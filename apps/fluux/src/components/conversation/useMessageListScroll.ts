@@ -159,6 +159,7 @@ export function useMessageListScroll({
 
   /** Pending scroll data for cleanup (in case DOM unmounts first) */
   const pendingScrollDataRef = useRef<{
+    conversationId: string
     scrollTop: number
     scrollHeight: number
     clientHeight: number
@@ -302,8 +303,8 @@ export function useMessageListScroll({
       // Update "at bottom" state
       isAtBottomRef.current = distanceFromBottom < AT_BOTTOM_THRESHOLD
 
-      // Save scroll position (throttled)
-      pendingScrollDataRef.current = { scrollTop, scrollHeight, clientHeight }
+      // Save scroll position (throttled) - include conversationId for verification in cleanup
+      pendingScrollDataRef.current = { conversationId: conversationIdRef.current, scrollTop, scrollHeight, clientHeight }
       const now = Date.now()
       if (now - lastScrollSaveRef.current > SCROLL_SAVE_THROTTLE_MS) {
         lastScrollSaveRef.current = now
@@ -364,18 +365,19 @@ export function useMessageListScroll({
     return () => {
       if (!conversationId) return
 
-      // Try DOM first, fall back to pending data
-      const scroller = scrollContainerRef.current
-      if (scroller) {
-        scrollStateManager.leaveConversation(
-          conversationId,
-          scroller.scrollTop,
-          scroller.scrollHeight,
-          scroller.clientHeight
-        )
-      } else if (pendingScrollDataRef.current) {
-        const { scrollTop, scrollHeight, clientHeight } = pendingScrollDataRef.current
+      // IMPORTANT: Prefer pendingScrollDataRef over DOM!
+      // When React's cleanup runs, the DOM may already have the NEW conversation's content
+      // (due to React's render cycle), but pendingScrollDataRef contains the last scroll
+      // position captured during handleScroll BEFORE the conversation switch.
+      const pendingData = pendingScrollDataRef.current
+      if (pendingData && pendingData.conversationId === conversationId) {
+        const { scrollTop, scrollHeight, clientHeight } = pendingData
         scrollStateManager.leaveConversation(conversationId, scrollTop, scrollHeight, clientHeight)
+      } else {
+        // Fallback: pendingRef doesn't have data for this conversation
+        // This can happen if user switched away before any scroll events occurred
+        // Don't save anything, but still mark as left so return is detected as switch
+        scrollStateManager.markAsLeft(conversationId)
       }
     }
   }, [conversationId])

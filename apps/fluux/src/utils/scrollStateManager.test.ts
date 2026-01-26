@@ -230,6 +230,73 @@ describe('ScrollStateManager', () => {
     })
   })
 
+  describe('markAsLeft', () => {
+    it('clears currentConversationId without saving scroll position', () => {
+      manager.enterConversation('conv1', 10)
+      expect(manager.getCurrentConversationId()).toBe('conv1')
+
+      manager.markAsLeft('conv1')
+
+      expect(manager.getCurrentConversationId()).toBeNull()
+      // Should not have saved any scroll state
+      expect(manager.getSavedScrollTop('conv1')).toBeNull()
+    })
+
+    it('preserves existing scroll state when marking as left', () => {
+      manager.enterConversation('conv1', 10)
+      // Save a scroll position first
+      manager.saveScrollPosition('conv1', 500, 2000, 400)
+      expect(manager.getSavedScrollTop('conv1')).toBe(500)
+
+      manager.markAsLeft('conv1')
+
+      // Scroll state should be preserved
+      expect(manager.getSavedScrollTop('conv1')).toBe(500)
+      expect(manager.getCurrentConversationId()).toBeNull()
+    })
+
+    it('does nothing if marking a different conversation as left', () => {
+      manager.enterConversation('conv1', 10)
+      expect(manager.getCurrentConversationId()).toBe('conv1')
+
+      manager.markAsLeft('conv2')
+
+      // conv1 should still be current since we tried to mark conv2
+      expect(manager.getCurrentConversationId()).toBe('conv1')
+    })
+  })
+
+  describe('saveScrollPosition', () => {
+    it('saves position when scrolled up (not at bottom)', () => {
+      manager.enterConversation('conv1', 10)
+      // Scrolled up: distanceFromBottom = 2000 - 500 - 400 = 1100
+      manager.saveScrollPosition('conv1', 500, 2000, 400)
+
+      expect(manager.getSavedScrollTop('conv1')).toBe(500)
+    })
+
+    it('clears position when at bottom', () => {
+      manager.enterConversation('conv1', 10)
+      // First save a position
+      manager.saveScrollPosition('conv1', 500, 2000, 400)
+      expect(manager.getSavedScrollTop('conv1')).toBe(500)
+
+      // Then scroll to bottom: distanceFromBottom = 2000 - 1600 - 400 = 0
+      manager.saveScrollPosition('conv1', 1600, 2000, 400)
+
+      expect(manager.getSavedScrollTop('conv1')).toBeNull()
+    })
+
+    it('updates position on subsequent saves', () => {
+      manager.enterConversation('conv1', 10)
+      manager.saveScrollPosition('conv1', 500, 2000, 400)
+      expect(manager.getSavedScrollTop('conv1')).toBe(500)
+
+      manager.saveScrollPosition('conv1', 300, 2000, 400)
+      expect(manager.getSavedScrollTop('conv1')).toBe(300)
+    })
+  })
+
   describe('complex navigation scenarios', () => {
     it('handles multiple conversation switches correctly', () => {
       // View conv1 for the first time
@@ -259,6 +326,57 @@ describe('ScrollStateManager', () => {
 
       // Return to conv2 (was at bottom)
       expect(manager.enterConversation('conv2', 5)).toBe('scroll-to-bottom')
+    })
+
+    it('BUG PREVENTION: using wrong scroll data would lose position (DOM race condition)', () => {
+      // This test documents the bug where React cleanup reads DOM after content change.
+      // The fix is to use pendingScrollDataRef (captured during scroll events) instead of DOM.
+
+      // User is in conv1 (long conversation), scrolled up
+      manager.enterConversation('conv1', 33)
+      // User scrolls up to position 960 (scrollHeight: 2586, clientHeight: 357)
+      // distanceFromBottom = 2586 - 960 - 357 = 1269 (not at bottom)
+      manager.saveScrollPosition('conv1', 960, 2586, 357)
+      expect(manager.getSavedScrollTop('conv1')).toBe(960)
+
+      // User switches to conv2 (short conversation, scrollHeight: 357)
+      // BUG SCENARIO: If cleanup reads DOM after React renders conv2's content,
+      // it would read scrollTop=0, scrollHeight=357 and INCORRECTLY save that to conv1
+
+      // WRONG: This is what the bug did - save conv2's dimensions to conv1
+      // manager.leaveConversation('conv1', 0, 357, 357) // wasAtBottom=true, DELETES scroll state!
+
+      // CORRECT: Use the last saved scroll position from conv1 (from saveScrollPosition)
+      manager.leaveConversation('conv1', 960, 2586, 357) // Correct data from pendingScrollDataRef
+
+      // Switch to conv2
+      manager.enterConversation('conv2', 2)
+      // Stay at bottom in conv2
+      manager.leaveConversation('conv2', 0, 357, 357)
+
+      // Return to conv1 - should restore position!
+      const action = manager.enterConversation('conv1', 33)
+      expect(action).toBe('restore-position')
+      expect(manager.getSavedScrollTop('conv1')).toBe(960)
+    })
+
+    it('BUG PREVENTION: short conversation should not corrupt long conversation position', () => {
+      // Scenario: A (long) -> B (short, no scrollbar) -> A (should restore)
+
+      // User in conv A, scrolled up
+      manager.enterConversation('convA', 100)
+      manager.saveScrollPosition('convA', 500, 5000, 400)
+      manager.leaveConversation('convA', 500, 5000, 400)
+
+      // User switches to conv B (short, no scrollbar: scrollHeight === clientHeight)
+      manager.enterConversation('convB', 3)
+      // Short conversation - always at bottom (no scrollbar)
+      manager.leaveConversation('convB', 0, 400, 400) // wasAtBottom = true
+
+      // Return to conv A - must restore position, NOT scroll to bottom
+      const action = manager.enterConversation('convA', 100)
+      expect(action).toBe('restore-position')
+      expect(manager.getSavedScrollTop('convA')).toBe(500)
     })
 
     it('handles rapid conversation switches', () => {

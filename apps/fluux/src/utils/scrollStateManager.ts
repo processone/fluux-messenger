@@ -185,6 +185,18 @@ class ScrollStateManager {
   }
 
   /**
+   * Mark a conversation as left without saving scroll position.
+   * Used when we don't have valid scroll data to save (e.g., user switched
+   * away before any scroll events occurred).
+   */
+  markAsLeft(conversationId: string): void {
+    this.log('markAsLeft', { conversationId })
+    if (this.currentConversationId === conversationId) {
+      this.currentConversationId = null
+    }
+  }
+
+  /**
    * Get the saved scroll position for a conversation.
    * Returns null if no position saved or if it was at bottom.
    */
