@@ -20,6 +20,7 @@ import {
   NS_REFERENCE,
   NS_MENTION_ALL,
   NS_HINTS,
+  NS_FLUUX,
 } from '../namespaces'
 import type {
   Message,
@@ -883,6 +884,9 @@ export class Chat extends BaseModule {
   }
 
   private handleMucInvitation(stanza: Element, from: string): boolean {
+    // Check for quickchat marker (custom Fluux extension)
+    const isQuickChat = !!stanza.getChild('quickchat', NS_FLUUX)
+
     // Direct Invitation (XEP-0249)
     const directInvite = stanza.getChild('x', NS_CONFERENCE)
     if (directInvite) {
@@ -895,6 +899,7 @@ export class Chat extends BaseModule {
           reason: directInvite.attrs.reason,
           password: directInvite.attrs.password,
           isDirect: true,
+          isQuickChat,
         })
         return true
       }
@@ -916,6 +921,7 @@ export class Chat extends BaseModule {
           reason,
           password,
           isDirect: false,
+          isQuickChat,
         })
         return true
       }

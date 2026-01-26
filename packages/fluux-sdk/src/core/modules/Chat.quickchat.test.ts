@@ -480,4 +480,108 @@ describe('XMPPClient Quick Chat', () => {
       })
     })
   })
+
+  describe('receiving mediated invitation', () => {
+    it('should emit muc-invitation event with isQuickChat: true when quickchat element is present', () => {
+      // Simulate receiving a mediated invitation with quickchat marker
+      const invitationStanza = createMockElement('message', {
+        from: 'room@conference.example.com',
+        to: 'user@example.com',
+      }, [
+        {
+          name: 'x',
+          attrs: { xmlns: 'http://jabber.org/protocol/muc#user' },
+          children: [
+            {
+              name: 'invite',
+              attrs: { from: 'alice@example.com' },
+              children: [
+                { name: 'reason', text: 'Join quick chat: deploy issue' },
+              ],
+            },
+          ],
+        },
+        { name: 'quickchat', attrs: { xmlns: 'urn:xmpp:fluux:0' } },
+      ])
+
+      // Emit the stanza to trigger invitation handling
+      mockXmppClientInstance._emit('stanza', invitationStanza)
+
+      // Verify SDK event was emitted with isQuickChat: true
+      expect(emitSDKSpy).toHaveBeenCalledWith('events:muc-invitation', {
+        roomJid: 'room@conference.example.com',
+        from: 'alice@example.com',
+        reason: 'Join quick chat: deploy issue',
+        password: undefined,
+        isDirect: false,
+        isQuickChat: true,
+      })
+    })
+
+    it('should emit muc-invitation event with isQuickChat: false when quickchat element is absent', () => {
+      // Simulate receiving a mediated invitation WITHOUT quickchat marker
+      const invitationStanza = createMockElement('message', {
+        from: 'room@conference.example.com',
+        to: 'user@example.com',
+      }, [
+        {
+          name: 'x',
+          attrs: { xmlns: 'http://jabber.org/protocol/muc#user' },
+          children: [
+            {
+              name: 'invite',
+              attrs: { from: 'alice@example.com' },
+              children: [
+                { name: 'reason', text: 'Join our room' },
+              ],
+            },
+          ],
+        },
+      ])
+
+      // Emit the stanza to trigger invitation handling
+      mockXmppClientInstance._emit('stanza', invitationStanza)
+
+      // Verify SDK event was emitted with isQuickChat: false
+      expect(emitSDKSpy).toHaveBeenCalledWith('events:muc-invitation', {
+        roomJid: 'room@conference.example.com',
+        from: 'alice@example.com',
+        reason: 'Join our room',
+        password: undefined,
+        isDirect: false,
+        isQuickChat: false,
+      })
+    })
+
+    it('should emit muc-invitation event with isQuickChat: true for direct invitations with quickchat marker', () => {
+      // Simulate receiving a direct invitation (XEP-0249) with quickchat marker
+      const invitationStanza = createMockElement('message', {
+        from: 'alice@example.com',
+        to: 'user@example.com',
+      }, [
+        {
+          name: 'x',
+          attrs: {
+            xmlns: 'jabber:x:conference',
+            jid: 'room@conference.example.com',
+            reason: 'Quick discussion',
+          },
+        },
+        { name: 'quickchat', attrs: { xmlns: 'urn:xmpp:fluux:0' } },
+      ])
+
+      // Emit the stanza to trigger invitation handling
+      mockXmppClientInstance._emit('stanza', invitationStanza)
+
+      // Verify SDK event was emitted with isQuickChat: true
+      expect(emitSDKSpy).toHaveBeenCalledWith('events:muc-invitation', {
+        roomJid: 'room@conference.example.com',
+        from: 'alice@example.com',
+        reason: 'Quick discussion',
+        password: undefined,
+        isDirect: true,
+        isQuickChat: true,
+      })
+    })
+  })
 })
