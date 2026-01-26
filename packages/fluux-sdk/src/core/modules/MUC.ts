@@ -351,11 +351,16 @@ export class MUC extends BaseModule {
     options?: { maxHistory?: number; password?: string; isQuickChat?: boolean }
   ): Promise<void> {
     const existingRoom = this.deps.stores?.room.getRoom(roomJid)
+    const isQuickChat = options?.isQuickChat ?? existingRoom?.isQuickChat
 
     // Query room features to detect MAM support
+    // Skip for quickchat rooms - they're transient and don't use MAM
     // If MAM is supported, we'll skip MUC history since MAM provides a more reliable archive
-    const roomFeatures = await this.queryRoomFeatures(roomJid)
-    const supportsMAM = roomFeatures?.supportsMAM ?? false
+    let supportsMAM = false
+    if (!isQuickChat) {
+      const roomFeatures = await this.queryRoomFeatures(roomJid)
+      supportsMAM = roomFeatures?.supportsMAM ?? false
+    }
 
     if (!existingRoom) {
       const room: Room = {
