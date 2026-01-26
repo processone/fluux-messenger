@@ -403,6 +403,10 @@ export function useMessageListScroll({
       // Mark that we're in initial load phase - will scroll to bottom when MAM completes.
       // Only set this if MAM is actually loading; otherwise, no need to wait.
       isInitialLoadPhaseRef.current = !!isLoadingOlder
+      // Reset initial scroll flag so the content resize observer will scroll
+      hasInitialScrolledRef.current = false
+      // Try scrolling immediately, then again after RAF
+      doScrollToBottom(false)
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           doScrollToBottom(false)
@@ -424,6 +428,10 @@ export function useMessageListScroll({
         // Mark that we're in initial load phase - will scroll to bottom when MAM completes.
         // Only set this if MAM is actually loading; otherwise, no need to wait.
         isInitialLoadPhaseRef.current = !!isLoadingOlder
+        // Reset initial scroll flag so the content resize observer will scroll
+        hasInitialScrolledRef.current = false
+        // Try scrolling immediately, then again after RAF
+        doScrollToBottom(false)
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             doScrollToBottom(false)
@@ -505,10 +513,17 @@ export function useMessageListScroll({
       // MAM finished loading during initial load phase - scroll to bottom
       // This handles the case where MUC history arrives first, then MAM messages
       // arrive later. We need to scroll to show the latest messages.
+      // Reset initial scroll flag so the content resize observer will also scroll
+      hasInitialScrolledRef.current = false
+      // Try scrolling immediately, then again after RAF for layout completion
+      doScrollToBottom(false)
       requestAnimationFrame(() => {
         doScrollToBottom(false)
-        // End the initial load phase now that MAM is complete
-        isInitialLoadPhaseRef.current = false
+        requestAnimationFrame(() => {
+          doScrollToBottom(false)
+          // End the initial load phase now that MAM is complete and we've scrolled
+          isInitialLoadPhaseRef.current = false
+        })
       })
     }
 
@@ -677,17 +692,34 @@ export function useMessageListScroll({
     // force an immediate scroll to bottom. This handles the race condition where
     // the double-rAF scroll happens before content is rendered.
     if (!hasInitialScrolledRef.current && scroller.scrollHeight > 0) {
-      hasInitialScrolledRef.current = true
       // Only scroll if we're supposed to be at bottom (not restoring a saved position)
       if (isAtBottomRef.current) {
         scroller.scrollTop = scroller.scrollHeight
+        // Only mark as scrolled if we actually reached the bottom
+        // This handles the case where content isn't fully rendered yet
+        const distanceFromBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
+        if (distanceFromBottom < AT_BOTTOM_THRESHOLD) {
+          hasInitialScrolledRef.current = true
+        }
+      } else {
+        // Restoring position - mark as done
+        hasInitialScrolledRef.current = true
       }
     }
 
     const observer = new ResizeObserver(() => {
       const newScrollHeight = scroller.scrollHeight
-      // Scroll if content grew and we're at bottom
-      if (newScrollHeight > lastScrollHeight && isAtBottomRef.current) {
+
+      // During initial load, keep trying to scroll to bottom until we succeed
+      if (!hasInitialScrolledRef.current && isAtBottomRef.current && newScrollHeight > 0) {
+        scroller.scrollTop = newScrollHeight
+        const distanceFromBottom = newScrollHeight - scroller.scrollTop - scroller.clientHeight
+        if (distanceFromBottom < AT_BOTTOM_THRESHOLD) {
+          hasInitialScrolledRef.current = true
+        }
+      }
+      // Scroll if content grew and we're at bottom (normal operation after initial scroll)
+      else if (newScrollHeight > lastScrollHeight && isAtBottomRef.current) {
         requestAnimationFrame(() => {
           if (scrollContainerRef.current) {
             scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight
