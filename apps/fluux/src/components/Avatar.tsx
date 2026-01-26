@@ -11,7 +11,7 @@ const SIZES = {
   header: { container: 'w-9 h-9', text: 'text-base', presence: 'w-3 h-3 -bottom-0.5 -right-0.5' },
   md: { container: 'w-10 h-10', text: 'text-base', presence: 'w-3.5 h-3.5 -bottom-0.5 -right-0.5' },
   lg: { container: 'w-12 h-12', text: 'text-lg', presence: 'w-4 h-4 -bottom-0.5 -right-0.5' },
-  xl: { container: 'w-24 h-24', text: 'text-3xl', presence: 'w-5 h-5 -bottom-1 -right-1' },
+  xl: { container: 'w-24 h-24', text: 'text-3xl', presence: 'w-5 h-5 bottom-0 right-0' },
 } as const
 
 export type AvatarSize = keyof typeof SIZES
