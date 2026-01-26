@@ -884,14 +884,13 @@ export class Chat extends BaseModule {
   }
 
   private handleMucInvitation(stanza: Element, from: string): boolean {
-    // Check for quickchat marker (custom Fluux extension)
-    const isQuickChat = !!stanza.getChild('quickchat', NS_FLUUX)
-
     // Direct Invitation (XEP-0249)
+    // For direct invitations, quickchat marker is a sibling of <x> (message goes directly to invitee)
     const directInvite = stanza.getChild('x', NS_CONFERENCE)
     if (directInvite) {
       const roomJid = directInvite.attrs.jid
       if (roomJid) {
+        const isQuickChat = !!stanza.getChild('quickchat', NS_FLUUX)
         // SDK event only - binding calls store.addMucInvitation
         this.deps.emitSDK('events:muc-invitation', {
           roomJid,
@@ -906,6 +905,8 @@ export class Chat extends BaseModule {
     }
 
     // Mediated Invitation (XEP-0045)
+    // For mediated invitations, quickchat marker is INSIDE the <invite> element
+    // (so it gets forwarded by the MUC server)
     const mucUser = stanza.getChild('x', NS_MUC_USER)
     const invite = mucUser?.getChild('invite')
     if (invite) {
@@ -913,6 +914,7 @@ export class Chat extends BaseModule {
       const inviteFrom = invite.attrs.from
       const reason = invite.getChildText('reason') || undefined
       const password = mucUser?.getChildText('password') || undefined
+      const isQuickChat = !!invite.getChild('quickchat', NS_FLUUX)
       if (roomJid && inviteFrom) {
         // SDK event only - binding calls store.addMucInvitation
         this.deps.emitSDK('events:muc-invitation', {

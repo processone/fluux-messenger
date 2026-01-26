@@ -381,13 +381,15 @@ describe('XMPPClient Quick Chat', () => {
       ).rejects.toThrow('Not connected')
     })
 
-    it('should include quickchat element when isQuickChat is true', async () => {
+    it('should include quickchat element inside invite when isQuickChat is true', async () => {
       await xmppClient.muc.sendMediatedInvitation('room@conference.example.com', 'alice@example.com', undefined, true)
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
 
-      // Should have quickchat element with Fluux namespace
-      const quickchatElement = sentStanza.children.find((c: any) =>
+      // Quickchat element should be INSIDE the invite element (so MUC server forwards it)
+      const xElement = sentStanza.children.find((c: any) => c.name === 'x')
+      const inviteElement = xElement?.children.find((c: any) => c.name === 'invite')
+      const quickchatElement = inviteElement?.children.find((c: any) =>
         c.name === 'quickchat' && c.attrs.xmlns === 'urn:xmpp:fluux:0'
       )
       expect(quickchatElement).toBeDefined()
@@ -398,8 +400,10 @@ describe('XMPPClient Quick Chat', () => {
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
 
-      // Should NOT have quickchat element
-      const quickchatElement = sentStanza.children.find((c: any) =>
+      // Should NOT have quickchat element anywhere
+      const xElement = sentStanza.children.find((c: any) => c.name === 'x')
+      const inviteElement = xElement?.children.find((c: any) => c.name === 'invite')
+      const quickchatElement = inviteElement?.children.find((c: any) =>
         c.name === 'quickchat'
       )
       expect(quickchatElement).toBeUndefined()
@@ -410,8 +414,10 @@ describe('XMPPClient Quick Chat', () => {
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
 
-      // Should NOT have quickchat element
-      const quickchatElement = sentStanza.children.find((c: any) =>
+      // Should NOT have quickchat element anywhere
+      const xElement = sentStanza.children.find((c: any) => c.name === 'x')
+      const inviteElement = xElement?.children.find((c: any) => c.name === 'invite')
+      const quickchatElement = inviteElement?.children.find((c: any) =>
         c.name === 'quickchat'
       )
       expect(quickchatElement).toBeUndefined()
@@ -471,9 +477,13 @@ describe('XMPPClient Quick Chat', () => {
         true // isQuickChat
       )
 
-      // All invitations should have quickchat element
+      // All invitations should have quickchat element inside the invite
       mockXmppClientInstance.send.mock.calls.forEach((call: any[]) => {
-        const quickchatElement = call[0].children.find((c: any) =>
+        const xElement = call[0].children.find((c: any) =>
+          c.name === 'x' && c.attrs.xmlns === 'http://jabber.org/protocol/muc#user'
+        )
+        const inviteElement = xElement?.children.find((c: any) => c.name === 'invite')
+        const quickchatElement = inviteElement?.children.find((c: any) =>
           c.name === 'quickchat' && c.attrs.xmlns === 'urn:xmpp:fluux:0'
         )
         expect(quickchatElement).toBeDefined()
@@ -483,7 +493,8 @@ describe('XMPPClient Quick Chat', () => {
 
   describe('receiving mediated invitation', () => {
     it('should emit muc-invitation event with isQuickChat: true when quickchat element is present', () => {
-      // Simulate receiving a mediated invitation with quickchat marker
+      // Simulate receiving a mediated invitation with quickchat marker INSIDE the invite element
+      // (MUC server forwards content inside <invite>, so quickchat must be there)
       const invitationStanza = createMockElement('message', {
         from: 'room@conference.example.com',
         to: 'user@example.com',
@@ -497,11 +508,11 @@ describe('XMPPClient Quick Chat', () => {
               attrs: { from: 'alice@example.com' },
               children: [
                 { name: 'reason', text: 'Join quick chat: deploy issue' },
+                { name: 'quickchat', attrs: { xmlns: 'urn:xmpp:fluux:0' } },
               ],
             },
           ],
         },
-        { name: 'quickchat', attrs: { xmlns: 'urn:xmpp:fluux:0' } },
       ])
 
       // Emit the stanza to trigger invitation handling

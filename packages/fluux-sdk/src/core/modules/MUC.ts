@@ -518,24 +518,22 @@ export class MUC extends BaseModule {
    * ```
    */
   async sendMediatedInvitation(roomJid: string, inviteeJid: string, reason?: string, isQuickChat?: boolean): Promise<void> {
-    const inviteElement = reason
-      ? xml('invite', { to: inviteeJid }, xml('reason', {}, reason))
-      : xml('invite', { to: inviteeJid })
-
-    // Build message children
-    const children: Element[] = [
-      xml('x', { xmlns: NS_MUC_USER }, inviteElement)
-    ]
-
-    // Add quick chat marker if this is a quick chat invitation
-    if (isQuickChat) {
-      children.push(xml('quickchat', { xmlns: NS_FLUUX }))
+    // Build invite element children
+    const inviteChildren: Element[] = []
+    if (reason) {
+      inviteChildren.push(xml('reason', {}, reason))
     }
+    // Add quickchat marker INSIDE the invite element so it gets forwarded by the MUC server
+    if (isQuickChat) {
+      inviteChildren.push(xml('quickchat', { xmlns: NS_FLUUX }))
+    }
+
+    const inviteElement = xml('invite', { to: inviteeJid }, ...inviteChildren)
 
     const message = xml(
       'message',
       { to: roomJid },
-      ...children
+      xml('x', { xmlns: NS_MUC_USER }, inviteElement)
     )
 
     await this.deps.sendStanza(message)
