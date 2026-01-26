@@ -58,19 +58,23 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
             </div>
             <div>
               <div
-                class="flex items-center gap-4 h-12"
+                data-date-separator="10:00"
               >
                 <div
-                  class="flex-1 h-px bg-fluux-hover"
-                />
-                <span
-                  class="text-xs font-semibold text-fluux-muted whitespace-nowrap"
+                  class="flex items-center gap-4 h-12"
                 >
-                  Today
-                </span>
-                <div
-                  class="flex-1 h-px bg-fluux-hover"
-                />
+                  <div
+                    class="flex-1 h-px bg-fluux-hover"
+                  />
+                  <span
+                    class="text-xs font-semibold text-fluux-muted whitespace-nowrap"
+                  >
+                    Today
+                  </span>
+                  <div
+                    class="flex-1 h-px bg-fluux-hover"
+                  />
+                </div>
               </div>
               <div
                 data-message-id="msg-1"
@@ -83,12 +87,14 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                   data-message-time="10:00"
                 >
                   <div
-                    class="w-10 flex-shrink-0 select-none"
+                    class="w-10 flex-shrink-0"
                   >
                     <div
                       class="inline-flex"
                     >
-                      <div>
+                      <div
+                        class="select-none"
+                      >
                         <div
                           data-testid="avatar"
                         >
@@ -101,7 +107,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                     class="relative flex-1 min-w-0 "
                   >
                     <div
-                      class="absolute -top-7 -right-2 p-4 z-20 opacity-0 pointer-events-none"
+                      class="absolute -top-7 -right-2 p-4 z-20 select-none opacity-0 pointer-events-none"
                     >
                       <div
                         class="flex items-center bg-fluux-bg rounded-md shadow-lg border border-fluux-hover transition-opacity"
@@ -208,7 +214,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                       </div>
                     </div>
                     <div
-                      class="flex items-baseline gap-2 pb-1 flex-wrap select-none"
+                      class="flex items-baseline gap-2 pb-1 flex-wrap"
                     >
                       <div
                         class="inline-flex"
@@ -227,7 +233,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                       </span>
                     </div>
                     <div
-                      class="text-fluux-text break-words whitespace-pre-wrap"
+                      class="text-fluux-text break-words whitespace-pre-wrap leading-[1.375]"
                     >
                       Hello there!
                     </div>
@@ -250,12 +256,14 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                   data-message-time="10:00"
                 >
                   <div
-                    class="w-10 flex-shrink-0 select-none"
+                    class="w-10 flex-shrink-0"
                   >
                     <div
                       class="inline-flex"
                     >
-                      <div>
+                      <div
+                        class="select-none"
+                      >
                         <div
                           data-testid="avatar"
                         >
@@ -268,7 +276,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                     class="relative flex-1 min-w-0 "
                   >
                     <div
-                      class="absolute -top-7 -right-2 p-4 z-20 opacity-0 pointer-events-none"
+                      class="absolute -top-7 -right-2 p-4 z-20 select-none opacity-0 pointer-events-none"
                     >
                       <div
                         class="flex items-center bg-fluux-bg rounded-md shadow-lg border border-fluux-hover transition-opacity"
@@ -374,7 +382,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                       </div>
                     </div>
                     <div
-                      class="flex items-baseline gap-2 pb-1 flex-wrap select-none"
+                      class="flex items-baseline gap-2 pb-1 flex-wrap"
                     >
                       <div
                         class="inline-flex"
@@ -393,7 +401,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                       </span>
                     </div>
                     <div
-                      class="text-fluux-text break-words whitespace-pre-wrap"
+                      class="text-fluux-text break-words whitespace-pre-wrap leading-[1.375]"
                     >
                       Hi! How are you?
                     </div>

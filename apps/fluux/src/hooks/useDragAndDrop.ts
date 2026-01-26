@@ -89,7 +89,16 @@ export function useDragAndDrop({
     e.preventDefault()
     e.stopPropagation()
     dragCounterRef.current++
-    if (e.dataTransfer.types.includes('Files') && isUploadSupported && !isTauri) {
+
+    // Only show drop zone for external file drags (from filesystem)
+    // When dragging from inside the browser (e.g., an image in a message), the dataTransfer
+    // includes 'text/html' or 'text/uri-list' in addition to 'Files'
+    // When dragging from the filesystem, it only has 'Files' (or similar file type)
+    const types = Array.from(e.dataTransfer.types)
+    const hasFiles = types.includes('Files')
+    const isInternalDrag = types.includes('text/html') || types.includes('text/uri-list')
+
+    if (hasFiles && !isInternalDrag && isUploadSupported && !isTauri) {
       setIsHtmlDragging(true)
     }
   }, [isUploadSupported, isTauri])
@@ -116,6 +125,11 @@ export function useDragAndDrop({
 
     // Only handle in browser - Tauri uses native drop handler
     if (!isTauri) {
+      // Ignore internal drags (images dragged from within the app)
+      const types = Array.from(e.dataTransfer.types)
+      const isInternalDrag = types.includes('text/html') || types.includes('text/uri-list')
+      if (isInternalDrag) return
+
       const files = e.dataTransfer.files
       if (files.length > 0 && isUploadSupported) {
         // Upload first file (single file upload for now)
