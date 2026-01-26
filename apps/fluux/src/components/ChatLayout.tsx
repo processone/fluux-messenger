@@ -380,10 +380,10 @@ function ChatLayoutContent() {
     setAdminCategory(null)
   }, [clearAdminSession, setAdminCategory])
 
-  // Handle mobile back from settings view - go back to messages
+  // Handle mobile back from settings view - go back to settings sidebar (no category selected)
   const handleSettingsBack = useCallback(() => {
-    navigateToView('messages')
-  }, [navigateToView])
+    navigateToSettings()
+  }, [navigateToSettings])
 
   const shortcuts = useKeyboardShortcuts({
     onToggleShortcutHelp: toggleShortcutHelp,
