@@ -25,7 +25,7 @@ import { useSoundNotification } from '@/hooks/useSoundNotification'
 import { useEventsSoundNotification } from '@/hooks/useEventsSoundNotification'
 import { useEventsDesktopNotifications } from '@/hooks/useEventsDesktopNotifications'
 import { useAutoAway } from '@/hooks/useAutoAway'
-import { useWakeDetector, useSleepDetector, useFocusZones, useViewNavigation, isMobileWeb, useWindowVisibility, type FocusZoneRefs } from '@/hooks'
+import { useWakeDetector, useSleepDetector, useFocusZones, useViewNavigation, isMobileWeb, useWindowVisibility, useRouteSync, type FocusZoneRefs } from '@/hooks'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useDeepLink } from '@/hooks/useDeepLink'
 import { saveViewState, getSavedViewState, type ViewStateData } from '@/hooks/useSessionPersistence'
@@ -121,6 +121,9 @@ function ChatLayoutContent() {
     navigateToAdmin,
     navigateToSettings,
   } = useViewNavigation(selectedContact)
+
+  // Get settingsCategory to determine if settings has explicit content selected
+  const { settingsCategory } = useRouteSync()
 
 
   // Ref for main container to enable focus for keyboard shortcuts
@@ -288,8 +291,9 @@ function ChatLayoutContent() {
   // For admin: only 'users' and 'rooms' categories have main view content
   // 'stats' and 'announcements' just expand to show commands in the sidebar
   const adminHasMainContent = adminSession || adminCategory === 'users' || adminCategory === 'rooms'
-  // Settings is a regular view that always has content
-  const hasActiveContent = !!(activeConversationId || activeRoomJid || selectedContact || adminHasMainContent || sidebarView === 'settings')
+  // Settings: only show content when a category is explicitly selected (on mobile, let user choose from sidebar first)
+  const settingsHasContent = sidebarView === 'settings' && !!settingsCategory
+  const hasActiveContent = !!(activeConversationId || activeRoomJid || selectedContact || adminHasMainContent || settingsHasContent)
 
   // Update dock/favicon badge with unread count
   useNotificationBadge()
