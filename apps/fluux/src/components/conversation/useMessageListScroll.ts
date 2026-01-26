@@ -718,13 +718,25 @@ export function useMessageListScroll({
           hasInitialScrolledRef.current = true
         }
       }
-      // Scroll if content grew and we're at bottom (normal operation after initial scroll)
-      else if (newScrollHeight > lastScrollHeight && isAtBottomRef.current) {
-        requestAnimationFrame(() => {
-          if (scrollContainerRef.current) {
-            scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight
-          }
-        })
+      // Scroll if content grew (normal operation after initial scroll)
+      // IMPORTANT: Calculate whether user WAS at bottom based on OLD scroll height,
+      // not isAtBottomRef which may have been set to false by a scroll event that
+      // fired when the content grew and pushed the user away from bottom.
+      else if (newScrollHeight > lastScrollHeight) {
+        const { scrollTop, clientHeight } = scroller
+        // Calculate distance from bottom BEFORE content grew
+        const oldDistanceFromBottom = lastScrollHeight - scrollTop - clientHeight
+        const wasAtBottom = oldDistanceFromBottom < AT_BOTTOM_THRESHOLD
+
+        if (wasAtBottom) {
+          requestAnimationFrame(() => {
+            if (scrollContainerRef.current) {
+              scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight
+              // Update isAtBottomRef since we just scrolled to bottom
+              isAtBottomRef.current = true
+            }
+          })
+        }
       }
       lastScrollHeight = newScrollHeight
     })
