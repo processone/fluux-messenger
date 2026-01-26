@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/readme/fm-logo.png" width="300" alt="Fluux Messenger Logo"/>
+
 # Fluux Messenger
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
