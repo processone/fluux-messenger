@@ -656,12 +656,31 @@ export function useMessageListScroll({
   // EFFECT: Handle content resize (images load, reactions render)
   // --------------------------------------------------------------------------
 
+  // Track if we've done the initial scroll for this conversation
+  const hasInitialScrolledRef = useRef(false)
+
+  // Reset initial scroll flag when conversation changes
+  useEffect(() => {
+    hasInitialScrolledRef.current = false
+  }, [conversationId])
+
   useEffect(() => {
     const contentWrapper = contentWrapperRef.current
     const scroller = scrollContainerRef.current
     if (!contentWrapper || !scroller) return
 
     let lastScrollHeight = scroller.scrollHeight
+
+    // If this is the first time content appears and we haven't scrolled yet,
+    // force an immediate scroll to bottom. This handles the race condition where
+    // the double-rAF scroll happens before content is rendered.
+    if (!hasInitialScrolledRef.current && scroller.scrollHeight > 0) {
+      hasInitialScrolledRef.current = true
+      // Only scroll if we're supposed to be at bottom (not restoring a saved position)
+      if (isAtBottomRef.current) {
+        scroller.scrollTop = scroller.scrollHeight
+      }
+    }
 
     const observer = new ResizeObserver(() => {
       const newScrollHeight = scroller.scrollHeight
@@ -678,7 +697,7 @@ export function useMessageListScroll({
 
     observer.observe(contentWrapper)
     return () => observer.disconnect()
-  }, [conversationId, isAtBottomRef])
+  }, [conversationId, isAtBottomRef, messageCount])
 
   // --------------------------------------------------------------------------
   // EFFECT: Keyboard shortcuts (Home/End, Cmd+Up/Down)
