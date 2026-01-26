@@ -46,6 +46,19 @@
   --scrollbar-thumb-hover: #a8adb3;
 }
 
+/* Text selection styling - uses brand color for consistent look */
+::selection {
+  background-color: var(--fluux-selection);
+  color: inherit;
+  line-height: inherit;
+}
+
+::-moz-selection {
+  background-color: var(--fluux-selection);
+  color: inherit;
+  line-height: inherit;
+}
+
 /* Custom scrollbar styling */
 ::-webkit-scrollbar {
   width: 8px;

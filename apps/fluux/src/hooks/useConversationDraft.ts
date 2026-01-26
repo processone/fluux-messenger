@@ -52,8 +52,10 @@ export function useConversationDraft({
 
   // Save draft on conversation change or unmount, restore draft on conversation change
   useEffect(() => {
+    const isConversationChange = prevConversationIdRef.current !== conversationId
+
     // Save draft for previous conversation if there was one
-    if (prevConversationIdRef.current && prevConversationIdRef.current !== conversationId) {
+    if (prevConversationIdRef.current && isConversationChange) {
       const currentText = composerRef.current?.getText() || ''
       if (currentText.trim()) {
         setDraft(prevConversationIdRef.current, currentText)
@@ -62,21 +64,24 @@ export function useConversationDraft({
       }
     }
 
-    // Restore draft for new conversation
-    isRestoringRef.current = true
-    const draft = getDraft(conversationId)
-    setText(draft)
+    // Restore draft for new conversation (only when conversation actually changed)
+    // This prevents re-restoring the draft when the effect runs due to function reference changes
+    if (isConversationChange) {
+      isRestoringRef.current = true
+      const draft = getDraft(conversationId)
+      setText(draft)
 
-    // Reset restoring flag after state update
-    requestAnimationFrame(() => {
-      isRestoringRef.current = false
-    })
+      // Reset restoring flag after state update
+      requestAnimationFrame(() => {
+        isRestoringRef.current = false
+      })
 
-    // Notify caller that draft was restored (e.g., to reset mention references)
-    onDraftRestored?.()
+      // Notify caller that draft was restored (e.g., to reset mention references)
+      onDraftRestored?.()
 
-    // Update prev ref
-    prevConversationIdRef.current = conversationId
+      // Update prev ref
+      prevConversationIdRef.current = conversationId
+    }
 
     // Capture ref for cleanup (avoid stale closure warning)
     const composer = composerRef.current

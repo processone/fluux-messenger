@@ -351,11 +351,16 @@ export class MUC extends BaseModule {
     options?: { maxHistory?: number; password?: string; isQuickChat?: boolean }
   ): Promise<void> {
     const existingRoom = this.deps.stores?.room.getRoom(roomJid)
+    const isQuickChat = options?.isQuickChat ?? existingRoom?.isQuickChat
 
     // Query room features to detect MAM support
+    // Skip for quickchat rooms - they're transient and don't use MAM
     // If MAM is supported, we'll skip MUC history since MAM provides a more reliable archive
-    const roomFeatures = await this.queryRoomFeatures(roomJid)
-    const supportsMAM = roomFeatures?.supportsMAM ?? false
+    let supportsMAM = false
+    if (!isQuickChat) {
+      const roomFeatures = await this.queryRoomFeatures(roomJid)
+      supportsMAM = roomFeatures?.supportsMAM ?? false
+    }
 
     if (!existingRoom) {
       const room: Room = {
@@ -518,24 +523,22 @@ export class MUC extends BaseModule {
    * ```
    */
   async sendMediatedInvitation(roomJid: string, inviteeJid: string, reason?: string, isQuickChat?: boolean): Promise<void> {
-    const inviteElement = reason
-      ? xml('invite', { to: inviteeJid }, xml('reason', {}, reason))
-      : xml('invite', { to: inviteeJid })
-
-    // Build message children
-    const children: Element[] = [
-      xml('x', { xmlns: NS_MUC_USER }, inviteElement)
-    ]
-
-    // Add quick chat marker if this is a quick chat invitation
-    if (isQuickChat) {
-      children.push(xml('quickchat', { xmlns: NS_FLUUX }))
+    // Build invite element children
+    const inviteChildren: Element[] = []
+    if (reason) {
+      inviteChildren.push(xml('reason', {}, reason))
     }
+    // Add quickchat marker INSIDE the invite element so it gets forwarded by the MUC server
+    if (isQuickChat) {
+      inviteChildren.push(xml('quickchat', { xmlns: NS_FLUUX }))
+    }
+
+    const inviteElement = xml('invite', { to: inviteeJid }, ...inviteChildren)
 
     const message = xml(
       'message',
       { to: roomJid },
-      ...children
+      xml('x', { xmlns: NS_MUC_USER }, inviteElement)
     )
 
     await this.deps.sendStanza(message)

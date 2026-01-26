@@ -33,6 +33,10 @@ scraper = "0.22"
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 user-idle = "0.6"
 
+# ctor for Linux to set env vars before main() - required for WebKitGTK workaround
+[target.'cfg(target_os = "linux")'.dependencies]
+ctor = "0.2"
+
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["NSNotification", "NSString", "NSThread", "NSProcessInfo"] }

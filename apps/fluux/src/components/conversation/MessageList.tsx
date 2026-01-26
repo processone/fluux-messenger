@@ -11,10 +11,10 @@
  *
  * Scroll behavior is handled by useMessageListScroll hook.
  */
-import { useMemo, type ReactNode } from 'react'
+import { useMemo, useRef, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { BaseMessage } from '@fluux/sdk'
-import { useNewMessageMarker } from '@/hooks'
+import { useNewMessageMarker, useMessageCopyFormatter } from '@/hooks'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { DateSeparator } from './DateSeparator'
 import { NewMessageMarker } from './NewMessageMarker'
@@ -124,8 +124,11 @@ export function MessageList<T extends BaseMessage>({
   // SCROLL BEHAVIOR (delegated to hook)
   // --------------------------------------------------------------------------
 
+  // Local ref for multi-message selection (scroll hook has its own internal ref)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+
   const {
-    setScrollContainerRef,
+    setScrollContainerRef: setScrollContainerRefFromHook,
     contentWrapperRef,
     handleScroll,
     handleWheel,
@@ -144,6 +147,18 @@ export function MessageList<T extends BaseMessage>({
     typingUsersCount: typingUsers.length,
     lastMessageReactionsKey,
   })
+
+  // Combined ref setter for scroll container
+  const setScrollContainerRef = (element: HTMLDivElement | null) => {
+    (scrollContainerRef as React.MutableRefObject<HTMLDivElement | null>).current = element
+    setScrollContainerRefFromHook(element)
+  }
+
+  // --------------------------------------------------------------------------
+  // COPY FORMATTING (ensures date is always included)
+  // --------------------------------------------------------------------------
+
+  useMessageCopyFormatter({ containerRef: scrollContainerRef })
 
   // --------------------------------------------------------------------------
   // NEW MESSAGE MARKER
@@ -219,7 +234,9 @@ export function MessageList<T extends BaseMessage>({
           {/* Messages grouped by date */}
           {groupedMessages.map((group, groupIndex) => (
             <div key={`${group.date}-${groupIndex}`}>
-              <DateSeparator date={group.date} />
+              <div data-date-separator={group.date}>
+                <DateSeparator date={group.date} />
+              </div>
               {group.messages.map((msg, idx) => {
                 const showNewMarker = !shownNewMarker && firstNewMessageId === msg.id
                 if (showNewMarker) shownNewMarker = true

@@ -202,7 +202,7 @@ export const MessageBubble = memo(function MessageBubble({
       onMouseLeave={onMouseLeave}
     >
       {/* Avatar, timestamp (when selected), or spacer */}
-      <div className="w-10 flex-shrink-0 select-none">
+      <div className="w-10 flex-shrink-0">
         {/* /me action messages always show timestamp instead of avatar */}
         {isActionMessage(message.body) ? (
           <span className={`text-[10px] text-fluux-muted font-mono pt-0.5 ${isSelected ? 'opacity-100' : hasKeyboardSelection ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
@@ -210,7 +210,7 @@ export const MessageBubble = memo(function MessageBubble({
           </span>
         ) : showAvatar ? (
           <Tooltip content={avatarTooltip || ''} position="top" disabled={!avatarTooltip}>
-            <div>
+            <div className="select-none">
               <Avatar
                 identifier={avatarIdentifier}
                 name={senderName}
@@ -258,7 +258,7 @@ export const MessageBubble = memo(function MessageBubble({
 
         {/* Nick header - hidden for /me action messages (nick is shown inline) */}
         {showAvatar && !isActionMessage(message.body) && (
-          <div className="flex items-baseline gap-2 pb-1 flex-wrap select-none">
+          <div className="flex items-baseline gap-2 pb-1 flex-wrap">
             <Tooltip content={avatarTooltip || ''} position="top" disabled={!avatarTooltip}>
               <span
                 className="font-medium cursor-default"

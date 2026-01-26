@@ -159,6 +159,7 @@ export function useMessageListScroll({
 
   /** Pending scroll data for cleanup (in case DOM unmounts first) */
   const pendingScrollDataRef = useRef<{
+    conversationId: string
     scrollTop: number
     scrollHeight: number
     clientHeight: number
@@ -302,8 +303,8 @@ export function useMessageListScroll({
       // Update "at bottom" state
       isAtBottomRef.current = distanceFromBottom < AT_BOTTOM_THRESHOLD
 
-      // Save scroll position (throttled)
-      pendingScrollDataRef.current = { scrollTop, scrollHeight, clientHeight }
+      // Save scroll position (throttled) - include conversationId for verification in cleanup
+      pendingScrollDataRef.current = { conversationId: conversationIdRef.current, scrollTop, scrollHeight, clientHeight }
       const now = Date.now()
       if (now - lastScrollSaveRef.current > SCROLL_SAVE_THROTTLE_MS) {
         lastScrollSaveRef.current = now
@@ -364,18 +365,19 @@ export function useMessageListScroll({
     return () => {
       if (!conversationId) return
 
-      // Try DOM first, fall back to pending data
-      const scroller = scrollContainerRef.current
-      if (scroller) {
-        scrollStateManager.leaveConversation(
-          conversationId,
-          scroller.scrollTop,
-          scroller.scrollHeight,
-          scroller.clientHeight
-        )
-      } else if (pendingScrollDataRef.current) {
-        const { scrollTop, scrollHeight, clientHeight } = pendingScrollDataRef.current
+      // IMPORTANT: Prefer pendingScrollDataRef over DOM!
+      // When React's cleanup runs, the DOM may already have the NEW conversation's content
+      // (due to React's render cycle), but pendingScrollDataRef contains the last scroll
+      // position captured during handleScroll BEFORE the conversation switch.
+      const pendingData = pendingScrollDataRef.current
+      if (pendingData && pendingData.conversationId === conversationId) {
+        const { scrollTop, scrollHeight, clientHeight } = pendingData
         scrollStateManager.leaveConversation(conversationId, scrollTop, scrollHeight, clientHeight)
+      } else {
+        // Fallback: pendingRef doesn't have data for this conversation
+        // This can happen if user switched away before any scroll events occurred
+        // Don't save anything, but still mark as left so return is detected as switch
+        scrollStateManager.markAsLeft(conversationId)
       }
     }
   }, [conversationId])
@@ -401,6 +403,10 @@ export function useMessageListScroll({
       // Mark that we're in initial load phase - will scroll to bottom when MAM completes.
       // Only set this if MAM is actually loading; otherwise, no need to wait.
       isInitialLoadPhaseRef.current = !!isLoadingOlder
+      // Reset initial scroll flag so the content resize observer will scroll
+      hasInitialScrolledRef.current = false
+      // Try scrolling immediately, then again after RAF
+      doScrollToBottom(false)
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           doScrollToBottom(false)
@@ -422,6 +428,10 @@ export function useMessageListScroll({
         // Mark that we're in initial load phase - will scroll to bottom when MAM completes.
         // Only set this if MAM is actually loading; otherwise, no need to wait.
         isInitialLoadPhaseRef.current = !!isLoadingOlder
+        // Reset initial scroll flag so the content resize observer will scroll
+        hasInitialScrolledRef.current = false
+        // Try scrolling immediately, then again after RAF
+        doScrollToBottom(false)
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             doScrollToBottom(false)
@@ -503,10 +513,17 @@ export function useMessageListScroll({
       // MAM finished loading during initial load phase - scroll to bottom
       // This handles the case where MUC history arrives first, then MAM messages
       // arrive later. We need to scroll to show the latest messages.
+      // Reset initial scroll flag so the content resize observer will also scroll
+      hasInitialScrolledRef.current = false
+      // Try scrolling immediately, then again after RAF for layout completion
+      doScrollToBottom(false)
       requestAnimationFrame(() => {
         doScrollToBottom(false)
-        // End the initial load phase now that MAM is complete
-        isInitialLoadPhaseRef.current = false
+        requestAnimationFrame(() => {
+          doScrollToBottom(false)
+          // End the initial load phase now that MAM is complete and we've scrolled
+          isInitialLoadPhaseRef.current = false
+        })
       })
     }
 
@@ -656,6 +673,14 @@ export function useMessageListScroll({
   // EFFECT: Handle content resize (images load, reactions render)
   // --------------------------------------------------------------------------
 
+  // Track if we've done the initial scroll for this conversation
+  const hasInitialScrolledRef = useRef(false)
+
+  // Reset initial scroll flag when conversation changes
+  useEffect(() => {
+    hasInitialScrolledRef.current = false
+  }, [conversationId])
+
   useEffect(() => {
     const contentWrapper = contentWrapperRef.current
     const scroller = scrollContainerRef.current
@@ -663,22 +688,62 @@ export function useMessageListScroll({
 
     let lastScrollHeight = scroller.scrollHeight
 
+    // If this is the first time content appears and we haven't scrolled yet,
+    // force an immediate scroll to bottom. This handles the race condition where
+    // the double-rAF scroll happens before content is rendered.
+    if (!hasInitialScrolledRef.current && scroller.scrollHeight > 0) {
+      // Only scroll if we're supposed to be at bottom (not restoring a saved position)
+      if (isAtBottomRef.current) {
+        scroller.scrollTop = scroller.scrollHeight
+        // Only mark as scrolled if we actually reached the bottom
+        // This handles the case where content isn't fully rendered yet
+        const distanceFromBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
+        if (distanceFromBottom < AT_BOTTOM_THRESHOLD) {
+          hasInitialScrolledRef.current = true
+        }
+      } else {
+        // Restoring position - mark as done
+        hasInitialScrolledRef.current = true
+      }
+    }
+
     const observer = new ResizeObserver(() => {
       const newScrollHeight = scroller.scrollHeight
-      // Scroll if content grew and we're at bottom
-      if (newScrollHeight > lastScrollHeight && isAtBottomRef.current) {
-        requestAnimationFrame(() => {
-          if (scrollContainerRef.current) {
-            scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight
-          }
-        })
+
+      // During initial load, keep trying to scroll to bottom until we succeed
+      if (!hasInitialScrolledRef.current && isAtBottomRef.current && newScrollHeight > 0) {
+        scroller.scrollTop = newScrollHeight
+        const distanceFromBottom = newScrollHeight - scroller.scrollTop - scroller.clientHeight
+        if (distanceFromBottom < AT_BOTTOM_THRESHOLD) {
+          hasInitialScrolledRef.current = true
+        }
+      }
+      // Scroll if content grew (normal operation after initial scroll)
+      // IMPORTANT: Calculate whether user WAS at bottom based on OLD scroll height,
+      // not isAtBottomRef which may have been set to false by a scroll event that
+      // fired when the content grew and pushed the user away from bottom.
+      else if (newScrollHeight > lastScrollHeight) {
+        const { scrollTop, clientHeight } = scroller
+        // Calculate distance from bottom BEFORE content grew
+        const oldDistanceFromBottom = lastScrollHeight - scrollTop - clientHeight
+        const wasAtBottom = oldDistanceFromBottom < AT_BOTTOM_THRESHOLD
+
+        if (wasAtBottom) {
+          requestAnimationFrame(() => {
+            if (scrollContainerRef.current) {
+              scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight
+              // Update isAtBottomRef since we just scrolled to bottom
+              isAtBottomRef.current = true
+            }
+          })
+        }
       }
       lastScrollHeight = newScrollHeight
     })
 
     observer.observe(contentWrapper)
     return () => observer.disconnect()
-  }, [conversationId, isAtBottomRef])
+  }, [conversationId, isAtBottomRef, messageCount])
 
   // --------------------------------------------------------------------------
   // EFFECT: Keyboard shortcuts (Home/End, Cmd+Up/Down)

@@ -1054,6 +1054,7 @@ name = "fluux"
 version = "0.11.0"
 dependencies = [
  "block2",
+ "ctor",
  "keyring",
  "objc2",
  "objc2-app-kit",

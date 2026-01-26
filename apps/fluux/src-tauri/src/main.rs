@@ -1,6 +1,20 @@
 // Prevents additional console window on Windows in release
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+// Linux: Set WebKitGTK workaround env vars BEFORE main() runs
+// This uses ctor to run a static constructor before any other code,
+// ensuring the env vars are set before WebKitGTK initializes.
+// Fixes grey screen / "Could not create default EGL display: EGL_BAD_PARAMETER"
+// See: https://github.com/tauri-apps/tauri/issues/11988
+#[cfg(target_os = "linux")]
+#[ctor::ctor]
+fn set_linux_webkit_env() {
+    if std::env::var("FLUUX_ENABLE_GPU").is_err() {
+        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+    }
+}
+
 use tauri::{Emitter, Manager};
 #[cfg(target_os = "macos")]
 use tauri::{RunEvent, WindowEvent};
@@ -429,22 +443,6 @@ mod macos {
 }
 
 fn main() {
-    // Linux: Work around WebKitGTK EGL/GPU issues that cause grey screen on AppImages
-    // This is an upstream WebKitGTK bug (WebKit #280239) affecting versions > 2.44
-    // Particularly affects: systems without GPU, NVIDIA on Wayland, VMs
-    // Fixes: "Could not create default EGL display: EGL_BAD_PARAMETER"
-    // See: https://github.com/tauri-apps/tauri/issues/11988
-    // Power users can set FLUUX_ENABLE_GPU=1 to re-enable hardware acceleration
-    #[cfg(target_os = "linux")]
-    {
-        if std::env::var("FLUUX_ENABLE_GPU").is_err() {
-            // Disable DMA-BUF renderer (main fix for EGL issues)
-            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-            // Disable compositing mode (fallback for older WebKitGTK)
-            std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
-        }
-    }
-
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_os::init())

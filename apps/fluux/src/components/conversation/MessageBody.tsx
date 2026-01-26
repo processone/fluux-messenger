@@ -71,7 +71,7 @@ export const MessageBody = memo(function MessageBody({
   // /me action message
   if (isActionMessage(body)) {
     return (
-      <div className="text-fluux-text/85 italic break-words whitespace-pre-wrap">
+      <div className="text-fluux-text/85 italic break-words whitespace-pre-wrap leading-[1.375]">
         <span className="text-fluux-muted mr-1">*</span>
         <span className="font-medium" style={{ color: senderColor }}>
           {senderName}
@@ -90,7 +90,7 @@ export const MessageBody = memo(function MessageBody({
 
   // Regular message
   return (
-    <div className="text-fluux-text break-words whitespace-pre-wrap">
+    <div className="text-fluux-text break-words whitespace-pre-wrap leading-[1.375]">
       {noStyling ? body : renderStyledMessage(body, mentions)}
       {isEdited && <EditedIndicator originalBody={originalBody} />}
     </div>

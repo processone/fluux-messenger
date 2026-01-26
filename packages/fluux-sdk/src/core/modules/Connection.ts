@@ -212,12 +212,15 @@ export class Connection extends BaseModule {
     }
 
     // Get list of currently joined rooms for fallback rejoin if SM resumption fails
-    const joinedRooms = (this.stores.room.joinedRooms() ?? []).map(room => ({
-      jid: room.jid,
-      nickname: room.nickname,
-      password: room.password,
-      autojoin: room.autojoin,
-    }))
+    // Filter out quickchat rooms - they're transient and won't exist after everyone leaves
+    const joinedRooms = (this.stores.room.joinedRooms() ?? [])
+      .filter(room => !room.isQuickChat)
+      .map(room => ({
+        jid: room.jid,
+        nickname: room.nickname,
+        password: room.password,
+        autojoin: room.autojoin,
+      }))
 
     // Use synchronous storage write for beforeunload reliability
     // The async persistSmState() may not complete before unload

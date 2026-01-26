@@ -158,6 +158,7 @@ vi.mock('@/hooks', () => ({
     },
   }),
   useNewMessageMarker: () => {},
+  useMessageCopyFormatter: () => {},
   useConversationDraft: () => {
     const [text, setText] = React.useState('')
     return [text, setText]

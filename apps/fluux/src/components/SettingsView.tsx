@@ -9,10 +9,11 @@ import {
   UpdatesSettings,
   BlockedUsersSettings,
   type SettingsCategory,
+  SETTINGS_CATEGORIES,
   isTauri,
   DEFAULT_SETTINGS_CATEGORY,
 } from './settings-components'
-import { Settings, ArrowLeft } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 
 interface SettingsViewProps {
   onBack?: () => void
@@ -27,8 +28,13 @@ export function SettingsView({ onBack }: SettingsViewProps) {
   const { titleBarClass, dragRegionProps } = useWindowDrag()
   const { settingsCategory } = useRouteSync()
 
-  // Current category (default to appearance if none specified)
+  // Current category (default to profile if none specified)
   const activeCategory = (settingsCategory as SettingsCategory) || DEFAULT_SETTINGS_CATEGORY
+
+  // Get the active category's config for icon and label
+  const activeCategoryConfig = SETTINGS_CATEGORIES.find(cat => cat.id === activeCategory)
+  const CategoryIcon = activeCategoryConfig?.icon
+  const categoryLabel = activeCategoryConfig?.labelKey ? t(activeCategoryConfig.labelKey) : t('settings.title')
 
   // Render settings content based on active category
   const renderContent = () => {
@@ -64,8 +70,8 @@ export function SettingsView({ onBack }: SettingsViewProps) {
             <ArrowLeft className="w-5 h-5 text-fluux-muted" />
           </button>
         )}
-        <Settings className="w-5 h-5 text-fluux-muted mr-2" />
-        <h2 className="font-semibold text-fluux-text">{t('settings.title')}</h2>
+        {CategoryIcon && <CategoryIcon className="w-5 h-5 text-fluux-muted mr-2" />}
+        <h2 className="font-semibold text-fluux-text">{categoryLabel}</h2>
       </div>
 
       {/* Content - centered like ProfileView */}

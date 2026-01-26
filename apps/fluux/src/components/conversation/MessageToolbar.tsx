@@ -117,8 +117,9 @@ export const MessageToolbar = memo(function MessageToolbar({
   return (
     // Outer wrapper provides an extended hover zone (padding) around the visible toolbar
     // This makes it easier to move the mouse to the toolbar without losing hover state
+    // select-none prevents toolbar from being included in text selection
     <div
-      className={`absolute ${showAvatar ? '-top-7' : '-top-12'} -right-2 p-4 z-20 ${visibilityClass}`}
+      className={`absolute ${showAvatar ? '-top-7' : '-top-12'} -right-2 p-4 z-20 select-none ${visibilityClass}`}
       onMouseEnter={onToolbarMouseEnter}
     >
       {/* Visible toolbar */}

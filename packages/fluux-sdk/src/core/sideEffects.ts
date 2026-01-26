@@ -196,9 +196,31 @@ export function setupChatSideEffects(
     previousStatus = status
   })
 
+  // Subscribe to serverInfo changes (for initial MAM support discovery)
+  // When the app auto-selects a conversation during login, serverInfo may not be
+  // populated yet. This subscription triggers MAM fetch when MAM becomes available.
+  let hadMAMSupport = connectionStore.getState().serverInfo?.features?.includes(NS_MAM) ?? false
+  const unsubscribeServerInfo = connectionStore.subscribe((state) => {
+    const hasMAMSupport = state.serverInfo?.features?.includes(NS_MAM) ?? false
+
+    // When MAM support is first discovered (wasn't available before, now it is)
+    if (hasMAMSupport && !hadMAMSupport) {
+      hadMAMSupport = hasMAMSupport
+
+      const activeConversationId = chatStore.getState().activeConversationId
+      if (activeConversationId && !fetchInitiated.has(activeConversationId)) {
+        if (debug) console.log('[SideEffects] Chat: MAM support discovered, fetching for active conversation', activeConversationId)
+        void fetchMAMForConversation(activeConversationId)
+      }
+    } else {
+      hadMAMSupport = hasMAMSupport
+    }
+  })
+
   return () => {
     unsubscribeConversation()
     unsubscribeConnection()
+    unsubscribeServerInfo()
   }
 }
 
