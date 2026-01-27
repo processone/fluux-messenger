@@ -1139,6 +1139,11 @@ export class XMPPClient {
 
     // MAM is now lazy - triggered by side effects when opening conversations/rooms
     // This avoids large MAM queries for ALL conversations on connect
+
+    // Refresh sidebar previews in the background
+    // After being offline, lastMessage previews may be stale (messages exchanged on other devices)
+    // This fetches max=1 message per conversation to update the sidebar without loading full history
+    this.mam.refreshConversationPreviews().catch(() => {})
   }
 
   private enableCarbons(): void {

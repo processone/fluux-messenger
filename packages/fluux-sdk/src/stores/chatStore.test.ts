@@ -2181,4 +2181,90 @@ describe('chatStore', () => {
       expect(result1).toHaveLength(0)
     })
   })
+
+  describe('updateLastMessagePreview', () => {
+    it('should update lastMessage preview without affecting messages array', () => {
+      // Create a conversation with an existing message
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      const existingMsg = createMessage('alice@example.com', 'Old message')
+      chatStore.getState().addMessage(existingMsg)
+
+      // Verify initial state
+      const initialMessages = chatStore.getState().messages.get('alice@example.com')
+      expect(initialMessages).toHaveLength(1)
+      expect(initialMessages?.[0].body).toBe('Old message')
+
+      // Update the preview with a newer message
+      const previewMsg: Message = {
+        type: 'chat',
+        id: 'preview-msg',
+        conversationId: 'alice@example.com',
+        from: 'alice@example.com',
+        body: 'New message from other device',
+        timestamp: new Date(Date.now() + 1000), // Newer timestamp
+        isOutgoing: false,
+      }
+      chatStore.getState().updateLastMessagePreview('alice@example.com', previewMsg)
+
+      // Messages array should be unchanged
+      const messagesAfter = chatStore.getState().messages.get('alice@example.com')
+      expect(messagesAfter).toHaveLength(1)
+      expect(messagesAfter?.[0].body).toBe('Old message')
+
+      // But the preview should be updated (both in conversationMeta and conversations)
+      const meta = chatStore.getState().conversationMeta.get('alice@example.com')
+      expect(meta?.lastMessage?.body).toBe('New message from other device')
+
+      const conv = chatStore.getState().conversations.get('alice@example.com')
+      expect(conv?.lastMessage?.body).toBe('New message from other device')
+    })
+
+    it('should not update preview if message is older than existing', () => {
+      // Create a conversation with a recent message
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      const recentMsg = createMessage('alice@example.com', 'Recent message')
+      recentMsg.timestamp = new Date('2024-01-15T12:00:00Z')
+      chatStore.getState().addMessage(recentMsg)
+
+      // Verify the lastMessage was set from addMessage
+      const initialMeta = chatStore.getState().conversationMeta.get('alice@example.com')
+      expect(initialMeta?.lastMessage?.body).toBe('Recent message')
+
+      // Try to update with an older message
+      const olderMsg: Message = {
+        type: 'chat',
+        id: 'older-msg',
+        conversationId: 'alice@example.com',
+        from: 'alice@example.com',
+        body: 'Older message',
+        timestamp: new Date('2024-01-15T11:00:00Z'), // Older timestamp
+        isOutgoing: false,
+      }
+      chatStore.getState().updateLastMessagePreview('alice@example.com', olderMsg)
+
+      // Preview should NOT be updated (still shows recent message)
+      const metaAfter = chatStore.getState().conversationMeta.get('alice@example.com')
+      expect(metaAfter?.lastMessage?.body).toBe('Recent message')
+    })
+
+    it('should do nothing for non-existent conversation', () => {
+      const previewMsg: Message = {
+        type: 'chat',
+        id: 'preview-msg',
+        conversationId: 'nonexistent@example.com',
+        from: 'nonexistent@example.com',
+        body: 'Message',
+        timestamp: new Date(),
+        isOutgoing: false,
+      }
+
+      // Should not throw
+      expect(() => {
+        chatStore.getState().updateLastMessagePreview('nonexistent@example.com', previewMsg)
+      }).not.toThrow()
+
+      // State should be unchanged (no new conversation created)
+      expect(chatStore.getState().conversations.has('nonexistent@example.com')).toBe(false)
+    })
+  })
 })

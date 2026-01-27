@@ -113,6 +113,7 @@ export function createDefaultStoreBindings(options: DefaultStoreBindingsOptions 
       resetMAMStates: chatStore.getState().resetMAMStates,
       markAllNeedsCatchUp: chatStore.getState().markAllNeedsCatchUp,
       clearNeedsCatchUp: chatStore.getState().clearNeedsCatchUp,
+      updateLastMessagePreview: chatStore.getState().updateLastMessagePreview,
       getAllConversations: () => {
         const state = chatStore.getState()
         return Array.from(state.conversations.values()).map(conv => ({

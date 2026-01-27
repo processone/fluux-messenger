@@ -81,6 +81,8 @@ export interface StoreBindings {
     // Lazy MAM: mark conversations as needing catch-up after reconnect
     markAllNeedsCatchUp: () => void
     clearNeedsCatchUp: (conversationId: string) => void
+    // Update sidebar preview without affecting message history
+    updateLastMessagePreview: (conversationId: string, lastMessage: Message) => void
     // Get all conversations for MAM catch-up
     getAllConversations: () => Array<{ id: string; messages: Message[] }>
   }

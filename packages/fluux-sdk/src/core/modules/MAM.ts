@@ -450,6 +450,108 @@ export class MAM extends BaseModule {
     await Promise.allSettled(promises)
   }
 
+  /**
+   * Refresh sidebar previews for all conversations by fetching the latest message.
+   *
+   * After being offline, the cached lastMessage may be stale (messages exchanged on
+   * other devices). This method fetches `max=1` from MAM for each conversation to
+   * update the sidebar preview without affecting the message history.
+   *
+   * The fetched messages are NOT stored in IndexedDB or the messages array - they
+   * only update the `lastMessage` field for sidebar display. When the conversation
+   * is opened, a full MAM fetch will retrieve the complete history.
+   *
+   * @param options - Optional configuration
+   * @param options.concurrency - Maximum parallel requests (default: 3)
+   */
+  async refreshConversationPreviews(options: { concurrency?: number } = {}): Promise<void> {
+    const { concurrency = 3 } = options
+    const conversations = this.deps.stores?.chat.getAllConversations() || []
+    if (conversations.length === 0) return
+
+    this.deps.emitSDK('console:event', {
+      message: `Refreshing previews for ${conversations.length} conversation(s)`,
+      category: 'sm',
+    })
+
+    // Process in batches to avoid overwhelming the server
+    const conversationIds = conversations.map(c => c.id)
+
+    // Simple throttled execution with concurrency limit
+    const results: Promise<void>[] = []
+    let activeCount = 0
+    let index = 0
+
+    const processNext = async (): Promise<void> => {
+      while (index < conversationIds.length) {
+        if (activeCount >= concurrency) {
+          // Wait a bit before checking again
+          await new Promise(resolve => setTimeout(resolve, 50))
+          continue
+        }
+
+        const conversationId = conversationIds[index++]
+        activeCount++
+
+        // Don't await - let it run in parallel
+        this.fetchPreviewForConversation(conversationId).finally(() => {
+          activeCount--
+        })
+      }
+    }
+
+    // Start the processing
+    await processNext()
+
+    // Wait for all in-flight requests to complete
+    while (activeCount > 0) {
+      await new Promise(resolve => setTimeout(resolve, 50))
+    }
+
+    await Promise.allSettled(results)
+  }
+
+  /**
+   * Fetch the latest message for a single conversation (preview only).
+   * Updates lastMessage without affecting message history.
+   */
+  private async fetchPreviewForConversation(conversationId: string): Promise<void> {
+    try {
+      const queryId = `preview_${generateUUID()}`
+
+      // Build form fields with 'with' filter for 1:1 conversations
+      const formFields: Element[] = [
+        xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, NS_MAM)),
+        xml('field', { var: 'with' }, xml('value', {}, conversationId)),
+      ]
+
+      // Query with max=1 to get only the latest message
+      const iq = this.buildMAMQuery(queryId, formFields, 1, '')
+
+      let latestMessage: Message | null = null
+
+      const collectMessage = this.createMessageCollector(queryId, (forwarded, _messageEl) => {
+        const msg = this.parseArchiveMessage(forwarded, conversationId)
+        if (msg) latestMessage = msg
+      })
+
+      ;(this.deps.getXmpp() as any)?.on('stanza', collectMessage)
+
+      try {
+        const response = await this.deps.sendIQ(iq)
+        if (response && latestMessage) {
+          // Update only the lastMessage preview, not the message history
+          this.deps.stores?.chat.updateLastMessagePreview(conversationId, latestMessage)
+        }
+      } finally {
+        ;(this.deps.getXmpp() as any)?.removeListener('stanza', collectMessage)
+      }
+    } catch (error) {
+      // Silently ignore errors - preview refresh is best-effort
+      // Individual conversation failures shouldn't affect others
+    }
+  }
+
   // --- Private Helpers ---
 
   /**
