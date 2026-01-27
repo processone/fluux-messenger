@@ -2267,4 +2267,39 @@ describe('chatStore', () => {
       expect(chatStore.getState().conversations.has('nonexistent@example.com')).toBe(false)
     })
   })
+
+  describe('activeConversations', () => {
+    it('should return only non-archived conversations', () => {
+      // Create multiple conversations
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      chatStore.getState().addConversation(createConversation('bob@example.com'))
+      chatStore.getState().addConversation(createConversation('carol@example.com'))
+
+      // Archive one
+      chatStore.getState().archiveConversation('bob@example.com')
+
+      // activeConversations should only return non-archived
+      const active = chatStore.getState().activeConversations()
+      expect(active).toHaveLength(2)
+      expect(active.map(c => c.id)).toContain('alice@example.com')
+      expect(active.map(c => c.id)).toContain('carol@example.com')
+      expect(active.map(c => c.id)).not.toContain('bob@example.com')
+    })
+
+    it('should return empty array when all conversations are archived', () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      chatStore.getState().archiveConversation('alice@example.com')
+
+      const active = chatStore.getState().activeConversations()
+      expect(active).toHaveLength(0)
+    })
+
+    it('should return all conversations when none are archived', () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      chatStore.getState().addConversation(createConversation('bob@example.com'))
+
+      const active = chatStore.getState().activeConversations()
+      expect(active).toHaveLength(2)
+    })
+  })
 })

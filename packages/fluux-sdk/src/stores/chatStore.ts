@@ -92,6 +92,8 @@ interface ChatState {
   activeConversation: () => Conversation | null
   activeMessages: () => Message[]
   isArchived: (id: string) => boolean
+  /** Get all non-archived conversations (visible in sidebar) */
+  activeConversations: () => Conversation[]
 
   // Actions
   setActiveConversation: (id: string | null) => void
@@ -320,6 +322,17 @@ export const chatStore = createStore<ChatState>()(
 
       isArchived: (id) => {
         return get().archivedConversations.has(id)
+      },
+
+      activeConversations: () => {
+        const state = get()
+        const result: Conversation[] = []
+        for (const conv of state.conversations.values()) {
+          if (!state.archivedConversations.has(conv.id)) {
+            result.push(conv)
+          }
+        }
+        return result
       },
 
       setActiveConversation: (id) => {
