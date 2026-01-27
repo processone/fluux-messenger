@@ -612,6 +612,7 @@ describe('XMPPClient', () => {
         stop: vi.fn().mockResolvedValue(undefined),
         send: vi.fn().mockResolvedValue(undefined),
         write: vi.fn().mockResolvedValue(undefined),
+        socket: { writable: true },
         iqCallee: {
           set: vi.fn((xmlns: string, element: string, handler: Function) => {
             iqCalleeHandlers.set(`set:${xmlns}:${element}`, handler)

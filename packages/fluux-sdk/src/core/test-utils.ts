@@ -68,6 +68,8 @@ export const createMockXmppClient = () => {
     stop: vi.fn().mockResolvedValue(undefined),
     send: vi.fn().mockResolvedValue(undefined),
     write: vi.fn().mockResolvedValue(undefined),
+    // Mock socket property (required by sendStanza health check)
+    socket: { writable: true },
     // Mock iq-callee for roster push handling and disco#info
     // Simulates real xmpp.js iqCallee behavior:
     // - If handler registered and returns Element/truthy: sends IQ result
