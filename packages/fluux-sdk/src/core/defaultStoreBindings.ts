@@ -116,10 +116,13 @@ export function createDefaultStoreBindings(options: DefaultStoreBindingsOptions 
       updateLastMessagePreview: chatStore.getState().updateLastMessagePreview,
       getAllConversations: () => {
         const state = chatStore.getState()
-        return Array.from(state.conversations.values()).map(conv => ({
-          id: conv.id,
-          messages: state.messages.get(conv.id) || [],
-        }))
+        // Only return non-archived conversations (visible in sidebar)
+        return Array.from(state.conversations.values())
+          .filter(conv => !state.archivedConversations.has(conv.id))
+          .map(conv => ({
+            id: conv.id,
+            messages: state.messages.get(conv.id) || [],
+          }))
       },
     },
     roster: {
