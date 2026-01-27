@@ -797,6 +797,34 @@ describe('MUC Module', () => {
       })
     })
 
+    it('skips join if already joined (avoids presence issues)', async () => {
+      // Simulate already being in the room
+      mockStores.room.getRoom.mockReturnValue({
+        jid: 'room@conference.example.org',
+        joined: true, // Already joined!
+        isJoining: false,
+        nickname: 'mynick',
+        isBookmarked: true,
+        supportsMAM: false,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+      })
+
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+      await muc.joinRoom('room@conference.example.org', 'newnick')
+
+      // Should NOT send presence (mockSendStanza should not be called)
+      expect(mockSendStanza).not.toHaveBeenCalled()
+      // Should NOT emit room:added or room:updated
+      expect(mockEmitSDK).not.toHaveBeenCalled()
+
+      consoleSpy.mockRestore()
+    })
+
     it('clears isJoining on successful self-presence (status 110)', async () => {
       // First join the room
       await muc.joinRoom('room@conference.example.org', 'mynick')

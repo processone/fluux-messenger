@@ -351,6 +351,13 @@ export class MUC extends BaseModule {
     options?: { maxHistory?: number; password?: string; isQuickChat?: boolean }
   ): Promise<void> {
     const existingRoom = this.deps.stores?.room.getRoom(roomJid)
+
+    // If already joined, don't send another presence (avoids leave/rejoin issues)
+    if (existingRoom?.joined) {
+      console.log('[MUC] Already in room, skipping join:', roomJid)
+      return
+    }
+
     const isQuickChat = options?.isQuickChat ?? existingRoom?.isQuickChat
 
     // Query room features to detect MAM support
