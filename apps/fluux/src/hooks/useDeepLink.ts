@@ -7,7 +7,8 @@
  * Phase 2.4: Uses React Router for navigation instead of callback handlers.
  */
 import { useEffect, useCallback, useRef } from 'react'
-import { useChat, useRoom, useRoster, useConnection, chatStore, type Conversation, parseXmppUri, isMucJid, getBareJid } from '@fluux/sdk'
+import { useChat, useRoom, useRoster, chatStore, type Conversation, parseXmppUri, isMucJid, getBareJid } from '@fluux/sdk'
+import { useConnectionStore } from '@fluux/sdk/react'
 import { useNavigateToTarget } from './useNavigateToTarget'
 
 // Tauri detection
@@ -24,7 +25,8 @@ export function useDeepLink() {
   const { joinRoom } = useRoom()
   const { navigateToConversation, navigateToRoom } = useNavigateToTarget()
   const { contacts } = useRoster()
-  const { jid } = useConnection()
+  // Use focused selector to only subscribe to jid
+  const jid = useConnectionStore((s) => s.jid)
   const contactsRef = useRef(contacts)
   const jidRef = useRef(jid)
 

@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useConnection, type FileAttachment, type ThumbnailInfo } from '@fluux/sdk'
+import { useXMPP, type FileAttachment, type ThumbnailInfo } from '@fluux/sdk'
+import { useConnectionStore } from '@fluux/sdk/react'
 import {
   generateThumbnail,
   generateVideoThumbnail,
@@ -27,7 +28,17 @@ export type { FileAttachment, ThumbnailInfo }
  */
 export function useFileUpload() {
   const { t } = useTranslation()
-  const { httpUploadService, requestUploadSlot } = useConnection()
+  // Get client from context for methods (avoiding useConnection's 12+ subscriptions)
+  const { client } = useXMPP()
+  // Use focused selector for httpUploadService (only re-render when it changes)
+  const httpUploadService = useConnectionStore((s) => s.httpUploadService)
+  // Get requestUploadSlot from client
+  const requestUploadSlot = useCallback(
+    (filename: string, size: number, contentType: string) => {
+      return client.discovery.requestUploadSlot(filename, size, contentType)
+    },
+    [client]
+  )
   const [state, setState] = useState<UploadState>({
     isUploading: false,
     progress: 0,

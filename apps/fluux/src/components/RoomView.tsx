@@ -127,6 +127,17 @@ export function RoomView({ onBack, mainContentRef, composerRef }: RoomViewProps)
   // Occupant panel state
   const [showOccupants, setShowOccupants] = useState(false)
 
+  // Memoized callbacks to prevent render loops (new function refs cause child re-renders)
+  const handleCancelReply = useCallback(() => setReplyingTo(null), [])
+  const handleCancelEdit = useCallback(() => setEditingMessage(null), [])
+  const handleReactionPickerChange = useCallback((messageId: string, isOpen: boolean) => {
+    setActiveReactionPickerMessageId(isOpen ? messageId : null)
+  }, [])
+  const handleCloseOccupants = useCallback(() => setShowOccupants(false), [])
+
+  // Memoized upload state to prevent new object reference on every render
+  const uploadStateObj = useMemo(() => ({ isUploading, progress }), [isUploading, progress])
+
   // Scroll ref for programmatic scrolling and keyboard navigation
   const scrollRef = useRef<HTMLElement>(null)
   const isAtBottomRef = useRef(true)
@@ -272,7 +283,7 @@ export function RoomView({ onBack, mainContentRef, composerRef }: RoomViewProps)
             typingUsers={activeTypingUsers}
             isComposing={isComposing}
             activeReactionPickerMessageId={activeReactionPickerMessageId}
-            onReactionPickerChange={(messageId, isOpen) => setActiveReactionPickerMessageId(isOpen ? messageId : null)}
+            onReactionPickerChange={handleReactionPickerChange}
             retractMessage={retractMessage}
             selectedMessageId={selectedMessageId}
             hasKeyboardSelection={hasKeyboardSelection}
@@ -301,12 +312,12 @@ export function RoomView({ onBack, mainContentRef, composerRef }: RoomViewProps)
             onMessageSent={scrollToBottom}
             onInputResize={handleInputResize}
             replyingTo={replyingTo}
-            onCancelReply={() => setReplyingTo(null)}
+            onCancelReply={handleCancelReply}
             editingMessage={editingMessage}
-            onCancelEdit={() => setEditingMessage(null)}
+            onCancelEdit={handleCancelEdit}
             onEditLastMessage={handleEditLastMessage}
             onComposingChange={setIsComposing}
-            uploadState={{ isUploading, progress }}
+            uploadState={uploadStateObj}
             isUploadSupported={isSupported}
             onFileSelect={handleFileDrop}
             processLinkPreview={processMessageForLinkPreview}
@@ -325,7 +336,7 @@ export function RoomView({ onBack, mainContentRef, composerRef }: RoomViewProps)
           room={activeRoom}
           contactsByJid={contactsByJid}
           ownAvatar={ownAvatar}
-          onClose={() => setShowOccupants(false)}
+          onClose={handleCloseOccupants}
         />
       )}
 
@@ -337,7 +348,7 @@ export function RoomView({ onBack, mainContentRef, composerRef }: RoomViewProps)
   )
 }
 
-function RoomMessageList({
+const RoomMessageList = memo(function RoomMessageList({
   messages,
   messagesById,
   scrollerRef,
@@ -475,6 +486,40 @@ function RoomMessageList({
     </div>
   ) : null
 
+  // Memoize renderMessage to prevent render loops
+  // Note: This callback captures many values, but they all affect how messages render
+  const renderMessage = useCallback((msg: RoomMessage, idx: number, groupMessages: RoomMessage[]) => (
+    <RoomMessageBubbleWrapper
+      message={msg}
+      showAvatar={shouldShowAvatar(groupMessages, idx)}
+      messagesById={messagesById}
+      room={room}
+      contactsByJid={contactsByJid}
+      ownAvatar={ownAvatar}
+      sendReaction={sendReaction}
+      onReply={onReply}
+      onEdit={onEdit}
+      isLastOutgoing={msg.id === lastOutgoingMessageId}
+      isLastMessage={msg.id === lastMessageId}
+      hideToolbar={isComposing || (activeReactionPickerMessageId !== null && activeReactionPickerMessageId !== msg.id)}
+      onReactionPickerChange={(isOpen) => onReactionPickerChange(msg.id, isOpen)}
+      retractMessage={retractMessage}
+      isSelected={msg.id === selectedMessageId}
+      hasKeyboardSelection={hasKeyboardSelection}
+      showToolbarForSelection={showToolbarForSelection}
+      isDarkMode={isDarkMode}
+      onMediaLoad={onMediaLoad}
+      isHovered={hoveredMessageId === msg.id}
+      onMouseEnter={() => handleMessageHover(msg.id)}
+      onMouseLeave={handleMessageLeave}
+    />
+  ), [
+    messagesById, room, contactsByJid, ownAvatar, sendReaction, onReply, onEdit,
+    lastOutgoingMessageId, lastMessageId, isComposing, activeReactionPickerMessageId,
+    onReactionPickerChange, retractMessage, selectedMessageId, hasKeyboardSelection,
+    showToolbarForSelection, isDarkMode, onMediaLoad, hoveredMessageId, handleMessageHover, handleMessageLeave
+  ])
+
   return (
     <MessageList
       messages={messages}
@@ -491,35 +536,10 @@ function RoomMessageList({
       onScrollToTop={onScrollToTop}
       isLoadingOlder={isLoadingOlder}
       isHistoryComplete={isHistoryComplete}
-      renderMessage={(msg, idx, groupMessages) => (
-        <RoomMessageBubbleWrapper
-          message={msg}
-          showAvatar={shouldShowAvatar(groupMessages, idx)}
-          messagesById={messagesById}
-          room={room}
-          contactsByJid={contactsByJid}
-          ownAvatar={ownAvatar}
-          sendReaction={sendReaction}
-          onReply={onReply}
-          onEdit={onEdit}
-          isLastOutgoing={msg.id === lastOutgoingMessageId}
-          isLastMessage={msg.id === lastMessageId}
-          hideToolbar={isComposing || (activeReactionPickerMessageId !== null && activeReactionPickerMessageId !== msg.id)}
-          onReactionPickerChange={(isOpen) => onReactionPickerChange(msg.id, isOpen)}
-          retractMessage={retractMessage}
-          isSelected={msg.id === selectedMessageId}
-          hasKeyboardSelection={hasKeyboardSelection}
-          showToolbarForSelection={showToolbarForSelection}
-          isDarkMode={isDarkMode}
-          onMediaLoad={onMediaLoad}
-          isHovered={hoveredMessageId === msg.id}
-          onMouseEnter={() => handleMessageHover(msg.id)}
-          onMouseLeave={handleMessageLeave}
-        />
-      )}
+      renderMessage={renderMessage}
     />
   )
-}
+})
 
 interface RoomMessageBubbleWrapperProps {
   message: RoomMessage

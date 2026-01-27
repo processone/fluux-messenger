@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
-import { useEvents, useConnection } from '@fluux/sdk'
+import { useEvents } from '@fluux/sdk'
+import { useConnectionStore } from '@fluux/sdk/react'
 import {
   isPermissionGranted,
   requestPermission,
@@ -17,7 +18,8 @@ const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
  */
 export function useEventsDesktopNotifications(): void {
   const { subscriptionRequests } = useEvents()
-  const { status } = useConnection()
+  // Use focused selector to only subscribe to status
+  const status = useConnectionStore((s) => s.status)
   const prevRequestsRef = useRef<typeof subscriptionRequests>([])
   const permissionGranted = useRef(false)
 

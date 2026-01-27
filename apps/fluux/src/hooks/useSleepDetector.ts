@@ -1,5 +1,6 @@
 import { useEffect, useCallback } from 'react'
-import { consoleStore, useConnection, usePresence } from '@fluux/sdk'
+import { consoleStore, usePresence } from '@fluux/sdk'
+import { useConnectionStore } from '@fluux/sdk/react'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
@@ -12,7 +13,8 @@ const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
  * - User activity is detected (handled by useAutoAway's activity listeners)
  */
 export function useSleepDetector() {
-  const { status } = useConnection()
+  // Use focused selector to only subscribe to status
+  const status = useConnectionStore((s) => s.status)
   const { presenceStatus: presenceShow, isAutoAway, sleepDetected } = usePresence()
 
   // Helper to log events to the XMPP console

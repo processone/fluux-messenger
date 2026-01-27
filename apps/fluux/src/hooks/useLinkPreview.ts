@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useState } from 'react'
-import { useConnection } from '@fluux/sdk'
+import { useXMPP } from '@fluux/sdk'
 import { fetchUrlMetadata, extractFirstUrl, isImageUrl } from '@/utils/linkPreview'
 import type { LinkPreview } from '@fluux/sdk'
 
@@ -16,7 +16,14 @@ interface LinkPreviewState {
 }
 
 export function useLinkPreview() {
-  const { sendLinkPreview } = useConnection()
+  // Get client from context for methods (avoiding useConnection's 12+ subscriptions)
+  const { client } = useXMPP()
+  const sendLinkPreview = useCallback(
+    async (to: string, messageId: string, preview: LinkPreview, type: 'chat' | 'groupchat') => {
+      await client.chat.sendLinkPreview(to, messageId, preview, type)
+    },
+    [client]
+  )
   const [state, setState] = useState<LinkPreviewState>({
     isFetching: false,
     error: null,

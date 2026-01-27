@@ -51,10 +51,11 @@ const { mockPresenceConnect, mockPresenceDisconnect } = vi.hoisted(() => ({
   mockPresenceDisconnect: vi.fn(),
 }))
 
+vi.mock('@fluux/sdk/react', () => ({
+  useConnectionStore: (selector: (state: { status: string }) => string) => selector({ status: 'online' }),
+}))
+
 vi.mock('@fluux/sdk', () => ({
-  useConnection: () => ({
-    status: 'online',
-  }),
   useSystemState: () => ({
     notifyIdle: mockNotifyIdle,
     notifyActive: mockNotifyActive,

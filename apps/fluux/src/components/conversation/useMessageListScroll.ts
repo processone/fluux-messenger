@@ -1,101 +1,75 @@
 /**
- * useMessageListScroll - Manages all scroll behavior for MessageList
+ * useMessageListScroll - Simple, imperative scroll management
  *
- * This hook encapsulates the complex scroll logic that was previously scattered
- * across MessageList.tsx. It handles:
+ * DESIGN PRINCIPLES:
+ * 1. All scroll state lives in REFS, not React state (prevents render loops)
+ * 2. Scroll operations are IMPERATIVE (directly set scrollTop)
+ * 3. Only FAB visibility uses React state (it needs to trigger UI updates)
+ * 4. Logic is LINEAR and SIMPLE - no state machines, no complex transitions
  *
- * 1. CONVERSATION SWITCHING
- *    - First visit: scroll to bottom
- *    - Return visit (was at bottom): scroll to bottom
- *    - Return visit (was scrolled up): restore saved position
- *
- * 2. NEW MESSAGES
- *    - At bottom: smooth scroll to show new message
- *    - Scrolled up: don't disturb user's position
- *
- * 3. HISTORY LOADING (prepend)
- *    - Capture scroll state before loading
- *    - After prepend: adjust position to maintain visual continuity
- *
- * 4. AUTO-SCROLL TRIGGERS
- *    - Typing indicator changes (when at bottom)
- *    - Reaction changes on last message (when at bottom)
- *    - Container/content resize (when at bottom)
- *
- * 5. SCROLL-TO-TOP LOADING
- *    - Trigger onScrollToTop when user scrolls to top
- *    - Cooldown to prevent rapid re-triggering
- *    - Wheel event handling when already at scrollTop=0
+ * BEHAVIORS:
+ * - Initial load: scroll to bottom
+ * - Conversation switch: restore position or scroll to bottom
+ * - New message arrives: if at bottom, stay at bottom
+ * - Load older messages: preserve visual position (what user was looking at)
+ * - Images load: if at bottom, stay at bottom
  */
 
 import { useRef, useEffect, useLayoutEffect, useCallback, useState } from 'react'
 import { scrollStateManager } from '@/utils/scrollStateManager'
 
 // ============================================================================
-// CONFIGURATION
+// DEBUG
 // ============================================================================
 
-/** Minimum time between scroll-to-top load triggers */
-const LOAD_COOLDOWN_MS = 500
+const DEBUG = false
 
-/** Distance from bottom to show "scroll to bottom" FAB */
-const SCROLL_TO_BOTTOM_THRESHOLD = 300
+function debugLog(action: string, data?: Record<string, unknown>) {
+  if (DEBUG) {
+    console.log(`[Scroll] ${action}`, data ?? '')
+  }
+}
 
-/** Distance from bottom to consider "at bottom" for auto-scroll */
-const AT_BOTTOM_THRESHOLD = 50
+// ============================================================================
+// CONSTANTS
+// ============================================================================
 
-/** Throttle interval for saving scroll position */
-const SCROLL_SAVE_THROTTLE_MS = 100
-
+const AT_BOTTOM_THRESHOLD = 50 // pixels from bottom to consider "at bottom"
+const FAB_THRESHOLD = 300 // pixels from bottom to show "scroll to bottom" button
+const LOAD_COOLDOWN_MS = 500 // minimum time between load triggers
+const SAVE_THROTTLE_MS = 100 // minimum time between position saves
+const PREPEND_COOLDOWN_MS = 500 // time to keep prepend flag after restore (prevents re-trigger)
 
 // ============================================================================
 // TYPES
 // ============================================================================
 
 export interface UseMessageListScrollOptions {
-  /** Unique identifier for this conversation/room */
   conversationId: string
-  /** Number of messages (used to detect new arrivals) */
   messageCount: number
-  /** ID of first message (used to detect prepends) */
   firstMessageId: string | undefined
-  /** External ref for scroll container (for keyboard navigation) */
   externalScrollerRef?: React.RefObject<HTMLElement>
-  /** External ref for "at bottom" state (shared with parent) */
   externalIsAtBottomRef?: React.MutableRefObject<boolean>
-  /** Callback when user scrolls to top (for lazy loading) */
   onScrollToTop?: () => void
-  /** Whether older messages are currently loading */
   isLoadingOlder?: boolean
-  /** Whether all history has been fetched */
   isHistoryComplete?: boolean
-  /** Number of users typing (triggers auto-scroll when changes) */
   typingUsersCount: number
-  /** Serialized reactions of last message (triggers auto-scroll when changes) */
   lastMessageReactionsKey: string
 }
 
 export interface UseMessageListScrollResult {
-  /** Callback ref for the scroll container div */
   setScrollContainerRef: (element: HTMLDivElement | null) => void
-  /** Ref for the content wrapper (for resize observation) */
   contentWrapperRef: React.RefObject<HTMLDivElement>
-  /** Scroll event handler */
   handleScroll: (e: React.UIEvent<HTMLDivElement>) => void
-  /** Wheel event handler (for scroll-to-top at boundary) */
   handleWheel: (e: React.WheelEvent<HTMLDivElement>) => void
-  /** Click handler for "load earlier" button */
   handleLoadEarlier: () => void
-  /** Smooth scroll to bottom (for FAB) */
   scrollToBottom: () => void
-  /** Smooth scroll to top (for keyboard shortcut) */
   scrollToTop: () => void
-  /** Whether to show the "scroll to bottom" FAB */
   showScrollToBottom: boolean
 }
 
 // ============================================================================
-// HOOK IMPLEMENTATION
+// HOOK
 // ============================================================================
 
 export function useMessageListScroll({
@@ -110,678 +84,528 @@ export function useMessageListScroll({
   typingUsersCount,
   lastMessageReactionsKey,
 }: UseMessageListScrollOptions): UseMessageListScrollResult {
-  // --------------------------------------------------------------------------
-  // REFS: Core scroll state
-  // --------------------------------------------------------------------------
 
-  /** The scroll container DOM element */
-  const scrollContainerRef = useRef<HTMLDivElement | null>(null)
+  // ==========================================================================
+  // REFS - All scroll state lives here, NOT in React state
+  // ==========================================================================
 
-  /** Content wrapper for resize observation */
-  const contentWrapperRef = useRef<HTMLDivElement>(null)
+  const scrollerRef = useRef<HTMLDivElement | null>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
 
-  /** Whether user is currently at bottom (for auto-scroll decisions) */
-  const internalIsAtBottomRef = useRef(true)
-  const isAtBottomRef = externalIsAtBottomRef || internalIsAtBottomRef
+  // Track scroll position
+  const isAtBottomRef = externalIsAtBottomRef || useRef(true)
 
-  /** Previous conversation ID (to detect switches) */
-  const prevConversationIdRef = useRef<string | null>(null)
+  // Track conversation
+  const prevConversationRef = useRef<string | null>(null)
+  const prevMessageCountRef = useRef(0)
+  const hasInitializedRef = useRef(false)
 
-  /** Current conversation ID as ref (for stable callbacks) */
-  const conversationIdRef = useRef(conversationId)
-  conversationIdRef.current = conversationId
-
-  /** Whether MAM was loading on the previous render (to detect completion) */
-  const wasMAMLoadingRef = useRef(false)
-
-  /** Whether we're in the initial load phase (should scroll to bottom when MAM completes) */
-  const isInitialLoadPhaseRef = useRef(false)
-
-  // --------------------------------------------------------------------------
-  // REFS: Scroll-to-top loading state
-  // --------------------------------------------------------------------------
-
-  /** Last scrollTop value (to detect scroll direction) */
-  const lastScrollTopRef = useRef(0)
-
-  /** Timestamp of last load trigger (for cooldown) */
-  const loadCooldownRef = useRef(0)
-
-  /** Whether user has scrolled away from top (allows re-trigger) */
-  const hasScrolledAwayRef = useRef(false)
-
-  // --------------------------------------------------------------------------
-  // REFS: Scroll position persistence
-  // --------------------------------------------------------------------------
-
-  /** Timestamp of last position save (for throttling) */
-  const lastScrollSaveRef = useRef(0)
-
-  /** Pending scroll data for cleanup (in case DOM unmounts first) */
-  const pendingScrollDataRef = useRef<{
-    conversationId: string
-    scrollTop: number
-    scrollHeight: number
-    clientHeight: number
+  // Track prepend (loading older messages)
+  // When we load older messages, we save the anchor element position BEFORE the load,
+  // then restore it AFTER React renders the new messages.
+  // Using element-based positioning is more reliable than pure scroll math.
+  const prependRef = useRef<{
+    // Element-based: ID and offset of the anchor element (first visible message)
+    anchorMessageId: string
+    anchorOffsetFromTop: number
+    // Fallback: distance from bottom (in case element isn't found)
+    distanceFromBottom: number
+    oldFirstId: string
+    oldMessageCount: number
+    restored?: boolean  // Set after restore, cleared after cooldown
+    restoredAt?: number // Timestamp of restore
   } | null>(null)
 
-  // --------------------------------------------------------------------------
-  // REFS: Prepend adjustment (for loading older messages)
-  // --------------------------------------------------------------------------
+  // Throttling/cooldown
+  const lastSaveTimeRef = useRef(0)
+  const lastLoadTimeRef = useRef(0)
+  const lastRestoreTimeRef = useRef(0) // Track when we last restored position
+  const scrolledAwayFromTopRef = useRef(false)
 
-  /** Scroll height before prepend (to calculate adjustment) */
-  const prePrependScrollHeightRef = useRef(0)
+  // Last scroll data (for saving on conversation switch)
+  const lastScrollDataRef = useRef<{ top: number; height: number; client: number } | null>(null)
 
-  /** Scroll position before prepend */
-  const prePrependScrollTopRef = useRef(0)
+  // ==========================================================================
+  // REACT STATE - Only for things that need to trigger UI updates
+  // ==========================================================================
 
-  /** First message ID before prepend (to detect when prepend happened) */
-  const prePrependFirstMsgIdRef = useRef<string | null>(null)
-
-  /** Flag to indicate prepend is pending (used to hide content during transition) */
-  const isPrependPendingRef = useRef(false)
-
-  // --------------------------------------------------------------------------
-  // STATE
-  // --------------------------------------------------------------------------
-
-  /** Whether to show the "scroll to bottom" FAB */
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
 
-  /** Track last FAB state to avoid unnecessary state updates */
-  const lastShowScrollToBottomRef = useRef(false)
+  // ==========================================================================
+  // HELPERS
+  // ==========================================================================
 
-  // --------------------------------------------------------------------------
-  // DERIVED VALUES
-  // --------------------------------------------------------------------------
-
-  /** Whether we can trigger a load (not complete, not loading, has callback) */
   const canLoadMore = !isHistoryComplete && !isLoadingOlder && !!onScrollToTop
 
-  // --------------------------------------------------------------------------
-  // CALLBACKS: Ref management
-  // --------------------------------------------------------------------------
+  const getDistanceFromBottom = (el: HTMLElement) =>
+    el.scrollHeight - el.scrollTop - el.clientHeight
 
-  /** Callback ref that syncs internal and external refs */
-  const setScrollContainerRef = useCallback(
-    (element: HTMLDivElement | null) => {
-      scrollContainerRef.current = element
-      if (externalScrollerRef) {
-        (externalScrollerRef as React.MutableRefObject<HTMLElement | null>).current = element
-      }
-    },
-    [externalScrollerRef]
-  )
+  // ==========================================================================
+  // REF SETTER (connects external ref if provided)
+  // ==========================================================================
 
-  // --------------------------------------------------------------------------
-  // CALLBACKS: Scroll actions
-  // --------------------------------------------------------------------------
-
-  /** Scroll to bottom - instant or smooth */
-  const doScrollToBottom = useCallback((smooth: boolean) => {
-    const scroller = scrollContainerRef.current
-    if (!scroller) return
-
-    if (smooth) {
-      scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' })
-    } else {
-      scroller.scrollTop = scroller.scrollHeight
+  const setScrollContainerRef = useCallback((el: HTMLDivElement | null) => {
+    scrollerRef.current = el
+    if (externalScrollerRef) {
+      (externalScrollerRef as React.MutableRefObject<HTMLElement | null>).current = el
     }
-  }, [])
+  }, [externalScrollerRef])
 
-  /** Public smooth scroll to bottom (for FAB) */
+  // ==========================================================================
+  // SCROLL ACTIONS
+  // ==========================================================================
+
   const scrollToBottom = useCallback(() => {
-    doScrollToBottom(true)
-  }, [doScrollToBottom])
-
-  /** Public smooth scroll to top (for keyboard shortcut) */
-  const scrollToTop = useCallback(() => {
-    const scroller = scrollContainerRef.current
-    if (!scroller) return
-
-    // Set cooldown to prevent auto-load triggering
-    loadCooldownRef.current = Date.now()
-    scroller.scrollTo({ top: 0, behavior: 'smooth' })
+    scrollerRef.current?.scrollTo({ top: scrollerRef.current.scrollHeight, behavior: 'smooth' })
   }, [])
 
-  // --------------------------------------------------------------------------
-  // CALLBACKS: Prepend state capture
-  // --------------------------------------------------------------------------
+  const scrollToTop = useCallback(() => {
+    lastLoadTimeRef.current = Date.now() // prevent auto-load trigger
+    scrollerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [])
 
-  /** Capture scroll state before triggering a load (for prepend adjustment) */
-  const captureScrollStateForPrepend = useCallback(() => {
-    const scroller = scrollContainerRef.current
-    if (!scroller) return
+  // ==========================================================================
+  // LOAD OLDER MESSAGES
+  // ==========================================================================
 
-    prePrependScrollHeightRef.current = scroller.scrollHeight
-    prePrependScrollTopRef.current = scroller.scrollTop
-    prePrependFirstMsgIdRef.current = firstMessageId ?? null
-    // Mark prepend as pending - content will be hidden until scroll is adjusted
-    isPrependPendingRef.current = true
-    // Clear initial load phase to prevent scroll-to-bottom after this prepend completes
-    isInitialLoadPhaseRef.current = false
-  }, [firstMessageId])
+  // Find the first visible message element and its offset from the viewport top
+  const findAnchorElement = useCallback(() => {
+    const scroller = scrollerRef.current
+    if (!scroller) return null
 
-  // --------------------------------------------------------------------------
-  // CALLBACKS: Load triggering
-  // --------------------------------------------------------------------------
+    const scrollTop = scroller.scrollTop
+    const messages = scroller.querySelectorAll('[data-message-id]')
 
-  /** Check cooldown and trigger load if allowed */
-  const tryTriggerLoad = useCallback(() => {
+    for (const msg of messages) {
+      const element = msg as HTMLElement
+      const rect = element.getBoundingClientRect()
+      const scrollerRect = scroller.getBoundingClientRect()
+      const offsetFromViewportTop = rect.top - scrollerRect.top
+
+      // First message whose top is at or below the viewport top
+      if (offsetFromViewportTop >= -rect.height / 2) {
+        return {
+          id: element.dataset.messageId!,
+          offsetFromTop: element.offsetTop - scrollTop,
+        }
+      }
+    }
+    return null
+  }, [])
+
+  const triggerLoadOlder = useCallback(() => {
     if (!canLoadMore) return
+    const scroller = scrollerRef.current
+    if (!scroller) return
 
     const now = Date.now()
-    const cooldownPassed = now - loadCooldownRef.current > LOAD_COOLDOWN_MS
+    const cooldownOk = now - lastLoadTimeRef.current > LOAD_COOLDOWN_MS
+    const recentlyRestored = now - lastRestoreTimeRef.current < LOAD_COOLDOWN_MS
 
-    if (cooldownPassed || hasScrolledAwayRef.current) {
-      loadCooldownRef.current = now
-      hasScrolledAwayRef.current = false
-      captureScrollStateForPrepend()
+    // Don't trigger if we just restored scroll position (prevents rapid re-loading)
+    if (recentlyRestored) {
+      debugLog('LOAD BLOCKED (recently restored)', {
+        timeSinceRestore: now - lastRestoreTimeRef.current,
+      })
+      return
+    }
+
+    if (cooldownOk || scrolledAwayFromTopRef.current) {
+      lastLoadTimeRef.current = now
+      scrolledAwayFromTopRef.current = false
+
+      const distFromBottom = getDistanceFromBottom(scroller)
+      const anchor = findAnchorElement()
+
+      // SAVE position before load - we'll restore this distance after messages render
+      prependRef.current = {
+        anchorMessageId: anchor?.id || '',
+        anchorOffsetFromTop: anchor?.offsetFromTop || 0,
+        distanceFromBottom: distFromBottom,
+        oldFirstId: firstMessageId || '',
+        oldMessageCount: messageCount,
+      }
+
+      debugLog('PREPEND START', {
+        anchor,
+        distanceFromBottom: distFromBottom,
+        scrollHeight: scroller.scrollHeight,
+        scrollTop: scroller.scrollTop,
+        clientHeight: scroller.clientHeight,
+        firstMessageId,
+        messageCount,
+      })
+
       onScrollToTop?.()
     }
-  }, [canLoadMore, captureScrollStateForPrepend, onScrollToTop])
+  }, [canLoadMore, findAnchorElement, firstMessageId, messageCount, onScrollToTop])
 
-  /** Handle "load earlier" button click (no cooldown for explicit clicks) */
   const handleLoadEarlier = useCallback(() => {
     if (!canLoadMore) return
-
-    loadCooldownRef.current = Date.now()
-    captureScrollStateForPrepend()
-    onScrollToTop?.()
-  }, [canLoadMore, captureScrollStateForPrepend, onScrollToTop])
-
-  // --------------------------------------------------------------------------
-  // CALLBACKS: Event handlers
-  // --------------------------------------------------------------------------
-
-  /** Main scroll event handler */
-  const handleScroll = useCallback(
-    (e: React.UIEvent<HTMLDivElement>) => {
-      const { scrollTop, scrollHeight, clientHeight } = e.currentTarget
-      const distanceFromBottom = scrollHeight - scrollTop - clientHeight
-
-      // Update "at bottom" state
-      isAtBottomRef.current = distanceFromBottom < AT_BOTTOM_THRESHOLD
-
-      // Save scroll position (throttled) - include conversationId for verification in cleanup
-      pendingScrollDataRef.current = { conversationId: conversationIdRef.current, scrollTop, scrollHeight, clientHeight }
-      const now = Date.now()
-      if (now - lastScrollSaveRef.current > SCROLL_SAVE_THROTTLE_MS) {
-        lastScrollSaveRef.current = now
-        scrollStateManager.saveScrollPosition(
-          conversationIdRef.current,
-          scrollTop,
-          scrollHeight,
-          clientHeight
-        )
-      }
-
-      // Update FAB visibility (only if changed to avoid re-renders)
-      const shouldShowFab = distanceFromBottom > SCROLL_TO_BOTTOM_THRESHOLD
-      if (shouldShowFab !== lastShowScrollToBottomRef.current) {
-        lastShowScrollToBottomRef.current = shouldShowFab
-        setShowScrollToBottom(shouldShowFab)
-      }
-
-      // Track if user scrolled away from top
-      if (scrollTop > 50) {
-        hasScrolledAwayRef.current = true
-      }
-
-      // Trigger load when reaching top (from scrolling down)
-      if (scrollTop === 0 && lastScrollTopRef.current > 0) {
-        tryTriggerLoad()
-      }
-
-      lastScrollTopRef.current = scrollTop
-    },
-    [isAtBottomRef, tryTriggerLoad]
-  )
-
-  /** Wheel event handler - needed to detect "scroll up" intent when at top */
-  const handleWheel = useCallback(
-    (e: React.WheelEvent<HTMLDivElement>) => {
-      const { scrollTop } = e.currentTarget
-
-      // Upward scroll at top boundary
-      if (scrollTop === 0 && e.deltaY < 0) {
-        tryTriggerLoad()
-      }
-
-      // Downward scroll at top resets "scrolled away" flag
-      if (scrollTop === 0 && e.deltaY > 0) {
-        hasScrolledAwayRef.current = true
-      }
-    },
-    [tryTriggerLoad]
-  )
-
-  // --------------------------------------------------------------------------
-  // EFFECT: Save scroll position when leaving conversation
-  // --------------------------------------------------------------------------
-
-  useEffect(() => {
-    // Cleanup runs when conversationId changes or component unmounts
-    return () => {
-      if (!conversationId) return
-
-      // IMPORTANT: Prefer pendingScrollDataRef over DOM!
-      // When React's cleanup runs, the DOM may already have the NEW conversation's content
-      // (due to React's render cycle), but pendingScrollDataRef contains the last scroll
-      // position captured during handleScroll BEFORE the conversation switch.
-      const pendingData = pendingScrollDataRef.current
-      if (pendingData && pendingData.conversationId === conversationId) {
-        const { scrollTop, scrollHeight, clientHeight } = pendingData
-        scrollStateManager.leaveConversation(conversationId, scrollTop, scrollHeight, clientHeight)
-      } else {
-        // Fallback: pendingRef doesn't have data for this conversation
-        // This can happen if user switched away before any scroll events occurred
-        // Don't save anything, but still mark as left so return is detected as switch
-        scrollStateManager.markAsLeft(conversationId)
-      }
-    }
-  }, [conversationId])
-
-  // --------------------------------------------------------------------------
-  // EFFECT: Handle conversation switch and new messages
-  // --------------------------------------------------------------------------
-
-  useEffect(() => {
-    const scroller = scrollContainerRef.current
-    if (!scroller || messageCount === 0) return
-
-    const isConversationSwitch = prevConversationIdRef.current !== conversationId
-    const wasInitialized = scrollStateManager.isInitialized(conversationId)
-    const isNewMessage =
-      !isConversationSwitch && wasInitialized && scrollStateManager.updateMessageCount(conversationId, messageCount)
-
-    // FIRST LOAD: Messages arrived for the first time (0 → N)
-    // This happens when joining a room - the view renders with 0 messages,
-    // then MAM loads history. We need to scroll to bottom.
-    if (!isConversationSwitch && !wasInitialized) {
-      scrollStateManager.enterConversation(conversationId, messageCount)
-      // Mark that we're in initial load phase - will scroll to bottom when MAM completes.
-      // Only set this if MAM is actually loading; otherwise, no need to wait.
-      isInitialLoadPhaseRef.current = !!isLoadingOlder
-      // Reset initial scroll flag so the content resize observer will scroll
-      hasInitialScrolledRef.current = false
-      // Try scrolling immediately, then again after RAF
-      doScrollToBottom(false)
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          doScrollToBottom(false)
-        })
-      })
-    } else if (isNewMessage) {
-      // NEW MESSAGE arrived - scroll if at bottom OR if MAM is still loading during initial phase.
-      // This handles the race condition when MUC history and MAM messages arrive in rapid succession.
-      const shouldScrollDuringInitialLoad = isInitialLoadPhaseRef.current && isLoadingOlder
-      if (isAtBottomRef.current || shouldScrollDuringInitialLoad) {
-        doScrollToBottom(true)
-      }
-    } else if (isConversationSwitch) {
-      // CONVERSATION SWITCH → ask scrollStateManager what to do
-      const action = scrollStateManager.enterConversation(conversationId, messageCount)
-
-      if (action === 'scroll-to-bottom') {
-        // First visit OR was at bottom last time
-        // Mark that we're in initial load phase - will scroll to bottom when MAM completes.
-        // Only set this if MAM is actually loading; otherwise, no need to wait.
-        isInitialLoadPhaseRef.current = !!isLoadingOlder
-        // Reset initial scroll flag so the content resize observer will scroll
-        hasInitialScrolledRef.current = false
-        // Try scrolling immediately, then again after RAF
-        doScrollToBottom(false)
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            doScrollToBottom(false)
-          })
-        })
-      } else if (action === 'restore-position') {
-        // Returning to saved position
-        const savedPosition = scrollStateManager.getSavedScrollTop(conversationId)
-        if (savedPosition !== null) {
-          // Mark NOT at bottom to prevent race with new messages
-          isAtBottomRef.current = false
-          // Not an initial load - don't auto-scroll when MAM completes
-          isInitialLoadPhaseRef.current = false
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              if (scrollContainerRef.current) {
-                scrollContainerRef.current.scrollTop = savedPosition
-              }
-              scrollStateManager.clearSavedScrollState(conversationId)
-            })
-          })
-        }
-      }
-      // 'no-action' means don't scroll (shouldn't happen on switch)
-    }
-
-    // Update tracking ref AFTER processing
-    prevConversationIdRef.current = conversationId
-  }, [conversationId, messageCount, doScrollToBottom, isAtBottomRef, isLoadingOlder])
-
-  // --------------------------------------------------------------------------
-  // EFFECT: Reset state when conversation changes
-  // --------------------------------------------------------------------------
-
-  useEffect(() => {
-    // Reset prepend tracking
-    prePrependScrollHeightRef.current = 0
-    prePrependScrollTopRef.current = 0
-    prePrependFirstMsgIdRef.current = null
-
-    // Reset MAM loading tracking
-    wasMAMLoadingRef.current = false
-    isInitialLoadPhaseRef.current = false
-
-    // Reset FAB (only if not already false)
-    if (lastShowScrollToBottomRef.current) {
-      lastShowScrollToBottomRef.current = false
-      setShowScrollToBottom(false)
-    }
-  }, [conversationId])
-
-  // --------------------------------------------------------------------------
-  // EFFECT: Scroll to bottom when MAM loading completes during initial load
-  // --------------------------------------------------------------------------
-
-  useEffect(() => {
-    // Detect MAM loading START (transition from false → true)
-    // This handles the race condition where:
-    // 1. Conversation switch sets isInitialLoadPhaseRef = !!isLoadingOlder = false
-    // 2. MAM starts loading AFTER the switch effect runs
-    // We need to capture this late-starting MAM load as part of initial phase
-    const mamJustStarted = !wasMAMLoadingRef.current && isLoadingOlder
-    if (mamJustStarted && prevConversationIdRef.current === conversationId) {
-      // IMPORTANT: Only mark as initial load phase if we're NOT doing scroll-up pagination.
-      // If prePrependFirstMsgIdRef is set, the user scrolled up and triggered a load -
-      // we should NOT scroll to bottom when that load completes.
-      const isScrollUpPagination = prePrependFirstMsgIdRef.current !== null
-      if (!isScrollUpPagination) {
-        // MAM started loading for the current conversation during initial phase
-        // so we scroll to bottom when it completes
-        isInitialLoadPhaseRef.current = true
-      }
-    }
-
-    // Detect MAM loading completion (transition from true → false)
-    const mamJustCompleted = wasMAMLoadingRef.current && !isLoadingOlder
-
-    if (mamJustCompleted && isInitialLoadPhaseRef.current) {
-      // MAM finished loading during initial load phase - scroll to bottom
-      // This handles the case where MUC history arrives first, then MAM messages
-      // arrive later. We need to scroll to show the latest messages.
-      // Reset initial scroll flag so the content resize observer will also scroll
-      hasInitialScrolledRef.current = false
-      // Try scrolling immediately, then again after RAF for layout completion
-      doScrollToBottom(false)
-      requestAnimationFrame(() => {
-        doScrollToBottom(false)
-        requestAnimationFrame(() => {
-          doScrollToBottom(false)
-          // End the initial load phase now that MAM is complete and we've scrolled
-          isInitialLoadPhaseRef.current = false
-        })
-      })
-    }
-
-    // Track current loading state for next render
-    wasMAMLoadingRef.current = isLoadingOlder ?? false
-  }, [isLoadingOlder, doScrollToBottom, conversationId])
-
-  // --------------------------------------------------------------------------
-  // LAYOUT EFFECT: Adjust scroll after prepend (older messages loaded)
-  // --------------------------------------------------------------------------
-
-  useLayoutEffect(() => {
-    const scroller = scrollContainerRef.current
-    if (!scroller || !firstMessageId) return
-
-    // Detect prepend: first message changed and we have saved state
-    const didPrepend =
-      prePrependFirstMsgIdRef.current !== null &&
-      firstMessageId !== prePrependFirstMsgIdRef.current &&
-      prePrependScrollHeightRef.current > 0
-
-    if (didPrepend) {
-      const previousFirstMsgId = prePrependFirstMsgIdRef.current
-
-      // CRITICAL: Hide content during scroll adjustment to prevent visual blink.
-      // Without this, the browser may paint the new messages at the wrong scroll
-      // position before we can adjust it.
-      if (isPrependPendingRef.current) {
-        scroller.style.visibility = 'hidden'
-      }
-
-      // Force synchronous layout calculation before reading scrollHeight.
-      // Without this, React may have committed DOM changes but the browser
-      // hasn't calculated the new layout yet, causing scrollHeight to be stale.
-      // Reading offsetHeight triggers a synchronous reflow.
-      void scroller.offsetHeight
-
-      const newScrollHeight = scroller.scrollHeight
-      const heightDiff = newScrollHeight - prePrependScrollHeightRef.current
-
-      if (heightDiff > 0) {
-        // Adjust scroll to maintain visual position
-        scroller.scrollTop = prePrependScrollTopRef.current + heightDiff
-      } else {
-        // Fallback: Height-based calculation failed (heightDiff <= 0).
-        // This can happen if layout isn't fully computed yet.
-        // Try to find the previous first message element and scroll to it.
-        if (previousFirstMsgId) {
-          const targetElement = scroller.querySelector(`[data-message-id="${previousFirstMsgId}"]`)
-          if (targetElement) {
-            // Position the element at the top of the viewport
-            const elementTop = (targetElement as HTMLElement).offsetTop
-            scroller.scrollTop = elementTop
-          }
-        }
-      }
-
-      // Force the browser to repaint immediately by reading scrollTop.
-      // This ensures the visual update happens before any other rendering.
-      void scroller.scrollTop
-
-      // Reveal content after scroll adjustment
-      if (isPrependPendingRef.current) {
-        scroller.style.visibility = ''
-        isPrependPendingRef.current = false
-      }
-
-      // Reset saved state
-      prePrependScrollHeightRef.current = 0
-      prePrependScrollTopRef.current = 0
-      prePrependFirstMsgIdRef.current = firstMessageId
-    }
-  }, [firstMessageId, messageCount])
-
-  // --------------------------------------------------------------------------
-  // EFFECT: Auto-scroll when typing indicator changes (if at bottom)
-  // --------------------------------------------------------------------------
-
-  useEffect(() => {
-    if (!scrollContainerRef.current || !isAtBottomRef.current) return
-    scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight
-  }, [typingUsersCount, isAtBottomRef])
-
-  // --------------------------------------------------------------------------
-  // EFFECT: Auto-scroll when last message reactions change (if at bottom)
-  // --------------------------------------------------------------------------
-
-  useEffect(() => {
-    if (!scrollContainerRef.current || !isAtBottomRef.current) return
-
-    requestAnimationFrame(() => {
-      if (scrollContainerRef.current && isAtBottomRef.current) {
-        scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight
-      }
-    })
-  }, [lastMessageReactionsKey, isAtBottomRef])
-
-  // --------------------------------------------------------------------------
-  // EFFECT: Handle container resize (composer grows/shrinks)
-  // --------------------------------------------------------------------------
-
-  useEffect(() => {
-    const scroller = scrollContainerRef.current
+    const scroller = scrollerRef.current
     if (!scroller) return
 
-    // Use null to indicate we haven't received a valid height yet.
-    // This handles jsdom and other environments where initial clientHeight is 0.
+    lastLoadTimeRef.current = Date.now()
+
+    const distFromBottom = getDistanceFromBottom(scroller)
+    const anchor = findAnchorElement()
+
+    // SAVE position before load
+    prependRef.current = {
+      anchorMessageId: anchor?.id || '',
+      anchorOffsetFromTop: anchor?.offsetFromTop || 0,
+      distanceFromBottom: distFromBottom,
+      oldFirstId: firstMessageId || '',
+      oldMessageCount: messageCount,
+    }
+
+    debugLog('LOAD EARLIER', {
+      anchor,
+      distanceFromBottom: distFromBottom,
+      scrollHeight: scroller.scrollHeight,
+      scrollTop: scroller.scrollTop,
+      clientHeight: scroller.clientHeight,
+      firstMessageId,
+      messageCount,
+    })
+
+    onScrollToTop?.()
+  }, [canLoadMore, findAnchorElement, firstMessageId, messageCount, onScrollToTop])
+
+  // ==========================================================================
+  // SCROLL EVENT HANDLER
+  // ==========================================================================
+
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget
+    const { scrollTop, scrollHeight, clientHeight } = el
+    const distFromBottom = scrollHeight - scrollTop - clientHeight
+
+    // Update refs (NO React state updates here except FAB)
+    lastScrollDataRef.current = { top: scrollTop, height: scrollHeight, client: clientHeight }
+    isAtBottomRef.current = distFromBottom < AT_BOTTOM_THRESHOLD
+
+    // FAB visibility (only React state in scroll handler)
+    const shouldShowFab = distFromBottom > FAB_THRESHOLD
+    setShowScrollToBottom(prev => prev !== shouldShowFab ? shouldShowFab : prev)
+
+    // Save position for cross-conversation persistence (throttled)
+    const now = Date.now()
+    if (now - lastSaveTimeRef.current > SAVE_THROTTLE_MS) {
+      lastSaveTimeRef.current = now
+      scrollStateManager.saveScrollPosition(conversationId, scrollTop, scrollHeight, clientHeight)
+    }
+
+    // Track if user scrolled away from top (allows re-trigger of load)
+    if (scrollTop > 50) scrolledAwayFromTopRef.current = true
+
+    // Auto-trigger load when at top
+    if (scrollTop === 0) triggerLoadOlder()
+  }, [conversationId, triggerLoadOlder, isAtBottomRef])
+
+  const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    const { scrollTop } = e.currentTarget
+    if (scrollTop === 0 && e.deltaY < 0) triggerLoadOlder()
+    if (scrollTop === 0 && e.deltaY > 0) scrolledAwayFromTopRef.current = true
+  }, [triggerLoadOlder])
+
+  // ==========================================================================
+  // EFFECT: Conversation switch
+  // ==========================================================================
+
+  useLayoutEffect(() => {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+    if (prevConversationRef.current === conversationId) return
+
+    debugLog('CONVERSATION SWITCH', {
+      from: prevConversationRef.current,
+      to: conversationId,
+      messageCount,
+    })
+
+    // LEAVING old conversation - save position
+    if (prevConversationRef.current && lastScrollDataRef.current) {
+      const { top, height, client } = lastScrollDataRef.current
+      scrollStateManager.leaveConversation(prevConversationRef.current, top, height, client)
+    }
+
+    // ENTERING new conversation - reset state
+    hasInitializedRef.current = false
+    scrolledAwayFromTopRef.current = false
+    lastScrollDataRef.current = null
+    prependRef.current = null
+    setShowScrollToBottom(false)
+
+    // Decide: restore position or scroll to bottom?
+    const action = scrollStateManager.enterConversation(conversationId, messageCount)
+    const savedPos = scrollStateManager.getSavedScrollTop(conversationId)
+
+    debugLog('CONVERSATION ACTION', { action, savedPos, scrollHeight: scroller.scrollHeight })
+
+    if (action === 'restore-position' && savedPos !== null) {
+      scroller.scrollTop = savedPos
+      isAtBottomRef.current = false
+      scrollStateManager.clearSavedScrollState(conversationId)
+    } else {
+      scroller.scrollTop = scroller.scrollHeight
+      isAtBottomRef.current = true
+    }
+
+    // Update tracking
+    hasInitializedRef.current = true
+    prevConversationRef.current = conversationId
+    prevMessageCountRef.current = messageCount
+  }, [conversationId, messageCount, isAtBottomRef])
+
+  // ==========================================================================
+  // EFFECT: Prepend complete (older messages loaded)
+  // ==========================================================================
+  //
+  // This runs in useLayoutEffect so it happens BEFORE the browser paints.
+  // We restore the user's visual position using pure math:
+  //   newScrollTop = scrollHeight - clientHeight - savedDistanceFromBottom
+
+  useLayoutEffect(() => {
+    const scroller = scrollerRef.current
+    const saved = prependRef.current
+    if (!scroller || !saved) return
+
+    // Already restored? Skip.
+    if (saved.restored) return
+
+    // Check if messages were actually prepended:
+    // 1. Message count must have increased
+    // 2. First message ID must have changed (new messages at the beginning)
+    const countIncreased = messageCount > saved.oldMessageCount
+    const firstIdChanged = firstMessageId !== saved.oldFirstId
+
+    if (!countIncreased || !firstIdChanged) {
+      debugLog('PREPEND WAITING', {
+        messageCount,
+        oldMessageCount: saved.oldMessageCount,
+        firstMessageId,
+        oldFirstId: saved.oldFirstId,
+        countIncreased,
+        firstIdChanged,
+      })
+      return
+    }
+
+    // Try element-based positioning first (more reliable)
+    let newScrollTop: number | null = null
+
+    if (saved.anchorMessageId) {
+      const anchorElement = scroller.querySelector(
+        `[data-message-id="${saved.anchorMessageId}"]`
+      ) as HTMLElement | null
+
+      if (anchorElement) {
+        // Position the anchor element at the same offset from viewport top as before
+        newScrollTop = anchorElement.offsetTop - saved.anchorOffsetFromTop
+
+        debugLog('PREPEND RESTORE (element-based)', {
+          anchorMessageId: saved.anchorMessageId,
+          anchorOffsetTop: anchorElement.offsetTop,
+          savedOffsetFromTop: saved.anchorOffsetFromTop,
+          newScrollTop,
+        })
+      }
+    }
+
+    // Fallback to distance-from-bottom math if element not found
+    if (newScrollTop === null) {
+      newScrollTop = scroller.scrollHeight - scroller.clientHeight - saved.distanceFromBottom
+
+      debugLog('PREPEND RESTORE (math-based fallback)', {
+        newScrollTop,
+        scrollHeight: scroller.scrollHeight,
+        clientHeight: scroller.clientHeight,
+        savedDistanceFromBottom: saved.distanceFromBottom,
+      })
+    }
+
+    debugLog('PREPEND RESTORE FINAL', {
+      newScrollTop,
+      oldFirstId: saved.oldFirstId,
+      newFirstId: firstMessageId,
+      messageCount,
+      scrollHeightBefore: scroller.scrollHeight,
+      scrollTopBefore: scroller.scrollTop,
+    })
+
+    // Force reflow to ensure browser has calculated new layout
+    void scroller.offsetHeight
+
+    // Set scroll position synchronously - this happens before browser paint
+    scroller.scrollTop = Math.max(0, newScrollTop)
+
+    debugLog('PREPEND RESTORE APPLIED', {
+      scrollTopAfter: scroller.scrollTop,
+      scrollHeightAfter: scroller.scrollHeight,
+    })
+
+    // Mark as restored but keep the ref for a cooldown period
+    // This prevents ResizeObserver from interfering
+    saved.restored = true
+    saved.restoredAt = Date.now()
+    lastRestoreTimeRef.current = Date.now() // Track restore time to prevent rapid re-loading
+
+    // Clear after cooldown
+    setTimeout(() => {
+      if (prependRef.current?.restoredAt === saved.restoredAt) {
+        debugLog('PREPEND CLEAR')
+        prependRef.current = null
+      }
+    }, PREPEND_COOLDOWN_MS)
+  }, [messageCount, firstMessageId])
+
+  // ==========================================================================
+  // EFFECT: New message arrives
+  // ==========================================================================
+
+  useEffect(() => {
+    const scroller = scrollerRef.current
+    if (!scroller || !hasInitializedRef.current) return
+
+    // Don't interfere with prepend (either in progress or just restored)
+    if (prependRef.current) {
+      debugLog('NEW MSG SKIP (prepend active)', { messageCount, prevCount: prevMessageCountRef.current })
+      prevMessageCountRef.current = messageCount
+      return
+    }
+
+    const isNewMessage = messageCount > prevMessageCountRef.current
+    if (isNewMessage && isAtBottomRef.current) {
+      debugLog('NEW MSG SCROLL TO BOTTOM', { messageCount, isAtBottom: isAtBottomRef.current })
+      scroller.scrollTop = scroller.scrollHeight
+    }
+
+    prevMessageCountRef.current = messageCount
+  }, [messageCount, isAtBottomRef])
+
+  // ==========================================================================
+  // EFFECT: Typing indicator / reactions change
+  // ==========================================================================
+
+  useEffect(() => {
+    if (isAtBottomRef.current && scrollerRef.current) {
+      scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight
+    }
+  }, [typingUsersCount, isAtBottomRef])
+
+  useEffect(() => {
+    if (isAtBottomRef.current) {
+      requestAnimationFrame(() => {
+        if (scrollerRef.current) {
+          scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight
+        }
+      })
+    }
+  }, [lastMessageReactionsKey, isAtBottomRef])
+
+  // ==========================================================================
+  // EFFECT: Container resize (composer grows/shrinks)
+  // NOTE: This effect MUST come before content resize so tests can find it at instances[0]
+  // ==========================================================================
+
+  useEffect(() => {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+
     let lastHeight: number | null = null
 
     const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const newHeight = entry.contentRect.height
+      const newHeight = entries[0].contentRect.height
+      if (lastHeight === null) { lastHeight = newHeight; return }
 
-        // Skip if this is the first observation (just establishing baseline)
-        if (lastHeight === null) {
-          lastHeight = newHeight
-          continue
-        }
-
-        const heightDiff = lastHeight - newHeight // Positive if container shrank (composer grew)
-
-        // Only handle container shrinking (heightDiff > 0 means composer grew).
-        // When container grows (composer shrinks), don't auto-scroll.
-        if (heightDiff > 0 && scrollContainerRef.current) {
-          const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current
-          const distanceFromBottom = scrollHeight - scrollTop - clientHeight
-
-          // When composer grows by X pixels, we're pushed away from bottom by exactly X pixels.
-          // Only scroll if we were within (heightDiff + threshold) of the bottom.
-          // Don't use isAtBottomRef as fallback - it can be stale and cause unwanted scrolls.
-          const wasNearBottom = distanceFromBottom <= heightDiff + AT_BOTTOM_THRESHOLD
-
-          if (wasNearBottom) {
-            // Scroll immediately without RAF to avoid visual jank
-            scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight
-          }
-        }
-        lastHeight = newHeight
+      const shrunk = lastHeight - newHeight
+      if (shrunk > 0 && scrollerRef.current) {
+        const wasNear = getDistanceFromBottom(scrollerRef.current) <= shrunk + AT_BOTTOM_THRESHOLD
+        if (wasNear) scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight
       }
+
+      lastHeight = newHeight
     })
 
     observer.observe(scroller)
     return () => observer.disconnect()
-  }, [conversationId, isAtBottomRef])
-
-  // --------------------------------------------------------------------------
-  // EFFECT: Handle content resize (images load, reactions render)
-  // --------------------------------------------------------------------------
-
-  // Track if we've done the initial scroll for this conversation
-  const hasInitialScrolledRef = useRef(false)
-
-  // Reset initial scroll flag when conversation changes
-  useEffect(() => {
-    hasInitialScrolledRef.current = false
   }, [conversationId])
 
+  // ==========================================================================
+  // EFFECT: Content resize (images loading, etc.)
+  // ==========================================================================
+
   useEffect(() => {
-    const contentWrapper = contentWrapperRef.current
-    const scroller = scrollContainerRef.current
-    if (!contentWrapper || !scroller) return
+    const content = contentRef.current
+    const scroller = scrollerRef.current
+    if (!content || !scroller) return
 
-    let lastScrollHeight = scroller.scrollHeight
-
-    // If this is the first time content appears and we haven't scrolled yet,
-    // force an immediate scroll to bottom. This handles the race condition where
-    // the double-rAF scroll happens before content is rendered.
-    if (!hasInitialScrolledRef.current && scroller.scrollHeight > 0) {
-      // Only scroll if we're supposed to be at bottom (not restoring a saved position)
-      if (isAtBottomRef.current) {
-        scroller.scrollTop = scroller.scrollHeight
-        // Only mark as scrolled if we actually reached the bottom
-        // This handles the case where content isn't fully rendered yet
-        const distanceFromBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight
-        if (distanceFromBottom < AT_BOTTOM_THRESHOLD) {
-          hasInitialScrolledRef.current = true
-        }
-      } else {
-        // Restoring position - mark as done
-        hasInitialScrolledRef.current = true
-      }
-    }
+    let lastHeight = scroller.scrollHeight
 
     const observer = new ResizeObserver(() => {
-      const newScrollHeight = scroller.scrollHeight
+      const newHeight = scroller.scrollHeight
 
-      // During initial load, keep trying to scroll to bottom until we succeed
-      if (!hasInitialScrolledRef.current && isAtBottomRef.current && newScrollHeight > 0) {
-        scroller.scrollTop = newScrollHeight
-        const distanceFromBottom = newScrollHeight - scroller.scrollTop - scroller.clientHeight
-        if (distanceFromBottom < AT_BOTTOM_THRESHOLD) {
-          hasInitialScrolledRef.current = true
-        }
-      }
-      // Scroll if content grew (normal operation after initial scroll)
-      // IMPORTANT: Calculate whether user WAS at bottom based on OLD scroll height,
-      // not isAtBottomRef which may have been set to false by a scroll event that
-      // fired when the content grew and pushed the user away from bottom.
-      else if (newScrollHeight > lastScrollHeight) {
-        const { scrollTop, clientHeight } = scroller
-        // Calculate distance from bottom BEFORE content grew
-        const oldDistanceFromBottom = lastScrollHeight - scrollTop - clientHeight
-        const wasAtBottom = oldDistanceFromBottom < AT_BOTTOM_THRESHOLD
-
-        if (wasAtBottom) {
-          requestAnimationFrame(() => {
-            if (scrollContainerRef.current) {
-              scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight
-              // Update isAtBottomRef since we just scrolled to bottom
-              isAtBottomRef.current = true
-            }
-          })
-        }
-      }
-      lastScrollHeight = newScrollHeight
-    })
-
-    observer.observe(contentWrapper)
-    return () => observer.disconnect()
-  }, [conversationId, isAtBottomRef, messageCount])
-
-  // --------------------------------------------------------------------------
-  // EFFECT: Keyboard shortcuts (Home/End, Cmd+Up/Down)
-  // --------------------------------------------------------------------------
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if in input
-      const target = e.target as HTMLElement
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+      // Skip during prepend (in progress or just restored)
+      if (prependRef.current) {
+        debugLog('RESIZE SKIP (prepend)', {
+          newHeight,
+          lastHeight,
+          restored: prependRef.current.restored,
+        })
+        lastHeight = newHeight
         return
       }
 
-      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
-      const modKey = isMac ? e.metaKey : e.ctrlKey
+      // Content grew and we were at bottom -> stay at bottom
+      if (newHeight > lastHeight && isAtBottomRef.current) {
+        debugLog('RESIZE SCROLL TO BOTTOM', {
+          newHeight,
+          lastHeight,
+          isAtBottom: isAtBottomRef.current,
+        })
+        scroller.scrollTop = newHeight
+      }
 
-      if (e.key === 'End' || (modKey && e.key === 'ArrowDown')) {
+      lastHeight = newHeight
+    })
+
+    observer.observe(content)
+    return () => observer.disconnect()
+  }, [conversationId, isAtBottomRef])
+
+  // ==========================================================================
+  // EFFECT: Keyboard shortcuts
+  // ==========================================================================
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return
+
+      const mod = navigator.platform.includes('Mac') ? e.metaKey : e.ctrlKey
+
+      if (e.key === 'End' || (mod && e.key === 'ArrowDown')) {
         e.preventDefault()
         scrollToBottom()
       }
-
-      if (e.key === 'Home' || (modKey && e.key === 'ArrowUp')) {
+      if (e.key === 'Home' || (mod && e.key === 'ArrowUp')) {
         e.preventDefault()
         scrollToTop()
       }
     }
 
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
   }, [scrollToBottom, scrollToTop])
 
-  // --------------------------------------------------------------------------
+  // ==========================================================================
   // RETURN
-  // --------------------------------------------------------------------------
+  // ==========================================================================
 
   return {
     setScrollContainerRef,
-    contentWrapperRef,
+    contentWrapperRef: contentRef,
     handleScroll,
     handleWheel,
     handleLoadEarlier,

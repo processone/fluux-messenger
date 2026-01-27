@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react'
 import type { UnlistenFn } from '@tauri-apps/api/event'
-import { useConnection, useSystemState, usePresence, consoleStore } from '@fluux/sdk'
+import { useSystemState, usePresence, consoleStore } from '@fluux/sdk'
+import { useConnectionStore } from '@fluux/sdk/react'
 import { isWakeHandlingActive } from '@/utils/wakeCoordinator'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -46,7 +47,9 @@ const ACTIVITY_THROTTLE_MS = 5000
  * ```
  */
 export function useAutoAway() {
-  const { status } = useConnection()
+  // Use focused selector to only subscribe to status, not all 12+ connection values
+  // This prevents render loops when ownResources or other values change
+  const status = useConnectionStore((s) => s.status)
   const {
     notifyIdle,
     notifyActive,

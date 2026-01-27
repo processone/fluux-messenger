@@ -68,6 +68,16 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
   // Track which message has reaction picker open (hides other toolbars)
   const [activeReactionPickerMessageId, setActiveReactionPickerMessageId] = useState<string | null>(null)
 
+  // Memoized callbacks to prevent render loops (new function refs cause child re-renders)
+  const handleCancelReply = useCallback(() => setReplyingTo(null), [])
+  const handleCancelEdit = useCallback(() => setEditingMessage(null), [])
+  const handleReactionPickerChange = useCallback((messageId: string, isOpen: boolean) => {
+    setActiveReactionPickerMessageId(isOpen ? messageId : null)
+  }, [])
+
+  // Memoized upload state to prevent new object reference on every render
+  const uploadStateObj = useMemo(() => ({ isUploading, progress }), [isUploading, progress])
+
   // Composer handle ref for type-to-focus (separate from focus zone ref)
   const composerHandleRef = useRef<MessageComposerHandle>(null)
 
@@ -243,7 +253,7 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
           lastMessageId={lastMessageId}
           isComposing={isComposing}
           activeReactionPickerMessageId={activeReactionPickerMessageId}
-          onReactionPickerChange={(messageId, isOpen) => setActiveReactionPickerMessageId(isOpen ? messageId : null)}
+          onReactionPickerChange={handleReactionPickerChange}
           retractMessage={retractMessage}
           selectedMessageId={selectedMessageId}
           hasKeyboardSelection={hasKeyboardSelection}
@@ -270,16 +280,16 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
         onMessageSent={scrollToBottom}
         onInputResize={handleInputResize}
         replyingTo={replyingTo}
-        onCancelReply={() => setReplyingTo(null)}
+        onCancelReply={handleCancelReply}
         editingMessage={editingMessage}
-        onCancelEdit={() => setEditingMessage(null)}
+        onCancelEdit={handleCancelEdit}
         onEditLastMessage={handleEditLastMessage}
         sendCorrection={sendCorrection}
         retractMessage={retractMessage}
         contactsByJid={contactsByJid}
         onComposingChange={setIsComposing}
         sendEasterEgg={sendEasterEgg}
-        uploadState={{ isUploading, progress }}
+        uploadState={uploadStateObj}
         isUploadSupported={isSupported}
         onFileSelect={handleFileDrop}
         processLinkPreview={processMessageForLinkPreview}
@@ -295,7 +305,7 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
   )
 }
 
-function ChatMessageList({
+const ChatMessageList = memo(function ChatMessageList({
   messages,
   contactsByJid,
   messagesById,
@@ -406,6 +416,51 @@ function ChatMessageList({
     }
   }, [])
 
+  // Memoize formatTypingUser to prevent render loops
+  const formatTypingUser = useCallback((jid: string) => {
+    const bareJid = jid.split('/')[0]
+    return contactsByJid.get(bareJid)?.name || bareJid.split('@')[0]
+  }, [contactsByJid])
+
+  // Memoize renderMessage to prevent render loops
+  // Note: This callback captures many values, but they all affect how messages render
+  const renderMessage = useCallback((msg: Message, idx: number, groupMessages: Message[]) => (
+    <ChatMessageBubble
+      message={msg}
+      showAvatar={shouldShowAvatar(groupMessages, idx)}
+      avatar={msg.isOutgoing ? ownAvatar ?? undefined : contactsByJid.get(msg.from)?.avatar}
+      ownNickname={ownNickname}
+      ownPresence={ownPresence}
+      conversationId={conversationId}
+      conversationType={conversationType}
+      sendReaction={sendReaction}
+      myBareJid={myBareJid}
+      contactsByJid={contactsByJid}
+      messagesById={messagesById}
+      onReply={onReply}
+      onEdit={onEdit}
+      isLastOutgoing={msg.id === lastOutgoingMessageId}
+      isLastMessage={msg.id === lastMessageId}
+      hideToolbar={isComposing || (activeReactionPickerMessageId !== null && activeReactionPickerMessageId !== msg.id)}
+      onReactionPickerChange={(isOpen) => onReactionPickerChange(msg.id, isOpen)}
+      retractMessage={retractMessage}
+      isSelected={msg.id === selectedMessageId}
+      hasKeyboardSelection={hasKeyboardSelection}
+      showToolbarForSelection={showToolbarForSelection}
+      isDarkMode={isDarkMode}
+      onMediaLoad={onMediaLoad}
+      isHovered={hoveredMessageId === msg.id}
+      onMouseEnter={() => handleMessageHover(msg.id)}
+      onMouseLeave={handleMessageLeave}
+    />
+  ), [
+    ownAvatar, contactsByJid, ownNickname, ownPresence, conversationId, conversationType,
+    sendReaction, myBareJid, messagesById, onReply, onEdit, lastOutgoingMessageId, lastMessageId,
+    isComposing, activeReactionPickerMessageId, onReactionPickerChange, retractMessage,
+    selectedMessageId, hasKeyboardSelection, showToolbarForSelection, isDarkMode, onMediaLoad,
+    hoveredMessageId, handleMessageHover, handleMessageLeave
+  ])
+
   return (
     <MessageListComponent
       messages={messages}
@@ -415,40 +470,8 @@ function ChatMessageList({
       scrollerRef={scrollerRef}
       isAtBottomRef={isAtBottomRef}
       typingUsers={typingUsers}
-      formatTypingUser={(jid) => {
-        const bareJid = jid.split('/')[0]
-        return contactsByJid.get(bareJid)?.name || bareJid.split('@')[0]
-      }}
-      renderMessage={(msg, idx, groupMessages) => (
-        <ChatMessageBubble
-          message={msg}
-          showAvatar={shouldShowAvatar(groupMessages, idx)}
-          avatar={msg.isOutgoing ? ownAvatar ?? undefined : contactsByJid.get(msg.from)?.avatar}
-          ownNickname={ownNickname}
-          ownPresence={ownPresence}
-          conversationId={conversationId}
-          conversationType={conversationType}
-          sendReaction={sendReaction}
-          myBareJid={myBareJid}
-          contactsByJid={contactsByJid}
-          messagesById={messagesById}
-          onReply={onReply}
-          onEdit={onEdit}
-          isLastOutgoing={msg.id === lastOutgoingMessageId}
-          isLastMessage={msg.id === lastMessageId}
-          hideToolbar={isComposing || (activeReactionPickerMessageId !== null && activeReactionPickerMessageId !== msg.id)}
-          onReactionPickerChange={(isOpen) => onReactionPickerChange(msg.id, isOpen)}
-          retractMessage={retractMessage}
-          isSelected={msg.id === selectedMessageId}
-          hasKeyboardSelection={hasKeyboardSelection}
-          showToolbarForSelection={showToolbarForSelection}
-          isDarkMode={isDarkMode}
-          onMediaLoad={onMediaLoad}
-          isHovered={hoveredMessageId === msg.id}
-          onMouseEnter={() => handleMessageHover(msg.id)}
-          onMouseLeave={handleMessageLeave}
-        />
-      )}
+      formatTypingUser={formatTypingUser}
+      renderMessage={renderMessage}
       onScrollToTop={onScrollToTop}
       isLoadingOlder={isLoadingOlder}
       isHistoryComplete={isHistoryComplete}
@@ -463,7 +486,7 @@ function ChatMessageList({
       }
     />
   )
-}
+})
 
 interface ChatMessageBubbleProps {
   message: Message

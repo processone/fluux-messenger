@@ -997,11 +997,13 @@ describe('MUC Module', () => {
     })
 
     it('returns null when disco#info query fails', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
       mockSendIQ.mockRejectedValue(new Error('Room not found'))
 
       const result = await muc.queryRoomFeatures('room@conference.example.org')
 
       expect(result).toBeNull()
+      warnSpy.mockRestore()
     })
 
     it('returns null when response has no query element', async () => {
@@ -1103,6 +1105,7 @@ describe('MUC Module', () => {
     })
 
     it('uses default maxHistory when disco#info fails', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
       mockSendIQ.mockRejectedValue(new Error('Room not found'))
       mockStores.room.getRoom.mockReturnValue(null)
 
@@ -1131,6 +1134,7 @@ describe('MUC Module', () => {
           supportsMAM: false,
         }),
       })
+      warnSpy.mockRestore()
     })
 
     it('updates existing room with supportsMAM field', async () => {

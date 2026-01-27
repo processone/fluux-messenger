@@ -2,15 +2,24 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useFileUpload, formatBytes, type FileAttachment } from './useFileUpload'
 
-// Mock useConnection from SDK
+// Mock SDK
 const mockRequestUploadSlot = vi.fn()
 let mockHttpUploadService: { jid: string; maxFileSize?: number } | null = null
 
 vi.mock('@fluux/sdk', () => ({
-  useConnection: () => ({
-    httpUploadService: mockHttpUploadService,
-    requestUploadSlot: mockRequestUploadSlot,
+  useXMPP: () => ({
+    client: {
+      discovery: {
+        requestUploadSlot: mockRequestUploadSlot,
+      },
+    },
   }),
+}))
+
+vi.mock('@fluux/sdk/react', () => ({
+  useConnectionStore: (selector: (state: { httpUploadService: typeof mockHttpUploadService }) => typeof mockHttpUploadService) => {
+    return selector({ httpUploadService: mockHttpUploadService })
+  },
 }))
 
 // Mock react-i18next

@@ -65,7 +65,7 @@ interface SidebarListMenuProviderProps {
 // Context
 // ============================================================================
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 const SidebarListMenuContext = createContext<SidebarListMenuState<any> | null>(null)
 
 // ============================================================================

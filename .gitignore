@@ -3,7 +3,7 @@ node_modules/
 
 # Build outputs
 dist/
-docs/
+ts-docs/
 *.tsbuildinfo
 
 # Tauri

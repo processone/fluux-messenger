@@ -31,9 +31,6 @@ vi.mock('@fluux/sdk', () => ({
       { jid: 'bob@example.org', name: 'Bob' },
     ],
   }),
-  useConnection: () => ({
-    jid: 'testuser@example.org',
-  }),
   // URI utilities moved from app to SDK
   parseXmppUri: (uri: string) => {
     if (!uri || !uri.startsWith('xmpp:')) return null
@@ -86,6 +83,9 @@ vi.mock('@fluux/sdk/react', () => ({
       setActiveRoom: mockSetActiveRoom,
     }
     return selector(state)
+  },
+  useConnectionStore: (selector: (state: { jid: string }) => string) => {
+    return selector({ jid: 'testuser@example.org' })
   },
 }))
 

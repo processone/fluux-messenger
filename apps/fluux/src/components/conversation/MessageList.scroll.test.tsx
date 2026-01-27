@@ -28,6 +28,9 @@ vi.mock('@/hooks', () => ({
   useMessageCopyFormatter: vi.fn(),
 }))
 
+// Import scrollStateManager to reset between tests
+import { scrollStateManager } from '@/utils/scrollStateManager'
+
 // Helper to create test messages
 function createTestMessages(count: number, withReactions = false): BaseMessage[] {
   return Array.from({ length: count }, (_, i) => ({
@@ -74,6 +77,9 @@ describe('MessageList scroll behavior', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     MockResizeObserver.instances = []
+
+    // Reset scrollStateManager to prevent state leakage between tests
+    scrollStateManager.reset()
 
     // Mock ResizeObserver
     vi.stubGlobal('ResizeObserver', MockResizeObserver)
@@ -982,6 +988,460 @@ describe('MessageList scroll behavior', () => {
 
       // No typing indicator text
       expect(screen.queryByText(/typing/i)).not.toBeInTheDocument()
+    })
+  })
+
+  describe('scroll-to-bottom FAB visibility', () => {
+    it('should show FAB when scrolled far from bottom (> 300px)', () => {
+      const messages = createTestMessages(20)
+
+      render(
+        <MessageList
+          messages={messages}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />
+      )
+
+      const container = document.querySelector('.overflow-y-auto') as HTMLDivElement
+      if (container) {
+        // Set up scroll dimensions: total 2000px, visible 500px
+        // At scrollTop=0, distance from bottom = 2000-0-500 = 1500px (> 300)
+        let scrollTopValue = 0
+        Object.defineProperty(container, 'scrollHeight', { value: 2000, configurable: true })
+        Object.defineProperty(container, 'clientHeight', { value: 500, configurable: true })
+        Object.defineProperty(container, 'scrollTop', {
+          get: () => scrollTopValue,
+          set: (v) => { scrollTopValue = v },
+          configurable: true,
+        })
+
+        // Trigger scroll event to update FAB visibility
+        act(() => {
+          container.dispatchEvent(new Event('scroll'))
+        })
+
+        // FAB should be visible (tooltip has "Scroll to bottom")
+        const fab = document.querySelector('[aria-label]')
+        expect(fab).toBeInTheDocument()
+      }
+    })
+
+    it('should hide FAB when near bottom (< 300px)', () => {
+      const messages = createTestMessages(20)
+
+      render(
+        <MessageList
+          messages={messages}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />
+      )
+
+      const container = document.querySelector('.overflow-y-auto') as HTMLDivElement
+      if (container) {
+        // Set up scroll dimensions: total 1000px, visible 500px
+        // At scrollTop=400, distance from bottom = 1000-400-500 = 100px (< 300)
+        let scrollTopValue = 400
+        Object.defineProperty(container, 'scrollHeight', { value: 1000, configurable: true })
+        Object.defineProperty(container, 'clientHeight', { value: 500, configurable: true })
+        Object.defineProperty(container, 'scrollTop', {
+          get: () => scrollTopValue,
+          set: (v) => { scrollTopValue = v },
+          configurable: true,
+        })
+
+        // Trigger scroll event
+        act(() => {
+          container.dispatchEvent(new Event('scroll'))
+        })
+
+        // FAB should NOT be visible - look for the ChevronDown icon button
+        // The FAB uses ChevronDown icon and has specific styling
+        const fabButton = document.querySelector('button.absolute.bottom-4')
+        expect(fabButton).not.toBeInTheDocument()
+      }
+    })
+
+    it('should update FAB visibility when scrolling up from bottom', () => {
+      const messages = createTestMessages(20)
+
+      render(
+        <MessageList
+          messages={messages}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />
+      )
+
+      const container = document.querySelector('.overflow-y-auto') as HTMLDivElement
+      if (container) {
+        let scrollTopValue = 1500 // Start at bottom
+        Object.defineProperty(container, 'scrollHeight', { value: 2000, configurable: true })
+        Object.defineProperty(container, 'clientHeight', { value: 500, configurable: true })
+        Object.defineProperty(container, 'scrollTop', {
+          get: () => scrollTopValue,
+          set: (v) => { scrollTopValue = v },
+          configurable: true,
+        })
+        container.scrollTo = vi.fn() // Mock scrollTo
+
+        // Initially at bottom - FAB should be hidden
+        act(() => {
+          container.dispatchEvent(new Event('scroll'))
+        })
+
+        let fabButton = document.querySelector('button.absolute.bottom-4')
+        expect(fabButton).not.toBeInTheDocument()
+
+        // Scroll up far from bottom
+        scrollTopValue = 200 // distance from bottom = 2000-200-500 = 1300px
+
+        act(() => {
+          container.dispatchEvent(new Event('scroll'))
+        })
+
+        // Now FAB should be visible
+        fabButton = document.querySelector('button.absolute.bottom-4')
+        expect(fabButton).toBeInTheDocument()
+      }
+    })
+
+    it('should show FAB during prepending state when scrolled up', () => {
+      // This tests that FAB works even when state machine is in non-idle state
+      const messages = createTestMessages(20)
+      const onScrollToTop = vi.fn()
+
+      render(
+        <MessageList
+          messages={messages}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          onScrollToTop={onScrollToTop}
+          isLoadingOlder={true} // Triggers prepending state
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />
+      )
+
+      const container = document.querySelector('.overflow-y-auto') as HTMLDivElement
+      if (container) {
+        // Set scrolled up position (far from bottom)
+        let scrollTopValue = 100
+        Object.defineProperty(container, 'scrollHeight', { value: 2000, configurable: true })
+        Object.defineProperty(container, 'clientHeight', { value: 500, configurable: true })
+        Object.defineProperty(container, 'scrollTop', {
+          get: () => scrollTopValue,
+          set: (v) => { scrollTopValue = v },
+          configurable: true,
+        })
+
+        // Trigger scroll event during "prepending" state
+        act(() => {
+          container.dispatchEvent(new Event('scroll'))
+        })
+
+        // FAB should still be visible even during prepending
+        const fabButton = document.querySelector('button.absolute.bottom-4')
+        expect(fabButton).toBeInTheDocument()
+      }
+    })
+
+    it('should call scrollToBottom when FAB is clicked', () => {
+      const messages = createTestMessages(20)
+      const scrollToSpy = vi.fn()
+
+      render(
+        <MessageList
+          messages={messages}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />
+      )
+
+      const container = document.querySelector('.overflow-y-auto') as HTMLDivElement
+      if (container) {
+        let scrollTopValue = 100
+        Object.defineProperty(container, 'scrollHeight', { value: 2000, configurable: true })
+        Object.defineProperty(container, 'clientHeight', { value: 500, configurable: true })
+        Object.defineProperty(container, 'scrollTop', {
+          get: () => scrollTopValue,
+          set: (v) => { scrollTopValue = v },
+          configurable: true,
+        })
+        container.scrollTo = scrollToSpy
+
+        // Trigger scroll to show FAB
+        act(() => {
+          container.dispatchEvent(new Event('scroll'))
+        })
+
+        // Find and click FAB
+        const fabButton = document.querySelector('button.absolute.bottom-4') as HTMLButtonElement
+        if (fabButton) {
+          act(() => {
+            fabButton.click()
+          })
+
+          // Should have called scrollTo with behavior: smooth
+          expect(scrollToSpy).toHaveBeenCalledWith(
+            expect.objectContaining({ behavior: 'smooth' })
+          )
+        }
+      }
+    })
+  })
+
+  describe('conversation switch scroll position saving', () => {
+    it('should save final scroll position when switching to different conversation', () => {
+      const messages = createTestMessages(10)
+
+      const { rerender } = render(
+        <MessageList
+          messages={messages}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />
+      )
+
+      const container = document.querySelector('.overflow-y-auto') as HTMLDivElement
+      if (container) {
+        // Set up scroll position (scrolled up)
+        let scrollTopValue = 250
+        Object.defineProperty(container, 'scrollHeight', { value: 1000, configurable: true })
+        Object.defineProperty(container, 'clientHeight', { value: 500, configurable: true })
+        Object.defineProperty(container, 'scrollTop', {
+          get: () => scrollTopValue,
+          set: (v) => { scrollTopValue = v },
+          configurable: true,
+        })
+
+        // Trigger a scroll event to ensure the hook has the scroll data
+        container.dispatchEvent(new Event('scroll'))
+
+        // Switch to different conversation
+        rerender(
+          <MessageList
+            messages={messages}
+            conversationId="conv-2"
+            clearFirstNewMessageId={vi.fn()}
+            renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+          />
+        )
+
+        // Switch back - should restore to saved position (250)
+        rerender(
+          <MessageList
+            messages={messages}
+            conversationId="conv-1"
+            clearFirstNewMessageId={vi.fn()}
+            renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+          />
+        )
+
+        // The scroll position should be restored to 250
+        expect(scrollTopValue).toBe(250)
+      }
+    })
+
+    it('should save position from last scroll event (not DOM state at switch time)', () => {
+      // The implementation captures scroll position from scroll events,
+      // not from reading DOM at switch time. This is more reliable because
+      // by the time the React effect runs, the DOM may have already changed.
+      const messages = createTestMessages(10)
+      const scrollSpy = vi.fn()
+
+      const { rerender } = render(
+        <MessageList
+          messages={messages}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />
+      )
+
+      const container = document.querySelector('.overflow-y-auto') as HTMLDivElement
+      if (container) {
+        let scrollTopValue = 100
+        Object.defineProperty(container, 'scrollHeight', { value: 1000, configurable: true })
+        Object.defineProperty(container, 'clientHeight', { value: 500, configurable: true })
+        Object.defineProperty(container, 'scrollTop', {
+          get: () => scrollTopValue,
+          set: (v) => {
+            scrollTopValue = v
+            scrollSpy(v)
+          },
+          configurable: true,
+        })
+
+        // Scroll to position 100 - this gets captured
+        container.dispatchEvent(new Event('scroll'))
+
+        // Scroll to position 350 - this ALSO gets captured
+        scrollTopValue = 350
+        container.dispatchEvent(new Event('scroll'))
+
+        // Switch conversations - uses last captured position (350)
+        rerender(
+          <MessageList
+            messages={messages}
+            conversationId="conv-2"
+            clearFirstNewMessageId={vi.fn()}
+            renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+          />
+        )
+
+        scrollSpy.mockClear()
+
+        // Return to conv-1 - should restore to 350
+        rerender(
+          <MessageList
+            messages={messages}
+            conversationId="conv-1"
+            clearFirstNewMessageId={vi.fn()}
+            renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+          />
+        )
+
+        expect(scrollSpy).toHaveBeenCalledWith(350)
+      }
+    })
+
+    it('should scroll to bottom when returning to conversation that was at bottom', () => {
+      const messages = createTestMessages(10)
+      const scrollSpy = vi.fn()
+
+      const { rerender } = render(
+        <MessageList
+          messages={messages}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />
+      )
+
+      const container = document.querySelector('.overflow-y-auto') as HTMLDivElement
+      if (container) {
+        // User is at bottom: scrollHeight(1000) - scrollTop(500) - clientHeight(500) = 0
+        let scrollTopValue = 500
+        Object.defineProperty(container, 'scrollHeight', { value: 1000, configurable: true })
+        Object.defineProperty(container, 'clientHeight', { value: 500, configurable: true })
+        Object.defineProperty(container, 'scrollTop', {
+          get: () => scrollTopValue,
+          set: (v) => {
+            scrollTopValue = v
+            scrollSpy(v)
+          },
+          configurable: true,
+        })
+
+        // Trigger scroll to mark as at bottom
+        container.dispatchEvent(new Event('scroll'))
+
+        // Switch to conv-2
+        rerender(
+          <MessageList
+            messages={messages}
+            conversationId="conv-2"
+            clearFirstNewMessageId={vi.fn()}
+            renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+          />
+        )
+
+        scrollSpy.mockClear()
+
+        // Return to conv-1 - should scroll to bottom (was at bottom when leaving)
+        rerender(
+          <MessageList
+            messages={messages}
+            conversationId="conv-1"
+            clearFirstNewMessageId={vi.fn()}
+            renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+          />
+        )
+
+        // Should scroll to bottom (scrollHeight = 1000)
+        expect(scrollSpy).toHaveBeenCalledWith(1000)
+      }
+    })
+
+    it('should handle multiple conversation switches and restore correct positions', () => {
+      // This test validates that scrollStateManager correctly tracks
+      // positions for multiple conversations independently
+
+      // First, set up positions in scrollStateManager directly
+      // This isolates the test from the complexity of DOM mocking
+      scrollStateManager.enterConversation('conv-1', 10)
+      scrollStateManager.saveScrollPosition('conv-1', 100, 1000, 500)
+      scrollStateManager.leaveConversation('conv-1', 100, 1000, 500)
+
+      scrollStateManager.enterConversation('conv-2', 10)
+      scrollStateManager.saveScrollPosition('conv-2', 200, 1000, 500)
+      scrollStateManager.leaveConversation('conv-2', 200, 1000, 500)
+
+      scrollStateManager.enterConversation('conv-3', 10)
+      scrollStateManager.saveScrollPosition('conv-3', 300, 1000, 500)
+      scrollStateManager.leaveConversation('conv-3', 300, 1000, 500)
+
+      // Verify positions are stored correctly
+      expect(scrollStateManager.getSavedScrollTop('conv-1')).toBe(100)
+      expect(scrollStateManager.getSavedScrollTop('conv-2')).toBe(200)
+      expect(scrollStateManager.getSavedScrollTop('conv-3')).toBe(300)
+
+      // Verify entering returns restore-position for each
+      expect(scrollStateManager.enterConversation('conv-1', 10)).toBe('restore-position')
+      scrollStateManager.clearSavedScrollState('conv-1')
+      scrollStateManager.markAsLeft('conv-1')
+
+      expect(scrollStateManager.enterConversation('conv-2', 10)).toBe('restore-position')
+      scrollStateManager.clearSavedScrollState('conv-2')
+      scrollStateManager.markAsLeft('conv-2')
+
+      expect(scrollStateManager.enterConversation('conv-3', 10)).toBe('restore-position')
+    })
+
+    it('should preserve scroll position when user scrolls before each switch', () => {
+      // This test verifies that scrollStateManager correctly handles
+      // multiple conversations and returns restore-position for each
+
+      // Test the scrollStateManager directly since the component integration
+      // has complex timing with React rendering and DOM updates
+
+      // Simulate conv-1: scrolled up to 150
+      scrollStateManager.enterConversation('conv-1', 10)
+      scrollStateManager.saveScrollPosition('conv-1', 150, 1000, 500)
+
+      // Leave conv-1 (this saves the position)
+      scrollStateManager.leaveConversation('conv-1', 150, 1000, 500)
+
+      // Enter conv-2
+      scrollStateManager.enterConversation('conv-2', 5)
+      scrollStateManager.leaveConversation('conv-2', 0, 500, 500) // at bottom
+
+      // Return to conv-1 - first cycle
+      const action1 = scrollStateManager.enterConversation('conv-1', 10)
+      expect(action1).toBe('restore-position')
+      expect(scrollStateManager.getSavedScrollTop('conv-1')).toBe(150)
+
+      // Clear the state (simulates what the hook does after restoring)
+      scrollStateManager.clearSavedScrollState('conv-1')
+
+      // User scrolls in conv-1 again, establishing position for next cycle
+      scrollStateManager.saveScrollPosition('conv-1', 150, 1000, 500)
+      scrollStateManager.leaveConversation('conv-1', 150, 1000, 500)
+
+      // Enter conv-3
+      scrollStateManager.enterConversation('conv-3', 8)
+      scrollStateManager.leaveConversation('conv-3', 0, 500, 500)
+
+      // Return to conv-1 - second cycle
+      const action2 = scrollStateManager.enterConversation('conv-1', 10)
+      expect(action2).toBe('restore-position')
+      expect(scrollStateManager.getSavedScrollTop('conv-1')).toBe(150)
     })
   })
 

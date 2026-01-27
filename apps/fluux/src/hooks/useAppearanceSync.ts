@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
-import { useConnection, useXMPP } from '@fluux/sdk'
+import { useXMPP } from '@fluux/sdk'
+import { useConnectionStore } from '@fluux/sdk/react'
 import { useSettingsStore, type ThemeMode } from '@/stores/settingsStore'
 
 /**
@@ -8,7 +9,8 @@ import { useSettingsStore, type ThemeMode } from '@/stores/settingsStore'
  * - Saves settings to PEP when they change (debounced)
  */
 export function useAppearanceSync() {
-  const { status } = useConnection()
+  // Use focused selector to only subscribe to status
+  const status = useConnectionStore((s) => s.status)
   const { client } = useXMPP()
   const themeMode = useSettingsStore((s) => s.themeMode)
   const setThemeMode = useSettingsStore((s) => s.setThemeMode)

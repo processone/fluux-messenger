@@ -45,7 +45,7 @@ describe('useIsMobileWeb', () => {
   describe('non-Tauri environment (web browser)', () => {
     beforeEach(() => {
       // Ensure no Tauri
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       delete (global.window as any).__TAURI_INTERNALS__
     })
 
@@ -127,12 +127,12 @@ describe('useIsMobileWeb', () => {
   describe('Tauri environment (desktop app)', () => {
     beforeEach(() => {
       // Simulate Tauri environment
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       (global.window as any).__TAURI_INTERNALS__ = {}
     })
 
     afterEach(() => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       delete (global.window as any).__TAURI_INTERNALS__
     })
 
@@ -160,7 +160,7 @@ describe('useIsMobileWeb', () => {
 
 describe('isMobileWeb (non-reactive)', () => {
   beforeEach(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     delete (global.window as any).__TAURI_INTERNALS__
   })
 
@@ -175,45 +175,45 @@ describe('isMobileWeb (non-reactive)', () => {
   })
 
   it('returns false in Tauri regardless of viewport', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (global.window as any).__TAURI_INTERNALS__ = {}
     Object.defineProperty(global.window, 'innerWidth', { value: 500, writable: true })
     expect(isMobileWeb()).toBe(false)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     delete (global.window as any).__TAURI_INTERNALS__
   })
 })
 
 describe('isSmallScreen (platform-agnostic)', () => {
   it('returns true when viewport < 768px (not Tauri)', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     delete (global.window as any).__TAURI_INTERNALS__
     Object.defineProperty(global.window, 'innerWidth', { value: 500, writable: true })
     expect(isSmallScreen()).toBe(true)
   })
 
   it('returns false when viewport >= 768px (not Tauri)', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     delete (global.window as any).__TAURI_INTERNALS__
     Object.defineProperty(global.window, 'innerWidth', { value: 1024, writable: true })
     expect(isSmallScreen()).toBe(false)
   })
 
   it('returns true in Tauri when viewport < 768px', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (global.window as any).__TAURI_INTERNALS__ = {}
     Object.defineProperty(global.window, 'innerWidth', { value: 500, writable: true })
     expect(isSmallScreen()).toBe(true)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     delete (global.window as any).__TAURI_INTERNALS__
   })
 
   it('returns false in Tauri when viewport >= 768px', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (global.window as any).__TAURI_INTERNALS__ = {}
     Object.defineProperty(global.window, 'innerWidth', { value: 1024, writable: true })
     expect(isSmallScreen()).toBe(false)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     delete (global.window as any).__TAURI_INTERNALS__
   })
 })

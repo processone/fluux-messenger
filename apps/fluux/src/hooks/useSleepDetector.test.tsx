@@ -42,10 +42,12 @@ vi.mock('@tauri-apps/api/event', () => ({
 }))
 
 // Mock SDK hooks
+vi.mock('@fluux/sdk/react', () => ({
+  useConnectionStore: (selector: (state: { status: string }) => string) =>
+    selector({ status: getMockState().status }),
+}))
+
 vi.mock('@fluux/sdk', () => ({
-  useConnection: () => ({
-    status: getMockState().status,
-  }),
   usePresence: () => ({
     presenceStatus: getMockState().presenceShow,
     isAutoAway: getMockState().isAutoAway,
@@ -83,10 +85,12 @@ describe('useSleepDetector', () => {
       listen: mockListen,
     }))
 
+    vi.doMock('@fluux/sdk/react', () => ({
+      useConnectionStore: (selector: (state: { status: string }) => string) =>
+        selector({ status: getMockState().status }),
+    }))
+
     vi.doMock('@fluux/sdk', () => ({
-      useConnection: () => ({
-        status: getMockState().status,
-      }),
       usePresence: () => ({
         presenceStatus: getMockState().presenceShow,
         isAutoAway: getMockState().isAutoAway,

@@ -828,6 +828,10 @@ export class XMPPClient {
     let previousShow: string | undefined
     let previousStatus: string | null = null
     let isFirstUpdate = true
+    let consecutiveErrors = 0
+    let lastErrorTime = 0
+    const ERROR_SUPPRESSION_THRESHOLD = 3  // Suppress after 3 consecutive errors
+    const ERROR_RESET_INTERVAL = 30000     // Reset error count after 30s of no errors
 
     const subscription: Subscription = presenceActor.subscribe((state) => {
       // Only sync when connected to XMPP server
@@ -838,11 +842,22 @@ export class XMPPClient {
       const currentShow = getPresenceShowFromState(stateValue)
       const currentStatus = (state.context as PresenceMachineContext).statusMessage
 
+      // Skip if not online OR if reconnecting (socket may be in bad state)
       if (connectionStatus !== 'online') {
-        this.stores?.console.addEvent(
-          `[PresenceSync] Skipped: not online (status: ${connectionStatus})`,
-          'presence'
-        )
+        // Only log occasionally to avoid spam during reconnection storms
+        if (connectionStatus !== 'reconnecting' || consecutiveErrors === 0) {
+          this.stores?.console.addEvent(
+            `[PresenceSync] Skipped: not online (status: ${connectionStatus})`,
+            'presence'
+          )
+        }
+        return
+      }
+
+      // Additional guard: verify socket is actually usable before attempting send
+      const xmpp = this.getXmpp()
+      if (!xmpp) {
+        // Socket is null but status says online - race condition, skip silently
         return
       }
 
@@ -875,12 +890,36 @@ export class XMPPClient {
       // Send XMPP presence to server (including MUC rooms)
       // currentShow is already in XMPP format (undefined = online, 'away', 'dnd', 'xa')
       this.roster.setPresence(currentShow || 'online', currentStatus ?? undefined)
+        .then(() => {
+          // Reset error count on success
+          consecutiveErrors = 0
+        })
         .catch((err) => {
-          console.error('[PresenceSync] Failed to send XMPP presence:', err)
-          this.stores?.console.addEvent(
-            `[PresenceSync] ERROR: Failed to send presence: ${err}`,
-            'presence'
-          )
+          const now = Date.now()
+
+          // Reset error count if it's been a while since last error
+          if (now - lastErrorTime > ERROR_RESET_INTERVAL) {
+            consecutiveErrors = 0
+          }
+
+          consecutiveErrors++
+          lastErrorTime = now
+
+          // Only log first few errors, then suppress to avoid log spam
+          if (consecutiveErrors <= ERROR_SUPPRESSION_THRESHOLD) {
+            console.error('[PresenceSync] Failed to send XMPP presence:', err)
+            this.stores?.console.addEvent(
+              `[PresenceSync] ERROR: Failed to send presence: ${err}`,
+              'presence'
+            )
+          } else if (consecutiveErrors === ERROR_SUPPRESSION_THRESHOLD + 1) {
+            // Log once that we're suppressing further errors
+            this.stores?.console.addEvent(
+              `[PresenceSync] Suppressing further errors (${consecutiveErrors} consecutive failures)`,
+              'presence'
+            )
+          }
+          // Errors are still handled by sendStanza which triggers reconnect
         })
     })
 
@@ -1125,6 +1164,19 @@ export class XMPPClient {
       }
       throw new Error('Not connected')
     }
+
+    // Additional socket health check: verify the underlying socket exists
+    // This catches the race condition where xmpp client exists but socket is dead
+    const socket = (xmpp as any).socket
+    if (!socket) {
+      const currentStatus = this.stores?.connection.getStatus?.()
+      if (currentStatus === 'online') {
+        this.stores?.console.addEvent('Socket null but status online - triggering reconnect', 'error')
+        this.connection.handleDeadSocket()
+      }
+      throw new Error('Socket not available')
+    }
+
     try {
       await xmpp.send(stanza)
     } catch (err) {

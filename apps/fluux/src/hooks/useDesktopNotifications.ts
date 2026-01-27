@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react'
-import { useConnection, rosterStore } from '@fluux/sdk'
+import { rosterStore } from '@fluux/sdk'
+import { useConnectionStore } from '@fluux/sdk/react'
 import type { Conversation, Message, Room, RoomMessage } from '@fluux/sdk'
 import {
   isPermissionGranted,
@@ -36,7 +37,8 @@ const NOTIFICATION_CLICK_WINDOW = 3000
  * - Uses Tauri notification API when available, falls back to web API
  */
 export function useDesktopNotifications(): void {
-  const { status } = useConnection()
+  // Use focused selector to only subscribe to status
+  const status = useConnectionStore((s) => s.status)
   const { navigateToConversation, navigateToRoom } = useNavigateToTarget()
   const permissionGranted = useRef(false)
 

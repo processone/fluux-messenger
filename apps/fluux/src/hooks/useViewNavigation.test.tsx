@@ -75,12 +75,12 @@ vi.mock('@fluux/sdk', () => ({
 // Mock React store hooks (from @fluux/sdk/react)
 vi.mock('@fluux/sdk/react', () => ({
   useChatStore: Object.assign(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (selector: (state: ReturnType<typeof mockChatStoreState>) => unknown) => selector(mockChatStoreState()),
     { getState: mockChatStoreState }
   ),
   useRoomStore: Object.assign(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (selector: (state: ReturnType<typeof mockRoomStoreState>) => unknown) => selector(mockRoomStoreState()),
     { getState: mockRoomStoreState }
   ),

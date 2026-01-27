@@ -254,7 +254,6 @@ export function LoginScreen() {
               autoComplete="current-password"
               value={password}
               onChange={(e) => { setPassword(e.target.value); setCredentialsModified(true) }}
-              placeholder={t('login.passwordPlaceholder')}
               required
               disabled={isLoading}
               className="w-full px-3 py-2 bg-fluux-bg text-fluux-text rounded

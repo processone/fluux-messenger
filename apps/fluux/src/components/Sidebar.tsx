@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useClickOutside, useWindowDrag, useRouteSync } from '@/hooks'
 import { useModals } from '@/contexts'
 import {
-  useConnection,
+  useXMPP,
   useChat,
   useEvents,
   useRoom,
@@ -11,6 +11,7 @@ import {
   type Contact,
   type AdminCategory,
 } from '@fluux/sdk'
+import { useConnectionStore } from '@fluux/sdk/react'
 import { AdminDashboard } from './AdminDashboard'
 import { BrowseRoomsModal } from './BrowseRoomsModal'
 import { Avatar } from './Avatar'
@@ -76,7 +77,18 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
   const { t } = useTranslation()
   // Get current view from URL
   const { sidebarView, settingsCategory, navigateToSettings } = useRouteSync()
-  const { jid, status, reconnectAttempt, reconnectIn, disconnect, cancelReconnect, ownAvatar, ownNickname } = useConnection()
+  // Use focused selectors instead of useConnection() to avoid re-renders when unrelated values change
+  // (e.g., ownResources updates shouldn't re-render the entire sidebar)
+  const jid = useConnectionStore((s) => s.jid)
+  const status = useConnectionStore((s) => s.status)
+  const reconnectAttempt = useConnectionStore((s) => s.reconnectAttempt)
+  const reconnectIn = useConnectionStore((s) => s.reconnectIn)
+  const ownAvatar = useConnectionStore((s) => s.ownAvatar)
+  const ownNickname = useConnectionStore((s) => s.ownNickname)
+  // Get methods from client (not from store)
+  const { client } = useXMPP()
+  const disconnect = useCallback(() => client.disconnect(), [client])
+  const cancelReconnect = useCallback(() => client.cancelReconnect(), [client])
   const { isAdmin } = useAdmin()
   const { conversations } = useChat()
   const { pendingCount } = useEvents()

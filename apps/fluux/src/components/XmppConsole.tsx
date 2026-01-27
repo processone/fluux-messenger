@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { format } from 'date-fns'
 import { X, Trash2, Send, ChevronDown, ChevronUp, Search, Download, Server, ArrowDownToLine } from 'lucide-react'
-import { useConsole, useConnection, useXMPP, type XmppPacket } from '@fluux/sdk'
+import { useConsole, useXMPP, type XmppPacket } from '@fluux/sdk'
+import { useConnectionStore } from '@fluux/sdk/react'
 import { formatStanzaPreview, formatStanzaXml } from '@/utils/stanzaPreviewFormatter'
 import { Tooltip } from './Tooltip'
 
@@ -146,7 +147,9 @@ function ConsoleEntry({ entry, isSelected, expanded, onToggle, onSelect }: Conso
 export function XmppConsole() {
   const { t } = useTranslation()
   const { isOpen, height, entries, toggle, setHeight, clearEntries } = useConsole()
-  const { status, serverInfo } = useConnection()
+  // Use focused selectors instead of useConnection() to avoid re-renders when unrelated values change
+  const status = useConnectionStore((s) => s.status)
+  const serverInfo = useConnectionStore((s) => s.serverInfo)
   const { sendRawXml } = useXMPP()
   const [inputXml, setInputXml] = useState('')
   const [error, setError] = useState<string | null>(null)

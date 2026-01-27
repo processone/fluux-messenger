@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react'
-import { useConnection } from '@fluux/sdk'
+import { useEffect, useRef, useCallback } from 'react'
+import { useXMPP } from '@fluux/sdk'
+import { useConnectionStore } from '@fluux/sdk/react'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { isTauri } from '../utils/keychain'
 import { checkTimeGapWake, releaseWakeLock, tryAcquireWakeLock } from '../utils/wakeCoordinator'
@@ -35,7 +36,16 @@ const MIN_HIDDEN_TIME_MS = 60_000 // 1 minute
  * Uses shared wakeCoordinator to prevent multiple hooks from handling wake simultaneously.
  */
 export function useWakeDetector() {
-  const { status, notifySystemState } = useConnection()
+  // Use focused selector to only subscribe to status, not all 12+ connection values
+  const status = useConnectionStore((s) => s.status)
+  // Get client from context for methods
+  const { client } = useXMPP()
+  const notifySystemState = useCallback(
+    async (state: 'awake' | 'sleeping' | 'visible' | 'hidden') => {
+      await client.notifySystemState(state)
+    },
+    [client]
+  )
   const hiddenAtRef = useRef<number | null>(null)
 
   // Time-gap based sleep detection - works even when window is focused
