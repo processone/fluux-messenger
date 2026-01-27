@@ -187,7 +187,9 @@ describe('MessageList scroll behavior', () => {
         scrollTopValue = 200
 
         // Trigger a scroll event to update isAtBottomRef
-        container.dispatchEvent(new Event('scroll'))
+        act(() => {
+          container.dispatchEvent(new Event('scroll'))
+        })
 
         scrollSpy.mockClear()
 
@@ -344,7 +346,9 @@ describe('MessageList scroll behavior', () => {
         })
 
         // Trigger scroll event to update isAtBottomRef
-        container.dispatchEvent(new Event('scroll'))
+        act(() => {
+          container.dispatchEvent(new Event('scroll'))
+        })
 
         // First trigger an initial resize to establish baseline height
         const observer = MockResizeObserver.instances[0]
@@ -843,7 +847,9 @@ describe('MessageList scroll behavior', () => {
         })
 
         // Trigger scroll event to save the scrolled-up position
-        container.dispatchEvent(new Event('scroll'))
+        act(() => {
+          container.dispatchEvent(new Event('scroll'))
+        })
 
         // Clear spy for clean assertions
         scrollSpy.mockClear()
@@ -910,7 +916,9 @@ describe('MessageList scroll behavior', () => {
         })
 
         // Trigger scroll to mark as scrolled up and save position
-        container.dispatchEvent(new Event('scroll'))
+        act(() => {
+          container.dispatchEvent(new Event('scroll'))
+        })
         scrollSpy.mockClear()
 
         // Switch away
@@ -1221,7 +1229,9 @@ describe('MessageList scroll behavior', () => {
         })
 
         // Trigger a scroll event to ensure the hook has the scroll data
-        container.dispatchEvent(new Event('scroll'))
+        act(() => {
+          container.dispatchEvent(new Event('scroll'))
+        })
 
         // Switch to different conversation
         rerender(
@@ -1279,11 +1289,15 @@ describe('MessageList scroll behavior', () => {
         })
 
         // Scroll to position 100 - this gets captured
-        container.dispatchEvent(new Event('scroll'))
+        act(() => {
+          container.dispatchEvent(new Event('scroll'))
+        })
 
         // Scroll to position 350 - this ALSO gets captured
         scrollTopValue = 350
-        container.dispatchEvent(new Event('scroll'))
+        act(() => {
+          container.dispatchEvent(new Event('scroll'))
+        })
 
         // Switch conversations - uses last captured position (350)
         rerender(
@@ -1340,7 +1354,9 @@ describe('MessageList scroll behavior', () => {
         })
 
         // Trigger scroll to mark as at bottom
-        container.dispatchEvent(new Event('scroll'))
+        act(() => {
+          container.dispatchEvent(new Event('scroll'))
+        })
 
         // Switch to conv-2
         rerender(
@@ -1600,7 +1616,9 @@ describe('MessageList scroll behavior', () => {
         scrollContainer.scrollTo = vi.fn()
 
         // Trigger scroll to save position
-        scrollContainer.dispatchEvent(new Event('scroll'))
+        act(() => {
+          scrollContainer.dispatchEvent(new Event('scroll'))
+        })
         scrollSpy.mockClear()
 
         // Switch to different conversation

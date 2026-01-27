@@ -92,8 +92,9 @@ export function useMessageListScroll({
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const contentRef = useRef<HTMLDivElement>(null)
 
-  // Track scroll position
-  const isAtBottomRef = externalIsAtBottomRef || useRef(true)
+  // Track scroll position - always create internal ref to follow rules of hooks
+  const internalIsAtBottomRef = useRef(true)
+  const isAtBottomRef = externalIsAtBottomRef || internalIsAtBottomRef
 
   // Track conversation
   const prevConversationRef = useRef<string | null>(null)
