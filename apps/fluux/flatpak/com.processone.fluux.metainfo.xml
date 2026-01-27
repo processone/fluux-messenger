@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.processone.fluux</id>
+  <name>Fluux Messenger</name>
+  <summary>A modern, cross-platform XMPP client for communities and organizations</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-or-later</project_license>
+  <developer id="com.processone">
+    <name>ProcessOne</name>
+  </developer>
+
+  <description>
+    <p>
+      Fluux Messenger is a modern XMPP chat client built with React and Tauri.
+      It provides a polished user experience while supporting the full breadth
+      of the XMPP protocol.
+    </p>
+    <p>Features include:</p>
+    <ul>
+      <li>Real-time messaging with typing indicators and read receipts</li>
+      <li>Multi-user chat rooms with roles, affiliations, and mentions</li>
+      <li>File sharing via HTTP uploads with previews</li>
+      <li>Message reactions, corrections, and replies</li>
+      <li>Built-in XMPP console for debugging</li>
+      <li>Light and dark themes</li>
+      <li>Offline support with automatic sync</li>
+      <li>Server administration features</li>
+    </ul>
+    <p>
+      Connect to any XMPP server - there is no vendor lock-in. Fluux Messenger
+      is fully open source under the AGPL-3.0 license.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">com.processone.fluux.desktop</launchable>
+
+  <url type="homepage">https://github.com/processone/fluux-messenger</url>
+  <url type="bugtracker">https://github.com/processone/fluux-messenger/issues</url>
+  <url type="help">https://github.com/processone/fluux-messenger/discussions</url>
+  <url type="vcs-browser">https://github.com/processone/fluux-messenger</url>
+
+  <provides>
+    <binary>fluux</binary>
+  </provides>
+
+  <requires>
+    <display_length compare="ge">800</display_length>
+  </requires>
+
+  <recommends>
+    <control>keyboard</control>
+    <control>pointing</control>
+  </recommends>
+
+  <categories>
+    <category>Network</category>
+    <category>Chat</category>
+    <category>InstantMessaging</category>
+  </categories>
+
+  <keywords>
+    <keyword>xmpp</keyword>
+    <keyword>jabber</keyword>
+    <keyword>chat</keyword>
+    <keyword>messenger</keyword>
+    <keyword>im</keyword>
+    <keyword>instant messaging</keyword>
+    <keyword>muc</keyword>
+    <keyword>groupchat</keyword>
+  </keywords>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>Multi-user chat room</caption>
+      <image>https://raw.githubusercontent.com/processone/fluux-messenger/main/assets/readme/chatroom.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>XMPP debug console</caption>
+      <image>https://raw.githubusercontent.com/processone/fluux-messenger/main/assets/readme/console.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Login screen</caption>
+      <image>https://raw.githubusercontent.com/processone/fluux-messenger/main/assets/readme/login.png</image>
+    </screenshot>
+  </screenshots>
+
+  <content_rating type="oars-1.1">
+    <content_attribute id="social-chat">intense</content_attribute>
+    <content_attribute id="social-contacts">intense</content_attribute>
+  </content_rating>
+
+  <releases>
+    <release version="0.11.0" date="2026-01-27">
+      <description>
+        <p>Initial Flatpak release with event-based SDK infrastructure.</p>
+      </description>
+    </release>
+  </releases>
+</component>
