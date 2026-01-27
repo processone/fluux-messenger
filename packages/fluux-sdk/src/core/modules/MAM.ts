@@ -546,7 +546,7 @@ export class MAM extends BaseModule {
       } finally {
         ;(this.deps.getXmpp() as any)?.removeListener('stanza', collectMessage)
       }
-    } catch (error) {
+    } catch (_error) {
       // Silently ignore errors - preview refresh is best-effort
       // Individual conversation failures shouldn't affect others
     }
@@ -639,7 +639,7 @@ export class MAM extends BaseModule {
       } finally {
         ;(this.deps.getXmpp() as any)?.removeListener('stanza', collectMessage)
       }
-    } catch (error) {
+    } catch (_error) {
       // Silently ignore errors - preview refresh is best-effort
     }
   }
