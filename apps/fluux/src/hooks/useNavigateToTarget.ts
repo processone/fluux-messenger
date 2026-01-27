@@ -17,6 +17,9 @@ const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 /**
  * Clear all active notifications from the notification center.
  * Called when navigating to a conversation/room so stale notifications are dismissed.
+ *
+ * Note: removeAllActive() is not available on all platforms (e.g., may not work on macOS).
+ * We silently ignore errors since this is a "nice to have" feature.
  */
 async function clearAllNotifications(): Promise<void> {
   if (!isTauri) return
@@ -24,10 +27,8 @@ async function clearAllNotifications(): Promise<void> {
   try {
     const { removeAllActive } = await import('@tauri-apps/plugin-notification')
     await removeAllActive()
-    console.log('[Navigation] Cleared all active notifications')
-  } catch (err) {
-    // Permission might not be granted or API not available
-    console.warn('[Navigation] Failed to clear notifications:', err)
+  } catch {
+    // Silently ignore - removeAllActive is not available on all platforms
   }
 }
 
