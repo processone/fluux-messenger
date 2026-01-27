@@ -48,7 +48,7 @@ export function SettingsView({ onBack }: SettingsViewProps) {
       case 'notifications':
         return <NotificationsSettings />
       case 'updates':
-        return isTauri ? <UpdatesSettings /> : <ProfileSettings />
+        return isTauri() ? <UpdatesSettings /> : <ProfileSettings />
       case 'blocked':
         return <BlockedUsersSettings />
       default:

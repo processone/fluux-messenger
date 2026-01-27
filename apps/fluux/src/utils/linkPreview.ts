@@ -4,7 +4,7 @@
  */
 
 // Note: invoke is imported dynamically inside functions to avoid loading Tauri APIs in web mode
-import { isTauri } from './keychain'
+import { isTauri } from './tauri'
 
 export interface UrlMetadata {
   url: string

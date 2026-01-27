@@ -7,7 +7,7 @@ type NotificationStatus = 'checking' | 'granted' | 'denied' | 'default' | 'unava
 
 async function checkNotificationPermission(): Promise<NotificationStatus> {
   try {
-    if (isTauri) {
+    if (isTauri()) {
       const { isPermissionGranted } = await import('@tauri-apps/plugin-notification')
       const granted = await isPermissionGranted()
       return granted ? 'granted' : 'denied'
@@ -105,7 +105,7 @@ export function NotificationsSettings() {
           )}
 
           {/* Tauri: Open system settings button */}
-          {isTauri && (notificationStatus === 'denied' || notificationStatus === 'default') && (
+          {isTauri() && (notificationStatus === 'denied' || notificationStatus === 'default') && (
             <button
               onClick={openNotificationSettings}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand hover:text-fluux-text

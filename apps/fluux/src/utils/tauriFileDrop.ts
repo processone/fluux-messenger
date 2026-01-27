@@ -5,11 +5,13 @@
  * so it's ready before any React components render.
  */
 
+import { isTauri } from './tauri'
+
 type DragStateListener = (isDragging: boolean) => void
 type FileDropListener = (paths: string[]) => void
 
-// Check if running in Tauri
-const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+// Evaluate once at module load time
+const isRunningInTauri = isTauri()
 
 // Global state
 let isDragging = false
@@ -29,7 +31,7 @@ function notifyFileDrop(paths: string[]) {
 }
 
 // Set up the global listener IMMEDIATELY (not in useEffect)
-if (isTauri) {
+if (isRunningInTauri) {
   // Use dynamic import but start it immediately
   import('@tauri-apps/api/webview').then(({ getCurrentWebview }) => {
     getCurrentWebview().onDragDropEvent((event) => {
@@ -87,5 +89,5 @@ export function getIsDragging(): boolean {
  * Check if running in Tauri.
  */
 export function getIsTauri(): boolean {
-  return isTauri
+  return isRunningInTauri
 }

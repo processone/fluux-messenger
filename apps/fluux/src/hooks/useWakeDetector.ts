@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from 'react'
 import { useXMPP } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import type { UnlistenFn } from '@tauri-apps/api/event'
-import { isTauri } from '../utils/keychain'
+import { isTauri } from '../utils/tauri'
 import { checkTimeGapWake, releaseWakeLock, tryAcquireWakeLock } from '../utils/wakeCoordinator'
 
 /**

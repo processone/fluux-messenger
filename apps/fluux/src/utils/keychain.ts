@@ -5,6 +5,8 @@
 
 // Note: invoke is imported dynamically inside functions to avoid loading Tauri APIs in web mode
 
+import { isTauri } from './tauri'
+
 export interface StoredCredentials {
   jid: string
   password: string
@@ -13,13 +15,6 @@ export interface StoredCredentials {
 
 // Flag to track if credentials exist without triggering keychain prompt
 const STORAGE_KEY_HAS_CREDENTIALS = 'xmpp-has-saved-credentials'
-
-/**
- * Check if running in Tauri (desktop app)
- */
-export function isTauri(): boolean {
-  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
-}
 
 /**
  * Check if credentials might be saved (without triggering keychain prompt)

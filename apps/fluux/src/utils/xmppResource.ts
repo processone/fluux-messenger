@@ -11,10 +11,9 @@
  *   kicks the existing connection. This prevents multiple web sessions.
  */
 
-const RESOURCE_KEY = 'xmpp-resource'
+import { isTauri } from './tauri'
 
-// Check if running in Tauri (v2 uses __TAURI_INTERNALS__)
-const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+const RESOURCE_KEY = 'xmpp-resource'
 
 /**
  * Generates a random resource identifier.
@@ -36,7 +35,7 @@ function generateResource(): string {
  * - For Web: Returns "web" (fixed resource to kick existing sessions)
  */
 export function getResource(): string {
-  if (isTauri) {
+  if (isTauri()) {
     // Desktop: Use persistent random resource
     let resource = localStorage.getItem(RESOURCE_KEY)
     if (!resource) {

@@ -4,7 +4,7 @@ import { connectionStore, rosterStore, roomStore, useXMPPContext } from '@fluux/
 import { useRosterStore, useConnectionStore, useRoomStore } from '@fluux/sdk/react'
 import type { Contact, Room, RoomOccupant, ServerInfo, HttpUploadService, RoomMessage, ResourcePresence } from '@fluux/sdk'
 import { getResource } from '@/utils/xmppResource'
-import { isTauri } from '@/utils/keychain'
+import { isTauri } from '@/utils/tauri'
 
 const SESSION_KEY = 'xmpp-session'
 const ROSTER_KEY = 'xmpp-roster'

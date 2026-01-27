@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 import { User, Palette, Globe, Bell, Download, Ban } from 'lucide-react'
+import { isTauri } from '@/utils/tauri'
 
 export type SettingsCategory = 'profile' | 'appearance' | 'language' | 'notifications' | 'updates' | 'blocked'
 
@@ -10,8 +11,7 @@ export interface SettingsCategoryConfig {
   tauriOnly?: boolean
 }
 
-// Check if we're running in Tauri
-export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+export { isTauri }
 
 export const SETTINGS_CATEGORIES: SettingsCategoryConfig[] = [
   { id: 'profile', labelKey: 'settings.categories.profile', icon: User },

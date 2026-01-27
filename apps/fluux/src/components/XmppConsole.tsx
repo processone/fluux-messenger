@@ -6,6 +6,7 @@ import { useConsole, useXMPP, type XmppPacket } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { formatStanzaPreview, formatStanzaXml } from '@/utils/stanzaPreviewFormatter'
 import { Tooltip } from './Tooltip'
+import { isTauri } from '@/utils/tauri'
 
 type FilterType = 'message' | 'presence' | 'iq' | 'sm' | 'other' | 'event'
 type DirectionFilter = 'all' | 'incoming' | 'outgoing'
@@ -366,7 +367,7 @@ export function XmppConsole() {
     }
   }
 
-  const handleExport = () => {
+  const handleExport = async () => {
     // Build header with version info
     const exportDate = format(new Date(), 'yyyy-MM-dd HH:mm:ss')
     const header = [
@@ -407,9 +408,34 @@ export function XmppConsole() {
     })
 
     const content = [...header, ...serverSection, ...lines].join('\n')
-    const filename = `xmpp-log-${format(new Date(), 'yyyy-MM-dd-HHmmss')}.txt`
+    const defaultFilename = `xmpp-log-${format(new Date(), 'yyyy-MM-dd-HHmmss')}.txt`
 
-    // Create and trigger download
+    // Use native save dialog in Tauri, fallback to blob download for web
+    if (isTauri()) {
+      try {
+        const { save } = await import('@tauri-apps/plugin-dialog')
+        const { writeTextFile } = await import('@tauri-apps/plugin-fs')
+
+        const filePath = await save({
+          defaultPath: defaultFilename,
+          filters: [{ name: 'Text Files', extensions: ['txt', 'log'] }],
+        })
+
+        if (filePath) {
+          await writeTextFile(filePath, content)
+        }
+      } catch (err) {
+        console.error('Failed to save file:', err)
+        // Fallback to web download if Tauri save fails
+        downloadAsBlob(content, defaultFilename)
+      }
+    } else {
+      downloadAsBlob(content, defaultFilename)
+    }
+  }
+
+  // Web fallback: download using blob URL
+  const downloadAsBlob = (content: string, filename: string) => {
     const blob = new Blob([content], { type: 'text/plain' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')

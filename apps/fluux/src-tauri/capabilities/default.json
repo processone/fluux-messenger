@@ -37,6 +37,7 @@
       "allow": [{ "path": "**/*" }]
     },
     "deep-link:default",
+    "dialog:allow-save",
     "updater:default",
     "process:allow-restart",
     {
