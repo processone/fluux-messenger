@@ -16,6 +16,7 @@ import {
   NS_REPLY,
   NS_OOB,
   NS_THUMBS,
+  NS_FILE_METADATA,
   NS_STANZA_ID,
   NS_CORRECTION,
   NS_XHTML,
@@ -80,7 +81,7 @@ export function parseOgpFastening(applyToEl: Element): LinkPreview | null {
 }
 
 /**
- * Parse XEP-0066 Out of Band Data with optional XEP-0264 thumbnail.
+ * Parse XEP-0066 Out of Band Data with optional XEP-0264 thumbnail and XEP-0446 file metadata.
  * Returns FileAttachment if OOB data is present.
  */
 export function parseOobData(stanza: Element): FileAttachment | undefined {
@@ -113,24 +114,49 @@ export function parseOobData(stanza: Element): FileAttachment | undefined {
     }
   }
 
-  // Extract filename from URL
-  let name: string | undefined
-  try {
-    const urlObj = new URL(url)
-    const pathname = urlObj.pathname
-    const lastSegment = pathname.split('/').pop()
-    if (lastSegment && !lastSegment.includes('.')) {
-      name = undefined // No extension, likely not a filename
-    } else {
-      name = lastSegment ? decodeURIComponent(lastSegment) : undefined
-    }
-  } catch {
-    // Invalid URL, skip name extraction
+  // XEP-0446: Parse file metadata element for original dimensions
+  let fileWidth: number | undefined
+  let fileHeight: number | undefined
+  let fileSize: number | undefined
+  let fileName: string | undefined
+  let fileMediaType: string | undefined
+  const fileEl = stanza.getChild('file', NS_FILE_METADATA)
+  if (fileEl) {
+    const widthEl = fileEl.getChild('width')
+    const heightEl = fileEl.getChild('height')
+    const sizeEl = fileEl.getChild('size')
+    const nameEl = fileEl.getChild('name')
+    const mediaTypeEl = fileEl.getChild('media-type')
+    if (widthEl?.text()) fileWidth = parseInt(widthEl.text(), 10)
+    if (heightEl?.text()) fileHeight = parseInt(heightEl.text(), 10)
+    if (sizeEl?.text()) fileSize = parseInt(sizeEl.text(), 10)
+    if (nameEl?.text()) fileName = nameEl.text()
+    if (mediaTypeEl?.text()) fileMediaType = mediaTypeEl.text()
   }
 
-  // Determine media type from URL extension (most reliable)
-  let mediaType: string | undefined
-  if (name) {
+  // Extract filename from URL (fallback if not in XEP-0446)
+  let name: string | undefined = fileName
+  if (!name) {
+    try {
+      const urlObj = new URL(url)
+      const pathname = urlObj.pathname
+      const lastSegment = pathname.split('/').pop()
+      if (lastSegment && !lastSegment.includes('.')) {
+        name = undefined // No extension, likely not a filename
+      } else {
+        name = lastSegment ? decodeURIComponent(lastSegment) : undefined
+      }
+    } catch {
+      // Invalid URL, skip name extraction
+    }
+  }
+
+  // Use description as name if provided (override URL-extracted name)
+  if (desc) name = desc
+
+  // Determine media type - prefer XEP-0446, fallback to URL extension
+  let mediaType: string | undefined = fileMediaType
+  if (!mediaType && name) {
     const ext = name.split('.').pop()?.toLowerCase()
     const mimeMap: Record<string, string> = {
       // Images
@@ -158,8 +184,10 @@ export function parseOobData(stanza: Element): FileAttachment | undefined {
   return {
     url,
     ...(name && { name }),
-    ...(desc && { name: desc }), // Use description as name if provided
+    ...(fileSize !== undefined && { size: fileSize }),
     ...(mediaType && { mediaType }),
+    ...(fileWidth !== undefined && { width: fileWidth }),
+    ...(fileHeight !== undefined && { height: fileHeight }),
     ...(thumbnail && { thumbnail }),
   }
 }

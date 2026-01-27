@@ -11,6 +11,7 @@ import {
   NS_RETRACT,
   NS_OOB,
   NS_THUMBS,
+  NS_FILE_METADATA,
   NS_FASTEN,
   NS_MUC_USER,
   NS_CONFERENCE,
@@ -361,6 +362,27 @@ export class Chat extends BaseModule {
       children.push(xml('fallback', { xmlns: NS_FALLBACK, for: NS_OOB },
         xml('body', { start: '0', end: String(fullBody.length) })
       ))
+
+      // XEP-0446: File Metadata Element (for original dimensions)
+      const fileChildren: Element[] = []
+      if (attachment.mediaType) {
+        fileChildren.push(xml('media-type', {}, attachment.mediaType))
+      }
+      if (attachment.name) {
+        fileChildren.push(xml('name', {}, attachment.name))
+      }
+      if (attachment.size !== undefined) {
+        fileChildren.push(xml('size', {}, String(attachment.size)))
+      }
+      if (attachment.width !== undefined) {
+        fileChildren.push(xml('width', {}, String(attachment.width)))
+      }
+      if (attachment.height !== undefined) {
+        fileChildren.push(xml('height', {}, String(attachment.height)))
+      }
+      if (fileChildren.length > 0) {
+        children.push(xml('file', { xmlns: NS_FILE_METADATA }, ...fileChildren))
+      }
     }
 
     const message = xml('message', { to: recipient, type, id }, ...children)
@@ -521,6 +543,17 @@ export class Chat extends BaseModule {
       children.push(xml('fallback', { xmlns: NS_FALLBACK, for: NS_OOB },
         xml('body', { start: String(fallbackEnd), end: String(fallbackBody.length) })
       ))
+
+      // XEP-0446: File Metadata Element (for original dimensions)
+      const fileChildren: Element[] = []
+      if (attachment.mediaType) fileChildren.push(xml('media-type', {}, attachment.mediaType))
+      if (attachment.name) fileChildren.push(xml('name', {}, attachment.name))
+      if (attachment.size !== undefined) fileChildren.push(xml('size', {}, String(attachment.size)))
+      if (attachment.width !== undefined) fileChildren.push(xml('width', {}, String(attachment.width)))
+      if (attachment.height !== undefined) fileChildren.push(xml('height', {}, String(attachment.height)))
+      if (fileChildren.length > 0) {
+        children.push(xml('file', { xmlns: NS_FILE_METADATA }, ...fileChildren))
+      }
     }
 
     await this.deps.sendStanza(xml('message', { to: recipient, type, id: generateUUID() }, ...children))

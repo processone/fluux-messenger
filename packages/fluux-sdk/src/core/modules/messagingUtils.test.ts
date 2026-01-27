@@ -270,5 +270,125 @@ describe('messagingUtils', () => {
 
       expect(result?.name).toBe('Important Document')
     })
+
+    it('should extract XEP-0446 file metadata dimensions', () => {
+      const stanza = createMockElement('message', { id: 'msg-1' }, [
+        {
+          name: 'x',
+          attrs: { xmlns: 'jabber:x:oob' },
+          children: [
+            { name: 'url', text: 'https://example.com/photo.jpg' },
+          ],
+        },
+        {
+          name: 'file',
+          attrs: { xmlns: 'urn:xmpp:file:metadata:0' },
+          children: [
+            { name: 'media-type', text: 'image/jpeg' },
+            { name: 'name', text: 'vacation-photo.jpg' },
+            { name: 'size', text: '1024000' },
+            { name: 'width', text: '1920' },
+            { name: 'height', text: '1080' },
+          ],
+        },
+      ])
+
+      const result = parseOobData(stanza)
+
+      expect(result).toBeDefined()
+      expect(result?.width).toBe(1920)
+      expect(result?.height).toBe(1080)
+      expect(result?.size).toBe(1024000)
+      expect(result?.name).toBe('vacation-photo.jpg')
+      expect(result?.mediaType).toBe('image/jpeg')
+    })
+
+    it('should prefer XEP-0446 media-type over URL extension', () => {
+      const stanza = createMockElement('message', { id: 'msg-1' }, [
+        {
+          name: 'x',
+          attrs: { xmlns: 'jabber:x:oob' },
+          children: [
+            { name: 'url', text: 'https://example.com/file.unknown' },
+          ],
+        },
+        {
+          name: 'file',
+          attrs: { xmlns: 'urn:xmpp:file:metadata:0' },
+          children: [
+            { name: 'media-type', text: 'image/png' },
+          ],
+        },
+      ])
+
+      const result = parseOobData(stanza)
+
+      expect(result?.mediaType).toBe('image/png')
+    })
+
+    it('should work with XEP-0446 and XEP-0264 thumbnail together', () => {
+      const stanza = createMockElement('message', { id: 'msg-1' }, [
+        {
+          name: 'x',
+          attrs: { xmlns: 'jabber:x:oob' },
+          children: [
+            { name: 'url', text: 'https://example.com/photo.jpg' },
+            {
+              name: 'thumbnail',
+              attrs: {
+                xmlns: 'urn:xmpp:thumbs:1',
+                uri: 'https://example.com/thumb.jpg',
+                'media-type': 'image/jpeg',
+                width: '256',
+                height: '144',
+              },
+            },
+          ],
+        },
+        {
+          name: 'file',
+          attrs: { xmlns: 'urn:xmpp:file:metadata:0' },
+          children: [
+            { name: 'width', text: '3840' },
+            { name: 'height', text: '2160' },
+          ],
+        },
+      ])
+
+      const result = parseOobData(stanza)
+
+      // Original dimensions from XEP-0446
+      expect(result?.width).toBe(3840)
+      expect(result?.height).toBe(2160)
+      // Thumbnail dimensions from XEP-0264
+      expect(result?.thumbnail?.width).toBe(256)
+      expect(result?.thumbnail?.height).toBe(144)
+    })
+
+    it('should handle XEP-0446 with only partial metadata', () => {
+      const stanza = createMockElement('message', { id: 'msg-1' }, [
+        {
+          name: 'x',
+          attrs: { xmlns: 'jabber:x:oob' },
+          children: [
+            { name: 'url', text: 'https://example.com/video.mp4' },
+          ],
+        },
+        {
+          name: 'file',
+          attrs: { xmlns: 'urn:xmpp:file:metadata:0' },
+          children: [
+            { name: 'width', text: '1280' },
+            // height is missing
+          ],
+        },
+      ])
+
+      const result = parseOobData(stanza)
+
+      expect(result?.width).toBe(1280)
+      expect(result?.height).toBeUndefined()
+      expect(result?.mediaType).toBe('video/mp4') // Falls back to URL extension
+    })
   })
 })

@@ -10,6 +10,8 @@ import {
   isAudioFile,
   getVideoDuration,
   getAudioDuration,
+  getImageDimensions,
+  getVideoDimensions,
   getEffectiveMimeType,
   type ThumbnailResult,
 } from '@/utils/thumbnail'
@@ -82,20 +84,37 @@ export function useFileUpload() {
 
     try {
       // Generate thumbnail for images and videos (non-blocking, can fail silently)
+      // Also extract original dimensions for XEP-0446 file metadata
       let thumbnailResult: ThumbnailResult | null = null
       let duration: number | undefined
+      let width: number | undefined
+      let height: number | undefined
 
       if (isImageFile(file)) {
-        thumbnailResult = await generateThumbnail(file)
+        // Extract thumbnail and original dimensions in parallel
+        const [thumbResult, dimensions] = await Promise.all([
+          generateThumbnail(file),
+          getImageDimensions(file),
+        ])
+        thumbnailResult = thumbResult
+        if (dimensions) {
+          width = dimensions.width
+          height = dimensions.height
+        }
       } else if (isVideoFile(file)) {
-        // Generate video thumbnail and extract duration in parallel
-        const [thumbResult, videoDuration] = await Promise.all([
+        // Generate video thumbnail, extract duration and dimensions in parallel
+        const [thumbResult, videoDuration, dimensions] = await Promise.all([
           generateVideoThumbnail(file),
           getVideoDuration(file),
+          getVideoDimensions(file),
         ])
         thumbnailResult = thumbResult
         if (videoDuration !== null) {
           duration = videoDuration
+        }
+        if (dimensions) {
+          width = dimensions.width
+          height = dimensions.height
         }
       } else if (isAudioFile(file)) {
         // Extract audio duration
@@ -169,6 +188,8 @@ export function useFileUpload() {
         name: file.name,
         size: file.size,
         mediaType: effectiveMimeType,
+        width,
+        height,
         thumbnail: thumbnailInfo,
         duration,
       }

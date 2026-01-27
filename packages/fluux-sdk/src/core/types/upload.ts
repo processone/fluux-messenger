@@ -69,7 +69,7 @@ export interface OobInfo {
  * File attachment in a message.
  *
  * Combined information from HTTP Upload (XEP-0363), OOB (XEP-0066),
- * and thumbnails (XEP-0264).
+ * thumbnails (XEP-0264), and file metadata (XEP-0446).
  *
  * @category FileUpload
  */
@@ -82,6 +82,10 @@ export interface FileAttachment {
   size?: number
   /** MIME type */
   mediaType?: string
+  /** XEP-0446: Width in pixels (for images/videos) */
+  width?: number
+  /** XEP-0446: Height in pixels (for images/videos) */
+  height?: number
   /** XEP-0264: Thumbnail for images/videos */
   thumbnail?: ThumbnailInfo
   /** Duration in seconds (for audio/video) */

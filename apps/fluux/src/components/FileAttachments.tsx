@@ -26,12 +26,18 @@ export function ImageAttachment({ attachment, onLoad }: AttachmentProps) {
 
   // Use thumbnail if available, otherwise fall back to main URL
   const imageSrc = attachment.thumbnail?.uri || attachment.url
-  const hasKnownDimensions = attachment.thumbnail?.width && attachment.thumbnail?.height
+
+  // Prefer XEP-0446 original dimensions, fall back to thumbnail dimensions
+  const width = attachment.width ?? attachment.thumbnail?.width
+  const height = attachment.height ?? attachment.thumbnail?.height
+  const hasKnownDimensions = width !== undefined && height !== undefined
 
   // Calculate aspect ratio to reserve space and prevent layout shift
+  // Use 4:3 as default for unknown dimensions (common photo ratio)
+  const DEFAULT_ASPECT_RATIO = 4 / 3
   const aspectRatio = hasKnownDimensions
-    ? attachment.thumbnail!.width / attachment.thumbnail!.height
-    : undefined
+    ? width / height
+    : DEFAULT_ASPECT_RATIO
 
   return (
     <a
@@ -44,16 +50,14 @@ export function ImageAttachment({ attachment, onLoad }: AttachmentProps) {
       <img
         src={imageSrc}
         alt={attachment.name || 'Image attachment'}
-        width={attachment.thumbnail?.width}
-        height={attachment.thumbnail?.height}
-        className="max-w-full h-auto rounded-lg"
+        width={width}
+        height={height}
+        className="max-w-full rounded-lg object-contain"
         style={{
-          // Reserve space using aspect ratio when dimensions known
+          // Always reserve space using aspect ratio to prevent layout shift
           aspectRatio: aspectRatio,
-          // Fallback max height when dimensions unknown
-          maxHeight: !hasKnownDimensions ? '300px' : undefined,
-          // Ensure minimum height while loading (prevents 0-height flash)
-          minHeight: hasKnownDimensions ? undefined : '100px',
+          // Max height for reasonable sizing
+          maxHeight: '300px',
         }}
         loading="lazy"
         onLoad={onLoad}

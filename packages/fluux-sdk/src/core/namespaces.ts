@@ -18,6 +18,9 @@ export const NS_OOB = 'jabber:x:oob'
 // XEP-0264: Jingle Content Thumbnails
 export const NS_THUMBS = 'urn:xmpp:thumbs:1'
 
+// XEP-0446: File Metadata Element
+export const NS_FILE_METADATA = 'urn:xmpp:file:metadata:0'
+
 // XEP-0085: Chat State Notifications
 export const NS_CHATSTATES = 'http://jabber.org/protocol/chatstates'
 

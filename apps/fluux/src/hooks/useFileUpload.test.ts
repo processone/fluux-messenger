@@ -42,6 +42,8 @@ const mockIsVideoFile = vi.fn()
 const mockIsAudioFile = vi.fn()
 const mockGetVideoDuration = vi.fn()
 const mockGetAudioDuration = vi.fn()
+const mockGetImageDimensions = vi.fn()
+const mockGetVideoDimensions = vi.fn()
 const mockGetEffectiveMimeType = vi.fn()
 
 vi.mock('../utils/thumbnail', () => ({
@@ -52,6 +54,8 @@ vi.mock('../utils/thumbnail', () => ({
   isAudioFile: (...args: unknown[]) => mockIsAudioFile(...args),
   getVideoDuration: (...args: unknown[]) => mockGetVideoDuration(...args),
   getAudioDuration: (...args: unknown[]) => mockGetAudioDuration(...args),
+  getImageDimensions: (...args: unknown[]) => mockGetImageDimensions(...args),
+  getVideoDimensions: (...args: unknown[]) => mockGetVideoDimensions(...args),
   getEffectiveMimeType: (...args: unknown[]) => mockGetEffectiveMimeType(...args),
 }))
 
@@ -102,7 +106,7 @@ describe('useFileUpload', () => {
     mockXhrStatus = 200
     mockXhrShouldFail = false
     mockXhrShouldTimeout = false
-    // Default: not a media file (no thumbnail/duration generation)
+    // Default: not a media file (no thumbnail/duration/dimensions generation)
     mockIsImageFile.mockReturnValue(false)
     mockIsVideoFile.mockReturnValue(false)
     mockIsAudioFile.mockReturnValue(false)
@@ -110,6 +114,8 @@ describe('useFileUpload', () => {
     mockGenerateVideoThumbnail.mockResolvedValue(null)
     mockGetVideoDuration.mockResolvedValue(null)
     mockGetAudioDuration.mockResolvedValue(null)
+    mockGetImageDimensions.mockResolvedValue(null)
+    mockGetVideoDimensions.mockResolvedValue(null)
     // Default: return the file's type or application/octet-stream
     mockGetEffectiveMimeType.mockImplementation((file: File) => file.type || 'application/octet-stream')
   })
