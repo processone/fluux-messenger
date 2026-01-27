@@ -14,6 +14,9 @@ import {
   type ThumbnailResult,
 } from '@/utils/thumbnail'
 
+// Detect if running in Tauri
+const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+
 interface UploadState {
   isUploading: boolean
   progress: number  // 0-100
@@ -180,9 +183,48 @@ export function useFileUpload() {
 }
 
 /**
- * Upload file with XMLHttpRequest for progress tracking.
+ * Upload file using Tauri's HTTP plugin (bypasses CORS).
+ * Progress tracking is not available with Tauri's fetch.
  */
-async function uploadWithProgress(
+async function uploadWithTauri(
+  url: string,
+  file: File,
+  contentType: string,
+  headers?: Record<string, string>,
+  onProgress?: (progress: number) => void
+): Promise<void> {
+  // Dynamic import to avoid bundling Tauri code in web builds
+  const { fetch } = await import('@tauri-apps/plugin-http')
+
+  // Read file as ArrayBuffer for Tauri fetch
+  const arrayBuffer = await file.arrayBuffer()
+
+  // Build headers
+  const requestHeaders: Record<string, string> = {
+    'Content-Type': contentType,
+    ...headers,
+  }
+
+  // Tauri fetch doesn't support progress, simulate it
+  onProgress?.(50)
+
+  const response = await fetch(url, {
+    method: 'PUT',
+    headers: requestHeaders,
+    body: arrayBuffer,
+  })
+
+  if (!response.ok) {
+    throw new Error(`Upload failed: ${response.status}`)
+  }
+
+  onProgress?.(100)
+}
+
+/**
+ * Upload file with XMLHttpRequest for progress tracking (web only).
+ */
+async function uploadWithXHR(
   url: string,
   file: File,
   contentType: string,
@@ -228,6 +270,24 @@ async function uploadWithProgress(
 
     xhr.send(file)
   })
+}
+
+/**
+ * Upload file with progress tracking.
+ * Uses Tauri HTTP plugin in desktop app (bypasses CORS),
+ * falls back to XMLHttpRequest for web.
+ */
+async function uploadWithProgress(
+  url: string,
+  file: File,
+  contentType: string,
+  headers?: Record<string, string>,
+  onProgress?: (progress: number) => void
+): Promise<void> {
+  if (isTauri) {
+    return uploadWithTauri(url, file, contentType, headers, onProgress)
+  }
+  return uploadWithXHR(url, file, contentType, headers, onProgress)
 }
 
 /**
