@@ -252,13 +252,17 @@ export function RoomHeader({
                   // TODO: Open room settings modal
                   setShowOwnerMenu(false)
                 }}
-                className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-left transition-colors"
+                className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-left transition-colors opacity-60 cursor-not-allowed"
+                disabled
               >
                 <Settings className="w-4 h-4 text-fluux-muted" />
                 <div className="flex-1">
                   <div className="text-sm text-fluux-text">{t('rooms.roomSettings')}</div>
                   <div className="text-xs text-fluux-muted">{t('rooms.configureRoom')}</div>
                 </div>
+                <span className="text-[10px] px-1.5 py-0.5 bg-fluux-muted/20 text-fluux-muted rounded">
+                  {t('common.comingSoon')}
+                </span>
               </button>
 
               {/* Change Room Subject (placeholder) */}
@@ -267,12 +271,16 @@ export function RoomHeader({
                   // TODO: Open change subject modal
                   setShowOwnerMenu(false)
                 }}
-                className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-left transition-colors"
+                className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-left transition-colors opacity-60 cursor-not-allowed"
+                disabled
               >
                 <Type className="w-4 h-4 text-fluux-muted" />
                 <div className="flex-1">
                   <div className="text-sm text-fluux-text">{t('rooms.changeSubject')}</div>
                 </div>
+                <span className="text-[10px] px-1.5 py-0.5 bg-fluux-muted/20 text-fluux-muted rounded">
+                  {t('common.comingSoon')}
+                </span>
               </button>
 
               {/* Change Room Avatar (owner only) */}
@@ -334,13 +342,17 @@ export function RoomHeader({
                     // TODO: Open kick/ban member modal
                     setShowOwnerMenu(false)
                   }}
-                  className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-left transition-colors"
+                  className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-left transition-colors opacity-60 cursor-not-allowed"
+                  disabled
                 >
                   <UserMinus className="w-4 h-4 text-fluux-muted" />
                   <div className="flex-1">
                     <div className="text-sm text-fluux-text">{t('rooms.manageMembership')}</div>
                     <div className="text-xs text-fluux-muted">{t('rooms.kickBanMembers')}</div>
                   </div>
+                  <span className="text-[10px] px-1.5 py-0.5 bg-fluux-muted/20 text-fluux-muted rounded">
+                    {t('common.comingSoon')}
+                  </span>
                 </button>
               )}
             </div>

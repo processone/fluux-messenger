@@ -27,6 +27,7 @@ vi.mock('react-i18next', () => ({
         'rooms.showMembers': 'Show members',
         'rooms.avatarClearFailed': 'Failed to clear avatar',
         'rooms.avatarChangeFailed': 'Failed to change avatar',
+        'common.comingSoon': 'Coming soon',
       }
       return translations[key] || key
     },

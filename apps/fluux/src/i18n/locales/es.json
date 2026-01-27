@@ -12,7 +12,8 @@
     "download": "Descargar",
     "optional": "opcional",
     "create": "Crear",
-    "block": "Bloquear"
+    "block": "Bloquear",
+    "comingSoon": "Próximamente"
   },
   "login": {
     "title": "Fluux Messenger",
