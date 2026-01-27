@@ -60,6 +60,7 @@ This document lists the XMPP Extension Protocols (XEPs) and related RFCs impleme
 | [XEP-0363](https://xmpp.org/extensions/xep-0363.html) | HTTP File Upload | ✅ Implemented | File upload with drag-and-drop, progress indicator, automatic service discovery |
 | [XEP-0066](https://xmpp.org/extensions/xep-0066.html) | Out of Band Data | ✅ Implemented | File URL sharing with thumbnails |
 | [XEP-0264](https://xmpp.org/extensions/xep-0264.html) | Jingle Content Thumbnails | ✅ Implemented | Image preview thumbnails for file uploads |
+| [XEP-0446](https://xmpp.org/extensions/xep-0446.html) | File Metadata Element | ✅ Implemented | Original image/video dimensions for proper layout reservation |
 | [XEP-0422](https://xmpp.org/extensions/xep-0422.html) | Message Fastening | ✅ Implemented | Link previews with OGP metadata attached to messages |
 | [XEP-0203](https://xmpp.org/extensions/xep-0203.html) | Delayed Delivery | ✅ Implemented | Offline message timestamps |
 | [XEP-0297](https://xmpp.org/extensions/xep-0297.html) | Stanza Forwarding | ✅ Implemented | Used by Message Carbons |
