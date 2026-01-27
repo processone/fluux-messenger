@@ -4,9 +4,11 @@
 
 # Fluux Messenger
 
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![Release](https://img.shields.io/github/v/release/processone/fluux-messenger)](https://github.com/processone/fluux-messenger/releases)
+[![Downloads](https://img.shields.io/github/downloads/processone/fluux-messenger/total)](https://github.com/processone/fluux-messenger/releases)
+[![Repo Size](https://img.shields.io/github/repo-size/processone/ejabberd)](https://github.com/processone/fluux-messenger/releases)
 [![Build Status](https://github.com/processone/fluux-messenger/workflows/CI/badge.svg)](https://github.com/processone/fluux-messenger/actions)
-[![Release](https://github.com/v/release/processone/fluux-messenger)](https://github.com/processone/fluux-messenger/releases)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 *A modern, cross-platform XMPP client for communities and organizations*
