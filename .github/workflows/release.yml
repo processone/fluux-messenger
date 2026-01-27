@@ -190,7 +190,7 @@ jobs:
           echo "$NOTES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Build Tauri app (deb only)
+      - name: Build Tauri app (deb and rpm)
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -203,7 +203,7 @@ jobs:
           releaseBody: ${{ steps.release_notes.outputs.notes }}
           releaseDraft: false
           prerelease: false
-          args: --bundles deb
+          args: --bundles deb,rpm
 
       - name: Build Flatpak
         run: |
