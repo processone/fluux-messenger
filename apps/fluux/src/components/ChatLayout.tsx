@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { Sidebar, type SidebarView } from './Sidebar'
@@ -129,12 +129,18 @@ function ChatLayoutContent() {
   // Ref for main container to enable focus for keyboard shortcuts
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Focus zone refs for Tab cycling
-  const focusZoneRefs: FocusZoneRefs = {
-    sidebarList: useRef<HTMLDivElement>(null),
-    mainContent: useRef<HTMLElement>(null),
-    composer: useRef<HTMLElement>(null),
-  }
+  // Focus zone refs for Tab cycling - create refs at top level (stable across renders)
+  const sidebarListRef = useRef<HTMLDivElement>(null)
+  const mainContentRef = useRef<HTMLElement>(null)
+  const composerRef = useRef<HTMLElement>(null)
+
+  // Memoize the refs object so it's stable across renders
+  // Without this, useFocusZones would recreate callbacks on every render
+  const focusZoneRefs = useMemo<FocusZoneRefs>(() => ({
+    sidebarList: sidebarListRef,
+    mainContent: mainContentRef,
+    composer: composerRef,
+  }), [])
 
   // Enable Tab cycling between focus zones
   useFocusZones(focusZoneRefs)
