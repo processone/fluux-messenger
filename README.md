@@ -65,7 +65,7 @@
 
 ## 🆘 Support
 
-- **XMPP chatroom**: <fluux-messenger@conference.process-one.net>
+- **XMPP chatroom**: [fluux-messenger@conference.process-one.net](xmpp:fluux-messenger@conference.process-one.net?join)
 - **Discussions**: [GitHub Discussions](https://github.com/processone/fluux-messenger/discussions)
 - **Issues**: [GitHub Issues](https://github.com/processone/fluux-messenger/issues)
 
@@ -75,7 +75,7 @@ Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed g
 
 ## 📄 License
 
-Fluux Messenger is licensed under the **GNU Affero General Public License v3.0 or later**. See [LICENSE.md](LICENSE.md)
+Fluux Messenger is licensed under the **GNU Affero General Public License v3.0 or later**. See [LICENSE](LICENSE)
 
 ## ⭐ Star History
 
