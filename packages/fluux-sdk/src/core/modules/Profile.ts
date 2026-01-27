@@ -157,21 +157,53 @@ export class Profile extends BaseModule {
     }
   }
 
-  async fetchRoomAvatar(roomJid: string): Promise<void> {
+  /**
+   * Fetch a room's avatar from its vCard (XEP-0054).
+   * MUC rooms don't support PEP, so avatars are always via vCard-temp.
+   *
+   * @param roomJid - The room's bare JID
+   * @param knownHash - Optional hash from XEP-0153 presence (used for cache key)
+   */
+  async fetchRoomAvatar(roomJid: string, knownHash?: string): Promise<void> {
     const bareJid = getBareJid(roomJid)
+
+    // If we have a known hash, check cache first
+    if (knownHash) {
+      const cachedUrl = await getCachedAvatar(knownHash)
+      if (cachedUrl) {
+        this.deps.emitSDK('room:updated', {
+          roomJid: bareJid,
+          updates: { avatar: cachedUrl, avatarHash: knownHash },
+        })
+        return
+      }
+    }
+
     const iq = xml('iq', { type: 'get', to: bareJid, id: `vcard_${generateUUID()}` },
       xml('vCard', { xmlns: NS_VCARD_TEMP })
     )
-    
+
     try {
       const result = await this.deps.sendIQ(iq)
       const vcard = result.getChild('vCard', NS_VCARD_TEMP)
       const photo = vcard?.getChild('PHOTO')
       const binval = photo?.getChildText('BINVAL')
-      
+
       if (binval) {
-        const avatarUrl = `data:image/png;base64,${binval.replace(/\s/g, '')}`
-        this.deps.emitSDK('room:updated', { roomJid: bareJid, updates: { avatar: avatarUrl } })
+        const base64 = binval.replace(/\s/g, '')
+        const mimeType = photo?.getChildText('TYPE') || 'image/png'
+
+        // Use known hash from presence, or generate one from data
+        const hash = knownHash || generateUUID()
+
+        // Cache the avatar and save hash mapping
+        const blobUrl = await cacheAvatar(hash, base64, mimeType)
+        await saveAvatarHash(bareJid, hash, 'room')
+
+        this.deps.emitSDK('room:updated', {
+          roomJid: bareJid,
+          updates: { avatar: blobUrl, avatarHash: hash },
+        })
       }
     } catch (err) {
       console.error('Failed to fetch room avatar:', err)
@@ -587,6 +619,40 @@ export class Profile extends BaseModule {
     } catch (error) {
       // Silently fail - avatar cache is optional
       console.warn('Failed to restore contact avatar hashes:', error)
+    }
+  }
+
+  /**
+   * Restore avatar hashes for all rooms from IndexedDB cache.
+   * This is called after bookmarks load to populate avatarHash for bookmarked
+   * rooms that aren't currently joined, enabling their cached avatars to display.
+   */
+  async restoreAllRoomAvatarHashes(): Promise<void> {
+    try {
+      const mappings = await getAllAvatarHashes('room')
+      for (const mapping of mappings) {
+        // Only restore if the room exists in store
+        const room = this.deps.stores?.room.getRoom(mapping.jid)
+        if (room && !room.avatarHash) {
+          // Try to restore the full avatar from cache
+          const cachedUrl = await getCachedAvatar(mapping.hash)
+          if (cachedUrl) {
+            this.deps.emitSDK('room:updated', {
+              roomJid: mapping.jid,
+              updates: { avatar: cachedUrl, avatarHash: mapping.hash },
+            })
+          } else {
+            // At least set the hash so we can try fetching later
+            this.deps.emitSDK('room:updated', {
+              roomJid: mapping.jid,
+              updates: { avatarHash: mapping.hash },
+            })
+          }
+        }
+      }
+    } catch (error) {
+      // Silently fail - avatar cache is optional
+      console.warn('Failed to restore room avatar hashes:', error)
     }
   }
 

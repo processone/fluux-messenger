@@ -993,13 +993,14 @@ describe('XMPPClient', () => {
       expect(fetchRoomAvatarSpy).toHaveBeenCalledWith('room@conference.example.com')
     })
 
-    it('should wire roomAvatarUpdate to profile.fetchRoomAvatar', async () => {
+    it('should wire roomAvatarUpdate to profile.fetchRoomAvatar with hash', async () => {
       const fetchRoomAvatarSpy = vi.spyOn(xmppClient.profile, 'fetchRoomAvatar').mockResolvedValue()
 
       // Emit roomAvatarUpdate
       ;(xmppClient as any).emit('roomAvatarUpdate', 'room@conference.example.com', 'newhash123')
 
-      expect(fetchRoomAvatarSpy).toHaveBeenCalledWith('room@conference.example.com')
+      // Should pass the hash to fetchRoomAvatar for cache lookup
+      expect(fetchRoomAvatarSpy).toHaveBeenCalledWith('room@conference.example.com', 'newhash123')
     })
 
     it('should NOT call fetchRoomAvatar on mucJoined if room already has avatar from presence', async () => {
