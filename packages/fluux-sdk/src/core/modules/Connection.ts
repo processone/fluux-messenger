@@ -449,6 +449,12 @@ export class Connection extends BaseModule {
   async verifyConnection(): Promise<boolean> {
     if (!this.xmpp) return false
 
+    // Set status to 'verifying' to show we're checking connection health
+    const previousStatus = this.stores.connection.getStatus()
+    if (previousStatus === 'online') {
+      this.stores.connection.setStatus('verifying')
+    }
+
     try {
       // Send a Stream Management request (<r/>) if available, otherwise a ping
       const sm = this.xmpp.streamManagement as any
@@ -463,6 +469,11 @@ export class Connection extends BaseModule {
           xml('ping', { xmlns: 'urn:xmpp:ping' })
         )
         await this.xmpp.send(ping)
+      }
+
+      // Connection verified - restore to online
+      if (this.stores.connection.getStatus() === 'verifying') {
+        this.stores.connection.setStatus('online')
       }
       return true
     } catch (err) {

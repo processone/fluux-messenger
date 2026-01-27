@@ -12,11 +12,13 @@
  * Status transitions:
  * - `disconnected` → `connecting` → `online`
  * - `online` → `reconnecting` → `online` (on temporary disconnect)
+ * - `online` → `verifying` → `online` (after wake from sleep, connection alive)
+ * - `online` → `verifying` → `reconnecting` (after wake from sleep, connection dead)
  * - `online` → `error` → `disconnected` (on fatal error)
  *
  * @category Connection
  */
-export type ConnectionStatus = 'disconnected' | 'connecting' | 'online' | 'reconnecting' | 'error'
+export type ConnectionStatus = 'disconnected' | 'connecting' | 'online' | 'reconnecting' | 'verifying' | 'error'
 
 /**
  * System state changes that the app can signal to the SDK.

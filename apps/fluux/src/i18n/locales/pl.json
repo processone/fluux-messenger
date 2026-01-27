@@ -73,6 +73,7 @@
     "reconnecting": "Ponowne laczenie...",
     "reconnectingIn": "Ponowne laczenie za {{seconds}}s (proba {{attempt}})",
     "connecting": "Laczenie...",
+    "verifying": "Weryfikacja połączenia...",
     "connectionError": "Blad polaczenia",
     "disconnected": "Rozlaczony",
     "cancelReconnection": "Anuluj ponowne laczenie"

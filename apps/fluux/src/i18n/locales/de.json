@@ -73,6 +73,7 @@
     "reconnecting": "Verbindung wird wiederhergestellt...",
     "reconnectingIn": "Erneuter Verbindungsversuch in {{seconds}}s (Versuch {{attempt}})",
     "connecting": "Verbinden...",
+    "verifying": "Verbindung wird überprüft...",
     "connectionError": "Verbindungsfehler",
     "disconnected": "Getrennt",
     "cancelReconnection": "Wiederverbindung abbrechen"

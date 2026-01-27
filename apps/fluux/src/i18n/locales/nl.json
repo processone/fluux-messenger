@@ -73,6 +73,7 @@
     "reconnecting": "Opnieuw verbinden...",
     "reconnectingIn": "Opnieuw verbinden over {{seconds}}s (poging {{attempt}})",
     "connecting": "Verbinden...",
+    "verifying": "Verbinding verifiëren...",
     "connectionError": "Verbindingsfout",
     "disconnected": "Verbinding verbroken",
     "cancelReconnection": "Opnieuw verbinden annuleren"

@@ -931,6 +931,40 @@ describe('XMPPClient', () => {
       expect(sentElement.attrs.xmlns).toBe('urn:xmpp:sm:3')
     })
 
+    it('should set status to verifying and restore to online on success', async () => {
+      // Add SM to the existing mock client
+      mockXmppClientInstance.streamManagement = {
+        id: 'sm-123',
+        inbound: 5,
+        outbound: 0,
+        enabled: true,
+        on: vi.fn(),
+      }
+
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'password',
+        server: 'wss://example.com/ws',
+      })
+
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      // Track status changes - start as 'online', then simulate actual state tracking
+      let currentStatus = 'online'
+      mockStores.connection.getStatus.mockImplementation(() => currentStatus)
+      mockStores.connection.setStatus.mockImplementation((status: string) => {
+        currentStatus = status
+      })
+      mockStores.connection.setStatus.mockClear()
+
+      await xmppClient.verifyConnection()
+
+      // Should set to 'verifying' first, then restore to 'online'
+      expect(mockStores.connection.setStatus).toHaveBeenNthCalledWith(1, 'verifying')
+      expect(mockStores.connection.setStatus).toHaveBeenNthCalledWith(2, 'online')
+    })
+
     it('should return false and trigger reconnect on dead socket', async () => {
       const connectPromise = xmppClient.connect({
         jid: 'user@example.com',
@@ -941,7 +975,9 @@ describe('XMPPClient', () => {
       mockXmppClientInstance._emit('online')
       await connectPromise
 
-      // Simulate dead socket on verify
+      // Simulate being online, then dead socket on verify
+      mockStores.connection.getStatus.mockReturnValue('online')
+      mockStores.connection.setStatus.mockClear()
       mockXmppClientInstance.send.mockRejectedValueOnce(
         new Error("Cannot read properties of null")
       )
@@ -949,6 +985,8 @@ describe('XMPPClient', () => {
       const result = await xmppClient.verifyConnection()
 
       expect(result).toBe(false)
+      // Should set to 'verifying' first, then to 'reconnecting' on dead socket
+      expect(mockStores.connection.setStatus).toHaveBeenNthCalledWith(1, 'verifying')
       expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
     })
   })

@@ -73,6 +73,7 @@
     "reconnecting": "Riconnessione...",
     "reconnectingIn": "Riconnessione tra {{seconds}}s (tentativo {{attempt}})",
     "connecting": "Connessione...",
+    "verifying": "Verifica connessione...",
     "connectionError": "Errore di connessione",
     "disconnected": "Disconnesso",
     "cancelReconnection": "Annulla riconnessione"

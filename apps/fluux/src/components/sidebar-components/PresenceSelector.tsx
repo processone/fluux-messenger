@@ -213,6 +213,15 @@ export function StatusDisplay({
 }: StatusDisplayProps) {
   const { t } = useTranslation()
 
+  if (status === 'verifying') {
+    return (
+      <p className="text-xs text-fluux-yellow truncate flex items-center gap-1">
+        <RefreshCw className="w-3 h-3 animate-spin" />
+        {t('status.verifying')}
+      </p>
+    )
+  }
+
   if (status === 'reconnecting') {
     return (
       <p className="text-xs text-fluux-yellow truncate flex items-center gap-1">
