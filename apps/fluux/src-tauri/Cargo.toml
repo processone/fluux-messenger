@@ -11,7 +11,7 @@ edition = "2021"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["devtools", "unstable"] }
+tauri = { version = "2", features = ["devtools", "unstable", "tray-icon"] }
 tauri-plugin-shell = "2"
 tauri-plugin-os = "2"
 tauri-plugin-notification = "2"

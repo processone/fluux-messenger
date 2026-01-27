@@ -18,8 +18,16 @@ fn set_linux_webkit_env() {
 use tauri::{Emitter, Manager};
 #[cfg(target_os = "macos")]
 use tauri::{RunEvent, WindowEvent};
+#[cfg(target_os = "windows")]
+use tauri::WindowEvent;
 #[cfg(target_os = "macos")]
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
+// System tray support for Windows
+#[cfg(target_os = "windows")]
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+};
 use tauri_plugin_deep_link::DeepLinkExt;
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
@@ -497,6 +505,68 @@ fn main() {
                 });
                 macos::setup_activation_observer(main_window.clone());
                 macos::setup_sleep_observer(app.handle().clone());
+            }
+
+            // Windows: Hide to system tray when close button is clicked
+            // Minimize button works normally (minimize to taskbar)
+            #[cfg(target_os = "windows")]
+            {
+                // Create system tray menu
+                let show_item = MenuItem::with_id(app, "show", "Show Fluux", true, None::<&str>)?;
+                let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+                let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+
+                // Build the system tray icon
+                let _tray = TrayIconBuilder::new()
+                    .icon(app.default_window_icon().unwrap().clone())
+                    .menu(&menu)
+                    .tooltip("Fluux Messenger")
+                    .on_menu_event(|app, event| match event.id.as_ref() {
+                        "show" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.unminimize();
+                                let _ = window.set_focus();
+                            }
+                        }
+                        "quit" => {
+                            // Emit graceful shutdown event to frontend
+                            let _ = app.emit("graceful-shutdown", ());
+                            // Set a fallback timer to force exit after 2 seconds
+                            let handle = app.clone();
+                            std::thread::spawn(move || {
+                                std::thread::sleep(std::time::Duration::from_secs(2));
+                                handle.exit(0);
+                            });
+                        }
+                        _ => {}
+                    })
+                    .on_tray_icon_event(|tray, event| {
+                        // Show window on left-click (single or double)
+                        if let TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            ..
+                        } = event
+                        {
+                            if let Some(window) = tray.app_handle().get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.unminimize();
+                                let _ = window.set_focus();
+                            }
+                        }
+                    })
+                    .build(app)?;
+
+                // Hide to tray when close button is clicked
+                let main_window = app.get_webview_window("main").unwrap();
+                let window = main_window.clone();
+                main_window.on_window_event(move |event| {
+                    if let WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = window.hide();
+                    }
+                });
             }
 
             // Start XMPP keepalive timer (30 seconds)
