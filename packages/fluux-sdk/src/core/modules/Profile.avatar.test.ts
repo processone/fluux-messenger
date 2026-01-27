@@ -53,6 +53,7 @@ vi.mock('../../utils/avatarCache', () => ({
   cacheAvatar: vi.fn().mockResolvedValue('blob:cached-url'),
   saveAvatarHash: vi.fn().mockResolvedValue(undefined),
   getAvatarHash: vi.fn().mockResolvedValue(null),
+  getAllAvatarHashes: vi.fn().mockResolvedValue([]),
 }))
 
 describe('XMPPClient Own Avatar', () => {
@@ -598,6 +599,232 @@ describe('XMPPClient Own Avatar', () => {
         jid: 'contact@example.com',
         hash: 'contact-avatar-hash',
       })
+    })
+  })
+
+  describe('fetchRoomAvatar', () => {
+    beforeEach(async () => {
+      // Connect the client first
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online', { jid: { toString: () => 'user@example.com/resource' } })
+      await connectPromise
+    })
+
+    it('should fetch room avatar via vCard and cache it', async () => {
+      // Clear any calls from connection setup
+      mockXmppClientInstance.iqCaller.request.mockClear()
+      emitSDKSpy.mockClear()
+
+      const { cacheAvatar, saveAvatarHash } = await import('../../utils/avatarCache')
+      vi.mocked(cacheAvatar).mockResolvedValue('blob:room-avatar-cached')
+
+      // Mock vCard response with avatar
+      const vcardResponse = createMockElement('iq', { type: 'result' }, [
+        {
+          name: 'vCard',
+          attrs: { xmlns: 'vcard-temp' },
+          children: [
+            {
+              name: 'PHOTO',
+              children: [
+                { name: 'TYPE', text: 'image/jpeg' },
+                { name: 'BINVAL', text: 'base64roomavatardata' },
+              ],
+            },
+          ],
+        },
+      ])
+
+      mockXmppClientInstance.iqCaller.request.mockResolvedValue(vcardResponse)
+
+      await xmppClient.profile.fetchRoomAvatar('room@conference.example.com', 'known-hash-123')
+
+      // Should cache the avatar
+      expect(cacheAvatar).toHaveBeenCalledWith('known-hash-123', 'base64roomavatardata', 'image/jpeg')
+
+      // Should save the hash mapping
+      expect(saveAvatarHash).toHaveBeenCalledWith('room@conference.example.com', 'known-hash-123', 'room')
+
+      // Should emit room:updated with avatar
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:updated', {
+        roomJid: 'room@conference.example.com',
+        updates: { avatar: 'blob:room-avatar-cached', avatarHash: 'known-hash-123' },
+      })
+    })
+
+    it('should use cached avatar if available for known hash', async () => {
+      // Clear any calls from connection setup
+      mockXmppClientInstance.iqCaller.request.mockClear()
+      emitSDKSpy.mockClear()
+
+      const { getCachedAvatar } = await import('../../utils/avatarCache')
+      vi.mocked(getCachedAvatar).mockResolvedValueOnce('blob:cached-room-avatar')
+
+      await xmppClient.profile.fetchRoomAvatar('room@conference.example.com', 'cached-hash')
+
+      // Should NOT make vCard request when cached
+      expect(mockXmppClientInstance.iqCaller.request).not.toHaveBeenCalled()
+
+      // Should emit room:updated with cached avatar
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:updated', {
+        roomJid: 'room@conference.example.com',
+        updates: { avatar: 'blob:cached-room-avatar', avatarHash: 'cached-hash' },
+      })
+    })
+
+    it('should generate hash if none provided from presence', async () => {
+      // Clear any calls from connection setup
+      mockXmppClientInstance.iqCaller.request.mockClear()
+      emitSDKSpy.mockClear()
+
+      const { cacheAvatar, saveAvatarHash } = await import('../../utils/avatarCache')
+      vi.mocked(cacheAvatar).mockResolvedValue('blob:generated-hash-avatar')
+
+      // Mock vCard response
+      const vcardResponse = createMockElement('iq', { type: 'result' }, [
+        {
+          name: 'vCard',
+          attrs: { xmlns: 'vcard-temp' },
+          children: [
+            {
+              name: 'PHOTO',
+              children: [
+                { name: 'BINVAL', text: 'base64data' },
+              ],
+            },
+          ],
+        },
+      ])
+
+      mockXmppClientInstance.iqCaller.request.mockResolvedValue(vcardResponse)
+
+      // Call without known hash
+      await xmppClient.profile.fetchRoomAvatar('room@conference.example.com')
+
+      // Should have called cacheAvatar with a generated hash (UUID)
+      expect(cacheAvatar).toHaveBeenCalledWith(
+        expect.any(String), // generated hash
+        'base64data',
+        'image/png' // default mime type
+      )
+
+      // Should save the hash mapping
+      expect(saveAvatarHash).toHaveBeenCalledWith(
+        'room@conference.example.com',
+        expect.any(String),
+        'room'
+      )
+    })
+  })
+
+  describe('restoreAllRoomAvatarHashes', () => {
+    beforeEach(async () => {
+      // Connect the client first
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online', { jid: { toString: () => 'user@example.com/resource' } })
+      await connectPromise
+    })
+
+    it('should restore room avatar from cache for bookmarked rooms', async () => {
+      emitSDKSpy.mockClear()
+
+      const { getAllAvatarHashes, getCachedAvatar } = await import('../../utils/avatarCache')
+      vi.mocked(getAllAvatarHashes).mockResolvedValue([
+        { jid: 'room1@conference.example.com', hash: 'hash1', type: 'room' },
+        { jid: 'room2@conference.example.com', hash: 'hash2', type: 'room' },
+      ])
+      vi.mocked(getCachedAvatar)
+        .mockResolvedValueOnce('blob:room1-avatar')
+        .mockResolvedValueOnce('blob:room2-avatar')
+
+      // Mock room store to return rooms without avatars
+      mockStores.room.getRoom
+        .mockReturnValueOnce({ jid: 'room1@conference.example.com', name: 'Room 1' })
+        .mockReturnValueOnce({ jid: 'room2@conference.example.com', name: 'Room 2' })
+
+      await xmppClient.profile.restoreAllRoomAvatarHashes()
+
+      // Should emit room:updated for both rooms with avatars
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:updated', {
+        roomJid: 'room1@conference.example.com',
+        updates: { avatar: 'blob:room1-avatar', avatarHash: 'hash1' },
+      })
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:updated', {
+        roomJid: 'room2@conference.example.com',
+        updates: { avatar: 'blob:room2-avatar', avatarHash: 'hash2' },
+      })
+    })
+
+    it('should set only avatarHash if blob not in cache', async () => {
+      emitSDKSpy.mockClear()
+
+      const { getAllAvatarHashes, getCachedAvatar } = await import('../../utils/avatarCache')
+      vi.mocked(getAllAvatarHashes).mockResolvedValue([
+        { jid: 'room@conference.example.com', hash: 'hash-no-blob', type: 'room' },
+      ])
+      vi.mocked(getCachedAvatar).mockResolvedValue(null) // No blob in cache
+
+      // Mock room store to return room without avatar
+      mockStores.room.getRoom.mockReturnValue({
+        jid: 'room@conference.example.com',
+        name: 'Room',
+      })
+
+      await xmppClient.profile.restoreAllRoomAvatarHashes()
+
+      // Should emit room:updated with just the hash (no blob)
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:updated', {
+        roomJid: 'room@conference.example.com',
+        updates: { avatarHash: 'hash-no-blob' },
+      })
+    })
+
+    it('should skip rooms not in store', async () => {
+      emitSDKSpy.mockClear()
+
+      const { getAllAvatarHashes } = await import('../../utils/avatarCache')
+      vi.mocked(getAllAvatarHashes).mockResolvedValue([
+        { jid: 'unknown-room@conference.example.com', hash: 'hash', type: 'room' },
+      ])
+
+      // Mock room store to return null (room not in store)
+      mockStores.room.getRoom.mockReturnValue(null)
+
+      await xmppClient.profile.restoreAllRoomAvatarHashes()
+
+      // Should NOT emit room:updated for unknown rooms
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('room:updated', expect.anything())
+    })
+
+    it('should skip rooms that already have avatarHash', async () => {
+      emitSDKSpy.mockClear()
+
+      const { getAllAvatarHashes } = await import('../../utils/avatarCache')
+      vi.mocked(getAllAvatarHashes).mockResolvedValue([
+        { jid: 'room@conference.example.com', hash: 'new-hash', type: 'room' },
+      ])
+
+      // Mock room store to return room WITH existing avatarHash
+      mockStores.room.getRoom.mockReturnValue({
+        jid: 'room@conference.example.com',
+        name: 'Room',
+        avatarHash: 'existing-hash', // Already has hash
+      })
+
+      await xmppClient.profile.restoreAllRoomAvatarHashes()
+
+      // Should NOT emit room:updated for rooms with existing hash
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('room:updated', expect.anything())
     })
   })
 })

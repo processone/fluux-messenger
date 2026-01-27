@@ -488,8 +488,8 @@ export class XMPPClient {
       })
 
       // Listen for room avatar updates from presence
-      this.on('roomAvatarUpdate', (roomJid, _photoHash) => {
-        this.profile.fetchRoomAvatar(roomJid).catch(() => {})
+      this.on('roomAvatarUpdate', (roomJid, photoHash) => {
+        this.profile.fetchRoomAvatar(roomJid, photoHash).catch(() => {})
       })
 
       // Listen for avatar metadata updates (XEP-0084)
@@ -1097,6 +1097,9 @@ export class XMPPClient {
     // Continue setup for new sessions
     if (!isResumption) {
       const { roomsToAutojoin } = await this.muc.fetchBookmarks()
+
+      // Restore cached room avatars for bookmarked rooms
+      this.profile.restoreAllRoomAvatarHashes().catch(() => {})
 
       // Rejoin rooms BEFORE server info fetch - server info can block on slow/unresponsive servers
       // Two scenarios: reconnect (previouslyJoinedRooms provided) vs fresh connect
