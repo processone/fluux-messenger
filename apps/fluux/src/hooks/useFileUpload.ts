@@ -14,8 +14,14 @@ import {
   type ThumbnailResult,
 } from '@/utils/thumbnail'
 
-// Detect if running in Tauri
-const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+/**
+ * Check if running in Tauri dynamically.
+ * IMPORTANT: Must be checked at call time, not module load time,
+ * because __TAURI_INTERNALS__ may not be available when the module first loads.
+ */
+function isTauri(): boolean {
+  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+}
 
 interface UploadState {
   isUploading: boolean
@@ -284,7 +290,7 @@ async function uploadWithProgress(
   headers?: Record<string, string>,
   onProgress?: (progress: number) => void
 ): Promise<void> {
-  if (isTauri) {
+  if (isTauri()) {
     return uploadWithTauri(url, file, contentType, headers, onProgress)
   }
   return uploadWithXHR(url, file, contentType, headers, onProgress)
