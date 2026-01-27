@@ -552,6 +552,98 @@ export class MAM extends BaseModule {
     }
   }
 
+  /**
+   * Refresh sidebar previews for all joined rooms by fetching the latest message.
+   *
+   * After being offline or auto-joining rooms, the lastMessage preview may be stale.
+   * This method fetches `max=1` from MAM for each room that supports MAM to update
+   * the sidebar preview without affecting the message history.
+   *
+   * @param options - Optional configuration
+   * @param options.concurrency - Maximum parallel requests (default: 3)
+   */
+  async refreshRoomPreviews(options: { concurrency?: number } = {}): Promise<void> {
+    const { concurrency = 3 } = options
+    // Get joined rooms that support MAM
+    const joinedRooms = this.deps.stores?.room.joinedRooms() || []
+    const mamRooms = joinedRooms.filter(r => r.supportsMAM && !r.isQuickChat)
+    if (mamRooms.length === 0) return
+
+    this.deps.emitSDK('console:event', {
+      message: `Refreshing previews for ${mamRooms.length} room(s)`,
+      category: 'sm',
+    })
+
+    // Simple throttled execution with concurrency limit
+    const roomJids = mamRooms.map(r => r.jid)
+    let activeCount = 0
+    let index = 0
+
+    const processNext = async (): Promise<void> => {
+      while (index < roomJids.length) {
+        if (activeCount >= concurrency) {
+          await new Promise(resolve => setTimeout(resolve, 50))
+          continue
+        }
+
+        const roomJid = roomJids[index++]
+        activeCount++
+
+        this.fetchPreviewForRoom(roomJid).finally(() => {
+          activeCount--
+        })
+      }
+    }
+
+    await processNext()
+
+    // Wait for all in-flight requests to complete
+    while (activeCount > 0) {
+      await new Promise(resolve => setTimeout(resolve, 50))
+    }
+  }
+
+  /**
+   * Fetch the latest message for a single room (preview only).
+   * Updates lastMessage without affecting message history.
+   */
+  private async fetchPreviewForRoom(roomJid: string): Promise<void> {
+    try {
+      const queryId = `preview_${generateUUID()}`
+
+      // Room MAM doesn't need a 'with' filter
+      const formFields: Element[] = [
+        xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, NS_MAM)),
+      ]
+
+      // Query with max=1 to get only the latest message
+      const iq = this.buildMAMQuery(queryId, formFields, 1, '', roomJid)
+
+      const room = this.deps.stores?.room.getRoom(roomJid)
+      const myNickname = room?.nickname || ''
+      let latestMessage: RoomMessage | null = null
+
+      const collectMessage = this.createMessageCollector(queryId, (forwarded, _messageEl) => {
+        const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname)
+        if (msg) latestMessage = msg
+      })
+
+      ;(this.deps.getXmpp() as any)?.on('stanza', collectMessage)
+
+      try {
+        const response = await this.deps.sendIQ(iq)
+        if (response && latestMessage) {
+          // Update only the lastMessage preview, not the message history
+          this.deps.stores?.room.updateLastMessagePreview(roomJid, latestMessage)
+        }
+      } finally {
+        ;(this.deps.getXmpp() as any)?.removeListener('stanza', collectMessage)
+      }
+    } catch (error) {
+      // Silently ignore errors - preview refresh is best-effort
+    }
+  }
+
   // --- Private Helpers ---
 
   /**

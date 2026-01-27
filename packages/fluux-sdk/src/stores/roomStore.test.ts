@@ -2012,4 +2012,129 @@ describe('roomStore', () => {
       expect(messages[messages.length - 1].body).toBe('MAM at 16:00')
     })
   })
+
+  describe('updateLastMessagePreview', () => {
+    const roomJid = 'room@conference.example.com'
+
+    beforeEach(() => {
+      roomStore.getState().reset()
+      const room: Room = {
+        jid: roomJid,
+        name: 'Test Room',
+        nickname: 'testuser',
+        joined: true,
+        isJoining: false,
+        isBookmarked: true,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+      }
+      roomStore.getState().addRoom(room)
+    })
+
+    it('should update lastMessage when room has no previous lastMessage', () => {
+      const lastMessage: RoomMessage = {
+        type: 'groupchat',
+        id: 'preview-1',
+        roomJid,
+        from: `${roomJid}/alice`,
+        nick: 'alice',
+        body: 'Latest message',
+        timestamp: new Date('2024-01-15T10:00:00Z'),
+        isOutgoing: false,
+      }
+
+      roomStore.getState().updateLastMessagePreview(roomJid, lastMessage)
+
+      const room = roomStore.getState().rooms.get(roomJid)
+      expect(room?.lastMessage?.body).toBe('Latest message')
+
+      const meta = roomStore.getState().roomMeta.get(roomJid)
+      expect(meta?.lastMessage?.body).toBe('Latest message')
+    })
+
+    it('should update lastMessage when new message is newer', () => {
+      // Set initial lastMessage
+      const oldMessage: RoomMessage = {
+        type: 'groupchat',
+        id: 'old-1',
+        roomJid,
+        from: `${roomJid}/alice`,
+        nick: 'alice',
+        body: 'Old message',
+        timestamp: new Date('2024-01-15T09:00:00Z'),
+        isOutgoing: false,
+      }
+      roomStore.getState().updateLastMessagePreview(roomJid, oldMessage)
+
+      // Update with newer message
+      const newMessage: RoomMessage = {
+        type: 'groupchat',
+        id: 'new-1',
+        roomJid,
+        from: `${roomJid}/bob`,
+        nick: 'bob',
+        body: 'New message',
+        timestamp: new Date('2024-01-15T10:00:00Z'),
+        isOutgoing: false,
+      }
+      roomStore.getState().updateLastMessagePreview(roomJid, newMessage)
+
+      const room = roomStore.getState().rooms.get(roomJid)
+      expect(room?.lastMessage?.body).toBe('New message')
+    })
+
+    it('should NOT update lastMessage when new message is older', () => {
+      // Set initial lastMessage
+      const newMessage: RoomMessage = {
+        type: 'groupchat',
+        id: 'new-1',
+        roomJid,
+        from: `${roomJid}/alice`,
+        nick: 'alice',
+        body: 'New message',
+        timestamp: new Date('2024-01-15T10:00:00Z'),
+        isOutgoing: false,
+      }
+      roomStore.getState().updateLastMessagePreview(roomJid, newMessage)
+
+      // Try to update with older message
+      const oldMessage: RoomMessage = {
+        type: 'groupchat',
+        id: 'old-1',
+        roomJid,
+        from: `${roomJid}/bob`,
+        nick: 'bob',
+        body: 'Old message',
+        timestamp: new Date('2024-01-15T09:00:00Z'),
+        isOutgoing: false,
+      }
+      roomStore.getState().updateLastMessagePreview(roomJid, oldMessage)
+
+      // Should still have the new message
+      const room = roomStore.getState().rooms.get(roomJid)
+      expect(room?.lastMessage?.body).toBe('New message')
+    })
+
+    it('should do nothing for non-existent room', () => {
+      const message: RoomMessage = {
+        type: 'groupchat',
+        id: 'preview-1',
+        roomJid: 'nonexistent@conference.example.com',
+        from: 'nonexistent@conference.example.com/alice',
+        nick: 'alice',
+        body: 'Message',
+        timestamp: new Date(),
+        isOutgoing: false,
+      }
+
+      // Should not throw
+      roomStore.getState().updateLastMessagePreview('nonexistent@conference.example.com', message)
+
+      // Room should not be created
+      expect(roomStore.getState().rooms.get('nonexistent@conference.example.com')).toBeUndefined()
+    })
+  })
 })

@@ -182,6 +182,7 @@ export function createDefaultStoreBindings(options: DefaultStoreBindingsOptions 
       resetRoomMAMStates: roomStore.getState().resetRoomMAMStates,
       markAllRoomsNeedsCatchUp: roomStore.getState().markAllRoomsNeedsCatchUp,
       clearRoomNeedsCatchUp: roomStore.getState().clearRoomNeedsCatchUp,
+      updateLastMessagePreview: roomStore.getState().updateLastMessagePreview,
     },
     admin: {
       setIsAdmin: adminStore.getState().setIsAdmin,

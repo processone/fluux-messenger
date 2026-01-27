@@ -160,6 +160,8 @@ export interface StoreBindings {
     // Lazy MAM: mark rooms as needing catch-up after reconnect
     markAllRoomsNeedsCatchUp: () => void
     clearRoomNeedsCatchUp: (roomJid: string) => void
+    // Preview refresh: update lastMessage without affecting message history
+    updateLastMessagePreview: (roomJid: string, lastMessage: RoomMessage) => void
   }
   admin: {
     setIsAdmin: (isAdmin: boolean) => void

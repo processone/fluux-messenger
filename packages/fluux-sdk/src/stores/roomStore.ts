@@ -198,6 +198,8 @@ export interface RoomState {
   markAllRoomsNeedsCatchUp: () => void
   /** Clear the needsCatchUp flag for a specific room */
   clearRoomNeedsCatchUp: (roomJid: string) => void
+  /** Update only the lastMessage preview without affecting message history */
+  updateLastMessagePreview: (roomJid: string, lastMessage: RoomMessage) => void
 
   // Computed
   joinedRooms: () => Room[]
@@ -1328,6 +1330,33 @@ export const roomStore = createStore<RoomState>()(
     set((state) => ({
       mamQueryStates: mamState.clearNeedsCatchUp(state.mamQueryStates, roomJid),
     }))
+  },
+
+  /**
+   * Update only the lastMessage preview for a room without affecting message history.
+   * Used by MAM preview refresh to update sidebar displays.
+   */
+  updateLastMessagePreview: (roomJid, lastMessage) => {
+    set((state) => {
+      const room = state.rooms.get(roomJid)
+      const meta = state.roomMeta.get(roomJid)
+      if (!room || !meta) return state
+
+      // Only update if this message is newer than existing lastMessage
+      const existingTime = meta.lastMessage?.timestamp?.getTime() ?? 0
+      const newTime = lastMessage.timestamp?.getTime() ?? 0
+      if (newTime <= existingTime) return state
+
+      // Update metadata map
+      const newMeta = new Map(state.roomMeta)
+      newMeta.set(roomJid, { ...meta, lastMessage })
+
+      // Update combined map for backward compatibility
+      const newRooms = new Map(state.rooms)
+      newRooms.set(roomJid, { ...room, lastMessage })
+
+      return { roomMeta: newMeta, rooms: newRooms }
+    })
   },
 
   // Computed
