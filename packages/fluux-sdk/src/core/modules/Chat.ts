@@ -1,6 +1,6 @@
 import { xml, Element } from '@xmpp/client'
 import { BaseModule, type ModuleDependencies } from './BaseModule'
-import { getBareJid, getLocalPart, getResource } from '../jid'
+import { getBareJid, getLocalPart, getResource, isQuickChatJid } from '../jid'
 import { isMucJid } from '../../utils/xmppUri'
 import { generateUUID } from '../../utils/uuid'
 import {
@@ -924,7 +924,10 @@ export class Chat extends BaseModule {
     if (directInvite) {
       const roomJid = directInvite.attrs.jid
       if (roomJid) {
-        const isQuickChat = !!stanza.getChild('quickchat', NS_FLUUX)
+        // Detect quickchat from marker element OR fallback to JID naming pattern.
+        // The fallback is needed because some MUC servers strip unknown namespaced elements
+        // when forwarding invitations.
+        const isQuickChat = !!stanza.getChild('quickchat', NS_FLUUX) || isQuickChatJid(roomJid)
         // SDK event only - binding calls store.addMucInvitation
         this.deps.emitSDK('events:muc-invitation', {
           roomJid,
@@ -950,7 +953,10 @@ export class Chat extends BaseModule {
       const inviteFrom = invite.attrs.from || roomJid
       const reason = invite.getChildText('reason') || undefined
       const password = mucUser?.getChildText('password') || undefined
-      const isQuickChat = !!invite.getChild('quickchat', NS_FLUUX)
+      // Detect quickchat from marker element OR fallback to JID naming pattern.
+      // The fallback is needed because some MUC servers strip unknown namespaced elements
+      // when forwarding invitations.
+      const isQuickChat = !!invite.getChild('quickchat', NS_FLUUX) || isQuickChatJid(roomJid)
       if (roomJid) {
         // SDK event only - binding calls store.addMucInvitation
         this.deps.emitSDK('events:muc-invitation', {

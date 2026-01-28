@@ -763,6 +763,72 @@ describe('XMPPClient Quick Chat', () => {
       })
     })
 
+    it('should detect quickchat from JID pattern when server strips quickchat marker (mediated)', () => {
+      // Some MUC servers strip unknown namespaced elements when forwarding invitations.
+      // In this case, we fall back to detecting quickchats by their JID pattern: quickchat-*
+      const invitationStanza = createMockElement('message', {
+        from: 'quickchat-user-happy-fox-a1b2@conference.example.com',
+        to: 'user@example.com',
+      }, [
+        {
+          name: 'x',
+          attrs: { xmlns: 'http://jabber.org/protocol/muc#user' },
+          children: [
+            {
+              name: 'invite',
+              attrs: { from: 'alice@example.com' },
+              children: [
+                { name: 'reason', text: 'Join quick chat: deploy issue' },
+                // NOTE: No quickchat marker - simulates server stripping it
+              ],
+            },
+          ],
+        },
+      ])
+
+      mockXmppClientInstance._emit('stanza', invitationStanza)
+
+      // Should still detect as quickchat based on JID pattern
+      expect(emitSDKSpy).toHaveBeenCalledWith('events:muc-invitation', {
+        roomJid: 'quickchat-user-happy-fox-a1b2@conference.example.com',
+        from: 'alice@example.com',
+        reason: 'Join quick chat: deploy issue',
+        password: undefined,
+        isDirect: false,
+        isQuickChat: true, // Detected from JID pattern
+      })
+    })
+
+    it('should detect quickchat from JID pattern when server strips quickchat marker (direct)', () => {
+      // Direct invitation where server might strip the quickchat marker
+      const invitationStanza = createMockElement('message', {
+        from: 'alice@example.com',
+        to: 'user@example.com',
+      }, [
+        {
+          name: 'x',
+          attrs: {
+            xmlns: 'jabber:x:conference',
+            jid: 'quickchat-user-happy-fox-a1b2@conference.example.com',
+            reason: 'Quick discussion',
+          },
+        },
+        // NOTE: No quickchat marker
+      ])
+
+      mockXmppClientInstance._emit('stanza', invitationStanza)
+
+      // Should still detect as quickchat based on JID pattern
+      expect(emitSDKSpy).toHaveBeenCalledWith('events:muc-invitation', {
+        roomJid: 'quickchat-user-happy-fox-a1b2@conference.example.com',
+        from: 'alice@example.com',
+        reason: 'Quick discussion',
+        password: undefined,
+        isDirect: true,
+        isQuickChat: true, // Detected from JID pattern
+      })
+    })
+
     it('should not treat MUC JID as stranger message', () => {
       // If a message with body comes from a MUC JID (which is not in roster),
       // it should NOT be added as a stranger message
