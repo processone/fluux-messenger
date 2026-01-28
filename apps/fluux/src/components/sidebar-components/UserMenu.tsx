@@ -51,7 +51,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
   return (
     <>
       <div className="relative" ref={menuRef}>
-        <Tooltip content={t('common.options')} position="top">
+        <Tooltip content={t('common.options')} position="top" disabled={isOpen}>
           <button
             onClick={() => setIsOpen(!isOpen)}
             className="p-2 text-fluux-muted hover:text-fluux-text rounded hover:bg-fluux-hover"
