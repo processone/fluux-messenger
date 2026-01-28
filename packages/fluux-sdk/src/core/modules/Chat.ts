@@ -1,6 +1,7 @@
 import { xml, Element } from '@xmpp/client'
 import { BaseModule, type ModuleDependencies } from './BaseModule'
 import { getBareJid, getLocalPart, getResource } from '../jid'
+import { isMucJid } from '../../utils/xmppUri'
 import { generateUUID } from '../../utils/uuid'
 import {
   NS_CHATSTATES,
@@ -944,11 +945,13 @@ export class Chat extends BaseModule {
     const invite = mucUser?.getChild('invite')
     if (invite) {
       const roomJid = from
-      const inviteFrom = invite.attrs.from
+      // Use inviter JID if present, otherwise fall back to room JID
+      // (some servers may omit the from attribute)
+      const inviteFrom = invite.attrs.from || roomJid
       const reason = invite.getChildText('reason') || undefined
       const password = mucUser?.getChildText('password') || undefined
       const isQuickChat = !!invite.getChild('quickchat', NS_FLUUX)
-      if (roomJid && inviteFrom) {
+      if (roomJid) {
         // SDK event only - binding calls store.addMucInvitation
         this.deps.emitSDK('events:muc-invitation', {
           roomJid,
@@ -996,7 +999,8 @@ export class Chat extends BaseModule {
     }
 
     if (!isOutgoing && this.deps.stores) {
-      if (!this.deps.stores.roster.hasContact(conversationId)) {
+      // Skip stranger message handling for MUC JIDs - they should never be treated as contacts
+      if (!this.deps.stores.roster.hasContact(conversationId) && !isMucJid(conversationId)) {
         // SDK event only - binding calls store.addStrangerMessage
         this.deps.emitSDK('events:stranger-message', { from: conversationId, body: parsed.processedBody })
         return message

@@ -784,4 +784,49 @@ describe('XMPPClient Roster', () => {
       expect(rosterLoadedCalls.length).toBe(0)
     })
   })
+
+  describe('subscription requests from MUC JIDs', () => {
+    it('should ignore subscription requests from MUC JIDs', async () => {
+      await connectClient()
+      const emitSDKSpy = vi.spyOn(xmppClient as any, 'emitSDK')
+
+      // Simulate a subscription request from a MUC JID (should be ignored)
+      const mucSubscribePresence = createMockElement('presence', {
+        from: 'room@conference.example.com',
+        to: 'user@example.com',
+        type: 'subscribe',
+      })
+
+      mockXmppClientInstance._emit('stanza', mucSubscribePresence)
+
+      // Should NOT emit subscription-request event for MUC JIDs
+      expect(emitSDKSpy).not.toHaveBeenCalledWith(
+        'events:subscription-request',
+        expect.objectContaining({ from: 'room@conference.example.com' })
+      )
+    })
+
+    it('should process subscription requests from regular JIDs', async () => {
+      await connectClient()
+      const emitSDKSpy = vi.spyOn(xmppClient as any, 'emitSDK')
+
+      // Mock hasContact to return false for the stranger JID
+      mockStores.roster.hasContact.mockReturnValue(false)
+
+      // Simulate a subscription request from a regular user JID
+      const userSubscribePresence = createMockElement('presence', {
+        from: 'stranger@example.com',
+        to: 'user@example.com',
+        type: 'subscribe',
+      })
+
+      mockXmppClientInstance._emit('stanza', userSubscribePresence)
+
+      // Should emit subscription-request event for regular JIDs
+      expect(emitSDKSpy).toHaveBeenCalledWith(
+        'events:subscription-request',
+        { from: 'stranger@example.com' }
+      )
+    })
+  })
 })

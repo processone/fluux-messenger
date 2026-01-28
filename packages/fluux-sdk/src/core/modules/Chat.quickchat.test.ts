@@ -727,5 +727,60 @@ describe('XMPPClient Quick Chat', () => {
         isQuickChat: true,
       })
     })
+
+    it('should handle mediated invitation even when invite from attribute is missing', () => {
+      // Some servers may omit the from attribute in the invite element
+      // The SDK should still process it, using the room JID as fallback
+      const invitationStanza = createMockElement('message', {
+        from: 'room@conference.example.com',
+        to: 'user@example.com',
+      }, [
+        {
+          name: 'x',
+          attrs: { xmlns: 'http://jabber.org/protocol/muc#user' },
+          children: [
+            {
+              name: 'invite',
+              // No 'from' attribute
+              children: [
+                { name: 'reason', text: 'Join our room' },
+              ],
+            },
+          ],
+        },
+      ])
+
+      mockXmppClientInstance._emit('stanza', invitationStanza)
+
+      // Should emit with room JID as fallback for 'from'
+      expect(emitSDKSpy).toHaveBeenCalledWith('events:muc-invitation', {
+        roomJid: 'room@conference.example.com',
+        from: 'room@conference.example.com', // Fallback to room JID
+        reason: 'Join our room',
+        password: undefined,
+        isDirect: false,
+        isQuickChat: false,
+      })
+    })
+
+    it('should not treat MUC JID as stranger message', () => {
+      // If a message with body comes from a MUC JID (which is not in roster),
+      // it should NOT be added as a stranger message
+      const messageFromMuc = createMockElement('message', {
+        from: 'room@conference.example.com',
+        to: 'user@example.com',
+        type: 'chat',
+      }, [
+        { name: 'body', text: 'Some message from MUC' },
+      ])
+
+      mockXmppClientInstance._emit('stanza', messageFromMuc)
+
+      // Should NOT emit stranger-message event for MUC JIDs
+      expect(emitSDKSpy).not.toHaveBeenCalledWith(
+        'events:stranger-message',
+        expect.objectContaining({ from: 'room@conference.example.com' })
+      )
+    })
   })
 })

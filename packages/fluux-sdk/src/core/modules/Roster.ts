@@ -1,6 +1,7 @@
 import { xml, Element } from '@xmpp/client'
 import { BaseModule } from './BaseModule'
 import { getBareJid, getLocalPart, getResource } from '../jid'
+import { isMucJid } from '../../utils/xmppUri'
 import { generateUUID } from '../../utils/uuid'
 import { calculateCapsHash, getCapsNode } from '../caps'
 import { getClientName } from '../clients'
@@ -148,6 +149,11 @@ export class Roster extends BaseModule {
   }
 
   private handleSubscribe(bareFrom: string): void {
+    // Ignore subscription requests from MUC JIDs - rooms should never be contacts
+    if (isMucJid(bareFrom)) {
+      return
+    }
+
     // Auto-accept if they're already in our roster (mutual subscription flow)
     if (this.deps.stores?.roster.hasContact(bareFrom)) {
       this.deps.sendStanza(xml('presence', { to: bareFrom, type: 'subscribed' }))
