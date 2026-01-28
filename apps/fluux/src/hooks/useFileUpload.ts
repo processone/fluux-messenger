@@ -223,8 +223,10 @@ async function uploadWithTauri(
   // Dynamic import to avoid bundling Tauri code in web builds
   const { fetch } = await import('@tauri-apps/plugin-http')
 
-  // Read file as ArrayBuffer for Tauri fetch
+  // Read file as Uint8Array for Tauri fetch
+  // Note: Tauri's fetch expects Uint8Array, not ArrayBuffer
   const arrayBuffer = await file.arrayBuffer()
+  const body = new Uint8Array(arrayBuffer)
 
   // Build headers
   const requestHeaders: Record<string, string> = {
@@ -238,7 +240,7 @@ async function uploadWithTauri(
   const response = await fetch(url, {
     method: 'PUT',
     headers: requestHeaders,
-    body: arrayBuffer,
+    body,
   })
 
   if (!response.ok) {
