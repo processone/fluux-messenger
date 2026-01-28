@@ -103,6 +103,18 @@ vi.mock('@fluux/sdk', () => ({
     isConnected: true,
   }),
   getBareJid: (jid: string) => jid.split('/')[0],
+  getUniqueOccupantCount: (occupants: Iterable<{ jid?: string }>) => {
+    const bareJids = new Set<string>()
+    let noJidCount = 0
+    for (const occ of occupants) {
+      if (occ.jid) {
+        bareJids.add(occ.jid.split('/')[0])
+      } else {
+        noJidCount++
+      }
+    }
+    return bareJids.size + noJidCount
+  },
   generateConsistentColorHexSync: () => '#4a90d9',
   getBestPresenceShow: () => 'online',
   getPresenceFromShow: () => 'online',
@@ -417,8 +429,8 @@ describe('RoomView', () => {
       mockActiveRoom = createRoom({
         joined: false,
         occupantsList: [
-          createOccupant({ nick: 'Alice' }),
-          createOccupant({ nick: 'Bob' }),
+          createOccupant({ nick: 'Alice', jid: 'alice@example.com' }),
+          createOccupant({ nick: 'Bob', jid: 'bob@example.com' }),
         ],
       })
 

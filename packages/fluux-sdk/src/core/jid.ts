@@ -143,6 +143,33 @@ export function isQuickChatJid(roomJid: string): boolean {
 }
 
 /**
+ * Count unique users from an iterable of occupants by bare JID.
+ * Multiple connections from the same user (same bare JID) are counted once.
+ * Occupants without a JID are each counted individually.
+ *
+ * @param occupants - Iterable of objects with optional jid field
+ * @returns Number of unique users
+ *
+ * @example
+ * ```typescript
+ * const count = getUniqueOccupantCount(room.occupants.values())
+ * // 2 connections from alice@example.com + 1 from bob@example.com = 2
+ * ```
+ */
+export function getUniqueOccupantCount(occupants: Iterable<{ jid?: string }>): number {
+  const bareJids = new Set<string>()
+  let noJidCount = 0
+  for (const occupant of occupants) {
+    if (occupant.jid) {
+      bareJids.add(getBareJid(occupant.jid))
+    } else {
+      noJidCount++
+    }
+  }
+  return bareJids.size + noJidCount
+}
+
+/**
  * Check if a search query matches a JID by username only (not domain).
  * This prevents matching on common domains like "example.com" or "gmail.com".
  *

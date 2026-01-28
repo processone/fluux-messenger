@@ -6,10 +6,10 @@
  * - Room management (owners/admins): settings, subject, avatar, members
  * - Occupant panel toggle
  */
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Room } from '@fluux/sdk'
-import { generateConsistentColorHexSync } from '@fluux/sdk'
+import { generateConsistentColorHexSync, getUniqueOccupantCount } from '@fluux/sdk'
 import { Avatar } from './Avatar'
 import { Tooltip } from './Tooltip'
 import { useWindowDrag, useClickOutside } from '@/hooks'
@@ -87,6 +87,12 @@ export function RoomHeader({
     return 'mentions'
   }
   const notifyMode = getNotifyMode()
+
+  // Count unique users by bare JID (multiple connections from same user count as one)
+  const uniqueOccupantCount = useMemo(
+    () => getUniqueOccupantCount(room.occupants.values()),
+    [room.occupants]
+  )
 
   // Get icon based on mode
   const NotifyIcon = notifyMode === 'mentions' ? BellOff
@@ -369,7 +375,7 @@ export function RoomHeader({
           aria-label={showOccupants ? t('rooms.hideMembers') : t('rooms.showMembers')}
         >
           <Users className="w-4 h-4" />
-          <span className="text-sm font-medium">{room.occupants.size}</span>
+          <span className="text-sm font-medium">{uniqueOccupantCount}</span>
           <ChevronRight className={`w-4 h-4 transition-transform ${showOccupants ? '' : 'rotate-180'}`} />
         </button>
       </Tooltip>

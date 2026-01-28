@@ -75,6 +75,18 @@ vi.mock('@/utils/messageStyles', () => ({
 // Mock SDK
 vi.mock('@fluux/sdk', () => ({
   generateConsistentColorHexSync: () => '#4a90d9',
+  getUniqueOccupantCount: (occupants: Iterable<{ jid?: string }>) => {
+    const bareJids = new Set<string>()
+    let noJidCount = 0
+    for (const occ of occupants) {
+      if (occ.jid) {
+        bareJids.add(occ.jid.split('/')[0])
+      } else {
+        noJidCount++
+      }
+    }
+    return bareJids.size + noJidCount
+  },
 }))
 
 // Helper to create a test room
@@ -238,9 +250,9 @@ describe('RoomHeader', () => {
     it('shows occupant count', () => {
       const room = createRoom({
         occupantsList: [
-          createOccupant({ nick: 'Alice' }),
-          createOccupant({ nick: 'Bob' }),
-          createOccupant({ nick: 'Me' }),
+          createOccupant({ nick: 'Alice', jid: 'alice@example.com' }),
+          createOccupant({ nick: 'Bob', jid: 'bob@example.com' }),
+          createOccupant({ nick: 'Me', jid: 'me@example.com' }),
         ],
       })
 

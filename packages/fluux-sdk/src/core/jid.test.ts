@@ -8,6 +8,7 @@ import {
   splitFullJid,
   hasResource,
   createFullJid,
+  getUniqueOccupantCount,
 } from './jid'
 
 describe('JID utilities', () => {
@@ -219,6 +220,39 @@ describe('JID utilities', () => {
 
     it('should handle MUC JID', () => {
       expect(createFullJid('room@conf.example.com', 'nickname')).toBe('room@conf.example.com/nickname')
+    })
+  })
+
+  describe('getUniqueOccupantCount', () => {
+    it('should count unique users by bare JID', () => {
+      const occupants = [
+        { jid: 'alice@example.com/mobile' },
+        { jid: 'alice@example.com/desktop' },
+        { jid: 'bob@example.com/web' },
+      ]
+      expect(getUniqueOccupantCount(occupants)).toBe(2)
+    })
+
+    it('should count occupants without JID individually', () => {
+      const occupants = [
+        { jid: 'alice@example.com' },
+        { jid: undefined },
+        { jid: undefined },
+      ]
+      expect(getUniqueOccupantCount(occupants)).toBe(3)
+    })
+
+    it('should return 0 for empty list', () => {
+      expect(getUniqueOccupantCount([])).toBe(0)
+    })
+
+    it('should work with Map values iterator', () => {
+      const map = new Map([
+        ['Alice', { jid: 'alice@example.com/mobile' }],
+        ['Alice2', { jid: 'alice@example.com/desktop' }],
+        ['Bob', { jid: 'bob@example.com' }],
+      ])
+      expect(getUniqueOccupantCount(map.values())).toBe(2)
     })
   })
 })

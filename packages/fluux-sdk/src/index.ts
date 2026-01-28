@@ -307,6 +307,7 @@ export {
   createFullJid,
   matchJidUsername,
   matchNameOrJid,
+  getUniqueOccupantCount,
 } from './core/jid'
 export type { ParsedJid } from './core/jid'
 
