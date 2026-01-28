@@ -190,6 +190,7 @@ export function MessageList<T extends BaseMessage>({
         onWheel={handleWheel}
         className="flex-1 overflow-y-auto overflow-x-hidden px-4 pt-4 pb-0 overscroll-contain"
         style={{ overflowAnchor: 'auto' }}
+        data-message-list
       >
         {/* Loading state */}
         {showLoading && loadingState}

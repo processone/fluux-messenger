@@ -94,10 +94,21 @@ export function UserInfoPopover({ contact, jid, role, affiliation, children, cla
     // Position the popover near the click
     const rect = triggerRef.current?.getBoundingClientRect()
     if (rect) {
-      // Position below and slightly to the right of the trigger
+      // Find the message list container to stay within its bounds
+      const messageList = triggerRef.current?.closest('[data-message-list]')
+      const listRect = messageList?.getBoundingClientRect()
+
+      // Use message list bottom or leave 100px for typing area
+      const maxBottom = listRect?.bottom ?? (window.innerHeight - 100)
+      const popoverHeight = 150 // Estimated height
+
+      // Position below if there's space, otherwise above
+      const spaceBelow = maxBottom - rect.bottom - 8
+      const positionAbove = spaceBelow < popoverHeight && rect.top > popoverHeight
+
       setPosition({
         x: Math.min(rect.left, window.innerWidth - 250), // Keep within viewport
-        y: rect.bottom + 8,
+        y: positionAbove ? rect.top - popoverHeight - 8 : rect.bottom + 8,
       })
     }
     setIsOpen(true)
