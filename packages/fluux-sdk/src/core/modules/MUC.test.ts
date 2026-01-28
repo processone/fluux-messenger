@@ -993,7 +993,7 @@ describe('MUC Module', () => {
 
       const result = await muc.queryRoomFeatures('room@conference.example.org')
 
-      expect(result).toEqual({ supportsMAM: true })
+      expect(result).toEqual({ supportsMAM: true, name: 'Test Room' })
       expect(mockSendIQ).toHaveBeenCalledWith(
         expect.objectContaining({
           attrs: expect.objectContaining({
@@ -1021,7 +1021,7 @@ describe('MUC Module', () => {
 
       const result = await muc.queryRoomFeatures('room@conference.example.org')
 
-      expect(result).toEqual({ supportsMAM: false })
+      expect(result).toEqual({ supportsMAM: false, name: 'Test Room' })
     })
 
     it('returns null when disco#info query fails', async () => {
@@ -1193,6 +1193,96 @@ describe('MUC Module', () => {
         roomJid: 'room@conference.example.org',
         updates: expect.objectContaining({
           supportsMAM: true,
+        }),
+      })
+    })
+
+    it('uses room name from disco#info when joining new room', async () => {
+      // Mock disco#info response with room name in identity
+      const discoResponse = createMockElement('iq', { type: 'result' }, [
+        {
+          name: 'query',
+          attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
+          children: [
+            { name: 'identity', attrs: { category: 'conference', type: 'text', name: 'Quick Chat: Alice & Bob' } },
+            { name: 'feature', attrs: { var: 'http://jabber.org/protocol/muc' } },
+          ],
+        },
+      ])
+
+      mockSendIQ.mockResolvedValue(discoResponse)
+      mockStores.room.getRoom.mockReturnValue(null)
+
+      await muc.joinRoom('quickchat-user-happy-fox-a1b2@conference.example.org', 'mynick', { isQuickChat: true })
+
+      // Check that room:added event includes the proper room name from disco#info
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:added', {
+        room: expect.objectContaining({
+          jid: 'quickchat-user-happy-fox-a1b2@conference.example.org',
+          name: 'Quick Chat: Alice & Bob',
+          isQuickChat: true,
+        }),
+      })
+    })
+
+    it('falls back to JID local part when disco#info has no room name', async () => {
+      // Mock disco#info response without identity name
+      const discoResponse = createMockElement('iq', { type: 'result' }, [
+        {
+          name: 'query',
+          attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
+          children: [
+            { name: 'identity', attrs: { category: 'conference', type: 'text' } }, // no name attribute
+            { name: 'feature', attrs: { var: 'http://jabber.org/protocol/muc' } },
+          ],
+        },
+      ])
+
+      mockSendIQ.mockResolvedValue(discoResponse)
+      mockStores.room.getRoom.mockReturnValue(null)
+
+      await muc.joinRoom('quickchat-user-happy-fox-a1b2@conference.example.org', 'mynick', { isQuickChat: true })
+
+      // Check that room:added event falls back to JID local part
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:added', {
+        room: expect.objectContaining({
+          jid: 'quickchat-user-happy-fox-a1b2@conference.example.org',
+          name: 'quickchat-user-happy-fox-a1b2',
+        }),
+      })
+    })
+
+    it('updates room name when joining existing room with default JID name', async () => {
+      // Mock disco#info response with proper room name
+      const discoResponse = createMockElement('iq', { type: 'result' }, [
+        {
+          name: 'query',
+          attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
+          children: [
+            { name: 'identity', attrs: { category: 'conference', type: 'text', name: 'Quick Chat: Alice & Bob' } },
+            { name: 'feature', attrs: { var: 'http://jabber.org/protocol/muc' } },
+          ],
+        },
+      ])
+
+      mockSendIQ.mockResolvedValue(discoResponse)
+      // Room exists with JID local part as name (from before disco was queried)
+      mockStores.room.getRoom.mockReturnValue({
+        jid: 'quickchat-user-happy-fox-a1b2@conference.example.org',
+        name: 'quickchat-user-happy-fox-a1b2', // JID local part
+        nickname: 'oldnick',
+        joined: false,
+        isBookmarked: false,
+        isQuickChat: true,
+      })
+
+      await muc.joinRoom('quickchat-user-happy-fox-a1b2@conference.example.org', 'newnick', { isQuickChat: true })
+
+      // Check that room:updated includes the new name from disco#info
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:updated', {
+        roomJid: 'quickchat-user-happy-fox-a1b2@conference.example.org',
+        updates: expect.objectContaining({
+          name: 'Quick Chat: Alice & Bob',
         }),
       })
     })

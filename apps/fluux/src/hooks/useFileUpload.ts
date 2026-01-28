@@ -68,7 +68,10 @@ export function useFileUpload() {
    * Returns FileAttachment with URL, thumbnail info, and duration, or null on failure.
    */
   const uploadFile = useCallback(async (file: File): Promise<FileAttachment | null> => {
+    console.log('[uploadFile] Starting upload for:', file.name, 'isTauri:', isTauri())
+
     if (!httpUploadService) {
+      console.error('[uploadFile] HTTP upload not supported')
       setState(s => ({ ...s, error: t('upload.notSupported') }))
       return null
     }
@@ -194,6 +197,7 @@ export function useFileUpload() {
         duration,
       }
     } catch (err) {
+      console.error('[uploadFile] Error during upload:', err)
       const message = err instanceof Error ? err.message : t('upload.failed')
       setState({ isUploading: false, progress: 0, error: message })
       return null
@@ -223,8 +227,15 @@ async function uploadWithTauri(
   // Dynamic import to avoid bundling Tauri code in web builds
   const { fetch } = await import('@tauri-apps/plugin-http')
 
-  // Read file as ArrayBuffer for Tauri fetch
+  console.log('[uploadWithTauri] Starting upload to:', url)
+  console.log('[uploadWithTauri] File:', file.name, 'size:', file.size, 'type:', contentType)
+
+  // Read file as Uint8Array for Tauri fetch
+  // Note: Tauri's fetch expects Uint8Array, not ArrayBuffer
   const arrayBuffer = await file.arrayBuffer()
+  const body = new Uint8Array(arrayBuffer)
+
+  console.log('[uploadWithTauri] Body prepared, length:', body.length)
 
   // Build headers
   const requestHeaders: Record<string, string> = {
@@ -232,20 +243,32 @@ async function uploadWithTauri(
     ...headers,
   }
 
+  console.log('[uploadWithTauri] Headers:', requestHeaders)
+
   // Tauri fetch doesn't support progress, simulate it
   onProgress?.(50)
 
-  const response = await fetch(url, {
-    method: 'PUT',
-    headers: requestHeaders,
-    body: arrayBuffer,
-  })
+  try {
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: requestHeaders,
+      body,
+    })
 
-  if (!response.ok) {
-    throw new Error(`Upload failed: ${response.status}`)
+    console.log('[uploadWithTauri] Response status:', response.status)
+
+    if (!response.ok) {
+      const responseText = await response.text()
+      console.error('[uploadWithTauri] Upload failed:', response.status, responseText)
+      throw new Error(`Upload failed: ${response.status}`)
+    }
+
+    console.log('[uploadWithTauri] Upload successful')
+    onProgress?.(100)
+  } catch (err) {
+    console.error('[uploadWithTauri] Fetch error:', err)
+    throw err
   }
-
-  onProgress?.(100)
 }
 
 /**
