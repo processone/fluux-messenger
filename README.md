@@ -112,6 +112,8 @@ Looking ahead, we also plan to make Fluux Messenger available on F-Droid, and po
 
 Contributions are welcome! See [CONTRIBUTING](CONTRIBUTING.md) for detailed guidelines.
 
+For getting started with development, you can check out our [Developer Guide](docs/DEVELOPER.md).
+
 ## License
 
 Fluux Messenger is licensed under the **GNU Affero General Public License v3.0 or later**. See [LICENSE](LICENSE)
