@@ -361,19 +361,17 @@ export class MUC extends BaseModule {
 
     const isQuickChat = options?.isQuickChat ?? existingRoom?.isQuickChat
 
-    // Query room features to detect MAM support
-    // Skip for quickchat rooms - they're transient and don't use MAM
-    // If MAM is supported, we'll skip MUC history since MAM provides a more reliable archive
-    let supportsMAM = false
-    if (!isQuickChat) {
-      const roomFeatures = await this.queryRoomFeatures(roomJid)
-      supportsMAM = roomFeatures?.supportsMAM ?? false
-    }
+    // Query room features to get room name and detect MAM support
+    // For quickchats, we still query to get the room name (set by creator)
+    // but skip MAM since quickchats are transient
+    const roomFeatures = await this.queryRoomFeatures(roomJid)
+    const supportsMAM = isQuickChat ? false : (roomFeatures?.supportsMAM ?? false)
+    const roomName = roomFeatures?.name || existingRoom?.name || getLocalPart(roomJid)
 
     if (!existingRoom) {
       const room: Room = {
         jid: roomJid,
-        name: getLocalPart(roomJid),
+        name: roomName,
         nickname,
         joined: false,
         isJoining: true,
@@ -389,7 +387,7 @@ export class MUC extends BaseModule {
       // SDK event only - binding calls store.addRoom
       this.deps.emitSDK('room:added', { room })
     } else {
-      const updates = {
+      const updates: Partial<Room> = {
         nickname,
         isJoining: true,
         supportsMAM,
@@ -397,6 +395,10 @@ export class MUC extends BaseModule {
         selfOccupant: undefined,
         typingUsers: new Set() as Set<string>,
         ...(options?.isQuickChat !== undefined && { isQuickChat: options.isQuickChat }),
+      }
+      // Update room name if we fetched a proper name and it's different from local part
+      if (roomFeatures?.name && existingRoom.name === getLocalPart(roomJid)) {
+        updates.name = roomFeatures.name
       }
       // SDK event only - binding calls store.updateRoom
       this.deps.emitSDK('room:updated', { roomJid, updates })
@@ -660,7 +662,7 @@ export class MUC extends BaseModule {
    * - If MAM is supported, joinRoom() requests 0 MUC history messages
    *   since MAM provides a more reliable and complete archive
    */
-  async queryRoomFeatures(roomJid: string): Promise<{ supportsMAM: boolean } | null> {
+  async queryRoomFeatures(roomJid: string): Promise<{ supportsMAM: boolean; name?: string } | null> {
     try {
       const iq = xml(
         'iq',
@@ -679,7 +681,13 @@ export class MUC extends BaseModule {
 
       const supportsMAM = features.includes(NS_MAM)
 
-      return { supportsMAM }
+      // Parse room name from identity element
+      // <identity category="conference" type="text" name="Room Name"/>
+      const identity = query.getChildren('identity')
+        .find((i: Element) => i.attrs.category === 'conference')
+      const name = identity?.attrs.name as string | undefined
+
+      return { supportsMAM, name }
     } catch (err) {
       // Room disco#info not available - that's fine, room may not exist yet
       // or may not support disco queries
