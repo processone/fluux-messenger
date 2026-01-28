@@ -90,7 +90,10 @@ html, body {
   margin: 0;
   padding: 0;
   background-color: var(--fluux-bg);
-  /* Note: overscroll-behavior removed to allow native bounce in child scroll containers */
+  /* Prevent pull-to-refresh on mobile PWA which reloads and breaks the app */
+  /* Using 'contain' blocks navigation gestures while allowing child scroll containers */
+  /* to have their own overscroll behavior (rubber band effect) */
+  overscroll-behavior-y: contain;
 }
 
 #root {
