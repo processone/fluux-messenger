@@ -157,7 +157,7 @@ export function RoomHeader({
 
       {/* Notification dropdown */}
       <div className="relative" ref={notifyMenuRef}>
-        <Tooltip content={t('rooms.notificationSettings')} position="bottom">
+        <Tooltip content={t('rooms.notificationSettings')} position="bottom" disabled={showNotifyMenu}>
           <button
             onClick={() => setShowNotifyMenu(!showNotifyMenu)}
             className={`flex items-center gap-1 px-2 py-1.5 rounded-lg transition-colors
@@ -228,7 +228,7 @@ export function RoomHeader({
       {/* Room management dropdown (owners/admins only) */}
       {canManageRoom && (
         <div className="relative" ref={ownerMenuRef}>
-          <Tooltip content={t('rooms.manageRoom')} position="bottom">
+          <Tooltip content={t('rooms.manageRoom')} position="bottom" disabled={showOwnerMenu}>
             <button
               onClick={() => setShowOwnerMenu(!showOwnerMenu)}
               className={`flex items-center gap-1 px-2 py-1.5 rounded-lg transition-colors
@@ -247,41 +247,39 @@ export function RoomHeader({
           {showOwnerMenu && (
             <div className="absolute right-0 top-full mt-1 w-56 bg-fluux-bg border border-fluux-hover rounded-lg shadow-lg z-30 py-1">
               {/* Room Settings (placeholder) */}
-              <button
-                onClick={() => {
-                  // TODO: Open room settings modal
-                  setShowOwnerMenu(false)
-                }}
-                className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-left transition-colors opacity-60 cursor-not-allowed"
-                disabled
-              >
-                <Settings className="w-4 h-4 text-fluux-muted" />
-                <div className="flex-1">
-                  <div className="text-sm text-fluux-text">{t('rooms.roomSettings')}</div>
-                  <div className="text-xs text-fluux-muted">{t('rooms.configureRoom')}</div>
-                </div>
-                <span className="text-[10px] px-1.5 py-0.5 bg-fluux-muted/20 text-fluux-muted rounded">
-                  {t('common.comingSoon')}
-                </span>
-              </button>
+              <Tooltip content={t('common.comingSoon')} position="left">
+                <button
+                  onClick={() => {
+                    // TODO: Open room settings modal
+                    setShowOwnerMenu(false)
+                  }}
+                  className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-left transition-colors opacity-60 cursor-not-allowed"
+                  disabled
+                >
+                  <Settings className="w-4 h-4 text-fluux-muted" />
+                  <div className="flex-1">
+                    <div className="text-sm text-fluux-text">{t('rooms.roomSettings')}</div>
+                    <div className="text-xs text-fluux-muted">{t('rooms.configureRoom')}</div>
+                  </div>
+                </button>
+              </Tooltip>
 
               {/* Change Room Subject (placeholder) */}
-              <button
-                onClick={() => {
-                  // TODO: Open change subject modal
-                  setShowOwnerMenu(false)
-                }}
-                className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-left transition-colors opacity-60 cursor-not-allowed"
-                disabled
-              >
-                <Type className="w-4 h-4 text-fluux-muted" />
-                <div className="flex-1">
-                  <div className="text-sm text-fluux-text">{t('rooms.changeSubject')}</div>
-                </div>
-                <span className="text-[10px] px-1.5 py-0.5 bg-fluux-muted/20 text-fluux-muted rounded">
-                  {t('common.comingSoon')}
-                </span>
-              </button>
+              <Tooltip content={t('common.comingSoon')} position="left">
+                <button
+                  onClick={() => {
+                    // TODO: Open change subject modal
+                    setShowOwnerMenu(false)
+                  }}
+                  className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-left transition-colors opacity-60 cursor-not-allowed"
+                  disabled
+                >
+                  <Type className="w-4 h-4 text-fluux-muted" />
+                  <div className="flex-1">
+                    <div className="text-sm text-fluux-text">{t('rooms.changeSubject')}</div>
+                  </div>
+                </button>
+              </Tooltip>
 
               {/* Change Room Avatar (owner only) */}
               {isOwner && (
@@ -337,23 +335,22 @@ export function RoomHeader({
 
               {/* Kick/Ban Member (placeholder) - owner only */}
               {isOwner && (
-                <button
-                  onClick={() => {
-                    // TODO: Open kick/ban member modal
-                    setShowOwnerMenu(false)
-                  }}
-                  className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-left transition-colors opacity-60 cursor-not-allowed"
-                  disabled
-                >
-                  <UserMinus className="w-4 h-4 text-fluux-muted" />
-                  <div className="flex-1">
-                    <div className="text-sm text-fluux-text">{t('rooms.manageMembership')}</div>
-                    <div className="text-xs text-fluux-muted">{t('rooms.kickBanMembers')}</div>
-                  </div>
-                  <span className="text-[10px] px-1.5 py-0.5 bg-fluux-muted/20 text-fluux-muted rounded">
-                    {t('common.comingSoon')}
-                  </span>
-                </button>
+                <Tooltip content={t('common.comingSoon')} position="left">
+                  <button
+                    onClick={() => {
+                      // TODO: Open kick/ban member modal
+                      setShowOwnerMenu(false)
+                    }}
+                    className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-left transition-colors opacity-60 cursor-not-allowed"
+                    disabled
+                  >
+                    <UserMinus className="w-4 h-4 text-fluux-muted" />
+                    <div className="flex-1">
+                      <div className="text-sm text-fluux-text">{t('rooms.manageMembership')}</div>
+                      <div className="text-xs text-fluux-muted">{t('rooms.kickBanMembers')}</div>
+                    </div>
+                  </button>
+                </Tooltip>
               )}
             </div>
           )}

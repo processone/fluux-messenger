@@ -44,7 +44,7 @@ export function Tooltip({
   content,
   children,
   position = 'top',
-  delay = 400,
+  delay = 700,
   className = '',
   disabled = false,
   maxWidth = 250,
@@ -220,7 +220,7 @@ export function SimpleTooltip({
   content,
   children,
   position = 'top',
-  delay = 400,
+  delay = 700,
 }: {
   content: string
   children: ReactNode
