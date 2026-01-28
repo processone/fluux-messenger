@@ -55,6 +55,7 @@ export const HIDDEN_ADMIN_COMMANDS = [
   'create_rooms_file',     // ejabberd API - batch operation, not for GUI
   'destroy_rooms_file',    // ejabberd API - batch operation, not for GUI
   'muc_online_rooms',      // ejabberd API - redundant with disco#items
+  'muc_online_rooms_count', // ejabberd API - used internally for entity counts
 ] as const
 
 export type HiddenAdminCommand = typeof HIDDEN_ADMIN_COMMANDS[number]
