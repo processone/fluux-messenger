@@ -96,6 +96,7 @@ exports[`RoomView > Snapshots > should match snapshot for non-joined room 1`] = 
         >
           <div
             class="flex-1 overflow-y-auto overflow-x-hidden px-4 pt-4 pb-0 overscroll-contain"
+            data-message-list="true"
             style="overflow-anchor: auto;"
           >
             <div

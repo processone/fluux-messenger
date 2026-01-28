@@ -39,6 +39,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
       >
         <div
           class="flex-1 overflow-y-auto overflow-x-hidden px-4 pt-4 pb-0 overscroll-contain"
+          data-message-list="true"
           style="overflow-anchor: auto;"
         >
           <div>
@@ -443,6 +444,7 @@ exports[`ChatView > Snapshots > should match snapshot with typing indicator 1`] 
       >
         <div
           class="flex-1 overflow-y-auto overflow-x-hidden px-4 pt-4 pb-0 overscroll-contain"
+          data-message-list="true"
           style="overflow-anchor: auto;"
         >
           <div
