@@ -129,17 +129,16 @@ export const MessageToolbar = memo(function MessageToolbar({
       >
       {/* Quick reaction emojis */}
       {TOOLBAR_REACTIONS.map(emoji => (
-        <Tooltip key={emoji} content={t('chat.reactWith', { emoji })} position="top" disabled={showReactionPicker || showMoreMenu}>
-          <button
-            onClick={() => handleReaction(emoji)}
-            className={`px-2 py-1.5 transition-colors text-base ${
-              showReactionPicker || showMoreMenu ? '' : 'hover:bg-fluux-hover'
-            } ${myReactions.includes(emoji) ? 'bg-fluux-brand/20' : ''}`}
-            aria-label={t('chat.reactWith', { emoji })}
-          >
-            {emoji}
-          </button>
-        </Tooltip>
+        <button
+          key={emoji}
+          onClick={() => handleReaction(emoji)}
+          className={`px-2 py-1.5 transition-colors text-base ${
+            showReactionPicker || showMoreMenu ? '' : 'hover:bg-fluux-hover'
+          } ${myReactions.includes(emoji) ? 'bg-fluux-brand/20' : ''}`}
+          aria-label={t('chat.reactWith', { emoji })}
+        >
+          {emoji}
+        </button>
       ))}
 
       {/* Divider */}
@@ -147,15 +146,13 @@ export const MessageToolbar = memo(function MessageToolbar({
 
       {/* More reactions button */}
       <div className="relative">
-        <Tooltip content={t('chat.moreReactions')} position="top" disabled={showReactionPicker || showMoreMenu}>
-          <button
-            onClick={() => setShowReactionPicker(!showReactionPicker)}
-            className={`p-1.5 transition-colors ${showReactionPicker || showMoreMenu ? '' : 'hover:bg-fluux-hover'}`}
-            aria-label={t('chat.moreReactions')}
-          >
-            <SmilePlus className="w-4 h-4 text-fluux-muted" />
-          </button>
-        </Tooltip>
+        <button
+          onClick={() => setShowReactionPicker(!showReactionPicker)}
+          className={`p-1.5 transition-colors ${showReactionPicker || showMoreMenu ? '' : 'hover:bg-fluux-hover'}`}
+          aria-label={t('chat.moreReactions')}
+        >
+          <SmilePlus className="w-4 h-4 text-fluux-muted" />
+        </button>
 
         {/* Extended reaction picker */}
         {showReactionPicker && (
