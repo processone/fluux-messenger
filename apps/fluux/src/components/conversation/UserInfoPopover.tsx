@@ -3,7 +3,7 @@
  * Shows useful contact info like JID and connected devices.
  * Dismisses on click outside.
  */
-import { useState, useRef, type ReactNode } from 'react'
+import { useState, useRef, useEffect, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import type { Contact, RoomAffiliation, RoomRole } from '@fluux/sdk'
@@ -73,6 +73,16 @@ export function UserInfoPopover({ contact, jid, role, affiliation, children, cla
 
   // Close on click outside
   useClickOutside(popoverRef, () => setIsOpen(false), isOpen)
+
+  // Close on scroll (message list or any parent)
+  useEffect(() => {
+    if (!isOpen) return
+
+    const handleScroll = () => setIsOpen(false)
+    // Use capture to catch scroll events from any scrolling container
+    window.addEventListener('scroll', handleScroll, true)
+    return () => window.removeEventListener('scroll', handleScroll, true)
+  }, [isOpen])
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation()
