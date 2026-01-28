@@ -16,6 +16,7 @@ import {
   NS_DATA_FORMS,
   NS_FLUUX,
   NS_MAM,
+  NS_NICK,
 } from '../namespaces'
 import type {
   Room,
@@ -731,8 +732,9 @@ export class MUC extends BaseModule {
     const slug = generateQuickChatSlug()
     const roomJid = `quickchat-${username}-${slug}@${mucJid}`
 
-    // 3. Generate room name based on invitees and date for quick identification
-    const roomName = this.generateQuickChatName(invitees)
+    // 3. Generate room name based on all participants (creator + invitees)
+    // Try to fetch XEP-0172 nicknames, fall back to JID local parts
+    const roomName = await this.generateQuickChatName(currentJid, invitees)
 
     // 4. Create room in store with isQuickChat flag
     const room: Room = {
@@ -767,34 +769,67 @@ export class MUC extends BaseModule {
 
   /**
    * Generate a descriptive name for a quick chat room.
-   * Uses invitee names and date for quick identification.
+   * Includes all participants (creator + invitees) using XEP-0172 nicknames
+   * when available, falling back to JID local parts.
+   *
+   * Note: We intentionally avoid using roster names (contact.name) to prevent
+   * leaking private labels the user may have assigned to contacts.
    */
-  private generateQuickChatName(invitees?: string[]): string {
+  private async generateQuickChatName(creatorJid: string, invitees?: string[]): Promise<string> {
     const now = new Date()
     const dateStr = now.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
     const timeStr = now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
 
-    // If we have invitees, use their names
+    // Build list of all participants (creator + invitees)
+    const names: string[] = []
+
+    // Add creator's name (use stored XEP-0172 nickname or JID local part)
+    const ownNickname = this.deps.stores?.connection.getOwnNickname?.()
+    const creatorName = ownNickname || getLocalPart(creatorJid)
+    if (creatorName) names.push(creatorName)
+
+    // Add invitees' names
     if (invitees && invitees.length > 0) {
-      const names: string[] = []
       for (const jid of invitees) {
-        const contact = this.deps.stores?.roster.getContact(jid)
-        // Use contact name if available, otherwise use local part of JID
-        const name = contact?.name || getLocalPart(jid)
+        // Try XEP-0172 nickname first, fall back to JID local part
+        const nickname = await this.fetchContactNickname(jid)
+        const name = nickname || getLocalPart(jid)
         if (name) names.push(name)
       }
+    }
 
-      if (names.length > 0) {
-        // Format: "Alice, Bob - Jan 1" or "Alice - Jan 1"
-        const nameList = names.length <= 3
-          ? names.join(', ')
-          : `${names.slice(0, 2).join(', ')} +${names.length - 2}`
-        return `${nameList} - ${dateStr}`
-      }
+    if (names.length > 0) {
+      // Format: "Me, Alice, Bob - Jan 1" or "Me, Alice +2 - Jan 1"
+      const nameList = names.length <= 3
+        ? names.join(', ')
+        : `${names.slice(0, 2).join(', ')} +${names.length - 2}`
+      return `${nameList} - ${dateStr}`
     }
 
     // Fallback: "Quick Chat - Jan 1, 2:30 PM"
     return `Quick Chat - ${dateStr}, ${timeStr}`
+  }
+
+  /**
+   * Fetch a contact's XEP-0172 User Nickname from their PEP.
+   * Returns null if not available or on error.
+   */
+  private async fetchContactNickname(jid: string): Promise<string | null> {
+    const bareJid = getBareJid(jid)
+    const iq = xml('iq', { type: 'get', to: bareJid, id: `nick_${generateUUID()}` },
+      xml('pubsub', { xmlns: NS_PUBSUB },
+        xml('items', { node: NS_NICK, max_items: '1' })
+      )
+    )
+
+    try {
+      const result = await this.deps.sendIQ(iq)
+      const nick = result.getChild('pubsub', NS_PUBSUB)?.getChild('items')?.getChild('item')?.getChild('nick', NS_NICK)?.text()
+      return nick || null
+    } catch {
+      // Contact may not have a nickname set or PEP may not be available
+      return null
+    }
   }
 
   /**

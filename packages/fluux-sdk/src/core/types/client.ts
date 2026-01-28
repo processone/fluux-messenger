@@ -52,6 +52,7 @@ export interface StoreBindings {
     // Own profile state
     setOwnAvatar: (avatar: string | null, hash?: string | null) => void
     setOwnNickname: (nickname: string | null) => void
+    getOwnNickname: () => string | null
     updateOwnResource: (resource: string, show: PresenceShow | null, priority: number, status?: string, lastInteraction?: Date, client?: string) => void
     removeOwnResource: (resource: string) => void
     clearOwnResources: () => void

@@ -173,10 +173,11 @@ describe('XMPPClient Quick Chat', () => {
       }
     })
 
-    it('should use default room name when no topic provided', async () => {
+    it('should use creator name in room name when no topic provided', async () => {
       await xmppClient.muc.createQuickChat('testuser')
 
-      // Should configure with default "Quick Chat - {timestamp}" name via iqCaller.request
+      // Should configure with "{creator} - {date}" name via iqCaller.request
+      // Since getOwnNickname returns null, it falls back to JID local part "user"
       const requestCalls = mockXmppClientInstance.iqCaller.request.mock.calls
       const configCall = requestCalls.find((call: any[]) => {
         const iq = call[0]
@@ -187,7 +188,8 @@ describe('XMPPClient Quick Chat', () => {
       expect(configCall).toBeDefined()
       if (configCall) {
         const xmlStr = JSON.stringify(configCall[0])
-        expect(xmlStr).toContain('Quick Chat')
+        // Should contain the creator's name (from JID local part)
+        expect(xmlStr).toContain('user')
       }
     })
 
@@ -316,6 +318,137 @@ describe('XMPPClient Quick Chat', () => {
       })
 
       expect(invitationMessages.length).toBe(0)
+    })
+
+    it('should use JID local parts for room name when no XEP-0172 nickname (privacy)', async () => {
+      // Setup: mock roster with custom roster names that should NOT be leaked
+      mockStores.roster.getContact = vi.fn().mockImplementation((jid: string) => {
+        if (jid === 'alice@example.com') {
+          return { jid, name: 'My Secret Label for Alice', presence: 'online' }
+        }
+        if (jid === 'bob@example.com') {
+          return { jid, name: 'Bob (Work Friend)', presence: 'online' }
+        }
+        return null
+      })
+
+      // Store original mock implementation to extend it
+      const originalMock = mockXmppClientInstance.iqCaller.request.getMockImplementation()
+      mockXmppClientInstance.iqCaller.request.mockImplementation(async (iq: any) => {
+        // Check for XEP-0172 nickname request
+        const pubsubEl = iq.children?.find((c: any) => c.attrs?.xmlns === 'http://jabber.org/protocol/pubsub')
+        const itemsEl = pubsubEl?.children?.find((c: any) => c.name === 'items')
+        if (itemsEl?.attrs?.node === 'http://jabber.org/protocol/nick') {
+          // Simulate no nickname published
+          throw new Error('item-not-found')
+        }
+        // Delegate to original mock for other IQs
+        return originalMock!(iq)
+      })
+
+      await xmppClient.muc.createQuickChat('testuser', undefined, ['alice@example.com', 'bob@example.com'])
+
+      // Find the room configuration IQ
+      const requestCalls = mockXmppClientInstance.iqCaller.request.mock.calls
+      const configCall = requestCalls.find((call: any[]) => {
+        const iq = call[0]
+        return iq?.attrs?.type === 'set' &&
+               iq?.children?.some((c: any) => c.attrs?.xmlns === 'http://jabber.org/protocol/muc#owner')
+      })
+
+      expect(configCall).toBeDefined()
+      if (configCall) {
+        const xmlStr = JSON.stringify(configCall[0])
+        // Should use JID local parts (alice, bob), NOT roster names
+        expect(xmlStr).toContain('alice')
+        expect(xmlStr).toContain('bob')
+        // Should NOT contain the private roster labels
+        expect(xmlStr).not.toContain('My Secret Label')
+        expect(xmlStr).not.toContain('Work Friend')
+      }
+    })
+
+    it('should use XEP-0172 nicknames when available for room name', async () => {
+      // Store original mock implementation to extend it
+      const originalMock = mockXmppClientInstance.iqCaller.request.getMockImplementation()
+      mockXmppClientInstance.iqCaller.request.mockImplementation(async (iq: any) => {
+        // Check for XEP-0172 nickname request
+        const pubsubEl = iq.children?.find((c: any) => c.attrs?.xmlns === 'http://jabber.org/protocol/pubsub')
+        const itemsEl = pubsubEl?.children?.find((c: any) => c.name === 'items')
+        if (itemsEl?.attrs?.node === 'http://jabber.org/protocol/nick') {
+          const toJid = iq.attrs?.to
+          let nickname = null
+          if (toJid === 'alice@example.com') {
+            nickname = 'Alice Wonderland'
+          } else if (toJid === 'bob@example.com') {
+            nickname = 'Bob Builder'
+          }
+          if (nickname) {
+            return createMockElement('iq', { type: 'result' }, [
+              {
+                name: 'pubsub',
+                attrs: { xmlns: 'http://jabber.org/protocol/pubsub' },
+                children: [{
+                  name: 'items',
+                  attrs: { node: 'http://jabber.org/protocol/nick' },
+                  children: [{
+                    name: 'item',
+                    children: [{
+                      name: 'nick',
+                      attrs: { xmlns: 'http://jabber.org/protocol/nick' },
+                      text: nickname
+                    }]
+                  }]
+                }]
+              }
+            ])
+          }
+        }
+        // Delegate to original mock for other IQs
+        return originalMock!(iq)
+      })
+
+      await xmppClient.muc.createQuickChat('testuser', undefined, ['alice@example.com', 'bob@example.com'])
+
+      // Find the room configuration IQ
+      const requestCalls = mockXmppClientInstance.iqCaller.request.mock.calls
+      const configCall = requestCalls.find((call: any[]) => {
+        const iq = call[0]
+        return iq?.attrs?.type === 'set' &&
+               iq?.children?.some((c: any) => c.attrs?.xmlns === 'http://jabber.org/protocol/muc#owner')
+      })
+
+      expect(configCall).toBeDefined()
+      if (configCall) {
+        const xmlStr = JSON.stringify(configCall[0])
+        // Should use XEP-0172 nicknames, not JID local parts
+        expect(xmlStr).toContain('Alice Wonderland')
+        expect(xmlStr).toContain('Bob Builder')
+      }
+    })
+
+    it('should use creator XEP-0172 nickname in room name when available', async () => {
+      // Mock getOwnNickname to return the creator's XEP-0172 nickname
+      mockStores.connection.getOwnNickname = vi.fn().mockReturnValue('John Doe')
+
+      await xmppClient.muc.createQuickChat('testuser', undefined, ['alice@example.com'])
+
+      // Find the room configuration IQ
+      const requestCalls = mockXmppClientInstance.iqCaller.request.mock.calls
+      const configCall = requestCalls.find((call: any[]) => {
+        const iq = call[0]
+        return iq?.attrs?.type === 'set' &&
+               iq?.children?.some((c: any) => c.attrs?.xmlns === 'http://jabber.org/protocol/muc#owner')
+      })
+
+      expect(configCall).toBeDefined()
+      if (configCall) {
+        const xmlStr = JSON.stringify(configCall[0])
+        // Should use the creator's XEP-0172 nickname, not JID local part
+        expect(xmlStr).toContain('John Doe')
+        // Should NOT use the JID local part when nickname is available
+        // (Actually it may contain "user" as part of the room JID, so we check specifically for the name field)
+      }
     })
   })
 

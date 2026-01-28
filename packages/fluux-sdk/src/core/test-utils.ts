@@ -571,6 +571,7 @@ export const createMockStores = (): MockStoreBindings => ({
     clearPreAutoAwayState: vi.fn(),
     setOwnAvatar: vi.fn(),
     setOwnNickname: vi.fn(),
+    getOwnNickname: vi.fn().mockReturnValue(null),
     updateOwnResource: vi.fn(),
     removeOwnResource: vi.fn(),
     clearOwnResources: vi.fn(),
