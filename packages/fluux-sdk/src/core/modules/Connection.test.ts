@@ -1437,4 +1437,122 @@ describe('XMPPClient Connection', () => {
       vi.useFakeTimers()
     })
   })
+
+  describe('notifySystemState', () => {
+    beforeEach(async () => {
+      // Set up a connected client for these tests
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'wss://example.com/ws',
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+      mockStores.connection.getStatus.mockReturnValue('online')
+      // Clear mocks after connection setup
+      mockStores.connection.setStatus.mockClear()
+      mockStores.console.addEvent.mockClear()
+      mockXmppClientInstance.send.mockClear()
+    })
+
+    it('should verify connection on "awake" state when online', async () => {
+      // Add SM to enable verification
+      mockXmppClientInstance.streamManagement = {
+        id: 'sm-123',
+        inbound: 5,
+        outbound: 0,
+        enabled: true,
+        on: vi.fn(),
+      }
+
+      // Simulate SM ack response when send is called
+      mockXmppClientInstance.send.mockImplementationOnce(() => {
+        setTimeout(() => {
+          const ackNonza = createMockElement('a', { xmlns: 'urn:xmpp:sm:3', h: '5' })
+          mockXmppClientInstance._emit('nonza', ackNonza)
+        }, 10)
+        return Promise.resolve()
+      })
+
+      const notifyPromise = xmppClient.notifySystemState('awake')
+      await vi.runAllTimersAsync()
+      await notifyPromise
+
+      // Should have set status to verifying
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('verifying')
+      // Should have logged the verification
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        expect.stringContaining('awake'),
+        'connection'
+      )
+    })
+
+    it('should NOT verify connection on "visible" state when online', async () => {
+      await xmppClient.notifySystemState('visible')
+
+      // Should NOT set status to verifying
+      expect(mockStores.connection.setStatus).not.toHaveBeenCalledWith('verifying')
+      // Should NOT send any SM request (send was cleared after connection setup)
+      expect(mockXmppClientInstance.send).not.toHaveBeenCalled()
+    })
+
+    it('should trigger reconnect on "visible" state when reconnecting', async () => {
+      mockStores.connection.getStatus.mockReturnValue('reconnecting')
+
+      await xmppClient.notifySystemState('visible')
+
+      // Should log the event
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        expect.stringContaining('visible'),
+        'connection'
+      )
+    })
+
+    it('should skip verification and reconnect immediately when sleep exceeds SM timeout', async () => {
+      // Sleep duration of 15 minutes (exceeds 10 min SM timeout)
+      const fifteenMinutesMs = 15 * 60 * 1000
+
+      await xmppClient.notifySystemState('awake', fifteenMinutesMs)
+
+      // Should NOT verify (no SM request sent for verification)
+      expect(mockStores.connection.setStatus).not.toHaveBeenCalledWith('verifying')
+      // Should trigger reconnect
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
+      // Should log that we're reconnecting immediately
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        expect.stringContaining('exceeds SM timeout'),
+        'connection'
+      )
+    })
+
+    it('should verify connection when sleep is under SM timeout', async () => {
+      // Add SM to enable verification
+      mockXmppClientInstance.streamManagement = {
+        id: 'sm-123',
+        inbound: 5,
+        outbound: 0,
+        enabled: true,
+        on: vi.fn(),
+      }
+
+      // Simulate SM ack response when send is called
+      mockXmppClientInstance.send.mockImplementationOnce(() => {
+        setTimeout(() => {
+          const ackNonza = createMockElement('a', { xmlns: 'urn:xmpp:sm:3', h: '5' })
+          mockXmppClientInstance._emit('nonza', ackNonza)
+        }, 10)
+        return Promise.resolve()
+      })
+
+      // Sleep duration of 5 minutes (under 10 min SM timeout)
+      const fiveMinutesMs = 5 * 60 * 1000
+
+      const notifyPromise = xmppClient.notifySystemState('awake', fiveMinutesMs)
+      await vi.runAllTimersAsync()
+      await notifyPromise
+
+      // Should verify (status set to verifying)
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('verifying')
+    })
+  })
 })
