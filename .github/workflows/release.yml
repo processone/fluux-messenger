@@ -205,23 +205,27 @@ jobs:
           prerelease: false
           args: --bundles deb,rpm
 
-      - name: Build Flatpak
-        run: |
-          # Find the built deb file (use lowercase kebab-case version)
-          DEB_FILE=$(find apps/fluux/src-tauri/target/release/bundle/deb -name "fluux-messenger*.deb" -not -name "*.sig" | head -1)
-          echo "Found deb: $DEB_FILE"
-
-          # Copy deb to flatpak directory
-          cp "$DEB_FILE" apps/fluux/flatpak/fluux.deb
-
-          # Build Flatpak bundle
-          cd apps/fluux/flatpak
-          flatpak-builder --user --force-clean --repo=repo build-dir com.processone.fluux.yaml
-          flatpak build-bundle repo Fluux.Messenger.flatpak com.processone.fluux
-
-      - name: Upload Flatpak to Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: apps/fluux/flatpak/Fluux.Messenger.flatpak
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Flatpak build is temporarily disabled - needs investigation into
+      # Tauri's deb internal file naming conventions
+      # - name: Build Flatpak
+      #   continue-on-error: true
+      #   run: |
+      #     # Find the built deb file
+      #     DEB_FILE=$(find apps/fluux/src-tauri/target/release/bundle/deb -name "*.deb" -not -name "*.sig" | head -1)
+      #     echo "Found deb: $DEB_FILE"
+      #
+      #     # Copy deb to flatpak directory
+      #     cp "$DEB_FILE" apps/fluux/flatpak/fluux.deb
+      #
+      #     # Build Flatpak bundle
+      #     cd apps/fluux/flatpak
+      #     flatpak-builder --user --force-clean --repo=repo build-dir com.processone.fluux.yaml
+      #     flatpak build-bundle repo Fluux.Messenger.flatpak com.processone.fluux
+      #
+      # - name: Upload Flatpak to Release
+      #   if: success()
+      #   uses: softprops/action-gh-release@v1
+      #   with:
+      #     files: apps/fluux/flatpak/Fluux.Messenger.flatpak
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
