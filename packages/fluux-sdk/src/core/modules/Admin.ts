@@ -422,16 +422,20 @@ export class Admin extends BaseModule {
         const form = parseDataForm(formEl)
 
         // Build submit form with default values from the form
-        const submitForm = xml(
-          'x',
-          { xmlns: NS_DATA_FORMS, type: 'submit' },
-          // Include all fields with their default values
-          ...form.fields.map(field => {
+        // Filter out fixed fields and fields without var (they shouldn't be submitted)
+        const submitFields = form.fields
+          .filter(field => field.var && field.type !== 'fixed')
+          .map(field => {
             const values = Array.isArray(field.value) ? field.value : (field.value ? [field.value] : [])
             return xml('field', { var: field.var },
               ...values.map((v: string) => xml('value', {}, v))
             )
           })
+
+        const submitForm = xml(
+          'x',
+          { xmlns: NS_DATA_FORMS, type: 'submit' },
+          ...submitFields
         )
 
         // Step 2: Complete the command with the form
