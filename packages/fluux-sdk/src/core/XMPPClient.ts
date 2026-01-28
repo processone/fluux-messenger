@@ -749,11 +749,14 @@ export class XMPPClient {
    *   - 'sleeping': System is going to sleep. SDK may gracefully disconnect.
    *   - 'visible': App became visible/foreground. SDK verifies connection.
    *   - 'hidden': App went to background.
+   * @param sleepDurationMs - Optional duration of sleep/inactivity in milliseconds.
+   *   If provided and exceeds SM session timeout (~10 min), skips verification and
+   *   immediately triggers reconnect (the SM session is definitely expired).
    *
    * @example
    * ```typescript
-   * // App detects wake from sleep (e.g., via Tauri event or time-gap detection)
-   * client.notifySystemState('awake')
+   * // App detects wake from sleep with duration (e.g., via time-gap detection)
+   * client.notifySystemState('awake', sleepGapMs)
    *
    * // App visibility changed
    * document.addEventListener('visibilitychange', () => {
@@ -761,8 +764,11 @@ export class XMPPClient {
    * })
    * ```
    */
-  async notifySystemState(state: 'awake' | 'sleeping' | 'visible' | 'hidden'): Promise<void> {
-    return this.connection.notifySystemState(state)
+  async notifySystemState(
+    state: 'awake' | 'sleeping' | 'visible' | 'hidden',
+    sleepDurationMs?: number
+  ): Promise<void> {
+    return this.connection.notifySystemState(state, sleepDurationMs)
   }
 
   /**

@@ -922,7 +922,19 @@ describe('XMPPClient', () => {
       await vi.advanceTimersByTimeAsync(100)
       mockXmppClientInstance.send.mockClear()
 
-      const result = await xmppClient.verifyConnection()
+      // Simulate SM ack response when send() is called
+      mockXmppClientInstance.send.mockImplementationOnce(() => {
+        // Emit the <a/> nonza response shortly after
+        setTimeout(() => {
+          const ackNonza = createMockElement('a', { xmlns: 'urn:xmpp:sm:3', h: '5' })
+          mockXmppClientInstance._emit('nonza', ackNonza)
+        }, 10)
+        return Promise.resolve()
+      })
+
+      const resultPromise = xmppClient.verifyConnection()
+      await vi.advanceTimersByTimeAsync(100)
+      const result = await resultPromise
 
       expect(result).toBe(true)
       expect(mockXmppClientInstance.send).toHaveBeenCalled()
@@ -958,7 +970,18 @@ describe('XMPPClient', () => {
       })
       mockStores.connection.setStatus.mockClear()
 
-      await xmppClient.verifyConnection()
+      // Simulate SM ack response when send() is called
+      mockXmppClientInstance.send.mockImplementationOnce(() => {
+        setTimeout(() => {
+          const ackNonza = createMockElement('a', { xmlns: 'urn:xmpp:sm:3', h: '5' })
+          mockXmppClientInstance._emit('nonza', ackNonza)
+        }, 10)
+        return Promise.resolve()
+      })
+
+      const resultPromise = xmppClient.verifyConnection()
+      await vi.advanceTimersByTimeAsync(100)
+      await resultPromise
 
       // Should set to 'verifying' first, then restore to 'online'
       expect(mockStores.connection.setStatus).toHaveBeenNthCalledWith(1, 'verifying')
@@ -966,6 +989,15 @@ describe('XMPPClient', () => {
     })
 
     it('should return false and trigger reconnect on dead socket', async () => {
+      // Add SM to the existing mock client
+      mockXmppClientInstance.streamManagement = {
+        id: 'sm-123',
+        inbound: 5,
+        outbound: 0,
+        enabled: true,
+        on: vi.fn(),
+      }
+
       const connectPromise = xmppClient.connect({
         jid: 'user@example.com',
         password: 'password',
@@ -986,6 +1018,44 @@ describe('XMPPClient', () => {
 
       expect(result).toBe(false)
       // Should set to 'verifying' first, then to 'reconnecting' on dead socket
+      expect(mockStores.connection.setStatus).toHaveBeenNthCalledWith(1, 'verifying')
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
+    })
+
+    it('should return false and trigger reconnect on SM ack timeout', async () => {
+      // Add SM to the existing mock client
+      mockXmppClientInstance.streamManagement = {
+        id: 'sm-123',
+        inbound: 5,
+        outbound: 0,
+        enabled: true,
+        on: vi.fn(),
+      }
+
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'password',
+        server: 'wss://example.com/ws',
+      })
+
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      // Simulate being online
+      mockStores.connection.getStatus.mockReturnValue('online')
+      mockStores.connection.setStatus.mockClear()
+      // Don't simulate any ack response - let it timeout
+
+      // Use a shorter timeout for the test (100ms)
+      const resultPromise = xmppClient.verifyConnection(100)
+
+      // Run all pending timers to completion
+      await vi.runAllTimersAsync()
+
+      const result = await resultPromise
+
+      expect(result).toBe(false)
+      // Should set to 'verifying' first, then to 'reconnecting' on timeout
       expect(mockStores.connection.setStatus).toHaveBeenNthCalledWith(1, 'verifying')
       expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
     })

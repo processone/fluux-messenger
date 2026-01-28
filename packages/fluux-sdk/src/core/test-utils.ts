@@ -64,6 +64,13 @@ export const createMockXmppClient = () => {
       }
       return this
     }),
+    off: vi.fn((event: string, handler: Function) => {
+      if (handlers[event]) {
+        const idx = handlers[event].indexOf(handler)
+        if (idx > -1) handlers[event].splice(idx, 1)
+      }
+      return this
+    }),
     start: vi.fn().mockResolvedValue(undefined),
     stop: vi.fn().mockResolvedValue(undefined),
     send: vi.fn().mockResolvedValue(undefined),

@@ -41,8 +41,8 @@ export function useWakeDetector() {
   // Get client from context for methods
   const { client } = useXMPP()
   const notifySystemState = useCallback(
-    async (state: 'awake' | 'sleeping' | 'visible' | 'hidden') => {
-      await client.notifySystemState(state)
+    async (state: 'awake' | 'sleeping' | 'visible' | 'hidden', sleepDurationMs?: number) => {
+      await client.notifySystemState(state, sleepDurationMs)
     },
     [client]
   )
@@ -64,8 +64,9 @@ export function useWakeDetector() {
         console.log(`[WakeDetector] Detected wake from sleep (${gapSeconds}s gap)`)
 
         try {
-          // Signal SDK - it handles connection verification and reconnect
-          await notifySystemState('awake')
+          // Signal SDK with sleep duration - it handles connection verification
+          // and reconnect. If duration > SM timeout, SDK skips verification.
+          await notifySystemState('awake', gapSeconds * 1000)
         } catch (err) {
           console.error('[WakeDetector] Error handling wake:', err)
         } finally {
@@ -111,7 +112,8 @@ export function useWakeDetector() {
 
       try {
         console.log(`[WakeDetector] Page visible after ${Math.round(hiddenDuration / 1000)}s`)
-        // Signal SDK - it handles connection verification and reconnect
+        // Signal SDK - don't pass hiddenDuration since it measures tab visibility,
+        // not socket inactivity. The time-gap detector handles actual sleep gaps.
         await notifySystemState('visible')
       } catch (err) {
         console.error('[WakeDetector] Error handling visibility change:', err)

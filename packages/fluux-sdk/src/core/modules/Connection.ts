@@ -12,6 +12,10 @@ const INITIAL_RECONNECT_DELAY = 1000  // 1 second
 const MAX_RECONNECT_DELAY = 120000    // 2 minutes
 const RECONNECT_MULTIPLIER = 2
 
+// Stream Management session timeout (server-side, typically 10 minutes)
+// If we've been asleep longer than this, the SM session is definitely dead
+const SM_SESSION_TIMEOUT_MS = 10 * 60 * 1000  // 10 minutes
+
 // Dev-only error logging (checks Vite dev mode, excludes test mode)
 const isDev = (() => {
   try {
@@ -442,11 +446,13 @@ export class Connection extends BaseModule {
   }
 
   /**
-   * Verify the connection is alive by sending a ping.
+   * Verify the connection is alive by sending a ping and waiting for response.
    * Call this after wake from sleep or long inactivity to check connection health.
    * Returns true if connection is healthy, false if dead/reconnecting.
+   *
+   * @param timeoutMs - Maximum time to wait for response (default: 10 seconds)
    */
-  async verifyConnection(): Promise<boolean> {
+  async verifyConnection(timeoutMs = 10000): Promise<boolean> {
     if (!this.xmpp) return false
 
     // Set status to 'verifying' to show we're checking connection health
@@ -459,16 +465,38 @@ export class Connection extends BaseModule {
       // Send a Stream Management request (<r/>) if available, otherwise a ping
       const sm = this.xmpp.streamManagement as any
       if (sm?.enabled) {
-        // SM request - server should respond with <a/>
-        await this.xmpp.send(xml('r', { xmlns: 'urn:xmpp:sm:3' }))
+        // SM request - wait for <a/> acknowledgment with timeout
+        const ackReceived = await this.waitForSmAck(timeoutMs)
+        if (!ackReceived) {
+          // Timeout waiting for ack - connection is dead
+          this.stores.console.addEvent('Verification timed out waiting for SM ack', 'connection')
+          this.handleDeadSocket()
+          return false
+        }
       } else {
-        // Fallback: send a ping IQ
-        const ping = xml(
-          'iq',
-          { type: 'get', id: `ping_${Date.now()}` },
-          xml('ping', { xmlns: 'urn:xmpp:ping' })
-        )
-        await this.xmpp.send(ping)
+        // Fallback: send a ping IQ and wait for response
+        const iqCaller = (this.xmpp as any).iqCaller
+        if (iqCaller) {
+          const ping = xml(
+            'iq',
+            { type: 'get', id: `ping_${Date.now()}`, to: getDomain(this.credentials?.jid || '') },
+            xml('ping', { xmlns: NS_PING })
+          )
+          await Promise.race([
+            iqCaller.request(ping),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Ping timeout')), timeoutMs)
+            ),
+          ])
+        } else {
+          // No iqCaller available - just send and hope for the best
+          const ping = xml(
+            'iq',
+            { type: 'get', id: `ping_${Date.now()}` },
+            xml('ping', { xmlns: NS_PING })
+          )
+          await this.xmpp.send(ping)
+        }
       }
 
       // Connection verified - restore to online
@@ -478,11 +506,61 @@ export class Connection extends BaseModule {
       return true
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err)
-      if (this.isDeadSocketError(errorMessage)) {
+      if (this.isDeadSocketError(errorMessage) || errorMessage.includes('timeout')) {
         this.handleDeadSocket()
       }
       return false
     }
+  }
+
+  /**
+   * Wait for a Stream Management acknowledgment (<a/>) with timeout.
+   * @internal
+   */
+  private waitForSmAck(timeoutMs: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      if (!this.xmpp) {
+        resolve(false)
+        return
+      }
+
+      let resolved = false
+
+      // Cleanup helper
+      const cleanup = (timeoutId: ReturnType<typeof setTimeout>) => {
+        clearTimeout(timeoutId)
+        ;(this.xmpp as any)?.off?.('nonza', handleNonza)
+      }
+
+      // Listen for <a/> nonza - defined as a hoisted function for cleanup reference
+      const handleNonza = (nonza: Element) => {
+        if (nonza.is('a', 'urn:xmpp:sm:3') && !resolved) {
+          resolved = true
+          cleanup(timeoutId)
+          resolve(true)
+        }
+      }
+
+      ;(this.xmpp as any)?.on?.('nonza', handleNonza)
+
+      // Timeout - must be set up before send() to be in scope for cleanup
+      const timeoutId = setTimeout(() => {
+        if (!resolved) {
+          resolved = true
+          ;(this.xmpp as any)?.off?.('nonza', handleNonza)
+          resolve(false)
+        }
+      }, timeoutMs)
+
+      // Send <r/> request
+      this.xmpp.send(xml('r', { xmlns: 'urn:xmpp:sm:3' })).catch(() => {
+        if (!resolved) {
+          resolved = true
+          cleanup(timeoutId)
+          resolve(false)
+        }
+      })
+    })
   }
 
   /**
@@ -514,11 +592,14 @@ export class Connection extends BaseModule {
    *   - 'sleeping': System is going to sleep. SDK may gracefully disconnect.
    *   - 'visible': App became visible/foreground. SDK verifies connection after long hide.
    *   - 'hidden': App went to background. SDK may reduce keepalive frequency.
+   * @param sleepDurationMs - Optional duration of sleep/inactivity in milliseconds.
+   *   If provided and exceeds SM session timeout (~10 min), skips verification and
+   *   immediately triggers reconnect (the SM session is definitely expired).
    *
    * @example
    * ```typescript
-   * // App detects wake from sleep
-   * client.notifySystemState('awake')
+   * // App detects wake from sleep with duration
+   * client.notifySystemState('awake', sleepGapMs)
    *
    * // App visibility changed
    * document.addEventListener('visibilitychange', () => {
@@ -526,7 +607,10 @@ export class Connection extends BaseModule {
    * })
    * ```
    */
-  async notifySystemState(state: 'awake' | 'sleeping' | 'visible' | 'hidden'): Promise<void> {
+  async notifySystemState(
+    state: 'awake' | 'sleeping' | 'visible' | 'hidden',
+    sleepDurationMs?: number
+  ): Promise<void> {
     const currentStatus = this.stores.connection.getStatus()
 
     switch (state) {
@@ -534,6 +618,18 @@ export class Connection extends BaseModule {
       case 'visible':
         // Verify connection health after wake or becoming visible
         if (currentStatus === 'online') {
+          // If sleep duration exceeds SM timeout, the session is definitely dead
+          // Skip verification and immediately trigger reconnect to save time
+          if (sleepDurationMs && sleepDurationMs > SM_SESSION_TIMEOUT_MS) {
+            const sleepSecs = Math.round(sleepDurationMs / 1000)
+            this.stores.console.addEvent(
+              `System state: ${state}, sleep duration ${sleepSecs}s exceeds SM timeout - reconnecting immediately`,
+              'connection'
+            )
+            this.handleDeadSocket()
+            return
+          }
+
           this.stores.console.addEvent(`System state: ${state}, verifying connection`, 'connection')
           const isHealthy = await this.verifyConnection()
           if (!isHealthy) {
