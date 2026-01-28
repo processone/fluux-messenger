@@ -67,7 +67,7 @@ function getDeviceIcon(clientName: string) {
 export function UserInfoPopover({ contact, jid, role, affiliation, children, className = '' }: UserInfoPopoverProps) {
   const { t } = useTranslation()
   const [isOpen, setIsOpen] = useState(false)
-  const [position, setPosition] = useState({ x: 0, y: 0 })
+  const [position, setPosition] = useState<{ x: number; top?: number; bottom?: number }>({ x: 0 })
   const triggerRef = useRef<HTMLDivElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
 
@@ -106,10 +106,15 @@ export function UserInfoPopover({ contact, jid, role, affiliation, children, cla
       const spaceBelow = maxBottom - rect.bottom - 8
       const positionAbove = spaceBelow < popoverHeight && rect.top > popoverHeight
 
-      setPosition({
-        x: Math.min(rect.left, window.innerWidth - 250), // Keep within viewport
-        y: positionAbove ? rect.top - popoverHeight - 8 : rect.bottom + 8,
-      })
+      const x = Math.min(rect.left, window.innerWidth - 250) // Keep within viewport
+
+      if (positionAbove) {
+        // Position above: anchor bottom of popover to top of trigger
+        setPosition({ x, bottom: window.innerHeight - rect.top + 8 })
+      } else {
+        // Position below: anchor top of popover to bottom of trigger
+        setPosition({ x, top: rect.bottom + 8 })
+      }
     }
     setIsOpen(true)
   }
@@ -140,7 +145,7 @@ export function UserInfoPopover({ contact, jid, role, affiliation, children, cla
         <div
           ref={popoverRef}
           className="fixed bg-fluux-sidebar rounded-lg shadow-xl border border-fluux-hover p-3 z-50 min-w-[200px] max-w-[280px]"
-          style={{ left: position.x, top: position.y }}
+          style={{ left: position.x, top: position.top, bottom: position.bottom }}
         >
           {/* JID */}
           {displayJid && (
