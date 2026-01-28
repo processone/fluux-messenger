@@ -65,4 +65,10 @@ export interface BaseMessage {
   attachment?: FileAttachment
   /** XEP-0422 + OGP: Link preview metadata for URLs in message */
   linkPreview?: LinkPreview
+  /**
+   * XEP-0334: Message Processing Hint - do not store this message.
+   * When true, the message should not be persisted to local cache or server archives.
+   * Automatically set for messages in Quick Chat (transient) rooms.
+   */
+  noStore?: boolean
 }

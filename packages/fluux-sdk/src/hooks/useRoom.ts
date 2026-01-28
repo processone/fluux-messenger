@@ -377,8 +377,9 @@ export function useRoom() {
         getActiveId: () => roomStore.getState().activeRoomJid,
         isValidTarget: (id) => {
           // Room just needs to exist - MAM queries don't require being joined
+          // Quick Chat rooms don't persist history, so skip MAM for them
           const room = roomStore.getState().rooms.get(id)
-          return !!room
+          return !!room && !room.isQuickChat
         },
         getMAMState: (id) => roomStore.getState().getRoomMAMQueryState(id),
         setMAMLoading: (id, loading) => roomStore.getState().setRoomMAMLoading(id, loading),

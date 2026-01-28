@@ -28,6 +28,22 @@ Object.defineProperty(globalThis, 'localStorage', {
   writable: true,
 })
 
+// Mock messageCache to verify IndexedDB operations
+vi.mock('../utils/messageCache', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/messageCache')>()
+  return {
+    ...actual,
+    saveRoomMessage: vi.fn().mockResolvedValue(undefined),
+    saveRoomMessages: vi.fn().mockResolvedValue(undefined),
+    getRoomMessages: vi.fn().mockResolvedValue([]),
+    updateRoomMessage: vi.fn().mockResolvedValue(undefined),
+    deleteRoomMessages: vi.fn().mockResolvedValue(undefined),
+  }
+})
+
+// Import the mocked module for assertions
+import * as messageCache from '../utils/messageCache'
+
 // Helper to create test rooms
 function createRoom(
   jid: string,
@@ -87,6 +103,7 @@ describe('roomStore', () => {
       drafts: new Map(),
       mamQueryStates: new Map(),
     })
+    vi.clearAllMocks()
   })
 
   describe('addRoom', () => {
@@ -787,6 +804,60 @@ describe('roomStore', () => {
 
       const room = roomStore.getState().rooms.get('test@conference.example.com')
       expect(room?.lastReadAt).toEqual(msgTimestamp) // Updated to message time
+    })
+
+    it('should save message to IndexedDB when noStore is false', () => {
+      roomStore.getState().addRoom(createRoom('test@conference.example.com'))
+      const message = createMessage('msg1', 'test@conference.example.com', 'alice', 'Hello!')
+
+      roomStore.getState().addMessage('test@conference.example.com', message)
+
+      expect(messageCache.saveRoomMessage).toHaveBeenCalled()
+    })
+
+    it('should not save message to IndexedDB when noStore is true (XEP-0334)', () => {
+      roomStore.getState().addRoom(createRoom('test@conference.example.com'))
+      const message = { ...createMessage('msg1', 'test@conference.example.com', 'alice', 'Ephemeral'), noStore: true }
+
+      roomStore.getState().addMessage('test@conference.example.com', message)
+
+      expect(messageCache.saveRoomMessage).not.toHaveBeenCalled()
+    })
+
+    it('should set noStore=true on messages for Quick Chat rooms', () => {
+      roomStore.getState().addRoom(createRoom('quickchat@conference.example.com', { isQuickChat: true }))
+      const message = createMessage('msg1', 'quickchat@conference.example.com', 'alice', 'Quick chat message')
+
+      roomStore.getState().addMessage('quickchat@conference.example.com', message)
+
+      // Message should not be saved to IndexedDB
+      expect(messageCache.saveRoomMessage).not.toHaveBeenCalled()
+
+      // But message should still be in memory with noStore flag
+      const room = roomStore.getState().rooms.get('quickchat@conference.example.com')
+      expect(room?.messages.length).toBe(1)
+      expect(room?.messages[0].noStore).toBe(true)
+    })
+
+    it('should still add noStore message to in-memory store', () => {
+      roomStore.getState().addRoom(createRoom('test@conference.example.com'))
+      const message = { ...createMessage('msg1', 'test@conference.example.com', 'alice', 'Ephemeral'), noStore: true }
+
+      roomStore.getState().addMessage('test@conference.example.com', message)
+
+      const room = roomStore.getState().rooms.get('test@conference.example.com')
+      expect(room?.messages.length).toBe(1)
+      expect(room?.messages[0].body).toBe('Ephemeral')
+    })
+
+    it('should still increment unreadCount for noStore messages', () => {
+      roomStore.getState().addRoom(createRoom('test@conference.example.com'))
+      const message = { ...createMessage('msg1', 'test@conference.example.com', 'alice', 'Ephemeral'), noStore: true }
+
+      roomStore.getState().addMessage('test@conference.example.com', message)
+
+      const room = roomStore.getState().rooms.get('test@conference.example.com')
+      expect(room?.unreadCount).toBe(1)
     })
   })
 

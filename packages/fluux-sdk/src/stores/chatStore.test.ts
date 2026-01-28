@@ -430,6 +430,45 @@ describe('chatStore', () => {
       const conv = chatStore.getState().conversations.get('alice@example.com')
       expect(conv?.unreadCount).toBe(1) // Only incremented once
     })
+
+    it('should save message to IndexedDB when noStore is false', () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      const msg = createMessage('alice@example.com', 'Hello!')
+
+      chatStore.getState().addMessage(msg)
+
+      expect(messageCache.saveMessage).toHaveBeenCalledWith(msg)
+    })
+
+    it('should not save message to IndexedDB when noStore is true (XEP-0334)', () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      const msg = { ...createMessage('alice@example.com', 'Ephemeral message'), noStore: true }
+
+      chatStore.getState().addMessage(msg)
+
+      expect(messageCache.saveMessage).not.toHaveBeenCalled()
+    })
+
+    it('should still add noStore message to in-memory store', () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      const msg = { ...createMessage('alice@example.com', 'Ephemeral'), noStore: true }
+
+      chatStore.getState().addMessage(msg)
+
+      const messages = chatStore.getState().messages.get('alice@example.com')
+      expect(messages?.length).toBe(1)
+      expect(messages?.[0].body).toBe('Ephemeral')
+    })
+
+    it('should still increment unreadCount for noStore messages', () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      const msg = { ...createMessage('alice@example.com', 'Ephemeral', false), noStore: true }
+
+      chatStore.getState().addMessage(msg)
+
+      const conv = chatStore.getState().conversations.get('alice@example.com')
+      expect(conv?.unreadCount).toBe(1)
+    })
   })
 
   describe('markAsRead', () => {

@@ -570,9 +570,18 @@ export const roomStore = createStore<RoomState>()(
   addMessage: (roomJid, message, options = {}) => {
     const { incrementUnread = true, incrementMentions = false } = options
 
-    // Save to IndexedDB (non-blocking, fire-and-forget)
-    // Note: roomJid is already part of the RoomMessage object
-    void messageCache.saveRoomMessage(message)
+    // Get room to check if it's a Quick Chat (transient history)
+    const room = get().rooms.get(roomJid)
+
+    // XEP-0334: Set noStore hint for Quick Chat room messages
+    const messageToAdd = room?.isQuickChat
+      ? { ...message, noStore: true }
+      : message
+
+    // Save to IndexedDB only if message doesn't have noStore hint
+    if (!messageToAdd.noStore) {
+      void messageCache.saveRoomMessage(messageToAdd)
+    }
 
     set((state) => {
       const newRooms = new Map(state.rooms)
@@ -581,12 +590,12 @@ export const roomStore = createStore<RoomState>()(
 
       // XEP-0359: Deduplicate messages using shared utility
       const existingKeys = buildMessageKeySet(existing.messages, getRoomMessageKeys)
-      if (isMessageDuplicate(message, existingKeys, getRoomMessageKeys)) {
+      if (isMessageDuplicate(messageToAdd, existingKeys, getRoomMessageKeys)) {
         return state // Don't add duplicate message
       }
 
       // Add message and trim to max count (older ones remain in IndexedDB)
-      const newMessages = trimMessages([...existing.messages, message], MAX_MESSAGES_PER_ROOM)
+      const newMessages = trimMessages([...existing.messages, messageToAdd], MAX_MESSAGES_PER_ROOM)
 
       // Only increment counters if room is not active, message is not outgoing,
       // and message is not delayed (historical messages from join shouldn't increment unread)
@@ -597,7 +606,7 @@ export const roomStore = createStore<RoomState>()(
       const userSeesMessage = isActive && windowVisible
 
       // Increment unread if user doesn't see message (not just if not active)
-      const shouldIncrement = !userSeesMessage && !message.isOutgoing && !message.isDelayed
+      const shouldIncrement = !userSeesMessage && !messageToAdd.isOutgoing && !messageToAdd.isDelayed
 
       const newUnreadCount = shouldIncrement && incrementUnread
         ? existing.unreadCount + 1
@@ -613,8 +622,8 @@ export const roomStore = createStore<RoomState>()(
       let newLastReadAt: Date | undefined
       let newFirstNewMessageId = existing.firstNewMessageId
       if (userSeesMessage) {
-        newLastReadAt = message.timestamp
-      } else if (existing.lastReadAt === undefined && !message.isOutgoing) {
+        newLastReadAt = messageToAdd.timestamp
+      } else if (existing.lastReadAt === undefined && !messageToAdd.isOutgoing) {
         // First unread message in this room - set marker to show it as new
         newLastReadAt = new Date(0)
       } else {
@@ -624,8 +633,8 @@ export const roomStore = createStore<RoomState>()(
       // Set firstNewMessageId for the new message marker when:
       // - Window is not visible AND room is active AND incoming message (not delayed)
       // - This ensures marker is shown when user returns to visible window
-      if (isActive && !windowVisible && !message.isOutgoing && !message.isDelayed && !existing.firstNewMessageId) {
-        newFirstNewMessageId = message.id
+      if (isActive && !windowVisible && !messageToAdd.isOutgoing && !messageToAdd.isDelayed && !existing.firstNewMessageId) {
+        newFirstNewMessageId = messageToAdd.id
       }
 
       // Get the last message for both the combined room and metadata
@@ -1284,8 +1293,11 @@ export const roomStore = createStore<RoomState>()(
         return { mamQueryStates: newStates }
       }
 
-      // Save new messages to IndexedDB in a single transaction (faster, more reliable)
-      void messageCache.saveRoomMessages(newFromMAM)
+      // XEP-0334: Save only messages without noStore hint to IndexedDB
+      const persistableMessages = newFromMAM.filter(msg => !msg.noStore)
+      if (persistableMessages.length > 0) {
+        void messageCache.saveRoomMessages(persistableMessages)
+      }
 
       // Get the last message from merged messages for sidebar preview
       const lastMessage = merged.length > 0 ? merged[merged.length - 1] : room.lastMessage

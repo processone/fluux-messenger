@@ -500,8 +500,10 @@ export const chatStore = createStore<ChatState>()(
             return state // Don't add duplicate message
           }
 
-          // Save to IndexedDB asynchronously (non-blocking)
-          void messageCache.saveMessage(msg)
+          // XEP-0334: Save to IndexedDB only if message doesn't have noStore hint
+          if (!msg.noStore) {
+            void messageCache.saveMessage(msg)
+          }
 
           const newMessages = new Map(state.messages)
           newMessages.set(msg.conversationId, [...convMessages, msg])
@@ -875,8 +877,11 @@ export const chatStore = createStore<ChatState>()(
             return { mamQueryStates: newStates }
           }
 
-          // Save new messages to IndexedDB (permanent storage)
-          void messageCache.saveMessages(newMessages)
+          // XEP-0334: Save only messages without noStore hint to IndexedDB
+          const persistableMessages = newMessages.filter(msg => !msg.noStore)
+          if (persistableMessages.length > 0) {
+            void messageCache.saveMessages(persistableMessages)
+          }
 
           // Update messages map (only when we have new messages)
           const newMessagesMap = new Map(state.messages)

@@ -272,6 +272,12 @@ export function setupRoomSideEffects(
         return
       }
 
+      // Quick Chat rooms don't persist history - skip cache loading
+      if (room.isQuickChat) {
+        if (debug) console.log('[SideEffects] Room: Skipping cache for Quick Chat')
+        return
+      }
+
       // Already loaded for this room
       if (cacheLoaded.has(activeRoomJid)) {
         if (debug) console.log('[SideEffects] Room: Cache already loaded')
