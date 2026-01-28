@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { useIsMobileWeb } from '../hooks/useIsMobileWeb'
 
 export type TooltipPosition = 'top' | 'bottom' | 'left' | 'right'
 
@@ -18,6 +19,8 @@ interface TooltipProps {
   disabled?: boolean
   /** Max width of the tooltip (default: 250px) */
   maxWidth?: number
+  /** Whether to show tooltip on mobile devices (default: false - tooltips are intrusive on touch) */
+  showOnMobile?: boolean
 }
 
 /**
@@ -48,7 +51,10 @@ export function Tooltip({
   className = '',
   disabled = false,
   maxWidth = 250,
+  showOnMobile = false,
 }: TooltipProps) {
+  const isMobile = useIsMobileWeb()
+  const effectiveDisabled = disabled || (isMobile && !showOnMobile)
   const [isVisible, setIsVisible] = useState(false)
   const [coords, setCoords] = useState({ x: 0, y: 0 })
   const [actualPosition, setActualPosition] = useState(position)
@@ -57,7 +63,7 @@ export function Tooltip({
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const showTooltip = () => {
-    if (disabled) return
+    if (effectiveDisabled) return
     timeoutRef.current = setTimeout(() => {
       setIsVisible(true)
     }, delay)
@@ -148,10 +154,10 @@ export function Tooltip({
 
   // Hide tooltip when disabled becomes true
   useEffect(() => {
-    if (disabled && isVisible) {
+    if (effectiveDisabled && isVisible) {
       hideTooltip()
     }
-  }, [disabled, isVisible])
+  }, [effectiveDisabled, isVisible])
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -221,14 +227,17 @@ export function SimpleTooltip({
   children,
   position = 'top',
   delay = 700,
+  showOnMobile = false,
 }: {
   content: string
   children: ReactNode
   position?: TooltipPosition
   delay?: number
+  /** Whether to show tooltip on mobile devices (default: false) */
+  showOnMobile?: boolean
 }) {
   return (
-    <Tooltip content={content} position={position} delay={delay}>
+    <Tooltip content={content} position={position} delay={delay} showOnMobile={showOnMobile}>
       {children}
     </Tooltip>
   )

@@ -92,6 +92,22 @@ class ResizeObserverMock {
 }
 globalThis.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver
 
+// Mock matchMedia for jsdom (not available by default)
+// Returns desktop (non-mobile) by default - tests can override in specific files
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: vi.fn().mockImplementation((query: string) => ({
+    matches: false, // Default to desktop/non-mobile
+    media: query,
+    onchange: null,
+    addListener: vi.fn(), // Deprecated
+    removeListener: vi.fn(), // Deprecated
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })),
+})
+
 // Provide default vanilla store mocks for @fluux/sdk
 // Tests that need specific store behavior should override these in their own vi.mock('@fluux/sdk')
 vi.mock('@fluux/sdk', async (importOriginal) => {
