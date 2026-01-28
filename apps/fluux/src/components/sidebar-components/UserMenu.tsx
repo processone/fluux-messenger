@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useClickOutside } from '@/hooks'
+import { useClickOutside, useIsMobileWeb } from '@/hooks'
 import { useModals } from '@/contexts'
 import { useConsole } from '@fluux/sdk'
 import { AboutModal } from '../AboutModal'
@@ -29,6 +29,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
   const { toggle: toggleConsole, isOpen: consoleOpen } = useConsole()
   const { actions: modalActions } = useModals()
+  const isMobile = useIsMobileWeb()
 
   // Close menu when clicking outside
   const closeMenu = useCallback(() => setIsOpen(false), [])
@@ -62,17 +63,19 @@ export function UserMenu({ onLogout }: UserMenuProps) {
 
         {isOpen && (
           <div className="absolute bottom-full right-0 mb-2 w-48 bg-fluux-bg rounded-lg shadow-xl border border-fluux-hover py-1 z-50">
-            {/* Console toggle */}
-            <button
-              onClick={() => {
-                toggleConsole()
-                setIsOpen(false)
-              }}
-              className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-white transition-colors"
-            >
-              <Terminal className="w-4 h-4" />
-              <span>{consoleOpen ? t('menu.hideConsole') : t('menu.showConsole')}</span>
-            </button>
+            {/* Console toggle - hidden on mobile */}
+            {!isMobile && (
+              <button
+                onClick={() => {
+                  toggleConsole()
+                  setIsOpen(false)
+                }}
+                className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-white transition-colors"
+              >
+                <Terminal className="w-4 h-4" />
+                <span>{consoleOpen ? t('menu.hideConsole') : t('menu.showConsole')}</span>
+              </button>
+            )}
 
             {/* What's New */}
             <button
@@ -86,17 +89,19 @@ export function UserMenu({ onLogout }: UserMenuProps) {
               <span>{t('menu.whatsNew')}</span>
             </button>
 
-            {/* Keyboard Shortcuts */}
-            <button
-              onClick={() => {
-                modalActions.open('shortcutHelp')
-                setIsOpen(false)
-              }}
-              className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-white transition-colors"
-            >
-              <Keyboard className="w-4 h-4" />
-              <span>{t('menu.keyboardShortcuts')}</span>
-            </button>
+            {/* Keyboard Shortcuts - hidden on mobile */}
+            {!isMobile && (
+              <button
+                onClick={() => {
+                  modalActions.open('shortcutHelp')
+                  setIsOpen(false)
+                }}
+                className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-white transition-colors"
+              >
+                <Keyboard className="w-4 h-4" />
+                <span>{t('menu.keyboardShortcuts')}</span>
+              </button>
+            )}
 
             {/* Report an issue */}
             <a
