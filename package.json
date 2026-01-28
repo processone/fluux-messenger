@@ -2,7 +2,7 @@
   "name": "fluux",
   "private": true,
   "license": "AGPL-3.0-or-later",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "type": "module",
   "workspaces": [
     "packages/*",
@@ -23,7 +23,7 @@
     "tauri:dev": "npm run build:sdk && npm run tauri:dev -w @xmpp/fluux",
     "tauri:build": "npm run build:sdk && npm run tauri:build -w @xmpp/fluux",
     "release:prepare": "node scripts/prepare-release.js",
-    "docs": "npm run docs -w @fluux/sdk",
+    "docs": "npm run ts-docs -w @fluux/sdk",
     "docs:watch": "npm run docs:watch -w @fluux/sdk"
   },
   "devDependencies": {

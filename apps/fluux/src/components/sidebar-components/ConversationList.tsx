@@ -342,6 +342,7 @@ function ConversationContextMenu({
   const { t } = useTranslation()
   const { targetItem, close } = useSidebarListMenu<Conversation>()
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
 
   const handleArchive = () => {
     if (targetItem) {
@@ -358,14 +359,18 @@ function ConversationContextMenu({
   }
 
   const handleDeleteClick = () => {
-    close()
-    setShowDeleteConfirm(true)
+    if (targetItem) {
+      setDeleteTargetId(targetItem.id)
+      close()
+      setShowDeleteConfirm(true)
+    }
   }
 
   const handleDeleteConfirm = () => {
-    if (targetItem) {
+    if (deleteTargetId) {
       setShowDeleteConfirm(false)
-      onDelete(targetItem.id)
+      onDelete(deleteTargetId)
+      setDeleteTargetId(null)
     }
   }
 
@@ -415,7 +420,10 @@ function ConversationContextMenu({
             </p>
             <div className="flex gap-2 justify-end">
               <button
-                onClick={() => setShowDeleteConfirm(false)}
+                onClick={() => {
+                  setShowDeleteConfirm(false)
+                  setDeleteTargetId(null)
+                }}
                 className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active
                            rounded-lg transition-colors"
               >
