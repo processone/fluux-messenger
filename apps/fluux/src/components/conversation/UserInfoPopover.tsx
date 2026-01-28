@@ -22,11 +22,29 @@ export interface UserInfoPopoverProps {
   className?: string
 }
 
+// Well-known XMPP clients categorized by platform
+const MOBILE_CLIENTS = ['conversations', 'siskin', 'monal', 'beagle', 'chatsecure', 'yaxim', 'blabber', 'cheogram']
+const DESKTOP_CLIENTS = ['dino', 'gajim', 'psi', 'swift', 'adium', 'pidgin', 'kopete', 'tkabber', 'profanity', 'mcabber']
+const WEB_CLIENTS = ['movim', 'converse', 'jsxc', 'xmpp-web', 'libervia', 'salut', 'fluux']
+
 /**
  * Get device icon based on client name heuristics
  */
 function getDeviceIcon(clientName: string) {
   const name = clientName.toLowerCase()
+
+  // Check well-known clients first
+  if (MOBILE_CLIENTS.some(c => name.includes(c))) {
+    return <Smartphone className="w-3 h-3" />
+  }
+  if (DESKTOP_CLIENTS.some(c => name.includes(c))) {
+    return <Monitor className="w-3 h-3" />
+  }
+  if (WEB_CLIENTS.some(c => name.includes(c))) {
+    return <Globe className="w-3 h-3" />
+  }
+
+  // Fall back to keyword-based detection
   if (name.includes('mobile') || name.includes('android') || name.includes('ios') || name.includes('iphone')) {
     return <Smartphone className="w-3 h-3" />
   }
