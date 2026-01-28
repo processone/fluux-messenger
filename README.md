@@ -15,7 +15,7 @@
 
 </div>
 
-## 📑 Table of Contents
+## Table of Contents
 
 - [Screenshots](#-screenshots)
 - [Features](#-features)
@@ -101,6 +101,12 @@ We have many ideas and exciting additions planned for Fluux Messenger! We welcom
 ### Which XMPP servers are compatible with Fluux Messenger?
 
 We aim to create an XMPP client that respects standards, but currently the project has been tested **exclusively with [ejabberd](https://github.com/processone/ejabberd)**. We're eager to receive feedback on compatibility with other servers. If you test Fluux Messenger with a different XMPP server, please share your experience in the [Discussions](https://github.com/processone/fluux-messenger/discussions)!
+
+### Will there be other installations methods? Can I run it on my own server?
+
+Yes. It is already technically possible to host Fluux Messenger on your own web server. After running a quick `npm ci` in the appropriate directory and serving the correct build folder, you can access it as a web application. This also makes it possible to run it as a PWA, including on mobile devices, directly from your own server. Documentation for this setup is still missing and will be added later.
+
+Looking ahead, we also plan to make Fluux Messenger available on F-Droid, and possibly on the Google Play Store as well.
 
 ## Contributing
 
