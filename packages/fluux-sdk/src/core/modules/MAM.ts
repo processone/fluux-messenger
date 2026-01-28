@@ -703,6 +703,9 @@ export class MAM extends BaseModule {
     onMessage: (forwarded: Element, messageEl: Element) => void
   ): (stanza: Element) => void {
     return (stanza: Element) => {
+      // Skip error stanzas - server may return error with stale MAM result inside
+      if (stanza.attrs.type === 'error') return
+
       const result = stanza.getChild('result', NS_MAM)
       if (!result || result.attrs.queryid !== queryId) return
 
@@ -878,6 +881,12 @@ export class MAM extends BaseModule {
     const from = messageEl.attrs.from
     const body = messageEl.getChildText('body')
 
+    // Skip modification messages (retractions, corrections, reactions)
+    // These are handled separately by detectAndCollectModification()
+    if (messageEl.getChild('retract', NS_RETRACT)) return null
+    if (messageEl.getChild('replace', NS_CORRECTION)) return null
+    if (messageEl.getChild('reactions', NS_REACTIONS)) return null
+
     // Accept messages with body OR OOB attachment (file-only messages have no body)
     if (!from) return null
     if (!body && !messageEl.getChild('x', NS_OOB)) return null
@@ -912,6 +921,12 @@ export class MAM extends BaseModule {
 
     const from = messageEl.attrs.from
     const body = messageEl.getChildText('body')
+
+    // Skip modification messages (retractions, corrections, reactions)
+    // These are handled separately by detectAndCollectModification()
+    if (messageEl.getChild('retract', NS_RETRACT)) return null
+    if (messageEl.getChild('replace', NS_CORRECTION)) return null
+    if (messageEl.getChild('reactions', NS_REACTIONS)) return null
 
     // Accept messages with body OR OOB attachment (file-only messages have no body)
     if (!from) return null
