@@ -7,7 +7,7 @@
 import { useState, memo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { format } from 'date-fns'
-import type { BaseMessage, MentionReference, Contact } from '@fluux/sdk'
+import type { BaseMessage, MentionReference, Contact, RoomRole, RoomAffiliation } from '@fluux/sdk'
 import { Avatar } from '../Avatar'
 import { Tooltip } from '../Tooltip'
 import { MessageToolbar } from './MessageToolbar'
@@ -48,6 +48,10 @@ export interface MessageBubbleProps {
   senderJid?: string
   /** Contact object for showing connected devices in popover */
   senderContact?: Contact
+  /** Room role for MUC occupants */
+  senderRole?: RoomRole
+  /** Room affiliation for MUC occupants */
+  senderAffiliation?: RoomAffiliation
 
   // Nick header extras (for room moderator badge, hats)
   nickExtras?: ReactNode
@@ -122,6 +126,8 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps): bool
   if (prev.avatarPresence !== next.avatarPresence) return false
   if (prev.senderJid !== next.senderJid) return false
   if (prev.senderContact !== next.senderContact) return false
+  if (prev.senderRole !== next.senderRole) return false
+  if (prev.senderAffiliation !== next.senderAffiliation) return false
 
   // Reply context - compare by reference (parent should memoize)
   if (prev.replyContext !== next.replyContext) {
@@ -164,6 +170,8 @@ export const MessageBubble = memo(function MessageBubble({
   avatarPresence,
   senderJid,
   senderContact,
+  senderRole,
+  senderAffiliation,
   nickExtras,
   myReactions,
   onReaction,
@@ -215,7 +223,7 @@ export const MessageBubble = memo(function MessageBubble({
             {format(message.timestamp, 'HH:mm')}
           </span>
         ) : showAvatar ? (
-          <UserInfoPopover contact={senderContact} jid={senderJid}>
+          <UserInfoPopover contact={senderContact} jid={senderJid} role={senderRole} affiliation={senderAffiliation}>
             <div className="select-none">
               <Avatar
                 identifier={avatarIdentifier}
@@ -265,7 +273,7 @@ export const MessageBubble = memo(function MessageBubble({
         {/* Nick header - hidden for /me action messages (nick is shown inline) */}
         {showAvatar && !isActionMessage(message.body) && (
           <div className="flex items-baseline gap-2 pb-1 flex-wrap">
-            <UserInfoPopover contact={senderContact} jid={senderJid}>
+            <UserInfoPopover contact={senderContact} jid={senderJid} role={senderRole} affiliation={senderAffiliation}>
               <span
                 className="font-medium"
                 style={{ color: senderColor }}

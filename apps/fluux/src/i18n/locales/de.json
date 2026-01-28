@@ -182,6 +182,10 @@
     "owner": "Eigentümer",
     "admin": "Admin",
     "member": "Mitglied",
+    "role": {
+      "moderator": "Moderator",
+      "visitor": "Besucher"
+    },
     "connections": "Verbindungen",
     "mod": "Mod",
     "notifyEveryone": "alle benachrichtigen",

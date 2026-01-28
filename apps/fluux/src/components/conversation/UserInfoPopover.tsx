@@ -6,16 +6,20 @@
 import { useState, useRef, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
-import type { Contact } from '@fluux/sdk'
+import type { Contact, RoomAffiliation, RoomRole } from '@fluux/sdk'
 import { useClickOutside } from '@/hooks'
 import { getTranslatedShowText } from '@/utils/presence'
-import { Monitor, Smartphone, Tablet, Globe, HelpCircle } from 'lucide-react'
+import { Monitor, Smartphone, Tablet, Globe, HelpCircle, Shield, Crown, UserCheck } from 'lucide-react'
 
 export interface UserInfoPopoverProps {
   /** The contact to show info for */
   contact?: Contact
   /** The JID to display (fallback if no contact) */
   jid?: string
+  /** Room role (for MUC occupants) */
+  role?: RoomRole
+  /** Room affiliation (for MUC occupants) */
+  affiliation?: RoomAffiliation
   /** Trigger element (avatar or name) */
   children: ReactNode
   /** Additional class for the trigger wrapper */
@@ -60,7 +64,7 @@ function getDeviceIcon(clientName: string) {
   return <HelpCircle className="w-3 h-3" />
 }
 
-export function UserInfoPopover({ contact, jid, children, className = '' }: UserInfoPopoverProps) {
+export function UserInfoPopover({ contact, jid, role, affiliation, children, className = '' }: UserInfoPopoverProps) {
   const { t } = useTranslation()
   const [isOpen, setIsOpen] = useState(false)
   const [position, setPosition] = useState({ x: 0, y: 0 })
@@ -121,6 +125,25 @@ export function UserInfoPopover({ contact, jid, children, className = '' }: User
           {displayJid && (
             <div className="text-xs text-fluux-muted mb-2 break-all font-mono">
               {displayJid}
+            </div>
+          )}
+
+          {/* Role & Affiliation (for room occupants) */}
+          {(role || affiliation) && (
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {affiliation && affiliation !== 'none' && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs rounded bg-fluux-hover text-fluux-text">
+                  {affiliation === 'owner' && <Crown className="w-3 h-3" />}
+                  {affiliation === 'admin' && <Shield className="w-3 h-3" />}
+                  {affiliation === 'member' && <UserCheck className="w-3 h-3" />}
+                  {t(`rooms.${affiliation}`)}
+                </span>
+              )}
+              {role && role !== 'none' && role !== 'participant' && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs rounded bg-fluux-hover text-fluux-text">
+                  {t(`rooms.role.${role}`)}
+                </span>
+              )}
             </div>
           )}
 
