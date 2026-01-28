@@ -588,9 +588,9 @@ export class Connection extends BaseModule {
    * appropriate protocol response internally.
    *
    * @param state - The system state change:
-   *   - 'awake': System woke from sleep. SDK verifies connection and reconnects if dead.
+   *   - 'awake': System woke from sleep (time-gap detected). SDK verifies connection and reconnects if dead.
    *   - 'sleeping': System is going to sleep. SDK may gracefully disconnect.
-   *   - 'visible': App became visible/foreground. SDK verifies connection after long hide.
+   *   - 'visible': App became visible/foreground. Only triggers reconnect if already reconnecting.
    *   - 'hidden': App went to background. SDK may reduce keepalive frequency.
    * @param sleepDurationMs - Optional duration of sleep/inactivity in milliseconds.
    *   If provided and exceeds SM session timeout (~10 min), skips verification and
@@ -615,8 +615,8 @@ export class Connection extends BaseModule {
 
     switch (state) {
       case 'awake':
-      case 'visible':
-        // Verify connection health after wake or becoming visible
+        // Verify connection health after wake from sleep (time-gap detected)
+        // This is the reliable indicator of potential socket death
         if (currentStatus === 'online') {
           // If sleep duration exceeds SM timeout, the session is definitely dead
           // Skip verification and immediately trigger reconnect to save time
@@ -638,6 +638,15 @@ export class Connection extends BaseModule {
         } else if (currentStatus === 'reconnecting') {
           // Trigger immediate reconnect if we were already reconnecting
           this.stores.console.addEvent(`System state: ${state}, triggering immediate reconnect`, 'connection')
+          this.triggerReconnect()
+        }
+        break
+
+      case 'visible':
+        // App became visible - don't verify connection (no indication of socket death)
+        // Only trigger reconnect if we were already in reconnecting state
+        if (currentStatus === 'reconnecting') {
+          this.stores.console.addEvent('System state: visible, triggering immediate reconnect', 'connection')
           this.triggerReconnect()
         }
         break
