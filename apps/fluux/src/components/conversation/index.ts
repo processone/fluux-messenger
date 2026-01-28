@@ -27,3 +27,6 @@ export { MessageList } from './MessageList'
 export type { MessageListProps } from './MessageList'
 
 export { useMessageListScroll } from './useMessageListScroll'
+
+export { UserInfoPopover } from './UserInfoPopover'
+export type { UserInfoPopoverProps } from './UserInfoPopover'

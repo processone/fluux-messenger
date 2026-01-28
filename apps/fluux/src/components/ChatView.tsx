@@ -2,10 +2,8 @@ import React, { useState, useRef, useEffect, useMemo, useCallback, memo, type Re
 import { useTranslation } from 'react-i18next'
 import { useChat, useRoster, usePresence, createMessageLookup, type Message, type Contact } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
-import { getTranslatedStatusText } from '@/utils/statusText'
 import { getConsistentTextColor } from './Avatar'
 import { useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft } from '@/hooks'
-import { getTranslatedShowText } from '@/utils/presence'
 import { Upload, Loader2 } from 'lucide-react'
 import { MessageBubble, MessageList as MessageListComponent, shouldShowAvatar, buildReplyContext } from './conversation'
 import { ChristmasAnimation } from './ChristmasAnimation'
@@ -546,8 +544,6 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
   onMouseEnter,
   onMouseLeave,
 }: ChatMessageBubbleProps) {
-  const { t } = useTranslation()
-
   // Use display name from roster, fall back to JID username
   // For outgoing messages, use own nickname if set
   const senderContact = contactsByJid.get(message.from.split('/')[0])
@@ -629,7 +625,8 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
       avatarIdentifier={message.from}
       avatarFallbackColor={senderColor}
       avatarPresence={message.isOutgoing ? ownPresence : senderContact?.presence}
-      avatarTooltip={getContactDevicesTooltip(senderContact, t)}
+      senderJid={message.isOutgoing ? myBareJid : message.from.split('/')[0]}
+      senderContact={message.isOutgoing ? undefined : senderContact}
       myReactions={myReactions}
       onReaction={handleReaction}
       getReactorName={getReactorName}
@@ -801,18 +798,3 @@ function MessageInput({
   )
 }
 
-// Generate tooltip text for contact's connected devices
- 
-function getContactDevicesTooltip(contact: Contact | undefined, t?: any): string | undefined {
-  if (!contact?.resources || contact.resources.size === 0) {
-    return contact && t ? getTranslatedStatusText(contact, t) : undefined
-  }
-
-  const lines: string[] = []
-  for (const [resource, presence] of contact.resources.entries()) {
-    const clientName = presence.client || resource || (t ? t('contacts.unknown') : 'Unknown')
-    const status = t ? getTranslatedShowText(presence.show, t) : presence.show || 'online'
-    lines.push(`${clientName}: ${status}`)
-  }
-  return lines.join('\n')
-}

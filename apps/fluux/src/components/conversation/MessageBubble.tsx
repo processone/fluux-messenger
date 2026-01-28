@@ -7,7 +7,7 @@
 import { useState, memo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { format } from 'date-fns'
-import type { BaseMessage, MentionReference } from '@fluux/sdk'
+import type { BaseMessage, MentionReference, Contact } from '@fluux/sdk'
 import { Avatar } from '../Avatar'
 import { Tooltip } from '../Tooltip'
 import { MessageToolbar } from './MessageToolbar'
@@ -16,6 +16,7 @@ import { MessageReactions } from './MessageReactions'
 import { scrollToMessage, isActionMessage } from './messageGrouping'
 import { MessageAttachments } from '../MessageAttachments'
 import { LinkPreviewCard } from '../LinkPreviewCard'
+import { UserInfoPopover } from './UserInfoPopover'
 
 export interface MessageBubbleProps {
   // Core message data (using BaseMessage interface)
@@ -43,7 +44,10 @@ export interface MessageBubbleProps {
   avatarIdentifier: string
   avatarFallbackColor?: string  // Optional color matching nick text for visual consistency
   avatarPresence?: 'online' | 'away' | 'dnd' | 'offline'
-  avatarTooltip?: string
+  /** JID to show in the click popover */
+  senderJid?: string
+  /** Contact object for showing connected devices in popover */
+  senderContact?: Contact
 
   // Nick header extras (for room moderator badge, hats)
   nickExtras?: ReactNode
@@ -116,7 +120,8 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps): bool
   if (prev.avatarIdentifier !== next.avatarIdentifier) return false
   if (prev.avatarFallbackColor !== next.avatarFallbackColor) return false
   if (prev.avatarPresence !== next.avatarPresence) return false
-  if (prev.avatarTooltip !== next.avatarTooltip) return false
+  if (prev.senderJid !== next.senderJid) return false
+  if (prev.senderContact !== next.senderContact) return false
 
   // Reply context - compare by reference (parent should memoize)
   if (prev.replyContext !== next.replyContext) {
@@ -157,7 +162,8 @@ export const MessageBubble = memo(function MessageBubble({
   avatarIdentifier,
   avatarFallbackColor,
   avatarPresence,
-  avatarTooltip,
+  senderJid,
+  senderContact,
   nickExtras,
   myReactions,
   onReaction,
@@ -209,7 +215,7 @@ export const MessageBubble = memo(function MessageBubble({
             {format(message.timestamp, 'HH:mm')}
           </span>
         ) : showAvatar ? (
-          <Tooltip content={avatarTooltip || ''} position="top" disabled={!avatarTooltip}>
+          <UserInfoPopover contact={senderContact} jid={senderJid}>
             <div className="select-none">
               <Avatar
                 identifier={avatarIdentifier}
@@ -221,7 +227,7 @@ export const MessageBubble = memo(function MessageBubble({
                 presenceBorderColor="border-fluux-chat"
               />
             </div>
-          </Tooltip>
+          </UserInfoPopover>
         ) : (
           <span className={`text-[10px] text-fluux-muted font-mono pt-0.5 ${isSelected ? 'opacity-100' : hasKeyboardSelection ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
             {format(message.timestamp, 'HH:mm')}
@@ -259,14 +265,14 @@ export const MessageBubble = memo(function MessageBubble({
         {/* Nick header - hidden for /me action messages (nick is shown inline) */}
         {showAvatar && !isActionMessage(message.body) && (
           <div className="flex items-baseline gap-2 pb-1 flex-wrap">
-            <Tooltip content={avatarTooltip || ''} position="top" disabled={!avatarTooltip}>
+            <UserInfoPopover contact={senderContact} jid={senderJid}>
               <span
-                className="font-medium cursor-default"
+                className="font-medium"
                 style={{ color: senderColor }}
               >
                 {senderName}
               </span>
-            </Tooltip>
+            </UserInfoPopover>
             {nickExtras}
             <span className="text-xs text-fluux-muted">
               {format(message.timestamp, 'HH:mm')}

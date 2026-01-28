@@ -1,11 +1,10 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useRoom, useRoster, getBareJid, generateConsistentColorHexSync, getPresenceFromShow, createMessageLookup, type RoomMessage, type Room, type RoomOccupant, type MentionReference, type ChatStateNotification, type Contact, type FileAttachment } from '@fluux/sdk'
+import { useRoom, useRoster, getBareJid, generateConsistentColorHexSync, getPresenceFromShow, createMessageLookup, type RoomMessage, type Room, type MentionReference, type ChatStateNotification, type Contact, type FileAttachment } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft } from '@/hooks'
 import { MessageBubble, MessageList, shouldShowAvatar, buildReplyContext } from './conversation'
 import { Avatar, getConsistentTextColor } from './Avatar'
-import { getTranslatedShowText } from '@/utils/presence'
 import { format } from 'date-fns'
 import { Shield, Upload, Loader2, LogIn, AlertCircle, Users } from 'lucide-react'
 import { ChristmasAnimation } from './ChristmasAnimation'
@@ -13,36 +12,6 @@ import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHan
 import { RoomHeader } from './RoomHeader'
 import { OccupantPanel } from './OccupantPanel'
 import { findLastEditableMessage, findLastEditableMessageId } from '@/utils/messageUtils'
-
-// Generate unified tooltip text for room occupant (status, role, affiliation, hats)
-function getOccupantTooltip(occupant: RoomOccupant | undefined, t?: (key: string) => string): string | undefined {
-  if (!occupant) return undefined
-
-  const parts: string[] = []
-
-  // Status (online, away, dnd, etc.)
-  const status = t ? getTranslatedShowText(occupant.show, t) : (occupant.show || 'online')
-  parts.push(status)
-
-  // Role (moderator only - participant/visitor are default)
-  if (occupant.role === 'moderator') {
-    parts.push(t ? t('rooms.moderator') : 'Moderator')
-  }
-
-  // Affiliation (owner, admin, member - not "none")
-  if (occupant.affiliation && occupant.affiliation !== 'none') {
-    const affiliationKey = `rooms.${occupant.affiliation}`
-    parts.push(t ? t(affiliationKey) : occupant.affiliation)
-  }
-
-  // Hats (XEP-0317)
-  if (occupant.hats && occupant.hats.length > 0) {
-    const hatTitles = occupant.hats.map(hat => hat.title).join(', ')
-    parts.push(hatTitles)
-  }
-
-  return parts.join(' · ')
-}
 
 // Generate hat colors from URI using XEP-0392 consistent color
 function getHatColors(hat: { uri: string; hue?: number }) {
@@ -591,8 +560,6 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   onMouseEnter,
   onMouseLeave,
 }: RoomMessageBubbleWrapperProps) {
-  const { t } = useTranslation()
-
   // Get occupant info if available
   const occupant = room.occupants.get(message.nick)
   const myNick = room.nickname
@@ -694,7 +661,8 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
       avatarIdentifier={message.nick}
       avatarFallbackColor={senderColor}
       avatarPresence={room.joined ? (occupant ? getPresenceFromShow(occupant.show) : 'offline') : undefined}
-      avatarTooltip={getOccupantTooltip(occupant, t)}
+      senderJid={senderBareJid}
+      senderContact={contact}
       nickExtras={nickExtras}
       myReactions={myReactions}
       onReaction={handleReaction}

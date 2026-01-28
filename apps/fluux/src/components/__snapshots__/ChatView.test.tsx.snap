@@ -90,7 +90,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                     class="w-10 flex-shrink-0"
                   >
                     <div
-                      class="inline-flex"
+                      class="cursor-pointer "
                     >
                       <div
                         class="select-none"
@@ -201,10 +201,10 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                       class="flex items-baseline gap-2 pb-1 flex-wrap"
                     >
                       <div
-                        class="inline-flex"
+                        class="cursor-pointer "
                       >
                         <span
-                          class="font-medium cursor-default"
+                          class="font-medium"
                           style="color: rgb(0, 0, 0);"
                         >
                           Alice Smith
@@ -243,7 +243,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                     class="w-10 flex-shrink-0"
                   >
                     <div
-                      class="inline-flex"
+                      class="cursor-pointer "
                     >
                       <div
                         class="select-none"
@@ -353,10 +353,10 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                       class="flex items-baseline gap-2 pb-1 flex-wrap"
                     >
                       <div
-                        class="inline-flex"
+                        class="cursor-pointer "
                       >
                         <span
-                          class="font-medium cursor-default"
+                          class="font-medium"
                           style="color: var(--fluux-green);"
                         >
                           Me
