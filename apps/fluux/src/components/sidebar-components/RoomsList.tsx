@@ -375,10 +375,6 @@ const RoomItem = memo(function RoomItem({
               <Loader2 className="w-2.5 h-2.5 text-fluux-brand animate-spin" />
             </div>
           )}
-          {/* Joined indicator */}
-          {room.joined && !room.isJoining && (
-            <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-fluux-sidebar bg-fluux-green" />
-          )}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
