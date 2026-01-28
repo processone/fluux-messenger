@@ -298,7 +298,7 @@ export class Admin extends BaseModule {
 
   /**
    * Fetch entity counts for admin dashboard badges.
-   * Executes get-registered-users-num and get-online-users-num commands.
+   * Executes get-registered-users-num, get-online-users-num, and muc_online_rooms_count commands.
    */
   async fetchEntityCounts(): Promise<EntityCounts> {
     const counts: EntityCounts = {}
@@ -329,6 +329,25 @@ export class Admin extends BaseModule {
       // Command may not be available
     }
 
+    // Try to fetch online MUC rooms count from MUC service
+    try {
+      const mucJid = this.deps.stores?.admin.getMucServiceJid?.()
+      if (mucJid) {
+        const roomsResult = await this.executeMucCommand(mucJid, 'muc_online_rooms_count')
+        if (roomsResult) {
+          // The field name varies - try common variations
+          const numField = getFormFieldValue(roomsResult, 'onlineroomsnum') ||
+                          getFormFieldValue(roomsResult, 'rooms') ||
+                          getFormFieldValue(roomsResult, 'count')
+          if (numField) {
+            counts.rooms = parseInt(numField, 10)
+          }
+        }
+      }
+    } catch {
+      // Command may not be available on MUC service
+    }
+
     this.deps.emitSDK('admin:entity-counts', { counts })
     return counts
   }
@@ -349,6 +368,33 @@ export class Admin extends BaseModule {
         'iq',
         { type: 'set', to: domain, id: `cmd_${generateUUID()}` },
         xml('command', { xmlns: NS_COMMANDS, node, action: 'execute' })
+      )
+
+      const result = await this.deps.sendIQ(iq)
+      const command = result.getChild('command', NS_COMMANDS)
+
+      if (!command) return null
+
+      const formEl = command.getChild('x', NS_DATA_FORMS)
+      if (!formEl) return null
+
+      return parseDataForm(formEl)
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Execute an ad-hoc command on a specific target (e.g., MUC service).
+   * @param targetJid - The JID to send the command to (e.g., conference.example.com)
+   * @param commandName - The command name (e.g., muc_online_rooms_count)
+   */
+  private async executeMucCommand(targetJid: string, commandName: string): Promise<DataForm | null> {
+    try {
+      const iq = xml(
+        'iq',
+        { type: 'set', to: targetJid, id: `muc_cmd_${generateUUID()}` },
+        xml('command', { xmlns: NS_COMMANDS, node: commandName, action: 'execute' })
       )
 
       const result = await this.deps.sendIQ(iq)
