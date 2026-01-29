@@ -46,6 +46,8 @@
         { "url": "https://*" },
         { "url": "https://*:*/**" }
       ]
-    }
+    },
+    "http:allow-fetch-read-body",
+    "http:allow-fetch-cancel"
   ]
 }

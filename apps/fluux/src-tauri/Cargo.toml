@@ -18,7 +18,7 @@ tauri-plugin-notification = "2"
 tauri-plugin-window-state = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-dialog = "2"
-tauri-plugin-http = "2"
+tauri-plugin-http = "=2.3.0"
 tauri-plugin-deep-link = "2"
 tauri-plugin-process = "2"
 serde = { version = "1", features = ["derive"] }

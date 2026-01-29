@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
-import { Music, Film, FileText, Archive, File, Download, BookOpen } from 'lucide-react'
+import { Music, Film, FileText, Archive, File, Download, BookOpen, Loader2 } from 'lucide-react'
 import { Tooltip } from './Tooltip'
-import { formatBytes } from '@/hooks'
+import { formatBytes, useProxiedUrl } from '@/hooks'
 import { isPdfMimeType, isDocumentMimeType, isArchiveMimeType, isEbookMimeType, getFileTypeLabel } from '@/utils/thumbnail'
 import type { FileAttachment } from '@fluux/sdk'
 
@@ -18,14 +18,21 @@ interface AttachmentProps {
 /**
  * Image attachment preview with clickable link to full image
  * Falls back to main URL when no thumbnail is provided (e.g., from other XMPP clients)
+ * Uses Tauri HTTP plugin to bypass CORS in desktop app.
  */
 export function ImageAttachment({ attachment, onLoad }: AttachmentProps) {
-  if (!attachment.mediaType?.startsWith('image/')) {
-    return null
-  }
+  const isImage = attachment.mediaType?.startsWith('image/') ?? false
 
   // Use thumbnail if available, otherwise fall back to main URL
-  const imageSrc = attachment.thumbnail?.uri || attachment.url
+  const originalImageSrc = attachment.thumbnail?.uri || attachment.url
+
+  // Fetch via Tauri HTTP plugin to bypass CORS (only when it's an image)
+  const { url: proxiedImageSrc, isLoading, error } = useProxiedUrl(originalImageSrc, isImage)
+
+  // Early return after hooks
+  if (!isImage) {
+    return null
+  }
 
   // Prefer XEP-0446 original dimensions, fall back to thumbnail dimensions
   const width = attachment.width ?? attachment.thumbnail?.width
@@ -39,6 +46,34 @@ export function ImageAttachment({ attachment, onLoad }: AttachmentProps) {
     ? width / height
     : DEFAULT_ASPECT_RATIO
 
+  // Show loading placeholder while fetching
+  if (isLoading) {
+    return (
+      <div
+        className="pt-2 max-w-sm rounded-lg bg-fluux-hover flex items-center justify-center"
+        style={{ aspectRatio, maxHeight: '300px', minHeight: '100px' }}
+      >
+        <Loader2 className="w-6 h-6 text-fluux-muted animate-spin" />
+      </div>
+    )
+  }
+
+  // Show error state if fetch failed
+  if (error || !proxiedImageSrc) {
+    return (
+      <a
+        href={attachment.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block pt-2 max-w-sm rounded-lg bg-fluux-hover flex items-center justify-center text-fluux-muted text-sm"
+        style={{ aspectRatio, maxHeight: '300px', minHeight: '100px' }}
+        tabIndex={-1}
+      >
+        Click to view image
+      </a>
+    )
+  }
+
   return (
     <a
       href={attachment.url}
@@ -48,7 +83,7 @@ export function ImageAttachment({ attachment, onLoad }: AttachmentProps) {
       tabIndex={-1}
     >
       <img
-        src={imageSrc}
+        src={proxiedImageSrc}
         alt={attachment.name || 'Image attachment'}
         width={width}
         height={height}
@@ -68,12 +103,52 @@ export function ImageAttachment({ attachment, onLoad }: AttachmentProps) {
 
 /**
  * Video attachment with inline player and info bar
+ * Uses Tauri HTTP plugin to bypass CORS in desktop app.
  */
 export function VideoAttachment({ attachment, onLoad }: AttachmentProps) {
   const { t } = useTranslation()
+  const isVideo = attachment.mediaType?.startsWith('video/') ?? false
 
-  if (!attachment.mediaType?.startsWith('video/')) {
+  // Fetch video via Tauri HTTP plugin to bypass CORS (only when it's a video)
+  const { url: proxiedVideoUrl, isLoading, error } = useProxiedUrl(attachment.url, isVideo)
+  // Also fetch poster/thumbnail if available
+  const { url: proxiedPosterUrl } = useProxiedUrl(attachment.thumbnail?.uri, isVideo && !!attachment.thumbnail?.uri)
+
+  // Early return after hooks
+  if (!isVideo) {
     return null
+  }
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="pt-2 max-w-md rounded-lg overflow-hidden bg-black flex items-center justify-center" style={{ minHeight: '200px' }}>
+        <Loader2 className="w-8 h-8 text-fluux-muted animate-spin" />
+      </div>
+    )
+  }
+
+  // Show error/fallback if fetch failed
+  if (error || !proxiedVideoUrl) {
+    return (
+      <div className="pt-2 max-w-md rounded-lg overflow-hidden bg-black">
+        <a
+          href={attachment.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-center text-fluux-muted text-sm py-8"
+        >
+          <Film className="w-6 h-6 mr-2" />
+          Click to view video
+        </a>
+        {attachment.name && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-fluux-hover">
+            <Film className="w-4 h-4 text-fluux-muted flex-shrink-0" />
+            <span className="text-sm text-fluux-text truncate">{attachment.name}</span>
+          </div>
+        )}
+      </div>
+    )
   }
 
   return (
@@ -81,12 +156,12 @@ export function VideoAttachment({ attachment, onLoad }: AttachmentProps) {
       <video
         controls
         preload="metadata"
-        poster={attachment.thumbnail?.uri}
+        poster={proxiedPosterUrl || undefined}
         className="w-full max-h-80"
         tabIndex={-1}
         onLoadedMetadata={onLoad}
       >
-        <source src={attachment.url} type={attachment.mediaType} />
+        <source src={proxiedVideoUrl} type={attachment.mediaType} />
       </video>
       {/* Video info bar */}
       {attachment.name && (
@@ -117,11 +192,17 @@ export function VideoAttachment({ attachment, onLoad }: AttachmentProps) {
 
 /**
  * Audio attachment with inline player
+ * Uses Tauri HTTP plugin to bypass CORS in desktop app.
  */
 export function AudioAttachment({ attachment }: AttachmentProps) {
   const { t } = useTranslation()
+  const isAudio = (attachment.mediaType?.startsWith('audio/') ?? false) && !attachment.thumbnail
 
-  if (!attachment.mediaType?.startsWith('audio/') || attachment.thumbnail) {
+  // Fetch audio via Tauri HTTP plugin to bypass CORS (only when it's audio)
+  const { url: proxiedAudioUrl, isLoading, error } = useProxiedUrl(attachment.url, isAudio)
+
+  // Early return after hooks
+  if (!isAudio) {
     return null
   }
 
@@ -129,7 +210,11 @@ export function AudioAttachment({ attachment }: AttachmentProps) {
     <div className="pt-2 max-w-sm">
       <div className="flex items-center gap-3 p-3 rounded-t-lg bg-fluux-hover">
         <div className="w-10 h-10 rounded-full bg-fluux-brand flex items-center justify-center flex-shrink-0">
-          <Music className="w-5 h-5 text-white" />
+          {isLoading ? (
+            <Loader2 className="w-5 h-5 text-white animate-spin" />
+          ) : (
+            <Music className="w-5 h-5 text-white" />
+          )}
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-fluux-text truncate">
@@ -153,15 +238,25 @@ export function AudioAttachment({ attachment }: AttachmentProps) {
           </a>
         </Tooltip>
       </div>
-      <audio
-        controls
-        preload="metadata"
-        className="w-full rounded-b-lg"
-        style={{ height: '40px' }}
-        tabIndex={-1}
-      >
-        <source src={attachment.url} type={attachment.mediaType} />
-      </audio>
+      {error || !proxiedAudioUrl ? (
+        <div className="w-full rounded-b-lg bg-fluux-bg flex items-center justify-center text-fluux-muted text-xs py-3">
+          {isLoading ? t('common.loading') : (
+            <a href={attachment.url} target="_blank" rel="noopener noreferrer">
+              Click to play audio
+            </a>
+          )}
+        </div>
+      ) : (
+        <audio
+          controls
+          preload="metadata"
+          className="w-full rounded-b-lg"
+          style={{ height: '40px' }}
+          tabIndex={-1}
+        >
+          <source src={proxiedAudioUrl} type={attachment.mediaType} />
+        </audio>
+      )}
     </div>
   )
 }
