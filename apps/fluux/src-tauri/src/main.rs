@@ -450,7 +450,50 @@ mod macos {
     }
 }
 
+static PROXY_PORT: std::sync::OnceLock<Result<u16, &'static str>> = std::sync::OnceLock::new();
+
+#[tauri::command]
+fn proxy_port() -> Result<u16, &'static str> {
+    println!("returning proxy_port");
+    *PROXY_PORT.wait()
+}
+
+async fn start_proxy() -> Result<u16, std::io::Error> {
+    use std::sync::Arc;
+    use tokio::net::TcpListener;
+    use xmpp_proxy::{
+        common::{certs_key::CertsKey, outgoing::OutgoingConfig},
+        outgoing::spawn_outgoing_listener,
+    };
+    let outgoing_cfg = OutgoingConfig {
+        // limit incoming stanzas to this many bytes, default to ejabberd's default
+        // https://github.com/processone/ejabberd/blob/master/ejabberd.yml.example#L32
+        // xmpp-proxy will use this many bytes + 16k per connection
+        max_stanza_size_bytes: 262_144,
+        certs_key: Arc::new(CertsKey {}),
+    };
+    // try to listen to a specific port (10032), but otherwise listen on any available
+    let listener = match TcpListener::bind("127.0.0.1:10032").await {
+        Ok(listener) => listener,
+        Err(_) => TcpListener::bind("127.0.0.1:0").await?,
+    };
+    let port = listener.local_addr()?.port();
+    spawn_outgoing_listener(listener, outgoing_cfg);
+    println!("started proxy at port: {port} url: ws://127.0.0.1:{port}/ws");
+    Ok(port)
+}
+
 fn main() {
+    xmpp_proxy::install_default_rustls_provider().ok();
+    tauri::async_runtime::spawn(async {
+        PROXY_PORT
+            .set(
+                start_proxy()
+                    .await
+                    .map_err(|e| Box::leak(Box::new(format!("{:?}", e))).as_str()),
+            )
+            .expect("this is the only place that calls set");
+    });
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_os::init())
@@ -468,7 +511,8 @@ fn main() {
             get_credentials,
             delete_credentials,
             exit_app,
-            fetch_url_metadata
+            fetch_url_metadata,
+            proxy_port,
         ])
         .setup(|app| {
             // Register xmpp: URI scheme for deep linking (RFC 5122)
