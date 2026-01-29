@@ -576,8 +576,18 @@ export class Connection extends BaseModule {
     this.stores.console.addEvent('Dead connection detected, will reconnect', 'connection')
     this.stores.connection.setStatus('reconnecting')
 
-    // Clean up the dead client (fire-and-forget, don't await since socket is already dead)
-    this.cleanupClient().catch(() => {})
+    // IMPORTANT: Null the client reference SYNCHRONOUSLY before any async operations.
+    // This prevents a race condition where the old client's 'online' event fires
+    // during cleanup, causing handleConnectionSuccess to run and set status='online'
+    // while xmpp is about to become null.
+    // This matches the pattern used in disconnect().
+    const clientToClean = this.xmpp
+    this.xmpp = null
+
+    // Stop the old client (fire-and-forget since socket is already dead)
+    if (clientToClean) {
+      clientToClean.stop().catch(() => {})
+    }
 
     // Schedule reconnection
     this.scheduleReconnect()
@@ -637,6 +647,10 @@ export class Connection extends BaseModule {
           const isHealthy = await this.verifyConnection()
           if (!isHealthy) {
             this.stores.console.addEvent('Connection dead after wake, reconnecting...', 'connection')
+            // verifyConnection() calls handleDeadSocket internally on timeout/error,
+            // but returns false immediately if this.xmpp is null (without triggering reconnect).
+            // Ensure reconnection is triggered in all cases.
+            this.handleDeadSocket()
           }
         } else if (currentStatus === 'reconnecting') {
           // Trigger immediate reconnect if we were already reconnecting
@@ -1080,6 +1094,13 @@ export class Connection extends BaseModule {
     logMessage: string,
     previouslyJoinedRooms?: Array<{ jid: string; nickname: string; password?: string; autojoin?: boolean }>
   ): Promise<void> {
+    // Guard: if xmpp was cleaned up during async connection negotiation, abort.
+    // This can happen if handleDeadSocket() was called while we were connecting.
+    if (!this.xmpp) {
+      this.stores.console.addEvent('Connection success aborted - client was cleaned up', 'connection')
+      return
+    }
+
     // Reset reconnection state
     this.isReconnecting = false
     this.reconnectAttempt = 0
@@ -1218,15 +1239,23 @@ export class Connection extends BaseModule {
   /**
    * Clean up the current XMPP client connection.
    * Used before reconnecting or when detecting a dead socket.
+   *
+   * IMPORTANT: Nulls this.xmpp FIRST to prevent race conditions where
+   * the old client fires events during stop(). This matches the pattern
+   * used in disconnect().
    */
   private async cleanupClient(): Promise<void> {
-    if (!this.xmpp) return
+    const clientToClean = this.xmpp
+    if (!clientToClean) return
+
+    // Null the reference FIRST to prevent race conditions
+    this.xmpp = null
+
     try {
-      await this.xmpp.stop()
+      await clientToClean.stop()
     } catch {
       // Ignore stop errors during cleanup
     }
-    this.xmpp = null
   }
 
   /**
