@@ -240,7 +240,7 @@ describe('i18n', () => {
     it('should switch to Polish', async () => {
       await i18n.changeLanguage('pl')
       expect(i18n.language).toBe('pl')
-      expect(i18n.t('login.connect')).toBe('Polacz')
+      expect(i18n.t('login.connect')).toBe('Połącz')
     })
 
     it('should switch to Portuguese', async () => {
@@ -286,7 +286,7 @@ describe('i18n', () => {
     it('should have correct German translations for key UI elements', async () => {
       await i18n.changeLanguage('de')
       expect(i18n.t('sidebar.messages')).toBe('Nachrichten')
-      expect(i18n.t('sidebar.rooms')).toBe('Raume')
+      expect(i18n.t('sidebar.rooms')).toBe('Räume')
       expect(i18n.t('presence.online')).toBe('Online')
       expect(i18n.t('common.save')).toBe('Speichern')
       expect(i18n.t('common.cancel')).toBe('Abbrechen')
@@ -303,9 +303,9 @@ describe('i18n', () => {
 
     it('should have correct Polish translations for key UI elements', async () => {
       await i18n.changeLanguage('pl')
-      expect(i18n.t('sidebar.messages')).toBe('Wiadomosci')
+      expect(i18n.t('sidebar.messages')).toBe('Wiadomości')
       expect(i18n.t('sidebar.rooms')).toBe('Pokoje')
-      expect(i18n.t('presence.online')).toBe('Dostepny')
+      expect(i18n.t('presence.online')).toBe('Dostępny')
       expect(i18n.t('common.save')).toBe('Zapisz')
       expect(i18n.t('common.cancel')).toBe('Anuluj')
     })
