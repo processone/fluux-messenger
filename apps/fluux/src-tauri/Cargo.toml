@@ -23,6 +23,9 @@ tauri-plugin-deep-link = "2"
 tauri-plugin-process = "2"
 serde = { version = "1", features = ["derive"] }
 
+tokio = { version = "1", default-features = false }
+xmpp-proxy = { git = "https://github.com/moparisthebest/xmpp-proxy", default-features = false, features = ["c2s-outgoing", "tls", "tls-aws-lc-rs", "quic", "websocket", "webtransport", "tls-ca-roots-bundled"] }
+
 # Updater plugin for auto-updates (desktop only)
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
