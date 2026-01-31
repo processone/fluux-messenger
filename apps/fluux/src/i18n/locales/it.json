@@ -30,6 +30,8 @@
     "credentialsLoaded": "Credenziali caricate dal portachiavi",
     "connecting": "Connessione...",
     "connect": "Connetti",
+    "showPassword": "Mostra password",
+    "hidePassword": "Nascondi password",
     "madeBy": "Creato da",
     "ejabberdCreator": ", l'azienda dietro",
     "poweredBy": "Powered by"

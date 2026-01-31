@@ -30,6 +30,8 @@
     "credentialsLoaded": "Credentials loaded from Keychain",
     "connecting": "Connecting...",
     "connect": "Connect",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
     "madeBy": "Made by",
     "ejabberdCreator": ", the company behind",
     "poweredBy": "Powered by"

@@ -30,6 +30,8 @@
     "credentialsLoaded": "Anmeldedaten aus Schlüsselbund geladen",
     "connecting": "Verbinden...",
     "connect": "Verbinden",
+    "showPassword": "Passwort anzeigen",
+    "hidePassword": "Passwort ausblenden",
     "madeBy": "Erstellt von",
     "ejabberdCreator": ", dem Unternehmen hinter",
     "poweredBy": "Betrieben von"

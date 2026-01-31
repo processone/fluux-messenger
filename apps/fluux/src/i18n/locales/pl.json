@@ -30,6 +30,8 @@
     "credentialsLoaded": "Dane logowania załadowane z pęku kluczy",
     "connecting": "Łączenie...",
     "connect": "Połącz",
+    "showPassword": "Pokaż hasło",
+    "hidePassword": "Ukryj hasło",
     "madeBy": "Stworzone przez",
     "ejabberdCreator": ", firmę stojącą za",
     "poweredBy": "Napędzane przez"

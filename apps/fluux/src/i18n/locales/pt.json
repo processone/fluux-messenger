@@ -30,6 +30,8 @@
     "credentialsLoaded": "Credenciais carregadas do Keychain",
     "connecting": "A ligar...",
     "connect": "Ligar",
+    "showPassword": "Mostrar palavra-passe",
+    "hidePassword": "Ocultar palavra-passe",
     "madeBy": "Criado por",
     "ejabberdCreator": ", a empresa por trás do",
     "poweredBy": "Desenvolvido com"

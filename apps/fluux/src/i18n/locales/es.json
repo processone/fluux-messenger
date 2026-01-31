@@ -30,6 +30,8 @@
     "credentialsLoaded": "Credenciales cargadas del Llavero",
     "connecting": "Conectando...",
     "connect": "Conectar",
+    "showPassword": "Mostrar contraseña",
+    "hidePassword": "Ocultar contraseña",
     "madeBy": "Hecho por",
     "ejabberdCreator": ", la empresa detras de",
     "poweredBy": "Impulsado por"

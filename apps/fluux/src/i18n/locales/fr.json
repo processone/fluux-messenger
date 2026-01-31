@@ -30,6 +30,8 @@
     "credentialsLoaded": "Identifiants chargés depuis le Trousseau",
     "connecting": "Connexion...",
     "connect": "Se connecter",
+    "showPassword": "Afficher le mot de passe",
+    "hidePassword": "Masquer le mot de passe",
     "madeBy": "Créé par",
     "ejabberdCreator": ", la société qui développe",
     "poweredBy": "Propulsé par"

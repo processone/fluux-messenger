@@ -30,6 +30,8 @@
     "credentialsLoaded": "Inloggegevens geladen uit Sleutelhanger",
     "connecting": "Verbinden...",
     "connect": "Verbinden",
+    "showPassword": "Wachtwoord tonen",
+    "hidePassword": "Wachtwoord verbergen",
     "madeBy": "Gemaakt door",
     "ejabberdCreator": ", het bedrijf achter",
     "poweredBy": "Mogelijk gemaakt door"
