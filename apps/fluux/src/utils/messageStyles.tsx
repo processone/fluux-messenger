@@ -233,7 +233,7 @@ function renderSegment(segment: StyledSegment, index: number): React.ReactNode {
           href={segment.content}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-fluux-brand hover:underline"
+          className="text-fluux-link hover:underline"
         >
           {segment.content}
         </a>
@@ -339,7 +339,7 @@ export function renderTextWithLinks(text: string): React.ReactNode {
         href={url}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-fluux-brand hover:underline"
+        className="text-fluux-link hover:underline"
       >
         {url}
       </a>
