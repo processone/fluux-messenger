@@ -288,4 +288,46 @@ describe('buildReplyContext', () => {
       messageId: 'missing-1',
     })
   })
+
+  it('uses original message id when reply references stanza-id (regression test for scroll)', () => {
+    // This test verifies the fix for the bug where clicking on a reply context
+    // would not scroll to the original message. The issue was that when the reply
+    // references a message by its stanza-id (from MAM), but the DOM uses the
+    // client-generated message.id for data-message-id, scrollToMessage() wouldn't
+    // find the element.
+    //
+    // The fix ensures we always use originalMessage.id for the messageId.
+    const originalMessage = createTestMessage({
+      id: 'client-uuid-123',           // The client-generated ID used in DOM
+      stanzaId: 'mam-stanza-id-456',   // The server-assigned stanza-id from MAM
+      body: 'Original body',
+      from: 'bob@example.com',
+    })
+    const replyMessage = createTestMessage({
+      id: 'reply-1',
+      // Reply references the message by stanza-id (common when original came from MAM)
+      replyTo: { id: 'mam-stanza-id-456', to: 'bob@example.com' },
+    })
+    // The messagesById map is indexed by both id and stanzaId (via createMessageLookup)
+    const messagesById = new Map<string, BaseMessage>([
+      ['client-uuid-123', originalMessage],
+      ['mam-stanza-id-456', originalMessage],  // Same message, indexed by stanza-id too
+    ])
+
+    const result = buildReplyContext(
+      replyMessage,
+      messagesById,
+      (msg) => msg ? 'Bob' : 'Unknown',
+      () => 'rgb(100, 100, 100)'
+    )
+
+    // The messageId should be the client-generated ID (used in DOM),
+    // not the stanza-id that was in replyTo.id
+    expect(result).toEqual({
+      senderName: 'Bob',
+      senderColor: 'rgb(100, 100, 100)',
+      body: 'Original body',
+      messageId: 'client-uuid-123',  // NOT 'mam-stanza-id-456'
+    })
+  })
 })

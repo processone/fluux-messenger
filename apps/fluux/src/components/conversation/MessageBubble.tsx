@@ -362,10 +362,15 @@ export function buildReplyContext<T extends BaseMessage>(
   const senderColor = getSenderColor(originalMessage, fallbackId, isDarkMode)
   const body = originalMessage?.body || message.replyTo.fallbackBody || 'Original message not found'
 
+  // Use the original message's actual ID for scrolling.
+  // The replyTo.id may reference the stanza-id (from MAM), but the DOM uses
+  // the client-generated message.id for data-message-id attributes.
+  const messageId = originalMessage?.id ?? message.replyTo.id
+
   return {
     senderName,
     senderColor,
     body,
-    messageId: message.replyTo.id,
+    messageId,
   }
 }
