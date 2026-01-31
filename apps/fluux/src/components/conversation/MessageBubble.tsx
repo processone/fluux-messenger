@@ -291,7 +291,7 @@ export const MessageBubble = memo(function MessageBubble({
             onClick={() => scrollToMessage(replyContext.messageId)}
             className="flex items-start gap-2 pb-1 pl-2 border-l-2 border-fluux-brand text-left w-full hover:bg-fluux-hover/50 rounded-r transition-colors cursor-pointer select-none"
           >
-            <div className="text-xs text-fluux-muted min-w-0 flex-1">
+            <div className="text-sm text-fluux-muted min-w-0 flex-1">
               <span
                 className="font-medium"
                 style={{ color: replyContext.senderColor }}
