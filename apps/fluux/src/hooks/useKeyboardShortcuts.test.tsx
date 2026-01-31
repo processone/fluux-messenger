@@ -738,5 +738,30 @@ describe('useKeyboardShortcuts', () => {
       expect(escapeHierarchy.onCloseCommandPalette).toHaveBeenCalledTimes(1)
       expect(options.onOpenCommandPalette).not.toHaveBeenCalled()
     })
+
+    it('should trigger Cmd-K even when focused in an input field', async () => {
+      const options = createDefaultOptions()
+
+      renderHook(() => useKeyboardShortcuts(options))
+
+      // Create and focus a textarea (simulating message composer)
+      const textarea = document.createElement('textarea')
+      document.body.appendChild(textarea)
+      textarea.focus()
+
+      // Dispatch Cmd-K event while textarea is focused
+      const event = new KeyboardEvent('keydown', {
+        key: 'k',
+        metaKey: true,
+        bubbles: true,
+      })
+      window.dispatchEvent(event)
+
+      // Command palette should still open
+      expect(options.onOpenCommandPalette).toHaveBeenCalledTimes(1)
+
+      // Cleanup
+      document.body.removeChild(textarea)
+    })
   })
 })

@@ -465,7 +465,9 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
           // Allow some shortcuts even in input fields
           const isAltArrow = (shortcut.key === 'ArrowUp' || shortcut.key === 'ArrowDown') &&
                              shortcut.modifiers?.includes('alt')
-          const allowInInput = shortcut.key === '?' || shortcut.key === 'F12' || shortcut.key === 'Escape' || isAltArrow
+          const isCmdK = shortcut.key.toLowerCase() === 'k' &&
+                         (shortcut.modifiers?.includes('meta') || shortcut.modifiers?.includes('ctrl'))
+          const allowInInput = shortcut.key === '?' || shortcut.key === 'F12' || shortcut.key === 'Escape' || isAltArrow || isCmdK
 
           if (!isInputField || allowInInput) {
             e.preventDefault()
