@@ -14,7 +14,7 @@ function getActionText(body: string): string {
 }
 
 export interface MessageBodyProps {
-  /** Message body text */
+  /** Message body text (already processed by SDK - OOB URLs stripped) */
   body: string
   /** Whether message was edited */
   isEdited?: boolean
@@ -30,8 +30,6 @@ export interface MessageBodyProps {
   senderColor: string
   /** Mention references for highlighting (room messages) */
   mentions?: MentionReference[]
-  /** Whether message has an attachment with thumbnail (hide text body) */
-  hasAttachmentThumbnail?: boolean
 }
 
 /**
@@ -50,7 +48,6 @@ export const MessageBody = memo(function MessageBody({
   senderName,
   senderColor,
   mentions,
-  hasAttachmentThumbnail,
 }: MessageBodyProps) {
   const { t } = useTranslation()
 
@@ -63,8 +60,8 @@ export const MessageBody = memo(function MessageBody({
     )
   }
 
-  // Hide body if attachment has thumbnail (body is just fallback URL)
-  if (hasAttachmentThumbnail) {
+  // If body is empty (e.g., was just attachment URL, now stripped by SDK), hide it
+  if (!body) {
     return null
   }
 

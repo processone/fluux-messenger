@@ -128,28 +128,28 @@ describe('MessageBody', () => {
     })
   })
 
-  describe('Attachment handling', () => {
-    it('should return null when hasAttachmentThumbnail is true', () => {
+  describe('Empty body handling', () => {
+    it('should return null when body is empty (SDK stripped attachment URL)', () => {
       const { container } = render(
-        <MessageBody {...defaultProps} hasAttachmentThumbnail={true} />
+        <MessageBody {...defaultProps} body="" />
       )
 
       expect(container.firstChild).toBeNull()
     })
 
-    it('should render body when hasAttachmentThumbnail is false', () => {
-      render(<MessageBody {...defaultProps} hasAttachmentThumbnail={false} />)
+    it('should render body when it has content', () => {
+      render(<MessageBody {...defaultProps} />)
 
       expect(screen.getByText('Hello, world!')).toBeInTheDocument()
     })
   })
 
   describe('Edge cases', () => {
-    it('should handle empty body', () => {
+    it('should return null for empty body', () => {
       const { container } = render(<MessageBody {...defaultProps} body="" />)
 
-      // Should render the container but with empty text
-      expect(container.querySelector('.text-fluux-text')).toBeInTheDocument()
+      // Empty body returns null (body was likely just an attachment URL stripped by SDK)
+      expect(container.firstChild).toBeNull()
     })
 
     it('should handle /me without action text', () => {

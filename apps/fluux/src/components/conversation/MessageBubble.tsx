@@ -314,7 +314,7 @@ export const MessageBubble = memo(function MessageBubble({
           </button>
         )}
 
-        {/* Message body */}
+        {/* Message body (SDK already strips OOB URL from body for non-XEP-0428 clients) */}
         <MessageBody
           body={message.body}
           isEdited={message.isEdited}
@@ -324,7 +324,6 @@ export const MessageBubble = memo(function MessageBubble({
           senderName={senderName}
           senderColor={senderColor}
           mentions={mentions}
-          hasAttachmentThumbnail={!!message.attachment?.thumbnail}
         />
 
         {/* File attachments (image, video, audio, text preview, document card) - hidden for retracted */}

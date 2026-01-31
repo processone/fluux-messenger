@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applyRetraction, applyCorrection, parseOobData } from './messagingUtils'
+import { applyRetraction, applyCorrection, parseOobData, parseMessageContent } from './messagingUtils'
 import { createMockElement } from '../test-utils'
 
 describe('messagingUtils', () => {
@@ -389,6 +389,103 @@ describe('messagingUtils', () => {
       expect(result?.width).toBe(1280)
       expect(result?.height).toBeUndefined()
       expect(result?.mediaType).toBe('video/mp4') // Falls back to URL extension
+    })
+  })
+
+  describe('parseMessageContent - OOB URL stripping', () => {
+    it('should strip OOB URL from body when body equals URL only', () => {
+      const url = 'https://example.com/image.jpg'
+      const messageEl = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'body', text: url },
+        {
+          name: 'x',
+          attrs: { xmlns: 'jabber:x:oob' },
+          children: [{ name: 'url', text: url }],
+        },
+      ])
+
+      const result = parseMessageContent({ messageEl, body: url })
+
+      expect(result.processedBody).toBe('')
+      expect(result.attachment?.url).toBe(url)
+    })
+
+    it('should strip OOB URL from body and preserve surrounding text', () => {
+      const url = 'https://example.com/image.jpg'
+      const body = `Check this out! ${url}`
+      const messageEl = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'body', text: body },
+        {
+          name: 'x',
+          attrs: { xmlns: 'jabber:x:oob' },
+          children: [{ name: 'url', text: url }],
+        },
+      ])
+
+      const result = parseMessageContent({ messageEl, body })
+
+      expect(result.processedBody).toBe('Check this out!')
+      expect(result.attachment?.url).toBe(url)
+    })
+
+    it('should preserve body when OOB URL is not in body', () => {
+      const messageEl = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'body', text: 'Hello, world!' },
+        {
+          name: 'x',
+          attrs: { xmlns: 'jabber:x:oob' },
+          children: [{ name: 'url', text: 'https://example.com/other.jpg' }],
+        },
+      ])
+
+      const result = parseMessageContent({ messageEl, body: 'Hello, world!' })
+
+      expect(result.processedBody).toBe('Hello, world!')
+    })
+
+    it('should preserve body when there is no OOB attachment', () => {
+      const messageEl = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'body', text: 'Just text, no attachment' },
+      ])
+
+      const result = parseMessageContent({ messageEl, body: 'Just text, no attachment' })
+
+      expect(result.processedBody).toBe('Just text, no attachment')
+      expect(result.attachment).toBeUndefined()
+    })
+
+    it('should strip OOB URL when it appears at the end of body', () => {
+      const url = 'https://upload.example.com/files/photo.png'
+      const body = `Here is the photo: ${url}`
+      const messageEl = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'body', text: body },
+        {
+          name: 'x',
+          attrs: { xmlns: 'jabber:x:oob' },
+          children: [{ name: 'url', text: url }],
+        },
+      ])
+
+      const result = parseMessageContent({ messageEl, body })
+
+      expect(result.processedBody).toBe('Here is the photo:')
+    })
+
+    it('should strip OOB URL when it appears at the start of body', () => {
+      const url = 'https://example.com/video.mp4'
+      const body = `${url} Check this video!`
+      const messageEl = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'body', text: body },
+        {
+          name: 'x',
+          attrs: { xmlns: 'jabber:x:oob' },
+          children: [{ name: 'url', text: url }],
+        },
+      ])
+
+      const result = parseMessageContent({ messageEl, body })
+
+      expect(result.processedBody).toBe('Check this video!')
     })
   })
 })

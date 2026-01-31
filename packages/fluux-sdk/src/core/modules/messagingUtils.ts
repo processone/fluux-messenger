@@ -297,6 +297,13 @@ export function parseMessageContent(options: ParseMessageContentOptions): Parsed
     replyTo.fallbackBody = fallbackBody
   }
 
+  // For clients that don't send XEP-0428 fallback indication but include OOB URL in body:
+  // Strip the attachment URL from the body if it matches the OOB URL
+  let finalBody = processedBody
+  if (attachment?.url && processedBody.includes(attachment.url)) {
+    finalBody = processedBody.replace(attachment.url, '').trim()
+  }
+
   return {
     timestamp,
     isDelayed,
@@ -304,7 +311,7 @@ export function parseMessageContent(options: ParseMessageContentOptions): Parsed
     noStyling,
     replyTo,
     attachment,
-    processedBody,
+    processedBody: finalBody,
   }
 }
 
