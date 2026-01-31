@@ -4,7 +4,7 @@ import { groupMessagesByDate, shouldShowAvatar, scrollToMessage, isActionMessage
 // Mock CSS.escape since it's not available in JSDOM
 // This implementation matches the browser's CSS.escape behavior
 vi.stubGlobal('CSS', {
-  escape: (str: string) => str.replace(/([\/\@\+\=])/g, '\\$1'),
+  escape: (str: string) => str.replace(/([/@+=])/g, '\\$1'),
 })
 
 describe('groupMessagesByDate', () => {
