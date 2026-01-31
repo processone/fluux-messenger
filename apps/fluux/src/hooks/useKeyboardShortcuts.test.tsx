@@ -93,7 +93,7 @@ describe('useKeyboardShortcuts', () => {
     onSidebarViewChange: vi.fn(),
   })
 
-  describe('Next Unread (Alt+U)', () => {
+  describe('Next Unread (Cmd+U)', () => {
     it('should navigate to conversation with unread messages', () => {
       mockState.conversations = [
         { id: 'user1@example.com', unreadCount: 0 },
@@ -106,7 +106,7 @@ describe('useKeyboardShortcuts', () => {
       )
 
       const nextUnreadShortcut = result.current.find(
-        s => s.key === 'u' && s.modifiers?.includes('alt')
+        s => s.key === 'u' && s.modifiers?.includes('meta')
       )
       expect(nextUnreadShortcut).toBeDefined()
       nextUnreadShortcut!.action()
@@ -128,7 +128,7 @@ describe('useKeyboardShortcuts', () => {
       )
 
       const nextUnreadShortcut = result.current.find(
-        s => s.key === 'u' && s.modifiers?.includes('alt')
+        s => s.key === 'u' && s.modifiers?.includes('meta')
       )
       nextUnreadShortcut!.action()
 
@@ -149,7 +149,7 @@ describe('useKeyboardShortcuts', () => {
       )
 
       const nextUnreadShortcut = result.current.find(
-        s => s.key === 'u' && s.modifiers?.includes('alt')
+        s => s.key === 'u' && s.modifiers?.includes('meta')
       )
       nextUnreadShortcut!.action()
 
@@ -173,7 +173,7 @@ describe('useKeyboardShortcuts', () => {
       )
 
       const nextUnreadShortcut = result.current.find(
-        s => s.key === 'u' && s.modifiers?.includes('alt')
+        s => s.key === 'u' && s.modifiers?.includes('meta')
       )
       nextUnreadShortcut!.action()
 
@@ -194,7 +194,7 @@ describe('useKeyboardShortcuts', () => {
       )
 
       const nextUnreadShortcut = result.current.find(
-        s => s.key === 'u' && s.modifiers?.includes('alt')
+        s => s.key === 'u' && s.modifiers?.includes('meta')
       )
       nextUnreadShortcut!.action()
 
@@ -215,7 +215,7 @@ describe('useKeyboardShortcuts', () => {
       )
 
       const nextUnreadShortcut = result.current.find(
-        s => s.key === 'u' && s.modifiers?.includes('alt')
+        s => s.key === 'u' && s.modifiers?.includes('meta')
       )
       nextUnreadShortcut!.action()
 
@@ -236,7 +236,7 @@ describe('useKeyboardShortcuts', () => {
       )
 
       const nextUnreadShortcut = result.current.find(
-        s => s.key === 'u' && s.modifiers?.includes('alt')
+        s => s.key === 'u' && s.modifiers?.includes('meta')
       )
       nextUnreadShortcut!.action()
 

@@ -322,7 +322,7 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
     },
     {
       key: 'u',
-      modifiers: ['alt'],
+      modifiers: ['meta'],
       description: 'Next unread conversation',
       category: 'navigation',
       action: goToNextUnread,
@@ -467,7 +467,9 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
                              shortcut.modifiers?.includes('alt')
           const isCmdK = shortcut.key.toLowerCase() === 'k' &&
                          (shortcut.modifiers?.includes('meta') || shortcut.modifiers?.includes('ctrl'))
-          const allowInInput = shortcut.key === '?' || shortcut.key === 'F12' || shortcut.key === 'Escape' || isAltArrow || isCmdK
+          const isCmdU = shortcut.key.toLowerCase() === 'u' &&
+                         (shortcut.modifiers?.includes('meta') || shortcut.modifiers?.includes('ctrl'))
+          const allowInInput = shortcut.key === '?' || shortcut.key === 'F12' || shortcut.key === 'Escape' || isAltArrow || isCmdK || isCmdU
 
           if (!isInputField || allowInInput) {
             e.preventDefault()
