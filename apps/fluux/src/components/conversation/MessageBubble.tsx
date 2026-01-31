@@ -5,7 +5,6 @@
  * the common bubble structure.
  */
 import { useState, memo, type ReactNode } from 'react'
-import { useTranslation } from 'react-i18next'
 import { format } from 'date-fns'
 import type { BaseMessage, MentionReference, Contact, RoomRole, RoomAffiliation } from '@fluux/sdk'
 import { Avatar } from '../Avatar'
@@ -183,7 +182,6 @@ export const MessageBubble = memo(function MessageBubble({
   mentions,
   onReactionPickerChange,
 }: MessageBubbleProps) {
-  const { t } = useTranslation()
   const [showReactionPicker, setShowReactionPickerState] = useState(false)
   const [showMoreMenu, setShowMoreMenu] = useState(false)
 
