@@ -4,7 +4,7 @@ import { groupMessagesByDate, shouldShowAvatar, scrollToMessage, isActionMessage
 // Mock CSS.escape since it's not available in JSDOM
 // This implementation matches the browser's CSS.escape behavior
 vi.stubGlobal('CSS', {
-  escape: (str: string) => str.replace(/([\/\@\+\=])/g, '\\$1'),
+  escape: (str: string) => str.replace(/([/@+=])/g, '\\$1'),
 })
 
 describe('groupMessagesByDate', () => {
@@ -183,7 +183,6 @@ describe('scrollToMessage', () => {
     }
   }
   let querySelectorSpy: ReturnType<typeof vi.spyOn>
-  let querySelectorAllSpy: ReturnType<typeof vi.spyOn>
   let consoleWarnSpy: ReturnType<typeof vi.spyOn>
 
   beforeEach(() => {
@@ -196,7 +195,7 @@ describe('scrollToMessage', () => {
       },
     }
     querySelectorSpy = vi.spyOn(document, 'querySelector')
-    querySelectorAllSpy = vi.spyOn(document, 'querySelectorAll').mockReturnValue([] as unknown as NodeListOf<Element>)
+    vi.spyOn(document, 'querySelectorAll').mockReturnValue([] as unknown as NodeListOf<Element>)
     consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
 

@@ -80,6 +80,11 @@ export class Connection extends BaseModule {
   private isReconnecting = false
   private disconnectReason: 'conflict' | 'auth-error' | null = null
 
+  // Track SM resume state to properly handle 'fail' events
+  // Stanzas in queue BEFORE resume should report as lost
+  // Stanzas sent AFTER resume are normal sends that failed for other reasons
+  private smResumeCompleted = false
+
   // Cached SM state - survives socket death for reconnection
   // Updated when SM is enabled/resumed, cleared on manual disconnect
   private cachedSmState: { id: string; inbound: number } | null = null
@@ -823,6 +828,10 @@ export class Connection extends BaseModule {
    * Must be called after creating the client but before starting.
    */
   private hydrateStreamManagement(smState?: { id: string; inbound: number }): void {
+    // Reset resume tracking - we're starting a new resume attempt
+    // This ensures 'fail' events during resume are properly logged as resume failures
+    this.smResumeCompleted = false
+
     if (!smState || !this.xmpp?.streamManagement) return
     const sm = this.xmpp.streamManagement as any
     sm.id = smState.id
@@ -863,6 +872,8 @@ export class Connection extends BaseModule {
       sm.on('enabled', () => {
         const smId = sm.id ? sm.id.slice(0, 8) + '...' : 'none'
         this.stores.console.addEvent(`Stream Management enabled (id: ${smId})`, 'sm')
+        // New session means no pending resume, so any future 'fail' events are real failures
+        this.smResumeCompleted = true
         // Cache SM state for reconnection (survives socket death)
         if (sm.id) {
           this.cachedSmState = {
@@ -876,6 +887,8 @@ export class Connection extends BaseModule {
       // SM session successfully resumed (from xmpp.js plugin)
       sm.on('resumed', () => {
         this.stores.console.addEvent('Stream Management session resumed', 'sm')
+        // Mark resume as completed - any 'fail' events after this are for new stanzas, not resume failures
+        this.smResumeCompleted = true
         // Update cached SM state (survives socket death for next reconnection)
         if (sm.id) {
           this.cachedSmState = {
@@ -888,9 +901,18 @@ export class Connection extends BaseModule {
         handleResult(true)
       })
       // Listen for SM resumption failure - called once per unacknowledged stanza
+      // IMPORTANT: This fires for stanzas that were in the queue BEFORE resume,
+      // not for stanzas sent after a successful resume. If smResumeCompleted is true,
+      // these are stanzas that failed to send for other reasons (e.g., socket died).
       sm.on('fail', (stanza: unknown) => {
         const stanzaStr = stanza instanceof Error ? stanza.message : String(stanza)
-        this.stores.console.addEvent(`SM stanza lost (resume failed): ${stanzaStr}`, 'sm')
+        if (!this.smResumeCompleted) {
+          // Stanza was in queue before resume attempt - server rejected them
+          this.stores.console.addEvent(`SM stanza lost (resume rejected): ${stanzaStr}`, 'sm')
+        } else {
+          // Stanza sent after successful resume - this is a send failure, not resume failure
+          this.stores.console.addEvent(`SM stanza send failed: ${stanzaStr}`, 'sm')
+        }
         // Note: xmpp.js will fall back to new session and emit 'online'
       })
     }
@@ -1037,9 +1059,22 @@ export class Connection extends BaseModule {
       }
     })
 
-    // Handle disconnection
-    this.xmpp.on('offline', () => {
-      this.emit('offline')
+    // Handle unexpected socket closure (XEP-0198 Stream Management aware)
+    // IMPORTANT: xmpp.js emits 'disconnect' when socket closes unexpectedly,
+    // and 'offline' only after stop() is called. We disabled the built-in
+    // reconnect module, so WE must handle 'disconnect' for reconnection.
+    // See: https://github.com/xmppjs/xmpp.js/tree/main/packages/client
+    //
+    // WORKAROUND: Cast to 'any' because @types/xmpp__client doesn't properly
+    // inherit the 'disconnect' event from @types/xmpp__connection's StatusEvents.
+    // The event is documented and works at runtime. A fix should be submitted to:
+    // https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/xmpp__client
+    ;(this.xmpp as any).on('disconnect', (context: { clean: boolean; reason?: unknown }) => {
+      const wasClean = context?.clean ?? false
+      this.stores.console.addEvent(
+        `Socket disconnected (clean: ${wasClean})`,
+        'connection'
+      )
 
       // Notify disconnect handler (for presence machine, etc.)
       // Skip during reconnection - we're not truly disconnected, just cycling the socket
@@ -1053,7 +1088,8 @@ export class Connection extends BaseModule {
       // - We're not already in a reconnect attempt (prevents loop when stopping client during reconnect)
       // - Not a resource conflict (prevents ping-pong between clients)
       if (this.isManualDisconnect) {
-        // Manual disconnect - already logged by disconnect() method
+        // Manual disconnect - will transition to offline via stop()
+        this.stores.console.addEvent('Socket closed (manual disconnect)', 'connection')
       } else if (this.disconnectReason === 'conflict') {
         // Resource conflict - do not auto-reconnect to prevent ping-pong
         this.stores.connection.setStatus('disconnected')
@@ -1068,16 +1104,24 @@ export class Connection extends BaseModule {
         this.credentials = null
         this.disconnectReason = null
       } else if (this.isReconnecting) {
-        // Already reconnecting - this offline event is from stopping the old client
-        this.stores.console.addEvent('Connection closed (reconnect in progress)', 'connection')
+        // Already reconnecting - this disconnect event is from cleaning up old client
+        this.stores.console.addEvent('Socket closed (reconnect in progress)', 'connection')
       } else if (!this.credentials) {
         // No credentials - cannot reconnect
-        this.stores.console.addEvent('Connection lost (no credentials to reconnect)', 'connection')
+        this.stores.console.addEvent('Socket closed (no credentials to reconnect)', 'connection')
       } else {
         // Unexpected disconnect - attempt to reconnect
         this.stores.console.addEvent('Connection lost unexpectedly, will reconnect', 'connection')
         this.scheduleReconnect()
       }
+    })
+
+    // Handle final offline state (only after stop() is called)
+    // This is the terminal state - no reconnection will happen
+    this.xmpp.on('offline', () => {
+      this.emit('offline')
+      // 'offline' only fires after we call stop(), so this is for cleanup only
+      // All reconnection logic is handled in the 'disconnect' handler above
     })
   }
 
@@ -1178,10 +1222,25 @@ export class Connection extends BaseModule {
 
   /**
    * Attempt to reconnect with saved credentials.
+   *
+   * Includes a defensive check for the xmpp.js client status before proceeding.
+   * This handles edge cases where the reconnect timer was suspended by the OS
+   * (e.g., during sleep) and the connection state may have changed.
    */
   private async attemptReconnect(): Promise<void> {
     // Same guards as scheduleReconnect - don't attempt if conflict occurred
     if (!this.credentials || this.isManualDisconnect || this.disconnectReason === 'conflict') {
+      return
+    }
+
+    // Defensive check: verify xmpp.js client is not already online.
+    // This shouldn't happen in normal flow, but guards against edge cases.
+    if (this.xmpp && (this.xmpp as any).status === 'online') {
+      this.stores.console.addEvent('Connection still online - cancelling reconnect attempt', 'connection')
+      this.isReconnecting = false
+      this.reconnectAttempt = 0
+      this.stores.connection.setStatus('online')
+      this.stores.connection.setReconnectState(0, null)
       return
     }
 
