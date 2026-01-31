@@ -254,7 +254,6 @@
     "forwardMessage": "Reenviar mensaje (proximamente)",
     "moreReactions": "Mas reacciones",
     "moreOptions": "Mas opciones",
-    "jumpToOriginal": "Ir al mensaje original",
     "reactWith": "Reaccionar con {{emoji}}",
     "noMessages": "Sin mensajes aun. Di hola!",
     "loadingMessages": "Cargando mensajes...",

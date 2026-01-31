@@ -258,7 +258,6 @@
     "forwardMessage": "Forward message (coming soon)",
     "moreReactions": "More reactions",
     "moreOptions": "More options",
-    "jumpToOriginal": "Jump to original message",
     "reactWith": "React with {{emoji}}",
     "noMessages": "No messages yet. Say hello!",
     "loadingMessages": "Loading messages...",

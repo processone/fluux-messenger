@@ -9,7 +9,6 @@ import { useTranslation } from 'react-i18next'
 import { format } from 'date-fns'
 import type { BaseMessage, MentionReference, Contact, RoomRole, RoomAffiliation } from '@fluux/sdk'
 import { Avatar } from '../Avatar'
-import { Tooltip } from '../Tooltip'
 import { MessageToolbar } from './MessageToolbar'
 import { MessageBody } from './MessageBody'
 import { MessageReactions } from './MessageReactions'
@@ -290,20 +289,18 @@ export const MessageBubble = memo(function MessageBubble({
 
         {/* Reply context - show what message this is replying to (hidden for retracted messages) */}
         {!message.isRetracted && replyContext && (
-          <Tooltip content={t('chat.jumpToOriginal')} position="top">
-            <button
-              onClick={() => scrollToMessage(replyContext.messageId)}
-              className="flex items-start gap-2 pb-1 pl-2 border-l-2 border-fluux-brand text-left w-full hover:bg-fluux-hover/50 rounded-r transition-colors cursor-pointer select-none"
-            >
-              <div className="text-xs text-fluux-muted min-w-0 flex-1">
-                <span
-                  className="font-medium"
-                  style={{ color: replyContext.senderColor }}
-                >{replyContext.senderName}</span>
-                <p className="line-clamp-2 opacity-75">{replyContext.body}</p>
-              </div>
-            </button>
-          </Tooltip>
+          <button
+            onClick={() => scrollToMessage(replyContext.messageId)}
+            className="flex items-start gap-2 pb-1 pl-2 border-l-2 border-fluux-brand text-left w-full hover:bg-fluux-hover/50 rounded-r transition-colors cursor-pointer select-none"
+          >
+            <div className="text-xs text-fluux-muted min-w-0 flex-1">
+              <span
+                className="font-medium"
+                style={{ color: replyContext.senderColor }}
+              >{replyContext.senderName}</span>
+              <p className="line-clamp-2 opacity-75">{replyContext.body}</p>
+            </div>
+          </button>
         )}
 
         {/* Message body */}

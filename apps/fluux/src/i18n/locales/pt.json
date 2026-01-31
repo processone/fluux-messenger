@@ -258,7 +258,6 @@
     "forwardMessage": "Encaminhar mensagem (brevemente)",
     "moreReactions": "Mais reações",
     "moreOptions": "Mais opções",
-    "jumpToOriginal": "Ir para a mensagem original",
     "reactWith": "Reagir com {{emoji}}",
     "noMessages": "Ainda não há mensagens. Diga olá!",
     "loadingMessages": "Carregando mensagens...",
