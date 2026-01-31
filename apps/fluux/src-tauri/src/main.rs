@@ -352,6 +352,7 @@ fn ensure_window_visible(window: &tauri::WebviewWindow) {
 mod macos {
     use std::ptr::NonNull;
     use std::sync::{Arc, Mutex};
+    use std::sync::atomic::{AtomicU64, Ordering};
     use block2::RcBlock;
     use objc2_foundation::{NSNotification, NSNotificationCenter, NSNotificationName, NSProcessInfo, NSString};
     use objc2_app_kit::NSWorkspace;
@@ -360,6 +361,14 @@ mod macos {
 
     // Store the window reference for the observer callback
     static WINDOW: std::sync::OnceLock<Arc<Mutex<Option<WebviewWindow>>>> = std::sync::OnceLock::new();
+
+    // Store the app handle for emitting events from activation observer
+    static APP_HANDLE: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();
+
+    // Store pending wake timestamp (epoch seconds, 0 = no pending wake)
+    // When system wakes while app is in background, JS can't process the event.
+    // We store the timestamp and emit when app becomes active.
+    static PENDING_WAKE_TIME: AtomicU64 = AtomicU64::new(0);
 
     /// Disable App Nap to keep the connection alive when minimized or on another desktop.
     /// This is particularly important for macOS versions before 14.0 where
@@ -381,10 +390,16 @@ mod macos {
         Box::leak(Box::new(activity));
     }
 
-    pub fn setup_activation_observer(window: WebviewWindow) {
+    pub fn setup_activation_observer(window: WebviewWindow, app_handle: tauri::AppHandle) {
+        use tauri::Emitter;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
         // Store window reference
         let window_holder = WINDOW.get_or_init(|| Arc::new(Mutex::new(None)));
         *window_holder.lock().unwrap() = Some(window);
+
+        // Store app handle for emitting events
+        let _ = APP_HANDLE.set(app_handle);
 
         unsafe {
             let center = NSNotificationCenter::defaultCenter();
@@ -405,6 +420,23 @@ mod macos {
                             }
                         }
                     }
+
+                    // Check for pending wake event that couldn't be processed while in background
+                    let pending_wake = PENDING_WAKE_TIME.swap(0, Ordering::SeqCst);
+                    if pending_wake > 0 {
+                        if let Some(handle) = APP_HANDLE.get() {
+                            // Calculate how long ago the wake happened
+                            let now = SystemTime::now()
+                                .duration_since(UNIX_EPOCH)
+                                .map(|d| d.as_secs())
+                                .unwrap_or(0);
+                            let sleep_duration_secs = now.saturating_sub(pending_wake);
+
+                            // Emit wake event with the duration the app was "asleep"
+                            // (time from actual wake to now when app becomes active)
+                            let _ = handle.emit("system-did-wake-deferred", sleep_duration_secs);
+                        }
+                    }
                 }),
             );
         }
@@ -413,8 +445,13 @@ mod macos {
     /// Set up observer for system sleep events.
     /// Emits "system-will-sleep" event to frontend before laptop goes to sleep.
     /// Emits "system-did-wake" event to frontend when laptop wakes from sleep.
+    ///
+    /// Note: When the app is in background, the JS event handler may not run due to
+    /// WebView throttling. We store the wake timestamp so that when the app becomes
+    /// active, we can emit a deferred wake event with the actual sleep duration.
     pub fn setup_sleep_observer(app_handle: tauri::AppHandle) {
         use tauri::Emitter;
+        use std::time::{SystemTime, UNIX_EPOCH};
 
         unsafe {
             // NSWorkspace notifications use the shared workspace's notification center
@@ -429,6 +466,8 @@ mod macos {
                 None,
                 None,
                 &RcBlock::new(move |_notification: NonNull<NSNotification>| {
+                    // Clear any pending wake (shouldn't happen, but be safe)
+                    PENDING_WAKE_TIME.store(0, Ordering::SeqCst);
                     // Emit event to frontend so it can set XA presence
                     let _ = sleep_handle.emit("system-will-sleep", ());
                 }),
@@ -442,7 +481,15 @@ mod macos {
                 None,
                 None,
                 &RcBlock::new(move |_notification: NonNull<NSNotification>| {
-                    // Emit event to frontend so it can restore presence
+                    // Store wake timestamp for deferred handling if app is in background
+                    let now = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0);
+                    PENDING_WAKE_TIME.store(now, Ordering::SeqCst);
+
+                    // Also emit immediately - if app is in foreground, JS will handle it
+                    // and the pending wake will be cleared when activation fires
                     let _ = wake_handle.emit("system-did-wake", ());
                 }),
             );
@@ -503,7 +550,7 @@ fn main() {
                         let _ = window.hide();
                     }
                 });
-                macos::setup_activation_observer(main_window.clone());
+                macos::setup_activation_observer(main_window.clone(), app.handle().clone());
                 macos::setup_sleep_observer(app.handle().clone());
             }
 

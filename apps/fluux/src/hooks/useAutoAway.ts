@@ -176,14 +176,21 @@ export function useAutoAway() {
   /**
    * Wake detection: OS notification in Tauri only.
    * Time-gap based wake detection is handled by useWakeDetector hook.
+   *
+   * We listen for two events:
+   * 1. system-did-wake: Immediate wake notification (works when app is in foreground)
+   * 2. system-did-wake-deferred: Deferred wake notification when app becomes active
+   *    (handles the case where app was in background during wake)
    */
   useEffect(() => {
     if (!isTauri || status !== 'online') return
 
     let cancelled = false
-    let unlisten: UnlistenFn | undefined
+    let unlistenImmediate: UnlistenFn | undefined
+    let unlistenDeferred: UnlistenFn | undefined
 
     import('@tauri-apps/api/event').then(({ listen }) => {
+      // Immediate wake notification (when app is in foreground)
       listen('system-did-wake', () => {
         if (cancelled) return
         logEvent('System woke from sleep (OS notification)')
@@ -193,14 +200,31 @@ export function useAutoAway() {
         if (cancelled) {
           fn()
         } else {
-          unlisten = fn
+          unlistenImmediate = fn
+        }
+      })
+
+      // Deferred wake notification (when app was in background during wake)
+      // The payload is the number of seconds the wake was delayed
+      listen<number>('system-did-wake-deferred', (event) => {
+        if (cancelled) return
+        const delaySecs = event.payload || 0
+        logEvent(`System woke from sleep (deferred ${delaySecs}s - app was in background)`)
+        notifyWake()
+        lastActivityRef.current = Date.now()
+      }).then(fn => {
+        if (cancelled) {
+          fn()
+        } else {
+          unlistenDeferred = fn
         }
       })
     })
 
     return () => {
       cancelled = true
-      if (unlisten) unlisten()
+      if (unlistenImmediate) unlistenImmediate()
+      if (unlistenDeferred) unlistenDeferred()
     }
   }, [status, notifyWake, logEvent])
 
