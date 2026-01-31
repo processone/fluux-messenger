@@ -150,6 +150,7 @@ describe('MessageBubble', () => {
           senderColor: 'rgb(0, 255, 0)',
           body: 'Original message',
           messageId: 'original-msg-1',
+          avatarIdentifier: 'bob@example.com',
         },
       })
       render(<MessageBubble {...props} />)
@@ -158,11 +159,49 @@ describe('MessageBubble', () => {
       expect(screen.getByText('Original message')).toBeInTheDocument()
     })
 
+    it('renders avatar in reply context when avatarUrl is provided', () => {
+      const props = createDefaultProps({
+        replyContext: {
+          senderName: 'Bob',
+          senderColor: 'rgb(0, 255, 0)',
+          body: 'Original message',
+          messageId: 'original-msg-1',
+          avatarIdentifier: 'bob@example.com',
+          avatarUrl: 'https://example.com/bob-avatar.jpg',
+        },
+      })
+      render(<MessageBubble {...props} />)
+
+      // When avatarUrl is provided, an img element with that src should be rendered
+      const avatarImg = screen.getByRole('img', { name: 'Bob' })
+      expect(avatarImg).toBeInTheDocument()
+      expect(avatarImg).toHaveAttribute('src', 'https://example.com/bob-avatar.jpg')
+    })
+
+    it('does not render avatar in reply context when avatarUrl is undefined', () => {
+      const props = createDefaultProps({
+        replyContext: {
+          senderName: 'Bob',
+          senderColor: 'rgb(0, 255, 0)',
+          body: 'Original message',
+          messageId: 'original-msg-1',
+          avatarIdentifier: 'bob@example.com',
+          // avatarUrl is intentionally omitted - should not render avatar
+        },
+      })
+      render(<MessageBubble {...props} />)
+
+      // When avatarUrl is not provided, no avatar img should be rendered in reply context
+      const avatarImg = screen.queryByRole('img', { name: 'Bob' })
+      expect(avatarImg).not.toBeInTheDocument()
+    })
+
     it('does not render reply context for retracted messages', () => {
       const props = createDefaultProps({
         message: createTestMessage({ isRetracted: true }),
         replyContext: {
           senderName: 'Bob',
+          avatarIdentifier: 'bob@example.com',
           senderColor: 'rgb(0, 255, 0)',
           body: 'Original message',
           messageId: 'original-msg-1',
@@ -228,7 +267,8 @@ describe('buildReplyContext', () => {
       message,
       messagesById,
       () => 'Unknown',
-      () => 'rgb(0, 0, 0)'
+      () => 'rgb(0, 0, 0)',
+      () => ({ avatarUrl: undefined, avatarIdentifier: 'unknown' })
     )
 
     expect(result).toBeUndefined()
@@ -252,7 +292,8 @@ describe('buildReplyContext', () => {
       replyMessage,
       messagesById,
       (msg) => msg ? 'Bob' : 'Unknown',
-      () => 'rgb(100, 100, 100)'
+      () => 'rgb(100, 100, 100)',
+      (msg) => ({ avatarUrl: msg ? 'http://example.com/bob.jpg' : undefined, avatarIdentifier: 'bob@example.com' })
     )
 
     expect(result).toEqual({
@@ -260,6 +301,8 @@ describe('buildReplyContext', () => {
       senderColor: 'rgb(100, 100, 100)',
       body: 'Original body',
       messageId: 'original-1',
+      avatarUrl: 'http://example.com/bob.jpg',
+      avatarIdentifier: 'bob@example.com',
     })
   })
 
@@ -278,7 +321,8 @@ describe('buildReplyContext', () => {
       replyMessage,
       messagesById,
       (msg, fallbackId) => msg ? 'Found' : (fallbackId ? 'Charlie' : 'Unknown'),
-      () => 'rgb(50, 50, 50)'
+      () => 'rgb(50, 50, 50)',
+      (_msg, fallbackId) => ({ avatarUrl: undefined, avatarIdentifier: fallbackId || 'unknown' })
     )
 
     expect(result).toEqual({
@@ -286,6 +330,8 @@ describe('buildReplyContext', () => {
       senderColor: 'rgb(50, 50, 50)',
       body: 'Fallback text',
       messageId: 'missing-1',
+      avatarUrl: undefined,
+      avatarIdentifier: 'charlie@example.com',
     })
   })
 
@@ -318,7 +364,8 @@ describe('buildReplyContext', () => {
       replyMessage,
       messagesById,
       (msg) => msg ? 'Bob' : 'Unknown',
-      () => 'rgb(100, 100, 100)'
+      () => 'rgb(100, 100, 100)',
+      () => ({ avatarUrl: 'http://example.com/bob.jpg', avatarIdentifier: 'bob@example.com' })
     )
 
     // The messageId should be the client-generated ID (used in DOM),
@@ -328,6 +375,8 @@ describe('buildReplyContext', () => {
       senderColor: 'rgb(100, 100, 100)',
       body: 'Original body',
       messageId: 'client-uuid-123',  // NOT 'mam-stanza-id-456'
+      avatarUrl: 'http://example.com/bob.jpg',
+      avatarIdentifier: 'bob@example.com',
     })
   })
 })

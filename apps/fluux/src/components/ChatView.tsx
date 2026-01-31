@@ -598,6 +598,14 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
       }
       return getConsistentTextColor(senderId, dark)
     },
+    (originalMsg, fallbackId) => {
+      const senderId = originalMsg?.from.split('/')[0] || fallbackId?.split('/')[0]
+      const contact = senderId ? contactsByJid.get(senderId) : undefined
+      return {
+        avatarUrl: contact?.avatar,
+        avatarIdentifier: senderId || 'unknown',
+      }
+    },
     isDarkMode
   ), [message, messagesById, contactsByJid, isDarkMode])
 

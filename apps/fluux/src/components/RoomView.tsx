@@ -613,8 +613,21 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
       const nick = originalMsg?.nick || (fallbackId ? fallbackId.split('/').pop() : undefined)
       return nick ? getConsistentTextColor(nick, dark) : 'var(--fluux-brand)'
     },
+    (originalMsg, fallbackId) => {
+      const nick = originalMsg?.nick || (fallbackId ? fallbackId.split('/').pop() : undefined)
+      // Try to get contact avatar if occupant's real JID is known
+      const occupantForReply = nick ? room.occupants.get(nick) : undefined
+      const senderBareJid = occupantForReply?.jid
+        ? getBareJid(occupantForReply.jid)
+        : (nick ? room.nickToJidCache?.get(nick) : undefined)
+      const contactAvatar = senderBareJid ? contactsByJid.get(senderBareJid)?.avatar : undefined
+      return {
+        avatarUrl: contactAvatar,
+        avatarIdentifier: nick || 'unknown',
+      }
+    },
     isDarkMode
-  ), [message, messagesById, isDarkMode])
+  ), [message, messagesById, isDarkMode, room.occupants, room.nickToJidCache, contactsByJid])
 
   // Get reactor display name (for rooms, nicks are shown as-is)
   // Note: MAM-loaded reactions may use full MUC JID (room@server/nick), so extract nick
