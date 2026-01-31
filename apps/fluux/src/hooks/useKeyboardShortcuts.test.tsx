@@ -93,7 +93,7 @@ describe('useKeyboardShortcuts', () => {
     onSidebarViewChange: vi.fn(),
   })
 
-  describe('Next Unread (Alt+U)', () => {
+  describe('Next Unread (Cmd+U)', () => {
     it('should navigate to conversation with unread messages', () => {
       mockState.conversations = [
         { id: 'user1@example.com', unreadCount: 0 },
@@ -106,7 +106,7 @@ describe('useKeyboardShortcuts', () => {
       )
 
       const nextUnreadShortcut = result.current.find(
-        s => s.key === 'u' && s.modifiers?.includes('alt')
+        s => s.key === 'u' && s.modifiers?.includes('meta')
       )
       expect(nextUnreadShortcut).toBeDefined()
       nextUnreadShortcut!.action()
@@ -128,7 +128,7 @@ describe('useKeyboardShortcuts', () => {
       )
 
       const nextUnreadShortcut = result.current.find(
-        s => s.key === 'u' && s.modifiers?.includes('alt')
+        s => s.key === 'u' && s.modifiers?.includes('meta')
       )
       nextUnreadShortcut!.action()
 
@@ -149,7 +149,7 @@ describe('useKeyboardShortcuts', () => {
       )
 
       const nextUnreadShortcut = result.current.find(
-        s => s.key === 'u' && s.modifiers?.includes('alt')
+        s => s.key === 'u' && s.modifiers?.includes('meta')
       )
       nextUnreadShortcut!.action()
 
@@ -173,7 +173,7 @@ describe('useKeyboardShortcuts', () => {
       )
 
       const nextUnreadShortcut = result.current.find(
-        s => s.key === 'u' && s.modifiers?.includes('alt')
+        s => s.key === 'u' && s.modifiers?.includes('meta')
       )
       nextUnreadShortcut!.action()
 
@@ -194,7 +194,7 @@ describe('useKeyboardShortcuts', () => {
       )
 
       const nextUnreadShortcut = result.current.find(
-        s => s.key === 'u' && s.modifiers?.includes('alt')
+        s => s.key === 'u' && s.modifiers?.includes('meta')
       )
       nextUnreadShortcut!.action()
 
@@ -215,7 +215,7 @@ describe('useKeyboardShortcuts', () => {
       )
 
       const nextUnreadShortcut = result.current.find(
-        s => s.key === 'u' && s.modifiers?.includes('alt')
+        s => s.key === 'u' && s.modifiers?.includes('meta')
       )
       nextUnreadShortcut!.action()
 
@@ -236,7 +236,7 @@ describe('useKeyboardShortcuts', () => {
       )
 
       const nextUnreadShortcut = result.current.find(
-        s => s.key === 'u' && s.modifiers?.includes('alt')
+        s => s.key === 'u' && s.modifiers?.includes('meta')
       )
       nextUnreadShortcut!.action()
 
@@ -737,6 +737,31 @@ describe('useKeyboardShortcuts', () => {
       // Should close, not open
       expect(escapeHierarchy.onCloseCommandPalette).toHaveBeenCalledTimes(1)
       expect(options.onOpenCommandPalette).not.toHaveBeenCalled()
+    })
+
+    it('should trigger Cmd-K even when focused in an input field', async () => {
+      const options = createDefaultOptions()
+
+      renderHook(() => useKeyboardShortcuts(options))
+
+      // Create and focus a textarea (simulating message composer)
+      const textarea = document.createElement('textarea')
+      document.body.appendChild(textarea)
+      textarea.focus()
+
+      // Dispatch Cmd-K event while textarea is focused
+      const event = new KeyboardEvent('keydown', {
+        key: 'k',
+        metaKey: true,
+        bubbles: true,
+      })
+      window.dispatchEvent(event)
+
+      // Command palette should still open
+      expect(options.onOpenCommandPalette).toHaveBeenCalledTimes(1)
+
+      // Cleanup
+      document.body.removeChild(textarea)
     })
   })
 })
