@@ -615,6 +615,13 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
     },
     (originalMsg, fallbackId) => {
       const nick = originalMsg?.nick || (fallbackId ? fallbackId.split('/').pop() : undefined)
+      // If the quoted message is from the current user, use own avatar
+      if (nick === myNick) {
+        return {
+          avatarUrl: ownAvatar || undefined,
+          avatarIdentifier: nick || 'unknown',
+        }
+      }
       // Try to get contact avatar if occupant's real JID is known
       const occupantForReply = nick ? room.occupants.get(nick) : undefined
       const senderBareJid = occupantForReply?.jid
@@ -627,7 +634,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
       }
     },
     isDarkMode
-  ), [message, messagesById, isDarkMode, room.occupants, room.nickToJidCache, contactsByJid])
+  ), [message, messagesById, isDarkMode, room.occupants, room.nickToJidCache, contactsByJid, myNick, ownAvatar])
 
   // Get reactor display name (for rooms, nicks are shown as-is)
   // Note: MAM-loaded reactions may use full MUC JID (room@server/nick), so extract nick

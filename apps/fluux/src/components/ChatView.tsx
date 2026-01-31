@@ -427,6 +427,7 @@ const ChatMessageList = memo(function ChatMessageList({
       message={msg}
       showAvatar={shouldShowAvatar(groupMessages, idx)}
       avatar={msg.isOutgoing ? ownAvatar ?? undefined : contactsByJid.get(msg.from)?.avatar}
+      ownAvatar={ownAvatar}
       ownNickname={ownNickname}
       ownPresence={ownPresence}
       conversationId={conversationId}
@@ -490,6 +491,7 @@ interface ChatMessageBubbleProps {
   message: Message
   showAvatar: boolean
   avatar?: string
+  ownAvatar?: string | null
   ownNickname?: string | null
   ownPresence?: 'online' | 'away' | 'dnd' | 'offline'
   conversationId: string
@@ -520,6 +522,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
   message,
   showAvatar,
   avatar,
+  ownAvatar,
   ownNickname,
   ownPresence,
   conversationId,
@@ -600,6 +603,13 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
     },
     (originalMsg, fallbackId) => {
       const senderId = originalMsg?.from.split('/')[0] || fallbackId?.split('/')[0]
+      // If the quoted message is from the current user, use own avatar
+      if (senderId === myBareJid) {
+        return {
+          avatarUrl: ownAvatar || undefined,
+          avatarIdentifier: senderId || 'unknown',
+        }
+      }
       const contact = senderId ? contactsByJid.get(senderId) : undefined
       return {
         avatarUrl: contact?.avatar,
@@ -607,7 +617,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
       }
     },
     isDarkMode
-  ), [message, messagesById, contactsByJid, isDarkMode])
+  ), [message, messagesById, contactsByJid, isDarkMode, myBareJid, ownAvatar])
 
   // Get reactor display name (contact name, or username if not in roster)
   const getReactorName = useCallback((jid: string) => {
