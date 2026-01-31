@@ -1,0 +1,52 @@
+#!/usr/bin/make -f
+
+export DH_VERBOSE = 1
+
+# Binary path - can be overridden for pre-built binaries
+FLUUX_BINARY ?= apps/fluux/src-tauri/target/release/fluux
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+	# Only install npm deps if we need to build
+	@if [ ! -f "$(FLUUX_BINARY)" ]; then \
+		echo "Binary not found, installing npm dependencies..."; \
+		npm ci; \
+	else \
+		echo "Using pre-built binary: $(FLUUX_BINARY)"; \
+	fi
+
+override_dh_auto_build:
+	# Only build if binary doesn't exist
+	@if [ ! -f "$(FLUUX_BINARY)" ]; then \
+		echo "Building Fluux Messenger..."; \
+		npm run build:sdk; \
+		cd apps/fluux && npm run tauri build -- --bundles none; \
+	else \
+		echo "Skipping build, using pre-built binary"; \
+	fi
+
+override_dh_auto_install:
+	# Install binary
+	install -Dm755 $(FLUUX_BINARY) \
+		$(CURDIR)/debian/fluux-messenger/usr/bin/fluux-messenger
+	# Install desktop file
+	install -Dm644 debian/fluux-messenger.desktop \
+		$(CURDIR)/debian/fluux-messenger/usr/share/applications/fluux-messenger.desktop
+	# Install icons
+	install -Dm644 apps/fluux/src-tauri/icons/128x128.png \
+		$(CURDIR)/debian/fluux-messenger/usr/share/icons/hicolor/128x128/apps/fluux-messenger.png
+	install -Dm644 apps/fluux/src-tauri/icons/32x32.png \
+		$(CURDIR)/debian/fluux-messenger/usr/share/icons/hicolor/32x32/apps/fluux-messenger.png
+
+override_dh_auto_clean:
+	cd apps/fluux/src-tauri && cargo clean || true
+	rm -rf node_modules packages/fluux-sdk/dist
+
+override_dh_auto_test:
+	# Skip tests during package build
+
+override_dh_shlibdeps:
+	# Use correct library paths for cross-compilation
+	dh_shlibdeps --dpkg-shlibdeps-params=--ignore-missing-info

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Fluux Messenger
+Comment=Modern XMPP chat client
+Exec=fluux-messenger %u
+Icon=fluux-messenger
+Terminal=false
+Type=Application
+Categories=Network;InstantMessaging;Chat;
+Keywords=xmpp;jabber;chat;messenger;im;
+MimeType=x-scheme-handler/xmpp;
+StartupWMClass=fluux-messenger

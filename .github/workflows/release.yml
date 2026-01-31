@@ -139,7 +139,111 @@ jobs:
           prerelease: false
 
   build-linux:
-    name: Build Linux
+    name: Build Linux (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            deb_arch: amd64
+          - arch: aarch64
+            runner: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+            deb_arch: arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libxss-dev \
+            devscripts \
+            debhelper
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/fluux/src-tauri
+          key: ${{ matrix.target }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build SDK
+        run: npm run build:sdk
+
+      - name: Read release notes
+        id: release_notes
+        run: |
+          if [ -f RELEASE_NOTES.md ]; then
+            NOTES=$(cat RELEASE_NOTES.md)
+          else
+            NOTES="See the [CHANGELOG](https://github.com/processone/fluux-messenger/blob/main/CHANGELOG.md) for details."
+          fi
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Build Tauri binary
+        run: |
+          cd apps/fluux
+          npm run tauri build -- --target ${{ matrix.target }} --bundles none
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      - name: Build .deb package
+        run: |
+          # Point to pre-built binary (debian/rules will skip build)
+          export FLUUX_BINARY="apps/fluux/src-tauri/target/${{ matrix.target }}/release/fluux"
+
+          # Build the .deb package
+          dpkg-buildpackage -uc -us -b
+
+          # Move .deb to a known location
+          mkdir -p dist
+          mv ../fluux-messenger_*.deb dist/
+
+          # Rename to include architecture
+          cd dist
+          for f in fluux-messenger_*.deb; do
+            mv "$f" "${f%.deb}_${{ matrix.deb_arch }}.deb"
+          done
+
+      - name: Upload .deb to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/*.deb
+          tag_name: ${{ github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-linux-rpm:
+    name: Build Linux RPM (x86_64)
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -151,12 +255,12 @@ jobs:
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libxss-dev flatpak flatpak-builder
-
-      - name: Setup Flatpak
-        run: |
-          flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-          flatpak install --user -y flathub org.gnome.Platform//47 org.gnome.Sdk//47
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libxss-dev
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -190,7 +294,7 @@ jobs:
           echo "$NOTES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Build Tauri app (deb and rpm)
+      - name: Build Tauri app (RPM only)
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -203,29 +307,4 @@ jobs:
           releaseBody: ${{ steps.release_notes.outputs.notes }}
           releaseDraft: false
           prerelease: false
-          args: --bundles deb,rpm
-
-      # Flatpak build is temporarily disabled - needs investigation into
-      # Tauri's deb internal file naming conventions
-      # - name: Build Flatpak
-      #   continue-on-error: true
-      #   run: |
-      #     # Find the built deb file
-      #     DEB_FILE=$(find apps/fluux/src-tauri/target/release/bundle/deb -name "*.deb" -not -name "*.sig" | head -1)
-      #     echo "Found deb: $DEB_FILE"
-      #
-      #     # Copy deb to flatpak directory
-      #     cp "$DEB_FILE" apps/fluux/flatpak/fluux.deb
-      #
-      #     # Build Flatpak bundle
-      #     cd apps/fluux/flatpak
-      #     flatpak-builder --user --force-clean --repo=repo build-dir com.processone.fluux.yaml
-      #     flatpak build-bundle repo Fluux.Messenger.flatpak com.processone.fluux
-      #
-      # - name: Upload Flatpak to Release
-      #   if: success()
-      #   uses: softprops/action-gh-release@v1
-      #   with:
-      #     files: apps/fluux/flatpak/Fluux.Messenger.flatpak
-      #   env:
-      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          args: --bundles rpm

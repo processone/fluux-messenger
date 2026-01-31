@@ -1,0 +1,40 @@
+Source: fluux-messenger
+Section: net
+Priority: optional
+Maintainer: ProcessOne <contact@process-one.net>
+Build-Depends: debhelper-compat (= 13),
+               nodejs (>= 18),
+               npm,
+               rustc,
+               cargo,
+               libwebkit2gtk-4.1-dev,
+               libgtk-3-dev,
+               libayatana-appindicator3-dev,
+               librsvg2-dev,
+               libssl-dev,
+               pkg-config
+Standards-Version: 4.6.2
+Homepage: https://github.com/processone/fluux-messenger
+Vcs-Git: https://github.com/processone/fluux-messenger.git
+Vcs-Browser: https://github.com/processone/fluux-messenger
+Rules-Requires-Root: no
+
+Package: fluux-messenger
+Architecture: any
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+         libwebkit2gtk-4.1-0,
+         libgtk-3-0,
+         libayatana-appindicator3-1
+Description: Modern XMPP desktop client
+ Fluux Messenger is a modern, user-friendly XMPP chat client built with
+ Tauri and React. It provides a clean interface for real-time messaging
+ using the XMPP protocol.
+ .
+ Features include:
+  - One-to-one and group chat (MUC)
+  - Message reactions and replies
+  - File sharing via HTTP Upload
+  - Desktop notifications
+  - Multiple account support
+  - Cross-platform (Linux, macOS, Windows)
