@@ -22,7 +22,7 @@ override_dh_auto_build:
 	@if [ ! -f "$(FLUUX_BINARY)" ]; then \
 		echo "Building Fluux Messenger..."; \
 		npm run build:sdk; \
-		cd apps/fluux && npm run tauri build -- --bundles none; \
+		cd apps/fluux && npm run tauri build -- --no-bundle; \
 	else \
 		echo "Skipping build, using pre-built binary"; \
 	fi
