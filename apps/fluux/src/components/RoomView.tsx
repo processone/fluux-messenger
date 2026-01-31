@@ -610,6 +610,8 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
       return fallbackId ? fallbackId.split('/').pop() || 'Unknown' : 'Unknown'
     },
     (originalMsg, fallbackId, dark) => {
+      // Own messages: use green color
+      if (originalMsg?.isOutgoing) return 'var(--fluux-green)'
       const nick = originalMsg?.nick || (fallbackId ? fallbackId.split('/').pop() : undefined)
       return nick ? getConsistentTextColor(nick, dark) : 'var(--fluux-brand)'
     },

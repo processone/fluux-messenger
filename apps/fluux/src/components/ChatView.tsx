@@ -587,12 +587,18 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
     message,
     messagesById,
     (originalMsg, fallbackId) => {
+      // Own messages: use ownNickname or JID username
+      if (originalMsg?.isOutgoing) {
+        return ownNickname || originalMsg.from.split('@')[0]
+      }
       if (originalMsg) {
         return contactsByJid.get(originalMsg.from.split('/')[0])?.name || originalMsg.from.split('@')[0]
       }
       return fallbackId ? fallbackId.split('@')[0] : 'Unknown'
     },
     (originalMsg, fallbackId, dark) => {
+      // Own messages: use green color
+      if (originalMsg?.isOutgoing) return 'var(--fluux-green)'
       const senderId = originalMsg?.from.split('/')[0] || fallbackId?.split('/')[0]
       if (!senderId) return 'var(--fluux-brand)'
       const contact = contactsByJid.get(senderId)
@@ -617,7 +623,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
       }
     },
     isDarkMode
-  ), [message, messagesById, contactsByJid, isDarkMode, myBareJid, ownAvatar])
+  ), [message, messagesById, contactsByJid, isDarkMode, myBareJid, ownAvatar, ownNickname])
 
   // Get reactor display name (contact name, or username if not in roster)
   const getReactorName = useCallback((jid: string) => {
