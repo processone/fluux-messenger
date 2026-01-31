@@ -183,7 +183,6 @@ describe('scrollToMessage', () => {
     }
   }
   let querySelectorSpy: ReturnType<typeof vi.spyOn>
-  let querySelectorAllSpy: ReturnType<typeof vi.spyOn>
   let consoleWarnSpy: ReturnType<typeof vi.spyOn>
 
   beforeEach(() => {
@@ -196,7 +195,7 @@ describe('scrollToMessage', () => {
       },
     }
     querySelectorSpy = vi.spyOn(document, 'querySelector')
-    querySelectorAllSpy = vi.spyOn(document, 'querySelectorAll').mockReturnValue([] as unknown as NodeListOf<Element>)
+    vi.spyOn(document, 'querySelectorAll').mockReturnValue([] as unknown as NodeListOf<Element>)
     consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
 
