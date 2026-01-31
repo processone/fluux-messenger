@@ -220,7 +220,7 @@ describe('XMPPClient Connection', () => {
       vi.mocked(mockStores.connection.setReconnectState).mockClear()
 
       // Simulate unexpected disconnect
-      mockXmppClientInstance._emit('offline')
+      mockXmppClientInstance._emit('disconnect', { clean: false })
 
       // Should be in reconnecting state
       expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
@@ -245,7 +245,7 @@ describe('XMPPClient Connection', () => {
       vi.mocked(mockStores.connection.setStatus).mockClear()
 
       // Simulate offline event
-      mockXmppClientInstance._emit('offline')
+      mockXmppClientInstance._emit('disconnect', { clean: false })
 
       // Should NOT have set reconnecting status after the disconnect call
       const calls = vi.mocked(mockStores.connection.setStatus).mock.calls
@@ -264,7 +264,7 @@ describe('XMPPClient Connection', () => {
       await connectPromise
 
       // Trigger reconnection
-      mockXmppClientInstance._emit('offline')
+      mockXmppClientInstance._emit('disconnect', { clean: false })
 
       // Cancel
       xmppClient.cancelReconnect()
@@ -294,7 +294,7 @@ describe('XMPPClient Connection', () => {
       mockClientFactory.mockClear()
 
       // Trigger reconnection
-      mockXmppClientInstance._emit('offline')
+      mockXmppClientInstance._emit('disconnect', { clean: false })
 
       // Before timer expires, no new client created
       expect(mockClientFactory).not.toHaveBeenCalled()
@@ -361,7 +361,7 @@ describe('XMPPClient Connection', () => {
       mockXmppClientInstance.reconnect.stop.mockClear()
 
       // Trigger reconnection
-      mockXmppClientInstance._emit('offline')
+      mockXmppClientInstance._emit('disconnect', { clean: false })
 
       // Create new mock client for reconnection
       mockXmppClientInstance = createMockXmppClient()
@@ -396,7 +396,7 @@ describe('XMPPClient Connection', () => {
       // Try to trigger reconnection via offline event - should NOT reconnect
       // because credentials are cleared
       mockClientFactory.mockClear()
-      mockXmppClientInstance._emit('offline')
+      mockXmppClientInstance._emit('disconnect', { clean: false })
 
       // Advance timers - no reconnection should happen
       await vi.advanceTimersByTimeAsync(5000)
@@ -455,7 +455,7 @@ describe('XMPPClient Connection', () => {
       vi.mocked(mockStores.connection.setReconnectState).mockClear()
 
       // First disconnect - attempt 1
-      mockXmppClientInstance._emit('offline')
+      mockXmppClientInstance._emit('disconnect', { clean: false })
       expect(mockStores.connection.setReconnectState).toHaveBeenCalledWith(1, 1) // 1s delay
 
       // Simulate failed reconnect by making start() reject
@@ -486,7 +486,7 @@ describe('XMPPClient Connection', () => {
       await connectPromise
 
       // Trigger reconnection
-      mockXmppClientInstance._emit('offline')
+      mockXmppClientInstance._emit('disconnect', { clean: false })
 
       // Create new mock for reconnection
       mockXmppClientInstance = createMockXmppClient()
@@ -520,7 +520,7 @@ describe('XMPPClient Connection', () => {
       mockXmppClientInstance.send.mockClear()
 
       // Trigger reconnection
-      mockXmppClientInstance._emit('offline')
+      mockXmppClientInstance._emit('disconnect', { clean: false })
 
       // Create new mock for reconnection
       mockXmppClientInstance = createMockXmppClient()
@@ -551,7 +551,7 @@ describe('XMPPClient Connection', () => {
       await connectPromise
 
       // Trigger reconnection
-      mockXmppClientInstance._emit('offline')
+      mockXmppClientInstance._emit('disconnect', { clean: false })
 
       // Create new mock for reconnection
       mockXmppClientInstance = createMockXmppClient()
@@ -597,7 +597,7 @@ describe('XMPPClient Connection', () => {
       vi.mocked(mockStores.roster.resetAllPresence).mockClear()
 
       // Trigger reconnection
-      mockXmppClientInstance._emit('offline')
+      mockXmppClientInstance._emit('disconnect', { clean: false })
 
       // Create new mock for reconnection
       mockXmppClientInstance = createMockXmppClient()
@@ -629,7 +629,7 @@ describe('XMPPClient Connection', () => {
       vi.mocked(mockStores.chat.resetMAMStates).mockClear()
 
       // Trigger reconnection
-      mockXmppClientInstance._emit('offline')
+      mockXmppClientInstance._emit('disconnect', { clean: false })
 
       // Create new mock for reconnection
       mockXmppClientInstance = createMockXmppClient()
@@ -663,7 +663,7 @@ describe('XMPPClient Connection', () => {
       vi.mocked(mockStores.chat.resetMAMStates).mockClear()
 
       // Trigger reconnection
-      mockXmppClientInstance._emit('offline')
+      mockXmppClientInstance._emit('disconnect', { clean: false })
 
       // Create new mock for reconnection
       mockXmppClientInstance = createMockXmppClient()
@@ -733,7 +733,7 @@ describe('XMPPClient Connection', () => {
 
       // Simulate resource conflict error followed by offline
       mockXmppClientInstance._emit('error', new Error('conflict'))
-      mockXmppClientInstance._emit('offline')
+      mockXmppClientInstance._emit('disconnect', { clean: false })
 
       // Should set status to disconnected (not reconnecting)
       expect(mockStores.connection.setStatus).toHaveBeenCalledWith('disconnected')
@@ -767,7 +767,7 @@ describe('XMPPClient Connection', () => {
 
       // Simulate auth error followed by offline
       mockXmppClientInstance._emit('error', new Error('not-authorized'))
-      mockXmppClientInstance._emit('offline')
+      mockXmppClientInstance._emit('disconnect', { clean: false })
 
       // Should log the auth error
       expect(mockStores.console.addEvent).toHaveBeenCalledWith(
@@ -797,7 +797,7 @@ describe('XMPPClient Connection', () => {
       vi.mocked(mockStores.connection.setStatus).mockClear()
 
       // Simulate normal disconnection (no error before offline)
-      mockXmppClientInstance._emit('offline')
+      mockXmppClientInstance._emit('disconnect', { clean: false })
 
       // Should set status to reconnecting
       expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')

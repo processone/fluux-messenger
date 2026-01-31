@@ -846,8 +846,8 @@ describe('XMPPClient', () => {
       mockXmppClientInstance._emit('online')
       await connectPromise
 
-      // Trigger offline to start reconnecting
-      mockXmppClientInstance._emit('offline')
+      // Trigger disconnect to start reconnecting (xmpp.js emits 'disconnect' on socket close)
+      mockXmppClientInstance._emit('disconnect', { clean: false })
       expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
 
       // Clear mocks
