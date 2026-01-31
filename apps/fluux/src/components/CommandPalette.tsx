@@ -428,6 +428,14 @@ export function CommandPalette({
   // =============================================================================
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Handle Cmd+K / Ctrl+K to toggle (close) the palette
+    if (e.key.toLowerCase() === 'k' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault()
+      e.stopPropagation()
+      onClose()
+      return
+    }
+
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault()

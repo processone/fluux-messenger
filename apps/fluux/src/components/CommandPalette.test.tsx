@@ -332,6 +332,24 @@ describe('CommandPalette', () => {
       expect(defaultProps.onClose).toHaveBeenCalled()
     })
 
+    it('should close on Cmd+K (toggle)', () => {
+      render(<CommandPalette {...defaultProps} />)
+      const container = screen.getByPlaceholderText('Go to...').closest('div')?.parentElement
+
+      fireEvent.keyDown(container!, { key: 'k', metaKey: true })
+
+      expect(defaultProps.onClose).toHaveBeenCalled()
+    })
+
+    it('should close on Ctrl+K (toggle)', () => {
+      render(<CommandPalette {...defaultProps} />)
+      const container = screen.getByPlaceholderText('Go to...').closest('div')?.parentElement
+
+      fireEvent.keyDown(container!, { key: 'k', ctrlKey: true })
+
+      expect(defaultProps.onClose).toHaveBeenCalled()
+    })
+
     it('should execute action on Enter', () => {
       render(<CommandPalette {...defaultProps} />)
       const container = screen.getByPlaceholderText('Go to...').closest('div')?.parentElement
