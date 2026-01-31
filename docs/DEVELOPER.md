@@ -37,22 +37,33 @@ You can build `.deb` packages locally using standard Debian tooling.
 
 ### Prerequisites
 
-Install the required build dependencies on Debian/Ubuntu:
+Install Node.js 20 (Ubuntu's default is too old):
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+```
+
+Install Rust via rustup:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source "$HOME/.cargo/env"
+```
+
+Install system dependencies:
 
 ```bash
 sudo apt-get install -y \
   debhelper \
   devscripts \
   nodejs \
-  npm \
-  rustc \
-  cargo \
   libwebkit2gtk-4.1-dev \
   libgtk-3-dev \
   libayatana-appindicator3-dev \
   librsvg2-dev \
   libssl-dev \
-  pkg-config
+  pkg-config \
+  patchelf
 ```
 
 ### Build from Source
@@ -60,8 +71,8 @@ sudo apt-get install -y \
 To build the `.deb` package from scratch (compiles everything):
 
 ```bash
-# From repository root
-dpkg-buildpackage -uc -us -b
+# From repository root (-d skips dpkg's dependency check for rustup-installed Rust)
+dpkg-buildpackage -d -uc -us -b
 ```
 
 This will:
@@ -81,13 +92,13 @@ If you've already built the binary with Tauri, you can skip the build step:
 npm run tauri:build
 
 # Then package (auto-detects existing binary)
-dpkg-buildpackage -uc -us -b
+dpkg-buildpackage -d -uc -us -b
 ```
 
 Or explicitly specify the binary path:
 
 ```bash
-FLUUX_BINARY=apps/fluux/src-tauri/target/release/fluux dpkg-buildpackage -uc -us -b
+FLUUX_BINARY=apps/fluux/src-tauri/target/release/fluux dpkg-buildpackage -d -uc -us -b
 ```
 
 ### Install the Package
