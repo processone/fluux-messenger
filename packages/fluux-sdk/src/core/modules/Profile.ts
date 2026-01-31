@@ -206,7 +206,11 @@ export class Profile extends BaseModule {
         })
       }
     } catch (err) {
-      console.error('Failed to fetch room avatar:', err)
+      // item-not-found is expected when a room has no avatar set
+      const isNotFound = err instanceof Error && err.message.includes('item-not-found')
+      if (!isNotFound) {
+        console.error('Failed to fetch room avatar:', err)
+      }
     }
   }
 
