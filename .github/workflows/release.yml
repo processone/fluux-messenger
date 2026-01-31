@@ -211,7 +211,7 @@ jobs:
       - name: Build Tauri binary
         run: |
           cd apps/fluux
-          npm run tauri build -- --target ${{ matrix.target }} --bundles none
+          npm run tauri build -- --target ${{ matrix.target }} --no-bundle
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
