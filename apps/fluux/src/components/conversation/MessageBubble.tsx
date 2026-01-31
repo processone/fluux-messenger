@@ -294,7 +294,8 @@ export const MessageBubble = memo(function MessageBubble({
         {!message.isRetracted && replyContext && (
           <button
             onClick={() => scrollToMessage(replyContext.messageId)}
-            className="flex items-start gap-1.5 pb-1 pl-2 border-l-2 border-fluux-brand text-left w-full hover:bg-fluux-hover/50 rounded-r transition-colors cursor-pointer select-none"
+            className="flex items-start gap-1.5 pb-1 pl-2 border-l-2 text-left w-full hover:bg-fluux-hover/50 rounded-r transition-colors cursor-pointer select-none"
+            style={{ borderColor: replyContext.senderColor }}
           >
             <CornerUpLeft className="w-3.5 h-3.5 text-fluux-muted flex-shrink-0 mt-0.5" />
             <Avatar
