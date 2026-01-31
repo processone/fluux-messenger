@@ -12,7 +12,7 @@ export interface ThumbnailResult {
 }
 
 /** Maximum dimension for thumbnails (width or height) */
-const THUMBNAIL_MAX_SIZE = 256
+const THUMBNAIL_MAX_SIZE = 512
 
 /** JPEG quality for thumbnails (0-1) */
 const THUMBNAIL_QUALITY = 0.7
@@ -122,7 +122,7 @@ export function isImageFile(file: File): boolean {
 
 /**
  * Generate a thumbnail from an image file.
- * Resizes to max 256px on longest side, converts to JPEG.
+ * Resizes to max 512px on longest side, converts to JPEG.
  *
  * @param file - The image file to generate thumbnail from
  * @returns Thumbnail blob with dimensions, or null if generation fails

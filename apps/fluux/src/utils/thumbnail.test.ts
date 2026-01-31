@@ -162,7 +162,7 @@ describe('generateThumbnail', () => {
     expect(mockRevokeObjectURL).toHaveBeenCalledWith(mockObjectUrl)
   })
 
-  it('should scale down wide images to max 256px width', async () => {
+  it('should scale down wide images to max 512px width', async () => {
     mockImage.width = 1024
     mockImage.height = 768
 
@@ -170,11 +170,11 @@ describe('generateThumbnail', () => {
     const result = await generateThumbnail(file)
 
     expect(result).not.toBeNull()
-    expect(result!.width).toBe(256)
-    expect(result!.height).toBe(192) // 768 * (256/1024) = 192
+    expect(result!.width).toBe(512)
+    expect(result!.height).toBe(384) // 768 * (512/1024) = 384
   })
 
-  it('should scale down tall images to max 256px height', async () => {
+  it('should scale down tall images to max 512px height', async () => {
     mockImage.width = 600
     mockImage.height = 800
 
@@ -182,8 +182,8 @@ describe('generateThumbnail', () => {
     const result = await generateThumbnail(file)
 
     expect(result).not.toBeNull()
-    expect(result!.width).toBe(192) // 600 * (256/800) = 192
-    expect(result!.height).toBe(256)
+    expect(result!.width).toBe(384) // 600 * (512/800) = 384
+    expect(result!.height).toBe(512)
   })
 
   it('should not scale up small images', async () => {
@@ -199,15 +199,15 @@ describe('generateThumbnail', () => {
   })
 
   it('should handle square images correctly', async () => {
-    mockImage.width = 512
-    mockImage.height = 512
+    mockImage.width = 1024
+    mockImage.height = 1024
 
     const file = new File([''], 'square.jpg', { type: 'image/jpeg' })
     const result = await generateThumbnail(file)
 
     expect(result).not.toBeNull()
-    expect(result!.width).toBe(256)
-    expect(result!.height).toBe(256)
+    expect(result!.width).toBe(512)
+    expect(result!.height).toBe(512)
   })
 
   it('should return JPEG media type', async () => {
@@ -450,7 +450,7 @@ describe('generateVideoThumbnail', () => {
     expect(result!.mediaType).toBe('image/jpeg')
   })
 
-  it('should scale down wide videos to max 256px width', async () => {
+  it('should scale down wide videos to max 512px width', async () => {
     const videoElement: Record<string | symbol, unknown> = {
       preload: '',
       muted: false,
@@ -485,8 +485,8 @@ describe('generateVideoThumbnail', () => {
     const result = await generateVideoThumbnail(file)
 
     expect(result).not.toBeNull()
-    expect(result!.width).toBe(256)
-    expect(result!.height).toBe(144) // 1080 * (256/1920) = 144
+    expect(result!.width).toBe(512)
+    expect(result!.height).toBe(288) // 1080 * (512/1920) = 288
   })
 })
 
