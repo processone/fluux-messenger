@@ -29,21 +29,36 @@ export interface MessageGroup<T extends GroupableMessage> {
 
 /**
  * Groups messages by their date (yyyy-MM-dd format).
- * Messages are assumed to be in chronological order.
+ *
+ * Uses a Map to collect messages by date, then sorts both the groups (by date)
+ * and messages within each group (by timestamp). This handles the case where
+ * messages may arrive out of order (e.g., delayed messages via live path,
+ * cached messages merged with live messages).
  */
 export function groupMessagesByDate<T extends GroupableMessage>(messages: T[]): MessageGroup<T>[] {
-  const groups: MessageGroup<T>[] = []
+  // Collect messages by date using a Map
+  const groupMap = new Map<string, T[]>()
 
   for (const msg of messages) {
     const dateStr = format(msg.timestamp, 'yyyy-MM-dd')
-    const lastGroup = groups[groups.length - 1]
-
-    if (lastGroup?.date === dateStr) {
-      lastGroup.messages.push(msg)
+    const existing = groupMap.get(dateStr)
+    if (existing) {
+      existing.push(msg)
     } else {
-      groups.push({ date: dateStr, messages: [msg] })
+      groupMap.set(dateStr, [msg])
     }
   }
+
+  // Convert to array and sort groups by date, messages by timestamp
+  const groups: MessageGroup<T>[] = []
+  for (const [date, msgs] of groupMap) {
+    // Sort messages within each group by timestamp
+    msgs.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
+    groups.push({ date, messages: msgs })
+  }
+
+  // Sort groups by date (chronological order)
+  groups.sort((a, b) => a.date.localeCompare(b.date))
 
   return groups
 }

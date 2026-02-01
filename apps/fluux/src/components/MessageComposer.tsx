@@ -237,6 +237,7 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
     const savedScrollTop = textarea.scrollTop
 
     textarea.style.height = 'auto'
+    // This value must match the CSS line-height in .message-input (index.css)
     const lineHeight = 24
     const minHeight = lineHeight
     const maxHeight = lineHeight * 8

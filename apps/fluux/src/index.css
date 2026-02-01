@@ -164,6 +164,7 @@ html, body {
 .message-input {
   min-height: 44px;
   max-height: 200px;
+  line-height: 24px; /* Must match lineHeight constant in MessageComposer.tsx */
   word-break: break-word;
   overflow-wrap: break-word;
 }
