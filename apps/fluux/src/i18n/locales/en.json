@@ -138,6 +138,7 @@
     "autojoinOn": "Auto-join: On",
     "autojoinOff": "Auto-join: Off",
     "doubleClickToJoin": "Double-click to join",
+    "noMessages": "No messages yet",
     "user": "user",
     "users": "users",
     "asNickname": "as {{nickname}}",
