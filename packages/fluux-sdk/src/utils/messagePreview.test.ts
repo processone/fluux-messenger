@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getAttachmentEmoji, formatMessagePreview, stripReplyQuote } from './messagePreview'
+import { getAttachmentEmoji, formatMessagePreview, stripReplyQuote, stripMessageStyling } from './messagePreview'
 import type { Message, FileAttachment } from '../core/types'
 
 describe('messagePreview', () => {
@@ -137,6 +137,32 @@ describe('messagePreview', () => {
       expect(formatMessagePreview(message)).toBe('🎵 song.mp3')
     })
 
+    describe('XEP-0393 styling', () => {
+      it('should strip bold markup from preview', () => {
+        const message = { ...baseMessage, body: 'This is *important* news' }
+        expect(formatMessagePreview(message)).toBe('This is important news')
+      })
+
+      it('should strip italic markup from preview', () => {
+        const message = { ...baseMessage, body: 'Read the _documentation_ first' }
+        expect(formatMessagePreview(message)).toBe('Read the documentation first')
+      })
+
+      it('should strip inline code from preview', () => {
+        const message = { ...baseMessage, body: 'Run `npm install` to start' }
+        expect(formatMessagePreview(message)).toBe('Run npm install to start')
+      })
+
+      it('should strip styling from attachment preview', () => {
+        const message = {
+          ...baseMessage,
+          body: 'Check this *amazing* photo',
+          attachment: { url: 'photo.jpg', mediaType: 'image/jpeg' },
+        }
+        expect(formatMessagePreview(message)).toBe('📷 Check this amazing photo')
+      })
+    })
+
     describe('reply handling', () => {
       it('should strip quote prefix when message is a reply', () => {
         const message = {
@@ -193,6 +219,68 @@ describe('messagePreview', () => {
         }
         expect(formatMessagePreview(message)).toBe('📷 photo.jpg')
       })
+    })
+  })
+
+  describe('stripMessageStyling', () => {
+    it('should strip bold markup', () => {
+      expect(stripMessageStyling('This is *bold* text')).toBe('This is bold text')
+    })
+
+    it('should strip italic markup', () => {
+      expect(stripMessageStyling('This is _italic_ text')).toBe('This is italic text')
+    })
+
+    it('should strip strikethrough markup', () => {
+      expect(stripMessageStyling('This is ~deleted~ text')).toBe('This is deleted text')
+    })
+
+    it('should strip inline code markup', () => {
+      expect(stripMessageStyling('Run `npm install` now')).toBe('Run npm install now')
+    })
+
+    it('should strip multiple styles in same message', () => {
+      expect(stripMessageStyling('*bold* and _italic_ and ~strike~')).toBe('bold and italic and strike')
+    })
+
+    it('should not strip markup in the middle of words', () => {
+      // Per XEP-0393, markup must be at word boundaries
+      expect(stripMessageStyling('foo*bar*baz')).toBe('foo*bar*baz')
+      expect(stripMessageStyling('under_score_name')).toBe('under_score_name')
+    })
+
+    it('should handle markup at start of string', () => {
+      expect(stripMessageStyling('*bold* at start')).toBe('bold at start')
+    })
+
+    it('should handle markup at end of string', () => {
+      expect(stripMessageStyling('end with *bold*')).toBe('end with bold')
+    })
+
+    it('should handle empty string', () => {
+      expect(stripMessageStyling('')).toBe('')
+    })
+
+    it('should handle text with no markup', () => {
+      expect(stripMessageStyling('Plain text message')).toBe('Plain text message')
+    })
+
+    it('should not strip unmatched markup characters', () => {
+      expect(stripMessageStyling('This * is not bold')).toBe('This * is not bold')
+      expect(stripMessageStyling('Price: $50_000')).toBe('Price: $50_000')
+    })
+
+    it('should handle markup followed by punctuation', () => {
+      expect(stripMessageStyling('Is it *important*?')).toBe('Is it important?')
+      expect(stripMessageStyling('Say _hello_!')).toBe('Say hello!')
+    })
+
+    it('should strip multi-word bold', () => {
+      expect(stripMessageStyling('This is *very important* info')).toBe('This is very important info')
+    })
+
+    it('should strip multi-word italic', () => {
+      expect(stripMessageStyling('Read the _fine print_ carefully')).toBe('Read the fine print carefully')
     })
   })
 
