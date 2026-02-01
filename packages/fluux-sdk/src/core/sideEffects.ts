@@ -403,9 +403,38 @@ export function setupRoomSideEffects(
     previousStatus = status
   })
 
+  // Subscribe to supportsMAM changes on the active room.
+  // This handles the case where view state is restored before rooms are joined:
+  // 1. Session restore sets activeRoomJid (from previous session)
+  // 2. Side effect triggers but room.supportsMAM may be false (not joined yet)
+  // 3. MAM fetch is skipped
+  // 4. Room joins from bookmarks, disco#info runs, supportsMAM becomes true
+  // 5. This subscription catches that and triggers MAM fetch
+  const unsubscribeRoomMAMSupport = roomStore.subscribe(
+    // Selector: watch supportsMAM on the active room
+    (state) => {
+      const activeJid = state.activeRoomJid
+      if (!activeJid) return { jid: null, supportsMAM: false }
+      const room = state.rooms.get(activeJid)
+      return { jid: activeJid, supportsMAM: room?.supportsMAM ?? false }
+    },
+    // Handler: runs when supportsMAM changes for active room
+    (current, previous) => {
+      // If supportsMAM just became true for the active room
+      if (current.supportsMAM && !previous.supportsMAM && current.jid) {
+        if (!fetchInitiated.has(current.jid)) {
+          if (debug) console.log('[SideEffects] Room: MAM support discovered for active room', current.jid)
+          void fetchMAMForRoom(current.jid)
+        }
+      }
+    },
+    { fireImmediately: false }
+  )
+
   return () => {
     unsubscribe()
     unsubscribeConnection()
+    unsubscribeRoomMAMSupport()
   }
 }
 
