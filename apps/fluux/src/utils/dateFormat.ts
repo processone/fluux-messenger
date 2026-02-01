@@ -37,7 +37,11 @@ export function formatDateHeader(
   t: (key: string) => string,
   lang: string
 ): string {
-  const date = new Date(dateStr)
+  // Parse yyyy-MM-dd as LOCAL midnight (not UTC)
+  // new Date('2026-02-01') parses as UTC midnight, which can be the previous day
+  // in western timezones. Explicitly constructing with year/month/day ensures local time.
+  const [year, month, day] = dateStr.split('-').map(Number)
+  const date = new Date(year, month - 1, day)
 
   if (isToday(date)) return t('dates.today')
   if (isYesterday(date)) return t('dates.yesterday')
