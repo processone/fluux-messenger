@@ -2,6 +2,26 @@
 
 A headless SDK for building XMPP chat applications. The core is framework-agnostic, with React bindings provided out of the box.
 
+## Design principles
+
+My approach is to apply reactive application design pattern to Fluux Messenger, using a reactive layered architecture (three tiered).
+
+```
+┌─────────────┐      state      ┌─────────────┐     events      ┌─────────────┐
+│     UI      │ ←─────────────→ │     SDK     │ ←─────────────→ │ XMPP Server │
+│ (Reactive)  │    commands     │   (State    │    stanzas      │             │
+│             │                 │   Container)│                 │             │
+└─────────────┘                 └─────────────┘                 └─────────────┘
+```
+
+The SDK acts as a state container and protocol abstraction layer, exposing the application state to the UI through reactive subscriptions and accepting commands through a clean API.
+
+In other words, the SDK handles XMPP protocol translation, transforming user commands into state change commands (that may or may not require sending stanzas) and server events into state updates. If I manage to make this rights, the UI should be a pure function of this state, never speaking XMPP directly.
+
+This is not an utopy. Most GUI applications are designed with such architectural patterns (some use MVC, MVVM, reactive design, etc).
+
+Fluux SDK push the cursor to the maximum to decouple as much as possible UI from XMPP and the SDK is a tool for that.
+
 ## Headless Client Design
 
 The SDK is designed as a **headless XMPP client**. This means it handles all XMPP protocol complexity internally, exposing only a clean, simple API to your application.
