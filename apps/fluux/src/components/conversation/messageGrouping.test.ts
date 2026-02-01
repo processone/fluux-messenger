@@ -77,29 +77,32 @@ describe('groupMessagesByDate', () => {
    * MessageList must use `${group.date}-${groupIndex}` as the React key to avoid
    * duplicate key warnings when the same date appears in multiple groups.
    */
-  it('should handle out-of-order messages creating multiple groups for same date', () => {
+  it('should consolidate out-of-order messages from same date into single group', () => {
     // Simulate delayed message scenario:
     // 1. Messages from Jan 23 arrive
     // 2. Messages from Jan 24 arrive
-    // 3. A delayed message from Jan 23 arrives late
+    // 3. A delayed message from Jan 23 arrives late (out of order in array)
     const messages = [
       { id: '1', timestamp: new Date('2024-01-23T10:00:00'), from: 'alice' },
       { id: '2', timestamp: new Date('2024-01-24T09:00:00'), from: 'bob' },
-      { id: '3', timestamp: new Date('2024-01-23T11:00:00'), from: 'charlie' }, // Delayed message
+      { id: '3', timestamp: new Date('2024-01-23T11:00:00'), from: 'charlie' }, // Out of order
     ]
 
     const groups = groupMessagesByDate(messages)
 
-    // Creates 3 groups - the same date can appear multiple times
-    expect(groups).toHaveLength(3)
+    // Now consolidates into 2 groups (one per date), sorted chronologically
+    expect(groups).toHaveLength(2)
     expect(groups[0].date).toBe('2024-01-23')
     expect(groups[1].date).toBe('2024-01-24')
-    expect(groups[2].date).toBe('2024-01-23') // Duplicate date!
 
-    // Each group contains the correct message
-    expect(groups[0].messages[0].id).toBe('1')
+    // Jan 23 group contains both messages, sorted by timestamp
+    expect(groups[0].messages).toHaveLength(2)
+    expect(groups[0].messages[0].id).toBe('1') // 10:00
+    expect(groups[0].messages[1].id).toBe('3') // 11:00
+
+    // Jan 24 group contains its message
+    expect(groups[1].messages).toHaveLength(1)
     expect(groups[1].messages[0].id).toBe('2')
-    expect(groups[2].messages[0].id).toBe('3')
   })
 })
 
