@@ -477,14 +477,17 @@ export class XMPPClient {
 
     // Only set up event listeners once
     if (!this.modulesInitialized) {
-      // Listen for MUC join events to fetch room avatars and catch up on messages
+      // Listen for MUC join events to fetch room avatars and preview
       this.on('mucJoined', (roomJid) => {
         const room = this.stores?.room.getRoom(roomJid)
         if (room && !room.avatar && !room.avatarFromPresence) {
           this.profile.fetchRoomAvatar(roomJid).catch(() => {})
         }
-        // MAM is now lazy - triggered by side effects when room becomes active
-        // The <history maxstanzas="50"/> on join provides immediate history
+        // Fetch sidebar preview immediately for MAM-enabled rooms
+        // For non-MAM rooms, history is requested via <history maxstanzas="50"/> on join
+        if (room?.supportsMAM && !room.isQuickChat) {
+          this.mam.fetchPreviewForRoom(roomJid).catch(() => {})
+        }
       })
 
       // Listen for room avatar updates from presence
