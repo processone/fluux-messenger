@@ -7,7 +7,7 @@
 import { useState, memo, type ReactNode } from 'react'
 import { format } from 'date-fns'
 import { CornerUpLeft } from 'lucide-react'
-import type { BaseMessage, MentionReference, Contact, RoomRole, RoomAffiliation } from '@fluux/sdk'
+import { formatMessagePreview, type BaseMessage, type MentionReference, type Contact, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
 import { Avatar } from '../Avatar'
 import { MessageToolbar } from './MessageToolbar'
 import { MessageBody } from './MessageBody'
@@ -370,7 +370,10 @@ export function buildReplyContext<T extends BaseMessage>(
   const fallbackId = message.replyTo.to
   const senderName = getSenderName(originalMessage, fallbackId)
   const senderColor = getSenderColor(originalMessage, fallbackId, isDarkMode)
-  const body = originalMessage?.body || message.replyTo.fallbackBody || 'Original message not found'
+  // Use formatMessagePreview for consistent display (handles attachments, styling, etc.)
+  const body = originalMessage
+    ? formatMessagePreview(originalMessage) || 'Original message not found'
+    : message.replyTo.fallbackBody || 'Original message not found'
   const { avatarUrl, avatarIdentifier } = getAvatarInfo(originalMessage, fallbackId)
 
   // Use the original message's actual ID for scrolling.
