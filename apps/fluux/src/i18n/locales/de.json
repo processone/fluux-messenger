@@ -138,6 +138,7 @@
     "autojoinOn": "Automatisch beitreten: An",
     "autojoinOff": "Automatisch beitreten: Aus",
     "doubleClickToJoin": "Doppelklick zum Beitreten",
+    "noMessages": "Noch keine Nachrichten",
     "user": "Benutzer",
     "users": "Benutzer",
     "asNickname": "als {{nickname}}",

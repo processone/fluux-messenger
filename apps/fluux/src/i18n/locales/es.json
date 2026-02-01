@@ -139,6 +139,7 @@
     "autojoinOn": "Auto-unirse: Activado",
     "autojoinOff": "Auto-unirse: Desactivado",
     "doubleClickToJoin": "Doble clic para unirse",
+    "noMessages": "Aún no hay mensajes",
     "user": "usuario",
     "users": "usuarios",
     "asNickname": "como {{nickname}}",

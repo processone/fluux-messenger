@@ -138,6 +138,7 @@
     "autojoinOn": "Automatyczne dołączanie: Wł.",
     "autojoinOff": "Automatyczne dołączanie: Wył.",
     "doubleClickToJoin": "Kliknij dwukrotnie, aby dołączyć",
+    "noMessages": "Brak wiadomości",
     "user": "użytkownik",
     "users": "użytkowników",
     "asNickname": "jako {{nickname}}",

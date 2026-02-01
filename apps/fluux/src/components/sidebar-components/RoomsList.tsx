@@ -306,17 +306,25 @@ const RoomItem = memo(function RoomItem({
   }
 
   // Determine tooltip based on state
-  const getTitle = () => {
+  const getTooltipContent = () => {
     if (room.isJoining) return t('rooms.joining')
-    if (room.joined) return undefined
+    if (room.joined) {
+      // Show user count and nickname in tooltip for joined rooms
+      const userCount = room.occupants.size
+      const userText = `${userCount} ${userCount === 1 ? t('rooms.user') : t('rooms.users')}`
+      if (room.nickname) {
+        return `${userText} • ${room.nickname}`
+      }
+      return userText
+    }
     return t('rooms.doubleClickToJoin')
   }
 
-  const tooltipContent = getTitle()
+  const tooltipContent = getTooltipContent()
 
   return (
     <>
-      <Tooltip content={tooltipContent || ''} position="right" disabled={!tooltipContent} className="w-full">
+      <Tooltip content={tooltipContent} position="right" className="w-full">
         <div
           {...rest}
           onClick={handleClick}
@@ -409,10 +417,12 @@ const RoomItem = memo(function RoomItem({
                 {lastMessage.isRetracted ? t('chat.messageDeleted') : formatMessagePreview(lastMessage)}
               </span>
             ) : room.joined ? (
-              <>
-                {room.occupants.size} {room.occupants.size === 1 ? t('rooms.user') : t('rooms.users')}
-                {room.nickname && ` • ${room.nickname}`}
-              </>
+              // No messages yet - show room subject if available, otherwise subtle placeholder
+              room.subject ? (
+                <span className="text-fluux-muted">{room.subject}</span>
+              ) : (
+                <span className="text-fluux-muted italic">{t('rooms.noMessages')}</span>
+              )
             ) : (
               <>
                 {room.nickname && t('rooms.asNickname', { nickname: room.nickname })}
