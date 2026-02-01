@@ -525,8 +525,9 @@ export class MAM extends BaseModule {
         xml('field', { var: 'with' }, xml('value', {}, conversationId)),
       ]
 
-      // Query with max=1 to get only the latest message
-      const iq = this.buildMAMQuery(queryId, formFields, 1, '')
+      // Query with max=5 to find a displayable message (reactions/corrections are skipped)
+      // This handles the case where recent messages are modifications that can't be previewed
+      const iq = this.buildMAMQuery(queryId, formFields, 5, '')
 
       let latestMessage: Message | null = null
 
@@ -621,8 +622,9 @@ export class MAM extends BaseModule {
         xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, NS_MAM)),
       ]
 
-      // Query with max=1 to get only the latest message
-      const iq = this.buildMAMQuery(queryId, formFields, 1, '', roomJid)
+      // Query with max=5 to find a displayable message (reactions/corrections are skipped)
+      // This handles the case where recent messages are modifications that can't be previewed
+      const iq = this.buildMAMQuery(queryId, formFields, 5, '', roomJid)
 
       const room = this.deps.stores?.room.getRoom(roomJid)
       const myNickname = room?.nickname || ''
