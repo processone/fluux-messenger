@@ -4,6 +4,7 @@ import type { XMPPClientConfig } from '../core/types/client'
 import type { StorageAdapter } from '../core/types/storage'
 import { setupTauriCloseHandlers } from '../utils/tauriLifecycle'
 import { sessionStorageAdapter } from '../utils/sessionStorageAdapter'
+import { setupDebugUtils } from '../utils/debugUtils'
 import { PresenceContext } from './PresenceContext'
 
 /**
@@ -162,6 +163,13 @@ export function XMPPProvider({
       window.removeEventListener('beforeunload', handleBeforeUnload)
       window.removeEventListener('pagehide', handleBeforeUnload)
     }
+  }, [])
+
+  // Expose debug utilities on window for troubleshooting from browser console
+  useEffect(() => {
+    const client = clientRef.current
+    if (!client) return
+    return setupDebugUtils(client)
   }, [])
 
   // Memoize context value to prevent unnecessary re-renders of all consumers
