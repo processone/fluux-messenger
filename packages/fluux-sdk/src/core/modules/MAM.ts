@@ -606,8 +606,13 @@ export class MAM extends BaseModule {
   /**
    * Fetch the latest message for a single room (preview only).
    * Updates lastMessage without affecting message history.
+   *
+   * This is called automatically when a room is successfully joined
+   * to populate the sidebar preview immediately.
+   *
+   * @param roomJid - The bare JID of the room
    */
-  private async fetchPreviewForRoom(roomJid: string): Promise<void> {
+  async fetchPreviewForRoom(roomJid: string): Promise<void> {
     try {
       const queryId = `preview_${generateUUID()}`
 
