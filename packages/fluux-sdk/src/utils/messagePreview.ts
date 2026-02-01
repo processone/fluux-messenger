@@ -109,6 +109,40 @@ export function getAttachmentEmoji(attachment: FileAttachment): AttachmentDispla
 }
 
 /**
+ * Strip XEP-0393 Message Styling markup from text.
+ *
+ * Removes styling markers while preserving the content:
+ * - `*bold*` → `bold`
+ * - `_italic_` → `italic`
+ * - `~strikethrough~` → `strikethrough`
+ * - `` `code` `` → `code`
+ *
+ * @param text - Text that may contain XEP-0393 markup
+ * @returns Text with markup stripped
+ */
+export function stripMessageStyling(text: string): string {
+  if (!text) return text
+
+  let result = text
+
+  // Strip inline code (backticks) - do this first to avoid processing markup inside code
+  // Matches `code` but not ```code blocks```
+  result = result.replace(/(?<!`)`([^`\n]+)`(?!`)/g, '$1')
+
+  // Strip bold (*text*)
+  // Must be preceded by start or whitespace/punctuation, followed by end or whitespace/punctuation
+  result = result.replace(/(?<=^|[\s\p{P}])\*([^\s*](?:[^*]*[^\s*])?)\*(?=$|[\s\p{P}])/gu, '$1')
+
+  // Strip italic (_text_)
+  result = result.replace(/(?<=^|[\s\p{P}])_([^\s_](?:[^_]*[^\s_])?)_(?=$|[\s\p{P}])/gu, '$1')
+
+  // Strip strikethrough (~text~)
+  result = result.replace(/(?<=^|[\s\p{P}])~([^\s~](?:[^~]*[^\s~])?)~(?=$|[\s\p{P}])/gu, '$1')
+
+  return result
+}
+
+/**
  * Strip reply quote prefix from message body.
  *
  * When a message is a reply and the server/client didn't use XEP-0428 fallback
@@ -178,6 +212,9 @@ export function formatMessagePreview(message: Pick<BaseMessage, 'body' | 'attach
   if (replyTo && previewBody.startsWith('> ')) {
     previewBody = stripReplyQuote(previewBody)
   }
+
+  // Strip XEP-0393 message styling markup for cleaner previews
+  previewBody = stripMessageStyling(previewBody)
 
   if (attachment) {
     const { emoji } = getAttachmentEmoji(attachment)
