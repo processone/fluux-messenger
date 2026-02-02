@@ -46,7 +46,12 @@ export function RoomsList() {
   const quickChats = useMemo(() => rooms.filter(r => r.isQuickChat), [rooms])
   // Include rooms that are joined OR currently joining (so they move to Joined section immediately)
   const joinedRooms = useMemo(() => rooms.filter(r => (r.joined || r.isJoining) && !r.isQuickChat), [rooms])
-  const bookmarkedNotJoined = useMemo(() => rooms.filter(r => !r.joined && !r.isJoining && r.isBookmarked && !r.isQuickChat), [rooms])
+  const bookmarkedNotJoined = useMemo(() =>
+    rooms
+      .filter(r => !r.joined && !r.isJoining && r.isBookmarked && !r.isQuickChat)
+      .sort((a, b) => (a.name || a.jid).toLowerCase().localeCompare((b.name || b.jid).toLowerCase())),
+    [rooms]
+  )
 
   // Full list of rooms for plain arrow navigation (all rooms)
   const flatRooms = useMemo(() => [...quickChats, ...joinedRooms, ...bookmarkedNotJoined], [quickChats, joinedRooms, bookmarkedNotJoined])
