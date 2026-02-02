@@ -402,6 +402,64 @@ describe('roomStore', () => {
       const room = roomStore.getState().rooms.get('test@conference.example.com')
       expect(room?.notifyAllPersistent).toBe(true)
     })
+
+    it('should set lastInteractedAt to last message timestamp when joining', () => {
+      const messageTime = new Date(Date.now() - 30 * 60 * 1000) // 30 minutes ago
+
+      roomStore.getState().addRoom(createRoom('test@conference.example.com', {
+        joined: false,
+        messages: [{
+          type: 'groupchat',
+          id: 'msg1',
+          from: 'test@conference.example.com/user',
+          roomJid: 'test@conference.example.com',
+          nick: 'user',
+          body: 'Hello',
+          timestamp: messageTime,
+          isOutgoing: false,
+        }],
+      }))
+
+      roomStore.getState().setRoomJoined('test@conference.example.com', true)
+
+      const room = roomStore.getState().rooms.get('test@conference.example.com')
+      const meta = roomStore.getState().roomMeta.get('test@conference.example.com')
+
+      expect(room?.lastInteractedAt?.getTime()).toBe(messageTime.getTime())
+      expect(meta?.lastInteractedAt?.getTime()).toBe(messageTime.getTime())
+    })
+
+    it('should set lastInteractedAt to now when joining room with no messages', () => {
+      const beforeTime = Date.now()
+
+      roomStore.getState().addRoom(createRoom('test@conference.example.com', {
+        joined: false,
+        messages: [],
+      }))
+
+      roomStore.getState().setRoomJoined('test@conference.example.com', true)
+
+      const afterTime = Date.now()
+      const room = roomStore.getState().rooms.get('test@conference.example.com')
+
+      expect(room?.lastInteractedAt).toBeDefined()
+      expect(room?.lastInteractedAt!.getTime()).toBeGreaterThanOrEqual(beforeTime)
+      expect(room?.lastInteractedAt!.getTime()).toBeLessThanOrEqual(afterTime)
+    })
+
+    it('should preserve lastInteractedAt when leaving room', () => {
+      const interactionTime = new Date(Date.now() - 60 * 60 * 1000) // 1 hour ago
+
+      roomStore.getState().addRoom(createRoom('test@conference.example.com', {
+        joined: true,
+        lastInteractedAt: interactionTime,
+      }))
+
+      roomStore.getState().setRoomJoined('test@conference.example.com', false)
+
+      const room = roomStore.getState().rooms.get('test@conference.example.com')
+      expect(room?.lastInteractedAt?.getTime()).toBe(interactionTime.getTime())
+    })
   })
 
   describe('setBookmark with notifyAll', () => {
