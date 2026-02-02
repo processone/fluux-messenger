@@ -373,6 +373,56 @@ describe('MAM Preview Refresh', () => {
       expect(mamQueryTargets).not.toContain('room2@conference.example.com')
     })
 
+    it('should call loadPreviewFromCache for non-MAM rooms without lastMessage', async () => {
+      await connectClient()
+
+      // Mock rooms - one with MAM, one without (and no lastMessage)
+      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
+        { jid: 'mam-room@conference.example.com', name: 'MAM Room', supportsMAM: true, isQuickChat: false, joined: true, nickname: 'me' },
+        { jid: 'non-mam-room@conference.example.com', name: 'Non-MAM Room', supportsMAM: false, isQuickChat: false, joined: true, nickname: 'me', lastMessage: undefined },
+      ] as any)
+
+      mockXmppClientInstance.iqCaller.request.mockResolvedValue(
+        createMockElement('iq', { type: 'result' }, [
+          { name: 'fin', attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' }, children: [] },
+        ])
+      )
+
+      const refreshPromise = xmppClient.mam.refreshRoomPreviews()
+      await waitForAsyncOps(20, 100)
+      await refreshPromise
+
+      // Should call loadPreviewFromCache for the non-MAM room
+      expect(mockStores.room.loadPreviewFromCache).toHaveBeenCalledWith('non-mam-room@conference.example.com')
+    })
+
+    it('should NOT call loadPreviewFromCache for non-MAM rooms that already have lastMessage', async () => {
+      await connectClient()
+
+      const existingMessage = {
+        type: 'groupchat' as const,
+        id: 'existing-msg',
+        roomJid: 'non-mam-room@conference.example.com',
+        from: 'non-mam-room@conference.example.com/alice',
+        nick: 'alice',
+        body: 'Existing message',
+        timestamp: new Date(),
+        isOutgoing: false,
+      }
+
+      // Mock room that already has lastMessage
+      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
+        { jid: 'non-mam-room@conference.example.com', name: 'Non-MAM Room', supportsMAM: false, isQuickChat: false, joined: true, nickname: 'me', lastMessage: existingMessage },
+      ] as any)
+
+      const refreshPromise = xmppClient.mam.refreshRoomPreviews()
+      await waitForAsyncOps(20, 100)
+      await refreshPromise
+
+      // Should NOT call loadPreviewFromCache since room already has lastMessage
+      expect(mockStores.room.loadPreviewFromCache).not.toHaveBeenCalled()
+    })
+
     it('should skip Quick Chat rooms', async () => {
       await connectClient()
 
@@ -620,7 +670,7 @@ describe('MAM Preview Refresh', () => {
 
       // Should have emitted the refresh event via SDK
       expect(emitSDKSpy).toHaveBeenCalledWith('console:event', {
-        message: expect.stringContaining('Refreshing previews for 1 room'),
+        message: expect.stringContaining('Refreshing previews for 1 MAM room(s)'),
         category: 'sm',
       })
     })

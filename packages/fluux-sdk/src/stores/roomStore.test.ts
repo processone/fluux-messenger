@@ -33,6 +33,7 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils/messageCache')>()
   return {
     ...actual,
+    isMessageCacheAvailable: vi.fn().mockReturnValue(true),
     saveRoomMessage: vi.fn().mockResolvedValue(undefined),
     saveRoomMessages: vi.fn().mockResolvedValue(undefined),
     getRoomMessages: vi.fn().mockResolvedValue([]),
@@ -2448,6 +2449,107 @@ describe('roomStore', () => {
 
       // Room should not be created
       expect(roomStore.getState().rooms.get('nonexistent@conference.example.com')).toBeUndefined()
+    })
+  })
+
+  describe('loadPreviewFromCache', () => {
+    const roomJid = 'room@conference.example.com'
+
+    beforeEach(() => {
+      roomStore.getState().reset()
+      vi.mocked(messageCache.getRoomMessages).mockReset()
+      const room: Room = {
+        jid: roomJid,
+        name: 'Test Room',
+        nickname: 'testuser',
+        joined: true,
+        isJoining: false,
+        isBookmarked: false,
+        supportsMAM: false, // Non-MAM room
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+      }
+      roomStore.getState().addRoom(room)
+    })
+
+    it('should load latest message from cache and set as lastMessage', async () => {
+      const cachedMessage: RoomMessage = {
+        type: 'groupchat',
+        id: 'cached-1',
+        roomJid,
+        from: `${roomJid}/alice`,
+        nick: 'alice',
+        body: 'Cached message',
+        timestamp: new Date('2024-01-15T10:00:00Z'),
+        isOutgoing: false,
+      }
+      vi.mocked(messageCache.getRoomMessages).mockResolvedValue([cachedMessage])
+
+      const result = await roomStore.getState().loadPreviewFromCache(roomJid)
+
+      expect(result).toEqual(cachedMessage)
+      expect(messageCache.getRoomMessages).toHaveBeenCalledWith(roomJid, {
+        limit: 1,
+        latest: true,
+      })
+
+      const room = roomStore.getState().rooms.get(roomJid)
+      expect(room?.lastMessage?.body).toBe('Cached message')
+    })
+
+    it('should return null when no cached messages exist', async () => {
+      vi.mocked(messageCache.getRoomMessages).mockResolvedValue([])
+
+      const result = await roomStore.getState().loadPreviewFromCache(roomJid)
+
+      expect(result).toBeNull()
+
+      const room = roomStore.getState().rooms.get(roomJid)
+      expect(room?.lastMessage).toBeUndefined()
+    })
+
+    it('should not overwrite newer lastMessage with older cached message', async () => {
+      // Set a newer lastMessage first
+      const newerMessage: RoomMessage = {
+        type: 'groupchat',
+        id: 'new-1',
+        roomJid,
+        from: `${roomJid}/bob`,
+        nick: 'bob',
+        body: 'Newer message',
+        timestamp: new Date('2024-01-15T12:00:00Z'),
+        isOutgoing: false,
+      }
+      roomStore.getState().updateLastMessagePreview(roomJid, newerMessage)
+
+      // Try to load older cached message
+      const olderCachedMessage: RoomMessage = {
+        type: 'groupchat',
+        id: 'old-1',
+        roomJid,
+        from: `${roomJid}/alice`,
+        nick: 'alice',
+        body: 'Older cached',
+        timestamp: new Date('2024-01-15T08:00:00Z'),
+        isOutgoing: false,
+      }
+      vi.mocked(messageCache.getRoomMessages).mockResolvedValue([olderCachedMessage])
+
+      await roomStore.getState().loadPreviewFromCache(roomJid)
+
+      // Should still have the newer message
+      const room = roomStore.getState().rooms.get(roomJid)
+      expect(room?.lastMessage?.body).toBe('Newer message')
+    })
+
+    it('should return null for non-existent room', async () => {
+      const result = await roomStore.getState().loadPreviewFromCache('nonexistent@conference.example.com')
+
+      expect(result).toBeNull()
+      expect(messageCache.getRoomMessages).not.toHaveBeenCalled()
     })
   })
 })

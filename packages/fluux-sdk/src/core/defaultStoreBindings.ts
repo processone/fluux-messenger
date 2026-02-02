@@ -184,6 +184,7 @@ export function createDefaultStoreBindings(options: DefaultStoreBindingsOptions 
       markAllRoomsNeedsCatchUp: roomStore.getState().markAllRoomsNeedsCatchUp,
       clearRoomNeedsCatchUp: roomStore.getState().clearRoomNeedsCatchUp,
       updateLastMessagePreview: roomStore.getState().updateLastMessagePreview,
+      loadPreviewFromCache: roomStore.getState().loadPreviewFromCache,
     },
     admin: {
       setIsAdmin: adminStore.getState().setIsAdmin,

@@ -661,6 +661,7 @@ export const createMockStores = (): MockStoreBindings => ({
     markAllRoomsNeedsCatchUp: vi.fn(),
     clearRoomNeedsCatchUp: vi.fn(),
     updateLastMessagePreview: vi.fn(),
+    loadPreviewFromCache: vi.fn().mockResolvedValue(null),
   },
   admin: {
     setIsAdmin: vi.fn(),

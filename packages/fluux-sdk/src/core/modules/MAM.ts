@@ -538,23 +538,35 @@ export class MAM extends BaseModule {
    */
   async refreshRoomPreviews(options: { concurrency?: number } = {}): Promise<void> {
     const { concurrency = 3 } = options
-    // Get joined rooms that support MAM (skip QuickChat rooms)
+    // Get all joined rooms (skip QuickChat rooms)
     const joinedRooms = this.deps.stores?.room.joinedRooms() || []
-    const mamRooms = joinedRooms.filter((r) => r.supportsMAM && !r.isQuickChat)
-    if (mamRooms.length === 0) return
+    const nonQuickChatRooms = joinedRooms.filter((r) => !r.isQuickChat)
+    if (nonQuickChatRooms.length === 0) return
+
+    // Separate rooms by MAM support
+    const mamRooms = nonQuickChatRooms.filter((r) => r.supportsMAM)
+    const nonMamRooms = nonQuickChatRooms.filter((r) => !r.supportsMAM)
 
     this.deps.emitSDK('console:event', {
-      message: `Refreshing previews for ${mamRooms.length} room(s)`,
+      message: `Refreshing previews for ${mamRooms.length} MAM room(s), ${nonMamRooms.length} non-MAM room(s)`,
       category: 'sm',
     })
 
-    const roomJids = mamRooms.map((r) => r.jid)
-
+    // For MAM rooms: fetch preview via MAM query
+    const mamRoomJids = mamRooms.map((r) => r.jid)
     await executeWithConcurrency(
-      roomJids,
+      mamRoomJids,
       (roomJid) => this.fetchPreviewForRoom(roomJid),
       concurrency
     )
+
+    // For non-MAM rooms: load preview from cache to populate lastMessage
+    // This only updates lastMessage without modifying the messages array
+    for (const room of nonMamRooms) {
+      if (!room.lastMessage) {
+        await this.deps.stores?.room.loadPreviewFromCache(room.jid)
+      }
+    }
   }
 
   /**

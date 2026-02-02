@@ -180,6 +180,8 @@ export interface RoomState {
   // IndexedDB cache loading
   loadMessagesFromCache: (roomJid: string, options?: GetMessagesOptions) => Promise<RoomMessage[]>
   loadOlderMessagesFromCache: (roomJid: string, limit?: number) => Promise<RoomMessage[]>
+  /** Load only the latest message from cache for sidebar preview (doesn't modify messages array) */
+  loadPreviewFromCache: (roomJid: string) => Promise<RoomMessage | null>
 
   // MAM state management (XEP-0313 for MUC rooms)
   setRoomMAMLoading: (roomJid: string, isLoading: boolean) => void
@@ -1276,6 +1278,57 @@ export const roomStore = createStore<RoomState>()(
     } catch (error) {
       console.error('Failed to load older room messages from IndexedDB:', error)
       return []
+    }
+  },
+
+  // Load only the latest message from cache for sidebar preview
+  // This doesn't modify the messages array - it only updates lastMessage
+  loadPreviewFromCache: async (roomJid) => {
+    if (!messageCache.isMessageCacheAvailable()) {
+      return null
+    }
+
+    // Check if room exists first - no point querying cache for non-existent rooms
+    const room = get().rooms.get(roomJid)
+    if (!room) {
+      return null
+    }
+
+    try {
+      // Query for just the latest message
+      const cachedMessages = await messageCache.getRoomMessages(roomJid, {
+        limit: 1,
+        latest: true,
+      })
+
+      if (cachedMessages.length > 0) {
+        const latestMessage = cachedMessages[0]
+
+        // Update only lastMessage in metadata and combined room
+        set((state) => {
+          const room = state.rooms.get(roomJid)
+          const meta = state.roomMeta.get(roomJid)
+          if (!room || !meta) return state
+
+          // Only update if we don't already have a lastMessage or if cached is newer
+          if (!shouldUpdateLastMessage(meta.lastMessage, latestMessage)) return state
+
+          const newMeta = new Map(state.roomMeta)
+          newMeta.set(roomJid, { ...meta, lastMessage: latestMessage })
+
+          const newRooms = new Map(state.rooms)
+          newRooms.set(roomJid, { ...room, lastMessage: latestMessage })
+
+          return { roomMeta: newMeta, rooms: newRooms }
+        })
+
+        return latestMessage
+      }
+
+      return null
+    } catch (error) {
+      console.error('Failed to load room preview from IndexedDB:', error)
+      return null
     }
   },
 

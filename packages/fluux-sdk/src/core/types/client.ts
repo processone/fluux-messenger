@@ -163,6 +163,8 @@ export interface StoreBindings {
     clearRoomNeedsCatchUp: (roomJid: string) => void
     // Preview refresh: update lastMessage without affecting message history
     updateLastMessagePreview: (roomJid: string, lastMessage: RoomMessage) => void
+    // Load preview from cache for non-MAM rooms (only updates lastMessage, not messages array)
+    loadPreviewFromCache: (roomJid: string) => Promise<RoomMessage | null>
   }
   admin: {
     setIsAdmin: (isAdmin: boolean) => void
