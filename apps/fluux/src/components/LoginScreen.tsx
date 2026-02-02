@@ -23,6 +23,7 @@ export function LoginScreen() {
   const [server, setServer] = useState('')
   const [rememberMe, setRememberMe] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const passwordInputRef = useRef<HTMLInputElement>(null)
   const [loadedFromKeychain, setLoadedFromKeychain] = useState(false)
   const [credentialsModified, setCredentialsModified] = useState(false)
   const [isDesktopApp, setIsDesktopApp] = useState(false)
@@ -251,6 +252,7 @@ export function LoginScreen() {
             </label>
             <div className="relative">
               <input
+                ref={passwordInputRef}
                 id="password"
                 name="password"
                 type={showPassword ? 'text' : 'password'}
@@ -266,16 +268,21 @@ export function LoginScreen() {
               />
               <button
                 type="button"
-                onClick={() => setShowPassword(!showPassword)}
+                tabIndex={-1}
+                onClick={() => {
+                  setShowPassword(!showPassword)
+                  // Keep focus on the password input after toggling
+                  passwordInputRef.current?.focus()
+                }}
                 disabled={isLoading}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-fluux-muted hover:text-fluux-text
                            disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 aria-label={showPassword ? t('login.hidePassword') : t('login.showPassword')}
               >
                 {showPassword ? (
-                  <EyeOff className="w-4 h-4" />
+                  <EyeOff className="w-5 h-5" />
                 ) : (
-                  <Eye className="w-4 h-4" />
+                  <Eye className="w-5 h-5" />
                 )}
               </button>
             </div>

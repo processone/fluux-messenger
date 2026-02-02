@@ -3,12 +3,14 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { LoginScreen } from './LoginScreen'
 
 // Mock the SDK hooks
+const mockUseConnection = vi.fn(() => ({
+    status: 'offline',
+    error: null,
+    connect: vi.fn(),
+}))
+
 vi.mock('@fluux/sdk', () => ({
-    useConnection: () => ({
-        status: 'offline',
-        error: null,
-        connect: vi.fn(),
-    }),
+    useConnection: () => mockUseConnection(),
 }))
 
 // Mock react-i18next
@@ -56,6 +58,12 @@ describe('LoginScreen', () => {
     beforeEach(() => {
         vi.clearAllMocks()
         localStorage.clear()
+        // Reset to default offline state
+        mockUseConnection.mockReturnValue({
+            status: 'offline',
+            error: null,
+            connect: vi.fn(),
+        })
     })
 
     describe('rendering', () => {
@@ -130,6 +138,26 @@ describe('LoginScreen', () => {
             // Toggle to hide
             fireEvent.click(screen.getByRole('button', { name: 'login.hidePassword' }))
             expect(passwordInput).toHaveValue('mySecretPassword')
+        })
+
+        it('should disable toggle button when connecting', () => {
+            mockUseConnection.mockReturnValue({
+                status: 'connecting',
+                error: null,
+                connect: vi.fn(),
+            })
+
+            render(<LoginScreen />)
+
+            const toggleButton = screen.getByRole('button', { name: 'login.showPassword' })
+            expect(toggleButton).toBeDisabled()
+        })
+
+        it('should not be focusable via tab navigation', () => {
+            render(<LoginScreen />)
+
+            const toggleButton = screen.getByRole('button', { name: 'login.showPassword' })
+            expect(toggleButton).toHaveAttribute('tabIndex', '-1')
         })
     })
 })
