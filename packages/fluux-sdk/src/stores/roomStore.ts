@@ -835,9 +835,10 @@ export const roomStore = createStore<RoomState>()(
       // Determine lastInteractedAt: use last message timestamp to position room correctly
       // This implements "Conversations-style" sorting: rooms sort by last message time,
       // but only update their position when the user reads them (not when messages arrive)
-      // Check both the full message history and the precomputed lastMessage (from preview MAM)
+      // Prioritize room.lastMessage (sidebar preview from MAM) over room.messages (live messages)
+      // This ensures sorting matches what's shown in the sidebar, not transient live messages
       const lastMessage = room?.messages?.[room.messages.length - 1]
-      const lastMessageTimestamp = lastMessage?.timestamp ?? room?.lastMessage?.timestamp
+      const lastMessageTimestamp = room?.lastMessage?.timestamp ?? lastMessage?.timestamp
       // Only use new Date() if there are truly no messages at all
       // This ensures rooms with messages sort by their message time, not by when they were opened
       const newLastInteractedAt = lastMessageTimestamp ?? new Date()
