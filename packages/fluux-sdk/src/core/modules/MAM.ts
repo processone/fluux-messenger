@@ -622,9 +622,10 @@ export class MAM extends BaseModule {
         xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, NS_MAM)),
       ]
 
-      // Query with max=5 to find a displayable message (reactions/corrections are skipped)
-      // This handles the case where recent messages are modifications that can't be previewed
-      const iq = this.buildMAMQuery(queryId, formFields, 5, '', roomJid)
+      // Query with max=30 to find a displayable message (reactions/corrections/markers are skipped)
+      // High-traffic rooms may have many non-displayable messages (reactions, read markers, etc.)
+      // so we request more to increase the chance of finding a message with actual body text
+      const iq = this.buildMAMQuery(queryId, formFields, 30, '', roomJid)
 
       const room = this.deps.stores?.room.getRoom(roomJid)
       const myNickname = room?.nickname || ''
