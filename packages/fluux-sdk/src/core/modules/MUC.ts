@@ -689,7 +689,7 @@ export class MUC extends BaseModule {
    *   since MAM provides a more reliable and complete archive
    * - Has a 10-second timeout to prevent hanging if remote server doesn't respond
    */
-  async queryRoomFeatures(roomJid: string): Promise<{ supportsMAM: boolean; name?: string } | null> {
+  async queryRoomFeatures(roomJid: string): Promise<{ supportsMAM: boolean; name?: string; isServiceLevelFallback?: boolean } | null> {
     try {
       const iq = xml(
         'iq',

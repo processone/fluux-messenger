@@ -248,6 +248,7 @@ describe('XMPPClient HTTP Upload', () => {
     it('should handle disco#items query failure gracefully', async () => {
       // Suppress expected warning logs
       vi.spyOn(console, 'warn').mockImplementation(() => {})
+      vi.spyOn(console, 'error').mockImplementation(() => {})
 
       // Fail disco requests but allow other common IQ types
       mockXmppClientInstance.iqCaller.request.mockImplementation(async (iq: any) => {
@@ -275,6 +276,9 @@ describe('XMPPClient HTTP Upload', () => {
     })
 
     it('should continue checking items if one fails disco#info query', async () => {
+      // Silence expected console output from MUC discovery failure
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+
       const itemsResponse = createMockElement('iq', { type: 'result' }, [
         {
           name: 'query',

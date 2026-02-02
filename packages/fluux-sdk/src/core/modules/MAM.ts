@@ -26,6 +26,7 @@ import { xml, Element } from '@xmpp/client'
 import { BaseModule } from './BaseModule'
 import { getBareJid, getResource } from '../jid'
 import { generateUUID } from '../../utils/uuid'
+import { executeWithConcurrency } from '../../utils/concurrencyUtils'
 import { parseRSMResponse } from '../../utils/rsm'
 import {
   NS_MAM,
@@ -474,41 +475,13 @@ export class MAM extends BaseModule {
       category: 'sm',
     })
 
-    // Process in batches to avoid overwhelming the server
-    const conversationIds = conversations.map(c => c.id)
+    const conversationIds = conversations.map((c) => c.id)
 
-    // Simple throttled execution with concurrency limit
-    const results: Promise<void>[] = []
-    let activeCount = 0
-    let index = 0
-
-    const processNext = async (): Promise<void> => {
-      while (index < conversationIds.length) {
-        if (activeCount >= concurrency) {
-          // Wait a bit before checking again
-          await new Promise(resolve => setTimeout(resolve, 50))
-          continue
-        }
-
-        const conversationId = conversationIds[index++]
-        activeCount++
-
-        // Don't await - let it run in parallel
-        this.fetchPreviewForConversation(conversationId).finally(() => {
-          activeCount--
-        })
-      }
-    }
-
-    // Start the processing
-    await processNext()
-
-    // Wait for all in-flight requests to complete
-    while (activeCount > 0) {
-      await new Promise(resolve => setTimeout(resolve, 50))
-    }
-
-    await Promise.allSettled(results)
+    await executeWithConcurrency(
+      conversationIds,
+      (conversationId) => this.fetchPreviewForConversation(conversationId),
+      concurrency
+    )
   }
 
   /**
@@ -565,9 +538,9 @@ export class MAM extends BaseModule {
    */
   async refreshRoomPreviews(options: { concurrency?: number } = {}): Promise<void> {
     const { concurrency = 3 } = options
-    // Get joined rooms that support MAM
+    // Get joined rooms that support MAM (skip QuickChat rooms)
     const joinedRooms = this.deps.stores?.room.joinedRooms() || []
-    const mamRooms = joinedRooms.filter(r => r.supportsMAM && !r.isQuickChat)
+    const mamRooms = joinedRooms.filter((r) => r.supportsMAM && !r.isQuickChat)
     if (mamRooms.length === 0) return
 
     this.deps.emitSDK('console:event', {
@@ -575,33 +548,13 @@ export class MAM extends BaseModule {
       category: 'sm',
     })
 
-    // Simple throttled execution with concurrency limit
-    const roomJids = mamRooms.map(r => r.jid)
-    let activeCount = 0
-    let index = 0
+    const roomJids = mamRooms.map((r) => r.jid)
 
-    const processNext = async (): Promise<void> => {
-      while (index < roomJids.length) {
-        if (activeCount >= concurrency) {
-          await new Promise(resolve => setTimeout(resolve, 50))
-          continue
-        }
-
-        const roomJid = roomJids[index++]
-        activeCount++
-
-        this.fetchPreviewForRoom(roomJid).finally(() => {
-          activeCount--
-        })
-      }
-    }
-
-    await processNext()
-
-    // Wait for all in-flight requests to complete
-    while (activeCount > 0) {
-      await new Promise(resolve => setTimeout(resolve, 50))
-    }
+    await executeWithConcurrency(
+      roomJids,
+      (roomJid) => this.fetchPreviewForRoom(roomJid),
+      concurrency
+    )
   }
 
   /**

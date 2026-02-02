@@ -2809,4 +2809,408 @@ describe('XMPPClient MAM', () => {
       })
     })
   })
+
+  describe('fetchMissedRoomMessages', () => {
+    const roomJid = 'room@conference.example.com'
+
+    it('should skip if no joined rooms', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([])
+
+      // Clear the mock to ignore IQ calls from connectClient setup
+      mockXmppClientInstance.iqCaller.request.mockClear()
+
+      await xmppClient.mam.fetchMissedRoomMessages()
+
+      // Should not attempt any MAM queries
+      expect(mockXmppClientInstance.iqCaller.request).not.toHaveBeenCalled()
+    })
+
+    it('should query rooms regardless of supportsMAM flag (errors handled gracefully)', async () => {
+      // Note: Current implementation queries all rooms and relies on error handling
+      // for rooms that don't support MAM. This could be optimized in a refactor.
+      await connectClient()
+
+      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
+        {
+          jid: roomJid,
+          name: 'Test Room',
+          supportsMAM: false, // MAM not supported
+          joined: true,
+          nickname: 'me',
+          messages: [
+            {
+              type: 'groupchat' as const,
+              id: 'msg-1',
+              roomJid,
+              from: `${roomJid}/sender`,
+              nick: 'sender',
+              body: 'Hello',
+              timestamp: new Date('2026-01-20T10:00:00Z'),
+              isOutgoing: false,
+            },
+          ],
+        },
+      ] as any)
+
+      vi.mocked(mockStores.room.getRoom).mockReturnValue({
+        jid: roomJid,
+        nickname: 'me',
+      } as any)
+
+      const mamResponse = createMockElement('iq', { type: 'result' }, [
+        {
+          name: 'fin',
+          attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' },
+          children: [],
+        },
+      ])
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockResolvedValue(mamResponse)
+
+      await xmppClient.mam.fetchMissedRoomMessages()
+
+      // Current behavior: queries all rooms regardless of supportsMAM flag
+      expect(mockXmppClientInstance.iqCaller.request).toHaveBeenCalled()
+    })
+
+    it('should query rooms without messages using before="" to get latest', async () => {
+      // When a room has no messages, the implementation fetches the latest using before=""
+      await connectClient()
+
+      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
+        {
+          jid: roomJid,
+          name: 'Test Room',
+          supportsMAM: true,
+          joined: true,
+          nickname: 'me',
+          messages: [], // No messages
+        },
+      ] as any)
+
+      vi.mocked(mockStores.room.getRoom).mockReturnValue({
+        jid: roomJid,
+        nickname: 'me',
+      } as any)
+
+      const mamResponse = createMockElement('iq', { type: 'result' }, [
+        {
+          name: 'fin',
+          attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' },
+          children: [],
+        },
+      ])
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockResolvedValue(mamResponse)
+
+      await xmppClient.mam.fetchMissedRoomMessages()
+
+      // Should query using before="" to get latest messages
+      expect(mockXmppClientInstance.iqCaller.request).toHaveBeenCalled()
+
+      // Verify it uses before="" (empty before = get latest)
+      const iqArg = mockXmppClientInstance.iqCaller.request.mock.calls[0][0]
+      const queryEl = iqArg.children?.find((c: any) => c.name === 'query')
+      const setEl = queryEl?.children?.find((c: any) => c.name === 'set')
+      const beforeEl = setEl?.children?.find((c: any) => c.name === 'before')
+      expect(beforeEl).toBeDefined()
+    })
+
+    it('should query MAM with start filter using latest message timestamp + 1ms', async () => {
+      await connectClient()
+
+      const latestMessageTime = new Date('2026-01-20T10:00:00.000Z')
+      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
+        {
+          jid: roomJid,
+          name: 'Test Room',
+          supportsMAM: true,
+          joined: true,
+          nickname: 'me',
+          messages: [
+            {
+              type: 'groupchat' as const,
+              id: 'msg-1',
+              roomJid,
+              from: `${roomJid}/sender`,
+              nick: 'sender',
+              body: 'Hello',
+              timestamp: latestMessageTime,
+              isOutgoing: false,
+            },
+          ],
+        },
+      ] as any)
+
+      vi.mocked(mockStores.room.getRoom).mockReturnValue({
+        jid: roomJid,
+        nickname: 'me',
+      } as any)
+
+      const mamResponse = createMockElement('iq', { type: 'result' }, [
+        {
+          name: 'fin',
+          attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' },
+          children: [],
+        },
+      ])
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockResolvedValue(mamResponse)
+
+      await xmppClient.mam.fetchMissedRoomMessages()
+
+      // Should have made a MAM query
+      expect(mockXmppClientInstance.iqCaller.request).toHaveBeenCalled()
+
+      // Verify the IQ is sent to the room JID
+      const iqArg = mockXmppClientInstance.iqCaller.request.mock.calls[0][0]
+      expect(iqArg.attrs?.to).toBe(roomJid)
+
+      // Verify it has a start filter (timestamp + 1ms)
+      const queryEl = iqArg.children?.find((c: any) => c.name === 'query')
+      expect(queryEl).toBeDefined()
+
+      const formEl = queryEl.children?.find((c: any) => c.name === 'x')
+      expect(formEl).toBeDefined()
+
+      const startField = formEl.children?.find((c: any) => c.attrs?.var === 'start')
+      expect(startField).toBeDefined()
+
+      // The start time should be 1ms after the latest message
+      const startValue = startField.children?.[0]?.children?.[0]
+      expect(startValue).toBeDefined()
+      const expectedStartTime = new Date(latestMessageTime.getTime() + 1)
+      expect(startValue).toBe(expectedStartTime.toISOString())
+    })
+
+    it('should query multiple rooms in parallel', async () => {
+      await connectClient()
+
+      const timestamp1 = new Date('2026-01-20T10:00:00Z')
+      const timestamp2 = new Date('2026-01-21T10:00:00Z')
+
+      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
+        {
+          jid: 'room1@conference.example.com',
+          name: 'Room 1',
+          supportsMAM: true,
+          joined: true,
+          nickname: 'me',
+          messages: [
+            {
+              type: 'groupchat' as const,
+              id: 'msg-1',
+              roomJid: 'room1@conference.example.com',
+              from: 'room1@conference.example.com/sender',
+              nick: 'sender',
+              body: 'Hello',
+              timestamp: timestamp1,
+              isOutgoing: false,
+            },
+          ],
+        },
+        {
+          jid: 'room2@conference.example.com',
+          name: 'Room 2',
+          supportsMAM: true,
+          joined: true,
+          nickname: 'me',
+          messages: [
+            {
+              type: 'groupchat' as const,
+              id: 'msg-2',
+              roomJid: 'room2@conference.example.com',
+              from: 'room2@conference.example.com/sender',
+              nick: 'sender',
+              body: 'Hi there',
+              timestamp: timestamp2,
+              isOutgoing: false,
+            },
+          ],
+        },
+      ] as any)
+
+      vi.mocked(mockStores.room.getRoom).mockImplementation((jid: string) => ({
+        jid,
+        nickname: 'me',
+      } as any))
+
+      const mamResponse = createMockElement('iq', { type: 'result' }, [
+        {
+          name: 'fin',
+          attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' },
+          children: [],
+        },
+      ])
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockResolvedValue(mamResponse)
+
+      await xmppClient.mam.fetchMissedRoomMessages()
+
+      // Should have made at least 2 MAM queries (one for each room)
+      expect(mockXmppClientInstance.iqCaller.request.mock.calls.length).toBeGreaterThanOrEqual(2)
+
+      // Verify both rooms were queried
+      const queriedRooms = mockXmppClientInstance.iqCaller.request.mock.calls.map(
+        (call: any) => call[0].attrs?.to
+      )
+      expect(queriedRooms).toContain('room1@conference.example.com')
+      expect(queriedRooms).toContain('room2@conference.example.com')
+    })
+
+    it('should handle single room by roomJid parameter', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
+        {
+          jid: 'room1@conference.example.com',
+          name: 'Room 1',
+          supportsMAM: true,
+          joined: true,
+          nickname: 'me',
+          messages: [
+            {
+              type: 'groupchat' as const,
+              id: 'msg-1',
+              roomJid: 'room1@conference.example.com',
+              from: 'room1@conference.example.com/sender',
+              nick: 'sender',
+              body: 'Hello',
+              timestamp: new Date('2026-01-20T10:00:00Z'),
+              isOutgoing: false,
+            },
+          ],
+        },
+        {
+          jid: 'room2@conference.example.com',
+          name: 'Room 2',
+          supportsMAM: true,
+          joined: true,
+          nickname: 'me',
+          messages: [
+            {
+              type: 'groupchat' as const,
+              id: 'msg-2',
+              roomJid: 'room2@conference.example.com',
+              from: 'room2@conference.example.com/sender',
+              nick: 'sender',
+              body: 'Hi',
+              timestamp: new Date('2026-01-21T10:00:00Z'),
+              isOutgoing: false,
+            },
+          ],
+        },
+      ] as any)
+
+      vi.mocked(mockStores.room.getRoom).mockImplementation((jid: string) => ({
+        jid,
+        nickname: 'me',
+      } as any))
+
+      const mamResponse = createMockElement('iq', { type: 'result' }, [
+        {
+          name: 'fin',
+          attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' },
+          children: [],
+        },
+      ])
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockResolvedValue(mamResponse)
+
+      // Query only room1
+      await xmppClient.mam.fetchMissedRoomMessages('room1@conference.example.com')
+
+      // Should have only queried room1
+      expect(mockXmppClientInstance.iqCaller.request).toHaveBeenCalledTimes(1)
+      const iqArg = mockXmppClientInstance.iqCaller.request.mock.calls[0][0]
+      expect(iqArg.attrs?.to).toBe('room1@conference.example.com')
+    })
+
+    it('should handle errors gracefully without failing', async () => {
+      await connectClient()
+
+      // Silence expected console.warn output
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
+        {
+          jid: roomJid,
+          name: 'Test Room',
+          supportsMAM: true,
+          joined: true,
+          nickname: 'me',
+          messages: [
+            {
+              type: 'groupchat' as const,
+              id: 'msg-1',
+              roomJid,
+              from: `${roomJid}/sender`,
+              nick: 'sender',
+              body: 'Hello',
+              timestamp: new Date('2026-01-20T10:00:00Z'),
+              isOutgoing: false,
+            },
+          ],
+        },
+      ] as any)
+
+      vi.mocked(mockStores.room.getRoom).mockReturnValue({
+        jid: roomJid,
+        nickname: 'me',
+      } as any)
+
+      // Make MAM query fail
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockRejectedValue(new Error('MAM query failed'))
+
+      // Should not throw
+      await expect(xmppClient.mam.fetchMissedRoomMessages()).resolves.not.toThrow()
+
+      warnSpy.mockRestore()
+    })
+
+    it('should log event when starting catch-up', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
+        {
+          jid: roomJid,
+          name: 'Test Room',
+          supportsMAM: true,
+          joined: true,
+          nickname: 'me',
+          messages: [
+            {
+              type: 'groupchat' as const,
+              id: 'msg-1',
+              roomJid,
+              from: `${roomJid}/sender`,
+              nick: 'sender',
+              body: 'Hello',
+              timestamp: new Date('2026-01-20T10:00:00Z'),
+              isOutgoing: false,
+            },
+          ],
+        },
+      ] as any)
+
+      vi.mocked(mockStores.room.getRoom).mockReturnValue({
+        jid: roomJid,
+        nickname: 'me',
+      } as any)
+
+      const mamResponse = createMockElement('iq', { type: 'result' }, [
+        {
+          name: 'fin',
+          attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' },
+          children: [],
+        },
+      ])
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockResolvedValue(mamResponse)
+
+      await xmppClient.mam.fetchMissedRoomMessages()
+
+      // Should log the start of catch-up
+      expect(emitSDKSpy).toHaveBeenCalledWith('console:event', {
+        message: expect.stringContaining('Fetching missed messages for 1 joined room(s)'),
+        category: 'sm'
+      })
+    })
+  })
 })

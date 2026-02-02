@@ -8,3 +8,4 @@
 export * from './mamState'
 export * from './draftState'
 export * from './messageArrayUtils'
+export * from './lastMessageUtils'

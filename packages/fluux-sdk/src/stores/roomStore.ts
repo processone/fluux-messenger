@@ -19,6 +19,7 @@ import * as mamState from './shared/mamState'
 import type { MAMQueryDirection } from './shared/mamState'
 import * as draftState from './shared/draftState'
 import { buildMessageKeySet, isMessageDuplicate, sortMessagesByTimestamp, trimMessages, prependOlderMessages, mergeAndProcessMessages } from './shared/messageArrayUtils'
+import { shouldUpdateLastMessage } from './shared/lastMessageUtils'
 import { connectionStore } from './connectionStore'
 
 /**
@@ -1395,9 +1396,7 @@ export const roomStore = createStore<RoomState>()(
       if (!room || !meta) return state
 
       // Only update if this message is newer than existing lastMessage
-      const existingTime = meta.lastMessage?.timestamp?.getTime() ?? 0
-      const newTime = lastMessage.timestamp?.getTime() ?? 0
-      if (newTime <= existingTime) return state
+      if (!shouldUpdateLastMessage(meta.lastMessage, lastMessage)) return state
 
       // Update metadata map
       const newMeta = new Map(state.roomMeta)
