@@ -478,6 +478,7 @@ describe('XMPPClient Disco', () => {
     it('should handle disco#info query failure gracefully', async () => {
       // Suppress expected warning logs
       vi.spyOn(console, 'warn').mockImplementation(() => {})
+      vi.spyOn(console, 'error').mockImplementation(() => {})
 
       // Fail disco requests but allow other common IQ types (bookmarks, vcard, etc.)
       mockXmppClientInstance.iqCaller.request.mockImplementation(async (iq: any) => {
