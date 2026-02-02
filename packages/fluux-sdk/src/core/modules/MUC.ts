@@ -369,6 +369,7 @@ export class MUC extends BaseModule {
     // but skip MAM since quickchats are transient
     const roomFeatures = await this.queryRoomFeatures(roomJid)
     const supportsMAM = isQuickChat ? false : (roomFeatures?.supportsMAM ?? false)
+    const isServiceLevelMAMFallback = roomFeatures?.isServiceLevelFallback ?? false
     const roomName = roomFeatures?.name || existingRoom?.name || getLocalPart(roomJid)
 
     if (!existingRoom) {
@@ -409,9 +410,21 @@ export class MUC extends BaseModule {
 
     const xChildren: (Element | undefined)[] = []
 
-    // Request history: if MAM is supported, request 0 messages since MAM provides history
-    // Otherwise use the provided maxHistory (default 50)
-    const maxHistory = supportsMAM ? 0 : (options?.maxHistory ?? 50)
+    // Request history based on MAM support:
+    // - Room-level MAM confirmed: request 0 (MAM provides full history)
+    // - Service-level MAM fallback: request 10 (safety net - room might not have MAM enabled)
+    // - No MAM: request 50 (default, or custom maxHistory)
+    let maxHistory: number
+    if (supportsMAM && !isServiceLevelMAMFallback) {
+      // Room definitely supports MAM
+      maxHistory = 0
+    } else if (isServiceLevelMAMFallback) {
+      // Service supports MAM but room-level unknown - request some history as fallback
+      maxHistory = options?.maxHistory ?? 10
+    } else {
+      // No MAM support - request full history
+      maxHistory = options?.maxHistory ?? 50
+    }
     xChildren.push(xml('history', { maxstanzas: maxHistory.toString() }))
 
     if (options?.password) {
@@ -718,10 +731,12 @@ export class MUC extends BaseModule {
 
       // Fallback: check if MUC service supports MAM globally (e.g., Prosody with mod_muc_mam)
       // This covers cases where room disco is slow/unreachable but the service advertises MAM
+      // Note: service-level MAM doesn't guarantee this specific room has MAM enabled
+      // (e.g., ejabberd with per-room MAM), so we mark it as a fallback
       const serviceSupportsMAM = this.deps.stores?.admin.getMucServiceSupportsMAM?.()
       if (serviceSupportsMAM) {
         console.log(`[MUC] Using service-level MAM support for ${roomJid}`)
-        return { supportsMAM: true }
+        return { supportsMAM: true, isServiceLevelFallback: true }
       }
 
       return null

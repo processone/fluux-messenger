@@ -1054,7 +1054,7 @@ describe('MUC Module', () => {
 
       const result = await muc.queryRoomFeatures('room@conference.example.org')
 
-      expect(result).toEqual({ supportsMAM: true })
+      expect(result).toEqual({ supportsMAM: true, isServiceLevelFallback: true })
       expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Using service-level MAM support'))
       warnSpy.mockRestore()
       logSpy.mockRestore()
