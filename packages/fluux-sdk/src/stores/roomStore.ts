@@ -839,9 +839,9 @@ export const roomStore = createStore<RoomState>()(
       // This ensures sorting matches what's shown in the sidebar, not transient live messages
       const lastMessage = room?.messages?.[room.messages.length - 1]
       const lastMessageTimestamp = room?.lastMessage?.timestamp ?? lastMessage?.timestamp
-      // Only use new Date() if there are truly no messages at all
-      // This ensures rooms with messages sort by their message time, not by when they were opened
-      const newLastInteractedAt = lastMessageTimestamp ?? new Date()
+      // If no messages yet (e.g., room still loading), preserve existing lastInteractedAt
+      // or leave undefined - don't use new Date() which would make it jump to top
+      const newLastInteractedAt = lastMessageTimestamp ?? room?.lastInteractedAt
 
       if (room && lastReadAt) {
         // Find first message that is:

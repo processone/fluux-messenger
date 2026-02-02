@@ -690,9 +690,7 @@ describe('roomStore', () => {
       expect(meta?.lastInteractedAt!.getTime()).toBe(messageTime.getTime())
     })
 
-    it('should set lastInteractedAt to now when room has no messages', () => {
-      const beforeTime = Date.now()
-
+    it('should NOT set lastInteractedAt when room has no messages (prevents jumping to top)', () => {
       roomStore.getState().addRoom(createRoom('test@conference.example.com', {
         joined: true,
         messages: [], // No messages
@@ -700,13 +698,11 @@ describe('roomStore', () => {
 
       roomStore.getState().setActiveRoom('test@conference.example.com')
 
-      const afterTime = Date.now()
       const room = roomStore.getState().rooms.get('test@conference.example.com')
 
-      // Should fall back to current time when no messages
-      expect(room?.lastInteractedAt).toBeDefined()
-      expect(room?.lastInteractedAt!.getTime()).toBeGreaterThanOrEqual(beforeTime)
-      expect(room?.lastInteractedAt!.getTime()).toBeLessThanOrEqual(afterTime)
+      // Should NOT set lastInteractedAt when no messages - this prevents rooms
+      // from jumping to top when opened before messages have loaded
+      expect(room?.lastInteractedAt).toBeUndefined()
     })
 
     it('should update lastInteractedAt to new last message when room is reopened with new messages', () => {
