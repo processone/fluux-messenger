@@ -133,6 +133,18 @@ html, body {
   height: 100%;
 }
 
+/* Safe area insets for mobile devices with gesture bars (e/OS, iOS, etc.) */
+/* This allows the app background to extend behind the gesture bar while */
+/* keeping interactive content above it */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  body {
+    /* Extend background into safe areas */
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
 /* Allow native rubber band effect within scrollable elements (macOS) */
 /* Using 'auto' enables the visual bounce, while 'none' on html/body prevents whole-page bounce */
 /* -webkit-overflow-scrolling: touch enables momentum/bounce scrolling in WebKit */
