@@ -82,6 +82,9 @@ const JOIN_TIMEOUT_MS = 30000
 /** Maximum number of join retry attempts */
 const MAX_JOIN_RETRIES = 1
 
+/** Timeout for disco#info queries to rooms (in milliseconds) */
+const DISCO_QUERY_TIMEOUT_MS = 10000
+
 /**
  * Pending join info for timeout tracking
  */
@@ -661,6 +664,7 @@ export class MUC extends BaseModule {
    * - Called automatically by joinRoom() to determine history strategy
    * - If MAM is supported, joinRoom() requests 0 MUC history messages
    *   since MAM provides a more reliable and complete archive
+   * - Has a 10-second timeout to prevent hanging if remote server doesn't respond
    */
   async queryRoomFeatures(roomJid: string): Promise<{ supportsMAM: boolean; name?: string } | null> {
     try {
@@ -670,7 +674,16 @@ export class MUC extends BaseModule {
         xml('query', { xmlns: NS_DISCO_INFO })
       )
 
-      const response = await this.deps.sendIQ(iq)
+      // Wrap sendIQ with a timeout to prevent hanging if remote server doesn't respond
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error(`Disco query timeout for ${roomJid}`)), DISCO_QUERY_TIMEOUT_MS)
+      })
+
+      const response = await Promise.race([
+        this.deps.sendIQ(iq),
+        timeoutPromise,
+      ])
+
       const query = response.getChild('query', NS_DISCO_INFO)
       if (!query) return null
 
@@ -690,7 +703,7 @@ export class MUC extends BaseModule {
       return { supportsMAM, name }
     } catch (err) {
       // Room disco#info not available - that's fine, room may not exist yet
-      // or may not support disco queries
+      // or may not support disco queries, or the query timed out
       console.warn(`[MUC] Failed to query room features for ${roomJid}:`, err)
       return null
     }
