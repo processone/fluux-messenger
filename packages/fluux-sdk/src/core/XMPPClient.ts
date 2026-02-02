@@ -1107,6 +1107,11 @@ export class XMPPClient {
     if (!isResumption) {
       const { roomsToAutojoin } = await this.muc.fetchBookmarks()
 
+      // Discover MUC service and check service-level MAM support BEFORE joining rooms
+      // This allows queryRoomFeatures() to fall back to service-level MAM detection
+      // when room-level disco fails (e.g., XSF rooms that don't respond to disco)
+      this.muc.discoverMucService().catch(() => {})
+
       // Restore cached room avatars for bookmarked rooms
       this.profile.restoreAllRoomAvatarHashes().catch(() => {})
 
