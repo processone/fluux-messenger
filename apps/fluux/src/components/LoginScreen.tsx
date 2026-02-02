@@ -28,7 +28,6 @@ export function LoginScreen() {
   const [credentialsModified, setCredentialsModified] = useState(false)
   const [isDesktopApp, setIsDesktopApp] = useState(false)
   const [isLoadingCredentials, setIsLoadingCredentials] = useState(true)
-  const [pendingKeychainSave, setPendingKeychainSave] = useState(false)
 
   // Prevent double-execution in React StrictMode
   const hasLoadedCredentials = useRef(false)
@@ -104,9 +103,6 @@ export function LoginScreen() {
   useEffect(() => {
     if (!error) return
 
-    // Clear pending save on any error
-    setPendingKeychainSave(false)
-
     // Delete keychain credentials on "not-authorized" error (invalid password)
     if (loadedFromKeychain && isDesktopApp && error.includes('not-authorized')) {
       console.log('[LoginScreen] Deleting keychain credentials after auth failure')
@@ -115,24 +111,6 @@ export function LoginScreen() {
     }
   }, [error, loadedFromKeychain, isDesktopApp])
 
-  // Save credentials to keychain after successful authentication
-  useEffect(() => {
-    if (!pendingKeychainSave || status !== 'online') return
-
-    const saveToKeychain = async () => {
-      try {
-        console.log('[LoginScreen] Saving credentials to keychain after successful auth')
-        await saveCredentials(jid, password, server || null)
-        setLoadedFromKeychain(true)
-      } catch (err) {
-        console.error('Failed to save credentials to keychain:', err)
-      } finally {
-        setPendingKeychainSave(false)
-      }
-    }
-
-    saveToKeychain()
-  }, [pendingKeychainSave, status, jid, password, server])
 
   // Auto-connect when credentials are loaded from keychain
   useEffect(() => {
@@ -180,11 +158,11 @@ export function LoginScreen() {
     localStorage.setItem(STORAGE_KEY_REMEMBER, rememberMe ? 'true' : 'false')
 
     // Handle keychain storage (Tauri only)
+    // Use local variable since React state updates are async
+    const shouldSaveToKeychain = isDesktopApp && rememberMe && (!loadedFromKeychain || credentialsModified)
+
     if (isDesktopApp) {
-      if (rememberMe && (!loadedFromKeychain || credentialsModified)) {
-        // Mark for saving after successful authentication
-        setPendingKeychainSave(true)
-      } else if (!rememberMe && loadedFromKeychain) {
+      if (!rememberMe && loadedFromKeychain) {
         // User unchecked "Remember me" - delete stored credentials
         try {
           await deleteCredentials()
@@ -200,6 +178,16 @@ export function LoginScreen() {
       await connect(jid, password, actualServer, undefined, resource, i18n.language, isTauri())
       // Save session for auto-reconnect on page reload
       saveSession(jid, password, actualServer)
+
+      // Save to keychain immediately after successful connect (before component unmounts)
+      if (shouldSaveToKeychain) {
+        try {
+          await saveCredentials(jid, password, server || null)
+          setLoadedFromKeychain(true)
+        } catch (err) {
+          console.error('Failed to save credentials to keychain:', err)
+        }
+      }
     } catch {
       // Error is handled in hook
     }

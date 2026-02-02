@@ -55,9 +55,15 @@ export async function getCredentials(): Promise<StoredCredentials | null> {
   try {
     const { invoke } = await import('@tauri-apps/api/core')
     const result = await invoke<StoredCredentials | null>('get_credentials')
+    // If credentials were expected but not found, clear the flag to stay in sync
+    if (result === null) {
+      localStorage.removeItem(STORAGE_KEY_HAS_CREDENTIALS)
+    }
     return result
   } catch (error) {
     console.error('Failed to get credentials from keychain:', error)
+    // Clear flag on error to prevent repeated failed attempts
+    localStorage.removeItem(STORAGE_KEY_HAS_CREDENTIALS)
     return null
   }
 }
