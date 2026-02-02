@@ -462,6 +462,11 @@ export interface AdminEvents {
   'admin:muc-service': {
     mucServiceJid: string
   }
+
+  /** MUC service MAM support discovered */
+  'admin:muc-service-mam': {
+    supportsMAM: boolean
+  }
 }
 
 // ============================================================================

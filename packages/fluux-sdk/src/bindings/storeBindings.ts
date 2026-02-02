@@ -471,6 +471,11 @@ export function createStoreBindings(
     stores.admin.setMucServiceJid(mucServiceJid)
   })
 
+  on('admin:muc-service-mam', ({ supportsMAM }) => {
+    const stores = getStores()
+    stores.admin.setMucServiceSupportsMAM(supportsMAM)
+  })
+
   // ============================================================================
   // Console Events (optional, for debugging)
   // ============================================================================

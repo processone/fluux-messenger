@@ -632,6 +632,16 @@ export class MUC extends BaseModule {
         )
 
         if (identity) {
+          // Check if the MUC service supports MAM globally (XEP-0313)
+          // This is useful as a fallback when individual room disco fails
+          const features = infoQuery?.getChildren('feature')
+            .map((f: Element) => f.attrs.var as string)
+            .filter(Boolean) ?? []
+          const serviceSupportsMAM = features.includes(NS_MAM)
+
+          // Emit service-level MAM support for use as fallback
+          this.deps.emitSDK('admin:muc-service-mam', { supportsMAM: serviceSupportsMAM })
+
           return jid
         }
       }
@@ -705,6 +715,15 @@ export class MUC extends BaseModule {
       // Room disco#info not available - that's fine, room may not exist yet
       // or may not support disco queries, or the query timed out
       console.warn(`[MUC] Failed to query room features for ${roomJid}:`, err)
+
+      // Fallback: check if MUC service supports MAM globally (e.g., Prosody with mod_muc_mam)
+      // This covers cases where room disco is slow/unreachable but the service advertises MAM
+      const serviceSupportsMAM = this.deps.stores?.admin.getMucServiceSupportsMAM?.()
+      if (serviceSupportsMAM) {
+        console.log(`[MUC] Using service-level MAM support for ${roomJid}`)
+        return { supportsMAM: true }
+      }
+
       return null
     }
   }
