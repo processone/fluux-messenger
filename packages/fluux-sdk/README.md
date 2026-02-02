@@ -18,7 +18,7 @@ The SDK acts as a state container and protocol abstraction layer, exposing the a
 
 In other words, the SDK handles XMPP protocol translation, transforming user commands into state change commands (that may or may not require sending stanzas) and server events into state updates. If I manage to make this rights, the UI should be a pure function of this state, never speaking XMPP directly.
 
-This is not an utopy. Most GUI applications are designed with such architectural patterns (some use MVC, MVVM, reactive design, etc).
+This is not a utopia. Most GUI applications are designed with such architectural patterns (some use MVC, MVVM, reactive design, etc).
 
 Fluux SDK push the cursor to the maximum to decouple as much as possible UI from XMPP and the SDK is a tool for that.
 
