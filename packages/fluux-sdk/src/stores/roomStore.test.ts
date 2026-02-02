@@ -68,6 +68,8 @@ function createRoom(
     lastReadAt: options.lastReadAt,
     notifyAll: options.notifyAll,
     notifyAllPersistent: options.notifyAllPersistent,
+    lastInteractedAt: options.lastInteractedAt,
+    lastMessage: options.lastMessage,
   }
 }
 
@@ -506,6 +508,194 @@ describe('roomStore', () => {
 
     it('should return empty array when store is empty', () => {
       expect(roomStore.getState().allRooms()).toEqual([])
+    })
+
+    it('should sort rooms by lastInteractedAt (most recent first)', () => {
+      const now = new Date()
+      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000)
+      const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000)
+
+      roomStore.getState().addRoom(createRoom('oldest@conference.example.com', {
+        joined: true,
+        lastInteractedAt: twoHoursAgo,
+      }))
+      roomStore.getState().addRoom(createRoom('newest@conference.example.com', {
+        joined: true,
+        lastInteractedAt: now,
+      }))
+      roomStore.getState().addRoom(createRoom('middle@conference.example.com', {
+        joined: true,
+        lastInteractedAt: oneHourAgo,
+      }))
+
+      const all = roomStore.getState().allRooms()
+
+      expect(all.length).toBe(3)
+      expect(all[0].jid).toBe('newest@conference.example.com')
+      expect(all[1].jid).toBe('middle@conference.example.com')
+      expect(all[2].jid).toBe('oldest@conference.example.com')
+    })
+
+    it('should fall back to lastMessage timestamp when lastInteractedAt is not set', () => {
+      const now = new Date()
+      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000)
+
+      roomStore.getState().addRoom(createRoom('with-interaction@conference.example.com', {
+        joined: true,
+        lastInteractedAt: oneHourAgo, // User opened 1 hour ago
+      }))
+      roomStore.getState().addRoom(createRoom('with-message@conference.example.com', {
+        joined: true,
+        // No lastInteractedAt - should use lastMessage timestamp
+        lastMessage: {
+          type: 'groupchat',
+          id: 'msg1',
+          from: 'with-message@conference.example.com/user',
+          roomJid: 'with-message@conference.example.com',
+          nick: 'user',
+          body: 'Hello',
+          timestamp: now, // Recent message
+          isOutgoing: false,
+        },
+      }))
+
+      const all = roomStore.getState().allRooms()
+
+      expect(all.length).toBe(2)
+      // Room with recent message but no interaction should be first (fallback to lastMessage)
+      expect(all[0].jid).toBe('with-message@conference.example.com')
+      expect(all[1].jid).toBe('with-interaction@conference.example.com')
+    })
+
+    it('should not move room up when messages arrive (only when user reads)', () => {
+      const now = new Date()
+      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000)
+
+      // Add two rooms, both interacted with at the same time
+      roomStore.getState().addRoom(createRoom('room-a@conference.example.com', {
+        joined: true,
+        lastInteractedAt: oneHourAgo,
+      }))
+      roomStore.getState().addRoom(createRoom('room-b@conference.example.com', {
+        joined: true,
+        lastInteractedAt: oneHourAgo,
+      }))
+
+      // Simulate new message arriving in room-a (should NOT change order)
+      roomStore.getState().addMessage('room-a@conference.example.com', {
+        type: 'groupchat',
+        id: 'new-msg',
+        from: 'room-a@conference.example.com/otheruser',
+        roomJid: 'room-a@conference.example.com',
+        nick: 'otheruser',
+        body: 'New message!',
+        timestamp: now,
+        isOutgoing: false,
+      })
+
+      const all = roomStore.getState().allRooms()
+      // Order should still be based on lastInteractedAt, not lastMessage
+      expect(all[0].lastInteractedAt?.getTime()).toBe(oneHourAgo.getTime())
+      expect(all[1].lastInteractedAt?.getTime()).toBe(oneHourAgo.getTime())
+    })
+  })
+
+  describe('setActiveRoom lastInteractedAt', () => {
+    it('should set lastInteractedAt to last message timestamp when room is opened', () => {
+      const messageTime = new Date(Date.now() - 30 * 60 * 1000) // 30 minutes ago
+
+      roomStore.getState().addRoom(createRoom('test@conference.example.com', {
+        joined: true,
+        messages: [{
+          type: 'groupchat',
+          id: 'msg1',
+          from: 'test@conference.example.com/user',
+          roomJid: 'test@conference.example.com',
+          nick: 'user',
+          body: 'Hello',
+          timestamp: messageTime,
+          isOutgoing: false,
+        }],
+      }))
+
+      expect(roomStore.getState().rooms.get('test@conference.example.com')?.lastInteractedAt).toBeUndefined()
+
+      roomStore.getState().setActiveRoom('test@conference.example.com')
+
+      const room = roomStore.getState().rooms.get('test@conference.example.com')
+      const meta = roomStore.getState().roomMeta.get('test@conference.example.com')
+
+      // lastInteractedAt should be set to last message timestamp, not current time
+      expect(room?.lastInteractedAt).toBeDefined()
+      expect(room?.lastInteractedAt!.getTime()).toBe(messageTime.getTime())
+
+      // Also check metadata is updated
+      expect(meta?.lastInteractedAt).toBeDefined()
+      expect(meta?.lastInteractedAt!.getTime()).toBe(messageTime.getTime())
+    })
+
+    it('should set lastInteractedAt to now when room has no messages', () => {
+      const beforeTime = Date.now()
+
+      roomStore.getState().addRoom(createRoom('test@conference.example.com', {
+        joined: true,
+        messages: [], // No messages
+      }))
+
+      roomStore.getState().setActiveRoom('test@conference.example.com')
+
+      const afterTime = Date.now()
+      const room = roomStore.getState().rooms.get('test@conference.example.com')
+
+      // Should fall back to current time when no messages
+      expect(room?.lastInteractedAt).toBeDefined()
+      expect(room?.lastInteractedAt!.getTime()).toBeGreaterThanOrEqual(beforeTime)
+      expect(room?.lastInteractedAt!.getTime()).toBeLessThanOrEqual(afterTime)
+    })
+
+    it('should update lastInteractedAt to new last message when room is reopened with new messages', () => {
+      const oldMessageTime = new Date(Date.now() - 60 * 60 * 1000) // 1 hour ago
+      const newMessageTime = new Date(Date.now() - 5 * 60 * 1000) // 5 minutes ago
+
+      roomStore.getState().addRoom(createRoom('test@conference.example.com', {
+        joined: true,
+        messages: [{
+          type: 'groupchat',
+          id: 'msg1',
+          from: 'test@conference.example.com/user',
+          roomJid: 'test@conference.example.com',
+          nick: 'user',
+          body: 'Old message',
+          timestamp: oldMessageTime,
+          isOutgoing: false,
+        }],
+      }))
+
+      // Open room first time
+      roomStore.getState().setActiveRoom('test@conference.example.com')
+      expect(roomStore.getState().rooms.get('test@conference.example.com')?.lastInteractedAt?.getTime()).toBe(oldMessageTime.getTime())
+
+      // Close room
+      roomStore.getState().setActiveRoom(null)
+
+      // Add new message
+      roomStore.getState().addMessage('test@conference.example.com', {
+        type: 'groupchat',
+        id: 'msg2',
+        from: 'test@conference.example.com/otheruser',
+        roomJid: 'test@conference.example.com',
+        nick: 'otheruser',
+        body: 'New message',
+        timestamp: newMessageTime,
+        isOutgoing: false,
+      })
+
+      // Room position should NOT have changed yet (still using old lastInteractedAt)
+      expect(roomStore.getState().rooms.get('test@conference.example.com')?.lastInteractedAt?.getTime()).toBe(oldMessageTime.getTime())
+
+      // Open room again - NOW it should update to new message timestamp
+      roomStore.getState().setActiveRoom('test@conference.example.com')
+      expect(roomStore.getState().rooms.get('test@conference.example.com')?.lastInteractedAt?.getTime()).toBe(newMessageTime.getTime())
     })
   })
 

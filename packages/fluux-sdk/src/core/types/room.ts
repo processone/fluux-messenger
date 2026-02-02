@@ -169,6 +169,13 @@ export interface RoomMetadata {
   firstNewMessageId?: string
   /** Most recent message for sidebar preview */
   lastMessage?: RoomMessage
+  /**
+   * When user last interacted with this room (opened it).
+   * Used for sorting rooms in sidebar - rooms sort by this timestamp
+   * so high-traffic rooms don't constantly jump to the top.
+   * Only updates when user explicitly opens the room, not when messages arrive.
+   */
+  lastInteractedAt?: Date
 }
 
 /**

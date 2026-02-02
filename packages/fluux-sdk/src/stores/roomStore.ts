@@ -252,6 +252,7 @@ export const roomStore = createStore<RoomState>()(
         lastReadAt: room.lastReadAt,
         firstNewMessageId: room.firstNewMessageId,
         lastMessage: room.messages?.length > 0 ? room.messages[room.messages.length - 1] : undefined,
+        lastInteractedAt: room.lastInteractedAt,
       }
       const runtime: RoomRuntime = {
         occupants: room.occupants,
@@ -297,7 +298,7 @@ export const roomStore = createStore<RoomState>()(
 
       // Update metadata fields if any changed
       const metaFields = ['unreadCount', 'mentionsCount', 'typingUsers', 'notifyAll',
-        'notifyAllPersistent', 'lastReadAt', 'firstNewMessageId'] as const
+        'notifyAllPersistent', 'lastReadAt', 'firstNewMessageId', 'lastInteractedAt'] as const
       const hasMetaUpdate = metaFields.some((f) => f in update)
 
       // Update runtime fields if any changed
@@ -341,6 +342,7 @@ export const roomStore = createStore<RoomState>()(
             notifyAllPersistent: updatedRoom.notifyAllPersistent,
             lastReadAt: updatedRoom.lastReadAt,
             firstNewMessageId: updatedRoom.firstNewMessageId,
+            lastInteractedAt: updatedRoom.lastInteractedAt,
           })
         }
         result.roomMeta = newMeta
@@ -819,6 +821,13 @@ export const roomStore = createStore<RoomState>()(
       const room = get().rooms.get(roomJid)
       const meta = get().roomMeta.get(roomJid)
       const lastReadAt = meta?.lastReadAt ?? room?.lastReadAt
+
+      // Determine lastInteractedAt: use last message timestamp to position room correctly
+      // This implements "Conversations-style" sorting: rooms sort by last message time,
+      // but only update their position when the user reads them (not when messages arrive)
+      const lastMessage = room?.messages?.[room.messages.length - 1]
+      const newLastInteractedAt = lastMessage?.timestamp ?? new Date()
+
       if (room && lastReadAt) {
         // Find first message that is:
         // 1. After lastReadAt
@@ -829,18 +838,19 @@ export const roomStore = createStore<RoomState>()(
         )
         if (firstNewMessage) {
           // Store the marker position before updating lastReadAt
+          // Also update lastInteractedAt for sidebar sorting
           set((state) => {
             const newRooms = new Map(state.rooms)
             const existing = newRooms.get(roomJid)
             if (existing) {
-              newRooms.set(roomJid, { ...existing, firstNewMessageId: firstNewMessage.id })
+              newRooms.set(roomJid, { ...existing, firstNewMessageId: firstNewMessage.id, lastInteractedAt: newLastInteractedAt })
             }
 
             // Update metadata
             const newMeta = new Map(state.roomMeta)
             const existingMeta = newMeta.get(roomJid)
             if (existingMeta) {
-              newMeta.set(roomJid, { ...existingMeta, firstNewMessageId: firstNewMessage.id })
+              newMeta.set(roomJid, { ...existingMeta, firstNewMessageId: firstNewMessage.id, lastInteractedAt: newLastInteractedAt })
             }
 
             return { rooms: newRooms, roomMeta: newMeta, activeRoomJid: roomJid }
@@ -850,12 +860,27 @@ export const roomStore = createStore<RoomState>()(
           return
         }
       }
-    }
-    // Default case: no marker needed, just set active and mark as read
-    set({ activeRoomJid: roomJid })
-    if (roomJid) {
+      // Room exists but no new messages marker needed - still update lastInteractedAt
+      set((state) => {
+        const newRooms = new Map(state.rooms)
+        const existing = newRooms.get(roomJid)
+        if (existing) {
+          newRooms.set(roomJid, { ...existing, lastInteractedAt: newLastInteractedAt })
+        }
+
+        const newMeta = new Map(state.roomMeta)
+        const existingMeta = newMeta.get(roomJid)
+        if (existingMeta) {
+          newMeta.set(roomJid, { ...existingMeta, lastInteractedAt: newLastInteractedAt })
+        }
+
+        return { rooms: newRooms, roomMeta: newMeta, activeRoomJid: roomJid }
+      })
       get().markAsRead(roomJid)
+      return
     }
+    // Clearing active room (roomJid is null)
+    set({ activeRoomJid: roomJid })
   },
 
   getActiveRoomJid: () => get().activeRoomJid,
@@ -1389,7 +1414,18 @@ export const roomStore = createStore<RoomState>()(
     const rooms = get().rooms
     // Return all rooms that are either bookmarked or joined
     const result = Array.from(rooms.values()).filter(r => r.isBookmarked || r.joined)
-    return result.length > 0 ? result : EMPTY_ROOM_ARRAY
+    if (result.length === 0) return EMPTY_ROOM_ARRAY
+
+    // Sort by lastInteractedAt (when user opened the room) descending
+    // This prevents high-traffic rooms from constantly jumping to the top
+    // Rooms only move up when the user explicitly opens them
+    result.sort((a, b) => {
+      // Use lastInteractedAt if available, fall back to lastMessage timestamp, then creation/join time
+      const aTime = a.lastInteractedAt?.getTime() ?? a.lastMessage?.timestamp?.getTime() ?? 0
+      const bTime = b.lastInteractedAt?.getTime() ?? b.lastMessage?.timestamp?.getTime() ?? 0
+      return bTime - aTime // Descending (most recent first)
+    })
+    return result
   },
 
   quickChatRooms: () => {
