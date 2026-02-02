@@ -3,11 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/favicon.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Fluux Messenger</title>
 
-    <!-- PWA Meta Tags -->
-    <meta name="theme-color" content="#4a90d9" />
+    <!-- PWA Meta Tags - theme-color for Android status bar -->
+    <!-- Dark mode (default) -->
+    <meta name="theme-color" content="#1e1f22" media="(prefers-color-scheme: dark)" />
+    <!-- Light mode -->
+    <meta name="theme-color" content="#e3e5e8" media="(prefers-color-scheme: light)" />
+    <!-- Fallback for browsers that don't support media queries in meta -->
+    <meta name="theme-color" content="#1e1f22" />
     <meta name="description" content="Modern XMPP chat client - pleasant to use" />
 
     <!-- iOS PWA -->
