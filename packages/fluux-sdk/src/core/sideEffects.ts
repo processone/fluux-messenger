@@ -269,6 +269,12 @@ export function setupRoomSideEffects(
       return
     }
 
+    // Skip if not fully joined yet (wait for self-presence)
+    if (!room.joined) {
+      if (debug) console.log('[SideEffects] Room: Skipping MAM - not joined yet', roomJid)
+      return
+    }
+
     // Check if room supports MAM
     if (!room.supportsMAM) {
       if (debug) console.log('[SideEffects] Room: MAM not supported for', roomJid)
@@ -431,10 +437,42 @@ export function setupRoomSideEffects(
     { fireImmediately: false }
   )
 
+  // Subscribe to joined state changes on the active room.
+  // This handles the case where MAM fetch is skipped because room wasn't joined yet:
+  // 1. Room starts joining, supportsMAM becomes true
+  // 2. MAM fetch is attempted but skipped (room not joined yet)
+  // 3. Join completes, joined becomes true
+  // 4. This subscription catches that and triggers MAM fetch
+  const unsubscribeRoomJoined = roomStore.subscribe(
+    // Selector: watch joined state on the active room
+    (state) => {
+      const activeJid = state.activeRoomJid
+      if (!activeJid) return { jid: null, joined: false, supportsMAM: false }
+      const room = state.rooms.get(activeJid)
+      return {
+        jid: activeJid,
+        joined: room?.joined ?? false,
+        supportsMAM: room?.supportsMAM ?? false,
+      }
+    },
+    // Handler: runs when joined changes for active room
+    (current, previous) => {
+      // If the room just finished joining and supports MAM
+      if (current.joined && !previous.joined && current.supportsMAM && current.jid) {
+        if (!fetchInitiated.has(current.jid)) {
+          if (debug) console.log('[SideEffects] Room: Join completed for active room', current.jid)
+          void fetchMAMForRoom(current.jid)
+        }
+      }
+    },
+    { fireImmediately: false }
+  )
+
   return () => {
     unsubscribe()
     unsubscribeConnection()
     unsubscribeRoomMAMSupport()
+    unsubscribeRoomJoined()
   }
 }
 
