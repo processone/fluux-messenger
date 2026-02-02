@@ -230,6 +230,8 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
         id,
         {
           ...conv,
+          // Default to 'chat' for conversations stored before the type field was added
+          type: conv.type ?? 'chat',
           unreadCount: 0, // Reset unread on restore
           lastMessage: restoreLastMessage(conv.lastMessage),
           lastReadAt: restoreLastReadAt(conv.lastReadAt),
@@ -244,7 +246,8 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
       conversationEntities.set(id, {
         id: conv.id,
         name: conv.name,
-        type: conv.type,
+        // Default to 'chat' for conversations stored before the type field was added
+        type: conv.type ?? 'chat',
       })
       conversationMeta.set(id, {
         unreadCount: conv.unreadCount,
