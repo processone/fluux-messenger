@@ -398,11 +398,12 @@ export const roomStore = createStore<RoomState>()(
       const existing = newRooms.get(roomJid)
       if (!existing) return state
 
-      // When joining, set lastInteractedAt to last message timestamp (or now)
-      // This ensures proper sidebar sorting from client launch/autojoin
+      // When joining, set lastInteractedAt to last message timestamp (if available)
+      // DON'T fall back to new Date() - that would make all autojoined rooms sort to top
+      // Instead, leave it undefined so sorting falls back to lastMessage.timestamp from MAM
       const lastMessage = existing.messages?.[existing.messages.length - 1]
       const newLastInteractedAt = joined
-        ? (lastMessage?.timestamp ?? new Date())
+        ? (lastMessage?.timestamp ?? existing.lastInteractedAt) // Keep existing or undefined
         : existing.lastInteractedAt // Preserve on leave
 
       const updatedRoom = {

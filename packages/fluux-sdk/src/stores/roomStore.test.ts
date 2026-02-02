@@ -429,9 +429,9 @@ describe('roomStore', () => {
       expect(meta?.lastInteractedAt?.getTime()).toBe(messageTime.getTime())
     })
 
-    it('should set lastInteractedAt to now when joining room with no messages', () => {
-      const beforeTime = Date.now()
-
+    it('should NOT set lastInteractedAt when joining room with no messages', () => {
+      // When joining with no messages (e.g., autojoin before MAM loads),
+      // lastInteractedAt should remain undefined so sorting falls back to lastMessage.timestamp
       roomStore.getState().addRoom(createRoom('test@conference.example.com', {
         joined: false,
         messages: [],
@@ -439,12 +439,10 @@ describe('roomStore', () => {
 
       roomStore.getState().setRoomJoined('test@conference.example.com', true)
 
-      const afterTime = Date.now()
       const room = roomStore.getState().rooms.get('test@conference.example.com')
 
-      expect(room?.lastInteractedAt).toBeDefined()
-      expect(room?.lastInteractedAt!.getTime()).toBeGreaterThanOrEqual(beforeTime)
-      expect(room?.lastInteractedAt!.getTime()).toBeLessThanOrEqual(afterTime)
+      // Should be undefined, not "now" - this allows sorting by lastMessage after MAM loads
+      expect(room?.lastInteractedAt).toBeUndefined()
     })
 
     it('should preserve lastInteractedAt when leaving room', () => {
