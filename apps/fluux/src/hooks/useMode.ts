@@ -1,6 +1,13 @@
 import { useEffect } from 'react'
 import { useSettingsStore, type ThemeMode } from '@/stores/settingsStore'
 
+/** Theme colors for status bar - using bg-secondary for better visual continuity */
+/** In dark mode, this matches the icon rail which is at the top-left corner */
+const THEME_COLORS = {
+  dark: '#1a1b1e',  // --fluux-bg-secondary (darker, matches icon rail)
+  light: '#d8dadf', // --fluux-bg-secondary for light mode
+} as const
+
 /**
  * Resolves the actual mode (light/dark) based on setting and system preference
  */
@@ -9,6 +16,18 @@ function resolveMode(mode: ThemeMode): 'light' | 'dark' {
     return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
   }
   return mode
+}
+
+/**
+ * Updates the theme-color meta tag to match the current mode.
+ * This controls the Android status bar color and PWA title bar color.
+ */
+function updateThemeColorMeta(resolved: 'light' | 'dark') {
+  const color = THEME_COLORS[resolved]
+  // Update all theme-color meta tags (there may be multiple with media queries)
+  document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => {
+    meta.setAttribute('content', color)
+  })
 }
 
 /**
@@ -35,6 +54,9 @@ export function useMode() {
         root.classList.add('light')
       }
       // No class needed for dark (it's the default in :root)
+
+      // Sync Android/PWA status bar color with app theme
+      updateThemeColorMeta(resolved)
     }
 
     applyMode()
