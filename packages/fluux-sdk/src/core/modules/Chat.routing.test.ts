@@ -260,6 +260,35 @@ describe('Message Routing', () => {
       }))
     })
 
+    it('should detect own messages with different case (case-insensitive match)', async () => {
+      await connectClient()
+
+      const mockRoom = createMockRoom('room@conference.example.com', {
+        joined: true,
+        nickname: 'MyName', // Mixed case stored nickname
+      })
+      vi.mocked(mockStores.room.getRoom).mockReturnValue(mockRoom)
+
+      const messageStanza = createMockElement('message', {
+        from: 'room@conference.example.com/myname', // Lowercase from server
+        to: 'user@example.com',
+        type: 'groupchat',
+        id: 'own-room-msg-case',
+      }, [
+        { name: 'body', text: 'My own message' },
+      ])
+
+      mockXmppClientInstance._emit('stanza', messageStanza)
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:message', expect.objectContaining({
+        roomJid: 'room@conference.example.com',
+        message: expect.objectContaining({
+          isOutgoing: true, // Should still be detected as own message
+          nick: 'myname',
+        })
+      }))
+    })
+
     it('should detect other user messages in room', async () => {
       await connectClient()
 

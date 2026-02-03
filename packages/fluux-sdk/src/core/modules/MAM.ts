@@ -906,7 +906,8 @@ export class MAM extends BaseModule {
     if (!body && !messageEl.getChild('x', NS_OOB)) return null
 
     const nick = getResource(from) || ''
-    const isOutgoing = nick === myNickname
+    // Case-insensitive nickname comparison - some servers may change case
+    const isOutgoing = nick.toLowerCase() === myNickname.toLowerCase()
     const parsed = parseMessageContent({ messageEl, body: body || '', delayEl, forceDelayed: true, preserveFullReplyToJid: true })
 
     return {

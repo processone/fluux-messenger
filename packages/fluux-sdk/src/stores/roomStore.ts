@@ -549,7 +549,16 @@ export const roomStore = createStore<RoomState>()(
       const existing = newRooms.get(roomJid)
       if (!existing) return state
 
-      newRooms.set(roomJid, { ...existing, selfOccupant: occupant })
+      // Update nickname with server-reflected value to ensure message comparison works
+      // The server may normalize the nickname (e.g., case changes), so we use what it sends back
+      newRooms.set(roomJid, { ...existing, selfOccupant: occupant, nickname: occupant.nick })
+
+      // Update entities (includes nickname)
+      const newEntities = new Map(state.roomEntities)
+      const existingEntity = newEntities.get(roomJid)
+      if (existingEntity) {
+        newEntities.set(roomJid, { ...existingEntity, nickname: occupant.nick })
+      }
 
       // Update runtime
       const newRuntime = new Map(state.roomRuntime)
@@ -558,7 +567,7 @@ export const roomStore = createStore<RoomState>()(
         newRuntime.set(roomJid, { ...existingRuntime, selfOccupant: occupant })
       }
 
-      return { rooms: newRooms, roomRuntime: newRuntime }
+      return { rooms: newRooms, roomEntities: newEntities, roomRuntime: newRuntime }
     })
   },
 
@@ -623,22 +632,34 @@ export const roomStore = createStore<RoomState>()(
       // Increment unread if user doesn't see message (not just if not active)
       const shouldIncrement = !userSeesMessage && !messageToAdd.isOutgoing && !messageToAdd.isDelayed
 
-      const newUnreadCount = shouldIncrement && incrementUnread
-        ? existing.unreadCount + 1
-        : existing.unreadCount
-      const newMentionsCount = shouldIncrement && incrementMentions
-        ? existing.mentionsCount + 1
-        : existing.mentionsCount
+      // When sending a message (outgoing), clear unread counts - user is actively engaging
+      // Otherwise, increment if conditions met, or preserve existing count
+      let newUnreadCount: number
+      let newMentionsCount: number
+      if (messageToAdd.isOutgoing) {
+        // Sending a message clears unread state
+        newUnreadCount = 0
+        newMentionsCount = 0
+      } else if (shouldIncrement) {
+        newUnreadCount = incrementUnread ? existing.unreadCount + 1 : existing.unreadCount
+        newMentionsCount = incrementMentions ? existing.mentionsCount + 1 : existing.mentionsCount
+      } else {
+        newUnreadCount = existing.unreadCount
+        newMentionsCount = existing.mentionsCount
+      }
 
       // Determine lastReadAt:
+      // - When outgoing message: update to message timestamp (user is engaging)
       // - When user sees message: update to message timestamp
       // - When user doesn't see it and lastReadAt undefined: set to epoch so marker shows
       // - When user doesn't see it and lastReadAt defined: preserve (marker position stays correct)
       let newLastReadAt: Date | undefined
       let newFirstNewMessageId = existing.firstNewMessageId
-      if (userSeesMessage) {
+      if (messageToAdd.isOutgoing || userSeesMessage) {
+        // Sending a message or viewing incoming message = up to date
         newLastReadAt = messageToAdd.timestamp
-      } else if (existing.lastReadAt === undefined && !messageToAdd.isOutgoing) {
+        newFirstNewMessageId = undefined // Clear new message marker
+      } else if (existing.lastReadAt === undefined) {
         // First unread message in this room - set marker to show it as new
         newLastReadAt = new Date(0)
       } else {

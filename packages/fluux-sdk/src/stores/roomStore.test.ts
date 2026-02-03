@@ -487,6 +487,53 @@ describe('roomStore', () => {
     })
   })
 
+  describe('setSelfOccupant', () => {
+    it('should update nickname with server-reflected value', () => {
+      // Add room with initial nickname (as stored when joining)
+      roomStore.getState().addRoom(createRoom('test@conference.example.com', {
+        joined: true,
+        nickname: 'MyNickname', // Initial case
+      }))
+
+      // Server reflects back with different case (some servers normalize)
+      roomStore.getState().setSelfOccupant('test@conference.example.com', {
+        nick: 'mynickname', // Server-reflected (different case)
+        affiliation: 'member',
+        role: 'participant',
+      })
+
+      const room = roomStore.getState().rooms.get('test@conference.example.com')
+      const entity = roomStore.getState().roomEntities.get('test@conference.example.com')
+
+      // Nickname should be updated to match server's version
+      expect(room?.nickname).toBe('mynickname')
+      expect(entity?.nickname).toBe('mynickname')
+      expect(room?.selfOccupant?.nick).toBe('mynickname')
+    })
+
+    it('should set selfOccupant correctly', () => {
+      roomStore.getState().addRoom(createRoom('test@conference.example.com', {
+        joined: true,
+        nickname: 'user',
+      }))
+
+      roomStore.getState().setSelfOccupant('test@conference.example.com', {
+        nick: 'user',
+        affiliation: 'owner',
+        role: 'moderator',
+        jid: 'me@example.com/resource',
+      })
+
+      const room = roomStore.getState().rooms.get('test@conference.example.com')
+      expect(room?.selfOccupant).toEqual({
+        nick: 'user',
+        affiliation: 'owner',
+        role: 'moderator',
+        jid: 'me@example.com/resource',
+      })
+    })
+  })
+
   describe('joinedRooms', () => {
     it('should return only joined rooms', () => {
       roomStore.getState().addRoom(createRoom('joined1@conference.example.com', { joined: true }))
@@ -844,6 +891,23 @@ describe('roomStore', () => {
       roomStore.getState().addMessage('test@conference.example.com', message)
 
       expect(roomStore.getState().rooms.get('test@conference.example.com')?.unreadCount).toBe(0)
+    })
+
+    it('should clear unread count when sending outgoing message', () => {
+      // Room starts with unread messages
+      roomStore.getState().addRoom(createRoom('test@conference.example.com', {
+        unreadCount: 5,
+        mentionsCount: 2,
+      }))
+
+      // Send an outgoing message
+      const message = createMessage('msg1', 'test@conference.example.com', 'me', 'My reply', true)
+      roomStore.getState().addMessage('test@conference.example.com', message)
+
+      const room = roomStore.getState().rooms.get('test@conference.example.com')
+      // Sending a message clears unread state - user is engaging with the room
+      expect(room?.unreadCount).toBe(0)
+      expect(room?.mentionsCount).toBe(0)
     })
 
     it('should not increment unread count for delayed (historical) messages', () => {

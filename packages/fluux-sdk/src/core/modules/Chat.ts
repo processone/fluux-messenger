@@ -1030,7 +1030,8 @@ export class Chat extends BaseModule {
     const room = this.deps.stores?.room.getRoom(roomJid)
     if (!room) return null
 
-    const isOutgoing = isSentCarbon || (room.nickname === nick)
+    // Case-insensitive nickname comparison - some servers may change case
+    const isOutgoing = isSentCarbon || (room.nickname.toLowerCase() === nick.toLowerCase())
     const parsed = parseMessageContent({ messageEl: stanza, body, preserveFullReplyToJid: true })
     const isCorrection = !!stanza.getChild('replace', NS_CORRECTION)
 
