@@ -125,7 +125,7 @@ export function RoomsList() {
     <div ref={listRef} className="px-2 py-2" {...getContainerProps()}>
       {/* Quick Chats - only show if any exist */}
       {quickChats.length > 0 && (
-        <>
+        <div className="mb-4">
           <h3 className="text-xs font-semibold text-fluux-muted uppercase px-2 mb-2 flex items-center gap-1">
             <Zap className="w-3 h-3 text-amber-500" />
             {t('rooms.quickChatSection')} — {quickChats.length}
@@ -157,7 +157,7 @@ export function RoomsList() {
               />
             )
           })}
-        </>
+        </div>
       )}
 
       {/* Joined rooms */}
