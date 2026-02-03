@@ -47,11 +47,15 @@ describe('keychain utilities', () => {
   describe('saveCredentials', () => {
     it('should not call invoke when not in Tauri', async () => {
       mockIsTauri.mockReturnValue(false)
+      // Silence expected console.warn
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
       await saveCredentials('user@example.com', 'password', 'wss://example.com')
 
       expect(mockInvoke).not.toHaveBeenCalled()
       expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
+      expect(warnSpy).toHaveBeenCalledWith('Keychain storage is only available in the desktop app')
+      warnSpy.mockRestore()
     })
 
     it('should call invoke with correct parameters when in Tauri', async () => {
@@ -115,11 +119,15 @@ describe('keychain utilities', () => {
     it('should clear localStorage flag on error', async () => {
       localStorage.setItem(STORAGE_KEY, 'true')
       mockInvoke.mockRejectedValue(new Error('Keychain access denied'))
+      // Silence expected console.error
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
       const result = await getCredentials()
 
       expect(result).toBeNull()
       expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
+      expect(errorSpy).toHaveBeenCalled()
+      errorSpy.mockRestore()
     })
 
     it('should keep localStorage flag when credentials found', async () => {
@@ -154,11 +162,15 @@ describe('keychain utilities', () => {
     it('should clear localStorage flag even if invoke fails', async () => {
       localStorage.setItem(STORAGE_KEY, 'true')
       mockInvoke.mockRejectedValue(new Error('Delete failed'))
+      // Silence expected console.error
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
       await deleteCredentials()
 
       // Flag should still be cleared even though invoke failed
       expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
+      expect(errorSpy).toHaveBeenCalled()
+      errorSpy.mockRestore()
     })
   })
 

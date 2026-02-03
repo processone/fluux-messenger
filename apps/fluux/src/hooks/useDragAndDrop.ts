@@ -3,8 +3,8 @@ import { useTauriFileDrop } from './useTauriFileDrop'
 import { getMimeType, getFilename } from '@/utils/fileUtils'
 
 interface UseDragAndDropOptions {
-  /** Callback when a file is dropped (receives File object) */
-  onFileDrop: (file: File) => Promise<void>
+  /** Callback when a file is dropped (receives File object) - can be sync or async */
+  onFileDrop: (file: File) => void | Promise<void>
   /** Whether file upload is supported/enabled */
   isUploadSupported: boolean
 }

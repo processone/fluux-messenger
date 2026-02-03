@@ -314,6 +314,24 @@ export class Chat extends BaseModule {
       fullBody = fallbackText + body
     }
 
+    // XEP-0066/XEP-0428: When sending an attachment, include the URL in the body
+    // as fallback for non-supporting clients. Only the URL portion is marked as
+    // fallback, so user text is preserved when received.
+    let oobFallbackStart = 0
+    let oobFallbackEnd = 0
+    if (attachment) {
+      if (fullBody.length === 0 || fullBody === attachment.url) {
+        // No user text, or user explicitly typed the URL - use URL as body
+        fullBody = attachment.url
+        oobFallbackStart = 0
+      } else {
+        // User has text - append URL after a newline
+        oobFallbackStart = fullBody.length + 1 // +1 for newline
+        fullBody = fullBody + '\n' + attachment.url
+      }
+      oobFallbackEnd = fullBody.length
+    }
+
     const children = [
       xml('body', {}, fullBody),
       xml('active', { xmlns: NS_CHATSTATES })
@@ -360,8 +378,9 @@ export class Chat extends BaseModule {
         }))
       }
       children.push(xml('x', { xmlns: NS_OOB }, ...oobChildren))
+      // Mark only the URL portion as fallback (preserves user text)
       children.push(xml('fallback', { xmlns: NS_FALLBACK, for: NS_OOB },
-        xml('body', { start: '0', end: String(fullBody.length) })
+        xml('body', { start: String(oobFallbackStart), end: String(oobFallbackEnd) })
       ))
 
       // XEP-0446: File Metadata Element (for original dimensions)
@@ -397,7 +416,9 @@ export class Chat extends BaseModule {
         id,
         conversationId: to,
         from: this.deps.getCurrentJid()!,
-        body: attachment ? '' : body,
+        // Store user's original text (empty if they only sent a file with no caption)
+        // The URL in fullBody is fallback for non-OOB clients, not the user's message
+        body: body === attachment?.url ? '' : body,
         timestamp: new Date(),
         isOutgoing: true,
         ...(replyTo && { replyTo: { id: replyTo.id, to: replyTo.to } }),
@@ -520,15 +541,33 @@ export class Chat extends BaseModule {
    */
   async sendCorrection(to: string, originalMessageId: string, newBody: string, type: 'chat' | 'groupchat' = 'chat', attachment?: FileAttachment): Promise<void> {
     const recipient = type === 'chat' ? getBareJid(to) : to
-    const bodyText = attachment ? attachment.url : newBody
-    const fallbackBody = `[Corrected] ${bodyText}`
-    const fallbackEnd = '[Corrected] '.length
+    const correctionPrefix = '[Corrected] '
+    const correctionFallbackEnd = correctionPrefix.length
+
+    // Build the body text, preserving user text when there's an attachment
+    let bodyText = newBody
+    let oobFallbackStart = 0
+    let oobFallbackEnd = 0
+    if (attachment) {
+      if (newBody.length === 0 || newBody === attachment.url) {
+        // No user text, or user explicitly typed the URL - use URL as body
+        bodyText = attachment.url
+        oobFallbackStart = correctionFallbackEnd
+      } else {
+        // User has text - append URL after a newline
+        oobFallbackStart = correctionFallbackEnd + newBody.length + 1 // +1 for newline
+        bodyText = newBody + '\n' + attachment.url
+      }
+      oobFallbackEnd = correctionFallbackEnd + bodyText.length
+    }
+
+    const fallbackBody = correctionPrefix + bodyText
 
     const children = [
       xml('body', {}, fallbackBody),
       xml('replace', { xmlns: NS_CORRECTION, id: originalMessageId }),
       xml('fallback', { xmlns: NS_FALLBACK, for: NS_CORRECTION },
-        xml('body', { start: '0', end: String(fallbackEnd) })
+        xml('body', { start: '0', end: String(correctionFallbackEnd) })
       )
     ]
 
@@ -541,8 +580,9 @@ export class Chat extends BaseModule {
         }))
       }
       children.push(xml('x', { xmlns: NS_OOB }, ...oobChildren))
+      // Mark only the URL portion as OOB fallback (preserves user text)
       children.push(xml('fallback', { xmlns: NS_FALLBACK, for: NS_OOB },
-        xml('body', { start: String(fallbackEnd), end: String(fallbackBody.length) })
+        xml('body', { start: String(oobFallbackStart), end: String(oobFallbackEnd) })
       ))
 
       // XEP-0446: File Metadata Element (for original dimensions)

@@ -1000,6 +1000,49 @@ describe('XMPPClient Message', () => {
       })
     })
 
+    it('should preserve user text when sending attachment with body', async () => {
+      // This test verifies the fix for the bug where body text was being stripped
+      // when sending a file with accompanying text (e.g., "Check this out" + image)
+      await connectClient()
+
+      const userText = 'Check this out!'
+      const url = 'https://upload.example.com/files/photo.jpg'
+      const attachment = {
+        url,
+        name: 'photo.jpg',
+        size: 12345,
+        mediaType: 'image/jpeg',
+      }
+
+      await xmppClient.chat.sendMessage('alice@example.com', userText, 'chat', undefined, undefined, attachment)
+
+      const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
+      const bodyEl = sentStanza.children.find((c: any) => c.name === 'body')
+      const fallbackEl = sentStanza.children.find(
+        (c: any) => c.name === 'fallback' && c.attrs.xmlns === 'urn:xmpp:fallback:0'
+      )
+      const bodyRangeEl = fallbackEl?.children.find((c: any) => c.name === 'body')
+
+      // Body should contain user text followed by URL (for non-OOB clients)
+      const expectedBody = userText + '\n' + url
+      expect(bodyEl.children[0]).toBe(expectedBody)
+
+      // Fallback should mark ONLY the URL portion (after newline), NOT the user text
+      const expectedStart = userText.length + 1 // +1 for newline
+      expect(bodyRangeEl.attrs.start).toBe(String(expectedStart))
+      expect(bodyRangeEl.attrs.end).toBe(String(expectedBody.length))
+
+      // Stored message should preserve the user text (not strip it as fallback)
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        message: expect.objectContaining({
+          body: userText, // User text is preserved
+          attachment: expect.objectContaining({
+            url,
+          }),
+        })
+      })
+    })
+
     it('should not include fallback when no attachment', async () => {
       await connectClient()
 
@@ -1039,6 +1082,38 @@ describe('XMPPClient Message', () => {
 
       expect(oobEl).toBeDefined()
       expect(fallbackEl).toBeDefined()
+    })
+
+    it('should preserve user text in groupchat with attachment', async () => {
+      // Verify the fix also works for groupchat (MUC) messages
+      await connectClient()
+
+      const userText = 'Check this image!'
+      const url = 'https://upload.example.com/files/photo.jpg'
+      const attachment = {
+        url,
+        name: 'photo.jpg',
+        size: 12345,
+        mediaType: 'image/jpeg',
+      }
+
+      await xmppClient.chat.sendMessage('room@conference.example.com', userText, 'groupchat', undefined, undefined, attachment)
+
+      const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
+      const bodyEl = sentStanza.children.find((c: any) => c.name === 'body')
+      const fallbackEl = sentStanza.children.find(
+        (c: any) => c.name === 'fallback' && c.attrs.xmlns === 'urn:xmpp:fallback:0'
+      )
+      const bodyRangeEl = fallbackEl?.children.find((c: any) => c.name === 'body')
+
+      // Body should contain user text followed by URL
+      const expectedBody = userText + '\n' + url
+      expect(bodyEl.children[0]).toBe(expectedBody)
+
+      // Fallback should mark ONLY the URL portion (after newline), NOT the user text
+      const expectedStart = userText.length + 1 // +1 for newline
+      expect(bodyRangeEl.attrs.start).toBe(String(expectedStart))
+      expect(bodyRangeEl.attrs.end).toBe(String(expectedBody.length))
     })
   })
 
@@ -1197,6 +1272,57 @@ describe('XMPPClient Message', () => {
 
       expect(oobEl).toBeUndefined()
       expect(oobFallbackEl).toBeUndefined()
+    })
+
+    it('should preserve user text when correction includes both body and attachment', async () => {
+      // This test verifies the fix for corrections losing body text when attachment is present
+      await connectClient()
+
+      mockStores.chat.getMessage = vi.fn().mockReturnValue({
+        type: 'chat',
+        id: 'original-msg-123',
+        body: 'Original message',
+        from: 'me@example.com',
+      })
+
+      const userText = 'Updated caption for the image'
+      const url = 'https://upload.example.com/files/photo.jpg'
+      const attachment = {
+        url,
+        name: 'photo.jpg',
+        size: 12345,
+        mediaType: 'image/jpeg',
+      }
+
+      await xmppClient.chat.sendCorrection('contact@example.com', 'original-msg-123', userText, 'chat', attachment)
+
+      const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
+      const bodyEl = sentStanza.children.find((c: any) => c.name === 'body')
+      const oobFallbackEl = sentStanza.children.find(
+        (c: any) => c.name === 'fallback' && c.attrs.for === 'jabber:x:oob'
+      )
+      const bodyRangeEl = oobFallbackEl?.children.find((c: any) => c.name === 'body')
+
+      // Body should be: "[Corrected] user text\nURL"
+      const correctionPrefix = '[Corrected] '
+      const expectedBody = correctionPrefix + userText + '\n' + url
+      expect(bodyEl.children[0]).toBe(expectedBody)
+
+      // OOB fallback should mark ONLY the URL portion (after correction prefix and user text)
+      const expectedStart = correctionPrefix.length + userText.length + 1 // +1 for newline
+      expect(bodyRangeEl.attrs.start).toBe(String(expectedStart))
+      expect(bodyRangeEl.attrs.end).toBe(String(expectedBody.length))
+
+      // Local store should have the user's text preserved
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:message-updated', {
+        conversationId: 'contact@example.com',
+        messageId: 'original-msg-123',
+        updates: expect.objectContaining({
+          body: userText, // User text is preserved, not empty
+          isEdited: true,
+          attachment,
+        })
+      })
     })
 
     it('should update local store with attachment when provided', async () => {

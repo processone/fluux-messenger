@@ -6,6 +6,14 @@ import { EmojiPicker } from './EmojiPicker'
 import { Tooltip } from './Tooltip'
 import type { FileAttachment } from '@fluux/sdk'
 
+// Format file size for display
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
+}
+
 // Typing notification constants (XEP-0085)
 const COMPOSING_THROTTLE_MS = 2000
 // When user stops typing, wait this long before sending "paused" state.
@@ -45,6 +53,14 @@ export interface MessageComposerHandle {
 interface UploadState {
   isUploading: boolean
   progress: number
+}
+
+/** Pending attachment staged for sending (not yet sent) */
+export interface PendingAttachment {
+  file: File
+  previewUrl?: string
+  // Note: attachment field is NOT included here - files are only uploaded when user clicks Send
+  // This prevents accidental file uploads from drag-and-drop mistakes (privacy protection)
 }
 
 interface MessageComposerProps {
@@ -100,6 +116,10 @@ interface MessageComposerProps {
   uploadState?: UploadState
   /** Whether file upload is supported */
   isUploadSupported?: boolean
+  /** Pending attachment staged for sending */
+  pendingAttachment?: PendingAttachment | null
+  /** Callback to remove pending attachment */
+  onRemovePendingAttachment?: () => void
   /** Whether sending is disabled (e.g., when offline) */
   disabled?: boolean
   /** Callback when Up arrow is pressed in empty field (to edit last message) */
@@ -129,6 +149,8 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
   onFileSelect,
   uploadState,
   isUploadSupported = false,
+  pendingAttachment,
+  onRemovePendingAttachment,
   disabled = false,
   onEditLastMessage,
 }, ref) {
@@ -340,8 +362,8 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
     const isEmptyEdit = editingMessage && !trimmed && !attachmentToKeep
     const hasAttachmentOnly = editingMessage && !trimmed && attachmentToKeep
 
-    // For normal messages, require text. For edits, allow empty to trigger retraction or attachment-only.
-    if (!trimmed && !isEmptyEdit && !hasAttachmentOnly) return
+    // For normal messages, require text OR pending attachment. For edits, allow empty to trigger retraction or attachment-only.
+    if (!trimmed && !isEmptyEdit && !hasAttachmentOnly && !pendingAttachment) return
     if (sending) return
 
     // Handle slash commands (but not when editing)
@@ -398,7 +420,7 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
       e.preventDefault()
       // Don't submit if disabled (e.g., offline)
       if (disabled) return
-      handleSubmit(e)
+      void handleSubmit(e)
     } else if (e.key === 'Escape') {
       // Cancel edit mode on Escape
       if (editingMessage && onCancelEdit) {
@@ -554,7 +576,60 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
         </div>
       )}
 
-      <div className={`bg-fluux-hover ${(replyingTo || editingMessage) ? 'rounded-b-lg' : 'rounded-lg'} flex items-center`}>
+      {/* Pending attachment preview */}
+      {pendingAttachment && !editingMessage && (
+        <div className={`bg-fluux-hover ${replyingTo ? '' : 'rounded-t-lg'} px-3 py-2 flex items-center gap-3 border-l-2 border-fluux-brand`}>
+          {/* Thumbnail preview for images/videos */}
+          {pendingAttachment.previewUrl && pendingAttachment.file.type.startsWith('image/') ? (
+            <img
+              src={pendingAttachment.previewUrl}
+              alt={pendingAttachment.file.name}
+              className="w-12 h-12 object-cover rounded flex-shrink-0"
+            />
+          ) : pendingAttachment.previewUrl && pendingAttachment.file.type.startsWith('video/') ? (
+            <div className="w-12 h-12 relative flex-shrink-0">
+              <img
+                src={pendingAttachment.previewUrl}
+                alt={pendingAttachment.file.name}
+                className="w-full h-full object-cover rounded"
+              />
+              <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded">
+                <div className="w-4 h-4 border-2 border-white rounded-full flex items-center justify-center">
+                  <div className="w-0 h-0 border-l-[5px] border-l-white border-y-[3px] border-y-transparent ml-0.5" />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="w-12 h-12 flex items-center justify-center bg-fluux-bg rounded flex-shrink-0">
+              {pendingAttachment.file.type.startsWith('image/') ? (
+                <Image className="w-6 h-6 text-fluux-muted" />
+              ) : (
+                <FileText className="w-6 h-6 text-fluux-muted" />
+              )}
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-fluux-text truncate">
+              {pendingAttachment.file.name}
+            </p>
+            <p className="text-xs text-fluux-muted">
+              {formatFileSize(pendingAttachment.file.size)}
+            </p>
+          </div>
+          <Tooltip content={t('chat.removeAttachment')} position="top">
+            <button
+              type="button"
+              onClick={onRemovePendingAttachment}
+              className="p-1 text-fluux-muted hover:text-fluux-red transition-colors flex-shrink-0"
+              aria-label={t('chat.removeAttachment')}
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </Tooltip>
+        </div>
+      )}
+
+      <div className={`bg-fluux-hover ${(replyingTo || editingMessage || pendingAttachment) ? 'rounded-b-lg' : 'rounded-lg'} flex items-center`}>
         {/* Hidden file input */}
         <input
           ref={fileInputRef}
@@ -632,7 +707,7 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
         {/* Send button */}
         <button
           type="submit"
-          disabled={!text.trim() || sending || disabled}
+          disabled={(!text.trim() && !pendingAttachment) || sending || disabled}
           className="p-3 text-fluux-brand hover:text-fluux-brand-hover
                      disabled:text-fluux-muted disabled:cursor-not-allowed transition-colors"
         >
