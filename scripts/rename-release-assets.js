@@ -6,7 +6,7 @@
  * Requires: GITHUB_TOKEN environment variable
  */
 
-const https = require('https');
+import https from 'https';
 
 const OWNER = 'processone';
 const REPO = 'fluux-messenger';
