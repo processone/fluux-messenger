@@ -45,6 +45,15 @@ export function useMessageCopyFormatter({
       const range = selection.getRangeAt(0)
       if (!container.contains(range.commonAncestorContainer)) return
 
+      // Check if selection is entirely within a single message bubble
+      // If so, let the browser's default copy behavior handle it (just copy the selected text)
+      const startMessage = range.startContainer.parentElement?.closest('[data-message-id]')
+      const endMessage = range.endContainer.parentElement?.closest('[data-message-id]')
+      if (startMessage && endMessage && startMessage === endMessage) {
+        // Selection is within a single message - use default browser copy
+        return
+      }
+
       // Get all selected message elements - only get the ones with data-message-from
       // (the actual MessageBubble, not the wrapper div)
       const messageElements = container.querySelectorAll('[data-message-from]')
@@ -96,8 +105,8 @@ export function useMessageCopyFormatter({
         }
       })
 
-      // If we have selected messages, format the output
-      if (selectedMessages.length > 0) {
+      // If we have selected messages across multiple bubbles, format the output
+      if (selectedMessages.length > 1) {
         // Use today's date as fallback if no date separator was found
         const fallbackDate = earliestDate || format(new Date(), 'yyyy-MM-dd')
 
