@@ -201,7 +201,12 @@ describe('FileAttachments', () => {
         url: 'https://example.com/voice.ogg',
         mediaType: 'audio/ogg',
         name: 'voice.ogg',
-        thumbnail: { uri: 'https://example.com/waveform.png' },
+        thumbnail: {
+          uri: 'https://example.com/waveform.png',
+          mediaType: 'image/png',
+          width: 200,
+          height: 50,
+        },
       }
 
       const { container } = render(<AudioAttachment attachment={voiceMessage} />)
