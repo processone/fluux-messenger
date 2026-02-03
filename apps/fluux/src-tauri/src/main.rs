@@ -22,6 +22,9 @@ use tauri::{RunEvent, WindowEvent};
 use tauri::WindowEvent;
 #[cfg(target_os = "macos")]
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
+// Menu support
+#[cfg(target_os = "macos")]
+use tauri::menu::{MenuBuilder, PredefinedMenuItem, SubmenuBuilder};
 // System tray support for Windows
 #[cfg(target_os = "windows")]
 use tauri::{
@@ -29,6 +32,7 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 use tauri_plugin_deep_link::DeepLinkExt;
+use tauri_plugin_opener::OpenerExt;
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
 use scraper::{Html, Selector};
@@ -500,6 +504,7 @@ mod macos {
 fn main() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
@@ -523,6 +528,79 @@ fn main() {
             #[cfg(desktop)]
             {
                 let _ = app.deep_link().register("xmpp");
+            }
+
+            // macOS: Create custom menu with Help submenu
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::menu::MenuItem;
+
+                // App menu (standard macOS app menu)
+                let app_menu = SubmenuBuilder::new(app, "Fluux Messenger")
+                    .item(&PredefinedMenuItem::about(app, Some("About Fluux Messenger"), None)?)
+                    .separator()
+                    .item(&PredefinedMenuItem::services(app, None)?)
+                    .separator()
+                    .item(&PredefinedMenuItem::hide(app, Some("Hide Fluux Messenger"))?)
+                    .item(&PredefinedMenuItem::hide_others(app, None)?)
+                    .item(&PredefinedMenuItem::show_all(app, None)?)
+                    .separator()
+                    .item(&PredefinedMenuItem::quit(app, Some("Quit Fluux Messenger"))?)
+                    .build()?;
+
+                // Edit menu (standard text editing)
+                let edit_menu = SubmenuBuilder::new(app, "Edit")
+                    .item(&PredefinedMenuItem::undo(app, None)?)
+                    .item(&PredefinedMenuItem::redo(app, None)?)
+                    .separator()
+                    .item(&PredefinedMenuItem::cut(app, None)?)
+                    .item(&PredefinedMenuItem::copy(app, None)?)
+                    .item(&PredefinedMenuItem::paste(app, None)?)
+                    .separator()
+                    .item(&PredefinedMenuItem::select_all(app, None)?)
+                    .build()?;
+
+                // View menu
+                let view_menu = SubmenuBuilder::new(app, "View")
+                    .item(&PredefinedMenuItem::fullscreen(app, Some("Toggle Full Screen"))?)
+                    .build()?;
+
+                // Window menu
+                let window_menu = SubmenuBuilder::new(app, "Window")
+                    .item(&PredefinedMenuItem::minimize(app, None)?)
+                    .item(&PredefinedMenuItem::maximize(app, Some("Zoom"))?)
+                    .separator()
+                    .item(&PredefinedMenuItem::close_window(app, None)?)
+                    .build()?;
+
+                // Help menu with GitHub link
+                let github_item = MenuItem::with_id(app, "github", "Fluux Messenger on GitHub", true, None::<&str>)?;
+                let report_issue_item = MenuItem::with_id(app, "report_issue", "Report an Issue...", true, None::<&str>)?;
+
+                let help_menu = SubmenuBuilder::new(app, "Help")
+                    .item(&github_item)
+                    .item(&report_issue_item)
+                    .build()?;
+
+                // Build and set the menu
+                let menu = MenuBuilder::new(app)
+                    .items(&[&app_menu, &edit_menu, &view_menu, &window_menu, &help_menu])
+                    .build()?;
+
+                app.set_menu(menu)?;
+
+                // Handle Help menu events
+                app.on_menu_event(move |app_handle, event| {
+                    match event.id().as_ref() {
+                        "github" => {
+                            let _ = app_handle.opener().open_url("https://github.com/processone/fluux-messenger", None::<&str>);
+                        }
+                        "report_issue" => {
+                            let _ = app_handle.opener().open_url("https://github.com/processone/fluux-messenger/issues/new", None::<&str>);
+                        }
+                        _ => {}
+                    }
+                });
             }
 
             // Check if window is off-screen (e.g., monitor was disconnected) and reset if needed

@@ -20,6 +20,7 @@
     "core:window:allow-set-focus",
     "core:webview:allow-webview-position",
     "shell:allow-open",
+    "opener:default",
     "os:default",
     "core:window:allow-set-badge-count",
     "notification:default",
