@@ -772,6 +772,203 @@ describe('MessageComposer', () => {
     })
   })
 
+  describe('pending attachment (staged file before sending)', () => {
+    it('should display pending attachment with file name and size', () => {
+      const onSend = vi.fn().mockResolvedValue(true)
+      // Create file with known size (1500 bytes = 1.5 KB)
+      const content = 'x'.repeat(1500)
+      const pendingAttachment = {
+        file: new File([content], 'document.pdf', { type: 'application/pdf' }),
+      }
+
+      render(
+        <MessageComposer
+          placeholder="Type a message"
+          onSend={onSend}
+          pendingAttachment={pendingAttachment}
+        />
+      )
+
+      // Should show file name
+      expect(screen.getByText('document.pdf')).toBeInTheDocument()
+      // Should show file size (1.5 KB)
+      expect(screen.getByText('1.5 KB')).toBeInTheDocument()
+    })
+
+    it('should show thumbnail preview for image attachments', () => {
+      const onSend = vi.fn().mockResolvedValue(true)
+      const pendingAttachment = {
+        file: new File(['test'], 'photo.jpg', { type: 'image/jpeg' }),
+        previewUrl: 'blob:http://localhost/preview-123',
+      }
+
+      render(
+        <MessageComposer
+          placeholder="Type a message"
+          onSend={onSend}
+          pendingAttachment={pendingAttachment}
+        />
+      )
+
+      // Should show image preview
+      const img = screen.getByAltText('photo.jpg')
+      expect(img).toBeInTheDocument()
+      expect(img).toHaveAttribute('src', 'blob:http://localhost/preview-123')
+    })
+
+    it('should enable send button when there is a pending attachment (even without text)', () => {
+      const onSend = vi.fn().mockResolvedValue(true)
+      const pendingAttachment = {
+        file: new File(['test'], 'photo.jpg', { type: 'image/jpeg' }),
+      }
+
+      render(
+        <MessageComposer
+          placeholder="Type a message"
+          onSend={onSend}
+          pendingAttachment={pendingAttachment}
+        />
+      )
+
+      // Find the send button
+      const buttons = screen.getAllByRole('button')
+      const submitButton = buttons.find(btn => btn.getAttribute('type') === 'submit')
+
+      // Should be enabled even though text is empty
+      expect(submitButton).not.toBeDisabled()
+    })
+
+    it('should call onRemovePendingAttachment when remove button is clicked', () => {
+      const onSend = vi.fn().mockResolvedValue(true)
+      const onRemovePendingAttachment = vi.fn()
+      const pendingAttachment = {
+        file: new File(['test'], 'photo.jpg', { type: 'image/jpeg' }),
+      }
+
+      render(
+        <MessageComposer
+          placeholder="Type a message"
+          onSend={onSend}
+          pendingAttachment={pendingAttachment}
+          onRemovePendingAttachment={onRemovePendingAttachment}
+        />
+      )
+
+      // Find and click remove button
+      const removeButton = screen.getByLabelText('chat.removeAttachment')
+      fireEvent.click(removeButton)
+
+      expect(onRemovePendingAttachment).toHaveBeenCalledTimes(1)
+    })
+
+    it('should call onSend when submitting with only a pending attachment', async () => {
+      const onSend = vi.fn().mockResolvedValue(true)
+      const pendingAttachment = {
+        file: new File(['test'], 'photo.jpg', { type: 'image/jpeg' }),
+      }
+
+      render(
+        <MessageComposer
+          placeholder="Type a message"
+          onSend={onSend}
+          pendingAttachment={pendingAttachment}
+        />
+      )
+
+      const textarea = screen.getByPlaceholderText('Type a message')
+
+      // Submit without typing text (Enter key)
+      fireEvent.keyDown(textarea, { key: 'Enter', code: 'Enter' })
+
+      // Wait for async
+      await act(async () => {
+        await Promise.resolve()
+      })
+
+      // Should call onSend with empty string (the body is handled by parent)
+      expect(onSend).toHaveBeenCalledWith('')
+    })
+
+    it('should call onSend with text when there is both text and pending attachment', async () => {
+      const onSend = vi.fn().mockResolvedValue(true)
+      const pendingAttachment = {
+        file: new File(['test'], 'photo.jpg', { type: 'image/jpeg' }),
+      }
+
+      render(
+        <MessageComposer
+          placeholder="Type a message"
+          onSend={onSend}
+          pendingAttachment={pendingAttachment}
+        />
+      )
+
+      const textarea = screen.getByPlaceholderText('Type a message')
+
+      // Type a message
+      fireEvent.change(textarea, { target: { value: 'Check out this photo!' } })
+
+      // Submit
+      fireEvent.keyDown(textarea, { key: 'Enter', code: 'Enter' })
+
+      // Wait for async
+      await act(async () => {
+        await Promise.resolve()
+      })
+
+      expect(onSend).toHaveBeenCalledWith('Check out this photo!')
+    })
+
+    it('should not show pending attachment preview when in edit mode', () => {
+      const onSend = vi.fn().mockResolvedValue(true)
+      const pendingAttachment = {
+        file: new File(['test'], 'photo.jpg', { type: 'image/jpeg' }),
+      }
+
+      render(
+        <MessageComposer
+          placeholder="Type a message"
+          onSend={onSend}
+          pendingAttachment={pendingAttachment}
+          editingMessage={{ id: 'msg-123', body: 'Editing this' }}
+        />
+      )
+
+      // Pending attachment should not be visible when editing
+      expect(screen.queryByText('photo.jpg')).not.toBeInTheDocument()
+    })
+
+    it('should format file sizes correctly', () => {
+      const onSend = vi.fn().mockResolvedValue(true)
+
+      // Test B formatting (small file - 500 bytes)
+      const smallContent = 'x'.repeat(500)
+      const { rerender } = render(
+        <MessageComposer
+          placeholder="Type a message"
+          onSend={onSend}
+          pendingAttachment={{
+            file: new File([smallContent], 'small.txt', { type: 'text/plain' }),
+          }}
+        />
+      )
+      expect(screen.getByText('500 B')).toBeInTheDocument()
+
+      // Test KB formatting (medium file - 50KB)
+      const mediumContent = 'x'.repeat(50 * 1024)
+      rerender(
+        <MessageComposer
+          placeholder="Type a message"
+          onSend={onSend}
+          pendingAttachment={{
+            file: new File([mediumContent], 'medium.txt', { type: 'text/plain' }),
+          }}
+        />
+      )
+      expect(screen.getByText('50.0 KB')).toBeInTheDocument()
+    })
+  })
+
   describe('control character filtering (Tauri arrow key bug workaround)', () => {
     it('should filter out control characters from input', () => {
       const onSend = vi.fn().mockResolvedValue(true)

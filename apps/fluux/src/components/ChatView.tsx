@@ -8,7 +8,7 @@ import { Upload, Loader2 } from 'lucide-react'
 import { MessageBubble, MessageList as MessageListComponent, shouldShowAvatar, buildReplyContext } from './conversation'
 import { ChristmasAnimation } from './ChristmasAnimation'
 import { ChatHeader } from './ChatHeader'
-import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle } from './MessageComposer'
+import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment } from './MessageComposer'
 import { findLastEditableMessage, findLastEditableMessageId } from '@/utils/messageUtils'
 
 interface ChatViewProps {
@@ -21,7 +21,7 @@ interface ChatViewProps {
 
 export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerRef }: ChatViewProps) {
   const { t } = useTranslation()
-  const { activeConversation, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, activeMAMState, fetchOlderHistory } = useChat()
+  const { activeConversation, activeMessages, activeTypingUsers, sendReaction, sendCorrection, retractMessage, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, activeMAMState, fetchOlderHistory } = useChat()
   const { contacts } = useRoster()
   // NOTE: Use focused selectors instead of useConnection() hook to avoid
   // re-renders when unrelated connection state changes (error, reconnectAttempt, etc.)
@@ -41,6 +41,9 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
 
   // Edit state - which message are we editing
   const [editingMessage, setEditingMessage] = useState<Message | null>(null)
+
+  // Pending attachment state - staged file ready to send with next message
+  const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null)
 
 
   // Find the last outgoing message ID for edit button visibility (skip retracted)
@@ -142,12 +145,18 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
   // Index by both client id and stanza-id since replies may reference either
   const messagesById = useMemo(() => createMessageLookup(activeMessages), [activeMessages])
 
-  // Clear reply/edit state when conversation changes
+  // Clear reply/edit/pending attachment state when conversation changes
   // Note: scroll position is managed by MessageList component
   useEffect(() => {
     setReplyingTo(null)
     setEditingMessage(null)
+    // Revoke old preview URL to avoid memory leaks
+    if (pendingAttachment?.previewUrl) {
+      URL.revokeObjectURL(pendingAttachment.previewUrl)
+    }
+    setPendingAttachment(null)
     clearSelection()
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- pendingAttachment cleanup is intentional, not a trigger
   }, [activeConversation?.id, clearSelection])
 
   // XEP-0313: Message history is now auto-fetched by the SDK (useChat hook)
@@ -155,15 +164,26 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
   // - MAM query runs in background when connected
   // - No manual orchestration needed here
 
-  // File upload handler for drag-drop
-  const handleFileDrop = useCallback(async (file: File) => {
+  // File drop handler - stages file for preview only (no upload yet - privacy protection)
+  // Upload happens when user clicks Send, not on drop (prevents accidental data leaks)
+  const handleFileDrop = useCallback((file: File) => {
     if (!activeConversation || !isSupported) return
-    const attachment = await uploadFile(file)
-    if (attachment) {
-      await sendMessage(activeConversation.id, attachment.url, activeConversation.type, undefined, attachment)
-      scrollToBottom()
+    // Create preview URL for images/videos
+    const previewUrl = file.type.startsWith('image/') || file.type.startsWith('video/')
+      ? URL.createObjectURL(file)
+      : undefined
+    setPendingAttachment({ file, previewUrl })
+    // Focus composer so user can add a message
+    setTimeout(() => composerHandleRef.current?.focus(), 0)
+  }, [activeConversation, isSupported])
+
+  // Clear pending attachment and revoke preview URL
+  const handleRemovePendingAttachment = useCallback(() => {
+    if (pendingAttachment?.previewUrl) {
+      URL.revokeObjectURL(pendingAttachment.previewUrl)
     }
-  }, [activeConversation, isSupported, uploadFile, sendMessage, scrollToBottom])
+    setPendingAttachment(null)
+  }, [pendingAttachment])
 
   // Drag-and-drop for file upload (handles both HTML5 and Tauri native)
   const { isDragging, dragHandlers } = useDragAndDrop({
@@ -180,11 +200,12 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
 
   // Memoize the clearFirstNewMessageId callback to avoid render loops
   // (inline arrow functions create new references on every render)
+  const conversationId = activeConversation?.id
   const handleClearFirstNewMessageId = useCallback(() => {
-    if (activeConversation) {
-      clearFirstNewMessageId(activeConversation.id)
+    if (conversationId) {
+      clearFirstNewMessageId(conversationId)
     }
-  }, [activeConversation?.id, clearFirstNewMessageId])
+  }, [conversationId, clearFirstNewMessageId])
 
   if (!activeConversation) return null
 
@@ -290,6 +311,9 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
         uploadState={uploadStateObj}
         isUploadSupported={isSupported}
         onFileSelect={handleFileDrop}
+        uploadFile={uploadFile}
+        pendingAttachment={pendingAttachment}
+        onRemovePendingAttachment={handleRemovePendingAttachment}
         processLinkPreview={processMessageForLinkPreview}
         isConnected={isConnected}
         onSwitchToMessages={onSwitchToMessages}
@@ -689,6 +713,9 @@ function MessageInput({
   uploadState,
   isUploadSupported,
   onFileSelect,
+  uploadFile,
+  pendingAttachment,
+  onRemovePendingAttachment,
   processLinkPreview,
   onSwitchToMessages,
 }: {
@@ -713,6 +740,9 @@ function MessageInput({
   uploadState?: { isUploading: boolean; progress: number }
   isUploadSupported?: boolean
   onFileSelect?: (file: File) => void
+  uploadFile?: (file: File) => Promise<import('@fluux/sdk').FileAttachment | null>
+  pendingAttachment?: PendingAttachment | null
+  onRemovePendingAttachment?: () => void
   processLinkPreview?: (messageId: string, body: string, to: string, type: 'chat' | 'groupchat') => Promise<void>
   onSwitchToMessages?: (conversationId: string) => void
 }) {
@@ -774,13 +804,31 @@ function MessageInput({
         fallback: { author: authorName, body: replyingTo.body }
       }
     }
-    const messageId = await sendMessage(conversationId, text, type, replyTo)
+
+    // If there's a pending attachment, upload it first (privacy: only upload when user explicitly sends)
+    let attachment: import('@fluux/sdk').FileAttachment | null | undefined
+    if (pendingAttachment && uploadFile) {
+      attachment = await uploadFile(pendingAttachment.file)
+      if (!attachment) {
+        // Upload failed - don't send the message
+        return false
+      }
+    }
+
+    // The body is the file URL if no text was entered, otherwise the user's text
+    const body = text || attachment?.url || ''
+    const messageId = await sendMessage(conversationId, body, type, replyTo, attachment ?? undefined)
+
+    // Clear pending attachment after sending
+    if (pendingAttachment) {
+      onRemovePendingAttachment?.()
+    }
 
     // Clear draft immediately so sidebar updates
     clearDraft(conversationId)
 
     // Process link preview in background (don't block on it)
-    if (processLinkPreview) {
+    if (processLinkPreview && text) {
       processLinkPreview(messageId, text, conversationId, type).catch(console.error)
     }
 
@@ -817,6 +865,8 @@ function MessageInput({
       onFileSelect={onFileSelect}
       uploadState={uploadState}
       isUploadSupported={isUploadSupported}
+      pendingAttachment={pendingAttachment}
+      onRemovePendingAttachment={onRemovePendingAttachment}
       disabled={!isConnected}
       value={text}
       onValueChange={setText}

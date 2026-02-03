@@ -8,7 +8,7 @@ import { Avatar, getConsistentTextColor } from './Avatar'
 import { format } from 'date-fns'
 import { Shield, Upload, Loader2, LogIn, AlertCircle, Users } from 'lucide-react'
 import { ChristmasAnimation } from './ChristmasAnimation'
-import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, MESSAGE_INPUT_BASE_CLASSES, MESSAGE_INPUT_OVERLAY_CLASSES } from './MessageComposer'
+import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment, MESSAGE_INPUT_BASE_CLASSES, MESSAGE_INPUT_OVERLAY_CLASSES } from './MessageComposer'
 import { RoomHeader } from './RoomHeader'
 import { OccupantPanel } from './OccupantPanel'
 import { findLastEditableMessage, findLastEditableMessageId } from '@/utils/messageUtils'
@@ -69,6 +69,9 @@ export function RoomView({ onBack, mainContentRef, composerRef }: RoomViewProps)
   // Edit state
   const [editingMessage, setEditingMessage] = useState<RoomMessage | null>(null)
 
+  // Pending attachment state - staged file ready to send with next message
+  const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null)
+
 
   // Find the last outgoing message ID for edit button visibility (skip retracted)
   const lastOutgoingMessageId = useMemo(
@@ -110,6 +113,9 @@ export function RoomView({ onBack, mainContentRef, composerRef }: RoomViewProps)
   // Scroll ref for programmatic scrolling and keyboard navigation
   const scrollRef = useRef<HTMLElement>(null)
   const isAtBottomRef = useRef(true)
+
+  // Composer handle ref for focusing after staging attachment
+  const composerHandleRef = useRef<MessageComposerHandle>(null)
 
   // Scroll to bottom (used after sending a message)
   const scrollToBottom = useCallback(() => {
@@ -160,23 +166,40 @@ export function RoomView({ onBack, mainContentRef, composerRef }: RoomViewProps)
   // Index by both client id and stanza-id since replies may reference either
   const messagesById = useMemo(() => createMessageLookup(activeMessages), [activeMessages])
 
-  // Clear reply/edit state when room changes
+  // Clear reply/edit/pending attachment state when room changes
   // Note: scroll position is managed by MessageList component
   useEffect(() => {
     setReplyingTo(null)
     setEditingMessage(null)
+    // Revoke old preview URL to avoid memory leaks
+    if (pendingAttachment?.previewUrl) {
+      URL.revokeObjectURL(pendingAttachment.previewUrl)
+    }
+    setPendingAttachment(null)
     clearSelection()
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- pendingAttachment cleanup is intentional, not a trigger
   }, [activeRoom?.jid, clearSelection])
 
-  // File upload handler for drag-drop and button clicks
-  const handleFileDrop = useCallback(async (file: File) => {
+  // File drop handler - stages file for preview only (no upload yet - privacy protection)
+  // Upload happens when user clicks Send, not on drop (prevents accidental data leaks)
+  const handleFileDrop = useCallback((file: File) => {
     if (!activeRoom || !isSupported) return
-    const attachment = await uploadFile(file)
-    if (attachment) {
-      await sendMessage(activeRoom.jid, attachment.url, undefined, undefined, attachment)
-      scrollToBottom()
+    // Create preview URL for images/videos
+    const previewUrl = file.type.startsWith('image/') || file.type.startsWith('video/')
+      ? URL.createObjectURL(file)
+      : undefined
+    setPendingAttachment({ file, previewUrl })
+    // Focus composer so user can add a message
+    setTimeout(() => composerHandleRef.current?.focus(), 0)
+  }, [activeRoom, isSupported])
+
+  // Clear pending attachment and revoke preview URL
+  const handleRemovePendingAttachment = useCallback(() => {
+    if (pendingAttachment?.previewUrl) {
+      URL.revokeObjectURL(pendingAttachment.previewUrl)
     }
-  }, [activeRoom, isSupported, uploadFile, sendMessage, scrollToBottom])
+    setPendingAttachment(null)
+  }, [pendingAttachment])
 
   // Drag-and-drop for file upload (handles both HTML5 and Tauri native)
   const { isDragging, dragHandlers } = useDragAndDrop({
@@ -186,11 +209,12 @@ export function RoomView({ onBack, mainContentRef, composerRef }: RoomViewProps)
 
   // Memoize the clearFirstNewMessageId callback to avoid render loops
   // (inline arrow functions create new references on every render)
+  const roomJid = activeRoom?.jid
   const handleClearFirstNewMessageId = useCallback(() => {
-    if (activeRoom) {
-      clearFirstNewMessageId(activeRoom.jid)
+    if (roomJid) {
+      clearFirstNewMessageId(roomJid)
     }
-  }, [activeRoom?.jid, clearFirstNewMessageId])
+  }, [roomJid, clearFirstNewMessageId])
 
   if (!activeRoom) return null
 
@@ -271,6 +295,7 @@ export function RoomView({ onBack, mainContentRef, composerRef }: RoomViewProps)
         {/* Input - show composer if joined, join prompt if not */}
         {activeRoom.joined ? (
           <RoomMessageInput
+            ref={composerHandleRef}
             room={activeRoom}
             textareaRef={composerRef as React.RefObject<HTMLTextAreaElement>}
             sendMessage={sendMessage}
@@ -289,6 +314,9 @@ export function RoomView({ onBack, mainContentRef, composerRef }: RoomViewProps)
             uploadState={uploadStateObj}
             isUploadSupported={isSupported}
             onFileSelect={handleFileDrop}
+            uploadFile={uploadFile}
+            pendingAttachment={pendingAttachment}
+            onRemovePendingAttachment={handleRemovePendingAttachment}
             processLinkPreview={processMessageForLinkPreview}
             isConnected={isConnected}
           />
@@ -707,28 +735,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   )
 })
 
-function RoomMessageInput({
-  room,
-  textareaRef,
-  sendMessage,
-  sendCorrection,
-  retractMessage,
-  sendChatState,
-  sendEasterEgg,
-  onMessageSent,
-  onInputResize,
-  replyingTo,
-  onCancelReply,
-  editingMessage,
-  onCancelEdit,
-  onEditLastMessage,
-  onComposingChange,
-  uploadState,
-  isUploadSupported,
-  onFileSelect,
-  processLinkPreview,
-  isConnected,
-}: {
+interface RoomMessageInputProps {
   room: Room
   textareaRef?: React.RefObject<HTMLTextAreaElement>
   sendMessage: (roomJid: string, body: string, replyTo?: { id: string; to: string; fallback?: { author: string; body: string } }, references?: MentionReference[], attachment?: FileAttachment) => Promise<string>
@@ -747,9 +754,38 @@ function RoomMessageInput({
   uploadState?: { isUploading: boolean; progress: number }
   isUploadSupported?: boolean
   onFileSelect?: (file: File) => void
+  uploadFile?: (file: File) => Promise<FileAttachment | null>
+  pendingAttachment?: PendingAttachment | null
+  onRemovePendingAttachment?: () => void
   processLinkPreview?: (messageId: string, body: string, to: string, type: 'chat' | 'groupchat') => Promise<void>
   isConnected: boolean
-}) {
+}
+
+const RoomMessageInput = React.forwardRef<MessageComposerHandle, RoomMessageInputProps>(function RoomMessageInput({
+  room,
+  textareaRef,
+  sendMessage,
+  sendCorrection,
+  retractMessage,
+  sendChatState,
+  sendEasterEgg,
+  onMessageSent,
+  onInputResize,
+  replyingTo,
+  onCancelReply,
+  editingMessage,
+  onCancelEdit,
+  onEditLastMessage,
+  onComposingChange,
+  uploadState,
+  isUploadSupported,
+  onFileSelect,
+  uploadFile,
+  pendingAttachment,
+  onRemovePendingAttachment,
+  processLinkPreview,
+  isConnected,
+}, ref) {
   const { t } = useTranslation()
   const { setDraft, getDraft, clearDraft, clearFirstNewMessageId } = useRoom()
 
@@ -757,6 +793,13 @@ function RoomMessageInput({
   const [cursorPosition, setCursorPosition] = useState(0)
   const [references, setReferences] = useState<MentionReference[]>([])
   const composerRef = useRef<MessageComposerHandle>(null)
+
+  // Forward ref to parent for focus after staging attachment
+  React.useImperativeHandle(ref, () => ({
+    focus: () => composerRef.current?.focus(),
+    getText: () => composerRef.current?.getText() || '',
+    setText: (t: string) => composerRef.current?.setText(t),
+  }), [])
 
   // Draft persistence - saves on room change, restores on load, clears references
   const [text, setText] = useConversationDraft({
@@ -843,14 +886,32 @@ function RoomMessageInput({
         fallback: { author: replyingTo.nick, body: replyingTo.body }
       }
     }
-    const messageId = await sendMessage(room.jid, sendText, replyTo, references.length > 0 ? references : undefined)
+
+    // If there's a pending attachment, upload it first (privacy: only upload when user explicitly sends)
+    let attachment: FileAttachment | null | undefined
+    if (pendingAttachment && uploadFile) {
+      attachment = await uploadFile(pendingAttachment.file)
+      if (!attachment) {
+        // Upload failed - don't send the message
+        return false
+      }
+    }
+
+    // The body is the file URL if no text was entered, otherwise the user's text
+    const body = sendText || attachment?.url || ''
+    const messageId = await sendMessage(room.jid, body, replyTo, references.length > 0 ? references : undefined, attachment ?? undefined)
     setReferences([])
+
+    // Clear pending attachment after sending
+    if (pendingAttachment) {
+      onRemovePendingAttachment?.()
+    }
 
     // Clear draft immediately so sidebar updates
     clearDraft(room.jid)
 
     // Process link preview in background (don't block on it)
-    if (processLinkPreview) {
+    if (processLinkPreview && sendText) {
       processLinkPreview(messageId, sendText, room.jid, 'groupchat').catch(console.error)
     }
 
@@ -1082,11 +1143,13 @@ function RoomMessageInput({
       onFileSelect={onFileSelect}
       uploadState={uploadState}
       isUploadSupported={isUploadSupported}
+      pendingAttachment={pendingAttachment}
+      onRemovePendingAttachment={onRemovePendingAttachment}
       disabled={!isConnected}
       onEditLastMessage={onEditLastMessage}
     />
   )
-}
+})
 
 /**
  * Join prompt shown when viewing a bookmarked room that is not joined.
