@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Music, Film, FileText, Archive, File, Download, BookOpen, Loader2 } from 'lucide-react'
+import { Music, Film, FileText, Archive, File, Download, BookOpen, Loader2, ImageOff, FileX } from 'lucide-react'
 import { Tooltip } from './Tooltip'
 import { formatBytes, useProxiedUrl } from '@/hooks'
 import { isPdfMimeType, isDocumentMimeType, isArchiveMimeType, isEbookMimeType, getFileTypeLabel } from '@/utils/thumbnail'
@@ -21,6 +22,8 @@ interface AttachmentProps {
  * Uses Tauri HTTP plugin to bypass CORS in desktop app.
  */
 export function ImageAttachment({ attachment, onLoad }: AttachmentProps) {
+  const { t } = useTranslation()
+  const [loadError, setLoadError] = useState(false)
   const isImage = attachment.mediaType?.startsWith('image/') ?? false
 
   // Use thumbnail if available, otherwise fall back to main URL
@@ -58,19 +61,16 @@ export function ImageAttachment({ attachment, onLoad }: AttachmentProps) {
     )
   }
 
-  // Show error state if fetch failed
-  if (error || !proxiedImageSrc) {
+  // Show error state if fetch failed or image failed to load (404, etc.)
+  if (error || !proxiedImageSrc || loadError) {
     return (
-      <a
-        href={attachment.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="block pt-2 max-w-sm rounded-lg bg-fluux-hover flex items-center justify-center text-fluux-muted text-sm"
+      <div
+        className="pt-2 max-w-sm rounded-lg bg-fluux-hover flex flex-col items-center justify-center text-fluux-muted text-sm gap-2"
         style={{ aspectRatio, maxHeight: '300px', minHeight: '100px' }}
-        tabIndex={-1}
       >
-        Click to view image
-      </a>
+        <ImageOff className="w-8 h-8" />
+        <span>{t('chat.imageUnavailable')}</span>
+      </div>
     )
   }
 
@@ -96,6 +96,7 @@ export function ImageAttachment({ attachment, onLoad }: AttachmentProps) {
         }}
         loading="lazy"
         onLoad={onLoad}
+        onError={() => setLoadError(true)}
       />
     </a>
   )
@@ -107,6 +108,7 @@ export function ImageAttachment({ attachment, onLoad }: AttachmentProps) {
  */
 export function VideoAttachment({ attachment, onLoad }: AttachmentProps) {
   const { t } = useTranslation()
+  const [loadError, setLoadError] = useState(false)
   const isVideo = attachment.mediaType?.startsWith('video/') ?? false
 
   // Fetch video via Tauri HTTP plugin to bypass CORS (only when it's a video)
@@ -128,23 +130,18 @@ export function VideoAttachment({ attachment, onLoad }: AttachmentProps) {
     )
   }
 
-  // Show error/fallback if fetch failed
-  if (error || !proxiedVideoUrl) {
+  // Show error/fallback if fetch failed or video failed to load (404, etc.)
+  if (error || !proxiedVideoUrl || loadError) {
     return (
-      <div className="pt-2 max-w-md rounded-lg overflow-hidden bg-black">
-        <a
-          href={attachment.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center justify-center text-fluux-muted text-sm py-8"
-        >
-          <Film className="w-6 h-6 mr-2" />
-          Click to view video
-        </a>
+      <div className="pt-2 max-w-md rounded-lg overflow-hidden bg-fluux-hover">
+        <div className="flex flex-col items-center justify-center text-fluux-muted text-sm py-8 gap-2">
+          <FileX className="w-8 h-8" />
+          <span>{t('chat.videoUnavailable')}</span>
+        </div>
         {attachment.name && (
-          <div className="flex items-center gap-2 px-3 py-2 bg-fluux-hover">
+          <div className="flex items-center gap-2 px-3 py-2 bg-fluux-bg/50">
             <Film className="w-4 h-4 text-fluux-muted flex-shrink-0" />
-            <span className="text-sm text-fluux-text truncate">{attachment.name}</span>
+            <span className="text-sm text-fluux-muted truncate">{attachment.name}</span>
           </div>
         )}
       </div>
@@ -160,6 +157,7 @@ export function VideoAttachment({ attachment, onLoad }: AttachmentProps) {
         className="w-full max-h-80"
         tabIndex={-1}
         onLoadedMetadata={onLoad}
+        onError={() => setLoadError(true)}
       >
         <source src={proxiedVideoUrl} type={attachment.mediaType} />
       </video>
@@ -196,6 +194,7 @@ export function VideoAttachment({ attachment, onLoad }: AttachmentProps) {
  */
 export function AudioAttachment({ attachment }: AttachmentProps) {
   const { t } = useTranslation()
+  const [loadError, setLoadError] = useState(false)
   const isAudio = (attachment.mediaType?.startsWith('audio/') ?? false) && !attachment.thumbnail
 
   // Fetch audio via Tauri HTTP plugin to bypass CORS (only when it's audio)
@@ -206,46 +205,48 @@ export function AudioAttachment({ attachment }: AttachmentProps) {
     return null
   }
 
+  const hasError = error || !proxiedAudioUrl || loadError
+
   return (
     <div className="pt-2 max-w-sm">
-      <div className="flex items-center gap-3 p-3 rounded-t-lg bg-fluux-hover">
-        <div className="w-10 h-10 rounded-full bg-fluux-brand flex items-center justify-center flex-shrink-0">
+      <div className={`flex items-center gap-3 p-3 rounded-t-lg ${hasError ? 'bg-fluux-hover/50' : 'bg-fluux-hover'}`}>
+        <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${hasError ? 'bg-fluux-muted/30' : 'bg-fluux-brand'}`}>
           {isLoading ? (
             <Loader2 className="w-5 h-5 text-white animate-spin" />
+          ) : hasError ? (
+            <FileX className="w-5 h-5 text-fluux-muted" />
           ) : (
             <Music className="w-5 h-5 text-white" />
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-fluux-text truncate">
+          <p className={`text-sm font-medium truncate ${hasError ? 'text-fluux-muted' : 'text-fluux-text'}`}>
             {attachment.name || t('chat.audioFile')}
           </p>
           <p className="text-xs text-fluux-muted">
-            {attachment.duration !== undefined
-              ? formatDuration(attachment.duration)
-              : t('chat.audio')}
+            {hasError
+              ? t('chat.audioUnavailable')
+              : attachment.duration !== undefined
+                ? formatDuration(attachment.duration)
+                : t('chat.audio')}
           </p>
         </div>
-        <Tooltip content={t('common.download')} position="top">
-          <a
-            href={attachment.url}
-            download={attachment.name || 'audio'}
-            className="p-1 rounded hover:bg-fluux-bg transition-colors flex-shrink-0"
-            aria-label={t('common.download')}
-            tabIndex={-1}
-          >
-            <Download className="w-4 h-4 text-fluux-muted hover:text-fluux-text" />
-          </a>
-        </Tooltip>
-      </div>
-      {error || !proxiedAudioUrl ? (
-        <div className="w-full rounded-b-lg bg-fluux-bg flex items-center justify-center text-fluux-muted text-xs py-3">
-          {isLoading ? t('common.loading') : (
-            <a href={attachment.url} target="_blank" rel="noopener noreferrer">
-              Click to play audio
+        {!hasError && (
+          <Tooltip content={t('common.download')} position="top">
+            <a
+              href={attachment.url}
+              download={attachment.name || 'audio'}
+              className="p-1 rounded hover:bg-fluux-bg transition-colors flex-shrink-0"
+              aria-label={t('common.download')}
+              tabIndex={-1}
+            >
+              <Download className="w-4 h-4 text-fluux-muted hover:text-fluux-text" />
             </a>
-          )}
-        </div>
+          </Tooltip>
+        )}
+      </div>
+      {hasError ? (
+        <div className="w-full rounded-b-lg bg-fluux-bg/50 h-10" />
       ) : (
         <audio
           controls
@@ -253,6 +254,7 @@ export function AudioAttachment({ attachment }: AttachmentProps) {
           className="w-full rounded-b-lg"
           style={{ height: '40px' }}
           tabIndex={-1}
+          onError={() => setLoadError(true)}
         >
           <source src={proxiedAudioUrl} type={attachment.mediaType} />
         </audio>

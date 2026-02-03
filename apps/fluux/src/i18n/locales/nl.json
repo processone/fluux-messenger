@@ -279,6 +279,9 @@
     "truncated": "ingekort",
     "messageDeleted": "Bericht verwijderd",
     "deleteMessage": "Bericht verwijderen",
+    "imageUnavailable": "Afbeelding niet meer beschikbaar",
+    "videoUnavailable": "Video niet meer beschikbaar",
+    "audioUnavailable": "Audio niet meer beschikbaar",
     "typing": {
       "one": "{{name}} is aan het typen...",
       "two": "{{name1}} en {{name2}} zijn aan het typen...",
