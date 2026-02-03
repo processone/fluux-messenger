@@ -135,6 +135,7 @@ export function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
         {categories.map((category) => (
           <Tooltip key={category} content={t(`emoji.categories.${category}`)}>
             <button
+              type="button"
               onClick={() => setActiveCategory(category)}
               className={`flex-1 p-2 text-lg transition-colors hover:bg-fluux-hover
                          ${activeCategory === category ? 'bg-fluux-hover border-b-2 border-fluux-brand' : ''}`}
@@ -150,6 +151,7 @@ export function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
         <div className="grid grid-cols-8 gap-1">
           {EMOJI_CATEGORIES[activeCategory].map((emoji, index) => (
             <button
+              type="button"
               key={`${emoji}-${index}`}
               onClick={() => handleEmojiClick(emoji)}
               className="p-1.5 text-xl rounded hover:bg-fluux-hover transition-colors"
