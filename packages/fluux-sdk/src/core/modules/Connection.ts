@@ -581,6 +581,13 @@ export class Connection extends BaseModule {
     this.stores.console.addEvent('Dead connection detected, will reconnect', 'connection')
     this.stores.connection.setStatus('reconnecting')
 
+    // IMPORTANT: Set isReconnecting BEFORE stopping the client.
+    // When clientToClean.stop() fires the 'disconnect' event, the handler checks
+    // isReconnecting and skips calling scheduleReconnect() if true. Without this,
+    // both handleDeadSocket() and the 'disconnect' handler would call scheduleReconnect(),
+    // causing double reconnection attempts (showing "attempt 2" immediately).
+    this.isReconnecting = true
+
     // IMPORTANT: Null the client reference SYNCHRONOUSLY before any async operations.
     // This prevents a race condition where the old client's 'online' event fires
     // during cleanup, causing handleConnectionSuccess to run and set status='online'
