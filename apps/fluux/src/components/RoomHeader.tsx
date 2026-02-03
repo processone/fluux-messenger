@@ -253,7 +253,7 @@ export function RoomHeader({
           {showOwnerMenu && (
             <div className="absolute right-0 top-full mt-1 w-56 bg-fluux-bg border border-fluux-hover rounded-lg shadow-lg z-30 py-1">
               {/* Room Settings (placeholder) */}
-              <Tooltip content={t('common.comingSoon')} position="left">
+              <Tooltip content={t('common.comingSoon')} position="left" className='w-full'>
                 <button
                   onClick={() => {
                     // TODO: Open room settings modal
@@ -271,7 +271,7 @@ export function RoomHeader({
               </Tooltip>
 
               {/* Change Room Subject (placeholder) */}
-              <Tooltip content={t('common.comingSoon')} position="left">
+              <Tooltip content={t('common.comingSoon')} position="left" className='w-full'>
                 <button
                   onClick={() => {
                     // TODO: Open change subject modal
@@ -341,7 +341,7 @@ export function RoomHeader({
 
               {/* Kick/Ban Member (placeholder) - owner only */}
               {isOwner && (
-                <Tooltip content={t('common.comingSoon')} position="left">
+                <Tooltip content={t('common.comingSoon')} position="left" className='w-full'>
                   <button
                     onClick={() => {
                       // TODO: Open kick/ban member modal
