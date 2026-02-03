@@ -1044,31 +1044,17 @@ describe('MUC Module', () => {
       expect(result).toBeNull()
     })
 
-    it('falls back to service-level MAM when room disco fails', async () => {
+    it('returns null when room disco fails (no service-level fallback)', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
       mockSendIQ.mockRejectedValue(new Error('Room disco timeout'))
 
-      // Mock that MUC service supports MAM globally
+      // Even if MUC service supports MAM globally, we don't fallback
+      // because the room may have MAM explicitly disabled
       mockStores.admin.getMucServiceSupportsMAM.mockReturnValue(true)
 
       const result = await muc.queryRoomFeatures('room@conference.example.org')
 
-      expect(result).toEqual({ supportsMAM: true, isServiceLevelFallback: true })
-      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Using service-level MAM support'))
-      warnSpy.mockRestore()
-      logSpy.mockRestore()
-    })
-
-    it('returns null when both room disco and service MAM are unavailable', async () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-      mockSendIQ.mockRejectedValue(new Error('Room disco timeout'))
-
-      // Mock that MUC service does NOT support MAM
-      mockStores.admin.getMucServiceSupportsMAM.mockReturnValue(false)
-
-      const result = await muc.queryRoomFeatures('room@conference.example.org')
-
+      // Should return null, not fallback to service MAM
       expect(result).toBeNull()
       warnSpy.mockRestore()
     })

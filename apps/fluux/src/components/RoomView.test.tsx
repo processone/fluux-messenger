@@ -302,6 +302,8 @@ vi.mock('lucide-react', () => ({
   Loader2: () => <span data-testid="icon-loader">Loader</span>,
   LogIn: () => <span data-testid="icon-login">LogIn</span>,
   AlertCircle: () => <span data-testid="icon-alert">Alert</span>,
+  Clock: () => <span data-testid="icon-clock">Clock</span>,
+  ChevronUp: () => <span data-testid="icon-chevron-up">ChevronUp</span>,
 }))
 
 // Create hoisted mock for MessageComposer that uses forwardRef

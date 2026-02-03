@@ -150,7 +150,7 @@ export function RoomView({ onBack, mainContentRef, composerRef }: RoomViewProps)
   } = useMessageSelection(activeMessages, scrollRef, isAtBottomRef, {
     onReachedFirstMessage: fetchOlderHistory,
     isLoadingOlder: activeMAMState?.isLoading,
-    isHistoryComplete: activeMAMState?.isHistoryComplete,
+    isHistoryComplete: !activeRoom?.supportsMAM || activeMAMState?.isHistoryComplete,
   })
 
   // Format copied messages with sender headers
@@ -264,7 +264,7 @@ export function RoomView({ onBack, mainContentRef, composerRef }: RoomViewProps)
             onMediaLoad={handleMediaLoad}
             onScrollToTop={fetchOlderHistory}
             isLoadingOlder={activeMAMState?.isLoading}
-            isHistoryComplete={activeMAMState?.isHistoryComplete}
+            isHistoryComplete={!activeRoom.supportsMAM || activeMAMState?.isHistoryComplete}
           />
         </div>
 
