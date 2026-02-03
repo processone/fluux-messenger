@@ -57,7 +57,7 @@
     ],
     "macOS": {
       "minimumSystemVersion": "10.13",
-      "bundleVersion": "7b65ef1",
+      "bundleVersion": "f81be69",
       "entitlements": "Entitlements.plist",
       "signingIdentity": null
     },
@@ -75,6 +75,13 @@
           "libwebkit2gtk-4.1-0",
           "libgtk-3-0",
           "libayatana-appindicator3-1"
+        ]
+      },
+      "rpm": {
+        "depends": [
+          "webkit2gtk4.1",
+          "gtk3",
+          "libappindicator-gtk3"
         ]
       }
     }
