@@ -187,6 +187,7 @@ async function main() {
 
     // Upload updated latest.json
     const uploadUrl = release.upload_url.replace('{?name,label}', `?name=latest.json`);
+    const jsonContent = JSON.stringify(latestJson, null, 2);
     const uploadOptions = {
       hostname: 'uploads.github.com',
       path: uploadUrl.replace('https://uploads.github.com', ''),
@@ -196,6 +197,7 @@ async function main() {
         'Authorization': `Bearer ${process.env.GITHUB_TOKEN}`,
         'Accept': 'application/vnd.github+json',
         'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(jsonContent),
         'X-GitHub-Api-Version': '2022-11-28',
       },
     };
@@ -213,7 +215,7 @@ async function main() {
         });
       });
       req.on('error', reject);
-      req.write(JSON.stringify(latestJson));
+      req.write(jsonContent);
       req.end();
     });
 
