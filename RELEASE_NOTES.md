@@ -1,27 +1,36 @@
-## What's New in v0.11.2
+## What's New in v0.11.3
 
 ### Added
 
-- Keyboard shortcut improvements (Cmd+K in composer, better macOS Alt shortcuts)
-- Debian packaging and aarch64 Linux support
-- Developer documentation (DEVELOPMENT.md)
+- ARM64 builds for Linux
+- Password visibility toggle on login screen
 
 ### Changed
 
-- Command palette selection is now more visually distinct
-- Reply quote text size increased for better readability
-- Thumbnail resolution increased from 256px to 512px
-- Fonts embedded locally (removed Google Fonts dependency)
+- Reply quote border uses quoted person's XEP-0392 consistent color and user's avatar
+- MUC rooms now sorted by last message time
+- Copy behavior preserved for single message selection
+- Show room info in tooltip instead of inline preview
+- Standardized release asset names across platforms
 
 ### Fixed
 
-- Connection stability: fixed reconnection loops and race conditions
-- MAM loading race conditions in both chats and rooms
-- Wake-from-sleep detection when app stays in background (macOS)
-- Scroll-to-original message with special characters in IDs
-- Message view alignment when clicking notification to open conversation
-- German and Polish translation diacritics
-- Reaction tooltip now shows localized "you" with proper nickname
+- Rooms with MAM disabled no longer fallback to service-level MAM
+- Scroll to new message marker when entering room with unread messages
+- Emoji picker buttons no longer submit form accidentally
+- Own MUC message detection improved for unread clearing
+- Double reconnection race condition after wake from sleep
+- Restored keychain credentials saving on login
+- Android status bar color syncs with app theme
+- Mobile layout improvements for e/OS/ and Android
+- Image loading no longer proxied via Tauri HTTP plugin
+- Date separator and cursor alignment in message list
+- MAM catchup reliability improvements
+- Sidebar message preview shows correct content
+- OOB attachment URL stripped from message body
+- Room avatar fetch no longer logs error when avatar missing
+- Reply quotes show avatar for own messages
+- Quick Chats section spacing in sidebar
 
 ---
 [Full Changelog](https://github.com/processone/fluux-messenger/blob/main/CHANGELOG.md)
