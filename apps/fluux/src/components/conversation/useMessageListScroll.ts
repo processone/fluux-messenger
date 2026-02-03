@@ -48,6 +48,7 @@ export interface UseMessageListScrollOptions {
   conversationId: string
   messageCount: number
   firstMessageId: string | undefined
+  firstNewMessageId?: string  // ID of the first unread message (for new message marker)
   externalScrollerRef?: React.RefObject<HTMLElement>
   externalIsAtBottomRef?: React.MutableRefObject<boolean>
   onScrollToTop?: () => void
@@ -76,6 +77,7 @@ export function useMessageListScroll({
   conversationId,
   messageCount,
   firstMessageId,
+  firstNewMessageId,
   externalScrollerRef,
   externalIsAtBottomRef,
   onScrollToTop,
@@ -382,8 +384,56 @@ export function useMessageListScroll({
       scroller.scrollTop = savedPos
       isAtBottomRef.current = false
       scrollStateManager.clearSavedScrollState(conversationId)
+    } else if (firstNewMessageId) {
+      // Has unread messages - scroll to show the new message marker with context
+      // We defer this because the message elements may not be in DOM yet
+      debugLog('CONVERSATION SWITCH: has unread, will scroll to marker', { firstNewMessageId })
+
+      // Immediately scroll to bottom as fallback (content may not be rendered yet)
+      scroller.scrollTop = scroller.scrollHeight
+      isAtBottomRef.current = true  // Start as "at bottom", will update when we scroll to marker
+
+      // Deferred: scroll to the new message marker once it's rendered
+      const scrollToMarker = () => {
+        const markerScroller = scrollerRef.current
+        if (!markerScroller) return
+
+        const escapedId = CSS.escape(firstNewMessageId)
+        const messageElement = markerScroller.querySelector(`[data-message-id="${escapedId}"]`)
+
+        if (messageElement) {
+          // Scroll so the new message marker is visible near the top with context above
+          // We want to show some messages before the marker, so scroll to put the marker
+          // about 1/3 down from the top of the viewport
+          const elementTop = (messageElement as HTMLElement).offsetTop
+          const viewportHeight = markerScroller.clientHeight
+          const targetScrollTop = Math.max(0, elementTop - viewportHeight / 3)
+
+          markerScroller.scrollTop = targetScrollTop
+
+          // Update isAtBottom based on actual position after scrolling
+          const distFromBottom = markerScroller.scrollHeight - targetScrollTop - viewportHeight
+          isAtBottomRef.current = distFromBottom < AT_BOTTOM_THRESHOLD
+
+          debugLog('CONVERSATION SWITCH: scrolled to new message marker', {
+            firstNewMessageId,
+            elementTop,
+            targetScrollTop,
+            viewportHeight,
+            isAtBottom: isAtBottomRef.current,
+          })
+        } else {
+          // Element not found yet, try again on next frame
+          debugLog('CONVERSATION SWITCH: marker element not found, retrying', { firstNewMessageId })
+        }
+      }
+
+      // Try immediately, then with increasing delays to handle async rendering
+      requestAnimationFrame(scrollToMarker)
+      setTimeout(scrollToMarker, 50)
+      setTimeout(scrollToMarker, 150)
     } else {
-      // Scroll to bottom on new conversation entry.
+      // No unread messages - scroll to bottom
       // We use both immediate and deferred scroll because:
       // 1. Immediate: Works when content is already rendered (useLayoutEffect runs after DOM mutations)
       // 2. Deferred: Catches edge cases where React's reconciliation hasn't finished
@@ -410,7 +460,7 @@ export function useMessageListScroll({
     hasInitializedRef.current = true
     prevConversationRef.current = conversationId
     prevMessageCountRef.current = messageCount
-  }, [conversationId, messageCount, isAtBottomRef])
+  }, [conversationId, messageCount, firstNewMessageId, isAtBottomRef])
 
   // ==========================================================================
   // EFFECT: Prepend complete (older messages loaded)

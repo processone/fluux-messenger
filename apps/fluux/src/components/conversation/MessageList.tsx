@@ -139,6 +139,7 @@ export function MessageList<T extends BaseMessage>({
     conversationId,
     messageCount: messages.length,
     firstMessageId,
+    firstNewMessageId,
     externalScrollerRef,
     externalIsAtBottomRef,
     onScrollToTop,
