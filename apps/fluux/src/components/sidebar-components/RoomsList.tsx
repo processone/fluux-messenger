@@ -163,7 +163,7 @@ export function RoomsList() {
       {/* Joined rooms */}
       {joinedRooms.length > 0 && (
         <>
-          <h3 className="text-xs font-semibold text-fluux-muted uppercase px-2 mb-2">
+          <h3 className={`text-xs font-semibold text-fluux-muted uppercase px-2 mb-2 ${quickChats.length > 0 ? 'mt-4' : ''}`}>
             {t('rooms.joined')} — {joinedRooms.length}
           </h3>
           {joinedRooms.map((room) => {
