@@ -415,7 +415,8 @@
     "passwordTooShort": "Wachtwoord moet minimaal 6 tekens zijn",
     "failedToChangePassword": "Wachtwoord wijzigen mislukt",
     "passwordChangeNotSupported": "Wachtwoord wijzigen wordt niet ondersteund door deze server",
-    "priority": "Prioriteit"
+    "priority": "Prioriteit",
+    "offlineNotice": "Profielbewerking is niet beschikbaar terwijl u offline bent"
   },
   "console": {
     "title": "XMPP Console",

@@ -415,7 +415,8 @@
     "passwordTooShort": "Hasło musi mieć co najmniej 6 znaków",
     "failedToChangePassword": "Nie udało się zmienić hasła",
     "passwordChangeNotSupported": "Zmiana hasła nie jest obsługiwana przez ten serwer",
-    "priority": "Priorytet"
+    "priority": "Priorytet",
+    "offlineNotice": "Edycja profilu jest niedostępna w trybie offline"
   },
   "console": {
     "title": "Konsola XMPP",

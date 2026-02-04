@@ -15,7 +15,7 @@ interface ProfileModalProps {
 
 export function ProfileModal({ onClose }: ProfileModalProps) {
   const { t } = useTranslation()
-  const { jid, ownAvatar, ownNickname, ownResources, setOwnNickname, setOwnAvatar, clearOwnAvatar, clearOwnNickname, supportsPasswordChange } = useConnection()
+  const { jid, isConnected, ownAvatar, ownNickname, ownResources, setOwnNickname, setOwnAvatar, clearOwnAvatar, clearOwnNickname, supportsPasswordChange } = useConnection()
   const { presenceStatus: presenceShow, statusMessage } = usePresence()
   const modalRef = useRef<HTMLDivElement>(null)
 
@@ -163,11 +163,19 @@ export function ProfileModal({ onClose }: ProfileModalProps) {
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
           <div className="p-6 flex flex-col items-center">
+            {/* Offline notice */}
+            {!isConnected && (
+              <div className="w-full max-w-xs mb-4 px-3 py-2 bg-fluux-bg rounded-lg text-center">
+                <p className="text-sm text-fluux-muted">{t('profile.offlineNotice')}</p>
+              </div>
+            )}
+
             {/* Large avatar - clickable to change */}
             <Tooltip content={t('profile.changeAvatar')}>
               <button
                 onClick={() => setShowAvatarModal(true)}
-                className="relative mb-2 group"
+                disabled={!isConnected}
+                className="relative mb-2 group disabled:opacity-50 disabled:cursor-not-allowed"
               >
               <Avatar
                 identifier={jid || ''}
@@ -189,8 +197,8 @@ export function ProfileModal({ onClose }: ProfileModalProps) {
             {ownAvatar && (
               <button
                 onClick={handleClearAvatar}
-                disabled={clearing === 'avatar'}
-                className="text-xs text-fluux-muted hover:text-fluux-red mb-4 disabled:opacity-50"
+                disabled={!isConnected || clearing === 'avatar'}
+                className="text-xs text-fluux-muted hover:text-fluux-red mb-4 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {clearing === 'avatar' ? t('profile.removingAvatar') : t('profile.removeAvatar')}
               </button>
@@ -221,7 +229,8 @@ export function ProfileModal({ onClose }: ProfileModalProps) {
                   <Tooltip content={t('profile.editNickname')}>
                     <button
                       onClick={handleStartEdit}
-                      className="p-1 text-fluux-muted hover:text-fluux-text rounded"
+                      disabled={!isConnected}
+                      className="p-1 text-fluux-muted hover:text-fluux-text rounded disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Pencil className="w-4 h-4" />
                     </button>
@@ -230,8 +239,8 @@ export function ProfileModal({ onClose }: ProfileModalProps) {
                     <Tooltip content={t('profile.resetToUsername')}>
                       <button
                         onClick={handleClearNickname}
-                        disabled={clearing === 'nickname'}
-                        className="p-1 text-fluux-muted hover:text-fluux-red rounded disabled:opacity-50"
+                        disabled={!isConnected || clearing === 'nickname'}
+                        className="p-1 text-fluux-muted hover:text-fluux-red rounded disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -314,7 +323,7 @@ export function ProfileModal({ onClose }: ProfileModalProps) {
               <h3 className="text-xs font-semibold text-fluux-muted uppercase tracking-wide mb-2">
                 {t('profile.account')}
               </h3>
-              {supportsPasswordChange ? (
+              {supportsPasswordChange && isConnected ? (
                 <button
                   onClick={() => setShowPasswordModal(true)}
                   className="w-full flex items-center gap-2 px-3 py-2 bg-fluux-bg hover:bg-fluux-hover rounded-lg transition-colors text-fluux-text"
@@ -323,7 +332,7 @@ export function ProfileModal({ onClose }: ProfileModalProps) {
                   <span className="text-sm">{t('profile.changePassword')}</span>
                 </button>
               ) : (
-                <Tooltip content={t('profile.passwordChangeNotSupported')}>
+                <Tooltip content={!isConnected ? t('profile.offlineNotice') : t('profile.passwordChangeNotSupported')}>
                   <div
                     className="w-full flex items-center gap-2 px-3 py-2 bg-fluux-bg rounded-lg text-fluux-muted opacity-50"
                   >

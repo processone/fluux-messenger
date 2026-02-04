@@ -413,7 +413,8 @@
     "passwordTooShort": "La contrasena debe tener al menos 6 caracteres",
     "failedToChangePassword": "Error al cambiar contrasena",
     "passwordChangeNotSupported": "El cambio de contrasena no es compatible con este servidor",
-    "priority": "Prioridad"
+    "priority": "Prioridad",
+    "offlineNotice": "La edición del perfil no está disponible sin conexión"
   },
   "console": {
     "title": "Consola XMPP",
