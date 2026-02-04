@@ -279,6 +279,9 @@
     "truncated": "skrócone",
     "messageDeleted": "Wiadomość usunięta",
     "deleteMessage": "Usuń wiadomość",
+    "imageUnavailable": "Obraz już niedostępny",
+    "videoUnavailable": "Film już niedostępny",
+    "audioUnavailable": "Audio już niedostępne",
     "typing": {
       "one": "{{name}} pisze...",
       "two": "{{name1}} i {{name2}} piszą...",

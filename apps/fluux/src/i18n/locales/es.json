@@ -275,6 +275,9 @@
     "truncated": "truncado",
     "messageDeleted": "Mensaje eliminado",
     "deleteMessage": "Eliminar mensaje",
+    "imageUnavailable": "Imagen ya no disponible",
+    "videoUnavailable": "Video ya no disponible",
+    "audioUnavailable": "Audio ya no disponible",
     "typing": {
       "one": "{{name}} esta escribiendo...",
       "two": "{{name1}} y {{name2}} estan escribiendo...",

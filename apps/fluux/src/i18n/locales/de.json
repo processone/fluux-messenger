@@ -279,6 +279,9 @@
     "truncated": "gekürzt",
     "messageDeleted": "Nachricht gelöscht",
     "deleteMessage": "Nachricht löschen",
+    "imageUnavailable": "Bild nicht mehr verfügbar",
+    "videoUnavailable": "Video nicht mehr verfügbar",
+    "audioUnavailable": "Audio nicht mehr verfügbar",
     "typing": {
       "one": "{{name}} tippt...",
       "two": "{{name1}} und {{name2}} tippen...",
