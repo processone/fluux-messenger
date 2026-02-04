@@ -12,6 +12,16 @@ export interface ServerConfig {
 }
 
 /**
+ * Wildcard server config for suffix-matched domains (e.g. *.m.in-app.io).
+ * The websocketUrl is a template where {domain} is replaced with the full domain.
+ */
+export interface WildcardServerConfig {
+  suffix: string // e.g. '.m.in-app.io'
+  websocketUrl: string // e.g. 'wss://{domain}/xmpp'
+  name?: string
+}
+
+/**
  * Map of domain -> server configuration
  * Add entries here for known XMPP servers
  */
@@ -27,11 +37,36 @@ export const wellKnownServers: Record<string, ServerConfig> = {
 }
 
 /**
- * Get WebSocket URL for a domain if it's a well-known server
+ * Wildcard entries for domains matching a suffix pattern.
+ * Checked when no exact match is found in wellKnownServers.
+ */
+export const wildcardServers: WildcardServerConfig[] = [
+  {
+    suffix: '.m.in-app.io',
+    websocketUrl: 'wss://{domain}/xmpp',
+    name: 'Fluux',
+  },
+]
+
+/**
+ * Get WebSocket URL for a domain if it's a well-known server.
+ * Checks exact matches first, then wildcard suffix matches.
  */
 export function getWebsocketUrlForDomain(domain: string): string | null {
-  const config = wellKnownServers[domain.toLowerCase()]
-  return config?.websocketUrl ?? null
+  const lower = domain.toLowerCase()
+
+  // Exact match
+  const config = wellKnownServers[lower]
+  if (config) return config.websocketUrl
+
+  // Wildcard suffix match
+  for (const wildcard of wildcardServers) {
+    if (lower.endsWith(wildcard.suffix)) {
+      return wildcard.websocketUrl.replace('{domain}', lower)
+    }
+  }
+
+  return null
 }
 
 /**
