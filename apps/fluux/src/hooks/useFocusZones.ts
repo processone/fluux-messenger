@@ -94,7 +94,17 @@ export function useFocusZones(refs: FocusZoneRefs, enabled: boolean = true) {
       if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
         const currentZone = getCurrentZone()
         if (!currentZone) {
-          // Check if focus is in the XMPP console - let console handle its own arrow keys
+          // Don't steal arrow keys from text editing contexts outside zones
+          // (e.g., XMPP console textarea). Inside zones, the zone or
+          // component handles arrow keys (e.g., composer ArrowUp to edit).
+          if (
+            activeElement?.tagName === 'INPUT' ||
+            activeElement?.tagName === 'TEXTAREA' ||
+            activeElement?.isContentEditable
+          ) {
+            return
+          }
+          // Check if focus is in the XMPP console log - let it handle its own arrow keys
           if (activeElement?.closest('.xmpp-console-log')) {
             return
           }
