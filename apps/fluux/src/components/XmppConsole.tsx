@@ -8,6 +8,8 @@ import { formatStanzaPreview, formatStanzaXml } from '@/utils/stanzaPreviewForma
 import { Tooltip } from './Tooltip'
 import { isTauri } from '@/utils/tauri'
 
+const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform)
+
 type FilterType = 'message' | 'presence' | 'iq' | 'sm' | 'other' | 'event'
 type DirectionFilter = 'all' | 'incoming' | 'outgoing'
 
@@ -299,14 +301,14 @@ export function XmppConsole() {
     }
   }, [isOpen])
 
-  // Auto-resize textarea based on content (1-3 lines)
+  // Auto-resize textarea based on content (1-8 lines)
   useEffect(() => {
     const textarea = textareaRef.current
     if (!textarea) return
     textarea.style.height = 'auto'
     const lineHeight = 20 // approximate line height in px
     const minHeight = lineHeight * 1.2
-    const maxHeight = lineHeight * 3
+    const maxHeight = lineHeight * 8
     textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, minHeight), maxHeight)}px`
   }, [inputXml])
 
@@ -341,14 +343,29 @@ export function XmppConsole() {
     document.addEventListener('mouseup', handleMouseUp)
   }
 
+  const validateXml = (xml: string): string | null => {
+    if (!xml.startsWith('<') || !xml.endsWith('>')) {
+      return t('console.invalidXml')
+    }
+    // Use DOMParser to validate XML structure
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(xml, 'application/xml')
+    const parseError = doc.querySelector('parsererror')
+    if (parseError) {
+      return t('console.invalidXml')
+    }
+    return null
+  }
+
   const handleSend = async () => {
     if (!inputXml.trim()) return
 
     setError(null)
 
     const trimmed = inputXml.trim()
-    if (!trimmed.startsWith('<') || !trimmed.endsWith('>')) {
-      setError('Invalid XML: must start with < and end with >')
+    const validationError = validateXml(trimmed)
+    if (validationError) {
+      setError(validationError)
       return
     }
 
@@ -356,7 +373,7 @@ export function XmppConsole() {
       await sendRawXml(trimmed)
       setInputXml('')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send')
+      setError(err instanceof Error ? err.message : t('console.failedToSend'))
     }
   }
 
@@ -638,17 +655,17 @@ export function XmppConsole() {
             value={inputXml}
             onChange={(e) => setInputXml(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={isConnected ? t('console.enterStanza') : t('console.connectToSend')}
+            placeholder={isConnected ? t('console.enterStanza', { modifier: isMac ? '⌘' : 'Ctrl' }) : t('console.connectToSend')}
             disabled={!isConnected}
             className="flex-1 bg-fluux-bg text-fluux-text text-sm font-mono px-3 py-2 rounded resize-none focus:outline-none focus:ring-1 focus:ring-fluux-brand disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden"
             rows={1}
           />
-          <Tooltip content={t('console.sendStanza')} position="top">
+          <Tooltip content={t('console.sendStanza', { modifier: isMac ? '⌘' : 'Ctrl' })} position="top">
             <button
               onClick={handleSend}
               disabled={!isConnected || !inputXml.trim()}
               className="px-4 bg-fluux-brand text-white rounded hover:bg-fluux-brand/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              aria-label={t('console.sendStanza')}
+              aria-label={t('console.sendStanza', { modifier: isMac ? '⌘' : 'Ctrl' })}
             >
               <Send className="w-4 h-4" />
             </button>

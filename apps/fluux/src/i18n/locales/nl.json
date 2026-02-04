@@ -423,8 +423,8 @@
     "serverInformation": "Serverinformatie",
     "close": "Console sluiten",
     "filter": "Filteren...",
-    "sendStanza": "Stanza verzenden (Ctrl+Enter)",
-    "enterStanza": "Voer XML-stanza in om te verzenden... (Ctrl+Enter om te verzenden)",
+    "sendStanza": "Stanza verzenden ({{modifier}}+Enter)",
+    "enterStanza": "Voer XML-stanza in om te verzenden... ({{modifier}}+Enter om te verzenden)",
     "connectToSend": "Verbind om stanza's te verzenden",
     "noEntries": "Nog geen items",
     "trafficWillAppear": "Verkeer verschijnt hier",
@@ -435,7 +435,9 @@
     "showSent": "Alleen verzonden pakketten tonen",
     "goToLive": "Autoscroll hervatten",
     "showType": "{{type}} tonen",
-    "hideType": "{{type}} verbergen"
+    "hideType": "{{type}} verbergen",
+    "invalidXml": "Ongeldige XML-stanza",
+    "failedToSend": "Verzenden mislukt"
   },
   "emoji": {
     "categories": {

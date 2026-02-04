@@ -120,6 +120,49 @@ describe('useFocusZones', () => {
       expect(document.activeElement).toBe(refs.sidebarList.current)
     })
 
+    it('should NOT intercept arrow keys when focus is in a textarea outside zones', () => {
+      renderHook(() => useFocusZones(refs))
+
+      // Create a textarea outside any zone (e.g., XMPP console input)
+      const textarea = document.createElement('textarea')
+      document.body.appendChild(textarea)
+      textarea.focus()
+
+      act(() => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }))
+      })
+
+      // Focus should stay on textarea, not move to sidebar
+      expect(document.activeElement).toBe(textarea)
+      expect(document.activeElement).not.toBe(refs.sidebarList.current)
+
+      act(() => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+      })
+
+      expect(document.activeElement).toBe(textarea)
+      expect(document.activeElement).not.toBe(refs.sidebarList.current)
+
+      document.body.removeChild(textarea)
+    })
+
+    it('should NOT intercept arrow keys when focus is in an input outside zones', () => {
+      renderHook(() => useFocusZones(refs))
+
+      const input = document.createElement('input')
+      document.body.appendChild(input)
+      input.focus()
+
+      act(() => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }))
+      })
+
+      expect(document.activeElement).toBe(input)
+      expect(document.activeElement).not.toBe(refs.sidebarList.current)
+
+      document.body.removeChild(input)
+    })
+
     it('should NOT intercept arrow keys when inside a zone', () => {
       renderHook(() => useFocusZones(refs))
 
@@ -138,6 +181,51 @@ describe('useFocusZones', () => {
       expect(preventDefaultSpy).not.toHaveBeenCalled()
       // Focus should stay in mainContent
       expect(document.activeElement).toBe(refs.mainContent.current)
+    })
+
+    it('should NOT intercept arrow keys for a textarea inside the composer zone', () => {
+      renderHook(() => useFocusZones(refs))
+
+      // Create a textarea inside the composer zone (like MessageComposer)
+      const composerTextarea = document.createElement('textarea')
+      refs.composer.current!.appendChild(composerTextarea)
+      composerTextarea.focus()
+
+      const preventDefaultSpy = vi.fn()
+      const event = new KeyboardEvent('keydown', { key: 'ArrowUp' })
+      Object.defineProperty(event, 'preventDefault', { value: preventDefaultSpy })
+
+      act(() => {
+        window.dispatchEvent(event)
+      })
+
+      // Should NOT call preventDefault - the zone (and React handler) handle it
+      // This allows MessageComposer's ArrowUp-to-edit-last-message to work
+      expect(preventDefaultSpy).not.toHaveBeenCalled()
+      expect(document.activeElement).toBe(composerTextarea)
+      expect(document.activeElement).not.toBe(refs.sidebarList.current)
+
+      refs.composer.current!.removeChild(composerTextarea)
+    })
+
+    it('should NOT intercept arrow keys when focus is in the XMPP console log', () => {
+      renderHook(() => useFocusZones(refs))
+
+      // Create a div with xmpp-console-log class outside any zone
+      const consoleLog = document.createElement('div')
+      consoleLog.className = 'xmpp-console-log'
+      consoleLog.tabIndex = 0
+      document.body.appendChild(consoleLog)
+      consoleLog.focus()
+
+      act(() => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+      })
+
+      expect(document.activeElement).toBe(consoleLog)
+      expect(document.activeElement).not.toBe(refs.sidebarList.current)
+
+      document.body.removeChild(consoleLog)
     })
   })
 

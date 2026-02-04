@@ -423,8 +423,8 @@
     "serverInformation": "Server Information",
     "close": "Close console",
     "filter": "Filter...",
-    "sendStanza": "Send stanza (Ctrl+Enter)",
-    "enterStanza": "Enter XML stanza to send... (Ctrl+Enter to send)",
+    "sendStanza": "Send stanza ({{modifier}}+Enter)",
+    "enterStanza": "Enter XML stanza to send... ({{modifier}}+Enter to send)",
     "connectToSend": "Connect to send stanzas",
     "noEntries": "No entries yet",
     "trafficWillAppear": "Traffic will appear here",
@@ -435,7 +435,9 @@
     "showSent": "Show sent packets only",
     "showType": "Show {{type}}",
     "hideType": "Hide {{type}}",
-    "goToLive": "Resume autoscroll"
+    "goToLive": "Resume autoscroll",
+    "invalidXml": "Invalid XML stanza",
+    "failedToSend": "Failed to send"
   },
   "emoji": {
     "categories": {

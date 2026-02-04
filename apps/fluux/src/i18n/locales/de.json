@@ -423,8 +423,8 @@
     "serverInformation": "Server-Informationen",
     "close": "Konsole schließen",
     "filter": "Filtern...",
-    "sendStanza": "Stanza senden (Strg+Enter)",
-    "enterStanza": "XML-Stanza zum Senden eingeben... (Strg+Enter zum Senden)",
+    "sendStanza": "Stanza senden ({{modifier}}+Eingabe)",
+    "enterStanza": "XML-Stanza zum Senden eingeben... ({{modifier}}+Eingabe zum Senden)",
     "connectToSend": "Verbinden um Stanzas zu senden",
     "noEntries": "Noch keine Einträge",
     "trafficWillAppear": "Datenverkehr wird hier angezeigt",
@@ -435,7 +435,9 @@
     "showSent": "Nur gesendete Pakete anzeigen",
     "goToLive": "Automatisches Scrollen fortsetzen",
     "showType": "{{type}} anzeigen",
-    "hideType": "{{type}} ausblenden"
+    "hideType": "{{type}} ausblenden",
+    "invalidXml": "Ungültige XML-Stanza",
+    "failedToSend": "Senden fehlgeschlagen"
   },
   "emoji": {
     "categories": {
