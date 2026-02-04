@@ -83,6 +83,30 @@ vi.mock('@fluux/sdk', () => ({
     acceptSubscription: vi.fn(),
     rejectSubscription: vi.fn(),
   }),
+  useXMPP: () => ({
+    client: {
+      subscribe: vi.fn(() => vi.fn()),
+      isConnected: vi.fn(() => true),
+      getJid: vi.fn(() => 'user@example.com'),
+      onStanza: vi.fn(() => vi.fn()),
+      on: vi.fn(() => vi.fn()),
+      sendRawXml: vi.fn(),
+      roster: {
+        removeContact: vi.fn(),
+        renameContact: vi.fn(),
+      },
+      profile: {
+        fetchContactNickname: vi.fn(),
+      },
+    },
+    sendRawXml: vi.fn(),
+    onStanza: vi.fn(() => vi.fn()),
+    on: vi.fn(() => vi.fn()),
+    setPresence: vi.fn(),
+    xml: vi.fn(),
+    isConnected: () => true,
+    getJid: () => 'user@example.com',
+  }),
   useXMPPContext: () => ({
     client: {
       roster: {
@@ -92,6 +116,12 @@ vi.mock('@fluux/sdk', () => ({
       profile: {
         fetchContactNickname: vi.fn(),
       },
+      subscribe: vi.fn(() => vi.fn()),
+      isConnected: vi.fn(() => true),
+      getJid: vi.fn(() => 'user@example.com'),
+      onStanza: vi.fn(() => vi.fn()),
+      on: vi.fn(() => vi.fn()),
+      sendRawXml: vi.fn(),
     },
   }),
   useRosterStore: (selector: (state: { contacts: Map<string, typeof mockContact> }) => unknown) => {

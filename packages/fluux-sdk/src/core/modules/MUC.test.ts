@@ -879,6 +879,62 @@ describe('MUC Module', () => {
       })
     })
 
+    it('logs formatted error message with server text on room error', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      await muc.joinRoom('room@conference.example.org', 'mynick')
+
+      const errorPresence = createMockElement('presence', {
+        from: 'room@conference.example.org',
+        type: 'error',
+      }, [
+        {
+          name: 'x',
+          attrs: { xmlns: 'http://jabber.org/protocol/muc#user' },
+        },
+        {
+          name: 'error',
+          attrs: { type: 'auth' },
+          children: [
+            { name: 'registration-required', attrs: { xmlns: 'urn:ietf:params:xml:ns:xmpp-stanzas' } },
+            { name: 'text', attrs: { xmlns: 'urn:ietf:params:xml:ns:xmpp-stanzas' }, text: 'Members only room' },
+          ],
+        },
+      ])
+
+      muc.handle(errorPresence)
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[MUC] Room error for room@conference.example.org: Members only room'
+      )
+      consoleSpy.mockRestore()
+    })
+
+    it('logs "unknown" when room error has no error element', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      await muc.joinRoom('room@conference.example.org', 'mynick')
+
+      const errorPresence = createMockElement('presence', {
+        from: 'room@conference.example.org',
+        type: 'error',
+      }, [
+        {
+          name: 'x',
+          attrs: { xmlns: 'http://jabber.org/protocol/muc#user' },
+        },
+      ])
+
+      muc.handle(errorPresence)
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[MUC] Room error for room@conference.example.org: unknown'
+      )
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:updated', {
+        roomJid: 'room@conference.example.org',
+        updates: expect.objectContaining({ joined: false, isJoining: false })
+      })
+      consoleSpy.mockRestore()
+    })
+
     it('retries joining after timeout (first attempt)', async () => {
       mockStores.room.getRoom.mockReturnValue({
         jid: 'room@conference.example.org',

@@ -449,6 +449,10 @@ export { generateUUID } from './utils/uuid'
 export { processFallback, getFallbackElement } from './utils/fallbackUtils'
 export type { FallbackProcessingResult, FallbackProcessingOptions } from './utils/fallbackUtils'
 
+// RFC 6120: XMPP Stanza Error parsing
+export { parseXMPPError, formatXMPPError } from './utils/xmppError'
+export type { XMPPStanzaError, XMPPErrorType } from './utils/xmppError'
+
 // XEP-0156: Discovering Alternative XMPP Connection Methods
 export { discoverWebSocket, discoverXmppEndpoints } from './utils/websocketDiscovery'
 export type { DiscoveryResult } from './utils/websocketDiscovery'

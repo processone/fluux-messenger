@@ -1569,4 +1569,166 @@ describe('XMPPClient Message', () => {
       expect(sentStanza.attrs.type).toBe('chat')
     })
   })
+
+  describe('error messages', () => {
+    it('should emit room:invite-error for bounced MUC invitation', async () => {
+      await connectClient()
+
+      // Simulate a bounced MUC invitation error stanza
+      const errorStanza = createMockElement('message', {
+        from: 'room@conference.example.com',
+        to: 'user@example.com',
+        type: 'error',
+      }, [
+        { name: 'body', text: 'Join us!' },
+        {
+          name: 'x',
+          attrs: { xmlns: 'http://jabber.org/protocol/muc#user' },
+          children: [
+            { name: 'invite', attrs: { to: 'target@example.com' } },
+          ],
+        },
+        {
+          name: 'error',
+          attrs: { type: 'auth' },
+          children: [
+            { name: 'forbidden', attrs: { xmlns: 'urn:ietf:params:xml:ns:xmpp-stanzas' } },
+          ],
+        },
+      ])
+
+      mockXmppClientInstance._emit('stanza', errorStanza)
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:invite-error', {
+        roomJid: 'room@conference.example.com',
+        error: 'Forbidden',
+        condition: 'forbidden',
+        errorType: 'auth',
+      })
+    })
+
+    it('should not emit room:invite-error for non-invitation errors', async () => {
+      await connectClient()
+
+      // A regular error message without muc#user invite
+      const errorStanza = createMockElement('message', {
+        from: 'contact@example.com',
+        to: 'user@example.com',
+        type: 'error',
+      }, [
+        { name: 'body', text: 'Hello' },
+        {
+          name: 'error',
+          attrs: { type: 'cancel' },
+          children: [
+            { name: 'service-unavailable', attrs: { xmlns: 'urn:ietf:params:xml:ns:xmpp-stanzas' } },
+          ],
+        },
+      ])
+
+      mockXmppClientInstance._emit('stanza', errorStanza)
+
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('room:invite-error', expect.anything())
+    })
+
+    it('should silently handle error messages with no error element', async () => {
+      await connectClient()
+
+      const errorStanza = createMockElement('message', {
+        from: 'room@conference.example.com',
+        to: 'user@example.com',
+        type: 'error',
+      }, [])
+
+      mockXmppClientInstance._emit('stanza', errorStanza)
+
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('room:invite-error', expect.anything())
+    })
+
+    it('should not emit when error message has no from attribute', async () => {
+      await connectClient()
+
+      const errorStanza = createMockElement('message', {
+        to: 'user@example.com',
+        type: 'error',
+      }, [
+        {
+          name: 'x',
+          attrs: { xmlns: 'http://jabber.org/protocol/muc#user' },
+          children: [
+            { name: 'invite', attrs: { to: 'target@example.com' } },
+          ],
+        },
+        {
+          name: 'error',
+          attrs: { type: 'auth' },
+          children: [
+            { name: 'forbidden', attrs: { xmlns: 'urn:ietf:params:xml:ns:xmpp-stanzas' } },
+          ],
+        },
+      ])
+
+      mockXmppClientInstance._emit('stanza', errorStanza)
+
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('room:invite-error', expect.anything())
+    })
+
+    it('should not emit when error element is missing but MUC invite is present', async () => {
+      await connectClient()
+
+      // Stanza has muc#user invite but no <error> child — parseXMPPError returns null
+      const errorStanza = createMockElement('message', {
+        from: 'room@conference.example.com',
+        to: 'user@example.com',
+        type: 'error',
+      }, [
+        {
+          name: 'x',
+          attrs: { xmlns: 'http://jabber.org/protocol/muc#user' },
+          children: [
+            { name: 'invite', attrs: { to: 'target@example.com' } },
+          ],
+        },
+      ])
+
+      mockXmppClientInstance._emit('stanza', errorStanza)
+
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('room:invite-error', expect.anything())
+    })
+
+    it('should prefer server text over condition name in error field', async () => {
+      await connectClient()
+
+      const errorStanza = createMockElement('message', {
+        from: 'room@conference.example.com',
+        to: 'user@example.com',
+        type: 'error',
+      }, [
+        {
+          name: 'x',
+          attrs: { xmlns: 'http://jabber.org/protocol/muc#user' },
+          children: [
+            { name: 'invite', attrs: { to: 'target@example.com' } },
+          ],
+        },
+        {
+          name: 'error',
+          attrs: { type: 'auth' },
+          children: [
+            { name: 'forbidden', attrs: { xmlns: 'urn:ietf:params:xml:ns:xmpp-stanzas' } },
+            { name: 'text', attrs: { xmlns: 'urn:ietf:params:xml:ns:xmpp-stanzas' }, text: 'You are not allowed to invite users' },
+          ],
+        },
+      ])
+
+      mockXmppClientInstance._emit('stanza', errorStanza)
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:invite-error', {
+        roomJid: 'room@conference.example.com',
+        error: 'You are not allowed to invite users',
+        condition: 'forbidden',
+        errorType: 'auth',
+      })
+    })
+  })
 })

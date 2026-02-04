@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { InviteToRoomModal } from './InviteToRoomModal'
+import { useToastStore } from '@/stores/toastStore'
 import type { Room, RoomOccupant } from '@fluux/sdk'
 
 // Mock inviteMultipleToRoom function
@@ -8,7 +9,6 @@ const mockInviteMultipleToRoom = vi.fn()
 
 // Track ContactSelector props for testing
 let capturedExcludeJids: string[] = []
-let capturedDisabled = false
 
 // Mock ContactSelector component
 vi.mock('./ContactSelector', () => ({
@@ -17,7 +17,6 @@ vi.mock('./ContactSelector', () => ({
     onSelectionChange,
     placeholder,
     excludeJids,
-    disabled
   }: {
     selectedContacts: string[]
     onSelectionChange: (selected: string[]) => void
@@ -27,14 +26,12 @@ vi.mock('./ContactSelector', () => ({
   }) => {
     // Capture props for assertions
     capturedExcludeJids = excludeJids || []
-    capturedDisabled = disabled || false
 
     return (
       <div data-testid="contact-selector">
         <input
           data-testid="contact-input"
           placeholder={placeholder}
-          disabled={disabled}
           onChange={() => {}}
         />
         <div data-testid="selected-count">{selectedContacts.length} selected</div>
@@ -88,7 +85,8 @@ vi.mock('react-i18next', () => ({
         'rooms.inviteReason': 'Reason (optional)',
         'rooms.inviteReasonPlaceholder': 'Why are you inviting them?',
         'rooms.inviteError': 'Failed to send invitations',
-        'rooms.sending': 'Sending...',
+        'rooms.invitationsSent': 'Invitation(s) sent',
+        'rooms.inviteRejected': `Invitation rejected: ${params?.error || ''}`,
         'rooms.sendInvitations': `Send ${params?.count || 0} invitation(s)`,
         'common.cancel': 'Cancel',
         'contacts.searchContacts': 'Search contacts...',
@@ -129,8 +127,9 @@ describe('InviteToRoomModal', () => {
   let mockRoom: Room
 
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.resetAllMocks()
     mockRoom = createMockRoom()
+    useToastStore.setState({ toasts: [] })
   })
 
   describe('rendering', () => {
@@ -351,10 +350,8 @@ describe('InviteToRoomModal', () => {
     })
   })
 
-  describe('invitation flow', () => {
-    it('should call inviteMultipleToRoom with selected contacts', async () => {
-      mockInviteMultipleToRoom.mockResolvedValue(undefined)
-
+  describe('invitation flow (fire-and-forget)', () => {
+    it('should call inviteMultipleToRoom and close immediately', async () => {
       render(
         <InviteToRoomModal
           isOpen={true}
@@ -363,7 +360,7 @@ describe('InviteToRoomModal', () => {
         />
       )
 
-      // Select a contact using mock button
+      // Select a contact
       fireEvent.click(screen.getByTestId('select-alice'))
 
       // Click send button
@@ -373,18 +370,43 @@ describe('InviteToRoomModal', () => {
       })
       fireEvent.click(screen.getByText('Send 1 invitation(s)'))
 
+      // Should call inviteMultipleToRoom
+      expect(mockInviteMultipleToRoom).toHaveBeenCalledWith(
+        'testroom@conference.example.com',
+        ['alice@example.com'],
+        undefined
+      )
+
+      // Should close immediately (no waiting)
+      expect(mockOnClose).toHaveBeenCalled()
+    })
+
+    it('should show success toast on send', async () => {
+      render(
+        <InviteToRoomModal
+          isOpen={true}
+          onClose={mockOnClose}
+          room={mockRoom}
+        />
+      )
+
+      // Select a contact
+      fireEvent.click(screen.getByTestId('select-alice'))
+
       await waitFor(() => {
-        expect(mockInviteMultipleToRoom).toHaveBeenCalledWith(
-          'testroom@conference.example.com',
-          ['alice@example.com'],
-          undefined
-        )
+        const sendButton = screen.getByText('Send 1 invitation(s)').closest('button')
+        expect(sendButton).not.toBeDisabled()
       })
+      fireEvent.click(screen.getByText('Send 1 invitation(s)'))
+
+      // Should add a success toast
+      const toasts = useToastStore.getState().toasts
+      expect(toasts).toHaveLength(1)
+      expect(toasts[0].type).toBe('success')
+      expect(toasts[0].message).toBe('Invitation(s) sent')
     })
 
     it('should include reason when provided', async () => {
-      mockInviteMultipleToRoom.mockResolvedValue(undefined)
-
       render(
         <InviteToRoomModal
           isOpen={true}
@@ -407,46 +429,20 @@ describe('InviteToRoomModal', () => {
       })
       fireEvent.click(screen.getByText('Send 1 invitation(s)'))
 
-      await waitFor(() => {
-        expect(mockInviteMultipleToRoom).toHaveBeenCalledWith(
-          'testroom@conference.example.com',
-          ['alice@example.com'],
-          'Please join!'
-        )
-      })
-    })
-
-    it('should close modal on successful invitation', async () => {
-      mockInviteMultipleToRoom.mockResolvedValue(undefined)
-
-      render(
-        <InviteToRoomModal
-          isOpen={true}
-          onClose={mockOnClose}
-          room={mockRoom}
-        />
+      expect(mockInviteMultipleToRoom).toHaveBeenCalledWith(
+        'testroom@conference.example.com',
+        ['alice@example.com'],
+        'Please join!'
       )
-
-      // Select a contact using mock button
-      fireEvent.click(screen.getByTestId('select-alice'))
-
-      // Click send button
-      await waitFor(() => {
-        const sendButton = screen.getByText('Send 1 invitation(s)').closest('button')
-        expect(sendButton).not.toBeDisabled()
-      })
-      fireEvent.click(screen.getByText('Send 1 invitation(s)'))
-
-      await waitFor(() => {
-        expect(mockOnClose).toHaveBeenCalled()
-      })
     })
 
-    it('should show error message on failure', async () => {
-      // Suppress expected console.error from error handling
+    it('should show error toast on synchronous failure', async () => {
+      // Suppress expected console.error
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
 
-      mockInviteMultipleToRoom.mockRejectedValue(new Error('Network error'))
+      mockInviteMultipleToRoom.mockImplementation(() => {
+        throw new Error('Not connected')
+      })
 
       render(
         <InviteToRoomModal
@@ -456,63 +452,22 @@ describe('InviteToRoomModal', () => {
         />
       )
 
-      // Select a contact using mock button
+      // Select a contact
       fireEvent.click(screen.getByTestId('select-alice'))
 
-      // Click send button
       await waitFor(() => {
         const sendButton = screen.getByText('Send 1 invitation(s)').closest('button')
         expect(sendButton).not.toBeDisabled()
       })
       fireEvent.click(screen.getByText('Send 1 invitation(s)'))
 
-      // Error message should appear
-      await waitFor(() => {
-        expect(screen.getByText('Failed to send invitations')).toBeInTheDocument()
-      })
-
-      // Modal should remain open
-      expect(mockOnClose).not.toHaveBeenCalled()
+      // Should add an error toast
+      const toasts = useToastStore.getState().toasts
+      expect(toasts).toHaveLength(1)
+      expect(toasts[0].type).toBe('error')
+      expect(toasts[0].message).toBe('Failed to send invitations')
 
       consoleError.mockRestore()
-    })
-
-    it('should show loading state during invitation', async () => {
-      // Make the promise hang to test loading state
-      let resolvePromise: (value?: unknown) => void
-      mockInviteMultipleToRoom.mockImplementation(() => new Promise(resolve => {
-        resolvePromise = resolve
-      }))
-
-      render(
-        <InviteToRoomModal
-          isOpen={true}
-          onClose={mockOnClose}
-          room={mockRoom}
-        />
-      )
-
-      // Select a contact using mock button
-      fireEvent.click(screen.getByTestId('select-alice'))
-
-      // Click send button
-      await waitFor(() => {
-        const sendButton = screen.getByText('Send 1 invitation(s)').closest('button')
-        expect(sendButton).not.toBeDisabled()
-      })
-      fireEvent.click(screen.getByText('Send 1 invitation(s)'))
-
-      // Should show loading text
-      await waitFor(() => {
-        expect(screen.getByText('Sending...')).toBeInTheDocument()
-      })
-
-      // Resolve the promise
-      resolvePromise!()
-
-      await waitFor(() => {
-        expect(mockOnClose).toHaveBeenCalled()
-      })
     })
   })
 
@@ -612,8 +567,6 @@ describe('InviteToRoomModal', () => {
 
   describe('multiple contact selection', () => {
     it('should allow selecting multiple contacts', async () => {
-      mockInviteMultipleToRoom.mockResolvedValue(undefined)
-
       render(
         <InviteToRoomModal
           isOpen={true}
@@ -636,99 +589,11 @@ describe('InviteToRoomModal', () => {
       // Send invitations
       fireEvent.click(screen.getByText('Send 2 invitation(s)'))
 
-      await waitFor(() => {
-        expect(mockInviteMultipleToRoom).toHaveBeenCalledWith(
-          'testroom@conference.example.com',
-          expect.arrayContaining(['alice@example.com', 'bob@example.com']),
-          undefined
-        )
-      })
-    })
-  })
-
-  describe('disabled state', () => {
-    it('should disable ContactSelector while inviting', async () => {
-      // Make the promise hang
-      mockInviteMultipleToRoom.mockImplementation(() => new Promise(() => {}))
-
-      render(
-        <InviteToRoomModal
-          isOpen={true}
-          onClose={mockOnClose}
-          room={mockRoom}
-        />
+      expect(mockInviteMultipleToRoom).toHaveBeenCalledWith(
+        'testroom@conference.example.com',
+        expect.arrayContaining(['alice@example.com', 'bob@example.com']),
+        undefined
       )
-
-      // Initially not disabled
-      expect(capturedDisabled).toBe(false)
-
-      // Select a contact and send
-      fireEvent.click(screen.getByTestId('select-alice'))
-      await waitFor(() => {
-        expect(screen.getByText('Send 1 invitation(s)')).toBeInTheDocument()
-      })
-      fireEvent.click(screen.getByText('Send 1 invitation(s)'))
-
-      // Should be disabled during sending
-      await waitFor(() => {
-        expect(capturedDisabled).toBe(true)
-      })
-    })
-
-    it('should disable reason input while inviting', async () => {
-      // Make the promise hang
-      mockInviteMultipleToRoom.mockImplementation(() => new Promise(() => {}))
-
-      render(
-        <InviteToRoomModal
-          isOpen={true}
-          onClose={mockOnClose}
-          room={mockRoom}
-        />
-      )
-
-      const reasonInput = screen.getByPlaceholderText('Why are you inviting them?')
-      expect(reasonInput).not.toBeDisabled()
-
-      // Select a contact and send
-      fireEvent.click(screen.getByTestId('select-alice'))
-      await waitFor(() => {
-        expect(screen.getByText('Send 1 invitation(s)')).toBeInTheDocument()
-      })
-      fireEvent.click(screen.getByText('Send 1 invitation(s)'))
-
-      // Reason input should be disabled during sending
-      await waitFor(() => {
-        expect(reasonInput).toBeDisabled()
-      })
-    })
-
-    it('should disable Cancel button while inviting', async () => {
-      // Make the promise hang
-      mockInviteMultipleToRoom.mockImplementation(() => new Promise(() => {}))
-
-      render(
-        <InviteToRoomModal
-          isOpen={true}
-          onClose={mockOnClose}
-          room={mockRoom}
-        />
-      )
-
-      const cancelButton = screen.getByText('Cancel')
-      expect(cancelButton).not.toBeDisabled()
-
-      // Select a contact and send
-      fireEvent.click(screen.getByTestId('select-alice'))
-      await waitFor(() => {
-        expect(screen.getByText('Send 1 invitation(s)')).toBeInTheDocument()
-      })
-      fireEvent.click(screen.getByText('Send 1 invitation(s)'))
-
-      // Cancel button should be disabled during sending
-      await waitFor(() => {
-        expect(cancelButton).toBeDisabled()
-      })
     })
   })
 })

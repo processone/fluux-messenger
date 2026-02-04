@@ -11,6 +11,7 @@ import { MemberList } from './MemberList'
 import { XmppConsole } from './XmppConsole'
 import { ShortcutHelp } from './ShortcutHelp'
 import { CommandPalette } from './CommandPalette'
+import { ToastContainer } from './ToastContainer'
 import {
   // Vanilla stores for imperative .getState() access
   chatStore, consoleStore, adminStore, rosterStore,
@@ -25,6 +26,7 @@ import { useSoundNotification } from '@/hooks/useSoundNotification'
 import { useEventsSoundNotification } from '@/hooks/useEventsSoundNotification'
 import { useEventsDesktopNotifications } from '@/hooks/useEventsDesktopNotifications'
 import { useAutoAway } from '@/hooks/useAutoAway'
+import { useSDKErrorToasts } from '@/hooks/useSDKErrorToasts'
 import { useWakeDetector, useSleepDetector, useFocusZones, useViewNavigation, isMobileWeb, useWindowVisibility, useRouteSync, type FocusZoneRefs } from '@/hooks'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useDeepLink } from '@/hooks/useDeepLink'
@@ -325,6 +327,9 @@ function ChatLayoutContent() {
   // Track window visibility for new message markers
   useWindowVisibility()
 
+  // Surface SDK error events as toast notifications
+  useSDKErrorToasts()
+
   // Toggle shortcut help overlay
   const toggleShortcutHelp = useCallback(() => {
     modalActions.toggle('shortcutHelp')
@@ -576,6 +581,9 @@ function ChatLayoutContent() {
           if (contact) handleStartConversation(contact)
         }}
       />
+
+      {/* Toast Notifications */}
+      <ToastContainer />
     </div>
   )
 }

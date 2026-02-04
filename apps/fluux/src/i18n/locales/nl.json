@@ -236,6 +236,8 @@
     "inviteReasonPlaceholder": "Waarom nodig je ze uit?",
     "inviteError": "Uitnodigingen verzenden mislukt",
     "sending": "Verzenden...",
+    "invitationsSent": "Uitnodiging(en) verzonden",
+    "inviteRejected": "Uitnodiging geweigerd: {{error}}",
     "sendInvitations": "{{count}} uitnodiging(en) verzenden"
   },
   "events": {

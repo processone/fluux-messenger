@@ -236,6 +236,8 @@
     "inviteReasonPlaceholder": "Porque os está a convidar?",
     "inviteError": "Falha ao enviar convites",
     "sending": "A enviar…",
+    "invitationsSent": "Convite(s) enviado(s)",
+    "inviteRejected": "Convite rejeitado: {{error}}",
     "sendInvitations": "Enviar {{count}} convite(s)"
   },
   "events": {
