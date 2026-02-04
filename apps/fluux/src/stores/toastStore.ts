@@ -19,6 +19,7 @@ const MAX_TOASTS = 3
 const DEFAULT_DURATION_MS = 4000
 
 let nextId = 0
+const timeouts = new Map<string, ReturnType<typeof setTimeout>>()
 
 export const useToastStore = create<ToastState>((set, get) => ({
   toasts: [],
@@ -28,6 +29,15 @@ export const useToastStore = create<ToastState>((set, get) => ({
     const toast: Toast = { id, type, message, createdAt: Date.now() }
 
     set((state) => {
+      // Clear timeout for evicted toast
+      if (state.toasts.length >= MAX_TOASTS) {
+        const evictedId = state.toasts[0].id
+        const evictedTimeout = timeouts.get(evictedId)
+        if (evictedTimeout) {
+          clearTimeout(evictedTimeout)
+          timeouts.delete(evictedId)
+        }
+      }
       const toasts = state.toasts.length >= MAX_TOASTS
         ? [...state.toasts.slice(1), toast]
         : [...state.toasts, toast]
@@ -35,15 +45,22 @@ export const useToastStore = create<ToastState>((set, get) => ({
     })
 
     if (duration > 0) {
-      setTimeout(() => {
+      const timeout = setTimeout(() => {
+        timeouts.delete(id)
         get().removeToast(id)
       }, duration)
+      timeouts.set(id, timeout)
     }
 
     return id
   },
 
   removeToast: (id) => {
+    const timeout = timeouts.get(id)
+    if (timeout) {
+      clearTimeout(timeout)
+      timeouts.delete(id)
+    }
     set((state) => ({
       toasts: state.toasts.filter((t) => t.id !== id),
     }))
