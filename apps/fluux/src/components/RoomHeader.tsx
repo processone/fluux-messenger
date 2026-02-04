@@ -231,6 +231,17 @@ export function RoomHeader({
         )}
       </div>
 
+      {/* Invite member - available to all occupants */}
+      <Tooltip content={t('rooms.inviteMember')} position="bottom">
+        <button
+          onClick={() => setShowInviteModal(true)}
+          className="p-1.5 rounded-lg hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors"
+          aria-label={t('rooms.inviteMember')}
+        >
+          <UserPlus className="w-4 h-4" />
+        </button>
+      </Tooltip>
+
       {/* Room management dropdown (owners/admins only) */}
       {canManageRoom && (
         <div className="relative" ref={ownerMenuRef}>
@@ -322,22 +333,6 @@ export function RoomHeader({
                   </div>
                 </button>
               )}
-
-              <div className="h-px bg-fluux-hover my-1" />
-
-              {/* Invite Member */}
-              <button
-                onClick={() => {
-                  setShowInviteModal(true)
-                  setShowOwnerMenu(false)
-                }}
-                className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-left transition-colors"
-              >
-                <UserPlus className="w-4 h-4 text-fluux-muted" />
-                <div className="flex-1">
-                  <div className="text-sm text-fluux-text">{t('rooms.inviteMember')}</div>
-                </div>
-              </button>
 
               {/* Kick/Ban Member (placeholder) - owner only */}
               {isOwner && (

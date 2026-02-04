@@ -462,7 +462,6 @@ describe('RoomHeader', () => {
       expect(screen.getByText('Room settings')).toBeInTheDocument()
       expect(screen.getByText('Change subject')).toBeInTheDocument()
       expect(screen.getByText('Change avatar')).toBeInTheDocument()
-      expect(screen.getByText('Invite member')).toBeInTheDocument()
     })
 
     it('shows "Remove avatar" only when room has avatar', () => {
@@ -551,7 +550,7 @@ describe('RoomHeader', () => {
   describe('Invite Modal', () => {
     it('opens invite modal when clicking Invite member', () => {
       const room = createRoom({
-        occupantsList: [createOccupant({ nick: 'Me', affiliation: 'owner' })],
+        occupantsList: [createOccupant({ nick: 'Me', affiliation: 'member' })],
       })
 
       render(
@@ -565,10 +564,28 @@ describe('RoomHeader', () => {
         />
       )
 
-      fireEvent.click(screen.getByLabelText('Manage room'))
-      fireEvent.click(screen.getByText('Invite member'))
+      fireEvent.click(screen.getByLabelText('Invite member'))
 
       expect(screen.getByTestId('invite-modal')).toBeInTheDocument()
+    })
+
+    it('invite button is available to all occupants, not just admins', () => {
+      const room = createRoom({
+        occupantsList: [createOccupant({ nick: 'Me', affiliation: 'none' })],
+      })
+
+      render(
+        <RoomHeader
+          room={room}
+          showOccupants={false}
+          onToggleOccupants={mockOnToggleOccupants}
+          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomAvatar={mockSetRoomAvatar}
+          clearRoomAvatar={mockClearRoomAvatar}
+        />
+      )
+
+      expect(screen.getByLabelText('Invite member')).toBeInTheDocument()
     })
   })
 

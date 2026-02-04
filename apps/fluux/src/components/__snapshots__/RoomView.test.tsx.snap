@@ -65,6 +65,20 @@ exports[`RoomView > Snapshots > should match snapshot for non-joined room 1`] = 
           class="inline-flex"
         >
           <button
+            aria-label="rooms.inviteMember"
+            class="p-1.5 rounded-lg hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors"
+          >
+            <span
+              data-testid="icon-user-plus"
+            >
+              UserPlus
+            </span>
+          </button>
+        </div>
+        <div
+          class="inline-flex"
+        >
+          <button
             aria-label="rooms.showMembers"
             class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors
                      hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text"
