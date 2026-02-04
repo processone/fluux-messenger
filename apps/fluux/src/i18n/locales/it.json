@@ -415,7 +415,8 @@
     "passwordTooShort": "La password deve avere almeno 6 caratteri",
     "failedToChangePassword": "Impossibile cambiare la password",
     "passwordChangeNotSupported": "Il cambio password non e supportato da questo server",
-    "priority": "Priorita"
+    "priority": "Priorita",
+    "offlineNotice": "La modifica del profilo non è disponibile offline"
   },
   "console": {
     "title": "Console XMPP",
