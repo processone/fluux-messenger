@@ -39,9 +39,14 @@ export default {
           '0%': { opacity: '0', transform: 'scale(0.96)' },
           '100%': { opacity: '1', transform: 'scale(1)' },
         },
+        'toast-in': {
+          '0%': { opacity: '0', transform: 'translateY(16px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
       },
       animation: {
         'tooltip-in': 'tooltip-in 150ms ease-out',
+        'toast-in': 'toast-in 200ms ease-out',
       },
     },
   },

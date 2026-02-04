@@ -18,6 +18,7 @@ import type { AdminCommand, AdminSession } from './admin'
 import type { RSMResponse } from './pagination'
 import type { MAMQueryDirection } from '../../stores/shared/mamState'
 import type { SystemNotificationType } from './events'
+import type { XMPPErrorType } from '../../utils/xmppError'
 
 // ============================================================================
 // Connection Events
@@ -269,6 +270,17 @@ export interface RoomEvents {
   'room:mam-error': {
     roomJid: string
     error: string | null
+  }
+
+  /** MUC invitation rejected by server (e.g., forbidden in members-only room) */
+  'room:invite-error': {
+    roomJid: string
+    /** Human-readable error message (prefers server text, falls back to formatted condition) */
+    error: string
+    /** RFC 6120 error condition (e.g. 'forbidden', 'not-allowed') */
+    condition: string
+    /** RFC 6120 error type category (cancel, auth, modify, wait, continue) */
+    errorType: XMPPErrorType
   }
 
   /** Room MAM messages loaded */

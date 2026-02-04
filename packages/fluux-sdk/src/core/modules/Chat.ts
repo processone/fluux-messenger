@@ -36,6 +36,7 @@ import type {
   RoomMAMResult,
 } from '../types'
 import { parseMessageContent, parseOgpFastening, applyRetraction, applyCorrection } from './messagingUtils'
+import { parseXMPPError, formatXMPPError } from '../../utils/xmppError'
 import type { MAM } from './MAM'
 
 /**
@@ -147,6 +148,7 @@ export class Chat extends BaseModule {
     const hasMucUserElement = !!stanza.getChild('x', NS_MUC_USER)
 
     if (type === 'error') {
+      this.handleErrorMessage(stanza, from)
       return { handled: true }
     }
 
@@ -848,6 +850,34 @@ export class Chat extends BaseModule {
   }
 
   // --- Internal Message Processing (Migrated from MessageHandler) ---
+
+  /**
+   * Handle error-type messages (e.g., MUC invitation rejections).
+   *
+   * XMPP servers send `<message type="error">` when a stanza cannot be
+   * delivered. For MUC mediated invitations, the original `<x xmlns="muc#user">`
+   * element is echoed back inside the error stanza, letting us detect the
+   * specific failure and surface it to the UI.
+   */
+  private handleErrorMessage(stanza: Element, from: string): void {
+    const bareFrom = from ? getBareJid(from) : undefined
+    if (!bareFrom) return
+
+    const error = parseXMPPError(stanza)
+    if (!error) return
+
+    // Check if this is a bounced MUC invitation
+    const mucUser = stanza.getChild('x', NS_MUC_USER)
+    const invite = mucUser?.getChild('invite')
+    if (invite) {
+      this.deps.emitSDK('room:invite-error', {
+        roomJid: bareFrom,
+        error: formatXMPPError(error),
+        condition: error.condition,
+        errorType: error.type,
+      })
+    }
+  }
 
   private handleChatState(stanza: Element, from: string, to?: string): void {
     const state = ['active', 'composing', 'paused', 'inactive', 'gone'].find(s => !!stanza.getChild(s, NS_CHATSTATES)) as ChatStateNotification | undefined

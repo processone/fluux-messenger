@@ -382,7 +382,7 @@ describe('XMPPClient Presence', () => {
       })
     })
 
-    it('should set unknown error when no error details', async () => {
+    it('should set undefined-condition error when no error details', async () => {
       await connectClient()
 
       const errorStanza = createMockElement('presence', {
@@ -391,6 +391,22 @@ describe('XMPPClient Presence', () => {
       }, [
         { name: 'error', attrs: { type: 'cancel' } },
       ])
+
+      mockXmppClientInstance._emit('stanza', errorStanza)
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('roster:presence-error', {
+        jid: 'contact@example.com',
+        error: 'Undefined condition'
+      })
+    })
+
+    it('should emit Unknown error when presence has no error element', async () => {
+      await connectClient()
+
+      const errorStanza = createMockElement('presence', {
+        from: 'contact@example.com/resource',
+        type: 'error',
+      }, [])
 
       mockXmppClientInstance._emit('stanza', errorStanza)
 

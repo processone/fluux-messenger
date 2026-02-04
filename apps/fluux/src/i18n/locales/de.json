@@ -236,6 +236,8 @@
     "inviteReasonPlaceholder": "Warum laden Sie sie ein?",
     "inviteError": "Einladungen konnten nicht gesendet werden",
     "sending": "Senden...",
+    "invitationsSent": "Einladung(en) gesendet",
+    "inviteRejected": "Einladung abgelehnt: {{error}}",
     "sendInvitations": "{{count}} Einladung(en) senden"
   },
   "events": {

@@ -236,6 +236,8 @@
     "inviteReasonPlaceholder": "Why are you inviting them?",
     "inviteError": "Failed to send invitations",
     "sending": "Sending...",
+    "invitationsSent": "Invitation(s) sent",
+    "inviteRejected": "Invitation rejected: {{error}}",
     "sendInvitations": "Send {{count}} invitation(s)"
   },
   "events": {

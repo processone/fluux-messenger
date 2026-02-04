@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useRoom, type Room } from '@fluux/sdk'
-import { X, UserPlus, Send, Loader2 } from 'lucide-react'
+import { X, UserPlus, Send } from 'lucide-react'
 import { ContactSelector } from './ContactSelector'
+import { useToastStore } from '@/stores/toastStore'
 
 interface InviteToRoomModalProps {
   isOpen: boolean
@@ -12,15 +13,19 @@ interface InviteToRoomModalProps {
 
 /**
  * Modal for inviting contacts to a MUC room.
- * Uses XEP-0045 mediated invitations.
+ * Uses XEP-0045 mediated invitations (fire-and-forget).
+ *
+ * Invitations are `<message>` stanzas — sendStanza() resolves immediately
+ * when bytes are sent. Server rejections arrive as separate async error
+ * stanzas, handled via the `room:invite-error` SDK event and surfaced
+ * through the toast system.
  */
 export function InviteToRoomModal({ isOpen, onClose, room }: InviteToRoomModalProps) {
   const { t } = useTranslation()
   const { inviteMultipleToRoom } = useRoom()
+  const addToast = useToastStore((s) => s.addToast)
   const [selectedContacts, setSelectedContacts] = useState<string[]>([])
   const [reason, setReason] = useState('')
-  const [isInviting, setIsInviting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const modalRef = useRef<HTMLDivElement>(null)
 
   // Reset state when modal opens
@@ -28,8 +33,6 @@ export function InviteToRoomModal({ isOpen, onClose, room }: InviteToRoomModalPr
     if (isOpen) {
       setSelectedContacts([])
       setReason('')
-      setError(null)
-      setIsInviting(false)
     }
   }, [isOpen])
 
@@ -52,20 +55,17 @@ export function InviteToRoomModal({ isOpen, onClose, room }: InviteToRoomModalPr
     .map(o => o.jid)
     .filter((jid): jid is string => !!jid)
 
-  const handleInvite = async () => {
+  const handleInvite = () => {
     if (selectedContacts.length === 0) return
 
-    setIsInviting(true)
-    setError(null)
-
     try {
-      await inviteMultipleToRoom(room.jid, selectedContacts, reason || undefined)
+      void inviteMultipleToRoom(room.jid, selectedContacts, reason || undefined)
+      addToast('success', t('rooms.invitationsSent'))
       onClose()
     } catch (err) {
+      // Only catches synchronous errors (e.g., not connected)
       console.error('Failed to send invitations:', err)
-      setError(t('rooms.inviteError'))
-    } finally {
-      setIsInviting(false)
+      addToast('error', t('rooms.inviteError'))
     }
   }
 
@@ -115,7 +115,6 @@ export function InviteToRoomModal({ isOpen, onClose, room }: InviteToRoomModalPr
               onSelectionChange={setSelectedContacts}
               placeholder={t('rooms.searchContactsToInvite')}
               excludeJids={occupantJids}
-              disabled={isInviting}
             />
           </div>
 
@@ -129,50 +128,32 @@ export function InviteToRoomModal({ isOpen, onClose, room }: InviteToRoomModalPr
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder={t('rooms.inviteReasonPlaceholder')}
-              disabled={isInviting}
               className="w-full px-3 py-2 bg-fluux-bg text-fluux-text rounded
                          border border-transparent focus:border-fluux-brand
-                         placeholder:text-fluux-muted disabled:opacity-50"
+                         placeholder:text-fluux-muted"
             />
           </div>
-
-          {/* Error message */}
-          {error && (
-            <div className="text-sm text-fluux-red bg-fluux-red/10 px-3 py-2 rounded">
-              {error}
-            </div>
-          )}
         </div>
 
         {/* Footer */}
         <div className="flex justify-end gap-2 px-4 py-3 border-t border-fluux-hover">
           <button
             onClick={onClose}
-            disabled={isInviting}
             className="px-4 py-2 text-sm text-fluux-muted hover:text-fluux-text
-                       hover:bg-fluux-hover rounded transition-colors disabled:opacity-50"
+                       hover:bg-fluux-hover rounded transition-colors"
           >
             {t('common.cancel')}
           </button>
           <button
             onClick={handleInvite}
-            disabled={selectedContacts.length === 0 || isInviting}
+            disabled={selectedContacts.length === 0}
             className="px-4 py-2 text-sm bg-fluux-brand text-white rounded
                        hover:bg-fluux-brand-hover transition-colors
                        disabled:opacity-50 disabled:cursor-not-allowed
                        flex items-center gap-2"
           >
-            {isInviting ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                {t('rooms.sending')}
-              </>
-            ) : (
-              <>
-                <Send className="w-4 h-4" />
-                {t('rooms.sendInvitations', { count: selectedContacts.length })}
-              </>
-            )}
+            <Send className="w-4 h-4" />
+            {t('rooms.sendInvitations', { count: selectedContacts.length })}
           </button>
         </div>
       </div>

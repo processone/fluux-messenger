@@ -142,3 +142,6 @@ export const NS_PING = 'urn:xmpp:ping'
 
 // XEP-0191: Blocking Command
 export const NS_BLOCKING = 'urn:xmpp:blocking'
+
+// RFC 6120: XMPP Stanza Error Conditions
+export const NS_XMPP_STANZAS = 'urn:ietf:params:xml:ns:xmpp-stanzas'

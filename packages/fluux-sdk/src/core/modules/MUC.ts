@@ -29,6 +29,7 @@ import type {
   RSMResponse,
   AdminRoom,
 } from '../types'
+import { parseXMPPError, formatXMPPError } from '../../utils/xmppError'
 
 /**
  * Multi-User Chat (MUC) module for group chat functionality.
@@ -129,9 +130,8 @@ export class MUC extends BaseModule {
     if (!nick) {
       // Room-level presence (e.g. error)
       if (type === 'error') {
-        const error = stanza.getChild('error')
-        const condition = error?.children[0] as Element
-        console.error(`[MUC] Room error for ${roomJid}: ${condition?.name}`)
+        const error = parseXMPPError(stanza)
+        console.error(`[MUC] Room error for ${roomJid}: ${error ? formatXMPPError(error) : 'unknown'}`)
         this.clearPendingJoin(roomJid)
         this.pendingOccupants.delete(roomJid) // Clear buffered occupants on error
         // SDK event only - binding calls store.updateRoom

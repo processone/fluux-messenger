@@ -11,6 +11,7 @@ import {
   NS_IDLE,
 } from '../namespaces'
 import type { PresenceShow, Contact } from '../types'
+import { parseXMPPError, formatXMPPError } from '../../utils/xmppError'
 
 /**
  * Roster and presence management module.
@@ -123,26 +124,8 @@ export class Roster extends BaseModule {
   }
 
   private handlePresenceError(stanza: Element, bareFrom: string): void {
-    const errorEl = stanza.getChild('error')
-    let errorReason = 'Unknown error'
-
-    if (errorEl) {
-      const textEl = errorEl.getChild('text', 'urn:ietf:params:xml:ns:xmpp-stanzas')
-      if (textEl) {
-        errorReason = textEl.getText() || errorReason
-      } else {
-        for (const child of errorEl.children) {
-          if (typeof child === 'string') continue
-          if (child.attrs?.xmlns === 'urn:ietf:params:xml:ns:xmpp-stanzas' && child.name !== 'text') {
-            errorReason = child.name
-              .split('-')
-              .map((word: string, i: number) => i === 0 ? word.charAt(0).toUpperCase() + word.slice(1) : word)
-              .join(' ')
-            break
-          }
-        }
-      }
-    }
+    const error = parseXMPPError(stanza)
+    const errorReason = error ? formatXMPPError(error) : 'Unknown error'
 
     // SDK event only - binding calls store.setPresenceError
     this.deps.emitSDK('roster:presence-error', { jid: bareFrom, error: errorReason })

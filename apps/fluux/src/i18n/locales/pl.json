@@ -236,6 +236,8 @@
     "inviteReasonPlaceholder": "Dlaczego ich zapraszasz?",
     "inviteError": "Nie udało się wysłać zaproszeń",
     "sending": "Wysyłanie...",
+    "invitationsSent": "Zaproszenie(a) wysłane",
+    "inviteRejected": "Zaproszenie odrzucone: {{error}}",
     "sendInvitations": "Wyślij {{count}} zaproszeń"
   },
   "events": {
