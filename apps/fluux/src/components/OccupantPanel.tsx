@@ -167,9 +167,14 @@ export function OccupantPanel({
               const hasMultipleConnections = group.connections.length > 1
               const isMe = group.connections.some(conn => conn.nick === room.nickname)
 
+              // Get occupant avatar from XEP-0398 or fall back to contact avatar
+              // Check all connections for an avatar (any of them may have it)
+              const occupantAvatar = group.connections.find(c => c.avatar)?.avatar
               // Get contact avatar if occupant's real JID is known and they're in our roster
               const contact = group.bareJid ? contactsByJid.get(group.bareJid) : undefined
               const contactAvatar = contact?.avatar
+              // Prefer occupant's direct avatar (XEP-0398) over contact avatar
+              const displayAvatar = occupantAvatar || contactAvatar
 
               // Build tooltip showing all nicks if multiple connections
               const tooltip = hasMultipleConnections
@@ -206,11 +211,11 @@ export function OccupantPanel({
                     className={`px-4 py-1.5 flex items-center gap-2 hover:bg-fluux-hover/50 cursor-default
                                ${isMe ? 'bg-fluux-brand/10' : ''}`}
                   >
-                    {/* Avatar with best presence */}
+                    {/* Avatar with best presence (XEP-0398 occupant avatar or roster contact avatar) */}
                     <Avatar
                       identifier={group.primaryNick}
                       name={group.primaryNick}
-                      avatarUrl={isMe ? (ownAvatar || undefined) : contactAvatar}
+                      avatarUrl={isMe ? (ownAvatar || undefined) : displayAvatar}
                       size="sm"
                       presence={getPresenceFromShow(group.bestPresence)}
                       presenceBorderColor="border-fluux-sidebar"

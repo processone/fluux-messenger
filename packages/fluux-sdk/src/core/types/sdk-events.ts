@@ -195,6 +195,14 @@ export interface RoomEvents {
     nick: string
   }
 
+  /** Occupant avatar updated (XEP-0398) */
+  'room:occupant-avatar': {
+    roomJid: string
+    nick: string
+    avatar: string | null
+    avatarHash: string | null
+  }
+
   /** Self occupant set (own presence in room) */
   'room:self-occupant': {
     roomJid: string

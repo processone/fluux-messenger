@@ -116,6 +116,7 @@ export type {
   XMPPClientEvents,
   XMPPClientConfig,
   PresenceOptions,
+  PrivacyOptions,
 } from './client'
 
 // Storage types
