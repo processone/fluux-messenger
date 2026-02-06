@@ -5,6 +5,29 @@ All notable changes to Fluux Messenger are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-02-06
+
+### Added
+
+- XEP-0398: MUC occupant avatars displayed in room participant list
+- Message styling for bullet points and support for markdown bold
+- Toast notifications for room invites and error feedback
+
+### Changed
+
+- File drag-and-drop now stages files for preview before sending
+- XMPP Console keyboard interaction and feedback improvements
+
+### Fixed
+
+- Scroll behavior for typing indicators and reactions
+- Performance: improvements
+- URL parsing for angle-bracketed URLs
+- Profile editing disabled when offline
+- Disabled room menu items render at full width
+- Missing media files handled gracefully (404 errors)
+- Update check no longer auto-triggers when viewing settings
+
 ## [0.11.3] - 2026-02-03
 
 ### Added

@@ -1,6 +1,6 @@
 [package]
 name = "fluux"
-version = "0.11.3"
+version = "0.12.0"
 description = "A powerful, productive messaging client that's pleasant to use."
 authors = ["ProcessOne"]
 license = "AGPL-3.0-or-later"
