@@ -594,13 +594,17 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   const occupant = room.occupants.get(message.nick)
   const myNick = room.nickname
 
-  // Get contact avatar if occupant's real JID is known and they're in our roster
-  // Fall back to cached nick→jid mapping for offline users in non-anonymous rooms
+  // Get avatar for message sender:
+  // 1. XEP-0398 occupant avatar (fetched from MUC presence vcard-temp:x:update)
+  // 2. Contact avatar (if occupant's real JID is in our roster)
+  // 3. Fall back to fallback avatar generation
   const senderBareJid = occupant?.jid
     ? getBareJid(occupant.jid)
     : room.nickToJidCache?.get(message.nick)
   const contact = senderBareJid ? contactsByJid.get(senderBareJid) : undefined
   const contactAvatar = contact?.avatar
+  // Prefer occupant's direct avatar (XEP-0398) over contact avatar
+  const senderAvatar = occupant?.avatar || contactAvatar
 
   // Get sender color: green for own messages, contact's pre-calculated color, or fallback to nick-based generation
   const senderColor = message.isOutgoing
@@ -652,14 +656,16 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
           avatarIdentifier: nick || 'unknown',
         }
       }
-      // Try to get contact avatar if occupant's real JID is known
+      // Try to get avatar: XEP-0398 occupant avatar or contact avatar
       const occupantForReply = nick ? room.occupants.get(nick) : undefined
       const senderBareJid = occupantForReply?.jid
         ? getBareJid(occupantForReply.jid)
         : (nick ? room.nickToJidCache?.get(nick) : undefined)
       const contactAvatar = senderBareJid ? contactsByJid.get(senderBareJid)?.avatar : undefined
+      // Prefer occupant's direct avatar (XEP-0398) over contact avatar
+      const replyAvatar = occupantForReply?.avatar || contactAvatar
       return {
-        avatarUrl: contactAvatar,
+        avatarUrl: replyAvatar,
         avatarIdentifier: nick || 'unknown',
       }
     },
@@ -712,7 +718,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
       onMouseLeave={onMouseLeave}
       senderName={message.nick}
       senderColor={senderColor}
-      avatarUrl={message.isOutgoing ? (ownAvatar || undefined) : (contactAvatar || undefined)}
+      avatarUrl={message.isOutgoing ? (ownAvatar || undefined) : (senderAvatar || undefined)}
       avatarIdentifier={message.nick}
       avatarFallbackColor={senderColor}
       avatarPresence={room.joined ? (occupant ? getPresenceFromShow(occupant.show) : 'offline') : undefined}

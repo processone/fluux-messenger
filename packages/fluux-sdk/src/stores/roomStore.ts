@@ -143,6 +143,7 @@ export interface RoomState {
   addOccupant: (roomJid: string, occupant: RoomOccupant) => void
   batchAddOccupants: (roomJid: string, occupants: RoomOccupant[]) => void
   removeOccupant: (roomJid: string, nick: string) => void
+  updateOccupantAvatar: (roomJid: string, nick: string, avatar: string | null, avatarHash: string | null) => void
   setSelfOccupant: (roomJid: string, occupant: RoomOccupant) => void
   getRoom: (roomJid: string) => Room | undefined
   reset: () => void
@@ -540,6 +541,34 @@ export const roomStore = createStore<RoomState>()(
       }
 
       return { rooms: newRooms, roomRuntime: newRuntime, roomMeta: newMeta }
+    })
+  },
+
+  updateOccupantAvatar: (roomJid, nick, avatar, avatarHash) => {
+    set((state) => {
+      const newRooms = new Map(state.rooms)
+      const existing = newRooms.get(roomJid)
+      if (!existing) return state
+
+      const existingOccupant = existing.occupants.get(nick)
+      if (!existingOccupant) return state
+
+      const newOccupants = new Map(existing.occupants)
+      newOccupants.set(nick, {
+        ...existingOccupant,
+        avatar: avatar ?? undefined,
+        avatarHash: avatarHash ?? undefined,
+      })
+      newRooms.set(roomJid, { ...existing, occupants: newOccupants })
+
+      // Update runtime (occupants)
+      const newRuntime = new Map(state.roomRuntime)
+      const existingRuntime = newRuntime.get(roomJid)
+      if (existingRuntime) {
+        newRuntime.set(roomJid, { ...existingRuntime, occupants: newOccupants })
+      }
+
+      return { rooms: newRooms, roomRuntime: newRuntime }
     })
   },
 

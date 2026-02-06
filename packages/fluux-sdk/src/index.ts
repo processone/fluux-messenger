@@ -227,6 +227,7 @@ export type {
   XMPPClientEvents,
   StoreBindings,
   PresenceOptions,
+  PrivacyOptions,
 
   // Admin types (XEP-0133, XEP-0050, XEP-0004)
   AdminCommand,

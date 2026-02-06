@@ -246,6 +246,11 @@ export function createStoreBindings(
     stores.room.removeOccupant(roomJid, nick)
   })
 
+  on('room:occupant-avatar', ({ roomJid, nick, avatar, avatarHash }) => {
+    const stores = getStores()
+    stores.room.updateOccupantAvatar(roomJid, nick, avatar, avatarHash)
+  })
+
   on('room:self-occupant', ({ roomJid, occupant }) => {
     const stores = getStores()
     stores.room.setSelfOccupant(roomJid, occupant)

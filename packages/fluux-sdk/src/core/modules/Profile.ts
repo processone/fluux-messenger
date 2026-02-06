@@ -164,6 +164,127 @@ export class Profile extends BaseModule {
    * @param roomJid - The room's bare JID
    * @param knownHash - Optional hash from XEP-0153 presence (used for cache key)
    */
+  /**
+   * Fetch an occupant's avatar from their vCard (XEP-0398).
+   *
+   * XEP-0398 defines how MUC occupant avatars work:
+   * - For non-anonymous rooms: we can use the real JID to fetch via XEP-0084/XEP-0054
+   * - For anonymous rooms: we query the vCard via the occupant's room JID (room@conf/nick)
+   *
+   * @param roomJid - The room's bare JID
+   * @param nick - The occupant's nickname
+   * @param avatarHash - The avatar hash from XEP-0153 presence
+   * @param realJid - The occupant's real JID (if available in non-anonymous rooms)
+   */
+  async fetchOccupantAvatar(
+    roomJid: string,
+    nick: string,
+    avatarHash: string,
+    realJid?: string
+  ): Promise<void> {
+    // Check privacy options: if avatar fetching is disabled for anonymous rooms
+    // and we don't have a real JID (meaning we'd query via room@conf/nick),
+    // skip fetching to protect user privacy
+    if (this.deps.privacyOptions?.disableOccupantAvatarsInAnonymousRooms && !realJid) {
+      return
+    }
+
+    // Check cache first using the hash
+    const cachedUrl = await getCachedAvatar(avatarHash)
+    if (cachedUrl) {
+      this.deps.emitSDK('room:occupant-avatar', {
+        roomJid,
+        nick,
+        avatar: cachedUrl,
+        avatarHash,
+      })
+      return
+    }
+
+    // If we have a real JID, try to fetch from their PEP or vCard
+    if (realJid) {
+      const bareJid = getBareJid(realJid)
+      try {
+        // Try XEP-0084 (PEP) first
+        const iq = xml('iq', { type: 'get', to: bareJid, id: `avatar_${generateUUID()}` },
+          xml('pubsub', { xmlns: NS_PUBSUB },
+            xml('items', { node: NS_AVATAR_DATA },
+              xml('item', { id: avatarHash })
+            )
+          )
+        )
+        const result = await this.deps.sendIQ(iq)
+        const data = result.getChild('pubsub', NS_PUBSUB)?.getChild('items')?.getChild('item')?.getChild('data', NS_AVATAR_DATA)?.text()
+
+        if (data) {
+          const mimeType = 'image/png'
+          const blobUrl = await cacheAvatar(avatarHash, data, mimeType)
+          this.deps.emitSDK('room:occupant-avatar', {
+            roomJid,
+            nick,
+            avatar: blobUrl,
+            avatarHash,
+          })
+          return
+        }
+      } catch {
+        // Fall through to vCard fetch
+      }
+
+      // Try vCard-temp (XEP-0054)
+      try {
+        const vcardIq = xml('iq', { type: 'get', to: bareJid, id: `vcard_${generateUUID()}` },
+          xml('vCard', { xmlns: NS_VCARD_TEMP })
+        )
+        const result = await this.deps.sendIQ(vcardIq)
+        const photo = result.getChild('vCard', NS_VCARD_TEMP)?.getChild('PHOTO')
+        const binval = photo?.getChildText('BINVAL')
+
+        if (binval) {
+          const mimeType = photo?.getChildText('TYPE') || 'image/png'
+          const base64 = binval.replace(/\s/g, '')
+          const blobUrl = await cacheAvatar(avatarHash, base64, mimeType)
+          this.deps.emitSDK('room:occupant-avatar', {
+            roomJid,
+            nick,
+            avatar: blobUrl,
+            avatarHash,
+          })
+          return
+        }
+      } catch {
+        // Silently fail - occupant may not have an avatar
+      }
+      return
+    }
+
+    // No real JID - fetch via occupant's room JID (anonymous room)
+    // Per XEP-0398, query vCard via room@conference.example.com/nickname
+    const occupantJid = `${roomJid}/${nick}`
+    try {
+      const iq = xml('iq', { type: 'get', to: occupantJid, id: `vcard_${generateUUID()}` },
+        xml('vCard', { xmlns: NS_VCARD_TEMP })
+      )
+      const result = await this.deps.sendIQ(iq)
+      const photo = result.getChild('vCard', NS_VCARD_TEMP)?.getChild('PHOTO')
+      const binval = photo?.getChildText('BINVAL')
+
+      if (binval) {
+        const mimeType = photo?.getChildText('TYPE') || 'image/png'
+        const base64 = binval.replace(/\s/g, '')
+        const blobUrl = await cacheAvatar(avatarHash, base64, mimeType)
+        this.deps.emitSDK('room:occupant-avatar', {
+          roomJid,
+          nick,
+          avatar: blobUrl,
+          avatarHash,
+        })
+      }
+    } catch {
+      // Silently fail - avatar fetch failed or occupant has no avatar
+    }
+  }
+
   async fetchRoomAvatar(roomJid: string, knownHash?: string): Promise<void> {
     const bareJid = getBareJid(roomJid)
 

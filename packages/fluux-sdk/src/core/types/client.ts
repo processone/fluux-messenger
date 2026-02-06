@@ -240,6 +240,8 @@ export interface XMPPClientEvents {
   mucJoined: (roomJid: string, nickname: string) => void
   /** Room avatar updated */
   roomAvatarUpdate: (roomJid: string, photoHash: string) => void
+  /** MUC occupant avatar hash received (XEP-0398) */
+  occupantAvatarUpdate: (roomJid: string, nick: string, hash: string, realJid?: string) => void
   /** Roster (contact list) fully loaded from server */
   rosterLoaded: () => void
 }
@@ -272,6 +274,32 @@ export interface PresenceOptions {
 }
 
 /**
+ * Privacy options for the XMPP client.
+ *
+ * These options control privacy-sensitive behaviors that users may want to disable
+ * in certain contexts, such as semi-anonymous MUC rooms.
+ *
+ * @category Core
+ */
+export interface PrivacyOptions {
+  /**
+   * Disable automatic avatar fetching for MUC occupants in semi-anonymous rooms.
+   *
+   * In semi-anonymous MUC rooms, the user's real JID is not exposed. Fetching
+   * avatars via the occupant's room JID (room@conf/nick) reveals to the server
+   * that you're interested in that user's vCard, which may be a privacy concern.
+   *
+   * When enabled:
+   * - Avatars are still fetched for non-anonymous rooms (where real JIDs are visible)
+   * - Avatars are still fetched from roster contacts
+   * - Only avatar fetching via room occupant JIDs is disabled
+   *
+   * @default false
+   */
+  disableOccupantAvatarsInAnonymousRooms?: boolean
+}
+
+/**
  * XMPPClient configuration options.
  *
  * @category Core
@@ -285,6 +313,11 @@ export interface XMPPClientConfig {
    * Bots typically don't need this - default presence handling is sufficient.
    */
   presenceOptions?: PresenceOptions
+  /**
+   * Privacy options for controlling data exposure.
+   * @see {@link PrivacyOptions}
+   */
+  privacyOptions?: PrivacyOptions
   /**
    * Storage adapter for session persistence.
    *

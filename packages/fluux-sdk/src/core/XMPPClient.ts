@@ -8,6 +8,7 @@ import type {
   SDKEvents,
   SDKEventHandler,
   StorageAdapter,
+  PrivacyOptions,
 } from './types'
 import {
   presenceMachine,
@@ -157,6 +158,7 @@ import { createDefaultStoreBindings, type DefaultStoreBindingsOptions } from './
 export class XMPPClient {
   private currentJid: string | null = null
   private storageAdapter?: StorageAdapter
+  private privacyOptions?: PrivacyOptions
 
   /**
    * Connection management module.
@@ -302,6 +304,8 @@ export class XMPPClient {
 
     // Store storage adapter for session persistence
     this.storageAdapter = config.storageAdapter
+    // Store privacy options for avatar fetching behavior
+    this.privacyOptions = config.privacyOptions
 
     // Initialize presence actor with persistence
     // Try to restore from persisted snapshot (sessionStorage if available)
@@ -447,6 +451,7 @@ export class XMPPClient {
       getXmpp: () => this.getXmpp(),
       storageAdapter: this.storageAdapter,
       registerMAMCollector: (queryId: string, collector: (stanza: Element) => void) => this.registerMAMCollector(queryId, collector),
+      privacyOptions: this.privacyOptions,
     }
 
     this.connection = new Connection(moduleDeps)

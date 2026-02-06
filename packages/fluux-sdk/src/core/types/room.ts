@@ -71,6 +71,16 @@ export interface RoomOccupant {
   show?: PresenceShow
   /** XEP-0317: Custom role tags */
   hats?: Hat[]
+  /**
+   * XEP-0398: Avatar URL (blob URL from cache or data URL).
+   * Fetched via XEP-0054 vCard-temp using the avatarHash from presence.
+   */
+  avatar?: string
+  /**
+   * XEP-0398: Avatar hash from XEP-0153 vcard-temp:x:update in presence.
+   * Used to detect avatar changes and for cache lookup.
+   */
+  avatarHash?: string
 }
 
 /**

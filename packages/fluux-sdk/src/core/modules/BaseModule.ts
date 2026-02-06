@@ -1,5 +1,5 @@
 import type { Element } from '@xmpp/client'
-import type { StoreBindings, XMPPClientEvents, SDKEvents, StorageAdapter } from '../types'
+import type { StoreBindings, XMPPClientEvents, SDKEvents, StorageAdapter, PrivacyOptions } from '../types'
 
 /**
  * Dependencies injected into each module by XMPPClient.
@@ -36,6 +36,11 @@ export interface ModuleDependencies {
    * Used by MAM module to avoid adding temporary event listeners.
    */
   registerMAMCollector?: (queryId: string, collector: (stanza: Element) => void) => () => void
+  /**
+   * Privacy options for controlling data exposure.
+   * Used by Profile module to control avatar fetching behavior.
+   */
+  privacyOptions?: PrivacyOptions
 }
 
 /**

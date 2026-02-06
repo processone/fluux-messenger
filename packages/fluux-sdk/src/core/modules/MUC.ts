@@ -17,6 +17,7 @@ import {
   NS_FLUUX,
   NS_MAM,
   NS_NICK,
+  NS_VCARD_UPDATE,
 } from '../namespaces'
 import type {
   Room,
@@ -184,6 +185,11 @@ export class MUC extends BaseModule {
       }
     }
 
+    // XEP-0398: User Avatar to vCard-Based Avatars Conversion
+    // Parse avatar hash from XEP-0153 vcard-temp:x:update in presence
+    const xUpdate = stanza.getChild('x', NS_VCARD_UPDATE)
+    const avatarHash = xUpdate?.getChildText('photo') || undefined
+
     const occupant: RoomOccupant = {
       nick,
       jid: realJid,
@@ -191,6 +197,7 @@ export class MUC extends BaseModule {
       role: role || 'none',
       show: show || undefined,
       hats: hats.length > 0 ? hats : undefined,
+      avatarHash,
     }
 
     if (isSelf) {
@@ -221,6 +228,11 @@ export class MUC extends BaseModule {
 
       // SDK event only - binding calls store.addOccupant
       this.deps.emitSDK('room:occupant-joined', { roomJid, occupant })
+
+      // XEP-0398: Trigger avatar fetch if occupant has avatar hash (skip self - we use own avatar)
+      if (avatarHash) {
+        this.deps.emit('occupantAvatarUpdate', roomJid, nick, avatarHash, realJid)
+      }
     } else {
       // Check if room is in joining state - buffer occupants to reduce re-renders
       const room = this.deps.stores?.room.getRoom(roomJid)
@@ -233,6 +245,11 @@ export class MUC extends BaseModule {
         // Room already joined - add occupant immediately (e.g., late joiner)
         // SDK event only - binding calls store.addOccupant
         this.deps.emitSDK('room:occupant-joined', { roomJid, occupant })
+
+        // XEP-0398: Trigger avatar fetch if occupant has avatar hash
+        if (avatarHash) {
+          this.deps.emit('occupantAvatarUpdate', roomJid, nick, avatarHash, realJid)
+        }
       }
     }
   }
@@ -258,6 +275,13 @@ export class MUC extends BaseModule {
     if (occupants && occupants.length > 0) {
       // SDK event only - binding calls store.batchAddOccupants
       this.deps.emitSDK('room:occupants-batch', { roomJid, occupants })
+
+      // XEP-0398: Trigger avatar fetch for all occupants with avatar hashes
+      for (const occupant of occupants) {
+        if (occupant.avatarHash) {
+          this.deps.emit('occupantAvatarUpdate', roomJid, occupant.nick, occupant.avatarHash, occupant.jid)
+        }
+      }
     }
     this.pendingOccupants.delete(roomJid)
   }
