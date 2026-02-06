@@ -163,7 +163,16 @@ export class MAM extends BaseModule {
           if (msg) collectedMessages.push(msg)
         })
 
-        ;(this.deps.getXmpp() as any)?.on('stanza', collectMessage)
+        // Use the collector registry if available, otherwise fall back to direct listeners
+        // (fallback is needed for tests that don't provide the registry)
+        let unregister: () => void
+        if (this.deps.registerMAMCollector) {
+          unregister = this.deps.registerMAMCollector(queryId, collectMessage)
+        } else {
+          const xmpp = this.deps.getXmpp()
+          xmpp?.on('stanza', collectMessage)
+          unregister = () => xmpp?.removeListener('stanza', collectMessage)
+        }
 
         try {
           const response = await this.deps.sendIQ(iq)
@@ -197,7 +206,7 @@ export class MAM extends BaseModule {
             break
           }
         } finally {
-          ;(this.deps.getXmpp() as any)?.removeListener('stanza', collectMessage)
+          unregister()
         }
       }
 
@@ -265,7 +274,15 @@ export class MAM extends BaseModule {
       if (msg) collectedMessages.push(msg)
     })
 
-    ;(this.deps.getXmpp() as any)?.on('stanza', collectMessage)
+    // Use the collector registry if available, otherwise fall back to direct listeners
+    let unregister: () => void
+    if (this.deps.registerMAMCollector) {
+      unregister = this.deps.registerMAMCollector(queryId, collectMessage)
+    } else {
+      const xmpp = this.deps.getXmpp()
+      xmpp?.on('stanza', collectMessage)
+      unregister = () => xmpp?.removeListener('stanza', collectMessage)
+    }
     this.deps.emitSDK('room:mam-loading', { roomJid, isLoading: true })
 
     try {
@@ -296,7 +313,7 @@ export class MAM extends BaseModule {
       this.deps.emitSDK('room:mam-error', { roomJid, error: msg })
       throw error
     } finally {
-      ;(this.deps.getXmpp() as any)?.removeListener('stanza', collectMessage)
+      unregister()
       this.deps.emitSDK('room:mam-loading', { roomJid, isLoading: false })
     }
   }
@@ -509,7 +526,15 @@ export class MAM extends BaseModule {
         if (msg) latestMessage = msg
       })
 
-      ;(this.deps.getXmpp() as any)?.on('stanza', collectMessage)
+      // Use the collector registry if available, otherwise fall back to direct listeners
+      let unregister: () => void
+      if (this.deps.registerMAMCollector) {
+        unregister = this.deps.registerMAMCollector(queryId, collectMessage)
+      } else {
+        const xmpp = this.deps.getXmpp()
+        xmpp?.on('stanza', collectMessage)
+        unregister = () => xmpp?.removeListener('stanza', collectMessage)
+      }
 
       try {
         const response = await this.deps.sendIQ(iq)
@@ -518,7 +543,7 @@ export class MAM extends BaseModule {
           this.deps.stores?.chat.updateLastMessagePreview(conversationId, latestMessage)
         }
       } finally {
-        ;(this.deps.getXmpp() as any)?.removeListener('stanza', collectMessage)
+        unregister()
       }
     } catch (_error) {
       // Silently ignore errors - preview refresh is best-effort
@@ -601,7 +626,15 @@ export class MAM extends BaseModule {
         if (msg) latestMessage = msg
       })
 
-      ;(this.deps.getXmpp() as any)?.on('stanza', collectMessage)
+      // Use the collector registry if available, otherwise fall back to direct listeners
+      let unregister: () => void
+      if (this.deps.registerMAMCollector) {
+        unregister = this.deps.registerMAMCollector(queryId, collectMessage)
+      } else {
+        const xmpp = this.deps.getXmpp()
+        xmpp?.on('stanza', collectMessage)
+        unregister = () => xmpp?.removeListener('stanza', collectMessage)
+      }
 
       try {
         const response = await this.deps.sendIQ(iq)
@@ -610,7 +643,7 @@ export class MAM extends BaseModule {
           this.deps.stores?.room.updateLastMessagePreview(roomJid, latestMessage)
         }
       } finally {
-        ;(this.deps.getXmpp() as any)?.removeListener('stanza', collectMessage)
+        unregister()
       }
     } catch (_error) {
       // Silently ignore errors - preview refresh is best-effort

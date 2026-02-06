@@ -30,6 +30,13 @@ export interface ModuleDependencies {
    */
   storageAdapter?: StorageAdapter
   /**
+   * Register a MAM query collector.
+   * The collector will be called for each incoming stanza while active.
+   * Returns a function to unregister the collector.
+   * Used by MAM module to avoid adding temporary event listeners.
+   */
+  registerMAMCollector?: (queryId: string, collector: (stanza: Element) => void) => () => void
+  /**
    * Privacy options for controlling data exposure.
    * Used by Profile module to control avatar fetching behavior.
    */
