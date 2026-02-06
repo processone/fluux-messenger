@@ -202,6 +202,157 @@ describe('renderStyledMessage', () => {
     })
   })
 
+  describe('unordered lists (-, +, *)', () => {
+    it('renders list with dash marker', () => {
+      const container = renderText('- First item\n- Second item')
+      const ul = container.querySelector('ul')
+      expect(ul).toBeTruthy()
+      const items = ul?.querySelectorAll('li')
+      expect(items).toHaveLength(2)
+      expect(items?.[0].textContent).toBe('First item')
+      expect(items?.[1].textContent).toBe('Second item')
+    })
+
+    it('renders list with plus marker', () => {
+      const container = renderText('+ First item\n+ Second item')
+      const ul = container.querySelector('ul')
+      expect(ul).toBeTruthy()
+      const items = ul?.querySelectorAll('li')
+      expect(items).toHaveLength(2)
+    })
+
+    it('renders list with asterisk marker', () => {
+      const container = renderText('* First item\n* Second item')
+      const ul = container.querySelector('ul')
+      expect(ul).toBeTruthy()
+      const items = ul?.querySelectorAll('li')
+      expect(items).toHaveLength(2)
+    })
+
+    it('distinguishes asterisk list from bold text', () => {
+      // "* item" with space after asterisk = list item
+      // "*bold*" without space = bold text
+      const container = renderText('* This is a list item\n*This is bold*')
+      expect(container.querySelector('ul')).toBeTruthy()
+      expect(container.querySelector('strong')).toBeTruthy()
+    })
+
+    it('renders single item list', () => {
+      const container = renderText('- Only item')
+      const ul = container.querySelector('ul')
+      expect(ul).toBeTruthy()
+      expect(ul?.querySelectorAll('li')).toHaveLength(1)
+    })
+
+    it('renders inline styling within list items', () => {
+      const container = renderText('- Item with **bold** text\n- Item with _italic_ text')
+      const items = container.querySelectorAll('li')
+      expect(items[0].querySelector('strong')?.textContent).toBe('bold')
+      expect(items[1].querySelector('em')?.textContent).toBe('italic')
+    })
+
+    it('renders URLs within list items', () => {
+      const container = renderText('- Check https://example.com\n- Visit https://test.org')
+      const items = container.querySelectorAll('li')
+      expect(items[0].querySelector('a')).toBeTruthy()
+      expect(items[1].querySelector('a')).toBeTruthy()
+    })
+
+    it('does not treat dash in middle of line as list', () => {
+      const container = renderText('This is not - a list')
+      expect(container.querySelector('ul')).toBeFalsy()
+    })
+
+    it('handles text before and after list', () => {
+      const container = renderText('Intro text\n- Item 1\n- Item 2\nOutro text')
+      expect(container.querySelector('ul')).toBeTruthy()
+      expect(container.textContent).toContain('Intro text')
+      expect(container.textContent).toContain('Outro text')
+    })
+  })
+
+  describe('ordered lists (1., 2., etc.)', () => {
+    it('renders numbered list', () => {
+      const container = renderText('1. First item\n2. Second item\n3. Third item')
+      const ol = container.querySelector('ol')
+      expect(ol).toBeTruthy()
+      const items = ol?.querySelectorAll('li')
+      expect(items).toHaveLength(3)
+      expect(items?.[0].textContent).toBe('First item')
+      expect(items?.[1].textContent).toBe('Second item')
+      expect(items?.[2].textContent).toBe('Third item')
+    })
+
+    it('preserves start number', () => {
+      const container = renderText('5. Fifth item\n6. Sixth item')
+      const ol = container.querySelector('ol')
+      expect(ol?.getAttribute('start')).toBe('5')
+    })
+
+    it('renders single item ordered list', () => {
+      const container = renderText('1. Only item')
+      const ol = container.querySelector('ol')
+      expect(ol).toBeTruthy()
+      expect(ol?.querySelectorAll('li')).toHaveLength(1)
+    })
+
+    it('renders inline styling within ordered list items', () => {
+      const container = renderText('1. Item with **bold** text\n2. Item with `code`')
+      const items = container.querySelectorAll('li')
+      expect(items[0].querySelector('strong')?.textContent).toBe('bold')
+      expect(items[1].querySelector('code')?.textContent).toBe('code')
+    })
+
+    it('does not treat number in middle of line as list', () => {
+      const container = renderText('I have 3. things to say')
+      expect(container.querySelector('ol')).toBeFalsy()
+    })
+
+    it('handles AI-style numbered instructions', () => {
+      const container = renderText('Here are the steps:\n1. First, do this\n2. Then, do that\n3. Finally, finish')
+      const ol = container.querySelector('ol')
+      expect(ol).toBeTruthy()
+      expect(ol?.querySelectorAll('li')).toHaveLength(3)
+    })
+  })
+
+  describe('mixed lists and other block elements', () => {
+    it('handles unordered list followed by ordered list', () => {
+      const container = renderText('- Bullet 1\n- Bullet 2\n1. Number 1\n2. Number 2')
+      expect(container.querySelector('ul')).toBeTruthy()
+      expect(container.querySelector('ol')).toBeTruthy()
+    })
+
+    it('handles blockquote followed by list', () => {
+      const container = renderText('> Quote here\n- List item')
+      expect(container.querySelector('blockquote')).toBeTruthy()
+      expect(container.querySelector('ul')).toBeTruthy()
+    })
+
+    it('handles list followed by blockquote', () => {
+      const container = renderText('- List item\n> Quote here')
+      expect(container.querySelector('ul')).toBeTruthy()
+      expect(container.querySelector('blockquote')).toBeTruthy()
+    })
+
+    it('handles complex mixed content', () => {
+      const text = `Here's a summary:
+
+- First point
+- Second point
+
+Steps to follow:
+1. Do this
+2. Do that
+
+> Important note`
+      const container = renderText(text)
+      expect(container.querySelector('ul')).toBeTruthy()
+      expect(container.querySelector('ol')).toBeTruthy()
+      expect(container.querySelector('blockquote')).toBeTruthy()
+    })
+  })
+
   describe('URLs', () => {
     it('renders URLs as links', () => {
       const container = renderText('Visit https://example.com')
