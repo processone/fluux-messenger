@@ -259,6 +259,14 @@ export class XMPPClient {
   private xep0084AvatarChecked: Set<string> = new Set()
 
   /**
+   * MAM query collectors registry.
+   * Maps query IDs to callbacks that collect MAM result stanzas.
+   * This avoids adding temporary listeners to the xmpp client.
+   * @internal
+   */
+  private mamCollectors: Map<string, (stanza: Element) => void> = new Map()
+
+  /**
    * Whether modules have been initialized.
    * @internal
    */
@@ -438,6 +446,7 @@ export class XMPPClient {
       emitSDK: <K extends keyof SDKEvents>(event: K, payload: SDKEvents[K]) => this.emitSDK(event, payload),
       getXmpp: () => this.getXmpp(),
       storageAdapter: this.storageAdapter,
+      registerMAMCollector: (queryId: string, collector: (stanza: Element) => void) => this.registerMAMCollector(queryId, collector),
     }
 
     this.connection = new Connection(moduleDeps)
@@ -465,6 +474,10 @@ export class XMPPClient {
     this.connection.setStanzaHandler((stanza: Element) => {
       // Emit for external listeners
       this.emit('stanza', stanza)
+
+      // Dispatch to MAM collectors first (before module routing)
+      // This handles MAM query results without adding temporary listeners
+      this.dispatchToMAMCollectors(stanza)
 
       // Route to modules (order matters - first handler to return true wins)
       // PubSub before Chat so PubSub events aren't treated as chat messages
@@ -641,6 +654,46 @@ export class XMPPClient {
    */
   onStanza(handler: (stanza: Element) => void): () => void {
     return this.on('stanza', handler)
+  }
+
+  // ============================================================================
+  // MAM Query Collector Registry
+  // ============================================================================
+
+  /**
+   * Register a MAM query collector.
+   * The collector will be called for each stanza that might be a MAM result.
+   * This replaces adding temporary listeners to the xmpp client.
+   *
+   * @param queryId - The MAM query ID
+   * @param collector - Callback to handle matching stanzas
+   * @returns A function to unregister the collector
+   * @internal Used by MAM module
+   */
+  registerMAMCollector(queryId: string, collector: (stanza: Element) => void): () => void {
+    this.mamCollectors.set(queryId, collector)
+    return () => this.mamCollectors.delete(queryId)
+  }
+
+  /**
+   * Dispatch a stanza to any registered MAM collectors.
+   * Called from the stanza handler before module routing.
+   *
+   * @param stanza - The incoming stanza
+   * @internal
+   */
+  private dispatchToMAMCollectors(stanza: Element): void {
+    // Only process if we have active collectors
+    if (this.mamCollectors.size === 0) return
+
+    // Pass to all collectors - they will check if the stanza matches their query
+    this.mamCollectors.forEach((collector) => {
+      try {
+        collector(stanza)
+      } catch {
+        // Collector errors shouldn't crash the stanza handler
+      }
+    })
   }
 
   // ============================================================================

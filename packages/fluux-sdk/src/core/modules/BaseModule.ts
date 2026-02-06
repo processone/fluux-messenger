@@ -29,6 +29,13 @@ export interface ModuleDependencies {
    * Used by Connection module for SM state persistence.
    */
   storageAdapter?: StorageAdapter
+  /**
+   * Register a MAM query collector.
+   * The collector will be called for each incoming stanza while active.
+   * Returns a function to unregister the collector.
+   * Used by MAM module to avoid adding temporary event listeners.
+   */
+  registerMAMCollector?: (queryId: string, collector: (stanza: Element) => void) => () => void
 }
 
 /**

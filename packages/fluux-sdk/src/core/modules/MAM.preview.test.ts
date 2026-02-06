@@ -142,8 +142,6 @@ describe('MAM Preview Refresh', () => {
     })
 
     it('should update lastMessage preview when message is received', async () => {
-      await connectClient()
-
       // Mock single conversation
       vi.mocked(mockStores.chat.getAllConversations).mockReturnValue([
         { id: 'alice@example.com', messages: [] },
@@ -153,6 +151,7 @@ describe('MAM Preview Refresh', () => {
       const archiveId = 'archive456'
 
       // Capture stanza handler for simulating MAM message response
+      // IMPORTANT: Set up capture BEFORE connectClient() so we capture the listener
       let stanzaHandler: ((stanza: any) => void) | null = null
       const originalOn = mockXmppClientInstance.on
       mockXmppClientInstance.on = vi.fn((event: string, handler: Function) => {
@@ -161,6 +160,8 @@ describe('MAM Preview Refresh', () => {
         }
         return originalOn.call(mockXmppClientInstance, event, handler)
       }) as any
+
+      await connectClient()
 
       mockXmppClientInstance.iqCaller.request.mockImplementation(async (iq: any) => {
         const query = iq?.children?.[0]
@@ -482,8 +483,6 @@ describe('MAM Preview Refresh', () => {
     })
 
     it('should update lastMessage preview when message is received', async () => {
-      await connectClient()
-
       // Mock single room
       vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
         { jid: 'room@conference.example.com', name: 'Test Room', supportsMAM: true, isQuickChat: false, joined: true, nickname: 'myNick' },
@@ -499,6 +498,7 @@ describe('MAM Preview Refresh', () => {
       const archiveId = 'archive456'
 
       // Capture stanza handler for simulating MAM message response
+      // IMPORTANT: Set up capture BEFORE connectClient() so we capture the listener
       let stanzaHandler: ((stanza: any) => void) | null = null
       const originalOn = mockXmppClientInstance.on
       mockXmppClientInstance.on = vi.fn((event: string, handler: Function) => {
@@ -507,6 +507,8 @@ describe('MAM Preview Refresh', () => {
         }
         return originalOn.call(mockXmppClientInstance, event, handler)
       }) as any
+
+      await connectClient()
 
       mockXmppClientInstance.iqCaller.request.mockImplementation(async (iq: any) => {
         const query = iq?.children?.[0]

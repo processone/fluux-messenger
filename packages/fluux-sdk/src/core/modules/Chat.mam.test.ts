@@ -164,7 +164,6 @@ describe('XMPPClient MAM', () => {
     })
 
     it('should collect forwarded messages from stanza events', async () => {
-      await connectClient()
       const queryId = 'mam_query_123'
 
       // Mock IQ response
@@ -186,13 +185,17 @@ describe('XMPPClient MAM', () => {
         },
       ])
 
-      // Capture the stanza listener
+      // IMPORTANT: Set up capture BEFORE connectClient() so we capture the listener
       let stanzaListener: ((stanza: any) => void) | null = null
-      mockXmppClientInstance.on = vi.fn().mockImplementation((event, listener) => {
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
         if (event === 'stanza') {
-          stanzaListener = listener
+          stanzaListener = listener as (stanza: any) => void
         }
-      })
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+
+      await connectClient()
 
       // Mock request to emit messages before resolving
       mockXmppClientInstance.iqCaller.request = vi.fn().mockImplementation(async (iq) => {
@@ -369,11 +372,14 @@ describe('XMPPClient MAM', () => {
     })
 
     it('should handle messages with reply info', async () => {
-      await connectClient()
+      // IMPORTANT: Set up capture BEFORE connectClient() so we capture the listener
       let stanzaListener: ((stanza: any) => void) | null = null
-      mockXmppClientInstance.on = vi.fn().mockImplementation((event, listener) => {
-        if (event === 'stanza') stanzaListener = listener
-      })
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') stanzaListener = listener as (stanza: any) => void
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+      await connectClient()
 
       const mamResponse = createMockElement('iq', { type: 'result' }, [
         {
@@ -432,11 +438,14 @@ describe('XMPPClient MAM', () => {
     })
 
     it('should handle messages with attachments (OOB)', async () => {
-      await connectClient()
+      // IMPORTANT: Set up capture BEFORE connectClient() so we capture the listener
       let stanzaListener: ((stanza: any) => void) | null = null
-      mockXmppClientInstance.on = vi.fn().mockImplementation((event, listener) => {
-        if (event === 'stanza') stanzaListener = listener
-      })
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') stanzaListener = listener as (stanza: any) => void
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+      await connectClient()
 
       const mamResponse = createMockElement('iq', { type: 'result' }, [
         {
@@ -499,11 +508,14 @@ describe('XMPPClient MAM', () => {
     })
 
     it('should handle file-only messages with OOB but no body text', async () => {
-      await connectClient()
+      // IMPORTANT: Set up capture BEFORE connectClient() so we capture the listener
       let stanzaListener: ((stanza: any) => void) | null = null
-      mockXmppClientInstance.on = vi.fn().mockImplementation((event, listener) => {
-        if (event === 'stanza') stanzaListener = listener
-      })
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') stanzaListener = listener as (stanza: any) => void
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+      await connectClient()
 
       const mamResponse = createMockElement('iq', { type: 'result' }, [
         {
@@ -570,11 +582,14 @@ describe('XMPPClient MAM', () => {
     })
 
     it('should apply link previews from fastening messages', async () => {
-      await connectClient()
+      // IMPORTANT: Set up capture BEFORE connectClient() so we capture the listener
       let stanzaListener: ((stanza: any) => void) | null = null
-      mockXmppClientInstance.on = vi.fn().mockImplementation((event, listener) => {
-        if (event === 'stanza') stanzaListener = listener
-      })
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') stanzaListener = listener as (stanza: any) => void
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+      await connectClient()
 
       const mamResponse = createMockElement('iq', { type: 'result' }, [
         {
@@ -798,11 +813,14 @@ describe('XMPPClient MAM', () => {
     })
 
     it('should skip messages without body', async () => {
-      await connectClient()
+      // IMPORTANT: Set up capture BEFORE connectClient() so we capture the listener
       let stanzaListener: ((stanza: any) => void) | null = null
-      mockXmppClientInstance.on = vi.fn().mockImplementation((event, listener) => {
-        if (event === 'stanza') stanzaListener = listener
-      })
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') stanzaListener = listener as (stanza: any) => void
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+      await connectClient()
 
       const mamResponse = createMockElement('iq', { type: 'result' }, [
         {
@@ -858,11 +876,14 @@ describe('XMPPClient MAM', () => {
     })
 
     it('should handle message retractions (XEP-0424) from MAM', async () => {
-      await connectClient()
+      // IMPORTANT: Set up capture BEFORE connectClient() so we capture the listener
       let stanzaListener: ((stanza: any) => void) | null = null
-      mockXmppClientInstance.on = vi.fn().mockImplementation((event, listener) => {
-        if (event === 'stanza') stanzaListener = listener
-      })
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') stanzaListener = listener as (stanza: any) => void
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+      await connectClient()
 
       const mamResponse = createMockElement('iq', { type: 'result' }, [
         {
@@ -954,11 +975,14 @@ describe('XMPPClient MAM', () => {
     })
 
     it('should handle retraction targeting stanzaId', async () => {
-      await connectClient()
+      // IMPORTANT: Set up capture BEFORE connectClient() so we capture the listener
       let stanzaListener: ((stanza: any) => void) | null = null
-      mockXmppClientInstance.on = vi.fn().mockImplementation((event, listener) => {
-        if (event === 'stanza') stanzaListener = listener
-      })
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') stanzaListener = listener as (stanza: any) => void
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+      await connectClient()
 
       const mamResponse = createMockElement('iq', { type: 'result' }, [
         {
@@ -1048,11 +1072,14 @@ describe('XMPPClient MAM', () => {
     })
 
     it('should handle message corrections (XEP-0308) from MAM', async () => {
-      await connectClient()
+      // IMPORTANT: Set up capture BEFORE connectClient() so we capture the listener
       let stanzaListener: ((stanza: any) => void) | null = null
-      mockXmppClientInstance.on = vi.fn().mockImplementation((event, listener) => {
-        if (event === 'stanza') stanzaListener = listener
-      })
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') stanzaListener = listener as (stanza: any) => void
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+      await connectClient()
 
       const mamResponse = createMockElement('iq', { type: 'result' }, [
         {
@@ -1143,11 +1170,14 @@ describe('XMPPClient MAM', () => {
     })
 
     it('should handle correction with XEP-0428 fallback text', async () => {
-      await connectClient()
+      // IMPORTANT: Set up capture BEFORE connectClient() so we capture the listener
       let stanzaListener: ((stanza: any) => void) | null = null
-      mockXmppClientInstance.on = vi.fn().mockImplementation((event, listener) => {
-        if (event === 'stanza') stanzaListener = listener
-      })
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') stanzaListener = listener as (stanza: any) => void
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+      await connectClient()
 
       const mamResponse = createMockElement('iq', { type: 'result' }, [
         {
@@ -1245,11 +1275,14 @@ describe('XMPPClient MAM', () => {
     })
 
     it('should handle correction targeting stanzaId', async () => {
-      await connectClient()
+      // IMPORTANT: Set up capture BEFORE connectClient() so we capture the listener
       let stanzaListener: ((stanza: any) => void) | null = null
-      mockXmppClientInstance.on = vi.fn().mockImplementation((event, listener) => {
-        if (event === 'stanza') stanzaListener = listener
-      })
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') stanzaListener = listener as (stanza: any) => void
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+      await connectClient()
 
       const mamResponse = createMockElement('iq', { type: 'result' }, [
         {
@@ -1340,11 +1373,14 @@ describe('XMPPClient MAM', () => {
     })
 
     it('should reject correction from different sender (security check)', async () => {
-      await connectClient()
+      // IMPORTANT: Set up capture BEFORE connectClient() so we capture the listener
       let stanzaListener: ((stanza: any) => void) | null = null
-      mockXmppClientInstance.on = vi.fn().mockImplementation((event, listener) => {
-        if (event === 'stanza') stanzaListener = listener
-      })
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') stanzaListener = listener as (stanza: any) => void
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+      await connectClient()
 
       const mamResponse = createMockElement('iq', { type: 'result' }, [
         {
@@ -1433,11 +1469,14 @@ describe('XMPPClient MAM', () => {
     })
 
     it('should handle message reactions (XEP-0444) from MAM', async () => {
-      await connectClient()
+      // IMPORTANT: Set up capture BEFORE connectClient() so we capture the listener
       let stanzaListener: ((stanza: any) => void) | null = null
-      mockXmppClientInstance.on = vi.fn().mockImplementation((event, listener) => {
-        if (event === 'stanza') stanzaListener = listener
-      })
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') stanzaListener = listener as (stanza: any) => void
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+      await connectClient()
 
       const mamResponse = createMockElement('iq', { type: 'result' }, [
         {
@@ -1535,11 +1574,14 @@ describe('XMPPClient MAM', () => {
     })
 
     it('should handle reaction targeting stanzaId', async () => {
-      await connectClient()
+      // IMPORTANT: Set up capture BEFORE connectClient() so we capture the listener
       let stanzaListener: ((stanza: any) => void) | null = null
-      mockXmppClientInstance.on = vi.fn().mockImplementation((event, listener) => {
-        if (event === 'stanza') stanzaListener = listener
-      })
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') stanzaListener = listener as (stanza: any) => void
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+      await connectClient()
 
       const mamResponse = createMockElement('iq', { type: 'result' }, [
         {
@@ -1635,11 +1677,14 @@ describe('XMPPClient MAM', () => {
     })
 
     it('should handle multiple reactions from different users', async () => {
-      await connectClient()
+      // IMPORTANT: Set up capture BEFORE connectClient() so we capture the listener
       let stanzaListener: ((stanza: any) => void) | null = null
-      mockXmppClientInstance.on = vi.fn().mockImplementation((event, listener) => {
-        if (event === 'stanza') stanzaListener = listener
-      })
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') stanzaListener = listener as (stanza: any) => void
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+      await connectClient()
 
       const mamResponse = createMockElement('iq', { type: 'result' }, [
         {
@@ -1772,11 +1817,14 @@ describe('XMPPClient MAM', () => {
     })
 
     it('should replace user reactions when they send new ones', async () => {
-      await connectClient()
+      // IMPORTANT: Set up capture BEFORE connectClient() so we capture the listener
       let stanzaListener: ((stanza: any) => void) | null = null
-      mockXmppClientInstance.on = vi.fn().mockImplementation((event, listener) => {
-        if (event === 'stanza') stanzaListener = listener
-      })
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') stanzaListener = listener as (stanza: any) => void
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+      await connectClient()
 
       const mamResponse = createMockElement('iq', { type: 'result' }, [
         {
@@ -1903,11 +1951,14 @@ describe('XMPPClient MAM', () => {
     })
 
     it('should handle empty reactions (remove all reactions)', async () => {
-      await connectClient()
+      // IMPORTANT: Set up capture BEFORE connectClient() so we capture the listener
       let stanzaListener: ((stanza: any) => void) | null = null
-      mockXmppClientInstance.on = vi.fn().mockImplementation((event, listener) => {
-        if (event === 'stanza') stanzaListener = listener
-      })
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') stanzaListener = listener as (stanza: any) => void
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+      await connectClient()
 
       const mamResponse = createMockElement('iq', { type: 'result' }, [
         {
@@ -2196,11 +2247,14 @@ describe('XMPPClient MAM', () => {
     })
 
     it('should collect room messages and detect outgoing by nickname', async () => {
-      await connectClient()
+      // IMPORTANT: Set up capture BEFORE connectClient() so we capture the listener
       let stanzaListener: ((stanza: any) => void) | null = null
-      mockXmppClientInstance.on = vi.fn().mockImplementation((event, listener) => {
-        if (event === 'stanza') stanzaListener = listener
-      })
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') stanzaListener = listener as (stanza: any) => void
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+      await connectClient()
 
       vi.mocked(mockStores.room.getRoom).mockReturnValue({
         jid: roomJid,
