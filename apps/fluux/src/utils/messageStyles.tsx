@@ -1,13 +1,15 @@
 /**
- * XEP-0393: Message Styling
+ * XEP-0393: Message Styling (extended with Markdown compatibility)
  *
  * Renders styled text with support for:
- * - *bold* (strong)
+ * - *bold* (XEP-0393 strong) or **bold** (Markdown strong)
  * - _italic_ (emphasis)
  * - ~strikethrough~
  * - `code` (inline preformatted)
  * - ```code block``` (preformatted block)
  * - > blockquote (lines starting with >)
+ * - Unordered lists (lines starting with -, +, or * followed by space)
+ * - Ordered lists (lines starting with 1., 2., etc.)
  * - URLs (auto-linked)
  * - @mentions (highlighted)
  * - Escape sequences (\* \_ \~ \` \>)
@@ -169,12 +171,13 @@ function parseStyledText(
   segments: StyledSegment[],
   escapeMap: Map<string, string>
 ): void {
-  // Regex for inline styles: *bold*, _italic_, ~strike~, `code`
+  // Regex for inline styles: **bold** (Markdown), *bold* (XEP-0393), _italic_, ~strike~, `code`
   // Per XEP-0393: markers must be at word boundaries (start/end of string, whitespace, or punctuation)
   // Opening marker: not followed by whitespace
   // Closing marker: not preceded by whitespace
   // Uses lookbehind (?<=...) and lookahead (?=...) for boundary checks
-  const styleRegex = /(?<=^|[\s\p{P}])(\*[^\s*][^*]*[^\s*]\*|\*[^\s*]\*|_[^\s_][^_]*[^\s_]_|_[^\s_]_|~[^\s~][^~]*[^\s~]~|~[^\s~]~|`[^`]+`)(?=$|[\s\p{P}])/gu
+  // IMPORTANT: **bold** patterns must come BEFORE *bold* patterns to match correctly
+  const styleRegex = /(?<=^|[\s\p{P}])(\*\*[^\s*][^*]*[^\s*]\*\*|\*\*[^\s*]\*\*|\*[^\s*][^*]*[^\s*]\*|\*[^\s*]\*|_[^\s_][^_]*[^\s_]_|_[^\s_]_|~[^\s~][^~]*[^\s~]~|~[^\s~]~|`[^`]+`)(?=$|[\s\p{P}])/gu
 
   let lastIndex = 0
   let match
@@ -187,14 +190,25 @@ function parseStyledText(
     }
 
     const styled = match[0]
-    const marker = styled[0]
-    const inner = styled.slice(1, -1)
 
+    // Detect double asterisk (Markdown bold) vs single asterisk (XEP-0393 bold)
     let type: StyledSegment['type'] = 'text'
-    if (marker === '*') type = 'bold'
-    else if (marker === '_') type = 'italic'
-    else if (marker === '~') type = 'strike'
-    else if (marker === '`') type = 'code'
+    let inner: string
+
+    if (styled.startsWith('**') && styled.endsWith('**')) {
+      // Markdown-style bold: **text**
+      type = 'bold'
+      inner = styled.slice(2, -2)
+    } else {
+      // XEP-0393 style: single character markers
+      const marker = styled[0]
+      inner = styled.slice(1, -1)
+
+      if (marker === '*') type = 'bold'
+      else if (marker === '_') type = 'italic'
+      else if (marker === '~') type = 'strike'
+      else if (marker === '`') type = 'code'
+    }
 
     segments.push({ type, content: restoreEscapes(inner, escapeMap) })
     lastIndex = match.index + styled.length
@@ -316,6 +330,29 @@ function isBlockquote(line: string): { isQuote: boolean; depth: number; content:
 }
 
 /**
+ * Check if a line is an unordered list item (starts with -, +, or * followed by space)
+ * Note: * must be followed by space to distinguish from *bold* formatting
+ */
+function isUnorderedListItem(line: string): { isList: boolean; content: string; marker: string } {
+  const match = line.match(/^([-+*])\s+(.*)$/)
+  if (match) {
+    return { isList: true, marker: match[1], content: match[2] }
+  }
+  return { isList: false, marker: '', content: line }
+}
+
+/**
+ * Check if a line is an ordered list item (starts with number. followed by space)
+ */
+function isOrderedListItem(line: string): { isList: boolean; number: number; content: string } {
+  const match = line.match(/^(\d+)\.\s+(.*)$/)
+  if (match) {
+    return { isList: true, number: parseInt(match[1], 10), content: match[2] }
+  }
+  return { isList: false, number: 0, content: line }
+}
+
+/**
  * Render text with clickable links only (no other styling)
  * Useful for room subjects and other simple text that may contain URLs
  */
@@ -418,7 +455,7 @@ export function renderStyledMessage(text: string, mentions?: MentionReference[])
 }
 
 /**
- * Render a text block (handles blockquotes and inline styles)
+ * Render a text block (handles blockquotes, lists, and inline styles)
  */
 function renderTextBlock(
   text: string,
@@ -429,6 +466,8 @@ function renderTextBlock(
   const lines = text.split('\n')
   const result: React.ReactNode[] = []
   let quoteBuffer: { depth: number; lines: string[]; lineOffsets: number[] } | null = null
+  let ulBuffer: { lines: string[]; lineOffsets: number[] } | null = null
+  let olBuffer: { items: { number: number; content: string; offset: number }[] } | null = null
   let index = startIndex
   let currentOffset = textOffset
 
@@ -452,36 +491,128 @@ function renderTextBlock(
     }
   }
 
+  const flushUnorderedList = () => {
+    if (ulBuffer && ulBuffer.lines.length > 0) {
+      result.push(
+        <ul
+          key={`ul-${index++}`}
+          className="list-disc list-inside my-1 space-y-0.5"
+        >
+          {ulBuffer.lines.map((line, i) => (
+            <li key={i} className="text-fluux-text">
+              {renderInline(line, index + i, mentionRanges, ulBuffer!.lineOffsets[i])}
+            </li>
+          ))}
+        </ul>
+      )
+      index += ulBuffer.lines.length
+      ulBuffer = null
+    }
+  }
+
+  const flushOrderedList = () => {
+    if (olBuffer && olBuffer.items.length > 0) {
+      // Use the first item's number as the start attribute
+      const startNum = olBuffer.items[0].number
+      result.push(
+        <ol
+          key={`ol-${index++}`}
+          start={startNum}
+          className="list-decimal list-inside my-1 space-y-0.5"
+        >
+          {olBuffer.items.map((item, i) => (
+            <li key={i} className="text-fluux-text">
+              {renderInline(item.content, index + i, mentionRanges, item.offset)}
+            </li>
+          ))}
+        </ol>
+      )
+      index += olBuffer.items.length
+      olBuffer = null
+    }
+  }
+
+  const flushAllBuffers = () => {
+    flushQuote()
+    flushUnorderedList()
+    flushOrderedList()
+  }
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
-    const { isQuote, content } = isBlockquote(line)
     const lineOffset = currentOffset
 
-    if (isQuote) {
+    // Check for blockquote first
+    const quoteCheck = isBlockquote(line)
+    if (quoteCheck.isQuote) {
+      // Flush other buffers before starting/continuing quote
+      flushUnorderedList()
+      flushOrderedList()
+
       if (!quoteBuffer) {
         quoteBuffer = { depth: 1, lines: [], lineOffsets: [] }
       }
-      // The content starts after "> " so adjust offset
-      const prefixLength = line.length - content.length
-      quoteBuffer.lines.push(content)
+      const prefixLength = line.length - quoteCheck.content.length
+      quoteBuffer.lines.push(quoteCheck.content)
       quoteBuffer.lineOffsets.push(lineOffset + prefixLength)
-    } else {
-      flushQuote()
-      if (line || i < lines.length - 1) {
-        result.push(
-          <React.Fragment key={`line-${index++}`}>
-            {renderInline(line, index, mentionRanges, lineOffset)}
-            {i < lines.length - 1 && <br />}
-          </React.Fragment>
-        )
-      }
+      currentOffset += line.length + 1
+      continue
     }
 
-    // Move offset past this line + newline character
+    // Check for unordered list item
+    const ulCheck = isUnorderedListItem(line)
+    if (ulCheck.isList) {
+      // Flush other buffers before starting/continuing unordered list
+      flushQuote()
+      flushOrderedList()
+
+      if (!ulBuffer) {
+        ulBuffer = { lines: [], lineOffsets: [] }
+      }
+      const prefixLength = line.length - ulCheck.content.length
+      ulBuffer.lines.push(ulCheck.content)
+      ulBuffer.lineOffsets.push(lineOffset + prefixLength)
+      currentOffset += line.length + 1
+      continue
+    }
+
+    // Check for ordered list item
+    const olCheck = isOrderedListItem(line)
+    if (olCheck.isList) {
+      // Flush other buffers before starting/continuing ordered list
+      flushQuote()
+      flushUnorderedList()
+
+      if (!olBuffer) {
+        olBuffer = { items: [] }
+      }
+      const prefixLength = line.length - olCheck.content.length
+      olBuffer.items.push({
+        number: olCheck.number,
+        content: olCheck.content,
+        offset: lineOffset + prefixLength
+      })
+      currentOffset += line.length + 1
+      continue
+    }
+
+    // Regular line - flush all buffers first
+    flushAllBuffers()
+
+    if (line || i < lines.length - 1) {
+      result.push(
+        <React.Fragment key={`line-${index++}`}>
+          {renderInline(line, index, mentionRanges, lineOffset)}
+          {i < lines.length - 1 && <br />}
+        </React.Fragment>
+      )
+    }
+
     currentOffset += line.length + 1
   }
 
-  flushQuote()
+  // Flush any remaining buffers
+  flushAllBuffers()
   return result
 }
 

@@ -26,7 +26,7 @@ describe('renderStyledMessage', () => {
     })
   })
 
-  describe('bold (*text*)', () => {
+  describe('bold (*text*) - XEP-0393 style', () => {
     it('renders bold text', () => {
       const container = renderText('Hello *world*')
       expect(container.querySelector('strong')).toBeTruthy()
@@ -49,6 +49,64 @@ describe('renderStyledMessage', () => {
     it('does not render bold when preceded by space', () => {
       const container = renderText('Hello *world *')
       expect(container.querySelector('strong')).toBeFalsy()
+    })
+  })
+
+  describe('bold (**text**) - Markdown style', () => {
+    it('renders bold text with double asterisks', () => {
+      const container = renderText('Hello **world**')
+      expect(container.querySelector('strong')).toBeTruthy()
+      expect(container.querySelector('strong')?.textContent).toBe('world')
+    })
+
+    it('renders multiple bold segments with double asterisks', () => {
+      const container = renderText('**Hello** and **world**')
+      const bolds = container.querySelectorAll('strong')
+      expect(bolds).toHaveLength(2)
+      expect(bolds[0].textContent).toBe('Hello')
+      expect(bolds[1].textContent).toBe('world')
+    })
+
+    it('renders bold at start of message', () => {
+      const container = renderText('**Important:** please read')
+      expect(container.querySelector('strong')?.textContent).toBe('Important:')
+    })
+
+    it('renders bold at end of message', () => {
+      const container = renderText('This is **critical**')
+      expect(container.querySelector('strong')?.textContent).toBe('critical')
+    })
+
+    it('renders single character bold', () => {
+      const container = renderText('Press **A** to continue')
+      expect(container.querySelector('strong')?.textContent).toBe('A')
+    })
+
+    it('does not render bold when followed by space', () => {
+      const container = renderText('Hello ** world**')
+      expect(container.querySelector('strong')).toBeFalsy()
+    })
+
+    it('does not render bold when preceded by space', () => {
+      const container = renderText('Hello **world **')
+      expect(container.querySelector('strong')).toBeFalsy()
+    })
+
+    it('renders mixed XEP-0393 and Markdown bold styles', () => {
+      const container = renderText('*single* and **double**')
+      const bolds = container.querySelectorAll('strong')
+      expect(bolds).toHaveLength(2)
+      expect(bolds[0].textContent).toBe('single')
+      expect(bolds[1].textContent).toBe('double')
+    })
+
+    it('handles AI-style bold formatting', () => {
+      // Common pattern from AI bots
+      const container = renderText('**Summary:** This is the key point. **Action required:** Please review.')
+      const bolds = container.querySelectorAll('strong')
+      expect(bolds).toHaveLength(2)
+      expect(bolds[0].textContent).toBe('Summary:')
+      expect(bolds[1].textContent).toBe('Action required:')
     })
   })
 
@@ -141,6 +199,157 @@ describe('renderStyledMessage', () => {
     it('does not treat > in middle of line as quote', () => {
       const container = renderText('x > y means greater than')
       expect(container.querySelector('blockquote')).toBeFalsy()
+    })
+  })
+
+  describe('unordered lists (-, +, *)', () => {
+    it('renders list with dash marker', () => {
+      const container = renderText('- First item\n- Second item')
+      const ul = container.querySelector('ul')
+      expect(ul).toBeTruthy()
+      const items = ul?.querySelectorAll('li')
+      expect(items).toHaveLength(2)
+      expect(items?.[0].textContent).toBe('First item')
+      expect(items?.[1].textContent).toBe('Second item')
+    })
+
+    it('renders list with plus marker', () => {
+      const container = renderText('+ First item\n+ Second item')
+      const ul = container.querySelector('ul')
+      expect(ul).toBeTruthy()
+      const items = ul?.querySelectorAll('li')
+      expect(items).toHaveLength(2)
+    })
+
+    it('renders list with asterisk marker', () => {
+      const container = renderText('* First item\n* Second item')
+      const ul = container.querySelector('ul')
+      expect(ul).toBeTruthy()
+      const items = ul?.querySelectorAll('li')
+      expect(items).toHaveLength(2)
+    })
+
+    it('distinguishes asterisk list from bold text', () => {
+      // "* item" with space after asterisk = list item
+      // "*bold*" without space = bold text
+      const container = renderText('* This is a list item\n*This is bold*')
+      expect(container.querySelector('ul')).toBeTruthy()
+      expect(container.querySelector('strong')).toBeTruthy()
+    })
+
+    it('renders single item list', () => {
+      const container = renderText('- Only item')
+      const ul = container.querySelector('ul')
+      expect(ul).toBeTruthy()
+      expect(ul?.querySelectorAll('li')).toHaveLength(1)
+    })
+
+    it('renders inline styling within list items', () => {
+      const container = renderText('- Item with **bold** text\n- Item with _italic_ text')
+      const items = container.querySelectorAll('li')
+      expect(items[0].querySelector('strong')?.textContent).toBe('bold')
+      expect(items[1].querySelector('em')?.textContent).toBe('italic')
+    })
+
+    it('renders URLs within list items', () => {
+      const container = renderText('- Check https://example.com\n- Visit https://test.org')
+      const items = container.querySelectorAll('li')
+      expect(items[0].querySelector('a')).toBeTruthy()
+      expect(items[1].querySelector('a')).toBeTruthy()
+    })
+
+    it('does not treat dash in middle of line as list', () => {
+      const container = renderText('This is not - a list')
+      expect(container.querySelector('ul')).toBeFalsy()
+    })
+
+    it('handles text before and after list', () => {
+      const container = renderText('Intro text\n- Item 1\n- Item 2\nOutro text')
+      expect(container.querySelector('ul')).toBeTruthy()
+      expect(container.textContent).toContain('Intro text')
+      expect(container.textContent).toContain('Outro text')
+    })
+  })
+
+  describe('ordered lists (1., 2., etc.)', () => {
+    it('renders numbered list', () => {
+      const container = renderText('1. First item\n2. Second item\n3. Third item')
+      const ol = container.querySelector('ol')
+      expect(ol).toBeTruthy()
+      const items = ol?.querySelectorAll('li')
+      expect(items).toHaveLength(3)
+      expect(items?.[0].textContent).toBe('First item')
+      expect(items?.[1].textContent).toBe('Second item')
+      expect(items?.[2].textContent).toBe('Third item')
+    })
+
+    it('preserves start number', () => {
+      const container = renderText('5. Fifth item\n6. Sixth item')
+      const ol = container.querySelector('ol')
+      expect(ol?.getAttribute('start')).toBe('5')
+    })
+
+    it('renders single item ordered list', () => {
+      const container = renderText('1. Only item')
+      const ol = container.querySelector('ol')
+      expect(ol).toBeTruthy()
+      expect(ol?.querySelectorAll('li')).toHaveLength(1)
+    })
+
+    it('renders inline styling within ordered list items', () => {
+      const container = renderText('1. Item with **bold** text\n2. Item with `code`')
+      const items = container.querySelectorAll('li')
+      expect(items[0].querySelector('strong')?.textContent).toBe('bold')
+      expect(items[1].querySelector('code')?.textContent).toBe('code')
+    })
+
+    it('does not treat number in middle of line as list', () => {
+      const container = renderText('I have 3. things to say')
+      expect(container.querySelector('ol')).toBeFalsy()
+    })
+
+    it('handles AI-style numbered instructions', () => {
+      const container = renderText('Here are the steps:\n1. First, do this\n2. Then, do that\n3. Finally, finish')
+      const ol = container.querySelector('ol')
+      expect(ol).toBeTruthy()
+      expect(ol?.querySelectorAll('li')).toHaveLength(3)
+    })
+  })
+
+  describe('mixed lists and other block elements', () => {
+    it('handles unordered list followed by ordered list', () => {
+      const container = renderText('- Bullet 1\n- Bullet 2\n1. Number 1\n2. Number 2')
+      expect(container.querySelector('ul')).toBeTruthy()
+      expect(container.querySelector('ol')).toBeTruthy()
+    })
+
+    it('handles blockquote followed by list', () => {
+      const container = renderText('> Quote here\n- List item')
+      expect(container.querySelector('blockquote')).toBeTruthy()
+      expect(container.querySelector('ul')).toBeTruthy()
+    })
+
+    it('handles list followed by blockquote', () => {
+      const container = renderText('- List item\n> Quote here')
+      expect(container.querySelector('ul')).toBeTruthy()
+      expect(container.querySelector('blockquote')).toBeTruthy()
+    })
+
+    it('handles complex mixed content', () => {
+      const text = `Here's a summary:
+
+- First point
+- Second point
+
+Steps to follow:
+1. Do this
+2. Do that
+
+> Important note`
+      const container = renderText(text)
+      expect(container.querySelector('ul')).toBeTruthy()
+      expect(container.querySelector('ol')).toBeTruthy()
+      expect(container.querySelector('blockquote')).toBeTruthy()
     })
   })
 
@@ -338,6 +547,12 @@ describe('renderStyledMessage', () => {
       expect(container.textContent).toContain('*not bold*')
     })
 
+    it('escapes double asterisks', () => {
+      const container = renderText('Use \\*\\*not bold\\*\\*')
+      expect(container.querySelector('strong')).toBeFalsy()
+      expect(container.textContent).toContain('**not bold**')
+    })
+
     it('escapes underscores', () => {
       const container = renderText('Use \\_not italic\\_')
       expect(container.querySelector('em')).toBeFalsy()
@@ -368,6 +583,19 @@ describe('renderStyledMessage', () => {
     it('renders styled text with URLs', () => {
       const container = renderText('Check *this* at https://example.com')
       expect(container.querySelector('strong')).toBeTruthy()
+      expect(container.querySelector('a')).toBeTruthy()
+    })
+
+    it('renders Markdown bold with other styles', () => {
+      const container = renderText('**bold** and _italic_ and ~strike~')
+      expect(container.querySelector('strong')?.textContent).toBe('bold')
+      expect(container.querySelector('em')).toBeTruthy()
+      expect(container.querySelector('del')).toBeTruthy()
+    })
+
+    it('renders Markdown bold with URLs', () => {
+      const container = renderText('Check **this** at https://example.com')
+      expect(container.querySelector('strong')?.textContent).toBe('this')
       expect(container.querySelector('a')).toBeTruthy()
     })
   })
