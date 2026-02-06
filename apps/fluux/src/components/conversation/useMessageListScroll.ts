@@ -690,19 +690,20 @@ export function useMessageListScroll({
   // EFFECT: Typing indicator / reactions change
   // ==========================================================================
 
-  useEffect(() => {
+  // useLayoutEffect ensures scroll adjustment happens BEFORE browser paint.
+  // With useEffect, the browser paints a frame with the gap visible, and scroll
+  // events can fire in between - potentially setting isAtBottomRef to false,
+  // which breaks auto-scroll for subsequent messages and causes blank screens
+  // on conversation switch (stale "not at bottom" state gets persisted).
+  useLayoutEffect(() => {
     if (isAtBottomRef.current && scrollerRef.current) {
       scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight
     }
   }, [typingUsersCount, isAtBottomRef])
 
-  useEffect(() => {
-    if (isAtBottomRef.current) {
-      requestAnimationFrame(() => {
-        if (scrollerRef.current) {
-          scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight
-        }
-      })
+  useLayoutEffect(() => {
+    if (isAtBottomRef.current && scrollerRef.current) {
+      scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight
     }
   }, [lastMessageReactionsKey, isAtBottomRef])
 

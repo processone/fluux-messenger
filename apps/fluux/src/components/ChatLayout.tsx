@@ -47,6 +47,53 @@ export function ChatLayout() {
   )
 }
 
+/**
+ * Isolated component for global side-effect hooks that don't produce UI.
+ *
+ * These hooks subscribe to frequently-changing state (message counts, unread badges,
+ * notification events). By isolating them here, their re-renders don't cascade to
+ * the ChatLayout tree. Re-rendering a null component is essentially free.
+ *
+ * Previously, these hooks lived in ChatLayoutContent, causing 100+ re-renders/sec
+ * during MAM loading because useNotificationBadge subscribes to per-message state.
+ */
+function GlobalEffects() {
+  // Update dock/favicon badge with unread count
+  useNotificationBadge()
+
+  // Play sound for new messages
+  useSoundNotification()
+
+  // Play sound for new events (subscription requests)
+  useEventsSoundNotification()
+
+  // Show desktop notifications for new events
+  useEventsDesktopNotifications()
+
+  // Show desktop notifications for new messages
+  useDesktopNotifications()
+
+  // Auto-away after inactivity
+  useAutoAway()
+
+  // Verify connection after wake from sleep
+  useWakeDetector()
+
+  // Set XA presence before laptop sleeps
+  useSleepDetector()
+
+  // Track window visibility for new message markers
+  useWindowVisibility()
+
+  // Surface SDK error events as toast notifications
+  useSDKErrorToasts()
+
+  // Handle XMPP URI deep links (xmpp:user@example.com?message)
+  useDeepLink()
+
+  return null
+}
+
 function ChatLayoutContent() {
   // Detect render loops before they freeze the UI
   detectRenderLoop('ChatLayout')
@@ -303,33 +350,6 @@ function ChatLayoutContent() {
   const settingsHasContent = sidebarView === 'settings' && !!settingsCategory
   const hasActiveContent = !!(activeConversationId || activeRoomJid || selectedContact || adminHasMainContent || settingsHasContent)
 
-  // Update dock/favicon badge with unread count
-  useNotificationBadge()
-
-  // Play sound for new messages
-  useSoundNotification()
-
-  // Play sound for new events (subscription requests)
-  useEventsSoundNotification()
-
-  // Show desktop notifications for new events
-  useEventsDesktopNotifications()
-
-  // Auto-away after inactivity
-  useAutoAway()
-
-  // Verify connection after wake from sleep
-  useWakeDetector()
-
-  // Set XA presence before laptop sleeps
-  useSleepDetector()
-
-  // Track window visibility for new message markers
-  useWindowVisibility()
-
-  // Surface SDK error events as toast notifications
-  useSDKErrorToasts()
-
   // Toggle shortcut help overlay
   const toggleShortcutHelp = useCallback(() => {
     modalActions.toggle('shortcutHelp')
@@ -355,14 +375,6 @@ function ChatLayoutContent() {
       setAdminCategory(null)
     }
   }, [navigateToView, clearAdminSession, setAdminCategory])
-
-  // Handle XMPP URI deep links (xmpp:user@example.com?message)
-  // Phase 2.4: Deep link navigation is now URL-based via React Router
-  useDeepLink()
-
-  // Show desktop notifications for new messages
-  // Phase 2.4: Notification click navigation is now URL-based via React Router
-  useDesktopNotifications()
 
   // Handle creating quick chat from keyboard shortcut
   const handleCreateQuickChat = useCallback(() => {
@@ -507,6 +519,9 @@ function ChatLayoutContent() {
       tabIndex={-1}
       className="flex flex-col h-full bg-fluux-bg text-fluux-text no-focus-ring"
     >
+      {/* Global side-effect hooks isolated from ChatLayout re-renders */}
+      <GlobalEffects />
+
       {/* Main content area */}
       <div className="flex flex-1 min-h-0">
         {/* Left Sidebar - Conversations */}
