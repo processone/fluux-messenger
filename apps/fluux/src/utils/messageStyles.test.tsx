@@ -26,7 +26,7 @@ describe('renderStyledMessage', () => {
     })
   })
 
-  describe('bold (*text*)', () => {
+  describe('bold (*text*) - XEP-0393 style', () => {
     it('renders bold text', () => {
       const container = renderText('Hello *world*')
       expect(container.querySelector('strong')).toBeTruthy()
@@ -49,6 +49,64 @@ describe('renderStyledMessage', () => {
     it('does not render bold when preceded by space', () => {
       const container = renderText('Hello *world *')
       expect(container.querySelector('strong')).toBeFalsy()
+    })
+  })
+
+  describe('bold (**text**) - Markdown style', () => {
+    it('renders bold text with double asterisks', () => {
+      const container = renderText('Hello **world**')
+      expect(container.querySelector('strong')).toBeTruthy()
+      expect(container.querySelector('strong')?.textContent).toBe('world')
+    })
+
+    it('renders multiple bold segments with double asterisks', () => {
+      const container = renderText('**Hello** and **world**')
+      const bolds = container.querySelectorAll('strong')
+      expect(bolds).toHaveLength(2)
+      expect(bolds[0].textContent).toBe('Hello')
+      expect(bolds[1].textContent).toBe('world')
+    })
+
+    it('renders bold at start of message', () => {
+      const container = renderText('**Important:** please read')
+      expect(container.querySelector('strong')?.textContent).toBe('Important:')
+    })
+
+    it('renders bold at end of message', () => {
+      const container = renderText('This is **critical**')
+      expect(container.querySelector('strong')?.textContent).toBe('critical')
+    })
+
+    it('renders single character bold', () => {
+      const container = renderText('Press **A** to continue')
+      expect(container.querySelector('strong')?.textContent).toBe('A')
+    })
+
+    it('does not render bold when followed by space', () => {
+      const container = renderText('Hello ** world**')
+      expect(container.querySelector('strong')).toBeFalsy()
+    })
+
+    it('does not render bold when preceded by space', () => {
+      const container = renderText('Hello **world **')
+      expect(container.querySelector('strong')).toBeFalsy()
+    })
+
+    it('renders mixed XEP-0393 and Markdown bold styles', () => {
+      const container = renderText('*single* and **double**')
+      const bolds = container.querySelectorAll('strong')
+      expect(bolds).toHaveLength(2)
+      expect(bolds[0].textContent).toBe('single')
+      expect(bolds[1].textContent).toBe('double')
+    })
+
+    it('handles AI-style bold formatting', () => {
+      // Common pattern from AI bots
+      const container = renderText('**Summary:** This is the key point. **Action required:** Please review.')
+      const bolds = container.querySelectorAll('strong')
+      expect(bolds).toHaveLength(2)
+      expect(bolds[0].textContent).toBe('Summary:')
+      expect(bolds[1].textContent).toBe('Action required:')
     })
   })
 
@@ -338,6 +396,12 @@ describe('renderStyledMessage', () => {
       expect(container.textContent).toContain('*not bold*')
     })
 
+    it('escapes double asterisks', () => {
+      const container = renderText('Use \\*\\*not bold\\*\\*')
+      expect(container.querySelector('strong')).toBeFalsy()
+      expect(container.textContent).toContain('**not bold**')
+    })
+
     it('escapes underscores', () => {
       const container = renderText('Use \\_not italic\\_')
       expect(container.querySelector('em')).toBeFalsy()
@@ -368,6 +432,19 @@ describe('renderStyledMessage', () => {
     it('renders styled text with URLs', () => {
       const container = renderText('Check *this* at https://example.com')
       expect(container.querySelector('strong')).toBeTruthy()
+      expect(container.querySelector('a')).toBeTruthy()
+    })
+
+    it('renders Markdown bold with other styles', () => {
+      const container = renderText('**bold** and _italic_ and ~strike~')
+      expect(container.querySelector('strong')?.textContent).toBe('bold')
+      expect(container.querySelector('em')).toBeTruthy()
+      expect(container.querySelector('del')).toBeTruthy()
+    })
+
+    it('renders Markdown bold with URLs', () => {
+      const container = renderText('Check **this** at https://example.com')
+      expect(container.querySelector('strong')?.textContent).toBe('this')
       expect(container.querySelector('a')).toBeTruthy()
     })
   })

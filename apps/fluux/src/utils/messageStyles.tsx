@@ -1,8 +1,8 @@
 /**
- * XEP-0393: Message Styling
+ * XEP-0393: Message Styling (extended with Markdown compatibility)
  *
  * Renders styled text with support for:
- * - *bold* (strong)
+ * - *bold* (XEP-0393 strong) or **bold** (Markdown strong)
  * - _italic_ (emphasis)
  * - ~strikethrough~
  * - `code` (inline preformatted)
@@ -169,12 +169,13 @@ function parseStyledText(
   segments: StyledSegment[],
   escapeMap: Map<string, string>
 ): void {
-  // Regex for inline styles: *bold*, _italic_, ~strike~, `code`
+  // Regex for inline styles: **bold** (Markdown), *bold* (XEP-0393), _italic_, ~strike~, `code`
   // Per XEP-0393: markers must be at word boundaries (start/end of string, whitespace, or punctuation)
   // Opening marker: not followed by whitespace
   // Closing marker: not preceded by whitespace
   // Uses lookbehind (?<=...) and lookahead (?=...) for boundary checks
-  const styleRegex = /(?<=^|[\s\p{P}])(\*[^\s*][^*]*[^\s*]\*|\*[^\s*]\*|_[^\s_][^_]*[^\s_]_|_[^\s_]_|~[^\s~][^~]*[^\s~]~|~[^\s~]~|`[^`]+`)(?=$|[\s\p{P}])/gu
+  // IMPORTANT: **bold** patterns must come BEFORE *bold* patterns to match correctly
+  const styleRegex = /(?<=^|[\s\p{P}])(\*\*[^\s*][^*]*[^\s*]\*\*|\*\*[^\s*]\*\*|\*[^\s*][^*]*[^\s*]\*|\*[^\s*]\*|_[^\s_][^_]*[^\s_]_|_[^\s_]_|~[^\s~][^~]*[^\s~]~|~[^\s~]~|`[^`]+`)(?=$|[\s\p{P}])/gu
 
   let lastIndex = 0
   let match
@@ -187,14 +188,25 @@ function parseStyledText(
     }
 
     const styled = match[0]
-    const marker = styled[0]
-    const inner = styled.slice(1, -1)
 
+    // Detect double asterisk (Markdown bold) vs single asterisk (XEP-0393 bold)
     let type: StyledSegment['type'] = 'text'
-    if (marker === '*') type = 'bold'
-    else if (marker === '_') type = 'italic'
-    else if (marker === '~') type = 'strike'
-    else if (marker === '`') type = 'code'
+    let inner: string
+
+    if (styled.startsWith('**') && styled.endsWith('**')) {
+      // Markdown-style bold: **text**
+      type = 'bold'
+      inner = styled.slice(2, -2)
+    } else {
+      // XEP-0393 style: single character markers
+      const marker = styled[0]
+      inner = styled.slice(1, -1)
+
+      if (marker === '*') type = 'bold'
+      else if (marker === '_') type = 'italic'
+      else if (marker === '~') type = 'strike'
+      else if (marker === '`') type = 'code'
+    }
 
     segments.push({ type, content: restoreEscapes(inner, escapeMap) })
     lastIndex = match.index + styled.length
