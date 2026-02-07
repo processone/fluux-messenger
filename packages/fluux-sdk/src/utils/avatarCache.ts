@@ -5,9 +5,16 @@
  */
 
 const DB_NAME = 'fluux-avatar-cache'
-const DB_VERSION = 2
+const DB_VERSION = 3
 const STORE_NAME = 'avatars'
 const HASH_STORE_NAME = 'avatar-hashes'
+const NO_AVATAR_STORE_NAME = 'no-avatar-jids'
+
+/**
+ * Default TTL for "no avatar" cache entries (24 hours in milliseconds)
+ * After this time, we'll re-check if the JID has an avatar
+ */
+const NO_AVATAR_TTL_MS = 24 * 60 * 60 * 1000
 
 interface CachedAvatar {
   hash: string // SHA-1 hash (primary key)
@@ -21,6 +28,16 @@ export type AvatarEntityType = 'contact' | 'room'
 export interface AvatarHashMapping {
   jid: string // JID (primary key)
   hash: string // SHA-1 hash
+  type: AvatarEntityType // 'contact' or 'room'
+}
+
+/**
+ * Entry tracking a JID that has been confirmed to have no avatar
+ * Used to prevent repeated queries for JIDs without avatars
+ */
+interface NoAvatarEntry {
+  jid: string // JID (primary key)
+  timestamp: number // When this was recorded
   type: AvatarEntityType // 'contact' or 'room'
 }
 
@@ -69,6 +86,11 @@ function getDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(HASH_STORE_NAME)) {
         const hashStore = db.createObjectStore(HASH_STORE_NAME, { keyPath: 'jid' })
         hashStore.createIndex('type', 'type', { unique: false })
+      }
+      // No-avatar JIDs store (v3) - negative cache
+      if (!db.objectStoreNames.contains(NO_AVATAR_STORE_NAME)) {
+        const noAvatarStore = db.createObjectStore(NO_AVATAR_STORE_NAME, { keyPath: 'jid' })
+        noAvatarStore.createIndex('type', 'type', { unique: false })
       }
     }
   })
@@ -363,6 +385,141 @@ export async function clearAllAvatarHashes(): Promise<void> {
     // Only log if IndexedDB is available (skip in test environments)
     if (isIndexedDBAvailable()) {
       console.warn('Failed to clear avatar hash mappings:', error)
+    }
+  }
+}
+
+// =============================================================================
+// No-Avatar Negative Cache Functions
+// =============================================================================
+
+/**
+ * Check if a JID is known to have no avatar (negative cache)
+ * Returns true if the JID was recently checked and found to have no avatar
+ *
+ * @param jid - The JID to check
+ * @param ttlMs - Time-to-live in milliseconds (default: 24 hours)
+ */
+export async function hasNoAvatar(jid: string, ttlMs: number = NO_AVATAR_TTL_MS): Promise<boolean> {
+  try {
+    const db = await getDB()
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(NO_AVATAR_STORE_NAME, 'readonly')
+      const store = transaction.objectStore(NO_AVATAR_STORE_NAME)
+      const request = store.get(jid)
+
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => {
+        const result = request.result as NoAvatarEntry | undefined
+        if (!result) {
+          resolve(false)
+          return
+        }
+        // Check if the entry is still valid (not expired)
+        const age = Date.now() - result.timestamp
+        if (age > ttlMs) {
+          // Entry expired, delete it and return false
+          const deleteTransaction = db.transaction(NO_AVATAR_STORE_NAME, 'readwrite')
+          deleteTransaction.objectStore(NO_AVATAR_STORE_NAME).delete(jid)
+          resolve(false)
+        } else {
+          resolve(true)
+        }
+      }
+    })
+  } catch (error) {
+    // Only log if IndexedDB is available (skip in test environments)
+    if (isIndexedDBAvailable()) {
+      console.warn('Failed to check no-avatar cache:', error)
+    }
+    return false
+  }
+}
+
+/**
+ * Mark a JID as having no avatar (negative cache)
+ * This prevents repeated queries for JIDs without avatars
+ *
+ * @param jid - The JID that has no avatar
+ * @param type - Whether this is a 'contact' or 'room'
+ */
+export async function markNoAvatar(jid: string, type: AvatarEntityType): Promise<void> {
+  try {
+    const db = await getDB()
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction(NO_AVATAR_STORE_NAME, 'readwrite')
+      const store = transaction.objectStore(NO_AVATAR_STORE_NAME)
+      const entry: NoAvatarEntry = {
+        jid,
+        timestamp: Date.now(),
+        type,
+      }
+      const request = store.put(entry)
+
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => resolve()
+    })
+  } catch (error) {
+    // Only log if IndexedDB is available (skip in test environments)
+    if (isIndexedDBAvailable()) {
+      console.warn('Failed to mark JID as no-avatar:', error)
+    }
+  }
+}
+
+/**
+ * Remove a JID from the no-avatar cache
+ * Call this when we discover the JID now has an avatar
+ *
+ * @param jid - The JID to remove from the cache
+ */
+export async function clearNoAvatar(jid: string): Promise<void> {
+  try {
+    const db = await getDB()
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction(NO_AVATAR_STORE_NAME, 'readwrite')
+      const store = transaction.objectStore(NO_AVATAR_STORE_NAME)
+      const request = store.delete(jid)
+
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => resolve()
+    })
+  } catch (error) {
+    // Only log if IndexedDB is available (skip in test environments)
+    if (isIndexedDBAvailable()) {
+      console.warn('Failed to clear no-avatar entry:', error)
+    }
+  }
+}
+
+/**
+ * Clear expired no-avatar entries
+ *
+ * @param ttlMs - Time-to-live in milliseconds (default: 24 hours)
+ */
+export async function clearExpiredNoAvatarEntries(ttlMs: number = NO_AVATAR_TTL_MS): Promise<void> {
+  const cutoff = Date.now() - ttlMs
+
+  try {
+    const db = await getDB()
+    const transaction = db.transaction(NO_AVATAR_STORE_NAME, 'readwrite')
+    const store = transaction.objectStore(NO_AVATAR_STORE_NAME)
+
+    const request = store.openCursor()
+    request.onsuccess = () => {
+      const cursor = request.result
+      if (cursor) {
+        const entry = cursor.value as NoAvatarEntry
+        if (entry.timestamp < cutoff) {
+          cursor.delete()
+        }
+        cursor.continue()
+      }
+    }
+  } catch (error) {
+    // Only log if IndexedDB is available (skip in test environments)
+    if (isIndexedDBAvailable()) {
+      console.warn('Failed to clear expired no-avatar entries:', error)
     }
   }
 }
