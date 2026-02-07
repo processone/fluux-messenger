@@ -317,7 +317,7 @@ export const MessageBubble = memo(function MessageBubble({
         )}
 
         {/* Collapsible wrapper for long messages */}
-        <CollapsibleContent messageId={message.id} isSelected={isSelected}>
+        <CollapsibleContent messageId={message.id} isSelected={isSelected} isHovered={isHovered}>
           {/* Message body (SDK already strips OOB URL from body for non-XEP-0428 clients) */}
           <MessageBody
             body={message.body}

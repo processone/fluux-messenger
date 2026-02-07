@@ -15,6 +15,8 @@ interface CollapsibleContentProps {
   className?: string
   /** Whether the message is currently selected (affects gradient color) */
   isSelected?: boolean
+  /** Whether the message is currently hovered (affects gradient color) */
+  isHovered?: boolean
 }
 
 /**
@@ -32,6 +34,7 @@ export function CollapsibleContent({
   children,
   className = '',
   isSelected = false,
+  isHovered = false,
 }: CollapsibleContentProps) {
   const { t } = useTranslation()
   const contentRef = useRef<HTMLDivElement>(null)
@@ -86,7 +89,10 @@ export function CollapsibleContent({
           <div
             className="absolute bottom-0 left-0 right-0 h-20 pointer-events-none"
             style={{
-              background: `linear-gradient(to bottom, transparent, var(${isSelected ? '--fluux-selection' : '--fluux-chat'}))`,
+              // Priority: selected > hovered > default chat background
+              background: `linear-gradient(to bottom, transparent, var(${
+                isSelected ? '--fluux-selection' : isHovered ? '--fluux-hover' : '--fluux-chat'
+              }))`,
             }}
           />
         )}

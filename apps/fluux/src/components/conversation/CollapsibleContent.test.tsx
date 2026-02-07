@@ -235,4 +235,48 @@ describe('CollapsibleContent', () => {
       background: 'linear-gradient(to bottom, transparent, var(--fluux-chat))',
     })
   })
+
+  it('should use hover gradient color when isHovered is true', () => {
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get() {
+        return 500
+      },
+    })
+
+    const { container } = render(
+      <CollapsibleContent messageId="msg-1" isHovered={true}>
+        <p>Long content</p>
+      </CollapsibleContent>
+    )
+
+    // Find the gradient overlay
+    const gradientDiv = container.querySelector('.pointer-events-none')
+    expect(gradientDiv).toBeTruthy()
+    expect(gradientDiv).toHaveStyle({
+      background: 'linear-gradient(to bottom, transparent, var(--fluux-hover))',
+    })
+  })
+
+  it('should prioritize selection over hover for gradient color', () => {
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get() {
+        return 500
+      },
+    })
+
+    const { container } = render(
+      <CollapsibleContent messageId="msg-1" isSelected={true} isHovered={true}>
+        <p>Long content</p>
+      </CollapsibleContent>
+    )
+
+    // Find the gradient overlay - selection should take priority
+    const gradientDiv = container.querySelector('.pointer-events-none')
+    expect(gradientDiv).toBeTruthy()
+    expect(gradientDiv).toHaveStyle({
+      background: 'linear-gradient(to bottom, transparent, var(--fluux-selection))',
+    })
+  })
 })
