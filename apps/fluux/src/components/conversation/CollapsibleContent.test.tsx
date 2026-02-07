@@ -191,4 +191,48 @@ describe('CollapsibleContent', () => {
     const contentDiv = container.querySelector('.overflow-hidden')
     expect(contentDiv).not.toHaveClass('max-h-[350px]')
   })
+
+  it('should use selection gradient color when isSelected is true', () => {
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get() {
+        return 500
+      },
+    })
+
+    const { container } = render(
+      <CollapsibleContent messageId="msg-1" isSelected={true}>
+        <p>Long content</p>
+      </CollapsibleContent>
+    )
+
+    // Find the gradient overlay
+    const gradientDiv = container.querySelector('.pointer-events-none')
+    expect(gradientDiv).toBeTruthy()
+    expect(gradientDiv).toHaveStyle({
+      background: 'linear-gradient(to bottom, transparent, var(--fluux-selection))',
+    })
+  })
+
+  it('should use chat gradient color when isSelected is false', () => {
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get() {
+        return 500
+      },
+    })
+
+    const { container } = render(
+      <CollapsibleContent messageId="msg-1" isSelected={false}>
+        <p>Long content</p>
+      </CollapsibleContent>
+    )
+
+    // Find the gradient overlay
+    const gradientDiv = container.querySelector('.pointer-events-none')
+    expect(gradientDiv).toBeTruthy()
+    expect(gradientDiv).toHaveStyle({
+      background: 'linear-gradient(to bottom, transparent, var(--fluux-chat))',
+    })
+  })
 })

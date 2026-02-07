@@ -13,6 +13,8 @@ interface CollapsibleContentProps {
   children: ReactNode
   /** Optional className for the wrapper */
   className?: string
+  /** Whether the message is currently selected (affects gradient color) */
+  isSelected?: boolean
 }
 
 /**
@@ -29,6 +31,7 @@ export function CollapsibleContent({
   messageId,
   children,
   className = '',
+  isSelected = false,
 }: CollapsibleContentProps) {
   const { t } = useTranslation()
   const contentRef = useRef<HTMLDivElement>(null)
@@ -83,7 +86,7 @@ export function CollapsibleContent({
           <div
             className="absolute bottom-0 left-0 right-0 h-20 pointer-events-none"
             style={{
-              background: 'linear-gradient(to bottom, transparent, var(--fluux-chat))',
+              background: `linear-gradient(to bottom, transparent, var(${isSelected ? '--fluux-selection' : '--fluux-chat'}))`,
             }}
           />
         )}
