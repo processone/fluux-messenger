@@ -84,6 +84,9 @@ export interface MessageBubbleProps {
 
   // Time formatting function (respects user's 12h/24h preference)
   formatTime: (date: Date) => string
+
+  // Effective time format for layout width calculations ('12h' needs wider column)
+  timeFormat: '12h' | '24h'
 }
 
 /**
@@ -150,6 +153,9 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps): bool
   // nickExtras - ReactNode, compare by reference (accept some re-renders)
   if (prev.nickExtras !== next.nickExtras) return false
 
+  // Time format affects column width
+  if (prev.timeFormat !== next.timeFormat) return false
+
   // All data props are equal - skip re-render
   // (callback props like onReply, onEdit, etc. are intentionally ignored)
   return true
@@ -190,6 +196,7 @@ export const MessageBubble = memo(function MessageBubble({
   mentions,
   onReactionPickerChange,
   formatTime,
+  timeFormat,
 }: MessageBubbleProps) {
   const [showReactionPicker, setShowReactionPickerState] = useState(false)
   const [showMoreMenu, setShowMoreMenu] = useState(false)
@@ -221,11 +228,11 @@ export const MessageBubble = memo(function MessageBubble({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      {/* Avatar, timestamp (when selected), or spacer */}
-      <div className="w-12 flex-shrink-0">
+      {/* Avatar, timestamp (when selected), or spacer - width adapts to time format */}
+      <div className={`${timeFormat === '12h' ? 'w-12' : 'w-10'} flex-shrink-0`}>
         {/* /me action messages always show timestamp instead of avatar */}
         {isActionMessage(message.body) ? (
-          <span className={`text-[10px] text-fluux-muted font-mono pt-0.5 ${isSelected ? 'opacity-100' : hasKeyboardSelection ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
+          <span className={`block text-center text-[10px] text-fluux-muted font-mono pt-0.5 ${isSelected ? 'opacity-100' : hasKeyboardSelection ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
             {formatTime(message.timestamp)}
           </span>
         ) : showAvatar ? (
@@ -243,7 +250,7 @@ export const MessageBubble = memo(function MessageBubble({
             </div>
           </UserInfoPopover>
         ) : (
-          <span className={`text-[10px] text-fluux-muted font-mono pt-0.5 ${isSelected ? 'opacity-100' : hasKeyboardSelection ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
+          <span className={`block text-center text-[10px] text-fluux-muted font-mono pt-0.5 ${isSelected ? 'opacity-100' : hasKeyboardSelection ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
             {formatTime(message.timestamp)}
           </span>
         )}

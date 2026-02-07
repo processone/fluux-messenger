@@ -397,7 +397,7 @@ const ChatMessageList = memo(function ChatMessageList({
   isInitialLoading?: boolean
 }) {
   const { t } = useTranslation()
-  const { formatTime } = useTimeFormat()
+  const { formatTime, effectiveTimeFormat } = useTimeFormat()
 
   // Track which message is hovered for stable toolbar interaction
   // This prevents the toolbar from switching when moving mouse to it
@@ -479,13 +479,14 @@ const ChatMessageList = memo(function ChatMessageList({
       onMouseEnter={() => handleMessageHover(msg.id)}
       onMouseLeave={handleMessageLeave}
       formatTime={formatTime}
+      timeFormat={effectiveTimeFormat}
     />
   ), [
     ownAvatar, contactsByJid, ownNickname, ownPresence, conversationId, conversationType,
     sendReaction, myBareJid, messagesById, onReply, onEdit, lastOutgoingMessageId, lastMessageId,
     isComposing, activeReactionPickerMessageId, onReactionPickerChange, retractMessage,
     selectedMessageId, hasKeyboardSelection, showToolbarForSelection, isDarkMode, onMediaLoad,
-    hoveredMessageId, handleMessageHover, handleMessageLeave, formatTime
+    hoveredMessageId, handleMessageHover, handleMessageLeave, formatTime, effectiveTimeFormat
   ])
 
   return (
@@ -546,6 +547,8 @@ interface ChatMessageBubbleProps {
   onMouseLeave?: () => void
   // Time formatting function (respects user's 12h/24h preference)
   formatTime: (date: Date) => string
+  // Effective time format for layout width calculations
+  timeFormat: '12h' | '24h'
 }
 
 const ChatMessageBubble = memo(function ChatMessageBubble({
@@ -577,6 +580,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
   onMouseEnter,
   onMouseLeave,
   formatTime,
+  timeFormat,
 }: ChatMessageBubbleProps) {
   const { t } = useTranslation()
 
@@ -695,6 +699,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
       replyContext={replyContext}
       onReactionPickerChange={onReactionPickerChange}
       formatTime={formatTime}
+      timeFormat={timeFormat}
     />
   )
 })

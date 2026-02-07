@@ -70,6 +70,19 @@ export function systemUses12Hour(): boolean {
 }
 
 /**
+ * Get the effective time format, resolving 'auto' to actual format.
+ *
+ * @param timeFormat - User's time format preference
+ * @returns '12h' or '24h' (never 'auto')
+ */
+export function getEffectiveTimeFormat(timeFormat: TimeFormat): '12h' | '24h' {
+  if (timeFormat === 'auto') {
+    return systemUses12Hour() ? '12h' : '24h'
+  }
+  return timeFormat
+}
+
+/**
  * Format a time according to user preference.
  *
  * @param date - Date to format

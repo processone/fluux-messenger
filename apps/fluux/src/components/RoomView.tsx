@@ -407,7 +407,7 @@ const RoomMessageList = memo(function RoomMessageList({
   isHistoryComplete?: boolean
 }) {
   const { t } = useTranslation()
-  const { formatTime } = useTimeFormat()
+  const { formatTime, effectiveTimeFormat } = useTimeFormat()
 
   // Track which message is hovered for stable toolbar interaction
   // This prevents the toolbar from switching when moving mouse to it
@@ -513,13 +513,14 @@ const RoomMessageList = memo(function RoomMessageList({
       onMouseEnter={() => handleMessageHover(msg.id)}
       onMouseLeave={handleMessageLeave}
       formatTime={formatTime}
+      timeFormat={effectiveTimeFormat}
     />
   ), [
     messagesById, room, contactsByJid, ownAvatar, sendReaction, onReply, onEdit,
     lastOutgoingMessageId, lastMessageId, isComposing, activeReactionPickerMessageId,
     onReactionPickerChange, retractMessage, selectedMessageId, hasKeyboardSelection,
     showToolbarForSelection, isDarkMode, onMediaLoad, hoveredMessageId, handleMessageHover, handleMessageLeave,
-    formatTime
+    formatTime, effectiveTimeFormat
   ])
 
   return (
@@ -569,6 +570,8 @@ interface RoomMessageBubbleWrapperProps {
   onMouseLeave?: () => void
   // Time formatting function (respects user's 12h/24h preference)
   formatTime: (date: Date) => string
+  // Effective time format for layout width calculations
+  timeFormat: '12h' | '24h'
 }
 
 const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
@@ -595,6 +598,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   onMouseEnter,
   onMouseLeave,
   formatTime,
+  timeFormat,
 }: RoomMessageBubbleWrapperProps) {
   const { t } = useTranslation()
 
@@ -746,6 +750,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
       mentions={message.mentions}
       onReactionPickerChange={onReactionPickerChange}
       formatTime={formatTime}
+      timeFormat={timeFormat}
     />
   )
 })

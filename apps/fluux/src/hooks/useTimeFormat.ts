@@ -4,10 +4,10 @@
  * Provides a formatTime function that respects the user's time format setting
  * (12-hour, 24-hour, or system default) and the current language.
  */
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { formatTime as formatTimeUtil } from '@/utils/dateFormat'
+import { formatTime as formatTimeUtil, getEffectiveTimeFormat } from '@/utils/dateFormat'
 
 /**
  * Hook that returns a time formatting function using current settings.
@@ -29,5 +29,11 @@ export function useTimeFormat() {
     [i18n.language, timeFormat]
   )
 
-  return { formatTime, timeFormat }
+  // Resolve 'auto' to actual '12h' or '24h' for layout calculations
+  const effectiveTimeFormat = useMemo(
+    () => getEffectiveTimeFormat(timeFormat),
+    [timeFormat]
+  )
+
+  return { formatTime, timeFormat, effectiveTimeFormat }
 }
