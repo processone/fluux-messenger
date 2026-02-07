@@ -225,6 +225,14 @@ export class Profile extends BaseModule {
     // If we have a real JID, try to fetch from their PEP or vCard
     if (realJid) {
       const bareJid = getBareJid(realJid)
+
+      // Check negative cache - skip if we recently got forbidden/no-avatar
+      if (await hasNoAvatar(bareJid)) {
+        return
+      }
+
+      let gotForbidden = false
+
       try {
         // Try XEP-0084 (PEP) first
         const iq = xml('iq', { type: 'get', to: bareJid, id: `avatar_${generateUUID()}` },
@@ -240,6 +248,7 @@ export class Profile extends BaseModule {
         if (data) {
           const mimeType = 'image/png'
           const blobUrl = await cacheAvatar(avatarHash, data, mimeType)
+          await clearNoAvatar(bareJid)
           this.deps.emitSDK('room:occupant-avatar', {
             roomJid,
             nick,
@@ -248,7 +257,12 @@ export class Profile extends BaseModule {
           })
           return
         }
-      } catch {
+      } catch (err) {
+        // Check if this is a forbidden error
+        const errorMsg = err instanceof Error ? err.message : String(err)
+        if (errorMsg.includes('forbidden')) {
+          gotForbidden = true
+        }
         // Fall through to vCard fetch
       }
 
@@ -265,6 +279,7 @@ export class Profile extends BaseModule {
           const mimeType = photo?.getChildText('TYPE') || 'image/png'
           const base64 = binval.replace(/\s/g, '')
           const blobUrl = await cacheAvatar(avatarHash, base64, mimeType)
+          await clearNoAvatar(bareJid)
           this.deps.emitSDK('room:occupant-avatar', {
             roomJid,
             nick,
@@ -272,9 +287,17 @@ export class Profile extends BaseModule {
             avatarHash,
           })
           return
+        } else {
+          // vCard exists but no photo - mark as no avatar
+          await markNoAvatar(bareJid, 'contact')
         }
-      } catch {
-        // Silently fail - occupant may not have an avatar
+      } catch (err) {
+        // Check if this is a forbidden error
+        const errorMsg = err instanceof Error ? err.message : String(err)
+        if (errorMsg.includes('forbidden') || gotForbidden) {
+          // Cache forbidden errors to avoid repeated queries
+          await markNoAvatar(bareJid, 'contact')
+        }
       }
       return
     }
