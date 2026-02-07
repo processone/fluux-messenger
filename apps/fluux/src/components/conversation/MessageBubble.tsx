@@ -222,7 +222,7 @@ export const MessageBubble = memo(function MessageBubble({
       onMouseLeave={onMouseLeave}
     >
       {/* Avatar, timestamp (when selected), or spacer */}
-      <div className="w-10 flex-shrink-0">
+      <div className="w-12 flex-shrink-0">
         {/* /me action messages always show timestamp instead of avatar */}
         {isActionMessage(message.body) ? (
           <span className={`text-[10px] text-fluux-muted font-mono pt-0.5 ${isSelected ? 'opacity-100' : hasKeyboardSelection ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
