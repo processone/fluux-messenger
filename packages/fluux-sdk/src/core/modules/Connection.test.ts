@@ -614,6 +614,47 @@ describe('XMPPClient Connection', () => {
       expect(mockStores.roster.resetAllPresence).toHaveBeenCalled()
     })
 
+    it('should NOT call bulk preview refresh on connect (MAM is lazy)', async () => {
+      // Regression test: We removed bulk preview refresh on connect because:
+      // - Conversations: Preview updates when opened (lazy MAM) or when new messages arrive
+      // - Rooms: Preview is fetched on room join (room:joined event)
+      // This avoids the flood of 300+ MAM queries that occurred on every reconnect
+
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      // Give time for async operations
+      await vi.advanceTimersByTimeAsync(100)
+
+      // MAM preview refresh methods should NOT have been called
+      // Check that no MAM queries were sent for preview refresh
+      const sendCalls = mockXmppClientInstance.send.mock.calls
+      const mamPreviewQueries = sendCalls.filter((call: any) => {
+        const stanza = call[0]
+        // MAM preview queries would be IQ stanzas with MAM namespace
+        // targeting the user's archive for multiple conversations
+        if (stanza?.name !== 'iq' || stanza?.attrs?.type !== 'set') return false
+        const queryChild = stanza?.children?.find((c: any) =>
+          c?.attrs?.xmlns === 'urn:xmpp:mam:2' && c?.name === 'query'
+        )
+        // Preview queries use max=1 to get just the last message
+        if (!queryChild) return false
+        const setChild = queryChild?.children?.find((c: any) => c?.name === 'set')
+        const maxChild = setChild?.children?.find((c: any) => c?.name === 'max')
+        return maxChild?.children?.[0] === '1'
+      })
+
+      // No bulk preview queries should be sent on connect
+      expect(mamPreviewQueries).toHaveLength(0)
+    })
+
     it('should reset MAM states on new session so history is re-fetched', async () => {
       // Connect first
       const connectPromise = xmppClient.connect({
