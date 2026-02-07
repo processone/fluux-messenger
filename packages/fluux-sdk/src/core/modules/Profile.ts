@@ -3,7 +3,7 @@ import type { Element } from '@xmpp/client'
 import { BaseModule } from './BaseModule'
 import { getBareJid, getLocalPart, getDomain } from '../jid'
 import { generateUUID } from '../../utils/uuid'
-import { getCachedAvatar, getAvatarHash, cacheAvatar, saveAvatarHash, getAllAvatarHashes } from '../../utils/avatarCache'
+import { getCachedAvatar, getAvatarHash, cacheAvatar, saveAvatarHash, getAllAvatarHashes, hasNoAvatar, markNoAvatar, clearNoAvatar } from '../../utils/avatarCache'
 import {
   NS_PUBSUB,
   NS_NICK,
@@ -68,10 +68,12 @@ export class Profile extends BaseModule {
       )
       const result = await this.deps.sendIQ(iq)
       const data = result.getChild('pubsub', NS_PUBSUB)?.getChild('items')?.getChild('item')?.getChild('data', 'urn:xmpp:avatar:data')?.text()
-      
+
       if (data) {
         const avatarUrl = `data:image/png;base64,${data}`
         this.updateAvatar(bareJid, avatarUrl, hash)
+        // Clear negative cache since we found an avatar
+        await clearNoAvatar(bareJid)
       } else {
         // Fallback to VCard
         await this.fetchVCardAvatar(bareJid)
@@ -93,6 +95,11 @@ export class Profile extends BaseModule {
    */
   async fetchContactAvatarMetadata(jid: string): Promise<string | null> {
     const bareJid = getBareJid(jid)
+
+    // Check negative cache first - skip if we recently confirmed no avatar
+    if (await hasNoAvatar(bareJid)) {
+      return null
+    }
 
     try {
       // Query contact's PEP node for avatar metadata
@@ -122,6 +129,8 @@ export class Profile extends BaseModule {
       const hash = info.attrs.id
 
       if (hash) {
+        // Found an avatar - clear any negative cache entry
+        await clearNoAvatar(bareJid)
         // Emit the same event that XEP-0153 would emit, so existing
         // avatar fetching logic handles it consistently
         this.deps.emit('avatarMetadataUpdate', bareJid, hash)
@@ -137,23 +146,35 @@ export class Profile extends BaseModule {
 
   async fetchVCardAvatar(jid: string): Promise<void> {
     const bareJid = getBareJid(jid)
+
+    // Check negative cache first - skip if we recently confirmed no avatar
+    if (await hasNoAvatar(bareJid)) {
+      return
+    }
+
     const iq = xml('iq', { type: 'get', to: bareJid, id: `vcard_${generateUUID()}` },
       xml('vCard', { xmlns: NS_VCARD_TEMP })
     )
-    
+
     try {
       const result = await this.deps.sendIQ(iq)
       const vcard = result.getChild('vCard', NS_VCARD_TEMP)
       const photo = vcard?.getChild('PHOTO')
       const binval = photo?.getChildText('BINVAL')
       const type = photo?.getChildText('TYPE') || 'image/png'
-      
+
       if (binval) {
         const avatarUrl = `data:${type};base64,${binval.replace(/\s/g, '')}`
         this.updateAvatar(bareJid, avatarUrl, null)
+        // Clear negative cache since we found an avatar
+        await clearNoAvatar(bareJid)
+      } else {
+        // vCard exists but has no photo - mark as no avatar
+        await markNoAvatar(bareJid, 'contact')
       }
     } catch {
-      // Silently ignore - vCard fallback failing is expected when user has no vCard
+      // vCard query failed - mark as no avatar for now
+      await markNoAvatar(bareJid, 'contact')
     }
   }
 
@@ -204,6 +225,14 @@ export class Profile extends BaseModule {
     // If we have a real JID, try to fetch from their PEP or vCard
     if (realJid) {
       const bareJid = getBareJid(realJid)
+
+      // Check negative cache - skip if we recently got forbidden/no-avatar
+      if (await hasNoAvatar(bareJid)) {
+        return
+      }
+
+      let gotForbidden = false
+
       try {
         // Try XEP-0084 (PEP) first
         const iq = xml('iq', { type: 'get', to: bareJid, id: `avatar_${generateUUID()}` },
@@ -219,6 +248,7 @@ export class Profile extends BaseModule {
         if (data) {
           const mimeType = 'image/png'
           const blobUrl = await cacheAvatar(avatarHash, data, mimeType)
+          await clearNoAvatar(bareJid)
           this.deps.emitSDK('room:occupant-avatar', {
             roomJid,
             nick,
@@ -227,7 +257,12 @@ export class Profile extends BaseModule {
           })
           return
         }
-      } catch {
+      } catch (err) {
+        // Check if this is a forbidden error
+        const errorMsg = err instanceof Error ? err.message : String(err)
+        if (errorMsg.includes('forbidden')) {
+          gotForbidden = true
+        }
         // Fall through to vCard fetch
       }
 
@@ -244,6 +279,7 @@ export class Profile extends BaseModule {
           const mimeType = photo?.getChildText('TYPE') || 'image/png'
           const base64 = binval.replace(/\s/g, '')
           const blobUrl = await cacheAvatar(avatarHash, base64, mimeType)
+          await clearNoAvatar(bareJid)
           this.deps.emitSDK('room:occupant-avatar', {
             roomJid,
             nick,
@@ -251,9 +287,17 @@ export class Profile extends BaseModule {
             avatarHash,
           })
           return
+        } else {
+          // vCard exists but no photo - mark as no avatar
+          await markNoAvatar(bareJid, 'contact')
         }
-      } catch {
-        // Silently fail - occupant may not have an avatar
+      } catch (err) {
+        // Check if this is a forbidden error
+        const errorMsg = err instanceof Error ? err.message : String(err)
+        if (errorMsg.includes('forbidden') || gotForbidden) {
+          // Cache forbidden errors to avoid repeated queries
+          await markNoAvatar(bareJid, 'contact')
+        }
       }
       return
     }
@@ -300,6 +344,12 @@ export class Profile extends BaseModule {
       }
     }
 
+    // Check negative cache - skip if we recently confirmed no avatar
+    // Only skip if we don't have a known hash (hash means presence advertised an avatar)
+    if (!knownHash && await hasNoAvatar(bareJid)) {
+      return
+    }
+
     const iq = xml('iq', { type: 'get', to: bareJid, id: `vcard_${generateUUID()}` },
       xml('vCard', { xmlns: NS_VCARD_TEMP })
     )
@@ -320,16 +370,25 @@ export class Profile extends BaseModule {
         // Cache the avatar and save hash mapping
         const blobUrl = await cacheAvatar(hash, base64, mimeType)
         await saveAvatarHash(bareJid, hash, 'room')
+        // Clear negative cache since we found an avatar
+        await clearNoAvatar(bareJid)
 
         this.deps.emitSDK('room:updated', {
           roomJid: bareJid,
           updates: { avatar: blobUrl, avatarHash: hash },
         })
+      } else {
+        // vCard exists but has no photo - mark as no avatar
+        await markNoAvatar(bareJid, 'room')
       }
     } catch (err) {
       // item-not-found is expected when a room has no avatar set
       const isNotFound = err instanceof Error && err.message.includes('item-not-found')
-      if (!isNotFound) {
+      if (isNotFound) {
+        // Room definitively has no avatar - cache this
+        await markNoAvatar(bareJid, 'room')
+      } else {
+        // Network or other error - don't cache, might succeed next time
         console.error('Failed to fetch room avatar:', err)
       }
     }

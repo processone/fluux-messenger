@@ -54,6 +54,10 @@ vi.mock('../../utils/avatarCache', () => ({
   saveAvatarHash: vi.fn().mockResolvedValue(undefined),
   getAvatarHash: vi.fn().mockResolvedValue(null),
   getAllAvatarHashes: vi.fn().mockResolvedValue([]),
+  // Negative cache functions
+  hasNoAvatar: vi.fn().mockResolvedValue(false),
+  markNoAvatar: vi.fn().mockResolvedValue(undefined),
+  clearNoAvatar: vi.fn().mockResolvedValue(undefined),
 }))
 
 describe('XMPPClient Own Avatar', () => {
@@ -825,6 +829,426 @@ describe('XMPPClient Own Avatar', () => {
 
       // Should NOT emit room:updated for rooms with existing hash
       expect(emitSDKSpy).not.toHaveBeenCalledWith('room:updated', expect.anything())
+    })
+  })
+
+  describe('Negative Avatar Cache', () => {
+    beforeEach(async () => {
+      // Connect the client first
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online', { jid: { toString: () => 'user@example.com/resource' } })
+      await connectPromise
+    })
+
+    describe('fetchVCardAvatar', () => {
+      it('should skip query when JID is in negative cache', async () => {
+        mockXmppClientInstance.iqCaller.request.mockClear()
+
+        const { hasNoAvatar } = await import('../../utils/avatarCache')
+        vi.mocked(hasNoAvatar).mockResolvedValueOnce(true) // JID has no avatar (cached)
+
+        await xmppClient.profile.fetchVCardAvatar('noavatar@example.com')
+
+        // Should NOT make any IQ request
+        expect(mockXmppClientInstance.iqCaller.request).not.toHaveBeenCalled()
+      })
+
+      it('should mark JID in negative cache when vCard has no photo', async () => {
+        mockXmppClientInstance.iqCaller.request.mockClear()
+
+        const { hasNoAvatar, markNoAvatar } = await import('../../utils/avatarCache')
+        vi.mocked(hasNoAvatar).mockResolvedValueOnce(false) // Not in cache
+
+        // Mock vCard response without PHOTO
+        const vcardResponse = createMockElement('iq', { type: 'result' }, [
+          {
+            name: 'vCard',
+            attrs: { xmlns: 'vcard-temp' },
+            children: [
+              { name: 'FN', text: 'John Doe' },
+              // No PHOTO element
+            ],
+          },
+        ])
+        mockXmppClientInstance.iqCaller.request.mockResolvedValueOnce(vcardResponse)
+
+        await xmppClient.profile.fetchVCardAvatar('nophoto@example.com')
+
+        // Should mark the JID as having no avatar
+        expect(markNoAvatar).toHaveBeenCalledWith('nophoto@example.com', 'contact')
+      })
+
+      it('should clear negative cache when vCard photo is found', async () => {
+        mockXmppClientInstance.iqCaller.request.mockClear()
+        emitSDKSpy.mockClear()
+
+        const { hasNoAvatar, clearNoAvatar, cacheAvatar } = await import('../../utils/avatarCache')
+        vi.mocked(hasNoAvatar).mockResolvedValueOnce(false) // Not in cache
+        vi.mocked(cacheAvatar).mockResolvedValue('blob:avatar-url')
+
+        // Mock vCard response WITH PHOTO
+        const vcardResponse = createMockElement('iq', { type: 'result' }, [
+          {
+            name: 'vCard',
+            attrs: { xmlns: 'vcard-temp' },
+            children: [
+              {
+                name: 'PHOTO',
+                children: [
+                  { name: 'TYPE', text: 'image/png' },
+                  { name: 'BINVAL', text: 'base64avatardata' },
+                ],
+              },
+            ],
+          },
+        ])
+        mockXmppClientInstance.iqCaller.request.mockResolvedValueOnce(vcardResponse)
+
+        await xmppClient.profile.fetchVCardAvatar('hasphoto@example.com')
+
+        // Should clear the negative cache for this JID
+        expect(clearNoAvatar).toHaveBeenCalledWith('hasphoto@example.com')
+      })
+    })
+
+    describe('fetchContactAvatarMetadata', () => {
+      it('should skip query when JID is in negative cache', async () => {
+        mockXmppClientInstance.iqCaller.request.mockClear()
+
+        const { hasNoAvatar } = await import('../../utils/avatarCache')
+        vi.mocked(hasNoAvatar).mockResolvedValueOnce(true) // JID has no avatar (cached)
+
+        const result = await xmppClient.profile.fetchContactAvatarMetadata('noavatar@example.com')
+
+        // Should return null without making any IQ request
+        expect(result).toBeNull()
+        expect(mockXmppClientInstance.iqCaller.request).not.toHaveBeenCalled()
+      })
+
+      it('should mark JID in negative cache when neither XEP-0084 nor vCard has avatar', async () => {
+        mockXmppClientInstance.iqCaller.request.mockClear()
+
+        const { hasNoAvatar, markNoAvatar } = await import('../../utils/avatarCache')
+        vi.mocked(hasNoAvatar).mockResolvedValueOnce(false) // Not in cache
+
+        // Mock empty XEP-0084 metadata response
+        const emptyMetadataResponse = createMockElement('iq', { type: 'result' }, [
+          {
+            name: 'pubsub',
+            attrs: { xmlns: 'http://jabber.org/protocol/pubsub' },
+            children: [
+              {
+                name: 'items',
+                attrs: { node: 'urn:xmpp:avatar:metadata' },
+                children: [
+                  {
+                    name: 'item',
+                    children: [
+                      {
+                        name: 'metadata',
+                        attrs: { xmlns: 'urn:xmpp:avatar:metadata' },
+                        // No info child means no avatar
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ])
+
+        // Mock vCard response without PHOTO
+        const vcardResponse = createMockElement('iq', { type: 'result' }, [
+          {
+            name: 'vCard',
+            attrs: { xmlns: 'vcard-temp' },
+            children: [
+              { name: 'FN', text: 'No Avatar User' },
+              // No PHOTO element
+            ],
+          },
+        ])
+
+        mockXmppClientInstance.iqCaller.request
+          .mockResolvedValueOnce(emptyMetadataResponse) // XEP-0084 empty
+          .mockResolvedValueOnce(vcardResponse) // vCard also empty
+
+        await xmppClient.profile.fetchContactAvatarMetadata('noavatar@example.com')
+
+        // Should mark the JID as having no avatar (via vCard fallback path)
+        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@example.com', 'contact')
+      })
+
+      it('should clear negative cache when XEP-0084 avatar is found', async () => {
+        mockXmppClientInstance.iqCaller.request.mockClear()
+
+        const { hasNoAvatar, clearNoAvatar } = await import('../../utils/avatarCache')
+        vi.mocked(hasNoAvatar).mockResolvedValueOnce(false) // Not in cache
+
+        // Mock successful XEP-0084 metadata response
+        const metadataResponse = createMockElement('iq', { type: 'result' }, [
+          {
+            name: 'pubsub',
+            attrs: { xmlns: 'http://jabber.org/protocol/pubsub' },
+            children: [
+              {
+                name: 'items',
+                attrs: { node: 'urn:xmpp:avatar:metadata' },
+                children: [
+                  {
+                    name: 'item',
+                    attrs: { id: 'found-hash' },
+                    children: [
+                      {
+                        name: 'metadata',
+                        attrs: { xmlns: 'urn:xmpp:avatar:metadata' },
+                        children: [
+                          {
+                            name: 'info',
+                            attrs: { id: 'found-hash', type: 'image/png', bytes: '1024' },
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ])
+
+        mockXmppClientInstance.iqCaller.request
+          .mockResolvedValueOnce(metadataResponse)
+          .mockRejectedValue(new Error('not found')) // Subsequent calls fail (ok for test)
+
+        await xmppClient.profile.fetchContactAvatarMetadata('hasavatar@example.com')
+
+        // Should clear the negative cache for this JID
+        expect(clearNoAvatar).toHaveBeenCalledWith('hasavatar@example.com')
+      })
+    })
+
+    describe('fetchRoomAvatar', () => {
+      it('should skip query when room JID is in negative cache (no known hash)', async () => {
+        mockXmppClientInstance.iqCaller.request.mockClear()
+
+        const { hasNoAvatar } = await import('../../utils/avatarCache')
+        vi.mocked(hasNoAvatar).mockResolvedValueOnce(true) // Room has no avatar (cached)
+
+        await xmppClient.profile.fetchRoomAvatar('noavatar@conference.example.com')
+
+        // Should NOT make any IQ request
+        expect(mockXmppClientInstance.iqCaller.request).not.toHaveBeenCalled()
+      })
+
+      it('should NOT check negative cache when known hash is provided', async () => {
+        mockXmppClientInstance.iqCaller.request.mockClear()
+
+        const { hasNoAvatar, getCachedAvatar } = await import('../../utils/avatarCache')
+        vi.mocked(getCachedAvatar).mockResolvedValueOnce('blob:cached-avatar')
+
+        await xmppClient.profile.fetchRoomAvatar('room@conference.example.com', 'known-hash')
+
+        // Should NOT check negative cache when hash is provided
+        expect(hasNoAvatar).not.toHaveBeenCalled()
+      })
+
+      it('should mark room JID in negative cache when vCard has no photo', async () => {
+        mockXmppClientInstance.iqCaller.request.mockClear()
+
+        const { hasNoAvatar, markNoAvatar } = await import('../../utils/avatarCache')
+        vi.mocked(hasNoAvatar).mockResolvedValueOnce(false) // Not in cache
+
+        // Mock vCard response without PHOTO
+        const vcardResponse = createMockElement('iq', { type: 'result' }, [
+          {
+            name: 'vCard',
+            attrs: { xmlns: 'vcard-temp' },
+            children: [
+              { name: 'FN', text: 'Conference Room' },
+              // No PHOTO element
+            ],
+          },
+        ])
+        mockXmppClientInstance.iqCaller.request.mockResolvedValueOnce(vcardResponse)
+
+        await xmppClient.profile.fetchRoomAvatar('noavatar@conference.example.com')
+
+        // Should mark the room JID as having no avatar
+        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@conference.example.com', 'room')
+      })
+
+      it('should mark room JID in negative cache on item-not-found error', async () => {
+        mockXmppClientInstance.iqCaller.request.mockClear()
+
+        const { hasNoAvatar, markNoAvatar } = await import('../../utils/avatarCache')
+        vi.mocked(hasNoAvatar).mockResolvedValueOnce(false) // Not in cache
+
+        // Mock item-not-found error
+        mockXmppClientInstance.iqCaller.request.mockRejectedValueOnce(new Error('item-not-found'))
+
+        await xmppClient.profile.fetchRoomAvatar('noavatar@conference.example.com')
+
+        // Should mark the room JID as having no avatar
+        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@conference.example.com', 'room')
+      })
+
+      it('should clear negative cache when room avatar is found', async () => {
+        mockXmppClientInstance.iqCaller.request.mockClear()
+
+        const { hasNoAvatar, clearNoAvatar, cacheAvatar } = await import('../../utils/avatarCache')
+        vi.mocked(hasNoAvatar).mockResolvedValueOnce(false) // Not in cache
+        vi.mocked(cacheAvatar).mockResolvedValue('blob:room-avatar')
+
+        // Mock vCard response WITH PHOTO
+        const vcardResponse = createMockElement('iq', { type: 'result' }, [
+          {
+            name: 'vCard',
+            attrs: { xmlns: 'vcard-temp' },
+            children: [
+              {
+                name: 'PHOTO',
+                children: [
+                  { name: 'TYPE', text: 'image/png' },
+                  { name: 'BINVAL', text: 'base64roomavatardata' },
+                ],
+              },
+            ],
+          },
+        ])
+        mockXmppClientInstance.iqCaller.request.mockResolvedValueOnce(vcardResponse)
+
+        await xmppClient.profile.fetchRoomAvatar('hasavatar@conference.example.com')
+
+        // Should clear the negative cache for this room JID
+        expect(clearNoAvatar).toHaveBeenCalledWith('hasavatar@conference.example.com')
+      })
+    })
+
+    describe('fetchOccupantAvatar', () => {
+      it('should skip query when realJid is in negative cache', async () => {
+        mockXmppClientInstance.iqCaller.request.mockClear()
+
+        const { hasNoAvatar } = await import('../../utils/avatarCache')
+        vi.mocked(hasNoAvatar).mockResolvedValueOnce(true) // JID in negative cache
+
+        await xmppClient.profile.fetchOccupantAvatar(
+          'room@conference.example.com',
+          'TestUser',
+          'some-hash',
+          'realuser@example.com'
+        )
+
+        // Should NOT make any IQ request
+        expect(mockXmppClientInstance.iqCaller.request).not.toHaveBeenCalled()
+      })
+
+      it('should cache forbidden error from XEP-0084 when vCard also fails', async () => {
+        mockXmppClientInstance.iqCaller.request.mockClear()
+
+        const { hasNoAvatar, markNoAvatar, getCachedAvatar } = await import('../../utils/avatarCache')
+        vi.mocked(hasNoAvatar).mockResolvedValueOnce(false) // Not in cache
+        vi.mocked(getCachedAvatar).mockResolvedValueOnce(null) // No cached avatar
+
+        // First call: XEP-0084 returns forbidden
+        // Second call: vCard also returns forbidden
+        mockXmppClientInstance.iqCaller.request
+          .mockRejectedValueOnce(new Error('forbidden'))
+          .mockRejectedValueOnce(new Error('forbidden'))
+
+        await xmppClient.profile.fetchOccupantAvatar(
+          'room@conference.example.com',
+          'PrivateUser',
+          'private-hash',
+          'private@example.com'
+        )
+
+        // Should mark the realJid as no-avatar due to forbidden errors
+        expect(markNoAvatar).toHaveBeenCalledWith('private@example.com', 'contact')
+      })
+
+      it('should cache empty vCard response after forbidden XEP-0084', async () => {
+        mockXmppClientInstance.iqCaller.request.mockClear()
+
+        const { hasNoAvatar, markNoAvatar, getCachedAvatar } = await import('../../utils/avatarCache')
+        vi.mocked(hasNoAvatar).mockResolvedValueOnce(false) // Not in cache
+        vi.mocked(getCachedAvatar).mockResolvedValueOnce(null) // No cached avatar
+
+        // Mock empty vCard response (no PHOTO)
+        const emptyVcardResponse = createMockElement('iq', { type: 'result' }, [
+          {
+            name: 'vCard',
+            attrs: { xmlns: 'vcard-temp' },
+            children: [],
+          },
+        ])
+
+        mockXmppClientInstance.iqCaller.request
+          .mockRejectedValueOnce(new Error('forbidden')) // XEP-0084 forbidden
+          .mockResolvedValueOnce(emptyVcardResponse) // vCard empty
+
+        await xmppClient.profile.fetchOccupantAvatar(
+          'room@conference.example.com',
+          'NoAvatarUser',
+          'some-hash',
+          'noavatar@example.com'
+        )
+
+        // Should mark as no-avatar due to empty vCard
+        expect(markNoAvatar).toHaveBeenCalledWith('noavatar@example.com', 'contact')
+      })
+
+      it('should clear negative cache when avatar is successfully fetched', async () => {
+        mockXmppClientInstance.iqCaller.request.mockClear()
+        emitSDKSpy.mockClear()
+
+        const { hasNoAvatar, clearNoAvatar, getCachedAvatar, cacheAvatar } = await import('../../utils/avatarCache')
+        vi.mocked(hasNoAvatar).mockResolvedValueOnce(false) // Not in cache
+        vi.mocked(getCachedAvatar).mockResolvedValueOnce(null) // No cached avatar
+        vi.mocked(cacheAvatar).mockResolvedValue('blob:occupant-avatar')
+
+        // Mock vCard response WITH PHOTO
+        const vcardResponse = createMockElement('iq', { type: 'result' }, [
+          {
+            name: 'vCard',
+            attrs: { xmlns: 'vcard-temp' },
+            children: [
+              {
+                name: 'PHOTO',
+                children: [
+                  { name: 'TYPE', text: 'image/png' },
+                  { name: 'BINVAL', text: 'base64avatardata' },
+                ],
+              },
+            ],
+          },
+        ])
+
+        mockXmppClientInstance.iqCaller.request
+          .mockRejectedValueOnce(new Error('item-not-found')) // XEP-0084 not found
+          .mockResolvedValueOnce(vcardResponse) // vCard has avatar
+
+        await xmppClient.profile.fetchOccupantAvatar(
+          'room@conference.example.com',
+          'HasAvatar',
+          'avatar-hash',
+          'hasavatar@example.com'
+        )
+
+        // Should clear negative cache and emit avatar
+        expect(clearNoAvatar).toHaveBeenCalledWith('hasavatar@example.com')
+        expect(emitSDKSpy).toHaveBeenCalledWith('room:occupant-avatar', {
+          roomJid: 'room@conference.example.com',
+          nick: 'HasAvatar',
+          avatar: 'blob:occupant-avatar',
+          avatarHash: 'avatar-hash',
+        })
+      })
     })
   })
 })
