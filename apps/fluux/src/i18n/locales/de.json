@@ -289,7 +289,9 @@
       "two": "{{name1}} und {{name2}} tippen...",
       "three": "{{name1}}, {{name2}} und {{name3}} tippen...",
       "many": "{{name1}}, {{name2}} und {{count}} weitere tippen..."
-    }
+    },
+    "showMore": "Mehr anzeigen",
+    "showLess": "Weniger anzeigen"
   },
   "dates": {
     "today": "Heute",

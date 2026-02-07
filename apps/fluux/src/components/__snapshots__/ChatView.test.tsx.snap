@@ -218,14 +218,18 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                       </span>
                     </div>
                     <div
-                      class="text-fluux-text break-words whitespace-pre-wrap leading-[1.375]"
+                      class=""
                     >
-                      Hello there!
-                    </div>
-                    <div
-                      data-testid="message-attachments"
-                    >
-                      Attachments
+                      <div
+                        class="text-fluux-text break-words whitespace-pre-wrap leading-[1.375]"
+                      >
+                        Hello there!
+                      </div>
+                      <div
+                        data-testid="message-attachments"
+                      >
+                        Attachments
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -370,14 +374,18 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                       </span>
                     </div>
                     <div
-                      class="text-fluux-text break-words whitespace-pre-wrap leading-[1.375]"
+                      class=""
                     >
-                      Hi! How are you?
-                    </div>
-                    <div
-                      data-testid="message-attachments"
-                    >
-                      Attachments
+                      <div
+                        class="text-fluux-text break-words whitespace-pre-wrap leading-[1.375]"
+                      >
+                        Hi! How are you?
+                      </div>
+                      <div
+                        data-testid="message-attachments"
+                      >
+                        Attachments
+                      </div>
                     </div>
                   </div>
                 </div>

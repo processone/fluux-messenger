@@ -285,7 +285,9 @@
       "two": "{{name1}} y {{name2}} estan escribiendo...",
       "three": "{{name1}}, {{name2}} y {{name3}} estan escribiendo...",
       "many": "{{name1}}, {{name2}} y {{count}} mas estan escribiendo..."
-    }
+    },
+    "showMore": "Mostrar más",
+    "showLess": "Mostrar menos"
   },
   "dates": {
     "today": "Hoy",
