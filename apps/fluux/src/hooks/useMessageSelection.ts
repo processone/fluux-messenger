@@ -11,6 +11,8 @@ interface UseMessageSelectionOptions {
   isLoadingOlder?: boolean
   /** Whether all history has been loaded (disables trigger) */
   isHistoryComplete?: boolean
+  /** Callback when user presses Enter on a selected message (for toggling expand/collapse) */
+  onEnterPressed?: (messageId: string) => void
 }
 
 /**
@@ -131,6 +133,15 @@ export function useMessageSelection<T extends MessageLike>(
 
   // Keyboard navigation for message list (plain arrow keys when message view is focused)
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const { onEnterPressed } = options ?? {}
+
+    // Handle Enter key for toggling expand/collapse
+    if (e.key === 'Enter' && selectedMessageId && onEnterPressed) {
+      e.preventDefault()
+      onEnterPressed(selectedMessageId)
+      return
+    }
+
     // Only handle plain ArrowUp/Down (no Alt modifier)
     // Alt+Arrow is reserved for sidebar navigation
     if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return
@@ -192,7 +203,7 @@ export function useMessageSelection<T extends MessageLike>(
 
       return messages[newIndex]?.id ?? null
     })
-  }, [messages, findLastVisibleMessageIndex, scrollRef, isAtBottomRef, onReachedFirstMessage, isLoadingOlder, isHistoryComplete])
+  }, [messages, findLastVisibleMessageIndex, scrollRef, isAtBottomRef, onReachedFirstMessage, isLoadingOlder, isHistoryComplete, options, selectedMessageId])
 
   /**
    * Clear selection (call when conversation changes)

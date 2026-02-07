@@ -408,7 +408,64 @@ describe('useMessageSelection', () => {
         result.current.setSelectedMessageId('msg-2')
       })
 
-      // Enter should not navigate
+      // Tab should not navigate
+      act(() => {
+        const event = {
+          key: 'Tab',
+          preventDefault: vi.fn(),
+          stopPropagation: vi.fn(),
+        } as unknown as React.KeyboardEvent
+        result.current.handleKeyDown(event)
+      })
+
+      expect(result.current.selectedMessageId).toBe('msg-2')
+    })
+
+    it('should call onEnterPressed when Enter is pressed on a selected message', () => {
+      const messages = createMessages(5)
+      const onEnterPressed = vi.fn()
+      const { result } = renderHook(() =>
+        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef, {
+          onEnterPressed,
+        })
+      )
+
+      // Select a message
+      act(() => {
+        result.current.setSelectedMessageId('msg-2')
+      })
+
+      // Press Enter
+      const preventDefault = vi.fn()
+      act(() => {
+        const event = {
+          key: 'Enter',
+          preventDefault,
+          stopPropagation: vi.fn(),
+        } as unknown as React.KeyboardEvent
+        result.current.handleKeyDown(event)
+      })
+
+      // onEnterPressed should be called with the message ID
+      expect(onEnterPressed).toHaveBeenCalledWith('msg-2')
+      expect(preventDefault).toHaveBeenCalled()
+      // Selection should remain
+      expect(result.current.selectedMessageId).toBe('msg-2')
+    })
+
+    it('should not call onEnterPressed when no message is selected', () => {
+      const messages = createMessages(5)
+      const onEnterPressed = vi.fn()
+      const { result } = renderHook(() =>
+        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef, {
+          onEnterPressed,
+        })
+      )
+
+      // No selection
+      expect(result.current.selectedMessageId).toBe(null)
+
+      // Press Enter
       act(() => {
         const event = {
           key: 'Enter',
@@ -418,6 +475,32 @@ describe('useMessageSelection', () => {
         result.current.handleKeyDown(event)
       })
 
+      // onEnterPressed should NOT be called
+      expect(onEnterPressed).not.toHaveBeenCalled()
+    })
+
+    it('should not call anything when Enter is pressed without onEnterPressed callback', () => {
+      const messages = createMessages(5)
+      const { result } = renderHook(() =>
+        useMessageSelection(messages, mockScrollRef, mockIsAtBottomRef)
+      )
+
+      // Select a message
+      act(() => {
+        result.current.setSelectedMessageId('msg-2')
+      })
+
+      // Press Enter - should not throw or change selection
+      act(() => {
+        const event = {
+          key: 'Enter',
+          preventDefault: vi.fn(),
+          stopPropagation: vi.fn(),
+        } as unknown as React.KeyboardEvent
+        result.current.handleKeyDown(event)
+      })
+
+      // Selection should remain unchanged
       expect(result.current.selectedMessageId).toBe('msg-2')
     })
 

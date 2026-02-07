@@ -10,6 +10,7 @@ import { ChristmasAnimation } from './ChristmasAnimation'
 import { ChatHeader } from './ChatHeader'
 import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment } from './MessageComposer'
 import { findLastEditableMessage, findLastEditableMessageId } from '@/utils/messageUtils'
+import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
 
 interface ChatViewProps {
   onBack?: () => void
@@ -129,6 +130,7 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
     onReachedFirstMessage: fetchOlderHistory,
     isLoadingOlder: activeMAMState?.isLoading,
     isHistoryComplete: activeMAMState?.isHistoryComplete,
+    onEnterPressed: useExpandedMessagesStore.getState().toggle,
   })
 
   // Format copied messages with sender headers
