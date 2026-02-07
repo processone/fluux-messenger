@@ -91,6 +91,7 @@ jobs:
           releaseBody: ${{ steps.release_notes.outputs.notes }}
           releaseDraft: false
           prerelease: false
+          includeUpdaterJson: false
           args: --target ${{ matrix.target }}
 
   build-windows:
@@ -339,6 +340,7 @@ jobs:
           releaseBody: ${{ steps.release_notes.outputs.notes }}
           releaseDraft: false
           prerelease: false
+          includeUpdaterJson: false
           args: --bundles rpm
 
   # Final job to rename all assets to consistent, user-friendly names

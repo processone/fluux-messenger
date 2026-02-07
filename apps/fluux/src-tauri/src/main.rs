@@ -32,6 +32,7 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 use tauri_plugin_deep_link::DeepLinkExt;
+#[cfg(target_os = "macos")]
 use tauri_plugin_opener::OpenerExt;
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
