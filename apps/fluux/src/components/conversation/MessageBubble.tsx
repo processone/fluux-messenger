@@ -16,6 +16,7 @@ import { scrollToMessage, isActionMessage } from './messageGrouping'
 import { MessageAttachments } from '../MessageAttachments'
 import { LinkPreviewCard } from '../LinkPreviewCard'
 import { UserInfoPopover } from './UserInfoPopover'
+import { CollapsibleContent } from './CollapsibleContent'
 
 export interface MessageBubbleProps {
   // Core message data (using BaseMessage interface)
@@ -315,23 +316,26 @@ export const MessageBubble = memo(function MessageBubble({
           </button>
         )}
 
-        {/* Message body (SDK already strips OOB URL from body for non-XEP-0428 clients) */}
-        <MessageBody
-          body={message.body}
-          isEdited={message.isEdited}
-          originalBody={message.originalBody}
-          isRetracted={message.isRetracted}
-          noStyling={message.noStyling}
-          senderName={senderName}
-          senderColor={senderColor}
-          mentions={mentions}
-        />
+        {/* Collapsible wrapper for long messages */}
+        <CollapsibleContent messageId={message.id} isSelected={isSelected} isHovered={isHovered}>
+          {/* Message body (SDK already strips OOB URL from body for non-XEP-0428 clients) */}
+          <MessageBody
+            body={message.body}
+            isEdited={message.isEdited}
+            originalBody={message.originalBody}
+            isRetracted={message.isRetracted}
+            noStyling={message.noStyling}
+            senderName={senderName}
+            senderColor={senderColor}
+            mentions={mentions}
+          />
 
-        {/* File attachments (image, video, audio, text preview, document card) - hidden for retracted */}
-        {!message.isRetracted && <MessageAttachments attachment={message.attachment} onMediaLoad={onMediaLoad} />}
+          {/* File attachments (image, video, audio, text preview, document card) - hidden for retracted */}
+          {!message.isRetracted && <MessageAttachments attachment={message.attachment} onMediaLoad={onMediaLoad} />}
 
-        {/* Link preview - hidden for retracted */}
-        {!message.isRetracted && message.linkPreview && <LinkPreviewCard preview={message.linkPreview} onLoad={onMediaLoad} />}
+          {/* Link preview - hidden for retracted */}
+          {!message.isRetracted && message.linkPreview && <LinkPreviewCard preview={message.linkPreview} onLoad={onMediaLoad} />}
+        </CollapsibleContent>
 
         {/* Reactions display */}
         <MessageReactions

@@ -289,7 +289,9 @@
       "two": "{{name1}} en {{name2}} zijn aan het typen...",
       "three": "{{name1}}, {{name2}} en {{name3}} zijn aan het typen...",
       "many": "{{name1}}, {{name2}} en {{count}} anderen zijn aan het typen..."
-    }
+    },
+    "showMore": "Meer weergeven",
+    "showLess": "Minder weergeven"
   },
   "dates": {
     "today": "Vandaag",

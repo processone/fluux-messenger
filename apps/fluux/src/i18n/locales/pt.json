@@ -289,7 +289,9 @@
       "two": "{{name1}} e {{name2}} estão a escrever...",
       "three": "{{name1}}, {{name2}} e {{name3}} estão a escrever...",
       "many": "{{name1}}, {{name2}} e mais {{count}} estão a escrever..."
-    }
+    },
+    "showMore": "Mostrar mais",
+    "showLess": "Mostrar menos"
   },
   "dates": {
     "today": "Hoje",

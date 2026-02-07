@@ -12,6 +12,7 @@ import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHan
 import { RoomHeader } from './RoomHeader'
 import { OccupantPanel } from './OccupantPanel'
 import { findLastEditableMessage, findLastEditableMessageId } from '@/utils/messageUtils'
+import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
 
 // Generate hat colors from URI using XEP-0392 consistent color
 function getHatColors(hat: { uri: string; hue?: number }) {
@@ -157,6 +158,7 @@ export function RoomView({ onBack, mainContentRef, composerRef }: RoomViewProps)
     onReachedFirstMessage: fetchOlderHistory,
     isLoadingOlder: activeMAMState?.isLoading,
     isHistoryComplete: !activeRoom?.supportsMAM || activeMAMState?.isHistoryComplete,
+    onEnterPressed: useExpandedMessagesStore.getState().toggle,
   })
 
   // Format copied messages with sender headers
