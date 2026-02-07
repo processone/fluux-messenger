@@ -1101,7 +1101,7 @@ describe('XMPPClient Own Avatar', () => {
       it('should clear negative cache when room avatar is found', async () => {
         mockXmppClientInstance.iqCaller.request.mockClear()
 
-        const { hasNoAvatar, clearNoAvatar, cacheAvatar, saveAvatarHash } = await import('../../utils/avatarCache')
+        const { hasNoAvatar, clearNoAvatar, cacheAvatar } = await import('../../utils/avatarCache')
         vi.mocked(hasNoAvatar).mockResolvedValueOnce(false) // Not in cache
         vi.mocked(cacheAvatar).mockResolvedValue('blob:room-avatar')
 
