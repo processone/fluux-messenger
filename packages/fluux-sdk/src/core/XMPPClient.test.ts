@@ -1129,5 +1129,89 @@ describe('XMPPClient', () => {
 
       expect(fetchRoomAvatarSpy).not.toHaveBeenCalled()
     })
+
+    it('should wire occupantAvatarUpdate to profile.fetchOccupantAvatar', async () => {
+      // Mock room without existing occupant avatar
+      const occupants = new Map()
+      occupants.set('TestUser', { nick: 'TestUser', affiliation: 'member', role: 'participant' })
+      mockStores.room.getRoom.mockReturnValue(
+        createMockRoom('room@conference.example.com', {
+          name: 'Test Room',
+          joined: true,
+          occupants,
+        })
+      )
+
+      const fetchOccupantAvatarSpy = vi.spyOn(xmppClient.profile, 'fetchOccupantAvatar').mockResolvedValue()
+
+      // Emit occupantAvatarUpdate (simulating what MUC.ts would emit)
+      ;(xmppClient as any).emit('occupantAvatarUpdate', 'room@conference.example.com', 'TestUser', 'abc123hash', 'realuser@example.com')
+
+      expect(fetchOccupantAvatarSpy).toHaveBeenCalledWith(
+        'room@conference.example.com',
+        'TestUser',
+        'abc123hash',
+        'realuser@example.com'
+      )
+    })
+
+    it('should NOT call fetchOccupantAvatar if occupant already has same hash and avatar', async () => {
+      // Mock room with occupant that already has the avatar
+      const occupants = new Map()
+      occupants.set('TestUser', {
+        nick: 'TestUser',
+        affiliation: 'member',
+        role: 'participant',
+        avatarHash: 'abc123hash',
+        avatar: 'blob:existing-avatar',
+      })
+      mockStores.room.getRoom.mockReturnValue(
+        createMockRoom('room@conference.example.com', {
+          name: 'Test Room',
+          joined: true,
+          occupants,
+        })
+      )
+
+      const fetchOccupantAvatarSpy = vi.spyOn(xmppClient.profile, 'fetchOccupantAvatar').mockResolvedValue()
+
+      // Emit occupantAvatarUpdate with same hash
+      ;(xmppClient as any).emit('occupantAvatarUpdate', 'room@conference.example.com', 'TestUser', 'abc123hash', 'realuser@example.com')
+
+      // Should skip fetch since hash matches and avatar exists
+      expect(fetchOccupantAvatarSpy).not.toHaveBeenCalled()
+    })
+
+    it('should call fetchOccupantAvatar if occupant hash changed', async () => {
+      // Mock room with occupant that has a different hash
+      const occupants = new Map()
+      occupants.set('TestUser', {
+        nick: 'TestUser',
+        affiliation: 'member',
+        role: 'participant',
+        avatarHash: 'oldhash',
+        avatar: 'blob:old-avatar',
+      })
+      mockStores.room.getRoom.mockReturnValue(
+        createMockRoom('room@conference.example.com', {
+          name: 'Test Room',
+          joined: true,
+          occupants,
+        })
+      )
+
+      const fetchOccupantAvatarSpy = vi.spyOn(xmppClient.profile, 'fetchOccupantAvatar').mockResolvedValue()
+
+      // Emit occupantAvatarUpdate with new hash
+      ;(xmppClient as any).emit('occupantAvatarUpdate', 'room@conference.example.com', 'TestUser', 'newhash456', 'realuser@example.com')
+
+      // Should fetch since hash changed
+      expect(fetchOccupantAvatarSpy).toHaveBeenCalledWith(
+        'room@conference.example.com',
+        'TestUser',
+        'newhash456',
+        'realuser@example.com'
+      )
+    })
   })
 })
