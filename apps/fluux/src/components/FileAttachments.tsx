@@ -275,7 +275,7 @@ export function FileAttachmentCard({ attachment }: AttachmentProps) {
       href={attachment.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex items-center gap-3 p-3 mt-2 max-w-sm rounded-lg bg-fluux-hover hover:bg-fluux-bg border border-fluux-hover transition-colors group"
+      className="flex items-center gap-3 p-3 mt-2 max-w-sm rounded-lg bg-fluux-bg border border-fluux-muted/25 hover:border-fluux-muted/40 hover:bg-fluux-hover transition-colors group"
       tabIndex={-1}
     >
       {/* File type icon */}
