@@ -2,7 +2,7 @@ import { xml, Element } from '@xmpp/client'
 import { BaseModule, type ModuleDependencies } from './BaseModule'
 import { getBareJid, getLocalPart, getResource, isQuickChatJid } from '../jid'
 import { isMucJid } from '../../utils/xmppUri'
-import { generateUUID } from '../../utils/uuid'
+import { generateUUID, generateStableMessageId } from '../../utils/uuid'
 import {
   NS_CHATSTATES,
   NS_CARBONS,
@@ -1058,9 +1058,12 @@ export class Chat extends BaseModule {
     const parsed = parseMessageContent({ messageEl: stanza, body })
     const isCorrection = !!stanza.getChild('replace', NS_CORRECTION)
 
+    // Use stable ID for messages without ID (e.g., from IRC bridges) to enable deduplication
+    const messageId = stanza.attrs.id || generateStableMessageId(bareFrom, parsed.timestamp, body)
+
     const message: Message = {
       type: 'chat',
-      id: stanza.attrs.id || generateUUID(),
+      id: messageId,
       ...(parsed.stanzaId && { stanzaId: parsed.stanzaId }),
       conversationId,
       from: bareFrom,
@@ -1105,9 +1108,12 @@ export class Chat extends BaseModule {
     const parsed = parseMessageContent({ messageEl: stanza, body, preserveFullReplyToJid: true })
     const isCorrection = !!stanza.getChild('replace', NS_CORRECTION)
 
+    // Use stable ID for messages without ID (e.g., from IRC bridges) to enable deduplication
+    const messageId = stanza.attrs.id || generateStableMessageId(from, parsed.timestamp, body)
+
     const message: RoomMessage = {
       type: 'groupchat',
-      id: stanza.attrs.id || generateUUID(),
+      id: messageId,
       ...(parsed.stanzaId && { stanzaId: parsed.stanzaId }),
       roomJid,
       from,

@@ -1731,4 +1731,119 @@ describe('XMPPClient Message', () => {
       })
     })
   })
+
+  /**
+   * Regression test for GitHub issue #117
+   * Messages from IRC bridges (like Biboumi) may lack XMPP message IDs.
+   * Without stable ID generation, these messages get duplicated on room rejoin.
+   */
+  describe('messages without ID (IRC bridge regression #117)', () => {
+    it('should generate stable ID for room messages without stanza id', async () => {
+      await connectClient()
+
+      const roomJid = 'irc-channel@biboumi.example.com'
+      mockStores.room.getRoom.mockReturnValue({
+        jid: roomJid,
+        name: '#channel',
+        nickname: 'myNick',
+        occupants: new Map(),
+      })
+
+      // Simulate message from IRC bridge without id attribute
+      const ircMessage = createMockElement('message', {
+        from: `${roomJid}/ircUser`,
+        to: 'me@example.com',
+        type: 'groupchat',
+        // Note: no 'id' attribute - this is the bug trigger
+      }, [
+        { name: 'body', text: 'Hello from IRC!' },
+        {
+          name: 'delay',
+          attrs: { xmlns: 'urn:xmpp:delay', stamp: '2024-01-15T10:30:00.000Z' },
+        },
+      ])
+
+      mockXmppClientInstance._emit('stanza', ircMessage)
+
+      // Verify SDK event was emitted with stable ID
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:message', expect.objectContaining({
+        roomJid,
+        message: expect.objectContaining({
+          id: expect.stringMatching(/^stable-[0-9a-f]{8}-[0-9a-f]{8}$/),
+          roomJid,
+          body: 'Hello from IRC!',
+        })
+      }))
+    })
+
+    it('should generate same stable ID for identical room messages (deduplication)', async () => {
+      await connectClient()
+
+      const roomJid = 'irc-channel@biboumi.example.com'
+      mockStores.room.getRoom.mockReturnValue({
+        jid: roomJid,
+        name: '#channel',
+        nickname: 'myNick',
+        occupants: new Map(),
+      })
+
+      // Same message received twice (e.g., on room rejoin)
+      const createIrcMessage = () => createMockElement('message', {
+        from: `${roomJid}/ircUser`,
+        to: 'me@example.com',
+        type: 'groupchat',
+      }, [
+        { name: 'body', text: 'Hello from IRC!' },
+        {
+          name: 'delay',
+          attrs: { xmlns: 'urn:xmpp:delay', stamp: '2024-01-15T10:30:00.000Z' },
+        },
+      ])
+
+      mockXmppClientInstance._emit('stanza', createIrcMessage())
+      mockXmppClientInstance._emit('stanza', createIrcMessage())
+
+      // Get the message IDs from both emitted events
+      const roomMessageCalls = emitSDKSpy.mock.calls.filter(
+        call => call[0] === 'room:message'
+      )
+      expect(roomMessageCalls).toHaveLength(2)
+
+      const firstMessage = roomMessageCalls[0][1].message
+      const secondMessage = roomMessageCalls[1][1].message
+
+      // Both should have the same stable ID (enabling deduplication)
+      expect(firstMessage.id).toBe(secondMessage.id)
+      expect(firstMessage.id).toMatch(/^stable-/)
+    })
+
+    it('should generate stable ID for chat messages without stanza id', async () => {
+      await connectClient()
+
+      // Simulate message without id attribute
+      const chatMessage = createMockElement('message', {
+        from: 'contact@example.com/resource',
+        to: 'me@example.com',
+        type: 'chat',
+        // Note: no 'id' attribute
+      }, [
+        { name: 'body', text: 'Hello!' },
+        {
+          name: 'delay',
+          attrs: { xmlns: 'urn:xmpp:delay', stamp: '2024-01-15T10:30:00.000Z' },
+        },
+      ])
+
+      mockXmppClientInstance._emit('stanza', chatMessage)
+
+      // Verify SDK event was emitted with stable ID
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        message: expect.objectContaining({
+          id: expect.stringMatching(/^stable-[0-9a-f]{8}-[0-9a-f]{8}$/),
+          conversationId: 'contact@example.com',
+          body: 'Hello!',
+        })
+      })
+    })
+  })
 })

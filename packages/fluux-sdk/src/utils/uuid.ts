@@ -7,6 +7,40 @@
  */
 
 /**
+ * Simple string hash function (djb2 algorithm)
+ * Returns a 32-bit integer hash as a hex string
+ */
+function hashString(str: string): string {
+  let hash = 5381
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash) ^ str.charCodeAt(i)
+  }
+  // Convert to unsigned 32-bit and then to hex
+  return (hash >>> 0).toString(16).padStart(8, '0')
+}
+
+/**
+ * Generate a stable ID from message content.
+ *
+ * Used for messages without an ID (e.g., from IRC bridges like Biboumi).
+ * Creates a deterministic ID based on sender, timestamp, and body so the
+ * same message always gets the same ID, enabling proper deduplication.
+ *
+ * @param from - The sender JID or nick
+ * @param timestamp - The message timestamp (ISO string or Date)
+ * @param body - The message body text
+ * @returns A stable ID in the format 'stable-xxxxxxxx-xxxxxxxx'
+ */
+export function generateStableMessageId(from: string, timestamp: string | Date, body: string): string {
+  const ts = typeof timestamp === 'string' ? timestamp : timestamp.toISOString()
+  // Combine from, timestamp, and first 100 chars of body for uniqueness
+  const content = `${from}|${ts}|${body.slice(0, 100)}`
+  const hash1 = hashString(content)
+  const hash2 = hashString(content + content) // Double hash for more bits
+  return `stable-${hash1}-${hash2}`
+}
+
+/**
  * Generate a random UUID v4 string
  *
  * @returns A UUID string in the format xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
