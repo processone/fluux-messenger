@@ -444,7 +444,7 @@ export { parseDataForm, getFormFieldValue, getFormFieldValues } from './utils/da
 export { parseRSMResponse, buildRSMElement } from './utils/rsm'
 
 // UUID generation utility
-export { generateUUID } from './utils/uuid'
+export { generateUUID, generateStableMessageId } from './utils/uuid'
 
 // XEP-0428: Fallback Indication utilities
 export { processFallback, getFallbackElement } from './utils/fallbackUtils'
