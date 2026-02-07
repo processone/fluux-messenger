@@ -139,6 +139,9 @@ jobs:
           echo "$NOTES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
+      - name: Install Azure Sign Tool
+        run: dotnet tool install --global AzureSignTool
+
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
@@ -152,6 +155,31 @@ jobs:
           releaseBody: ${{ steps.release_notes.outputs.notes }}
           releaseDraft: false
           prerelease: false
+
+      - name: Sign Windows executables
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -Path "apps/fluux/src-tauri/target/release/bundle" -Recurse -Include "*.exe", "*.msi"
+          foreach ($file in $files) {
+            Write-Host "Signing: $($file.FullName)"
+            AzureSignTool sign `
+              -kvu "${{ secrets.AZURE_SIGNING_ENDPOINT }}" `
+              -kvt "${{ secrets.AZURE_TENANT_ID }}" `
+              -kvi "${{ secrets.AZURE_CLIENT_ID }}" `
+              -kvs "${{ secrets.AZURE_CLIENT_SECRET }}" `
+              -kvc "${{ secrets.AZURE_CERT_PROFILE_NAME }}" `
+              -tr "http://timestamp.digicert.com" `
+              -td sha256 `
+              "$($file.FullName)"
+          }
+
+      - name: Re-upload signed artifacts
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload ${{ env.RELEASE_TAG }} apps/fluux/src-tauri/target/release/bundle/nsis/*.exe --clobber
+          gh release upload ${{ env.RELEASE_TAG }} apps/fluux/src-tauri/target/release/bundle/msi/*.msi --clobber
 
   build-linux:
     name: Build Linux (${{ matrix.arch }})
