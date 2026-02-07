@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useChat, useRoster, usePresence, createMessageLookup, getBareJid, getLocalPart, type Message, type Contact } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { getConsistentTextColor } from './Avatar'
-import { useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft } from '@/hooks'
+import { useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat } from '@/hooks'
 import { Upload, Loader2 } from 'lucide-react'
 import { MessageBubble, MessageList as MessageListComponent, shouldShowAvatar, buildReplyContext } from './conversation'
 import { ChristmasAnimation } from './ChristmasAnimation'
@@ -397,6 +397,7 @@ const ChatMessageList = memo(function ChatMessageList({
   isInitialLoading?: boolean
 }) {
   const { t } = useTranslation()
+  const { formatTime } = useTimeFormat()
 
   // Track which message is hovered for stable toolbar interaction
   // This prevents the toolbar from switching when moving mouse to it
@@ -477,13 +478,14 @@ const ChatMessageList = memo(function ChatMessageList({
       isHovered={hoveredMessageId === msg.id}
       onMouseEnter={() => handleMessageHover(msg.id)}
       onMouseLeave={handleMessageLeave}
+      formatTime={formatTime}
     />
   ), [
     ownAvatar, contactsByJid, ownNickname, ownPresence, conversationId, conversationType,
     sendReaction, myBareJid, messagesById, onReply, onEdit, lastOutgoingMessageId, lastMessageId,
     isComposing, activeReactionPickerMessageId, onReactionPickerChange, retractMessage,
     selectedMessageId, hasKeyboardSelection, showToolbarForSelection, isDarkMode, onMediaLoad,
-    hoveredMessageId, handleMessageHover, handleMessageLeave
+    hoveredMessageId, handleMessageHover, handleMessageLeave, formatTime
   ])
 
   return (
@@ -542,6 +544,8 @@ interface ChatMessageBubbleProps {
   isHovered?: boolean
   onMouseEnter?: () => void
   onMouseLeave?: () => void
+  // Time formatting function (respects user's 12h/24h preference)
+  formatTime: (date: Date) => string
 }
 
 const ChatMessageBubble = memo(function ChatMessageBubble({
@@ -572,6 +576,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
   isHovered,
   onMouseEnter,
   onMouseLeave,
+  formatTime,
 }: ChatMessageBubbleProps) {
   const { t } = useTranslation()
 
@@ -689,6 +694,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
       onMediaLoad={onMediaLoad}
       replyContext={replyContext}
       onReactionPickerChange={onReactionPickerChange}
+      formatTime={formatTime}
     />
   )
 })

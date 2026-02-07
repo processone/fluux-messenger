@@ -4,8 +4,9 @@ import {
   formatLocalizedDate,
   formatConversationTime,
   getDateLocale,
+  formatTime,
 } from './dateFormat'
-import { enUS, fr, pt } from 'date-fns/locale'
+import { enUS, fr, pt, de, es } from 'date-fns/locale'
 
 describe('dateFormat', () => {
   // ------------------------------
@@ -24,9 +25,15 @@ describe('dateFormat', () => {
       expect(getDateLocale('pt')).toBe(pt)
     })
 
+    it('should return German locale for "de"', () => {
+      expect(getDateLocale('de')).toBe(de)
+    })
+
+    it('should return Spanish locale for "es"', () => {
+      expect(getDateLocale('es')).toBe(es)
+    })
+
     it('should fall back to English for unsupported languages', () => {
-      expect(getDateLocale('de')).toBe(enUS)
-      expect(getDateLocale('es')).toBe(enUS)
       expect(getDateLocale('unknown')).toBe(enUS)
     })
   })
@@ -170,6 +177,81 @@ describe('dateFormat', () => {
   })
 
   // ------------------------------
+  // formatTime
+  // ------------------------------
+  describe('formatTime', () => {
+    const testDate = new Date('2025-12-30T14:30:00')
+
+    describe('12-hour format', () => {
+      it('should format time as 12-hour with AM/PM in English', () => {
+        const result = formatTime(testDate, 'en', '12h')
+        expect(result).toBe('2:30 PM')
+      })
+
+      it('should format morning time as AM', () => {
+        const morning = new Date('2025-12-30T08:15:00')
+        const result = formatTime(morning, 'en', '12h')
+        expect(result).toBe('8:15 AM')
+      })
+
+      it('should format noon correctly', () => {
+        const noon = new Date('2025-12-30T12:00:00')
+        const result = formatTime(noon, 'en', '12h')
+        expect(result).toBe('12:00 PM')
+      })
+
+      it('should format midnight correctly', () => {
+        const midnight = new Date('2025-12-30T00:00:00')
+        const result = formatTime(midnight, 'en', '12h')
+        expect(result).toBe('12:00 AM')
+      })
+    })
+
+    describe('24-hour format', () => {
+      it('should format time as 24-hour in English', () => {
+        const result = formatTime(testDate, 'en', '24h')
+        expect(result).toBe('14:30')
+      })
+
+      it('should format morning time with leading zero', () => {
+        const morning = new Date('2025-12-30T08:15:00')
+        const result = formatTime(morning, 'en', '24h')
+        expect(result).toBe('08:15')
+      })
+
+      it('should format noon correctly', () => {
+        const noon = new Date('2025-12-30T12:00:00')
+        const result = formatTime(noon, 'en', '24h')
+        expect(result).toBe('12:00')
+      })
+
+      it('should format midnight correctly', () => {
+        const midnight = new Date('2025-12-30T00:00:00')
+        const result = formatTime(midnight, 'en', '24h')
+        expect(result).toBe('00:00')
+      })
+    })
+
+    describe('localized formats', () => {
+      it('should use French locale for French language', () => {
+        // French uses same format as English but with French locale
+        const result = formatTime(testDate, 'fr', '12h')
+        expect(result).toBe('2:30 PM')
+      })
+
+      it('should use Portuguese locale for Portuguese language', () => {
+        const result = formatTime(testDate, 'pt', '24h')
+        expect(result).toBe('14:30')
+      })
+
+      it('should fall back to English for unknown language', () => {
+        const result = formatTime(testDate, 'unknown', '12h')
+        expect(result).toBe('2:30 PM')
+      })
+    })
+  })
+
+  // ------------------------------
   // formatConversationTime
   // ------------------------------
   describe('formatConversationTime', () => {
@@ -203,48 +285,60 @@ describe('dateFormat', () => {
       vi.useRealTimers()
     })
 
-    // ---------- EN ----------
-    it('should show time for messages within last 12 hours (EN)', () => {
+    // ---------- EN with 12h format ----------
+    it('should show time in 12h format for messages within last 12 hours (EN)', () => {
       const date = new Date('2025-12-30T08:30:00')
-      const result = formatConversationTime(date, mockTEn, 'en')
+      const result = formatConversationTime(date, mockTEn, 'en', '12h')
       expect(result).toBe('8:30 AM')
+    })
+
+    it('should show time in 24h format for messages within last 12 hours (EN)', () => {
+      const date = new Date('2025-12-30T08:30:00')
+      const result = formatConversationTime(date, mockTEn, 'en', '24h')
+      expect(result).toBe('08:30')
     })
 
     it('should show "Yesterday" for messages from yesterday (EN)', () => {
       const date = new Date('2025-12-29T20:00:00')
-      const result = formatConversationTime(date, mockTEn, 'en')
+      const result = formatConversationTime(date, mockTEn, 'en', '12h')
       expect(result).toBe('Yesterday')
     })
 
-    // ---------- FR ----------
+    // ---------- FR with 24h format ----------
     it('should show "Hier" for yesterday in French', () => {
       const date = new Date('2025-12-29T20:00:00')
-      const result = formatConversationTime(date, mockTFr, 'fr')
+      const result = formatConversationTime(date, mockTFr, 'fr', '24h')
       expect(result).toBe('Hier')
     })
 
     it('should show short date for older messages in French', () => {
       const date = new Date('2025-12-23T15:00:00')
-      const result = formatConversationTime(date, mockTFr, 'fr')
+      const result = formatConversationTime(date, mockTFr, 'fr', '24h')
       expect(result).toBe('déc. 23')
     })
 
-    // ---------- PT ----------
-    it('should show time for messages today in Portuguese', () => {
+    // ---------- PT with 24h format ----------
+    it('should show time in 24h format for messages today in Portuguese', () => {
       const date = new Date('2025-12-30T08:30:00')
-      const result = formatConversationTime(date, mockTPt, 'pt')
+      const result = formatConversationTime(date, mockTPt, 'pt', '24h')
       expect(result).toBe('08:30')
+    })
+
+    it('should show time in 12h format for messages today in Portuguese', () => {
+      const date = new Date('2025-12-30T08:30:00')
+      const result = formatConversationTime(date, mockTPt, 'pt', '12h')
+      expect(result).toBe('8:30 AM')
     })
 
     it('should show "Ontem" for messages from yesterday in Portuguese', () => {
       const date = new Date('2025-12-29T20:00:00')
-      const result = formatConversationTime(date, mockTPt, 'pt')
+      const result = formatConversationTime(date, mockTPt, 'pt', '24h')
       expect(result).toBe('Ontem')
     })
 
     it('should show short date for older messages in Portuguese', () => {
       const date = new Date('2025-12-23T15:00:00')
-      const result = formatConversationTime(date, mockTPt, 'pt')
+      const result = formatConversationTime(date, mockTPt, 'pt', '24h')
       expect(result).toBe('dez 23')
     })
   })

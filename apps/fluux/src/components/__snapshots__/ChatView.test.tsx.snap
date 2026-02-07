@@ -85,7 +85,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                   data-message-body="Hello there!"
                   data-message-from="Alice Smith"
                   data-message-id="msg-1"
-                  data-message-time="10:00"
+                  data-message-time="14:30"
                 >
                   <div
                     class="w-10 flex-shrink-0"
@@ -214,7 +214,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                       <span
                         class="text-xs text-fluux-muted"
                       >
-                        10:00
+                        14:30
                       </span>
                     </div>
                     <div
@@ -242,7 +242,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                   data-message-body="Hi! How are you?"
                   data-message-from="Me"
                   data-message-id="msg-2"
-                  data-message-time="10:00"
+                  data-message-time="14:30"
                 >
                   <div
                     class="w-10 flex-shrink-0"
@@ -370,7 +370,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                       <span
                         class="text-xs text-fluux-muted"
                       >
-                        10:00
+                        14:30
                       </span>
                     </div>
                     <div

@@ -8,7 +8,7 @@ describe('settingsStore', () => {
     vi.mocked(localStorage.getItem).mockClear()
     vi.mocked(localStorage.setItem).mockClear()
     vi.mocked(localStorage.getItem).mockReturnValue(null)
-    useSettingsStore.setState({ themeMode: 'dark' })
+    useSettingsStore.setState({ themeMode: 'dark', timeFormat: 'auto' })
   })
 
   describe('initial state', () => {

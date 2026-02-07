@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback, memo, type Re
 import { useTranslation } from 'react-i18next'
 import { useRoom, useRoster, getBareJid, generateConsistentColorHexSync, getPresenceFromShow, createMessageLookup, type RoomMessage, type Room, type MentionReference, type ChatStateNotification, type Contact, type FileAttachment } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
-import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft } from '@/hooks'
+import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat } from '@/hooks'
 import { MessageBubble, MessageList, shouldShowAvatar, buildReplyContext } from './conversation'
 import { Avatar, getConsistentTextColor } from './Avatar'
 import { format } from 'date-fns'
@@ -407,6 +407,7 @@ const RoomMessageList = memo(function RoomMessageList({
   isHistoryComplete?: boolean
 }) {
   const { t } = useTranslation()
+  const { formatTime } = useTimeFormat()
 
   // Track which message is hovered for stable toolbar interaction
   // This prevents the toolbar from switching when moving mouse to it
@@ -511,12 +512,14 @@ const RoomMessageList = memo(function RoomMessageList({
       isHovered={hoveredMessageId === msg.id}
       onMouseEnter={() => handleMessageHover(msg.id)}
       onMouseLeave={handleMessageLeave}
+      formatTime={formatTime}
     />
   ), [
     messagesById, room, contactsByJid, ownAvatar, sendReaction, onReply, onEdit,
     lastOutgoingMessageId, lastMessageId, isComposing, activeReactionPickerMessageId,
     onReactionPickerChange, retractMessage, selectedMessageId, hasKeyboardSelection,
-    showToolbarForSelection, isDarkMode, onMediaLoad, hoveredMessageId, handleMessageHover, handleMessageLeave
+    showToolbarForSelection, isDarkMode, onMediaLoad, hoveredMessageId, handleMessageHover, handleMessageLeave,
+    formatTime
   ])
 
   return (
@@ -564,6 +567,8 @@ interface RoomMessageBubbleWrapperProps {
   isHovered?: boolean
   onMouseEnter?: () => void
   onMouseLeave?: () => void
+  // Time formatting function (respects user's 12h/24h preference)
+  formatTime: (date: Date) => string
 }
 
 const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
@@ -589,6 +594,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   isHovered,
   onMouseEnter,
   onMouseLeave,
+  formatTime,
 }: RoomMessageBubbleWrapperProps) {
   const { t } = useTranslation()
 
@@ -739,6 +745,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
       replyContext={replyContext}
       mentions={message.mentions}
       onReactionPickerChange={onReactionPickerChange}
+      formatTime={formatTime}
     />
   )
 })

@@ -302,7 +302,7 @@
     "categories": {
       "profile": "Profil",
       "appearance": "Apparence",
-      "language": "Langue",
+      "language": "Langue et région",
       "notifications": "Notifications",
       "updates": "Mises à jour",
       "blocked": "Utilisateurs bloqués"
@@ -332,8 +332,14 @@
     "lightDescription": "Fond clair avec texte sombre",
     "systemDescription": "Suivre les préférences du système",
     "language": "Langue",
+    "languageAndRegion": "Langue et région",
     "languageDescription": "Choisissez votre langue préférée",
     "languageStreamNote": "La préférence de langue serveur s'applique à la prochaine connexion",
+    "timeFormat": "Format de l'heure",
+    "timeFormatDescription": "Choisissez l'affichage des heures",
+    "timeFormatAuto": "Par défaut du système",
+    "timeFormat12h": "12 heures (2:30 PM)",
+    "timeFormat24h": "24 heures (14:30)",
     "notifications": "Notifications",
     "notificationStatus": "Notifications bureau",
     "notificationEnabled": "Activées - Vous recevrez des notifications",

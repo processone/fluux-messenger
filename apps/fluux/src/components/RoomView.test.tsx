@@ -166,6 +166,7 @@ vi.mock('@/hooks', () => ({
   useTypeToFocus: () => {},
   useMessageCopy: () => ({ handleCopy: vi.fn() }),
   useMode: () => ({ resolvedMode: 'dark', isDark: true }),
+  useTimeFormat: () => ({ formatTime: () => '14:30', timeFormat: '24h' }),
   useMessageScroll: () => ({
     scrollRef: { current: null },
     isAtBottomRef: { current: true },

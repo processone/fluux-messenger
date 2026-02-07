@@ -12,6 +12,7 @@ import { EditBookmarkModal } from '../EditBookmarkModal'
 import { Tooltip } from '../Tooltip'
 import { useSidebarZone } from './types'
 import { formatConversationTime } from '@/utils/dateFormat'
+import { useSettingsStore } from '@/stores/settingsStore'
 import {
   Hash,
   LogIn,
@@ -292,6 +293,7 @@ const RoomItem = memo(function RoomItem({
   const { t, i18n } = useTranslation()
   const menu = useContextMenu()
   const currentLang = i18n.language.split('-')[0]
+  const timeFormat = useSettingsStore((s) => s.timeFormat)
 
   // Get last message for preview (uses pre-computed lastMessage from metadata for better performance)
   const lastMessage = room.lastMessage ?? null
@@ -407,7 +409,7 @@ const RoomItem = memo(function RoomItem({
             {/* Timestamp */}
             {lastMessage && (
               <span className="text-xs text-fluux-muted flex-shrink-0 ml-auto">
-                {formatConversationTime(lastMessage.timestamp, t, currentLang)}
+                {formatConversationTime(lastMessage.timestamp, t, currentLang, timeFormat)}
               </span>
             )}
           </div>

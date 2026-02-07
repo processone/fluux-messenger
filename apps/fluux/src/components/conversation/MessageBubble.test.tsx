@@ -51,6 +51,7 @@ function createDefaultProps(overrides: Partial<MessageBubbleProps> = {}): Messag
     onReply: vi.fn(),
     onEdit: vi.fn(),
     onDelete: vi.fn().mockResolvedValue(undefined),
+    formatTime: () => '14:30',
     ...overrides,
   }
 }

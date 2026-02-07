@@ -302,7 +302,7 @@
     "categories": {
       "profile": "Perfil",
       "appearance": "Aparência",
-      "language": "Idioma",
+      "language": "Idioma e região",
       "notifications": "Notificações",
       "updates": "Atualizações",
       "blocked": "Utilizadores bloqueados"
@@ -332,8 +332,14 @@
     "lightDescription": "Fundo claro com texto escuro",
     "systemDescription": "Seguir a preferência do sistema",
     "language": "Idioma",
+    "languageAndRegion": "Idioma e região",
     "languageDescription": "Escolha o seu idioma preferido",
     "languageStreamNote": "A preferência de idioma do servidor aplica-se no próximo login",
+    "timeFormat": "Formato de hora",
+    "timeFormatDescription": "Escolha como as horas são apresentadas",
+    "timeFormatAuto": "Padrão do sistema",
+    "timeFormat12h": "12 horas (2:30 PM)",
+    "timeFormat24h": "24 horas (14:30)",
     "notifications": "Notificações",
     "notificationStatus": "Notificações de ambiente de trabalho",
     "notificationEnabled": "Ativadas - Receberá notificações",

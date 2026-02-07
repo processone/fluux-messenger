@@ -302,7 +302,7 @@
     "categories": {
       "profile": "Profile",
       "appearance": "Appearance",
-      "language": "Language",
+      "language": "Language & Region",
       "notifications": "Notifications",
       "updates": "Updates",
       "blocked": "Blocked Users"
@@ -332,8 +332,14 @@
     "lightDescription": "Light background with dark text",
     "systemDescription": "Follow your system preference",
     "language": "Language",
+    "languageAndRegion": "Language & Region",
     "languageDescription": "Choose your preferred language",
     "languageStreamNote": "Server language preference applies on next login",
+    "timeFormat": "Time Format",
+    "timeFormatDescription": "Choose how times are displayed",
+    "timeFormatAuto": "System default",
+    "timeFormat12h": "12-hour (2:30 PM)",
+    "timeFormat24h": "24-hour (14:30)",
     "notifications": "Notifications",
     "notificationStatus": "Desktop Notifications",
     "notificationEnabled": "Enabled - You will receive notifications",

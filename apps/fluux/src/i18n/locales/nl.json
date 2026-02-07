@@ -302,7 +302,7 @@
     "categories": {
       "profile": "Profiel",
       "appearance": "Weergave",
-      "language": "Taal",
+      "language": "Taal & Regio",
       "notifications": "Meldingen",
       "updates": "Updates",
       "blocked": "Geblokkeerde gebruikers"
@@ -332,8 +332,14 @@
     "lightDescription": "Lichte achtergrond met donkere tekst",
     "systemDescription": "Volg je systeemvoorkeur",
     "language": "Taal",
+    "languageAndRegion": "Taal & Regio",
     "languageDescription": "Kies je voorkeurstaal",
     "languageStreamNote": "Servertaalvoorkeur geldt bij volgende aanmelding",
+    "timeFormat": "Tijdformaat",
+    "timeFormatDescription": "Kies hoe tijden worden weergegeven",
+    "timeFormatAuto": "Systeemstandaard",
+    "timeFormat12h": "12-uurs (2:30 PM)",
+    "timeFormat24h": "24-uurs (14:30)",
     "notifications": "Meldingen",
     "notificationStatus": "Desktopmeldingen",
     "notificationEnabled": "Ingeschakeld - Je ontvangt meldingen",

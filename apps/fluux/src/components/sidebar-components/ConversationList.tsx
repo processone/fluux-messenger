@@ -15,6 +15,7 @@ import { Avatar, TypingIndicator } from '../Avatar'
 import { Tooltip } from '../Tooltip'
 import { useSidebarZone, ContactDevicesTooltip } from './types'
 import { formatConversationTime } from '@/utils/dateFormat'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { Hash, Trash2, Archive, ArchiveRestore } from 'lucide-react'
 import {
   SidebarListMenuProvider,
@@ -235,6 +236,7 @@ export const ConversationItem = memo(function ConversationItem({
   const { t, i18n } = useTranslation()
   const { getItemMenuProps, isOpen, longPressTriggered } = useSidebarListMenu<Conversation>()
   const currentLang = i18n.language.split('-')[0]
+  const timeFormat = useSettingsStore((s) => s.timeFormat)
 
   const isGroupChat = conversation.type === 'groupchat'
   const menuProps = getItemMenuProps(conversation)
@@ -297,7 +299,7 @@ export const ConversationItem = memo(function ConversationItem({
             <p className="truncate font-medium">{conversation.name}</p>
             {conversation.lastMessage && (
               <span className="text-xs text-fluux-muted flex-shrink-0">
-                {formatConversationTime(conversation.lastMessage.timestamp, t, currentLang)}
+                {formatConversationTime(conversation.lastMessage.timestamp, t, currentLang, timeFormat)}
               </span>
             )}
           </div>
