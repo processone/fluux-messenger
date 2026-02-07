@@ -655,12 +655,12 @@ export function useMessageListScroll({
     const scroller = scrollerRef.current
     if (!scroller || !hasInitializedRef.current) return
 
-    // Don't interfere with prepend (either in progress or just restored)
-    if (prependRef.current) {
-      debugLog('NEW MSG SKIP (prepend active)', {
+    // Don't interfere with prepend that's actively in progress (not yet restored)
+    // Once restored, allow new message auto-scroll even during cooldown period
+    if (prependRef.current && !prependRef.current.restored) {
+      debugLog('NEW MSG SKIP (prepend in progress)', {
         messageCount,
         prevCount: prevMessageCountRef.current,
-        prependRestored: prependRef.current.restored,
       })
       prevMessageCountRef.current = messageCount
       return
@@ -750,12 +750,12 @@ export function useMessageListScroll({
       const newHeight = scroller.scrollHeight
       const currentScrollTop = scroller.scrollTop
 
-      // Skip during prepend (in progress or just restored)
-      if (prependRef.current) {
-        debugLog('RESIZE SKIP (prepend)', {
+      // Skip during prepend that's actively in progress (not yet restored)
+      // Once restored, allow resize-triggered scroll even during cooldown
+      if (prependRef.current && !prependRef.current.restored) {
+        debugLog('RESIZE SKIP (prepend in progress)', {
           newHeight,
           lastHeight,
-          restored: prependRef.current.restored,
           currentScrollTop,
         })
         lastHeight = newHeight
