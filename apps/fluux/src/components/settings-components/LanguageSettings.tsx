@@ -13,6 +13,9 @@ const languages = [
   { code: 'nl', name: 'Nederlands', flag: '🇳🇱' },
   { code: 'pl', name: 'Polski', flag: '🇵🇱' },
   { code: 'pt', name: 'Português', flag: '🇵🇹' },
+  { code: 'ru', name: 'Русский', flag: '🇷🇺' },
+  { code: 'be', name: 'Беларускі', flag: '🇧🇾' },
+  { code: 'uk', name: 'Українська', flag: '🇺🇦' },
 ]
 
 const timeFormatOptions: { value: TimeFormat; labelKey: string }[] = [
