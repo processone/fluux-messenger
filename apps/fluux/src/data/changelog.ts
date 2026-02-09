@@ -14,6 +14,41 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '0.12.1',
+    date: '2026-02-09',
+    sections: [
+      {
+        type: 'added',
+        items: [
+          'Time format preference (12-hour, 24-hour, or auto)',
+          'Collapsible long messages with Show more/less',
+          'Negative avatar cache to reduce redundant vCard queries',
+          'Azure Trusted Signing for Windows builds',
+        ],
+      },
+      {
+        type: 'changed',
+        items: [
+          'Skip MAM preview refresh on SM resume (performance)',
+          'File attachment card styling improvements in both themes',
+        ],
+      },
+      {
+        type: 'fixed',
+        items: [
+          'Typing indicators for group chats (room:typing event)',
+          'Socket error handling improved with reduced redundant logs',
+          'Failed media URLs cached to prevent repeated retry loops',
+          'Wide horizontal images limited to prevent thin strips',
+          'Link preview card border softened in dark mode',
+          'Stable IDs generated for messages without ID (prevents duplicates)',
+          'MUC occupant avatar event listener improved',
+          'Autoscroll and input alignment improvements',
+        ],
+      },
+    ],
+  },
+  {
     version: '0.12.0',
     date: '2026-02-06',
     sections: [

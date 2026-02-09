@@ -1,25 +1,27 @@
-## What's New in v0.12.0
+## What's New in v0.12.1
 
 ### Added
 
-- XEP-0398: MUC occupant avatars displayed in room participant list
-- Message styling for bullet points and support for markdown bold
-- Toast notifications for room invites and error feedback
+- Time format preference (12-hour, 24-hour, or auto)
+- Collapsible long messages with Show more/less
+- Negative avatar cache to reduce redundant vCard queries
+- Azure Trusted Signing for Windows builds
 
 ### Changed
 
-- File drag-and-drop now stages files for preview before sending
-- XMPP Console keyboard interaction and feedback improvements
+- Skip MAM preview refresh on SM resume (performance)
+- File attachment card styling improvements in both themes
 
 ### Fixed
 
-- Scroll behavior for typing indicators and reactions
-- Performance: improvements
-- URL parsing for angle-bracketed URLs
-- Profile editing disabled when offline
-- Disabled room menu items render at full width
-- Missing media files handled gracefully (404 errors)
-- Update check no longer auto-triggers when viewing settings
+- Typing indicators for group chats (room:typing event)
+- Socket error handling improved with reduced redundant logs
+- Failed media URLs cached to prevent repeated retry loops
+- Wide horizontal images limited to prevent thin strips
+- Link preview card border softened in dark mode
+- Stable IDs generated for messages without ID (prevents duplicates)
+- MUC occupant avatar event listener improved
+- Autoscroll and input alignment improvements
 
 ---
 [Full Changelog](https://github.com/processone/fluux-messenger/blob/main/CHANGELOG.md)
