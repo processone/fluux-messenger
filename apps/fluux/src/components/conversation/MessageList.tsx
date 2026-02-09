@@ -14,7 +14,7 @@
 import { useMemo, useRef, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { BaseMessage } from '@fluux/sdk'
-import { useNewMessageMarker, useMessageCopyFormatter } from '@/hooks'
+import { useMessageCopyFormatter } from '@/hooks'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { DateSeparator } from './DateSeparator'
 import { NewMessageMarker } from './NewMessageMarker'
@@ -36,8 +36,8 @@ export interface MessageListProps<T extends BaseMessage> {
   conversationId: string
   /** ID of the first unread message (for new message marker) */
   firstNewMessageId?: string
-  /** Callback to clear the first new message ID */
-  clearFirstNewMessageId: () => void
+  /** Callback to clear the first new message ID (used by viewport observer) */
+  clearFirstNewMessageId?: () => void
   /** Users currently typing */
   typingUsers?: string[]
   /** Format function for typing user display */
@@ -72,7 +72,6 @@ export function MessageList<T extends BaseMessage>({
   messages,
   conversationId,
   firstNewMessageId,
-  clearFirstNewMessageId,
   typingUsers = [],
   formatTypingUser,
   renderMessage,
@@ -160,13 +159,6 @@ export function MessageList<T extends BaseMessage>({
   // --------------------------------------------------------------------------
 
   useMessageCopyFormatter({ containerRef: scrollContainerRef })
-
-  // --------------------------------------------------------------------------
-  // NEW MESSAGE MARKER
-  // --------------------------------------------------------------------------
-
-  // Clear the new message marker 1 second after switching away
-  useNewMessageMarker(conversationId, firstNewMessageId, clearFirstNewMessageId)
 
   // --------------------------------------------------------------------------
   // RENDER: Message list (always render scroll container to preserve position)

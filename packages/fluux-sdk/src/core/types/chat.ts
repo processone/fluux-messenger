@@ -106,6 +106,8 @@ export interface ConversationMetadata {
   lastMessage?: Message
   /** When conversation was last marked as read (for new messages marker) */
   lastReadAt?: Date
+  /** ID of the last message the user saw in the viewport (persisted, only advances forward) */
+  lastSeenMessageId?: string
   /** ID of the first unread message (calculated when switching to conversation) */
   firstNewMessageId?: string
 }

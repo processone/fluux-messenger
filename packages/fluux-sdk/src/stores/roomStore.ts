@@ -20,6 +20,7 @@ import type { MAMQueryDirection } from './shared/mamState'
 import * as draftState from './shared/draftState'
 import { buildMessageKeySet, isMessageDuplicate, sortMessagesByTimestamp, trimMessages, prependOlderMessages, mergeAndProcessMessages } from './shared/messageArrayUtils'
 import { shouldUpdateLastMessage } from './shared/lastMessageUtils'
+import * as notifState from './shared/notificationState'
 import { connectionStore } from './connectionStore'
 
 /**
@@ -160,6 +161,7 @@ export interface RoomState {
   setActiveRoom: (roomJid: string | null) => void
   getActiveRoomJid: () => string | null
   clearFirstNewMessageId: (roomJid: string) => void
+  updateLastSeenMessageId: (roomJid: string, messageId: string) => void
   setTyping: (roomJid: string, nick: string, isTyping: boolean) => void
 
   // Bookmark actions
@@ -254,6 +256,7 @@ export const roomStore = createStore<RoomState>()(
         notifyAll: room.notifyAll,
         notifyAllPersistent: room.notifyAllPersistent,
         lastReadAt: room.lastReadAt,
+        lastSeenMessageId: room.lastSeenMessageId,
         firstNewMessageId: room.firstNewMessageId,
         lastMessage: room.messages?.length > 0 ? room.messages[room.messages.length - 1] : undefined,
         lastInteractedAt: room.lastInteractedAt,
@@ -650,57 +653,31 @@ export const roomStore = createStore<RoomState>()(
       // Add message and trim to max count (older ones remain in IndexedDB)
       const newMessages = trimMessages([...existing.messages, messageToAdd], MAX_MESSAGES_PER_ROOM)
 
-      // Only increment counters if room is not active, message is not outgoing,
-      // and message is not delayed (historical messages from join shouldn't increment unread)
+      // Delegate notification state to pure function
       const isActive = state.activeRoomJid === roomJid
       const windowVisible = connectionStore.getState().windowVisible
+      const existingMeta = state.roomMeta.get(roomJid)
 
-      // User sees message only if: room is active AND window is visible
-      const userSeesMessage = isActive && windowVisible
-
-      // Increment unread if user doesn't see message (not just if not active)
-      const shouldIncrement = !userSeesMessage && !messageToAdd.isOutgoing && !messageToAdd.isDelayed
-
-      // When sending a message (outgoing), clear unread counts - user is actively engaging
-      // Otherwise, increment if conditions met, or preserve existing count
-      let newUnreadCount: number
-      let newMentionsCount: number
-      if (messageToAdd.isOutgoing) {
-        // Sending a message clears unread state
-        newUnreadCount = 0
-        newMentionsCount = 0
-      } else if (shouldIncrement) {
-        newUnreadCount = incrementUnread ? existing.unreadCount + 1 : existing.unreadCount
-        newMentionsCount = incrementMentions ? existing.mentionsCount + 1 : existing.mentionsCount
-      } else {
-        newUnreadCount = existing.unreadCount
-        newMentionsCount = existing.mentionsCount
+      const notifInput: notifState.EntityNotificationState = {
+        unreadCount: existingMeta?.unreadCount ?? existing.unreadCount,
+        mentionsCount: existingMeta?.mentionsCount ?? existing.mentionsCount,
+        lastReadAt: existingMeta?.lastReadAt ?? existing.lastReadAt,
+        lastSeenMessageId: existingMeta?.lastSeenMessageId ?? existing.lastSeenMessageId,
+        firstNewMessageId: existingMeta?.firstNewMessageId ?? existing.firstNewMessageId,
       }
 
-      // Determine lastReadAt:
-      // - When outgoing message: update to message timestamp (user is engaging)
-      // - When user sees message: update to message timestamp
-      // - When user doesn't see it and lastReadAt undefined: set to epoch so marker shows
-      // - When user doesn't see it and lastReadAt defined: preserve (marker position stays correct)
-      let newLastReadAt: Date | undefined
-      let newFirstNewMessageId = existing.firstNewMessageId
-      if (messageToAdd.isOutgoing || userSeesMessage) {
-        // Sending a message or viewing incoming message = up to date
-        newLastReadAt = messageToAdd.timestamp
-        newFirstNewMessageId = undefined // Clear new message marker
-      } else if (existing.lastReadAt === undefined) {
-        // First unread message in this room - set marker to show it as new
-        newLastReadAt = new Date(0)
-      } else {
-        newLastReadAt = existing.lastReadAt
-      }
-
-      // Set firstNewMessageId for the new message marker when:
-      // - Window is not visible AND room is active AND incoming message (not delayed)
-      // - This ensures marker is shown when user returns to visible window
-      if (isActive && !windowVisible && !messageToAdd.isOutgoing && !messageToAdd.isDelayed && !existing.firstNewMessageId) {
-        newFirstNewMessageId = messageToAdd.id
-      }
+      const updated = notifState.onMessageReceived(
+        notifInput,
+        {
+          id: messageToAdd.id,
+          timestamp: messageToAdd.timestamp,
+          isOutgoing: messageToAdd.isOutgoing ?? false,
+          isDelayed: messageToAdd.isDelayed,
+          isMention: messageToAdd.isMention,
+        },
+        { isActive, windowVisible },
+        { incrementUnread, incrementMentions }
+      )
 
       // Get the last message for both the combined room and metadata
       const lastMessage = newMessages[newMessages.length - 1]
@@ -708,10 +685,10 @@ export const roomStore = createStore<RoomState>()(
       newRooms.set(roomJid, {
         ...existing,
         messages: newMessages,
-        unreadCount: newUnreadCount,
-        mentionsCount: newMentionsCount,
-        lastReadAt: newLastReadAt,
-        firstNewMessageId: newFirstNewMessageId,
+        unreadCount: updated.unreadCount,
+        mentionsCount: updated.mentionsCount,
+        lastReadAt: updated.lastReadAt,
+        firstNewMessageId: updated.firstNewMessageId,
         lastMessage,
       })
 
@@ -722,16 +699,15 @@ export const roomStore = createStore<RoomState>()(
         newRuntime.set(roomJid, { ...existingRuntime, messages: newMessages })
       }
 
-      // Update metadata (unreadCount, mentionsCount, lastReadAt, firstNewMessageId, lastMessage)
+      // Update metadata
       const newMeta = new Map(state.roomMeta)
-      const existingMeta = newMeta.get(roomJid)
       if (existingMeta) {
         newMeta.set(roomJid, {
           ...existingMeta,
-          unreadCount: newUnreadCount,
-          mentionsCount: newMentionsCount,
-          lastReadAt: newLastReadAt,
-          firstNewMessageId: newFirstNewMessageId,
+          unreadCount: updated.unreadCount,
+          mentionsCount: updated.mentionsCount,
+          lastReadAt: updated.lastReadAt,
+          firstNewMessageId: updated.firstNewMessageId,
           lastMessage,
         })
       }
@@ -846,108 +822,118 @@ export const roomStore = createStore<RoomState>()(
   markAsRead: (roomJid) => {
     set((state) => {
       const existing = state.rooms.get(roomJid)
-      if (!existing) {
-        return {} // No change
+      if (!existing) return {}
+
+      const meta = state.roomMeta.get(roomJid)
+      const notifInput: notifState.EntityNotificationState = {
+        unreadCount: meta?.unreadCount ?? existing.unreadCount,
+        mentionsCount: meta?.mentionsCount ?? existing.mentionsCount,
+        lastReadAt: meta?.lastReadAt ?? existing.lastReadAt,
+        lastSeenMessageId: meta?.lastSeenMessageId ?? existing.lastSeenMessageId,
+        firstNewMessageId: meta?.firstNewMessageId ?? existing.firstNewMessageId,
       }
-      // Always update lastReadAt when room becomes active
-      // This ensures the "new messages" marker is always correct
-      const lastMessage = existing.messages[existing.messages.length - 1]
-      const lastReadAt = lastMessage?.timestamp ?? new Date()
-      // Only update if there's actually a change to make
-      // Compare timestamps by value (getTime) not by reference to avoid infinite loops
-      const existingMeta = state.roomMeta.get(roomJid)
-      const currentLastReadAt = existingMeta?.lastReadAt ?? existing.lastReadAt
-      const lastReadAtChanged = currentLastReadAt?.getTime() !== lastReadAt.getTime()
-      const currentUnread = existingMeta?.unreadCount ?? existing.unreadCount
-      const currentMentions = existingMeta?.mentionsCount ?? existing.mentionsCount
 
-      if (currentUnread > 0 || currentMentions > 0 || lastReadAtChanged) {
-        const newRooms = new Map(state.rooms)
-        newRooms.set(roomJid, { ...existing, unreadCount: 0, mentionsCount: 0, lastReadAt })
+      const runtime = state.roomRuntime.get(roomJid)
+      const messages = runtime?.messages ?? existing.messages
+      const lastMessage = messages[messages.length - 1]
+      const lastMessageTimestamp = lastMessage?.timestamp
 
-        // Update metadata
-        const newMeta = new Map(state.roomMeta)
-        if (existingMeta) {
-          newMeta.set(roomJid, { ...existingMeta, unreadCount: 0, mentionsCount: 0, lastReadAt })
-        }
+      const updated = notifState.onMarkAsRead(notifInput, lastMessageTimestamp)
 
-        return { rooms: newRooms, roomMeta: newMeta }
+      // Skip update if no change
+      if (updated === notifInput) return {}
+
+      const newRooms = new Map(state.rooms)
+      newRooms.set(roomJid, { ...existing, unreadCount: updated.unreadCount, mentionsCount: updated.mentionsCount, lastReadAt: updated.lastReadAt })
+
+      const newMeta = new Map(state.roomMeta)
+      const newMetaEntry = {
+        ...(meta ?? { unreadCount: 0, mentionsCount: 0, typingUsers: new Set<string>() }),
+        unreadCount: updated.unreadCount,
+        mentionsCount: updated.mentionsCount,
+        lastReadAt: updated.lastReadAt,
       }
-      return {} // No change needed
+      newMeta.set(roomJid, newMetaEntry)
+
+      return { rooms: newRooms, roomMeta: newMeta }
     })
   },
 
   setActiveRoom: (roomJid) => {
-    // Calculate firstNewMessageId BEFORE marking as read
-    // This ensures the marker can be shown before lastReadAt is updated
+    // Deactivate previous room (clears marker)
+    const prevJid = get().activeRoomJid
+    if (prevJid && prevJid !== roomJid) {
+      const prevMeta = get().roomMeta.get(prevJid)
+      if (prevMeta?.firstNewMessageId) {
+        const deactivated = notifState.onDeactivate({
+          unreadCount: prevMeta.unreadCount,
+          mentionsCount: prevMeta.mentionsCount,
+          lastReadAt: prevMeta.lastReadAt,
+          lastSeenMessageId: prevMeta.lastSeenMessageId,
+          firstNewMessageId: prevMeta.firstNewMessageId,
+        })
+        set((state) => {
+          const newMeta = new Map(state.roomMeta)
+          newMeta.set(prevJid, { ...prevMeta, firstNewMessageId: deactivated.firstNewMessageId })
+          const newRooms = new Map(state.rooms)
+          const prevRoom = newRooms.get(prevJid)
+          if (prevRoom) {
+            newRooms.set(prevJid, { ...prevRoom, firstNewMessageId: deactivated.firstNewMessageId })
+          }
+          return { roomMeta: newMeta, rooms: newRooms }
+        })
+      }
+    }
+
     if (roomJid) {
       const room = get().rooms.get(roomJid)
-      const meta = get().roomMeta.get(roomJid)
-      const lastReadAt = meta?.lastReadAt ?? room?.lastReadAt
+      if (room) {
+        const meta = get().roomMeta.get(roomJid)
+        const notifInput: notifState.EntityNotificationState = {
+          unreadCount: meta?.unreadCount ?? room.unreadCount,
+          mentionsCount: meta?.mentionsCount ?? room.mentionsCount,
+          lastReadAt: meta?.lastReadAt ?? room.lastReadAt,
+          lastSeenMessageId: meta?.lastSeenMessageId ?? room.lastSeenMessageId,
+          firstNewMessageId: meta?.firstNewMessageId ?? room.firstNewMessageId,
+        }
 
-      // Determine lastInteractedAt: use last message timestamp to position room correctly
-      // This implements "Conversations-style" sorting: rooms sort by last message time,
-      // but only update their position when the user reads them (not when messages arrive)
-      // Prioritize room.lastMessage (sidebar preview from MAM) over room.messages (live messages)
-      // This ensures sorting matches what's shown in the sidebar, not transient live messages
-      const lastMessage = room?.messages?.[room.messages.length - 1]
-      const lastMessageTimestamp = room?.lastMessage?.timestamp ?? lastMessage?.timestamp
-      // If no messages yet (e.g., room still loading), preserve existing lastInteractedAt
-      // or leave undefined - don't use new Date() which would make it jump to top
-      const newLastInteractedAt = lastMessageTimestamp ?? room?.lastInteractedAt
+        const runtime = get().roomRuntime.get(roomJid)
+        const messages = runtime?.messages ?? room.messages
+        const activated = notifState.onActivate(notifInput, messages)
 
-      if (room && lastReadAt) {
-        // Find first message that is:
-        // 1. After lastReadAt
-        // 2. Not outgoing (we wrote it)
-        // 3. Not delayed (historical message)
-        const firstNewMessage = room.messages.find(
-          (msg) => msg.timestamp > lastReadAt && !msg.isOutgoing && !msg.isDelayed
-        )
-        if (firstNewMessage) {
-          // Store the marker position before updating lastReadAt
-          // Also update lastInteractedAt for sidebar sorting
-          set((state) => {
-            const newRooms = new Map(state.rooms)
-            const existing = newRooms.get(roomJid)
-            if (existing) {
-              newRooms.set(roomJid, { ...existing, firstNewMessageId: firstNewMessage.id, lastInteractedAt: newLastInteractedAt })
-            }
+        // Determine lastInteractedAt for sidebar sorting
+        const lastMessage = room.messages?.[room.messages.length - 1]
+        const lastMessageTimestamp = room.lastMessage?.timestamp ?? lastMessage?.timestamp
+        const newLastInteractedAt = lastMessageTimestamp ?? room.lastInteractedAt
 
-            // Update metadata
-            const newMeta = new Map(state.roomMeta)
-            const existingMeta = newMeta.get(roomJid)
-            if (existingMeta) {
-              newMeta.set(roomJid, { ...existingMeta, firstNewMessageId: firstNewMessage.id, lastInteractedAt: newLastInteractedAt })
-            }
-
-            return { rooms: newRooms, roomMeta: newMeta, activeRoomJid: roomJid }
+        set((state) => {
+          const newMetaEntry = {
+            ...(meta ?? { unreadCount: 0, mentionsCount: 0, typingUsers: new Set<string>() }),
+            unreadCount: activated.unreadCount,
+            mentionsCount: activated.mentionsCount,
+            lastReadAt: activated.lastReadAt,
+            lastSeenMessageId: activated.lastSeenMessageId,
+            firstNewMessageId: activated.firstNewMessageId,
+            lastInteractedAt: newLastInteractedAt,
+          }
+          const newMeta = new Map(state.roomMeta)
+          newMeta.set(roomJid, newMetaEntry)
+          const newRooms = new Map(state.rooms)
+          newRooms.set(roomJid, {
+            ...room,
+            unreadCount: activated.unreadCount,
+            mentionsCount: activated.mentionsCount,
+            lastReadAt: activated.lastReadAt,
+            lastSeenMessageId: activated.lastSeenMessageId,
+            firstNewMessageId: activated.firstNewMessageId,
+            lastInteractedAt: newLastInteractedAt,
           })
-          // Now mark as read (which updates lastReadAt)
-          get().markAsRead(roomJid)
-          return
-        }
+          return { roomMeta: newMeta, rooms: newRooms, activeRoomJid: roomJid }
+        })
+        return
       }
-      // Room exists but no new messages marker needed - still update lastInteractedAt
-      set((state) => {
-        const newRooms = new Map(state.rooms)
-        const existing = newRooms.get(roomJid)
-        if (existing) {
-          newRooms.set(roomJid, { ...existing, lastInteractedAt: newLastInteractedAt })
-        }
-
-        const newMeta = new Map(state.roomMeta)
-        const existingMeta = newMeta.get(roomJid)
-        if (existingMeta) {
-          newMeta.set(roomJid, { ...existingMeta, lastInteractedAt: newLastInteractedAt })
-        }
-
-        return { rooms: newRooms, roomMeta: newMeta, activeRoomJid: roomJid }
-      })
-      get().markAsRead(roomJid)
-      return
     }
-    // Clearing active room (roomJid is null)
+    // Clearing active room or room not found
     set({ activeRoomJid: roomJid })
   },
 
@@ -955,23 +941,60 @@ export const roomStore = createStore<RoomState>()(
 
   clearFirstNewMessageId: (roomJid) => {
     set((state) => {
-      const newRooms = new Map(state.rooms)
-      const existing = newRooms.get(roomJid)
-      const existingMeta = state.roomMeta.get(roomJid)
+      const existing = state.rooms.get(roomJid)
+      const meta = state.roomMeta.get(roomJid)
+      const hasFirstNewMessage = meta?.firstNewMessageId ?? existing?.firstNewMessageId
+      if (!existing || !hasFirstNewMessage) return state
 
-      const hasFirstNewMessage = existingMeta?.firstNewMessageId ?? existing?.firstNewMessageId
-      if (existing && hasFirstNewMessage) {
-        newRooms.set(roomJid, { ...existing, firstNewMessageId: undefined })
-
-        // Update metadata
-        const newMeta = new Map(state.roomMeta)
-        if (existingMeta) {
-          newMeta.set(roomJid, { ...existingMeta, firstNewMessageId: undefined })
-        }
-
-        return { rooms: newRooms, roomMeta: newMeta }
+      const notifInput: notifState.EntityNotificationState = {
+        unreadCount: meta?.unreadCount ?? existing.unreadCount,
+        mentionsCount: meta?.mentionsCount ?? existing.mentionsCount,
+        lastReadAt: meta?.lastReadAt ?? existing.lastReadAt,
+        lastSeenMessageId: meta?.lastSeenMessageId ?? existing.lastSeenMessageId,
+        firstNewMessageId: meta?.firstNewMessageId ?? existing.firstNewMessageId,
       }
-      return state
+      const cleared = notifState.onClearMarker(notifInput)
+
+      const newRooms = new Map(state.rooms)
+      newRooms.set(roomJid, { ...existing, firstNewMessageId: cleared.firstNewMessageId })
+
+      const newMeta = new Map(state.roomMeta)
+      if (meta) {
+        newMeta.set(roomJid, { ...meta, firstNewMessageId: cleared.firstNewMessageId })
+      }
+
+      return { rooms: newRooms, roomMeta: newMeta }
+    })
+  },
+
+  updateLastSeenMessageId: (roomJid, messageId) => {
+    set((state) => {
+      const existing = state.rooms.get(roomJid)
+      const meta = state.roomMeta.get(roomJid)
+      if (!existing) return state
+
+      const runtime = state.roomRuntime.get(roomJid)
+      const messages = runtime?.messages ?? existing.messages
+
+      const notifInput: notifState.EntityNotificationState = {
+        unreadCount: meta?.unreadCount ?? existing.unreadCount,
+        mentionsCount: meta?.mentionsCount ?? existing.mentionsCount,
+        lastReadAt: meta?.lastReadAt ?? existing.lastReadAt,
+        lastSeenMessageId: meta?.lastSeenMessageId ?? existing.lastSeenMessageId,
+        firstNewMessageId: meta?.firstNewMessageId ?? existing.firstNewMessageId,
+      }
+      const updated = notifState.onMessageSeen(notifInput, messageId, messages)
+      if (updated === notifInput) return state
+
+      const newRooms = new Map(state.rooms)
+      newRooms.set(roomJid, { ...existing, lastSeenMessageId: updated.lastSeenMessageId })
+
+      const newMeta = new Map(state.roomMeta)
+      if (meta) {
+        newMeta.set(roomJid, { ...meta, lastSeenMessageId: updated.lastSeenMessageId })
+      }
+
+      return { rooms: newRooms, roomMeta: newMeta }
     })
   },
 
