@@ -109,15 +109,15 @@ export function getAttachmentEmoji(attachment: FileAttachment): AttachmentDispla
 }
 
 /**
- * Strip XEP-0393 Message Styling markup from text.
+ * Strip message styling markup from text.
  *
- * Removes styling markers while preserving the content:
- * - `*bold*` → `bold`
+ * Supports both XEP-0393 Message Styling and Markdown patterns:
+ * - `**bold**` (Markdown) or `*bold*` (XEP-0393) → `bold`
  * - `_italic_` → `italic`
- * - `~strikethrough~` → `strikethrough`
+ * - `~~strikethrough~~` (Markdown) or `~strikethrough~` (XEP-0393) → `strikethrough`
  * - `` `code` `` → `code`
  *
- * @param text - Text that may contain XEP-0393 markup
+ * @param text - Text that may contain styling markup
  * @returns Text with markup stripped
  */
 export function stripMessageStyling(text: string): string {
@@ -129,14 +129,20 @@ export function stripMessageStyling(text: string): string {
   // Matches `code` but not ```code blocks```
   result = result.replace(/(?<!`)`([^`\n]+)`(?!`)/g, '$1')
 
-  // Strip bold (*text*)
+  // Strip Markdown-style bold (**text**) - must come before single asterisk
   // Must be preceded by start or whitespace/punctuation, followed by end or whitespace/punctuation
+  result = result.replace(/(?<=^|[\s\p{P}])\*\*([^\s*](?:[^*]*[^\s*])?)\*\*(?=$|[\s\p{P}])/gu, '$1')
+
+  // Strip XEP-0393 bold (*text*)
   result = result.replace(/(?<=^|[\s\p{P}])\*([^\s*](?:[^*]*[^\s*])?)\*(?=$|[\s\p{P}])/gu, '$1')
 
   // Strip italic (_text_)
   result = result.replace(/(?<=^|[\s\p{P}])_([^\s_](?:[^_]*[^\s_])?)_(?=$|[\s\p{P}])/gu, '$1')
 
-  // Strip strikethrough (~text~)
+  // Strip Markdown-style strikethrough (~~text~~) - must come before single tilde
+  result = result.replace(/(?<=^|[\s\p{P}])~~([^\s~](?:[^~]*[^\s~])?)~~(?=$|[\s\p{P}])/gu, '$1')
+
+  // Strip XEP-0393 strikethrough (~text~)
   result = result.replace(/(?<=^|[\s\p{P}])~([^\s~](?:[^~]*[^\s~])?)~(?=$|[\s\p{P}])/gu, '$1')
 
   return result
