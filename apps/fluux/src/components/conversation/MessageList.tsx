@@ -15,6 +15,7 @@ import { useMemo, useRef, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { BaseMessage } from '@fluux/sdk'
 import { useMessageCopyFormatter } from '@/hooks'
+import { useViewportObserver } from '@/hooks/useViewportObserver'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { DateSeparator } from './DateSeparator'
 import { NewMessageMarker } from './NewMessageMarker'
@@ -62,6 +63,8 @@ export interface MessageListProps<T extends BaseMessage> {
   isLoadingOlder?: boolean
   /** If true, all history has been fetched - disable scroll-to-top trigger */
   isHistoryComplete?: boolean
+  /** Callback when the bottom-most visible message changes (viewport tracking) */
+  onMessageSeen?: (messageId: string) => void
 }
 
 // ============================================================================
@@ -84,6 +87,7 @@ export function MessageList<T extends BaseMessage>({
   onScrollToTop,
   isLoadingOlder,
   isHistoryComplete,
+  onMessageSeen,
 }: MessageListProps<T>) {
   // Detect render loops before they freeze the UI
   detectRenderLoop('MessageList')
@@ -153,6 +157,17 @@ export function MessageList<T extends BaseMessage>({
     (scrollContainerRef as React.MutableRefObject<HTMLDivElement | null>).current = element
     setScrollContainerRefFromHook(element)
   }
+
+  // --------------------------------------------------------------------------
+  // VIEWPORT OBSERVER (tracks bottom-most visible message for lastSeenMessageId)
+  // --------------------------------------------------------------------------
+
+  useViewportObserver({
+    scrollContainerRef,
+    conversationId,
+    onMessageSeen,
+    enabled: !isLoading && messages.length > 0,
+  })
 
   // --------------------------------------------------------------------------
   // COPY FORMATTING (ensures date is always included)

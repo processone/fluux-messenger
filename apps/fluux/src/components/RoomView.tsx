@@ -44,7 +44,7 @@ const MAX_ROOM_SIZE_FOR_TYPING = 30
 
 export function RoomView({ onBack, mainContentRef, composerRef }: RoomViewProps) {
   const { t } = useTranslation()
-  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, sendChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, joinRoom, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, activeMAMState } = useRoom()
+  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, sendChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, activeMAMState } = useRoom()
   const { contacts } = useRoster()
   // NOTE: Use focused selectors instead of useConnection() hook to avoid
   // re-renders when unrelated connection state changes (error, reconnectAttempt, etc.)
@@ -218,6 +218,13 @@ export function RoomView({ onBack, mainContentRef, composerRef }: RoomViewProps)
     }
   }, [roomJid, clearFirstNewMessageId])
 
+  // Viewport observer callback: update lastSeenMessageId as user scrolls
+  const handleMessageSeen = useCallback((messageId: string) => {
+    if (roomJid) {
+      updateLastSeenMessageId(roomJid, messageId)
+    }
+  }, [roomJid, updateLastSeenMessageId])
+
   if (!activeRoom) return null
 
   return (
@@ -285,6 +292,7 @@ export function RoomView({ onBack, mainContentRef, composerRef }: RoomViewProps)
             showToolbarForSelection={showToolbarForSelection}
             firstNewMessageId={activeRoom.firstNewMessageId}
             clearFirstNewMessageId={handleClearFirstNewMessageId}
+            onMessageSeen={handleMessageSeen}
             isJoined={activeRoom.joined}
             isDarkMode={resolvedMode === 'dark'}
             onMediaLoad={handleMediaLoad}
@@ -370,6 +378,7 @@ const RoomMessageList = memo(function RoomMessageList({
   showToolbarForSelection,
   firstNewMessageId,
   clearFirstNewMessageId,
+  onMessageSeen,
   isJoined,
   isDarkMode,
   onMediaLoad,
@@ -399,6 +408,7 @@ const RoomMessageList = memo(function RoomMessageList({
   showToolbarForSelection: boolean
   firstNewMessageId?: string
   clearFirstNewMessageId: () => void
+  onMessageSeen?: (messageId: string) => void
   isJoined?: boolean
   isDarkMode?: boolean
   onMediaLoad?: () => void
@@ -529,6 +539,7 @@ const RoomMessageList = memo(function RoomMessageList({
       conversationId={room.jid}
       firstNewMessageId={firstNewMessageId}
       clearFirstNewMessageId={clearFirstNewMessageId}
+      onMessageSeen={onMessageSeen}
       scrollerRef={scrollerRef}
       isAtBottomRef={isAtBottomRef}
       typingUsers={typingUsers}
