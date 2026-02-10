@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useConnection } from '@fluux/sdk'
-import { Loader2, KeyRound, Eye, EyeOff } from 'lucide-react'
+import { Loader2, KeyRound, Eye, EyeOff, ChevronDown, ChevronRight } from 'lucide-react'
 import { saveSession } from '@/hooks/useSessionPersistence'
 import { getResource } from '@/utils/xmppResource'
 import { hasSavedCredentials, getCredentials, saveCredentials, deleteCredentials } from '@/utils/keychain'
@@ -13,6 +13,12 @@ const STORAGE_KEY_JID = 'xmpp-last-jid'
 const STORAGE_KEY_SERVER = 'xmpp-last-server'
 const STORAGE_KEY_REMEMBER = 'xmpp-remember-me'
 
+/** Check if a connection error is an authentication failure (bad credentials) */
+function isAuthError(error: string): boolean {
+  const lower = error.toLowerCase()
+  return lower.includes('not-authorized') || lower.includes('authentication failed')
+}
+
 export function LoginScreen() {
   const { t, i18n } = useTranslation()
   const { status, error, connect } = useConnection()
@@ -23,6 +29,7 @@ export function LoginScreen() {
   const [server, setServer] = useState('')
   const [rememberMe, setRememberMe] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [showServerField, setShowServerField] = useState(false)
   const passwordInputRef = useRef<HTMLInputElement>(null)
   const [loadedFromKeychain, setLoadedFromKeychain] = useState(false)
   const [credentialsModified, setCredentialsModified] = useState(false)
@@ -104,7 +111,14 @@ export function LoginScreen() {
     }
   }, [jid, server, isLoadingCredentials, isDesktopApp, hasManuallySetServer])
 
-  // Handle authentication errors
+  // Show server field if a saved server value was loaded
+  useEffect(() => {
+    if (!isLoadingCredentials && server) {
+      setShowServerField(true)
+    }
+  }, [isLoadingCredentials, server])
+
+  // Handle authentication errors + auto-reveal server field on non-auth errors
   useEffect(() => {
     if (!error) return
 
@@ -114,7 +128,29 @@ export function LoginScreen() {
       deleteCredentials()
       setLoadedFromKeychain(false)
     }
+
+    // Reveal server field on connection errors that aren't auth failures,
+    // so the user can manually specify a server address
+    if (!isAuthError(error)) {
+      setShowServerField(true)
+    }
   }, [error, loadedFromKeychain, isDesktopApp])
+
+  // Keyboard shortcut: Cmd+, (Mac) / Ctrl+, (other) toggles server field
+  const toggleServerField = useCallback(() => {
+    setShowServerField(prev => !prev)
+  }, [])
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === ',' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        toggleServerField()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [toggleServerField])
 
 
   // Auto-connect when credentials are loaded from keychain
@@ -281,30 +317,43 @@ export function LoginScreen() {
             </div>
           </div>
 
-          {/* Server Field (Optional) */}
+          {/* Server Field (Advanced - hidden by default) */}
           <div>
-            <label htmlFor="server" className="block text-xs font-semibold text-fluux-muted uppercase mb-2">
-              {t('login.serverLabel')}
-            </label>
-            <input
-              id="server"
-              type="text"
-              value={server}
-              onChange={(e) => {
-                setServer(e.target.value)
-                setCredentialsModified(true)
-                setHasManuallySetServer(true) // Prevent auto-fill after manual edit
-              }}
-              placeholder={isDesktopApp ? t('login.serverPlaceholderDesktop') : t('login.serverPlaceholder')}
-              disabled={isLoading}
-              className="w-full px-3 py-2 bg-fluux-bg text-fluux-text rounded
-                         border border-fluux-border focus:border-fluux-brand
-                         focus-visible:ring-2 focus-visible:ring-fluux-brand/50
-                         placeholder:text-fluux-muted disabled:opacity-50"
-            />
-            <p className="text-xs text-fluux-muted mt-1">
-              {isDesktopApp ? t('login.serverHintDesktop') : t('login.serverHint')}
-            </p>
+            <button
+              type="button"
+              onClick={() => setShowServerField(!showServerField)}
+              className="flex items-center gap-1 text-xs text-fluux-muted hover:text-fluux-text transition-colors mb-2"
+            >
+              {showServerField ? (
+                <ChevronDown className="w-3 h-3" />
+              ) : (
+                <ChevronRight className="w-3 h-3" />
+              )}
+              <span className="font-semibold uppercase">{t('login.serverLabel')}</span>
+            </button>
+            {showServerField && (
+              <>
+                <input
+                  id="server"
+                  type="text"
+                  value={server}
+                  onChange={(e) => {
+                    setServer(e.target.value)
+                    setCredentialsModified(true)
+                    setHasManuallySetServer(true) // Prevent auto-fill after manual edit
+                  }}
+                  placeholder={isDesktopApp ? t('login.serverPlaceholderDesktop') : t('login.serverPlaceholder')}
+                  disabled={isLoading}
+                  className="w-full px-3 py-2 bg-fluux-bg text-fluux-text rounded
+                             border border-fluux-border focus:border-fluux-brand
+                             focus-visible:ring-2 focus-visible:ring-fluux-brand/50
+                             placeholder:text-fluux-muted disabled:opacity-50"
+                />
+                <p className="text-xs text-fluux-muted mt-1">
+                  {isDesktopApp ? t('login.serverHintDesktop') : t('login.serverHint')}
+                </p>
+              </>
+            )}
           </div>
 
           {/* Remember Me (Desktop app only) */}

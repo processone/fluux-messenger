@@ -5,7 +5,7 @@ import { LoginScreen } from './LoginScreen'
 // Mock the SDK hooks
 const mockUseConnection = vi.fn(() => ({
     status: 'offline',
-    error: null,
+    error: null as string | null,
     connect: vi.fn(),
 }))
 
@@ -67,18 +67,62 @@ describe('LoginScreen', () => {
     })
 
     describe('rendering', () => {
-        it('should render login form with all fields', () => {
+        it('should render login form with JID and password fields', () => {
             render(<LoginScreen />)
 
             expect(screen.getByLabelText('login.jidLabel')).toBeInTheDocument()
             expect(screen.getByLabelText('login.passwordLabel')).toBeInTheDocument()
-            expect(screen.getByLabelText('login.serverLabel')).toBeInTheDocument()
+        })
+
+        it('should hide server field by default', () => {
+            render(<LoginScreen />)
+
+            // Server toggle button should be visible
+            expect(screen.getByText('login.serverLabel')).toBeInTheDocument()
+            // But the server input should not be rendered
+            expect(screen.queryByPlaceholderText('login.serverPlaceholder')).not.toBeInTheDocument()
+        })
+
+        it('should show server field when toggle is clicked', () => {
+            render(<LoginScreen />)
+
+            // Click the server toggle button
+            fireEvent.click(screen.getByText('login.serverLabel'))
+
+            // Server input should now be visible
+            expect(screen.getByPlaceholderText('login.serverPlaceholder')).toBeInTheDocument()
         })
 
         it('should render connect button', () => {
             render(<LoginScreen />)
 
             expect(screen.getByRole('button', { name: 'login.connect' })).toBeInTheDocument()
+        })
+
+        it('should reveal server field on non-auth connection error', () => {
+            mockUseConnection.mockReturnValue({
+                status: 'error',
+                error: 'Connection refused',
+                connect: vi.fn(),
+            })
+
+            render(<LoginScreen />)
+
+            // Server input should be automatically revealed for non-auth errors
+            expect(screen.getByPlaceholderText('login.serverPlaceholder')).toBeInTheDocument()
+        })
+
+        it('should not reveal server field on auth error', () => {
+            mockUseConnection.mockReturnValue({
+                status: 'error',
+                error: 'Authentication failed',
+                connect: vi.fn(),
+            })
+
+            render(<LoginScreen />)
+
+            // Server input should remain hidden for auth errors
+            expect(screen.queryByPlaceholderText('login.serverPlaceholder')).not.toBeInTheDocument()
         })
     })
 
