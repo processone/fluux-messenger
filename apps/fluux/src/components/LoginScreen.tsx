@@ -84,10 +84,15 @@ export function LoginScreen() {
     loadCredentials()
   }, [])
 
-  // Auto-fill WebSocket URL for well-known servers when JID domain changes
-  // Only fills if the server field is empty (doesn't override user input)
+  // Auto-fill WebSocket URL for well-known servers when JID domain changes (web only)
+  // Desktop app uses TCP proxy with SRV resolution, so WebSocket URLs are not needed
+  // Track if user has manually interacted with server field to prevent auto-fill after user clears it
+  const [hasManuallySetServer, setHasManuallySetServer] = useState(false)
+
   useEffect(() => {
-    if (server) return // Don't override if user has entered a server
+    if (isDesktopApp) return // Skip auto-fill for desktop - TCP proxy handles this
+    if (hasManuallySetServer) return // Don't auto-fill if user has manually set/cleared the field
+    if (server) return // Don't override if server field already has a value
     if (isLoadingCredentials) return // Wait for credentials to load first
 
     const domain = getDomainFromJid(jid)
@@ -97,7 +102,7 @@ export function LoginScreen() {
         setServer(websocketUrl)
       }
     }
-  }, [jid, server, isLoadingCredentials])
+  }, [jid, server, isLoadingCredentials, isDesktopApp, hasManuallySetServer])
 
   // Handle authentication errors
   useEffect(() => {
@@ -285,8 +290,12 @@ export function LoginScreen() {
               id="server"
               type="text"
               value={server}
-              onChange={(e) => { setServer(e.target.value); setCredentialsModified(true) }}
-              placeholder={t('login.serverPlaceholder')}
+              onChange={(e) => {
+                setServer(e.target.value)
+                setCredentialsModified(true)
+                setHasManuallySetServer(true) // Prevent auto-fill after manual edit
+              }}
+              placeholder={isDesktopApp ? t('login.serverPlaceholderDesktop') : t('login.serverPlaceholder')}
               disabled={isLoading}
               className="w-full px-3 py-2 bg-fluux-bg text-fluux-text rounded
                          border border-fluux-border focus:border-fluux-brand
@@ -294,7 +303,7 @@ export function LoginScreen() {
                          placeholder:text-fluux-muted disabled:opacity-50"
             />
             <p className="text-xs text-fluux-muted mt-1">
-              {t('login.serverHint')}
+              {isDesktopApp ? t('login.serverHintDesktop') : t('login.serverHint')}
             </p>
           </div>
 

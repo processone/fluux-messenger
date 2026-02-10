@@ -38,6 +38,8 @@ use keyring::Entry;
 use serde::{Deserialize, Serialize};
 use scraper::{Html, Selector};
 
+mod xmpp_proxy;
+
 #[cfg(target_os = "macos")]
 mod idle {
     use std::process::Command;
@@ -170,6 +172,19 @@ fn delete_credentials() -> Result<(), String> {
 #[tauri::command]
 fn exit_app(app: tauri::AppHandle) {
     app.exit(0);
+}
+
+/// Start XMPP WebSocket-to-TCP proxy.
+/// The `server` parameter supports: `tls://host:port`, `tcp://host:port`, `host:port`, or bare `domain`.
+#[tauri::command]
+async fn start_xmpp_proxy(server: String) -> Result<String, String> {
+    xmpp_proxy::start_proxy(server).await
+}
+
+/// Stop XMPP WebSocket-to-TCP proxy
+#[tauri::command]
+async fn stop_xmpp_proxy() -> Result<(), String> {
+    xmpp_proxy::stop_proxy().await
 }
 
 /// Open Graph metadata extracted from a URL
@@ -521,7 +536,9 @@ fn main() {
             get_credentials,
             delete_credentials,
             exit_app,
-            fetch_url_metadata
+            fetch_url_metadata,
+            start_xmpp_proxy,
+            stop_xmpp_proxy
         ])
         .setup(|app| {
             // Register xmpp: URI scheme for deep linking (RFC 5122)

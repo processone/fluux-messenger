@@ -24,6 +24,18 @@ tauri-plugin-deep-link = "2"
 tauri-plugin-process = "2"
 serde = { version = "1", features = ["derive"] }
 
+# XMPP WebSocket-to-TCP proxy dependencies
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = "0.24"
+futures-util = "0.3"
+quick-xml = "0.36"
+tokio-rustls = "0.26"
+rustls = { version = "0.23", features = ["ring"] }
+rustls-native-certs = "0.8"
+trust-dns-resolver = "0.23"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
 # Updater plugin for auto-updates (desktop only)
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
