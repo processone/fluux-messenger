@@ -251,16 +251,62 @@ describe('onActivate', () => {
   })
 
   describe('when lastSeenMessageId not in loaded messages (older than memory)', () => {
-    it('sets marker to first incoming when there are unread', () => {
+    it('uses lastReadAt fallback to find correct marker position', () => {
+      const state = makeState({
+        lastSeenMessageId: 'very-old-msg',
+        unreadCount: 2,
+        lastReadAt: new Date('2025-01-15T10:15:00Z'), // between msg-3 (10:00) and msg-4 (10:30)
+      })
+      const result = onActivate(state, messages)
+      expect(result.firstNewMessageId).toBe('msg-4')
+    })
+
+    it('lastReadAt fallback skips outgoing messages', () => {
+      const state = makeState({
+        lastSeenMessageId: 'very-old-msg',
+        unreadCount: 2,
+        lastReadAt: new Date('2025-01-15T09:45:00Z'), // between msg-2 (09:30) and msg-3 (10:00, outgoing)
+      })
+      const result = onActivate(state, messages)
+      // msg-3 is outgoing, so marker should be at msg-4
+      expect(result.firstNewMessageId).toBe('msg-4')
+    })
+
+    it('uses lastReadAt even when unreadCount is 0 (post-restart)', () => {
+      const state = makeState({
+        lastSeenMessageId: 'very-old-msg',
+        unreadCount: 0, // reset to 0 after app restart deserialization
+        lastReadAt: new Date('2025-01-15T10:15:00Z'),
+      })
+      const result = onActivate(state, messages)
+      expect(result.firstNewMessageId).toBe('msg-4')
+    })
+
+    it('sets no marker when all loaded messages are before lastReadAt', () => {
+      const state = makeState({
+        lastSeenMessageId: 'very-old-msg',
+        lastReadAt: new Date('2025-01-15T12:00:00Z'), // after all messages
+      })
+      const result = onActivate(state, messages)
+      expect(result.firstNewMessageId).toBeUndefined()
+    })
+
+    it('falls back to first incoming when no lastReadAt but unreadCount > 0', () => {
       const state = makeState({ lastSeenMessageId: 'very-old-msg', unreadCount: 3 })
       const result = onActivate(state, messages)
       expect(result.firstNewMessageId).toBe('msg-1') // first non-outgoing, non-delayed
     })
 
-    it('sets no marker when no unread', () => {
+    it('sets no marker when no lastReadAt and no unread', () => {
       const state = makeState({ lastSeenMessageId: 'very-old-msg', unreadCount: 0 })
       const result = onActivate(state, messages)
       expect(result.firstNewMessageId).toBeUndefined()
+    })
+
+    it('updates stale lastSeenMessageId to last message in array', () => {
+      const state = makeState({ lastSeenMessageId: 'very-old-msg', unreadCount: 3 })
+      const result = onActivate(state, messages)
+      expect(result.lastSeenMessageId).toBe('msg-5')
     })
   })
 
@@ -645,6 +691,39 @@ describe('lifecycle sequences', () => {
     expect(state.mentionsCount).toBe(0)
     expect(state.firstNewMessageId).toBeUndefined()
     expect(state.lastSeenMessageId).toBe('seen-1') // preserved
+  })
+
+  it('switching away and back does not regress marker (stale lastSeenMessageId)', () => {
+    const msgs: NotificationMessage[] = [
+      makeMsg({ id: 'msg-100', timestamp: new Date('2025-01-15T09:00:00Z') }),
+      makeMsg({ id: 'msg-101', timestamp: new Date('2025-01-15T09:30:00Z') }),
+      makeMsg({ id: 'msg-102', timestamp: new Date('2025-01-15T10:00:00Z') }),
+      // These two are new (after lastReadAt)
+      makeMsg({ id: 'msg-103', timestamp: new Date('2025-01-15T10:30:00Z') }),
+      makeMsg({ id: 'msg-104', timestamp: new Date('2025-01-15T11:00:00Z') }),
+    ]
+
+    let state = makeState({
+      lastSeenMessageId: 'msg-50', // stale: not in msgs
+      unreadCount: 2,
+      lastReadAt: new Date('2025-01-15T10:15:00Z'),
+    })
+
+    // First activation: marker at msg-103, lastSeenMessageId updated to msg-104
+    state = onActivate(state, msgs)
+    expect(state.firstNewMessageId).toBe('msg-103')
+    expect(state.lastSeenMessageId).toBe('msg-104')
+
+    // User switches away
+    state = onDeactivate(state)
+    expect(state.firstNewMessageId).toBeUndefined()
+
+    // User switches back — lastSeenMessageId is now msg-104 (found in array)
+    state = onActivate(state, msgs)
+    // No new messages after msg-104, so no marker
+    expect(state.firstNewMessageId).toBeUndefined()
+    // lastSeenMessageId preserved (found in array, not stale)
+    expect(state.lastSeenMessageId).toBe('msg-104')
   })
 
   it('room with mentions and notifyAll', () => {
