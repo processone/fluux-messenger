@@ -3,6 +3,7 @@ import { initReactI18next } from 'react-i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
 
 import de from './locales/de.json'
+import el from './locales/el.json'
 import en from './locales/en.json'
 import es from './locales/es.json'
 import fr from './locales/fr.json'
@@ -14,6 +15,7 @@ import ro from './locales/ro.json'
 
 const resources = {
   de: { translation: de },
+  el: { translation: el },
   en: { translation: en },
   es: { translation: es },
   fr: { translation: fr },

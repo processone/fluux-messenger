@@ -6,6 +6,7 @@ import { useSettingsStore, type TimeFormat } from '@/stores/settingsStore'
 
 const languages = [
   { code: 'de', name: 'Deutsch' },
+  { code: 'el', name: 'Ελληνικά' },
   { code: 'en', name: 'English' },
   { code: 'es', name: 'Español' },
   { code: 'fr', name: 'Français' },
@@ -13,6 +14,7 @@ const languages = [
   { code: 'nl', name: 'Nederlands' },
   { code: 'pl', name: 'Polski' },
   { code: 'pt', name: 'Português' },
+  { code: 'ro', name: 'Română' },
 ]
 
 const timeFormatOptions: { value: TimeFormat; labelKey: string }[] = [
