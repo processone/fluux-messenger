@@ -13,6 +13,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { XMPPClient } from './XMPPClient'
+import type { ConnectionStatus } from './types/connection'
 import {
   createMockXmppClient,
   createMockStores,
@@ -963,9 +964,9 @@ describe('XMPPClient', () => {
       await connectPromise
 
       // Track status changes - start as 'online', then simulate actual state tracking
-      let currentStatus = 'online'
+      let currentStatus: ConnectionStatus = 'online'
       mockStores.connection.getStatus.mockImplementation(() => currentStatus)
-      mockStores.connection.setStatus.mockImplementation((status: string) => {
+      mockStores.connection.setStatus.mockImplementation((status: ConnectionStatus) => {
         currentStatus = status
       })
       mockStores.connection.setStatus.mockClear()
@@ -1047,7 +1048,7 @@ describe('XMPPClient', () => {
       // Don't simulate any ack response - let it timeout
 
       // Use a shorter timeout for the test (100ms)
-      const resultPromise = xmppClient.verifyConnection(100)
+      const resultPromise = xmppClient.verifyConnection()
 
       // Run all pending timers to completion
       await vi.runAllTimersAsync()

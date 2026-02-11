@@ -175,6 +175,8 @@ export interface RoomMetadata {
   notifyAllPersistent?: boolean
   /** When room was last marked as read (for new messages marker) */
   lastReadAt?: Date
+  /** ID of the last message the user saw in the viewport (persisted, only advances forward) */
+  lastSeenMessageId?: string
   /** ID of the first unread message (calculated when switching to room) */
   firstNewMessageId?: string
   /** Most recent message for sidebar preview */

@@ -476,7 +476,7 @@ describe('XMPPClient Roster', () => {
     it('should NOT call setPresenceState for any presence show value', async () => {
       await connectClient()
 
-      const showValues: Array<'away' | 'dnd' | 'xa' | undefined> = ['away', 'dnd', 'xa', undefined]
+      const showValues: Array<'away' | 'dnd' | 'xa' | 'online'> = ['away', 'dnd', 'xa', 'online']
 
       for (const show of showValues) {
         mockStores.connection.setPresenceState.mockClear()
@@ -496,7 +496,7 @@ describe('XMPPClient Roster', () => {
   describe('sendInitialPresence auto-away recovery', () => {
     // Helper to find a child element by name, filtering out undefined children
     const findChild = (stanza: { children: unknown[] }, name: string) =>
-      stanza.children.filter(Boolean).find((c: { name?: string }) => c && c.name === name)
+      stanza.children.filter(Boolean).find((c: unknown) => c && (c as { name?: string }).name === name)
 
     it('should restore to online when isAutoAway=true and preAutoAwayState=online', async () => {
       await connectClient()
@@ -596,7 +596,7 @@ describe('XMPPClient Roster', () => {
 
       // User was manually 'away', then went idle and got auto-xa.
       // Pre-auto-away state should be 'away' (what they had before auto-xa)
-      mockStores.connection.getPresenceShow.mockReturnValue('xa')
+      mockStores.connection.getPresenceShow.mockReturnValue('xa' as any)
       mockStores.connection.getIsAutoAway.mockReturnValue(true)
       mockStores.connection.getPreAutoAwayState.mockReturnValue('away')
       mockStores.connection.getPreAutoAwayStatusMessage.mockReturnValue('Be right back')

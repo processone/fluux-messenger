@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { renderHook, act } from '@testing-library/react'
+import { renderHook } from '@testing-library/react'
 import { useNotificationBadge } from './useNotificationBadge'
 
 // Shared state that mocks can access
@@ -28,23 +28,27 @@ vi.mock('@tauri-apps/api/window', () => ({
 }))
 
 // Mock the SDK - use inline functions that read from mockState
-vi.mock('@fluux/sdk', () => ({
-  useEvents: () => ({
-    pendingCount: mockState.pendingCount,
-  }),
-  // Vanilla stores (for imperative .getState() access)
-  chatStore: {
-    getState: () => ({
-      conversations: mockState.conversations,
-      activeConversationId: mockState.activeConversationId,
+vi.mock('@fluux/sdk', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@fluux/sdk')>()
+  return {
+    ...actual,
+    useEvents: () => ({
+      pendingCount: mockState.pendingCount,
     }),
-    subscribe: vi.fn(() => () => {}),
-  },
-  roomStore: {
-    getState: () => ({}),
-    subscribe: vi.fn(() => () => {}),
-  },
-}))
+    // Vanilla stores (for imperative .getState() access)
+    chatStore: {
+      getState: () => ({
+        conversations: mockState.conversations,
+        activeConversationId: mockState.activeConversationId,
+      }),
+      subscribe: vi.fn(() => () => {}),
+    },
+    roomStore: {
+      getState: () => ({}),
+      subscribe: vi.fn(() => () => {}),
+    },
+  }
+})
 
 // Mock React store hooks (from @fluux/sdk/react)
 vi.mock('@fluux/sdk/react', () => ({
@@ -88,9 +92,6 @@ function setMockConversations(conversations: Array<{
 }
 
 describe('useNotificationBadge', () => {
-  let originalHasFocus: () => boolean
-  let mockHasFocus: boolean
-
   beforeEach(() => {
     vi.clearAllMocks()
     mockSetBadgeCount.mockClear()
@@ -101,126 +102,42 @@ describe('useNotificationBadge', () => {
     mockState.roomsWithUnreadCount = 0
     mockState.pendingCount = 0
 
-    // Mock document.hasFocus()
-    originalHasFocus = document.hasFocus.bind(document)
-    mockHasFocus = true
-    Object.defineProperty(document, 'hasFocus', {
-      value: () => mockHasFocus,
-      configurable: true,
-    })
-
     // Mock Tauri detection
     // @ts-expect-error - mocking Tauri internals
     window.__TAURI_INTERNALS__ = {}
   })
 
   afterEach(() => {
-    Object.defineProperty(document, 'hasFocus', {
-      value: originalHasFocus,
-      configurable: true,
-    })
     // @ts-expect-error - cleaning up Tauri mock
     delete window.__TAURI_INTERNALS__
   })
 
-  describe('focus state tracking', () => {
-    it('should recalculate badge when window gains focus', async () => {
-      // Setup: conversation with a message that arrived while blurred
+  describe('store-driven unread tracking', () => {
+    it('should show badge when store has unread messages', async () => {
+      // When a message arrives while window is blurred, the store sets unreadCount > 0
       setMockConversations([{
         id: 'user@example.com',
-        unreadCount: 0,
-        lastMessage: {
-          id: 'msg-1',
-          body: 'Hello',
-          timestamp: new Date(),
-          isOutgoing: false,
-        },
+        unreadCount: 1,
       }])
-      mockState.activeConversationId = 'user@example.com'
 
-      // Start with window blurred
-      mockHasFocus = false
+      renderHook(() => useNotificationBadge())
 
-      const { rerender } = renderHook(() => useNotificationBadge())
-
-      // Badge should be set (we're blurred with a new message)
       await vi.waitFor(() => {
-        expect(mockSetBadgeCount).toHaveBeenCalled()
-      })
-
-      // Clear the mock to check the next call
-      mockSetBadgeCount.mockClear()
-
-      // Now simulate window gaining focus
-      mockHasFocus = true
-      act(() => {
-        window.dispatchEvent(new Event('focus'))
-      })
-
-      // Force re-render to trigger the effect
-      rerender()
-
-      // Badge should be cleared (window is now focused, message is "seen")
-      await vi.waitFor(() => {
-        expect(mockSetBadgeCount).toHaveBeenCalledWith(undefined)
+        expect(mockSetBadgeCount).toHaveBeenCalledWith(1)
       })
     })
 
-    it('should update badge when window loses focus and new message arrives', async () => {
+    it('should clear badge when store unread count goes to zero', async () => {
+      // When window refocuses, useWindowVisibility calls markAsRead → unreadCount = 0
       setMockConversations([{
         id: 'user@example.com',
         unreadCount: 0,
-        lastMessage: {
-          id: 'msg-1',
-          body: 'Hello',
-          timestamp: new Date(),
-          isOutgoing: false,
-        },
       }])
-      mockState.activeConversationId = 'user@example.com'
 
-      // Start with window focused
-      mockHasFocus = true
+      renderHook(() => useNotificationBadge())
 
-      const { rerender } = renderHook(() => useNotificationBadge())
-
-      // Badge should be cleared (focused, message is seen)
       await vi.waitFor(() => {
         expect(mockSetBadgeCount).toHaveBeenCalledWith(undefined)
-      })
-
-      mockSetBadgeCount.mockClear()
-
-      // Now blur the window
-      mockHasFocus = false
-      act(() => {
-        window.dispatchEvent(new Event('blur'))
-      })
-
-      // Wait for the blur state to be processed
-      await vi.waitFor(() => {
-        expect(mockSetBadgeCount).toHaveBeenCalled()
-      })
-
-      mockSetBadgeCount.mockClear()
-
-      // New message arrives while blurred
-      setMockConversations([{
-        id: 'user@example.com',
-        unreadCount: 0,
-        lastMessage: {
-          id: 'msg-2',
-          body: 'New message',
-          timestamp: new Date(),
-          isOutgoing: false,
-        },
-      }])
-
-      rerender()
-
-      // Badge should show 1 (new unseen message while blurred)
-      await vi.waitFor(() => {
-        expect(mockSetBadgeCount).toHaveBeenCalledWith(1)
       })
     })
   })

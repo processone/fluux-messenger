@@ -154,7 +154,7 @@ describe('XMPPClient Admin', () => {
 
       // Should set commands (filtering only admin commands)
       expect(emitSDKSpy).toHaveBeenCalledWith('admin:commands', expect.objectContaining({ commands: expect.any(Array) }))
-      const commandsCall = emitSDKSpy.mock.calls.find(call => call[0] === 'admin:commands')
+      const commandsCall = emitSDKSpy.mock.calls.find((call: unknown[]) => call[0] === 'admin:commands')
       const commands = (commandsCall![1] as { commands: any[] }).commands
       expect(commands).toHaveLength(4)
 
@@ -212,7 +212,7 @@ describe('XMPPClient Admin', () => {
       await xmppClient.admin.discoverAdminCommands()
 
       // Find the last call to admin:discovering
-      const discoveringCalls = emitSDKSpy.mock.calls.filter(call => call[0] === 'admin:discovering')
+      const discoveringCalls = emitSDKSpy.mock.calls.filter((call: unknown[]) => call[0] === 'admin:discovering')
       expect(discoveringCalls[discoveringCalls.length - 1]).toEqual(['admin:discovering', { isDiscovering: false }])
     })
   })
@@ -241,7 +241,7 @@ describe('XMPPClient Admin', () => {
       ).rejects.toThrow('forbidden')
 
       // Find the last call to admin:executing
-      const executingCalls = emitSDKSpy.mock.calls.filter(call => call[0] === 'admin:executing')
+      const executingCalls = emitSDKSpy.mock.calls.filter((call: unknown[]) => call[0] === 'admin:executing')
       expect(executingCalls[executingCalls.length - 1]).toEqual(['admin:executing', { isExecuting: false }])
     })
   })
@@ -317,7 +317,7 @@ describe('XMPPClient Admin', () => {
 
       await xmppClient.admin.discoverAdminCommands()
 
-      const commandsCall = emitSDKSpy.mock.calls.find(call => call[0] === 'admin:commands')
+      const commandsCall = emitSDKSpy.mock.calls.find((call: unknown[]) => call[0] === 'admin:commands')
       const commands = (commandsCall![1] as { commands: any[] }).commands
       // change-user-password is filtered out (redundant with user-specific UI)
       expect(commands).toHaveLength(8)
@@ -353,7 +353,7 @@ describe('XMPPClient Admin', () => {
 
       await xmppClient.admin.discoverAdminCommands()
 
-      const commandsCall = emitSDKSpy.mock.calls.find(call => call[0] === 'admin:commands')
+      const commandsCall = emitSDKSpy.mock.calls.find((call: unknown[]) => call[0] === 'admin:commands')
       const commands = (commandsCall![1] as { commands: any[] }).commands
       expect(commands).toHaveLength(3)
       expect(commands.every(c => c.category === 'stats')).toBe(true)
@@ -390,7 +390,7 @@ describe('XMPPClient Admin', () => {
 
       await xmppClient.admin.discoverAdminCommands()
 
-      const commandsCall = emitSDKSpy.mock.calls.find(call => call[0] === 'admin:commands')
+      const commandsCall = emitSDKSpy.mock.calls.find((call: unknown[]) => call[0] === 'admin:commands')
       const commands = (commandsCall![1] as { commands: any[] }).commands
       expect(commands).toHaveLength(6)
       expect(commands.every(c => c.category === 'announcement')).toBe(true)
@@ -431,7 +431,7 @@ describe('XMPPClient Admin', () => {
 
       expect(emitSDKSpy).toHaveBeenCalledWith('admin:is-admin', { isAdmin: true })
 
-      const commandsCall = emitSDKSpy.mock.calls.find(call => call[0] === 'admin:commands')
+      const commandsCall = emitSDKSpy.mock.calls.find((call: unknown[]) => call[0] === 'admin:commands')
       const commands = (commandsCall![1] as { commands: any[] }).commands
       // Should include standard + api-commands, but not the other command
       expect(commands).toHaveLength(4)
@@ -471,7 +471,7 @@ describe('XMPPClient Admin', () => {
 
       await xmppClient.admin.discoverAdminCommands()
 
-      const commandsCall = emitSDKSpy.mock.calls.find(call => call[0] === 'admin:commands')
+      const commandsCall = emitSDKSpy.mock.calls.find((call: unknown[]) => call[0] === 'admin:commands')
       const commands = (commandsCall![1] as { commands: any[] }).commands
       expect(commands.every(c => c.category === 'user')).toBe(true)
     })
@@ -504,7 +504,7 @@ describe('XMPPClient Admin', () => {
 
       await xmppClient.admin.discoverAdminCommands()
 
-      const commandsCall = emitSDKSpy.mock.calls.find(call => call[0] === 'admin:commands')
+      const commandsCall = emitSDKSpy.mock.calls.find((call: unknown[]) => call[0] === 'admin:commands')
       const commands = (commandsCall![1] as { commands: any[] }).commands
       expect(commands.every(c => c.category === 'announcement')).toBe(true)
     })
@@ -535,7 +535,7 @@ describe('XMPPClient Admin', () => {
 
       await xmppClient.admin.discoverAdminCommands()
 
-      const commandsCall = emitSDKSpy.mock.calls.find(call => call[0] === 'admin:commands')
+      const commandsCall = emitSDKSpy.mock.calls.find((call: unknown[]) => call[0] === 'admin:commands')
       const commands = (commandsCall![1] as { commands: any[] }).commands
       expect(commands[0].name).toBe('get_roster')
       expect(commands[0].node).toBe('api-commands/get_roster')
@@ -570,7 +570,7 @@ describe('XMPPClient Admin', () => {
 
       await xmppClient.admin.discoverAdminCommands()
 
-      const commandsCall = emitSDKSpy.mock.calls.find(call => call[0] === 'admin:commands')
+      const commandsCall = emitSDKSpy.mock.calls.find((call: unknown[]) => call[0] === 'admin:commands')
       const commands = (commandsCall![1] as { commands: any[] }).commands
       // Both change-user-password (XEP-0133) and change_password (api-commands) should be filtered
       expect(commands).toHaveLength(2)

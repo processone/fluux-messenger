@@ -13,6 +13,7 @@ use quick_xml::Reader;
 use tokio_rustls::rustls::pki_types::ServerName;
 use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 use tokio_rustls::TlsConnector;
+use serde::Serialize;
 use tracing::{debug, error, info, warn};
 use trust_dns_resolver::TokioAsyncResolver;
 use trust_dns_resolver::config::*;
@@ -196,6 +197,15 @@ impl Drop for ConnectionGuard {
     }
 }
 
+/// Result of starting the XMPP proxy, returned to the frontend
+#[derive(Debug, Clone, Serialize)]
+pub struct ProxyStartResult {
+    /// Local WebSocket URL to connect to (e.g., "ws://127.0.0.1:12345")
+    pub url: String,
+    /// Connection method used: "tls" for direct TLS, "starttls" for STARTTLS upgrade
+    pub connection_method: String,
+}
+
 /// XMPP WebSocket-to-TCP proxy state
 pub struct XmppProxy {
     /// Local WebSocket server address
@@ -224,7 +234,7 @@ impl XmppProxy {
     /// - `tls://host:port` or `tcp://host:port` — explicit endpoint, skip SRV
     /// - `host:port` — explicit endpoint, mode inferred from port (5223=TLS, else STARTTLS)
     /// - `domain` — SRV resolution with fallback to domain:5222 STARTTLS
-    pub async fn start(&mut self, server: String) -> Result<String, String> {
+    pub async fn start(&mut self, server: String) -> Result<ProxyStartResult, String> {
         if self.local_addr.is_some() {
             return Err("Proxy already running".to_string());
         }
@@ -243,6 +253,12 @@ impl XmppProxy {
         };
 
         info!(host = %endpoint.host, port = endpoint.port, mode = ?endpoint.mode, "Resolved endpoint");
+
+        // Determine connection method string for the frontend
+        let connection_method = match endpoint.mode {
+            ConnectionMode::DirectTls => "tls".to_string(),
+            ConnectionMode::Tcp => "starttls".to_string(),
+        };
 
         // Bind to localhost on a random port
         let listener = TcpListener::bind("127.0.0.1:0")
@@ -290,7 +306,10 @@ impl XmppProxy {
 
         self.task = Some(task);
 
-        Ok(format!("ws://127.0.0.1:{}", local_addr.port()))
+        Ok(ProxyStartResult {
+            url: format!("ws://127.0.0.1:{}", local_addr.port()),
+            connection_method,
+        })
     }
 
     /// Stop the proxy server
@@ -913,7 +932,7 @@ static PROXY: RwLock<Option<XmppProxy>> = RwLock::const_new(None);
 /// Start the XMPP proxy (exposed to Tauri commands)
 ///
 /// The `server` parameter supports: `tls://host:port`, `tcp://host:port`, `host:port`, or bare `domain`.
-pub async fn start_proxy(server: String) -> Result<String, String> {
+pub async fn start_proxy(server: String) -> Result<ProxyStartResult, String> {
     // Initialize crypto provider before any TLS operations
     init_crypto_provider();
 
@@ -924,10 +943,10 @@ pub async fn start_proxy(server: String) -> Result<String, String> {
     }
 
     let mut proxy = XmppProxy::new();
-    let url = proxy.start(server).await?;
+    let result = proxy.start(server).await?;
     *proxy_guard = Some(proxy);
 
-    Ok(url)
+    Ok(result)
 }
 
 /// Stop the XMPP proxy (exposed to Tauri commands)

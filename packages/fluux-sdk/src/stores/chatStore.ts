@@ -9,6 +9,7 @@ import type { MAMQueryDirection } from './shared/mamState'
 import * as draftState from './shared/draftState'
 import { buildMessageKeySet, isMessageDuplicate, sortMessagesByTimestamp, trimMessages, prependOlderMessages, mergeAndProcessMessages } from './shared/messageArrayUtils'
 import { shouldUpdateLastMessage } from './shared/lastMessageUtils'
+import * as notifState from './shared/notificationState'
 import { connectionStore } from './connectionStore'
 
 // Maximum messages to keep in memory per conversation (display buffer)
@@ -104,6 +105,7 @@ interface ChatState {
   addMessage: (msg: Message) => void
   markAsRead: (conversationId: string) => void
   clearFirstNewMessageId: (conversationId: string) => void
+  updateLastSeenMessageId: (conversationId: string, messageId: string) => void
   hasConversation: (id: string) => boolean
   archiveConversation: (id: string) => void
   unarchiveConversation: (id: string) => void
@@ -254,6 +256,7 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
         unreadCount: conv.unreadCount,
         lastMessage: conv.lastMessage,
         lastReadAt: conv.lastReadAt,
+        lastSeenMessageId: conv.lastSeenMessageId,
         firstNewMessageId: conv.firstNewMessageId,
       })
     }
@@ -340,56 +343,73 @@ export const chatStore = createStore<ChatState>()(
       },
 
       setActiveConversation: (id) => {
-        // Calculate firstNewMessageId BEFORE marking as read
-        // This ensures the marker can be shown before lastReadAt is updated
-        if (id) {
-          // Try metadata map first, fall back to conversations for backward compatibility
-          // (e.g., during migration from old storage format, or when state is directly manipulated)
-          const meta = get().conversationMeta.get(id)
-          const conv = get().conversations.get(id)
-          const lastReadAtSource = meta?.lastReadAt ?? conv?.lastReadAt
-          const messages = get().messages.get(id) || []
-          if (lastReadAtSource) {
-            // Note: lastReadAt may be a string after JSON deserialization from persist middleware
-            const lastReadAt = lastReadAtSource instanceof Date
-              ? lastReadAtSource
-              : new Date(lastReadAtSource)
-            // Find first message that is:
-            // 1. After lastReadAt
-            // 2. Not outgoing (we wrote it)
-            // 3. Not delayed (historical message)
-            const firstNewMessage = messages.find(
-              (msg) => msg.timestamp > lastReadAt && !msg.isOutgoing && !msg.isDelayed
-            )
-            if (firstNewMessage) {
-              // Store the marker position before updating lastReadAt
-              set((state) => {
-                // Update metadata map (if entry exists)
-                const newMeta = new Map(state.conversationMeta)
-                const existingMeta = newMeta.get(id)
-                if (existingMeta) {
-                  newMeta.set(id, { ...existingMeta, firstNewMessageId: firstNewMessage.id })
-                }
-
-                // Update combined map
-                const newConversations = new Map(state.conversations)
-                const existing = newConversations.get(id)
-                if (existing) {
-                  newConversations.set(id, { ...existing, firstNewMessageId: firstNewMessage.id })
-                }
-                return { conversationMeta: newMeta, conversations: newConversations, activeConversationId: id }
-              })
-              // Now mark as read (which updates lastReadAt)
-              get().markAsRead(id)
-              return
-            }
+        // Deactivate previous conversation (clears marker)
+        const prevId = get().activeConversationId
+        if (prevId && prevId !== id) {
+          const prevMeta = get().conversationMeta.get(prevId)
+          if (prevMeta?.firstNewMessageId) {
+            const deactivated = notifState.onDeactivate({
+              unreadCount: prevMeta.unreadCount,
+              mentionsCount: 0,
+              lastReadAt: prevMeta.lastReadAt,
+              lastSeenMessageId: prevMeta.lastSeenMessageId,
+              firstNewMessageId: prevMeta.firstNewMessageId,
+            })
+            set((state) => {
+              const newMeta = new Map(state.conversationMeta)
+              newMeta.set(prevId, { ...prevMeta, firstNewMessageId: deactivated.firstNewMessageId })
+              const newConversations = new Map(state.conversations)
+              const prevConv = newConversations.get(prevId)
+              if (prevConv) {
+                newConversations.set(prevId, { ...prevConv, firstNewMessageId: deactivated.firstNewMessageId })
+              }
+              return { conversationMeta: newMeta, conversations: newConversations }
+            })
           }
         }
-        // Default case: no marker needed, just set active and mark as read
-        set({ activeConversationId: id })
+
         if (id) {
-          get().markAsRead(id)
+          const conv = get().conversations.get(id)
+          if (conv) {
+            // Use conversationMeta if available, otherwise derive from conversations map
+            const meta = get().conversationMeta.get(id)
+            const notifInput: notifState.EntityNotificationState = {
+              unreadCount: meta?.unreadCount ?? conv.unreadCount ?? 0,
+              mentionsCount: 0,
+              lastReadAt: meta?.lastReadAt ?? conv.lastReadAt,
+              lastSeenMessageId: meta?.lastSeenMessageId ?? conv.lastSeenMessageId,
+              firstNewMessageId: meta?.firstNewMessageId ?? conv.firstNewMessageId,
+            }
+
+            const messages = get().messages.get(id) || []
+            // Compute marker position and mark as read atomically
+            const activated = notifState.onActivate(notifInput, messages)
+
+            set((state) => {
+              const newMetaEntry = {
+                ...(meta ?? { unreadCount: 0, lastReadAt: undefined, lastSeenMessageId: undefined, firstNewMessageId: undefined }),
+                unreadCount: activated.unreadCount,
+                lastReadAt: activated.lastReadAt,
+                lastSeenMessageId: activated.lastSeenMessageId,
+                firstNewMessageId: activated.firstNewMessageId,
+              }
+              const newMeta = new Map(state.conversationMeta)
+              newMeta.set(id, newMetaEntry)
+              const newConversations = new Map(state.conversations)
+              newConversations.set(id, {
+                ...conv,
+                unreadCount: activated.unreadCount,
+                lastReadAt: activated.lastReadAt,
+                lastSeenMessageId: activated.lastSeenMessageId,
+                firstNewMessageId: activated.firstNewMessageId,
+              })
+              return { conversationMeta: newMeta, conversations: newConversations, activeConversationId: id }
+            })
+            return
+          }
         }
+        // Default case: conversation not found, just set active
+        set({ activeConversationId: id })
       },
 
       addConversation: (conv) => {
@@ -405,6 +425,7 @@ export const chatStore = createStore<ChatState>()(
             unreadCount: conv.unreadCount,
             lastMessage: conv.lastMessage,
             lastReadAt: conv.lastReadAt,
+            lastSeenMessageId: conv.lastSeenMessageId,
             firstNewMessageId: conv.firstNewMessageId,
           }
 
@@ -518,52 +539,42 @@ export const chatStore = createStore<ChatState>()(
             const isActive = state.activeConversationId === msg.conversationId
             const windowVisible = connectionStore.getState().windowVisible
 
-            // Determine if user can actually see this message
-            // User sees it only if: conversation is active AND window is visible
-            const userSeesMessage = isActive && windowVisible
-
-            // When user sees message, update lastReadAt to message timestamp
-            // When user doesn't see it and lastReadAt not set, initialize to epoch so new messages show marker
-            // When user doesn't see it and lastReadAt is set, preserve it (marker position stays correct)
-            let newLastReadAt: Date | undefined
-            let newFirstNewMessageId = meta.firstNewMessageId
-            if (userSeesMessage) {
-              newLastReadAt = msg.timestamp
-            } else if (meta.lastReadAt === undefined && !msg.isOutgoing) {
-              // First unread message in this conversation - set marker to show it as new
-              newLastReadAt = new Date(0)
-            } else {
-              newLastReadAt = meta.lastReadAt
-            }
-
-            // Set firstNewMessageId for the new message marker when:
-            // - Window is not visible AND conversation is active AND incoming message
-            // - This ensures marker is shown when user returns to visible window
-            if (isActive && !windowVisible && !msg.isOutgoing && !meta.firstNewMessageId) {
-              newFirstNewMessageId = msg.id
-            }
-
-            // Calculate new metadata values
-            const newUnreadCount = userSeesMessage ? 0 : meta.unreadCount + (msg.isOutgoing ? 0 : 1)
+            // Delegate notification state transition to pure function
+            const notif = notifState.onMessageReceived(
+              {
+                unreadCount: meta.unreadCount,
+                mentionsCount: 0,
+                lastReadAt: meta.lastReadAt,
+                lastSeenMessageId: meta.lastSeenMessageId,
+                firstNewMessageId: meta.firstNewMessageId,
+              },
+              msg,
+              { isActive, windowVisible },
+              // In 1:1 chats, delayed messages are offline delivery (new messages
+              // sent while user was offline), so they should increment unread
+              { treatDelayedAsNew: true }
+            )
 
             // Update metadata map
             const newMeta = new Map(state.conversationMeta)
             newMeta.set(msg.conversationId, {
               ...meta,
-              unreadCount: newUnreadCount,
-              lastReadAt: newLastReadAt,
+              unreadCount: notif.unreadCount,
+              lastReadAt: notif.lastReadAt,
               lastMessage: msg,
-              firstNewMessageId: newFirstNewMessageId,
+              lastSeenMessageId: notif.lastSeenMessageId,
+              firstNewMessageId: notif.firstNewMessageId,
             })
 
             // Update combined map for backward compatibility
             const newConversations = new Map(state.conversations)
             newConversations.set(msg.conversationId, {
               ...conv,
-              unreadCount: newUnreadCount,
-              lastReadAt: newLastReadAt,
+              unreadCount: notif.unreadCount,
+              lastReadAt: notif.lastReadAt,
               lastMessage: msg,
-              firstNewMessageId: newFirstNewMessageId,
+              lastSeenMessageId: notif.lastSeenMessageId,
+              firstNewMessageId: notif.firstNewMessageId,
             })
 
             // Auto-unarchive conversation when new incoming message arrives
@@ -591,41 +602,48 @@ export const chatStore = createStore<ChatState>()(
       markAsRead: (conversationId) => {
         set((state) => {
           const conv = state.conversations.get(conversationId)
-          if (!conv) {
-            return {} // No change - conversation doesn't exist
+          if (!conv) return {} // Conversation doesn't exist
+
+          // Use conversationMeta if available, otherwise derive from conversations map
+          // (backward compat: persist middleware may restore conversations without conversationMeta)
+          const meta = state.conversationMeta.get(conversationId)
+          const notifInput: notifState.EntityNotificationState = {
+            unreadCount: meta?.unreadCount ?? conv.unreadCount ?? 0,
+            mentionsCount: 0,
+            lastReadAt: meta?.lastReadAt ?? conv.lastReadAt,
+            lastSeenMessageId: meta?.lastSeenMessageId ?? conv.lastSeenMessageId,
+            firstNewMessageId: meta?.firstNewMessageId ?? conv.firstNewMessageId,
           }
 
-          // Try metadata map first, fall back to conversations for backward compatibility
-          const meta = state.conversationMeta.get(conversationId)
-          const currentUnreadCount = meta?.unreadCount ?? conv.unreadCount
-          const currentLastReadAt = meta?.lastReadAt ?? conv.lastReadAt
-
-          // Always update lastReadAt when conversation becomes active
-          // This ensures the "new messages" marker is always correct
           const messages = state.messages.get(conversationId) || []
           const lastMessage = messages[messages.length - 1]
-          const lastReadAt = lastMessage?.timestamp ?? new Date()
-          // Only update if there's actually a change to make
-          // Compare timestamps by value (getTime) not by reference to avoid infinite loops
-          // Note: lastReadAt may be a string after JSON deserialization from persist middleware
-          const existingLastReadAt = currentLastReadAt instanceof Date
-            ? currentLastReadAt.getTime()
-            : currentLastReadAt ? new Date(currentLastReadAt).getTime() : 0
-          const lastReadAtChanged = existingLastReadAt !== lastReadAt.getTime()
-          if (currentUnreadCount > 0 || lastReadAtChanged) {
-            // Update metadata map (if entry exists)
-            const newMeta = new Map(state.conversationMeta)
-            if (meta) {
-              newMeta.set(conversationId, { ...meta, unreadCount: 0, lastReadAt })
-            }
+          const lastMessageTimestamp = lastMessage?.timestamp
 
-            // Update combined map
-            const newConversations = new Map(state.conversations)
-            newConversations.set(conversationId, { ...conv, unreadCount: 0, lastReadAt })
+          // Delegate to pure function
+          const updated = notifState.onMarkAsRead(notifInput, lastMessageTimestamp)
 
-            return { conversationMeta: newMeta, conversations: newConversations }
+          // If no change (same reference returned), skip state update
+          if (updated.unreadCount === notifInput.unreadCount && updated.lastReadAt === notifInput.lastReadAt) {
+            // Also check by value for deserialized timestamps
+            const existingTime = notifInput.lastReadAt instanceof Date
+              ? notifInput.lastReadAt.getTime()
+              : notifInput.lastReadAt ? new Date(notifInput.lastReadAt as unknown as string).getTime() : 0
+            const newTime = updated.lastReadAt instanceof Date ? updated.lastReadAt.getTime() : 0
+            if (existingTime === newTime) return {}
           }
-          return {} // No change needed
+
+          const newMetaEntry = {
+            ...(meta ?? { unreadCount: 0, lastReadAt: undefined, lastSeenMessageId: undefined, firstNewMessageId: undefined }),
+            unreadCount: updated.unreadCount,
+            lastReadAt: updated.lastReadAt,
+          }
+          const newMeta = new Map(state.conversationMeta)
+          newMeta.set(conversationId, newMetaEntry)
+
+          const newConversations = new Map(state.conversations)
+          newConversations.set(conversationId, { ...conv, unreadCount: updated.unreadCount, lastReadAt: updated.lastReadAt })
+
+          return { conversationMeta: newMeta, conversations: newConversations }
         })
       },
 
@@ -633,21 +651,61 @@ export const chatStore = createStore<ChatState>()(
         set((state) => {
           const meta = state.conversationMeta.get(conversationId)
           const conv = state.conversations.get(conversationId)
-          if (meta && meta.firstNewMessageId) {
-            // Update metadata map
-            const newMeta = new Map(state.conversationMeta)
-            newMeta.set(conversationId, { ...meta, firstNewMessageId: undefined })
+          if (!meta || !meta.firstNewMessageId) return state
 
-            // Update combined map
-            if (conv) {
-              const newConversations = new Map(state.conversations)
-              newConversations.set(conversationId, { ...conv, firstNewMessageId: undefined })
-              return { conversationMeta: newMeta, conversations: newConversations }
-            }
+          const cleared = notifState.onClearMarker({
+            unreadCount: meta.unreadCount,
+            mentionsCount: 0,
+            lastReadAt: meta.lastReadAt,
+            lastSeenMessageId: meta.lastSeenMessageId,
+            firstNewMessageId: meta.firstNewMessageId,
+          })
 
-            return { conversationMeta: newMeta }
+          const newMeta = new Map(state.conversationMeta)
+          newMeta.set(conversationId, { ...meta, firstNewMessageId: cleared.firstNewMessageId })
+
+          if (conv) {
+            const newConversations = new Map(state.conversations)
+            newConversations.set(conversationId, { ...conv, firstNewMessageId: cleared.firstNewMessageId })
+            return { conversationMeta: newMeta, conversations: newConversations }
           }
-          return state
+
+          return { conversationMeta: newMeta }
+        })
+      },
+
+      updateLastSeenMessageId: (conversationId, messageId) => {
+        set((state) => {
+          const meta = state.conversationMeta.get(conversationId)
+          const conv = state.conversations.get(conversationId)
+          if (!meta) return state
+
+          const messages = state.messages.get(conversationId) || []
+          const updated = notifState.onMessageSeen(
+            {
+              unreadCount: meta.unreadCount,
+              mentionsCount: 0,
+              lastReadAt: meta.lastReadAt,
+              lastSeenMessageId: meta.lastSeenMessageId,
+              firstNewMessageId: meta.firstNewMessageId,
+            },
+            messageId,
+            messages
+          )
+
+          // No change (same reference or same value)
+          if (updated.lastSeenMessageId === meta.lastSeenMessageId) return state
+
+          const newMeta = new Map(state.conversationMeta)
+          newMeta.set(conversationId, { ...meta, lastSeenMessageId: updated.lastSeenMessageId })
+
+          if (conv) {
+            const newConversations = new Map(state.conversations)
+            newConversations.set(conversationId, { ...conv, lastSeenMessageId: updated.lastSeenMessageId })
+            return { conversationMeta: newMeta, conversations: newConversations }
+          }
+
+          return { conversationMeta: newMeta }
         })
       },
 

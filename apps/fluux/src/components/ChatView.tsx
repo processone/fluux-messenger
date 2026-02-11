@@ -22,7 +22,7 @@ interface ChatViewProps {
 
 export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerRef }: ChatViewProps) {
   const { t } = useTranslation()
-  const { activeConversation, activeMessages, activeTypingUsers, sendReaction, sendCorrection, retractMessage, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, activeMAMState, fetchOlderHistory } = useChat()
+  const { activeConversation, activeMessages, activeTypingUsers, sendReaction, sendCorrection, retractMessage, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, activeMAMState, fetchOlderHistory } = useChat()
   const { contacts } = useRoster()
   // NOTE: Use focused selectors instead of useConnection() hook to avoid
   // re-renders when unrelated connection state changes (error, reconnectAttempt, etc.)
@@ -209,6 +209,13 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
     }
   }, [conversationId, clearFirstNewMessageId])
 
+  // Viewport observer callback: update lastSeenMessageId as user scrolls
+  const handleMessageSeen = useCallback((messageId: string) => {
+    if (conversationId) {
+      updateLastSeenMessageId(conversationId, messageId)
+    }
+  }, [conversationId, updateLastSeenMessageId])
+
   if (!activeConversation) return null
 
   // Get contact for 1:1 chats
@@ -281,6 +288,7 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
           showToolbarForSelection={showToolbarForSelection}
           firstNewMessageId={activeConversation.firstNewMessageId}
           clearFirstNewMessageId={handleClearFirstNewMessageId}
+          onMessageSeen={handleMessageSeen}
           isDarkMode={resolvedMode === 'dark'}
           onMediaLoad={handleMediaLoad}
           onScrollToTop={fetchOlderHistory}
@@ -356,6 +364,7 @@ const ChatMessageList = memo(function ChatMessageList({
   showToolbarForSelection,
   firstNewMessageId,
   clearFirstNewMessageId,
+  onMessageSeen,
   isDarkMode,
   onMediaLoad,
   onScrollToTop,
@@ -389,6 +398,7 @@ const ChatMessageList = memo(function ChatMessageList({
   showToolbarForSelection: boolean
   firstNewMessageId?: string
   clearFirstNewMessageId: () => void
+  onMessageSeen?: (messageId: string) => void
   isDarkMode?: boolean
   onMediaLoad?: () => void
   onScrollToTop?: () => void
@@ -495,6 +505,7 @@ const ChatMessageList = memo(function ChatMessageList({
       conversationId={conversationId}
       firstNewMessageId={firstNewMessageId}
       clearFirstNewMessageId={clearFirstNewMessageId}
+      onMessageSeen={onMessageSeen}
       scrollerRef={scrollerRef}
       isAtBottomRef={isAtBottomRef}
       typingUsers={typingUsers}

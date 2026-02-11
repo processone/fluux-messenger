@@ -1,6 +1,6 @@
 import { client, Client, Element, xml } from '@xmpp/client'
 import { BaseModule, type ModuleDependencies } from './BaseModule'
-import type { ConnectOptions } from '../types'
+import type { ConnectOptions, ConnectionMethod } from '../types'
 import { getDomain, getLocalPart } from '../jid'
 import { getClientIdentity, CLIENT_FEATURES } from '../caps'
 import { NS_DISCO_INFO, NS_PING } from '../namespaces'
@@ -295,65 +295,61 @@ export class Connection extends BaseModule {
     // Emit SDK event for connection starting
     this.deps.emitSDK('connection:status', { status: 'connecting' })
 
-    // Check environment and user preferences (Tauri v2 uses __TAURI_INTERNALS__)
-    const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
-    const disableProxy = typeof window !== 'undefined' && localStorage.getItem('fluux:disable-tcp-proxy') === 'true'
+    // Check connection mode
     const userProvidedWebSocketUrl = server.startsWith('ws://') || server.startsWith('wss://')
-    // tls:// and tcp:// URIs are explicit server specs for the TCP proxy (not WebSocket URLs)
+    // tls:// and tcp:// URIs are explicit server specs for the proxy (not WebSocket URLs)
     const isExplicitTcpUri = server.startsWith('tls://') || server.startsWith('tcp://')
+    const hasProxy = !!this.deps.proxyAdapter
+    const useProxy = hasProxy && !userProvidedWebSocketUrl
 
     // Debug logging
     this.stores.console.addEvent(
-      `Connection setup: isTauri=${isTauri}, disableProxy=${disableProxy}, userProvidedWebSocketUrl=${userProvidedWebSocketUrl}, isExplicitTcpUri=${isExplicitTcpUri}, server="${server}"`,
+      `Connection setup: hasProxy=${hasProxy}, userProvidedWebSocketUrl=${userProvidedWebSocketUrl}, isExplicitTcpUri=${isExplicitTcpUri}, server="${server}"`,
       'connection'
     )
 
     // Resolve server URL:
-    // - For Tauri (desktop) with TCP proxy: pass server string to proxy (handles URI parsing + SRV)
-    // - For web or explicit WebSocket URL: Perform WebSocket URL resolution
+    // - With proxy adapter: pass server string to proxy (handles URI parsing + SRV)
+    // - Without proxy or explicit WebSocket URL: Perform WebSocket URL resolution
     // Note: tls:// and tcp:// URIs are treated as proxy targets, not WebSocket URLs
     let resolvedServer: string
-    const useProxy = isTauri && !disableProxy && !userProvidedWebSocketUrl
+    let connectionMethod: ConnectionMethod = 'websocket'
     if (useProxy) {
-      // Desktop mode with TCP proxy: pass server string as-is (proxy parses URI formats and does SRV)
+      // Proxy mode: pass server string as-is (proxy parses URI formats and does SRV)
       resolvedServer = server || getDomain(jid)
-      this.stores.console.addEvent(`Desktop mode: using "${resolvedServer}" for TCP proxy`, 'connection')
+      this.stores.console.addEvent(`Proxy mode: using "${resolvedServer}" for proxy`, 'connection')
     } else if (isExplicitTcpUri) {
-      // tls:// or tcp:// URI on web or with proxy disabled — not usable, fall back to domain
+      // tls:// or tcp:// URI without proxy — not usable, fall back to domain
       this.stores.console.addEvent(`TCP URI "${server}" not usable without proxy, falling back to WebSocket discovery`, 'connection')
       resolvedServer = this.shouldSkipDiscovery('', skipDiscovery)
         ? this.getWebSocketUrl('', getDomain(jid))
         : await this.resolveWebSocketUrl('', getDomain(jid))
     } else {
-      // Web mode or explicit WebSocket URL: resolve WebSocket URL via discovery
+      // WebSocket mode: resolve WebSocket URL via discovery
       resolvedServer = this.shouldSkipDiscovery(server, skipDiscovery)
         ? this.getWebSocketUrl(server, getDomain(jid))
         : await this.resolveWebSocketUrl(server, getDomain(jid))
     }
 
-    // Tauri: Start WebSocket-to-TCP proxy for native TCP/TLS connections
+    // Start proxy if available
     if (useProxy) {
-      this.stores.console.addEvent(`Starting TCP proxy for: ${resolvedServer}`, 'connection')
+      this.stores.console.addEvent(`Starting proxy for: ${resolvedServer}`, 'connection')
       try {
-        this.stores.console.addEvent(`Invoking start_xmpp_proxy command for server: ${resolvedServer}`, 'connection')
+        const proxyResult = await this.deps.proxyAdapter!.startProxy(resolvedServer)
 
-        // Start the proxy — it handles URI parsing (tls://, tcp://, host:port) and SRV resolution
-        const { invoke } = await import('@tauri-apps/api/core')
-        const localWsUrl = await invoke<string>('start_xmpp_proxy', {
-          server: resolvedServer,
-        })
-
-        this.stores.console.addEvent(`Proxy started successfully: ${localWsUrl}`, 'connection')
-
-        // Use the local WebSocket URL instead of the remote server
-        resolvedServer = localWsUrl
-        this.stores.console.addEvent(`Using native TCP proxy for ${server || getDomain(jid)} via ${localWsUrl}`, 'connection')
+        resolvedServer = proxyResult.url
+        connectionMethod = proxyResult.connectionMethod
+        this.stores.console.addEvent(`Proxy started: ${server || getDomain(jid)} via ${proxyResult.url} (${connectionMethod})`, 'connection')
       } catch (err) {
         // If proxy fails to start, fall back to WebSocket connection
         const errorMsg = err instanceof Error ? err.message : String(err)
-        this.stores.console.addEvent(`Failed to start TCP proxy: ${errorMsg}, falling back to WebSocket`, 'error')
+        this.stores.console.addEvent(`Failed to start proxy: ${errorMsg}, falling back to WebSocket`, 'error')
+        connectionMethod = 'websocket'
       }
     }
+
+    // Store connection method for display
+    this.stores.connection.setConnectionMethod(connectionMethod)
 
     // Store credentials for potential reconnection (with resolved URL)
     this.credentials = { jid, password, server: resolvedServer, resource, lang }
@@ -421,12 +417,11 @@ export class Connection extends BaseModule {
     // to ensure all messages received during this session are persisted
     await flushPendingRoomMessages()
 
-    // Tauri: Stop the proxy if running (Tauri v2 uses __TAURI_INTERNALS__)
-    if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+    // Stop the proxy if running
+    if (this.deps.proxyAdapter) {
       try {
-        const { invoke } = await import('@tauri-apps/api/core')
-        await invoke('stop_xmpp_proxy')
-        this.stores.console.addEvent('Stopped TCP proxy', 'connection')
+        await this.deps.proxyAdapter.stopProxy()
+        this.stores.console.addEvent('Stopped proxy', 'connection')
       } catch (_err) {
         // Ignore errors - proxy might not be running
       }
@@ -443,6 +438,7 @@ export class Connection extends BaseModule {
       // Set status and log BEFORE stop() to prevent race with session persistence
       this.stores.connection.setStatus('disconnected')
       this.stores.connection.setJid(null)
+      this.stores.connection.setConnectionMethod(null)
       this.stores.console.addEvent('Disconnected', 'connection')
       // Emit SDK event for disconnect
       this.deps.emitSDK('connection:status', { status: 'offline' })
@@ -872,7 +868,7 @@ export class Connection extends BaseModule {
       sm.preferredMaximum = 600 // 10 minutes in seconds
 
       // Optionally disable xmpp.js's built-in SM keepalive interval
-      // when the app implements its own keepalive (e.g., Rust timer in Tauri)
+      // when the app implements its own keepalive (e.g., native timer)
       if (this.credentials?.disableSmKeepalive) {
         // Set to very high value to effectively disable (24 hours)
         sm.requestAckInterval = 24 * 60 * 60 * 1000
@@ -1365,29 +1361,26 @@ export class Connection extends BaseModule {
       // Clean up old client and stop the proxy (the TCP connection is dead)
       await this.cleanupClient()
 
-      // Restart the TCP proxy if we're in Tauri desktop mode
+      // Restart the proxy if available
       // The proxy must be restarted with the original server string (not the local WS URL)
       // because the previous proxy's TCP connection to the XMPP server is dead
-      const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
-      const disableProxy = typeof window !== 'undefined' && localStorage.getItem('fluux:disable-tcp-proxy') === 'true'
       const userProvidedWebSocketUrl = this.originalServer.startsWith('ws://') || this.originalServer.startsWith('wss://')
 
-      if (isTauri && !disableProxy && !userProvidedWebSocketUrl) {
+      if (this.deps.proxyAdapter && !userProvidedWebSocketUrl) {
         try {
-          const { invoke } = await import('@tauri-apps/api/core')
           // Stop the old proxy first (if still running)
-          try { await invoke('stop_xmpp_proxy') } catch { /* may not be running */ }
+          try { await this.deps.proxyAdapter.stopProxy() } catch { /* may not be running */ }
           // Start a fresh proxy with the original server string
-          const localWsUrl = await invoke<string>('start_xmpp_proxy', {
-            server: this.originalServer,
-          })
-          this.credentials.server = localWsUrl
-          this.stores.console.addEvent(`Proxy restarted for reconnect: ${localWsUrl}`, 'connection')
+          const proxyResult = await this.deps.proxyAdapter.startProxy(this.originalServer)
+          this.credentials.server = proxyResult.url
+          this.stores.connection.setConnectionMethod(proxyResult.connectionMethod)
+          this.stores.console.addEvent(`Proxy restarted for reconnect: ${proxyResult.url} (${proxyResult.connectionMethod})`, 'connection')
         } catch (err) {
           const errorMsg = err instanceof Error ? err.message : String(err)
           this.stores.console.addEvent(`Failed to restart proxy on reconnect: ${errorMsg}`, 'error')
           // Fall back to WebSocket — update credentials.server so createXmppClient uses it
           this.credentials.server = `wss://${getDomain(this.credentials.jid)}/ws`
+          this.stores.connection.setConnectionMethod('websocket')
         }
       }
 

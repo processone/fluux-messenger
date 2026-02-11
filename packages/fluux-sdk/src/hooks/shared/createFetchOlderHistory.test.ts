@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createFetchOlderHistory, type FetchOlderHistoryDeps } from './createFetchOlderHistory'
+import type { MAMQueryState } from '../../core/types'
 import { connectionStore } from '../../stores'
 
 // Mock the connection store to return 'online' status
@@ -20,10 +21,11 @@ describe('createFetchOlderHistory', () => {
     deps = {
       getActiveId: vi.fn(() => 'conv-1'),
       isValidTarget: vi.fn(() => true),
-      getMAMState: vi.fn(() => ({
+      getMAMState: vi.fn((): MAMQueryState => ({
         isLoading: false,
         hasQueried: true,
         isHistoryComplete: false,
+        isCaughtUpToLive: false,
         error: null,
         oldestFetchedId: 'mam-oldest', // Note: this is no longer used for pagination
       })),
@@ -78,6 +80,7 @@ describe('createFetchOlderHistory', () => {
         isLoading: true,
         hasQueried: false,
         isHistoryComplete: false,
+        isCaughtUpToLive: false,
         error: null,
       })
 
@@ -92,6 +95,7 @@ describe('createFetchOlderHistory', () => {
         isLoading: false,
         hasQueried: true,
         isHistoryComplete: true,
+        isCaughtUpToLive: false,
         error: null,
         oldestFetchedId: 'msg-oldest',
       })
@@ -172,6 +176,7 @@ describe('createFetchOlderHistory', () => {
         isLoading: false,
         hasQueried: true,
         isHistoryComplete: false,
+        isCaughtUpToLive: false,
         error: null,
         oldestFetchedId: 'mam-oldest-from-start-query', // From initial 'fetch new' query
       })

@@ -2176,7 +2176,7 @@ describe('XMPPClient MAM', () => {
         messages: [],
         unreadCount: 0,
         mentionsCount: 0,
-        typingUsers: new Set(),
+        typingUsers: new Set<string>(),
       })
 
       const mamResponse = createMockElement('iq', { type: 'result' }, [
@@ -2214,7 +2214,7 @@ describe('XMPPClient MAM', () => {
         messages: [],
         unreadCount: 0,
         mentionsCount: 0,
-        typingUsers: new Set(),
+        typingUsers: new Set<string>(),
       })
 
       const mamResponse = createMockElement('iq', { type: 'result' }, [
@@ -2266,7 +2266,7 @@ describe('XMPPClient MAM', () => {
         messages: [],
         unreadCount: 0,
         mentionsCount: 0,
-        typingUsers: new Set(),
+        typingUsers: new Set<string>(),
       })
 
       const mamResponse = createMockElement('iq', { type: 'result' }, [
@@ -2369,7 +2369,7 @@ describe('XMPPClient MAM', () => {
         messages: [],
         unreadCount: 0,
         mentionsCount: 0,
-        typingUsers: new Set(),
+        typingUsers: new Set<string>(),
       })
 
       const mamResponse = createMockElement('iq', { type: 'result' }, [
@@ -2402,7 +2402,7 @@ describe('XMPPClient MAM', () => {
         messages: [],
         unreadCount: 0,
         mentionsCount: 0,
-        typingUsers: new Set(),
+        typingUsers: new Set<string>(),
       })
 
       const mamResponse = createMockElement('iq', { type: 'result' }, [
@@ -2449,7 +2449,7 @@ describe('XMPPClient MAM', () => {
         messages: [],
         unreadCount: 0,
         mentionsCount: 0,
-        typingUsers: new Set(),
+        typingUsers: new Set<string>(),
       })
 
       mockXmppClientInstance.iqCaller.request = vi.fn().mockRejectedValue(new Error('Room MAM not supported'))
@@ -2476,7 +2476,7 @@ describe('XMPPClient MAM', () => {
         messages: [],
         unreadCount: 0,
         mentionsCount: 0,
-        typingUsers: new Set(),
+        typingUsers: new Set<string>(),
       })
 
       const mamResponse = createMockElement('iq', { type: 'result' }, [
@@ -2519,7 +2519,7 @@ describe('XMPPClient MAM', () => {
         messages: [],
         unreadCount: 0,
         mentionsCount: 0,
-        typingUsers: new Set(),
+        typingUsers: new Set<string>(),
       })
 
       // Server returns complete=true for forward query (no more messages after start time)
@@ -2569,7 +2569,7 @@ describe('XMPPClient MAM', () => {
         messages: [],
         unreadCount: 0,
         mentionsCount: 0,
-        typingUsers: new Set(),
+        typingUsers: new Set<string>(),
       })
 
       // Server returns complete=true for backward query (reached beginning of archive)

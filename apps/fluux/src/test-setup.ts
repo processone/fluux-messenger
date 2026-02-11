@@ -92,6 +92,15 @@ class ResizeObserverMock {
 }
 globalThis.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver
 
+// Mock IntersectionObserver for jsdom (used by useViewportObserver)
+class IntersectionObserverMock {
+  observe = vi.fn()
+  unobserve = vi.fn()
+  disconnect = vi.fn()
+  constructor(_callback: IntersectionObserverCallback, _options?: IntersectionObserverInit) {}
+}
+globalThis.IntersectionObserver = IntersectionObserverMock as unknown as typeof IntersectionObserver
+
 // Mock matchMedia for jsdom (not available by default)
 // Returns desktop (non-mobile) by default - tests can override in specific files
 Object.defineProperty(window, 'matchMedia', {

@@ -177,7 +177,7 @@ fn exit_app(app: tauri::AppHandle) {
 /// Start XMPP WebSocket-to-TCP proxy.
 /// The `server` parameter supports: `tls://host:port`, `tcp://host:port`, `host:port`, or bare `domain`.
 #[tauri::command]
-async fn start_xmpp_proxy(server: String) -> Result<String, String> {
+async fn start_xmpp_proxy(server: String) -> Result<xmpp_proxy::ProxyStartResult, String> {
     xmpp_proxy::start_proxy(server).await
 }
 

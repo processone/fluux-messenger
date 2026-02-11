@@ -473,6 +473,119 @@ export function setupRoomSideEffects(
 }
 
 /**
+ * Sets up preview refresh side effects.
+ *
+ * On connect, refreshes sidebar previews for all non-archived conversations
+ * so that messages exchanged on other clients while offline are reflected.
+ * Additionally, once per day, checks archived conversations for new activity
+ * and auto-unarchives those with new incoming messages.
+ *
+ * This implements the "smart MAM" strategy: not fully lazy (stale previews),
+ * not fully eager (300+ queries on connect), but targeted background refreshes.
+ *
+ * @param client - The XMPPClient instance
+ * @param options - Configuration options
+ * @returns Unsubscribe function to clean up the subscriptions
+ */
+export function setupPreviewRefreshSideEffects(
+  client: XMPPClient,
+  options: SideEffectsOptions = {}
+): () => void {
+  const { debug = false } = options
+
+  // Track whether preview refresh has been triggered this connection cycle
+  let previewRefreshDone = false
+
+  // --- Daily archived check helpers ---
+  const ARCHIVED_CHECK_KEY = 'fluux:lastArchivedPreviewCheck'
+  const ONE_DAY_MS = 24 * 60 * 60 * 1000
+
+  function shouldCheckArchived(): boolean {
+    try {
+      const lastCheck = localStorage.getItem(ARCHIVED_CHECK_KEY)
+      if (!lastCheck) return true
+      return Date.now() - parseInt(lastCheck, 10) > ONE_DAY_MS
+    } catch {
+      return true // If localStorage fails, check anyway
+    }
+  }
+
+  function markArchivedChecked(): void {
+    try {
+      localStorage.setItem(ARCHIVED_CHECK_KEY, String(Date.now()))
+    } catch {
+      // Silently ignore localStorage errors
+    }
+  }
+
+  /**
+   * Triggers background preview refresh for all non-archived conversations,
+   * plus daily archived conversation check.
+   */
+  function triggerPreviewRefresh(): void {
+    if (previewRefreshDone) return
+    previewRefreshDone = true
+
+    if (debug) console.log('[SideEffects] Preview: Starting background preview refresh')
+
+    // Refresh non-archived conversation previews
+    void client.mam.refreshConversationPreviews().catch(() => {})
+
+    // Daily check of archived conversations for new activity
+    if (shouldCheckArchived()) {
+      if (debug) console.log('[SideEffects] Preview: Running daily archived conversation check')
+      void client.mam.refreshArchivedConversationPreviews()
+        .then(() => markArchivedChecked())
+        .catch(() => {})
+    }
+  }
+
+  // Subscribe to connection status changes
+  let previousStatus = connectionStore.getState().status
+  const unsubscribeConnection = connectionStore.subscribe((state) => {
+    const status = state.status
+
+    // When we come back online after being disconnected
+    if (status === 'online' && previousStatus !== 'online') {
+      // Reset flag for new connection cycle
+      previewRefreshDone = false
+
+      // Check if MAM is already supported (SM resumption with cached serverInfo)
+      const supportsMAM = connectionStore.getState().serverInfo?.features?.includes(NS_MAM) ?? false
+      if (supportsMAM) {
+        triggerPreviewRefresh()
+      }
+      // If MAM not yet known, the serverInfo subscription below will catch it
+    }
+
+    previousStatus = status
+  })
+
+  // Subscribe to serverInfo changes (for fresh sessions where MAM discovery is async)
+  let hadMAMSupport = connectionStore.getState().serverInfo?.features?.includes(NS_MAM) ?? false
+  const unsubscribeServerInfo = connectionStore.subscribe((state) => {
+    const hasMAMSupport = state.serverInfo?.features?.includes(NS_MAM) ?? false
+
+    // When MAM support is first discovered
+    if (hasMAMSupport && !hadMAMSupport) {
+      hadMAMSupport = hasMAMSupport
+
+      if (!previewRefreshDone) {
+        if (debug) console.log('[SideEffects] Preview: MAM support discovered, triggering preview refresh')
+        triggerPreviewRefresh()
+      }
+    } else {
+      hadMAMSupport = hasMAMSupport
+    }
+  })
+
+  return () => {
+    unsubscribeConnection()
+    unsubscribeServerInfo()
+  }
+}
+
+/**
  * Sets up all store-based side effects for the SDK.
  *
  * This should be called once when the XMPPClient is created. It sets up
@@ -498,9 +611,11 @@ export function setupStoreSideEffects(
 ): () => void {
   const unsubscribeChat = setupChatSideEffects(client, options)
   const unsubscribeRoom = setupRoomSideEffects(client, options)
+  const unsubscribePreview = setupPreviewRefreshSideEffects(client, options)
 
   return () => {
     unsubscribeChat()
     unsubscribeRoom()
+    unsubscribePreview()
   }
 }

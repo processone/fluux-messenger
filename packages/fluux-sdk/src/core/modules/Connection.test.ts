@@ -1277,6 +1277,8 @@ describe('XMPPClient Connection', () => {
         id: 'sm-session-123',
         inbound: 42,
         enabled: true,
+        outbound: 0,
+        on: vi.fn(),
       }
 
       mockXmppClientInstance._emit('online')
@@ -1302,6 +1304,8 @@ describe('XMPPClient Connection', () => {
         id: 'sm-session-456',
         inbound: 10,
         enabled: true,
+        outbound: 0,
+        on: vi.fn(),
       }
 
       mockXmppClientInstance._emit('online')
@@ -1315,7 +1319,7 @@ describe('XMPPClient Connection', () => {
       })
 
       // Simulate socket death - SM becomes unavailable
-      mockXmppClientInstance.streamManagement = null
+      mockXmppClientInstance.streamManagement = null as any
 
       // Should return cached state
       const smState2 = xmppClient.getStreamManagementState()
@@ -1338,6 +1342,8 @@ describe('XMPPClient Connection', () => {
         id: 'sm-session-789',
         inbound: 5,
         enabled: true,
+        outbound: 0,
+        on: vi.fn(),
       }
 
       mockXmppClientInstance._emit('online')
@@ -1367,6 +1373,8 @@ describe('XMPPClient Connection', () => {
         id: 'sm-session-abc',
         inbound: 1,
         enabled: true,
+        outbound: 0,
+        on: vi.fn(),
       }
 
       mockXmppClientInstance._emit('online')
@@ -1384,7 +1392,7 @@ describe('XMPPClient Connection', () => {
       expect(smState2?.inbound).toBe(15)
 
       // Simulate socket death
-      mockXmppClientInstance.streamManagement = null
+      mockXmppClientInstance.streamManagement = null as any
 
       // Should return the last cached state (inbound: 15)
       const smState3 = xmppClient.getStreamManagementState()

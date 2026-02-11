@@ -49,7 +49,7 @@ function createMockState(overrides: Partial<RoomState> = {}): RoomState {
     setRoomMAMLoading: () => {},
     setRoomMAMError: () => {},
     mergeRoomMAMMessages: () => {},
-    getRoomMAMQueryState: () => ({ isLoading: false, error: null, isHistoryComplete: false, isCaughtUpToLive: false }),
+    getRoomMAMQueryState: () => ({ isLoading: false, hasQueried: false, error: null, isHistoryComplete: false, isCaughtUpToLive: false }),
     resetRoomMAMStates: () => {},
     joinedRooms: () => [],
     bookmarkedRooms: () => [],
@@ -61,21 +61,23 @@ function createMockState(overrides: Partial<RoomState> = {}): RoomState {
     totalUnreadCount: () => 0,
     totalNotifiableUnreadCount: () => 0,
     roomsWithUnreadCount: () => 0,
+    updateOccupantAvatar: () => {},
     ...overrides,
-  }
+  } as RoomState
 }
 
 function createMockRoom(jid: string, overrides: Partial<Room> = {}): Room {
   return {
     jid,
     name: `Room ${jid}`,
+    nickname: 'me',
     joined: false,
     isBookmarked: false,
     occupants: new Map(),
     messages: [],
     unreadCount: 0,
     mentionsCount: 0,
-    typingUsers: new Set(),
+    typingUsers: new Set<string>(),
     ...overrides,
   }
 }
@@ -346,6 +348,7 @@ describe('roomSelectors', () => {
     it('should return MAM state for room', () => {
       const mamState: MAMQueryState = {
         isLoading: true,
+        hasQueried: false,
         error: null,
         isHistoryComplete: false,
         isCaughtUpToLive: false,
@@ -358,8 +361,9 @@ describe('roomSelectors', () => {
 
   describe('isMAMLoading', () => {
     it('should return true when loading', () => {
-      const mamQueryStates = new Map([['room@conference.example.com', {
+      const mamQueryStates = new Map<string, MAMQueryState>([['room@conference.example.com', {
         isLoading: true,
+        hasQueried: false,
         error: null,
         isHistoryComplete: false,
         isCaughtUpToLive: false,

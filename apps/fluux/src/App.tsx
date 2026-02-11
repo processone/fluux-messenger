@@ -150,7 +150,8 @@ function App() {
         <Route path="*" element={<Navigate to="/messages" replace />} />
       </Routes>
       {/* Update modal - shown on app launch when update is available */}
-      {showUpdateModal && update.available && (
+      {/* Disabled on Linux - users update through their distro package manager */}
+      {showUpdateModal && update.available && update.updaterEnabled && (
         <UpdateModal
           state={update}
           onDownload={update.downloadAndInstall}

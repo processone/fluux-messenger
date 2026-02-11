@@ -502,10 +502,48 @@ export class MAM extends BaseModule {
   }
 
   /**
+   * Refresh sidebar previews for archived conversations and auto-unarchive
+   * those with new incoming messages.
+   *
+   * This is meant to run periodically (e.g., once per day) to detect activity
+   * in archived conversations that occurred on other clients while Fluux was
+   * offline. When a newer incoming message is found, the conversation is
+   * automatically unarchived so it appears in the main sidebar.
+   *
+   * @param options - Optional configuration
+   * @param options.concurrency - Maximum parallel requests (default: 3)
+   */
+  async refreshArchivedConversationPreviews(options: { concurrency?: number } = {}): Promise<void> {
+    const { concurrency = 3 } = options
+    const archivedConversations = this.deps.stores?.chat.getArchivedConversations?.() || []
+    if (archivedConversations.length === 0) return
+
+    this.deps.emitSDK('console:event', {
+      message: `Checking ${archivedConversations.length} archived conversation(s) for new activity`,
+      category: 'sm',
+    })
+
+    const conversationIds = archivedConversations.map((c) => c.id)
+
+    await executeWithConcurrency(
+      conversationIds,
+      (conversationId) => this.fetchPreviewForConversation(conversationId, { unarchiveIfNewer: true }),
+      concurrency
+    )
+  }
+
+  /**
    * Fetch the latest message for a single conversation (preview only).
    * Updates lastMessage without affecting message history.
+   *
+   * @param conversationId - The bare JID of the conversation
+   * @param options - Optional behavior overrides
+   * @param options.unarchiveIfNewer - If true, unarchive the conversation when a newer incoming message is found
    */
-  private async fetchPreviewForConversation(conversationId: string): Promise<void> {
+  private async fetchPreviewForConversation(
+    conversationId: string,
+    options: { unarchiveIfNewer?: boolean } = {}
+  ): Promise<void> {
     try {
       const queryId = `preview_${generateUUID()}`
 
@@ -538,9 +576,22 @@ export class MAM extends BaseModule {
 
       try {
         const response = await this.deps.sendIQ(iq)
-        if (response && latestMessage) {
+        // latestMessage is mutated by the collector callback; TS CFA can't track this
+        const message = latestMessage as Message | null
+        if (response && message) {
+          // For archived conversations: check if we should unarchive BEFORE updating preview
+          // (updateLastMessagePreview uses shouldUpdateLastMessage internally)
+          if (options.unarchiveIfNewer && !message.isOutgoing) {
+            const existingLastMessage = this.deps.stores?.chat.getLastMessage?.(conversationId)
+            const existingTime = existingLastMessage?.timestamp?.getTime() ?? 0
+            const newTime = message.timestamp?.getTime() ?? 0
+            if (newTime > existingTime) {
+              this.deps.stores?.chat.unarchiveConversation?.(conversationId)
+            }
+          }
+
           // Update only the lastMessage preview, not the message history
-          this.deps.stores?.chat.updateLastMessagePreview(conversationId, latestMessage)
+          this.deps.stores?.chat.updateLastMessagePreview(conversationId, message)
         }
       } finally {
         unregister()

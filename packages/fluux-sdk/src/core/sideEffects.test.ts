@@ -60,7 +60,7 @@ vi.mock('../utils/messageCache', () => ({
   flushPendingRoomMessages: vi.fn().mockResolvedValue(undefined),
 }))
 
-import { setupRoomSideEffects, setupChatSideEffects } from './sideEffects'
+import { setupRoomSideEffects, setupChatSideEffects, setupPreviewRefreshSideEffects } from './sideEffects'
 import { roomStore } from '../stores/roomStore'
 import { chatStore } from '../stores/chatStore'
 import { connectionStore } from '../stores/connectionStore'
@@ -73,6 +73,10 @@ function createMockClient(): XMPPClient {
     chat: {
       queryMAM: vi.fn().mockResolvedValue(undefined),
       queryRoomMAM: vi.fn().mockResolvedValue(undefined),
+    },
+    mam: {
+      refreshConversationPreviews: vi.fn().mockResolvedValue(undefined),
+      refreshArchivedConversationPreviews: vi.fn().mockResolvedValue(undefined),
     },
   } as unknown as XMPPClient
 }
@@ -408,22 +412,24 @@ describe('sideEffects', () => {
         // Cache loading must NOT be skipped just because messages exist.
         connectionStore.getState().setStatus('online')
         connectionStore.getState().setServerInfo({
-          identity: null,
+          identities: [],
+          domain: 'example.com',
           features: [NS_MAM],
         })
 
         // Add a conversation with a live message already in memory
         chatStore.getState().addConversation({
           id: 'contact@example.com',
+          name: 'contact@example.com',
           type: 'chat',
-          lastMessage: null,
+          lastMessage: undefined,
           unreadCount: 1,
         })
-        chatStore.getState().addMessage('contact@example.com', {
+        chatStore.getState().addMessage({
           type: 'chat',
           id: 'live-msg-1',
+          conversationId: 'contact@example.com',
           from: 'contact@example.com',
-          to: 'me@example.com',
           body: 'New live message',
           timestamp: new Date('2026-02-04T12:00:00Z'),
           isOutgoing: false,
@@ -455,8 +461,9 @@ describe('sideEffects', () => {
         // Add a conversation
         chatStore.getState().addConversation({
           id: 'contact@example.com',
+          name: 'contact@example.com',
           type: 'chat',
-          lastMessage: null,
+          lastMessage: undefined,
           unreadCount: 0,
         })
 
@@ -472,7 +479,8 @@ describe('sideEffects', () => {
 
         // Now set server info with MAM support
         connectionStore.getState().setServerInfo({
-          identity: null,
+          identities: [],
+          domain: 'example.com',
           features: [NS_MAM],
         })
 
@@ -483,6 +491,191 @@ describe('sideEffects', () => {
               with: 'contact@example.com',
             })
           )
+        })
+      })
+    })
+  })
+
+  describe('setupPreviewRefreshSideEffects', () => {
+    const ARCHIVED_CHECK_KEY = 'fluux:lastArchivedPreviewCheck'
+
+    beforeEach(() => {
+      localStorageMock.clear()
+    })
+
+    describe('preview refresh on connect', () => {
+      it('should trigger refreshConversationPreviews when going online with MAM support', async () => {
+        // Set up serverInfo with MAM support before going online
+        connectionStore.getState().setServerInfo({
+          identities: [],
+          domain: 'example.com',
+          features: [NS_MAM],
+        })
+
+        // Start disconnected
+        connectionStore.getState().setStatus('disconnected')
+        cleanup = setupPreviewRefreshSideEffects(mockClient)
+
+        // Go online
+        connectionStore.getState().setStatus('online')
+
+        // Wait for preview refresh
+        await vi.waitFor(() => {
+          expect(mockClient.mam.refreshConversationPreviews).toHaveBeenCalledTimes(1)
+        })
+      })
+
+      it('should defer preview refresh to serverInfo discovery when MAM not immediately available', async () => {
+        // Start disconnected with NO serverInfo
+        connectionStore.getState().setStatus('disconnected')
+        cleanup = setupPreviewRefreshSideEffects(mockClient)
+
+        // Go online (no MAM support yet)
+        connectionStore.getState().setStatus('online')
+
+        // No preview refresh yet
+        await new Promise(resolve => setTimeout(resolve, 50))
+        expect(mockClient.mam.refreshConversationPreviews).not.toHaveBeenCalled()
+
+        // Now discover MAM support
+        connectionStore.getState().setServerInfo({
+          identities: [],
+          domain: 'example.com',
+          features: [NS_MAM],
+        })
+
+        // Preview refresh should now trigger
+        await vi.waitFor(() => {
+          expect(mockClient.mam.refreshConversationPreviews).toHaveBeenCalledTimes(1)
+        })
+      })
+
+      it('should not double-trigger preview refresh', async () => {
+        // Set up serverInfo with MAM support
+        connectionStore.getState().setServerInfo({
+          identities: [],
+          domain: 'example.com',
+          features: [NS_MAM],
+        })
+
+        // Start disconnected
+        connectionStore.getState().setStatus('disconnected')
+        cleanup = setupPreviewRefreshSideEffects(mockClient)
+
+        // Go online (triggers preview refresh via connection subscriber)
+        connectionStore.getState().setStatus('online')
+
+        await vi.waitFor(() => {
+          expect(mockClient.mam.refreshConversationPreviews).toHaveBeenCalledTimes(1)
+        })
+
+        // Simulate serverInfo update (should NOT trigger again)
+        connectionStore.getState().setServerInfo({
+          identities: [],
+          domain: 'example.com',
+          features: [NS_MAM, 'some:other:feature'],
+        })
+
+        await new Promise(resolve => setTimeout(resolve, 50))
+        expect(mockClient.mam.refreshConversationPreviews).toHaveBeenCalledTimes(1)
+      })
+
+      it('should reset and re-trigger after disconnect/reconnect cycle', async () => {
+        // Set up serverInfo with MAM support
+        connectionStore.getState().setServerInfo({
+          identities: [],
+          domain: 'example.com',
+          features: [NS_MAM],
+        })
+
+        // Start disconnected
+        connectionStore.getState().setStatus('disconnected')
+        cleanup = setupPreviewRefreshSideEffects(mockClient)
+
+        // First connect
+        connectionStore.getState().setStatus('online')
+        await vi.waitFor(() => {
+          expect(mockClient.mam.refreshConversationPreviews).toHaveBeenCalledTimes(1)
+        })
+
+        // Disconnect
+        connectionStore.getState().setStatus('disconnected')
+
+        // Reconnect
+        connectionStore.getState().setStatus('online')
+        await vi.waitFor(() => {
+          expect(mockClient.mam.refreshConversationPreviews).toHaveBeenCalledTimes(2)
+        })
+      })
+    })
+
+    describe('daily archived check', () => {
+      it('should trigger refreshArchivedConversationPreviews on first connect (no localStorage entry)', async () => {
+        // Set up serverInfo with MAM support
+        connectionStore.getState().setServerInfo({
+          identities: [],
+          domain: 'example.com',
+          features: [NS_MAM],
+        })
+
+        connectionStore.getState().setStatus('disconnected')
+        cleanup = setupPreviewRefreshSideEffects(mockClient)
+
+        // Go online
+        connectionStore.getState().setStatus('online')
+
+        await vi.waitFor(() => {
+          expect(mockClient.mam.refreshArchivedConversationPreviews).toHaveBeenCalledTimes(1)
+        })
+      })
+
+      it('should skip archived check if less than 24h since last check', async () => {
+        // Set a recent check timestamp
+        localStorageMock.setItem(ARCHIVED_CHECK_KEY, String(Date.now() - 1000))
+
+        // Set up serverInfo with MAM support
+        connectionStore.getState().setServerInfo({
+          identities: [],
+          domain: 'example.com',
+          features: [NS_MAM],
+        })
+
+        connectionStore.getState().setStatus('disconnected')
+        cleanup = setupPreviewRefreshSideEffects(mockClient)
+
+        // Go online
+        connectionStore.getState().setStatus('online')
+
+        // Preview refresh should still trigger
+        await vi.waitFor(() => {
+          expect(mockClient.mam.refreshConversationPreviews).toHaveBeenCalledTimes(1)
+        })
+
+        // But archived check should NOT trigger
+        await new Promise(resolve => setTimeout(resolve, 50))
+        expect(mockClient.mam.refreshArchivedConversationPreviews).not.toHaveBeenCalled()
+      })
+
+      it('should trigger archived check after 24h', async () => {
+        // Set a stale check timestamp (25 hours ago)
+        const staleTimestamp = Date.now() - (25 * 60 * 60 * 1000)
+        localStorageMock.setItem(ARCHIVED_CHECK_KEY, String(staleTimestamp))
+
+        // Set up serverInfo with MAM support
+        connectionStore.getState().setServerInfo({
+          identities: [],
+          domain: 'example.com',
+          features: [NS_MAM],
+        })
+
+        connectionStore.getState().setStatus('disconnected')
+        cleanup = setupPreviewRefreshSideEffects(mockClient)
+
+        // Go online
+        connectionStore.getState().setStatus('online')
+
+        await vi.waitFor(() => {
+          expect(mockClient.mam.refreshArchivedConversationPreviews).toHaveBeenCalledTimes(1)
         })
       })
     })

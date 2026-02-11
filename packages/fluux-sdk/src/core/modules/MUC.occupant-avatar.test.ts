@@ -73,8 +73,15 @@ describe('MUC Occupant Avatars (XEP-0398)', () => {
       // Mock room in store
       mockStores.room.getRoom.mockReturnValue({
         jid: 'room@conference.example.org',
+        name: 'room',
         nickname: 'MyNick',
+        joined: false,
+        isBookmarked: false,
         occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
       })
 
       const handled = muc.handle(presence)
@@ -121,8 +128,15 @@ describe('MUC Occupant Avatars (XEP-0398)', () => {
 
       mockStores.room.getRoom.mockReturnValue({
         jid: 'room@conference.example.org',
+        name: 'room',
         nickname: 'MyNick',
+        joined: false,
+        isBookmarked: false,
         occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
       })
 
       muc.handle(presence)
@@ -155,8 +169,15 @@ describe('MUC Occupant Avatars (XEP-0398)', () => {
 
       mockStores.room.getRoom.mockReturnValue({
         jid: 'room@conference.example.org',
+        name: 'room',
         nickname: 'MyNick',
+        joined: false,
+        isBookmarked: false,
         occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
       })
 
       muc.handle(presence)
@@ -197,8 +218,15 @@ describe('MUC Occupant Avatars (XEP-0398)', () => {
 
       mockStores.room.getRoom.mockReturnValue({
         jid: 'room@conference.example.org',
+        name: 'room',
         nickname: 'MyNick',
+        joined: false,
+        isBookmarked: false,
         occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
       })
 
       muc.handle(presence)
@@ -239,8 +267,15 @@ describe('MUC Occupant Avatars (XEP-0398)', () => {
 
       mockStores.room.getRoom.mockReturnValue({
         jid: 'room@conference.example.org',
+        name: 'room',
         nickname: 'MyNick',
+        joined: false,
+        isBookmarked: false,
         occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
       })
 
       muc.handle(presence)

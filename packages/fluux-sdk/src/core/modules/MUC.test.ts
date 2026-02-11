@@ -636,7 +636,7 @@ describe('MUC Module', () => {
 
         // Verify emitSDK was called with room:added 3 times
         const addedCalls = mockEmitSDK.mock.calls.filter(
-          (call: [string, unknown]) => call[0] === 'room:added'
+          (call) => call[0] === 'room:added'
         )
         expect(addedCalls).toHaveLength(3)
 
@@ -801,6 +801,7 @@ describe('MUC Module', () => {
       // Simulate already being in the room
       mockStores.room.getRoom.mockReturnValue({
         jid: 'room@conference.example.org',
+        name: 'room',
         joined: true, // Already joined!
         isJoining: false,
         nickname: 'mynick',
@@ -810,7 +811,7 @@ describe('MUC Module', () => {
         messages: [],
         unreadCount: 0,
         mentionsCount: 0,
-        typingUsers: new Set(),
+        typingUsers: new Set<string>(),
       })
 
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
@@ -938,9 +939,16 @@ describe('MUC Module', () => {
     it('retries joining after timeout (first attempt)', async () => {
       mockStores.room.getRoom.mockReturnValue({
         jid: 'room@conference.example.org',
+        name: 'room',
         joined: false,
         isJoining: true,
         nickname: 'mynick',
+        isBookmarked: false,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
       })
 
       await muc.joinRoom('room@conference.example.org', 'mynick')
@@ -958,9 +966,16 @@ describe('MUC Module', () => {
     it('gives up after max retries', async () => {
       mockStores.room.getRoom.mockReturnValue({
         jid: 'room@conference.example.org',
+        name: 'room',
         joined: false,
         isJoining: true,
         nickname: 'mynick',
+        isBookmarked: false,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
       })
 
       await muc.joinRoom('room@conference.example.org', 'mynick')
@@ -1009,9 +1024,16 @@ describe('MUC Module', () => {
     it('clears timeout when leaving room', async () => {
       mockStores.room.getRoom.mockReturnValue({
         jid: 'room@conference.example.org',
+        name: 'room',
         joined: false,
         isJoining: true,
         nickname: 'mynick',
+        isBookmarked: false,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
       })
 
       await muc.joinRoom('room@conference.example.org', 'mynick')
@@ -1202,7 +1224,7 @@ describe('MUC Module', () => {
       ])
 
       mockSendIQ.mockResolvedValue(discoResponse)
-      mockStores.room.getRoom.mockReturnValue(null)
+      mockStores.room.getRoom.mockReturnValue(undefined)
 
       await muc.joinRoom('room@conference.example.org', 'mynick')
 
@@ -1245,7 +1267,7 @@ describe('MUC Module', () => {
       ])
 
       mockSendIQ.mockResolvedValue(discoResponse)
-      mockStores.room.getRoom.mockReturnValue(null)
+      mockStores.room.getRoom.mockReturnValue(undefined)
 
       await muc.joinRoom('room@conference.example.org', 'mynick')
 
@@ -1278,7 +1300,7 @@ describe('MUC Module', () => {
     it('uses default maxHistory when disco#info fails', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
       mockSendIQ.mockRejectedValue(new Error('Room not found'))
-      mockStores.room.getRoom.mockReturnValue(null)
+      mockStores.room.getRoom.mockReturnValue(undefined)
 
       await muc.joinRoom('room@conference.example.org', 'mynick')
 
@@ -1327,6 +1349,11 @@ describe('MUC Module', () => {
         nickname: 'oldnick',
         joined: false,
         isBookmarked: true,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
       })
 
       await muc.joinRoom('room@conference.example.org', 'newnick')
@@ -1354,7 +1381,7 @@ describe('MUC Module', () => {
       ])
 
       mockSendIQ.mockResolvedValue(discoResponse)
-      mockStores.room.getRoom.mockReturnValue(null)
+      mockStores.room.getRoom.mockReturnValue(undefined)
 
       await muc.joinRoom('quickchat-user-happy-fox-a1b2@conference.example.org', 'mynick', { isQuickChat: true })
 
@@ -1382,7 +1409,7 @@ describe('MUC Module', () => {
       ])
 
       mockSendIQ.mockResolvedValue(discoResponse)
-      mockStores.room.getRoom.mockReturnValue(null)
+      mockStores.room.getRoom.mockReturnValue(undefined)
 
       await muc.joinRoom('quickchat-user-happy-fox-a1b2@conference.example.org', 'mynick', { isQuickChat: true })
 
@@ -1417,6 +1444,11 @@ describe('MUC Module', () => {
         joined: false,
         isBookmarked: false,
         isQuickChat: true,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
       })
 
       await muc.joinRoom('quickchat-user-happy-fox-a1b2@conference.example.org', 'newnick', { isQuickChat: true })

@@ -259,8 +259,39 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
+      - name: Create tarball for Arch Linux
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          ARCH="${{ matrix.arch }}"
+          TARBALL_NAME="fluux-messenger-${VERSION}-linux-${ARCH}.tar.gz"
+
+          mkdir -p tarball-staging/fluux-messenger
+
+          # Copy binary
+          cp apps/fluux/src-tauri/target/release/fluux tarball-staging/fluux-messenger/fluux-messenger
+
+          # Copy desktop file and icons
+          cp packaging/debian/fluux-messenger.desktop tarball-staging/fluux-messenger/
+          cp apps/fluux/src-tauri/icons/128x128.png tarball-staging/fluux-messenger/fluux-messenger.png
+          cp apps/fluux/src-tauri/icons/icon.png tarball-staging/fluux-messenger/fluux-messenger-256.png
+
+          # Create tarball
+          mkdir -p dist
+          tar -czvf "dist/${TARBALL_NAME}" -C tarball-staging fluux-messenger
+
+      - name: Upload tarball to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/*.tar.gz
+          tag_name: ${{ env.RELEASE_TAG }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build .deb package
         run: |
+          # Copy debian directory from packaging/ to root (required by dpkg-buildpackage)
+          cp -r packaging/debian .
+
           # Point to pre-built binary (debian/rules will skip build)
           # Native builds output to target/release/, not target/<triple>/release/
           export FLUUX_BINARY="apps/fluux/src-tauri/target/release/fluux"
@@ -284,6 +315,43 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Build Flatpak
+        run: |
+          # Install flatpak-builder
+          sudo apt-get install -y flatpak flatpak-builder
+          flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y flathub org.gnome.Platform//47 org.gnome.Sdk//47
+
+          VERSION="${RELEASE_TAG#v}"
+          ARCH="${{ matrix.arch }}"
+
+          # Prepare build directory with sources
+          mkdir -p flatpak-build
+          cp apps/fluux/src-tauri/target/release/fluux flatpak-build/fluux-messenger
+          cp packaging/debian/fluux-messenger.desktop flatpak-build/
+          cp apps/fluux/src-tauri/icons/128x128.png flatpak-build/fluux-messenger.png
+          cp apps/fluux/src-tauri/icons/icon.png flatpak-build/fluux-messenger-256.png
+          cp packaging/flatpak/com.processone.fluux.metainfo.xml flatpak-build/
+          cp packaging/flatpak/com.processone.fluux.yaml flatpak-build/
+
+          # Build Flatpak
+          cd flatpak-build
+          flatpak-builder --user --force-clean --repo=repo build-dir com.processone.fluux.yaml
+
+          # Create single-file bundle
+          flatpak build-bundle repo "fluux-messenger-${VERSION}-linux-${ARCH}.flatpak" com.processone.fluux
+
+          # Move to dist
+          mv *.flatpak ../dist/
+
+      - name: Upload Flatpak to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/*.flatpak
+          tag_name: ${{ env.RELEASE_TAG }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build-linux-rpm:
     name: Build Linux RPM (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
@@ -297,9 +365,11 @@ jobs:
           - arch: x86_64
             runner: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
+            rpm_arch: x86_64
           - arch: aarch64
             runner: ubuntu-22.04-arm
             target: aarch64-unknown-linux-gnu
+            rpm_arch: aarch64
 
     steps:
       - name: Checkout
@@ -315,7 +385,8 @@ jobs:
             libappindicator3-dev \
             librsvg2-dev \
             patchelf \
-            libxss-dev
+            libxss-dev \
+            rpm
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -340,33 +411,50 @@ jobs:
       - name: Build SDK
         run: npm run build:sdk
 
-      - name: Read release notes
-        id: release_notes
+      - name: Build Tauri binary
         run: |
-          if [ -f RELEASE_NOTES.md ]; then
-            NOTES=$(cat RELEASE_NOTES.md)
-          else
-            NOTES="See the [CHANGELOG](https://github.com/processone/fluux-messenger/blob/main/CHANGELOG.md) for details."
-          fi
-          echo "notes<<EOF" >> $GITHUB_OUTPUT
-          echo "$NOTES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Build Tauri app (RPM only)
-        uses: tauri-apps/tauri-action@v0
+          cd apps/fluux
+          npm run tauri build -- --no-bundle
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      - name: Build .rpm package
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+
+          # Setup RPM build directories
+          mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+
+          # Create source tarball for rpmbuild
+          mkdir -p "fluux-messenger-${VERSION}"
+          cp apps/fluux/src-tauri/target/release/fluux "fluux-messenger-${VERSION}/fluux-messenger"
+          cp packaging/debian/fluux-messenger.desktop "fluux-messenger-${VERSION}/"
+          mkdir -p "fluux-messenger-${VERSION}/icons"
+          cp apps/fluux/src-tauri/icons/32x32.png "fluux-messenger-${VERSION}/icons/"
+          cp apps/fluux/src-tauri/icons/128x128.png "fluux-messenger-${VERSION}/icons/"
+          cp apps/fluux/src-tauri/icons/icon.png "fluux-messenger-${VERSION}/icons/256x256.png"
+
+          tar czvf ~/rpmbuild/SOURCES/fluux-messenger-${VERSION}.tar.gz "fluux-messenger-${VERSION}"
+
+          # Copy and update spec file
+          cp packaging/rpm/fluux-messenger.spec ~/rpmbuild/SPECS/
+          sed -i "s/^Version:.*/Version:        ${VERSION}/" ~/rpmbuild/SPECS/fluux-messenger.spec
+
+          # Build RPM
+          rpmbuild -bb ~/rpmbuild/SPECS/fluux-messenger.spec --target ${{ matrix.rpm_arch }}
+
+          # Move RPM to dist
+          mkdir -p dist
+          mv ~/rpmbuild/RPMS/${{ matrix.rpm_arch }}/*.rpm dist/
+
+      - name: Upload .rpm to Release
+        uses: softprops/action-gh-release@v1
         with:
-          projectPath: apps/fluux
-          tagName: ${{ env.RELEASE_TAG }}
-          releaseName: 'Fluux Messenger ${{ env.RELEASE_TAG }}'
-          releaseBody: ${{ steps.release_notes.outputs.notes }}
-          releaseDraft: false
-          prerelease: false
-          includeUpdaterJson: false
-          args: --bundles rpm
+          files: dist/*.rpm
+          tag_name: ${{ env.RELEASE_TAG }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # Final job to rename all assets to consistent, user-friendly names
   rename-assets:

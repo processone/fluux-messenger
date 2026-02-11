@@ -162,6 +162,10 @@ export { chatSelectors, roomSelectors, rosterSelectors } from './stores'
 // Admin dashboard types
 export type { AdminStats } from './stores/adminStore'
 
+// Notification state utilities (pure functions for badge computation, etc.)
+export { computeBadgeCount, shouldNotifyConversation, shouldNotifyRoom } from './stores/shared/notificationState'
+export type { EntityNotificationState, NotificationMessage, EntityContext, BadgeInput } from './stores/shared/notificationState'
+
 // Store bindings (wire SDK events to Zustand stores)
 export { createStoreBindings } from './bindings'
 export type { StoreRefs, UnsubscribeBindings } from './bindings'
@@ -174,6 +178,7 @@ export type { StoreRefs, UnsubscribeBindings } from './bindings'
 export type {
   // Connection types
   ConnectionStatus,
+  ConnectionMethod,
   ConnectOptions,
 
   // Base message type (shared between chat and room messages)
@@ -469,6 +474,9 @@ export type { TauriCloseHandlerOptions } from './utils/tauriLifecycle'
 // Storage adapters for session persistence
 export { sessionStorageAdapter } from './utils/sessionStorageAdapter'
 export type { StorageAdapter, SessionState, StoredCredentials, JoinedRoomInfo } from './core/types'
+
+// Proxy adapter for WebSocket-to-TCP bridging (desktop apps)
+export type { ProxyAdapter, ProxyStartResult } from './core/types'
 
 // Emoji shortcode utilities (for clients that send :shortcodes: instead of Unicode)
 export { shortcodeToEmoji, convertShortcodes } from './core/emoji'

@@ -64,7 +64,12 @@ export function LoginScreen() {
       const savedJid = localStorage.getItem(STORAGE_KEY_JID)
       const savedServer = localStorage.getItem(STORAGE_KEY_SERVER)
       if (savedJid) setJid(savedJid)
-      if (savedServer) setServer(savedServer)
+      // On web, ignore bare-domain server values (e.g. from desktop sessions)
+      // so well-known auto-fill can provide the correct WebSocket URL
+      const isWebSocketUrl = savedServer?.startsWith('ws://') || savedServer?.startsWith('wss://')
+      if (savedServer && (inTauri || isWebSocketUrl)) {
+        setServer(savedServer)
+      }
 
       // Try to load credentials from keychain (Tauri only)
       // Only check keychain if we previously saved credentials (avoids prompt on first run)
@@ -99,8 +104,10 @@ export function LoginScreen() {
   useEffect(() => {
     if (isDesktopApp) return // Skip auto-fill for desktop - TCP proxy handles this
     if (hasManuallySetServer) return // Don't auto-fill if user has manually set/cleared the field
-    if (server) return // Don't override if server field already has a value
     if (isLoadingCredentials) return // Wait for credentials to load first
+    // Only skip auto-fill if server is already a WebSocket URL
+    // A bare domain (from desktop/previous session) should be overridable
+    if (server.startsWith('ws://') || server.startsWith('wss://')) return
 
     const domain = getDomainFromJid(jid)
     if (domain) {

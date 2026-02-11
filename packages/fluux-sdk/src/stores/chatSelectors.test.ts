@@ -45,19 +45,21 @@ function createMockState(overrides: Partial<ChatState> = {}): ChatState {
     setMAMLoading: () => {},
     setMAMError: () => {},
     mergeMAMMessages: () => {},
-    getMAMQueryState: () => ({ isLoading: false, error: null, isHistoryComplete: false, isCaughtUpToLive: false }),
+    getMAMQueryState: () => ({ isLoading: false, hasQueried: false, error: null, isHistoryComplete: false, isCaughtUpToLive: false }),
     resetMAMStates: () => {},
     loadMessagesFromCache: async () => [],
     loadOlderMessagesFromCache: async () => [],
+    activeConversations: () => [],
     reset: () => {},
     ...overrides,
-  }
+  } as ChatState
 }
 
 function createMockConversation(id: string, overrides: Partial<Conversation> = {}): Conversation {
   return {
     id,
     name: `Contact ${id}`,
+    type: 'chat',
     unreadCount: 0,
     ...overrides,
   }
@@ -273,6 +275,7 @@ describe('chatSelectors', () => {
     it('should return MAM state for conversation', () => {
       const mamState: MAMQueryState = {
         isLoading: true,
+        hasQueried: false,
         error: null,
         isHistoryComplete: false,
         isCaughtUpToLive: false,
@@ -285,8 +288,9 @@ describe('chatSelectors', () => {
 
   describe('isMAMLoading', () => {
     it('should return true when loading', () => {
-      const mamQueryStates = new Map([['user@example.com', {
+      const mamQueryStates = new Map<string, MAMQueryState>([['user@example.com', {
         isLoading: true,
+        hasQueried: false,
         error: null,
         isHistoryComplete: false,
         isCaughtUpToLive: false,

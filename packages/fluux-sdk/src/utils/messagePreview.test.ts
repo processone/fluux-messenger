@@ -223,16 +223,24 @@ describe('messagePreview', () => {
   })
 
   describe('stripMessageStyling', () => {
-    it('should strip bold markup', () => {
+    it('should strip XEP-0393 bold markup (*text*)', () => {
       expect(stripMessageStyling('This is *bold* text')).toBe('This is bold text')
+    })
+
+    it('should strip Markdown bold markup (**text**)', () => {
+      expect(stripMessageStyling('This is **bold** text')).toBe('This is bold text')
     })
 
     it('should strip italic markup', () => {
       expect(stripMessageStyling('This is _italic_ text')).toBe('This is italic text')
     })
 
-    it('should strip strikethrough markup', () => {
+    it('should strip XEP-0393 strikethrough markup (~text~)', () => {
       expect(stripMessageStyling('This is ~deleted~ text')).toBe('This is deleted text')
+    })
+
+    it('should strip Markdown strikethrough markup (~~text~~)', () => {
+      expect(stripMessageStyling('This is ~~deleted~~ text')).toBe('This is deleted text')
     })
 
     it('should strip inline code markup', () => {
@@ -281,6 +289,21 @@ describe('messagePreview', () => {
 
     it('should strip multi-word italic', () => {
       expect(stripMessageStyling('Read the _fine print_ carefully')).toBe('Read the fine print carefully')
+    })
+
+    it('should strip Markdown bold after punctuation', () => {
+      expect(stripMessageStyling('Yes, I can help! **CleanShot X** is excellent'))
+        .toBe('Yes, I can help! CleanShot X is excellent')
+    })
+
+    it('should strip multi-word Markdown bold', () => {
+      expect(stripMessageStyling('Check out **CleanShot X on macOS** for this'))
+        .toBe('Check out CleanShot X on macOS for this')
+    })
+
+    it('should handle mixed Markdown and XEP-0393 styles', () => {
+      expect(stripMessageStyling('**Bold** and *also bold* and _italic_'))
+        .toBe('Bold and also bold and italic')
     })
   })
 

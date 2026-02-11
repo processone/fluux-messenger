@@ -192,6 +192,15 @@
       </xmpp:SupportedXep>
     </implements>
 
+    <!-- XEP-0368: SRV Records for XMPP over TLS -->
+    <implements>
+      <xmpp:SupportedXep>
+        <xmpp:xep rdf:resource="https://xmpp.org/extensions/xep-0368.html"/>
+        <xmpp:status>complete</xmpp:status>
+        <xmpp:note>Desktop: SRV lookup for _xmpps-client._tcp (direct TLS) and _xmpp-client._tcp (STARTTLS) via Rust proxy</xmpp:note>
+      </xmpp:SupportedXep>
+    </implements>
+
     <!-- XEP-0172: User Nickname -->
     <implements>
       <xmpp:SupportedXep>
@@ -479,6 +488,20 @@
     </implements>
 
     <!-- Releases -->
+    <release>
+      <Version>
+        <revision>0.12.1</revision>
+        <created>2026-02-09</created>
+        <file-release rdf:resource="https://github.com/processone/fluux-messenger/releases/tag/v0.12.1"/>
+      </Version>
+    </release>
+    <release>
+      <Version>
+        <revision>0.12.0</revision>
+        <created>2026-02-07</created>
+        <file-release rdf:resource="https://github.com/processone/fluux-messenger/releases/tag/v0.12.0"/>
+      </Version>
+    </release>
     <release>
       <Version>
         <revision>0.11.3</revision>

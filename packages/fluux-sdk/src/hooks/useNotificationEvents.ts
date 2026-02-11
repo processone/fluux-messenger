@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { chatStore, roomStore, connectionStore } from '../stores'
+import { shouldNotifyConversation, shouldNotifyRoom } from '../stores/shared'
 import type { Conversation, Message, Room, RoomMessage } from '../core/types'
 
 /**
@@ -28,19 +29,6 @@ export interface NotificationEventHandlers {
 interface PrevRoomState {
   mentionsCount: number
   messagesLength: number
-}
-
-// Freshness threshold for notifications (5 minutes in milliseconds)
-// Messages older than this should never trigger notifications, even if isDelayed isn't set
-const FRESHNESS_THRESHOLD_MS = 5 * 60 * 1000
-
-/**
- * Check if a message is fresh enough to warrant a notification.
- * This is a defensive backup check in case isDelayed isn't set correctly.
- */
-function isMessageFreshForNotification(message: { timestamp: Date }): boolean {
-  const ageMs = Date.now() - message.timestamp.getTime()
-  return ageMs <= FRESHNESS_THRESHOLD_MS
 }
 
 /**
@@ -123,7 +111,6 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
         return
       }
 
-      // Get window visibility from SDK state (not browser API)
       const windowVisible = connectionStore.getState().windowVisible
 
       for (const conv of conversations) {
@@ -133,21 +120,20 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
         if (conv.lastMessage) {
           const isNewMessage = !prevConv?.lastMessage ||
             prevConv.lastMessage.id !== conv.lastMessage.id
+          if (!isNewMessage) continue
 
-          // Skip outgoing messages and delayed (historical) messages
-          // Also check timestamp as a backup in case isDelayed isn't set
-          if (!isNewMessage || conv.lastMessage.isOutgoing || conv.lastMessage.isDelayed) continue
-          if (!isMessageFreshForNotification(conv.lastMessage)) continue
+          const isActive = conv.id === activeConversationId
+          const notify = shouldNotifyConversation(
+            {
+              id: conv.lastMessage.id,
+              timestamp: conv.lastMessage.timestamp,
+              isOutgoing: conv.lastMessage.isOutgoing,
+              isDelayed: conv.lastMessage.isDelayed,
+            },
+            { isActive, windowVisible }
+          )
 
-          // Determine if we should notify:
-          // - Active conversation: only if window not visible
-          // - Inactive conversation: only if has unread messages
-          const isActiveConversation = conv.id === activeConversationId
-          const shouldNotify = isActiveConversation
-            ? !windowVisible
-            : conv.unreadCount > 0
-
-          if (shouldNotify) {
+          if (notify) {
             onConversationMessage(conv, conv.lastMessage)
           }
         }
@@ -176,54 +162,49 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
         return
       }
 
-      // Get window visibility from SDK state (not browser API)
       const windowVisible = connectionStore.getState().windowVisible
 
       for (const room of allRooms) {
         if (!room.joined) continue
 
         const prev = prevRooms.get(room.jid)
-        const prevMentionsCount = prev?.mentionsCount ?? 0
         const prevMessagesLength = prev?.messagesLength ?? 0
-        const hasNewMention = room.mentionsCount > prevMentionsCount
         const hasNewMessages = room.messages.length > prevMessagesLength
         const newMessageCount = room.messages.length - prevMessagesLength
 
         if (!hasNewMessages) continue
 
         // Skip if this looks like initial history load (many messages at once from empty state)
-        // This is a defensive check to avoid notifying about MUC history
         if (prevMessagesLength === 0 && newMessageCount > 5) continue
 
-        // Determine if notifyAll is enabled (session-only takes precedence)
         const notifyAllEnabled = room.notifyAll ?? room.notifyAllPersistent ?? false
+        const isActive = room.jid === activeRoomJid
 
-        // Only notify if window not visible or room not active
-        const shouldNotify = !windowVisible || room.jid !== activeRoomJid
-        if (!shouldNotify) continue
-
-        // Find the most recent non-outgoing, non-delayed message that warrants notification
-        // Only search within the newly added messages, not all messages
+        // Find the most recent message that warrants notification
         const searchStartIndex = room.messages.length - 1
         const searchEndIndex = Math.max(0, room.messages.length - newMessageCount)
 
         for (let i = searchStartIndex; i >= searchEndIndex; i--) {
           const msg = room.messages[i]
-          // Skip outgoing and delayed (historical) messages
-          // Also check timestamp as a backup in case isDelayed isn't set
-          if (msg.isOutgoing || msg.isDelayed) continue
-          if (!isMessageFreshForNotification(msg)) continue
 
-          // Notify if:
-          // 1. notifyAll is enabled (notify for all messages)
-          // 2. OR this is a mention (always notify for mentions)
-          const isMention = hasNewMention && (msg.isMention ?? false)
-          if (notifyAllEnabled || isMention) {
-            onRoomMessage(room, msg, isMention)
+          const result = shouldNotifyRoom(
+            {
+              id: msg.id,
+              timestamp: msg.timestamp,
+              isOutgoing: msg.isOutgoing ?? false,
+              isDelayed: msg.isDelayed,
+              isMention: msg.isMention,
+            },
+            { isActive, windowVisible },
+            notifyAllEnabled
+          )
+
+          if (result.shouldNotify) {
+            onRoomMessage(room, msg, result.isMention)
             break // Only notify for the latest relevant message
           }
 
-          // If we're only looking for mentions and this isn't one, stop
+          // If we're only looking for mentions and this isn't one, stop searching
           if (!notifyAllEnabled && !msg.isMention) break
         }
       }

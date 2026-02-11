@@ -2,6 +2,7 @@ import { createContext, useContext, useRef, useEffect, useMemo, type ReactNode }
 import { XMPPClient } from '../core/XMPPClient'
 import type { XMPPClientConfig } from '../core/types/client'
 import type { StorageAdapter } from '../core/types/storage'
+import type { ProxyAdapter } from '../core/types/proxy'
 import { setupTauriCloseHandlers } from '../utils/tauriLifecycle'
 import { sessionStorageAdapter } from '../utils/sessionStorageAdapter'
 import { setupDebugUtils } from '../utils/debugUtils'
@@ -48,6 +49,20 @@ export interface XMPPProviderProps {
    * ```
    */
   storageAdapter?: StorageAdapter
+  /**
+   * Proxy adapter for WebSocket-to-TCP bridging.
+   *
+   * Desktop apps can provide a proxy adapter to enable native TCP/TLS
+   * connections to XMPP servers instead of WebSocket.
+   *
+   * @example Desktop app with TCP proxy
+   * ```tsx
+   * <XMPPProvider proxyAdapter={tauriProxyAdapter}>
+   *   <App />
+   * </XMPPProvider>
+   * ```
+   */
+  proxyAdapter?: ProxyAdapter
 }
 
 /**
@@ -107,6 +122,7 @@ export function XMPPProvider({
   children,
   debug = false,
   storageAdapter = sessionStorageAdapter,
+  proxyAdapter,
 }: XMPPProviderProps) {
   const clientRef = useRef<XMPPClient | null>(null)
 
@@ -116,7 +132,7 @@ export function XMPPProvider({
   // - Presence sync (machine state -> XMPP presence)
   // - Storage adapter (session persistence)
   if (!clientRef.current) {
-    const config: XMPPClientConfig = { debug, storageAdapter }
+    const config: XMPPClientConfig = { debug, storageAdapter, proxyAdapter }
     clientRef.current = new XMPPClient(config)
   }
 

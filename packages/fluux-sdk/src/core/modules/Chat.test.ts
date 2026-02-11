@@ -329,7 +329,7 @@ describe('XMPPClient Message', () => {
       mockXmppClientInstance._emit('stanza', carbonStanza)
 
       // Should emit chat:message but NOT emit 'message' event (avoids notification for own messages)
-      const chatCalls = emitSDKSpy.mock.calls.filter(call => call[0] === 'chat:message')
+      const chatCalls = emitSDKSpy.mock.calls.filter((call: unknown[]) => call[0] === 'chat:message')
       expect(chatCalls.length).toBeGreaterThan(0)
       expect(messageHandler).not.toHaveBeenCalled()
     })
@@ -680,8 +680,13 @@ describe('XMPPClient Message', () => {
       // Mock the room store to return a room where we have the nickname 'TestUser'
       mockStores.room.getRoom.mockReturnValue({
         jid: 'room@conference.example.com',
+        name: 'room',
         nickname: 'TestUser',
         joined: true,
+        isBookmarked: false,
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
         occupants: new Map(),
         messages: [],
       })
@@ -707,8 +712,13 @@ describe('XMPPClient Message', () => {
       // Mock the room store - our nickname is 'TestUser' but server reflects 'testuser'
       mockStores.room.getRoom.mockReturnValue({
         jid: 'room@conference.example.com',
+        name: 'room',
         nickname: 'TestUser',
         joined: true,
+        isBookmarked: false,
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
         occupants: new Map(),
         messages: [],
       })
@@ -768,7 +778,7 @@ describe('XMPPClient Message', () => {
 
       mockXmppClientInstance._emit('stanza', messageStanza)
 
-      const chatCall = emitSDKSpy.mock.calls.find(call => call[0] === 'chat:message')
+      const chatCall = emitSDKSpy.mock.calls.find((call: unknown[]) => call[0] === 'chat:message')
       expect(chatCall).toBeDefined()
       const message = (chatCall![1] as { message: Record<string, unknown> }).message
       expect(message).not.toHaveProperty('noStyling', true)
@@ -789,7 +799,7 @@ describe('XMPPClient Message', () => {
 
       mockXmppClientInstance._emit('stanza', messageStanza)
 
-      const chatCall = emitSDKSpy.mock.calls.find(call => call[0] === 'chat:message')
+      const chatCall = emitSDKSpy.mock.calls.find((call: unknown[]) => call[0] === 'chat:message')
       expect(chatCall).toBeDefined()
       const message = (chatCall![1] as { message: Record<string, unknown> }).message
       expect(message).not.toHaveProperty('noStyling', true)
@@ -895,7 +905,7 @@ describe('XMPPClient Message', () => {
         })
       })
       // Should not have fallbackBody when no fallback element present
-      const chatCall = emitSDKSpy.mock.calls.find(call => call[0] === 'chat:message')
+      const chatCall = emitSDKSpy.mock.calls.find((call: unknown[]) => call[0] === 'chat:message')
       const addedMessage = (chatCall![1] as { message: Record<string, unknown> }).message
       expect((addedMessage.replyTo as Record<string, unknown>)).not.toHaveProperty('fallbackBody')
     })
@@ -1879,7 +1889,13 @@ describe('XMPPClient Message', () => {
         jid: roomJid,
         name: '#channel',
         nickname: 'myNick',
+        joined: true,
+        isBookmarked: false,
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
         occupants: new Map(),
+        messages: [],
       })
 
       // Simulate message from IRC bridge without id attribute
@@ -1917,7 +1933,13 @@ describe('XMPPClient Message', () => {
         jid: roomJid,
         name: '#channel',
         nickname: 'myNick',
+        joined: true,
+        isBookmarked: false,
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
         occupants: new Map(),
+        messages: [],
       })
 
       // Same message received twice (e.g., on room rejoin)
@@ -1938,7 +1960,7 @@ describe('XMPPClient Message', () => {
 
       // Get the message IDs from both emitted events
       const roomMessageCalls = emitSDKSpy.mock.calls.filter(
-        call => call[0] === 'room:message'
+        (call: unknown[]) => call[0] === 'room:message'
       )
       expect(roomMessageCalls).toHaveLength(2)
 

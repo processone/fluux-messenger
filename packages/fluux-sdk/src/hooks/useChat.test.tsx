@@ -439,11 +439,11 @@ describe('useChat hook', () => {
           type: 'chat',
           unreadCount: 1,
         })
-        chatStore.getState().addMessage('alice@example.com', {
+        chatStore.getState().addMessage({
           type: 'chat',
           id: 'live-msg-1',
+          conversationId: 'alice@example.com',
           from: 'alice@example.com',
-          to: 'me@example.com',
           body: 'New live message',
           timestamp: new Date('2026-02-04T12:00:00Z'),
           isOutgoing: false,
@@ -490,11 +490,11 @@ describe('useChat hook', () => {
           type: 'chat',
           unreadCount: 0,
         })
-        chatStore.getState().addMessage('alice@example.com', {
+        chatStore.getState().addMessage({
           type: 'chat',
           id: 'msg-1',
+          conversationId: 'alice@example.com',
           from: 'alice@example.com',
-          to: 'me@example.com',
           body: 'Existing message',
           timestamp: new Date(),
           isOutgoing: false,

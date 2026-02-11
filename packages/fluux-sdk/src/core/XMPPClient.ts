@@ -8,6 +8,7 @@ import type {
   SDKEvents,
   SDKEventHandler,
   StorageAdapter,
+  ProxyAdapter,
   PrivacyOptions,
 } from './types'
 import {
@@ -158,6 +159,7 @@ import { createDefaultStoreBindings, type DefaultStoreBindingsOptions } from './
 export class XMPPClient {
   private currentJid: string | null = null
   private storageAdapter?: StorageAdapter
+  private proxyAdapter?: ProxyAdapter
   private privacyOptions?: PrivacyOptions
 
   /**
@@ -304,6 +306,7 @@ export class XMPPClient {
 
     // Store storage adapter for session persistence
     this.storageAdapter = config.storageAdapter
+    this.proxyAdapter = config.proxyAdapter
     // Store privacy options for avatar fetching behavior
     this.privacyOptions = config.privacyOptions
 
@@ -450,6 +453,7 @@ export class XMPPClient {
       emitSDK: <K extends keyof SDKEvents>(event: K, payload: SDKEvents[K]) => this.emitSDK(event, payload),
       getXmpp: () => this.getXmpp(),
       storageAdapter: this.storageAdapter,
+      proxyAdapter: this.proxyAdapter,
       registerMAMCollector: (queryId: string, collector: (stanza: Element) => void) => this.registerMAMCollector(queryId, collector),
       privacyOptions: this.privacyOptions,
     }
@@ -1222,10 +1226,12 @@ export class XMPPClient {
     // Always re-discover admin commands
     this.admin.discoverAdminCommands().catch(() => {})
 
-    // MAM is now fully lazy - no bulk preview refresh on connect
-    // - Conversations: Preview updates when opened (lazy MAM) or when new messages arrive
+    // Smart MAM strategy (see sideEffects.ts setupPreviewRefreshSideEffects):
+    // - Active conversation: Full MAM catch-up on reconnect (sideEffects chat subscription)
+    // - Non-archived conversations: Lightweight preview refresh on connect (max=5 each, concurrency=3)
+    // - Archived conversations: Daily preview check, auto-unarchive on new incoming messages
     // - Rooms: Preview is fetched on room join (room:joined event)
-    // This avoids the flood of 300+ MAM queries that occurred on every reconnect
+    // Preview refresh is triggered by sideEffects when MAM support is available.
   }
 
   private enableCarbons(): void {

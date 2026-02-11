@@ -1,0 +1,62 @@
+app-id: com.processone.fluux
+runtime: org.gnome.Platform
+runtime-version: "47"
+sdk: org.gnome.Sdk
+command: fluux-messenger
+
+finish-args:
+  # Display
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  - --share=ipc
+
+  # Network (required for XMPP)
+  - --share=network
+
+  # Audio (for notifications)
+  - --socket=pulseaudio
+
+  # Notifications
+  - --talk-name=org.freedesktop.Notifications
+
+  # System tray
+  - --talk-name=org.kde.StatusNotifierWatcher
+
+  # Secrets/Keyring (for storing credentials)
+  - --talk-name=org.freedesktop.secrets
+
+  # File access for file uploads/downloads
+  - --filesystem=xdg-download
+
+modules:
+  - name: fluux-messenger
+    buildsystem: simple
+    build-commands:
+      # Install binary
+      - install -Dm755 fluux-messenger -t /app/bin/
+
+      # Install desktop file with correct app ID
+      - install -Dm644 fluux-messenger.desktop /app/share/applications/com.processone.fluux.desktop
+      - sed -i 's|Icon=fluux-messenger|Icon=com.processone.fluux|g' /app/share/applications/com.processone.fluux.desktop
+      - sed -i 's|Exec=fluux-messenger|Exec=fluux-messenger|g' /app/share/applications/com.processone.fluux.desktop
+
+      # Install icons
+      - install -Dm644 fluux-messenger.png /app/share/icons/hicolor/128x128/apps/com.processone.fluux.png
+      - install -Dm644 fluux-messenger-256.png /app/share/icons/hicolor/256x256/apps/com.processone.fluux.png
+
+      # Install metainfo
+      - install -Dm644 com.processone.fluux.metainfo.xml /app/share/metainfo/com.processone.fluux.metainfo.xml
+
+    sources:
+      # Binary and assets (copied by workflow before build)
+      - type: file
+        path: fluux-messenger
+      - type: file
+        path: fluux-messenger.desktop
+      - type: file
+        path: fluux-messenger.png
+      - type: file
+        path: fluux-messenger-256.png
+      - type: file
+        path: com.processone.fluux.metainfo.xml

@@ -73,6 +73,7 @@ export function createDefaultStoreBindings(options: DefaultStoreBindingsOptions 
       setError: connectionStore.getState().setError,
       setReconnectState: connectionStore.getState().setReconnectState,
       setServerInfo: connectionStore.getState().setServerInfo,
+      setConnectionMethod: connectionStore.getState().setConnectionMethod,
       // Presence from external machine (or defaults for headless)
       getPresenceShow,
       getStatusMessage,
@@ -122,6 +123,22 @@ export function createDefaultStoreBindings(options: DefaultStoreBindingsOptions 
           id: conv.id,
           messages: state.messages.get(conv.id) || [],
         }))
+      },
+      getArchivedConversations: () => {
+        const state = chatStore.getState()
+        const result = []
+        for (const id of state.archivedConversations) {
+          const conv = state.conversations.get(id)
+          if (conv) {
+            result.push({ id: conv.id, messages: state.messages.get(conv.id) || [] })
+          }
+        }
+        return result
+      },
+      unarchiveConversation: chatStore.getState().unarchiveConversation,
+      getLastMessage: (conversationId: string) => {
+        const meta = chatStore.getState().conversationMeta.get(conversationId)
+        return meta?.lastMessage
       },
     },
     roster: {

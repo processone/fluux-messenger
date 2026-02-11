@@ -1,5 +1,5 @@
 import { createStore } from 'zustand/vanilla'
-import type { ConnectionStatus, PresenceShow, ServerInfo, ResourcePresence, HttpUploadService } from '../core/types'
+import type { ConnectionStatus, ConnectionMethod, PresenceShow, ServerInfo, ResourcePresence, HttpUploadService } from '../core/types'
 
 // Re-export for convenience
 export type { ServerInfo, ServerIdentity, HttpUploadService } from '../core/types'
@@ -51,6 +51,7 @@ interface ConnectionState {
   reconnectAttempt: number
   reconnectIn: number | null
   serverInfo: ServerInfo | null
+  connectionMethod: ConnectionMethod | null
   // Own profile data
   ownAvatar: string | null  // Blob URL for display
   ownAvatarHash: string | null  // Hash for cache lookup
@@ -67,6 +68,7 @@ interface ConnectionState {
   setError: (error: string | null) => void
   setReconnectState: (attempt: number, reconnectIn: number | null) => void
   setServerInfo: (info: ServerInfo | null) => void
+  setConnectionMethod: (method: ConnectionMethod | null) => void
   // Own profile actions
   setOwnAvatar: (avatar: string | null, hash?: string | null) => void
   setOwnNickname: (nickname: string | null) => void
@@ -87,6 +89,7 @@ const initialState = {
   reconnectAttempt: 0,
   reconnectIn: null,
   serverInfo: null as ServerInfo | null,
+  connectionMethod: null as ConnectionMethod | null,
   ownAvatar: null as string | null,
   ownAvatarHash: null as string | null,
   ownNickname: null as string | null,
@@ -103,6 +106,7 @@ export const connectionStore = createStore<ConnectionState>((set) => ({
   setError: (error) => set({ error }),
   setReconnectState: (attempt, reconnectIn) => set({ reconnectAttempt: attempt, reconnectIn }),
   setServerInfo: (info) => set({ serverInfo: info }),
+  setConnectionMethod: (method) => set({ connectionMethod: method }),
 
   setOwnAvatar: (avatar, hash) => set({
     ownAvatar: avatar,

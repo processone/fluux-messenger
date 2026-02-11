@@ -37,11 +37,17 @@ function getNewName(oldName, version) {
     { pattern: /^fluux-messenger_[\d.]+-\d+_amd64.*\.deb$/, newName: `Fluux-Messenger_${v}_Linux_x64.deb` },
     { pattern: /^fluux-messenger_[\d.]+-\d+_arm64.*\.deb$/, newName: `Fluux-Messenger_${v}_Linux_arm64.deb` },
 
-    // Linux RPM
-    { pattern: /^Fluux\.Messenger-[\d.]+-\d+\.x86_64\.rpm$/, newName: `Fluux-Messenger_${v}_Linux_x64.rpm` },
-    { pattern: /^Fluux\.Messenger-[\d.]+-\d+\.x86_64\.rpm\.sig$/, newName: `Fluux-Messenger_${v}_Linux_x64.rpm.sig` },
-    { pattern: /^Fluux\.Messenger-[\d.]+-\d+\.aarch64\.rpm$/, newName: `Fluux-Messenger_${v}_Linux_arm64.rpm` },
-    { pattern: /^Fluux\.Messenger-[\d.]+-\d+\.aarch64\.rpm\.sig$/, newName: `Fluux-Messenger_${v}_Linux_arm64.rpm.sig` },
+    // Linux RPM (built with rpmbuild, not Tauri)
+    { pattern: /^fluux-messenger-[\d.]+-\d+\.x86_64\.rpm$/, newName: `Fluux-Messenger_${v}_Linux_x64.rpm` },
+    { pattern: /^fluux-messenger-[\d.]+-\d+\.aarch64\.rpm$/, newName: `Fluux-Messenger_${v}_Linux_arm64.rpm` },
+
+    // Linux Tarball (for Arch Linux / AUR)
+    { pattern: /^fluux-messenger-[\d.]+-linux-x86_64\.tar\.gz$/, newName: `Fluux-Messenger_${v}_Linux_x64.tar.gz` },
+    { pattern: /^fluux-messenger-[\d.]+-linux-aarch64\.tar\.gz$/, newName: `Fluux-Messenger_${v}_Linux_arm64.tar.gz` },
+
+    // Linux Flatpak
+    { pattern: /^fluux-messenger-[\d.]+-linux-x86_64\.flatpak$/, newName: `Fluux-Messenger_${v}_Linux_x64.flatpak` },
+    { pattern: /^fluux-messenger-[\d.]+-linux-aarch64\.flatpak$/, newName: `Fluux-Messenger_${v}_Linux_arm64.flatpak` },
   ];
 
   for (const { pattern, newName } of mappings) {

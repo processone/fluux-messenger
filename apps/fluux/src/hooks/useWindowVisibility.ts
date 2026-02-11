@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { connectionStore } from '@fluux/sdk'
+import { connectionStore, chatStore, roomStore } from '@fluux/sdk'
 
 /**
  * Hook to track window focus and update the SDK store.
@@ -8,10 +8,8 @@ import { connectionStore } from '@fluux/sdk'
  * This allows notifications to fire when the window is visible but the
  * user is working in another app (window not focused).
  *
- * When the window is not focused (e.g., user switched to another app),
- * new messages in the active conversation will:
- * - Trigger desktop notifications
- * - Show the "new messages" marker when the user returns
+ * When the window regains focus, active entities (conversation/room) are
+ * marked as read since the user is now seeing the messages.
  *
  * This hook is intentionally minimal and doesn't return any values
  * to avoid causing re-renders.
@@ -19,9 +17,23 @@ import { connectionStore } from '@fluux/sdk'
 export function useWindowVisibility(): void {
   useEffect(() => {
     const handleFocusChange = () => {
+      const wasFocused = connectionStore.getState().windowVisible
+      const isFocused = document.hasFocus()
+
       // Update store directly without going through React state
-      // Use hasFocus() to detect foreground state, not just visibility
-      connectionStore.getState().setWindowVisible(document.hasFocus())
+      connectionStore.getState().setWindowVisible(isFocused)
+
+      // When window becomes visible again, mark active entities as read
+      if (!wasFocused && isFocused) {
+        const activeConversationId = chatStore.getState().activeConversationId
+        if (activeConversationId) {
+          chatStore.getState().markAsRead(activeConversationId)
+        }
+        const activeRoomJid = roomStore.getState().activeRoomJid
+        if (activeRoomJid) {
+          roomStore.getState().markAsRead(activeRoomJid)
+        }
+      }
     }
 
     // Set initial state
