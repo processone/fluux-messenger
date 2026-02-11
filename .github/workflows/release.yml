@@ -315,6 +315,43 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Build Flatpak
+        run: |
+          # Install flatpak-builder
+          sudo apt-get install -y flatpak flatpak-builder
+          flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y flathub org.gnome.Platform//47 org.gnome.Sdk//47
+
+          VERSION="${RELEASE_TAG#v}"
+          ARCH="${{ matrix.arch }}"
+
+          # Prepare build directory with sources
+          mkdir -p flatpak-build
+          cp apps/fluux/src-tauri/target/release/fluux flatpak-build/fluux-messenger
+          cp packaging/debian/fluux-messenger.desktop flatpak-build/
+          cp apps/fluux/src-tauri/icons/128x128.png flatpak-build/fluux-messenger.png
+          cp apps/fluux/src-tauri/icons/icon.png flatpak-build/fluux-messenger-256.png
+          cp packaging/flatpak/com.processone.fluux.metainfo.xml flatpak-build/
+          cp packaging/flatpak/com.processone.fluux.yaml flatpak-build/
+
+          # Build Flatpak
+          cd flatpak-build
+          flatpak-builder --user --force-clean --repo=repo build-dir com.processone.fluux.yaml
+
+          # Create single-file bundle
+          flatpak build-bundle repo "fluux-messenger-${VERSION}-linux-${ARCH}.flatpak" com.processone.fluux
+
+          # Move to dist
+          mv *.flatpak ../dist/
+
+      - name: Upload Flatpak to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/*.flatpak
+          tag_name: ${{ env.RELEASE_TAG }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build-linux-rpm:
     name: Build Linux RPM (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}

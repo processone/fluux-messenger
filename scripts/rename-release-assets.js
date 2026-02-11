@@ -44,6 +44,10 @@ function getNewName(oldName, version) {
     // Linux Tarball (for Arch Linux / AUR)
     { pattern: /^fluux-messenger-[\d.]+-linux-x86_64\.tar\.gz$/, newName: `Fluux-Messenger_${v}_Linux_x64.tar.gz` },
     { pattern: /^fluux-messenger-[\d.]+-linux-aarch64\.tar\.gz$/, newName: `Fluux-Messenger_${v}_Linux_arm64.tar.gz` },
+
+    // Linux Flatpak
+    { pattern: /^fluux-messenger-[\d.]+-linux-x86_64\.flatpak$/, newName: `Fluux-Messenger_${v}_Linux_x64.flatpak` },
+    { pattern: /^fluux-messenger-[\d.]+-linux-aarch64\.flatpak$/, newName: `Fluux-Messenger_${v}_Linux_arm64.flatpak` },
   ];
 
   for (const { pattern, newName } of mappings) {
