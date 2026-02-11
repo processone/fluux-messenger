@@ -5,7 +5,7 @@
  */
 
 import { format, isToday, isYesterday, type Locale } from 'date-fns'
-import { cs, de, el, enUS, es, fr, it, nl, pl, pt, ro } from 'date-fns/locale'
+import { cs, de, el, enUS, es, fr, hu, it, nl, pl, pt, ro } from 'date-fns/locale'
 import type { TimeFormat } from '@/stores/settingsStore'
 
 // Map language codes to date-fns locales
@@ -16,6 +16,7 @@ const dateLocales: Record<string, Locale> = {
   el,
   es,
   fr,
+  hu,
   it,
   nl,
   pl,
