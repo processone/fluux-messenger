@@ -5,14 +5,32 @@ import { useMode } from '@/hooks'
 import { useSettingsStore, type TimeFormat } from '@/stores/settingsStore'
 
 const languages = [
-  { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
-  { code: 'en', name: 'English', flag: '🇬🇧' },
-  { code: 'es', name: 'Español', flag: '🇪🇸' },
-  { code: 'fr', name: 'Français', flag: '🇫🇷' },
-  { code: 'it', name: 'Italiano', flag: '🇮🇹' },
-  { code: 'nl', name: 'Nederlands', flag: '🇳🇱' },
-  { code: 'pl', name: 'Polski', flag: '🇵🇱' },
-  { code: 'pt', name: 'Português', flag: '🇵🇹' },
+  { code: 'bg', name: 'Български' },
+  { code: 'cs', name: 'Čeština' },
+  { code: 'da', name: 'Dansk' },
+  { code: 'de', name: 'Deutsch' },
+  { code: 'el', name: 'Ελληνικά' },
+  { code: 'en', name: 'English' },
+  { code: 'es', name: 'Español' },
+  { code: 'et', name: 'Eesti' },
+  { code: 'fi', name: 'Suomi' },
+  { code: 'fr', name: 'Français' },
+  { code: 'ga', name: 'Gaeilge' },
+  { code: 'hr', name: 'Hrvatski' },
+  { code: 'hu', name: 'Magyar' },
+  { code: 'is', name: 'Íslenska' },
+  { code: 'it', name: 'Italiano' },
+  { code: 'lt', name: 'Lietuvių' },
+  { code: 'lv', name: 'Latviešu' },
+  { code: 'mt', name: 'Malti' },
+  { code: 'nb', name: 'Norsk bokmål' },
+  { code: 'nl', name: 'Nederlands' },
+  { code: 'pl', name: 'Polski' },
+  { code: 'pt', name: 'Português' },
+  { code: 'ro', name: 'Română' },
+  { code: 'sk', name: 'Slovenčina' },
+  { code: 'sl', name: 'Slovenščina' },
+  { code: 'sv', name: 'Svenska' },
 ]
 
 const timeFormatOptions: { value: TimeFormat; labelKey: string }[] = [
@@ -64,7 +82,7 @@ export function LanguageSettings() {
                   value={lang.code}
                   className="bg-fluux-bg text-fluux-text"
                 >
-                  {lang.flag} {lang.name}
+                  {lang.name}
                 </option>
               ))}
             </select>

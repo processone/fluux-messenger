@@ -13,7 +13,9 @@
     "optional": "optionnel",
     "create": "Créer",
     "block": "Bloquer",
-    "comingSoon": "Bientôt disponible"
+    "comingSoon": "Bientôt disponible",
+    "back": "Retour",
+    "copied": "Copié"
   },
   "login": {
     "title": "Fluux Messenger",
@@ -21,7 +23,6 @@
     "jidLabel": "JID (Jabber ID)",
     "jidPlaceholder": "utilisateur@exemple.com",
     "passwordLabel": "Mot de passe",
-    "passwordPlaceholder": "••••••••",
     "serverLabel": "Serveur (Optionnel)",
     "serverPlaceholder": "wss://chat.exemple.com/ws",
     "serverPlaceholderDesktop": "exemple.com ou tls://hôte:port",
@@ -161,7 +162,6 @@
     "pleaseEnterRoomAddress": "Veuillez entrer une adresse de salon",
     "invalidRoomAddress": "Adresse de salon invalide (doit être salon@conference.serveur)",
     "joinRoomHint": "Entrez l'adresse complète du salon pour rejoindre une discussion publique.",
-    "joining": "Connexion...",
     "failedToJoinRoom": "Échec de la connexion au salon",
     "joinToParticipate": "Rejoindre pour participer",
     "cachedHistoryWarning": "Historique en cache jusqu'au {{date}}. Rejoignez pour les derniers messages.",
@@ -237,10 +237,10 @@
     "inviteReason": "Raison (optionnel)",
     "inviteReasonPlaceholder": "Pourquoi les invitez-vous ?",
     "inviteError": "Échec de l'envoi des invitations",
-    "sending": "Envoi...",
     "invitationsSent": "Invitation(s) envoyée(s)",
     "inviteRejected": "Invitation rejetée : {{error}}",
-    "sendInvitations": "Envoyer {{count}} invitation(s)"
+    "sendInvitations": "Envoyer {{count}} invitation(s)",
+    "outcast": "Banni"
   },
   "events": {
     "noPendingEvents": "Aucun événement en attente",
@@ -335,7 +335,6 @@
     "systemDescription": "Suivre les préférences du système",
     "language": "Langue",
     "languageAndRegion": "Langue et région",
-    "languageDescription": "Choisissez votre langue préférée",
     "languageStreamNote": "La préférence de langue serveur s'applique à la prochaine connexion",
     "timeFormat": "Format de l'heure",
     "timeFormatDescription": "Choisissez l'affichage des heures",
@@ -489,6 +488,10 @@
     "events": {
       "title": "Événements en attente",
       "description": "Les demandes d'abonnement, invitations aux salons et messages de contacts inconnus apparaîtront ici."
+    },
+    "admin": {
+      "title": "Administration du serveur",
+      "description": "Sélectionnez une commande dans la barre latérale pour gérer votre serveur."
     }
   },
   "avatar": {

@@ -13,7 +13,9 @@
     "optional": "optioneel",
     "create": "Aanmaken",
     "block": "Blokkeren",
-    "comingSoon": "Binnenkort"
+    "comingSoon": "Binnenkort",
+    "back": "Terug",
+    "copied": "Gekopieerd"
   },
   "login": {
     "title": "Fluux Messenger",
@@ -21,7 +23,6 @@
     "jidLabel": "JID (Jabber ID)",
     "jidPlaceholder": "gebruiker@voorbeeld.nl",
     "passwordLabel": "Wachtwoord",
-    "passwordPlaceholder": "••••••••",
     "serverLabel": "Server (Optioneel)",
     "serverPlaceholder": "wss://chat.voorbeeld.nl/ws",
     "serverPlaceholderDesktop": "voorbeeld.nl of tls://host:poort",
@@ -161,7 +162,6 @@
     "pleaseEnterRoomAddress": "Voer een groepsadres in",
     "invalidRoomAddress": "Ongeldig groepsadres (moet groep@conference.server zijn)",
     "joinRoomHint": "Voer het volledige groepsadres in om een publieke chatgroep te joinen.",
-    "joining": "Joinen...",
     "failedToJoinRoom": "Groep joinen mislukt",
     "joinToParticipate": "Join de groep om deel te nemen",
     "cachedHistoryWarning": "Gecachte geschiedenis tot {{date}}. Join om nieuwste berichten te krijgen.",
@@ -237,10 +237,10 @@
     "inviteReason": "Reden (optioneel)",
     "inviteReasonPlaceholder": "Waarom nodig je ze uit?",
     "inviteError": "Uitnodigingen verzenden mislukt",
-    "sending": "Verzenden...",
     "invitationsSent": "Uitnodiging(en) verzonden",
     "inviteRejected": "Uitnodiging geweigerd: {{error}}",
-    "sendInvitations": "{{count}} uitnodiging(en) verzenden"
+    "sendInvitations": "{{count}} uitnodiging(en) verzenden",
+    "outcast": "Verbannen"
   },
   "events": {
     "noPendingEvents": "Geen openstaande gebeurtenissen",
@@ -335,7 +335,6 @@
     "systemDescription": "Volg je systeemvoorkeur",
     "language": "Taal",
     "languageAndRegion": "Taal & Regio",
-    "languageDescription": "Kies je voorkeurstaal",
     "languageStreamNote": "Servertaalvoorkeur geldt bij volgende aanmelding",
     "timeFormat": "Tijdformaat",
     "timeFormatDescription": "Kies hoe tijden worden weergegeven",
@@ -489,6 +488,10 @@
     "events": {
       "title": "Openstaande gebeurtenissen",
       "description": "Abonnementsverzoeken, groepsuitnodigingen en berichten van onbekende contacten verschijnen hier."
+    },
+    "admin": {
+      "title": "Serverbeheer",
+      "description": "Selecteer een commando uit de zijbalk om je server te beheren."
     }
   },
   "avatar": {

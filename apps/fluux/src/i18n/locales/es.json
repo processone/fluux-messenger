@@ -13,7 +13,9 @@
     "optional": "opcional",
     "create": "Crear",
     "block": "Bloquear",
-    "comingSoon": "Próximamente"
+    "comingSoon": "Próximamente",
+    "back": "Atrás",
+    "copied": "Copiado"
   },
   "login": {
     "title": "Fluux Messenger",
@@ -21,7 +23,6 @@
     "jidLabel": "JID (Jabber ID)",
     "jidPlaceholder": "usuario@ejemplo.com",
     "passwordLabel": "Contrasena",
-    "passwordPlaceholder": "••••••••",
     "serverLabel": "Servidor (Opcional)",
     "serverPlaceholder": "wss://chat.ejemplo.com/ws",
     "serverPlaceholderDesktop": "ejemplo.com o tls://host:puerto",
@@ -81,8 +82,7 @@
     "verifying": "Verificando conexión...",
     "connectionError": "Error de conexion",
     "disconnected": "Desconectado",
-    "cancelReconnection": "Cancelar reconexion",
-    "computerSleeping": "El ordenador entro en suspension..."
+    "cancelReconnection": "Cancelar reconexion"
   },
   "conversations": {
     "noConversations": "Sin conversaciones aun",
@@ -233,10 +233,14 @@
     "inviteReason": "Razon (opcional)",
     "inviteReasonPlaceholder": "Por que los estas invitando?",
     "inviteError": "Error al enviar invitaciones",
-    "sending": "Enviando...",
     "invitationsSent": "Invitación(es) enviada(s)",
     "inviteRejected": "Invitación rechazada: {{error}}",
-    "sendInvitations": "Enviar {{count}} invitacion(es)"
+    "sendInvitations": "Enviar {{count}} invitacion(es)",
+    "outcast": "Baneado",
+    "role": {
+      "moderator": "Moderador",
+      "visitor": "Visitante"
+    }
   },
   "events": {
     "noPendingEvents": "Sin eventos pendientes",
@@ -329,11 +333,8 @@
     "darkDescription": "Fondo oscuro con texto claro",
     "lightDescription": "Fondo claro con texto oscuro",
     "systemDescription": "Seguir la preferencia del sistema",
-    "moreSettings": "Mas Ajustes",
-    "moreSettingsDescription": "Aqui se anadiran ajustes adicionales de privacidad y mas.",
     "language": "Idioma",
     "languageAndRegion": "Idioma y región",
-    "languageDescription": "Elige tu idioma preferido",
     "languageStreamNote": "La preferencia de idioma del servidor se aplica en el proximo inicio de sesion",
     "timeFormat": "Formato de hora",
     "timeFormatDescription": "Elige cómo se muestran las horas",
@@ -487,6 +488,10 @@
     "events": {
       "title": "Eventos Pendientes",
       "description": "Las solicitudes de suscripcion, invitaciones a salas y mensajes de contactos desconocidos apareceran aqui."
+    },
+    "admin": {
+      "title": "Administración del Servidor",
+      "description": "Selecciona un comando de la barra lateral para gestionar tu servidor."
     }
   },
   "avatar": {

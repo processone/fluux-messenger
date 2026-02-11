@@ -13,7 +13,9 @@
     "optional": "opcjonalne",
     "create": "Utwórz",
     "block": "Zablokuj",
-    "comingSoon": "Wkrótce"
+    "comingSoon": "Wkrótce",
+    "back": "Wstecz",
+    "copied": "Skopiowano"
   },
   "login": {
     "title": "Fluux Messenger",
@@ -21,7 +23,6 @@
     "jidLabel": "JID (Jabber ID)",
     "jidPlaceholder": "użytkownik@przykład.pl",
     "passwordLabel": "Hasło",
-    "passwordPlaceholder": "********",
     "serverLabel": "Serwer (opcjonalnie)",
     "serverPlaceholder": "wss://czat.przykład.pl/ws",
     "serverPlaceholderDesktop": "przykład.pl lub tls://host:port",
@@ -161,7 +162,6 @@
     "pleaseEnterRoomAddress": "Proszę wpisać adres pokoju",
     "invalidRoomAddress": "Nieprawidłowy adres pokoju (powinien być pokój@konferencja.serwer)",
     "joinRoomHint": "Wpisz pełny adres pokoju, aby dołączyć do publicznego czatu.",
-    "joining": "Dołączanie...",
     "failedToJoinRoom": "Nie udało się dołączyć do pokoju",
     "joinToParticipate": "Dołącz do pokoju, aby uczestniczyć",
     "cachedHistoryWarning": "Historia w pamięci podręcznej do {{date}}. Dołącz, aby pobrać najnowsze wiadomości.",
@@ -237,10 +237,10 @@
     "inviteReason": "Powód (opcjonalnie)",
     "inviteReasonPlaceholder": "Dlaczego ich zapraszasz?",
     "inviteError": "Nie udało się wysłać zaproszeń",
-    "sending": "Wysyłanie...",
     "invitationsSent": "Zaproszenie(a) wysłane",
     "inviteRejected": "Zaproszenie odrzucone: {{error}}",
-    "sendInvitations": "Wyślij {{count}} zaproszeń"
+    "sendInvitations": "Wyślij {{count}} zaproszeń",
+    "outcast": "Zbanowany"
   },
   "events": {
     "noPendingEvents": "Brak oczekujących zdarzeń",
@@ -335,7 +335,6 @@
     "systemDescription": "Zgodnie z ustawieniami systemowymi",
     "language": "Język",
     "languageAndRegion": "Język i region",
-    "languageDescription": "Wybierz preferowany język",
     "languageStreamNote": "Preferencja języka serwera zostanie zastosowana przy następnym logowaniu",
     "timeFormat": "Format czasu",
     "timeFormatDescription": "Wybierz sposób wyświetlania godzin",
@@ -489,6 +488,10 @@
     "events": {
       "title": "Oczekujące zdarzenia",
       "description": "Prośba o subskrypcję, zaproszenia do pokoi i wiadomości od nieznanych kontaktów pojawią się tutaj."
+    },
+    "admin": {
+      "title": "Administracja serwera",
+      "description": "Wybierz polecenie z paska bocznego, aby zarządzać serwerem."
     }
   },
   "avatar": {

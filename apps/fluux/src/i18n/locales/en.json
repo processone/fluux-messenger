@@ -12,7 +12,9 @@
     "download": "Download",
     "optional": "optional",
     "create": "Create",
+    "back": "Back",
     "block": "Block",
+    "copied": "Copied",
     "comingSoon": "Coming soon"
   },
   "login": {
@@ -21,7 +23,6 @@
     "jidLabel": "JID (Jabber ID)",
     "jidPlaceholder": "user@example.com",
     "passwordLabel": "Password",
-    "passwordPlaceholder": "••••••••",
     "serverLabel": "Server (Optional)",
     "serverPlaceholder": "wss://chat.example.com/ws",
     "serverPlaceholderDesktop": "example.com or tls://host:port",
@@ -187,6 +188,7 @@
     "owner": "Owner",
     "admin": "Admin",
     "member": "Member",
+    "outcast": "Banned",
     "role": {
       "moderator": "Moderator",
       "visitor": "Visitor"
@@ -237,7 +239,6 @@
     "inviteReason": "Reason (optional)",
     "inviteReasonPlaceholder": "Why are you inviting them?",
     "inviteError": "Failed to send invitations",
-    "sending": "Sending...",
     "invitationsSent": "Invitation(s) sent",
     "inviteRejected": "Invitation rejected: {{error}}",
     "sendInvitations": "Send {{count}} invitation(s)"
@@ -335,7 +336,6 @@
     "systemDescription": "Follow your system preference",
     "language": "Language",
     "languageAndRegion": "Language & Region",
-    "languageDescription": "Choose your preferred language",
     "languageStreamNote": "Server language preference applies on next login",
     "timeFormat": "Time Format",
     "timeFormatDescription": "Choose how times are displayed",
@@ -489,6 +489,10 @@
     "events": {
       "title": "Pending Events",
       "description": "Subscription requests, room invitations, and messages from unknown contacts will appear here."
+    },
+    "admin": {
+      "title": "Server Administration",
+      "description": "Select a command from the sidebar to manage your server."
     }
   },
   "avatar": {

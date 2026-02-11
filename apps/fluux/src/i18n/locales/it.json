@@ -13,7 +13,9 @@
     "optional": "opzionale",
     "create": "Crea",
     "block": "Blocca",
-    "comingSoon": "Prossimamente"
+    "comingSoon": "Prossimamente",
+    "back": "Indietro",
+    "copied": "Copiato"
   },
   "login": {
     "title": "Fluux Messenger",
@@ -21,7 +23,6 @@
     "jidLabel": "JID (Jabber ID)",
     "jidPlaceholder": "utente@esempio.it",
     "passwordLabel": "Password",
-    "passwordPlaceholder": "********",
     "serverLabel": "Server (opzionale)",
     "serverPlaceholder": "wss://chat.esempio.it/ws",
     "serverPlaceholderDesktop": "esempio.it o tls://host:porta",
@@ -161,7 +162,6 @@
     "pleaseEnterRoomAddress": "Inserisci un indirizzo stanza",
     "invalidRoomAddress": "Indirizzo stanza non valido (deve essere stanza@conferenza.server)",
     "joinRoomHint": "Inserisci l'indirizzo completo della stanza per entrare in una chat pubblica.",
-    "joining": "Ingresso...",
     "failedToJoinRoom": "Impossibile entrare nella stanza",
     "joinToParticipate": "Entra nella stanza per partecipare",
     "cachedHistoryWarning": "Cronologia in cache fino al {{date}}. Entra per ottenere i messaggi piu recenti.",
@@ -237,10 +237,10 @@
     "inviteReason": "Motivo (opzionale)",
     "inviteReasonPlaceholder": "Perche li stai invitando?",
     "inviteError": "Impossibile inviare gli inviti",
-    "sending": "Invio...",
     "invitationsSent": "Invito/i inviato/i",
     "inviteRejected": "Invito rifiutato: {{error}}",
-    "sendInvitations": "Invia {{count}} invito/i"
+    "sendInvitations": "Invia {{count}} invito/i",
+    "outcast": "Bandito"
   },
   "events": {
     "noPendingEvents": "Nessun evento in sospeso",
@@ -335,7 +335,6 @@
     "systemDescription": "Segui le preferenze di sistema",
     "language": "Lingua",
     "languageAndRegion": "Lingua e regione",
-    "languageDescription": "Scegli la tua lingua preferita",
     "languageStreamNote": "La preferenza lingua del server si applica al prossimo accesso",
     "timeFormat": "Formato ora",
     "timeFormatDescription": "Scegli come visualizzare gli orari",
@@ -489,6 +488,10 @@
     "events": {
       "title": "Eventi in sospeso",
       "description": "Richieste di sottoscrizione, inviti alle stanze e messaggi da contatti sconosciuti appariranno qui."
+    },
+    "admin": {
+      "title": "Amministrazione server",
+      "description": "Seleziona un comando dalla barra laterale per gestire il tuo server."
     }
   },
   "avatar": {

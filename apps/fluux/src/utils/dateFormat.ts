@@ -5,19 +5,23 @@
  */
 
 import { format, isToday, isYesterday, type Locale } from 'date-fns'
-import { de, enUS, es, fr, it, nl, pl, pt } from 'date-fns/locale'
+import { cs, de, el, enUS, es, fr, hu, it, nl, pl, pt, ro } from 'date-fns/locale'
 import type { TimeFormat } from '@/stores/settingsStore'
 
 // Map language codes to date-fns locales
 const dateLocales: Record<string, Locale> = {
   en: enUS,
+  cs,
   de,
+  el,
   es,
   fr,
+  hu,
   it,
   nl,
   pl,
   pt,
+  ro,
 }
 
 // Cache for system locale 12-hour detection
