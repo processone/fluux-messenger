@@ -293,6 +293,10 @@ export function useChat() {
     chatStore.getState().clearFirstNewMessageId(conversationId)
   }, [])
 
+  const updateLastSeenMessageId = useCallback((conversationId: string, messageId: string) => {
+    chatStore.getState().updateLastSeenMessageId(conversationId, messageId)
+  }, [])
+
   // XEP-0313: Fetch message history from server archive
   // If we have cached messages, fetch NEW messages after the newest cached.
   // If no cache, fetch latest messages.
@@ -400,6 +404,7 @@ export function useChat() {
       getDraft,
       clearDraft,
       clearFirstNewMessageId,
+      updateLastSeenMessageId,
       fetchHistory,
       fetchOlderHistory,
     }),
@@ -422,6 +427,7 @@ export function useChat() {
       getDraft,
       clearDraft,
       clearFirstNewMessageId,
+      updateLastSeenMessageId,
       fetchHistory,
       fetchOlderHistory,
     ]

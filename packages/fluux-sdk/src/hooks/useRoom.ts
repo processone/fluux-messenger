@@ -120,6 +120,7 @@ export function useRoom() {
   }, [setActiveRoomRaw])
   const markAsRead = useRoomStore((s) => s.markAsRead)
   const clearFirstNewMessageId = useRoomStore((s) => s.clearFirstNewMessageId)
+  const updateLastSeenMessageId = useRoomStore((s) => s.updateLastSeenMessageId)
   const totalMentionsCount = useRoomStore((s) => s.totalMentionsCount())
   const totalUnreadCount = useRoomStore((s) => s.totalUnreadCount())
   const totalNotifiableUnreadCount = useRoomStore((s) => s.totalNotifiableUnreadCount())
@@ -424,6 +425,7 @@ export function useRoom() {
       getDraft,
       clearDraft,
       clearFirstNewMessageId,
+      updateLastSeenMessageId,
       inviteToRoom,
       inviteMultipleToRoom,
       fetchOlderHistory,
@@ -453,6 +455,7 @@ export function useRoom() {
       getDraft,
       clearDraft,
       clearFirstNewMessageId,
+      updateLastSeenMessageId,
       inviteToRoom,
       inviteMultipleToRoom,
       fetchOlderHistory,

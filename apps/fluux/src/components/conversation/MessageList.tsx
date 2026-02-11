@@ -14,7 +14,8 @@
 import { useMemo, useRef, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { BaseMessage } from '@fluux/sdk'
-import { useNewMessageMarker, useMessageCopyFormatter } from '@/hooks'
+import { useMessageCopyFormatter } from '@/hooks'
+import { useViewportObserver } from '@/hooks/useViewportObserver'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { DateSeparator } from './DateSeparator'
 import { NewMessageMarker } from './NewMessageMarker'
@@ -36,8 +37,8 @@ export interface MessageListProps<T extends BaseMessage> {
   conversationId: string
   /** ID of the first unread message (for new message marker) */
   firstNewMessageId?: string
-  /** Callback to clear the first new message ID */
-  clearFirstNewMessageId: () => void
+  /** Callback to clear the first new message ID (used by viewport observer) */
+  clearFirstNewMessageId?: () => void
   /** Users currently typing */
   typingUsers?: string[]
   /** Format function for typing user display */
@@ -62,6 +63,8 @@ export interface MessageListProps<T extends BaseMessage> {
   isLoadingOlder?: boolean
   /** If true, all history has been fetched - disable scroll-to-top trigger */
   isHistoryComplete?: boolean
+  /** Callback when the bottom-most visible message changes (viewport tracking) */
+  onMessageSeen?: (messageId: string) => void
 }
 
 // ============================================================================
@@ -72,7 +75,6 @@ export function MessageList<T extends BaseMessage>({
   messages,
   conversationId,
   firstNewMessageId,
-  clearFirstNewMessageId,
   typingUsers = [],
   formatTypingUser,
   renderMessage,
@@ -85,6 +87,7 @@ export function MessageList<T extends BaseMessage>({
   onScrollToTop,
   isLoadingOlder,
   isHistoryComplete,
+  onMessageSeen,
 }: MessageListProps<T>) {
   // Detect render loops before they freeze the UI
   detectRenderLoop('MessageList')
@@ -156,17 +159,21 @@ export function MessageList<T extends BaseMessage>({
   }
 
   // --------------------------------------------------------------------------
+  // VIEWPORT OBSERVER (tracks bottom-most visible message for lastSeenMessageId)
+  // --------------------------------------------------------------------------
+
+  useViewportObserver({
+    scrollContainerRef,
+    conversationId,
+    onMessageSeen,
+    enabled: !isLoading && messages.length > 0,
+  })
+
+  // --------------------------------------------------------------------------
   // COPY FORMATTING (ensures date is always included)
   // --------------------------------------------------------------------------
 
   useMessageCopyFormatter({ containerRef: scrollContainerRef })
-
-  // --------------------------------------------------------------------------
-  // NEW MESSAGE MARKER
-  // --------------------------------------------------------------------------
-
-  // Clear the new message marker 1 second after switching away
-  useNewMessageMarker(conversationId, firstNewMessageId, clearFirstNewMessageId)
 
   // --------------------------------------------------------------------------
   // RENDER: Message list (always render scroll container to preserve position)

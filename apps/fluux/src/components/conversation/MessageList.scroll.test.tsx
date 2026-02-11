@@ -24,7 +24,6 @@ vi.mock('react-i18next', () => ({
 
 // Mock hooks used by MessageList
 vi.mock('@/hooks', () => ({
-  useNewMessageMarker: vi.fn(),
   useMessageCopyFormatter: vi.fn(),
 }))
 

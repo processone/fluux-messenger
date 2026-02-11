@@ -162,6 +162,10 @@ export { chatSelectors, roomSelectors, rosterSelectors } from './stores'
 // Admin dashboard types
 export type { AdminStats } from './stores/adminStore'
 
+// Notification state utilities (pure functions for badge computation, etc.)
+export { computeBadgeCount, shouldNotifyConversation, shouldNotifyRoom } from './stores/shared/notificationState'
+export type { EntityNotificationState, NotificationMessage, EntityContext, BadgeInput } from './stores/shared/notificationState'
+
 // Store bindings (wire SDK events to Zustand stores)
 export { createStoreBindings } from './bindings'
 export type { StoreRefs, UnsubscribeBindings } from './bindings'
