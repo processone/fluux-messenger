@@ -13,7 +13,9 @@
     "download": "Transferir",
     "optional": "opcional",
     "create": "Criar",
-    "comingSoon": "Em breve"
+    "comingSoon": "Em breve",
+    "back": "Voltar",
+    "copied": "Copiado"
   },
   "login": {
     "title": "Fluux Messenger",
@@ -21,7 +23,6 @@
     "jidLabel": "JID (Jabber ID)",
     "jidPlaceholder": "utilizador@exemplo.com",
     "passwordLabel": "Palavra-passe",
-    "passwordPlaceholder": "••••••••",
     "serverLabel": "Servidor (Opcional)",
     "serverPlaceholder": "wss://chat.exemplo.com/ws",
     "serverPlaceholderDesktop": "exemplo.com ou tls://host:porta",
@@ -161,7 +162,6 @@
     "pleaseEnterRoomAddress": "Por favor introduza o endereço da sala",
     "invalidRoomAddress": "Endereço da sala inválido (deve ser sala@conference.servidor)",
     "joinRoomHint": "Introduza o endereço completo para entrar numa sala pública.",
-    "joining": "A entrar...",
     "failedToJoinRoom": "Falha ao entrar na sala",
     "joinToParticipate": "Entre na sala para participar",
     "cachedHistoryWarning": "Histórico em cache até {{date}}. Entre para obter as mensagens mais recentes.",
@@ -237,10 +237,10 @@
     "inviteReason": "Motivo (opcional)",
     "inviteReasonPlaceholder": "Porque os está a convidar?",
     "inviteError": "Falha ao enviar convites",
-    "sending": "A enviar…",
     "invitationsSent": "Convite(s) enviado(s)",
     "inviteRejected": "Convite rejeitado: {{error}}",
-    "sendInvitations": "Enviar {{count}} convite(s)"
+    "sendInvitations": "Enviar {{count}} convite(s)",
+    "outcast": "Banido"
   },
   "events": {
     "noPendingEvents": "Nenhum evento pendente",
@@ -335,7 +335,6 @@
     "systemDescription": "Seguir a preferência do sistema",
     "language": "Idioma",
     "languageAndRegion": "Idioma e região",
-    "languageDescription": "Escolha o seu idioma preferido",
     "languageStreamNote": "A preferência de idioma do servidor aplica-se no próximo login",
     "timeFormat": "Formato de hora",
     "timeFormatDescription": "Escolha como as horas são apresentadas",
@@ -489,6 +488,10 @@
     "events": {
       "title": "Eventos pendentes",
       "description": "Pedidos de subscrição, convites para salas e mensagens de contactos desconhecidos aparecerão aqui."
+    },
+    "admin": {
+      "title": "Administração do servidor",
+      "description": "Selecione um comando na barra lateral para gerir o seu servidor."
     }
   },
   "avatar": {

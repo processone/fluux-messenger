@@ -13,7 +13,9 @@
     "optional": "optional",
     "create": "Erstellen",
     "block": "Blockieren",
-    "comingSoon": "Demnächst"
+    "comingSoon": "Demnächst",
+    "back": "Zurück",
+    "copied": "Kopiert"
   },
   "login": {
     "title": "Fluux Messenger",
@@ -21,7 +23,6 @@
     "jidLabel": "JID (Jabber ID)",
     "jidPlaceholder": "benutzer@beispiel.de",
     "passwordLabel": "Passwort",
-    "passwordPlaceholder": "********",
     "serverLabel": "Server (optional)",
     "serverPlaceholder": "wss://chat.beispiel.de/ws",
     "serverPlaceholderDesktop": "beispiel.de oder tls://host:port",
@@ -161,7 +162,6 @@
     "pleaseEnterRoomAddress": "Bitte eine Raumadresse eingeben",
     "invalidRoomAddress": "Ungültige Raumadresse (sollte raum@konferenz.server sein)",
     "joinRoomHint": "Geben Sie die vollständige Raumadresse ein, um einem öffentlichen Chatraum beizutreten.",
-    "joining": "Beitreten...",
     "failedToJoinRoom": "Raum konnte nicht betreten werden",
     "joinToParticipate": "Raum beitreten um teilzunehmen",
     "cachedHistoryWarning": "Zwischengespeicherter Verlauf bis {{date}}. Beitreten für aktuelle Nachrichten.",
@@ -237,10 +237,10 @@
     "inviteReason": "Grund (optional)",
     "inviteReasonPlaceholder": "Warum laden Sie sie ein?",
     "inviteError": "Einladungen konnten nicht gesendet werden",
-    "sending": "Senden...",
     "invitationsSent": "Einladung(en) gesendet",
     "inviteRejected": "Einladung abgelehnt: {{error}}",
-    "sendInvitations": "{{count}} Einladung(en) senden"
+    "sendInvitations": "{{count}} Einladung(en) senden",
+    "outcast": "Gesperrt"
   },
   "events": {
     "noPendingEvents": "Keine ausstehenden Ereignisse",
@@ -335,7 +335,6 @@
     "systemDescription": "Systemeinstellung verwenden",
     "language": "Sprache",
     "languageAndRegion": "Sprache & Region",
-    "languageDescription": "Wählen Sie Ihre bevorzugte Sprache",
     "languageStreamNote": "Server-Sprachpräferenz gilt ab nächster Anmeldung",
     "timeFormat": "Zeitformat",
     "timeFormatDescription": "Wählen Sie, wie Uhrzeiten angezeigt werden",
@@ -489,6 +488,10 @@
     "events": {
       "title": "Ausstehende Ereignisse",
       "description": "Abonnementanfragen, Raumeinladungen und Nachrichten von unbekannten Kontakten werden hier angezeigt."
+    },
+    "admin": {
+      "title": "Server-Administration",
+      "description": "Wählen Sie einen Befehl aus der Seitenleiste, um Ihren Server zu verwalten."
     }
   },
   "avatar": {
