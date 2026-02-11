@@ -7,7 +7,7 @@ import {
   type MockSDKClient,
   type MockStoreRefs,
 } from '../core/test-utils'
-import type { Message, RoomMessage, RoomOccupant, Contact, Room, Conversation, AdminCommand, AdminSession, SystemNotificationType } from '../core/types'
+import type { Message, RoomMessage, RoomOccupant, Contact, Room, AdminCommand, AdminSession, SystemNotificationType } from '../core/types'
 
 describe('createStoreBindings', () => {
   let mockClient: MockSDKClient
