@@ -5,14 +5,14 @@ import { useMode } from '@/hooks'
 import { useSettingsStore, type TimeFormat } from '@/stores/settingsStore'
 
 const languages = [
-  { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
-  { code: 'en', name: 'English', flag: '🇬🇧' },
-  { code: 'es', name: 'Español', flag: '🇪🇸' },
-  { code: 'fr', name: 'Français', flag: '🇫🇷' },
-  { code: 'it', name: 'Italiano', flag: '🇮🇹' },
-  { code: 'nl', name: 'Nederlands', flag: '🇳🇱' },
-  { code: 'pl', name: 'Polski', flag: '🇵🇱' },
-  { code: 'pt', name: 'Português', flag: '🇵🇹' },
+  { code: 'de', name: 'Deutsch' },
+  { code: 'en', name: 'English' },
+  { code: 'es', name: 'Español' },
+  { code: 'fr', name: 'Français' },
+  { code: 'it', name: 'Italiano' },
+  { code: 'nl', name: 'Nederlands' },
+  { code: 'pl', name: 'Polski' },
+  { code: 'pt', name: 'Português' },
 ]
 
 const timeFormatOptions: { value: TimeFormat; labelKey: string }[] = [
@@ -64,7 +64,7 @@ export function LanguageSettings() {
                   value={lang.code}
                   className="bg-fluux-bg text-fluux-text"
                 >
-                  {lang.flag} {lang.name}
+                  {lang.name}
                 </option>
               ))}
             </select>
