@@ -7,6 +7,7 @@ import { ChatLayout } from './components/ChatLayout'
 import { UpdateModal } from './components/UpdateModal'
 import { useSessionPersistence, getSession } from './hooks/useSessionPersistence'
 import { useFullscreen } from './hooks/useFullscreen'
+import { useTauriCloseHandler } from './hooks/useTauriCloseHandler'
 import { useAutoUpdate } from './hooks'
 
 // Tauri detection
@@ -39,6 +40,7 @@ function App() {
   detectRenderLoop('App')
 
   const { status } = useConnection()
+  useTauriCloseHandler()
   const update = useAutoUpdate({ autoCheck: true })
 
   // Track if we've shown the update modal this session (don't show again after dismiss)

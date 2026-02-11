@@ -20,7 +20,7 @@ use tauri::{Emitter, Manager};
 use tauri::{RunEvent, WindowEvent};
 #[cfg(target_os = "windows")]
 use tauri::WindowEvent;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 // Menu support
 #[cfg(target_os = "macos")]
@@ -704,9 +704,12 @@ fn main() {
                 // Hide to tray when close button is clicked
                 let main_window = app.get_webview_window("main").unwrap();
                 let window = main_window.clone();
+                let app_handle = app.handle().clone();
                 main_window.on_window_event(move |event| {
                     if let WindowEvent::CloseRequested { api, .. } = event {
                         api.prevent_close();
+                        // Save window state before hiding
+                        let _ = app_handle.save_window_state(StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED | StateFlags::FULLSCREEN);
                         let _ = window.hide();
                     }
                 });

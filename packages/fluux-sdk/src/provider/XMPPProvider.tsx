@@ -3,7 +3,6 @@ import { XMPPClient } from '../core/XMPPClient'
 import type { XMPPClientConfig } from '../core/types/client'
 import type { StorageAdapter } from '../core/types/storage'
 import type { ProxyAdapter } from '../core/types/proxy'
-import { setupTauriCloseHandlers } from '../utils/tauriLifecycle'
 import { sessionStorageAdapter } from '../utils/sessionStorageAdapter'
 import { setupDebugUtils } from '../utils/debugUtils'
 import { PresenceContext } from './PresenceContext'
@@ -143,23 +142,13 @@ export function XMPPProvider({
     }
   }, [])
 
-  // Tauri lifecycle setup
-  useEffect(() => {
-    const client = clientRef.current
-    if (!client) return
-
-    // NOTE: We intentionally do NOT disconnect on browser beforeunload.
-    // Sending a stream close signals "intentional disconnect" to the server,
-    // causing it to immediately discard the XEP-0198 SM session.
-    // By not closing cleanly, the server treats it as a connection loss
-    // and keeps the SM session for resume_timeout, allowing session
-    // resumption on page reload.
-
-    // Set up Tauri app close handlers (no-op in non-Tauri environments)
-    return setupTauriCloseHandlers({ client })
-  }, [])
-
   // Persist SM state before page unload for session resumption
+  // NOTE: We intentionally do NOT disconnect on browser beforeunload.
+  // Sending a stream close signals "intentional disconnect" to the server,
+  // causing it to immediately discard the XEP-0198 SM session.
+  // By not closing cleanly, the server treats it as a connection loss
+  // and keeps the SM session for resume_timeout, allowing session
+  // resumption on page reload.
   useEffect(() => {
     const client = clientRef.current
     if (!client) return
