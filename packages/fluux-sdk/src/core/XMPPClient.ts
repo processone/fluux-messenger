@@ -534,6 +534,11 @@ export class XMPPClient {
       // Emitted by PubSub module for real events or Roster for vcard-temp:x:update
       this.on('avatarMetadataUpdate', (jid, hash) => {
         if (hash) {
+          // Skip if contact already has this avatar hash with a loaded avatar
+          const contact = this.stores?.roster.getContact(jid)
+          if (contact?.avatarHash === hash && contact?.avatar) {
+            return
+          }
           this.profile.fetchAvatarData(jid, hash).catch(() => {})
         } else {
           // Avatar was removed

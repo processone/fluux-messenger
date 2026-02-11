@@ -242,13 +242,17 @@ export class MUC extends BaseModule {
         buffer.push(occupant)
         this.pendingOccupants.set(roomJid, buffer)
       } else {
-        // Room already joined - add occupant immediately (e.g., late joiner)
+        // Room already joined - add occupant immediately (e.g., late joiner or presence update)
         // SDK event only - binding calls store.addOccupant
         this.deps.emitSDK('room:occupant-joined', { roomJid, occupant })
 
         // XEP-0398: Trigger avatar fetch if occupant has avatar hash
+        // Only emit if hash changed from what we already have
         if (avatarHash) {
-          this.deps.emit('occupantAvatarUpdate', roomJid, nick, avatarHash, realJid)
+          const existing = room?.occupants.get(nick)
+          if (existing?.avatarHash !== avatarHash || !existing?.avatar) {
+            this.deps.emit('occupantAvatarUpdate', roomJid, nick, avatarHash, realJid)
+          }
         }
       }
     }

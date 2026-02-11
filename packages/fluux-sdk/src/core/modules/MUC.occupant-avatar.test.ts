@@ -294,6 +294,183 @@ describe('MUC Occupant Avatars (XEP-0398)', () => {
     })
   })
 
+  describe('occupant avatar dedup on presence update', () => {
+    it('does not emit occupantAvatarUpdate when occupant already has same hash and avatar', () => {
+      const existingOccupants = new Map()
+      existingOccupants.set('TestUser', {
+        nick: 'TestUser',
+        affiliation: 'member',
+        role: 'participant',
+        avatarHash: 'abc123avatarhash',
+        avatar: 'blob:existing-avatar',
+      })
+
+      const presence = createMockElement('presence', {
+        from: 'room@conference.example.org/TestUser',
+        to: 'user@example.com/resource',
+      }, [
+        {
+          name: 'x',
+          attrs: { xmlns: 'http://jabber.org/protocol/muc#user' },
+          children: [
+            {
+              name: 'item',
+              attrs: { affiliation: 'member', role: 'participant' },
+            },
+          ],
+        },
+        {
+          name: 'x',
+          attrs: { xmlns: 'vcard-temp:x:update' },
+          children: [
+            { name: 'photo', text: 'abc123avatarhash' },
+          ],
+        },
+      ])
+
+      // Mock room with existing occupant that already has avatar
+      mockStores.room.getRoom.mockReturnValue({
+        jid: 'room@conference.example.org',
+        name: 'room',
+        nickname: 'MyNick',
+        joined: true,
+        isBookmarked: false,
+        occupants: existingOccupants,
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
+      })
+
+      muc.handle(presence)
+
+      // Should NOT emit occupantAvatarUpdate because hash hasn't changed and avatar exists
+      expect(mockEmit).not.toHaveBeenCalledWith(
+        'occupantAvatarUpdate',
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.anything()
+      )
+    })
+
+    it('emits occupantAvatarUpdate when occupant has same hash but no avatar blob', () => {
+      const existingOccupants = new Map()
+      existingOccupants.set('TestUser', {
+        nick: 'TestUser',
+        affiliation: 'member',
+        role: 'participant',
+        avatarHash: 'abc123avatarhash',
+        // No avatar blob - needs to be fetched
+      })
+
+      const presence = createMockElement('presence', {
+        from: 'room@conference.example.org/TestUser',
+        to: 'user@example.com/resource',
+      }, [
+        {
+          name: 'x',
+          attrs: { xmlns: 'http://jabber.org/protocol/muc#user' },
+          children: [
+            {
+              name: 'item',
+              attrs: { affiliation: 'member', role: 'participant' },
+            },
+          ],
+        },
+        {
+          name: 'x',
+          attrs: { xmlns: 'vcard-temp:x:update' },
+          children: [
+            { name: 'photo', text: 'abc123avatarhash' },
+          ],
+        },
+      ])
+
+      mockStores.room.getRoom.mockReturnValue({
+        jid: 'room@conference.example.org',
+        name: 'room',
+        nickname: 'MyNick',
+        joined: true,
+        isBookmarked: false,
+        occupants: existingOccupants,
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
+      })
+
+      muc.handle(presence)
+
+      // Should emit because avatar blob is missing
+      expect(mockEmit).toHaveBeenCalledWith(
+        'occupantAvatarUpdate',
+        'room@conference.example.org',
+        'TestUser',
+        'abc123avatarhash',
+        undefined
+      )
+    })
+
+    it('emits occupantAvatarUpdate when occupant avatar hash changed', () => {
+      const existingOccupants = new Map()
+      existingOccupants.set('TestUser', {
+        nick: 'TestUser',
+        affiliation: 'member',
+        role: 'participant',
+        avatarHash: 'old-hash',
+        avatar: 'blob:old-avatar',
+      })
+
+      const presence = createMockElement('presence', {
+        from: 'room@conference.example.org/TestUser',
+        to: 'user@example.com/resource',
+      }, [
+        {
+          name: 'x',
+          attrs: { xmlns: 'http://jabber.org/protocol/muc#user' },
+          children: [
+            {
+              name: 'item',
+              attrs: { affiliation: 'member', role: 'participant' },
+            },
+          ],
+        },
+        {
+          name: 'x',
+          attrs: { xmlns: 'vcard-temp:x:update' },
+          children: [
+            { name: 'photo', text: 'new-hash' },
+          ],
+        },
+      ])
+
+      mockStores.room.getRoom.mockReturnValue({
+        jid: 'room@conference.example.org',
+        name: 'room',
+        nickname: 'MyNick',
+        joined: true,
+        isBookmarked: false,
+        occupants: existingOccupants,
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
+      })
+
+      muc.handle(presence)
+
+      // Should emit because hash changed
+      expect(mockEmit).toHaveBeenCalledWith(
+        'occupantAvatarUpdate',
+        'room@conference.example.org',
+        'TestUser',
+        'new-hash',
+        undefined
+      )
+    })
+  })
+
   describe('Profile.fetchOccupantAvatar privacy options', () => {
     it('skips fetching in anonymous rooms when privacy option is enabled', async () => {
       const depsWithPrivacy: ModuleDependencies = {

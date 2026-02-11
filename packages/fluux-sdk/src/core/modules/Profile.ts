@@ -57,6 +57,14 @@ export class Profile extends BaseModule {
    */
   async fetchAvatarData(jid: string, hash: string): Promise<void> {
     const bareJid = getBareJid(jid)
+
+    // Check IndexedDB cache first - skip network if we already have this avatar
+    const cachedUrl = await getCachedAvatar(hash)
+    if (cachedUrl) {
+      this.updateAvatar(bareJid, cachedUrl, hash)
+      return
+    }
+
     try {
       // Try XEP-0084 (PEP) first
       const iq = xml('iq', { type: 'get', to: bareJid, id: `avatar_${generateUUID()}` },
@@ -70,8 +78,10 @@ export class Profile extends BaseModule {
       const data = result.getChild('pubsub', NS_PUBSUB)?.getChild('items')?.getChild('item')?.getChild('data', 'urn:xmpp:avatar:data')?.text()
 
       if (data) {
-        const avatarUrl = `data:image/png;base64,${data}`
-        this.updateAvatar(bareJid, avatarUrl, hash)
+        // Cache to IndexedDB and get a blob URL
+        const blobUrl = await cacheAvatar(hash, data, 'image/png')
+        await saveAvatarHash(bareJid, hash, 'contact')
+        this.updateAvatar(bareJid, blobUrl, hash)
         // Clear negative cache since we found an avatar
         await clearNoAvatar(bareJid)
       } else {

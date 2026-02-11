@@ -692,6 +692,74 @@ describe('XMPPClient Roster', () => {
       expect(missingAvatarCalls[0]).toEqual(['contactMissingXep0153Avatar', 'contact@example.com'])
     })
 
+    it('should NOT emit avatarMetadataUpdate when contact already has the same avatar hash', async () => {
+      await connectClient()
+
+      const emitSpy = vi.spyOn(xmppClient as any, 'emit')
+
+      // Mock roster store to return a contact with existing avatar hash
+      mockStores.roster.getContact.mockReturnValue({
+        jid: 'contact@example.com',
+        name: 'Contact',
+        subscription: 'both',
+        presence: 'online',
+        avatar: 'blob:existing-avatar',
+        avatarHash: 'abc123avatarhash',
+      })
+
+      // Presence with same hash as already stored
+      const presenceWithSameHash = createMockElement('presence', {
+        from: 'contact@example.com/resource',
+      }, [
+        {
+          name: 'x',
+          attrs: { xmlns: 'vcard-temp:x:update' },
+          children: [
+            { name: 'photo', text: 'abc123avatarhash' },
+          ],
+        },
+      ])
+
+      mockXmppClientInstance._emit('stanza', presenceWithSameHash)
+
+      const avatarCalls = emitSpy.mock.calls.filter(call => call[0] === 'avatarMetadataUpdate')
+      expect(avatarCalls.length).toBe(0)
+    })
+
+    it('should emit avatarMetadataUpdate when contact avatar hash changes', async () => {
+      await connectClient()
+
+      const emitSpy = vi.spyOn(xmppClient as any, 'emit')
+
+      // Mock roster store to return a contact with a different avatar hash
+      mockStores.roster.getContact.mockReturnValue({
+        jid: 'contact@example.com',
+        name: 'Contact',
+        subscription: 'both',
+        presence: 'online',
+        avatar: 'blob:old-avatar',
+        avatarHash: 'old-hash',
+      })
+
+      const presenceWithNewHash = createMockElement('presence', {
+        from: 'contact@example.com/resource',
+      }, [
+        {
+          name: 'x',
+          attrs: { xmlns: 'vcard-temp:x:update' },
+          children: [
+            { name: 'photo', text: 'new-hash-456' },
+          ],
+        },
+      ])
+
+      mockXmppClientInstance._emit('stanza', presenceWithNewHash)
+
+      const avatarCalls = emitSpy.mock.calls.filter(call => call[0] === 'avatarMetadataUpdate')
+      expect(avatarCalls.length).toBe(1)
+      expect(avatarCalls[0]).toEqual(['avatarMetadataUpdate', 'contact@example.com', 'new-hash-456'])
+    })
+
     it('should NOT emit avatarMetadataUpdate for self-presence with photo hash', async () => {
       await connectClient()
 

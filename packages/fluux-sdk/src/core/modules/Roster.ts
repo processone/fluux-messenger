@@ -174,12 +174,17 @@ export class Roster extends BaseModule {
       if (isRoomPresence) {
         // Room avatar update from room bare JID
         if (photo) {
-          // Has avatar hash - update hash and flag, then trigger fetch
-          this.deps.emitSDK('room:updated', {
-            roomJid: bareFrom,
-            updates: { avatarFromPresence: true, avatarHash: photo },
-          })
-          this.deps.emit('roomAvatarUpdate', bareFrom, photo)
+          // Only trigger fetch if hash changed
+          const room = this.deps.stores?.room.getRoom(bareFrom)
+          if (room?.avatarHash === photo && room?.avatar) {
+            // Same hash and already have avatar - skip
+          } else {
+            this.deps.emitSDK('room:updated', {
+              roomJid: bareFrom,
+              updates: { avatarFromPresence: true, avatarHash: photo },
+            })
+            this.deps.emit('roomAvatarUpdate', bareFrom, photo)
+          }
         } else {
           // Empty photo - avatar was removed
           this.deps.emitSDK('room:updated', {
@@ -189,8 +194,11 @@ export class Roster extends BaseModule {
         }
       } else if (!isSelfPresence) {
         if (photo) {
-          // Contact has XEP-0153 avatar hash - emit for fetching
-          this.deps.emit('avatarMetadataUpdate', bareFrom, photo)
+          // Contact has XEP-0153 avatar hash - only emit if hash changed
+          const contact = this.deps.stores?.roster.getContact(bareFrom)
+          if (contact?.avatarHash !== photo) {
+            this.deps.emit('avatarMetadataUpdate', bareFrom, photo)
+          }
         } else {
           // Contact has empty <photo/> in XEP-0153 - they may use XEP-0084 instead
           // Clients like Conversations publish avatars via XEP-0084 (PEP) only.

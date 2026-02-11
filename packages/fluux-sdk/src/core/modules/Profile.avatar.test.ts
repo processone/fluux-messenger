@@ -1267,4 +1267,170 @@ describe('XMPPClient Own Avatar', () => {
       })
     })
   })
+
+  describe('fetchAvatarData cache dedup', () => {
+    beforeEach(async () => {
+      // Connect the client first
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online', { jid: { toString: () => 'user@example.com/resource' } })
+      await connectPromise
+    })
+
+    it('should return cached avatar without network request when hash is in cache', async () => {
+      mockXmppClientInstance.iqCaller.request.mockClear()
+      emitSDKSpy.mockClear()
+
+      const { getCachedAvatar } = await import('../../utils/avatarCache')
+      vi.mocked(getCachedAvatar).mockResolvedValueOnce('blob:already-cached')
+
+      await xmppClient.profile.fetchAvatarData('contact@example.com', 'cached-hash')
+
+      // Should NOT make any IQ request
+      expect(mockXmppClientInstance.iqCaller.request).not.toHaveBeenCalled()
+
+      // Should emit avatar update with cached URL
+      expect(emitSDKSpy).toHaveBeenCalledWith('roster:avatar', {
+        jid: 'contact@example.com',
+        avatar: 'blob:already-cached',
+        avatarHash: 'cached-hash',
+      })
+    })
+
+    it('should fetch from network when hash is NOT in cache', async () => {
+      mockXmppClientInstance.iqCaller.request.mockClear()
+      emitSDKSpy.mockClear()
+
+      const { getCachedAvatar, cacheAvatar, saveAvatarHash } = await import('../../utils/avatarCache')
+      vi.mocked(getCachedAvatar).mockResolvedValueOnce(null)
+      vi.mocked(cacheAvatar).mockResolvedValueOnce('blob:newly-fetched')
+
+      // Mock PEP data response
+      const dataResponse = createMockElement('iq', { type: 'result' }, [
+        {
+          name: 'pubsub',
+          attrs: { xmlns: 'http://jabber.org/protocol/pubsub' },
+          children: [
+            {
+              name: 'items',
+              attrs: { node: 'urn:xmpp:avatar:data' },
+              children: [
+                {
+                  name: 'item',
+                  attrs: { id: 'new-hash' },
+                  children: [
+                    {
+                      name: 'data',
+                      attrs: { xmlns: 'urn:xmpp:avatar:data' },
+                      text: 'iVBORw0KGgo=',
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ])
+
+      mockXmppClientInstance.iqCaller.request.mockResolvedValueOnce(dataResponse)
+
+      await xmppClient.profile.fetchAvatarData('contact@example.com', 'new-hash')
+
+      // Should have made network request
+      expect(mockXmppClientInstance.iqCaller.request).toHaveBeenCalledTimes(1)
+
+      // Should cache the fetched avatar to IndexedDB
+      expect(cacheAvatar).toHaveBeenCalledWith('new-hash', 'iVBORw0KGgo=', 'image/png')
+      expect(saveAvatarHash).toHaveBeenCalledWith('contact@example.com', 'new-hash', 'contact')
+    })
+  })
+
+  describe('avatarMetadataUpdate event dedup', () => {
+    beforeEach(async () => {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online', { jid: { toString: () => 'user@example.com/resource' } })
+      await connectPromise
+    })
+
+    it('should skip fetch when contact already has the same avatar hash and avatar', async () => {
+      mockXmppClientInstance.iqCaller.request.mockClear()
+
+      // Mock roster store to return a contact with existing avatar
+      mockStores.roster.getContact.mockReturnValue({
+        jid: 'contact@example.com',
+        name: 'Contact',
+        subscription: 'both',
+        presence: 'online',
+        avatar: 'blob:existing-avatar',
+        avatarHash: 'same-hash',
+      })
+
+      // Emit avatarMetadataUpdate with same hash
+      ;(xmppClient as any).emit('avatarMetadataUpdate', 'contact@example.com', 'same-hash')
+
+      // Allow any pending promises to resolve
+      await vi.runAllTimersAsync()
+
+      // Should NOT trigger any network request
+      expect(mockXmppClientInstance.iqCaller.request).not.toHaveBeenCalled()
+    })
+
+    it('should fetch when contact has different avatar hash', async () => {
+      mockXmppClientInstance.iqCaller.request.mockClear()
+
+      const { getCachedAvatar } = await import('../../utils/avatarCache')
+      vi.mocked(getCachedAvatar).mockResolvedValueOnce(null)
+
+      // Mock roster store to return a contact with different avatar
+      mockStores.roster.getContact.mockReturnValue({
+        jid: 'contact@example.com',
+        name: 'Contact',
+        subscription: 'both',
+        presence: 'online',
+        avatar: 'blob:old-avatar',
+        avatarHash: 'old-hash',
+      })
+
+      // Emit avatarMetadataUpdate with new hash
+      ;(xmppClient as any).emit('avatarMetadataUpdate', 'contact@example.com', 'new-hash')
+
+      // Allow async operations
+      await vi.runAllTimersAsync()
+
+      // Should trigger network request (cache miss + hash mismatch)
+      expect(mockXmppClientInstance.iqCaller.request).toHaveBeenCalled()
+    })
+
+    it('should fetch when contact has no avatar yet', async () => {
+      mockXmppClientInstance.iqCaller.request.mockClear()
+
+      const { getCachedAvatar } = await import('../../utils/avatarCache')
+      vi.mocked(getCachedAvatar).mockResolvedValueOnce(null)
+
+      // Mock roster store to return a contact without avatar
+      mockStores.roster.getContact.mockReturnValue({
+        jid: 'contact@example.com',
+        name: 'Contact',
+        subscription: 'both',
+        presence: 'online',
+      })
+
+      // Emit avatarMetadataUpdate
+      ;(xmppClient as any).emit('avatarMetadataUpdate', 'contact@example.com', 'first-hash')
+
+      await vi.runAllTimersAsync()
+
+      // Should trigger network request
+      expect(mockXmppClientInstance.iqCaller.request).toHaveBeenCalled()
+    })
+  })
 })
