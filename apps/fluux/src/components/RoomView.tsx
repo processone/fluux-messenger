@@ -1019,13 +1019,14 @@ const RoomMessageInput = React.forwardRef<MessageComposerHandle, RoomMessageInpu
   ) : null
 
   // Custom input renderer with mention highlighting
-  const renderMentionInput = useCallback(({ inputRef, mergedRef, value, onChange, onKeyDown: baseKeyDown, onSelect, placeholder }: {
+  const renderMentionInput = useCallback(({ inputRef, mergedRef, value, onChange, onKeyDown: baseKeyDown, onSelect, onPaste, placeholder }: {
     inputRef: React.RefObject<HTMLTextAreaElement>
     mergedRef: (node: HTMLTextAreaElement | null) => void
     value: string
     onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
     onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
     onSelect?: (e: React.SyntheticEvent<HTMLTextAreaElement>) => void
+    onPaste?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void
     placeholder: string
   }) => {
     // Enhanced keydown handler for mentions
@@ -1130,6 +1131,7 @@ const RoomMessageInput = React.forwardRef<MessageComposerHandle, RoomMessageInpu
           onChange={onChange}
           onSelect={onSelect}
           onKeyDown={handleKeyDown}
+          onPaste={onPaste}
           onScroll={(e) => {
             // Sync overlay scroll when textarea scrolls
             const overlay = e.currentTarget.previousElementSibling as HTMLElement
