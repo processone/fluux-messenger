@@ -5,18 +5,32 @@ import { useMode } from '@/hooks'
 import { useSettingsStore, type TimeFormat } from '@/stores/settingsStore'
 
 const languages = [
+  { code: 'bg', name: 'Български' },
   { code: 'cs', name: 'Čeština' },
+  { code: 'da', name: 'Dansk' },
   { code: 'de', name: 'Deutsch' },
   { code: 'el', name: 'Ελληνικά' },
   { code: 'en', name: 'English' },
   { code: 'es', name: 'Español' },
+  { code: 'et', name: 'Eesti' },
+  { code: 'fi', name: 'Suomi' },
   { code: 'fr', name: 'Français' },
+  { code: 'ga', name: 'Gaeilge' },
+  { code: 'hr', name: 'Hrvatski' },
   { code: 'hu', name: 'Magyar' },
+  { code: 'is', name: 'Íslenska' },
   { code: 'it', name: 'Italiano' },
+  { code: 'lt', name: 'Lietuvių' },
+  { code: 'lv', name: 'Latviešu' },
+  { code: 'mt', name: 'Malti' },
+  { code: 'nb', name: 'Norsk bokmål' },
   { code: 'nl', name: 'Nederlands' },
   { code: 'pl', name: 'Polski' },
   { code: 'pt', name: 'Português' },
   { code: 'ro', name: 'Română' },
+  { code: 'sk', name: 'Slovenčina' },
+  { code: 'sl', name: 'Slovenščina' },
+  { code: 'sv', name: 'Svenska' },
 ]
 
 const timeFormatOptions: { value: TimeFormat; labelKey: string }[] = [

@@ -176,5 +176,131 @@ describe('i18n', () => {
       expect(i18n.t('common.save')).toBe('Guardar')
       expect(i18n.t('common.cancel')).toBe('Cancelar')
     })
+
+    it('should have correct Swedish translations for key UI elements', async () => {
+      await i18n.changeLanguage('sv')
+      expect(i18n.t('sidebar.messages')).toBe('Meddelanden')
+      expect(i18n.t('sidebar.rooms')).toBe('Rum')
+      expect(i18n.t('presence.online')).toBe('Online')
+      expect(i18n.t('common.save')).toBe('Spara')
+      expect(i18n.t('common.cancel')).toBe('Avbryt')
+    })
+
+    it('should have correct Norwegian translations for key UI elements', async () => {
+      await i18n.changeLanguage('nb')
+      expect(i18n.t('sidebar.messages')).toBe('Meldinger')
+      expect(i18n.t('sidebar.rooms')).toBe('Rom')
+      expect(i18n.t('presence.online')).toBe('Pålogget')
+      expect(i18n.t('common.save')).toBe('Lagre')
+      expect(i18n.t('common.cancel')).toBe('Avbryt')
+    })
+
+    it('should have correct Danish translations for key UI elements', async () => {
+      await i18n.changeLanguage('da')
+      expect(i18n.t('sidebar.messages')).toBe('Beskeder')
+      expect(i18n.t('sidebar.rooms')).toBe('Rum')
+      expect(i18n.t('presence.online')).toBe('Online')
+      expect(i18n.t('common.save')).toBe('Gem')
+      expect(i18n.t('common.cancel')).toBe('Annuller')
+    })
+
+    it('should have correct Finnish translations for key UI elements', async () => {
+      await i18n.changeLanguage('fi')
+      expect(i18n.t('sidebar.messages')).toBe('Viestit')
+      expect(i18n.t('sidebar.rooms')).toBe('Huoneet')
+      expect(i18n.t('presence.online')).toBe('Paikalla')
+      expect(i18n.t('common.save')).toBe('Tallenna')
+      expect(i18n.t('common.cancel')).toBe('Peruuta')
+    })
+
+    it('should have correct Bulgarian translations for key UI elements', async () => {
+      await i18n.changeLanguage('bg')
+      expect(i18n.t('sidebar.messages')).toBe('Съобщения')
+      expect(i18n.t('sidebar.rooms')).toBe('Стаи')
+      expect(i18n.t('presence.online')).toBe('На линия')
+      expect(i18n.t('common.save')).toBe('Запази')
+      expect(i18n.t('common.cancel')).toBe('Отказ')
+    })
+
+    it('should have correct Croatian translations for key UI elements', async () => {
+      await i18n.changeLanguage('hr')
+      expect(i18n.t('sidebar.messages')).toBe('Poruke')
+      expect(i18n.t('sidebar.rooms')).toBe('Sobe')
+      expect(i18n.t('presence.online')).toBe('Na mreži')
+      expect(i18n.t('common.save')).toBe('Spremi')
+      expect(i18n.t('common.cancel')).toBe('Odustani')
+    })
+
+    it('should have correct Slovak translations for key UI elements', async () => {
+      await i18n.changeLanguage('sk')
+      expect(i18n.t('sidebar.messages')).toBe('Správy')
+      expect(i18n.t('sidebar.rooms')).toBe('Miestnosti')
+      expect(i18n.t('presence.online')).toBe('Online')
+      expect(i18n.t('common.save')).toBe('Uložiť')
+      expect(i18n.t('common.cancel')).toBe('Zrušiť')
+    })
+
+    it('should have correct Slovenian translations for key UI elements', async () => {
+      await i18n.changeLanguage('sl')
+      expect(i18n.t('sidebar.messages')).toBe('Sporočila')
+      expect(i18n.t('sidebar.rooms')).toBe('Sobe')
+      expect(i18n.t('presence.online')).toBe('Na spletu')
+      expect(i18n.t('common.save')).toBe('Shrani')
+      expect(i18n.t('common.cancel')).toBe('Prekliči')
+    })
+
+    it('should have correct Lithuanian translations for key UI elements', async () => {
+      await i18n.changeLanguage('lt')
+      expect(i18n.t('sidebar.messages')).toBe('Žinutės')
+      expect(i18n.t('sidebar.rooms')).toBe('Kambariai')
+      expect(i18n.t('presence.online')).toBe('Prisijungęs')
+      expect(i18n.t('common.save')).toBe('Išsaugoti')
+      expect(i18n.t('common.cancel')).toBe('Atšaukti')
+    })
+
+    it('should have correct Latvian translations for key UI elements', async () => {
+      await i18n.changeLanguage('lv')
+      expect(i18n.t('sidebar.messages')).toBe('Ziņojumi')
+      expect(i18n.t('sidebar.rooms')).toBe('Istabas')
+      expect(i18n.t('presence.online')).toBe('Tiešsaistē')
+      expect(i18n.t('common.save')).toBe('Saglabāt')
+      expect(i18n.t('common.cancel')).toBe('Atcelt')
+    })
+
+    it('should have correct Estonian translations for key UI elements', async () => {
+      await i18n.changeLanguage('et')
+      expect(i18n.t('sidebar.messages')).toBe('Sõnumid')
+      expect(i18n.t('sidebar.rooms')).toBe('Toad')
+      expect(i18n.t('presence.online')).toBe('Võrgus')
+      expect(i18n.t('common.save')).toBe('Salvesta')
+      expect(i18n.t('common.cancel')).toBe('Tühista')
+    })
+
+    it('should have correct Irish translations for key UI elements', async () => {
+      await i18n.changeLanguage('ga')
+      expect(i18n.t('sidebar.messages')).toBe('Teachtaireachtaí')
+      expect(i18n.t('sidebar.rooms')).toBe('Seomraí')
+      expect(i18n.t('presence.online')).toBe('Ar líne')
+      expect(i18n.t('common.save')).toBe('Sábháil')
+      expect(i18n.t('common.cancel')).toBe('Cealaigh')
+    })
+
+    it('should have correct Maltese translations for key UI elements', async () => {
+      await i18n.changeLanguage('mt')
+      expect(i18n.t('sidebar.messages')).toBe('Messaġġi')
+      expect(i18n.t('sidebar.rooms')).toBe('Kmamar')
+      expect(i18n.t('presence.online')).toBe('Online')
+      expect(i18n.t('common.save')).toBe('Issejvja')
+      expect(i18n.t('common.cancel')).toBe('Ikkanċella')
+    })
+
+    it('should have correct Icelandic translations for key UI elements', async () => {
+      await i18n.changeLanguage('is')
+      expect(i18n.t('sidebar.messages')).toBe('Skilaboð')
+      expect(i18n.t('sidebar.rooms')).toBe('Herbergi')
+      expect(i18n.t('presence.online')).toBe('Á netinu')
+      expect(i18n.t('common.save')).toBe('Vista')
+      expect(i18n.t('common.cancel')).toBe('Hætta við')
+    })
   })
 })
