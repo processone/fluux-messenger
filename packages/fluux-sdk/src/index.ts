@@ -467,10 +467,6 @@ export type { DiscoveryResult } from './utils/websocketDiscovery'
 // PLATFORM UTILITIES
 // =============================================================================
 
-// Tauri app lifecycle utilities
-export { setupTauriCloseHandlers } from './utils/tauriLifecycle'
-export type { TauriCloseHandlerOptions } from './utils/tauriLifecycle'
-
 // Storage adapters for session persistence
 export { sessionStorageAdapter } from './utils/sessionStorageAdapter'
 export type { StorageAdapter, SessionState, StoredCredentials, JoinedRoomInfo } from './core/types'

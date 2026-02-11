@@ -37,6 +37,11 @@ vi.mock('./hooks/useFullscreen', () => ({
   useFullscreen: vi.fn(() => false),
 }))
 
+// Mock Tauri close handler (no-op in tests)
+vi.mock('./hooks/useTauriCloseHandler', () => ({
+  useTauriCloseHandler: vi.fn(),
+}))
+
 // Mock ChatLayout to verify it renders
 vi.mock('./components/ChatLayout', () => ({
   ChatLayout: () => <div data-testid="chat-layout">ChatLayout</div>,
