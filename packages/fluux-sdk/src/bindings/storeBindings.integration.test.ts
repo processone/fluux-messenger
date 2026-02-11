@@ -82,7 +82,7 @@ describe('SDK Event Bindings Integration', () => {
         setOwnNickname: mockStores.connection.setOwnNickname,
         updateOwnResource: mockStores.connection.updateOwnResource,
         removeOwnResource: mockStores.connection.removeOwnResource,
-      } as StoreRefs['connection'],
+      } as unknown as StoreRefs['connection'],
       chat: {
         addMessage: mockStores.chat.addMessage,
         addConversation: mockStores.chat.addConversation,
@@ -91,7 +91,7 @@ describe('SDK Event Bindings Integration', () => {
         updateReactions: mockStores.chat.updateReactions,
         updateMessage: mockStores.chat.updateMessage,
         triggerAnimation: mockStores.chat.triggerAnimation,
-      } as StoreRefs['chat'],
+      } as unknown as StoreRefs['chat'],
       roster: {
         setContacts: mockStores.roster.setContacts,
         addOrUpdateContact: mockStores.roster.addOrUpdateContact,
@@ -100,7 +100,7 @@ describe('SDK Event Bindings Integration', () => {
         removePresence: mockStores.roster.removePresence,
         setPresenceError: mockStores.roster.setPresenceError,
         updateAvatar: mockStores.roster.updateAvatar,
-      } as StoreRefs['roster'],
+      } as unknown as StoreRefs['roster'],
       room: {
         addRoom: mockStores.room.addRoom,
         updateRoom: mockStores.room.updateRoom,
@@ -116,7 +116,7 @@ describe('SDK Event Bindings Integration', () => {
         setBookmark: mockStores.room.setBookmark,
         removeBookmark: mockStores.room.removeBookmark,
         triggerAnimation: mockStores.room.triggerAnimation,
-      } as StoreRefs['room'],
+      } as unknown as StoreRefs['room'],
       events: {
         addSubscriptionRequest: mockStores.events.addSubscriptionRequest,
         removeSubscriptionRequest: mockStores.events.removeSubscriptionRequest,
@@ -125,24 +125,24 @@ describe('SDK Event Bindings Integration', () => {
         addMucInvitation: mockStores.events.addMucInvitation,
         removeMucInvitation: mockStores.events.removeMucInvitation,
         addSystemNotification: mockStores.events.addSystemNotification,
-      } as StoreRefs['events'],
+      } as unknown as StoreRefs['events'],
       admin: {
         setIsAdmin: mockStores.admin.setIsAdmin,
         setCommands: mockStores.admin.setCommands,
         setCurrentSession: mockStores.admin.setCurrentSession,
         setIsDiscovering: mockStores.admin.setIsDiscovering,
         setIsExecuting: mockStores.admin.setIsExecuting,
-      } as StoreRefs['admin'],
+      } as unknown as StoreRefs['admin'],
       blocking: {
         setBlocklist: mockStores.blocking.setBlocklist,
         addBlockedJids: mockStores.blocking.addBlockedJids,
         removeBlockedJids: mockStores.blocking.removeBlockedJids,
         clearBlocklist: mockStores.blocking.clearBlocklist,
-      } as StoreRefs['blocking'],
+      } as unknown as StoreRefs['blocking'],
       console: {
         addEvent: mockStores.console.addEvent,
         addPacket: mockStores.console.addPacket,
-      } as StoreRefs['console'],
+      } as unknown as StoreRefs['console'],
     }
 
     // Set up store bindings (simulating what XMPPProvider does)

@@ -300,6 +300,7 @@ describe('XMPPProvider persistence', () => {
             onClick={() =>
               client.emitSDK('connection:server-info', {
                 info: {
+                  domain: 'example.com',
                   features: ['urn:xmpp:mam:2'],
                   identities: [{ category: 'server', type: 'im', name: 'Test' }],
                 },
@@ -314,8 +315,9 @@ describe('XMPPProvider persistence', () => {
               client.emitSDK('chat:conversation', {
                 conversation: {
                   id: 'test@example.com',
-                  jid: 'test@example.com',
                   name: 'Test Contact',
+                  type: 'chat' as const,
+                  unreadCount: 0,
                 },
               })
             }

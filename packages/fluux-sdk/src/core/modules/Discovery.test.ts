@@ -398,7 +398,7 @@ describe('XMPPClient Disco', () => {
       await waitForAsyncOps()
 
       // Verify connection:server-info was emitted with parsed data
-      const serverInfoCall = emitSDKSpy.mock.calls.find(call => call[0] === 'connection:server-info')
+      const serverInfoCall = emitSDKSpy.mock.calls.find((call: unknown[]) => call[0] === 'connection:server-info')
       expect(serverInfoCall).toBeDefined()
       const serverInfo = (serverInfoCall![1] as { info: any }).info
 
@@ -439,7 +439,7 @@ describe('XMPPClient Disco', () => {
       await connectPromise
       await waitForAsyncOps()
 
-      const serverInfoCall = emitSDKSpy.mock.calls.find(call => call[0] === 'connection:server-info')
+      const serverInfoCall = emitSDKSpy.mock.calls.find((call: unknown[]) => call[0] === 'connection:server-info')
       const serverInfo = (serverInfoCall![1] as { info: any }).info
       expect(serverInfo.features).toEqual(['aaa:first', 'mmm:middle', 'zzz:last'])
     })
@@ -468,7 +468,7 @@ describe('XMPPClient Disco', () => {
       await connectPromise
       await waitForAsyncOps()
 
-      const serverInfoCall = emitSDKSpy.mock.calls.find(call => call[0] === 'connection:server-info')
+      const serverInfoCall = emitSDKSpy.mock.calls.find((call: unknown[]) => call[0] === 'connection:server-info')
       const serverInfo = (serverInfoCall![1] as { info: any }).info
       expect(serverInfo.identities).toHaveLength(2)
       expect(serverInfo.identities[0].category).toBe('server')

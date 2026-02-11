@@ -7,7 +7,7 @@ import {
   type MockSDKClient,
   type MockStoreRefs,
 } from '../core/test-utils'
-import type { Message, RoomMessage, RoomOccupant, Contact } from '../core/types'
+import type { Message, RoomMessage, RoomOccupant, Contact, Room, Conversation, AdminCommand, AdminSession, SystemNotificationType } from '../core/types'
 
 describe('createStoreBindings', () => {
   let mockClient: MockSDKClient
@@ -83,11 +83,11 @@ describe('createStoreBindings', () => {
         show: 'away',
         priority: 5,
         status: 'BRB',
-        lastInteraction: 1234567890,
+        lastInteraction: new Date(1234567890),
         client: 'MobileApp',
       })
       expect(mockStores.connection.updateOwnResource).toHaveBeenCalledWith(
-        'mobile', 'away', 5, 'BRB', 1234567890, 'MobileApp'
+        'mobile', 'away', 5, 'BRB', new Date(1234567890), 'MobileApp'
       )
     })
 
@@ -99,19 +99,21 @@ describe('createStoreBindings', () => {
 
   describe('chat events', () => {
     it('should handle chat:message', () => {
-      const message: Partial<Message> = {
+      const message: Message = {
         id: 'msg1',
         from: 'bob@example.com',
         body: 'Hello',
         timestamp: new Date(),
         type: 'chat',
+        conversationId: 'bob@example.com',
+        isOutgoing: false,
       }
       mockClient.emit('chat:message', { message })
       expect(mockStores.chat.addMessage).toHaveBeenCalledWith(message)
     })
 
     it('should handle chat:conversation', () => {
-      const conversation = { jid: 'bob@example.com', messages: [], unreadCount: 0 }
+      const conversation = { id: 'bob@example.com', name: 'Bob', type: 'chat' as const, unreadCount: 0 }
       mockClient.emit('chat:conversation', { conversation })
       expect(mockStores.chat.addConversation).toHaveBeenCalledWith(conversation)
     })
@@ -157,7 +159,18 @@ describe('createStoreBindings', () => {
 
   describe('room events', () => {
     it('should handle room:added', () => {
-      const room = { jid: 'room@conference.example.com', name: 'Test Room' }
+      const room: Room = {
+        jid: 'room@conference.example.com',
+        name: 'Test Room',
+        nickname: 'Me',
+        joined: false,
+        isBookmarked: false,
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+        occupants: new Map(),
+        messages: [],
+      }
       mockClient.emit('room:added', { room })
       expect(mockStores.room.addRoom).toHaveBeenCalledWith(room)
     })
@@ -178,13 +191,13 @@ describe('createStoreBindings', () => {
     })
 
     it('should handle room:occupant-joined', () => {
-      const occupant: Partial<RoomOccupant> = { nick: 'Alice', affiliation: 'member', role: 'participant' }
+      const occupant: RoomOccupant = { nick: 'Alice', affiliation: 'member', role: 'participant' }
       mockClient.emit('room:occupant-joined', { roomJid: 'room@conference.example.com', occupant })
       expect(mockStores.room.addOccupant).toHaveBeenCalledWith('room@conference.example.com', occupant)
     })
 
     it('should handle room:occupants-batch', () => {
-      const occupants: Partial<RoomOccupant>[] = [
+      const occupants: RoomOccupant[] = [
         { nick: 'Alice', affiliation: 'member', role: 'participant' },
         { nick: 'Bob', affiliation: 'member', role: 'participant' },
       ]
@@ -198,18 +211,21 @@ describe('createStoreBindings', () => {
     })
 
     it('should handle room:self-occupant', () => {
-      const occupant: Partial<RoomOccupant> = { nick: 'Me', affiliation: 'owner', role: 'moderator' }
+      const occupant: RoomOccupant = { nick: 'Me', affiliation: 'owner', role: 'moderator' }
       mockClient.emit('room:self-occupant', { roomJid: 'room@conference.example.com', occupant })
       expect(mockStores.room.setSelfOccupant).toHaveBeenCalledWith('room@conference.example.com', occupant)
     })
 
     it('should handle room:message with options', () => {
-      const message: Partial<RoomMessage> = {
+      const message: RoomMessage = {
         id: 'msg1',
         from: 'Alice',
         body: 'Hello room',
         timestamp: new Date(),
         type: 'groupchat',
+        roomJid: 'room@conference.example.com',
+        nick: 'Alice',
+        isOutgoing: false,
       }
       mockClient.emit('room:message', {
         roomJid: 'room@conference.example.com',
@@ -282,13 +298,13 @@ describe('createStoreBindings', () => {
 
   describe('roster events', () => {
     it('should handle roster:loaded', () => {
-      const contacts: Partial<Contact>[] = [{ jid: 'alice@example.com', name: 'Alice' }]
+      const contacts: Contact[] = [{ jid: 'alice@example.com', name: 'Alice', presence: 'offline', subscription: 'both' }]
       mockClient.emit('roster:loaded', { contacts })
       expect(mockStores.roster.setContacts).toHaveBeenCalledWith(contacts)
     })
 
     it('should handle roster:contact', () => {
-      const contact: Partial<Contact> = { jid: 'bob@example.com', name: 'Bob' }
+      const contact: Contact = { jid: 'bob@example.com', name: 'Bob', presence: 'offline', subscription: 'both' }
       mockClient.emit('roster:contact', { contact })
       expect(mockStores.roster.addOrUpdateContact).toHaveBeenCalledWith(contact)
     })
@@ -299,16 +315,17 @@ describe('createStoreBindings', () => {
     })
 
     it('should handle roster:presence', () => {
+      const lastInteraction = new Date(1234567890)
       mockClient.emit('roster:presence', {
         fullJid: 'alice@example.com/phone',
         show: 'away',
         priority: 0,
         statusMessage: 'AFK',
-        lastInteraction: 1234567890,
+        lastInteraction,
         client: 'PhoneClient',
       })
       expect(mockStores.roster.updatePresence).toHaveBeenCalledWith(
-        'alice@example.com/phone', 'away', 0, 'AFK', 1234567890, 'PhoneClient'
+        'alice@example.com/phone', 'away', 0, 'AFK', lastInteraction, 'PhoneClient'
       )
     })
 
@@ -379,12 +396,12 @@ describe('createStoreBindings', () => {
 
     it('should handle events:system-notification', () => {
       mockClient.emit('events:system-notification', {
-        type: 'info',
+        type: 'connection-error' as SystemNotificationType,
         title: 'Server Update',
         message: 'Maintenance in 5 minutes',
       })
       expect(mockStores.events.addSystemNotification).toHaveBeenCalledWith(
-        'info', 'Server Update', 'Maintenance in 5 minutes'
+        'connection-error', 'Server Update', 'Maintenance in 5 minutes'
       )
     })
   })
@@ -418,13 +435,13 @@ describe('createStoreBindings', () => {
     })
 
     it('should handle admin:commands', () => {
-      const commands = [{ name: 'List Users', node: 'http://jabber.org/protocol/admin#get-user-list' }]
+      const commands: AdminCommand[] = [{ name: 'List Users', node: 'http://jabber.org/protocol/admin#get-user-list', category: 'user' }]
       mockClient.emit('admin:commands', { commands })
       expect(mockStores.admin.setCommands).toHaveBeenCalledWith(commands)
     })
 
     it('should handle admin:session', () => {
-      const session = { status: 'executing', sessionId: 'abc123' }
+      const session: AdminSession = { status: 'executing', sessionId: 'abc123', node: 'http://jabber.org/protocol/admin#get-user-list' }
       mockClient.emit('admin:session', { session })
       expect(mockStores.admin.setCurrentSession).toHaveBeenCalledWith(session)
     })

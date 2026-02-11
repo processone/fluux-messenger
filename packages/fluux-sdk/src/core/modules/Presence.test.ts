@@ -1570,7 +1570,7 @@ describe('XMPPClient Presence', () => {
 
       // Verify the date was parsed correctly
       const ownResourceCall = emitSDKSpy.mock.calls.find(
-        call => call[0] === 'connection:own-resource'
+        (call: unknown[]) => call[0] === 'connection:own-resource'
       )
       const lastInteraction = (ownResourceCall?.[1] as { lastInteraction: Date })?.lastInteraction
       expect(lastInteraction?.toISOString()).toBe('2026-01-14T12:00:00.000Z')
@@ -1780,9 +1780,13 @@ describe('XMPPClient Presence', () => {
 
   describe('setupPresenceSync', () => {
     // Helper to create a mock presence actor
-    function createMockPresenceActor() {
+    interface MockPresenceActor {
+      subscribe: ReturnType<typeof vi.fn>
+      _emitState: (state: any) => void
+    }
+    function createMockPresenceActor(): MockPresenceActor {
       let subscriber: ((state: any) => void) | null = null
-      const actor = {
+      const actor: MockPresenceActor = {
         subscribe: vi.fn((callback: (state: any) => void) => {
           subscriber = callback
           return { unsubscribe: vi.fn() }
@@ -1813,7 +1817,7 @@ describe('XMPPClient Presence', () => {
       await connectClient()
       const mockActor = createMockPresenceActor()
 
-      xmppClient.setupPresenceSync(mockActor as any)
+      ;(xmppClient as any).setupPresenceSync(mockActor as any)
 
       expect(mockActor.subscribe).toHaveBeenCalledTimes(1)
     })
@@ -1824,7 +1828,7 @@ describe('XMPPClient Presence', () => {
       const mockUnsubscribe = vi.fn()
       mockActor.subscribe.mockReturnValue({ unsubscribe: mockUnsubscribe })
 
-      const unsubscribe = xmppClient.setupPresenceSync(mockActor as any)
+      const unsubscribe = (xmppClient as any).setupPresenceSync(mockActor as any)
       unsubscribe()
 
       expect(mockUnsubscribe).toHaveBeenCalledTimes(1)
@@ -1838,7 +1842,7 @@ describe('XMPPClient Presence', () => {
       // Spy on the roster.setPresence method
       const setPresenceSpy = vi.spyOn(xmppClient.roster, 'setPresence').mockResolvedValue()
 
-      xmppClient.setupPresenceSync(mockActor as any)
+      ;(xmppClient as any).setupPresenceSync(mockActor as any)
 
       // Emit initial state
       mockActor._emitState(createPresenceState({ connected: 'userOnline' }))
@@ -1857,7 +1861,7 @@ describe('XMPPClient Presence', () => {
       // Spy on the roster.setPresence method
       const setPresenceSpy = vi.spyOn(xmppClient.roster, 'setPresence').mockResolvedValue()
 
-      xmppClient.setupPresenceSync(mockActor as any)
+      ;(xmppClient as any).setupPresenceSync(mockActor as any)
 
       // Initial state (skipped)
       mockActor._emitState(createPresenceState({ connected: 'userOnline' }))
@@ -1879,7 +1883,7 @@ describe('XMPPClient Presence', () => {
       // Spy on the roster.setPresence method
       const setPresenceSpy = vi.spyOn(xmppClient.roster, 'setPresence').mockResolvedValue()
 
-      xmppClient.setupPresenceSync(mockActor as any)
+      ;(xmppClient as any).setupPresenceSync(mockActor as any)
 
       // Initial state
       mockActor._emitState(createPresenceState({ connected: 'userOnline' }))
@@ -1900,7 +1904,7 @@ describe('XMPPClient Presence', () => {
       // Spy on the roster.setPresence method
       const setPresenceSpy = vi.spyOn(xmppClient.roster, 'setPresence').mockResolvedValue()
 
-      xmppClient.setupPresenceSync(mockActor as any)
+      ;(xmppClient as any).setupPresenceSync(mockActor as any)
 
       // Initial state (skipped)
       mockActor._emitState(createPresenceState({ connected: 'userAway' }))
@@ -1923,7 +1927,7 @@ describe('XMPPClient Presence', () => {
       // Spy on the roster.setPresence method
       const setPresenceSpy = vi.spyOn(xmppClient.roster, 'setPresence').mockResolvedValue()
 
-      xmppClient.setupPresenceSync(mockActor as any)
+      ;(xmppClient as any).setupPresenceSync(mockActor as any)
 
       // Initial state (skipped)
       mockActor._emitState(createPresenceState({ connected: 'userOnline' }))

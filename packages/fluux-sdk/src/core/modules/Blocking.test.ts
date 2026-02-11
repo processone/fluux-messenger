@@ -3,21 +3,22 @@ import { Blocking } from './Blocking'
 import { createMockElement, createMockStores } from '../test-utils'
 import { NS_BLOCKING } from '../namespaces'
 import type { Element } from '@xmpp/client'
+import type { ModuleDependencies } from './BaseModule'
 
 describe('Blocking module', () => {
   let blocking: Blocking
   let mockStores: ReturnType<typeof createMockStores>
-  let sendStanza: ReturnType<typeof vi.fn>
-  let sendIQ: ReturnType<typeof vi.fn>
-  let mockEmitSDK: ReturnType<typeof vi.fn>
+  let sendStanza: ReturnType<typeof vi.fn<ModuleDependencies['sendStanza']>>
+  let sendIQ: ReturnType<typeof vi.fn<ModuleDependencies['sendIQ']>>
+  let mockEmitSDK: ReturnType<typeof vi.fn<ModuleDependencies['emitSDK']>>
 
   beforeEach(() => {
     mockStores = createMockStores()
-    sendStanza = vi.fn()
-    sendIQ = vi.fn().mockResolvedValue(
-      createMockElement('iq', { type: 'result' })
+    sendStanza = vi.fn<ModuleDependencies['sendStanza']>()
+    sendIQ = vi.fn<ModuleDependencies['sendIQ']>().mockResolvedValue(
+      createMockElement('iq', { type: 'result' }) as unknown as Element
     )
-    mockEmitSDK = vi.fn()
+    mockEmitSDK = vi.fn<ModuleDependencies['emitSDK']>()
 
     blocking = new Blocking({
       stores: mockStores,

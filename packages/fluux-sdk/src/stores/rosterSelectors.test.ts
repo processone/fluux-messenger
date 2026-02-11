@@ -152,7 +152,7 @@ describe('rosterSelectors', () => {
   describe('resourcesFor', () => {
     it('should return resources for contact', () => {
       const resources = new Map<string, ResourcePresence>([
-        ['phone', { show: 'online', priority: 5 }],
+        ['phone', { show: null, priority: 5 }],
         ['laptop', { show: 'away', priority: 10 }],
       ])
       const contacts = new Map([
@@ -176,7 +176,7 @@ describe('rosterSelectors', () => {
   describe('resourceCountFor', () => {
     it('should return resource count for contact', () => {
       const resources = new Map<string, ResourcePresence>([
-        ['phone', { show: 'online', priority: 5 }],
+        ['phone', { show: null, priority: 5 }],
         ['laptop', { show: 'away', priority: 10 }],
       ])
       const contacts = new Map([

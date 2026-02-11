@@ -89,7 +89,7 @@ describe('Message Routing', () => {
       mockXmppClientInstance._emit('stanza', messageStanza)
 
       // Should route via chat:message event
-      const chatCalls = emitSDKSpy.mock.calls.filter(call => call[0] === 'chat:message')
+      const chatCalls = emitSDKSpy.mock.calls.filter((call: unknown[]) => call[0] === 'chat:message')
       expect(chatCalls).toHaveLength(1)
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
         message: expect.objectContaining({
@@ -118,7 +118,7 @@ describe('Message Routing', () => {
       mockXmppClientInstance._emit('stanza', messageStanza)
 
       // Should default to chat:message event
-      const chatCalls = emitSDKSpy.mock.calls.filter(call => call[0] === 'chat:message')
+      const chatCalls = emitSDKSpy.mock.calls.filter((call: unknown[]) => call[0] === 'chat:message')
       expect(chatCalls).toHaveLength(1)
       expect(emitSDKSpy).not.toHaveBeenCalledWith('room:message', expect.anything())
     })
@@ -158,7 +158,7 @@ describe('Message Routing', () => {
 
       mockXmppClientInstance._emit('stanza', carbonStanza)
 
-      const chatCalls = emitSDKSpy.mock.calls.filter(call => call[0] === 'chat:message')
+      const chatCalls = emitSDKSpy.mock.calls.filter((call: unknown[]) => call[0] === 'chat:message')
       expect(chatCalls).toHaveLength(1)
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
         message: expect.objectContaining({
@@ -193,7 +193,7 @@ describe('Message Routing', () => {
       mockXmppClientInstance._emit('stanza', messageStanza)
 
       // Should route via room:message event
-      const roomCalls = emitSDKSpy.mock.calls.filter(call => call[0] === 'room:message')
+      const roomCalls = emitSDKSpy.mock.calls.filter((call: unknown[]) => call[0] === 'room:message')
       expect(roomCalls).toHaveLength(1)
       expect(emitSDKSpy).toHaveBeenCalledWith('room:message', expect.objectContaining({
         roomJid: 'room@conference.example.com',
@@ -336,7 +336,7 @@ describe('Message Routing', () => {
         mockXmppClientInstance._emit('stanza', stanza)
       }
 
-      const chatCalls = emitSDKSpy.mock.calls.filter(call => call[0] === 'chat:message')
+      const chatCalls = emitSDKSpy.mock.calls.filter((call: unknown[]) => call[0] === 'chat:message')
       expect(chatCalls).toHaveLength(5)
       expect(emitSDKSpy).not.toHaveBeenCalledWith('room:message', expect.anything())
     })
@@ -363,7 +363,7 @@ describe('Message Routing', () => {
         mockXmppClientInstance._emit('stanza', stanza)
       }
 
-      const roomCalls = emitSDKSpy.mock.calls.filter(call => call[0] === 'room:message')
+      const roomCalls = emitSDKSpy.mock.calls.filter((call: unknown[]) => call[0] === 'room:message')
       expect(roomCalls).toHaveLength(5)
       expect(emitSDKSpy).not.toHaveBeenCalledWith('chat:message', expect.anything())
     })
@@ -412,8 +412,8 @@ describe('Message Routing', () => {
       mockXmppClientInstance._emit('stanza', roomStanza2)
 
       // Verify correct routing
-      const chatCalls = emitSDKSpy.mock.calls.filter(call => call[0] === 'chat:message')
-      const roomCalls = emitSDKSpy.mock.calls.filter(call => call[0] === 'room:message')
+      const chatCalls = emitSDKSpy.mock.calls.filter((call: unknown[]) => call[0] === 'chat:message')
+      const roomCalls = emitSDKSpy.mock.calls.filter((call: unknown[]) => call[0] === 'room:message')
       expect(chatCalls).toHaveLength(2)
       expect(roomCalls).toHaveLength(2)
 
@@ -505,7 +505,7 @@ describe('Message Routing', () => {
 
       mockXmppClientInstance._emit('stanza', stanza)
 
-      const chatCall = emitSDKSpy.mock.calls.find(call => call[0] === 'chat:message')
+      const chatCall = emitSDKSpy.mock.calls.find((call: unknown[]) => call[0] === 'chat:message')
       expect(chatCall).toBeDefined()
       const addedMessage = (chatCall![1] as { message: Record<string, unknown> }).message
       expect(addedMessage).toHaveProperty('conversationId', 'contact@example.com')
@@ -531,7 +531,7 @@ describe('Message Routing', () => {
 
       mockXmppClientInstance._emit('stanza', stanza)
 
-      const roomCall = emitSDKSpy.mock.calls.find(call => call[0] === 'room:message')
+      const roomCall = emitSDKSpy.mock.calls.find((call: unknown[]) => call[0] === 'room:message')
       expect(roomCall).toBeDefined()
       const addedMessage = (roomCall![1] as { message: Record<string, unknown> }).message
       expect(addedMessage).toHaveProperty('roomJid', 'room@conference.example.com')

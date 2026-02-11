@@ -18,7 +18,6 @@ function createMockMessage(conversationId: string, overrides: Partial<Message> =
     body: 'Test message',
     timestamp: new Date(),
     isOutgoing: false,
-    isRead: false,
     ...overrides,
   }
 }
@@ -46,8 +45,7 @@ describe('messageCache', () => {
     // This ensures test isolation with fake-indexeddb
     globalThis.indexedDB = new IDBFactory()
     // Reset the module's internal db reference
-    // @ts-expect-error - accessing internal state for testing
-    messageCache._resetDBForTesting?.()
+    ;(messageCache as { _resetDBForTesting?: () => void })._resetDBForTesting?.()
   })
 
   afterEach(async () => {

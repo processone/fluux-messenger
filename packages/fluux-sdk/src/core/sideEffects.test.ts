@@ -408,22 +408,24 @@ describe('sideEffects', () => {
         // Cache loading must NOT be skipped just because messages exist.
         connectionStore.getState().setStatus('online')
         connectionStore.getState().setServerInfo({
-          identity: null,
+          identities: [],
+          domain: 'example.com',
           features: [NS_MAM],
         })
 
         // Add a conversation with a live message already in memory
         chatStore.getState().addConversation({
           id: 'contact@example.com',
+          name: 'contact@example.com',
           type: 'chat',
-          lastMessage: null,
+          lastMessage: undefined,
           unreadCount: 1,
         })
-        chatStore.getState().addMessage('contact@example.com', {
+        chatStore.getState().addMessage({
           type: 'chat',
           id: 'live-msg-1',
+          conversationId: 'contact@example.com',
           from: 'contact@example.com',
-          to: 'me@example.com',
           body: 'New live message',
           timestamp: new Date('2026-02-04T12:00:00Z'),
           isOutgoing: false,
@@ -455,8 +457,9 @@ describe('sideEffects', () => {
         // Add a conversation
         chatStore.getState().addConversation({
           id: 'contact@example.com',
+          name: 'contact@example.com',
           type: 'chat',
-          lastMessage: null,
+          lastMessage: undefined,
           unreadCount: 0,
         })
 
@@ -472,7 +475,8 @@ describe('sideEffects', () => {
 
         // Now set server info with MAM support
         connectionStore.getState().setServerInfo({
-          identity: null,
+          identities: [],
+          domain: 'example.com',
           features: [NS_MAM],
         })
 

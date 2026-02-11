@@ -753,8 +753,8 @@ describe('XMPPClient Own Avatar', () => {
 
       // Mock room store to return rooms without avatars
       mockStores.room.getRoom
-        .mockReturnValueOnce({ jid: 'room1@conference.example.com', name: 'Room 1' })
-        .mockReturnValueOnce({ jid: 'room2@conference.example.com', name: 'Room 2' })
+        .mockReturnValueOnce({ jid: 'room1@conference.example.com', name: 'Room 1', nickname: '', joined: false, isBookmarked: false, occupants: new Map(), messages: [], unreadCount: 0, mentionsCount: 0, typingUsers: new Set<string>() })
+        .mockReturnValueOnce({ jid: 'room2@conference.example.com', name: 'Room 2', nickname: '', joined: false, isBookmarked: false, occupants: new Map(), messages: [], unreadCount: 0, mentionsCount: 0, typingUsers: new Set<string>() })
 
       await xmppClient.profile.restoreAllRoomAvatarHashes()
 
@@ -782,6 +782,14 @@ describe('XMPPClient Own Avatar', () => {
       mockStores.room.getRoom.mockReturnValue({
         jid: 'room@conference.example.com',
         name: 'Room',
+        nickname: '',
+        joined: false,
+        isBookmarked: false,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
       })
 
       await xmppClient.profile.restoreAllRoomAvatarHashes()
@@ -801,8 +809,8 @@ describe('XMPPClient Own Avatar', () => {
         { jid: 'unknown-room@conference.example.com', hash: 'hash', type: 'room' },
       ])
 
-      // Mock room store to return null (room not in store)
-      mockStores.room.getRoom.mockReturnValue(null)
+      // Mock room store to return undefined (room not in store)
+      mockStores.room.getRoom.mockReturnValue(undefined)
 
       await xmppClient.profile.restoreAllRoomAvatarHashes()
 
@@ -822,6 +830,14 @@ describe('XMPPClient Own Avatar', () => {
       mockStores.room.getRoom.mockReturnValue({
         jid: 'room@conference.example.com',
         name: 'Room',
+        nickname: '',
+        joined: false,
+        isBookmarked: false,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
         avatarHash: 'existing-hash', // Already has hash
       })
 
