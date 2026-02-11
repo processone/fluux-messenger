@@ -1077,4 +1077,244 @@ describe('MessageComposer', () => {
       expect(onValueChange).toHaveBeenCalledWith('Hello')
     })
   })
+
+  describe('clipboard paste image handling', () => {
+    it('should call onFileSelect when pasting an image from clipboard', () => {
+      const onSend = vi.fn().mockResolvedValue(true)
+      const onFileSelect = vi.fn()
+
+      render(
+        <MessageComposer
+          placeholder="Type a message"
+          onSend={onSend}
+          onFileSelect={onFileSelect}
+        />
+      )
+
+      const textarea = screen.getByPlaceholderText('Type a message')
+
+      // Create a mock image file
+      const imageFile = new File(['image-data'], 'screenshot.png', { type: 'image/png' })
+
+      // Create mock clipboard data with image
+      const clipboardData = {
+        items: [
+          {
+            type: 'image/png',
+            getAsFile: () => imageFile,
+          },
+        ],
+      }
+
+      // Trigger paste event
+      fireEvent.paste(textarea, { clipboardData })
+
+      expect(onFileSelect).toHaveBeenCalledWith(imageFile)
+    })
+
+    it('should not call onFileSelect when pasting text (no image)', () => {
+      const onSend = vi.fn().mockResolvedValue(true)
+      const onFileSelect = vi.fn()
+
+      render(
+        <MessageComposer
+          placeholder="Type a message"
+          onSend={onSend}
+          onFileSelect={onFileSelect}
+        />
+      )
+
+      const textarea = screen.getByPlaceholderText('Type a message')
+
+      // Create mock clipboard data with only text
+      const clipboardData = {
+        items: [
+          {
+            type: 'text/plain',
+            getAsFile: () => null,
+          },
+        ],
+      }
+
+      // Trigger paste event
+      fireEvent.paste(textarea, { clipboardData })
+
+      expect(onFileSelect).not.toHaveBeenCalled()
+    })
+
+    it('should not call onFileSelect when onFileSelect is not provided', () => {
+      const onSend = vi.fn().mockResolvedValue(true)
+
+      render(
+        <MessageComposer
+          placeholder="Type a message"
+          onSend={onSend}
+        />
+      )
+
+      const textarea = screen.getByPlaceholderText('Type a message')
+
+      // Create a mock image file
+      const imageFile = new File(['image-data'], 'screenshot.png', { type: 'image/png' })
+
+      // Create mock clipboard data with image
+      const clipboardData = {
+        items: [
+          {
+            type: 'image/png',
+            getAsFile: () => imageFile,
+          },
+        ],
+      }
+
+      // Should not throw
+      expect(() => {
+        fireEvent.paste(textarea, { clipboardData })
+      }).not.toThrow()
+    })
+
+    it('should handle clipboard with multiple items and select first image', () => {
+      const onSend = vi.fn().mockResolvedValue(true)
+      const onFileSelect = vi.fn()
+
+      render(
+        <MessageComposer
+          placeholder="Type a message"
+          onSend={onSend}
+          onFileSelect={onFileSelect}
+        />
+      )
+
+      const textarea = screen.getByPlaceholderText('Type a message')
+
+      // Create mock image files
+      const imageFile1 = new File(['image-data-1'], 'first.png', { type: 'image/png' })
+      const imageFile2 = new File(['image-data-2'], 'second.png', { type: 'image/png' })
+
+      // Create mock clipboard data with text first, then images
+      const clipboardData = {
+        items: [
+          {
+            type: 'text/plain',
+            getAsFile: () => null,
+          },
+          {
+            type: 'image/png',
+            getAsFile: () => imageFile1,
+          },
+          {
+            type: 'image/png',
+            getAsFile: () => imageFile2,
+          },
+        ],
+      }
+
+      // Trigger paste event
+      fireEvent.paste(textarea, { clipboardData })
+
+      // Should select first image
+      expect(onFileSelect).toHaveBeenCalledWith(imageFile1)
+      expect(onFileSelect).toHaveBeenCalledTimes(1)
+    })
+
+    it('should handle various image MIME types', () => {
+      const onSend = vi.fn().mockResolvedValue(true)
+      const onFileSelect = vi.fn()
+
+      render(
+        <MessageComposer
+          placeholder="Type a message"
+          onSend={onSend}
+          onFileSelect={onFileSelect}
+        />
+      )
+
+      const textarea = screen.getByPlaceholderText('Type a message')
+
+      // Test PNG
+      const pngFile = new File(['png'], 'img.png', { type: 'image/png' })
+      fireEvent.paste(textarea, {
+        clipboardData: { items: [{ type: 'image/png', getAsFile: () => pngFile }] }
+      })
+      expect(onFileSelect).toHaveBeenLastCalledWith(pngFile)
+
+      // Test JPEG
+      const jpegFile = new File(['jpeg'], 'img.jpg', { type: 'image/jpeg' })
+      fireEvent.paste(textarea, {
+        clipboardData: { items: [{ type: 'image/jpeg', getAsFile: () => jpegFile }] }
+      })
+      expect(onFileSelect).toHaveBeenLastCalledWith(jpegFile)
+
+      // Test GIF
+      const gifFile = new File(['gif'], 'img.gif', { type: 'image/gif' })
+      fireEvent.paste(textarea, {
+        clipboardData: { items: [{ type: 'image/gif', getAsFile: () => gifFile }] }
+      })
+      expect(onFileSelect).toHaveBeenLastCalledWith(gifFile)
+
+      // Test WebP
+      const webpFile = new File(['webp'], 'img.webp', { type: 'image/webp' })
+      fireEvent.paste(textarea, {
+        clipboardData: { items: [{ type: 'image/webp', getAsFile: () => webpFile }] }
+      })
+      expect(onFileSelect).toHaveBeenLastCalledWith(webpFile)
+    })
+
+    it('should handle null getAsFile result gracefully', () => {
+      const onSend = vi.fn().mockResolvedValue(true)
+      const onFileSelect = vi.fn()
+
+      render(
+        <MessageComposer
+          placeholder="Type a message"
+          onSend={onSend}
+          onFileSelect={onFileSelect}
+        />
+      )
+
+      const textarea = screen.getByPlaceholderText('Type a message')
+
+      // Create mock clipboard data where getAsFile returns null
+      const clipboardData = {
+        items: [
+          {
+            type: 'image/png',
+            getAsFile: () => null,
+          },
+        ],
+      }
+
+      // Trigger paste event - should not call onFileSelect
+      fireEvent.paste(textarea, { clipboardData })
+
+      expect(onFileSelect).not.toHaveBeenCalled()
+    })
+
+    it('should handle empty clipboard items array', () => {
+      const onSend = vi.fn().mockResolvedValue(true)
+      const onFileSelect = vi.fn()
+
+      render(
+        <MessageComposer
+          placeholder="Type a message"
+          onSend={onSend}
+          onFileSelect={onFileSelect}
+        />
+      )
+
+      const textarea = screen.getByPlaceholderText('Type a message')
+
+      // Create mock clipboard data with empty items
+      const clipboardData = {
+        items: [],
+      }
+
+      // Should not throw
+      expect(() => {
+        fireEvent.paste(textarea, { clipboardData })
+      }).not.toThrow()
+
+      expect(onFileSelect).not.toHaveBeenCalled()
+    })
+  })
 })

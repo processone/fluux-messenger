@@ -100,6 +100,7 @@ interface MessageComposerProps {
     onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
     onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
     onSelect?: (e: React.SyntheticEvent<HTMLTextAreaElement>) => void
+    onPaste?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void
     placeholder: string
   }) => ReactNode
   /** Content to render above the input (e.g., mention autocomplete dropdown) */
@@ -444,6 +445,25 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
     onSelectionChange?.(e.currentTarget.selectionStart)
   }
 
+  // Handle clipboard paste - stage images as pending attachment
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items
+    if (!items || !onFileSelect) return
+
+    // Look for image in clipboard
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile()
+        if (file) {
+          e.preventDefault() // Prevent pasting image data as text
+          onFileSelect(file)
+          return
+        }
+      }
+    }
+    // If no image found, let the paste proceed normally (text paste)
+  }, [onFileSelect])
+
   // File upload handlers
   const handleFileClick = () => {
     fileInputRef.current?.click()
@@ -485,6 +505,7 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
       onChange={handleTextChange}
       onKeyDown={handleKeyDown}
       onSelect={handleSelect}
+      onPaste={handlePaste}
       placeholder={placeholder}
       rows={1}
       spellCheck={true}
@@ -676,6 +697,7 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
               onChange: handleTextChange,
               onKeyDown: handleKeyDown,
               onSelect: handleSelect,
+              onPaste: handlePaste,
               placeholder,
             })}
           </div>
