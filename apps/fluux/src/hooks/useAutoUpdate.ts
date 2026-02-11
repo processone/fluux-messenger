@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
+import { isUpdaterEnabled } from '@/utils/tauri'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+
+// In-app updates are disabled on Linux - users update through their distro package manager
+const updaterEnabled = isUpdaterEnabled()
 
 export interface UpdateState {
   available: boolean
@@ -35,7 +39,7 @@ export function useAutoUpdate(options: UseAutoUpdateOptions = {}) {
   const [update, setUpdate] = useState<Awaited<ReturnType<typeof import('@tauri-apps/plugin-updater').check>> | null>(null)
 
   const checkForUpdate = useCallback(async () => {
-    if (!isTauri) return
+    if (!updaterEnabled) return
 
     setState(prev => ({ ...prev, checking: true, error: null }))
 
@@ -117,7 +121,7 @@ export function useAutoUpdate(options: UseAutoUpdateOptions = {}) {
   }, [update])
 
   const relaunchApp = useCallback(async () => {
-    if (!isTauri) return
+    if (!updaterEnabled) return
 
     try {
       const { relaunch } = await import('@tauri-apps/plugin-process')
@@ -136,8 +140,9 @@ export function useAutoUpdate(options: UseAutoUpdateOptions = {}) {
   }, [])
 
   // Check for updates on mount (only when autoCheck is enabled, typically at app launch)
+  // Disabled on Linux - users update through their distro package manager
   useEffect(() => {
-    if (isTauri && autoCheck) {
+    if (updaterEnabled && autoCheck) {
       // Delay check slightly to not block app startup
       const timer = setTimeout(checkForUpdate, 2000)
       return () => clearTimeout(timer)
@@ -151,5 +156,7 @@ export function useAutoUpdate(options: UseAutoUpdateOptions = {}) {
     relaunchApp,
     dismissUpdate,
     isTauri,
+    /** Whether in-app updates are enabled (Tauri on macOS/Windows, not Linux) */
+    updaterEnabled,
   }
 }

@@ -10,9 +10,9 @@ import {
   BlockedUsersSettings,
   type SettingsCategory,
   SETTINGS_CATEGORIES,
-  isTauri,
   DEFAULT_SETTINGS_CATEGORY,
 } from './settings-components'
+import { isUpdaterEnabled } from '@/utils/tauri'
 import { ArrowLeft } from 'lucide-react'
 
 interface SettingsViewProps {
@@ -48,7 +48,8 @@ export function SettingsView({ onBack }: SettingsViewProps) {
       case 'notifications':
         return <NotificationsSettings />
       case 'updates':
-        return isTauri() ? <UpdatesSettings /> : <ProfileSettings />
+        // Updates only available on macOS/Windows, not Linux (users update via package manager)
+        return isUpdaterEnabled() ? <UpdatesSettings /> : <ProfileSettings />
       case 'blocked':
         return <BlockedUsersSettings />
       default:
