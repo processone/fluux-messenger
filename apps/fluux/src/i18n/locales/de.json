@@ -426,7 +426,11 @@
     "failedToChangePassword": "Passwort konnte nicht geändert werden",
     "passwordChangeNotSupported": "Passwortänderung wird von diesem Server nicht unterstützt",
     "priority": "Priorität",
-    "offlineNotice": "Profilbearbeitung ist offline nicht verfügbar"
+    "offlineNotice": "Profilbearbeitung ist offline nicht verfügbar",
+    "connection": "Verbindung",
+    "connectionMethod_tls": "TLS",
+    "connectionMethod_starttls": "StartTLS",
+    "connectionMethod_websocket": "WebSocket"
   },
   "console": {
     "title": "XMPP-Konsole",

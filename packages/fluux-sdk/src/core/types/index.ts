@@ -9,7 +9,7 @@
  */
 
 // Connection types
-export type { ConnectionStatus, ConnectOptions, SystemState } from './connection'
+export type { ConnectionStatus, ConnectionMethod, ConnectOptions, SystemState } from './connection'
 
 // Base message type (shared between chat and room messages)
 export type { BaseMessage } from './message-base'
@@ -126,6 +126,12 @@ export type {
   StoredCredentials,
   StorageAdapter,
 } from './storage'
+
+// Proxy types
+export type {
+  ProxyStartResult,
+  ProxyAdapter,
+} from './proxy'
 
 // SDK Events (for event-based decoupling)
 export type {

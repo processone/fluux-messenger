@@ -153,6 +153,7 @@ export function XmppConsole() {
   // Use focused selectors instead of useConnection() to avoid re-renders when unrelated values change
   const status = useConnectionStore((s) => s.status)
   const serverInfo = useConnectionStore((s) => s.serverInfo)
+  const connectionMethod = useConnectionStore((s) => s.connectionMethod)
   const { sendRawXml } = useXMPP()
   const [inputXml, setInputXml] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -391,6 +392,7 @@ export function XmppConsole() {
       '================================================================================',
       `Fluux XMPP Console Log`,
       `Version: ${__APP_VERSION__} (${__GIT_COMMIT__})`,
+      `Connection: ${connectionMethod?.toUpperCase() ?? 'Unknown'}`,
       `Exported: ${exportDate}`,
       '================================================================================',
     ]

@@ -10,9 +10,14 @@ import './index.css'
 
 // Initialize global Tauri file drop listener immediately (before React renders)
 import './utils/tauriFileDrop'
+import { tauriProxyAdapter } from './utils/tauriProxyAdapter'
 
 // Check if running in Tauri
 const isTauri = '__TAURI_INTERNALS__' in window
+
+// Enable native TCP/TLS proxy in Tauri unless explicitly disabled
+const disableTcpProxy = localStorage.getItem('fluux:disable-tcp-proxy') === 'true'
+const proxyAdapter = isTauri && !disableTcpProxy ? tauriProxyAdapter : undefined
 
 // Register service worker only in browser (not Tauri)
 // Tauri uses a custom protocol that doesn't support service workers
@@ -52,7 +57,7 @@ document.addEventListener('keydown', (e) => {
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <RenderLoopBoundary>
-      <XMPPProvider debug={import.meta.env.DEV}>
+      <XMPPProvider debug={import.meta.env.DEV} proxyAdapter={proxyAdapter}>
         <ThemeProvider>
           <BrowserRouter>
             <App />

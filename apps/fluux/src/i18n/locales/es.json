@@ -424,7 +424,11 @@
     "failedToChangePassword": "Error al cambiar contrasena",
     "passwordChangeNotSupported": "El cambio de contrasena no es compatible con este servidor",
     "priority": "Prioridad",
-    "offlineNotice": "La edición del perfil no está disponible sin conexión"
+    "offlineNotice": "La edición del perfil no está disponible sin conexión",
+    "connection": "Conexión",
+    "connectionMethod_tls": "TLS",
+    "connectionMethod_starttls": "StartTLS",
+    "connectionMethod_websocket": "WebSocket"
   },
   "console": {
     "title": "Consola XMPP",

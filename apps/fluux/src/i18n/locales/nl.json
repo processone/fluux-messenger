@@ -426,7 +426,11 @@
     "failedToChangePassword": "Wachtwoord wijzigen mislukt",
     "passwordChangeNotSupported": "Wachtwoord wijzigen wordt niet ondersteund door deze server",
     "priority": "Prioriteit",
-    "offlineNotice": "Profielbewerking is niet beschikbaar terwijl u offline bent"
+    "offlineNotice": "Profielbewerking is niet beschikbaar terwijl u offline bent",
+    "connection": "Verbinding",
+    "connectionMethod_tls": "TLS",
+    "connectionMethod_starttls": "StartTLS",
+    "connectionMethod_websocket": "WebSocket"
   },
   "console": {
     "title": "XMPP Console",

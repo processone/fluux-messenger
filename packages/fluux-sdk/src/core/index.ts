@@ -17,6 +17,7 @@ export type {
   StoreBindings,
   PresenceOptions,
   ConnectionStatus,
+  ConnectionMethod,
   Message,
   ConversationEntity,
   ConversationMetadata,

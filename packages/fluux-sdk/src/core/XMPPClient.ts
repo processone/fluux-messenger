@@ -8,6 +8,7 @@ import type {
   SDKEvents,
   SDKEventHandler,
   StorageAdapter,
+  ProxyAdapter,
   PrivacyOptions,
 } from './types'
 import {
@@ -158,6 +159,7 @@ import { createDefaultStoreBindings, type DefaultStoreBindingsOptions } from './
 export class XMPPClient {
   private currentJid: string | null = null
   private storageAdapter?: StorageAdapter
+  private proxyAdapter?: ProxyAdapter
   private privacyOptions?: PrivacyOptions
 
   /**
@@ -304,6 +306,7 @@ export class XMPPClient {
 
     // Store storage adapter for session persistence
     this.storageAdapter = config.storageAdapter
+    this.proxyAdapter = config.proxyAdapter
     // Store privacy options for avatar fetching behavior
     this.privacyOptions = config.privacyOptions
 
@@ -450,6 +453,7 @@ export class XMPPClient {
       emitSDK: <K extends keyof SDKEvents>(event: K, payload: SDKEvents[K]) => this.emitSDK(event, payload),
       getXmpp: () => this.getXmpp(),
       storageAdapter: this.storageAdapter,
+      proxyAdapter: this.proxyAdapter,
       registerMAMCollector: (queryId: string, collector: (stanza: Element) => void) => this.registerMAMCollector(queryId, collector),
       privacyOptions: this.privacyOptions,
     }

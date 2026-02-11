@@ -6,7 +6,7 @@
  */
 
 import type { Element } from '@xmpp/client'
-import type { ConnectionStatus } from './connection'
+import type { ConnectionStatus, ConnectionMethod } from './connection'
 import type { Message, Conversation } from './chat'
 import type { PresenceStatus, PresenceShow, Contact } from './roster'
 import type { Room, RoomOccupant, RoomMessage } from './room'
@@ -17,6 +17,7 @@ import type { RSMResponse, MAMQueryState } from './pagination'
 import type { MAMQueryDirection } from '../../stores/shared/mamState'
 import type { AdminCommand, AdminSession, EntityCounts } from './admin'
 import type { StorageAdapter } from './storage'
+import type { ProxyAdapter } from './proxy'
 
 // ============================================================================
 // Store Bindings (Internal)
@@ -41,6 +42,7 @@ export interface StoreBindings {
     setPresenceState: (show: PresenceStatus, message?: string | null) => void
     setAutoAway: (isAuto: boolean) => void
     setServerInfo: (info: ServerInfo | null) => void
+    setConnectionMethod: (method: ConnectionMethod | null) => void
     // Getters for presence preservation on reconnect
     getPresenceShow: () => PresenceStatus
     getStatusMessage: () => string | null
@@ -343,4 +345,21 @@ export interface XMPPClientConfig {
    * ```
    */
   storageAdapter?: StorageAdapter
+  /**
+   * Proxy adapter for WebSocket-to-TCP bridging.
+   *
+   * Desktop apps can provide a proxy adapter to enable native TCP/TLS
+   * connections to XMPP servers instead of WebSocket.
+   *
+   * When provided, the SDK will use this adapter to start/stop the proxy
+   * for each connection. When not provided, connections use WebSocket directly.
+   *
+   * @example
+   * ```tsx
+   * <XMPPProvider proxyAdapter={tauriProxyAdapter}>
+   *   <App />
+   * </XMPPProvider>
+   * ```
+   */
+  proxyAdapter?: ProxyAdapter
 }

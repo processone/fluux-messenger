@@ -426,7 +426,11 @@
     "failedToChangePassword": "Échec du changement de mot de passe",
     "passwordChangeNotSupported": "Le changement de mot de passe n'est pas pris en charge par ce serveur",
     "priority": "Priorité",
-    "offlineNotice": "La modification du profil n'est pas disponible hors ligne"
+    "offlineNotice": "La modification du profil n'est pas disponible hors ligne",
+    "connection": "Connexion",
+    "connectionMethod_tls": "TLS",
+    "connectionMethod_starttls": "StartTLS",
+    "connectionMethod_websocket": "WebSocket"
   },
   "console": {
     "title": "Console XMPP",

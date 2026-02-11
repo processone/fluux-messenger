@@ -1,5 +1,5 @@
 import type { Element } from '@xmpp/client'
-import type { StoreBindings, XMPPClientEvents, SDKEvents, StorageAdapter, PrivacyOptions } from '../types'
+import type { StoreBindings, XMPPClientEvents, SDKEvents, StorageAdapter, ProxyAdapter, PrivacyOptions } from '../types'
 
 /**
  * Dependencies injected into each module by XMPPClient.
@@ -29,6 +29,11 @@ export interface ModuleDependencies {
    * Used by Connection module for SM state persistence.
    */
   storageAdapter?: StorageAdapter
+  /**
+   * Proxy adapter for WebSocket-to-TCP bridging.
+   * Used by Connection module for native TCP/TLS connections.
+   */
+  proxyAdapter?: ProxyAdapter
   /**
    * Register a MAM query collector.
    * The collector will be called for each incoming stanza while active.

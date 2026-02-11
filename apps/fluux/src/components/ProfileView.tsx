@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X, Monitor, Smartphone, Globe, Pencil, Camera, Trash2, Key } from 'lucide-react'
+import { X, Monitor, Smartphone, Globe, Pencil, Camera, Trash2, Key, Network } from 'lucide-react'
 import { type ResourcePresence, getClientType, getLocalPart, useConnection, usePresence } from '@fluux/sdk'
 import { Avatar } from './Avatar'
 import { PRESENCE_COLORS } from '@/constants/ui'
@@ -16,7 +16,7 @@ interface ProfileViewProps {
 
 export function ProfileView({ onClose }: ProfileViewProps) {
   const { t } = useTranslation()
-  const { jid, isConnected, ownAvatar, ownNickname, ownResources, setOwnNickname, setOwnAvatar, clearOwnAvatar, clearOwnNickname, supportsPasswordChange } = useConnection()
+  const { jid, isConnected, ownAvatar, ownNickname, ownResources, connectionMethod, setOwnNickname, setOwnAvatar, clearOwnAvatar, clearOwnNickname, supportsPasswordChange } = useConnection()
   const { presenceStatus: presenceShow, statusMessage } = usePresence()
   const { titleBarClass, dragRegionProps } = useWindowDrag()
 
@@ -233,7 +233,18 @@ export function ProfileView({ onClose }: ProfileViewProps) {
           )}
 
           {/* JID */}
-          <p className="text-fluux-muted text-sm mb-3">{bareJid}</p>
+          <p className="text-fluux-muted text-sm mb-1">{bareJid}</p>
+
+          {/* Connection method */}
+          {connectionMethod && (
+            <div className="flex items-center gap-1.5 mb-3">
+              <Network className="w-3 h-3 text-fluux-muted" />
+              <span className="text-xs text-fluux-muted">
+                {t(`profile.connectionMethod_${connectionMethod}`)}
+              </span>
+            </div>
+          )}
+          {!connectionMethod && <div className="mb-2" />}
 
           {/* Presence status - always Active since you're using the app */}
           <div className="flex items-center gap-2 mb-2">
