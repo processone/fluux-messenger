@@ -727,4 +727,239 @@ describe('MAM Preview Refresh', () => {
       expect(maxConcurrent).toBeLessThanOrEqual(3)
     })
   })
+
+  describe('refreshArchivedConversationPreviews', () => {
+    it('should do nothing when there are no archived conversations', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.chat.getArchivedConversations!).mockReturnValue([])
+
+      await xmppClient.mam.refreshArchivedConversationPreviews()
+
+      // No MAM queries should have been sent
+      expect(mockStores.console.addEvent).not.toHaveBeenCalledWith(
+        expect.stringContaining('archived'),
+        expect.anything()
+      )
+    })
+
+    it('should send MAM query for each archived conversation', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.chat.getArchivedConversations!).mockReturnValue([
+        { id: 'old-alice@example.com', messages: [] },
+        { id: 'old-bob@example.com', messages: [] },
+      ])
+
+      // Track MAM query calls
+      const mamQueryCalls: string[] = []
+      mockXmppClientInstance.iqCaller.request.mockImplementation(async (iq: any) => {
+        const query = iq?.children?.[0]
+        if (query?.attrs?.xmlns === 'urn:xmpp:mam:2') {
+          const form = query.children?.find((c: any) => c.name === 'x')
+          const withField = form?.children?.find((c: any) => c.attrs?.var === 'with')
+          const withValue = withField?.children?.[0]?.children?.[0]
+          if (withValue) mamQueryCalls.push(withValue)
+        }
+        return createMockElement('iq', { type: 'result' }, [
+          { name: 'fin', attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' }, children: [] },
+        ])
+      })
+
+      const refreshPromise = xmppClient.mam.refreshArchivedConversationPreviews()
+      await waitForAsyncOps(20, 100)
+      await refreshPromise
+
+      expect(mamQueryCalls).toContain('old-alice@example.com')
+      expect(mamQueryCalls).toContain('old-bob@example.com')
+    })
+
+    it('should unarchive conversation when newer incoming message is found', async () => {
+      vi.mocked(mockStores.chat.getArchivedConversations!).mockReturnValue([
+        { id: 'alice@example.com', messages: [] },
+      ])
+
+      // Existing lastMessage is older
+      vi.mocked(mockStores.chat.getLastMessage!).mockReturnValue({
+        type: 'chat',
+        id: 'old-msg',
+        conversationId: 'alice@example.com',
+        from: 'alice@example.com',
+        body: 'Old message',
+        timestamp: new Date('2024-01-01T00:00:00Z'),
+        isOutgoing: false,
+      })
+
+      // Set up stanza handler capture BEFORE connect
+      let stanzaHandler: ((stanza: any) => void) | null = null
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn((event: string, handler: Function) => {
+        if (event === 'stanza') {
+          stanzaHandler = handler as (stanza: any) => void
+        }
+        return originalOn.call(mockXmppClientInstance, event, handler)
+      }) as any
+
+      await connectClient()
+
+      mockXmppClientInstance.iqCaller.request.mockImplementation(async (iq: any) => {
+        const query = iq?.children?.[0]
+        if (query?.attrs?.xmlns === 'urn:xmpp:mam:2') {
+          // Simulate receiving a newer incoming MAM message
+          if (stanzaHandler) {
+            const mamMessage = createMockElement('message', {}, [
+              {
+                name: 'result',
+                attrs: { xmlns: 'urn:xmpp:mam:2', queryid: query.attrs?.queryid, id: 'archive-1' },
+                children: [
+                  {
+                    name: 'forwarded',
+                    attrs: { xmlns: 'urn:xmpp:forward:0' },
+                    children: [
+                      {
+                        name: 'delay',
+                        attrs: { xmlns: 'urn:xmpp:delay', stamp: '2024-06-15T10:30:00Z' },
+                      },
+                      {
+                        name: 'message',
+                        attrs: { from: 'alice@example.com/resource', to: 'me@example.com', id: 'new-msg', type: 'chat' },
+                        children: [
+                          { name: 'body', text: 'New message from another client!' },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ])
+            stanzaHandler(mamMessage)
+          }
+          return createMockElement('iq', { type: 'result' }, [
+            {
+              name: 'fin',
+              attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' },
+              children: [],
+            },
+          ])
+        }
+        return createMockElement('iq', { type: 'result' }, [])
+      })
+
+      const refreshPromise = xmppClient.mam.refreshArchivedConversationPreviews()
+      await waitForAsyncOps(20, 100)
+      await refreshPromise
+
+      // Should have unarchived the conversation
+      expect(mockStores.chat.unarchiveConversation).toHaveBeenCalledWith('alice@example.com')
+      // Should have updated the preview
+      expect(mockStores.chat.updateLastMessagePreview).toHaveBeenCalledWith(
+        'alice@example.com',
+        expect.objectContaining({ body: 'New message from another client!' })
+      )
+    })
+
+    it('should not unarchive when no newer message found', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.chat.getArchivedConversations!).mockReturnValue([
+        { id: 'alice@example.com', messages: [] },
+      ])
+
+      // No messages returned from MAM
+      mockXmppClientInstance.iqCaller.request.mockResolvedValue(
+        createMockElement('iq', { type: 'result' }, [
+          { name: 'fin', attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' }, children: [] },
+        ])
+      )
+
+      const refreshPromise = xmppClient.mam.refreshArchivedConversationPreviews()
+      await waitForAsyncOps(20, 100)
+      await refreshPromise
+
+      // Should NOT have unarchived
+      expect(mockStores.chat.unarchiveConversation).not.toHaveBeenCalled()
+    })
+
+    it('should not unarchive for outgoing messages', async () => {
+      vi.mocked(mockStores.chat.getArchivedConversations!).mockReturnValue([
+        { id: 'alice@example.com', messages: [] },
+      ])
+
+      // Existing lastMessage
+      vi.mocked(mockStores.chat.getLastMessage!).mockReturnValue({
+        type: 'chat',
+        id: 'old-msg',
+        conversationId: 'alice@example.com',
+        from: 'alice@example.com',
+        body: 'Old message',
+        timestamp: new Date('2024-01-01T00:00:00Z'),
+        isOutgoing: false,
+      })
+
+      // Set up stanza handler capture BEFORE connect
+      let stanzaHandler: ((stanza: any) => void) | null = null
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn((event: string, handler: Function) => {
+        if (event === 'stanza') {
+          stanzaHandler = handler as (stanza: any) => void
+        }
+        return originalOn.call(mockXmppClientInstance, event, handler)
+      }) as any
+
+      await connectClient()
+
+      mockXmppClientInstance.iqCaller.request.mockImplementation(async (iq: any) => {
+        const query = iq?.children?.[0]
+        if (query?.attrs?.xmlns === 'urn:xmpp:mam:2') {
+          // Simulate a newer OUTGOING message (sent from another client)
+          if (stanzaHandler) {
+            const mamMessage = createMockElement('message', {}, [
+              {
+                name: 'result',
+                attrs: { xmlns: 'urn:xmpp:mam:2', queryid: query.attrs?.queryid, id: 'archive-1' },
+                children: [
+                  {
+                    name: 'forwarded',
+                    attrs: { xmlns: 'urn:xmpp:forward:0' },
+                    children: [
+                      {
+                        name: 'delay',
+                        attrs: { xmlns: 'urn:xmpp:delay', stamp: '2024-06-15T10:30:00Z' },
+                      },
+                      {
+                        // Outgoing: from our own JID
+                        name: 'message',
+                        attrs: { from: 'me@example.com/other-device', to: 'alice@example.com', id: 'out-msg', type: 'chat' },
+                        children: [
+                          { name: 'body', text: 'Sent from other device' },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ])
+            stanzaHandler(mamMessage)
+          }
+          return createMockElement('iq', { type: 'result' }, [
+            {
+              name: 'fin',
+              attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' },
+              children: [],
+            },
+          ])
+        }
+        return createMockElement('iq', { type: 'result' }, [])
+      })
+
+      const refreshPromise = xmppClient.mam.refreshArchivedConversationPreviews()
+      await waitForAsyncOps(20, 100)
+      await refreshPromise
+
+      // Should NOT have unarchived (outgoing messages don't trigger unarchive)
+      expect(mockStores.chat.unarchiveConversation).not.toHaveBeenCalled()
+      // But should still update the preview
+      expect(mockStores.chat.updateLastMessagePreview).toHaveBeenCalled()
+    })
+  })
 })

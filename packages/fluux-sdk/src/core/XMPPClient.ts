@@ -1226,10 +1226,12 @@ export class XMPPClient {
     // Always re-discover admin commands
     this.admin.discoverAdminCommands().catch(() => {})
 
-    // MAM is now fully lazy - no bulk preview refresh on connect
-    // - Conversations: Preview updates when opened (lazy MAM) or when new messages arrive
+    // Smart MAM strategy (see sideEffects.ts setupPreviewRefreshSideEffects):
+    // - Active conversation: Full MAM catch-up on reconnect (sideEffects chat subscription)
+    // - Non-archived conversations: Lightweight preview refresh on connect (max=5 each, concurrency=3)
+    // - Archived conversations: Daily preview check, auto-unarchive on new incoming messages
     // - Rooms: Preview is fetched on room join (room:joined event)
-    // This avoids the flood of 300+ MAM queries that occurred on every reconnect
+    // Preview refresh is triggered by sideEffects when MAM support is available.
   }
 
   private enableCarbons(): void {

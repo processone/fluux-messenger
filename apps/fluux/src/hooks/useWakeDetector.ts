@@ -67,6 +67,12 @@ export function useWakeDetector() {
           // Signal SDK with sleep duration - it handles connection verification
           // and reconnect. If duration > SM timeout, SDK skips verification.
           await notifySystemState('awake', gapSeconds * 1000)
+          // Force CSS layout recalculation after wake from sleep.
+          // WebKit in fullscreen mode can fail to re-evaluate media queries after wake,
+          // causing layout corruption (sidebar disappearing). Dispatching resize event fixes this.
+          requestAnimationFrame(() => {
+            window.dispatchEvent(new Event('resize'))
+          })
         } catch (err) {
           console.error('[WakeDetector] Error handling wake:', err)
         } finally {
@@ -120,6 +126,12 @@ export function useWakeDetector() {
         // Signal SDK - don't pass hiddenDuration since it measures tab visibility,
         // not socket inactivity. The time-gap detector handles actual sleep gaps.
         await notifySystemState('visible')
+        // Force CSS layout recalculation after visibility change.
+        // WebKit in fullscreen mode can fail to re-evaluate media queries after
+        // returning from another desktop space, causing layout corruption.
+        requestAnimationFrame(() => {
+          window.dispatchEvent(new Event('resize'))
+        })
       } catch (err) {
         console.error('[WakeDetector] Error handling visibility change:', err)
       } finally {

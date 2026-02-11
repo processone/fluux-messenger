@@ -196,6 +196,12 @@ export function useAutoAway() {
         logEvent('System woke from sleep (OS notification)')
         notifyWake()
         lastActivityRef.current = Date.now()
+        // Force CSS layout recalculation after wake from sleep.
+        // WebKit in fullscreen mode can fail to re-evaluate media queries after wake,
+        // causing layout corruption (sidebar disappearing). Dispatching resize event fixes this.
+        requestAnimationFrame(() => {
+          window.dispatchEvent(new Event('resize'))
+        })
       }).then(fn => {
         if (cancelled) {
           fn()
@@ -212,6 +218,10 @@ export function useAutoAway() {
         logEvent(`System woke from sleep (deferred ${delaySecs}s - app was in background)`)
         notifyWake()
         lastActivityRef.current = Date.now()
+        // Force CSS layout recalculation (see comment in system-did-wake handler)
+        requestAnimationFrame(() => {
+          window.dispatchEvent(new Event('resize'))
+        })
       }).then(fn => {
         if (cancelled) {
           fn()
