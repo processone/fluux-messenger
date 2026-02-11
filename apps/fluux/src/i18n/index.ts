@@ -10,6 +10,7 @@ import it from './locales/it.json'
 import nl from './locales/nl.json'
 import pl from './locales/pl.json'
 import pt from './locales/pt.json'
+import ro from './locales/ro.json'
 
 const resources = {
   de: { translation: de },
@@ -20,6 +21,7 @@ const resources = {
   nl: { translation: nl },
   pl: { translation: pl },
   pt: { translation: pt },
+  ro: { translation: ro },
 }
 
 i18n

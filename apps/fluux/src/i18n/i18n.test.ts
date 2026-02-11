@@ -1,12 +1,20 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import i18n from './index'
-import de from './locales/de.json'
-import en from './locales/en.json'
-import fr from './locales/fr.json'
-import itLang from './locales/it.json'
-import nl from './locales/nl.json'
-import pl from './locales/pl.json'
-import pt from './locales/pt.json'
+
+// Auto-discover all locale files via Vite eager glob
+const localeModules = import.meta.glob('./locales/*.json', { eager: true }) as Record<
+  string,
+  { default: Record<string, unknown> }
+>
+
+// Build a map of language code → translation object
+const locales: Record<string, Record<string, unknown>> = {}
+for (const [path, mod] of Object.entries(localeModules)) {
+  const code = path.replace('./locales/', '').replace('.json', '')
+  locales[code] = mod.default
+}
+
+const languageCodes = Object.keys(locales).sort()
 
 /**
  * Recursively get all keys from a nested object as dot-notation paths
@@ -27,166 +35,42 @@ function getAllKeys(obj: Record<string, unknown>, prefix = ''): string[] {
   return keys.sort()
 }
 
+/**
+ * Resolve a dot-notation key to its value in a nested object
+ */
+function resolveKey(obj: Record<string, unknown>, key: string): unknown {
+  return key.split('.').reduce((o, k) => (o as Record<string, unknown>)?.[k], obj as unknown)
+}
+
 describe('i18n', () => {
+  const enKeys = getAllKeys(locales['en'])
+  const keysByLang = Object.fromEntries(
+    languageCodes.map(code => [code, getAllKeys(locales[code])])
+  )
+
   describe('translation key parity', () => {
-    const deKeys = getAllKeys(de)
-    const enKeys = getAllKeys(en)
-    const frKeys = getAllKeys(fr)
-    const itKeys = getAllKeys(itLang)
-    const nlKeys = getAllKeys(nl)
-    const plKeys = getAllKeys(pl)
-    const ptKeys = getAllKeys(pt)
+    const nonEnglish = languageCodes.filter(code => code !== 'en')
 
-    it('should have the same number of keys in all languages', () => {
-      expect(deKeys.length).toBe(enKeys.length)
-      expect(frKeys.length).toBe(enKeys.length)
-      expect(itKeys.length).toBe(enKeys.length)
-      expect(nlKeys.length).toBe(enKeys.length)
-      expect(plKeys.length).toBe(enKeys.length)
-      expect(ptKeys.length).toBe(enKeys.length)
+    it.each(nonEnglish)('%s should have the same number of keys as English', (code) => {
+      expect(keysByLang[code].length).toBe(enKeys.length)
     })
 
-    it('should have all English keys in German', () => {
-      const missing = enKeys.filter(key => !deKeys.includes(key))
+    it.each(nonEnglish)('%s should have all English keys', (code) => {
+      const missing = enKeys.filter(key => !keysByLang[code].includes(key))
       expect(missing).toEqual([])
     })
 
-    it('should have all English keys in French', () => {
-      const missing = enKeys.filter(key => !frKeys.includes(key))
-      expect(missing).toEqual([])
-    })
-
-    it('should have all English keys in Italian', () => {
-      const missing = enKeys.filter(key => !itKeys.includes(key))
-      expect(missing).toEqual([])
-    })
-
-    it('should have all English keys in Dutch', () => {
-      const missing = enKeys.filter(key => !nlKeys.includes(key))
-      expect(missing).toEqual([])
-    })
-
-    it('should have all English keys in Polish', () => {
-      const missing = enKeys.filter(key => !plKeys.includes(key))
-      expect(missing).toEqual([])
-    })
-
-    it('should have all English keys in Portuguese', () => {
-      const missing = enKeys.filter(key => !ptKeys.includes(key))
-      expect(missing).toEqual([])
-    })
-
-    it('should not have extra keys in German', () => {
-      const extra = deKeys.filter(key => !enKeys.includes(key))
+    it.each(nonEnglish)('%s should not have extra keys beyond English', (code) => {
+      const extra = keysByLang[code].filter(key => !enKeys.includes(key))
       expect(extra).toEqual([])
     })
 
-    it('should not have extra keys in French', () => {
-      const extra = frKeys.filter(key => !enKeys.includes(key))
-      expect(extra).toEqual([])
-    })
-
-    it('should not have extra keys in Italian', () => {
-      const extra = itKeys.filter(key => !enKeys.includes(key))
-      expect(extra).toEqual([])
-    })
-
-    it('should not have extra keys in Dutch', () => {
-      const extra = nlKeys.filter(key => !enKeys.includes(key))
-      expect(extra).toEqual([])
-    })
-
-    it('should not have extra keys in Polish', () => {
-      const extra = plKeys.filter(key => !enKeys.includes(key))
-      expect(extra).toEqual([])
-    })
-
-    it('should not have extra keys in Portuguese', () => {
-      const extra = ptKeys.filter(key => !enKeys.includes(key))
-      expect(extra).toEqual([])
-    })
-
-    it('should not have empty translation values in English', () => {
-      const emptyKeys = enKeys.filter(key => {
-        const value = key
-          .split('.')
-          .reduce((obj, k) => (obj as Record<string, unknown>)?.[k], en as unknown)
-
+    it.each(languageCodes)('%s should not have empty translation values', (code) => {
+      const keys = keysByLang[code]
+      const emptyKeys = keys.filter(key => {
+        const value = resolveKey(locales[code], key)
         return value === '' || value === null || value === undefined
       })
-
-      expect(emptyKeys).toEqual([])
-    })
-
-    it('should not have empty translation values in German', () => {
-      const emptyKeys = deKeys.filter(key => {
-        const value = key
-          .split('.')
-          .reduce((obj, k) => (obj as Record<string, unknown>)?.[k], de as unknown)
-
-        return value === '' || value === null || value === undefined
-      })
-
-      expect(emptyKeys).toEqual([])
-    })
-
-    it('should not have empty translation values in French', () => {
-      const emptyKeys = frKeys.filter(key => {
-        const value = key
-          .split('.')
-          .reduce((obj, k) => (obj as Record<string, unknown>)?.[k], fr as unknown)
-
-        return value === '' || value === null || value === undefined
-      })
-
-      expect(emptyKeys).toEqual([])
-    })
-
-    it('should not have empty translation values in Italian', () => {
-      const emptyKeys = itKeys.filter(key => {
-        const value = key
-          .split('.')
-          .reduce((obj, k) => (obj as Record<string, unknown>)?.[k], itLang as unknown)
-
-        return value === '' || value === null || value === undefined
-      })
-
-      expect(emptyKeys).toEqual([])
-    })
-
-    it('should not have empty translation values in Dutch', () => {
-      const emptyKeys = nlKeys.filter(key => {
-        const value = key
-          .split('.')
-          .reduce((obj, k) => (obj as Record<string, unknown>)?.[k], nl as unknown)
-
-        return value === '' || value === null || value === undefined
-      })
-
-      expect(emptyKeys).toEqual([])
-    })
-
-    it('should not have empty translation values in Polish', () => {
-      const emptyKeys = plKeys.filter(key => {
-        const value = key
-          .split('.')
-          .reduce((obj, k) => (obj as Record<string, unknown>)?.[k], pl as unknown)
-
-        return value === '' || value === null || value === undefined
-      })
-
-      expect(emptyKeys).toEqual([])
-    })
-
-    it('should not have empty translation values in Portuguese', () => {
-      const emptyKeys = ptKeys.filter(key => {
-        const value = key
-          .split('.')
-          .reduce((obj, k) => (obj as Record<string, unknown>)?.[k], pt as unknown)
-
-        return value === '' || value === null || value === undefined
-      })
-
       expect(emptyKeys).toEqual([])
     })
   })
@@ -213,46 +97,12 @@ describe('i18n', () => {
   })
 
   describe('language switching', () => {
-    it('should switch to German', async () => {
-      await i18n.changeLanguage('de')
-      expect(i18n.language).toBe('de')
-      expect(i18n.t('login.connect')).toBe('Verbinden')
-    })
-
-    it('should switch to French', async () => {
-      await i18n.changeLanguage('fr')
-      expect(i18n.language).toBe('fr')
-      expect(i18n.t('login.connect')).toBe('Se connecter')
-    })
-
-    it('should switch to Italian', async () => {
-      await i18n.changeLanguage('it')
-      expect(i18n.language).toBe('it')
-      expect(i18n.t('login.connect')).toBe('Connetti')
-    })
-
-    it('should switch to Dutch', async () => {
-      await i18n.changeLanguage('nl')
-      expect(i18n.language).toBe('nl')
-      expect(i18n.t('login.connect')).toBe('Verbinden')
-    })
-
-    it('should switch to Polish', async () => {
-      await i18n.changeLanguage('pl')
-      expect(i18n.language).toBe('pl')
-      expect(i18n.t('login.connect')).toBe('Połącz')
-    })
-
-    it('should switch to Portuguese', async () => {
-      await i18n.changeLanguage('pt')
-      expect(i18n.language).toBe('pt')
-      expect(i18n.t('login.connect')).toBe('Ligar')
-    })
-
-    it('should switch to English', async () => {
-      await i18n.changeLanguage('en')
-      expect(i18n.language).toBe('en')
-      expect(i18n.t('login.connect')).toBe('Connect')
+    it.each(languageCodes)('should switch to %s and resolve login.connect', async (code) => {
+      await i18n.changeLanguage(code)
+      expect(i18n.language).toBe(code)
+      // Verify the key resolves to the locale value, not the raw key
+      const value = i18n.t('login.connect')
+      expect(value).toBe(resolveKey(locales[code], 'login.connect'))
     })
 
     it('should fall back to English for unknown language', async () => {

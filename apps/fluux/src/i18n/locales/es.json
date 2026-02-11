@@ -236,7 +236,11 @@
     "invitationsSent": "Invitación(es) enviada(s)",
     "inviteRejected": "Invitación rechazada: {{error}}",
     "sendInvitations": "Enviar {{count}} invitacion(es)",
-    "outcast": "Baneado"
+    "outcast": "Baneado",
+    "role": {
+      "moderator": "Moderador",
+      "visitor": "Visitante"
+    }
   },
   "events": {
     "noPendingEvents": "Sin eventos pendientes",
