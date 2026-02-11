@@ -5,6 +5,7 @@ import { useMode } from '@/hooks'
 import { useSettingsStore, type TimeFormat } from '@/stores/settingsStore'
 
 const languages = [
+  { code: 'cs', name: 'Čeština' },
   { code: 'de', name: 'Deutsch' },
   { code: 'el', name: 'Ελληνικά' },
   { code: 'en', name: 'English' },
