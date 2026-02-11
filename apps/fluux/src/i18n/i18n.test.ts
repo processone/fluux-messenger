@@ -7,6 +7,9 @@ import itLang from './locales/it.json'
 import nl from './locales/nl.json'
 import pl from './locales/pl.json'
 import pt from './locales/pt.json'
+import ru from './locales/ru.json'
+import be from './locales/be.json'
+import uk from './locales/uk.json'
 
 /**
  * Recursively get all keys from a nested object as dot-notation paths
@@ -36,6 +39,9 @@ describe('i18n', () => {
     const nlKeys = getAllKeys(nl)
     const plKeys = getAllKeys(pl)
     const ptKeys = getAllKeys(pt)
+    const ruKeys = getAllKeys(ru)
+    const beKeys = getAllKeys(be)
+    const ukKeys = getAllKeys(uk)
 
     it('should have the same number of keys in all languages', () => {
       expect(deKeys.length).toBe(enKeys.length)
@@ -44,6 +50,9 @@ describe('i18n', () => {
       expect(nlKeys.length).toBe(enKeys.length)
       expect(plKeys.length).toBe(enKeys.length)
       expect(ptKeys.length).toBe(enKeys.length)
+      expect(ruKeys.length).toBe(enKeys.length)
+      expect(beKeys.length).toBe(enKeys.length)
+      expect(ukKeys.length).toBe(enKeys.length)
     })
 
     it('should have all English keys in German', () => {
@@ -76,6 +85,21 @@ describe('i18n', () => {
       expect(missing).toEqual([])
     })
 
+    it('should have all English keys in Russian', () => {
+      const missing = enKeys.filter(key => !ruKeys.includes(key))
+      expect(missing).toEqual([])
+    })
+
+    it('should have all English keys in Belarusian', () => {
+      const missing = enKeys.filter(key => !beKeys.includes(key))
+      expect(missing).toEqual([])
+    })
+
+    it('should have all English keys in Ukrainian', () => {
+      const missing = enKeys.filter(key => !ukKeys.includes(key))
+      expect(missing).toEqual([])
+    })
+
     it('should not have extra keys in German', () => {
       const extra = deKeys.filter(key => !enKeys.includes(key))
       expect(extra).toEqual([])
@@ -103,6 +127,21 @@ describe('i18n', () => {
 
     it('should not have extra keys in Portuguese', () => {
       const extra = ptKeys.filter(key => !enKeys.includes(key))
+      expect(extra).toEqual([])
+    })
+
+    it('should not have extra keys in Russian', () => {
+      const extra = ruKeys.filter(key => !enKeys.includes(key))
+      expect(extra).toEqual([])
+    })
+
+    it('should not have extra keys in Belarusian', () => {
+      const extra = beKeys.filter(key => !enKeys.includes(key))
+      expect(extra).toEqual([])
+    })
+
+    it('should not have extra keys in Ukrainian', () => {
+      const extra = ukKeys.filter(key => !enKeys.includes(key))
       expect(extra).toEqual([])
     })
 
@@ -189,6 +228,42 @@ describe('i18n', () => {
 
       expect(emptyKeys).toEqual([])
     })
+
+    it('should not have empty translation values in Russian', () => {
+      const emptyKeys = ruKeys.filter(key => {
+        const value = key
+          .split('.')
+          .reduce((obj, k) => (obj as Record<string, unknown>)?.[k], ru as unknown)
+
+        return value === '' || value === null || value === undefined
+      })
+
+      expect(emptyKeys).toEqual([])
+    })
+
+    it('should not have empty translation values in Belarusian', () => {
+      const emptyKeys = beKeys.filter(key => {
+        const value = key
+          .split('.')
+          .reduce((obj, k) => (obj as Record<string, unknown>)?.[k], be as unknown)
+
+        return value === '' || value === null || value === undefined
+      })
+
+      expect(emptyKeys).toEqual([])
+    })
+
+    it('should not have empty translation values in Ukrainian', () => {
+      const emptyKeys = ukKeys.filter(key => {
+        const value = key
+          .split('.')
+          .reduce((obj, k) => (obj as Record<string, unknown>)?.[k], uk as unknown)
+
+        return value === '' || value === null || value === undefined
+      })
+
+      expect(emptyKeys).toEqual([])
+    })
   })
 
   describe('interpolation', () => {
@@ -253,6 +328,24 @@ describe('i18n', () => {
       await i18n.changeLanguage('en')
       expect(i18n.language).toBe('en')
       expect(i18n.t('login.connect')).toBe('Connect')
+    })
+
+    it('should switch to Russian', async () => {
+      await i18n.changeLanguage('ru')
+      expect(i18n.language).toBe('ru')
+      expect(i18n.t('login.connect')).toBe('Подключиться')
+    })
+
+    it('should switch to Belarusian', async () => {
+      await i18n.changeLanguage('be')
+      expect(i18n.language).toBe('be')
+      expect(i18n.t('login.connect')).toBe('Падключыцца')
+    })
+
+    it('should switch to Ukrainian', async () => {
+      await i18n.changeLanguage('uk')
+      expect(i18n.language).toBe('uk')
+      expect(i18n.t('login.connect')).toBe('Підключитися')
     })
 
     it('should fall back to English for unknown language', async () => {
@@ -325,6 +418,33 @@ describe('i18n', () => {
       expect(i18n.t('presence.online')).toBe('Online')
       expect(i18n.t('common.save')).toBe('Guardar')
       expect(i18n.t('common.cancel')).toBe('Cancelar')
+    })
+
+    it('should have correct Russian translations for key UI elements', async () => {
+      await i18n.changeLanguage('ru')
+      expect(i18n.t('sidebar.messages')).toBe('Сообщения')
+      expect(i18n.t('sidebar.rooms')).toBe('Конференции')
+      expect(i18n.t('presence.online')).toBe('В сети')
+      expect(i18n.t('common.save')).toBe('Сохранить')
+      expect(i18n.t('common.cancel')).toBe('Отмена')
+    })
+
+    it('should have correct Belarusian translations for key UI elements', async () => {
+      await i18n.changeLanguage('be')
+      expect(i18n.t('sidebar.messages')).toBe('Паведамлення')
+      expect(i18n.t('sidebar.rooms')).toBe('Канферэнцыі')
+      expect(i18n.t('presence.online')).toBe('Інтэрнэт')
+      expect(i18n.t('common.save')).toBe('Захаваць')
+      expect(i18n.t('common.cancel')).toBe('Адмена')
+    })
+
+    it('should have correct Ukrainian translations for key UI elements', async () => {
+      await i18n.changeLanguage('uk')
+      expect(i18n.t('sidebar.messages')).toBe('Повідомлення')
+      expect(i18n.t('sidebar.rooms')).toBe('Конференції')
+      expect(i18n.t('presence.online')).toBe('Онлайн')
+      expect(i18n.t('common.save')).toBe('Зберегти')
+      expect(i18n.t('common.cancel')).toBe('Скасування')
     })
   })
 })
