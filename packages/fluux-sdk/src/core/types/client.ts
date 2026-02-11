@@ -88,6 +88,10 @@ export interface StoreBindings {
     updateLastMessagePreview: (conversationId: string, lastMessage: Message) => void
     // Get all conversations for MAM catch-up
     getAllConversations: () => Array<{ id: string; messages: Message[] }>
+    // Smart MAM: archived conversation preview refresh
+    getArchivedConversations?: () => Array<{ id: string; messages: Message[] }>
+    unarchiveConversation?: (id: string) => void
+    getLastMessage?: (conversationId: string) => Message | undefined
   }
   roster: {
     setContacts: (contacts: Contact[]) => void

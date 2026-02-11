@@ -601,6 +601,9 @@ export const createMockStores = (): MockStoreBindings => ({
     clearNeedsCatchUp: vi.fn(),
     updateLastMessagePreview: vi.fn(),
     getAllConversations: vi.fn().mockReturnValue([]),
+    getArchivedConversations: vi.fn().mockReturnValue([]),
+    unarchiveConversation: vi.fn(),
+    getLastMessage: vi.fn().mockReturnValue(undefined),
   },
   roster: {
     setContacts: vi.fn(),
