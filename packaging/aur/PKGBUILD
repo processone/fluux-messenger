@@ -1,0 +1,40 @@
+# Maintainer: ProcessOne <contact@process-one.net>
+pkgname=fluux-messenger-bin
+pkgver=0.12.1
+pkgrel=1
+pkgdesc="A modern XMPP chat client built with Tauri"
+arch=('x86_64' 'aarch64')
+url="https://github.com/processone/fluux-messenger"
+license=('AGPL-3.0-or-later')
+depends=(
+    'webkit2gtk-4.1'
+    'gtk3'
+    'libappindicator-gtk3'
+)
+optdepends=(
+    'xdg-utils: for opening URLs'
+)
+provides=('fluux-messenger')
+conflicts=('fluux-messenger')
+
+# Architecture-specific sources
+source_x86_64=("${pkgname}-${pkgver}-x86_64.tar.gz::https://github.com/processone/fluux-messenger/releases/download/v${pkgver}/Fluux-Messenger_${pkgver}_Linux_x64.tar.gz")
+source_aarch64=("${pkgname}-${pkgver}-aarch64.tar.gz::https://github.com/processone/fluux-messenger/releases/download/v${pkgver}/Fluux-Messenger_${pkgver}_Linux_arm64.tar.gz")
+
+# Update these checksums after each release (use 'updpkgsums' or 'makepkg -g')
+sha256sums_x86_64=('SKIP')
+sha256sums_aarch64=('SKIP')
+
+package() {
+    cd "${srcdir}/fluux-messenger"
+
+    # Install binary
+    install -Dm755 "fluux-messenger" "${pkgdir}/usr/bin/fluux-messenger"
+
+    # Install desktop file
+    install -Dm644 "fluux-messenger.desktop" "${pkgdir}/usr/share/applications/fluux-messenger.desktop"
+
+    # Install icons
+    install -Dm644 "fluux-messenger.png" "${pkgdir}/usr/share/icons/hicolor/128x128/apps/fluux-messenger.png"
+    install -Dm644 "fluux-messenger-256.png" "${pkgdir}/usr/share/icons/hicolor/256x256/apps/fluux-messenger.png"
+}

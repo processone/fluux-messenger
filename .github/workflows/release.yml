@@ -259,8 +259,39 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
+      - name: Create tarball for Arch Linux
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          ARCH="${{ matrix.arch }}"
+          TARBALL_NAME="fluux-messenger-${VERSION}-linux-${ARCH}.tar.gz"
+
+          mkdir -p tarball-staging/fluux-messenger
+
+          # Copy binary
+          cp apps/fluux/src-tauri/target/release/fluux tarball-staging/fluux-messenger/fluux-messenger
+
+          # Copy desktop file and icons
+          cp packaging/debian/fluux-messenger.desktop tarball-staging/fluux-messenger/
+          cp apps/fluux/src-tauri/icons/128x128.png tarball-staging/fluux-messenger/fluux-messenger.png
+          cp apps/fluux/src-tauri/icons/icon.png tarball-staging/fluux-messenger/fluux-messenger-256.png
+
+          # Create tarball
+          mkdir -p dist
+          tar -czvf "dist/${TARBALL_NAME}" -C tarball-staging fluux-messenger
+
+      - name: Upload tarball to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/*.tar.gz
+          tag_name: ${{ env.RELEASE_TAG }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build .deb package
         run: |
+          # Copy debian directory from packaging/ to root (required by dpkg-buildpackage)
+          cp -r packaging/debian .
+
           # Point to pre-built binary (debian/rules will skip build)
           # Native builds output to target/release/, not target/<triple>/release/
           export FLUUX_BINARY="apps/fluux/src-tauri/target/release/fluux"
