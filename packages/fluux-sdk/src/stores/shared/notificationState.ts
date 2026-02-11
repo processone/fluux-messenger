@@ -166,6 +166,7 @@ export function onActivate(
   messages: NotificationMessage[]
 ): EntityNotificationState {
   let firstNewMessageId: string | undefined = undefined
+  let updatedLastSeenMessageId = state.lastSeenMessageId
 
   if (state.lastSeenMessageId && messages.length > 0) {
     // Find the position of the last seen message
@@ -181,14 +182,33 @@ export function onActivate(
         }
       }
     } else {
-      // lastSeenMessageId not found in loaded messages — it may be older than
-      // what's currently in memory. In this case, if there are unread messages,
-      // the first incoming message is the marker.
-      if (state.unreadCount > 0) {
+      // lastSeenMessageId not found in loaded messages — it's older than the
+      // loaded slice (e.g., cache loaded latest 100 of 500+ messages).
+      // Use lastReadAt as a timestamp-based fallback to find the correct
+      // marker position within the loaded messages.
+      if (state.lastReadAt) {
+        const fallbackReadAt = state.lastReadAt instanceof Date
+          ? state.lastReadAt
+          : new Date(state.lastReadAt as unknown as string)
+        const firstNew = messages.find(
+          (msg) => msg.timestamp > fallbackReadAt && !msg.isOutgoing && !msg.isDelayed
+        )
+        if (firstNew) {
+          firstNewMessageId = firstNew.id
+        }
+      } else if (state.unreadCount > 0) {
+        // No lastReadAt available either — absolute last resort.
         const firstIncoming = messages.find((m) => !m.isOutgoing && !m.isDelayed)
         if (firstIncoming) {
           firstNewMessageId = firstIncoming.id
         }
+      }
+
+      // Update stale lastSeenMessageId to the last message in the loaded array
+      // so subsequent activations don't repeat the stale-ID fallback path.
+      const lastMsg = messages[messages.length - 1]
+      if (lastMsg) {
+        updatedLastSeenMessageId = lastMsg.id
       }
     }
   } else if (!state.lastSeenMessageId && state.lastReadAt) {
@@ -212,7 +232,7 @@ export function onActivate(
     unreadCount: 0,
     mentionsCount: 0,
     lastReadAt,
-    lastSeenMessageId: state.lastSeenMessageId,
+    lastSeenMessageId: updatedLastSeenMessageId,
     firstNewMessageId,
   }
 }
