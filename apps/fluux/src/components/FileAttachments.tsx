@@ -71,7 +71,7 @@ export function ImageAttachment({ attachment, onLoad }: AttachmentProps) {
   if (isLoading) {
     return (
       <div
-        className="pt-2 rounded-lg bg-fluux-hover/60 border border-fluux-muted/10 flex items-center justify-center"
+        className="pt-2 rounded-lg bg-fluux-hover/60 border border-fluux-border flex items-center justify-center"
         style={{ aspectRatio, maxWidth: `${maxWidthPx}px`, maxHeight: '300px', minHeight: '100px' }}
       >
         <Loader2 className="w-6 h-6 text-fluux-muted animate-spin" />
@@ -83,7 +83,7 @@ export function ImageAttachment({ attachment, onLoad }: AttachmentProps) {
   if (error || !proxiedImageSrc || loadError) {
     return (
       <div
-        className="pt-2 rounded-lg bg-fluux-hover/60 border border-fluux-muted/10 flex flex-col items-center justify-center text-fluux-muted text-sm gap-2"
+        className="pt-2 rounded-lg bg-fluux-hover/60 border border-fluux-border flex flex-col items-center justify-center text-fluux-muted text-sm gap-2"
         style={{ aspectRatio, maxWidth: `${maxWidthPx}px`, maxHeight: '300px', minHeight: '100px' }}
       >
         <ImageOff className="w-8 h-8" />
@@ -97,7 +97,7 @@ export function ImageAttachment({ attachment, onLoad }: AttachmentProps) {
       href={attachment.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="block pt-2 rounded-lg overflow-hidden hover:opacity-90 transition-opacity"
+      className="block pt-2 rounded-lg overflow-hidden border border-fluux-border hover:opacity-90 transition-opacity"
       style={{ maxWidth: `${maxWidthPx}px` }}
       tabIndex={-1}
     >
@@ -157,7 +157,7 @@ export function VideoAttachment({ attachment, onLoad }: AttachmentProps) {
   // Show error/fallback if fetch failed or video failed to load (404, etc.)
   if (error || !proxiedVideoUrl || loadError) {
     return (
-      <div className="pt-2 max-w-md rounded-lg overflow-hidden bg-fluux-hover/60 border border-fluux-muted/10">
+      <div className="pt-2 max-w-md rounded-lg overflow-hidden bg-fluux-hover/60 border border-fluux-border">
         <div className="flex flex-col items-center justify-center text-fluux-muted text-sm py-8 gap-2">
           <FileX className="w-8 h-8" />
           <span>{t('chat.videoUnavailable')}</span>
@@ -190,7 +190,7 @@ export function VideoAttachment({ attachment, onLoad }: AttachmentProps) {
       </video>
       {/* Video info bar */}
       {attachment.name && (
-        <div className="flex items-center gap-2 px-3 py-2 bg-fluux-hover/80">
+        <div className="flex items-center gap-2 px-3 py-2 bg-fluux-bg/60 border-t border-fluux-border">
           <Film className="w-4 h-4 text-fluux-muted flex-shrink-0" />
           <span className="text-sm text-fluux-text truncate">{attachment.name}</span>
           {attachment.duration !== undefined && (
@@ -238,7 +238,7 @@ export function AudioAttachment({ attachment }: AttachmentProps) {
 
   return (
     <div className="pt-2 max-w-sm">
-      <div className={`flex items-center gap-3 p-3 rounded-t-lg border border-b-0 border-fluux-muted/10 ${hasError ? 'bg-fluux-hover/40' : 'bg-fluux-hover/60'}`}>
+      <div className={`flex items-center gap-3 p-3 rounded-t-lg border border-b-0 border-fluux-border ${hasError ? 'bg-fluux-hover/40' : 'bg-fluux-hover/60'}`}>
         <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${hasError ? 'bg-fluux-muted/30' : 'bg-fluux-brand'}`}>
           {isLoading ? (
             <Loader2 className="w-5 h-5 text-white animate-spin" />
@@ -275,7 +275,7 @@ export function AudioAttachment({ attachment }: AttachmentProps) {
         )}
       </div>
       {hasError ? (
-        <div className="w-full rounded-b-lg bg-fluux-bg/40 border border-t-0 border-fluux-muted/10 h-10" />
+        <div className="w-full rounded-b-lg bg-fluux-bg/40 border border-t-0 border-fluux-border h-10" />
       ) : (
         <audio
           controls
@@ -307,7 +307,7 @@ export function FileAttachmentCard({ attachment }: AttachmentProps) {
       href={attachment.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="flex items-center gap-3 p-3 mt-2 max-w-sm rounded-lg bg-fluux-bg/60 border border-fluux-muted/10 hover:border-fluux-muted/20 hover:bg-fluux-hover/60 transition-colors group/file"
+      className="flex items-center gap-3 p-3 mt-2 max-w-sm rounded-lg bg-fluux-bg/60 border border-fluux-border hover:bg-fluux-hover/60 transition-colors group/file"
       tabIndex={-1}
     >
       {/* File type icon */}

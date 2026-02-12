@@ -341,7 +341,7 @@ export const MessageBubble = memo(function MessageBubble({
           />
 
           {/* File attachments (image, video, audio, text preview, document card) - hidden for retracted */}
-          {!message.isRetracted && <MessageAttachments attachment={message.attachment} onMediaLoad={onMediaLoad} />}
+          {!message.isRetracted && <MessageAttachments attachment={message.attachment} onMediaLoad={onMediaLoad} isSelected={isSelected} isHovered={isHovered} />}
 
           {/* Link preview - hidden for retracted */}
           {!message.isRetracted && message.linkPreview && <LinkPreviewCard preview={message.linkPreview} onLoad={onMediaLoad} />}
