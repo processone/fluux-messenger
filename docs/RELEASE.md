@@ -19,15 +19,15 @@ npm run release:prepare X.Y.Z
 
 ## Files Involved
 
-| File | Role |
-|------|------|
-| `apps/fluux/src/data/changelog.ts` | **Authoritative source** - Edit this first |
-| `CHANGELOG.md` | Generated - Full changelog for GitHub |
-| `RELEASE_NOTES.md` | Generated - Current version for auto-updater |
-| `package.json` | Version number (root) |
-| `apps/fluux/package.json` | Version number (app) |
-| `packages/fluux-sdk/package.json` | Version number (SDK) |
-| `apps/fluux/src-tauri/tauri.conf.json` | Version + bundleVersion |
+| File                                   | Role                                         |
+|----------------------------------------|----------------------------------------------|
+| `apps/fluux/src/data/changelog.ts`     | **Authoritative source** - Edit this first   |
+| `CHANGELOG.md`                         | Generated - Full changelog for GitHub        |
+| `RELEASE_NOTES.md`                     | Generated - Current version for auto-updater |
+| `package.json`                         | Version number (root)                        |
+| `apps/fluux/package.json`              | Version number (app)                         |
+| `packages/fluux-sdk/package.json`      | Version number (SDK)                         |
+| `apps/fluux/src-tauri/tauri.conf.json` | Version + bundleVersion                      |
 
 ## Step-by-Step Release
 
