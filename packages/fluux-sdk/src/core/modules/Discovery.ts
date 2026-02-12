@@ -7,7 +7,7 @@ import {
   NS_DISCO_ITEMS,
   NS_HTTP_UPLOAD,
 } from '../namespaces'
-import type { UploadSlot } from '../types'
+import type { UploadSlot, HttpUploadService } from '../types'
 
 /**
  * Service discovery and HTTP file upload module.
@@ -91,8 +91,8 @@ export class Discovery extends BaseModule {
 
   /**
    * Discover HTTP Upload service (XEP-0363).
-   * Queries disco#items to find upload service, then queries its disco#info
-   * for capabilities (max file size).
+   * First checks disco#info directly on server domain (some servers like Prosody
+   * advertise the feature there), then falls back to querying disco#items.
    */
   async discoverHttpUploadService(): Promise<void> {
     const currentJid = this.deps.getCurrentJid()
@@ -102,7 +102,30 @@ export class Discovery extends BaseModule {
     if (!domain) return
 
     try {
-      // 1. Query disco#items on server domain
+      // 1. First check disco#info directly on server domain
+      // Some servers (e.g., Prosody with http_file_share) advertise the upload
+      // feature directly on the server rather than as a separate component
+      const serverInfoIq = xml(
+        'iq',
+        { type: 'get', to: domain, id: `info_${generateUUID()}` },
+        xml('query', { xmlns: NS_DISCO_INFO })
+      )
+      const serverInfoResult = await this.deps.sendIQ(serverInfoIq)
+      const serverQuery = serverInfoResult.getChild('query', NS_DISCO_INFO)
+      const serverFeatures = serverQuery?.getChildren('feature') || []
+      const serverHasUpload = serverFeatures.some((f: Element) => f.attrs.var === NS_HTTP_UPLOAD)
+
+      if (serverHasUpload) {
+        const uploadService = this.extractUploadService(domain, serverQuery)
+        this.deps.emitSDK('connection:http-upload-service', { service: uploadService })
+        this.deps.emitSDK('console:event', {
+          message: `HTTP Upload service discovered on server: ${domain}${uploadService.maxFileSize ? ` (max ${Math.round(uploadService.maxFileSize / 1024 / 1024)}MB)` : ''}`,
+          category: 'connection',
+        })
+        return
+      }
+
+      // 2. Query disco#items on server domain to find upload component
       const itemsIq = xml(
         'iq',
         { type: 'get', to: domain, id: `items_${generateUUID()}` },
@@ -110,7 +133,7 @@ export class Discovery extends BaseModule {
       )
       const itemsResult = await this.deps.sendIQ(itemsIq)
 
-      // 2. For each item, query disco#info to find HTTP Upload feature
+      // 3. For each item, query disco#info to find HTTP Upload feature
       const items = itemsResult.getChild('query', NS_DISCO_ITEMS)?.getChildren('item') || []
 
       for (const item of items) {
@@ -131,27 +154,10 @@ export class Discovery extends BaseModule {
           const hasUpload = features.some((f: Element) => f.attrs.var === NS_HTTP_UPLOAD)
 
           if (hasUpload) {
-            // Extract max-file-size from x-data form if present
-            let maxFileSize: number | undefined
-            const xForm = query?.getChild('x', 'jabber:x:data')
-            if (xForm) {
-              const fields = xForm.getChildren('field') || []
-              for (const field of fields) {
-                if (field.attrs.var === 'max-file-size') {
-                  const value = field.getChildText('value')
-                  if (value) {
-                    maxFileSize = parseInt(value, 10)
-                  }
-                  break
-                }
-              }
-            }
-
-            const uploadService = { jid: itemJid, maxFileSize }
+            const uploadService = this.extractUploadService(itemJid, query)
             this.deps.emitSDK('connection:http-upload-service', { service: uploadService })
-
             this.deps.emitSDK('console:event', {
-              message: `HTTP Upload service discovered: ${itemJid}${maxFileSize ? ` (max ${Math.round(maxFileSize / 1024 / 1024)}MB)` : ''}`,
+              message: `HTTP Upload service discovered: ${itemJid}${uploadService.maxFileSize ? ` (max ${Math.round(uploadService.maxFileSize / 1024 / 1024)}MB)` : ''}`,
               category: 'connection',
             })
             return
@@ -164,10 +170,37 @@ export class Discovery extends BaseModule {
       // No HTTP Upload service found
       this.deps.emitSDK('connection:http-upload-service', { service: null })
     } catch (err) {
-      // disco#items not available
+      // disco#info/items not available
       console.warn('[Discovery] Failed to discover HTTP Upload service:', err)
       this.deps.emitSDK('connection:http-upload-service', { service: null })
     }
+  }
+
+  /**
+   * Extract HTTP Upload service info from a disco#info query result.
+   * @param jid - The JID of the service
+   * @param query - The query element from disco#info response
+   * @returns HttpUploadService with jid and optional maxFileSize
+   */
+  private extractUploadService(jid: string, query: Element | undefined): HttpUploadService {
+    let maxFileSize: number | undefined
+
+    // Extract max-file-size from x-data form if present
+    const xForm = query?.getChild('x', 'jabber:x:data')
+    if (xForm) {
+      const fields = xForm.getChildren('field') || []
+      for (const field of fields) {
+        if (field.attrs.var === 'max-file-size') {
+          const value = field.getChildText('value')
+          if (value) {
+            maxFileSize = parseInt(value, 10)
+          }
+          break
+        }
+      }
+    }
+
+    return { jid, maxFileSize }
   }
 
   /**

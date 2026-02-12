@@ -68,6 +68,17 @@ describe('XMPPClient HTTP Upload', () => {
 
   describe('discoverHttpUploadService', () => {
     it('should discover HTTP Upload service from server items', async () => {
+      // Mock server disco#info (no upload feature on server itself)
+      const serverInfoResponse = createMockElement('iq', { type: 'result' }, [
+        {
+          name: 'query',
+          attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
+          children: [
+            { name: 'feature', attrs: { var: 'http://jabber.org/protocol/disco#info' } },
+          ],
+        },
+      ])
+
       // Mock disco#items response with upload service
       const itemsResponse = createMockElement('iq', { type: 'result' }, [
         {
@@ -106,7 +117,13 @@ describe('XMPPClient HTTP Upload', () => {
       // Set up mock to return different responses based on the IQ target
       mockXmppClientInstance.iqCaller.request.mockImplementation(async (iq: any) => {
         const to = iq.attrs?.to
-        if (to === 'example.com') {
+        const xmlns = iq.children?.[0]?.attrs?.xmlns
+        // Server disco#info (first check for upload on server itself)
+        if (to === 'example.com' && xmlns === 'http://jabber.org/protocol/disco#info') {
+          return serverInfoResponse
+        }
+        // Server disco#items (fallback to check components)
+        if (to === 'example.com' && xmlns === 'http://jabber.org/protocol/disco#items') {
           return itemsResponse
         } else if (to === 'conference.example.com') {
           return conferenceInfoResponse
@@ -138,7 +155,80 @@ describe('XMPPClient HTTP Upload', () => {
       })
     })
 
+    it('should discover HTTP Upload service directly on server domain (Prosody http_file_share)', async () => {
+      // Mock disco#info response on server domain with HTTP Upload feature
+      // This is how Prosody's http_file_share module advertises the service
+      const serverInfoResponse = createMockElement('iq', { type: 'result' }, [
+        {
+          name: 'query',
+          attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
+          children: [
+            { name: 'identity', attrs: { category: 'server', type: 'im', name: 'Prosody' } },
+            { name: 'feature', attrs: { var: 'urn:xmpp:http:upload:0' } },
+            { name: 'feature', attrs: { var: 'http://jabber.org/protocol/disco#info' } },
+            {
+              name: 'x',
+              attrs: { xmlns: 'jabber:x:data', type: 'result' },
+              children: [
+                {
+                  name: 'field',
+                  attrs: { var: 'FORM_TYPE', type: 'hidden' },
+                  children: [{ name: 'value', text: 'urn:xmpp:http:upload:0' }],
+                },
+                {
+                  name: 'field',
+                  attrs: { var: 'max-file-size' },
+                  children: [{ name: 'value', text: '104857600' }], // 100 MB
+                },
+              ],
+            },
+          ],
+        },
+      ])
+
+      // disco#items should not be needed since we find upload on server itself
+      mockXmppClientInstance.iqCaller.request.mockImplementation(async (iq: any) => {
+        const to = iq.attrs?.to
+        const xmlns = iq.children?.[0]?.attrs?.xmlns
+        if (to === 'example.com' && xmlns === 'http://jabber.org/protocol/disco#info') {
+          return serverInfoResponse
+        }
+        const defaultResponse = getDefaultIQResponse(iq)
+        if (defaultResponse) return defaultResponse
+        throw new Error('Service unavailable')
+      })
+
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'password',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+      await waitForAsyncOps()
+
+      // Verify HTTP upload service was discovered on server domain itself
+      expect(emitSDKSpy).toHaveBeenCalledWith('connection:http-upload-service', {
+        service: {
+          jid: 'example.com',
+          maxFileSize: 104857600,
+        }
+      })
+    })
+
     it('should extract max-file-size from disco#info x-data form', async () => {
+      // Server disco#info without upload feature
+      const serverInfoResponse = createMockElement('iq', { type: 'result' }, [
+        {
+          name: 'query',
+          attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
+          children: [
+            { name: 'feature', attrs: { var: 'http://jabber.org/protocol/disco#info' } },
+          ],
+        },
+      ])
+
       const itemsResponse = createMockElement('iq', { type: 'result' }, [
         {
           name: 'query',
@@ -178,7 +268,13 @@ describe('XMPPClient HTTP Upload', () => {
 
       mockXmppClientInstance.iqCaller.request.mockImplementation(async (iq: any) => {
         const to = iq.attrs?.to
-        if (to === 'example.com') return itemsResponse
+        const xmlns = iq.children?.[0]?.attrs?.xmlns
+        if (to === 'example.com' && xmlns === 'http://jabber.org/protocol/disco#info') {
+          return serverInfoResponse
+        }
+        if (to === 'example.com' && xmlns === 'http://jabber.org/protocol/disco#items') {
+          return itemsResponse
+        }
         if (to === 'upload.example.com') return uploadInfoResponse
         const defaultResponse = getDefaultIQResponse(iq)
         if (defaultResponse) return defaultResponse
@@ -204,6 +300,17 @@ describe('XMPPClient HTTP Upload', () => {
     })
 
     it('should handle server with no HTTP Upload service', async () => {
+      // Server disco#info without upload feature
+      const serverInfoResponse = createMockElement('iq', { type: 'result' }, [
+        {
+          name: 'query',
+          attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
+          children: [
+            { name: 'feature', attrs: { var: 'http://jabber.org/protocol/disco#info' } },
+          ],
+        },
+      ])
+
       const itemsResponse = createMockElement('iq', { type: 'result' }, [
         {
           name: 'query',
@@ -227,7 +334,15 @@ describe('XMPPClient HTTP Upload', () => {
 
       mockXmppClientInstance.iqCaller.request.mockImplementation(async (iq: any) => {
         const to = iq.attrs?.to
-        if (to === 'example.com') return itemsResponse
+        const xmlns = iq.children?.[0]?.attrs?.xmlns
+        // Server disco#info (first check for upload on server itself)
+        if (to === 'example.com' && xmlns === 'http://jabber.org/protocol/disco#info') {
+          return serverInfoResponse
+        }
+        // Server disco#items (fallback to check components)
+        if (to === 'example.com' && xmlns === 'http://jabber.org/protocol/disco#items') {
+          return itemsResponse
+        }
         return genericInfoResponse
       })
 
