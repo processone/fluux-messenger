@@ -31,6 +31,24 @@ Open http://localhost:5173 and connect with your XMPP credentials.
 | `npm run tauri:dev`   | Run desktop app in development mode |
 | `npm run tauri:build` | Build desktop app for distribution  |
 
+## Troubleshooting
+
+### Clear Local Storage
+
+If the desktop app enters a connection loop or has stale configuration from a previous version, you can reset all local data (localStorage, sessionStorage, IndexedDB) by launching with the `--clear-storage` flag:
+
+```bash
+fluux --clear-storage
+```
+
+Short form:
+
+```bash
+fluux -c
+```
+
+This clears persisted store data (e.g., stale `wss://` server URLs) without requiring manual intervention in browser dev tools. The flag is processed on the Rust side and emits an event to the frontend, which calls `clearLocalData()` before the app initializes.
+
 ## Building Debian Packages
 
 You can build `.deb` packages locally using standard Debian tooling.

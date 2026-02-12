@@ -79,6 +79,7 @@ export class Connection extends BaseModule {
   private reconnectAttempt = 0
   private isManualDisconnect = false
   private isReconnecting = false
+  private hasEverConnected = false  // Track if we've had a successful connection (prevents reconnect on initial connection failure)
   private disconnectReason: 'conflict' | 'auth-error' | null = null
 
   // Original server string before proxy resolution (e.g. "process-one.net", "tls://host:5223")
@@ -292,6 +293,12 @@ export class Connection extends BaseModule {
    * - A domain name (example.com) - XEP-0156 discovery is attempted, falls back to wss://{domain}/ws
    */
   async connect({ jid, password, server, resource, smState, lang, previouslyJoinedRooms, skipDiscovery }: ConnectOptions): Promise<void> {
+    // Reset hasEverConnected for each new connect() call.
+    // Each user-initiated connection must prove itself before auto-reconnect is allowed.
+    // Without this, a stale `true` from a previous session would cause auto-reconnect
+    // on a fresh login attempt that fails (e.g., after max retries exhausted the old session).
+    this.hasEverConnected = false
+
     // Emit SDK event for connection starting
     this.deps.emitSDK('connection:status', { status: 'connecting' })
 
@@ -406,6 +413,7 @@ export class Connection extends BaseModule {
   async disconnect(): Promise<void> {
     this.isManualDisconnect = true
     this.cancelReconnect()
+    this.hasEverConnected = false  // Reset for next login attempt
 
     // Clear cached SM state - manual disconnect means fresh session next time
     this.cachedSmState = null
@@ -1163,6 +1171,7 @@ export class Connection extends BaseModule {
       // - We have credentials to reconnect with
       // - We're not already in a reconnect attempt (prevents loop when stopping client during reconnect)
       // - Not a resource conflict (prevents ping-pong between clients)
+      // - We have successfully connected at least once (prevents reconnect on initial connection failure)
       if (this.isManualDisconnect) {
         // Manual disconnect - will transition to offline via stop()
         this.stores.console.addEvent('Socket closed (manual disconnect)', 'connection')
@@ -1185,6 +1194,20 @@ export class Connection extends BaseModule {
       } else if (!this.credentials) {
         // No credentials - cannot reconnect
         this.stores.console.addEvent('Socket closed (no credentials to reconnect)', 'connection')
+      } else if (!this.hasEverConnected) {
+        // Initial connection failed - don't auto-reconnect so user can see the error
+        // This prevents the error message from disappearing immediately after login failure
+        const reason = context?.reason instanceof Error ? context.reason.message : String(context?.reason || '')
+        const errorMsg = reason
+          ? `Connection failed: ${reason}`
+          : 'Connection failed. Check your server address and try again.'
+        this.stores.connection.setStatus('error')
+        this.stores.connection.setError(errorMsg)
+        this.stores.console.addEvent('Initial connection failed (no auto-reconnect)', 'connection')
+        // Log to browser console for user diagnostics
+        console.warn(`[XMPP] Initial connection failed (clean: ${wasClean}, reason: ${reason || 'unknown'}). Server: ${this.originalServer || 'unknown'}`)
+        // Clear credentials so login form shows fresh
+        this.credentials = null
       } else {
         // Unexpected disconnect - attempt to reconnect
         this.stores.console.addEvent('Connection lost unexpectedly, will reconnect', 'connection')
@@ -1224,6 +1247,7 @@ export class Connection extends BaseModule {
     // Reset reconnection state
     this.isReconnecting = false
     this.reconnectAttempt = 0
+    this.hasEverConnected = true  // Mark that we've successfully connected
     this.stores.connection.setReconnectState(0, null)
 
     // Update connection status
@@ -1255,7 +1279,8 @@ export class Connection extends BaseModule {
     // - No credentials (can't reconnect)
     // - Manual disconnect (user initiated)
     // - Resource conflict (another client connected - would cause ping-pong loop)
-    if (!this.credentials || this.isManualDisconnect || this.disconnectReason === 'conflict') {
+    // - Never connected successfully (initial connection failure - let user see error)
+    if (!this.credentials || this.isManualDisconnect || this.disconnectReason === 'conflict' || !this.hasEverConnected) {
       return
     }
 
