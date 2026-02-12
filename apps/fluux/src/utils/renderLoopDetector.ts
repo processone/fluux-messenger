@@ -40,7 +40,7 @@ const MAX_SELECTOR_HISTORY = 50
 
 // Configuration - per component thresholds
 const MAX_RENDERS_PER_WINDOW = 200  // Max renders allowed per component in time window
-const WARNING_THRESHOLD = 50        // Warn at this many renders (before throwing)
+const WARNING_THRESHOLD = 100       // Warn at this many renders (before throwing)
 const TIME_WINDOW_MS = 1000         // Time window in milliseconds
 const COOLDOWN_MS = 5000            // Cooldown before resetting after trigger
 const MAX_RENDER_HISTORY = 20       // Keep last N renders per component for debugging

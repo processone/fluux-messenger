@@ -49,6 +49,28 @@ fluux -c
 
 This clears persisted store data (e.g., stale `wss://` server URLs) without requiring manual intervention in browser dev tools. The flag is processed on the Rust side and emits an event to the frontend, which calls `clearLocalData()` before the app initializes.
 
+## Debugging
+
+The desktop app supports verbose logging to diagnose connection issues, freezes, and render loops:
+
+```bash
+# Enable verbose logging (Rust tracing + WebView console forwarded to stderr)
+fluux --verbose 2>&1 | tee fluux-debug.log
+
+# Fine-grained control with RUST_LOG
+RUST_LOG=debug fluux 2>&1 | tee fluux-debug.log
+
+# Show available CLI flags
+fluux --help
+```
+
+When `--verbose` is active:
+- Rust-side tracing from the XMPP proxy (SRV resolution, WebSocket, STARTTLS) prints to stderr
+- WebView `console.log/warn/error` messages are forwarded to stderr
+- Startup diagnostics show version, platform, and GPU workaround status (Linux)
+
+On Linux, GPU rendering is disabled by default (WebKitGTK workaround). Set `FLUUX_ENABLE_GPU=1` to re-enable.
+
 ## Building Debian Packages
 
 You can build `.deb` packages locally using standard Debian tooling.
