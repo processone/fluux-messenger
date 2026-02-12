@@ -293,6 +293,12 @@ export class Connection extends BaseModule {
    * - A domain name (example.com) - XEP-0156 discovery is attempted, falls back to wss://{domain}/ws
    */
   async connect({ jid, password, server, resource, smState, lang, previouslyJoinedRooms, skipDiscovery }: ConnectOptions): Promise<void> {
+    // Reset hasEverConnected for each new connect() call.
+    // Each user-initiated connection must prove itself before auto-reconnect is allowed.
+    // Without this, a stale `true` from a previous session would cause auto-reconnect
+    // on a fresh login attempt that fails (e.g., after max retries exhausted the old session).
+    this.hasEverConnected = false
+
     // Emit SDK event for connection starting
     this.deps.emitSDK('connection:status', { status: 'connecting' })
 

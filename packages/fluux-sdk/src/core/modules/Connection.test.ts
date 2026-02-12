@@ -370,6 +370,52 @@ describe('XMPPClient Connection', () => {
         'connection'
       )
     })
+
+    it('should NOT auto-reconnect on fresh connect() after a previous successful session', async () => {
+      // Scenario: User had a successful session, reconnect exhausted max retries,
+      // user clicks Connect again. This fresh connect() should NOT auto-reconnect
+      // if it fails, because hasEverConnected is reset at the start of connect().
+
+      // Step 1: Connect successfully (sets hasEverConnected = true internally)
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      // Step 2: Start a fresh connect() that will fail
+      // This simulates the user clicking Connect again after an error screen
+      mockXmppClientInstance.start.mockRejectedValue(new Error('Connection refused'))
+
+      await expect(
+        xmppClient.connect({
+          jid: 'user@example.com',
+          password: 'secret',
+          server: 'example.com',
+          skipDiscovery: true,
+        })
+      ).rejects.toThrow('Connection refused')
+
+      // Clear to track new calls
+      vi.mocked(mockStores.connection.setStatus).mockClear()
+      mockClientFactory.mockClear()
+
+      // Step 3: Simulate disconnect event from the failed connection
+      mockXmppClientInstance._emit('disconnect', { clean: false })
+
+      // Should NOT auto-reconnect - this is a fresh login attempt that failed
+      const statusCalls = vi.mocked(mockStores.connection.setStatus).mock.calls
+      expect(statusCalls.some(c => c[0] === 'reconnecting')).toBe(false)
+
+      // Should log initial connection failure
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        'Initial connection failed (no auto-reconnect)',
+        'connection'
+      )
+    })
   })
 
   describe('exponential backoff calculation', () => {
