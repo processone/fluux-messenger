@@ -549,6 +549,21 @@ export function useMessageListScroll({
   }, [conversationId, messageCount, firstNewMessageId, isAtBottomRef])
 
   // ==========================================================================
+  // EFFECT: Cleanup on unmount
+  // ==========================================================================
+  //
+  // Clear the media load debounce timer to prevent memory leaks and
+  // attempted DOM access after the component unmounts.
+
+  useEffect(() => {
+    return () => {
+      if (mediaLoadDebounceRef.current) {
+        clearTimeout(mediaLoadDebounceRef.current)
+      }
+    }
+  }, [])
+
+  // ==========================================================================
   // EFFECT: Prepend complete (older messages loaded)
   // ==========================================================================
   //
