@@ -1197,8 +1197,15 @@ export class Connection extends BaseModule {
       } else if (!this.hasEverConnected) {
         // Initial connection failed - don't auto-reconnect so user can see the error
         // This prevents the error message from disappearing immediately after login failure
+        const reason = context?.reason instanceof Error ? context.reason.message : String(context?.reason || '')
+        const errorMsg = reason
+          ? `Connection failed: ${reason}`
+          : 'Connection failed. Check your server address and try again.'
         this.stores.connection.setStatus('error')
+        this.stores.connection.setError(errorMsg)
         this.stores.console.addEvent('Initial connection failed (no auto-reconnect)', 'connection')
+        // Log to browser console for user diagnostics
+        console.warn(`[XMPP] Initial connection failed (clean: ${wasClean}, reason: ${reason || 'unknown'}). Server: ${this.originalServer || 'unknown'}`)
         // Clear credentials so login form shows fresh
         this.credentials = null
       } else {
