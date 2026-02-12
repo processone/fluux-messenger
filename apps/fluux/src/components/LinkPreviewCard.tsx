@@ -28,11 +28,11 @@ export function LinkPreviewCard({ preview, onLoad }: LinkPreviewCardProps) {
       href={preview.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="block mt-2 max-w-md border border-fluux-muted/20 hover:border-fluux-muted/35 rounded-lg overflow-hidden bg-fluux-bg hover:bg-fluux-hover/50 transition-colors"
+      className="block mt-2 max-w-md border border-fluux-muted/10 hover:border-fluux-muted/20 rounded-lg overflow-hidden bg-fluux-bg/60 hover:bg-fluux-hover/60 transition-colors"
     >
       {/* Image preview - hidden entirely on error */}
       {preview.image && !imageError && (
-        <div className="aspect-video bg-fluux-bg overflow-hidden">
+        <div className="aspect-video bg-fluux-bg/80 overflow-hidden">
           <img
             src={preview.image}
             alt=""
