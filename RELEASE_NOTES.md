@@ -5,7 +5,7 @@
 - Native TCP connection support via WebSocket proxy (desktop)
 - Clipboard image paste support (Cmd+V / Ctrl+V)
 - Clear local data option on logout
-- Complete EU language coverage (26 languages including Catalan)
+- Complete EU language coverage (26 languages)
 - Improved Linux packaging with native distro tools
 
 ### Changed
