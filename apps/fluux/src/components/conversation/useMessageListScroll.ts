@@ -39,6 +39,8 @@ const FAB_THRESHOLD = 300 // pixels from bottom to show "scroll to bottom" butto
 const LOAD_COOLDOWN_MS = 500 // minimum time between load triggers
 const SAVE_THROTTLE_MS = 100 // minimum time between position saves
 const PREPEND_COOLDOWN_MS = 500 // time to keep prepend flag after restore (prevents re-trigger)
+const MEDIA_LOAD_DEBOUNCE_MS = 150 // debounce time for batching image load events
+const MEDIA_LOAD_SCROLL_THRESHOLD = 150 // max distance from bottom to still auto-scroll after media load
 
 // ============================================================================
 // TYPES
@@ -64,6 +66,7 @@ export interface UseMessageListScrollResult {
   handleScroll: (e: React.UIEvent<HTMLDivElement>) => void
   handleWheel: (e: React.WheelEvent<HTMLDivElement>) => void
   handleLoadEarlier: () => void
+  handleMediaLoad: () => void
   scrollToBottom: () => void
   scrollToTop: () => void
   showScrollToBottom: boolean
@@ -124,6 +127,12 @@ export function useMessageListScroll({
   const lastLoadTimeRef = useRef(0)
   const lastRestoreTimeRef = useRef(0) // Track when we last restored position
   const scrolledAwayFromTopRef = useRef(false)
+
+  // Media load batching (for images, videos, link previews)
+  // When multiple media elements load in quick succession, we batch them and apply
+  // a single scroll correction at the end to avoid jitter.
+  const mediaLoadSnapshotRef = useRef<{ wasAtBottom: boolean } | null>(null)
+  const mediaLoadDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Last scroll data (for saving on conversation switch)
   const lastScrollDataRef = useRef<{ top: number; height: number; client: number } | null>(null)
@@ -310,6 +319,76 @@ export function useMessageListScroll({
   }, [canLoadMore, findAnchorElement, firstMessageId, messageCount, onScrollToTop])
 
   // ==========================================================================
+  // MEDIA LOAD HANDLER (images, videos, link previews)
+  // ==========================================================================
+  //
+  // When media loads, it can change the content height. We use a snapshot+debounce
+  // pattern to batch multiple rapid loads and apply a single scroll correction:
+  //
+  // 1. First load in batch: capture wasAtBottom snapshot
+  // 2. Each subsequent load: reset debounce timer
+  // 3. After debounce: apply correction based on snapshot
+  //
+  // This prevents jitter from multiple images loading in sequence.
+
+  const handleMediaLoad = useCallback(() => {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+
+    // Capture snapshot on first load in batch (user's intent at start of batch)
+    if (!mediaLoadSnapshotRef.current) {
+      mediaLoadSnapshotRef.current = { wasAtBottom: isAtBottomRef.current }
+      debugLog('MEDIA LOAD: batch started', {
+        wasAtBottom: isAtBottomRef.current,
+        scrollTop: scroller.scrollTop,
+        scrollHeight: scroller.scrollHeight,
+      })
+    }
+
+    // Clear existing timer and set new one (debounce)
+    if (mediaLoadDebounceRef.current) {
+      clearTimeout(mediaLoadDebounceRef.current)
+    }
+
+    mediaLoadDebounceRef.current = setTimeout(() => {
+      const currentScroller = scrollerRef.current
+      if (!currentScroller || !mediaLoadSnapshotRef.current) return
+
+      const { wasAtBottom } = mediaLoadSnapshotRef.current
+
+      if (wasAtBottom) {
+        // User was at bottom when batch started - check if they're still close
+        const distFromBottom = getDistanceFromBottom(currentScroller)
+
+        if (distFromBottom < MEDIA_LOAD_SCROLL_THRESHOLD) {
+          // Still close to bottom - scroll to bottom
+          debugLog('MEDIA LOAD: batch complete, scrolling to bottom', {
+            wasAtBottom,
+            distFromBottom,
+            scrollHeight: currentScroller.scrollHeight,
+          })
+          currentScroller.scrollTop = currentScroller.scrollHeight
+        } else {
+          // User actively scrolled away - respect their position
+          debugLog('MEDIA LOAD: batch complete, user scrolled away', {
+            wasAtBottom,
+            distFromBottom,
+            threshold: MEDIA_LOAD_SCROLL_THRESHOLD,
+          })
+        }
+      } else {
+        debugLog('MEDIA LOAD: batch complete, was not at bottom', {
+          wasAtBottom,
+        })
+      }
+
+      // Clear for next batch
+      mediaLoadSnapshotRef.current = null
+      mediaLoadDebounceRef.current = null
+    }, MEDIA_LOAD_DEBOUNCE_MS)
+  }, [isAtBottomRef])
+
+  // ==========================================================================
   // SCROLL EVENT HANDLER
   // ==========================================================================
 
@@ -373,6 +452,13 @@ export function useMessageListScroll({
     lastScrollDataRef.current = null
     prependRef.current = null
     setShowScrollToBottom(false)
+
+    // Clear any pending media load batch
+    if (mediaLoadDebounceRef.current) {
+      clearTimeout(mediaLoadDebounceRef.current)
+      mediaLoadDebounceRef.current = null
+    }
+    mediaLoadSnapshotRef.current = null
 
     // Decide: restore position or scroll to bottom?
     const action = scrollStateManager.enterConversation(conversationId, messageCount)
@@ -762,6 +848,18 @@ export function useMessageListScroll({
         return
       }
 
+      // Skip during media load batch - let the debounced handler manage it
+      // This prevents multiple scroll corrections when images load in sequence
+      if (mediaLoadSnapshotRef.current) {
+        debugLog('RESIZE SKIP (media load batch in progress)', {
+          newHeight,
+          lastHeight,
+          currentScrollTop,
+        })
+        lastHeight = newHeight
+        return
+      }
+
       // Content grew and we were at bottom -> stay at bottom
       if (newHeight > lastHeight && isAtBottomRef.current) {
         debugLog('RESIZE SCROLL TO BOTTOM', {
@@ -822,6 +920,7 @@ export function useMessageListScroll({
     handleScroll,
     handleWheel,
     handleLoadEarlier,
+    handleMediaLoad,
     scrollToBottom,
     scrollToTop,
     showScrollToBottom,

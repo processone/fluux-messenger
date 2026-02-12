@@ -1525,6 +1525,205 @@ describe('MessageList scroll behavior', () => {
     })
   })
 
+  describe('media load scroll behavior (images, videos, link previews)', () => {
+    /**
+     * These tests verify the snapshot + debounce pattern for media load scroll correction.
+     *
+     * Key behaviors:
+     * 1. First image load captures snapshot (wasAtBottom)
+     * 2. Multiple rapid loads are debounced (single scroll correction)
+     * 3. Scroll correction respects user's scroll position
+     * 4. ResizeObserver skips during media load batch
+     */
+
+    it('should provide onMediaLoad callback to renderMessage', () => {
+      const messages = createTestMessages(5)
+      let onMediaLoadCallback: (() => void) | null = null
+
+      render(
+        <MessageList
+          messages={messages}
+          conversationId="conv-media-callback"
+          clearFirstNewMessageId={vi.fn()}
+          renderMessage={(msg, _idx, _group, _showNew, onMediaLoad) => {
+            onMediaLoadCallback = onMediaLoad
+            return <div key={msg.id}>{msg.body}</div>
+          }}
+        />
+      )
+
+      // The onMediaLoad callback should be provided
+      expect(onMediaLoadCallback).not.toBeNull()
+      expect(typeof onMediaLoadCallback).toBe('function')
+    })
+
+    it('should scroll to bottom when media loads and user was at bottom', async () => {
+      const messages = createTestMessages(5)
+      const scrollSpy = vi.fn()
+
+      const { container } = render(
+        <MessageList
+          messages={messages}
+          conversationId="conv-media-at-bottom"
+          clearFirstNewMessageId={vi.fn()}
+          renderMessage={(msg, _idx, _group, _showNew, onMediaLoad) => (
+            <div key={msg.id}>
+              {msg.body}
+              <button data-testid={`load-${msg.id}`} onClick={onMediaLoad}>Load</button>
+            </div>
+          )}
+        />
+      )
+
+      const scrollContainer = container.querySelector('.overflow-y-auto') as HTMLDivElement
+      if (scrollContainer) {
+        // Set up at bottom: scrollHeight(1000) - scrollTop(500) - clientHeight(500) = 0
+        let scrollTopValue = 500
+        Object.defineProperty(scrollContainer, 'scrollHeight', { value: 1000, configurable: true })
+        Object.defineProperty(scrollContainer, 'clientHeight', { value: 500, configurable: true })
+        Object.defineProperty(scrollContainer, 'scrollTop', {
+          get: () => scrollTopValue,
+          set: (v) => {
+            scrollTopValue = v
+            scrollSpy(v)
+          },
+          configurable: true,
+        })
+
+        // Trigger scroll to establish at-bottom state
+        act(() => {
+          scrollContainer.dispatchEvent(new Event('scroll'))
+        })
+        scrollSpy.mockClear()
+
+        // Trigger media load
+        const loadButton = document.querySelector('[data-testid^="load-"]')
+        act(() => {
+          loadButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        })
+
+        // Wait for debounce (using real timers)
+        await act(async () => {
+          await new Promise(resolve => setTimeout(resolve, 200))
+        })
+
+        // Should have scrolled to bottom
+        expect(scrollSpy).toHaveBeenCalledWith(1000)
+      }
+    })
+
+    it('should NOT scroll when user was scrolled up when media started loading', async () => {
+      const messages = createTestMessages(5)
+      const scrollSpy = vi.fn()
+
+      const { container } = render(
+        <MessageList
+          messages={messages}
+          conversationId="conv-media-scrolled-up"
+          clearFirstNewMessageId={vi.fn()}
+          renderMessage={(msg, _idx, _group, _showNew, onMediaLoad) => (
+            <div key={msg.id}>
+              {msg.body}
+              <button data-testid={`load-${msg.id}`} onClick={onMediaLoad}>Load</button>
+            </div>
+          )}
+        />
+      )
+
+      const scrollContainer = container.querySelector('.overflow-y-auto') as HTMLDivElement
+      if (scrollContainer) {
+        // User is scrolled up: scrollHeight(1000) - scrollTop(200) - clientHeight(500) = 300 (> 50 threshold)
+        let scrollTopValue = 200
+        Object.defineProperty(scrollContainer, 'scrollHeight', { value: 1000, configurable: true })
+        Object.defineProperty(scrollContainer, 'clientHeight', { value: 500, configurable: true })
+        Object.defineProperty(scrollContainer, 'scrollTop', {
+          get: () => scrollTopValue,
+          set: (v) => {
+            scrollTopValue = v
+            scrollSpy(v)
+          },
+          configurable: true,
+        })
+
+        // Trigger scroll to establish scrolled-up state
+        act(() => {
+          scrollContainer.dispatchEvent(new Event('scroll'))
+        })
+        scrollSpy.mockClear()
+
+        // Trigger media load
+        const loadButton = document.querySelector('[data-testid^="load-"]')
+        act(() => {
+          loadButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        })
+
+        // Wait for debounce
+        await act(async () => {
+          await new Promise(resolve => setTimeout(resolve, 200))
+        })
+
+        // Should NOT have scrolled (user was not at bottom)
+        expect(scrollSpy).not.toHaveBeenCalled()
+      }
+    })
+
+    it('should batch multiple media loads with debouncing', async () => {
+      const messages = createTestMessages(5)
+      let scrollCount = 0
+
+      const { container } = render(
+        <MessageList
+          messages={messages}
+          conversationId="conv-media-batch-test"
+          clearFirstNewMessageId={vi.fn()}
+          renderMessage={(msg, _idx, _group, _showNew, onMediaLoad) => (
+            <div key={msg.id}>
+              {msg.body}
+              <button data-testid={`load-${msg.id}`} onClick={onMediaLoad}>Load</button>
+            </div>
+          )}
+        />
+      )
+
+      const scrollContainer = container.querySelector('.overflow-y-auto') as HTMLDivElement
+      if (scrollContainer) {
+        let scrollTopValue = 500
+        Object.defineProperty(scrollContainer, 'scrollHeight', { value: 1000, configurable: true })
+        Object.defineProperty(scrollContainer, 'clientHeight', { value: 500, configurable: true })
+        Object.defineProperty(scrollContainer, 'scrollTop', {
+          get: () => scrollTopValue,
+          set: (v) => {
+            scrollTopValue = v
+            scrollCount++
+          },
+          configurable: true,
+        })
+
+        // Establish at-bottom state
+        act(() => {
+          scrollContainer.dispatchEvent(new Event('scroll'))
+        })
+        scrollCount = 0
+
+        // Trigger multiple media loads rapidly
+        const loadButtons = document.querySelectorAll('[data-testid^="load-"]')
+        act(() => {
+          loadButtons[0]?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+          loadButtons[1]?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+          loadButtons[2]?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        })
+
+        // Wait for debounce
+        await act(async () => {
+          await new Promise(resolve => setTimeout(resolve, 200))
+        })
+
+        // Should have only ONE scroll correction (batched via debounce)
+        expect(scrollCount).toBe(1)
+      }
+    })
+  })
+
   describe('MAM initial load phase behavior', () => {
     /**
      * These tests verify that the scroll behavior correctly handles the interaction

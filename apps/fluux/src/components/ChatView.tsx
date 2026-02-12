@@ -100,14 +100,9 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
     }
   }, [])
 
-  // Scroll to bottom when media loads (images, videos, link previews)
-  // Only scrolls if user was already at bottom to avoid disrupting scroll position
-  const handleMediaLoad = useCallback(() => {
-    if (scrollRef.current && isAtBottomRef.current) {
-      // Use instant scroll to avoid jarring animation when content expands
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [])
+  // Note: Media load scroll handling is now managed by useMessageListScroll hook
+  // via the handleMediaLoad callback passed through renderMessage. This provides
+  // batched scroll correction to avoid jitter when multiple images load.
 
   // Scroll to bottom when composer resizes (typing long message)
   // Only scrolls if user was already at bottom to avoid disrupting scroll position
@@ -290,7 +285,6 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
           clearFirstNewMessageId={handleClearFirstNewMessageId}
           onMessageSeen={handleMessageSeen}
           isDarkMode={resolvedMode === 'dark'}
-          onMediaLoad={handleMediaLoad}
           onScrollToTop={fetchOlderHistory}
           isLoadingOlder={activeMAMState?.isLoading ?? false}
           isHistoryComplete={activeMAMState?.isHistoryComplete ?? false}
@@ -366,7 +360,6 @@ const ChatMessageList = memo(function ChatMessageList({
   clearFirstNewMessageId,
   onMessageSeen,
   isDarkMode,
-  onMediaLoad,
   onScrollToTop,
   isLoadingOlder,
   isHistoryComplete,
@@ -400,7 +393,6 @@ const ChatMessageList = memo(function ChatMessageList({
   clearFirstNewMessageId: () => void
   onMessageSeen?: (messageId: string) => void
   isDarkMode?: boolean
-  onMediaLoad?: () => void
   onScrollToTop?: () => void
   isLoadingOlder?: boolean
   isHistoryComplete?: boolean
@@ -459,7 +451,8 @@ const ChatMessageList = memo(function ChatMessageList({
 
   // Memoize renderMessage to prevent render loops
   // Note: This callback captures many values, but they all affect how messages render
-  const renderMessage = useCallback((msg: Message, idx: number, groupMessages: Message[]) => (
+  // The onMediaLoad parameter is provided by MessageList from useMessageListScroll hook
+  const renderMessage = useCallback((msg: Message, idx: number, groupMessages: Message[], _showNewMarker: boolean, onMediaLoad: () => void) => (
     <ChatMessageBubble
       message={msg}
       showAvatar={shouldShowAvatar(groupMessages, idx)}
@@ -495,7 +488,7 @@ const ChatMessageList = memo(function ChatMessageList({
     ownAvatar, contactsByJid, ownNickname, ownPresence, conversationId, conversationType,
     sendReaction, myBareJid, messagesById, onReply, onEdit, lastOutgoingMessageId, lastMessageId,
     isComposing, activeReactionPickerMessageId, onReactionPickerChange, retractMessage,
-    selectedMessageId, hasKeyboardSelection, showToolbarForSelection, isDarkMode, onMediaLoad,
+    selectedMessageId, hasKeyboardSelection, showToolbarForSelection, isDarkMode,
     hoveredMessageId, handleMessageHover, handleMessageLeave, formatTime, effectiveTimeFormat
   ])
 

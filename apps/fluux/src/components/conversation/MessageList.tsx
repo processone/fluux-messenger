@@ -43,8 +43,12 @@ export interface MessageListProps<T extends BaseMessage> {
   typingUsers?: string[]
   /** Format function for typing user display */
   formatTypingUser?: (user: string) => string
-  /** Render function for each message */
-  renderMessage: (message: T, index: number, groupMessages: T[], showNewMarker: boolean) => ReactNode
+  /**
+   * Render function for each message.
+   * The onMediaLoad callback should be passed to image/video components to enable
+   * batched scroll correction when media loads.
+   */
+  renderMessage: (message: T, index: number, groupMessages: T[], showNewMarker: boolean, onMediaLoad: () => void) => ReactNode
   /** Extra content to render after all messages */
   extraContent?: ReactNode
   /** Content to show when messages array is empty */
@@ -136,6 +140,7 @@ export function MessageList<T extends BaseMessage>({
     handleScroll,
     handleWheel,
     handleLoadEarlier,
+    handleMediaLoad,
     scrollToBottom,
     showScrollToBottom,
   } = useMessageListScroll({
@@ -253,7 +258,7 @@ export function MessageList<T extends BaseMessage>({
                 return (
                   <div key={msg.id} data-message-id={msg.id}>
                     {showNewMarker && <NewMessageMarker />}
-                    {renderMessage(msg, idx, group.messages, showNewMarker)}
+                    {renderMessage(msg, idx, group.messages, showNewMarker, handleMediaLoad)}
                   </div>
                 )
               })}
