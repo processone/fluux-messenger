@@ -37,12 +37,15 @@ interface RoomViewProps {
   // Focus zone refs for Tab cycling
   mainContentRef?: RefObject<HTMLElement>
   composerRef?: RefObject<HTMLElement>
+  // Occupant panel state (lifted to parent for persistence across view switches)
+  showOccupants?: boolean
+  onShowOccupantsChange?: (show: boolean) => void
 }
 
 // Max room size for sending typing indicators (to avoid noise in large rooms)
 const MAX_ROOM_SIZE_FOR_TYPING = 30
 
-export function RoomView({ onBack, mainContentRef, composerRef }: RoomViewProps) {
+export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange }: RoomViewProps) {
   const { t } = useTranslation()
   const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, sendChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, activeMAMState } = useRoom()
   const { contacts } = useRoster()
@@ -97,8 +100,10 @@ export function RoomView({ onBack, mainContentRef, composerRef }: RoomViewProps)
   // Track which message has reaction picker open (hides other toolbars)
   const [activeReactionPickerMessageId, setActiveReactionPickerMessageId] = useState<string | null>(null)
 
-  // Occupant panel state
-  const [showOccupants, setShowOccupants] = useState(false)
+  // Occupant panel state setter (calls parent callback if provided)
+  const setShowOccupants = useCallback((show: boolean) => {
+    onShowOccupantsChange?.(show)
+  }, [onShowOccupantsChange])
 
   // Memoized callbacks to prevent render loops (new function refs cause child re-renders)
   const handleCancelReply = useCallback(() => setReplyingTo(null), [])
@@ -106,7 +111,7 @@ export function RoomView({ onBack, mainContentRef, composerRef }: RoomViewProps)
   const handleReactionPickerChange = useCallback((messageId: string, isOpen: boolean) => {
     setActiveReactionPickerMessageId(isOpen ? messageId : null)
   }, [])
-  const handleCloseOccupants = useCallback(() => setShowOccupants(false), [])
+  const handleCloseOccupants = useCallback(() => setShowOccupants(false), [setShowOccupants])
 
   // Memoized upload state to prevent new object reference on every render
   const uploadStateObj = useMemo(() => ({ isUploading, progress }), [isUploading, progress])

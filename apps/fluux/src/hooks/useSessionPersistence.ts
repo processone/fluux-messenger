@@ -34,6 +34,7 @@ export interface ViewStateData {
   activeConversationId: string | null
   activeRoomJid: string | null
   selectedContactJid: string | null
+  showRoomOccupants?: boolean  // Whether members sidebar is expanded in room view
 }
 
 /**
