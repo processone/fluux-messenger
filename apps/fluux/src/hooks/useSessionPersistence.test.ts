@@ -130,6 +130,26 @@ describe('useSessionPersistence', () => {
         expect(restored?.sidebarView).toBe(view)
       })
     })
+
+    it('should persist showRoomOccupants state', () => {
+      const viewState: ViewStateData = {
+        sidebarView: 'rooms',
+        activeConversationId: null,
+        activeRoomJid: 'room@conference.example.com',
+        selectedContactJid: null,
+        showRoomOccupants: true,
+      }
+
+      saveViewState(viewState)
+      const restored = getSavedViewState()
+      expect(restored?.showRoomOccupants).toBe(true)
+
+      // Also test with false
+      viewState.showRoomOccupants = false
+      saveViewState(viewState)
+      const restoredFalse = getSavedViewState()
+      expect(restoredFalse?.showRoomOccupants).toBe(false)
+    })
   })
 
   describe('Roster serialization', () => {

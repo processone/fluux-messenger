@@ -157,6 +157,9 @@ function ChatLayoutContent() {
     selectedContactJid ? s.contacts.get(selectedContactJid) ?? null : null
   )
 
+  // Room occupants panel state (persisted across view switches)
+  const [showRoomOccupants, setShowRoomOccupants] = useState(false)
+
   // Phase 3: Use consolidated navigation hook for per-tab memory and modal management
   const {
     sidebarView,
@@ -216,6 +219,11 @@ function ChatLayoutContent() {
         setSelectedContactJid(savedViewState.selectedContactJid)
       }
 
+      // Restore room occupants panel state
+      if (savedViewState.showRoomOccupants !== undefined) {
+        setShowRoomOccupants(savedViewState.showRoomOccupants)
+      }
+
       // Navigate to the saved sidebar view (including settings)
       switch (savedViewState.sidebarView) {
         case 'messages':
@@ -252,9 +260,10 @@ function ChatLayoutContent() {
       activeConversationId: activeConversationId ?? null,
       activeRoomJid: activeRoomJid ?? null,
       selectedContactJid: selectedContactJid,
+      showRoomOccupants,
     }
     saveViewState(viewState)
-  }, [status, sidebarView, activeConversationId, activeRoomJid, selectedContactJid])
+  }, [status, sidebarView, activeConversationId, activeRoomJid, selectedContactJid, showRoomOccupants])
 
   // Clear selected contact when conversation or room becomes active
   useEffect(() => {
@@ -547,7 +556,7 @@ function ChatLayoutContent() {
           {sidebarView === 'settings' ? (
             <SettingsView onBack={handleSettingsBack} />
           ) : activeRoomJid ? (
-            <RoomView onBack={handleRoomBack} mainContentRef={focusZoneRefs.mainContent} composerRef={focusZoneRefs.composer} />
+            <RoomView onBack={handleRoomBack} mainContentRef={focusZoneRefs.mainContent} composerRef={focusZoneRefs.composer} showOccupants={showRoomOccupants} onShowOccupantsChange={setShowRoomOccupants} />
           ) : activeConversationId ? (
             <ChatView onBack={handleChatBack} onSwitchToMessages={(conversationId) => navigateToMessages(conversationId)} mainContentRef={focusZoneRefs.mainContent} composerRef={focusZoneRefs.composer} />
           ) : selectedContact ? (
