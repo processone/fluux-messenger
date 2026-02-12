@@ -308,6 +308,68 @@ describe('XMPPClient Connection', () => {
       // Should have created new client for reconnect
       expect(mockClientFactory).toHaveBeenCalledTimes(1)
     })
+
+    it('should NOT auto-reconnect when initial connection fails (never connected)', async () => {
+      // Make connection fail by having start() reject
+      mockXmppClientInstance.start.mockRejectedValue(new Error('Connection refused'))
+
+      // Attempt to connect - it will fail
+      await expect(
+        xmppClient.connect({
+          jid: 'user@example.com',
+          password: 'secret',
+          server: 'example.com',
+          skipDiscovery: true,
+        })
+      ).rejects.toThrow('Connection refused')
+
+      // Clear previous calls to track new activity
+      vi.mocked(mockStores.connection.setStatus).mockClear()
+      mockClientFactory.mockClear()
+
+      // Simulate the disconnect event that follows connection failure
+      mockXmppClientInstance._emit('disconnect', { clean: false })
+
+      // Should NOT set status to reconnecting - this is initial connection failure
+      const statusCalls = vi.mocked(mockStores.connection.setStatus).mock.calls
+      expect(statusCalls.some(c => c[0] === 'reconnecting')).toBe(false)
+
+      // Advance timers - no reconnection should be scheduled
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(mockClientFactory).not.toHaveBeenCalled()
+
+      // Should have logged the initial connection failure
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        'Initial connection failed (no auto-reconnect)',
+        'connection'
+      )
+    })
+
+    it('should auto-reconnect when connection drops after successful connection', async () => {
+      // First, connect successfully
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      // Clear to track new calls
+      vi.mocked(mockStores.connection.setStatus).mockClear()
+      mockClientFactory.mockClear()
+
+      // Simulate unexpected disconnect after successful connection
+      mockXmppClientInstance._emit('disconnect', { clean: false })
+
+      // Should schedule reconnect because we were previously connected
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        'Connection lost unexpectedly, will reconnect',
+        'connection'
+      )
+    })
   })
 
   describe('exponential backoff calculation', () => {

@@ -79,6 +79,7 @@ export class Connection extends BaseModule {
   private reconnectAttempt = 0
   private isManualDisconnect = false
   private isReconnecting = false
+  private hasEverConnected = false  // Track if we've had a successful connection (prevents reconnect on initial connection failure)
   private disconnectReason: 'conflict' | 'auth-error' | null = null
 
   // Original server string before proxy resolution (e.g. "process-one.net", "tls://host:5223")
@@ -406,6 +407,7 @@ export class Connection extends BaseModule {
   async disconnect(): Promise<void> {
     this.isManualDisconnect = true
     this.cancelReconnect()
+    this.hasEverConnected = false  // Reset for next login attempt
 
     // Clear cached SM state - manual disconnect means fresh session next time
     this.cachedSmState = null
@@ -1163,6 +1165,7 @@ export class Connection extends BaseModule {
       // - We have credentials to reconnect with
       // - We're not already in a reconnect attempt (prevents loop when stopping client during reconnect)
       // - Not a resource conflict (prevents ping-pong between clients)
+      // - We have successfully connected at least once (prevents reconnect on initial connection failure)
       if (this.isManualDisconnect) {
         // Manual disconnect - will transition to offline via stop()
         this.stores.console.addEvent('Socket closed (manual disconnect)', 'connection')
@@ -1185,6 +1188,10 @@ export class Connection extends BaseModule {
       } else if (!this.credentials) {
         // No credentials - cannot reconnect
         this.stores.console.addEvent('Socket closed (no credentials to reconnect)', 'connection')
+      } else if (!this.hasEverConnected) {
+        // Initial connection failed - don't auto-reconnect so user can see the error
+        // This prevents the error message from disappearing immediately after login failure
+        this.stores.console.addEvent('Initial connection failed (no auto-reconnect)', 'connection')
       } else {
         // Unexpected disconnect - attempt to reconnect
         this.stores.console.addEvent('Connection lost unexpectedly, will reconnect', 'connection')
@@ -1224,6 +1231,7 @@ export class Connection extends BaseModule {
     // Reset reconnection state
     this.isReconnecting = false
     this.reconnectAttempt = 0
+    this.hasEverConnected = true  // Mark that we've successfully connected
     this.stores.connection.setReconnectState(0, null)
 
     // Update connection status
@@ -1255,7 +1263,8 @@ export class Connection extends BaseModule {
     // - No credentials (can't reconnect)
     // - Manual disconnect (user initiated)
     // - Resource conflict (another client connected - would cause ping-pong loop)
-    if (!this.credentials || this.isManualDisconnect || this.disconnectReason === 'conflict') {
+    // - Never connected successfully (initial connection failure - let user see error)
+    if (!this.credentials || this.isManualDisconnect || this.disconnectReason === 'conflict' || !this.hasEverConnected) {
       return
     }
 
