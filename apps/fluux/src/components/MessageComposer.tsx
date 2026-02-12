@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo, type ReactNode, type RefObject, forwardRef, useImperativeHandle } from 'react'
 import { useTranslation } from 'react-i18next'
+import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { Send, Smile, Paperclip, Reply, X, Pencil, Loader2, Image, FileText, Trash2 } from 'lucide-react'
 import { useClickOutside, useSlashCommands } from '@/hooks'
 import { EmojiPicker } from './EmojiPicker'
@@ -155,6 +156,7 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
   disabled = false,
   onEditLastMessage,
 }, ref) {
+  detectRenderLoop('MessageComposer')
   const { t } = useTranslation()
   // Internal state for uncontrolled mode
   const [internalText, setInternalText] = useState('')

@@ -396,6 +396,7 @@ export class Connection extends BaseModule {
         },
         (err) => {
           logError('Connection error:', err.message)
+          console.error(`[XMPP] Connection error: ${err.message}`)
           this.stores.connection.setError(err.message)
           this.stores.console.addEvent(`Connection error: ${err.message}`, 'error')
           // Emit SDK event for connection error
@@ -1132,6 +1133,7 @@ export class Connection extends BaseModule {
       if (message.includes('conflict')) {
         this.disconnectReason = 'conflict'
         this.stores.console.addEvent('Disconnected: Resource conflict (another client connected)', 'error')
+        console.error('[XMPP] Resource conflict: another client connected with the same account')
         this.stores.events.addSystemNotification(
           'resource-conflict',
           'Session Replaced',
@@ -1140,6 +1142,7 @@ export class Connection extends BaseModule {
       } else if (message.includes('not-authorized') || message.includes('auth')) {
         this.disconnectReason = 'auth-error'
         this.stores.console.addEvent('Disconnected: Authentication error', 'error')
+        console.error('[XMPP] Authentication failed: not-authorized')
       }
     })
 

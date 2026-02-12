@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
+import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { useClickOutside, useWindowDrag, useRouteSync } from '@/hooks'
 import { useModals } from '@/contexts'
 import {
@@ -75,6 +76,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCategory, onAdminCategoryChange, sidebarListRef, activeContactJid, onViewChange }: SidebarProps) {
+  detectRenderLoop('Sidebar')
   const { t } = useTranslation()
   // Get current view from URL
   const { sidebarView, settingsCategory, navigateToSettings } = useRouteSync()

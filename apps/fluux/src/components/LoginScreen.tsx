@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
+import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { useConnection } from '@fluux/sdk'
 import { Loader2, KeyRound, Eye, EyeOff, ChevronDown, ChevronRight } from 'lucide-react'
 import { saveSession } from '@/hooks/useSessionPersistence'
@@ -20,6 +21,7 @@ function isAuthError(error: string): boolean {
 }
 
 export function LoginScreen() {
+  detectRenderLoop('LoginScreen')
   const { t, i18n } = useTranslation()
   const { status, error, connect } = useConnection()
   const { dragRegionProps } = useWindowDrag()

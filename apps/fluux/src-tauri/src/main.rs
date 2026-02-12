@@ -517,7 +517,99 @@ mod macos {
     }
 }
 
+/// Forward a WebView console message to the terminal via tracing.
+/// Only produces output when a tracing subscriber is active (--verbose or RUST_LOG).
+#[tauri::command]
+fn log_to_terminal(level: String, message: String) {
+    match level.as_str() {
+        "error" => tracing::error!(target: "webview", "{}", message),
+        "warn" => tracing::warn!(target: "webview", "{}", message),
+        "debug" => tracing::debug!(target: "webview", "{}", message),
+        _ => tracing::info!(target: "webview", "{}", message),
+    }
+}
+
+/// Print startup diagnostics to stderr for debugging.
+fn print_startup_diagnostics() {
+    eprintln!("Fluux Messenger v{}", env!("CARGO_PKG_VERSION"));
+    eprintln!("Platform: {} / {}", std::env::consts::OS, std::env::consts::ARCH);
+
+    #[cfg(target_os = "linux")]
+    {
+        let gpu_enabled = std::env::var("FLUUX_ENABLE_GPU").is_ok();
+        let dmabuf_disabled = std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER")
+            .map(|v| v == "1")
+            .unwrap_or(false);
+        let compositing_disabled = std::env::var("WEBKIT_DISABLE_COMPOSITING_MODE")
+            .map(|v| v == "1")
+            .unwrap_or(false);
+
+        eprintln!("WebKitGTK GPU workarounds:");
+        eprintln!(
+            "  FLUUX_ENABLE_GPU: {}",
+            if gpu_enabled {
+                "set (GPU workarounds disabled)"
+            } else {
+                "not set"
+            }
+        );
+        eprintln!("  WEBKIT_DISABLE_DMABUF_RENDERER: {}", dmabuf_disabled);
+        eprintln!("  WEBKIT_DISABLE_COMPOSITING_MODE: {}", compositing_disabled);
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        eprintln!("GPU workarounds: N/A (not Linux)");
+    }
+
+    eprintln!("---");
+}
+
 fn main() {
+    // Parse CLI flags early, before tracing subscriber init
+    let args: Vec<String> = std::env::args().collect();
+    let verbose = args.iter().any(|arg| arg == "--verbose" || arg == "-v");
+    let clear_storage = args.iter().any(|arg| arg == "--clear-storage" || arg == "-c");
+
+    if args.iter().any(|arg| arg == "--help" || arg == "-h") {
+        eprintln!("Fluux Messenger v{}", env!("CARGO_PKG_VERSION"));
+        eprintln!();
+        eprintln!("Usage: fluux-messenger [OPTIONS]");
+        eprintln!();
+        eprintln!("Options:");
+        eprintln!("  -v, --verbose         Enable verbose logging to stderr");
+        eprintln!("  -c, --clear-storage   Clear local storage on startup");
+        eprintln!("  -h, --help            Show this help message");
+        eprintln!();
+        eprintln!("Environment variables:");
+        eprintln!("  RUST_LOG              Override log filter (e.g. RUST_LOG=debug)");
+        eprintln!("  FLUUX_ENABLE_GPU      Disable WebKitGTK GPU workarounds (Linux)");
+        std::process::exit(0);
+    }
+
+    // Initialize tracing subscriber when --verbose or RUST_LOG is set
+    if verbose || std::env::var("RUST_LOG").is_ok() {
+        use tracing_subscriber::EnvFilter;
+
+        let filter = if std::env::var("RUST_LOG").is_ok() {
+            // RUST_LOG takes precedence for fine-grained control
+            EnvFilter::from_default_env()
+        } else {
+            // Default verbose filter: info for app, debug for xmpp_proxy
+            EnvFilter::new("fluux=info,fluux::xmpp_proxy=debug,info")
+        };
+
+        tracing_subscriber::fmt()
+            .with_env_filter(filter)
+            .with_writer(std::io::stderr)
+            .init();
+    }
+
+    // Print startup diagnostics when verbose
+    if verbose {
+        print_startup_diagnostics();
+    }
+
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
@@ -538,11 +630,11 @@ fn main() {
             exit_app,
             fetch_url_metadata,
             start_xmpp_proxy,
-            stop_xmpp_proxy
+            stop_xmpp_proxy,
+            log_to_terminal
         ])
-        .setup(|app| {
-            // Check for --clear-storage CLI flag (useful for debugging connection issues)
-            let clear_storage = std::env::args().any(|arg| arg == "--clear-storage" || arg == "-c");
+        .setup(move |app| {
+            // Handle --clear-storage CLI flag (useful for debugging connection issues)
             if clear_storage {
                 println!("[CLI] --clear-storage flag detected, will clear local data on startup");
                 // Emit event to frontend after window is ready
@@ -552,6 +644,32 @@ fn main() {
                     std::thread::sleep(std::time::Duration::from_millis(500));
                     let _ = app_handle.emit("clear-storage-requested", ());
                 });
+            }
+
+            // Verbose: inject console-forwarding script into WebView
+            if verbose {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.eval(r#"
+                        (function() {
+                            var origLog = console.log;
+                            var origWarn = console.warn;
+                            var origError = console.error;
+                            var origDebug = console.debug;
+                            function forward(level, args) {
+                                try {
+                                    var msg = Array.prototype.slice.call(args).map(function(a) {
+                                        return typeof a === 'string' ? a : JSON.stringify(a);
+                                    }).join(' ');
+                                    window.__TAURI__.core.invoke('log_to_terminal', { level: level, message: msg });
+                                } catch(e) {}
+                            }
+                            console.log = function() { origLog.apply(console, arguments); forward('info', arguments); };
+                            console.warn = function() { origWarn.apply(console, arguments); forward('warn', arguments); };
+                            console.error = function() { origError.apply(console, arguments); forward('error', arguments); };
+                            console.debug = function() { origDebug.apply(console, arguments); forward('debug', arguments); };
+                        })();
+                    "#);
+                }
             }
 
             // Register xmpp: URI scheme for deep linking (RFC 5122)

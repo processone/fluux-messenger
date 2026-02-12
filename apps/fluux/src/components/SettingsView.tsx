@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next'
+import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { useWindowDrag } from '@/hooks'
 import { useRouteSync } from '@/hooks/useRouteSync'
 import {
@@ -24,6 +25,7 @@ interface SettingsViewProps {
  * The settings category list is now in the main Sidebar component.
  */
 export function SettingsView({ onBack }: SettingsViewProps) {
+  detectRenderLoop('SettingsView')
   const { t } = useTranslation()
   const { titleBarClass, dragRegionProps } = useWindowDrag()
   const { settingsCategory } = useRouteSync()
