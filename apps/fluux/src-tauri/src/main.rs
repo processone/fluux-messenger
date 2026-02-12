@@ -541,6 +541,19 @@ fn main() {
             stop_xmpp_proxy
         ])
         .setup(|app| {
+            // Check for --clear-storage CLI flag (useful for debugging connection issues)
+            let clear_storage = std::env::args().any(|arg| arg == "--clear-storage" || arg == "-c");
+            if clear_storage {
+                println!("[CLI] --clear-storage flag detected, will clear local data on startup");
+                // Emit event to frontend after window is ready
+                let app_handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    // Small delay to ensure frontend is ready
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                    let _ = app_handle.emit("clear-storage-requested", ());
+                });
+            }
+
             // Register xmpp: URI scheme for deep linking (RFC 5122)
             // This allows the app to open when users click xmpp: links
             #[cfg(desktop)]

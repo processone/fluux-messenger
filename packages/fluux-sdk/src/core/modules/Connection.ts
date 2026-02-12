@@ -1191,7 +1191,10 @@ export class Connection extends BaseModule {
       } else if (!this.hasEverConnected) {
         // Initial connection failed - don't auto-reconnect so user can see the error
         // This prevents the error message from disappearing immediately after login failure
+        this.stores.connection.setStatus('error')
         this.stores.console.addEvent('Initial connection failed (no auto-reconnect)', 'connection')
+        // Clear credentials so login form shows fresh
+        this.credentials = null
       } else {
         // Unexpected disconnect - attempt to reconnect
         this.stores.console.addEvent('Connection lost unexpectedly, will reconnect', 'connection')

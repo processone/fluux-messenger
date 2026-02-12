@@ -9,6 +9,7 @@ import { useSessionPersistence, getSession } from './hooks/useSessionPersistence
 import { useFullscreen } from './hooks/useFullscreen'
 import { useTauriCloseHandler } from './hooks/useTauriCloseHandler'
 import { useAutoUpdate } from './hooks'
+import { clearLocalData } from './utils/clearLocalData'
 
 // Tauri detection
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -42,6 +43,26 @@ function App() {
   const { status } = useConnection()
   useTauriCloseHandler()
   const update = useAutoUpdate({ autoCheck: true })
+
+  // Listen for --clear-storage CLI flag (Tauri only)
+  // This clears all local data on startup when the flag is passed
+  useEffect(() => {
+    if (!isTauri) return
+
+    let unlisten: (() => void) | undefined
+    import('@tauri-apps/api/event').then(({ listen }) => {
+      listen('clear-storage-requested', () => {
+        console.log('[CLI] Clearing local storage due to --clear-storage flag')
+        void clearLocalData()
+      }).then((fn) => {
+        unlisten = fn
+      })
+    })
+
+    return () => {
+      unlisten?.()
+    }
+  }, [])
 
   // Track if we've shown the update modal this session (don't show again after dismiss)
   const [showUpdateModal, setShowUpdateModal] = useState(false)
