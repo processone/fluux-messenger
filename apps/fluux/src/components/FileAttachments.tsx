@@ -71,7 +71,7 @@ export function ImageAttachment({ attachment, onLoad }: AttachmentProps) {
   if (isLoading) {
     return (
       <div
-        className="pt-2 rounded-lg bg-fluux-hover/60 border border-fluux-border flex items-center justify-center"
+        className="pt-2 rounded-lg bg-fluux-hover/60 flex items-center justify-center"
         style={{ aspectRatio, maxWidth: `${maxWidthPx}px`, maxHeight: '300px', minHeight: '100px' }}
       >
         <Loader2 className="w-6 h-6 text-fluux-muted animate-spin" />
@@ -83,7 +83,7 @@ export function ImageAttachment({ attachment, onLoad }: AttachmentProps) {
   if (error || !proxiedImageSrc || loadError) {
     return (
       <div
-        className="pt-2 rounded-lg bg-fluux-hover/60 border border-fluux-border flex flex-col items-center justify-center text-fluux-muted text-sm gap-2"
+        className="pt-2 rounded-lg bg-fluux-hover/60 flex flex-col items-center justify-center text-fluux-muted text-sm gap-2"
         style={{ aspectRatio, maxWidth: `${maxWidthPx}px`, maxHeight: '300px', minHeight: '100px' }}
       >
         <ImageOff className="w-8 h-8" />
@@ -97,7 +97,7 @@ export function ImageAttachment({ attachment, onLoad }: AttachmentProps) {
       href={attachment.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="block pt-2 rounded-lg overflow-hidden border border-fluux-border hover:opacity-90 transition-opacity"
+      className="block pt-2 rounded-lg overflow-hidden hover:opacity-90 transition-opacity"
       style={{ maxWidth: `${maxWidthPx}px` }}
       tabIndex={-1}
     >
