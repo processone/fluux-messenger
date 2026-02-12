@@ -16,8 +16,31 @@ env:
   RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Create or Update Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          body_path: RELEASE_NOTES.md
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build-macos:
     name: Build macOS (${{ matrix.arch }})
+    needs: create-release
     runs-on: macos-latest
     permissions:
       contents: write
@@ -96,6 +119,7 @@ jobs:
 
   build-windows:
     name: Build Windows
+    needs: create-release
     runs-on: windows-latest
     permissions:
       contents: write
@@ -180,6 +204,7 @@ jobs:
 
   build-linux:
     name: Build Linux (${{ matrix.arch }})
+    needs: create-release
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: write
@@ -354,6 +379,7 @@ jobs:
 
   build-linux-rpm:
     name: Build Linux RPM (${{ matrix.arch }})
+    needs: create-release
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: write
