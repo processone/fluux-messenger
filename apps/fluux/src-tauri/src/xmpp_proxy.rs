@@ -8,6 +8,7 @@ use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 use futures_util::{SinkExt, StreamExt};
+use quick_xml::errors::SyntaxError;
 use quick_xml::events::Event;
 use quick_xml::Reader;
 use tokio_rustls::rustls::pki_types::ServerName;
@@ -916,6 +917,11 @@ fn extract_stanza(buffer: &[u8]) -> Option<(String, Vec<u8>)> {
             }
             Ok(Event::Eof) => {
                 // Incomplete stanza - need more data from TCP
+                return None;
+            }
+            Err(quick_xml::Error::Syntax(SyntaxError::UnclosedTag)) => {
+                // Expected during TCP streaming: the buffer contains a
+                // partial stanza that will be completed by the next read.
                 return None;
             }
             Err(e) => {
