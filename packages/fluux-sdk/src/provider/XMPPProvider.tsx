@@ -135,10 +135,18 @@ export function XMPPProvider({
     clientRef.current = new XMPPClient(config)
   }
 
-  // Clean up client on unmount (handles store bindings + presence cleanup)
+  // Manage store bindings lifecycle in useEffect for React StrictMode support.
+  // StrictMode runs effects, then cleanup, then effects again. By setting up
+  // bindings here (not just in the constructor), the cycle works correctly:
+  // setup bindings → cleanup (destroy bindings) → setup bindings again.
+  // The constructor also calls setupBindings() for non-React usage.
   useEffect(() => {
+    const client = clientRef.current
+    if (!client) return
+    // Re-establish bindings (idempotent: destroy() clears previous ones first)
+    client.setupBindings()
     return () => {
-      clientRef.current?.destroy()
+      client.destroy()
     }
   }, [])
 

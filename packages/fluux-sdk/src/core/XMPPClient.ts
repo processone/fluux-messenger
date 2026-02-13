@@ -277,6 +277,13 @@ export class XMPPClient {
   private modulesInitialized = false
 
   /**
+   * Cleanup functions for all subscriptions and bindings.
+   * Torn down in destroy() and re-established by setupBindings().
+   * @internal
+   */
+  private cleanupFunctions: (() => void)[] = []
+
+  /**
    * Creates a new XMPPClient instance.
    *
    * The client automatically uses the SDK's global Zustand stores. For most use
@@ -332,10 +339,8 @@ export class XMPPClient {
       snapshot: persistedSnapshot,
     }).start()
 
-    // Subscribe to persist state changes to sessionStorage
-    this.presenceActor.subscribe(() => {
-      savePresenceSnapshot(this.presenceActor)
-    })
+    // Note: presence persistence subscription is set up in setupBindings()
+    // so it can be re-established after destroy() in React StrictMode.
 
     // Create presence options that read from the machine (single source of truth)
     const presenceOptions: DefaultStoreBindingsOptions = {
@@ -383,19 +388,41 @@ export class XMPPClient {
     // Initialize with default store bindings (using global Zustand stores)
     this.initializeModules(createDefaultStoreBindings(presenceOptions))
 
+    // Set up all bindings (presence sync, store bindings, side effects).
+    // Extracted to a method so XMPPProvider can call setupBindings/destroy
+    // in useEffect for proper React StrictMode support.
+    this.setupBindings()
+  }
+
+  /**
+   * Set up store bindings, presence sync, and side effects.
+   *
+   * This wires SDK events to Zustand store updates, sets up presence
+   * synchronization, and initializes store-based side effects.
+   *
+   * Can be called after {@link destroy} to re-establish bindings
+   * (used by XMPPProvider for React StrictMode compatibility).
+   */
+  setupBindings(): void {
+    // Clean up any existing bindings first (idempotent)
+    for (const cleanup of this.cleanupFunctions) {
+      try { cleanup() } catch { /* ignore */ }
+    }
+    this.cleanupFunctions = []
+
+    // Subscribe to persist presence state changes to sessionStorage
+    const presencePersistSubscription = this.presenceActor.subscribe(() => {
+      savePresenceSnapshot(this.presenceActor)
+    })
+    this.cleanupFunctions.push(() => presencePersistSubscription.unsubscribe())
+
     // Set up presence sync (machine state -> XMPP presence)
-    // The subscription is permanent for the lifetime of the client.
-    // We don't store the unsubscribe function because in React StrictMode,
-    // destroy() is called between mount cycles but the client persists.
-    this.setupPresenceSync(this.presenceActor)
+    const unsubscribePresenceSync = this.setupPresenceSync(this.presenceActor)
+    this.cleanupFunctions.push(unsubscribePresenceSync)
 
     // Set up SDK event -> Zustand store bindings
     // This wires SDK events (e.g., 'chat:message') to store updates (e.g., chatStore.addMessage)
-    // Note: We don't store the unsubscribe function because:
-    // 1. Bindings are permanent for the lifetime of the client
-    // 2. In React StrictMode, destroy() is called between mount cycles but the client persists
-    // 3. Bindings are garbage collected when the client is
-    createStoreBindings(this, () => ({
+    const unsubscribeStoreBindings = createStoreBindings(this, () => ({
       connection: connectionStore.getState(),
       chat: chatStore.getState(),
       roster: rosterStore.getState(),
@@ -405,13 +432,11 @@ export class XMPPClient {
       blocking: blockingStore.getState(),
       console: consoleStore.getState(),
     }))
+    this.cleanupFunctions.push(unsubscribeStoreBindings)
 
     // Set up store-based side effects (activeConversation -> load cache, MAM fetch)
-    // Note: Like store bindings, we don't store the unsubscribe function because:
-    // 1. Side effects are permanent for the lifetime of the client
-    // 2. In React StrictMode, destroy() is called between mount cycles but the client persists
-    // 3. Subscriptions are garbage collected when the client is
-    setupStoreSideEffects(this)
+    const unsubscribeSideEffects = setupStoreSideEffects(this)
+    this.cleanupFunctions.push(unsubscribeSideEffects)
   }
 
   /**
@@ -886,21 +911,15 @@ export class XMPPClient {
    * ```
    */
   destroy(): void {
-    // NOTE: We intentionally do NOT clean up store bindings, presence sync,
-    // or the presence actor here.
-    //
-    // All of these are created once in the constructor and persist for the
-    // lifetime of the client. In React StrictMode, useEffect cleanup runs
-    // between mount cycles, but the client ref persists. If we cleaned up
-    // these resources here, they couldn't be recreated without making a new
-    // client, which would break presence state.
-    //
-    // Specifically:
-    // - Store bindings wire SDK events to Zustand stores
-    // - Presence sync subscription sends XMPP presence on machine state changes
-    // - Presence actor manages presence state machine
-    //
-    // All resources will be garbage collected when the client itself is.
+    // Clean up all subscriptions (store bindings, side effects, presence sync,
+    // presence persistence) to prevent memory leaks
+    for (const cleanup of this.cleanupFunctions) {
+      try { cleanup() } catch { /* ignore */ }
+    }
+    this.cleanupFunctions = []
+
+    // Clean up MUC pending joins to prevent orphaned timeouts
+    this.muc?.cleanup()
   }
 
   /**

@@ -182,11 +182,19 @@ export function setupChatSideEffects(
     { fireImmediately: false }
   )
 
-  // Subscribe to connection status changes (for reconnection catch-up)
+  // Subscribe to connection status changes (for reconnection catch-up and cleanup)
   // Note: connectionStore doesn't use subscribeWithSelector, so we track previous status manually
   let previousStatus = connectionStore.getState().status
   const unsubscribeConnection = connectionStore.subscribe((state) => {
     const status = state.status
+
+    // When going offline, clear typing states to prevent stale indicators
+    // and orphaned typing timeout timers
+    if (status !== 'online' && previousStatus === 'online') {
+      if (debug) console.log('[SideEffects] Chat: Going offline, clearing typing states')
+      chatStore.getState().clearAllTyping()
+    }
+
     // When we come back online after being disconnected
     if (status === 'online' && previousStatus !== 'online') {
       const activeConversationId = chatStore.getState().activeConversationId

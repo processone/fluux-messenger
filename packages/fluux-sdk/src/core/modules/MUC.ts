@@ -271,6 +271,20 @@ export class MUC extends BaseModule {
   }
 
   /**
+   * Clean up all pending operations.
+   * Called when the client is destroyed or connection is lost to prevent
+   * memory leaks from orphaned timeouts.
+   */
+  cleanup(): void {
+    // Clear all pending join timeouts
+    for (const pending of this.pendingJoins.values()) {
+      clearTimeout(pending.timeoutId)
+    }
+    this.pendingJoins.clear()
+    this.pendingOccupants.clear()
+  }
+
+  /**
    * Flush buffered occupants for a room in a single batch update.
    * This reduces store updates from ~N to 1 for large rooms during join.
    */
