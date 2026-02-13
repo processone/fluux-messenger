@@ -158,11 +158,18 @@ export function useWakeDetector() {
     // Dynamic import to avoid loading Tauri APIs in web mode
     void import('@tauri-apps/api/event').then(({ listen }) => {
       void listen('xmpp-keepalive', () => {
+        // Use shared coordinator to prevent concurrent wake handling
+        // (matches the pattern used by time-gap and visibility handlers)
+        if (!tryAcquireWakeLock('useWakeDetector:keepalive')) return
         // Signal SDK to verify connection
-        notifySystemState('visible').catch((err) => {
-          // Ignore errors - socket may be dead and reconnect will handle it
-          console.debug('[WakeDetector] Error on keepalive notification:', err)
-        })
+        notifySystemState('visible')
+          .catch((err) => {
+            // Ignore errors - socket may be dead and reconnect will handle it
+            console.debug('[WakeDetector] Error on keepalive notification:', err)
+          })
+          .finally(() => {
+            releaseWakeLock()
+          })
       }).then((fn) => {
         // If cleanup already ran, unlisten immediately
         if (cleanedUp) {

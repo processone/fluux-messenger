@@ -219,6 +219,10 @@ pub struct ProxyStartResult {
     pub url: String,
     /// Connection method used: "tls" for direct TLS, "starttls" for STARTTLS upgrade
     pub connection_method: String,
+    /// Resolved endpoint URI for reuse on reconnect (e.g., "tls://chat.example.com:5223").
+    /// Passing this back to startProxy() on reconnect avoids SRV re-resolution,
+    /// which may yield different results after DNS cache flush (e.g., after system sleep).
+    pub resolved_endpoint: String,
 }
 
 /// XMPP WebSocket-to-TCP proxy state
@@ -275,6 +279,12 @@ impl XmppProxy {
             ConnectionMode::Tcp => "starttls".to_string(),
         };
 
+        // Build resolved endpoint URI for reuse on reconnect (skips SRV re-resolution)
+        let resolved_endpoint = match endpoint.mode {
+            ConnectionMode::DirectTls => format!("tls://{}:{}", endpoint.host, endpoint.port),
+            ConnectionMode::Tcp => format!("tcp://{}:{}", endpoint.host, endpoint.port),
+        };
+
         // Bind to localhost on a random port
         let listener = TcpListener::bind("127.0.0.1:0")
             .await
@@ -324,6 +334,7 @@ impl XmppProxy {
         Ok(ProxyStartResult {
             url: format!("ws://127.0.0.1:{}", local_addr.port()),
             connection_method,
+            resolved_endpoint,
         })
     }
 

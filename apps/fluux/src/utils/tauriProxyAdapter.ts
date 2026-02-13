@@ -10,13 +10,14 @@ import type { ProxyAdapter, ConnectionMethod } from '@fluux/sdk'
 export const tauriProxyAdapter: ProxyAdapter = {
   async startProxy(server: string) {
     const { invoke } = await import('@tauri-apps/api/core')
-    const result = await invoke<{ url: string; connection_method: string }>(
+    const result = await invoke<{ url: string; connection_method: string; resolved_endpoint: string }>(
       'start_xmpp_proxy',
       { server },
     )
     return {
       url: result.url,
       connectionMethod: result.connection_method as ConnectionMethod,
+      resolvedEndpoint: result.resolved_endpoint,
     }
   },
 

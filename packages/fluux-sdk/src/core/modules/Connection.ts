@@ -86,6 +86,10 @@ export class Connection extends BaseModule {
   // Needed to restart the proxy on reconnect — credentials.server holds the resolved local WS URL
   private originalServer: string = ''
 
+  // Resolved endpoint from proxy (e.g. "tls://chat.example.com:5223")
+  // Used on reconnect to skip SRV resolution which may return different results after DNS cache flush
+  private resolvedEndpoint: string | null = null
+
   // Track SM resume state to properly handle 'fail' events
   // Stanzas in queue BEFORE resume should report as lost
   // Stanzas sent AFTER resume are normal sends that failed for other reasons
@@ -346,6 +350,7 @@ export class Connection extends BaseModule {
 
         resolvedServer = proxyResult.url
         connectionMethod = proxyResult.connectionMethod
+        this.resolvedEndpoint = proxyResult.resolvedEndpoint ?? null
         this.stores.console.addEvent(`Proxy started: ${server || getDomain(jid)} via ${proxyResult.url} (${connectionMethod})`, 'connection')
       } catch (err) {
         // If proxy fails to start, fall back to WebSocket connection
@@ -444,6 +449,7 @@ export class Connection extends BaseModule {
       this.xmpp = null
       this.credentials = null
       this.originalServer = ''
+      this.resolvedEndpoint = null
       // Set status and log BEFORE stop() to prevent race with session persistence
       this.stores.connection.setStatus('disconnected')
       this.stores.connection.setJid(null)
@@ -1398,17 +1404,46 @@ export class Connection extends BaseModule {
         try {
           // Stop the old proxy first (if still running)
           try { await this.deps.proxyAdapter.stopProxy() } catch { /* may not be running */ }
-          // Start a fresh proxy with the original server string
-          const proxyResult = await this.deps.proxyAdapter.startProxy(this.originalServer)
+          // Prefer cached resolved endpoint to skip SRV re-resolution
+          // (SRV may return different results after DNS cache flush, e.g. after system sleep)
+          const proxyServer = this.resolvedEndpoint || this.originalServer
+          const proxyResult = await this.deps.proxyAdapter.startProxy(proxyServer)
           this.credentials.server = proxyResult.url
           this.stores.connection.setConnectionMethod(proxyResult.connectionMethod)
-          this.stores.console.addEvent(`Proxy restarted for reconnect: ${proxyResult.url} (${proxyResult.connectionMethod})`, 'connection')
+          this.resolvedEndpoint = proxyResult.resolvedEndpoint ?? null
+          this.stores.console.addEvent(
+            `Proxy restarted for reconnect: ${proxyResult.url} (${proxyResult.connectionMethod}) [endpoint: ${proxyServer}]`,
+            'connection'
+          )
         } catch (err) {
           const errorMsg = err instanceof Error ? err.message : String(err)
-          this.stores.console.addEvent(`Failed to restart proxy on reconnect: ${errorMsg}`, 'error')
-          // Fall back to WebSocket — update credentials.server so createXmppClient uses it
-          this.credentials.server = `wss://${getDomain(this.credentials.jid)}/ws`
-          this.stores.connection.setConnectionMethod('websocket')
+          // If reconnect with cached endpoint failed, retry with original server (fresh SRV)
+          if (this.resolvedEndpoint) {
+            this.stores.console.addEvent(
+              `Cached endpoint failed: ${errorMsg}, retrying with SRV resolution`,
+              'connection'
+            )
+            this.resolvedEndpoint = null
+            try {
+              const proxyResult = await this.deps.proxyAdapter.startProxy(this.originalServer)
+              this.credentials.server = proxyResult.url
+              this.stores.connection.setConnectionMethod(proxyResult.connectionMethod)
+              this.resolvedEndpoint = proxyResult.resolvedEndpoint ?? null
+              this.stores.console.addEvent(
+                `Proxy restarted via SRV fallback: ${proxyResult.url} (${proxyResult.connectionMethod})`,
+                'connection'
+              )
+            } catch (fallbackErr) {
+              const fallbackMsg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)
+              this.stores.console.addEvent(`Failed to restart proxy on reconnect: ${fallbackMsg}`, 'error')
+              this.credentials.server = `wss://${getDomain(this.credentials.jid)}/ws`
+              this.stores.connection.setConnectionMethod('websocket')
+            }
+          } else {
+            this.stores.console.addEvent(`Failed to restart proxy on reconnect: ${errorMsg}`, 'error')
+            this.credentials.server = `wss://${getDomain(this.credentials.jid)}/ws`
+            this.stores.connection.setConnectionMethod('websocket')
+          }
         }
       }
 

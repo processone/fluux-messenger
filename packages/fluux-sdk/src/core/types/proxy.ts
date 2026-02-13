@@ -19,6 +19,10 @@ export interface ProxyStartResult {
   url: string
   /** Connection method used: 'tls' for direct TLS, 'starttls' for STARTTLS upgrade */
   connectionMethod: ConnectionMethod
+  /** Resolved endpoint URI for reuse on reconnect (e.g., "tls://chat.example.com:5223").
+   *  Passing this to startProxy() on reconnect avoids SRV re-resolution
+   *  which may yield different results after DNS cache flush (e.g., after system sleep). */
+  resolvedEndpoint?: string
 }
 
 /**
