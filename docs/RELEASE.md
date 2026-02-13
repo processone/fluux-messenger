@@ -152,6 +152,53 @@ Check that:
 - Check that the release is published (not a draft)
 - The manifest URL in `tauri.conf.json` must match the release location
 
+## Beta / Pre-release
+
+Beta releases are published to GitHub but **do not trigger Tauri autoupdate** for existing users. This lets testers download and try new versions without pushing them to all users.
+
+### How it works
+
+1. Tags containing `-alpha.`, `-beta.`, or `-rc.` (e.g. `v0.14.0-beta.1`) are detected as prereleases
+2. The GitHub Release is marked as **prerelease**, so it doesn't appear under `/releases/latest/`
+3. The `latest.json` updater manifest is **not generated**, so the Tauri autoupdater never sees it
+4. All platform binaries are still built, signed, and uploaded normally
+
+### Beta release steps
+
+```bash
+# 1. Add changelog entry in changelog.ts with the beta version
+#    version: '0.14.0-beta.1'
+
+# 2. Run the prepare script with the beta version
+npm run release:prepare 0.14.0-beta.1
+
+# 3. Commit and tag
+git add -A
+git commit -m "chore: release v0.14.0-beta.1"
+git tag -a v0.14.0-beta.1 -m "Release v0.14.0-beta.1"
+
+# 4. Push
+git push origin main && git push origin v0.14.0-beta.1
+```
+
+The release workflow detects the `-beta.` suffix and automatically:
+- Creates the GitHub Release with the **prerelease** flag
+- Builds and uploads all platform binaries
+- **Skips** `latest.json` generation (no autoupdate prompt)
+
+Testers can download the beta from the GitHub Releases page directly.
+
+### Promoting a beta to stable
+
+When the beta is ready for general release, create a new stable release with the final version number:
+
+```bash
+npm run release:prepare 0.14.0
+# commit, tag, push as usual
+```
+
+This creates a normal release with `latest.json`, and all users will be prompted to update.
+
 ## Version Numbering
 
 We follow [Semantic Versioning](https://semver.org/):

@@ -126,9 +126,12 @@ async function downloadAsset(url) {
 }
 
 async function main() {
-  const tag = process.argv[2];
+  const args = process.argv.slice(2);
+  const tag = args.find(a => !a.startsWith('--'));
+  const skipUpdater = args.includes('--skip-updater');
+
   if (!tag) {
-    console.error('Usage: node rename-release-assets.js <tag>');
+    console.error('Usage: node rename-release-assets.js <tag> [--skip-updater]');
     process.exit(1);
   }
 
@@ -175,6 +178,13 @@ async function main() {
 
   // Generate complete latest.json from scratch using .sig files
   // This ensures all platforms are included regardless of which build finished first
+  // Skipped for prereleases to prevent Tauri autoupdater from proposing beta versions
+  if (skipUpdater) {
+    console.log('\nSkipping latest.json generation (prerelease)');
+    console.log('\nDone! Assets renamed successfully.');
+    return;
+  }
+
   console.log('\nGenerating latest.json...');
 
   // Re-fetch release to get renamed assets
