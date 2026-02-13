@@ -5,18 +5,21 @@
  * Handles result collection, pagination, and applying modifications (retractions,
  * corrections, fastenings, reactions) to archived messages.
  *
- * ## Lazy Loading Strategy
+ * ## Loading Strategy
  *
- * MAM queries are **lazy** - they only run when needed, not on connect:
+ * MAM queries follow a hybrid lazy + background approach:
  *
- * 1. **On conversation open**: Side effects trigger a MAM query with `start` filter
- *    to fetch messages newer than the most recent cached message.
- * 2. **On scroll up**: `fetchOlderHistory()` queries MAM with `before` cursor for
+ * 1. **On connect (fast)**: Preview refresh fetches the latest message for each
+ *    conversation to update sidebar previews (max=5, concurrency=3).
+ * 2. **On connect (slow)**: Background catch-up populates full message history
+ *    for all conversations and rooms (max=100, concurrency=2).
+ * 3. **On conversation open**: Side effects trigger a MAM query with `start` filter
+ *    to fetch any remaining messages newer than the most recent cached message.
+ * 4. **On scroll up**: `fetchOlderHistory()` queries MAM with `before` cursor for
  *    older messages (pagination).
- * 3. **On reconnect**: Only the active conversation catches up; others wait until opened.
  *
- * This approach minimizes connection time and bandwidth by avoiding bulk queries
- * for all conversations upfront.
+ * This approach balances fast connection time with having messages ready when
+ * the user opens any conversation.
  *
  * @module MAM
  * @category Modules
@@ -528,6 +531,116 @@ export class MAM extends BaseModule {
     await executeWithConcurrency(
       conversationIds,
       (conversationId) => this.fetchPreviewForConversation(conversationId, { unarchiveIfNewer: true }),
+      concurrency
+    )
+  }
+
+  /**
+   * Background catch-up for all non-archived conversations.
+   *
+   * After being offline, this fetches the full message history (not just previews)
+   * for all conversations so messages are ready when the user opens them.
+   *
+   * Uses forward queries from the newest cached message, matching the proven
+   * pattern from sideEffects' lazy MAM loading. Runs with low concurrency
+   * to avoid overwhelming the server.
+   *
+   * @param options - Optional configuration
+   * @param options.concurrency - Maximum parallel requests (default: 2)
+   */
+  async catchUpAllConversations(options: { concurrency?: number } = {}): Promise<void> {
+    const { concurrency = 2 } = options
+    const conversations = this.deps.stores?.chat.getAllConversations() || []
+    if (conversations.length === 0) return
+
+    this.deps.emitSDK('console:event', {
+      message: `Background catch-up for ${conversations.length} conversation(s)`,
+      category: 'sm',
+    })
+
+    await executeWithConcurrency(
+      conversations,
+      async (conv) => {
+        try {
+          const messages = conv.messages || []
+          const newestCachedMessage = messages[messages.length - 1]
+
+          if (newestCachedMessage?.timestamp) {
+            // Forward query from newest cached message
+            const startTime = new Date(newestCachedMessage.timestamp.getTime() + 1)
+            await this.queryArchive({
+              with: conv.id,
+              start: startTime.toISOString(),
+              max: 100,
+            })
+          } else {
+            // No cached messages — fetch latest
+            await this.queryArchive({
+              with: conv.id,
+              before: '',
+              max: 50,
+            })
+          }
+        } catch (_error) {
+          // Silently ignore — individual failures shouldn't affect others
+        }
+      },
+      concurrency
+    )
+  }
+
+  /**
+   * Background catch-up for all joined MAM-enabled rooms.
+   *
+   * After being offline, this fetches the full message history for all rooms
+   * so messages are ready when the user opens them.
+   *
+   * Only processes rooms that are joined, support MAM, and are not Quick Chat rooms.
+   * Uses forward queries for efficiency.
+   *
+   * @param options - Optional configuration
+   * @param options.concurrency - Maximum parallel requests (default: 2)
+   */
+  async catchUpAllRooms(options: { concurrency?: number } = {}): Promise<void> {
+    const { concurrency = 2 } = options
+    const joinedRooms = this.deps.stores?.room.joinedRooms() || []
+
+    // Filter for MAM-enabled, non-Quick Chat rooms
+    const mamRooms = joinedRooms.filter((r) => r.supportsMAM && !r.isQuickChat)
+    if (mamRooms.length === 0) return
+
+    this.deps.emitSDK('console:event', {
+      message: `Background catch-up for ${mamRooms.length} room(s)`,
+      category: 'sm',
+    })
+
+    await executeWithConcurrency(
+      mamRooms,
+      async (room) => {
+        try {
+          const messages = room.messages || []
+          const newestCachedMessage = messages[messages.length - 1]
+
+          if (newestCachedMessage?.timestamp) {
+            // Forward query from newest cached message
+            const startTime = new Date(newestCachedMessage.timestamp.getTime() + 1)
+            await this.queryRoomArchive({
+              roomJid: room.jid,
+              start: startTime.toISOString(),
+              max: 100,
+            })
+          } else {
+            // No cached messages — fetch latest
+            await this.queryRoomArchive({
+              roomJid: room.jid,
+              before: '',
+              max: 50,
+            })
+          }
+        } catch (_error) {
+          // Silently ignore — individual failures shouldn't affect others
+        }
+      },
       concurrency
     )
   }

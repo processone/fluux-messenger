@@ -77,6 +77,8 @@ function createMockClient(): XMPPClient {
     mam: {
       refreshConversationPreviews: vi.fn().mockResolvedValue(undefined),
       refreshArchivedConversationPreviews: vi.fn().mockResolvedValue(undefined),
+      catchUpAllConversations: vi.fn().mockResolvedValue(undefined),
+      catchUpAllRooms: vi.fn().mockResolvedValue(undefined),
     },
   } as unknown as XMPPClient
 }
@@ -676,6 +678,136 @@ describe('sideEffects', () => {
 
         await vi.waitFor(() => {
           expect(mockClient.mam.refreshArchivedConversationPreviews).toHaveBeenCalledTimes(1)
+        })
+      })
+    })
+
+    describe('background catch-up on connect', () => {
+      beforeEach(() => {
+        vi.useFakeTimers()
+      })
+
+      afterEach(() => {
+        vi.useRealTimers()
+      })
+
+      it('should trigger catchUpAllConversations after preview refresh completes', async () => {
+        // Make refreshConversationPreviews resolve so the .then() chain runs
+        ;(mockClient.mam.refreshConversationPreviews as ReturnType<typeof vi.fn>).mockResolvedValue(undefined)
+
+        // Set up serverInfo with MAM support
+        connectionStore.getState().setServerInfo({
+          identities: [],
+          domain: 'example.com',
+          features: [NS_MAM],
+        })
+
+        connectionStore.getState().setStatus('disconnected')
+        cleanup = setupPreviewRefreshSideEffects(mockClient)
+
+        // Go online
+        connectionStore.getState().setStatus('online')
+
+        // Wait for the chained catch-up to trigger
+        await vi.waitFor(() => {
+          expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
+        })
+
+        // Verify it was called with concurrency: 2
+        expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledWith({ concurrency: 2 })
+      })
+
+      it('should trigger catchUpAllRooms after a delay', async () => {
+        // Set up serverInfo with MAM support
+        connectionStore.getState().setServerInfo({
+          identities: [],
+          domain: 'example.com',
+          features: [NS_MAM],
+        })
+
+        connectionStore.getState().setStatus('disconnected')
+        cleanup = setupPreviewRefreshSideEffects(mockClient)
+
+        // Go online
+        connectionStore.getState().setStatus('online')
+
+        // Advance a small amount — room catch-up should NOT be triggered yet
+        await vi.advanceTimersByTimeAsync(1_000)
+        expect(mockClient.mam.catchUpAllRooms).not.toHaveBeenCalled()
+
+        // Advance past the 10-second delay
+        await vi.advanceTimersByTimeAsync(10_000)
+
+        // Room catch-up should now be triggered
+        expect(mockClient.mam.catchUpAllRooms).toHaveBeenCalledTimes(1)
+
+        // Verify it was called with concurrency: 2
+        expect(mockClient.mam.catchUpAllRooms).toHaveBeenCalledWith({ concurrency: 2 })
+      })
+
+      it('should cancel room catch-up timer on disconnect', async () => {
+        // Set up serverInfo with MAM support
+        connectionStore.getState().setServerInfo({
+          identities: [],
+          domain: 'example.com',
+          features: [NS_MAM],
+        })
+
+        connectionStore.getState().setStatus('disconnected')
+        cleanup = setupPreviewRefreshSideEffects(mockClient)
+
+        // Go online (starts the 10s timer)
+        connectionStore.getState().setStatus('online')
+
+        // Disconnect before timer fires (after 5s)
+        await vi.advanceTimersByTimeAsync(5_000)
+        connectionStore.getState().setStatus('disconnected')
+
+        // Advance past the original timer
+        await vi.advanceTimersByTimeAsync(10_000)
+
+        // Room catch-up should NOT have been triggered
+        expect(mockClient.mam.catchUpAllRooms).not.toHaveBeenCalled()
+      })
+
+      it('should re-trigger catch-up on reconnect', async () => {
+        ;(mockClient.mam.refreshConversationPreviews as ReturnType<typeof vi.fn>).mockResolvedValue(undefined)
+
+        // Set up serverInfo with MAM support
+        connectionStore.getState().setServerInfo({
+          identities: [],
+          domain: 'example.com',
+          features: [NS_MAM],
+        })
+
+        connectionStore.getState().setStatus('disconnected')
+        cleanup = setupPreviewRefreshSideEffects(mockClient)
+
+        // First connect
+        connectionStore.getState().setStatus('online')
+        await vi.waitFor(() => {
+          expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
+        })
+
+        // Advance past room timer
+        await vi.advanceTimersByTimeAsync(10_000)
+        await vi.waitFor(() => {
+          expect(mockClient.mam.catchUpAllRooms).toHaveBeenCalledTimes(1)
+        })
+
+        // Disconnect
+        connectionStore.getState().setStatus('disconnected')
+
+        // Reconnect
+        connectionStore.getState().setStatus('online')
+        await vi.waitFor(() => {
+          expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(2)
+        })
+
+        // Advance past room timer again
+        await vi.advanceTimersByTimeAsync(10_000)
+        await vi.waitFor(() => {
+          expect(mockClient.mam.catchUpAllRooms).toHaveBeenCalledTimes(2)
         })
       })
     })
