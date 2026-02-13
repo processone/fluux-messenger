@@ -14,6 +14,42 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '0.13.1',
+    date: '2026-02-13',
+    sections: [
+      {
+        type: 'added',
+        items: [
+          'Enhanced logging and diagnostics for connection troubleshooting',
+          'Tracing for keychain, idle detection, link preview, and startup operations',
+        ],
+      },
+      {
+        type: 'changed',
+        items: [
+          'Improved XMPP proxy robustness and TCP streaming error handling',
+          'Streamlined avatar restoration logic',
+        ],
+      },
+      {
+        type: 'fixed',
+        items: [
+          'Memory and CPU leaks on connection loss',
+          'SRV flip and double-connect on reconnect after sleep',
+          'Background MAM catchup after reconnection',
+          'New message marker rewinding to earlier position',
+          'Room sorting after connection',
+          'Occupant avatar negative cache handling',
+          'Stuck tooltips on rapid hover',
+          'Room members sidebar state lost across view switches',
+          'HTTP upload discovery on server domain',
+          'Pointer cursor missing on interactive buttons',
+          'Windows code signing',
+        ],
+      },
+    ],
+  },
+  {
     version: '0.13.0',
     date: '2026-02-12',
     sections: [
