@@ -404,7 +404,10 @@ describe('roomStore', () => {
       expect(room?.notifyAllPersistent).toBe(true)
     })
 
-    it('should set lastInteractedAt to last message timestamp when joining', () => {
+    it('should NOT set lastInteractedAt when joining room with messages', () => {
+      // MUC history arrives before the join confirmation, so room.messages may
+      // already have content. But these are history messages, not user interaction.
+      // Only setActiveRoom (user clicking) should set lastInteractedAt.
       const messageTime = new Date(Date.now() - 30 * 60 * 1000) // 30 minutes ago
 
       roomStore.getState().addRoom(createRoom('test@conference.example.com', {
@@ -426,13 +429,12 @@ describe('roomStore', () => {
       const room = roomStore.getState().rooms.get('test@conference.example.com')
       const meta = roomStore.getState().roomMeta.get('test@conference.example.com')
 
-      expect(room?.lastInteractedAt?.getTime()).toBe(messageTime.getTime())
-      expect(meta?.lastInteractedAt?.getTime()).toBe(messageTime.getTime())
+      // lastInteractedAt should remain undefined - sorting falls back to lastMessage.timestamp
+      expect(room?.lastInteractedAt).toBeUndefined()
+      expect(meta?.lastInteractedAt).toBeUndefined()
     })
 
     it('should NOT set lastInteractedAt when joining room with no messages', () => {
-      // When joining with no messages (e.g., autojoin before MAM loads),
-      // lastInteractedAt should remain undefined so sorting falls back to lastMessage.timestamp
       roomStore.getState().addRoom(createRoom('test@conference.example.com', {
         joined: false,
         messages: [],
@@ -442,11 +444,10 @@ describe('roomStore', () => {
 
       const room = roomStore.getState().rooms.get('test@conference.example.com')
 
-      // Should be undefined, not "now" - this allows sorting by lastMessage after MAM loads
       expect(room?.lastInteractedAt).toBeUndefined()
     })
 
-    it('should preserve lastInteractedAt when leaving room', () => {
+    it('should preserve existing lastInteractedAt when joining or leaving', () => {
       const interactionTime = new Date(Date.now() - 60 * 60 * 1000) // 1 hour ago
 
       roomStore.getState().addRoom(createRoom('test@conference.example.com', {
@@ -454,9 +455,14 @@ describe('roomStore', () => {
         lastInteractedAt: interactionTime,
       }))
 
+      // Leave
       roomStore.getState().setRoomJoined('test@conference.example.com', false)
+      let room = roomStore.getState().rooms.get('test@conference.example.com')
+      expect(room?.lastInteractedAt?.getTime()).toBe(interactionTime.getTime())
 
-      const room = roomStore.getState().rooms.get('test@conference.example.com')
+      // Rejoin
+      roomStore.getState().setRoomJoined('test@conference.example.com', true)
+      room = roomStore.getState().rooms.get('test@conference.example.com')
       expect(room?.lastInteractedAt?.getTime()).toBe(interactionTime.getTime())
     })
   })
