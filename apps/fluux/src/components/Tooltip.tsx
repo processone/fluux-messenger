@@ -64,6 +64,10 @@ export function Tooltip({
 
   const showTooltip = () => {
     if (effectiveDisabled) return
+    // Clear any existing timeout to prevent orphaned timeouts from firing
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+    }
     timeoutRef.current = setTimeout(() => {
       setIsVisible(true)
     }, delay)
