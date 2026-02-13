@@ -277,8 +277,8 @@ export class XMPPClient {
   private modulesInitialized = false
 
   /**
-   * Cleanup functions for store subscriptions.
-   * Called in destroy() to prevent memory leaks.
+   * Cleanup functions for all subscriptions and bindings.
+   * Torn down in destroy() and re-established by setupBindings().
    * @internal
    */
   private cleanupFunctions: (() => void)[] = []
@@ -339,11 +339,8 @@ export class XMPPClient {
       snapshot: persistedSnapshot,
     }).start()
 
-    // Subscribe to persist state changes to sessionStorage
-    const presencePersistSubscription = this.presenceActor.subscribe(() => {
-      savePresenceSnapshot(this.presenceActor)
-    })
-    this.cleanupFunctions.push(() => presencePersistSubscription.unsubscribe())
+    // Note: presence persistence subscription is set up in setupBindings()
+    // so it can be re-established after destroy() in React StrictMode.
 
     // Create presence options that read from the machine (single source of truth)
     const presenceOptions: DefaultStoreBindingsOptions = {
@@ -390,6 +387,34 @@ export class XMPPClient {
 
     // Initialize with default store bindings (using global Zustand stores)
     this.initializeModules(createDefaultStoreBindings(presenceOptions))
+
+    // Set up all bindings (presence sync, store bindings, side effects).
+    // Extracted to a method so XMPPProvider can call setupBindings/destroy
+    // in useEffect for proper React StrictMode support.
+    this.setupBindings()
+  }
+
+  /**
+   * Set up store bindings, presence sync, and side effects.
+   *
+   * This wires SDK events to Zustand store updates, sets up presence
+   * synchronization, and initializes store-based side effects.
+   *
+   * Can be called after {@link destroy} to re-establish bindings
+   * (used by XMPPProvider for React StrictMode compatibility).
+   */
+  setupBindings(): void {
+    // Clean up any existing bindings first (idempotent)
+    for (const cleanup of this.cleanupFunctions) {
+      try { cleanup() } catch { /* ignore */ }
+    }
+    this.cleanupFunctions = []
+
+    // Subscribe to persist presence state changes to sessionStorage
+    const presencePersistSubscription = this.presenceActor.subscribe(() => {
+      savePresenceSnapshot(this.presenceActor)
+    })
+    this.cleanupFunctions.push(() => presencePersistSubscription.unsubscribe())
 
     // Set up presence sync (machine state -> XMPP presence)
     const unsubscribePresenceSync = this.setupPresenceSync(this.presenceActor)
@@ -886,14 +911,10 @@ export class XMPPClient {
    * ```
    */
   destroy(): void {
-    // Clean up all store subscriptions and side effects to prevent memory leaks.
-    // This is called when XMPPProvider unmounts or when the client is destroyed.
+    // Clean up all subscriptions (store bindings, side effects, presence sync,
+    // presence persistence) to prevent memory leaks
     for (const cleanup of this.cleanupFunctions) {
-      try {
-        cleanup()
-      } catch {
-        // Ignore cleanup errors
-      }
+      try { cleanup() } catch { /* ignore */ }
     }
     this.cleanupFunctions = []
 
