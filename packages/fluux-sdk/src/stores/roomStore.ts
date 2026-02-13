@@ -405,14 +405,11 @@ export const roomStore = createStore<RoomState>()(
       const existing = newRooms.get(roomJid)
       if (!existing) return state
 
-      // When joining, set lastInteractedAt to last message timestamp (if available)
-      // DON'T fall back to new Date() - that would make all autojoined rooms sort to top
-      // Instead, leave it undefined so sorting falls back to lastMessage.timestamp from MAM
-      const lastMessage = existing.messages?.[existing.messages.length - 1]
-      const newLastInteractedAt = joined
-        ? (lastMessage?.timestamp ?? existing.lastInteractedAt) // Keep existing or undefined
-        : existing.lastInteractedAt // Preserve on leave
-
+      // DON'T set lastInteractedAt on join - only setActiveRoom (user clicking) should set it.
+      // MUC history messages arrive before the join confirmation, so existing.messages may
+      // contain history whose timestamps don't reflect actual user interaction.
+      // Leaving lastInteractedAt undefined lets allRooms() fall back to lastMessage.timestamp
+      // (populated by MAM preview), which correctly reflects each room's latest activity.
       const updatedRoom = {
         ...existing,
         joined,
@@ -422,7 +419,6 @@ export const roomStore = createStore<RoomState>()(
         unreadCount: joined ? existing.unreadCount : 0,
         mentionsCount: joined ? existing.mentionsCount : 0,
         notifyAll: joined ? existing.notifyAll : undefined,
-        lastInteractedAt: newLastInteractedAt,
       }
       newRooms.set(roomJid, updatedRoom)
 
@@ -433,7 +429,7 @@ export const roomStore = createStore<RoomState>()(
         newEntities.set(roomJid, { ...existingEntity, joined, isJoining: false })
       }
 
-      // Update metadata (unreadCount, mentionsCount, notifyAll, lastInteractedAt)
+      // Update metadata (unreadCount, mentionsCount, notifyAll)
       const newMeta = new Map(state.roomMeta)
       const existingMeta = newMeta.get(roomJid)
       if (existingMeta) {
@@ -442,7 +438,6 @@ export const roomStore = createStore<RoomState>()(
           unreadCount: joined ? existingMeta.unreadCount : 0,
           mentionsCount: joined ? existingMeta.mentionsCount : 0,
           notifyAll: joined ? existingMeta.notifyAll : undefined,
-          lastInteractedAt: newLastInteractedAt,
         })
       }
 
