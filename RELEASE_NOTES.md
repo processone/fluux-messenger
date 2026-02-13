@@ -1,31 +1,28 @@
-## What's New in v0.13.0
+## What's New in v0.13.1
 
 ### Added
 
-- Native TCP connection support via WebSocket proxy (desktop)
-- Clipboard image paste support (Cmd+V / Ctrl+V)
-- Clear local data option on logout
-- Complete EU language coverage (26 languages)
-- Improved Linux packaging with native distro tools
+- Enhanced logging and diagnostics for connection troubleshooting
+- Tracing for keychain, idle detection, link preview, and startup operations
 
 ### Changed
 
-- Smarter MAM strategy for better message history loading
-- Dynamic locale loading for faster initial load
-- Centralized notification state with viewport observer
-- Windows tray behavior improvements
+- Improved XMPP proxy robustness and TCP streaming error handling
+- Streamlined avatar restoration logic
 
 ### Fixed
 
-- Attachment styling consistency across themes
-- Sidebar switching with Cmd+U
-- Scroll-to-bottom reliability on media load
-- "Copy Image" paste support (only tested with Safari)
-- New message marker position on conversation switch
-- Duplicate avatar fetches for unchanged hashes
-- macOS layout corruption after sleep
-- Markdown bold/strikethrough stripped from message previews
-- Context menu positioning within viewport bounds
+- Memory and CPU leaks on connection loss
+- SRV flip and double-connect on reconnect after sleep
+- Background MAM catchup after reconnection
+- New message marker rewinding to earlier position
+- Room sorting after connection
+- Occupant avatar negative cache handling
+- Stuck tooltips on rapid hover
+- Room members sidebar state lost across view switches
+- HTTP upload discovery on server domain
+- Pointer cursor missing on interactive buttons
+- Windows code signing
 
 ---
 [Full Changelog](https://github.com/processone/fluux-messenger/blob/main/CHANGELOG.md)

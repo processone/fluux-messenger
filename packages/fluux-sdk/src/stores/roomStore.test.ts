@@ -1079,7 +1079,7 @@ describe('roomStore', () => {
       expect(room?.unreadCount).toBe(1) // Only incremented once
     })
 
-    it('should set lastReadAt to epoch when undefined and inactive room gets first message', () => {
+    it('should leave lastReadAt undefined when inactive room gets first message', () => {
       roomStore.getState().addRoom(createRoom('test@conference.example.com'))
       // Room is inactive (activeRoomJid is not set)
 
@@ -1087,7 +1087,7 @@ describe('roomStore', () => {
       roomStore.getState().addMessage('test@conference.example.com', message)
 
       const room = roomStore.getState().rooms.get('test@conference.example.com')
-      expect(room?.lastReadAt).toEqual(new Date(0)) // Epoch - marker will show
+      expect(room?.lastReadAt).toBeUndefined() // Stays undefined; marker placed via unreadCount on activate
     })
 
     it('should preserve lastReadAt when inactive room gets new message', () => {

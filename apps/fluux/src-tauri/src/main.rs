@@ -795,7 +795,10 @@ fn main() {
 
             // Register xmpp: URI scheme for deep linking (RFC 5122)
             // This allows the app to open when users click xmpp: links
-            #[cfg(desktop)]
+            // On macOS, URI schemes are registered via Info.plist at build time
+            // (configured in tauri.conf.json), so runtime registration is only
+            // needed on Linux and Windows.
+            #[cfg(any(target_os = "linux", target_os = "windows"))]
             {
                 match app.deep_link().register("xmpp") {
                     Ok(_) => tracing::info!("Deep link: registered xmpp: URI scheme"),
