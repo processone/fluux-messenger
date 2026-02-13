@@ -568,8 +568,24 @@ fn print_startup_diagnostics() {
 fn main() {
     // Parse CLI flags early, before tracing subscriber init
     let args: Vec<String> = std::env::args().collect();
-    let verbose = args.iter().any(|arg| arg == "--verbose" || arg == "-v");
     let clear_storage = args.iter().any(|arg| arg == "--clear-storage" || arg == "-c");
+
+    // Parse verbose level: --verbose / -v (default, no XMPP packets) or --verbose=xmpp (with packets)
+    let verbose_level = args.iter().find_map(|arg| {
+        if arg == "--verbose" || arg == "-v" {
+            Some("default")
+        } else if arg.starts_with("--verbose=") {
+            Some(arg.strip_prefix("--verbose=").unwrap())
+        } else {
+            None
+        }
+    });
+    let verbose = verbose_level.is_some();
+
+    // Parse --log-file=<path> option
+    let log_file_path = args.iter().find_map(|arg| {
+        arg.strip_prefix("--log-file=").map(|s| s.to_string())
+    });
 
     if args.iter().any(|arg| arg == "--help" || arg == "-h") {
         eprintln!("Fluux Messenger v{}", env!("CARGO_PKG_VERSION"));
@@ -577,7 +593,9 @@ fn main() {
         eprintln!("Usage: fluux-messenger [OPTIONS]");
         eprintln!();
         eprintln!("Options:");
-        eprintln!("  -v, --verbose         Enable verbose logging to stderr");
+        eprintln!("  -v, --verbose         Enable verbose logging to stderr (no XMPP traffic)");
+        eprintln!("      --verbose=xmpp    Enable verbose logging including XMPP packet content");
+        eprintln!("      --log-file=PATH   Write log output to a file instead of stderr");
         eprintln!("  -c, --clear-storage   Clear local storage on startup");
         eprintln!("  -h, --help            Show this help message");
         eprintln!();
@@ -587,26 +605,57 @@ fn main() {
         std::process::exit(0);
     }
 
-    // Initialize tracing subscriber when --verbose or RUST_LOG is set
-    if verbose || std::env::var("RUST_LOG").is_ok() {
+    // Initialize tracing subscriber when --verbose, --log-file, or RUST_LOG is set
+    if verbose || log_file_path.is_some() || std::env::var("RUST_LOG").is_ok() {
         use tracing_subscriber::EnvFilter;
+
+        // --log-file implies at least default verbose level
+        let effective_verbose = verbose || log_file_path.is_some();
+        let effective_level = verbose_level.or(if log_file_path.is_some() { Some("default") } else { None });
 
         let filter = if std::env::var("RUST_LOG").is_ok() {
             // RUST_LOG takes precedence for fine-grained control
             EnvFilter::from_default_env()
-        } else {
-            // Default verbose filter: info for app, debug for xmpp_proxy
+        } else if effective_level == Some("xmpp") {
+            // --verbose=xmpp: include XMPP packet content (debug level on xmpp_proxy)
             EnvFilter::new("fluux=info,fluux::xmpp_proxy=debug,info")
+        } else if effective_verbose {
+            // --verbose: app logging without XMPP packet dumps (info level only)
+            EnvFilter::new("fluux=info,info")
+        } else {
+            EnvFilter::new("info")
         };
 
-        tracing_subscriber::fmt()
-            .with_env_filter(filter)
-            .with_writer(std::io::stderr)
-            .init();
+        if let Some(ref path) = log_file_path {
+            // Write logs to file
+            match std::fs::File::create(path) {
+                Ok(file) => {
+                    tracing_subscriber::fmt()
+                        .with_env_filter(filter)
+                        .with_writer(std::sync::Mutex::new(file))
+                        .with_ansi(false)
+                        .init();
+                    eprintln!("Logging to file: {}", path);
+                }
+                Err(e) => {
+                    eprintln!("Failed to open log file '{}': {}", path, e);
+                    eprintln!("Falling back to stderr");
+                    tracing_subscriber::fmt()
+                        .with_env_filter(filter)
+                        .with_writer(std::io::stderr)
+                        .init();
+                }
+            }
+        } else {
+            tracing_subscriber::fmt()
+                .with_env_filter(filter)
+                .with_writer(std::io::stderr)
+                .init();
+        }
     }
 
-    // Print startup diagnostics when verbose
-    if verbose {
+    // Print startup diagnostics when verbose or logging to file
+    if verbose || log_file_path.is_some() {
         print_startup_diagnostics();
     }
 
