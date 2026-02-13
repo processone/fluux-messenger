@@ -194,13 +194,26 @@ jobs:
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
 
+      - name: Re-sign Authenticode-signed binaries for Tauri updater
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          # After Azure Trusted Signing modifies the binaries (embeds Authenticode signature),
+          # the original .sig files are stale. Re-generate them against the signed binaries.
+          npx tauri signer sign apps/fluux/src-tauri/target/release/bundle/nsis/*.exe
+          npx tauri signer sign apps/fluux/src-tauri/target/release/bundle/msi/*.msi
+
       - name: Re-upload signed artifacts
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release upload ${{ env.RELEASE_TAG }} apps/fluux/src-tauri/target/release/bundle/nsis/*.exe --clobber
+          gh release upload ${{ env.RELEASE_TAG }} apps/fluux/src-tauri/target/release/bundle/nsis/*.exe.sig --clobber
           gh release upload ${{ env.RELEASE_TAG }} apps/fluux/src-tauri/target/release/bundle/msi/*.msi --clobber
+          gh release upload ${{ env.RELEASE_TAG }} apps/fluux/src-tauri/target/release/bundle/msi/*.msi.sig --clobber
 
   build-linux:
     name: Build Linux (${{ matrix.arch }})
