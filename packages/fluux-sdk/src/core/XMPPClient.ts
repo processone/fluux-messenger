@@ -340,10 +340,10 @@ export class XMPPClient {
     }).start()
 
     // Subscribe to persist state changes to sessionStorage
-    const unsubscribePresencePersist = this.presenceActor.subscribe(() => {
+    const presencePersistSubscription = this.presenceActor.subscribe(() => {
       savePresenceSnapshot(this.presenceActor)
     })
-    this.cleanupFunctions.push(unsubscribePresencePersist)
+    this.cleanupFunctions.push(() => presencePersistSubscription.unsubscribe())
 
     // Create presence options that read from the machine (single source of truth)
     const presenceOptions: DefaultStoreBindingsOptions = {
