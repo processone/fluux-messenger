@@ -1206,7 +1206,19 @@ export class Connection extends BaseModule {
       } else if (!this.hasEverConnected) {
         // Initial connection failed - don't auto-reconnect so user can see the error
         // This prevents the error message from disappearing immediately after login failure
-        const reason = context?.reason instanceof Error ? context.reason.message : String(context?.reason || '')
+        let reason = ''
+        const rawReason = context?.reason
+        if (rawReason instanceof Error) {
+          reason = rawReason.message
+        } else if (rawReason && typeof rawReason === 'object' && 'code' in rawReason) {
+          // WebSocket CloseEvent - extract code and reason string
+          const evt = rawReason as { code: number; reason?: string }
+          reason = evt.reason
+            ? `WebSocket closed (code: ${evt.code}, ${evt.reason})`
+            : `WebSocket closed (code: ${evt.code})`
+        } else if (rawReason) {
+          reason = String(rawReason)
+        }
         const errorMsg = reason
           ? `Connection failed: ${reason}`
           : 'Connection failed. Check your server address and try again.'

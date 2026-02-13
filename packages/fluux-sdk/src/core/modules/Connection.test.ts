@@ -351,6 +351,54 @@ describe('XMPPClient Connection', () => {
       )
     })
 
+    it('should extract WebSocket close code from CloseEvent reason', async () => {
+      // Simulate failed initial connection
+      mockXmppClientInstance.start.mockRejectedValue(new Error('Connection refused'))
+
+      await expect(
+        xmppClient.connect({
+          jid: 'user@example.com',
+          password: 'secret',
+          server: 'example.com',
+          skipDiscovery: true,
+        })
+      ).rejects.toThrow('Connection refused')
+
+      vi.mocked(mockStores.connection.setError).mockClear()
+
+      // Simulate disconnect with a CloseEvent-like reason (has code and reason properties)
+      mockXmppClientInstance._emit('disconnect', {
+        clean: false,
+        reason: { code: 1006, reason: '' },
+      })
+
+      const errorArg = vi.mocked(mockStores.connection.setError).mock.calls[0][0]
+      expect(errorArg).toBe('Connection failed: WebSocket closed (code: 1006)')
+    })
+
+    it('should include CloseEvent reason string when present', async () => {
+      mockXmppClientInstance.start.mockRejectedValue(new Error('Connection refused'))
+
+      await expect(
+        xmppClient.connect({
+          jid: 'user@example.com',
+          password: 'secret',
+          server: 'example.com',
+          skipDiscovery: true,
+        })
+      ).rejects.toThrow('Connection refused')
+
+      vi.mocked(mockStores.connection.setError).mockClear()
+
+      mockXmppClientInstance._emit('disconnect', {
+        clean: false,
+        reason: { code: 1008, reason: 'Policy violation' },
+      })
+
+      const errorArg = vi.mocked(mockStores.connection.setError).mock.calls[0][0]
+      expect(errorArg).toBe('Connection failed: WebSocket closed (code: 1008, Policy violation)')
+    })
+
     it('should auto-reconnect when connection drops after successful connection', async () => {
       // First, connect successfully
       const connectPromise = xmppClient.connect({
