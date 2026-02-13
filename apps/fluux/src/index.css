@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Restore pointer cursor on interactive elements (Tailwind Preflight resets to default) */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+}
+
 /* Inter font - self-hosted for privacy (no Google Fonts connection) */
 @font-face {
   font-family: 'Inter';
