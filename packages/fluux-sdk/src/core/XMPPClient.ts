@@ -1250,7 +1250,7 @@ export class XMPPClient {
     // Always re-discover admin commands
     this.admin.discoverAdminCommands().catch(() => {})
 
-    // Smart MAM strategy (see sideEffects.ts setupPreviewRefreshSideEffects):
+    // Smart MAM strategy (see backgroundSync.ts setupBackgroundSyncSideEffects):
     // - Active conversation: Full MAM catch-up on reconnect (sideEffects chat subscription)
     // - Non-archived conversations: Lightweight preview refresh on connect (max=5 each, concurrency=3)
     // - Archived conversations: Daily preview check, auto-unarchive on new incoming messages

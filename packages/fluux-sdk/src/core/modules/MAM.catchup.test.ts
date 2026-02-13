@@ -1,8 +1,9 @@
 /**
  * MAM Background Catch-Up Tests
  *
- * Tests for catchUpAllConversations() and catchUpAllRooms() which populate
- * full message history in the background after connecting.
+ * Tests for catchUpAllConversations(), catchUpAllRooms(), and
+ * discoverNewConversationsFromRoster() which populate full message
+ * history in the background after connecting.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { XMPPClient } from '../XMPPClient'
@@ -491,6 +492,111 @@ describe('MAM Background Catch-Up', () => {
         message: 'Background catch-up for 1 room(s)',
         category: 'sm',
       })
+    })
+  })
+
+  describe('discoverNewConversationsFromRoster', () => {
+    it('should do nothing when roster is empty', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.roster.sortedContacts).mockReturnValue([])
+      mockXmppClientInstance.iqCaller.request.mockClear()
+
+      await xmppClient.mam.discoverNewConversationsFromRoster()
+
+      expect(emitSDKSpy).not.toHaveBeenCalledWith(
+        'console:event',
+        expect.objectContaining({ message: expect.stringContaining('Discovering') })
+      )
+    })
+
+    it('should skip contacts that already have a conversation', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.roster.sortedContacts).mockReturnValue([
+        { jid: 'alice@example.com', name: 'Alice', presence: 'online', subscription: 'both' },
+        { jid: 'bob@example.com', name: 'Bob', presence: 'offline', subscription: 'both' },
+      ] as any)
+
+      // Both contacts already have conversations
+      vi.mocked(mockStores.chat.hasConversation).mockReturnValue(true)
+      mockXmppClientInstance.iqCaller.request.mockClear()
+
+      await xmppClient.mam.discoverNewConversationsFromRoster()
+
+      // No MAM queries should have been made
+      expect(mockXmppClientInstance.iqCaller.request).not.toHaveBeenCalled()
+    })
+
+    it('should query MAM for contacts without existing conversations', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.roster.sortedContacts).mockReturnValue([
+        { jid: 'alice@example.com', name: 'Alice', presence: 'online', subscription: 'both' },
+        { jid: 'bob@example.com', name: 'Bob', presence: 'offline', subscription: 'both' },
+      ] as any)
+
+      // Alice has a conversation, Bob doesn't
+      vi.mocked(mockStores.chat.hasConversation).mockImplementation(
+        (jid: string) => jid === 'alice@example.com'
+      )
+
+      mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse())
+
+      const discoverPromise = xmppClient.mam.discoverNewConversationsFromRoster()
+      await waitForAsyncOps(20, 100)
+      await discoverPromise
+
+      // Should have emitted a console event for 1 contact (Bob)
+      expect(emitSDKSpy).toHaveBeenCalledWith('console:event', {
+        message: 'Discovering conversations for 1 roster contact(s)',
+        category: 'sm',
+      })
+
+      // Should have made a MAM query (only for Bob)
+      expect(mockXmppClientInstance.iqCaller.request).toHaveBeenCalled()
+    })
+
+    it('should use backward query (before="") for discovery', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.roster.sortedContacts).mockReturnValue([
+        { jid: 'bob@example.com', name: 'Bob', presence: 'offline', subscription: 'both' },
+      ] as any)
+
+      vi.mocked(mockStores.chat.hasConversation).mockReturnValue(false)
+      mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse())
+
+      const discoverPromise = xmppClient.mam.discoverNewConversationsFromRoster()
+      await waitForAsyncOps(20, 100)
+      await discoverPromise
+
+      // The emitted event should have direction='backward' (before="" query)
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:mam-messages', expect.objectContaining({
+        conversationId: 'bob@example.com',
+        direction: 'backward',
+      }))
+    })
+
+    it('should silently ignore individual errors', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.roster.sortedContacts).mockReturnValue([
+        { jid: 'alice@example.com', name: 'Alice', presence: 'online', subscription: 'both' },
+        { jid: 'bob@example.com', name: 'Bob', presence: 'offline', subscription: 'both' },
+      ] as any)
+
+      vi.mocked(mockStores.chat.hasConversation).mockReturnValue(false)
+
+      // First query fails, second succeeds
+      mockXmppClientInstance.iqCaller.request
+        .mockRejectedValueOnce(new Error('Timeout'))
+        .mockResolvedValue(createFinResponse())
+
+      // Should not throw
+      const discoverPromise = xmppClient.mam.discoverNewConversationsFromRoster()
+      await waitForAsyncOps(20, 100)
+      await discoverPromise
     })
   })
 })

@@ -60,7 +60,8 @@ vi.mock('../utils/messageCache', () => ({
   flushPendingRoomMessages: vi.fn().mockResolvedValue(undefined),
 }))
 
-import { setupRoomSideEffects, setupChatSideEffects, setupPreviewRefreshSideEffects } from './sideEffects'
+import { setupRoomSideEffects, setupChatSideEffects } from './sideEffects'
+import { setupBackgroundSyncSideEffects } from './backgroundSync'
 import { roomStore } from '../stores/roomStore'
 import { chatStore } from '../stores/chatStore'
 import { connectionStore } from '../stores/connectionStore'
@@ -79,6 +80,7 @@ function createMockClient(): XMPPClient {
       refreshArchivedConversationPreviews: vi.fn().mockResolvedValue(undefined),
       catchUpAllConversations: vi.fn().mockResolvedValue(undefined),
       catchUpAllRooms: vi.fn().mockResolvedValue(undefined),
+      discoverNewConversationsFromRoster: vi.fn().mockResolvedValue(undefined),
     },
   } as unknown as XMPPClient
 }
@@ -498,7 +500,7 @@ describe('sideEffects', () => {
     })
   })
 
-  describe('setupPreviewRefreshSideEffects', () => {
+  describe('setupBackgroundSyncSideEffects', () => {
     const ARCHIVED_CHECK_KEY = 'fluux:lastArchivedPreviewCheck'
 
     beforeEach(() => {
@@ -516,7 +518,7 @@ describe('sideEffects', () => {
 
         // Start disconnected
         connectionStore.getState().setStatus('disconnected')
-        cleanup = setupPreviewRefreshSideEffects(mockClient)
+        cleanup = setupBackgroundSyncSideEffects(mockClient)
 
         // Go online
         connectionStore.getState().setStatus('online')
@@ -530,7 +532,7 @@ describe('sideEffects', () => {
       it('should defer preview refresh to serverInfo discovery when MAM not immediately available', async () => {
         // Start disconnected with NO serverInfo
         connectionStore.getState().setStatus('disconnected')
-        cleanup = setupPreviewRefreshSideEffects(mockClient)
+        cleanup = setupBackgroundSyncSideEffects(mockClient)
 
         // Go online (no MAM support yet)
         connectionStore.getState().setStatus('online')
@@ -562,7 +564,7 @@ describe('sideEffects', () => {
 
         // Start disconnected
         connectionStore.getState().setStatus('disconnected')
-        cleanup = setupPreviewRefreshSideEffects(mockClient)
+        cleanup = setupBackgroundSyncSideEffects(mockClient)
 
         // Go online (triggers preview refresh via connection subscriber)
         connectionStore.getState().setStatus('online')
@@ -592,7 +594,7 @@ describe('sideEffects', () => {
 
         // Start disconnected
         connectionStore.getState().setStatus('disconnected')
-        cleanup = setupPreviewRefreshSideEffects(mockClient)
+        cleanup = setupBackgroundSyncSideEffects(mockClient)
 
         // First connect
         connectionStore.getState().setStatus('online')
@@ -621,7 +623,7 @@ describe('sideEffects', () => {
         })
 
         connectionStore.getState().setStatus('disconnected')
-        cleanup = setupPreviewRefreshSideEffects(mockClient)
+        cleanup = setupBackgroundSyncSideEffects(mockClient)
 
         // Go online
         connectionStore.getState().setStatus('online')
@@ -643,7 +645,7 @@ describe('sideEffects', () => {
         })
 
         connectionStore.getState().setStatus('disconnected')
-        cleanup = setupPreviewRefreshSideEffects(mockClient)
+        cleanup = setupBackgroundSyncSideEffects(mockClient)
 
         // Go online
         connectionStore.getState().setStatus('online')
@@ -671,7 +673,7 @@ describe('sideEffects', () => {
         })
 
         connectionStore.getState().setStatus('disconnected')
-        cleanup = setupPreviewRefreshSideEffects(mockClient)
+        cleanup = setupBackgroundSyncSideEffects(mockClient)
 
         // Go online
         connectionStore.getState().setStatus('online')
@@ -703,7 +705,7 @@ describe('sideEffects', () => {
         })
 
         connectionStore.getState().setStatus('disconnected')
-        cleanup = setupPreviewRefreshSideEffects(mockClient)
+        cleanup = setupBackgroundSyncSideEffects(mockClient)
 
         // Go online
         connectionStore.getState().setStatus('online')
@@ -726,7 +728,7 @@ describe('sideEffects', () => {
         })
 
         connectionStore.getState().setStatus('disconnected')
-        cleanup = setupPreviewRefreshSideEffects(mockClient)
+        cleanup = setupBackgroundSyncSideEffects(mockClient)
 
         // Go online
         connectionStore.getState().setStatus('online')
@@ -754,7 +756,7 @@ describe('sideEffects', () => {
         })
 
         connectionStore.getState().setStatus('disconnected')
-        cleanup = setupPreviewRefreshSideEffects(mockClient)
+        cleanup = setupBackgroundSyncSideEffects(mockClient)
 
         // Go online (starts the 10s timer)
         connectionStore.getState().setStatus('online')
@@ -770,6 +772,26 @@ describe('sideEffects', () => {
         expect(mockClient.mam.catchUpAllRooms).not.toHaveBeenCalled()
       })
 
+      it('should trigger discoverNewConversationsFromRoster on connect', async () => {
+        // Set up serverInfo with MAM support
+        connectionStore.getState().setServerInfo({
+          identities: [],
+          domain: 'example.com',
+          features: [NS_MAM],
+        })
+
+        connectionStore.getState().setStatus('disconnected')
+        cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+        // Go online
+        connectionStore.getState().setStatus('online')
+
+        // Roster discovery should be triggered immediately (not delayed)
+        await vi.advanceTimersByTimeAsync(100)
+        expect(mockClient.mam.discoverNewConversationsFromRoster).toHaveBeenCalledTimes(1)
+        expect(mockClient.mam.discoverNewConversationsFromRoster).toHaveBeenCalledWith({ concurrency: 2 })
+      })
+
       it('should re-trigger catch-up on reconnect', async () => {
         ;(mockClient.mam.refreshConversationPreviews as ReturnType<typeof vi.fn>).mockResolvedValue(undefined)
 
@@ -781,7 +803,7 @@ describe('sideEffects', () => {
         })
 
         connectionStore.getState().setStatus('disconnected')
-        cleanup = setupPreviewRefreshSideEffects(mockClient)
+        cleanup = setupBackgroundSyncSideEffects(mockClient)
 
         // First connect
         connectionStore.getState().setStatus('online')

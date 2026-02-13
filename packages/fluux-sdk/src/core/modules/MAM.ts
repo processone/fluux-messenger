@@ -13,9 +13,11 @@
  *    conversation to update sidebar previews (max=5, concurrency=3).
  * 2. **On connect (slow)**: Background catch-up populates full message history
  *    for all conversations and rooms (max=100, concurrency=2).
- * 3. **On conversation open**: Side effects trigger a MAM query with `start` filter
+ * 3. **On connect (discovery)**: Query MAM for roster contacts that don't have an
+ *    existing conversation, discovering messages received while offline.
+ * 4. **On conversation open**: Side effects trigger a MAM query with `start` filter
  *    to fetch any remaining messages newer than the most recent cached message.
- * 4. **On scroll up**: `fetchOlderHistory()` queries MAM with `before` cursor for
+ * 5. **On scroll up**: `fetchOlderHistory()` queries MAM with `before` cursor for
  *    older messages (pagination).
  *
  * This approach balances fast connection time with having messages ready when
@@ -581,6 +583,54 @@ export class MAM extends BaseModule {
               max: 50,
             })
           }
+        } catch (_error) {
+          // Silently ignore — individual failures shouldn't affect others
+        }
+      },
+      concurrency
+    )
+  }
+
+  /**
+   * Discover new conversations from roster contacts.
+   *
+   * Roster contacts who sent messages while the user was offline won't have
+   * a conversation entry in the store. This method queries MAM for each roster
+   * contact that doesn't already have a conversation, creating conversation
+   * entries for those with messages.
+   *
+   * Uses a preview-style query (max=5) to keep it lightweight — the full
+   * catch-up will be handled by the next connection cycle or lazy loading
+   * when the user opens the conversation.
+   *
+   * @param options - Optional configuration
+   * @param options.concurrency - Maximum parallel requests (default: 2)
+   */
+  async discoverNewConversationsFromRoster(options: { concurrency?: number } = {}): Promise<void> {
+    const { concurrency = 2 } = options
+    const contacts = this.deps.stores?.roster.sortedContacts() || []
+    if (contacts.length === 0) return
+
+    // Filter to contacts that don't already have a conversation (active or archived)
+    const newContacts = contacts.filter(
+      (contact) => !this.deps.stores?.chat.hasConversation(contact.jid)
+    )
+    if (newContacts.length === 0) return
+
+    this.deps.emitSDK('console:event', {
+      message: `Discovering conversations for ${newContacts.length} roster contact(s)`,
+      category: 'sm',
+    })
+
+    await executeWithConcurrency(
+      newContacts,
+      async (contact) => {
+        try {
+          await this.queryArchive({
+            with: contact.jid,
+            before: '',
+            max: 50,
+          })
         } catch (_error) {
           // Silently ignore — individual failures shouldn't affect others
         }
