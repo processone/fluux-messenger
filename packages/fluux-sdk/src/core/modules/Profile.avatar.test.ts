@@ -1147,11 +1147,24 @@ describe('XMPPClient Own Avatar', () => {
     })
 
     describe('fetchOccupantAvatar', () => {
-      it('should skip query when realJid is in negative cache', async () => {
+      it('should clear negative cache and proceed when presence advertises avatar hash', async () => {
         mockXmppClientInstance.iqCaller.request.mockClear()
 
-        const { hasNoAvatar } = await import('../../utils/avatarCache')
-        vi.mocked(hasNoAvatar).mockResolvedValueOnce(true) // JID in negative cache
+        const { clearNoAvatar, getCachedAvatar } = await import('../../utils/avatarCache')
+        vi.mocked(getCachedAvatar).mockResolvedValueOnce(null) // Not in avatar cache
+
+        // Mock XEP-0084 PEP response with avatar data
+        const avatarData = 'base64avatardata'
+        const pepResponse = createMockElement('iq', { type: 'result' }, [
+          { name: 'pubsub', attrs: { xmlns: 'http://jabber.org/protocol/pubsub' }, children: [
+            { name: 'items', children: [
+              { name: 'item', attrs: { id: 'some-hash' }, children: [
+                { name: 'data', attrs: { xmlns: 'urn:xmpp:avatar:data' }, text: avatarData },
+              ] },
+            ] },
+          ] },
+        ])
+        mockXmppClientInstance.iqCaller.request.mockResolvedValueOnce(pepResponse)
 
         await xmppClient.profile.fetchOccupantAvatar(
           'room@conference.example.com',
@@ -1160,8 +1173,10 @@ describe('XMPPClient Own Avatar', () => {
           'realuser@example.com'
         )
 
-        // Should NOT make any IQ request
-        expect(mockXmppClientInstance.iqCaller.request).not.toHaveBeenCalled()
+        // Should clear the negative cache since presence advertises an avatar
+        expect(clearNoAvatar).toHaveBeenCalledWith('realuser@example.com')
+        // Should proceed to fetch avatar via IQ
+        expect(mockXmppClientInstance.iqCaller.request).toHaveBeenCalled()
       })
 
       it('should cache forbidden error from XEP-0084 when vCard also fails', async () => {

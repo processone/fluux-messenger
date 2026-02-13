@@ -236,10 +236,10 @@ export class Profile extends BaseModule {
     if (realJid) {
       const bareJid = getBareJid(realJid)
 
-      // Check negative cache - skip if we recently got forbidden/no-avatar
-      if (await hasNoAvatar(bareJid)) {
-        return
-      }
+      // The presence advertises an avatar hash, which is a positive signal
+      // that the user now has an avatar. Clear any stale negative cache entry
+      // (they may have been marked as "no avatar" from a previous session).
+      await clearNoAvatar(bareJid)
 
       let gotForbidden = false
 

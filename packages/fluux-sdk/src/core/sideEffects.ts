@@ -481,15 +481,19 @@ export function setupRoomSideEffects(
 }
 
 /**
- * Sets up preview refresh side effects.
+ * Sets up preview refresh and background catch-up side effects.
  *
- * On connect, refreshes sidebar previews for all non-archived conversations
- * so that messages exchanged on other clients while offline are reflected.
+ * On connect, this runs a three-stage background process:
+ *
+ * 1. **Preview refresh** (fast): Fetch latest message for each non-archived
+ *    conversation to update sidebar previews (max=5, concurrency=3).
+ * 2. **Conversation catch-up** (slow): Populate full message history for all
+ *    non-archived conversations so messages are ready when opened (concurrency=2).
+ * 3. **Room catch-up** (delayed): After a delay to let rooms finish joining,
+ *    populate full message history for all MAM-enabled rooms (concurrency=2).
+ *
  * Additionally, once per day, checks archived conversations for new activity
  * and auto-unarchives those with new incoming messages.
- *
- * This implements the "smart MAM" strategy: not fully lazy (stale previews),
- * not fully eager (300+ queries on connect), but targeted background refreshes.
  *
  * @param client - The XMPPClient instance
  * @param options - Configuration options
@@ -503,6 +507,8 @@ export function setupPreviewRefreshSideEffects(
 
   // Track whether preview refresh has been triggered this connection cycle
   let previewRefreshDone = false
+  // Timer for delayed room catch-up (cleared on cleanup or disconnect)
+  let roomCatchUpTimer: ReturnType<typeof setTimeout> | undefined
 
   // --- Daily archived check helpers ---
   const ARCHIVED_CHECK_KEY = 'fluux:lastArchivedPreviewCheck'
@@ -527,8 +533,8 @@ export function setupPreviewRefreshSideEffects(
   }
 
   /**
-   * Triggers background preview refresh for all non-archived conversations,
-   * plus daily archived conversation check.
+   * Triggers background preview refresh, conversation catch-up, room catch-up,
+   * and daily archived conversation check.
    */
   function triggerPreviewRefresh(): void {
     if (previewRefreshDone) return
@@ -536,22 +542,42 @@ export function setupPreviewRefreshSideEffects(
 
     if (debug) console.log('[SideEffects] Preview: Starting background preview refresh')
 
-    // Refresh non-archived conversation previews
-    void client.mam.refreshConversationPreviews().catch(() => {})
+    // Stage 1: Refresh sidebar previews (fast), then catch up full history (slow)
+    void client.mam.refreshConversationPreviews()
+      .then(() => {
+        if (debug) console.log('[SideEffects] Preview: Starting background conversation catch-up')
+        return client.mam.catchUpAllConversations({ concurrency: 2 })
+      })
+      .catch(() => {})
 
-    // Daily check of archived conversations for new activity
+    // Stage 2: Daily check of archived conversations for new activity
     if (shouldCheckArchived()) {
       if (debug) console.log('[SideEffects] Preview: Running daily archived conversation check')
       void client.mam.refreshArchivedConversationPreviews()
         .then(() => markArchivedChecked())
         .catch(() => {})
     }
+
+    // Stage 3: Room catch-up (delayed to let rooms finish joining and discover MAM)
+    roomCatchUpTimer = setTimeout(() => {
+      roomCatchUpTimer = undefined
+      if (debug) console.log('[SideEffects] Preview: Starting background room catch-up')
+      void client.mam.catchUpAllRooms({ concurrency: 2 }).catch(() => {})
+    }, 10_000)
   }
 
   // Subscribe to connection status changes
   let previousStatus = connectionStore.getState().status
   const unsubscribeConnection = connectionStore.subscribe((state) => {
     const status = state.status
+
+    // When going offline, cancel any pending room catch-up timer
+    if (status !== 'online' && previousStatus === 'online') {
+      if (roomCatchUpTimer) {
+        clearTimeout(roomCatchUpTimer)
+        roomCatchUpTimer = undefined
+      }
+    }
 
     // When we come back online after being disconnected
     if (status === 'online' && previousStatus !== 'online') {
@@ -590,6 +616,10 @@ export function setupPreviewRefreshSideEffects(
   return () => {
     unsubscribeConnection()
     unsubscribeServerInfo()
+    if (roomCatchUpTimer) {
+      clearTimeout(roomCatchUpTimer)
+      roomCatchUpTimer = undefined
+    }
   }
 }
 
