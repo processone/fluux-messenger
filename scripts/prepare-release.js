@@ -212,8 +212,8 @@ if (entries.length === 0) {
   process.exit(1)
 }
 
-// Check if the new version exists in changelog.ts
-const hasNewVersion = entries.some(e => e.version === version)
+// Check if the new version (or its base version for prereleases) exists in changelog.ts
+const hasNewVersion = entries.some(e => e.version === version || e.version === version.replace(/-.*$/, ''))
 if (!hasNewVersion) {
   console.log(`  Warning: Version ${version} not found in changelog.ts`)
   console.log(`  Add the changelog entry to apps/fluux/src/data/changelog.ts first!`)
@@ -254,7 +254,10 @@ console.log(`  Generated ${CHANGELOG_MD} with ${entries.length} releases`)
 
 // 5. Generate RELEASE_NOTES.md (just the current version, for GitHub release body)
 console.log('\nGenerating RELEASE_NOTES.md for auto-updater...')
-const currentEntry = entries.find(e => e.version === version)
+// For prerelease versions (e.g. 0.13.2-beta.1), fall back to the base version (0.13.2)
+// since changelog.ts uses the target release version, not the prerelease suffix
+const baseVersion = version.replace(/-.*$/, '')
+const currentEntry = entries.find(e => e.version === version) || entries.find(e => e.version === baseVersion)
 if (currentEntry) {
   let releaseNotes = `## What's New in v${version}\n\n`
 
