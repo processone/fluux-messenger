@@ -397,8 +397,10 @@ jobs:
 
           # Update debian/changelog version from release tag
           # Convert pre-release for Debian (~ sorts before release, so 0.13.2~beta.1 < 0.13.2)
+          # Note: cannot use ${VERSION//-/~} because bash 5+ applies tilde expansion
+          # to the replacement string, turning ~ into $HOME
           VERSION="${RELEASE_TAG#v}"
-          DEB_VERSION="${VERSION//-/~}"
+          DEB_VERSION=$(echo "$VERSION" | sed 's/-/~/g')
           sed -i "1s#([^)]*)#($DEB_VERSION-1)#" debian/changelog
 
           # Build the .deb package (-d skips build dependency check since we use pre-built binary)
