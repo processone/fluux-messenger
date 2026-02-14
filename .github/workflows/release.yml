@@ -350,8 +350,10 @@ jobs:
           export FLUUX_BINARY="apps/fluux/src-tauri/target/release/fluux"
 
           # Update debian/changelog version from release tag
+          # Convert pre-release for Debian (~ sorts before release, so 0.13.2~beta.1 < 0.13.2)
           VERSION="${RELEASE_TAG#v}"
-          sed -i "1s/([^)]*)/($VERSION-1)/" debian/changelog
+          DEB_VERSION="${VERSION//-/~}"
+          sed -i "1s/([^)]*)/($DEB_VERSION-1)/" debian/changelog
 
           # Build the .deb package (-d skips build dependency check since we use pre-built binary)
           dpkg-buildpackage -d -uc -us -b
@@ -477,23 +479,36 @@ jobs:
         run: |
           VERSION="${RELEASE_TAG#v}"
 
+          # Convert pre-release version for RPM (hyphens not allowed in Version field)
+          # 0.13.2-beta.1 → RPM_VERSION=0.13.2, RPM_RELEASE=0.1.beta.1
+          # 0.13.2        → RPM_VERSION=0.13.2, RPM_RELEASE=1
+          if [[ "$VERSION" == *-* ]]; then
+            RPM_VERSION="${VERSION%%-*}"
+            RPM_PRERELEASE="${VERSION#*-}"
+            RPM_RELEASE="0.1.${RPM_PRERELEASE//-/.}"
+          else
+            RPM_VERSION="$VERSION"
+            RPM_RELEASE="1"
+          fi
+
           # Setup RPM build directories
           mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
 
-          # Create source tarball for rpmbuild
-          mkdir -p "fluux-messenger-${VERSION}"
-          cp apps/fluux/src-tauri/target/release/fluux "fluux-messenger-${VERSION}/fluux-messenger"
-          cp packaging/debian/fluux-messenger.desktop "fluux-messenger-${VERSION}/"
-          mkdir -p "fluux-messenger-${VERSION}/icons"
-          cp apps/fluux/src-tauri/icons/32x32.png "fluux-messenger-${VERSION}/icons/"
-          cp apps/fluux/src-tauri/icons/128x128.png "fluux-messenger-${VERSION}/icons/"
-          cp apps/fluux/src-tauri/icons/icon.png "fluux-messenger-${VERSION}/icons/256x256.png"
+          # Create source tarball for rpmbuild (directory name must match %{version} in spec)
+          mkdir -p "fluux-messenger-${RPM_VERSION}"
+          cp apps/fluux/src-tauri/target/release/fluux "fluux-messenger-${RPM_VERSION}/fluux-messenger"
+          cp packaging/debian/fluux-messenger.desktop "fluux-messenger-${RPM_VERSION}/"
+          mkdir -p "fluux-messenger-${RPM_VERSION}/icons"
+          cp apps/fluux/src-tauri/icons/32x32.png "fluux-messenger-${RPM_VERSION}/icons/"
+          cp apps/fluux/src-tauri/icons/128x128.png "fluux-messenger-${RPM_VERSION}/icons/"
+          cp apps/fluux/src-tauri/icons/icon.png "fluux-messenger-${RPM_VERSION}/icons/256x256.png"
 
-          tar czvf ~/rpmbuild/SOURCES/fluux-messenger-${VERSION}.tar.gz "fluux-messenger-${VERSION}"
+          tar czvf ~/rpmbuild/SOURCES/fluux-messenger-${RPM_VERSION}.tar.gz "fluux-messenger-${RPM_VERSION}"
 
           # Copy and update spec file
           cp packaging/rpm/fluux-messenger.spec ~/rpmbuild/SPECS/
-          sed -i "s/^Version:.*/Version:        ${VERSION}/" ~/rpmbuild/SPECS/fluux-messenger.spec
+          sed -i "s/^Version:.*/Version:        ${RPM_VERSION}/" ~/rpmbuild/SPECS/fluux-messenger.spec
+          sed -i "s/^Release:.*/Release:        ${RPM_RELEASE}%{?dist}/" ~/rpmbuild/SPECS/fluux-messenger.spec
 
           # Build RPM
           rpmbuild -bb ~/rpmbuild/SPECS/fluux-messenger.spec --target ${{ matrix.rpm_arch }}

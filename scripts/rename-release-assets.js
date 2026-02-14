@@ -33,13 +33,13 @@ function getNewName(oldName, version) {
     { pattern: /^Fluux\.Messenger_[\d.]+_x64_en-US\.msi$/, newName: `Fluux-Messenger_${v}_Windows_x64.msi` },
     { pattern: /^Fluux\.Messenger_[\d.]+_x64_en-US\.msi\.sig$/, newName: `Fluux-Messenger_${v}_Windows_x64.msi.sig` },
 
-    // Linux DEB - fix the double architecture issue
-    { pattern: /^fluux-messenger_[\d.]+-\d+_amd64.*\.deb$/, newName: `Fluux-Messenger_${v}_Linux_x64.deb` },
-    { pattern: /^fluux-messenger_[\d.]+-\d+_arm64.*\.deb$/, newName: `Fluux-Messenger_${v}_Linux_arm64.deb` },
+    // Linux DEB (version may contain ~ for prerelease, e.g. 0.13.2~beta.1-1_amd64.deb)
+    { pattern: /^fluux-messenger_[\d.]+(?:~[\w.]+)?-\d+_amd64.*\.deb$/, newName: `Fluux-Messenger_${v}_Linux_x64.deb` },
+    { pattern: /^fluux-messenger_[\d.]+(?:~[\w.]+)?-\d+_arm64.*\.deb$/, newName: `Fluux-Messenger_${v}_Linux_arm64.deb` },
 
-    // Linux RPM (built with rpmbuild, not Tauri)
-    { pattern: /^fluux-messenger-[\d.]+-\d+\.x86_64\.rpm$/, newName: `Fluux-Messenger_${v}_Linux_x64.rpm` },
-    { pattern: /^fluux-messenger-[\d.]+-\d+\.aarch64\.rpm$/, newName: `Fluux-Messenger_${v}_Linux_arm64.rpm` },
+    // Linux RPM (release field may be "1" or "0.1.beta.1" for prereleases)
+    { pattern: /^fluux-messenger-[\d.]+-[\d.]+(?:\.[\w.]+)?\.x86_64\.rpm$/, newName: `Fluux-Messenger_${v}_Linux_x64.rpm` },
+    { pattern: /^fluux-messenger-[\d.]+-[\d.]+(?:\.[\w.]+)?\.aarch64\.rpm$/, newName: `Fluux-Messenger_${v}_Linux_arm64.rpm` },
 
     // Linux Tarball (for Arch Linux / AUR)
     { pattern: /^fluux-messenger-[\d.]+-linux-x86_64\.tar\.gz$/, newName: `Fluux-Messenger_${v}_Linux_x64.tar.gz` },
