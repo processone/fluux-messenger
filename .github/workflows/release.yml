@@ -111,16 +111,16 @@ jobs:
       - name: Patch version for bundle compatibility
         if: needs.create-release.outputs.is_prerelease == 'true'
         run: |
-          # macOS CFBundleShortVersionString should be numeric-only
+          # Tauri/macOS/MSI require numeric-only version identifiers
           # Convert 0.13.2-beta.1 → 0.13.2.1 (extract numeric suffix as 4th segment)
           VERSION="${RELEASE_TAG#v}"
           BASE_VERSION="${VERSION%%-*}"
           PRERELEASE="${VERSION#*-}"
           NUMERIC_SUFFIX=$(echo "$PRERELEASE" | grep -oE '[0-9]+$')
           BUNDLE_VERSION="${BASE_VERSION}.${NUMERIC_SUFFIX:-0}"
-          echo "Patching tauri.conf.json version: $VERSION → $BUNDLE_VERSION"
-          cd apps/fluux/src-tauri
-          sed -i '' "s/\"version\": \".*\"/\"version\": \"$BUNDLE_VERSION\"/" tauri.conf.json
+          echo "Patching version for Tauri build: $VERSION → $BUNDLE_VERSION"
+          sed -i '' "s/\"version\": \".*\"/\"version\": \"$BUNDLE_VERSION\"/" apps/fluux/src-tauri/tauri.conf.json
+          sed -i '' "s/^version = \".*\"/version = \"$BUNDLE_VERSION\"/" apps/fluux/src-tauri/Cargo.toml
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
@@ -194,16 +194,16 @@ jobs:
         if: needs.create-release.outputs.is_prerelease == 'true'
         shell: bash
         run: |
-          # MSI requires numeric-only version identifiers (no "beta", "rc", etc.)
+          # Tauri/MSI require numeric-only version identifiers (no "beta", "rc", etc.)
           # Convert 0.13.2-beta.1 → 0.13.2.1 (extract numeric suffix as 4th segment)
           VERSION="${RELEASE_TAG#v}"
           BASE_VERSION="${VERSION%%-*}"
           PRERELEASE="${VERSION#*-}"
           NUMERIC_SUFFIX=$(echo "$PRERELEASE" | grep -oE '[0-9]+$')
-          MSI_VERSION="${BASE_VERSION}.${NUMERIC_SUFFIX:-0}"
-          echo "Patching tauri.conf.json version: $VERSION → $MSI_VERSION"
-          cd apps/fluux/src-tauri
-          sed -i "s/\"version\": \".*\"/\"version\": \"$MSI_VERSION\"/" tauri.conf.json
+          BUNDLE_VERSION="${BASE_VERSION}.${NUMERIC_SUFFIX:-0}"
+          echo "Patching version for Tauri build: $VERSION → $BUNDLE_VERSION"
+          sed -i "s/\"version\": \".*\"/\"version\": \"$BUNDLE_VERSION\"/" apps/fluux/src-tauri/tauri.conf.json
+          sed -i "s/^version = \".*\"/version = \"$BUNDLE_VERSION\"/" apps/fluux/src-tauri/Cargo.toml
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
@@ -382,7 +382,7 @@ jobs:
           # Convert pre-release for Debian (~ sorts before release, so 0.13.2~beta.1 < 0.13.2)
           VERSION="${RELEASE_TAG#v}"
           DEB_VERSION="${VERSION//-/~}"
-          sed -i "1s/([^)]*)/($DEB_VERSION-1)/" debian/changelog
+          sed -i "1s#([^)]*)#($DEB_VERSION-1)#" debian/changelog
 
           # Build the .deb package (-d skips build dependency check since we use pre-built binary)
           dpkg-buildpackage -d -uc -us -b
