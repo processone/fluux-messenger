@@ -108,6 +108,20 @@ jobs:
           echo "$NOTES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
+      - name: Patch version for bundle compatibility
+        if: needs.create-release.outputs.is_prerelease == 'true'
+        run: |
+          # macOS CFBundleShortVersionString should be numeric-only
+          # Convert 0.13.2-beta.1 → 0.13.2.1 (extract numeric suffix as 4th segment)
+          VERSION="${RELEASE_TAG#v}"
+          BASE_VERSION="${VERSION%%-*}"
+          PRERELEASE="${VERSION#*-}"
+          NUMERIC_SUFFIX=$(echo "$PRERELEASE" | grep -oE '[0-9]+$')
+          BUNDLE_VERSION="${BASE_VERSION}.${NUMERIC_SUFFIX:-0}"
+          echo "Patching tauri.conf.json version: $VERSION → $BUNDLE_VERSION"
+          cd apps/fluux/src-tauri
+          sed -i '' "s/\"version\": \".*\"/\"version\": \"$BUNDLE_VERSION\"/" tauri.conf.json
+
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
@@ -175,6 +189,21 @@ jobs:
           echo "notes<<EOF" >> $GITHUB_OUTPUT
           echo "$NOTES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Patch version for MSI compatibility
+        if: needs.create-release.outputs.is_prerelease == 'true'
+        shell: bash
+        run: |
+          # MSI requires numeric-only version identifiers (no "beta", "rc", etc.)
+          # Convert 0.13.2-beta.1 → 0.13.2.1 (extract numeric suffix as 4th segment)
+          VERSION="${RELEASE_TAG#v}"
+          BASE_VERSION="${VERSION%%-*}"
+          PRERELEASE="${VERSION#*-}"
+          NUMERIC_SUFFIX=$(echo "$PRERELEASE" | grep -oE '[0-9]+$')
+          MSI_VERSION="${BASE_VERSION}.${NUMERIC_SUFFIX:-0}"
+          echo "Patching tauri.conf.json version: $VERSION → $MSI_VERSION"
+          cd apps/fluux/src-tauri
+          sed -i "s/\"version\": \".*\"/\"version\": \"$MSI_VERSION\"/" tauri.conf.json
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
