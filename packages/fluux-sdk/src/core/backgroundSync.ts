@@ -5,6 +5,9 @@
  * process to populate message history so conversations and rooms are ready
  * when opened.
  *
+ * Stages are serialized to avoid overwhelming the server with concurrent queries.
+ * The active conversation/room is excluded since side effects handle those.
+ *
  * Uses client events (`'online'` for fresh sessions) instead of store-based
  * guards, so SM resumptions are simply never triggered — no guard needed.
  *
@@ -13,25 +16,22 @@
 
 import type { XMPPClient } from './XMPPClient'
 import type { SideEffectsOptions } from './chatSideEffects'
-import { connectionStore } from '../stores'
+import { connectionStore, chatStore, roomStore } from '../stores'
 import { NS_MAM } from './namespaces'
 
 /**
  * Sets up background sync side effects that run after a fresh session.
  *
- * On fresh connect (not SM resumption), this runs a multi-stage background process:
+ * On fresh connect (not SM resumption), this runs a serialized multi-stage process:
  *
- * 1. **Preview refresh** (fast): Fetch latest message for each non-archived
- *    conversation to update sidebar previews (max=5, concurrency=3).
- * 2. **Conversation catch-up** (slow): Populate full message history for all
- *    non-archived conversations so messages are ready when opened (concurrency=2).
- * 3. **Roster discovery**: Query MAM for roster contacts that don't have an
+ * 1. **Conversation catch-up**: Populate full message history for all non-archived
+ *    conversations (excluding the active one handled by chatSideEffects) (concurrency=2).
+ * 2. **Roster discovery** (hourly): Query MAM for roster contacts that don't have an
  *    existing conversation, discovering messages received while offline (concurrency=2).
+ * 3. **Archived check** (daily): Refresh previews for archived conversations and
+ *    auto-unarchive those with new incoming messages.
  * 4. **Room catch-up** (delayed): After a delay to let rooms finish joining,
  *    populate full message history for all MAM-enabled rooms (concurrency=2).
- *
- * Additionally, once per day, checks archived conversations for new activity
- * and auto-unarchives those with new incoming messages.
  *
  * On SM resumption (`'resumed'` event), no MAM queries are needed because the
  * server replays all undelivered stanzas automatically.
@@ -75,9 +75,34 @@ export function setupBackgroundSyncSideEffects(
     }
   }
 
+  // --- Hourly roster discovery helpers ---
+  const ROSTER_DISCOVERY_KEY = 'fluux:lastRosterDiscovery'
+  const ONE_HOUR_MS = 60 * 60 * 1000
+
+  function shouldDiscoverRoster(): boolean {
+    try {
+      const lastCheck = localStorage.getItem(ROSTER_DISCOVERY_KEY)
+      if (!lastCheck) return true
+      return Date.now() - parseInt(lastCheck, 10) > ONE_HOUR_MS
+    } catch {
+      return true // If localStorage fails, check anyway
+    }
+  }
+
+  function markRosterDiscovered(): void {
+    try {
+      localStorage.setItem(ROSTER_DISCOVERY_KEY, String(Date.now()))
+    } catch {
+      // Silently ignore localStorage errors
+    }
+  }
+
   /**
-   * Triggers background sync: preview refresh, conversation catch-up,
-   * roster discovery, room catch-up, and daily archived conversation check.
+   * Triggers background sync: conversation catch-up, roster discovery,
+   * archived conversation check, and room catch-up.
+   *
+   * Stages are serialized to cap server load at ~2 concurrent MAM queries
+   * (plus the active entity query from side effects = ~3 total).
    */
   function triggerBackgroundSync(): void {
     if (backgroundSyncDone) return
@@ -85,30 +110,40 @@ export function setupBackgroundSyncSideEffects(
 
     if (debug) console.log('[SideEffects] Sync: Starting background sync')
 
-    // Stage 1: Refresh sidebar previews (fast), then catch up full history (slow)
-    void client.mam.refreshConversationPreviews()
-      .then(() => {
-        if (debug) console.log('[SideEffects] Sync: Starting background conversation catch-up')
-        return client.mam.catchUpAllConversations({ concurrency: 2 })
-      })
-      .catch(() => {})
+    // Read active entities — side effects already handle MAM for these
+    const activeConversationId = chatStore.getState().activeConversationId
+    const activeRoomJid = roomStore.getState().activeRoomJid
 
-    // Stage 2: Daily check of archived conversations for new activity
-    if (shouldCheckArchived()) {
-      if (debug) console.log('[SideEffects] Sync: Running daily archived conversation check')
-      void client.mam.refreshArchivedConversationPreviews()
-        .then(() => markArchivedChecked())
-        .catch(() => {})
-    }
+    // Serialized pipeline: catch-up → roster discovery → archived check
+    void (async () => {
+      try {
+        // Stage 1: Conversation catch-up (skip active — handled by chatSideEffects)
+        if (debug) console.log('[SideEffects] Sync: Starting conversation catch-up')
+        await client.mam.catchUpAllConversations({ concurrency: 2, exclude: activeConversationId })
 
-    // Stage 3: Discover conversations from roster contacts with no existing conversation
-    void client.mam.discoverNewConversationsFromRoster({ concurrency: 2 }).catch(() => {})
+        // Stage 2: Roster discovery (hourly cooldown)
+        if (shouldDiscoverRoster()) {
+          if (debug) console.log('[SideEffects] Sync: Running roster discovery')
+          await client.mam.discoverNewConversationsFromRoster({ concurrency: 2 })
+          markRosterDiscovered()
+        }
+
+        // Stage 3: Daily archived conversation check
+        if (shouldCheckArchived()) {
+          if (debug) console.log('[SideEffects] Sync: Running daily archived conversation check')
+          await client.mam.refreshArchivedConversationPreviews()
+          markArchivedChecked()
+        }
+      } catch {
+        // Silently ignore — best-effort sync
+      }
+    })()
 
     // Stage 4: Room catch-up (delayed to let rooms finish joining and discover MAM)
     roomCatchUpTimer = setTimeout(() => {
       roomCatchUpTimer = undefined
       if (debug) console.log('[SideEffects] Sync: Starting background room catch-up')
-      void client.mam.catchUpAllRooms({ concurrency: 2 }).catch(() => {})
+      void client.mam.catchUpAllRooms({ concurrency: 2, exclude: activeRoomJid }).catch(() => {})
     }, 10_000)
   }
 
