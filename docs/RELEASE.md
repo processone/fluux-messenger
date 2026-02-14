@@ -163,6 +163,29 @@ Beta releases are published to GitHub but **do not trigger Tauri autoupdate** fo
 3. The `latest.json` updater manifest is **not generated**, so the Tauri autoupdater never sees it
 4. All platform binaries are still built, signed, and uploaded normally
 
+### Branch workflow
+
+Beta releases use a **release branch**:
+
+1. **Create** a release branch from `main`:
+   ```bash
+   git checkout -b release/0.14.0 main
+   ```
+2. **Develop and stabilize** on the release branch — fix bugs, refine features
+3. **Tag the beta** from the release branch (not from `main`)
+4. **Promote to stable**: merge the release branch back to `main`, then tag the stable release from `main`
+
+### Pre-flight checklist
+
+Before running `release:prepare`, verify:
+
+- [ ] Tests pass: `npm test`
+- [ ] Typecheck passes: `npm run typecheck`
+- [ ] SDK builds cleanly: `npm run build:sdk`
+- [ ] Changelog entry added in `apps/fluux/src/data/changelog.ts` with the beta version (e.g. `'0.14.0-beta.1'`)
+- [ ] Review `git log` to confirm all intended commits are on the branch
+- [ ] No untracked or uncommitted changes beyond what's intended for the release
+
 ### Beta release steps
 
 ```bash
@@ -172,13 +195,16 @@ Beta releases are published to GitHub but **do not trigger Tauri autoupdate** fo
 # 2. Run the prepare script with the beta version
 npm run release:prepare 0.14.0-beta.1
 
-# 3. Commit and tag
+# 3. Review generated files
+git diff
+
+# 4. Commit and tag
 git add -A
 git commit -m "chore: release v0.14.0-beta.1"
 git tag -a v0.14.0-beta.1 -m "Release v0.14.0-beta.1"
 
-# 4. Push
-git push origin main && git push origin v0.14.0-beta.1
+# 5. Push the release branch and the tag
+git push origin release/0.14.0 && git push origin v0.14.0-beta.1
 ```
 
 The release workflow detects the `-beta.` suffix and automatically:
@@ -188,14 +214,43 @@ The release workflow detects the `-beta.` suffix and automatically:
 
 Testers can download the beta from the GitHub Releases page directly.
 
-### Promoting a beta to stable
+### Local build verification (optional)
 
-When the beta is ready for general release, create a new stable release with the final version number:
+For a quick smoke test before pushing the tag:
 
 ```bash
-npm run release:prepare 0.14.0
-# commit, tag, push as usual
+npm run tauri:build
+# or for a specific architecture:
+./apps/fluux/scripts/tauri-build.sh --arm
 ```
+
+Launch the built binary and verify basic functionality (connect, send a message, etc.).
+
+### Promoting a beta to stable
+
+When the beta is ready for general release:
+
+1. Merge the release branch to `main`:
+   ```bash
+   git checkout main
+   git merge release/0.14.0
+   ```
+2. Update the changelog entry to the stable version and run the prepare script:
+   ```bash
+   npm run release:prepare 0.14.0
+   ```
+3. Commit, tag, and push as usual:
+   ```bash
+   git add -A
+   git commit -m "chore: release v0.14.0"
+   git tag -a v0.14.0 -m "Release v0.14.0"
+   git push origin main && git push origin v0.14.0
+   ```
+4. Delete the release branch:
+   ```bash
+   git branch -d release/0.14.0
+   git push origin --delete release/0.14.0
+   ```
 
 This creates a normal release with `latest.json`, and all users will be prompted to update.
 
