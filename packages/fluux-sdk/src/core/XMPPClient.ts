@@ -296,6 +296,13 @@ export class XMPPClient {
   private modulesInitialized = false
 
   /**
+   * Whether the current session was established via SM resumption.
+   * Used to skip MAM operations that are unnecessary after SM replay.
+   * @internal
+   */
+  private isSmResumedSession = false
+
+  /**
    * Cleanup functions for all subscriptions and bindings.
    * Torn down in destroy() and re-established by setupBindings().
    * @internal
@@ -552,7 +559,8 @@ export class XMPPClient {
         }
         // Fetch sidebar preview immediately for MAM-enabled rooms
         // For non-MAM rooms, history is requested via <history maxstanzas="50"/> on join
-        if (room?.supportsMAM && !room.isQuickChat) {
+        // Skip on SM resumption — server already replayed all undelivered stanzas
+        if (room?.supportsMAM && !room.isQuickChat && !this.isSmResumedSession) {
           this.mam.fetchPreviewForRoom(roomJid).catch(() => {})
         }
       })
@@ -1194,6 +1202,9 @@ export class XMPPClient {
   ): Promise<void> {
     // Transition presence machine to connected state
     this.presenceActor.send({ type: 'CONNECT' })
+
+    // Track session type for guards (e.g., skip MAM preview on mucJoined during SM replay)
+    this.isSmResumedSession = isResumption
 
     if (isResumption) {
       await this.handleSmResumption()

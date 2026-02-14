@@ -8,8 +8,8 @@
  * Also watches for `supportsMAM` and `joined` state transitions to handle
  * the race between session restore and room joining.
  *
- * Uses client events (`'online'` for fresh sessions) so SM resumptions
- * skip MAM queries entirely — no guard needed.
+ * Uses client events (`'online'` for fresh sessions) and an `isFreshSession`
+ * flag so SM resumptions skip MAM queries entirely.
  *
  * @module Core/RoomSideEffects
  */
@@ -172,9 +172,14 @@ export function setupRoomSideEffects(
     { fireImmediately: false }
   )
 
+  // Whether the current session is fresh (set by 'online' event, cleared on disconnect/SM resumption)
+  let isFreshSession = false
+
   // Fresh session: catch up MAM for the active room.
   // 'online' fires only on fresh sessions (not SM resumption).
   const unsubscribeOnline = client.on('online', () => {
+    isFreshSession = true
+
     const activeRoomJid = roomStore.getState().activeRoomJid
     if (activeRoomJid) {
       if (debug) console.log('[SideEffects] Room: Fresh session, catching up active room', activeRoomJid)
@@ -186,6 +191,31 @@ export function setupRoomSideEffects(
       void fetchMAMForRoom(activeRoomJid)
     }
   })
+
+  // SM resumption: no MAM catchup needed — server replays undelivered stanzas
+  const unsubscribeResumed = client.on('resumed', () => {
+    isFreshSession = false
+    if (debug) console.log('[SideEffects] Room: SM resumption — skipping MAM catchup')
+
+    // Mark active room as already fetched so switching away and back
+    // doesn't trigger a redundant MAM query (SM already caught us up)
+    const activeRoomJid = roomStore.getState().activeRoomJid
+    if (activeRoomJid) {
+      fetchInitiated.add(activeRoomJid)
+    }
+  })
+
+  // When going offline, clear isFreshSession.
+  let previousStatus = connectionStore.getState().status
+  const unsubscribeConnection = connectionStore.subscribe(
+    (state) => state.status,
+    (status) => {
+      if (status !== 'online' && previousStatus === 'online') {
+        isFreshSession = false
+      }
+      previousStatus = status
+    }
+  )
 
   // Subscribe to supportsMAM changes on the active room.
   // This handles the case where view state is restored before rooms are joined:
@@ -206,6 +236,9 @@ export function setupRoomSideEffects(
     (current, previous) => {
       // If supportsMAM just became true for the active room
       if (current.supportsMAM && !previous.supportsMAM && current.jid) {
+        // Only trigger on fresh sessions (isFreshSession is false on SM resumption)
+        if (!isFreshSession) return
+
         if (!fetchInitiated.has(current.jid)) {
           if (debug) console.log('[SideEffects] Room: MAM support discovered for active room', current.jid)
           void fetchMAMForRoom(current.jid)
@@ -237,6 +270,9 @@ export function setupRoomSideEffects(
     (current, previous) => {
       // If the room just finished joining and supports MAM
       if (current.joined && !previous.joined && current.supportsMAM && current.jid) {
+        // Only trigger on fresh sessions (isFreshSession is false on SM resumption)
+        if (!isFreshSession) return
+
         if (!fetchInitiated.has(current.jid)) {
           if (debug) console.log('[SideEffects] Room: Join completed for active room', current.jid)
           void fetchMAMForRoom(current.jid)
@@ -249,6 +285,8 @@ export function setupRoomSideEffects(
   return () => {
     unsubscribe()
     unsubscribeOnline()
+    unsubscribeResumed()
+    unsubscribeConnection()
     unsubscribeRoomMAMSupport()
     unsubscribeRoomJoined()
   }
