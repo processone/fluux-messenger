@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react'
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { format } from 'date-fns'
 import { X, Trash2, Send, ChevronDown, ChevronUp, Search, Download, Server, ArrowDownToLine } from 'lucide-react'
@@ -12,6 +12,19 @@ const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform)
 
 type FilterType = 'message' | 'presence' | 'iq' | 'sm' | 'other' | 'event'
 type DirectionFilter = 'all' | 'incoming' | 'outgoing'
+
+// Web fallback: download using blob URL
+function downloadAsBlob(content: string, filename: string) {
+  const blob = new Blob([content], { type: 'text/plain' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
 
 function getEntryFilterType(entry: XmppPacket): FilterType {
   // Events have their own filter
@@ -35,11 +48,11 @@ interface ConsoleEntryProps {
   entry: XmppPacket
   isSelected: boolean
   expanded: boolean
-  onToggle: () => void
-  onSelect: () => void
+  onToggle: (entryId: string) => void
+  onSelect: (entryId: string) => void
 }
 
-function ConsoleEntry({ entry, isSelected, expanded, onToggle, onSelect }: ConsoleEntryProps) {
+const ConsoleEntry = React.memo(function ConsoleEntry({ entry, isSelected, expanded, onToggle, onSelect }: ConsoleEntryProps) {
   const isEvent = entry.type === 'event'
   const isIncoming = entry.type === 'incoming'
 
@@ -50,7 +63,7 @@ function ConsoleEntry({ entry, isSelected, expanded, onToggle, onSelect }: Conso
     return (
       <div
         className={`${selectedClass} cursor-pointer border-l-4 border-l-orange-500`}
-        onClick={onSelect}
+        onClick={() => onSelect(entry.id)}
       >
         <div className="flex items-start gap-2 px-3 py-1.5">
           <span className="text-fluux-muted text-xs font-mono whitespace-nowrap">
@@ -92,7 +105,7 @@ function ConsoleEntry({ entry, isSelected, expanded, onToggle, onSelect }: Conso
     <div className={`${selectedClass} border-l-4 ${borderColor}`}>
       <div
         className="flex items-center gap-2 px-3 py-1.5 cursor-pointer select-none"
-        onClick={() => { onSelect(); onToggle(); }}
+        onClick={() => { onSelect(entry.id); onToggle(entry.id); }}
       >
         <span className="text-fluux-muted text-xs font-mono whitespace-nowrap">
           [{format(entry.timestamp, 'HH:mm:ss.SSS')}]
@@ -145,7 +158,7 @@ function ConsoleEntry({ entry, isSelected, expanded, onToggle, onSelect }: Conso
       )}
     </div>
   )
-}
+})
 
 export function XmppConsole() {
   const { t } = useTranslation()
@@ -208,7 +221,7 @@ export function XmppConsole() {
     })
   }
 
-  const toggleEntryExpanded = (entryId: string) => {
+  const toggleEntryExpanded = useCallback((entryId: string) => {
     setExpandedEntries((prev) => {
       const next = new Set(prev)
       if (next.has(entryId)) {
@@ -223,7 +236,7 @@ export function XmppConsole() {
       }
       return next
     })
-  }
+  }, [])
 
   // Keyboard navigation for log entries
   const handleLogKeyDown = (e: React.KeyboardEvent) => {
@@ -385,29 +398,34 @@ export function XmppConsole() {
     }
   }
 
-  const handleExport = async () => {
+  const handleExport = useCallback(async () => {
+    // Snapshot current entries at export time to avoid stale closure issues
+    const currentEntries = entries
+    const currentConnectionMethod = connectionMethod
+    const currentServerInfo = serverInfo
+
     // Build header with version info
     const exportDate = format(new Date(), 'yyyy-MM-dd HH:mm:ss')
     const header = [
       '================================================================================',
       `Fluux XMPP Console Log`,
       `Version: ${__APP_VERSION__} (${__GIT_COMMIT__})`,
-      `Connection: ${connectionMethod?.toUpperCase() ?? 'Unknown'}`,
+      `Connection: ${currentConnectionMethod?.toUpperCase() ?? 'Unknown'}`,
       `Exported: ${exportDate}`,
       '================================================================================',
     ]
 
     // Add server info section if available
     const serverSection: string[] = []
-    if (serverInfo) {
+    if (currentServerInfo) {
       serverSection.push('')
-      serverSection.push(`Server: ${serverInfo.domain}`)
-      if (serverInfo.identities.length > 0) {
-        const identity = serverInfo.identities[0]
+      serverSection.push(`Server: ${currentServerInfo.domain}`)
+      if (currentServerInfo.identities.length > 0) {
+        const identity = currentServerInfo.identities[0]
         serverSection.push(`Identity: ${identity.name || 'Unknown'} (${identity.category}/${identity.type})`)
       }
-      serverSection.push(`Features (${serverInfo.features.length}):`)
-      for (const feature of serverInfo.features) {
+      serverSection.push(`Features (${currentServerInfo.features.length}):`)
+      for (const feature of currentServerInfo.features) {
         serverSection.push(`  - ${feature}`)
       }
       serverSection.push('')
@@ -417,7 +435,7 @@ export function XmppConsole() {
     serverSection.push('')
 
     // Format entries as a readable log
-    const lines = entries.map((entry) => {
+    const lines = currentEntries.map((entry) => {
       const timestamp = format(entry.timestamp, 'yyyy-MM-dd HH:mm:ss.SSS')
       if (entry.type === 'event') {
         return `[${timestamp}] EVENT: ${entry.content}`
@@ -451,20 +469,7 @@ export function XmppConsole() {
     } else {
       downloadAsBlob(content, defaultFilename)
     }
-  }
-
-  // Web fallback: download using blob URL
-  const downloadAsBlob = (content: string, filename: string) => {
-    const blob = new Blob([content], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  }
+  }, [entries, connectionMethod, serverInfo])
 
   if (!isOpen) return null
 
@@ -620,8 +625,8 @@ export function XmppConsole() {
                     entry={entry}
                     isSelected={entry.id === selectedEntryId}
                     expanded={expandedEntries.has(entry.id)}
-                    onToggle={() => toggleEntryExpanded(entry.id)}
-                    onSelect={() => setSelectedEntryId(entry.id)}
+                    onToggle={toggleEntryExpanded}
+                    onSelect={setSelectedEntryId}
                   />
                 </div>
               ))}
