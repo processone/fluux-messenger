@@ -108,20 +108,17 @@ jobs:
           echo "$NOTES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Patch version for bundle compatibility
+      - name: Patch version for Tauri semver compatibility
         run: |
-          # Tauri/macOS/MSI require numeric-only version identifiers
-          # Convert 0.13.2-beta.1 → 0.13.2.1 (extract numeric suffix as 4th segment)
+          # Tauri v2 requires strict semver (X.Y.Z) — prerelease suffixes are rejected
+          # Strip prerelease suffix: 0.13.2-beta.1 → 0.13.2
           # For stable versions (no hyphen), this is a no-op
           VERSION="${RELEASE_TAG#v}"
           if [[ "$VERSION" == *-* ]]; then
             BASE_VERSION="${VERSION%%-*}"
-            PRERELEASE="${VERSION#*-}"
-            NUMERIC_SUFFIX=$(echo "$PRERELEASE" | grep -oE '[0-9]+$')
-            BUNDLE_VERSION="${BASE_VERSION}.${NUMERIC_SUFFIX:-0}"
-            echo "Patching version for Tauri build: $VERSION → $BUNDLE_VERSION"
-            sed -i '' "s/\"version\": \".*\"/\"version\": \"$BUNDLE_VERSION\"/" apps/fluux/src-tauri/tauri.conf.json
-            sed -i '' "s/^version = \".*\"/version = \"$BUNDLE_VERSION\"/" apps/fluux/src-tauri/Cargo.toml
+            echo "Patching version for Tauri build: $VERSION → $BASE_VERSION"
+            sed -i '' "s|\"version\": \".*\"|\"version\": \"$BASE_VERSION\"|" apps/fluux/src-tauri/tauri.conf.json
+            sed -i '' "s|^version = \".*\"|version = \"$BASE_VERSION\"|" apps/fluux/src-tauri/Cargo.toml
           else
             echo "Stable version $VERSION — no patching needed"
           fi
@@ -194,21 +191,18 @@ jobs:
           echo "$NOTES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Patch version for MSI compatibility
+      - name: Patch version for Tauri semver compatibility
         shell: bash
         run: |
-          # Tauri/MSI require numeric-only version identifiers (no "beta", "rc", etc.)
-          # Convert 0.13.2-beta.1 → 0.13.2.1 (extract numeric suffix as 4th segment)
+          # Tauri v2 requires strict semver (X.Y.Z) — prerelease suffixes are rejected
+          # Strip prerelease suffix: 0.13.2-beta.1 → 0.13.2
           # For stable versions (no hyphen), this is a no-op
           VERSION="${RELEASE_TAG#v}"
           if [[ "$VERSION" == *-* ]]; then
             BASE_VERSION="${VERSION%%-*}"
-            PRERELEASE="${VERSION#*-}"
-            NUMERIC_SUFFIX=$(echo "$PRERELEASE" | grep -oE '[0-9]+$')
-            BUNDLE_VERSION="${BASE_VERSION}.${NUMERIC_SUFFIX:-0}"
-            echo "Patching version for Tauri build: $VERSION → $BUNDLE_VERSION"
-            sed -i "s/\"version\": \".*\"/\"version\": \"$BUNDLE_VERSION\"/" apps/fluux/src-tauri/tauri.conf.json
-            sed -i "s/^version = \".*\"/version = \"$BUNDLE_VERSION\"/" apps/fluux/src-tauri/Cargo.toml
+            echo "Patching version for Tauri build: $VERSION → $BASE_VERSION"
+            sed -i "s|\"version\": \".*\"|\"version\": \"$BASE_VERSION\"|" apps/fluux/src-tauri/tauri.conf.json
+            sed -i "s|^version = \".*\"|version = \"$BASE_VERSION\"|" apps/fluux/src-tauri/Cargo.toml
           else
             echo "Stable version $VERSION — no patching needed"
           fi
@@ -339,6 +333,21 @@ jobs:
           echo "notes<<EOF" >> $GITHUB_OUTPUT
           echo "$NOTES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Patch version for Tauri semver compatibility
+        run: |
+          # Tauri v2 requires strict semver (X.Y.Z) — prerelease suffixes are rejected
+          # Strip prerelease suffix: 0.13.2-beta.1 → 0.13.2
+          # For stable versions (no hyphen), this is a no-op
+          VERSION="${RELEASE_TAG#v}"
+          if [[ "$VERSION" == *-* ]]; then
+            BASE_VERSION="${VERSION%%-*}"
+            echo "Patching version for Tauri build: $VERSION → $BASE_VERSION"
+            sed -i "s|\"version\": \".*\"|\"version\": \"$BASE_VERSION\"|" apps/fluux/src-tauri/tauri.conf.json
+            sed -i "s|^version = \".*\"|version = \"$BASE_VERSION\"|" apps/fluux/src-tauri/Cargo.toml
+          else
+            echo "Stable version $VERSION — no patching needed"
+          fi
 
       - name: Build Tauri binary
         run: |
@@ -503,6 +512,21 @@ jobs:
 
       - name: Build SDK
         run: npm run build:sdk
+
+      - name: Patch version for Tauri semver compatibility
+        run: |
+          # Tauri v2 requires strict semver (X.Y.Z) — prerelease suffixes are rejected
+          # Strip prerelease suffix: 0.13.2-beta.1 → 0.13.2
+          # For stable versions (no hyphen), this is a no-op
+          VERSION="${RELEASE_TAG#v}"
+          if [[ "$VERSION" == *-* ]]; then
+            BASE_VERSION="${VERSION%%-*}"
+            echo "Patching version for Tauri build: $VERSION → $BASE_VERSION"
+            sed -i "s|\"version\": \".*\"|\"version\": \"$BASE_VERSION\"|" apps/fluux/src-tauri/tauri.conf.json
+            sed -i "s|^version = \".*\"|version = \"$BASE_VERSION\"|" apps/fluux/src-tauri/Cargo.toml
+          else
+            echo "Stable version $VERSION — no patching needed"
+          fi
 
       - name: Build Tauri binary
         run: |
