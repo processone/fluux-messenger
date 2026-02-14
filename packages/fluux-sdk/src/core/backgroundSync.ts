@@ -1,21 +1,25 @@
 /**
  * Background sync side effects for post-connect MAM operations.
  *
- * After connecting, runs a multi-stage background process to populate
- * message history so conversations and rooms are ready when opened.
+ * After a fresh session (not SM resumption), runs a multi-stage background
+ * process to populate message history so conversations and rooms are ready
+ * when opened.
+ *
+ * Uses client events (`'online'` for fresh sessions) instead of store-based
+ * guards, so SM resumptions are simply never triggered — no guard needed.
  *
  * @module Core/BackgroundSync
  */
 
 import type { XMPPClient } from './XMPPClient'
-import type { SideEffectsOptions } from './sideEffects'
+import type { SideEffectsOptions } from './chatSideEffects'
 import { connectionStore } from '../stores'
 import { NS_MAM } from './namespaces'
 
 /**
- * Sets up background sync side effects that run after connecting.
+ * Sets up background sync side effects that run after a fresh session.
  *
- * On connect, this runs a multi-stage background process:
+ * On fresh connect (not SM resumption), this runs a multi-stage background process:
  *
  * 1. **Preview refresh** (fast): Fetch latest message for each non-archived
  *    conversation to update sidebar previews (max=5, concurrency=3).
@@ -29,6 +33,9 @@ import { NS_MAM } from './namespaces'
  * Additionally, once per day, checks archived conversations for new activity
  * and auto-unarchives those with new incoming messages.
  *
+ * On SM resumption (`'resumed'` event), no MAM queries are needed because the
+ * server replays all undelivered stanzas automatically.
+ *
  * @param client - The XMPPClient instance
  * @param options - Configuration options
  * @returns Unsubscribe function to clean up the subscriptions
@@ -41,6 +48,8 @@ export function setupBackgroundSyncSideEffects(
 
   // Track whether background sync has been triggered this connection cycle
   let backgroundSyncDone = false
+  // Whether the current session is fresh (set by 'online' event, cleared on disconnect)
+  let isFreshSession = false
   // Timer for delayed room catch-up (cleared on cleanup or disconnect)
   let roomCatchUpTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -103,32 +112,39 @@ export function setupBackgroundSyncSideEffects(
     }, 10_000)
   }
 
-  // Subscribe to connection status changes
+  // Fresh session: 'online' fires only on fresh sessions (not SM resumption).
+  // This is the entry point for all MAM background sync.
+  const unsubscribeOnline = client.on('online', () => {
+    backgroundSyncDone = false
+    isFreshSession = true
+
+    if (debug) console.log('[SideEffects] Sync: Fresh session — checking MAM support')
+
+    // Check if MAM is already supported (cached serverInfo from previous session)
+    const supportsMAM = connectionStore.getState().serverInfo?.features?.includes(NS_MAM) ?? false
+    if (supportsMAM) {
+      triggerBackgroundSync()
+    }
+    // If MAM not yet known, the serverInfo subscription below will catch it
+  })
+
+  // SM resumption: no MAM queries needed, just log
+  const unsubscribeResumed = client.on('resumed', () => {
+    isFreshSession = false
+    if (debug) console.log('[SideEffects] Sync: SM resumption — skipping background sync')
+  })
+
+  // When going offline, cancel any pending room catch-up timer
   let previousStatus = connectionStore.getState().status
   const unsubscribeConnection = connectionStore.subscribe((state) => {
     const status = state.status
-
-    // When going offline, cancel any pending room catch-up timer
     if (status !== 'online' && previousStatus === 'online') {
+      isFreshSession = false
       if (roomCatchUpTimer) {
         clearTimeout(roomCatchUpTimer)
         roomCatchUpTimer = undefined
       }
     }
-
-    // When we come back online after being disconnected
-    if (status === 'online' && previousStatus !== 'online') {
-      // Reset flag for new connection cycle
-      backgroundSyncDone = false
-
-      // Check if MAM is already supported (SM resumption with cached serverInfo)
-      const supportsMAM = connectionStore.getState().serverInfo?.features?.includes(NS_MAM) ?? false
-      if (supportsMAM) {
-        triggerBackgroundSync()
-      }
-      // If MAM not yet known, the serverInfo subscription below will catch it
-    }
-
     previousStatus = status
   })
 
@@ -141,7 +157,8 @@ export function setupBackgroundSyncSideEffects(
     if (hasMAMSupport && !hadMAMSupport) {
       hadMAMSupport = hasMAMSupport
 
-      if (!backgroundSyncDone) {
+      // Only trigger on fresh sessions (isFreshSession is false on SM resumption)
+      if (isFreshSession && !backgroundSyncDone) {
         if (debug) console.log('[SideEffects] Sync: MAM support discovered, triggering background sync')
         triggerBackgroundSync()
       }
@@ -151,6 +168,8 @@ export function setupBackgroundSyncSideEffects(
   })
 
   return () => {
+    unsubscribeOnline()
+    unsubscribeResumed()
     unsubscribeConnection()
     unsubscribeServerInfo()
     if (roomCatchUpTimer) {

@@ -1166,96 +1166,106 @@ export class XMPPClient {
   }
 
   /**
-   * Handle successful connection (both initial connect and reconnect).
+   * Handle successful connection — dispatches to SM resume or fresh session path.
    */
   private async handleConnectionSuccess(
     isResumption: boolean,
     previouslyJoinedRooms?: Array<{ jid: string; nickname: string; password?: string; autojoin?: boolean }>
   ): Promise<void> {
     // Transition presence machine to connected state
-    // This is done early so the machine is in the correct state before sending presence
     this.presenceActor.send({ type: 'CONNECT' })
 
-    // Always reset MAM states on any reconnection (including SM resumption)
-    // This ensures we can fetch messages that arrived while we were disconnected.
-    // SM guarantees delivery of in-flight messages, but MAM may have accumulated
-    // new messages (especially in MUC rooms) while we were offline.
+    if (isResumption) {
+      await this.handleSmResumption()
+    } else {
+      await this.handleFreshSession(previouslyJoinedRooms)
+    }
+
+    // Always re-discover admin commands (lightweight, no MAM)
+    this.admin.discoverAdminCommands().catch(() => {})
+  }
+
+  /**
+   * SM Resumption path (XEP-0198).
+   *
+   * When SM resumes successfully, the server replays all undelivered stanzas.
+   * No MAM queries, no roster fetch, no carbons enable needed.
+   * Only send presence and probe offline contacts to refresh their status.
+   */
+  private async handleSmResumption(): Promise<void> {
+    await this.roster.sendInitialPresence()
+
+    this.stores?.console.addEvent('Sending presence probes to refresh contact status', 'sm')
+    this.roster.sendPresenceProbes().catch(() => {})
+  }
+
+  /**
+   * Fresh session path (new session or SM resume failed).
+   *
+   * Full initialization: reset MAM states, fetch roster, enable carbons,
+   * join rooms, discover server features. Background sync side effects
+   * will trigger MAM queries once server info is available.
+   */
+  private async handleFreshSession(
+    previouslyJoinedRooms?: Array<{ jid: string; nickname: string; password?: string; autojoin?: boolean }>
+  ): Promise<void> {
+    // Reset MAM states so background sync will re-fetch message history
     this.stores?.chat.resetMAMStates()
     this.stores?.room.resetRoomMAMStates()
 
-    if (!isResumption) {
-      // Reset state for fresh session
-      this.stores?.roster.resetAllPresence()
-      this.stores?.connection.clearOwnResources()
+    // Reset presence and resources for fresh session
+    this.stores?.roster.resetAllPresence()
+    this.stores?.connection.clearOwnResources()
 
-      // Fetch roster before sending presence
-      await this.roster.fetchRoster()
-      this.enableCarbons()
-    }
+    // Fetch roster before sending presence
+    await this.roster.fetchRoster()
+    this.enableCarbons()
 
     // Send initial presence
     await this.roster.sendInitialPresence()
 
-    // For SM resumption, probe offline contacts
-    if (isResumption) {
-      this.stores?.console.addEvent('Sending presence probes to refresh contact status', 'sm')
-      this.roster.sendPresenceProbes().catch(() => {})
+    // Bookmarks and room joins
+    const { roomsToAutojoin } = await this.muc.fetchBookmarks()
+
+    // Discover MUC service and check service-level MAM support BEFORE joining rooms
+    // This allows queryRoomFeatures() to fall back to service-level MAM detection
+    // when room-level disco fails (e.g., XSF rooms that don't respond to disco)
+    this.muc.discoverMucService().catch(() => {})
+
+    // Restore cached room avatars for bookmarked rooms
+    this.profile.restoreAllRoomAvatarHashes().catch(() => {})
+
+    // Rejoin rooms BEFORE server info fetch - server info can block on slow/unresponsive servers
+    // Two scenarios: reconnect (previouslyJoinedRooms provided) vs fresh connect
+    //
+    // On reconnect: rejoin non-autojoin rooms that were active, PLUS autojoin bookmarks
+    // On fresh connect: just join autojoin bookmarks
+    //
+    // Filter previouslyJoinedRooms to exclude any rooms that are in roomsToAutojoin
+    // (the autojoin state might have changed on another client since we captured it)
+    const autojoinJids = new Set(roomsToAutojoin.map(r => r.jid))
+
+    // Rejoin non-autojoin rooms that were previously joined (reconnect only)
+    if (previouslyJoinedRooms && previouslyJoinedRooms.length > 0) {
+      const nonAutojoinRooms = previouslyJoinedRooms.filter(r => !autojoinJids.has(r.jid))
+      if (nonAutojoinRooms.length > 0) {
+        await this.muc.rejoinActiveRooms(nonAutojoinRooms)
+      }
     }
 
-    // Continue setup for new sessions
-    if (!isResumption) {
-      const { roomsToAutojoin } = await this.muc.fetchBookmarks()
-
-      // Discover MUC service and check service-level MAM support BEFORE joining rooms
-      // This allows queryRoomFeatures() to fall back to service-level MAM detection
-      // when room-level disco fails (e.g., XSF rooms that don't respond to disco)
-      this.muc.discoverMucService().catch(() => {})
-
-      // Restore cached room avatars for bookmarked rooms
-      this.profile.restoreAllRoomAvatarHashes().catch(() => {})
-
-      // Rejoin rooms BEFORE server info fetch - server info can block on slow/unresponsive servers
-      // Two scenarios: reconnect (previouslyJoinedRooms provided) vs fresh connect
-      //
-      // On reconnect: rejoin non-autojoin rooms that were active, PLUS autojoin bookmarks
-      // On fresh connect: just join autojoin bookmarks
-      //
-      // Filter previouslyJoinedRooms to exclude any rooms that are in roomsToAutojoin
-      // (the autojoin state might have changed on another client since we captured it)
-      const autojoinJids = new Set(roomsToAutojoin.map(r => r.jid))
-
-      // Rejoin non-autojoin rooms that were previously joined (reconnect only)
-      if (previouslyJoinedRooms && previouslyJoinedRooms.length > 0) {
-        const nonAutojoinRooms = previouslyJoinedRooms.filter(r => !autojoinJids.has(r.jid))
-        if (nonAutojoinRooms.length > 0) {
-          await this.muc.rejoinActiveRooms(nonAutojoinRooms)
-        }
+    // Always join autojoin bookmarks (both fresh connect and reconnect)
+    if (roomsToAutojoin.length > 0) {
+      for (const room of roomsToAutojoin) {
+        this.muc.joinRoom(room.jid, room.nick, { password: room.password }).catch((err) => {
+          console.error(`[XMPPClient] Failed to autojoin room ${room.jid}:`, err)
+        })
       }
-
-      // Always join autojoin bookmarks (both fresh connect and reconnect)
-      if (roomsToAutojoin.length > 0) {
-        for (const room of roomsToAutojoin) {
-          this.muc.joinRoom(room.jid, room.nick, { password: room.password }).catch((err) => {
-            console.error(`[XMPPClient] Failed to autojoin room ${room.jid}:`, err)
-          })
-        }
-      }
-
-      // Server discovery is less critical - can block on slow servers, so do it after rooms are joined
-      await this.discovery.fetchServerInfo()
-      this.discovery.discoverHttpUploadService().catch(() => {})
-      this.profile.fetchOwnProfile().catch(() => {})
     }
 
-    // Always re-discover admin commands
-    this.admin.discoverAdminCommands().catch(() => {})
-
-    // Smart MAM strategy (see backgroundSync.ts setupBackgroundSyncSideEffects):
-    // - Active conversation: Full MAM catch-up on reconnect (sideEffects chat subscription)
-    // - Non-archived conversations: Lightweight preview refresh on connect (max=5 each, concurrency=3)
-    // - Archived conversations: Daily preview check, auto-unarchive on new incoming messages
-    // - Rooms: Preview is fetched on room join (room:joined event)
-    // Preview refresh is triggered by sideEffects when MAM support is available.
+    // Server discovery is less critical - can block on slow servers, so do it after rooms are joined
+    await this.discovery.fetchServerInfo()
+    this.discovery.discoverHttpUploadService().catch(() => {})
+    this.profile.fetchOwnProfile().catch(() => {})
   }
 
   private enableCarbons(): void {
