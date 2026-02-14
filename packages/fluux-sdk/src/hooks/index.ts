@@ -1,5 +1,6 @@
 export { useConnection } from './useConnection'
 export { useChat } from './useChat'
+export { useChatActive } from './useChatActive'
 export { useRoster } from './useRoster'
 export { useRosterActions } from './useRosterActions'
 export { useConsole } from './useConsole'
