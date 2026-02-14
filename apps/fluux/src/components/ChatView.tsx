@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useChatActive, useContactIdentities, usePresence, createMessageLookup, getBareJid, getLocalPart, type Message, type ContactIdentity } from '@fluux/sdk'
+import { useChatActive, useContactIdentities, createMessageLookup, getBareJid, getLocalPart, type Message, type ContactIdentity } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { getConsistentTextColor } from './Avatar'
 import { useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat } from '@/hooks'
@@ -37,7 +37,6 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
   const ownNickname = useConnectionStore((s) => s.ownNickname)
   const status = useConnectionStore((s) => s.status)
   const isConnected = status === 'online'
-  const { presenceStatus: presenceShow } = usePresence()
   const { uploadFile, isUploading, progress, isSupported } = useFileUpload()
   const { processMessageForLinkPreview } = useLinkPreview()
   const { resolvedMode } = useMode()
@@ -268,7 +267,6 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
           myBareJid={myBareJid}
           ownAvatar={ownAvatar}
           ownNickname={ownNickname}
-          ownPresence={presenceShow}
           onReply={handleReply}
           onEdit={setEditingMessage}
           lastOutgoingMessageId={lastOutgoingMessageId}
@@ -343,7 +341,6 @@ const ChatMessageList = memo(function ChatMessageList({
   myBareJid,
   ownAvatar,
   ownNickname,
-  ownPresence,
   onReply,
   onEdit,
   lastOutgoingMessageId,
@@ -376,7 +373,6 @@ const ChatMessageList = memo(function ChatMessageList({
   myBareJid?: string
   ownAvatar?: string | null
   ownNickname?: string | null
-  ownPresence?: 'online' | 'away' | 'dnd' | 'offline'
   onReply: (message: Message) => void
   onEdit: (message: Message) => void
   lastOutgoingMessageId: string | null
@@ -458,7 +454,6 @@ const ChatMessageList = memo(function ChatMessageList({
       avatar={msg.isOutgoing ? ownAvatar ?? undefined : contactsByJid.get(msg.from)?.avatar}
       ownAvatar={ownAvatar}
       ownNickname={ownNickname}
-      ownPresence={ownPresence}
       conversationId={conversationId}
       conversationType={conversationType}
       sendReaction={sendReaction}
@@ -484,7 +479,7 @@ const ChatMessageList = memo(function ChatMessageList({
       timeFormat={effectiveTimeFormat}
     />
   ), [
-    ownAvatar, contactsByJid, ownNickname, ownPresence, conversationId, conversationType,
+    ownAvatar, contactsByJid, ownNickname, conversationId, conversationType,
     sendReaction, myBareJid, messagesById, onReply, onEdit, lastOutgoingMessageId, lastMessageId,
     isComposing, activeReactionPickerMessageId, onReactionPickerChange, retractMessage,
     selectedMessageId, hasKeyboardSelection, showToolbarForSelection, isDarkMode,
