@@ -5,7 +5,8 @@
  * Also supports group chat mode with a hash icon.
  */
 import { useTranslation } from 'react-i18next'
-import type { Contact } from '@fluux/sdk'
+import type { ContactIdentity } from '@fluux/sdk'
+import { useRosterStore } from '@fluux/sdk/react'
 import { Avatar } from './Avatar'
 import { useWindowDrag } from '@/hooks'
 import { getTranslatedStatusText } from '@/utils/statusText'
@@ -14,7 +15,7 @@ import { ArrowLeft, Hash } from 'lucide-react'
 export interface ChatHeaderProps {
   name: string
   type: 'chat' | 'groupchat'
-  contact?: Contact
+  contact?: ContactIdentity
   jid: string
   onBack?: () => void
 }
@@ -29,6 +30,11 @@ export function ChatHeader({
   const { t } = useTranslation()
   const isGroupChat = type === 'groupchat'
   const { titleBarClass, dragRegionProps } = useWindowDrag()
+
+  // Subscribe to this specific contact's full data from the roster store
+  // for presence display. This is a focused selector — only re-renders when
+  // this specific contact changes, not when other contacts update.
+  const fullContact = useRosterStore((s) => jid ? s.contacts.get(jid) : undefined)
 
   return (
     <header className={`h-14 ${titleBarClass} px-4 flex items-center border-b border-fluux-bg shadow-sm gap-3`} {...dragRegionProps}>
@@ -54,7 +60,7 @@ export function ChatHeader({
           name={name}
           avatarUrl={contact?.avatar}
           size="header"
-          presence={contact?.presence ?? 'offline'}
+          presence={fullContact?.presence ?? 'offline'}
           presenceBorderColor="border-fluux-bg"
         />
       )}
@@ -64,7 +70,7 @@ export function ChatHeader({
         <h2 className="font-semibold text-fluux-text truncate leading-tight">{name}</h2>
         {!isGroupChat && (
           <p className="text-xs text-fluux-muted truncate">
-            {contact ? getTranslatedStatusText(contact, t) : jid}
+            {fullContact ? getTranslatedStatusText(fullContact, t) : jid}
           </p>
         )}
       </div>
