@@ -14,6 +14,39 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '0.13.2',
+    date: '2026-02-14',
+    sections: [
+      {
+        type: 'added',
+        items: [
+          'SDK: Connection state machine for more predictable connection lifecycle',
+        ],
+      },
+      {
+        type: 'changed',
+        items: [
+          'Beta release process for pre-release testing',
+          'Separated SM resumption and fresh session initialization paths',
+          'Optimized active conversation rendering with `useChatActive` hook',
+          'MAM guards to skip unnecessary operations during SM resumption',
+          'Improved connection fallback: proper WebSocket URL resolution and proxy restart',
+          'XMPP Console performance with `useCallback`/`React.memo`',
+          'Reduced MAM traffic on connect',
+        ],
+      },
+      {
+        type: 'fixed',
+        items: [
+          'Connection error handling with firewall hint for proxy mode failures',
+          'Proxy memory handling with buffer size limits and better stanza extraction',
+          'Reconnection logic and login display optimizations',
+          'Connection error message formatting',
+        ],
+      },
+    ],
+  },
+  {
     version: '0.13.1',
     date: '2026-02-13',
     sections: [

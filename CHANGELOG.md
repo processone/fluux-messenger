@@ -5,6 +5,29 @@ All notable changes to Fluux Messenger are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.2] - 2026-02-14
+
+### Added
+
+- SDK: Connection state machine for more predictable connection lifecycle
+
+### Changed
+
+- Beta release process for pre-release testing
+- Separated SM resumption and fresh session initialization paths
+- Optimized active conversation rendering with `useChatActive` hook
+- MAM guards to skip unnecessary operations during SM resumption
+- Improved connection fallback: proper WebSocket URL resolution and proxy restart
+- XMPP Console performance with `useCallback`/`React.memo`
+- Reduced MAM traffic on connect
+
+### Fixed
+
+- Connection error handling with firewall hint for proxy mode failures
+- Proxy memory handling with buffer size limits and better stanza extraction
+- Reconnection logic and login display optimizations
+- Connection error message formatting
+
 ## [0.13.1] - 2026-02-13
 
 ### Added
