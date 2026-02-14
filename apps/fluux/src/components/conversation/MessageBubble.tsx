@@ -6,7 +6,7 @@
  */
 import { useState, memo, type ReactNode } from 'react'
 import { CornerUpLeft } from 'lucide-react'
-import { formatMessagePreview, type BaseMessage, type MentionReference, type Contact, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
+import { formatMessagePreview, type BaseMessage, type MentionReference, type Contact, type ContactIdentity, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
 import { Avatar } from '../Avatar'
 import { MessageToolbar } from './MessageToolbar'
 import { MessageBody } from './MessageBody'
@@ -45,8 +45,8 @@ export interface MessageBubbleProps {
   avatarPresence?: 'online' | 'away' | 'dnd' | 'offline'
   /** JID to show in the click popover */
   senderJid?: string
-  /** Contact object for showing connected devices in popover */
-  senderContact?: Contact
+  /** Contact or identity object for showing info in popover */
+  senderContact?: Contact | ContactIdentity
   /** Room role for MUC occupants */
   senderRole?: RoomRole
   /** Room affiliation for MUC occupants */

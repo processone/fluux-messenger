@@ -6,14 +6,14 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
-import type { Contact, RoomAffiliation, RoomRole } from '@fluux/sdk'
+import type { Contact, ContactIdentity, RoomAffiliation, RoomRole } from '@fluux/sdk'
 import { useClickOutside } from '@/hooks'
 import { getTranslatedShowText } from '@/utils/presence'
 import { Monitor, Smartphone, Tablet, Globe, HelpCircle, Shield, Crown, UserCheck } from 'lucide-react'
 
 export interface UserInfoPopoverProps {
-  /** The contact to show info for */
-  contact?: Contact
+  /** The contact to show info for (Contact has device info, ContactIdentity is identity-only) */
+  contact?: Contact | ContactIdentity
   /** The JID to display (fallback if no contact) */
   jid?: string
   /** Room role (for MUC occupants) */
@@ -119,9 +119,9 @@ export function UserInfoPopover({ contact, jid, role, affiliation, children, cla
     setIsOpen(true)
   }
 
-  // Build device list
+  // Build device list (only available when contact has full Contact data with resources)
   const devices: { name: string; status: string; resource: string }[] = []
-  if (contact?.resources) {
+  if (contact && 'resources' in contact && contact.resources) {
     for (const [resource, presence] of contact.resources.entries()) {
       const clientName = presence.client || resource || t('contacts.unknown')
       const status = getTranslatedShowText(presence.show, t)
