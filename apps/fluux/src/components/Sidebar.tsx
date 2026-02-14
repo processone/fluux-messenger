@@ -5,14 +5,12 @@ import { useClickOutside, useWindowDrag, useRouteSync } from '@/hooks'
 import { useModals } from '@/contexts'
 import {
   useXMPP,
-  useChat,
   useEvents,
-  useRoom,
   useAdmin,
   type Contact,
   type AdminCategory,
 } from '@fluux/sdk'
-import { useConnectionStore } from '@fluux/sdk/react'
+import { useConnectionStore, useChatStore, useRoomStore } from '@fluux/sdk/react'
 import { AdminDashboard } from './AdminDashboard'
 import { BrowseRoomsModal } from './BrowseRoomsModal'
 import { Avatar } from './Avatar'
@@ -93,9 +91,17 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
   const disconnect = useCallback(() => client.disconnect(), [client])
   const cancelReconnect = useCallback(() => client.cancelReconnect(), [client])
   const { isAdmin } = useAdmin()
-  const { conversations } = useChat()
+  // Use targeted store selectors instead of useChat()/useRoom() to avoid render loops.
+  // Those hooks subscribe to many store properties (conversations array, messages, etc.)
+  // which create new references during the post-connection initialization burst.
+  const totalUnread = useChatStore((s) => {
+    let sum = 0
+    for (const conv of s.conversations.values()) sum += conv.unreadCount
+    return sum
+  })
   const { pendingCount } = useEvents()
-  const { totalMentionsCount, totalNotifiableUnreadCount } = useRoom()
+  const totalMentionsCount = useRoomStore((s) => s.totalMentionsCount())
+  const totalNotifiableUnreadCount = useRoomStore((s) => s.totalNotifiableUnreadCount())
   const { titleBarClass, dragRegionProps } = useWindowDrag()
 
   // Modal state from context - shared with ChatLayout
@@ -179,8 +185,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
   const closeRoomDropdown = useCallback(() => setShowRoomDropdown(false), [])
   useClickOutside(roomDropdownRef, closeRoomDropdown, showRoomDropdown)
 
-  // Calculate total unread count across all conversations
-  const totalUnread = conversations.reduce((sum, conv) => sum + conv.unreadCount, 0)
+  // totalUnread is computed directly via useChatStore selector above
 
   return (
     <aside

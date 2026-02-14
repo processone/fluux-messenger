@@ -1,4 +1,5 @@
 import { createStore } from 'zustand/vanilla'
+import { subscribeWithSelector } from 'zustand/middleware'
 import type { ConnectionStatus, ConnectionMethod, PresenceShow, ServerInfo, ResourcePresence, HttpUploadService } from '../core/types'
 
 // Re-export for convenience
@@ -98,7 +99,8 @@ const initialState = {
   windowVisible: true, // Assume visible on startup
 }
 
-export const connectionStore = createStore<ConnectionState>((set) => ({
+export const connectionStore = createStore<ConnectionState>()(
+  subscribeWithSelector((set) => ({
   ...initialState,
 
   setStatus: (status) => set({ status }),
@@ -143,6 +145,6 @@ export const connectionStore = createStore<ConnectionState>((set) => ({
     ...initialState,
     ownResources: new Map(), // Create new Map instance on reset
   }),
-}))
+})))
 
 export type { ConnectionState }

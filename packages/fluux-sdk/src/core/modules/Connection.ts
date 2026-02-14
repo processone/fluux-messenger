@@ -25,6 +25,21 @@ const MAX_RECONNECT_ATTEMPTS = 10     // Stop after 10 failed attempts
 // If we've been asleep longer than this, the SM session is definitely dead
 const SM_SESSION_TIMEOUT_MS = 10 * 60 * 1000  // 10 minutes
 
+// Timeout for graceful client stop (stream close + socket close)
+// When the socket is already dead, xmpp.js stop() can hang waiting for events
+const CLIENT_STOP_TIMEOUT_MS = 2000
+
+/**
+ * Race a promise against a timeout. Resolves with void if the timeout fires first.
+ * Used to prevent hanging on xmpp.js stop() when the socket is already dead.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | void> {
+  return Promise.race([
+    promise,
+    new Promise<void>((resolve) => setTimeout(resolve, ms)),
+  ])
+}
+
 // Dev-only error logging (checks Vite dev mode, excludes test mode)
 const isDev = (() => {
   try {
@@ -443,16 +458,6 @@ export class Connection extends BaseModule {
     // to ensure all messages received during this session are persisted
     await flushPendingRoomMessages()
 
-    // Stop the proxy if running
-    if (this.deps.proxyAdapter) {
-      try {
-        await this.deps.proxyAdapter.stopProxy()
-        this.stores.console.addEvent('Stopped proxy', 'connection')
-      } catch (_err) {
-        // Ignore errors - proxy might not be running
-      }
-    }
-
     if (this.xmpp) {
       // Save reference to prevent race condition:
       // If connect() is called during stop(), it creates a new client.
@@ -471,13 +476,24 @@ export class Connection extends BaseModule {
       this.deps.emitSDK('connection:status', { status: 'offline' })
       // Flush any pending debounced SM ack before closing the stream
       flushSmAckDebounce(this.smPatchState, clientToStop)
-      await clientToStop.stop()
+      // Close the XMPP stream BEFORE stopping the proxy so the </stream:stream>
+      // close can flow through the WebSocket-to-TLS bridge. If we stop the proxy
+      // first, xmpp.js tries to write to a dead WebSocket and gets stuck.
+      await withTimeout(clientToStop.stop(), CLIENT_STOP_TIMEOUT_MS)
     } else {
       this.stores.connection.setStatus('disconnected')
       this.stores.connection.setJid(null)
       this.stores.console.addEvent('Disconnected', 'connection')
       // Emit SDK event for disconnect
       this.deps.emitSDK('connection:status', { status: 'offline' })
+    }
+
+    // Stop the proxy AFTER the XMPP stream is closed (fire-and-forget).
+    // The stream close already went through the proxy above, so this just
+    // cleans up the listener. No need to await — avoid blocking on IPC.
+    if (this.deps.proxyAdapter) {
+      this.deps.proxyAdapter.stopProxy().catch(() => {})
+      this.stores.console.addEvent('Stopped proxy', 'connection')
     }
   }
 
@@ -1538,7 +1554,7 @@ export class Connection extends BaseModule {
     clearSmAckDebounce(this.smPatchState)
 
     try {
-      await clientToClean.stop()
+      await withTimeout(clientToClean.stop(), CLIENT_STOP_TIMEOUT_MS)
     } catch {
       // Ignore stop errors during cleanup
     }

@@ -176,44 +176,50 @@ export function setupChatSideEffects(
   // Subscribe to connection status changes for typing cleanup only.
   // This fires on both fresh sessions and SM resumption — typing states
   // should always be cleared when going offline.
+  // Uses selective subscription to avoid firing on unrelated connectionStore
+  // changes (serverInfo, ownAvatar, etc.) during post-connection initialization.
   let previousStatus = connectionStore.getState().status
-  const unsubscribeConnection = connectionStore.subscribe((state) => {
-    const status = state.status
+  const unsubscribeConnection = connectionStore.subscribe(
+    (state) => state.status,
+    (status) => {
+      // When going offline, clear typing states to prevent stale indicators
+      // and orphaned typing timeout timers
+      if (status !== 'online' && previousStatus === 'online') {
+        if (debug) console.log('[SideEffects] Chat: Going offline, clearing typing states')
+        chatStore.getState().clearAllTyping()
+        isFreshSession = false
+      }
 
-    // When going offline, clear typing states to prevent stale indicators
-    // and orphaned typing timeout timers
-    if (status !== 'online' && previousStatus === 'online') {
-      if (debug) console.log('[SideEffects] Chat: Going offline, clearing typing states')
-      chatStore.getState().clearAllTyping()
-      isFreshSession = false
+      previousStatus = status
     }
-
-    previousStatus = status
-  })
+  )
 
   // Subscribe to serverInfo changes (for initial MAM support discovery)
   // When the app auto-selects a conversation during login, serverInfo may not be
   // populated yet. This subscription triggers MAM fetch when MAM becomes available.
   let hadMAMSupport = connectionStore.getState().serverInfo?.features?.includes(NS_MAM) ?? false
-  const unsubscribeServerInfo = connectionStore.subscribe((state) => {
-    const hasMAMSupport = state.serverInfo?.features?.includes(NS_MAM) ?? false
+  const unsubscribeServerInfo = connectionStore.subscribe(
+    (state) => state.serverInfo,
+    (serverInfo) => {
+      const hasMAMSupport = serverInfo?.features?.includes(NS_MAM) ?? false
 
-    // When MAM support is first discovered (wasn't available before, now it is)
-    if (hasMAMSupport && !hadMAMSupport) {
-      hadMAMSupport = hasMAMSupport
+      // When MAM support is first discovered (wasn't available before, now it is)
+      if (hasMAMSupport && !hadMAMSupport) {
+        hadMAMSupport = hasMAMSupport
 
-      // Only trigger on fresh sessions (isFreshSession is false on SM resumption)
-      if (!isFreshSession) return
+        // Only trigger on fresh sessions (isFreshSession is false on SM resumption)
+        if (!isFreshSession) return
 
-      const activeConversationId = chatStore.getState().activeConversationId
-      if (activeConversationId && !fetchInitiated.has(activeConversationId)) {
-        if (debug) console.log('[SideEffects] Chat: MAM support discovered, fetching for active conversation', activeConversationId)
-        void fetchMAMForConversation(activeConversationId)
+        const activeConversationId = chatStore.getState().activeConversationId
+        if (activeConversationId && !fetchInitiated.has(activeConversationId)) {
+          if (debug) console.log('[SideEffects] Chat: MAM support discovered, fetching for active conversation', activeConversationId)
+          void fetchMAMForConversation(activeConversationId)
+        }
+      } else {
+        hadMAMSupport = hasMAMSupport
       }
-    } else {
-      hadMAMSupport = hasMAMSupport
     }
-  })
+  )
 
   return () => {
     unsubscribeConversation()
