@@ -6,6 +6,14 @@ import { getClientIdentity, CLIENT_FEATURES } from '../caps'
 import { NS_DISCO_INFO, NS_PING } from '../namespaces'
 import { discoverWebSocket } from '../../utils/websocketDiscovery'
 import { flushPendingRoomMessages } from '../../utils/messageCache'
+import {
+  type SmPatchState,
+  createSmPatchState,
+  patchSmAckDebounce,
+  patchSmAckQueue,
+  flushSmAckDebounce,
+  clearSmAckDebounce,
+} from './smPatches'
 
 // Reconnection constants
 const INITIAL_RECONNECT_DELAY = 1000  // 1 second
@@ -98,6 +106,10 @@ export class Connection extends BaseModule {
   // Cached SM state - survives socket death for reconnection
   // Updated when SM is enabled/resumed, cleared on manual disconnect
   private cachedSmState: { id: string; inbound: number } | null = null
+
+  // SM patches state (ack debounce timer + original send reference)
+  // See smPatches.ts for implementation details
+  private smPatchState: SmPatchState = createSmPatchState()
 
   // Callback for post-connection setup (roster, presence, carbons, etc.)
   private onConnectionSuccess?: (isResumption: boolean, previouslyJoinedRooms?: Array<{ jid: string; nickname: string; password?: string; autojoin?: boolean }>) => Promise<void>
@@ -457,6 +469,8 @@ export class Connection extends BaseModule {
       this.stores.console.addEvent('Disconnected', 'connection')
       // Emit SDK event for disconnect
       this.deps.emitSDK('connection:status', { status: 'offline' })
+      // Flush any pending debounced SM ack before closing the stream
+      flushSmAckDebounce(this.smPatchState, clientToStop)
       await clientToStop.stop()
     } else {
       this.stores.connection.setStatus('disconnected')
@@ -680,6 +694,8 @@ export class Connection extends BaseModule {
     const clientToClean = this.xmpp
     this.xmpp = null
 
+    // Clear any pending SM ack debounce (socket is dead, don't try to send)
+    clearSmAckDebounce(this.smPatchState)
     // Stop the old client (fire-and-forget since socket is already dead)
     if (clientToClean) {
       clientToClean.stop().catch(() => {})
@@ -888,6 +904,9 @@ export class Connection extends BaseModule {
         // Set to very high value to effectively disable (24 hours)
         sm.requestAckInterval = 24 * 60 * 60 * 1000
       }
+
+      patchSmAckDebounce(this.smPatchState, xmppClient)
+      patchSmAckQueue(sm)
     }
 
     return xmppClient
@@ -1514,6 +1533,9 @@ export class Connection extends BaseModule {
 
     // Null the reference FIRST to prevent race conditions
     this.xmpp = null
+
+    // Clear any pending SM ack debounce timer
+    clearSmAckDebounce(this.smPatchState)
 
     try {
       await clientToClean.stop()
