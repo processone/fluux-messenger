@@ -67,3 +67,12 @@ export function simulateFreshSession(client: ReturnType<typeof createMockClient>
   connectionStore.getState().setStatus('online')
   client._emit('online')
 }
+
+/**
+ * Simulate an SM resumption: set store status to 'online' and emit 'resumed' event.
+ * In the real flow, Connection.ts does both in handleConnectionSuccess.
+ */
+export function simulateSmResumption(client: ReturnType<typeof createMockClient>) {
+  connectionStore.getState().setStatus('online')
+  client._emit('resumed')
+}

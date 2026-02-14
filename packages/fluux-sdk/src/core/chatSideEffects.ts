@@ -167,10 +167,17 @@ export function setupChatSideEffects(
     }
   })
 
-  // SM resumption: no MAM catchup needed
+  // SM resumption: no MAM catchup needed — server replays undelivered stanzas
   const unsubscribeResumed = client.on('resumed', () => {
     isFreshSession = false
     if (debug) console.log('[SideEffects] Chat: SM resumption — skipping MAM catchup')
+
+    // Mark active conversation as already fetched so switching away and back
+    // doesn't trigger a redundant MAM query (SM already caught us up)
+    const activeConversationId = chatStore.getState().activeConversationId
+    if (activeConversationId) {
+      fetchInitiated.add(activeConversationId)
+    }
   })
 
   // Subscribe to connection status changes for typing cleanup only.

@@ -45,7 +45,7 @@ vi.mock('../utils/messageCache', () => ({
 import { setupRoomSideEffects } from './roomSideEffects'
 import { roomStore } from '../stores/roomStore'
 import { connectionStore } from '../stores/connectionStore'
-import { createMockClient, simulateFreshSession } from './sideEffects.testHelpers'
+import { createMockClient, simulateFreshSession, simulateSmResumption } from './sideEffects.testHelpers'
 
 describe('setupRoomSideEffects', () => {
   let mockClient: ReturnType<typeof createMockClient>
@@ -62,9 +62,7 @@ describe('setupRoomSideEffects', () => {
   })
 
   describe('supportsMAM subscription', () => {
-    it('should trigger MAM fetch when supportsMAM becomes true on active room', async () => {
-      connectionStore.getState().setStatus('online')
-
+    it('should trigger MAM fetch when supportsMAM becomes true on active room (fresh session)', async () => {
       roomStore.getState().addRoom({
         jid: 'room@conference.example.com',
         name: 'Test Room',
@@ -82,6 +80,9 @@ describe('setupRoomSideEffects', () => {
       roomStore.getState().setActiveRoom('room@conference.example.com')
 
       cleanup = setupRoomSideEffects(mockClient)
+
+      // Simulate fresh session so isFreshSession = true
+      simulateFreshSession(mockClient)
 
       await vi.waitFor(() => {
         expect((mockClient.chat.queryRoomMAM as ReturnType<typeof vi.fn>).mock.calls.length).toBe(0)
@@ -102,8 +103,6 @@ describe('setupRoomSideEffects', () => {
     })
 
     it('should not trigger MAM fetch if supportsMAM was already true', async () => {
-      connectionStore.getState().setStatus('online')
-
       roomStore.getState().addRoom({
         jid: 'room@conference.example.com',
         name: 'Test Room',
@@ -119,6 +118,7 @@ describe('setupRoomSideEffects', () => {
       })
 
       cleanup = setupRoomSideEffects(mockClient)
+      simulateFreshSession(mockClient)
 
       roomStore.getState().setActiveRoom('room@conference.example.com')
 
@@ -303,6 +303,133 @@ describe('setupRoomSideEffects', () => {
       connectionStore.getState().setStatus('disconnected')
       cleanup = setupRoomSideEffects(mockClient)
 
+      simulateFreshSession(mockClient)
+
+      await vi.waitFor(() => {
+        expect(mockClient.chat.queryRoomMAM).toHaveBeenCalledWith(
+          expect.objectContaining({
+            roomJid: 'room@conference.example.com',
+          })
+        )
+      })
+    })
+  })
+
+  describe('SM resumption', () => {
+    it('should NOT trigger MAM catchup on SM resumption for active room', async () => {
+      roomStore.getState().addRoom({
+        jid: 'room@conference.example.com',
+        name: 'Test Room',
+        nickname: 'testuser',
+        joined: true,
+        supportsMAM: true,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+        isBookmarked: true,
+      })
+
+      roomStore.getState().setActiveRoom('room@conference.example.com')
+
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupRoomSideEffects(mockClient)
+
+      // SM resumption instead of fresh session
+      simulateSmResumption(mockClient)
+
+      await new Promise(resolve => setTimeout(resolve, 50))
+      expect(mockClient.chat.queryRoomMAM).not.toHaveBeenCalled()
+    })
+
+    it('should NOT trigger MAM when supportsMAM becomes true during SM resumption', async () => {
+      roomStore.getState().addRoom({
+        jid: 'room@conference.example.com',
+        name: 'Test Room',
+        nickname: 'testuser',
+        joined: true,
+        supportsMAM: false,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+        isBookmarked: true,
+      })
+
+      roomStore.getState().setActiveRoom('room@conference.example.com')
+
+      cleanup = setupRoomSideEffects(mockClient)
+
+      // SM resumption (not fresh session)
+      simulateSmResumption(mockClient)
+
+      // supportsMAM transition during SM resumed session
+      roomStore.getState().updateRoom('room@conference.example.com', {
+        supportsMAM: true,
+      })
+
+      await new Promise(resolve => setTimeout(resolve, 50))
+      expect(mockClient.chat.queryRoomMAM).not.toHaveBeenCalled()
+    })
+
+    it('should NOT trigger MAM when room joined state changes during SM resumption', async () => {
+      roomStore.getState().addRoom({
+        jid: 'room@conference.example.com',
+        name: 'Test Room',
+        nickname: 'testuser',
+        joined: false,
+        supportsMAM: true,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+        isBookmarked: true,
+      })
+
+      roomStore.getState().setActiveRoom('room@conference.example.com')
+
+      cleanup = setupRoomSideEffects(mockClient)
+
+      // SM resumption (not fresh session)
+      simulateSmResumption(mockClient)
+
+      // joined transition during SM resumed session (e.g., server replaying self-presence)
+      roomStore.getState().setRoomJoined('room@conference.example.com', true)
+
+      await new Promise(resolve => setTimeout(resolve, 50))
+      expect(mockClient.chat.queryRoomMAM).not.toHaveBeenCalled()
+    })
+
+    it('should trigger MAM correctly after SM resume then fresh session', async () => {
+      roomStore.getState().addRoom({
+        jid: 'room@conference.example.com',
+        name: 'Test Room',
+        nickname: 'testuser',
+        joined: true,
+        supportsMAM: true,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+        isBookmarked: true,
+      })
+
+      roomStore.getState().setActiveRoom('room@conference.example.com')
+
+      cleanup = setupRoomSideEffects(mockClient)
+
+      // First: SM resumption — no MAM
+      simulateSmResumption(mockClient)
+
+      await new Promise(resolve => setTimeout(resolve, 50))
+      expect(mockClient.chat.queryRoomMAM).not.toHaveBeenCalled()
+
+      // Then: disconnect and fresh session — should trigger MAM
+      connectionStore.getState().setStatus('reconnecting')
       simulateFreshSession(mockClient)
 
       await vi.waitFor(() => {

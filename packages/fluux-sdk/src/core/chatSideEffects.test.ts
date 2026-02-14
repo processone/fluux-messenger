@@ -45,7 +45,7 @@ import { setupChatSideEffects } from './chatSideEffects'
 import { chatStore } from '../stores/chatStore'
 import { connectionStore } from '../stores/connectionStore'
 import { NS_MAM } from './namespaces'
-import { createMockClient, simulateFreshSession } from './sideEffects.testHelpers'
+import { createMockClient, simulateFreshSession, simulateSmResumption } from './sideEffects.testHelpers'
 
 describe('setupChatSideEffects', () => {
   let mockClient: ReturnType<typeof createMockClient>
@@ -136,6 +136,62 @@ describe('setupChatSideEffects', () => {
           })
         )
       })
+    })
+  })
+
+  describe('SM resumption', () => {
+    it('should NOT trigger MAM catchup on SM resumption for active conversation', async () => {
+      connectionStore.getState().setServerInfo({
+        identities: [],
+        domain: 'example.com',
+        features: [NS_MAM],
+      })
+
+      chatStore.getState().addConversation({
+        id: 'contact@example.com',
+        name: 'contact@example.com',
+        type: 'chat',
+        lastMessage: undefined,
+        unreadCount: 0,
+      })
+
+      chatStore.getState().setActiveConversation('contact@example.com')
+
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupChatSideEffects(mockClient)
+
+      // SM resumption instead of fresh session
+      simulateSmResumption(mockClient)
+
+      await new Promise(resolve => setTimeout(resolve, 50))
+      expect(mockClient.chat.queryMAM).not.toHaveBeenCalled()
+    })
+
+    it('should NOT trigger MAM when serverInfo MAM support discovered during SM resumption', async () => {
+      chatStore.getState().addConversation({
+        id: 'contact@example.com',
+        name: 'contact@example.com',
+        type: 'chat',
+        lastMessage: undefined,
+        unreadCount: 0,
+      })
+
+      chatStore.getState().setActiveConversation('contact@example.com')
+
+      cleanup = setupChatSideEffects(mockClient)
+
+      // SM resumption (not fresh session)
+      simulateSmResumption(mockClient)
+
+      // Server info with MAM support arrives — should NOT trigger MAM because isFreshSession is false
+      connectionStore.getState().setServerInfo({
+        identities: [],
+        domain: 'example.com',
+        features: [NS_MAM],
+      })
+
+      await new Promise(resolve => setTimeout(resolve, 50))
+      expect(mockClient.chat.queryMAM).not.toHaveBeenCalled()
     })
   })
 })
