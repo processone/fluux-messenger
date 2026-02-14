@@ -520,7 +520,6 @@ interface ChatMessageBubbleProps {
   avatar?: string
   ownAvatar?: string | null
   ownNickname?: string | null
-  ownPresence?: 'online' | 'away' | 'dnd' | 'offline'
   conversationId: string
   conversationType: 'chat' | 'groupchat'
   sendReaction: (to: string, messageId: string, emojis: string[], type: 'chat' | 'groupchat') => Promise<void>
@@ -555,7 +554,6 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
   avatar,
   ownAvatar,
   ownNickname,
-  ownPresence,
   conversationId,
   conversationType,
   sendReaction,
@@ -684,9 +682,8 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
       avatarUrl={avatar}
       avatarIdentifier={message.from}
       avatarFallbackColor={senderColor}
-      avatarPresence={message.isOutgoing ? ownPresence : undefined}
       senderJid={message.isOutgoing ? myBareJid : message.from.split('/')[0]}
-      senderContact={message.isOutgoing ? undefined : senderContact as import('@fluux/sdk').Contact | undefined}
+      senderContact={message.isOutgoing ? undefined : senderContact}
       myReactions={myReactions}
       onReaction={handleReaction}
       getReactorName={getReactorName}
