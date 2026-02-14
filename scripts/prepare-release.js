@@ -67,21 +67,25 @@ for (const file of VERSION_FILES) {
   console.log(`  ${file}: ${oldVersion} -> ${version}`)
 }
 
+// Tauri v2 requires strict semver (X.Y.Z) — prerelease suffixes are rejected.
+// Strip the prerelease suffix for tauri.conf.json and Cargo.toml.
+const tauriVersion = version.replace(/-.*$/, '')
+
 // 2. Update tauri.conf.json
 console.log('\nUpdating tauri.conf.json...')
 const tauriPath = path.join(ROOT, TAURI_CONF)
 const tauriConf = JSON.parse(fs.readFileSync(tauriPath, 'utf-8'))
 const oldTauriVersion = tauriConf.version
-tauriConf.version = version
+tauriConf.version = tauriVersion
 
 // Update bundleVersion with short git hash
 try {
   const gitHash = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim()
   tauriConf.bundle.macOS.bundleVersion = gitHash
-  console.log(`  version: ${oldTauriVersion} -> ${version}`)
+  console.log(`  version: ${oldTauriVersion} -> ${tauriVersion}${tauriVersion !== version ? ` (stripped from ${version})` : ''}`)
   console.log(`  bundleVersion: ${gitHash}`)
 } catch (e) {
-  console.log(`  version: ${oldTauriVersion} -> ${version}`)
+  console.log(`  version: ${oldTauriVersion} -> ${tauriVersion}${tauriVersion !== version ? ` (stripped from ${version})` : ''}`)
   console.log(`  bundleVersion: (unchanged, git not available)`)
 }
 fs.writeFileSync(tauriPath, JSON.stringify(tauriConf, null, 2) + '\n')
@@ -92,9 +96,9 @@ const cargoPath = path.join(ROOT, TAURI_CARGO)
 let cargoContent = fs.readFileSync(cargoPath, 'utf-8')
 const cargoVersionMatch = cargoContent.match(/^version\s*=\s*"([^"]+)"/m)
 const oldCargoVersion = cargoVersionMatch ? cargoVersionMatch[1] : 'unknown'
-cargoContent = cargoContent.replace(/^version\s*=\s*"[^"]+"/m, `version = "${version}"`)
+cargoContent = cargoContent.replace(/^version\s*=\s*"[^"]+"/m, `version = "${tauriVersion}"`)
 fs.writeFileSync(cargoPath, cargoContent)
-console.log(`  version: ${oldCargoVersion} -> ${version}`)
+console.log(`  version: ${oldCargoVersion} -> ${tauriVersion}${tauriVersion !== version ? ` (stripped from ${version})` : ''}`)
 
 // 4. Generate CHANGELOG.md from changelog.ts
 console.log('\nGenerating CHANGELOG.md from changelog.ts...')
