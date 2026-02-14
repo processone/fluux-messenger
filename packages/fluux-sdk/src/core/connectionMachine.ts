@@ -1,0 +1,572 @@
+/**
+ * XState connection state machine.
+ *
+ * Manages XMPP connection lifecycle with explicit, auditable state transitions.
+ * Replaces the error-prone boolean flags (isReconnecting, hasEverConnected,
+ * isManualDisconnect, disconnectReason) with a proper state machine that makes
+ * impossible states unrepresentable.
+ *
+ * ## State Diagram
+ *
+ * ```
+ * ┌──────┐
+ * │ idle │◄──────────────────────────────────────────────────┐
+ * └──┬───┘                                                   │
+ *    │ CONNECT                                          CONNECT (reset)
+ *    ▼                                                       │
+ * ┌────────────┐  CONNECTION_ERROR  ┌────────────────────────┴──────┐
+ * │ connecting  │──────────────────►│           terminal             │
+ * └──────┬─────┘                    │  ┌──────────────────┐         │
+ *        │                          │  │  initialFailure  │         │
+ *        │ CONNECTION_SUCCESS       │  ├──────────────────┤         │
+ *        ▼                          │  │    conflict       │         │
+ * ┌──────────────────────────┐      │  ├──────────────────┤         │
+ * │        connected          │─────►│  │   authFailed     │         │
+ * │ ┌─────────┐ ┌──────────┐│CONFLICT│  ├──────────────────┤         │
+ * │ │ healthy  │ │verifying ││AUTH_ERR│  │   maxRetries     │         │
+ * │ └────┬────┘ └────┬─────┘│      │  └──────────────────┘         │
+ * │      │           │       │      └───────────────────────────────┘
+ * │  SOCKET_DIED  VERIFY_FAILED                                 ▲
+ * │  WAKE(long)      │       │                                  │
+ * └──────┬───────────┘       │               CONNECTION_ERROR   │
+ *        ▼                   │               (!canReconnect)    │
+ * ┌──────────────────────────┴──┐                               │
+ * │        reconnecting          │──────────────────────────────┘
+ * │ ┌──────────┐ ┌────────────┐ │
+ * │ │ waiting   │ │ attempting │ │
+ * │ └──────────┘ └────────────┘ │
+ * └──────┬───────────────────────┘
+ *        │ DISCONNECT / CANCEL_RECONNECT
+ *        ▼
+ * ┌──────────────┐
+ * │ disconnected  │──── CONNECT ────► idle
+ * └──────────────┘
+ * ```
+ *
+ * ## Key Invariants
+ *
+ * 1. Reconnection only happens from `connected` or `reconnecting` states
+ * 2. Terminal states block all auto-recovery — only user-initiated CONNECT escapes
+ * 3. `connecting` state only transitions to `connected` or `terminal.initialFailure`
+ * 4. Exponential backoff context is always consistent with the current state
+ * 5. CONFLICT and AUTH_ERROR are terminal from any connected/reconnecting state
+ *
+ * @module Core/ConnectionMachine
+ */
+import { setup, assign, type ActorRefFrom } from 'xstate'
+import type { ConnectionStatus } from './types'
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/** Initial delay before first reconnect attempt (ms) */
+export const INITIAL_RECONNECT_DELAY = 1000
+
+/** Maximum delay between reconnect attempts (ms) */
+export const MAX_RECONNECT_DELAY = 120_000
+
+/** Multiplier for exponential backoff */
+export const RECONNECT_MULTIPLIER = 2
+
+/** Maximum number of reconnect attempts before giving up */
+export const DEFAULT_MAX_RECONNECT_ATTEMPTS = 10
+
+/** Stream Management session timeout — server-side, typically 10 minutes (ms) */
+export const SM_SESSION_TIMEOUT_MS = 10 * 60 * 1000
+
+// ============================================================================
+// Types
+// ============================================================================
+
+/**
+ * Events that can be sent to the connection machine.
+ */
+export type ConnectionMachineEvent =
+  | { type: 'CONNECT' }
+  | { type: 'DISCONNECT' }
+  | { type: 'CONNECTION_SUCCESS' }
+  | { type: 'CONNECTION_ERROR'; error: string }
+  | { type: 'SOCKET_DIED' }
+  | { type: 'WAKE'; sleepDurationMs?: number }
+  | { type: 'VISIBLE' }
+  | { type: 'VERIFY_SUCCESS' }
+  | { type: 'VERIFY_FAILED' }
+  | { type: 'CONFLICT' }
+  | { type: 'AUTH_ERROR' }
+  | { type: 'RETRY_TIMER_EXPIRED' }
+  | { type: 'CANCEL_RECONNECT' }
+  | { type: 'TRIGGER_RECONNECT' }
+  | { type: 'COUNTDOWN_TICK' }
+
+/**
+ * Context (extended state) for the connection machine.
+ */
+export interface ConnectionMachineContext {
+  /** Current reconnect attempt number (1-based during reconnection, 0 when not reconnecting) */
+  reconnectAttempt: number
+  /** Maximum number of reconnect attempts before terminal failure */
+  maxReconnectAttempts: number
+  /** Delay before next reconnect attempt (ms), computed via exponential backoff */
+  nextRetryDelayMs: number
+  /** Seconds remaining until next reconnect attempt (for UI countdown), null when not waiting */
+  reconnectCountdownSecs: number | null
+  /** Last error message, null when no error */
+  lastError: string | null
+}
+
+/**
+ * The possible state values of the connection machine.
+ * Using discriminated union for type-safe state checks.
+ */
+export type ConnectionStateValue =
+  | 'idle'
+  | 'connecting'
+  | { connected: 'healthy' }
+  | { connected: 'verifying' }
+  | { reconnecting: 'waiting' }
+  | { reconnecting: 'attempting' }
+  | { terminal: 'conflict' }
+  | { terminal: 'authFailed' }
+  | { terminal: 'maxRetries' }
+  | { terminal: 'initialFailure' }
+  | 'disconnected'
+
+// ============================================================================
+// Helpers (pure functions)
+// ============================================================================
+
+/**
+ * Compute exponential backoff delay for a given attempt number.
+ *
+ * @param attempt - 1-based attempt number
+ * @returns Delay in milliseconds, capped at MAX_RECONNECT_DELAY
+ */
+function computeBackoffDelay(attempt: number): number {
+  return Math.min(
+    INITIAL_RECONNECT_DELAY * Math.pow(RECONNECT_MULTIPLIER, attempt - 1),
+    MAX_RECONNECT_DELAY
+  )
+}
+
+// ============================================================================
+// Machine Definition
+// ============================================================================
+
+/**
+ * Create the connection state machine definition.
+ *
+ * The machine manages connection lifecycle with explicit, auditable transitions.
+ * It doesn't perform I/O directly — instead, the Connection module subscribes
+ * to state changes and performs side effects (XMPP operations, timer management).
+ */
+export const connectionMachine = setup({
+  types: {
+    context: {} as ConnectionMachineContext,
+    events: {} as ConnectionMachineEvent,
+  },
+  actions: {
+    // Reset all reconnection-related context to defaults
+    resetReconnectState: assign({
+      reconnectAttempt: 0,
+      nextRetryDelayMs: 0,
+      reconnectCountdownSecs: null,
+      lastError: null,
+    }),
+
+    // Increment attempt counter and compute next backoff delay
+    incrementAttempt: assign(({ context }) => {
+      const attempt = context.reconnectAttempt + 1
+      const delay = computeBackoffDelay(attempt)
+      return {
+        reconnectAttempt: attempt,
+        nextRetryDelayMs: delay,
+        reconnectCountdownSecs: Math.ceil(delay / 1000),
+      }
+    }),
+
+    // Store error message from event
+    setError: assign(({ event }) => {
+      if (event.type === 'CONNECTION_ERROR') {
+        return { lastError: event.error }
+      }
+      return {}
+    }),
+
+    // Set a static error message (for terminal states)
+    setConflictError: assign({
+      lastError: 'Session replaced by another client',
+    }),
+
+    setAuthError: assign({
+      lastError: 'Authentication failed',
+    }),
+
+    setMaxRetriesError: assign({
+      lastError: 'Connection failed after multiple retry attempts',
+    }),
+
+    // Decrement the countdown by 1 second
+    decrementCountdown: assign(({ context }) => ({
+      reconnectCountdownSecs: context.reconnectCountdownSecs !== null
+        ? Math.max(0, context.reconnectCountdownSecs - 1)
+        : null,
+    })),
+
+    // Clear countdown (entering attempting state)
+    clearCountdown: assign({
+      reconnectCountdownSecs: null,
+    }),
+
+    // Clear error
+    clearError: assign({
+      lastError: null,
+    }),
+  },
+  guards: {
+    // Can we attempt another reconnect?
+    canReconnect: ({ context }) =>
+      context.reconnectAttempt < context.maxReconnectAttempts,
+
+    // Did the sleep duration exceed SM session timeout?
+    sleepExceedsSMTimeout: ({ event }) => {
+      if (event.type === 'WAKE') {
+        return (event.sleepDurationMs ?? 0) > SM_SESSION_TIMEOUT_MS
+      }
+      return false
+    },
+  },
+}).createMachine({
+  id: 'connection',
+  context: {
+    reconnectAttempt: 0,
+    maxReconnectAttempts: DEFAULT_MAX_RECONNECT_ATTEMPTS,
+    nextRetryDelayMs: 0,
+    reconnectCountdownSecs: null,
+    lastError: null,
+  },
+  initial: 'idle',
+  states: {
+    /**
+     * Fresh client — no connection has been attempted.
+     * Entry point for the machine and reset target after terminal states.
+     */
+    idle: {
+      on: {
+        CONNECT: {
+          target: 'connecting',
+          actions: 'clearError',
+        },
+      },
+    },
+
+    /**
+     * Initial connection attempt in progress.
+     * Only transitions to connected.healthy on success or terminal.initialFailure on error.
+     * This state does NOT auto-retry — if the first connection fails, the user sees the error.
+     */
+    connecting: {
+      on: {
+        CONNECTION_SUCCESS: {
+          target: 'connected',
+          actions: 'resetReconnectState',
+        },
+        CONNECTION_ERROR: {
+          target: 'terminal.initialFailure',
+          actions: 'setError',
+        },
+        // User can disconnect during initial connection
+        DISCONNECT: {
+          target: 'disconnected',
+          actions: 'resetReconnectState',
+        },
+      },
+    },
+
+    /**
+     * Successfully connected to the XMPP server.
+     */
+    connected: {
+      initial: 'healthy',
+      on: {
+        // These can happen from any connected substate
+        DISCONNECT: {
+          target: 'disconnected',
+          actions: 'resetReconnectState',
+        },
+        CONFLICT: {
+          target: 'terminal.conflict',
+          actions: 'setConflictError',
+        },
+        AUTH_ERROR: {
+          target: 'terminal.authFailed',
+          actions: 'setAuthError',
+        },
+      },
+      states: {
+        /**
+         * Normal connected operation.
+         * Can transition to verifying (wake check) or reconnecting (socket death).
+         */
+        healthy: {
+          on: {
+            SOCKET_DIED: {
+              target: '#connection.reconnecting',
+              actions: 'incrementAttempt',
+            },
+            WAKE: [
+              {
+                // Long sleep exceeds SM timeout — skip verification, reconnect immediately
+                guard: 'sleepExceedsSMTimeout',
+                target: '#connection.reconnecting',
+                actions: 'incrementAttempt',
+              },
+              {
+                // Short sleep — verify connection health first
+                target: 'verifying',
+              },
+            ],
+          },
+        },
+
+        /**
+         * Checking connection health after wake from sleep.
+         * The Connection module sends a ping/SM ack and reports the result.
+         */
+        verifying: {
+          on: {
+            VERIFY_SUCCESS: {
+              target: 'healthy',
+            },
+            VERIFY_FAILED: {
+              target: '#connection.reconnecting',
+              actions: 'incrementAttempt',
+            },
+            // Socket can die while we're verifying
+            SOCKET_DIED: {
+              target: '#connection.reconnecting',
+              actions: 'incrementAttempt',
+            },
+          },
+        },
+      },
+    },
+
+    /**
+     * Lost connection, attempting to recover with exponential backoff.
+     */
+    reconnecting: {
+      initial: 'waiting',
+      on: {
+        // These can happen from any reconnecting substate
+        DISCONNECT: {
+          target: 'disconnected',
+          actions: 'resetReconnectState',
+        },
+        CANCEL_RECONNECT: {
+          target: 'disconnected',
+          actions: 'resetReconnectState',
+        },
+        CONFLICT: {
+          target: 'terminal.conflict',
+          actions: ['resetReconnectState', 'setConflictError'],
+        },
+        AUTH_ERROR: {
+          target: 'terminal.authFailed',
+          actions: ['resetReconnectState', 'setAuthError'],
+        },
+      },
+      states: {
+        /**
+         * Waiting for backoff timer to expire before next attempt.
+         * Countdown ticks update the UI. Timer expiry or user trigger starts attempt.
+         */
+        waiting: {
+          on: {
+            RETRY_TIMER_EXPIRED: {
+              target: 'attempting',
+              actions: 'clearCountdown',
+            },
+            TRIGGER_RECONNECT: {
+              target: 'attempting',
+              actions: 'clearCountdown',
+            },
+            COUNTDOWN_TICK: {
+              actions: 'decrementCountdown',
+            },
+            // Wake or visibility while waiting — skip to immediate attempt
+            WAKE: {
+              target: 'attempting',
+              actions: 'clearCountdown',
+            },
+            VISIBLE: {
+              target: 'attempting',
+              actions: 'clearCountdown',
+            },
+          },
+        },
+
+        /**
+         * Actively attempting to reconnect.
+         * The Connection module performs the actual XMPP reconnection.
+         */
+        attempting: {
+          on: {
+            CONNECTION_SUCCESS: {
+              target: '#connection.connected',
+              actions: 'resetReconnectState',
+            },
+            CONNECTION_ERROR: [
+              {
+                guard: 'canReconnect',
+                target: 'waiting',
+                actions: ['setError', 'incrementAttempt'],
+              },
+              {
+                // Exhausted all attempts
+                target: '#connection.terminal.maxRetries',
+                actions: 'setMaxRetriesError',
+              },
+            ],
+            // Socket can die during reconnect attempt (e.g., proxy failure)
+            SOCKET_DIED: [
+              {
+                guard: 'canReconnect',
+                target: 'waiting',
+                actions: 'incrementAttempt',
+              },
+              {
+                target: '#connection.terminal.maxRetries',
+                actions: 'setMaxRetriesError',
+              },
+            ],
+          },
+        },
+      },
+    },
+
+    /**
+     * Unrecoverable failure — no auto-recovery possible.
+     * User must send CONNECT to try again (transitions back to idle).
+     */
+    terminal: {
+      initial: 'initialFailure',
+      on: {
+        CONNECT: {
+          target: 'idle',
+          actions: 'resetReconnectState',
+        },
+      },
+      states: {
+        /** Resource conflict — another client connected with same resource */
+        conflict: {},
+        /** Authentication failed — wrong password or account issue */
+        authFailed: {},
+        /** Exhausted all reconnect attempts */
+        maxRetries: {},
+        /** Initial connection never succeeded (first attempt failed) */
+        initialFailure: {},
+      },
+    },
+
+    /**
+     * User manually disconnected (clean shutdown).
+     * Can reconnect via CONNECT.
+     */
+    disconnected: {
+      entry: 'resetReconnectState',
+      on: {
+        CONNECT: {
+          target: 'connecting',
+          actions: 'clearError',
+        },
+      },
+    },
+  },
+})
+
+// ============================================================================
+// Actor Type
+// ============================================================================
+
+/**
+ * Type for a running connection machine actor.
+ */
+export type ConnectionActor = ActorRefFrom<typeof connectionMachine>
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Map machine state to the existing ConnectionStatus type for the store.
+ *
+ * This mapping preserves backward compatibility with all UI components and hooks
+ * that depend on the ConnectionStatus string union.
+ *
+ * @param stateValue - Current state value from the machine
+ * @returns The ConnectionStatus for the store
+ */
+export function getConnectionStatusFromState(stateValue: ConnectionStateValue): ConnectionStatus {
+  if (typeof stateValue === 'string') {
+    switch (stateValue) {
+      case 'idle':
+        return 'disconnected'
+      case 'connecting':
+        return 'connecting'
+      case 'disconnected':
+        return 'disconnected'
+    }
+  }
+
+  if ('connected' in stateValue) {
+    switch (stateValue.connected) {
+      case 'healthy':
+        return 'online'
+      case 'verifying':
+        return 'verifying'
+    }
+  }
+
+  if ('reconnecting' in stateValue) {
+    switch (stateValue.reconnecting) {
+      case 'waiting':
+        return 'reconnecting'
+      case 'attempting':
+        return 'connecting'
+    }
+  }
+
+  if ('terminal' in stateValue) {
+    return 'error'
+  }
+
+  // Exhaustive — should never reach here
+  return 'disconnected'
+}
+
+/**
+ * Check if the machine is in a terminal (unrecoverable) state.
+ *
+ * @param stateValue - Current state value from the machine
+ * @returns True if in any terminal substate
+ */
+export function isTerminalState(stateValue: ConnectionStateValue): boolean {
+  return typeof stateValue === 'object' && 'terminal' in stateValue
+}
+
+/**
+ * Extract reconnection info from machine context for UI display.
+ *
+ * @param context - Current machine context
+ * @returns Reconnect attempt number and countdown seconds
+ */
+export function getReconnectInfoFromContext(context: ConnectionMachineContext): {
+  attempt: number
+  countdownSecs: number | null
+} {
+  return {
+    attempt: context.reconnectAttempt,
+    countdownSecs: context.reconnectCountdownSecs,
+  }
+}
