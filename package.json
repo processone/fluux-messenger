@@ -2,7 +2,7 @@
   "name": "fluux",
   "private": true,
   "license": "AGPL-3.0-or-later",
-  "version": "0.13.1",
+  "version": "0.13.2-beta.1",
   "type": "module",
   "workspaces": [
     "packages/*",

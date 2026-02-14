@@ -1,6 +1,6 @@
 {
   "name": "@xmpp/fluux",
-  "version": "0.13.1",
+  "version": "0.13.2-beta.1",
   "private": true,
   "type": "module",
   "scripts": {
