@@ -89,32 +89,12 @@ export function createStoreBindings(
   // Connection Events
   // ============================================================================
 
-  on('connection:status', ({ status, error }) => {
-    const stores = getStores()
-    switch (status) {
-      case 'connecting':
-        stores.connection.setStatus('connecting')
-        break
-      case 'online':
-        stores.connection.setStatus('online')
-        break
-      case 'offline':
-        stores.connection.setStatus('disconnected')
-        break
-      case 'error':
-        stores.connection.setStatus('error')
-        if (error) stores.connection.setError(error)
-        break
-      case 'reconnecting':
-        stores.connection.setStatus('reconnecting')
-        break
-    }
-  })
+  // Note: connection:status store updates are handled directly by Connection.ts
+  // (setStatus/setError/setJid calls). The SDK event is emitted for external consumers
+  // but the store binding here is intentionally removed to avoid duplicate updates
+  // that cause unnecessary React re-renders during reconnection cycles.
 
-  on('connection:authenticated', ({ jid }) => {
-    const stores = getStores()
-    stores.connection.setJid(jid)
-  })
+  // connection:authenticated is also handled directly by Connection.ts
 
   on('connection:server-info', ({ info }) => {
     const stores = getStores()

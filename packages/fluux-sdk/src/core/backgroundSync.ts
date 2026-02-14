@@ -134,38 +134,45 @@ export function setupBackgroundSyncSideEffects(
     if (debug) console.log('[SideEffects] Sync: SM resumption — skipping background sync')
   })
 
-  // When going offline, cancel any pending room catch-up timer
+  // When going offline, cancel any pending room catch-up timer.
+  // Uses selective subscription to avoid firing on unrelated connectionStore
+  // changes (serverInfo, ownAvatar, etc.) during post-connection initialization.
   let previousStatus = connectionStore.getState().status
-  const unsubscribeConnection = connectionStore.subscribe((state) => {
-    const status = state.status
-    if (status !== 'online' && previousStatus === 'online') {
-      isFreshSession = false
-      if (roomCatchUpTimer) {
-        clearTimeout(roomCatchUpTimer)
-        roomCatchUpTimer = undefined
+  const unsubscribeConnection = connectionStore.subscribe(
+    (state) => state.status,
+    (status) => {
+      if (status !== 'online' && previousStatus === 'online') {
+        isFreshSession = false
+        if (roomCatchUpTimer) {
+          clearTimeout(roomCatchUpTimer)
+          roomCatchUpTimer = undefined
+        }
       }
+      previousStatus = status
     }
-    previousStatus = status
-  })
+  )
 
   // Subscribe to serverInfo changes (for fresh sessions where MAM discovery is async)
   let hadMAMSupport = connectionStore.getState().serverInfo?.features?.includes(NS_MAM) ?? false
-  const unsubscribeServerInfo = connectionStore.subscribe((state) => {
-    const hasMAMSupport = state.serverInfo?.features?.includes(NS_MAM) ?? false
+  const unsubscribeServerInfo = connectionStore.subscribe(
+    (state) => state.serverInfo,
+    (serverInfo) => {
+      const hasMAMSupport = serverInfo?.features?.includes(NS_MAM) ?? false
 
-    // When MAM support is first discovered
-    if (hasMAMSupport && !hadMAMSupport) {
-      hadMAMSupport = hasMAMSupport
+      // When MAM support is first discovered
+      if (hasMAMSupport && !hadMAMSupport) {
+        hadMAMSupport = hasMAMSupport
 
-      // Only trigger on fresh sessions (isFreshSession is false on SM resumption)
-      if (isFreshSession && !backgroundSyncDone) {
-        if (debug) console.log('[SideEffects] Sync: MAM support discovered, triggering background sync')
-        triggerBackgroundSync()
+        // Only trigger on fresh sessions (isFreshSession is false on SM resumption)
+        if (isFreshSession && !backgroundSyncDone) {
+          if (debug) console.log('[SideEffects] Sync: MAM support discovered, triggering background sync')
+          triggerBackgroundSync()
+        }
+      } else {
+        hadMAMSupport = hasMAMSupport
       }
-    } else {
-      hadMAMSupport = hasMAMSupport
     }
-  })
+  )
 
   return () => {
     unsubscribeOnline()

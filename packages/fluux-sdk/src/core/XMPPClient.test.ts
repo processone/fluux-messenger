@@ -219,7 +219,7 @@ describe('XMPPClient', () => {
       const handlers = (client as any).sdkEventHandlers
 
       // Key SDK events should have handlers registered from auto-bindings
-      expect(handlers.has('connection:status')).toBe(true)
+      // Note: connection:status is handled directly by Connection.ts (not via storeBindings)
       expect(handlers.has('roster:loaded')).toBe(true)
       expect(handlers.has('chat:message')).toBe(true)
       expect(handlers.has('room:added')).toBe(true)

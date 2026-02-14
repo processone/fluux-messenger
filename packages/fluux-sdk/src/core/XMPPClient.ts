@@ -1262,8 +1262,9 @@ export class XMPPClient {
       }
     }
 
-    // Server discovery is less critical - can block on slow servers, so do it after rooms are joined
-    await this.discovery.fetchServerInfo()
+    // Server discovery is non-blocking to avoid stalling the reconnection flow.
+    // The backgroundSync serverInfo subscriber will detect when MAM becomes available.
+    this.discovery.fetchServerInfo().catch(() => {})
     this.discovery.discoverHttpUploadService().catch(() => {})
     this.profile.fetchOwnProfile().catch(() => {})
   }

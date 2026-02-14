@@ -178,12 +178,14 @@ describe('SDK Event Bindings Integration', () => {
       expect(mockStores.room.addRoom).toHaveBeenCalledWith(room)
     })
 
-    it('should call store.connection.setStatus when emitSDK(connection:status) is called', () => {
-      // Act
+    it('should NOT call store.connection.setStatus for connection:status (handled directly by Connection.ts)', () => {
+      // connection:status store updates are handled directly by Connection.ts
+      // The SDK event is emitted for external consumers but storeBindings
+      // no longer updates the store to avoid duplicate mutations.
       xmppClient['emitSDK']('connection:status', { status: 'connecting' })
 
-      // Assert
-      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('connecting')
+      // Assert - setStatus should NOT be called by storeBindings
+      expect(mockStores.connection.setStatus).not.toHaveBeenCalled()
     })
 
     it('should call store.chat.addMessage when emitSDK(chat:message) is called', () => {
@@ -318,10 +320,10 @@ describe('SDK Event Bindings Integration', () => {
       const client = xmppClient as any
 
       // Check that we have handlers registered for key events
+      // Note: connection:status is NOT handled by storeBindings (handled directly by Connection.ts)
       expect(client.sdkEventHandlers.has('roster:loaded')).toBe(true)
       expect(client.sdkEventHandlers.has('room:added')).toBe(true)
       expect(client.sdkEventHandlers.has('chat:message')).toBe(true)
-      expect(client.sdkEventHandlers.has('connection:status')).toBe(true)
 
       // Check handler counts - we have 2 handlers per event:
       // 1. Auto-bindings created in XMPPClient constructor (to global Zustand stores)
