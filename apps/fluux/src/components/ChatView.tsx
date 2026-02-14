@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useChat, useRoster, usePresence, createMessageLookup, getBareJid, getLocalPart, type Message, type Contact } from '@fluux/sdk'
+import { useChatActive, useRoster, usePresence, createMessageLookup, getBareJid, getLocalPart, type Message, type Contact } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { getConsistentTextColor } from './Avatar'
 import { useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat } from '@/hooks'
@@ -24,7 +24,9 @@ interface ChatViewProps {
 export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerRef }: ChatViewProps) {
   detectRenderLoop('ChatView')
   const { t } = useTranslation()
-  const { activeConversation, activeMessages, activeTypingUsers, sendReaction, sendCorrection, retractMessage, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, activeMAMState, fetchOlderHistory } = useChat()
+  // Use useChatActive instead of useChat to avoid subscribing to the conversation list.
+  // This prevents re-renders during background MAM sync of other conversations.
+  const { activeConversation, activeMessages, activeTypingUsers, sendReaction, sendCorrection, retractMessage, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, activeMAMState, fetchOlderHistory } = useChatActive()
   const { contacts } = useRoster()
   // NOTE: Use focused selectors instead of useConnection() hook to avoid
   // re-renders when unrelated connection state changes (error, reconnectAttempt, etc.)
@@ -766,7 +768,7 @@ function MessageInput({
   onSwitchToMessages?: (conversationId: string) => void
 }) {
   const { t } = useTranslation()
-  const { sendMessage, sendChatState, isArchived, unarchiveConversation, setDraft, getDraft, clearDraft, clearFirstNewMessageId } = useChat()
+  const { sendMessage, sendChatState, isArchived, unarchiveConversation, setDraft, getDraft, clearDraft, clearFirstNewMessageId } = useChatActive()
 
   // Draft persistence - saves on conversation change, restores on load
   const [text, setText] = useConversationDraft({
