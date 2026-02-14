@@ -897,7 +897,7 @@ describe('XMPPClient Connection', () => {
       expect(mockStores.chat.resetMAMStates).toHaveBeenCalled()
     })
 
-    it('should also reset MAM states on SM resumption', async () => {
+    it('should NOT reset MAM states on SM resumption', async () => {
       // Connect with SM state
       const connectPromise = xmppClient.connect({
         jid: 'user@example.com',
@@ -927,11 +927,11 @@ describe('XMPPClient Connection', () => {
       // Give time for async operations
       await vi.advanceTimersByTimeAsync(100)
 
-      // Should have reset MAM states even on SM resumption
-      // SM guarantees delivery of in-flight messages, but MAM may have accumulated
-      // new messages (especially in MUC rooms) while we were offline
-      expect(mockStores.chat.resetMAMStates).toHaveBeenCalled()
+      // Should NOT reset MAM states on SM resumption — the server replays
+      // undelivered stanzas, so no MAM catchup is needed
+      expect(mockStores.chat.resetMAMStates).not.toHaveBeenCalled()
     })
+
   })
 
   describe('resource conflict handling', () => {

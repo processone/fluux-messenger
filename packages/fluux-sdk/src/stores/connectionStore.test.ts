@@ -236,4 +236,5 @@ describe('connectionStore', () => {
       expect(connectionStore.getState().httpUploadService).toBeNull()
     })
   })
+
 })
