@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useChatActive, useRoster, usePresence, createMessageLookup, getBareJid, getLocalPart, type Message, type Contact } from '@fluux/sdk'
+import { useChatActive, useContactIdentities, usePresence, createMessageLookup, getBareJid, getLocalPart, type Message, type ContactIdentity } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { getConsistentTextColor } from './Avatar'
 import { useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat } from '@/hooks'
@@ -27,7 +27,9 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
   // Use useChatActive instead of useChat to avoid subscribing to the conversation list.
   // This prevents re-renders during background MAM sync of other conversations.
   const { activeConversation, activeMessages, activeTypingUsers, sendReaction, sendCorrection, retractMessage, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, activeMAMState, fetchOlderHistory } = useChatActive()
-  const { contacts } = useRoster()
+  // Use useContactIdentities instead of useRoster() to avoid re-renders on
+  // presence changes. ChatView only needs contact names and avatars for display.
+  const contactsByJid = useContactIdentities()
   // NOTE: Use focused selectors instead of useConnection() hook to avoid
   // re-renders when unrelated connection state changes (error, reconnectAttempt, etc.)
   const jid = useConnectionStore((s) => s.jid)
@@ -134,13 +136,6 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
 
   // Format copied messages with sender headers
   useMessageCopy(scrollRef)
-
-  // Create a lookup map for contacts by JID
-  const contactsByJid = useMemo(() => {
-    const map = new Map<string, Contact>()
-    contacts.forEach(c => map.set(c.jid, c))
-    return map
-  }, [contacts])
 
   // Create a lookup map for messages by ID (for reply context)
   // Index by both client id and stanza-id since replies may reference either
@@ -370,7 +365,7 @@ const ChatMessageList = memo(function ChatMessageList({
   isInitialLoading,
 }: {
   messages: Message[]
-  contactsByJid: Map<string, Contact>
+  contactsByJid: Map<string, ContactIdentity>
   messagesById: Map<string, Message>
   typingUsers: string[]
   scrollerRef: React.RefObject<HTMLElement>
@@ -535,7 +530,7 @@ interface ChatMessageBubbleProps {
   conversationType: 'chat' | 'groupchat'
   sendReaction: (to: string, messageId: string, emojis: string[], type: 'chat' | 'groupchat') => Promise<void>
   myBareJid?: string
-  contactsByJid: Map<string, Contact>
+  contactsByJid: Map<string, ContactIdentity>
   messagesById: Map<string, Message>
   onReply: (message: Message) => void
   onEdit: (message: Message) => void
@@ -694,9 +689,9 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
       avatarUrl={avatar}
       avatarIdentifier={message.from}
       avatarFallbackColor={senderColor}
-      avatarPresence={message.isOutgoing ? ownPresence : senderContact?.presence}
+      avatarPresence={message.isOutgoing ? ownPresence : undefined}
       senderJid={message.isOutgoing ? myBareJid : message.from.split('/')[0]}
-      senderContact={message.isOutgoing ? undefined : senderContact}
+      senderContact={message.isOutgoing ? undefined : senderContact as import('@fluux/sdk').Contact | undefined}
       myReactions={myReactions}
       onReaction={handleReaction}
       getReactorName={getReactorName}
@@ -753,7 +748,7 @@ function MessageInput({
   onCancelEdit: () => void
   sendCorrection: (conversationId: string, messageId: string, newBody: string, attachment?: import('@fluux/sdk').FileAttachment) => Promise<void>
   retractMessage: (conversationId: string, messageId: string) => Promise<void>
-  contactsByJid: Map<string, Contact>
+  contactsByJid: Map<string, ContactIdentity>
   onComposingChange?: (isComposing: boolean) => void
   sendEasterEgg: (to: string, type: 'chat' | 'groupchat', animation: string) => Promise<void>
   isConnected: boolean

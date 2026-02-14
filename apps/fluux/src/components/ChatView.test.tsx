@@ -105,6 +105,11 @@ vi.mock('@fluux/sdk', () => ({
   useRoster: () => ({
     contacts: mockContacts,
   }),
+  useContactIdentities: () => {
+    const map = new Map()
+    mockContacts.forEach((c: Contact) => map.set(c.jid, { jid: c.jid, name: c.name, avatar: c.avatar, colorLight: c.colorLight, colorDark: c.colorDark }))
+    return map
+  },
   useConnection: () => ({
     jid: 'me@example.com/resource',
     ownAvatar: null,
