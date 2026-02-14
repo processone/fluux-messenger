@@ -1139,8 +1139,11 @@ pub async fn start_proxy(server: String) -> Result<ProxyStartResult, String> {
 
     let mut proxy_guard = PROXY.write().await;
 
-    if proxy_guard.is_some() {
-        return Err("Proxy already running".to_string());
+    // Stop existing proxy if running (idempotent restart for page reload).
+    // On WebView reload the Rust process stays alive but the old proxy's
+    // WebSocket client is gone, so the old proxy is useless.
+    if let Some(mut old_proxy) = proxy_guard.take() {
+        old_proxy.stop().await.ok();
     }
 
     let mut proxy = XmppProxy::new();

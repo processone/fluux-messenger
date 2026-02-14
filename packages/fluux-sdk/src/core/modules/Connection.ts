@@ -384,6 +384,11 @@ export class Connection extends BaseModule {
         const errorMsg = err instanceof Error ? err.message : String(err)
         this.stores.console.addEvent(`Failed to start proxy: ${errorMsg}, falling back to WebSocket`, 'error')
         connectionMethod = 'websocket'
+        // Resolve proper WebSocket URL for fallback (resolvedServer is currently the raw domain)
+        const domain = getDomain(jid)
+        resolvedServer = this.shouldSkipDiscovery(server, skipDiscovery)
+          ? this.getWebSocketUrl(server, domain)
+          : await this.resolveWebSocketUrl(server, domain)
       }
     }
 
