@@ -1174,7 +1174,7 @@ dependencies = [
 
 [[package]]
 name = "fluux"
-version = "0.13.1"
+version = "0.13.2-beta.1"
 dependencies = [
  "block2",
  "ctor",
