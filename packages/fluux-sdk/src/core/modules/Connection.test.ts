@@ -985,8 +985,8 @@ describe('XMPPClient Connection', () => {
       mockXmppClientInstance._emit('error', new Error('conflict'))
       mockXmppClientInstance._emit('disconnect', { clean: false })
 
-      // Should set status to disconnected (not reconnecting)
-      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('disconnected')
+      // Should set status to error (not reconnecting) — terminal state
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('error')
 
       // Should set error message
       expect(mockStores.connection.setError).toHaveBeenCalledWith('Session replaced by another client')
@@ -1755,7 +1755,10 @@ describe('XMPPClient Connection', () => {
     })
 
     it('should trigger reconnect on "visible" state when reconnecting', async () => {
-      mockStores.connection.getStatus.mockReturnValue('reconnecting')
+      // Put the connection machine into reconnecting state by simulating a dead socket
+      // The machine is in connected.healthy after the connect above — SOCKET_DIED
+      // transitions it to reconnecting.waiting
+      xmppClient.connectionActor.send({ type: 'SOCKET_DIED' })
 
       await xmppClient.notifySystemState('visible')
 

@@ -20,6 +20,7 @@ import {
   type PresenceStateValue,
   type PresenceContext as PresenceMachineContext,
 } from './presenceMachine'
+import type { ConnectionActor } from './connectionMachine'
 import { generateUUID } from '../utils/uuid'
 import { createStoreBindings } from '../bindings/storeBindings'
 import { setupStoreSideEffects } from './sideEffects'
@@ -244,7 +245,25 @@ export class XMPPClient {
    */
   public presenceActor!: PresenceActor
 
-
+  /**
+   * XState connection actor managing connection lifecycle state.
+   *
+   * The connection machine handles explicit state transitions for the XMPP
+   * connection (idle, connecting, connected, reconnecting, terminal, disconnected)
+   * with exponential backoff and proper error handling.
+   *
+   * **For React apps**: Access via XMPPProvider for UI status binding.
+   *
+   * **For bots/headless**: Access directly to monitor connection state:
+   *
+   * @example Monitoring connection state
+   * ```typescript
+   * client.connectionActor.subscribe((snapshot) => {
+   *   console.log('Connection state:', snapshot.value)
+   * })
+   * ```
+   */
+  public connectionActor!: ConnectionActor
 
   private stores: StoreBindings | null = null
   private eventHandlers: Map<keyof XMPPClientEvents, Set<XMPPClientEvents[keyof XMPPClientEvents]>> = new Map()
@@ -484,6 +503,7 @@ export class XMPPClient {
     }
 
     this.connection = new Connection(moduleDeps)
+    this.connectionActor = this.connection.getConnectionActor()
     this.pubsub = new PubSub(moduleDeps)
     this.mam = new MAM(moduleDeps)
     this.chat = new Chat(moduleDeps, this.mam)
