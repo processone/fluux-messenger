@@ -16,7 +16,7 @@
     "clean": "rm -rf dist",
     "clean:all": "rm -rf dist node_modules src-tauri/target",
     "tauri": "tauri",
-    "tauri:dev": "tauri dev",
+    "tauri:dev": "tauri dev -- -- --verbose",
     "tauri:build": "./scripts/tauri-build.sh"
   },
   "dependencies": {
