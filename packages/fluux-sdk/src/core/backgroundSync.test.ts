@@ -2,11 +2,10 @@
  * Tests for background sync side effects.
  *
  * Verifies the multi-stage background process that runs after a fresh session:
- * - Preview refresh
- * - Conversation catch-up
- * - Roster discovery
- * - Room catch-up (delayed)
+ * - Conversation catch-up (excluding active conversation)
+ * - Roster discovery (hourly cooldown)
  * - Daily archived conversation check
+ * - Room catch-up (delayed, excluding active room)
  */
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 
@@ -47,11 +46,14 @@ vi.mock('../utils/messageCache', () => ({
 
 import { setupBackgroundSyncSideEffects } from './backgroundSync'
 import { connectionStore } from '../stores/connectionStore'
+import { chatStore } from '../stores/chatStore'
+import { roomStore } from '../stores/roomStore'
 import { NS_MAM } from './namespaces'
 import { createMockClient, simulateFreshSession } from './sideEffects.testHelpers'
 
 describe('setupBackgroundSyncSideEffects', () => {
   const ARCHIVED_CHECK_KEY = 'fluux:lastArchivedPreviewCheck'
+  const ROSTER_DISCOVERY_KEY = 'fluux:lastRosterDiscovery'
   let mockClient: ReturnType<typeof createMockClient>
   let cleanup: () => void
 
@@ -65,8 +67,8 @@ describe('setupBackgroundSyncSideEffects', () => {
     cleanup?.()
   })
 
-  describe('preview refresh on connect', () => {
-    it('should trigger refreshConversationPreviews when going online with MAM support', async () => {
+  describe('conversation catch-up on connect', () => {
+    it('should trigger catchUpAllConversations when going online with MAM support', async () => {
       connectionStore.getState().setServerInfo({
         identities: [],
         domain: 'example.com',
@@ -79,18 +81,18 @@ describe('setupBackgroundSyncSideEffects', () => {
       simulateFreshSession(mockClient)
 
       await vi.waitFor(() => {
-        expect(mockClient.mam.refreshConversationPreviews).toHaveBeenCalledTimes(1)
+        expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
       })
     })
 
-    it('should defer preview refresh to serverInfo discovery when MAM not immediately available', async () => {
+    it('should defer catch-up to serverInfo discovery when MAM not immediately available', async () => {
       connectionStore.getState().setStatus('disconnected')
       cleanup = setupBackgroundSyncSideEffects(mockClient)
 
       simulateFreshSession(mockClient)
 
       await new Promise(resolve => setTimeout(resolve, 50))
-      expect(mockClient.mam.refreshConversationPreviews).not.toHaveBeenCalled()
+      expect(mockClient.mam.catchUpAllConversations).not.toHaveBeenCalled()
 
       connectionStore.getState().setServerInfo({
         identities: [],
@@ -99,11 +101,11 @@ describe('setupBackgroundSyncSideEffects', () => {
       })
 
       await vi.waitFor(() => {
-        expect(mockClient.mam.refreshConversationPreviews).toHaveBeenCalledTimes(1)
+        expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
       })
     })
 
-    it('should not double-trigger preview refresh', async () => {
+    it('should not double-trigger catch-up', async () => {
       connectionStore.getState().setServerInfo({
         identities: [],
         domain: 'example.com',
@@ -116,7 +118,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       simulateFreshSession(mockClient)
 
       await vi.waitFor(() => {
-        expect(mockClient.mam.refreshConversationPreviews).toHaveBeenCalledTimes(1)
+        expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
       })
 
       connectionStore.getState().setServerInfo({
@@ -126,7 +128,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       })
 
       await new Promise(resolve => setTimeout(resolve, 50))
-      expect(mockClient.mam.refreshConversationPreviews).toHaveBeenCalledTimes(1)
+      expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
     })
 
     it('should reset and re-trigger after disconnect/reconnect cycle', async () => {
@@ -141,15 +143,59 @@ describe('setupBackgroundSyncSideEffects', () => {
 
       simulateFreshSession(mockClient)
       await vi.waitFor(() => {
-        expect(mockClient.mam.refreshConversationPreviews).toHaveBeenCalledTimes(1)
+        expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
       })
 
       connectionStore.getState().setStatus('disconnected')
 
       simulateFreshSession(mockClient)
       await vi.waitFor(() => {
-        expect(mockClient.mam.refreshConversationPreviews).toHaveBeenCalledTimes(2)
+        expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(2)
       })
+    })
+
+    it('should pass exclude with activeConversationId', async () => {
+      // Set active conversation before connecting
+      chatStore.getState().setActiveConversation('alice@example.com')
+
+      connectionStore.getState().setServerInfo({
+        identities: [],
+        domain: 'example.com',
+        features: [NS_MAM],
+      })
+
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateFreshSession(mockClient)
+
+      await vi.waitFor(() => {
+        expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledWith(
+          expect.objectContaining({ exclude: 'alice@example.com' })
+        )
+      })
+
+      // Clean up
+      chatStore.getState().setActiveConversation(null)
+    })
+
+    it('should not call refreshConversationPreviews (removed stage)', async () => {
+      connectionStore.getState().setServerInfo({
+        identities: [],
+        domain: 'example.com',
+        features: [NS_MAM],
+      })
+
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateFreshSession(mockClient)
+
+      await vi.waitFor(() => {
+        expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
+      })
+
+      expect(mockClient.mam.refreshConversationPreviews).not.toHaveBeenCalled()
     })
   })
 
@@ -186,7 +232,7 @@ describe('setupBackgroundSyncSideEffects', () => {
       simulateFreshSession(mockClient)
 
       await vi.waitFor(() => {
-        expect(mockClient.mam.refreshConversationPreviews).toHaveBeenCalledTimes(1)
+        expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
       })
 
       await new Promise(resolve => setTimeout(resolve, 50))
@@ -214,17 +260,26 @@ describe('setupBackgroundSyncSideEffects', () => {
     })
   })
 
-  describe('background catch-up on connect', () => {
-    beforeEach(() => {
-      vi.useFakeTimers()
+  describe('roster discovery cooldown', () => {
+    it('should trigger discoverNewConversationsFromRoster on first connect (no localStorage entry)', async () => {
+      connectionStore.getState().setServerInfo({
+        identities: [],
+        domain: 'example.com',
+        features: [NS_MAM],
+      })
+
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateFreshSession(mockClient)
+
+      await vi.waitFor(() => {
+        expect(mockClient.mam.discoverNewConversationsFromRoster).toHaveBeenCalledTimes(1)
+      })
     })
 
-    afterEach(() => {
-      vi.useRealTimers()
-    })
-
-    it('should trigger catchUpAllConversations after preview refresh completes', async () => {
-      ;(mockClient.mam.refreshConversationPreviews as ReturnType<typeof vi.fn>).mockResolvedValue(undefined)
+    it('should skip roster discovery if less than 1h since last check', async () => {
+      localStorageMock.setItem(ROSTER_DISCOVERY_KEY, String(Date.now() - 1000))
 
       connectionStore.getState().setServerInfo({
         identities: [],
@@ -241,7 +296,80 @@ describe('setupBackgroundSyncSideEffects', () => {
         expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
       })
 
-      expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledWith({ concurrency: 2 })
+      await new Promise(resolve => setTimeout(resolve, 50))
+      expect(mockClient.mam.discoverNewConversationsFromRoster).not.toHaveBeenCalled()
+    })
+
+    it('should trigger roster discovery after 1h', async () => {
+      const staleTimestamp = Date.now() - (2 * 60 * 60 * 1000)
+      localStorageMock.setItem(ROSTER_DISCOVERY_KEY, String(staleTimestamp))
+
+      connectionStore.getState().setServerInfo({
+        identities: [],
+        domain: 'example.com',
+        features: [NS_MAM],
+      })
+
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateFreshSession(mockClient)
+
+      await vi.waitFor(() => {
+        expect(mockClient.mam.discoverNewConversationsFromRoster).toHaveBeenCalledTimes(1)
+      })
+    })
+
+    it('should persist roster discovery timestamp to localStorage', async () => {
+      connectionStore.getState().setServerInfo({
+        identities: [],
+        domain: 'example.com',
+        features: [NS_MAM],
+      })
+
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateFreshSession(mockClient)
+
+      await vi.waitFor(() => {
+        expect(mockClient.mam.discoverNewConversationsFromRoster).toHaveBeenCalledTimes(1)
+      })
+
+      expect(localStorageMock.setItem).toHaveBeenCalledWith(ROSTER_DISCOVERY_KEY, expect.any(String))
+    })
+  })
+
+  describe('background catch-up on connect', () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('should trigger catchUpAllConversations with concurrency 2', async () => {
+      ;(mockClient.mam.catchUpAllConversations as ReturnType<typeof vi.fn>).mockResolvedValue(undefined)
+
+      connectionStore.getState().setServerInfo({
+        identities: [],
+        domain: 'example.com',
+        features: [NS_MAM],
+      })
+
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateFreshSession(mockClient)
+
+      await vi.waitFor(() => {
+        expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
+      })
+
+      expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledWith(
+        expect.objectContaining({ concurrency: 2 })
+      )
     })
 
     it('should trigger catchUpAllRooms after a delay', async () => {
@@ -262,7 +390,9 @@ describe('setupBackgroundSyncSideEffects', () => {
       await vi.advanceTimersByTimeAsync(10_000)
 
       expect(mockClient.mam.catchUpAllRooms).toHaveBeenCalledTimes(1)
-      expect(mockClient.mam.catchUpAllRooms).toHaveBeenCalledWith({ concurrency: 2 })
+      expect(mockClient.mam.catchUpAllRooms).toHaveBeenCalledWith(
+        expect.objectContaining({ concurrency: 2 })
+      )
     })
 
     it('should cancel room catch-up timer on disconnect', async () => {
@@ -285,25 +415,8 @@ describe('setupBackgroundSyncSideEffects', () => {
       expect(mockClient.mam.catchUpAllRooms).not.toHaveBeenCalled()
     })
 
-    it('should trigger discoverNewConversationsFromRoster on connect', async () => {
-      connectionStore.getState().setServerInfo({
-        identities: [],
-        domain: 'example.com',
-        features: [NS_MAM],
-      })
-
-      connectionStore.getState().setStatus('disconnected')
-      cleanup = setupBackgroundSyncSideEffects(mockClient)
-
-      simulateFreshSession(mockClient)
-
-      await vi.advanceTimersByTimeAsync(100)
-      expect(mockClient.mam.discoverNewConversationsFromRoster).toHaveBeenCalledTimes(1)
-      expect(mockClient.mam.discoverNewConversationsFromRoster).toHaveBeenCalledWith({ concurrency: 2 })
-    })
-
     it('should re-trigger catch-up on reconnect', async () => {
-      ;(mockClient.mam.refreshConversationPreviews as ReturnType<typeof vi.fn>).mockResolvedValue(undefined)
+      ;(mockClient.mam.catchUpAllConversations as ReturnType<typeof vi.fn>).mockResolvedValue(undefined)
 
       connectionStore.getState().setServerInfo({
         identities: [],
@@ -335,6 +448,33 @@ describe('setupBackgroundSyncSideEffects', () => {
       await vi.waitFor(() => {
         expect(mockClient.mam.catchUpAllRooms).toHaveBeenCalledTimes(2)
       })
+    })
+
+    it('should pass exclude with activeRoomJid to catchUpAllRooms', async () => {
+      // Set active room before connecting
+      roomStore.getState().setActiveRoom('room@conference.example.com')
+
+      connectionStore.getState().setServerInfo({
+        identities: [],
+        domain: 'example.com',
+        features: [NS_MAM],
+      })
+
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateFreshSession(mockClient)
+
+      await vi.advanceTimersByTimeAsync(10_000)
+
+      await vi.waitFor(() => {
+        expect(mockClient.mam.catchUpAllRooms).toHaveBeenCalledWith(
+          expect.objectContaining({ exclude: 'room@conference.example.com' })
+        )
+      })
+
+      // Clean up
+      roomStore.getState().setActiveRoom(null)
     })
   })
 })

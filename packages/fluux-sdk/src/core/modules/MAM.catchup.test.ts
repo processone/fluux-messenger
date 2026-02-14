@@ -280,6 +280,55 @@ describe('MAM Background Catch-Up', () => {
         category: 'sm',
       })
     })
+
+    it('should skip excluded conversation', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.chat.getAllConversations).mockReturnValue([
+        { id: 'alice@example.com', messages: [] },
+        { id: 'bob@example.com', messages: [] },
+        { id: 'charlie@example.com', messages: [] },
+      ])
+
+      const queriedConversations: string[] = []
+      mockXmppClientInstance.iqCaller.request.mockImplementation(async (iq: any) => {
+        const query = iq?.children?.[0]
+        if (query?.attrs?.xmlns === 'urn:xmpp:mam:2') {
+          const form = query.children?.find((c: any) => c.name === 'x')
+          const withField = form?.children?.find((c: any) => c.attrs?.var === 'with')
+          const withValue = withField?.children?.[0]?.children?.[0]
+          if (withValue) queriedConversations.push(withValue)
+        }
+        return createFinResponse()
+      })
+
+      const catchUpPromise = xmppClient.mam.catchUpAllConversations({ exclude: 'bob@example.com' })
+      await waitForAsyncOps(30, 100)
+      await catchUpPromise
+
+      expect(queriedConversations).toContain('alice@example.com')
+      expect(queriedConversations).not.toContain('bob@example.com')
+      expect(queriedConversations).toContain('charlie@example.com')
+    })
+
+    it('should handle null exclude gracefully', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.chat.getAllConversations).mockReturnValue([
+        { id: 'alice@example.com', messages: [] },
+      ])
+
+      mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse())
+
+      const catchUpPromise = xmppClient.mam.catchUpAllConversations({ exclude: null })
+      await waitForAsyncOps(20, 100)
+      await catchUpPromise
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('console:event', {
+        message: 'Background catch-up for 1 conversation(s)',
+        category: 'sm',
+      })
+    })
   })
 
   describe('catchUpAllRooms', () => {
@@ -492,6 +541,32 @@ describe('MAM Background Catch-Up', () => {
         message: 'Background catch-up for 1 room(s)',
         category: 'sm',
       })
+    })
+
+    it('should skip excluded room', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
+        { jid: 'room1@conference.example.com', supportsMAM: true, isQuickChat: false, joined: true, messages: [] },
+        { jid: 'room2@conference.example.com', supportsMAM: true, isQuickChat: false, joined: true, messages: [] },
+        { jid: 'room3@conference.example.com', supportsMAM: true, isQuickChat: false, joined: true, messages: [] },
+      ] as any)
+
+      const queriedRooms: string[] = []
+      mockXmppClientInstance.iqCaller.request.mockImplementation(async (iq: any) => {
+        if (iq?.attrs?.to) {
+          queriedRooms.push(iq.attrs.to)
+        }
+        return createFinResponse()
+      })
+
+      const catchUpPromise = xmppClient.mam.catchUpAllRooms({ exclude: 'room2@conference.example.com' })
+      await waitForAsyncOps(30, 100)
+      await catchUpPromise
+
+      expect(queriedRooms).toContain('room1@conference.example.com')
+      expect(queriedRooms).not.toContain('room2@conference.example.com')
+      expect(queriedRooms).toContain('room3@conference.example.com')
     })
   })
 

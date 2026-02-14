@@ -549,10 +549,14 @@ export class MAM extends BaseModule {
    *
    * @param options - Optional configuration
    * @param options.concurrency - Maximum parallel requests (default: 2)
+   * @param options.exclude - Conversation ID to skip (e.g., the active conversation already handled by side effects)
    */
-  async catchUpAllConversations(options: { concurrency?: number } = {}): Promise<void> {
-    const { concurrency = 2 } = options
-    const conversations = this.deps.stores?.chat.getAllConversations() || []
+  async catchUpAllConversations(options: { concurrency?: number; exclude?: string | null } = {}): Promise<void> {
+    const { concurrency = 2, exclude } = options
+    let conversations = this.deps.stores?.chat.getAllConversations() || []
+    if (exclude) {
+      conversations = conversations.filter((c) => c.id !== exclude)
+    }
     if (conversations.length === 0) return
 
     this.deps.emitSDK('console:event', {
@@ -629,7 +633,7 @@ export class MAM extends BaseModule {
           await this.queryArchive({
             with: contact.jid,
             before: '',
-            max: 50,
+            max: 5,
           })
         } catch (_error) {
           // Silently ignore — individual failures shouldn't affect others
@@ -650,13 +654,14 @@ export class MAM extends BaseModule {
    *
    * @param options - Optional configuration
    * @param options.concurrency - Maximum parallel requests (default: 2)
+   * @param options.exclude - Room JID to skip (e.g., the active room already handled by side effects)
    */
-  async catchUpAllRooms(options: { concurrency?: number } = {}): Promise<void> {
-    const { concurrency = 2 } = options
+  async catchUpAllRooms(options: { concurrency?: number; exclude?: string | null } = {}): Promise<void> {
+    const { concurrency = 2, exclude } = options
     const joinedRooms = this.deps.stores?.room.joinedRooms() || []
 
-    // Filter for MAM-enabled, non-Quick Chat rooms
-    const mamRooms = joinedRooms.filter((r) => r.supportsMAM && !r.isQuickChat)
+    // Filter for MAM-enabled, non-Quick Chat rooms (and exclude active room if specified)
+    const mamRooms = joinedRooms.filter((r) => r.supportsMAM && !r.isQuickChat && (!exclude || r.jid !== exclude))
     if (mamRooms.length === 0) return
 
     this.deps.emitSDK('console:event', {
