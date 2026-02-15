@@ -63,6 +63,9 @@ describe('MAM Background Catch-Up', () => {
       ])
     )
 
+    // Mock connection status as online (needed by batch operation guards)
+    vi.mocked(mockStores.connection.getStatus).mockReturnValue('online')
+
     const connectPromise = xmppClient.connect({
       jid: 'me@example.com',
       password: 'password',

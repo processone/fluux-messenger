@@ -130,7 +130,7 @@ export class MAM extends BaseModule {
     const mamStart = Date.now()
     const direction = start ? 'forward' : 'backward'
 
-    logInfo(`MAM query: ${getDomain(conversationId) || '*'}@..., max=${max}, ${direction}${start ? ` from ${start}` : ''}`)
+    logInfo(`MAM query: ...@${getDomain(conversationId) || '*'}, max=${max}, ${direction}${start ? ` from ${start}` : ''}`)
 
     // Track total messages across automatic pagination
     const allMessages: Message[] = []
@@ -187,9 +187,6 @@ export class MAM extends BaseModule {
 
         try {
           const response = await this.deps.sendIQ(iq)
-          if (!response) {
-            throw new Error('No response from MAM query - client may be disconnected')
-          }
           const { complete, rsm } = this.parseMAMResponse(response)
 
           // Apply modifications to collected messages
@@ -226,7 +223,7 @@ export class MAM extends BaseModule {
       // - Backward: no `start` filter (fetching older history with `before` cursor)
       const direction = start ? 'forward' : 'backward'
 
-      logInfo(`MAM result: ${getDomain(conversationId) || '*'}@... → ${allMessages.length} msg(s), complete=${isComplete}, ${Date.now() - mamStart}ms`)
+      logInfo(`MAM result: ...@${getDomain(conversationId) || '*'} → ${allMessages.length} msg(s), complete=${isComplete}, ${Date.now() - mamStart}ms`)
 
       this.deps.emitSDK('chat:mam-messages', {
         conversationId,
@@ -238,7 +235,7 @@ export class MAM extends BaseModule {
       return { messages: allMessages, complete: isComplete, rsm: lastRsm }
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error'
-      logErr(`MAM error: ${getDomain(conversationId) || '*'}@... — ${msg}`)
+      logErr(`MAM error: ...@${getDomain(conversationId) || '*'} — ${msg}`)
       this.deps.emitSDK('chat:mam-error', { conversationId, error: msg })
       throw error
     } finally {
@@ -304,9 +301,6 @@ export class MAM extends BaseModule {
 
     try {
       const response = await this.deps.sendIQ(iq)
-      if (!response) {
-        throw new Error('No response from room MAM query - client may be disconnected')
-      }
       const { complete, rsm } = this.parseMAMResponse(response)
 
       // Apply modifications to collected messages (full JID comparison for rooms)
@@ -589,6 +583,9 @@ export class MAM extends BaseModule {
       conversations,
       async (conv) => {
         try {
+          // Skip if disconnected (avoid queuing doomed queries)
+          if (this.deps.stores?.connection.getStatus() !== 'online') return
+
           const messages = conv.messages || []
           const newestCachedMessage = messages[messages.length - 1]
 
@@ -655,6 +652,8 @@ export class MAM extends BaseModule {
       newContacts,
       async (contact) => {
         try {
+          if (this.deps.stores?.connection.getStatus() !== 'online') return
+
           await this.queryArchive({
             with: contact.jid,
             before: '',
@@ -702,6 +701,8 @@ export class MAM extends BaseModule {
       mamRooms,
       async (room) => {
         try {
+          if (this.deps.stores?.connection.getStatus() !== 'online') return
+
           const messages = room.messages || []
           const newestCachedMessage = messages[messages.length - 1]
 

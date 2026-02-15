@@ -500,7 +500,7 @@ export class XMPPClient {
     const moduleDeps = {
       stores: this.stores,
       sendStanza: (stanza: Element) => this.sendStanza(stanza),
-      sendIQ: (iq: Element) => (this.getXmpp() as any)?.iqCaller?.request(iq),
+      sendIQ: (iq: Element) => this.sendIQ(iq),
       getCurrentJid: () => this.currentJid,
       emit: <K extends keyof XMPPClientEvents>(event: K, ...args: Parameters<XMPPClientEvents[K]>) => this.emit(event, ...args),
       emitSDK: <K extends keyof SDKEvents>(event: K, payload: SDKEvents[K]) => this.emitSDK(event, payload),
@@ -1352,6 +1352,38 @@ export class XMPPClient {
 
     try {
       await xmpp.send(stanza)
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err)
+      if (this.isDeadSocketError(errorMessage)) {
+        this.connection.handleDeadSocket()
+      }
+      throw err
+    }
+  }
+
+  private async sendIQ(iq: Element): Promise<Element> {
+    const xmpp = this.getXmpp()
+    if (!xmpp) {
+      const currentStatus = this.stores?.connection.getStatus?.()
+      if (currentStatus === 'online') {
+        this.stores?.console.addEvent('Client null but status online (IQ) - triggering reconnect', 'error')
+        this.connection.handleDeadSocket()
+      }
+      throw new Error('Not connected')
+    }
+
+    const socket = (xmpp as any).socket
+    if (!socket) {
+      const currentStatus = this.stores?.connection.getStatus?.()
+      if (currentStatus === 'online') {
+        this.stores?.console.addEvent('Socket null but status online (IQ) - triggering reconnect', 'error')
+        this.connection.handleDeadSocket()
+      }
+      throw new Error('Socket not available')
+    }
+
+    try {
+      return await (xmpp as any).iqCaller.request(iq)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err)
       if (this.isDeadSocketError(errorMessage)) {
