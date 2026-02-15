@@ -703,9 +703,9 @@ fn main() {
             EnvFilter::from_default_env()
         } else if effective_level == Some("xmpp") {
             // --verbose=xmpp: include XMPP packet content (debug level on xmpp_proxy)
-            EnvFilter::new("fluux=info,fluux::xmpp_proxy=debug,info")
+            EnvFilter::new("fluux=info,fluux::xmpp_proxy=debug,webview=debug,info")
         } else if effective_verbose {
-            // --verbose: app logging without XMPP packet dumps (info level only)
+            // --verbose: app logging + JS console output (info/warn/error, no debug)
             EnvFilter::new("fluux=info,info")
         } else {
             EnvFilter::new("info")
@@ -772,6 +772,33 @@ fn main() {
             stop_xmpp_proxy,
             log_to_terminal
         ])
+        .on_page_load(move |webview, payload| {
+            // Verbose: inject console-forwarding script after page finishes loading
+            if verbose && matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                let _ = webview.eval(r#"
+                    (function() {
+                        if (window.__consoleForwardingActive) return;
+                        window.__consoleForwardingActive = true;
+                        var origLog = console.log;
+                        var origWarn = console.warn;
+                        var origError = console.error;
+                        var origDebug = console.debug;
+                        function forward(level, args) {
+                            try {
+                                var msg = Array.prototype.slice.call(args).map(function(a) {
+                                    return typeof a === 'string' ? a : JSON.stringify(a);
+                                }).join(' ');
+                                window.__TAURI_INTERNALS__.invoke('log_to_terminal', { level: level, message: msg });
+                            } catch(e) {}
+                        }
+                        console.log = function() { origLog.apply(console, arguments); forward('info', arguments); };
+                        console.warn = function() { origWarn.apply(console, arguments); forward('warn', arguments); };
+                        console.error = function() { origError.apply(console, arguments); forward('error', arguments); };
+                        console.debug = function() { origDebug.apply(console, arguments); forward('debug', arguments); };
+                    })();
+                "#);
+            }
+        })
         .setup(move |app| {
             // Handle --clear-storage CLI flag (useful for debugging connection issues)
             if clear_storage {
@@ -783,32 +810,6 @@ fn main() {
                     std::thread::sleep(std::time::Duration::from_millis(500));
                     let _ = app_handle.emit("clear-storage-requested", ());
                 });
-            }
-
-            // Verbose: inject console-forwarding script into WebView
-            if verbose {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.eval(r#"
-                        (function() {
-                            var origLog = console.log;
-                            var origWarn = console.warn;
-                            var origError = console.error;
-                            var origDebug = console.debug;
-                            function forward(level, args) {
-                                try {
-                                    var msg = Array.prototype.slice.call(args).map(function(a) {
-                                        return typeof a === 'string' ? a : JSON.stringify(a);
-                                    }).join(' ');
-                                    window.__TAURI__.core.invoke('log_to_terminal', { level: level, message: msg });
-                                } catch(e) {}
-                            }
-                            console.log = function() { origLog.apply(console, arguments); forward('info', arguments); };
-                            console.warn = function() { origWarn.apply(console, arguments); forward('warn', arguments); };
-                            console.error = function() { origError.apply(console, arguments); forward('error', arguments); };
-                            console.debug = function() { origDebug.apply(console, arguments); forward('debug', arguments); };
-                        })();
-                    "#);
-                }
             }
 
             // Register xmpp: URI scheme for deep linking (RFC 5122)
