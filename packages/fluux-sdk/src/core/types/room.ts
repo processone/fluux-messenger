@@ -203,6 +203,8 @@ export interface RoomRuntime {
   occupants: Map<string, RoomOccupant>
   /** Cache of nick→bareJid for users who have left (non-anonymous rooms only) */
   nickToJidCache?: Map<string, string>
+  /** Cache of nick→avatar blob URL for users who have left (preserves avatars across leave/join) */
+  nickToAvatarCache?: Map<string, string>
   /** Our own occupant info (when joined) */
   selfOccupant?: RoomOccupant
   /** Messages in this room */
