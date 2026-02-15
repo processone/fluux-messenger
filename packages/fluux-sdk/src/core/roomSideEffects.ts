@@ -115,10 +115,10 @@ export function setupRoomSideEffects(
     } catch (error) {
       // Only log if it's not a disconnection error (those are expected during reconnect)
       const errorMsg = error instanceof Error ? error.message : String(error)
-      if (!errorMsg.includes('disconnected')) {
+      if (errorMsg.includes('disconnected') || errorMsg.includes('Not connected') || errorMsg.includes('Socket not available')) {
+        if (debug) console.log('[SideEffects] Room: MAM skipped - client disconnected')
+      } else {
         console.error('[SideEffects] Room: MAM catchup failed:', error)
-      } else if (debug) {
-        console.log('[SideEffects] Room: MAM skipped - client disconnected')
       }
       // Clear loading state on error (MAM module clears it on success)
       roomStore.getState().setRoomMAMLoading(roomJid, false)
