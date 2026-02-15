@@ -494,7 +494,7 @@ describe('MUC Module', () => {
 
         expect(result.allRoomJids).toHaveLength(0)
         expect(result.roomsToAutojoin).toHaveLength(0)
-        expect(consoleSpy).toHaveBeenCalledWith('[MUC] Failed to fetch bookmarks:', expect.any(Error))
+        expect(consoleSpy).toHaveBeenCalledWith('[Fluux]', 'Bookmarks fetch failed: item-not-found')
         consoleSpy.mockRestore()
       })
 

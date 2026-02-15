@@ -18,6 +18,7 @@ import type { XMPPClient } from './XMPPClient'
 import type { SideEffectsOptions } from './chatSideEffects'
 import { connectionStore, chatStore, roomStore } from '../stores'
 import { NS_MAM } from './namespaces'
+import { logInfo } from './logger'
 
 /**
  * Sets up background sync side effects that run after a fresh session.
@@ -108,7 +109,7 @@ export function setupBackgroundSyncSideEffects(
     if (backgroundSyncDone) return
     backgroundSyncDone = true
 
-    if (debug) console.log('[SideEffects] Sync: Starting background sync')
+    logInfo('Background sync: starting')
 
     // Read active entities — side effects already handle MAM for these
     const activeConversationId = chatStore.getState().activeConversationId
@@ -118,19 +119,19 @@ export function setupBackgroundSyncSideEffects(
     void (async () => {
       try {
         // Stage 1: Conversation catch-up (skip active — handled by chatSideEffects)
-        if (debug) console.log('[SideEffects] Sync: Starting conversation catch-up')
+        logInfo('Background sync: conversation catch-up')
         await client.mam.catchUpAllConversations({ concurrency: 2, exclude: activeConversationId })
 
         // Stage 2: Roster discovery (hourly cooldown)
         if (shouldDiscoverRoster()) {
-          if (debug) console.log('[SideEffects] Sync: Running roster discovery')
+          logInfo('Background sync: roster discovery')
           await client.mam.discoverNewConversationsFromRoster({ concurrency: 2 })
           markRosterDiscovered()
         }
 
         // Stage 3: Daily archived conversation check
         if (shouldCheckArchived()) {
-          if (debug) console.log('[SideEffects] Sync: Running daily archived conversation check')
+          logInfo('Background sync: checking archived conversations')
           await client.mam.refreshArchivedConversationPreviews()
           markArchivedChecked()
         }
@@ -142,7 +143,7 @@ export function setupBackgroundSyncSideEffects(
     // Stage 4: Room catch-up (delayed to let rooms finish joining and discover MAM)
     roomCatchUpTimer = setTimeout(() => {
       roomCatchUpTimer = undefined
-      if (debug) console.log('[SideEffects] Sync: Starting background room catch-up')
+      logInfo('Background sync: room catch-up (delayed 10s)')
       void client.mam.catchUpAllRooms({ concurrency: 2, exclude: activeRoomJid }).catch(() => {})
     }, 10_000)
   }
@@ -153,7 +154,7 @@ export function setupBackgroundSyncSideEffects(
     backgroundSyncDone = false
     isFreshSession = true
 
-    if (debug) console.log('[SideEffects] Sync: Fresh session — checking MAM support')
+    logInfo('Background sync: fresh session — checking MAM support')
 
     // Check if MAM is already supported (cached serverInfo from previous session)
     const supportsMAM = connectionStore.getState().serverInfo?.features?.includes(NS_MAM) ?? false
@@ -166,7 +167,7 @@ export function setupBackgroundSyncSideEffects(
   // SM resumption: no MAM queries needed, just log
   const unsubscribeResumed = client.on('resumed', () => {
     isFreshSession = false
-    if (debug) console.log('[SideEffects] Sync: SM resumption — skipping background sync')
+    logInfo('Background sync: SM resumption — skipping')
   })
 
   // When going offline, cancel any pending room catch-up timer.
@@ -200,7 +201,7 @@ export function setupBackgroundSyncSideEffects(
 
         // Only trigger on fresh sessions (isFreshSession is false on SM resumption)
         if (isFreshSession && !backgroundSyncDone) {
-          if (debug) console.log('[SideEffects] Sync: MAM support discovered, triggering background sync')
+          logInfo('Background sync: MAM support discovered, triggering sync')
           triggerBackgroundSync()
         }
       } else {

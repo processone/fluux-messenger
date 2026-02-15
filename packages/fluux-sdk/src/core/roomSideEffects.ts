@@ -17,6 +17,7 @@
 import type { XMPPClient } from './XMPPClient'
 import type { SideEffectsOptions } from './chatSideEffects'
 import { roomStore, connectionStore } from '../stores'
+import { logInfo } from './logger'
 
 /**
  * Sets up room-related side effects.
@@ -88,7 +89,7 @@ export function setupRoomSideEffects(
     // The MAM module will also emit room:mam-loading=true, but that's idempotent.
     roomStore.getState().setRoomMAMLoading(roomJid, true)
 
-    if (debug) console.log('[SideEffects] Room: Starting MAM catchup for', roomJid)
+    logInfo(`Room side effect: MAM catch-up start for ${roomJid}`)
 
     try {
       const messages = room.messages || []
@@ -110,7 +111,7 @@ export function setupRoomSideEffects(
           max: 50,
         })
       }
-      if (debug) console.log('[SideEffects] Room: MAM catchup complete')
+      logInfo('Room side effect: MAM catch-up complete')
     } catch (error) {
       // Only log if it's not a disconnection error (those are expected during reconnect)
       const errorMsg = error instanceof Error ? error.message : String(error)
@@ -139,7 +140,7 @@ export function setupRoomSideEffects(
         return
       }
 
-      if (debug) console.log('[SideEffects] Room: Active room changed to', activeRoomJid)
+      logInfo(`Room side effect: active room changed to ${activeRoomJid}`)
 
       const room = roomStore.getState().rooms.get(activeRoomJid)
       if (!room) {

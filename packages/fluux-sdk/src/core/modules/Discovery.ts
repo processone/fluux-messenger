@@ -6,8 +6,13 @@ import {
   NS_DISCO_INFO,
   NS_DISCO_ITEMS,
   NS_HTTP_UPLOAD,
+  NS_MAM,
+  NS_CARBONS,
+  NS_BLOCKING,
+  NS_PUBSUB,
 } from '../namespaces'
 import type { UploadSlot, HttpUploadService } from '../types'
+import { logInfo, logWarn } from '../logger'
 
 /**
  * Service discovery and HTTP file upload module.
@@ -79,13 +84,32 @@ export class Discovery extends BaseModule {
       const serverInfo = { domain, identities, features }
       this.deps.emitSDK('connection:server-info', { info: serverInfo })
 
+      // Log server identity (e.g. "server/im ejabberd 24.06")
+      const primaryIdentity = identities.find(i => i.category === 'server')
+      if (primaryIdentity) {
+        const idName = primaryIdentity.name ? ` "${primaryIdentity.name}"` : ''
+        logInfo(`Server identity: ${primaryIdentity.category}/${primaryIdentity.type}${idName}`)
+      }
+
+      // Log key feature flags for troubleshooting
+      const keyFeatures = {
+        MAM: features.includes(NS_MAM),
+        Carbons: features.includes(NS_CARBONS),
+        Blocking: features.includes(NS_BLOCKING),
+        PubSub: features.some(f => f.startsWith(NS_PUBSUB)),
+      }
+      const featureSummary = Object.entries(keyFeatures)
+        .map(([k, v]) => `${k}=${v}`)
+        .join(', ')
+      logInfo(`Server features (${features.length}): ${featureSummary}`)
+
       this.deps.emitSDK('console:event', {
         message: `Server ${domain}: ${features.length} features discovered`,
         category: 'connection',
       })
     } catch (err) {
       // Server disco#info not available - that's fine, not all servers support it
-      console.warn('[Discovery] Failed to fetch server disco#info:', err)
+      logWarn(`Server disco#info failed: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
 
@@ -118,6 +142,7 @@ export class Discovery extends BaseModule {
       if (serverHasUpload) {
         const uploadService = this.extractUploadService(domain, serverQuery)
         this.deps.emitSDK('connection:http-upload-service', { service: uploadService })
+        logInfo(`HTTP Upload service: ${domain}${uploadService.maxFileSize ? ` (max ${Math.round(uploadService.maxFileSize / 1024 / 1024)}MB)` : ''}`)
         this.deps.emitSDK('console:event', {
           message: `HTTP Upload service discovered on server: ${domain}${uploadService.maxFileSize ? ` (max ${Math.round(uploadService.maxFileSize / 1024 / 1024)}MB)` : ''}`,
           category: 'connection',
@@ -135,6 +160,7 @@ export class Discovery extends BaseModule {
 
       // 3. For each item, query disco#info to find HTTP Upload feature
       const items = itemsResult.getChild('query', NS_DISCO_ITEMS)?.getChildren('item') || []
+      logInfo(`Disco#items: ${items.length} component(s) on ${domain}`)
 
       for (const item of items) {
         const itemJid = item.attrs.jid
@@ -156,6 +182,7 @@ export class Discovery extends BaseModule {
           if (hasUpload) {
             const uploadService = this.extractUploadService(itemJid, query)
             this.deps.emitSDK('connection:http-upload-service', { service: uploadService })
+            logInfo(`HTTP Upload service: ${itemJid}${uploadService.maxFileSize ? ` (max ${Math.round(uploadService.maxFileSize / 1024 / 1024)}MB)` : ''}`)
             this.deps.emitSDK('console:event', {
               message: `HTTP Upload service discovered: ${itemJid}${uploadService.maxFileSize ? ` (max ${Math.round(uploadService.maxFileSize / 1024 / 1024)}MB)` : ''}`,
               category: 'connection',
@@ -168,10 +195,11 @@ export class Discovery extends BaseModule {
       }
 
       // No HTTP Upload service found
+      logInfo('No HTTP Upload service found')
       this.deps.emitSDK('connection:http-upload-service', { service: null })
     } catch (err) {
       // disco#info/items not available
-      console.warn('[Discovery] Failed to discover HTTP Upload service:', err)
+      logWarn(`HTTP Upload discovery failed: ${err instanceof Error ? err.message : String(err)}`)
       this.deps.emitSDK('connection:http-upload-service', { service: null })
     }
   }

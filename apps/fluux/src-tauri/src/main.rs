@@ -812,8 +812,10 @@ fn main() {
             log_to_terminal
         ])
         .on_page_load(move |webview, payload| {
-            // Verbose: inject console-forwarding script after page finishes loading
-            if verbose && matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+            // Always inject console-forwarding script so SDK diagnostic logs
+            // (prefixed with [Fluux]) reach the Rust file log for troubleshooting.
+            // When --verbose is not active, this is the only way JS logs reach the file.
+            if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
                 let _ = webview.eval(r#"
                     (function() {
                         if (window.__consoleForwardingActive) return;
