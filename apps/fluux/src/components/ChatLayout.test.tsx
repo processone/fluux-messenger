@@ -312,8 +312,8 @@ vi.mock('@/hooks/useEventsDesktopNotifications', () => ({
   useEventsDesktopNotifications: () => {},
 }))
 
-vi.mock('@/hooks/useAutoAway', () => ({
-  useAutoAway: () => {},
+vi.mock('@/hooks/usePlatformState', () => ({
+  usePlatformState: () => {},
 }))
 
 vi.mock('@/utils/renderLoopDetector', () => ({
@@ -325,8 +325,6 @@ vi.mock('@/hooks', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/hooks')>()
   return {
     ...actual, // Keep useRouteSync and other real implementations
-    useWakeDetector: () => {},
-    useSleepDetector: () => {},
     useWindowVisibility: () => {},
     useFocusZones: () => ({
       focusZone: vi.fn(),

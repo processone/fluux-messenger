@@ -283,6 +283,40 @@ describe('XMPPClient', () => {
     })
   })
 
+  describe('notifySystemState', () => {
+    it('should send WAKE_DETECTED to presence actor on awake', async () => {
+      const sendSpy = vi.spyOn(xmppClient.presenceActor, 'send')
+
+      // notifySystemState delegates to connection module which requires connected state.
+      // We only verify the presence signaling here (connection behavior tested elsewhere).
+      await xmppClient.notifySystemState('awake').catch(() => {})
+
+      expect(sendSpy).toHaveBeenCalledWith({ type: 'WAKE_DETECTED' })
+    })
+
+    it('should send SLEEP_DETECTED to presence actor on sleeping', async () => {
+      const sendSpy = vi.spyOn(xmppClient.presenceActor, 'send')
+
+      await xmppClient.notifySystemState('sleeping').catch(() => {})
+
+      expect(sendSpy).toHaveBeenCalledWith({ type: 'SLEEP_DETECTED' })
+    })
+
+    it('should NOT send presence events for visible/hidden states', async () => {
+      const sendSpy = vi.spyOn(xmppClient.presenceActor, 'send')
+
+      await xmppClient.notifySystemState('visible').catch(() => {})
+      await xmppClient.notifySystemState('hidden').catch(() => {})
+
+      expect(sendSpy).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'WAKE_DETECTED' })
+      )
+      expect(sendSpy).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'SLEEP_DETECTED' })
+      )
+    })
+  })
+
   describe('namespace modules', () => {
     it('should expose all namespace modules after bindStores', () => {
       expect(xmppClient.connection).toBeDefined()
