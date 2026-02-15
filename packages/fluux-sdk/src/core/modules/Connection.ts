@@ -28,6 +28,12 @@ import {
 // When the socket is already dead, xmpp.js stop() can hang waiting for events
 const CLIENT_STOP_TIMEOUT_MS = 2000
 
+// Timeout for a single reconnection attempt (proxy restart + XMPP negotiation).
+// If xmpp.js hangs during connection negotiation (e.g., the WebSocket connects
+// but XMPP stream negotiation stalls), this ensures the attempt is abandoned
+// and the next retry can begin.
+const RECONNECT_ATTEMPT_TIMEOUT_MS = 30_000
+
 /**
  * Race a promise against a timeout. Resolves with void if the timeout fires first.
  * Used to prevent hanging on xmpp.js stop() when the socket is already dead.
@@ -381,7 +387,7 @@ export class Connection extends BaseModule {
    * - A full WebSocket URL (wss://example.com:5443/ws) - used directly
    * - A domain name (example.com) - XEP-0156 discovery is attempted, falls back to wss://{domain}/ws
    */
-  async connect({ jid, password, server, resource, smState, lang, previouslyJoinedRooms, skipDiscovery }: ConnectOptions): Promise<void> {
+  async connect({ jid, password, server, resource, smState, lang, previouslyJoinedRooms, skipDiscovery, disableSmKeepalive }: ConnectOptions): Promise<void> {
     // If the machine is not in idle state, reset it first.
     // This handles the case where connect() is called while already connected
     // (e.g., user clicks Connect again after a previous session).
@@ -459,7 +465,7 @@ export class Connection extends BaseModule {
     this.stores.connection.setConnectionMethod(connectionMethod)
 
     // Store credentials for potential reconnection (with resolved URL)
-    this.credentials = { jid, password, server: resolvedServer, resource, lang }
+    this.credentials = { jid, password, server: resolvedServer, resource, lang, disableSmKeepalive }
     this.originalServer = server || getDomain(jid)
 
     // Load SM state and joined rooms from storage if not provided (for session resumption across page reloads)
@@ -1566,8 +1572,13 @@ export class Connection extends BaseModule {
       this.setupHandlers()
 
       await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error(`Reconnect attempt timed out after ${RECONNECT_ATTEMPT_TIMEOUT_MS / 1000}s`))
+        }, RECONNECT_ATTEMPT_TIMEOUT_MS)
+
         this.setupConnectionHandlers(
           async (isResumption) => {
+            clearTimeout(timeout)
             // Signal machine: reconnect succeeded → connected.healthy
             this.connectionActor.send({ type: 'CONNECTION_SUCCESS' })
             await this.handleConnectionSuccess(
@@ -1577,7 +1588,10 @@ export class Connection extends BaseModule {
             )
             resolve()
           },
-          reject
+          (err) => {
+            clearTimeout(timeout)
+            reject(err)
+          }
         )
       })
     } catch (err) {
