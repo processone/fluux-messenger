@@ -38,7 +38,7 @@ export interface StoreBindings {
     getStatus: () => ConnectionStatus
     setJid: (jid: string | null) => void
     setError: (error: string | null) => void
-    setReconnectState: (attempt: number, reconnectIn: number | null) => void
+    setReconnectState: (attempt: number, reconnectTargetTime: number | null) => void
     setPresenceState: (show: PresenceStatus, message?: string | null) => void
     setAutoAway: (isAuto: boolean) => void
     setServerInfo: (info: ServerInfo | null) => void

@@ -50,7 +50,7 @@ interface ConnectionState {
   jid: string | null
   error: string | null
   reconnectAttempt: number
-  reconnectIn: number | null
+  reconnectTargetTime: number | null
   serverInfo: ServerInfo | null
   connectionMethod: ConnectionMethod | null
   // Own profile data
@@ -67,7 +67,7 @@ interface ConnectionState {
   setStatus: (status: ConnectionStatus) => void
   setJid: (jid: string | null) => void
   setError: (error: string | null) => void
-  setReconnectState: (attempt: number, reconnectIn: number | null) => void
+  setReconnectState: (attempt: number, reconnectTargetTime: number | null) => void
   setServerInfo: (info: ServerInfo | null) => void
   setConnectionMethod: (method: ConnectionMethod | null) => void
   // Own profile actions
@@ -88,7 +88,7 @@ const initialState = {
   jid: null,
   error: null,
   reconnectAttempt: 0,
-  reconnectIn: null,
+  reconnectTargetTime: null,
   serverInfo: null as ServerInfo | null,
   connectionMethod: null as ConnectionMethod | null,
   ownAvatar: null as string | null,
@@ -106,7 +106,7 @@ export const connectionStore = createStore<ConnectionState>()(
   setStatus: (status) => set({ status }),
   setJid: (jid) => set({ jid }),
   setError: (error) => set({ error }),
-  setReconnectState: (attempt, reconnectIn) => set({ reconnectAttempt: attempt, reconnectIn }),
+  setReconnectState: (attempt, reconnectTargetTime) => set({ reconnectAttempt: attempt, reconnectTargetTime }),
   setServerInfo: (info) => set({ serverInfo: info }),
   setConnectionMethod: (method) => set({ connectionMethod: method }),
 

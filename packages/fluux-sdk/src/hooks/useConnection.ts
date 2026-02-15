@@ -96,7 +96,7 @@ export function useConnection() {
   const jid = useConnectionStore((s) => s.jid)
   const error = useConnectionStore((s) => s.error)
   const reconnectAttempt = useConnectionStore((s) => s.reconnectAttempt)
-  const reconnectIn = useConnectionStore((s) => s.reconnectIn)
+  const reconnectTargetTime = useConnectionStore((s) => s.reconnectTargetTime)
   const serverInfo = useConnectionStore((s) => s.serverInfo)
   const connectionMethod = useConnectionStore((s) => s.connectionMethod)
   // Own profile state
@@ -269,7 +269,7 @@ export function useConnection() {
       jid,
       error,
       reconnectAttempt,
-      reconnectIn,
+      reconnectTargetTime,
       serverInfo,
       connectionMethod,
       // Own profile state
@@ -294,7 +294,7 @@ export function useConnection() {
       jid,
       error,
       reconnectAttempt,
-      reconnectIn,
+      reconnectTargetTime,
       serverInfo,
       connectionMethod,
       ownAvatar,
