@@ -34,7 +34,7 @@ import {
   adminStore,
   blockingStore,
 } from '../stores'
-import { detectPlatform } from './platform'
+import { detectPlatform, getCachedPlatform } from './platform'
 
 /**
  * Session storage key for persisting presence machine state.
@@ -92,6 +92,8 @@ import { Blocking } from './modules/Blocking'
 import { MAM } from './modules/MAM'
 import { NS_CARBONS, NS_MAM } from './namespaces'
 import { createDefaultStoreBindings, type DefaultStoreBindingsOptions } from './defaultStoreBindings'
+import { logInfo } from './logger'
+import { SDK_VERSION } from '../version'
 
 /**
  * Core XMPP client with namespace-based module API.
@@ -1200,6 +1202,9 @@ export class XMPPClient {
     isResumption: boolean,
     previouslyJoinedRooms?: Array<{ jid: string; nickname: string; password?: string; autojoin?: boolean }>
   ): Promise<void> {
+    const platform = getCachedPlatform() ?? 'unknown'
+    logInfo(`SDK v${SDK_VERSION}, platform: ${platform}`)
+
     // Transition presence machine to connected state
     this.presenceActor.send({ type: 'CONNECT' })
 
@@ -1251,6 +1256,7 @@ export class XMPPClient {
     // Fetch roster before sending presence
     await this.roster.fetchRoster()
     this.enableCarbons()
+    logInfo('Fresh session: roster fetched, enabling carbons')
 
     // Send initial presence
     await this.roster.sendInitialPresence()
@@ -1277,6 +1283,11 @@ export class XMPPClient {
     const autojoinJids = new Set(roomsToAutojoin.map(r => r.jid))
 
     // Rejoin non-autojoin rooms that were previously joined (reconnect only)
+    const rejoinCount = previouslyJoinedRooms?.filter(r => !autojoinJids.has(r.jid)).length ?? 0
+    if (roomsToAutojoin.length > 0 || rejoinCount > 0) {
+      logInfo(`Fresh session: ${roomsToAutojoin.length} rooms to autojoin, ${rejoinCount} to rejoin`)
+    }
+
     if (previouslyJoinedRooms && previouslyJoinedRooms.length > 0) {
       const nonAutojoinRooms = previouslyJoinedRooms.filter(r => !autojoinJids.has(r.jid))
       if (nonAutojoinRooms.length > 0) {

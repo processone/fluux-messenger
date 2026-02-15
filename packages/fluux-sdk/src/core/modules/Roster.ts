@@ -12,6 +12,7 @@ import {
 } from '../namespaces'
 import type { PresenceShow, Contact } from '../types'
 import { parseXMPPError, formatXMPPError } from '../../utils/xmppError'
+import { logInfo } from '../logger'
 
 /**
  * Roster and presence management module.
@@ -98,6 +99,15 @@ export class Roster extends BaseModule {
         }))
         // SDK event only - binding should call store.setContacts
         this.deps.emitSDK('roster:loaded', { contacts })
+
+        // Log roster distribution
+        const subs: Record<string, number> = {}
+        for (const c of contacts) {
+          subs[c.subscription || 'none'] = (subs[c.subscription || 'none'] || 0) + 1
+        }
+        const subSummary = Object.entries(subs).map(([k, v]) => `${k}=${v}`).join(', ')
+        logInfo(`Roster loaded: ${contacts.length} contact(s) (${subSummary})`)
+
         // Emit rosterLoaded event to trigger avatar hash restoration
         this.deps.emit('rosterLoaded')
       } else {
@@ -342,11 +352,13 @@ export class Roster extends BaseModule {
 
   async sendPresenceProbes(): Promise<void> {
     const contacts = this.deps.stores?.roster.sortedContacts() || []
-    for (const contact of contacts) {
-      if (contact.presence === 'offline') {
-        const probe = xml('presence', { to: contact.jid, type: 'probe' })
-        await this.deps.sendStanza(probe)
-      }
+    const offlineContacts = contacts.filter(c => c.presence === 'offline')
+    if (offlineContacts.length > 0) {
+      logInfo(`Sending presence probes to ${offlineContacts.length} offline contact(s)`)
+    }
+    for (const contact of offlineContacts) {
+      const probe = xml('presence', { to: contact.jid, type: 'probe' })
+      await this.deps.sendStanza(probe)
     }
   }
 

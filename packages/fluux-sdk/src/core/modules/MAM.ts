@@ -55,6 +55,8 @@ import type {
   RSMResponse,
 } from '../types'
 import { parseMessageContent, parseOgpFastening, applyRetraction, applyCorrection } from './messagingUtils'
+import { getDomain } from '../jid'
+import { logInfo, logError as logErr } from '../logger'
 
 /**
  * Internal type for collected modifications during MAM query
@@ -125,6 +127,10 @@ export class MAM extends BaseModule {
   async queryArchive(options: MAMQueryOptions): Promise<MAMResult> {
     const { with: withJid, max = 50, before = '', start, end } = options
     const conversationId = getBareJid(withJid)
+    const mamStart = Date.now()
+    const direction = start ? 'forward' : 'backward'
+
+    logInfo(`MAM query: ${getDomain(conversationId) || '*'}@..., max=${max}, ${direction}${start ? ` from ${start}` : ''}`)
 
     // Track total messages across automatic pagination
     const allMessages: Message[] = []
@@ -220,6 +226,8 @@ export class MAM extends BaseModule {
       // - Backward: no `start` filter (fetching older history with `before` cursor)
       const direction = start ? 'forward' : 'backward'
 
+      logInfo(`MAM result: ${getDomain(conversationId) || '*'}@... → ${allMessages.length} msg(s), complete=${isComplete}, ${Date.now() - mamStart}ms`)
+
       this.deps.emitSDK('chat:mam-messages', {
         conversationId,
         messages: allMessages,
@@ -230,6 +238,7 @@ export class MAM extends BaseModule {
       return { messages: allMessages, complete: isComplete, rsm: lastRsm }
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error'
+      logErr(`MAM error: ${getDomain(conversationId) || '*'}@... — ${msg}`)
       this.deps.emitSDK('chat:mam-error', { conversationId, error: msg })
       throw error
     } finally {
@@ -248,6 +257,9 @@ export class MAM extends BaseModule {
    */
   async queryRoomArchive(options: RoomMAMQueryOptions): Promise<RoomMAMResult> {
     const { roomJid, max = 50, before, after, start } = options
+    const roomMamStart = Date.now()
+    const roomDirection = start ? 'forward' : 'backward'
+    logInfo(`Room MAM query: ${roomJid}, max=${max}, ${roomDirection}${start ? ` from ${start}` : ''}`)
     const queryId = `mam_${generateUUID()}`
 
     // Room MAM doesn't need a 'with' filter - we query the room's archive directly
@@ -305,6 +317,8 @@ export class MAM extends BaseModule {
       // - Backward: no `start` filter (fetching older history with `before` cursor)
       const direction = start ? 'forward' : 'backward'
 
+      logInfo(`Room MAM result: ${roomJid} → ${collectedMessages.length} msg(s), complete=${complete}, ${Date.now() - roomMamStart}ms`)
+
       this.deps.emitSDK('room:mam-messages', {
         roomJid,
         messages: collectedMessages,
@@ -315,6 +329,7 @@ export class MAM extends BaseModule {
       return { messages: collectedMessages, complete, rsm }
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error'
+      logErr(`Room MAM error: ${roomJid} — ${msg}`)
       this.deps.emitSDK('room:mam-error', { roomJid, error: msg })
       throw error
     } finally {
@@ -492,6 +507,8 @@ export class MAM extends BaseModule {
     const conversations = this.deps.stores?.chat.getAllConversations() || []
     if (conversations.length === 0) return
 
+    logInfo(`Preview refresh for ${conversations.length} conversation(s)`)
+
     this.deps.emitSDK('console:event', {
       message: `Refreshing previews for ${conversations.length} conversation(s)`,
       category: 'sm',
@@ -504,6 +521,8 @@ export class MAM extends BaseModule {
       (conversationId) => this.fetchPreviewForConversation(conversationId),
       concurrency
     )
+
+    logInfo(`Preview refresh complete for ${conversations.length} conversation(s)`)
   }
 
   /**
@@ -559,6 +578,8 @@ export class MAM extends BaseModule {
     }
     if (conversations.length === 0) return
 
+    logInfo(`Background catch-up for ${conversations.length} conversation(s)`)
+
     this.deps.emitSDK('console:event', {
       message: `Background catch-up for ${conversations.length} conversation(s)`,
       category: 'sm',
@@ -593,6 +614,8 @@ export class MAM extends BaseModule {
       },
       concurrency
     )
+
+    logInfo(`Background catch-up for ${conversations.length} conversation(s) — complete`)
   }
 
   /**
@@ -621,6 +644,8 @@ export class MAM extends BaseModule {
     )
     if (newContacts.length === 0) return
 
+    logInfo(`Roster discovery for ${newContacts.length} contact(s)`)
+
     this.deps.emitSDK('console:event', {
       message: `Discovering conversations for ${newContacts.length} roster contact(s)`,
       category: 'sm',
@@ -641,6 +666,8 @@ export class MAM extends BaseModule {
       },
       concurrency
     )
+
+    logInfo(`Roster discovery complete for ${newContacts.length} contact(s)`)
   }
 
   /**
@@ -663,6 +690,8 @@ export class MAM extends BaseModule {
     // Filter for MAM-enabled, non-Quick Chat rooms (and exclude active room if specified)
     const mamRooms = joinedRooms.filter((r) => r.supportsMAM && !r.isQuickChat && (!exclude || r.jid !== exclude))
     if (mamRooms.length === 0) return
+
+    logInfo(`Background catch-up for ${mamRooms.length} room(s)`)
 
     this.deps.emitSDK('console:event', {
       message: `Background catch-up for ${mamRooms.length} room(s)`,
@@ -698,6 +727,8 @@ export class MAM extends BaseModule {
       },
       concurrency
     )
+
+    logInfo(`Background catch-up for ${mamRooms.length} room(s) — complete`)
   }
 
   /**

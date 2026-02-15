@@ -2,11 +2,12 @@ import { client, Client, Element, xml } from '@xmpp/client'
 import { createActor } from 'xstate'
 import { BaseModule, type ModuleDependencies } from './BaseModule'
 import type { ConnectOptions, ConnectionMethod } from '../types'
-import { getDomain, getLocalPart } from '../jid'
+import { getDomain, getLocalPart, getResource } from '../jid'
 import { getClientIdentity, CLIENT_FEATURES } from '../caps'
 import { NS_DISCO_INFO, NS_PING } from '../namespaces'
 import { discoverWebSocket } from '../../utils/websocketDiscovery'
 import { flushPendingRoomMessages } from '../../utils/messageCache'
+import { logInfo, logWarn, logError as logErr } from '../logger'
 import {
   type SmPatchState,
   createSmPatchState,
@@ -503,7 +504,7 @@ export class Connection extends BaseModule {
         },
         (err) => {
           logError('Connection error:', err.message)
-          console.error(`[XMPP] Connection error: ${err.message}`)
+          logErr(`Connection error: ${err.message}`)
           // Signal machine: initial connection failed → terminal.initialFailure
           this.connectionActor.send({ type: 'CONNECTION_ERROR', error: err.message })
           this.stores.console.addEvent(`Connection error: ${err.message}`, 'error')
@@ -652,6 +653,7 @@ export class Connection extends BaseModule {
    */
   async verifyConnection(timeoutMs = 10000): Promise<boolean> {
     if (!this.xmpp) return false
+    const verifyStart = Date.now()
 
     // Transition the machine to connected.verifying if currently healthy.
     // When called from notifySystemState, WAKE is already sent. When called
@@ -702,6 +704,7 @@ export class Connection extends BaseModule {
 
       // Connection verified — signal machine: verifying → healthy
       this.connectionActor.send({ type: 'VERIFY_SUCCESS' })
+      logInfo(`Connection verified (${Date.now() - verifyStart}ms)`)
       return true
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err)
@@ -778,6 +781,7 @@ export class Connection extends BaseModule {
     }
 
     this.stores.console.addEvent('Dead connection detected, will reconnect', 'connection')
+    logWarn('Dead connection detected, will reconnect')
 
     // Signal machine: SOCKET_DIED → transitions to reconnecting.waiting
     // (incrementAttempt action computes backoff delay)
@@ -835,6 +839,8 @@ export class Connection extends BaseModule {
   ): Promise<void> {
     switch (state) {
       case 'awake': {
+        const sleepSec = sleepDurationMs != null ? Math.round(sleepDurationMs / 1000) : null
+        logInfo(`System state: awake${sleepSec != null ? ` (sleep: ${sleepSec}s)` : ''}`)
         // Verify connection health after wake from sleep (time-gap detected)
         // This is the reliable indicator of potential socket death
         if (this.isInConnectedState()) {
@@ -883,6 +889,7 @@ export class Connection extends BaseModule {
         // App became visible - don't verify connection (no indication of socket death)
         // Only trigger reconnect if we were already in reconnecting state
         if (this.isInReconnectingState()) {
+          logInfo('System state: visible, triggering immediate reconnect')
           this.stores.console.addEvent('System state: visible, triggering immediate reconnect', 'connection')
           this.triggerReconnect()
         }
@@ -1089,7 +1096,9 @@ export class Connection extends BaseModule {
       // SM successfully enabled (new session)
       sm.on('enabled', () => {
         const smId = sm.id ? sm.id.slice(0, 8) + '...' : 'none'
+        const smMax = sm.max != null ? `${sm.max}s` : 'unknown'
         this.stores.console.addEvent(`Stream Management enabled (id: ${smId})`, 'sm')
+        logInfo(`SM enabled (id: ${smId}, server max: ${smMax})`)
         // New session means no pending resume, so any future 'fail' events are real failures
         this.smResumeCompleted = true
         // Cache SM state for reconnection (survives socket death)
@@ -1105,6 +1114,7 @@ export class Connection extends BaseModule {
       // SM session successfully resumed (from xmpp.js plugin)
       sm.on('resumed', () => {
         this.stores.console.addEvent('Stream Management session resumed', 'sm')
+        logInfo(`SM session resumed (id: ${sm.id ? sm.id.slice(0, 8) + '...' : 'none'}, h: ${sm.inbound ?? 0})`)
         // Mark resume as completed - any 'fail' events after this are for new stanzas, not resume failures
         this.smResumeCompleted = true
         // Update cached SM state (survives socket death for next reconnection)
@@ -1296,6 +1306,14 @@ export class Connection extends BaseModule {
     // https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/xmpp__client
     ;(this.xmpp as any).on('disconnect', (context: { clean: boolean; reason?: unknown }) => {
       const wasClean = context?.clean ?? false
+      // Extract close code for file log diagnostics
+      const rawReason = context?.reason
+      let closeInfo = ''
+      if (rawReason && typeof rawReason === 'object' && 'code' in rawReason) {
+        const evt = rawReason as { code: number; reason?: string }
+        closeInfo = evt.reason ? `, code: ${evt.code}, reason: ${evt.reason}` : `, code: ${evt.code}`
+      }
+      logInfo(`Socket disconnected (clean: ${wasClean}${closeInfo})`)
       this.stores.console.addEvent(
         `Socket disconnected (clean: ${wasClean})`,
         'connection'
@@ -1412,6 +1430,19 @@ export class Connection extends BaseModule {
       isResumption ? logMessage.replace('Connected', 'Session resumed') : logMessage,
       'connection'
     )
+
+    // Log session summary to file log
+    const sessionType = isResumption ? 'SM resumed' : 'fresh'
+    logInfo(`Connected: ${sessionType}`)
+
+    // Log the bound resource
+    if (this.credentials?.jid) {
+      const resource = getResource(this.credentials.jid)
+      if (resource) {
+        logInfo(`Bound resource: ${resource}`)
+      }
+    }
+
     // Emit SDK events for connection online and authenticated
     this.deps.emitSDK('connection:status', { status: 'online' })
     if (this.credentials?.jid) {
@@ -1450,6 +1481,7 @@ export class Connection extends BaseModule {
       `Reconnecting (attempt ${reconnectAttempt}, delay ${Math.round(nextRetryDelayMs / 1000)}s)`,
       'connection'
     )
+    logInfo(`Reconnecting (attempt ${reconnectAttempt}, delay ${Math.round(nextRetryDelayMs / 1000)}s)`)
     // Emit SDK events for reconnecting status
     this.deps.emitSDK('connection:status', { status: 'reconnecting' })
     this.deps.emitSDK('connection:reconnecting', { attempt: reconnectAttempt, delayMs: nextRetryDelayMs })
@@ -1598,6 +1630,7 @@ export class Connection extends BaseModule {
       logError('Reconnect failed:', err)
       const errorMsg = err instanceof Error ? err.message : 'Unknown error'
       this.stores.console.addEvent(`Reconnect attempt failed: ${errorMsg}`, 'error')
+      logErr(`Reconnect failed: ${errorMsg}`)
       // Signal machine: reconnect failed → either back to waiting (with incrementAttempt)
       // or terminal.maxRetries (if exhausted)
       this.connectionActor.send({ type: 'CONNECTION_ERROR', error: errorMsg })

@@ -31,6 +31,7 @@ import type {
   AdminRoom,
 } from '../types'
 import { parseXMPPError, formatXMPPError } from '../../utils/xmppError'
+import { logInfo, logWarn, logError as logErr } from '../logger'
 
 /**
  * Multi-User Chat (MUC) module for group chat functionality.
@@ -212,6 +213,9 @@ export class MUC extends BaseModule {
       this.deps.emitSDK('room:joined', { roomJid, joined: true })
       this.deps.emitSDK('room:self-occupant', { roomJid, occupant })
 
+      const pendingCount = this.pendingOccupants.get(roomJid)?.length ?? 0
+      logInfo(`Room joined: ${roomJid} (${affiliation}/${role}, ${pendingCount + 1} occupants)`)
+
       this.deps.emit('mucJoined', roomJid, nick)
 
       // Auto-bookmark the room if not already bookmarked (skip quick chats - they're transient)
@@ -322,14 +326,14 @@ export class MUC extends BaseModule {
     if (pending.retryCount < MAX_JOIN_RETRIES) {
       // Retry joining - DON'T delete the pending entry yet,
       // so startJoinTimeout can read the retry count
-      console.warn(`[MUC] Join timeout for ${roomJid}, retrying (attempt ${pending.retryCount + 1}/${MAX_JOIN_RETRIES})`)
+      logWarn(`Room join timeout: ${roomJid}, retrying (attempt ${pending.retryCount + 1}/${MAX_JOIN_RETRIES})`)
       // Re-call joinRoom which will set up a new timeout with incremented retry count
       this.joinRoom(roomJid, pending.nickname, pending.options).catch(err => {
         console.error(`[MUC] Retry join failed for ${roomJid}:`, err)
       })
     } else {
       // Max retries reached, give up
-      console.error(`[MUC] Join timeout for ${roomJid} after ${MAX_JOIN_RETRIES} retries, giving up`)
+      logErr(`Room join timeout: ${roomJid} after ${MAX_JOIN_RETRIES} retries, giving up`)
       this.pendingJoins.delete(roomJid)
       this.pendingOccupants.delete(roomJid) // Clear buffered occupants on timeout
       // SDK event only - binding calls store.updateRoom
@@ -484,6 +488,7 @@ export class MUC extends BaseModule {
       ...presenceChildren
     )
 
+    logInfo(`Joining room: ${roomJid}`)
     await this.deps.sendStanza(presence)
 
     // Start timeout - if no self-presence received within timeout, will retry or give up
@@ -519,6 +524,7 @@ export class MUC extends BaseModule {
     })
 
     await this.deps.sendStanza(presence)
+    logInfo(`Room left: ${roomJid}`)
     // SDK event only - binding calls store.updateRoom
     this.deps.emitSDK('room:updated', { roomJid, updates: { joined: false, isJoining: false } })
   }
@@ -682,6 +688,8 @@ export class MUC extends BaseModule {
             .filter(Boolean) ?? []
           const serviceSupportsMAM = features.includes(NS_MAM)
 
+          logInfo(`MUC service: ${jid} (MAM=${serviceSupportsMAM})`)
+
           // Emit service-level MAM support for use as fallback
           this.deps.emitSDK('admin:muc-service-mam', { supportsMAM: serviceSupportsMAM })
 
@@ -689,7 +697,7 @@ export class MUC extends BaseModule {
         }
       }
     } catch (err) {
-      console.error('[MUC] Failed to discover MUC service:', err)
+      logErr(`MUC service discovery failed: ${err instanceof Error ? err.message : String(err)}`)
     }
 
     return null
@@ -753,11 +761,13 @@ export class MUC extends BaseModule {
         .find((i: Element) => i.attrs.category === 'conference')
       const name = identity?.attrs.name as string | undefined
 
+      logInfo(`Room features: ${roomJid} MAM=${supportsMAM}`)
+
       return { supportsMAM, name }
     } catch (err) {
       // Room disco#info not available - that's fine, room may not exist yet
       // or may not support disco queries, or the query timed out
-      console.warn(`[MUC] Failed to query room features for ${roomJid}:`, err)
+      logWarn(`Room disco failed: ${roomJid}: ${err instanceof Error ? err.message : String(err)}`)
 
       // Don't fallback to service-level MAM - if we can't confirm room-level MAM,
       // assume it's not supported. This is safer because:
@@ -1086,8 +1096,11 @@ export class MUC extends BaseModule {
         }
       }
     } catch (err) {
-      console.error('[MUC] Failed to fetch bookmarks:', err)
+      logErr(`Bookmarks fetch failed: ${err instanceof Error ? err.message : String(err)}`)
     }
+
+    const autojoinCount = roomsToAutojoin.length
+    logInfo(`Bookmarks: ${allRoomJids.length} total, ${autojoinCount} autojoin`)
 
     return { roomsToAutojoin, allRoomJids }
   }

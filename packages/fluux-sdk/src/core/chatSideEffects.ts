@@ -14,6 +14,8 @@
 import type { XMPPClient } from './XMPPClient'
 import { chatStore, connectionStore } from '../stores'
 import { NS_MAM } from './namespaces'
+import { logInfo } from './logger'
+import { getDomain } from './jid'
 
 /**
  * Options for configuring side effects behavior.
@@ -77,7 +79,7 @@ export function setupChatSideEffects(
     // The MAM module will also emit mam-loading=true, but that's idempotent.
     chatStore.getState().setMAMLoading(conversationId, true)
 
-    if (debug) console.log('[SideEffects] Chat: Starting MAM fetch for', conversationId)
+    logInfo(`Chat side effect: MAM fetch start for ${getDomain(conversationId) || '*'}@...`)
 
     try {
       const cachedMessages = chatStore.getState().messages.get(conversationId)
@@ -90,7 +92,7 @@ export function setupChatSideEffects(
       }
 
       await client.chat.queryMAM(queryOptions)
-      if (debug) console.log('[SideEffects] Chat: MAM fetch complete')
+      logInfo('Chat side effect: MAM fetch complete')
     } catch (error) {
       // Only log if it's not a disconnection error (those are expected during reconnect)
       const errorMsg = error instanceof Error ? error.message : String(error)
@@ -120,7 +122,7 @@ export function setupChatSideEffects(
         return
       }
 
-      if (debug) console.log('[SideEffects] Chat: Active conversation changed to', activeConversationId)
+      logInfo(`Chat side effect: active conversation changed to ${getDomain(activeConversationId) || '*'}@...`)
 
       const conversation = chatStore.getState().conversations.get(activeConversationId)
       if (!conversation || conversation.type !== 'chat') {
