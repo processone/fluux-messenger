@@ -89,10 +89,19 @@ export function setupRoomSideEffects(
     // The MAM module will also emit room:mam-loading=true, but that's idempotent.
     roomStore.getState().setRoomMAMLoading(roomJid, true)
 
-    logInfo(`Room side effect: MAM catch-up start for ${roomJid}`)
+    logInfo(`Room: starting MAM catch-up for ${roomJid}`)
 
     try {
-      const messages = room.messages || []
+      // Load IndexedDB cache first to ensure we have the latest messages
+      // before deciding the MAM query direction. Without this, the 'online'
+      // handler races with the conversation subscriber's cache load, and
+      // room.messages may be empty — causing a backward "before:''" query
+      // instead of a forward catch-up from the newest cached message.
+      await roomStore.getState().loadMessagesFromCache(roomJid, { limit: 100 })
+
+      // Re-read room after cache load (store was mutated)
+      const roomAfterCache = roomStore.getState().rooms.get(roomJid)
+      const messages = roomAfterCache?.messages || []
       const newestCachedMessage = messages[messages.length - 1]
 
       if (newestCachedMessage?.timestamp) {
@@ -111,11 +120,15 @@ export function setupRoomSideEffects(
           max: 50,
         })
       }
-      logInfo('Room side effect: MAM catch-up complete')
+      logInfo('Room: MAM catch-up complete')
     } catch (error) {
       // Only log if it's not a disconnection error (those are expected during reconnect)
-      const errorMsg = error instanceof Error ? error.message : String(error)
-      if (errorMsg.includes('disconnected') || errorMsg.includes('Not connected') || errorMsg.includes('Socket not available')) {
+      const isConnectionError = error instanceof Error &&
+        (error.message.includes('disconnected') ||
+         error.message.includes('Not connected') ||
+         error.message.includes('Socket not available'))
+
+      if (isConnectionError) {
         if (debug) console.log('[SideEffects] Room: MAM skipped - client disconnected')
       } else {
         console.error('[SideEffects] Room: MAM catchup failed:', error)
@@ -140,7 +153,7 @@ export function setupRoomSideEffects(
         return
       }
 
-      logInfo(`Room side effect: active room changed to ${activeRoomJid}`)
+      logInfo(`Room: switched to ${activeRoomJid}`)
 
       const room = roomStore.getState().rooms.get(activeRoomJid)
       if (!room) {
