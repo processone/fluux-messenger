@@ -139,6 +139,102 @@ describe('setupChatSideEffects', () => {
     })
   })
 
+  describe('reconnection', () => {
+    it('should use forward query (start) when cache has messages after reconnection', async () => {
+      const cachedTimestamp = new Date('2026-02-15T10:00:00Z')
+
+      connectionStore.getState().setServerInfo({
+        identities: [],
+        domain: 'example.com',
+        features: [NS_MAM],
+      })
+
+      chatStore.getState().addConversation({
+        id: 'contact@example.com',
+        name: 'contact@example.com',
+        type: 'chat',
+        lastMessage: undefined,
+        unreadCount: 0,
+      })
+
+      chatStore.getState().setActiveConversation('contact@example.com')
+
+      // Mock loadMessagesFromCache to simulate populating the store with a cached message
+      const cachedMsg = {
+        type: 'chat' as const,
+        id: 'cached-msg-1',
+        conversationId: 'contact@example.com',
+        from: 'contact@example.com',
+        body: 'Cached message',
+        timestamp: cachedTimestamp,
+        isOutgoing: false,
+      }
+      const loadSpy = vi.spyOn(chatStore.getState(), 'loadMessagesFromCache')
+        .mockImplementation(async (conversationId: string) => {
+          chatStore.getState().addMessage({
+            ...cachedMsg,
+            conversationId,
+          })
+          return [cachedMsg]
+        })
+
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupChatSideEffects(mockClient)
+
+      simulateFreshSession(mockClient)
+
+      await vi.waitFor(() => {
+        expect(mockClient.chat.queryMAM).toHaveBeenCalledWith(
+          expect.objectContaining({
+            with: 'contact@example.com',
+            start: expect.any(String),
+          })
+        )
+      })
+
+      // Verify it used 'start' (forward catch-up from cached message)
+      const call = (mockClient.chat.queryMAM as ReturnType<typeof vi.fn>).mock.calls[0][0]
+      expect(new Date(call.start).getTime()).toBe(cachedTimestamp.getTime() + 1)
+
+      loadSpy.mockRestore()
+    })
+
+    it('should use query without start when cache is empty after reconnection', async () => {
+      connectionStore.getState().setServerInfo({
+        identities: [],
+        domain: 'example.com',
+        features: [NS_MAM],
+      })
+
+      chatStore.getState().addConversation({
+        id: 'contact@example.com',
+        name: 'contact@example.com',
+        type: 'chat',
+        lastMessage: undefined,
+        unreadCount: 0,
+      })
+
+      chatStore.getState().setActiveConversation('contact@example.com')
+
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupChatSideEffects(mockClient)
+
+      simulateFreshSession(mockClient)
+
+      await vi.waitFor(() => {
+        expect(mockClient.chat.queryMAM).toHaveBeenCalledWith(
+          expect.objectContaining({
+            with: 'contact@example.com',
+          })
+        )
+      })
+
+      // Verify it did NOT include 'start' (no cached messages to catch up from)
+      const call = (mockClient.chat.queryMAM as ReturnType<typeof vi.fn>).mock.calls[0][0]
+      expect(call).not.toHaveProperty('start')
+    })
+  })
+
   describe('SM resumption', () => {
     it('should NOT trigger MAM catchup on SM resumption for active conversation', async () => {
       connectionStore.getState().setServerInfo({

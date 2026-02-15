@@ -79,9 +79,17 @@ export function setupChatSideEffects(
     // The MAM module will also emit mam-loading=true, but that's idempotent.
     chatStore.getState().setMAMLoading(conversationId, true)
 
-    logInfo(`Chat side effect: MAM fetch start for ${getDomain(conversationId) || '*'}@...`)
+    logInfo(`Chat: starting MAM sync for ${getDomain(conversationId) || '*'}@...`)
 
     try {
+      // Load IndexedDB cache first to ensure we have the latest messages
+      // before deciding the MAM query direction. Without this, the 'online'
+      // handler races with the conversation subscriber's cache load, and
+      // messages may be empty — causing a backward query instead of a
+      // forward catch-up from the newest cached message.
+      await chatStore.getState().loadMessagesFromCache(conversationId, { limit: 100 })
+
+      // Re-read messages after cache load (store was mutated)
       const cachedMessages = chatStore.getState().messages.get(conversationId)
       const newestCachedMessage = cachedMessages?.[cachedMessages.length - 1]
 
@@ -92,11 +100,15 @@ export function setupChatSideEffects(
       }
 
       await client.chat.queryMAM(queryOptions)
-      logInfo('Chat side effect: MAM fetch complete')
+      logInfo('Chat: MAM sync complete')
     } catch (error) {
       // Only log if it's not a disconnection error (those are expected during reconnect)
-      const errorMsg = error instanceof Error ? error.message : String(error)
-      if (errorMsg.includes('disconnected') || errorMsg.includes('Not connected') || errorMsg.includes('Socket not available')) {
+      const isConnectionError = error instanceof Error &&
+        (error.message.includes('disconnected') ||
+         error.message.includes('Not connected') ||
+         error.message.includes('Socket not available'))
+
+      if (isConnectionError) {
         if (debug) console.log('[SideEffects] Chat: MAM skipped - client disconnected')
       } else {
         console.error('[SideEffects] Chat: MAM fetch failed:', error)
@@ -122,7 +134,7 @@ export function setupChatSideEffects(
         return
       }
 
-      logInfo(`Chat side effect: active conversation changed to ${getDomain(activeConversationId) || '*'}@...`)
+      logInfo(`Chat: switched to conversation ${getDomain(activeConversationId) || '*'}@...`)
 
       const conversation = chatStore.getState().conversations.get(activeConversationId)
       if (!conversation || conversation.type !== 'chat') {

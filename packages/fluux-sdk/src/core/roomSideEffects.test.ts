@@ -313,6 +313,107 @@ describe('setupRoomSideEffects', () => {
         )
       })
     })
+
+    it('should use forward query (start) when cache has messages after reconnection', async () => {
+      const cachedTimestamp = new Date('2026-02-15T10:00:00Z')
+
+      roomStore.getState().addRoom({
+        jid: 'room@conference.example.com',
+        name: 'Test Room',
+        nickname: 'testuser',
+        joined: true,
+        supportsMAM: true,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+        isBookmarked: true,
+      })
+
+      roomStore.getState().setActiveRoom('room@conference.example.com')
+
+      // Mock loadMessagesFromCache to simulate populating the store with a cached message
+      const cachedMsg = {
+        type: 'groupchat' as const,
+        id: 'cached-msg-1',
+        roomJid: 'room@conference.example.com',
+        from: 'room@conference.example.com/alice',
+        nick: 'alice',
+        body: 'Cached message',
+        timestamp: cachedTimestamp,
+        isOutgoing: false,
+      }
+      const loadSpy = vi.spyOn(roomStore.getState(), 'loadMessagesFromCache')
+        .mockImplementation(async (roomJid: string) => {
+          const room = roomStore.getState().rooms.get(roomJid)
+          if (room) {
+            roomStore.getState().updateRoom(roomJid, {
+              messages: [cachedMsg],
+            })
+          }
+          return [cachedMsg]
+        })
+
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupRoomSideEffects(mockClient)
+
+      simulateFreshSession(mockClient)
+
+      await vi.waitFor(() => {
+        expect(mockClient.chat.queryRoomMAM).toHaveBeenCalledWith(
+          expect.objectContaining({
+            roomJid: 'room@conference.example.com',
+            start: expect.any(String),
+            max: 100,
+          })
+        )
+      })
+
+      // Verify it used 'start' (forward) and NOT 'before' (backward)
+      const call = (mockClient.chat.queryRoomMAM as ReturnType<typeof vi.fn>).mock.calls[0][0]
+      expect(call).not.toHaveProperty('before')
+      expect(new Date(call.start).getTime()).toBe(cachedTimestamp.getTime() + 1)
+
+      loadSpy.mockRestore()
+    })
+
+    it('should use backward query (before) when cache is empty after reconnection', async () => {
+      roomStore.getState().addRoom({
+        jid: 'room@conference.example.com',
+        name: 'Test Room',
+        nickname: 'testuser',
+        joined: true,
+        supportsMAM: true,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+        isBookmarked: true,
+      })
+
+      roomStore.getState().setActiveRoom('room@conference.example.com')
+
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupRoomSideEffects(mockClient)
+
+      simulateFreshSession(mockClient)
+
+      await vi.waitFor(() => {
+        expect(mockClient.chat.queryRoomMAM).toHaveBeenCalledWith(
+          expect.objectContaining({
+            roomJid: 'room@conference.example.com',
+            before: '',
+            max: 50,
+          })
+        )
+      })
+
+      // Verify it used 'before' (backward) and NOT 'start' (forward)
+      const call = (mockClient.chat.queryRoomMAM as ReturnType<typeof vi.fn>).mock.calls[0][0]
+      expect(call).not.toHaveProperty('start')
+    })
   })
 
   describe('SM resumption', () => {
