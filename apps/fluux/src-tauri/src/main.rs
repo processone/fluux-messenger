@@ -821,6 +821,7 @@ fn main() {
                         if (window.__consoleForwardingActive) return;
                         window.__consoleForwardingActive = true;
                         var origLog = console.log;
+                        var origInfo = console.info;
                         var origWarn = console.warn;
                         var origError = console.error;
                         var origDebug = console.debug;
@@ -833,6 +834,7 @@ fn main() {
                             } catch(e) {}
                         }
                         console.log = function() { origLog.apply(console, arguments); forward('info', arguments); };
+                        console.info = function() { origInfo.apply(console, arguments); forward('info', arguments); };
                         console.warn = function() { origWarn.apply(console, arguments); forward('warn', arguments); };
                         console.error = function() { origError.apply(console, arguments); forward('error', arguments); };
                         console.debug = function() { origDebug.apply(console, arguments); forward('debug', arguments); };
