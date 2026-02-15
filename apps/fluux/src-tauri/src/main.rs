@@ -678,11 +678,16 @@ fn main() {
         eprintln!("Options:");
         eprintln!("  -v, --verbose         Enable verbose logging to stderr (no XMPP traffic)");
         eprintln!("      --verbose=xmpp    Enable verbose logging including XMPP packet content");
-        eprintln!("      --log-file=PATH   Write log output to a file instead of stderr");
+        eprintln!("      --log-file=PATH   Override log file directory (default: platform log dir)");
         eprintln!("  -c, --clear-storage   Clear local storage on startup");
         eprintln!("      --dangerous-insecure-tls");
         eprintln!("                        Disable TLS certificate verification (INSECURE!)");
         eprintln!("  -h, --help            Show this help message");
+        eprintln!();
+        eprintln!("Logs are always written to a daily-rotating file in:");
+        eprintln!("  macOS:   ~/Library/Logs/com.processone.fluux/");
+        eprintln!("  Linux:   ~/.local/share/com.processone.fluux/logs/");
+        eprintln!("  Windows: %APPDATA%\\com.processone.fluux\\logs\\");
         eprintln!();
         eprintln!("Environment variables:");
         eprintln!("  RUST_LOG              Override log filter (e.g. RUST_LOG=debug)");
@@ -690,53 +695,88 @@ fn main() {
         std::process::exit(0);
     }
 
-    // Initialize tracing subscriber when --verbose, --log-file, or RUST_LOG is set
-    if verbose || log_file_path.is_some() || std::env::var("RUST_LOG").is_ok() {
+    // Initialize tracing subscriber:
+    // - Always write to a log file in the platform log directory (for bug reports)
+    // - Optionally add stderr output when --verbose is passed
+    {
+        use tracing_subscriber::prelude::*;
         use tracing_subscriber::EnvFilter;
 
-        // --log-file implies at least default verbose level
-        let effective_verbose = verbose || log_file_path.is_some();
-        let effective_level = verbose_level.or(if log_file_path.is_some() { Some("default") } else { None });
-
-        let filter = if std::env::var("RUST_LOG").is_ok() {
-            // RUST_LOG takes precedence for fine-grained control
-            EnvFilter::from_default_env()
-        } else if effective_level == Some("xmpp") {
-            // --verbose=xmpp: include XMPP packet content (debug level on xmpp_proxy)
-            EnvFilter::new("fluux=info,fluux::xmpp_proxy=debug,webview=debug,info")
-        } else if effective_verbose {
-            // --verbose: app logging + JS console output (info/warn/error, no debug)
-            EnvFilter::new("fluux=info,info")
+        // Determine the log directory: --log-file=<path> overrides the default platform path
+        let log_dir = if let Some(ref path) = log_file_path {
+            std::path::PathBuf::from(path)
+                .parent()
+                .map(|p| p.to_path_buf())
+                .unwrap_or_else(|| std::path::PathBuf::from("."))
         } else {
-            EnvFilter::new("info")
+            // Platform log directory:
+            //   macOS:   ~/Library/Logs/com.processone.fluux/
+            //   Linux:   ~/.local/share/com.processone.fluux/logs/  (or $XDG_DATA_HOME)
+            //   Windows: %APPDATA%\com.processone.fluux\logs\
+            let base = dirs::data_local_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from("."));
+            let dir = base.join("com.processone.fluux").join("logs");
+
+            #[cfg(target_os = "macos")]
+            let dir = dirs::home_dir()
+                .map(|h| h.join("Library").join("Logs").join("com.processone.fluux"))
+                .unwrap_or(dir);
+
+            dir
         };
 
-        if let Some(ref path) = log_file_path {
-            // Write logs to file
-            match std::fs::File::create(path) {
-                Ok(file) => {
-                    tracing_subscriber::fmt()
-                        .with_env_filter(filter)
-                        .with_writer(std::sync::Mutex::new(file))
-                        .with_ansi(false)
-                        .init();
-                    eprintln!("Logging to file: {}", path);
-                }
-                Err(e) => {
-                    eprintln!("Failed to open log file '{}': {}", path, e);
-                    eprintln!("Falling back to stderr");
-                    tracing_subscriber::fmt()
-                        .with_env_filter(filter)
-                        .with_writer(std::io::stderr)
-                        .init();
-                }
-            }
-        } else {
-            tracing_subscriber::fmt()
-                .with_env_filter(filter)
-                .with_writer(std::io::stderr)
-                .init();
+        // Ensure log directory exists
+        if let Err(e) = std::fs::create_dir_all(&log_dir) {
+            eprintln!("Warning: could not create log directory '{}': {}", log_dir.display(), e);
         }
+
+        // File log filter: always at info level (captures app + webview logs)
+        let file_filter = if std::env::var("RUST_LOG").is_ok() {
+            EnvFilter::from_default_env()
+        } else {
+            EnvFilter::new("fluux=info,webview=info,info")
+        };
+
+        // File layer: daily-rotating log file, non-blocking writes
+        let file_appender = tracing_appender::rolling::daily(&log_dir, "fluux.log");
+        let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+        let file_layer = tracing_subscriber::fmt::layer()
+            .with_writer(non_blocking)
+            .with_ansi(false)
+            .with_filter(file_filter);
+
+        // Stderr layer: only when --verbose or --log-file is passed
+        let stderr_layer = if verbose || log_file_path.is_some() || std::env::var("RUST_LOG").is_ok() {
+            let effective_level = verbose_level.or(if log_file_path.is_some() { Some("default") } else { None });
+
+            let stderr_filter = if std::env::var("RUST_LOG").is_ok() {
+                EnvFilter::from_default_env()
+            } else if effective_level == Some("xmpp") {
+                EnvFilter::new("fluux=info,fluux::xmpp_proxy=debug,webview=debug,info")
+            } else {
+                EnvFilter::new("fluux=info,info")
+            };
+
+            Some(
+                tracing_subscriber::fmt::layer()
+                    .with_writer(std::io::stderr)
+                    .with_filter(stderr_filter),
+            )
+        } else {
+            None
+        };
+
+        tracing_subscriber::registry()
+            .with(file_layer)
+            .with(stderr_layer)
+            .init();
+
+        // Keep the non-blocking guard alive for the entire program lifetime.
+        // Dropping it would flush and stop the background writer thread.
+        // We use forget() since we want it to live until process exit.
+        std::mem::forget(_guard);
+
+        eprintln!("Log file: {}", log_dir.display());
     }
 
     // Print startup diagnostics when verbose or logging to file
