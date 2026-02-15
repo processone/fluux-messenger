@@ -4,9 +4,11 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tokio::task::JoinHandle;
 use tokio_tungstenite::{accept_async, tungstenite::Message};
+use tokio_tungstenite::tungstenite::protocol::CloseFrame;
+use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use futures_util::{SinkExt, StreamExt};
 use quick_xml::errors::SyntaxError;
 use quick_xml::events::Event;
@@ -15,6 +17,7 @@ use tokio_rustls::rustls::pki_types::ServerName;
 use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 use tokio_rustls::TlsConnector;
 use serde::Serialize;
+use tauri::Emitter;
 use tracing::{debug, error, info, warn};
 use trust_dns_resolver::TokioAsyncResolver;
 use trust_dns_resolver::config::*;
@@ -297,6 +300,8 @@ pub struct XmppProxy {
     shutdown_tx: Option<tokio::sync::broadcast::Sender<()>>,
     /// Active connection counter (for limiting to one connection)
     active_connections: Arc<AtomicUsize>,
+    /// Tauri app handle for emitting events to the frontend
+    app_handle: Option<tauri::AppHandle>,
 }
 
 impl XmppProxy {
@@ -306,7 +311,13 @@ impl XmppProxy {
             task: None,
             shutdown_tx: None,
             active_connections: Arc::new(AtomicUsize::new(0)),
+            app_handle: None,
         }
+    }
+
+    /// Set the Tauri app handle for emitting events to the frontend.
+    pub fn set_app_handle(&mut self, handle: tauri::AppHandle) {
+        self.app_handle = Some(handle);
     }
 
     /// Start the proxy server.
@@ -381,6 +392,7 @@ impl XmppProxy {
 
         // Clone connection counter for the background task
         let active_connections = self.active_connections.clone();
+        let app_handle = self.app_handle.clone();
 
         // Spawn background task to handle connections
         let task = tokio::spawn(async move {
@@ -393,9 +405,10 @@ impl XmppProxy {
                         let ep = endpoint.clone();
                         let shutdown = shutdown_tx.subscribe();
                         let conn_counter = active_connections.clone();
+                        let handle = app_handle.clone();
 
                         tokio::spawn(async move {
-                            if let Err(e) = handle_connection(stream, ep, shutdown, conn_counter).await {
+                            if let Err(e) = handle_connection(stream, ep, shutdown, conn_counter, handle).await {
                                 error!(error = %e, "Connection error");
                             }
                         });
@@ -438,6 +451,7 @@ async fn handle_connection(
     endpoint: XmppEndpoint,
     shutdown: tokio::sync::broadcast::Receiver<()>,
     active_connections: Arc<AtomicUsize>,
+    app_handle: Option<tauri::AppHandle>,
 ) -> Result<(), String> {
     // Check connection limit: only allow one active connection
     if active_connections.compare_exchange(0, 1, Ordering::SeqCst, Ordering::Relaxed).is_err() {
@@ -489,7 +503,7 @@ async fn handle_connection(
             // so that xmpp.js (which cannot do STARTTLS over WebSocket) sees a ready-to-use connection
             let tls_stream = perform_starttls(tcp_stream, &endpoint.host).await?;
             info!(host = %endpoint.host, port = endpoint.port, "STARTTLS upgrade complete");
-            bridge_websocket_tls(ws, tls_stream, shutdown).await
+            bridge_websocket_tls(ws, tls_stream, shutdown, app_handle).await
         }
         ConnectionMode::DirectTls => {
             let tcp_stream = tokio::time::timeout(
@@ -523,7 +537,7 @@ async fn handle_connection(
             let tls_stream = upgrade_to_tls(tcp_stream, &endpoint.host).await?;
 
             info!(host = %endpoint.host, port = endpoint.port, "Connected (direct TLS)");
-            bridge_websocket_tls(ws, tls_stream, shutdown).await
+            bridge_websocket_tls(ws, tls_stream, shutdown, app_handle).await
         }
     }
 }
@@ -876,9 +890,14 @@ async fn bridge_websocket_tls(
     ws: tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>,
     tls_stream: tokio_rustls::client::TlsStream<TcpStream>,
     mut shutdown: tokio::sync::broadcast::Receiver<()>,
+    app_handle: Option<tauri::AppHandle>,
 ) -> Result<(), String> {
-    let (mut ws_write, mut ws_read) = ws.split();
+    let (ws_write, mut ws_read) = ws.split();
     let (mut tls_read, mut tls_write) = tokio::io::split(tls_stream);
+
+    // Wrap ws_write in Arc<Mutex<>> so the cleanup code can send a close frame
+    // after aborting the tls_to_ws task that normally holds ws_write.
+    let ws_write = Arc::new(Mutex::new(ws_write));
 
     // Shared activity timestamp for inactivity watchdog (epoch millis)
     let last_activity = Arc::new(AtomicU64::new(now_millis()));
@@ -917,6 +936,7 @@ async fn bridge_websocket_tls(
 
     // Task 2: TLS -> WebSocket (requires stanza boundary detection)
     let activity_tls = last_activity.clone();
+    let ws_write_for_tls = ws_write.clone();
     let mut tls_to_ws = tokio::spawn(async move {
         let mut buffer = Vec::new();
         let mut read_buf = [0u8; 8192];
@@ -940,7 +960,7 @@ async fn bridge_websocket_tls(
                         consumed += bytes_used;
                         let translated = translate_tcp_to_ws(&stanza);
                         debug!(data = %translated, "TLS->WS");
-                        if let Err(e) = ws_write.send(Message::Text(translated.into_owned())).await {
+                        if let Err(e) = ws_write_for_tls.lock().await.send(Message::Text(translated.into_owned())).await {
                             debug!(error = %e, "TLS->WS write error (WebSocket likely closed)");
                             return;
                         }
@@ -987,12 +1007,16 @@ async fn bridge_websocket_tls(
         }
     };
 
+    // Track why the bridge ended for cleanup
+    let mut watchdog_triggered = false;
+
     // Wait for any task to complete, watchdog to trigger, or shutdown signal
     tokio::select! {
         _ = &mut ws_to_tls => {}
         _ = &mut tls_to_ws => {}
         _ = watchdog => {
             info!("Connection closed by inactivity watchdog");
+            watchdog_triggered = true;
         }
         _ = shutdown.recv() => {
             info!("Connection closed by shutdown");
@@ -1002,6 +1026,32 @@ async fn bridge_websocket_tls(
     // Abort both bridge tasks so they don't linger holding resources
     ws_to_tls.abort();
     tls_to_ws.abort();
+
+    // Send a proper WebSocket close frame so xmpp.js receives a 'disconnect' event.
+    // Without this, the JS side never learns the connection died (especially after
+    // watchdog or shutdown, where the bridge tasks are aborted without closing the WS).
+    let close_result = tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        async {
+            let mut writer = ws_write.lock().await;
+            let _ = writer.send(Message::Close(Some(CloseFrame {
+                code: CloseCode::Normal,
+                reason: "Bridge closed".into(),
+            }))).await;
+        }
+    ).await;
+    if close_result.is_err() {
+        debug!("WebSocket close frame send timed out");
+    }
+
+    // Emit Tauri event so the frontend can immediately trigger reconnection
+    // (belt-and-suspenders: the WS close frame above should suffice, but this
+    // provides a faster, more reliable signal)
+    if watchdog_triggered {
+        if let Some(ref handle) = app_handle {
+            let _ = handle.emit("proxy-connection-closed", ());
+        }
+    }
 
     Ok(())
 }
@@ -1133,7 +1183,7 @@ static PROXY: RwLock<Option<XmppProxy>> = RwLock::const_new(None);
 /// Start the XMPP proxy (exposed to Tauri commands)
 ///
 /// The `server` parameter supports: `tls://host:port`, `tcp://host:port`, `host:port`, or bare `domain`.
-pub async fn start_proxy(server: String) -> Result<ProxyStartResult, String> {
+pub async fn start_proxy(server: String, app_handle: Option<tauri::AppHandle>) -> Result<ProxyStartResult, String> {
     // Initialize crypto provider before any TLS operations
     init_crypto_provider();
 
@@ -1147,6 +1197,9 @@ pub async fn start_proxy(server: String) -> Result<ProxyStartResult, String> {
     }
 
     let mut proxy = XmppProxy::new();
+    if let Some(handle) = app_handle {
+        proxy.set_app_handle(handle);
+    }
     let result = proxy.start(server).await?;
     *proxy_guard = Some(proxy);
 

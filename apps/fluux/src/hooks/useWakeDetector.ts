@@ -148,21 +148,27 @@ export function useWakeDetector() {
 
   // Tauri-only: Listen for Rust-driven keepalive events
   // This is immune to WKWebView JS timer throttling that can suspend
-  // timers when the app is on another virtual desktop
+  // timers when the app is on another virtual desktop.
+  // Uses 'awake' (not 'visible') to trigger connection verification via SM <r/>
+  // or XMPP ping every 30s. This replaces xmpp.js's built-in SM keepalive
+  // (which is disabled in Tauri mode via disableSmKeepalive).
   useEffect(() => {
     if (!isTauri() || status !== 'online') return
 
-    let unlisten: UnlistenFn | undefined
+    let unlistenKeepalive: UnlistenFn | undefined
+    let unlistenProxyClosed: UnlistenFn | undefined
     let cleanedUp = false
 
     // Dynamic import to avoid loading Tauri APIs in web mode
     void import('@tauri-apps/api/event').then(({ listen }) => {
+      // Keepalive: verify connection health every 30 seconds
       void listen('xmpp-keepalive', () => {
         // Use shared coordinator to prevent concurrent wake handling
         // (matches the pattern used by time-gap and visibility handlers)
         if (!tryAcquireWakeLock('useWakeDetector:keepalive')) return
-        // Signal SDK to verify connection
-        notifySystemState('visible')
+        // Signal SDK to verify connection - sends SM <r/> or XMPP ping.
+        // If the socket is dead, verifyConnection() detects it and triggers reconnect.
+        notifySystemState('awake')
           .catch((err) => {
             // Ignore errors - socket may be dead and reconnect will handle it
             console.debug('[WakeDetector] Error on keepalive notification:', err)
@@ -171,18 +177,38 @@ export function useWakeDetector() {
             releaseWakeLock()
           })
       }).then((fn) => {
-        // If cleanup already ran, unlisten immediately
         if (cleanedUp) {
           fn()
         } else {
-          unlisten = fn
+          unlistenKeepalive = fn
+        }
+      })
+
+      // Proxy connection closed: the Rust proxy's watchdog detected a dead connection
+      // and closed the bridge. Immediately trigger reconnection.
+      void listen('proxy-connection-closed', () => {
+        console.log('[WakeDetector] Proxy connection closed by watchdog, triggering reconnect')
+        if (!tryAcquireWakeLock('useWakeDetector:proxy-closed')) return
+        notifySystemState('awake')
+          .catch((err) => {
+            console.debug('[WakeDetector] Error on proxy-closed notification:', err)
+          })
+          .finally(() => {
+            releaseWakeLock()
+          })
+      }).then((fn) => {
+        if (cleanedUp) {
+          fn()
+        } else {
+          unlistenProxyClosed = fn
         }
       })
     })
 
     return () => {
       cleanedUp = true
-      unlisten?.()
+      unlistenKeepalive?.()
+      unlistenProxyClosed?.()
     }
   }, [status, notifySystemState])
 }

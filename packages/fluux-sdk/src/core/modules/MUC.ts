@@ -277,7 +277,7 @@ export class MUC extends BaseModule {
    */
   cleanup(): void {
     // Clear all pending join timeouts
-    for (const pending of this.pendingJoins.values()) {
+    for (const pending of Array.from(this.pendingJoins.values())) {
       clearTimeout(pending.timeoutId)
     }
     this.pendingJoins.clear()

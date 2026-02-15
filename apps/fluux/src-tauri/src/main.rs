@@ -38,6 +38,8 @@ use tauri_plugin_opener::OpenerExt;
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
 use scraper::{Html, Selector};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 mod xmpp_proxy;
 
@@ -239,8 +241,8 @@ fn exit_app(app: tauri::AppHandle) {
 /// Start XMPP WebSocket-to-TCP proxy.
 /// The `server` parameter supports: `tls://host:port`, `tcp://host:port`, `host:port`, or bare `domain`.
 #[tauri::command]
-async fn start_xmpp_proxy(server: String) -> Result<xmpp_proxy::ProxyStartResult, String> {
-    xmpp_proxy::start_proxy(server).await
+async fn start_xmpp_proxy(app: tauri::AppHandle, server: String) -> Result<xmpp_proxy::ProxyStartResult, String> {
+    xmpp_proxy::start_proxy(server, Some(app)).await
 }
 
 /// Stop XMPP WebSocket-to-TCP proxy
@@ -732,6 +734,11 @@ fn main() {
         print_startup_diagnostics();
     }
 
+    // Shared flag to signal the keepalive thread to stop on app exit
+    let keepalive_running = Arc::new(AtomicBool::new(true));
+    let keepalive_flag_for_setup = keepalive_running.clone();
+    let keepalive_flag_for_run = keepalive_running.clone();
+
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
@@ -923,25 +930,30 @@ fn main() {
                     .icon(app.default_window_icon().unwrap().clone())
                     .menu(&menu)
                     .tooltip("Fluux Messenger")
-                    .on_menu_event(|app, event| match event.id.as_ref() {
-                        "show" => {
-                            if let Some(window) = app.get_webview_window("main") {
-                                let _ = window.show();
-                                let _ = window.unminimize();
-                                let _ = window.set_focus();
+                    .on_menu_event({
+                        let keepalive_flag = keepalive_flag_for_setup.clone();
+                        move |app, event| match event.id.as_ref() {
+                            "show" => {
+                                if let Some(window) = app.get_webview_window("main") {
+                                    let _ = window.show();
+                                    let _ = window.unminimize();
+                                    let _ = window.set_focus();
+                                }
                             }
+                            "quit" => {
+                                // Stop the keepalive thread
+                                keepalive_flag.store(false, Ordering::Relaxed);
+                                // Emit graceful shutdown event to frontend
+                                let _ = app.emit("graceful-shutdown", ());
+                                // Set a fallback timer to force exit after 2 seconds
+                                let handle = app.clone();
+                                std::thread::spawn(move || {
+                                    std::thread::sleep(std::time::Duration::from_secs(2));
+                                    handle.exit(0);
+                                });
+                            }
+                            _ => {}
                         }
-                        "quit" => {
-                            // Emit graceful shutdown event to frontend
-                            let _ = app.emit("graceful-shutdown", ());
-                            // Set a fallback timer to force exit after 2 seconds
-                            let handle = app.clone();
-                            std::thread::spawn(move || {
-                                std::thread::sleep(std::time::Duration::from_secs(2));
-                                handle.exit(0);
-                            });
-                        }
-                        _ => {}
                     })
                     .on_tray_icon_event(|tray, event| {
                         // Show window on left-click (single or double)
@@ -976,11 +988,16 @@ fn main() {
 
             // Start XMPP keepalive timer (30 seconds)
             // This runs in Rust and is immune to WKWebView JS timer throttling
-            // which can suspend timers when the app is on another virtual desktop
+            // which can suspend timers when the app is on another virtual desktop.
+            // Uses an AtomicBool flag to stop cleanly on app exit (prevents 100% CPU).
             if let Some(window) = app.get_webview_window("main") {
+                let running = keepalive_flag_for_setup.clone();
                 std::thread::spawn(move || {
-                    loop {
+                    while running.load(Ordering::Relaxed) {
                         std::thread::sleep(std::time::Duration::from_secs(30));
+                        if !running.load(Ordering::Relaxed) {
+                            break;
+                        }
                         let _ = window.emit("xmpp-keepalive", ());
                     }
                 });
@@ -991,7 +1008,7 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
-    app.run(|_app_handle, _event| {
+    app.run(move |_app_handle, _event| {
         #[cfg(target_os = "macos")]
         match &_event {
             // Handle clicking dock icon to show window again
@@ -1003,6 +1020,8 @@ fn main() {
             }
             // Handle Command-Q or app termination: request graceful shutdown
             RunEvent::ExitRequested { api, .. } => {
+                // Stop the keepalive thread to prevent 100% CPU on exit
+                keepalive_flag_for_run.store(false, Ordering::Relaxed);
                 // Save window state including position
                 let _ = _app_handle.save_window_state(StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED | StateFlags::FULLSCREEN);
                 // Emit event to frontend for graceful disconnect
