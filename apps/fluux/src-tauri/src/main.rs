@@ -606,7 +606,7 @@ fn log_to_terminal(level: String, message: String) {
 
 /// Print startup diagnostics to stderr for debugging.
 fn print_startup_diagnostics() {
-    eprintln!("Fluux Messenger v{}", env!("CARGO_PKG_VERSION"));
+    eprintln!("Fluux Messenger v{} (build {})", env!("CARGO_PKG_VERSION"), env!("GIT_HASH"));
     eprintln!("Platform: {} / {}", std::env::consts::OS, std::env::consts::ARCH);
 
     #[cfg(target_os = "linux")]
