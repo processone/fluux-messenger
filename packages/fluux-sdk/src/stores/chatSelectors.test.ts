@@ -186,11 +186,11 @@ describe('chatSelectors', () => {
     })
 
     it('should sum unread counts across conversations', () => {
-      const conversations = new Map<string, Conversation>([
-        ['user1@example.com', createMockConversation('user1@example.com', { unreadCount: 3 })],
-        ['user2@example.com', createMockConversation('user2@example.com', { unreadCount: 5 })],
+      const conversationMeta = new Map<string, ConversationMetadata>([
+        ['user1@example.com', { unreadCount: 3 }],
+        ['user2@example.com', { unreadCount: 5 }],
       ])
-      const state = createMockState({ conversations })
+      const state = createMockState({ conversationMeta })
       expect(chatSelectors.totalUnreadCount(state)).toBe(8)
     })
   })

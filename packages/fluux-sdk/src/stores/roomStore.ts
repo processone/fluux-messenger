@@ -1580,37 +1580,57 @@ export const roomStore = createStore<RoomState>()(
   },
 
   totalMentionsCount: () => {
-    const rooms = get().rooms
-    return Array.from(rooms.values())
-      .filter(r => r.joined)
-      .reduce((sum, room) => sum + room.mentionsCount, 0)
+    let total = 0
+    for (const [jid, entity] of get().roomEntities) {
+      if (entity.joined) {
+        const meta = get().roomMeta.get(jid)
+        if (meta) total += meta.mentionsCount
+      }
+    }
+    return total
   },
 
   totalUnreadCount: () => {
-    const rooms = get().rooms
-    return Array.from(rooms.values())
-      .filter(r => r.joined)
-      .reduce((sum, room) => sum + room.unreadCount, 0)
+    let total = 0
+    for (const [jid, entity] of get().roomEntities) {
+      if (entity.joined) {
+        const meta = get().roomMeta.get(jid)
+        if (meta) total += meta.unreadCount
+      }
+    }
+    return total
   },
 
   totalNotifiableUnreadCount: () => {
-    const rooms = get().rooms
-    return Array.from(rooms.values())
-      .filter(r => r.joined && (r.notifyAll || r.notifyAllPersistent))
-      .reduce((sum, room) => sum + room.unreadCount, 0)
+    let total = 0
+    for (const [jid, entity] of get().roomEntities) {
+      if (entity.joined) {
+        const meta = get().roomMeta.get(jid)
+        if (meta && (meta.notifyAll || meta.notifyAllPersistent)) {
+          total += meta.unreadCount
+        }
+      }
+    }
+    return total
   },
 
   roomsWithUnreadCount: () => {
     // Count rooms that would show a badge in the UI:
     // - Rooms with mentions (always show badge)
     // - Rooms with notifyAll enabled and any unread messages
-    const rooms = get().rooms
-    return Array.from(rooms.values())
-      .filter(r => r.joined && (
-        r.mentionsCount > 0 ||
-        ((r.notifyAll || r.notifyAllPersistent) && r.unreadCount > 0)
-      ))
-      .length
+    let count = 0
+    for (const [jid, entity] of get().roomEntities) {
+      if (entity.joined) {
+        const meta = get().roomMeta.get(jid)
+        if (meta) {
+          const hasActivity =
+            meta.mentionsCount > 0 ||
+            ((meta.notifyAll || meta.notifyAllPersistent) && meta.unreadCount > 0)
+          if (hasActivity) count++
+        }
+      }
+    }
+    return count
   },
 }))
 )

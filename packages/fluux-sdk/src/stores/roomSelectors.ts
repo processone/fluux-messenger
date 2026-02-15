@@ -191,9 +191,10 @@ export const roomSelectors = {
    */
   totalMentionsCount: (state: RoomState): number => {
     let total = 0
-    for (const room of state.rooms.values()) {
-      if (room.joined) {
-        total += room.mentionsCount
+    for (const [jid, entity] of state.roomEntities) {
+      if (entity.joined) {
+        const meta = state.roomMeta.get(jid)
+        if (meta) total += meta.mentionsCount
       }
     }
     return total
@@ -204,9 +205,10 @@ export const roomSelectors = {
    */
   totalUnreadCount: (state: RoomState): number => {
     let total = 0
-    for (const room of state.rooms.values()) {
-      if (room.joined) {
-        total += room.unreadCount
+    for (const [jid, entity] of state.roomEntities) {
+      if (entity.joined) {
+        const meta = state.roomMeta.get(jid)
+        if (meta) total += meta.unreadCount
       }
     }
     return total
@@ -217,9 +219,12 @@ export const roomSelectors = {
    */
   totalNotifiableUnreadCount: (state: RoomState): number => {
     let total = 0
-    for (const room of state.rooms.values()) {
-      if (room.joined && (room.notifyAll || room.notifyAllPersistent)) {
-        total += room.unreadCount
+    for (const [jid, entity] of state.roomEntities) {
+      if (entity.joined) {
+        const meta = state.roomMeta.get(jid)
+        if (meta && (meta.notifyAll || meta.notifyAllPersistent)) {
+          total += meta.unreadCount
+        }
       }
     }
     return total
@@ -230,12 +235,15 @@ export const roomSelectors = {
    */
   roomsWithUnreadCount: (state: RoomState): number => {
     let count = 0
-    for (const room of state.rooms.values()) {
-      if (room.joined) {
-        const hasActivity =
-          room.mentionsCount > 0 ||
-          ((room.notifyAll || room.notifyAllPersistent) && room.unreadCount > 0)
-        if (hasActivity) count++
+    for (const [jid, entity] of state.roomEntities) {
+      if (entity.joined) {
+        const meta = state.roomMeta.get(jid)
+        if (meta) {
+          const hasActivity =
+            meta.mentionsCount > 0 ||
+            ((meta.notifyAll || meta.notifyAllPersistent) && meta.unreadCount > 0)
+          if (hasActivity) count++
+        }
       }
     }
     return count

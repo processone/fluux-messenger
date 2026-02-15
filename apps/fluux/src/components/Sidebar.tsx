@@ -5,12 +5,10 @@ import { useClickOutside, useWindowDrag, useRouteSync } from '@/hooks'
 import { useModals } from '@/contexts'
 import {
   useXMPP,
-  useEvents,
-  useAdmin,
   type Contact,
   type AdminCategory,
 } from '@fluux/sdk'
-import { useConnectionStore, useChatStore, useRoomStore } from '@fluux/sdk/react'
+import { useConnectionStore, useChatStore, useRoomStore, useEventsStore, useAdminStore } from '@fluux/sdk/react'
 import { AdminDashboard } from './AdminDashboard'
 import { BrowseRoomsModal } from './BrowseRoomsModal'
 import { Avatar } from './Avatar'
@@ -90,16 +88,21 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
   const { client } = useXMPP()
   const disconnect = useCallback(() => client.disconnect(), [client])
   const cancelReconnect = useCallback(() => client.cancelReconnect(), [client])
-  const { isAdmin } = useAdmin()
+  const isAdmin = useAdminStore((s) => s.isAdmin)
   // Use targeted store selectors instead of useChat()/useRoom() to avoid render loops.
   // Those hooks subscribe to many store properties (conversations array, messages, etc.)
   // which create new references during the post-connection initialization burst.
   const totalUnread = useChatStore((s) => {
     let sum = 0
-    for (const conv of s.conversations.values()) sum += conv.unreadCount
+    for (const meta of s.conversationMeta.values()) sum += meta.unreadCount
     return sum
   })
-  const { pendingCount } = useEvents()
+  const pendingCount = useEventsStore((s) =>
+    s.subscriptionRequests.length +
+    new Set(s.strangerMessages.map((m) => m.from)).size +
+    s.mucInvitations.length +
+    s.systemNotifications.length
+  )
   const totalMentionsCount = useRoomStore((s) => s.totalMentionsCount())
   const totalNotifiableUnreadCount = useRoomStore((s) => s.totalNotifiableUnreadCount())
   const { titleBarClass, dragRegionProps } = useWindowDrag()

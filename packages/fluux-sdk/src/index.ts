@@ -92,6 +92,7 @@ export { useContactIdentities, type ContactIdentity } from './hooks/useContactId
 export { useConsole } from './hooks/useConsole'
 export { useEvents } from './hooks/useEvents'
 export { useRoom } from './hooks/useRoom'
+export { useRoomActive } from './hooks/useRoomActive'
 export { useXMPP } from './hooks/useXMPP'
 export { useAdmin } from './hooks/useAdmin'
 export { useBlocking } from './hooks/useBlocking'

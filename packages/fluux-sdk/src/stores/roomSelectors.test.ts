@@ -261,47 +261,66 @@ describe('roomSelectors', () => {
 
   describe('totalMentionsCount', () => {
     it('should sum mentions across joined rooms', () => {
-      const rooms = new Map<string, Room>([
-        ['room1@conference.example.com', createMockRoom('room1@conference.example.com', { joined: true, mentionsCount: 3 })],
-        ['room2@conference.example.com', createMockRoom('room2@conference.example.com', { joined: true, mentionsCount: 5 })],
-        ['room3@conference.example.com', createMockRoom('room3@conference.example.com', { joined: false, mentionsCount: 10 })],
+      const roomEntities = new Map([
+        ['room1@conference.example.com', { jid: 'room1@conference.example.com', name: 'Room 1', nickname: 'me', joined: true, isBookmarked: false } as RoomEntity],
+        ['room2@conference.example.com', { jid: 'room2@conference.example.com', name: 'Room 2', nickname: 'me', joined: true, isBookmarked: false } as RoomEntity],
+        ['room3@conference.example.com', { jid: 'room3@conference.example.com', name: 'Room 3', nickname: 'me', joined: false, isBookmarked: false } as RoomEntity],
       ])
-      const state = createMockState({ rooms })
+      const roomMeta = new Map([
+        ['room1@conference.example.com', { unreadCount: 0, mentionsCount: 3, typingUsers: new Set<string>() } as RoomMetadata],
+        ['room2@conference.example.com', { unreadCount: 0, mentionsCount: 5, typingUsers: new Set<string>() } as RoomMetadata],
+        ['room3@conference.example.com', { unreadCount: 0, mentionsCount: 10, typingUsers: new Set<string>() } as RoomMetadata],
+      ])
+      const state = createMockState({ roomEntities, roomMeta })
       expect(roomSelectors.totalMentionsCount(state)).toBe(8)
     })
   })
 
   describe('totalUnreadCount', () => {
     it('should sum unread counts across joined rooms', () => {
-      const rooms = new Map<string, Room>([
-        ['room1@conference.example.com', createMockRoom('room1@conference.example.com', { joined: true, unreadCount: 3 })],
-        ['room2@conference.example.com', createMockRoom('room2@conference.example.com', { joined: true, unreadCount: 7 })],
+      const roomEntities = new Map([
+        ['room1@conference.example.com', { jid: 'room1@conference.example.com', name: 'Room 1', nickname: 'me', joined: true, isBookmarked: false } as RoomEntity],
+        ['room2@conference.example.com', { jid: 'room2@conference.example.com', name: 'Room 2', nickname: 'me', joined: true, isBookmarked: false } as RoomEntity],
       ])
-      const state = createMockState({ rooms })
+      const roomMeta = new Map([
+        ['room1@conference.example.com', { unreadCount: 3, mentionsCount: 0, typingUsers: new Set<string>() } as RoomMetadata],
+        ['room2@conference.example.com', { unreadCount: 7, mentionsCount: 0, typingUsers: new Set<string>() } as RoomMetadata],
+      ])
+      const state = createMockState({ roomEntities, roomMeta })
       expect(roomSelectors.totalUnreadCount(state)).toBe(10)
     })
   })
 
   describe('totalNotifiableUnreadCount', () => {
     it('should sum unread in rooms with notifyAll', () => {
-      const rooms = new Map<string, Room>([
-        ['room1@conference.example.com', createMockRoom('room1@conference.example.com', { joined: true, unreadCount: 3, notifyAll: true })],
-        ['room2@conference.example.com', createMockRoom('room2@conference.example.com', { joined: true, unreadCount: 7, notifyAll: false })],
-        ['room3@conference.example.com', createMockRoom('room3@conference.example.com', { joined: true, unreadCount: 5, notifyAllPersistent: true })],
+      const roomEntities = new Map([
+        ['room1@conference.example.com', { jid: 'room1@conference.example.com', name: 'Room 1', nickname: 'me', joined: true, isBookmarked: false } as RoomEntity],
+        ['room2@conference.example.com', { jid: 'room2@conference.example.com', name: 'Room 2', nickname: 'me', joined: true, isBookmarked: false } as RoomEntity],
+        ['room3@conference.example.com', { jid: 'room3@conference.example.com', name: 'Room 3', nickname: 'me', joined: true, isBookmarked: false } as RoomEntity],
       ])
-      const state = createMockState({ rooms })
+      const roomMeta = new Map([
+        ['room1@conference.example.com', { unreadCount: 3, mentionsCount: 0, typingUsers: new Set<string>(), notifyAll: true } as RoomMetadata],
+        ['room2@conference.example.com', { unreadCount: 7, mentionsCount: 0, typingUsers: new Set<string>(), notifyAll: false } as RoomMetadata],
+        ['room3@conference.example.com', { unreadCount: 5, mentionsCount: 0, typingUsers: new Set<string>(), notifyAllPersistent: true } as RoomMetadata],
+      ])
+      const state = createMockState({ roomEntities, roomMeta })
       expect(roomSelectors.totalNotifiableUnreadCount(state)).toBe(8)
     })
   })
 
   describe('roomsWithUnreadCount', () => {
     it('should count rooms with mentions or notifyAll unread', () => {
-      const rooms = new Map<string, Room>([
-        ['room1@conference.example.com', createMockRoom('room1@conference.example.com', { joined: true, mentionsCount: 1 })],
-        ['room2@conference.example.com', createMockRoom('room2@conference.example.com', { joined: true, unreadCount: 5, notifyAll: true })],
-        ['room3@conference.example.com', createMockRoom('room3@conference.example.com', { joined: true, unreadCount: 10 })],
+      const roomEntities = new Map([
+        ['room1@conference.example.com', { jid: 'room1@conference.example.com', name: 'Room 1', nickname: 'me', joined: true, isBookmarked: false } as RoomEntity],
+        ['room2@conference.example.com', { jid: 'room2@conference.example.com', name: 'Room 2', nickname: 'me', joined: true, isBookmarked: false } as RoomEntity],
+        ['room3@conference.example.com', { jid: 'room3@conference.example.com', name: 'Room 3', nickname: 'me', joined: true, isBookmarked: false } as RoomEntity],
       ])
-      const state = createMockState({ rooms })
+      const roomMeta = new Map([
+        ['room1@conference.example.com', { unreadCount: 0, mentionsCount: 1, typingUsers: new Set<string>() } as RoomMetadata],
+        ['room2@conference.example.com', { unreadCount: 5, mentionsCount: 0, typingUsers: new Set<string>(), notifyAll: true } as RoomMetadata],
+        ['room3@conference.example.com', { unreadCount: 10, mentionsCount: 0, typingUsers: new Set<string>() } as RoomMetadata],
+      ])
+      const state = createMockState({ roomEntities, roomMeta })
       expect(roomSelectors.roomsWithUnreadCount(state)).toBe(2)
     })
   })
