@@ -7,6 +7,7 @@ export { useContactIdentities, type ContactIdentity } from './useContactIdentiti
 export { useConsole } from './useConsole'
 export { useEvents } from './useEvents'
 export { useRoom } from './useRoom'
+export { useRoomActive } from './useRoomActive'
 export { useXMPP } from './useXMPP'
 export { useBlocking } from './useBlocking'
 export { usePresence, type UsePresenceReturn } from './usePresence'

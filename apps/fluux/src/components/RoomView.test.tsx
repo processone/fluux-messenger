@@ -70,7 +70,7 @@ const mockClearAnimation = vi.fn()
 
 // Mock SDK hooks
 vi.mock('@fluux/sdk', () => ({
-  useRoom: () => ({
+  useRoomActive: () => ({
     activeRoom: mockActiveRoom,
     activeMessages: mockActiveMessages,
     activeTypingUsers: mockTypingUsers,
