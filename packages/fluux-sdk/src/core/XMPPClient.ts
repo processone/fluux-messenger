@@ -906,6 +906,18 @@ export class XMPPClient {
     state: 'awake' | 'sleeping' | 'visible' | 'hidden',
     sleepDurationMs?: number
   ): Promise<void> {
+    // Signal presence machine for relevant states.
+    // This makes notifySystemState the single orchestration point:
+    // one call handles both presence transitions and connection verification.
+    switch (state) {
+      case 'awake':
+        this.presenceActor.send({ type: 'WAKE_DETECTED' })
+        break
+      case 'sleeping':
+        this.presenceActor.send({ type: 'SLEEP_DETECTED' })
+        break
+    }
+    // Delegate to connection module for connection-level handling
     return this.connection.notifySystemState(state, sleepDurationMs)
   }
 

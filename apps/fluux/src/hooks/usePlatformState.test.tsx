@@ -13,42 +13,25 @@ vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(() => Promise.resolve(() => {})),
 }))
 
-vi.mock('@/utils/wakeCoordinator', () => ({
-  tryAcquireWakeLock: vi.fn(() => true),
-  releaseWakeLock: vi.fn(),
-  isWakeHandlingActive: vi.fn(() => false),
+vi.mock('@/utils/renderLoopDetector', () => ({
+  startWakeGracePeriod: vi.fn(),
 }))
 
 // Mock functions - use vi.hoisted to ensure they're available before vi.mock
 const {
   mockNotifyIdle,
   mockNotifyActive,
-  mockNotifyWake,
-  mockNotifySleep,
   mockNotifySystemState,
-  mockSetAutoAwayConfig,
-} = vi.hoisted(() => {
-  const mockNotifyIdle = vi.fn()
-  const mockNotifyActive = vi.fn()
-  const mockNotifyWake = vi.fn()
-  const mockNotifySleep = vi.fn()
-  const mockNotifySystemState = vi.fn()
-  const mockSetAutoAwayConfig = vi.fn()
-
-  return {
-    mockNotifyIdle,
-    mockNotifyActive,
-    mockNotifyWake,
-    mockNotifySleep,
-    mockNotifySystemState,
-    mockSetAutoAwayConfig,
-  }
-})
-
-// Mock presence functions - use vi.hoisted to ensure they're available before vi.mock
-const { mockPresenceConnect, mockPresenceDisconnect } = vi.hoisted(() => ({
+  mockPresenceConnect,
+  mockPresenceDisconnect,
+  mockClientNotifySystemState,
+} = vi.hoisted(() => ({
+  mockNotifyIdle: vi.fn(),
+  mockNotifyActive: vi.fn(),
+  mockNotifySystemState: vi.fn(),
   mockPresenceConnect: vi.fn(),
   mockPresenceDisconnect: vi.fn(),
+  mockClientNotifySystemState: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('@fluux/sdk/react', () => ({
@@ -56,24 +39,25 @@ vi.mock('@fluux/sdk/react', () => ({
 }))
 
 vi.mock('@fluux/sdk', () => ({
+  useXMPP: () => ({
+    client: {
+      notifySystemState: mockClientNotifySystemState,
+    },
+  }),
   useSystemState: () => ({
     notifyIdle: mockNotifyIdle,
     notifyActive: mockNotifyActive,
-    notifyWake: mockNotifyWake,
-    notifySleep: mockNotifySleep,
     notifySystemState: mockNotifySystemState,
-    setAutoAwayConfig: mockSetAutoAwayConfig,
     autoAwayConfig: {
       enabled: true,
-      idleThresholdMs: 5 * 60 * 1000, // 5 minutes
-      checkIntervalMs: 30 * 1000, // 30 seconds
+      idleThresholdMs: 5 * 60 * 1000,
+      checkIntervalMs: 30 * 1000,
     },
   }),
   usePresence: () => ({
     connect: mockPresenceConnect,
     disconnect: mockPresenceDisconnect,
   }),
-  // Vanilla store (for imperative .getState() access)
   consoleStore: {
     getState: () => ({
       addEvent: vi.fn(),
@@ -82,9 +66,9 @@ vi.mock('@fluux/sdk', () => ({
 }))
 
 // Import after mocks are set up
-import { useAutoAway } from './useAutoAway'
+import { usePlatformState } from './usePlatformState'
 
-describe('useAutoAway', () => {
+describe('usePlatformState', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.useFakeTimers()
@@ -96,22 +80,18 @@ describe('useAutoAway', () => {
 
   describe('activity detection', () => {
     it('should notify SDK when activity detected', async () => {
-      renderHook(() => useAutoAway())
+      renderHook(() => usePlatformState())
 
-      // Simulate user activity (mousemove)
       await act(async () => {
         document.dispatchEvent(new MouseEvent('mousemove'))
-        // Allow async operations to complete
         await Promise.resolve()
       })
 
-      // Should have sent activity event to SDK via useSystemState
-      // SDK's presence machine handles the state transition
       expect(mockNotifyActive).toHaveBeenCalled()
     })
 
     it('should respond to all tracked activity events', async () => {
-      renderHook(() => useAutoAway())
+      renderHook(() => usePlatformState())
 
       const events = ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll']
 
@@ -128,13 +108,12 @@ describe('useAutoAway', () => {
           await Promise.resolve()
         })
 
-        // Should send activity event to SDK for each event type
         expect(mockNotifyActive).toHaveBeenCalled()
       }
     })
 
     it('should throttle activity events to avoid flooding the SDK', async () => {
-      renderHook(() => useAutoAway())
+      renderHook(() => usePlatformState())
 
       // Flush any pending timers from mount effects (connection sync calls notifyActive after 100ms)
       await act(async () => {
@@ -154,18 +133,17 @@ describe('useAutoAway', () => {
       vi.clearAllMocks()
       for (let i = 0; i < 10; i++) {
         await act(async () => {
-          vi.advanceTimersByTime(100) // 100ms between events
+          vi.advanceTimersByTime(100)
           document.dispatchEvent(new MouseEvent('mousemove'))
           await Promise.resolve()
         })
       }
-      // None of these should have triggered notifyActive (within 5s window)
       expect(mockNotifyActive).not.toHaveBeenCalled()
 
       // After throttle window expires, next event should trigger
       vi.clearAllMocks()
       await act(async () => {
-        vi.advanceTimersByTime(5000) // Advance past throttle window
+        vi.advanceTimersByTime(5000)
         document.dispatchEvent(new MouseEvent('mousemove'))
         await Promise.resolve()
       })
@@ -175,18 +153,25 @@ describe('useAutoAway', () => {
 
   describe('idle detection', () => {
     it('should check idle time periodically and notify SDK when threshold reached', async () => {
-      renderHook(() => useAutoAway())
+      renderHook(() => usePlatformState())
 
       // Advance time beyond idle threshold (5 minutes = 300000ms)
-      // The hook checks every 30 seconds
       await act(async () => {
-        vi.advanceTimersByTime(300000) // 5 minutes
+        vi.advanceTimersByTime(300000)
         await Promise.resolve()
       })
 
-      // Should have called notifyIdle with a Date
       expect(mockNotifyIdle).toHaveBeenCalled()
       expect(mockNotifyIdle.mock.calls[0][0]).toBeInstanceOf(Date)
+    })
+  })
+
+  describe('presence sync', () => {
+    it('should call presenceConnect when status is online', () => {
+      renderHook(() => usePlatformState())
+
+      // The hook is rendered with status='online' from the mock
+      expect(mockPresenceConnect).toHaveBeenCalled()
     })
   })
 
@@ -195,14 +180,12 @@ describe('useAutoAway', () => {
       const addEventListenerSpy = vi.spyOn(document, 'addEventListener')
       const removeEventListenerSpy = vi.spyOn(document, 'removeEventListener')
 
-      const { unmount } = renderHook(() => useAutoAway())
+      const { unmount } = renderHook(() => usePlatformState())
 
-      // Should have added listeners
       expect(addEventListenerSpy).toHaveBeenCalledWith('mousemove', expect.any(Function), { passive: true })
 
       unmount()
 
-      // Should have removed listeners
       expect(removeEventListenerSpy).toHaveBeenCalledWith('mousemove', expect.any(Function))
     })
   })
