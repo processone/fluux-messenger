@@ -35,6 +35,12 @@ const CLIENT_STOP_TIMEOUT_MS = 2000
 // and the next retry can begin.
 const RECONNECT_ATTEMPT_TIMEOUT_MS = 30_000
 
+// Timeout for proxy adapter restart during reconnection.
+// After a WiFi switch, the proxy's TCP connection attempt may hang waiting for
+// DNS resolution on the old network. This ensures we fail fast and fall through
+// to the WebSocket fallback.
+const PROXY_RESTART_TIMEOUT_MS = 10_000
+
 /**
  * Race a promise against a timeout. Resolves with void if the timeout fires first.
  * Used to prevent hanging on xmpp.js stop() when the socket is already dead.
@@ -104,7 +110,6 @@ export class Connection extends BaseModule {
   private xmpp: Client | null = null
   private credentials: ConnectOptions | null = null
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null
-  private reconnectCountdown: ReturnType<typeof setInterval> | null = null
 
   /**
    * XState connection state machine actor.
@@ -159,11 +164,11 @@ export class Connection extends BaseModule {
     this.connectionActor.subscribe((snapshot) => {
       const stateValue = snapshot.value as ConnectionStateValue
       const status = getConnectionStatusFromState(stateValue)
-      const { attempt, countdownSecs } = getReconnectInfoFromContext(snapshot.context)
+      const { attempt, reconnectTargetTime } = getReconnectInfoFromContext(snapshot.context)
 
       // Sync status to store
       this.stores.connection.setStatus(status)
-      this.stores.connection.setReconnectState(attempt, countdownSecs)
+      this.stores.connection.setReconnectState(attempt, reconnectTargetTime)
 
       // Sync error to store
       if (snapshot.context.lastError) {
@@ -591,10 +596,6 @@ export class Connection extends BaseModule {
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout)
       this.reconnectTimeout = null
-    }
-    if (this.reconnectCountdown) {
-      clearInterval(this.reconnectCountdown)
-      this.reconnectCountdown = null
     }
   }
 
@@ -1487,16 +1488,10 @@ export class Connection extends BaseModule {
     this.deps.emitSDK('connection:reconnecting', { attempt: reconnectAttempt, delayMs: nextRetryDelayMs })
     this.emit('reconnecting', reconnectAttempt, nextRetryDelayMs)
 
-    // Update countdown every second via machine events
-    this.reconnectCountdown = setInterval(() => {
-      this.connectionActor.send({ type: 'COUNTDOWN_TICK' })
-    }, 1000)
+    // The UI reads reconnectTargetTime from the store to display a local countdown.
+    // No interval needed here — the machine already set the target time.
 
     this.reconnectTimeout = setTimeout(() => {
-      if (this.reconnectCountdown) {
-        clearInterval(this.reconnectCountdown)
-        this.reconnectCountdown = null
-      }
       // Signal machine: timer expired → transitions to reconnecting.attempting
       this.connectionActor.send({ type: 'RETRY_TIMER_EXPIRED' })
       void this.attemptReconnect()
@@ -1558,7 +1553,12 @@ export class Connection extends BaseModule {
           // Prefer cached resolved endpoint to skip SRV re-resolution
           // (SRV may return different results after DNS cache flush, e.g. after system sleep)
           const proxyServer = this.resolvedEndpoint || this.originalServer
-          const proxyResult = await this.deps.proxyAdapter.startProxy(proxyServer)
+          const proxyResult = await Promise.race([
+            this.deps.proxyAdapter.startProxy(proxyServer),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('Proxy restart timed out')), PROXY_RESTART_TIMEOUT_MS)
+            ),
+          ])
           this.credentials.server = proxyResult.url
           this.stores.connection.setConnectionMethod(proxyResult.connectionMethod)
           this.resolvedEndpoint = proxyResult.resolvedEndpoint ?? null
@@ -1576,7 +1576,12 @@ export class Connection extends BaseModule {
             )
             this.resolvedEndpoint = null
             try {
-              const proxyResult = await this.deps.proxyAdapter.startProxy(this.originalServer)
+              const proxyResult = await Promise.race([
+                this.deps.proxyAdapter.startProxy(this.originalServer),
+                new Promise<never>((_, reject) =>
+                  setTimeout(() => reject(new Error('Proxy restart timed out (SRV fallback)')), PROXY_RESTART_TIMEOUT_MS)
+                ),
+              ])
               this.credentials.server = proxyResult.url
               this.stores.connection.setConnectionMethod(proxyResult.connectionMethod)
               this.resolvedEndpoint = proxyResult.resolvedEndpoint ?? null

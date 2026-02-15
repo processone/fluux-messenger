@@ -97,7 +97,6 @@ export type ConnectionMachineEvent =
   | { type: 'RETRY_TIMER_EXPIRED' }
   | { type: 'CANCEL_RECONNECT' }
   | { type: 'TRIGGER_RECONNECT' }
-  | { type: 'COUNTDOWN_TICK' }
 
 /**
  * Context (extended state) for the connection machine.
@@ -109,8 +108,8 @@ export interface ConnectionMachineContext {
   maxReconnectAttempts: number
   /** Delay before next reconnect attempt (ms), computed via exponential backoff */
   nextRetryDelayMs: number
-  /** Seconds remaining until next reconnect attempt (for UI countdown), null when not waiting */
-  reconnectCountdownSecs: number | null
+  /** Absolute timestamp (ms since epoch) when the next reconnect attempt fires, null when not waiting */
+  reconnectTargetTime: number | null
   /** Last error message, null when no error */
   lastError: string | null
 }
@@ -170,18 +169,19 @@ export const connectionMachine = setup({
     resetReconnectState: assign({
       reconnectAttempt: 0,
       nextRetryDelayMs: 0,
-      reconnectCountdownSecs: null,
+      reconnectTargetTime: null,
       lastError: null,
     }),
 
-    // Increment attempt counter and compute next backoff delay
+    // Increment attempt counter and compute next backoff delay.
+    // Sets reconnectTargetTime as an absolute timestamp for UI countdown.
     incrementAttempt: assign(({ context }) => {
       const attempt = context.reconnectAttempt + 1
       const delay = computeBackoffDelay(attempt)
       return {
         reconnectAttempt: attempt,
         nextRetryDelayMs: delay,
-        reconnectCountdownSecs: Math.ceil(delay / 1000),
+        reconnectTargetTime: Date.now() + delay,
       }
     }),
 
@@ -206,16 +206,9 @@ export const connectionMachine = setup({
       lastError: 'Connection failed after multiple retry attempts',
     }),
 
-    // Decrement the countdown by 1 second
-    decrementCountdown: assign(({ context }) => ({
-      reconnectCountdownSecs: context.reconnectCountdownSecs !== null
-        ? Math.max(0, context.reconnectCountdownSecs - 1)
-        : null,
-    })),
-
-    // Clear countdown (entering attempting state)
-    clearCountdown: assign({
-      reconnectCountdownSecs: null,
+    // Clear target time (entering attempting state)
+    clearTargetTime: assign({
+      reconnectTargetTime: null,
     }),
 
     // Clear error
@@ -242,7 +235,7 @@ export const connectionMachine = setup({
     reconnectAttempt: 0,
     maxReconnectAttempts: DEFAULT_MAX_RECONNECT_ATTEMPTS,
     nextRetryDelayMs: 0,
-    reconnectCountdownSecs: null,
+    reconnectTargetTime: null,
     lastError: null,
   },
   initial: 'idle',
@@ -379,29 +372,27 @@ export const connectionMachine = setup({
       states: {
         /**
          * Waiting for backoff timer to expire before next attempt.
-         * Countdown ticks update the UI. Timer expiry or user trigger starts attempt.
+         * The UI reads reconnectTargetTime from context to display a local countdown.
+         * Timer expiry or user trigger starts attempt.
          */
         waiting: {
           on: {
             RETRY_TIMER_EXPIRED: {
               target: 'attempting',
-              actions: 'clearCountdown',
+              actions: 'clearTargetTime',
             },
             TRIGGER_RECONNECT: {
               target: 'attempting',
-              actions: 'clearCountdown',
-            },
-            COUNTDOWN_TICK: {
-              actions: 'decrementCountdown',
+              actions: 'clearTargetTime',
             },
             // Wake or visibility while waiting — skip to immediate attempt
             WAKE: {
               target: 'attempting',
-              actions: 'clearCountdown',
+              actions: 'clearTargetTime',
             },
             VISIBLE: {
               target: 'attempting',
-              actions: 'clearCountdown',
+              actions: 'clearTargetTime',
             },
           },
         },
@@ -559,14 +550,14 @@ export function isTerminalState(stateValue: ConnectionStateValue): boolean {
  * Extract reconnection info from machine context for UI display.
  *
  * @param context - Current machine context
- * @returns Reconnect attempt number and countdown seconds
+ * @returns Reconnect attempt number and target time for countdown
  */
 export function getReconnectInfoFromContext(context: ConnectionMachineContext): {
   attempt: number
-  countdownSecs: number | null
+  reconnectTargetTime: number | null
 } {
   return {
     attempt: context.reconnectAttempt,
-    countdownSecs: context.reconnectCountdownSecs,
+    reconnectTargetTime: context.reconnectTargetTime,
   }
 }

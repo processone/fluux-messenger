@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from 'react'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { useSystemState, usePresence, consoleStore } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
-import { isWakeHandlingActive } from '@/utils/wakeCoordinator'
+import { isWakeHandlingActive, tryAcquireWakeLock, releaseWakeLock } from '@/utils/wakeCoordinator'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
@@ -175,15 +175,24 @@ export function useAutoAway() {
 
   /**
    * Wake detection: OS notification in Tauri only.
-   * Time-gap based wake detection is handled by useWakeDetector hook.
+   * Time-gap based wake detection AND connection verification are handled by
+   * useWakeDetector hook. This effect only signals the presence machine to
+   * restore from auto-away/xa on wake.
+   *
+   * Coordinated through wakeCoordinator to prevent duplicate handling with
+   * useWakeDetector's time-gap detection.
    *
    * We listen for two events:
    * 1. system-did-wake: Immediate wake notification (works when app is in foreground)
    * 2. system-did-wake-deferred: Deferred wake notification when app becomes active
    *    (handles the case where app was in background during wake)
+   *
+   * NOTE: No `status` dependency — the listener stays registered across connection
+   * state changes to avoid listener churn during reconnection. The notifyWake()
+   * call is safe in any connection state (presence machine handles it).
    */
   useEffect(() => {
-    if (!isTauri || status !== 'online') return
+    if (!isTauri) return
 
     let cancelled = false
     let unlistenImmediate: UnlistenFn | undefined
@@ -193,9 +202,14 @@ export function useAutoAway() {
       // Immediate wake notification (when app is in foreground)
       listen('system-did-wake', () => {
         if (cancelled) return
+        // Guard with wakeCoordinator to prevent race with useWakeDetector
+        if (!tryAcquireWakeLock('useAutoAway:system-did-wake')) return
         logEvent('System woke from sleep (OS notification)')
+        // Only signal presence machine — connection verification is handled
+        // by useWakeDetector via client.notifySystemState('awake')
         notifyWake()
         lastActivityRef.current = Date.now()
+        releaseWakeLock()
         // Force CSS layout recalculation after wake from sleep.
         // WebKit in fullscreen mode can fail to re-evaluate media queries after wake,
         // causing layout corruption (sidebar disappearing). Dispatching resize event fixes this.
@@ -214,10 +228,12 @@ export function useAutoAway() {
       // The payload is the number of seconds the wake was delayed
       listen<number>('system-did-wake-deferred', (event) => {
         if (cancelled) return
+        if (!tryAcquireWakeLock('useAutoAway:system-did-wake-deferred')) return
         const delaySecs = event.payload || 0
         logEvent(`System woke from sleep (deferred ${delaySecs}s - app was in background)`)
         notifyWake()
         lastActivityRef.current = Date.now()
+        releaseWakeLock()
         // Force CSS layout recalculation (see comment in system-did-wake handler)
         requestAnimationFrame(() => {
           window.dispatchEvent(new Event('resize'))
@@ -236,7 +252,7 @@ export function useAutoAway() {
       if (unlistenImmediate) unlistenImmediate()
       if (unlistenDeferred) unlistenDeferred()
     }
-  }, [status, notifyWake, logEvent])
+  }, [notifyWake, logEvent])
 
   /**
    * Sleep detection: Tauri only (browser doesn't have reliable sleep detection).

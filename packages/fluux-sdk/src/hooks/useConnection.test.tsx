@@ -79,14 +79,14 @@ describe('useConnection hook', () => {
       const { result } = renderHook(() => useConnection(), { wrapper })
 
       expect(result.current.reconnectAttempt).toBe(0)
-      expect(result.current.reconnectIn).toBeNull()
+      expect(result.current.reconnectTargetTime).toBeNull()
 
       act(() => {
         connectionStore.getState().setReconnectState(3, 5000)
       })
 
       expect(result.current.reconnectAttempt).toBe(3)
-      expect(result.current.reconnectIn).toBe(5000)
+      expect(result.current.reconnectTargetTime).toBe(5000)
     })
 
     it('should reflect server info from store', () => {
@@ -324,7 +324,7 @@ describe('useConnection hook', () => {
       expect(mockClient.cancelReconnect).toHaveBeenCalled()
       expect(result.current.status).toBe('disconnected')
       expect(result.current.reconnectAttempt).toBe(0)
-      expect(result.current.reconnectIn).toBeNull()
+      expect(result.current.reconnectTargetTime).toBeNull()
     })
   })
 

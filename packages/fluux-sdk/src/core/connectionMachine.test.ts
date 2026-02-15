@@ -36,7 +36,7 @@ describe('connectionMachine', () => {
       expect(context.reconnectAttempt).toBe(0)
       expect(context.maxReconnectAttempts).toBe(DEFAULT_MAX_RECONNECT_ATTEMPTS)
       expect(context.nextRetryDelayMs).toBe(0)
-      expect(context.reconnectCountdownSecs).toBeNull()
+      expect(context.reconnectTargetTime).toBeNull()
       expect(context.lastError).toBeNull()
       actor.stop()
     })
@@ -105,7 +105,7 @@ describe('connectionMachine', () => {
 
       actor.send({ type: 'DISCONNECT' })
       expect(actor.getSnapshot().context.reconnectAttempt).toBe(0)
-      expect(actor.getSnapshot().context.reconnectCountdownSecs).toBeNull()
+      expect(actor.getSnapshot().context.reconnectTargetTime).toBeNull()
       actor.stop()
     })
 
@@ -228,6 +228,7 @@ describe('connectionMachine', () => {
     })
 
     it('should compute first backoff delay correctly', () => {
+      const before = Date.now()
       const actor = createActor(connectionMachine).start()
       actor.send({ type: 'CONNECT' })
       actor.send({ type: 'CONNECTION_SUCCESS' })
@@ -235,7 +236,9 @@ describe('connectionMachine', () => {
 
       const { context } = actor.getSnapshot()
       expect(context.nextRetryDelayMs).toBe(INITIAL_RECONNECT_DELAY) // 1000ms for attempt 1
-      expect(context.reconnectCountdownSecs).toBe(Math.ceil(INITIAL_RECONNECT_DELAY / 1000))
+      // reconnectTargetTime is an absolute timestamp (Date.now() + delay)
+      expect(context.reconnectTargetTime).toBeGreaterThanOrEqual(before + INITIAL_RECONNECT_DELAY)
+      expect(context.reconnectTargetTime).toBeLessThanOrEqual(Date.now() + INITIAL_RECONNECT_DELAY)
       actor.stop()
     })
   })
@@ -254,7 +257,7 @@ describe('connectionMachine', () => {
     it('should transition to attempting on RETRY_TIMER_EXPIRED', () => {
       actor.send({ type: 'RETRY_TIMER_EXPIRED' })
       expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
-      expect(actor.getSnapshot().context.reconnectCountdownSecs).toBeNull()
+      expect(actor.getSnapshot().context.reconnectTargetTime).toBeNull()
       actor.stop()
     })
 
@@ -282,25 +285,6 @@ describe('connectionMachine', () => {
     it('should handle TRIGGER_RECONNECT by skipping wait', () => {
       actor.send({ type: 'TRIGGER_RECONNECT' })
       expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
-      actor.stop()
-    })
-
-    it('should decrement countdown on COUNTDOWN_TICK', () => {
-      const initialCountdown = actor.getSnapshot().context.reconnectCountdownSecs!
-      actor.send({ type: 'COUNTDOWN_TICK' })
-      expect(actor.getSnapshot().context.reconnectCountdownSecs).toBe(initialCountdown - 1)
-      actor.stop()
-    })
-
-    it('should not go below 0 on COUNTDOWN_TICK', () => {
-      // Set countdown to 1, then tick twice
-      // First tick: 1 -> 0
-      // Send enough ticks to get to 0
-      const ticks = actor.getSnapshot().context.reconnectCountdownSecs!
-      for (let i = 0; i < ticks + 2; i++) {
-        actor.send({ type: 'COUNTDOWN_TICK' })
-      }
-      expect(actor.getSnapshot().context.reconnectCountdownSecs).toBe(0)
       actor.stop()
     })
 
@@ -389,19 +373,23 @@ describe('connectionMachine', () => {
       actor.stop()
     })
 
-    it('should compute countdown seconds from delay', () => {
+    it('should set reconnectTargetTime as absolute timestamp', () => {
+      const before = Date.now()
       const actor = createActor(connectionMachine).start()
       actor.send({ type: 'CONNECT' })
       actor.send({ type: 'CONNECTION_SUCCESS' })
       actor.send({ type: 'SOCKET_DIED' })
 
-      // Attempt 1: delay=1000ms → countdown=1s
-      expect(actor.getSnapshot().context.reconnectCountdownSecs).toBe(1)
+      // Attempt 1: delay=1000ms → targetTime ≈ now + 1000
+      const target1 = actor.getSnapshot().context.reconnectTargetTime!
+      expect(target1).toBeGreaterThanOrEqual(before + INITIAL_RECONNECT_DELAY)
 
-      // Fail: attempt 2: delay=2000ms → countdown=2s
+      // Fail: attempt 2: delay=2000ms → targetTime ≈ now + 2000
+      const beforeAttempt2 = Date.now()
       actor.send({ type: 'RETRY_TIMER_EXPIRED' })
       actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
-      expect(actor.getSnapshot().context.reconnectCountdownSecs).toBe(2)
+      const target2 = actor.getSnapshot().context.reconnectTargetTime!
+      expect(target2).toBeGreaterThanOrEqual(beforeAttempt2 + 2000)
 
       actor.stop()
     })
@@ -905,7 +893,7 @@ describe('connectionMachine', () => {
       expect(actor.getSnapshot().value).toBe('idle')
       expect(actor.getSnapshot().context.reconnectAttempt).toBe(0)
       expect(actor.getSnapshot().context.nextRetryDelayMs).toBe(0)
-      expect(actor.getSnapshot().context.reconnectCountdownSecs).toBeNull()
+      expect(actor.getSnapshot().context.reconnectTargetTime).toBeNull()
       expect(actor.getSnapshot().context.lastError).toBeNull()
 
       // And we can connect again successfully
@@ -999,30 +987,31 @@ describe('connectionMachine', () => {
     })
 
     describe('getReconnectInfoFromContext', () => {
-      it('should return attempt and countdown from context', () => {
+      it('should return attempt and target time from context', () => {
+        const targetTime = Date.now() + 4000
         const context = {
           reconnectAttempt: 3,
           maxReconnectAttempts: 10,
           nextRetryDelayMs: 4000,
-          reconnectCountdownSecs: 4,
+          reconnectTargetTime: targetTime,
           lastError: 'some error',
         }
         const info = getReconnectInfoFromContext(context)
         expect(info.attempt).toBe(3)
-        expect(info.countdownSecs).toBe(4)
+        expect(info.reconnectTargetTime).toBe(targetTime)
       })
 
-      it('should return null countdown when not reconnecting', () => {
+      it('should return null target time when not reconnecting', () => {
         const context = {
           reconnectAttempt: 0,
           maxReconnectAttempts: 10,
           nextRetryDelayMs: 0,
-          reconnectCountdownSecs: null,
+          reconnectTargetTime: null,
           lastError: null,
         }
         const info = getReconnectInfoFromContext(context)
         expect(info.attempt).toBe(0)
-        expect(info.countdownSecs).toBeNull()
+        expect(info.reconnectTargetTime).toBeNull()
       })
     })
   })

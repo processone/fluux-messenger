@@ -202,16 +202,34 @@ export function PresenceSelector({ isOpen: isOpenProp, onOpenChange }: PresenceS
 
 interface StatusDisplayProps {
   status: string
-  reconnectIn: number | null
+  reconnectTargetTime: number | null
   reconnectAttempt: number
 }
 
 export function StatusDisplay({
   status,
-  reconnectIn,
+  reconnectTargetTime,
   reconnectAttempt
 }: StatusDisplayProps) {
   const { t } = useTranslation()
+
+  // Local countdown state — only this component re-renders every second,
+  // not the entire Sidebar tree.
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (!reconnectTargetTime) {
+      setSecondsLeft(null)
+      return
+    }
+    const update = () => {
+      const remaining = Math.max(0, Math.ceil((reconnectTargetTime - Date.now()) / 1000))
+      setSecondsLeft(remaining)
+    }
+    update()
+    const interval = setInterval(update, 1000)
+    return () => clearInterval(interval)
+  }, [reconnectTargetTime])
 
   if (status === 'verifying') {
     return (
@@ -226,8 +244,8 @@ export function StatusDisplay({
     return (
       <p className="text-xs text-fluux-yellow truncate flex items-center gap-1">
         <RefreshCw className="w-3 h-3 animate-spin" />
-        {reconnectIn !== null
-          ? t('status.reconnectingIn', { seconds: reconnectIn, attempt: reconnectAttempt })
+        {secondsLeft !== null
+          ? t('status.reconnectingIn', { seconds: secondsLeft, attempt: reconnectAttempt })
           : t('status.reconnecting')}
       </p>
     )

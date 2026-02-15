@@ -81,7 +81,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
   const jid = useConnectionStore((s) => s.jid)
   const status = useConnectionStore((s) => s.status)
   const reconnectAttempt = useConnectionStore((s) => s.reconnectAttempt)
-  const reconnectIn = useConnectionStore((s) => s.reconnectIn)
+  const reconnectTargetTime = useConnectionStore((s) => s.reconnectTargetTime)
   const ownAvatar = useConnectionStore((s) => s.ownAvatar)
   const ownNickname = useConnectionStore((s) => s.ownNickname)
   // Get methods from client (not from store)
@@ -394,7 +394,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
               {status === 'online' ? (
                 <PresenceSelector isOpen={showPresenceMenu} onOpenChange={(open) => open ? modalActions.open('presenceMenu') : modalActions.close('presenceMenu')} />
               ) : (
-                <StatusDisplay status={status} reconnectIn={reconnectIn} reconnectAttempt={reconnectAttempt} />
+                <StatusDisplay status={status} reconnectTargetTime={reconnectTargetTime} reconnectAttempt={reconnectAttempt} />
               )}
             </div>
             {/* Menu button */}
