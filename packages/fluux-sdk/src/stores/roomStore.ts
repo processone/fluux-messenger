@@ -71,6 +71,19 @@ function saveDraftsToStorage(drafts: Map<string, string>): void {
  * constants instead of creating new [] instances each time.
  */
 const EMPTY_ROOM_ARRAY: Room[] = []
+
+// Selector memoization caches.
+// Store selectors (joinedRooms, allRooms, etc.) are called on every Zustand subscription check.
+// Without caching, each call runs O(n) filter + O(n log n) sort even when the rooms Map hasn't changed.
+// Since Zustand creates new Map references on mutations, we can cache by Map identity.
+let _cachedJoinedRooms: Room[] = EMPTY_ROOM_ARRAY
+let _cachedJoinedRoomsSource: Map<string, Room> | null = null
+let _cachedBookmarkedRooms: Room[] = EMPTY_ROOM_ARRAY
+let _cachedBookmarkedRoomsSource: Map<string, Room> | null = null
+let _cachedAllRooms: Room[] = EMPTY_ROOM_ARRAY
+let _cachedAllRoomsSource: Map<string, Room> | null = null
+let _cachedQuickChatRooms: Room[] = EMPTY_ROOM_ARRAY
+let _cachedQuickChatRoomsSource: Map<string, Room> | null = null
 const EMPTY_MESSAGE_ARRAY: RoomMessage[] = []
 
 /**
@@ -1535,21 +1548,32 @@ export const roomStore = createStore<RoomState>()(
   // Note: These return stable references (EMPTY_*_ARRAY) when empty to prevent infinite re-renders
   joinedRooms: () => {
     const rooms = get().rooms
+    if (rooms === _cachedJoinedRoomsSource) return _cachedJoinedRooms
+    _cachedJoinedRoomsSource = rooms
     const result = Array.from(rooms.values()).filter(r => r.joined)
-    return result.length > 0 ? result : EMPTY_ROOM_ARRAY
+    _cachedJoinedRooms = result.length > 0 ? result : EMPTY_ROOM_ARRAY
+    return _cachedJoinedRooms
   },
 
   bookmarkedRooms: () => {
     const rooms = get().rooms
+    if (rooms === _cachedBookmarkedRoomsSource) return _cachedBookmarkedRooms
+    _cachedBookmarkedRoomsSource = rooms
     const result = Array.from(rooms.values()).filter(r => r.isBookmarked)
-    return result.length > 0 ? result : EMPTY_ROOM_ARRAY
+    _cachedBookmarkedRooms = result.length > 0 ? result : EMPTY_ROOM_ARRAY
+    return _cachedBookmarkedRooms
   },
 
   allRooms: () => {
     const rooms = get().rooms
+    if (rooms === _cachedAllRoomsSource) return _cachedAllRooms
+    _cachedAllRoomsSource = rooms
     // Return all rooms that are either bookmarked or joined
     const result = Array.from(rooms.values()).filter(r => r.isBookmarked || r.joined)
-    if (result.length === 0) return EMPTY_ROOM_ARRAY
+    if (result.length === 0) {
+      _cachedAllRooms = EMPTY_ROOM_ARRAY
+      return EMPTY_ROOM_ARRAY
+    }
 
     // Sort by lastInteractedAt (when user opened the room) descending
     // This prevents high-traffic rooms from constantly jumping to the top
@@ -1560,13 +1584,17 @@ export const roomStore = createStore<RoomState>()(
       const bTime = b.lastInteractedAt?.getTime() ?? b.lastMessage?.timestamp?.getTime() ?? 0
       return bTime - aTime // Descending (most recent first)
     })
+    _cachedAllRooms = result
     return result
   },
 
   quickChatRooms: () => {
     const rooms = get().rooms
+    if (rooms === _cachedQuickChatRoomsSource) return _cachedQuickChatRooms
+    _cachedQuickChatRoomsSource = rooms
     const result = Array.from(rooms.values()).filter(r => r.isQuickChat)
-    return result.length > 0 ? result : EMPTY_ROOM_ARRAY
+    _cachedQuickChatRooms = result.length > 0 ? result : EMPTY_ROOM_ARRAY
+    return _cachedQuickChatRooms
   },
 
   activeRoom: () => {

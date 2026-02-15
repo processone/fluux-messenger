@@ -6,6 +6,18 @@ import '@testing-library/jest-dom/vitest'
 import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
 
+// Mock renderLoopDetector for tests (all exports become no-ops)
+vi.mock('@/utils/renderLoopDetector', () => ({
+  detectRenderLoop: vi.fn(),
+  trackSelectorChange: vi.fn(),
+  getSelectorHistory: vi.fn(() => []),
+  clearSelectorHistory: vi.fn(),
+  logRenderSummary: vi.fn(),
+  resetRenderLoopDetector: vi.fn(),
+  startWakeGracePeriod: vi.fn(),
+  getRenderStats: vi.fn(() => ({})),
+}))
+
 // Mock react-virtuoso for tests (it requires DOM APIs not available in jsdom)
 // Use vi.hoisted() to ensure React is available when the mock factory runs
 const { mockVirtuoso } = vi.hoisted(() => {

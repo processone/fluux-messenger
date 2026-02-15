@@ -142,6 +142,11 @@ vi.mock('@fluux/sdk/react', () => ({
       status: 'online',
     })
   },
+  useRosterStore: (selector: (state: { contacts: Map<string, Contact> }) => unknown) => {
+    const contactsMap = new Map<string, Contact>()
+    mockContacts.forEach((c: Contact) => contactsMap.set(c.jid, c))
+    return selector({ contacts: contactsMap })
+  },
 }))
 
 // Mock app hooks

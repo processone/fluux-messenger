@@ -26,6 +26,14 @@ function calculateContactColors(jid: string): { colorLight: string; colorDark: s
  */
 const EMPTY_CONTACT_ARRAY: Contact[] = []
 
+// Selector memoization caches.
+// sortedContacts() and onlineContacts() are called on every Zustand subscription check.
+// Cache by contacts Map reference to avoid redundant O(n log n) sorts.
+let _cachedSortedContacts: Contact[] = EMPTY_CONTACT_ARRAY
+let _cachedSortedContactsSource: Map<string, Contact> | null = null
+let _cachedOnlineContacts: Contact[] = EMPTY_CONTACT_ARRAY
+let _cachedOnlineContactsSource: Map<string, Contact> | null = null
+
 /**
  * Roster state interface for the contact list (buddy list).
  *
@@ -317,12 +325,19 @@ export const rosterStore = createStore<RosterState>((set, get) => ({
   reset: () => set({ contacts: new Map() }),
 
   onlineContacts: () => {
-    const result = Array.from(get().contacts.values())
+    const contacts = get().contacts
+    if (contacts === _cachedOnlineContactsSource) return _cachedOnlineContacts
+    _cachedOnlineContactsSource = contacts
+    const result = Array.from(contacts.values())
       .filter(c => c.presence !== 'offline')
-    return result.length > 0 ? result : EMPTY_CONTACT_ARRAY
+    _cachedOnlineContacts = result.length > 0 ? result : EMPTY_CONTACT_ARRAY
+    return _cachedOnlineContacts
   },
 
   sortedContacts: () => {
+    const contacts = get().contacts
+    if (contacts === _cachedSortedContactsSource) return _cachedSortedContacts
+    _cachedSortedContactsSource = contacts
     const presenceOrder: Record<PresenceStatus, number> = {
       online: 0,
       away: 1,
@@ -330,13 +345,14 @@ export const rosterStore = createStore<RosterState>((set, get) => ({
       offline: 3,
     }
 
-    const result = Array.from(get().contacts.values())
+    const result = Array.from(contacts.values())
       .sort((a, b) => {
         const presenceDiff = presenceOrder[a.presence] - presenceOrder[b.presence]
         if (presenceDiff !== 0) return presenceDiff
         return a.name.localeCompare(b.name)
       })
-    return result.length > 0 ? result : EMPTY_CONTACT_ARRAY
+    _cachedSortedContacts = result.length > 0 ? result : EMPTY_CONTACT_ARRAY
+    return _cachedSortedContacts
   },
 }))
 
