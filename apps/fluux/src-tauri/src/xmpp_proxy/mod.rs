@@ -22,6 +22,19 @@ use serde::Serialize;
 use tauri::Emitter;
 use tracing::{debug, error, info, warn};
 
+/// Global flag to disable TLS certificate verification.
+/// Set once at startup via `set_dangerous_insecure_tls()` from the CLI `--dangerous-insecure-tls` flag.
+static DANGEROUS_INSECURE_TLS: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+
+/// Set the insecure TLS flag (called once from main.rs at startup).
+pub fn set_dangerous_insecure_tls(enabled: bool) {
+    let _ = DANGEROUS_INSECURE_TLS.set(enabled);
+}
+
+fn is_insecure_tls() -> bool {
+    DANGEROUS_INSECURE_TLS.get().copied().unwrap_or(false)
+}
+
 /// TCP connection timeout for outbound XMPP server connections.
 ///
 /// Applied to both STARTTLS (port 5222) and direct TLS (port 5223) TCP connect calls.
@@ -78,11 +91,65 @@ fn init_crypto_provider() {
 }
 
 
+/// TLS certificate verifier that accepts all certificates without validation.
+///
+/// **DANGEROUS**: Only used when `--dangerous-insecure-tls` CLI flag is set.
+/// Intended for development/testing against servers with self-signed certificates.
+#[derive(Debug)]
+struct InsecureCertVerifier(Arc<rustls::crypto::CryptoProvider>);
+
+impl rustls::client::danger::ServerCertVerifier for InsecureCertVerifier {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &rustls::pki_types::CertificateDer<'_>,
+        _intermediates: &[rustls::pki_types::CertificateDer<'_>],
+        _server_name: &ServerName<'_>,
+        _ocsp_response: &[u8],
+        _now: rustls::pki_types::UnixTime,
+    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+        Ok(rustls::client::danger::ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &rustls::pki_types::CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls12_signature(message, cert, dss, &self.0.signature_verification_algorithms)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &rustls::pki_types::CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls13_signature(message, cert, dss, &self.0.signature_verification_algorithms)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+        self.0.signature_verification_algorithms.supported_schemes()
+    }
+}
+
 /// Create a TLS connector using the system's native root certificates.
 ///
 /// Used by both `DirectTls` connections and `STARTTLS` upgrades to avoid
 /// duplicating the TLS setup logic.
+///
+/// When `--dangerous-insecure-tls` is set, certificate verification is skipped entirely.
 fn create_tls_connector() -> Result<TlsConnector, String> {
+    if is_insecure_tls() {
+        warn!("TLS certificate verification DISABLED (--dangerous-insecure-tls)");
+        let provider = rustls::crypto::ring::default_provider();
+        let config = ClientConfig::builder()
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(InsecureCertVerifier(Arc::new(provider))))
+            .with_no_client_auth();
+        return Ok(TlsConnector::from(Arc::new(config)));
+    }
+
     let mut root_store = RootCertStore::empty();
     let native_certs = rustls_native_certs::load_native_certs();
     if native_certs.certs.is_empty() {

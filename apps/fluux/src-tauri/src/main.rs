@@ -644,6 +644,14 @@ fn main() {
     // Parse CLI flags early, before tracing subscriber init
     let args: Vec<String> = std::env::args().collect();
     let clear_storage = args.iter().any(|arg| arg == "--clear-storage" || arg == "-c");
+    let dangerous_insecure_tls = args.iter().any(|arg| arg == "--dangerous-insecure-tls");
+
+    // Set insecure TLS flag before any proxy can start
+    xmpp_proxy::set_dangerous_insecure_tls(dangerous_insecure_tls);
+    if dangerous_insecure_tls {
+        eprintln!("WARNING: TLS certificate verification is DISABLED (--dangerous-insecure-tls)");
+        eprintln!("         This is insecure and should only be used for development/testing.");
+    }
 
     // Parse verbose level: --verbose / -v (default, no XMPP packets) or --verbose=xmpp (with packets)
     let verbose_level = args.iter().find_map(|arg| {
@@ -672,6 +680,8 @@ fn main() {
         eprintln!("      --verbose=xmpp    Enable verbose logging including XMPP packet content");
         eprintln!("      --log-file=PATH   Write log output to a file instead of stderr");
         eprintln!("  -c, --clear-storage   Clear local storage on startup");
+        eprintln!("      --dangerous-insecure-tls");
+        eprintln!("                        Disable TLS certificate verification (INSECURE!)");
         eprintln!("  -h, --help            Show this help message");
         eprintln!();
         eprintln!("Environment variables:");
