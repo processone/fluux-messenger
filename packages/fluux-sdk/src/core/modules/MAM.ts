@@ -235,7 +235,12 @@ export class MAM extends BaseModule {
       return { messages: allMessages, complete: isComplete, rsm: lastRsm }
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error'
-      logErr(`MAM error: ...@${getDomain(conversationId) || '*'} — ${msg}`)
+      const isConnectionError = msg.includes('Not connected') || msg.includes('Socket not available')
+      if (isConnectionError) {
+        logInfo(`MAM skipped: ...@${getDomain(conversationId) || '*'} — ${msg}`)
+      } else {
+        logErr(`MAM error: ...@${getDomain(conversationId) || '*'} — ${msg}`)
+      }
       this.deps.emitSDK('chat:mam-error', { conversationId, error: msg })
       throw error
     } finally {
@@ -323,7 +328,12 @@ export class MAM extends BaseModule {
       return { messages: collectedMessages, complete, rsm }
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error'
-      logErr(`Room MAM error: ${roomJid} — ${msg}`)
+      const isConnectionError = msg.includes('Not connected') || msg.includes('Socket not available')
+      if (isConnectionError) {
+        logInfo(`Room MAM skipped: ${roomJid} — ${msg}`)
+      } else {
+        logErr(`Room MAM error: ${roomJid} — ${msg}`)
+      }
       this.deps.emitSDK('room:mam-error', { roomJid, error: msg })
       throw error
     } finally {

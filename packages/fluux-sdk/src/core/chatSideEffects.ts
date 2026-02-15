@@ -96,10 +96,10 @@ export function setupChatSideEffects(
     } catch (error) {
       // Only log if it's not a disconnection error (those are expected during reconnect)
       const errorMsg = error instanceof Error ? error.message : String(error)
-      if (!errorMsg.includes('disconnected')) {
+      if (errorMsg.includes('disconnected') || errorMsg.includes('Not connected') || errorMsg.includes('Socket not available')) {
+        if (debug) console.log('[SideEffects] Chat: MAM skipped - client disconnected')
+      } else {
         console.error('[SideEffects] Chat: MAM fetch failed:', error)
-      } else if (debug) {
-        console.log('[SideEffects] Chat: MAM skipped - client disconnected')
       }
       // Clear loading state on error (MAM module clears it on success)
       chatStore.getState().setMAMLoading(conversationId, false)
