@@ -894,6 +894,84 @@ describe('XMPPClient', () => {
     })
   })
 
+  describe('sendIQ health checks', () => {
+    it('should throw Not connected when xmpp client is null', async () => {
+      // Don't connect — xmpp client is null
+      // Try an IQ-based operation (e.g., blocking list fetch)
+      await expect(xmppClient.blocking.fetchBlocklist()).rejects.toThrow('Not connected')
+    })
+
+    it('should trigger dead socket recovery when client is null but status is online', async () => {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'password',
+        server: 'wss://example.com/ws',
+      })
+
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      // Simulate dead socket: null out the xmpp reference in Connection while status remains 'online'
+      mockStores.connection.getStatus.mockReturnValue('online' as ConnectionStatus)
+      ;(xmppClient.connection as any).xmpp = null
+
+      mockStores.console.addEvent.mockClear()
+
+      await expect(xmppClient.blocking.fetchBlocklist()).rejects.toThrow('Not connected')
+
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        'Client null but status online (IQ) - triggering reconnect',
+        'error'
+      )
+    })
+
+    it('should throw Socket not available when socket is null', async () => {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'password',
+        server: 'wss://example.com/ws',
+      })
+
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      // Null out the socket while keeping the client
+      ;(mockXmppClientInstance as any).socket = null
+      mockStores.connection.getStatus.mockReturnValue('online' as ConnectionStatus)
+      mockStores.console.addEvent.mockClear()
+
+      await expect(xmppClient.blocking.fetchBlocklist()).rejects.toThrow('Socket not available')
+
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        'Socket null but status online (IQ) - triggering reconnect',
+        'error'
+      )
+    })
+
+    it('should detect dead socket errors on IQ response failure', async () => {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'password',
+        server: 'wss://example.com/ws',
+      })
+
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      // Simulate dead socket error from iqCaller
+      mockXmppClientInstance.iqCaller.request.mockRejectedValueOnce(
+        new Error("null is not an object (evaluating 'this.socket.write')")
+      )
+
+      await expect(xmppClient.blocking.fetchBlocklist()).rejects.toThrow()
+
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        'Dead connection detected, will reconnect',
+        'connection'
+      )
+    })
+  })
+
   describe('verifyConnection', () => {
     it('should return false when not connected', async () => {
       const result = await xmppClient.verifyConnection()
