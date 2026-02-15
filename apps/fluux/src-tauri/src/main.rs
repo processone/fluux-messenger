@@ -33,7 +33,6 @@ use tauri::{
 };
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 use tauri_plugin_deep_link::DeepLinkExt;
-#[cfg(target_os = "macos")]
 use tauri_plugin_opener::OpenerExt;
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
@@ -695,35 +694,35 @@ fn main() {
         std::process::exit(0);
     }
 
+    // Determine the log directory: --log-file=<path> overrides the default platform path
+    let log_dir = if let Some(ref path) = log_file_path {
+        std::path::PathBuf::from(path)
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+    } else {
+        // Platform log directory:
+        //   macOS:   ~/Library/Logs/com.processone.fluux/
+        //   Linux:   ~/.local/share/com.processone.fluux/logs/  (or $XDG_DATA_HOME)
+        //   Windows: %APPDATA%\com.processone.fluux\logs\
+        let base = dirs::data_local_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."));
+        let dir = base.join("com.processone.fluux").join("logs");
+
+        #[cfg(target_os = "macos")]
+        let dir = dirs::home_dir()
+            .map(|h| h.join("Library").join("Logs").join("com.processone.fluux"))
+            .unwrap_or(dir);
+
+        dir
+    };
+
     // Initialize tracing subscriber:
     // - Always write to a log file in the platform log directory (for bug reports)
     // - Optionally add stderr output when --verbose is passed
     {
         use tracing_subscriber::prelude::*;
         use tracing_subscriber::EnvFilter;
-
-        // Determine the log directory: --log-file=<path> overrides the default platform path
-        let log_dir = if let Some(ref path) = log_file_path {
-            std::path::PathBuf::from(path)
-                .parent()
-                .map(|p| p.to_path_buf())
-                .unwrap_or_else(|| std::path::PathBuf::from("."))
-        } else {
-            // Platform log directory:
-            //   macOS:   ~/Library/Logs/com.processone.fluux/
-            //   Linux:   ~/.local/share/com.processone.fluux/logs/  (or $XDG_DATA_HOME)
-            //   Windows: %APPDATA%\com.processone.fluux\logs\
-            let base = dirs::data_local_dir()
-                .unwrap_or_else(|| std::path::PathBuf::from("."));
-            let dir = base.join("com.processone.fluux").join("logs");
-
-            #[cfg(target_os = "macos")]
-            let dir = dirs::home_dir()
-                .map(|h| h.join("Library").join("Logs").join("com.processone.fluux"))
-                .unwrap_or(dir);
-
-            dir
-        };
 
         // Ensure log directory exists
         if let Err(e) = std::fs::create_dir_all(&log_dir) {
@@ -908,13 +907,16 @@ fn main() {
                     .item(&PredefinedMenuItem::close_window(app, None)?)
                     .build()?;
 
-                // Help menu with GitHub link
+                // Help menu with GitHub link and log access
                 let github_item = MenuItem::with_id(app, "github", "Fluux Messenger on GitHub", true, None::<&str>)?;
                 let report_issue_item = MenuItem::with_id(app, "report_issue", "Report an Issue...", true, None::<&str>)?;
+                let show_logs_item = MenuItem::with_id(app, "show_logs", "Reveal Logs in Finder", true, None::<&str>)?;
 
                 let help_menu = SubmenuBuilder::new(app, "Help")
                     .item(&github_item)
                     .item(&report_issue_item)
+                    .separator()
+                    .item(&show_logs_item)
                     .build()?;
 
                 // Build and set the menu
@@ -924,7 +926,8 @@ fn main() {
 
                 app.set_menu(menu)?;
 
-                // Handle Help menu events
+                // Handle menu events
+                let log_dir_for_menu = log_dir.clone();
                 app.on_menu_event(move |app_handle, event| {
                     match event.id().as_ref() {
                         "github" => {
@@ -932,6 +935,9 @@ fn main() {
                         }
                         "report_issue" => {
                             let _ = app_handle.opener().open_url("https://github.com/processone/fluux-messenger/issues/new", None::<&str>);
+                        }
+                        "show_logs" => {
+                            let _ = app_handle.opener().reveal_item_in_dir(&log_dir_for_menu);
                         }
                         _ => {}
                     }
@@ -973,8 +979,9 @@ fn main() {
             {
                 // Create system tray menu
                 let show_item = MenuItem::with_id(app, "show", "Show Fluux", true, None::<&str>)?;
+                let show_logs_item = MenuItem::with_id(app, "show_logs", "Open Logs Folder", true, None::<&str>)?;
                 let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-                let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+                let menu = Menu::with_items(app, &[&show_item, &show_logs_item, &quit_item])?;
 
                 // Build the system tray icon
                 let _tray = TrayIconBuilder::new()
@@ -983,6 +990,7 @@ fn main() {
                     .tooltip("Fluux Messenger")
                     .on_menu_event({
                         let keepalive_flag = keepalive_flag_for_setup.clone();
+                        let log_dir_for_tray = log_dir.clone();
                         move |app, event| match event.id.as_ref() {
                             "show" => {
                                 if let Some(window) = app.get_webview_window("main") {
@@ -990,6 +998,9 @@ fn main() {
                                     let _ = window.unminimize();
                                     let _ = window.set_focus();
                                 }
+                            }
+                            "show_logs" => {
+                                let _ = app.opener().reveal_item_in_dir(&log_dir_for_tray);
                             }
                             "quit" => {
                                 // Stop the keepalive thread
