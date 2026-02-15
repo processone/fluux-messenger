@@ -626,15 +626,16 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
 
   // Get avatar for message sender:
   // 1. XEP-0398 occupant avatar (fetched from MUC presence vcard-temp:x:update)
-  // 2. Contact avatar (if occupant's real JID is in our roster)
-  // 3. Fall back to fallback avatar generation
+  // 2. Cached avatar from nickToAvatarCache (persists after occupant leaves)
+  // 3. Contact avatar (if occupant's real JID is in our roster)
+  // 4. Fall back to fallback avatar generation
   const senderBareJid = occupant?.jid
     ? getBareJid(occupant.jid)
     : room.nickToJidCache?.get(message.nick)
   const contact = senderBareJid ? contactsByJid.get(senderBareJid) : undefined
   const contactAvatar = contact?.avatar
-  // Prefer occupant's direct avatar (XEP-0398) over contact avatar
-  const senderAvatar = occupant?.avatar || contactAvatar
+  const cachedAvatar = room.nickToAvatarCache?.get(message.nick)
+  const senderAvatar = occupant?.avatar || cachedAvatar || contactAvatar
 
   // Get sender color: green for own messages, contact's pre-calculated color, or fallback to nick-based generation
   const senderColor = message.isOutgoing
@@ -686,14 +687,14 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
           avatarIdentifier: nick || 'unknown',
         }
       }
-      // Try to get avatar: XEP-0398 occupant avatar or contact avatar
+      // Try to get avatar: XEP-0398 occupant avatar, cached avatar, or contact avatar
       const occupantForReply = nick ? room.occupants.get(nick) : undefined
       const senderBareJid = occupantForReply?.jid
         ? getBareJid(occupantForReply.jid)
         : (nick ? room.nickToJidCache?.get(nick) : undefined)
       const contactAvatar = senderBareJid ? contactsByJid.get(senderBareJid)?.avatar : undefined
-      // Prefer occupant's direct avatar (XEP-0398) over contact avatar
-      const replyAvatar = occupantForReply?.avatar || contactAvatar
+      const cachedReplyAvatar = nick ? room.nickToAvatarCache?.get(nick) : undefined
+      const replyAvatar = occupantForReply?.avatar || cachedReplyAvatar || contactAvatar
       return {
         avatarUrl: replyAvatar,
         avatarIdentifier: nick || 'unknown',
