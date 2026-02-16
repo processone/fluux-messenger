@@ -100,6 +100,12 @@ function App() {
     if (status === 'online') {
       setIsAutoReconnecting(false)
       setHasBeenOnline(true)
+      // Mark that we've been online this session. LoginScreen reads this flag
+      // to detect post-disconnect transitions and trigger a webview reload
+      // (workaround for WRY losing native event delivery on macOS).
+      // Uses '__wry_' prefix so clearLocalData() won't remove it (it only
+      // clears 'fluux:' prefixed keys).
+      sessionStorage.setItem('__wry_was_online', '1')
     } else if (status === 'error' || status === 'disconnected') {
       // If we get an error or stay disconnected, check if session still exists
       // (it's cleared on connection failure in useSessionPersistence)

@@ -394,50 +394,45 @@ export class Connection extends BaseModule {
    * Disconnect from XMPP server.
    */
   async disconnect(): Promise<void> {
-    logInfo('disconnect(): starting user-initiated disconnect')
     // Signal machine: user-initiated disconnect
     this.connectionActor.send({ type: 'DISCONNECT' })
     this.clearTimers()
     this.reconnectInProgress = false
 
-    // Clear SM state - manual disconnect means fresh session next time
-    this.smPersistence.clearCache()
-    if (this.credentials?.jid) {
-      await this.smPersistence.clear(this.credentials.jid)
-    }
+    // ── Synchronous phase ──
+    // All state transitions happen BEFORE any await, so the UI sees
+    // 'disconnected' immediately and callers can safely chain cleanup
+    // (e.g. clearLocalData) without racing with async steps below.
 
-    // Flush any pending room messages to IndexedDB before disconnecting
-    // to ensure all messages received during this session are persisted
-    await flushPendingRoomMessages()
+    // Capture references needed for async cleanup before nulling them
+    const clientToStop = this.xmpp
+    const jidForSmCleanup = this.credentials?.jid
 
-    if (this.xmpp) {
-      // Save reference to prevent race condition:
-      // If connect() is called during stop(), it creates a new client.
-      // We should only null out the client we're stopping, not the new one.
-      const clientToStop = this.xmpp
+    if (clientToStop) {
       this.xmpp = null
       this.credentials = null
-      // Set status and log BEFORE stop() to prevent race with session persistence
-      this.stores.connection.setStatus('disconnected')
-      this.stores.connection.setJid(null)
-      this.stores.connection.setConnectionMethod(null)
-      this.stores.console.addEvent('Disconnected', 'connection')
-      // Emit SDK event for disconnect
-      this.deps.emitSDK('connection:status', { status: 'offline' })
-      // Flush any pending debounced SM ack before closing the stream
+    }
+
+    this.stores.connection.setStatus('disconnected')
+    this.stores.connection.setJid(null)
+    this.stores.connection.setConnectionMethod(null)
+    this.stores.console.addEvent('Disconnected', 'connection')
+    this.deps.emitSDK('connection:status', { status: 'offline' })
+
+    // ── Async cleanup phase ──
+    // SM persistence, room message flush, and XMPP stream close.
+    // Safe to run after UI has transitioned.
+
+    this.smPersistence.clearCache()
+    if (jidForSmCleanup) {
+      await this.smPersistence.clear(jidForSmCleanup)
+    }
+
+    await flushPendingRoomMessages()
+
+    if (clientToStop) {
       flushSmAckDebounce(this.smPatchState, clientToStop)
-      // Close the XMPP stream. The WS close terminates the proxy bridge naturally.
-      // The proxy stays running for future reconnects.
-      logInfo('disconnect(): calling stop() on client')
       await withTimeout(clientToStop.stop(), CLIENT_STOP_TIMEOUT_MS)
-      logInfo('disconnect(): stop() completed')
-    } else {
-      logInfo('disconnect(): no active client, setting status only')
-      this.stores.connection.setStatus('disconnected')
-      this.stores.connection.setJid(null)
-      this.stores.console.addEvent('Disconnected', 'connection')
-      // Emit SDK event for disconnect
-      this.deps.emitSDK('connection:status', { status: 'offline' })
     }
   }
 
@@ -1251,6 +1246,7 @@ export class Connection extends BaseModule {
     // Handle final offline state (only after stop() is called)
     // This is the terminal state - no reconnection will happen
     this.xmpp.on('offline', () => {
+      logInfo('Client offline event fired')
       this.emit('offline')
       // 'offline' only fires after we call stop(), so this is for cleanup only
       // All reconnection logic is handled in the 'disconnect' handler above
