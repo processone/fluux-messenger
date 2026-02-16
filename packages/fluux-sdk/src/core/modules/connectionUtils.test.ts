@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import {
   withTimeout,
+  forceDestroyClient,
   isDeadSocketError,
   CLIENT_STOP_TIMEOUT_MS,
   RECONNECT_ATTEMPT_TIMEOUT_MS,
@@ -44,6 +45,66 @@ describe('connectionUtils', () => {
       expect(isDeadSocketError('Connection refused')).toBe(false)
       expect(isDeadSocketError('timeout')).toBe(false)
       expect(isDeadSocketError('ECONNRESET')).toBe(false)
+    })
+  })
+
+  describe('forceDestroyClient', () => {
+    it('should remove all listeners and close socket via end()', () => {
+      const endFn = vi.fn()
+      const client = {
+        removeAllListeners: vi.fn(),
+        socket: { end: endFn },
+      }
+      forceDestroyClient(client)
+      expect(client.removeAllListeners).toHaveBeenCalled()
+      expect(endFn).toHaveBeenCalled()
+    })
+
+    it('should fall back to native WebSocket close()', () => {
+      const closeFn = vi.fn()
+      const client = {
+        removeAllListeners: vi.fn(),
+        socket: { socket: { close: closeFn } },
+      }
+      forceDestroyClient(client)
+      expect(client.removeAllListeners).toHaveBeenCalled()
+      expect(closeFn).toHaveBeenCalled()
+    })
+
+    it('should handle null socket gracefully', () => {
+      const client = {
+        removeAllListeners: vi.fn(),
+        socket: null,
+      }
+      expect(() => forceDestroyClient(client)).not.toThrow()
+      expect(client.removeAllListeners).toHaveBeenCalled()
+    })
+
+    it('should handle missing removeAllListeners gracefully', () => {
+      const endFn = vi.fn()
+      const client = { socket: { end: endFn } }
+      expect(() => forceDestroyClient(client)).not.toThrow()
+      expect(endFn).toHaveBeenCalled()
+    })
+
+    it('should handle end() throwing gracefully', () => {
+      const client = {
+        removeAllListeners: vi.fn(),
+        socket: {
+          end: () => { throw new Error('already closed') },
+        },
+      }
+      expect(() => forceDestroyClient(client)).not.toThrow()
+    })
+
+    it('should handle removeAllListeners throwing gracefully', () => {
+      const endFn = vi.fn()
+      const client = {
+        removeAllListeners: () => { throw new Error('broken') },
+        socket: { end: endFn },
+      }
+      expect(() => forceDestroyClient(client)).not.toThrow()
+      expect(endFn).toHaveBeenCalled()
     })
   })
 
