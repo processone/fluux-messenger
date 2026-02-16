@@ -25,6 +25,7 @@ import {
 } from '../connectionMachine'
 import {
   withTimeout,
+  forceDestroyClient,
   isDeadSocketError,
   CLIENT_STOP_TIMEOUT_MS,
   RECONNECT_ATTEMPT_TIMEOUT_MS,
@@ -654,9 +655,9 @@ export class Connection extends BaseModule {
 
     // Clear any pending SM ack debounce (socket is dead, don't try to send)
     clearSmAckDebounce(this.smPatchState)
-    // Stop the old client (fire-and-forget since socket is already dead)
+    // Forcefully destroy old client (socket is already dead, graceful stop() can hang)
     if (clientToClean) {
-      clientToClean.stop().catch(() => {})
+      forceDestroyClient(clientToClean)
     }
 
     // Start timer-driven reconnection based on machine context
@@ -719,7 +720,7 @@ export class Connection extends BaseModule {
             this.xmpp = null
             clearSmAckDebounce(this.smPatchState)
             if (clientToClean) {
-              clientToClean.stop().catch(() => {})
+              forceDestroyClient(clientToClean)
             }
             this.startReconnectTimer()
           } else {
@@ -1105,9 +1106,11 @@ export class Connection extends BaseModule {
 
         this.connectionActor.send({ type: 'SOCKET_DIED' })
 
-        // Fire-and-forget stop on old client — won't re-trigger our handlers
-        // since this.xmpp is null (stale-client guard in disconnect handler)
-        clientToClean?.stop().catch(() => {})
+        // Forcefully destroy old client — strip listeners and close socket
+        // to prevent stale events from interfering with reconnection
+        if (clientToClean) {
+          forceDestroyClient(clientToClean)
+        }
 
         this.startReconnectTimer()
       }
@@ -1400,7 +1403,7 @@ export class Connection extends BaseModule {
 
       // Clean up old client (the proxy stays running — each new WS connection
       // creates a fresh TCP/TLS connection with independent DNS resolution)
-      await this.cleanupClient()
+      this.cleanupClient()
       logInfo('attemptReconnect: old client cleaned up')
 
       // Create new client with stored credentials (proxy URL is still valid)
@@ -1457,10 +1460,15 @@ export class Connection extends BaseModule {
    * Used before reconnecting or when detecting a dead socket.
    *
    * IMPORTANT: Nulls this.xmpp FIRST to prevent race conditions where
-   * the old client fires events during stop(). This matches the pattern
+   * the old client fires events during cleanup. This matches the pattern
    * used in disconnect().
+   *
+   * Uses forceful cleanup instead of graceful stop():
+   * - Strips all event listeners to prevent stale events
+   * - Force-closes the socket without waiting for XMPP stream close
+   * - This avoids hangs when xmpp.js stop() blocks on a dead socket
    */
-  private async cleanupClient(): Promise<void> {
+  private cleanupClient(): void {
     const clientToClean = this.xmpp
     if (!clientToClean) {
       logInfo('cleanupClient: no client to clean')
@@ -1475,12 +1483,10 @@ export class Connection extends BaseModule {
     // Clear any pending SM ack debounce timer
     clearSmAckDebounce(this.smPatchState)
 
-    try {
-      await withTimeout(clientToClean.stop(), CLIENT_STOP_TIMEOUT_MS)
-      logInfo('cleanupClient: old client stopped')
-    } catch {
-      logInfo('cleanupClient: old client stop timed out or errored (ignored)')
-    }
+    // Forcefully destroy the old client
+    forceDestroyClient(clientToClean)
+
+    logInfo('cleanupClient: old client cleaned up (forceful)')
   }
 
 }
