@@ -107,128 +107,181 @@ pub struct StoredCredentials {
     pub server: Option<String>,
 }
 
-/// Save credentials to OS keychain
-#[tauri::command]
-fn save_credentials(jid: String, password: String, server: Option<String>) -> Result<(), String> {
-    let entry = Entry::new(KEYRING_SERVICE, &jid)
-        .map_err(|e| {
-            tracing::error!("Keychain: failed to create entry for {}: {}", jid, e);
-            format!("Failed to create keyring entry: {}", e)
-        })?;
-
-    let credentials = StoredCredentials { jid: jid.clone(), password, server };
-    let json = serde_json::to_string(&credentials)
-        .map_err(|e| {
-            tracing::error!("Keychain: failed to serialize credentials for {}: {}", jid, e);
-            format!("Failed to serialize credentials: {}", e)
-        })?;
-
-    entry.set_password(&json)
-        .map_err(|e| {
-            tracing::error!("Keychain: failed to save credentials for {}: {}", jid, e);
-            format!("Failed to save to keychain: {}", e)
-        })?;
-
-    // Also store the JID as the "last user" so we know which account to load
-    let last_user_entry = Entry::new(KEYRING_SERVICE, "last_user")
-        .map_err(|e| {
-            tracing::error!("Keychain: failed to create last_user entry: {}", e);
-            format!("Failed to create last_user entry: {}", e)
-        })?;
-    last_user_entry.set_password(&credentials.jid)
-        .map_err(|e| {
-            tracing::error!("Keychain: failed to save last_user: {}", e);
-            format!("Failed to save last_user: {}", e)
-        })?;
-
-    tracing::info!("Keychain: saved credentials for {}", jid);
-    Ok(())
-}
-
-/// Get credentials from OS keychain
-#[tauri::command]
-fn get_credentials() -> Result<Option<StoredCredentials>, String> {
-    // First get the last used JID
-    let last_user_entry = Entry::new(KEYRING_SERVICE, "last_user")
-        .map_err(|e| {
-            tracing::error!("Keychain: failed to create last_user entry: {}", e);
-            format!("Failed to create last_user entry: {}", e)
-        })?;
-
-    let jid = match last_user_entry.get_password() {
-        Ok(jid) => jid,
-        Err(keyring::Error::NoEntry) => {
-            tracing::debug!("Keychain: no last_user entry found");
-            return Ok(None);
-        }
-        Err(e) => {
-            tracing::error!("Keychain: failed to get last_user: {}", e);
-            return Err(format!("Failed to get last_user: {}", e));
-        }
-    };
-
-    // Now get the credentials for that JID
-    let entry = Entry::new(KEYRING_SERVICE, &jid)
-        .map_err(|e| {
-            tracing::error!("Keychain: failed to create entry for {}: {}", jid, e);
-            format!("Failed to create keyring entry: {}", e)
-        })?;
-
-    match entry.get_password() {
-        Ok(json) => {
-            let credentials: StoredCredentials = serde_json::from_str(&json)
-                .map_err(|e| {
-                    tracing::error!("Keychain: failed to parse credentials for {}: {}", jid, e);
-                    format!("Failed to parse credentials: {}", e)
-                })?;
-            tracing::info!("Keychain: loaded credentials for {}", jid);
-            Ok(Some(credentials))
-        }
-        Err(keyring::Error::NoEntry) => {
-            tracing::debug!("Keychain: no credentials found for {}", jid);
-            Ok(None)
-        }
-        Err(e) => {
-            tracing::error!("Keychain: failed to get credentials for {}: {}", jid, e);
-            Err(format!("Failed to get credentials: {}", e))
+/// Classify a keyring error into a user-friendly description.
+/// macOS wraps most keychain errors as PlatformFailure with the raw Security
+/// framework message (e.g., "User canceled the operation", "The specified item
+/// already exists in the keychain"). This function checks the error string to
+/// provide a clearer diagnosis.
+fn classify_keyring_error(e: &keyring::Error, operation: &str) -> String {
+    let msg = e.to_string();
+    if msg.contains("User canceled") || msg.contains("user canceled") {
+        format!("Keychain access denied by user during {}", operation)
+    } else if msg.contains("already exists") {
+        // This can also surface when access is denied on some macOS versions
+        format!("Keychain access conflict during {} (item may exist or access was denied)", operation)
+    } else {
+        match e {
+            keyring::Error::NoStorageAccess(_) => {
+                format!("Keychain locked or inaccessible during {}: {}", operation, msg)
+            }
+            keyring::Error::PlatformFailure(_) => {
+                format!("Keychain platform error during {}: {}", operation, msg)
+            }
+            _ => format!("Keychain error during {}: {}", operation, msg),
         }
     }
 }
 
-/// Delete credentials from OS keychain
+/// Save credentials to OS keychain.
+/// Runs on a background thread to avoid blocking the main thread when
+/// macOS shows a keychain authorization dialog.
 #[tauri::command]
-fn delete_credentials() -> Result<(), String> {
-    // Get the last used JID
-    let last_user_entry = Entry::new(KEYRING_SERVICE, "last_user")
-        .map_err(|e| {
-            tracing::error!("Keychain: failed to create last_user entry: {}", e);
-            format!("Failed to create last_user entry: {}", e)
-        })?;
-
-    if let Ok(jid) = last_user_entry.get_password() {
-        // Delete the credentials entry
+async fn save_credentials(jid: String, password: String, server: Option<String>) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
         let entry = Entry::new(KEYRING_SERVICE, &jid)
             .map_err(|e| {
                 tracing::error!("Keychain: failed to create entry for {}: {}", jid, e);
                 format!("Failed to create keyring entry: {}", e)
             })?;
-        match entry.delete_credential() {
-            Ok(()) => tracing::info!("Keychain: deleted credentials for {}", jid),
-            Err(keyring::Error::NoEntry) => tracing::debug!("Keychain: no credentials to delete for {}", jid),
-            Err(e) => tracing::warn!("Keychain: failed to delete credentials for {}: {}", jid, e),
+
+        let credentials = StoredCredentials { jid: jid.clone(), password, server };
+        let json = serde_json::to_string(&credentials)
+            .map_err(|e| {
+                tracing::error!("Keychain: failed to serialize credentials for {}: {}", jid, e);
+                format!("Failed to serialize credentials: {}", e)
+            })?;
+
+        entry.set_password(&json)
+            .map_err(|e| {
+                let desc = classify_keyring_error(&e, "save");
+                tracing::error!("Keychain: {} for {}", desc, jid);
+                desc
+            })?;
+
+        // Also store the JID as the "last user" so we know which account to load
+        let last_user_entry = Entry::new(KEYRING_SERVICE, "last_user")
+            .map_err(|e| {
+                tracing::error!("Keychain: failed to create last_user entry: {}", e);
+                format!("Failed to create last_user entry: {}", e)
+            })?;
+        last_user_entry.set_password(&credentials.jid)
+            .map_err(|e| {
+                let desc = classify_keyring_error(&e, "save last_user");
+                tracing::error!("Keychain: {} for {}", desc, jid);
+                desc
+            })?;
+
+        tracing::info!("Keychain: saved credentials for {}", jid);
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Keychain task panicked: {}", e))?
+}
+
+/// Get credentials from OS keychain.
+/// Runs on a background thread to avoid blocking the main thread when
+/// macOS shows a keychain authorization dialog.
+#[tauri::command]
+async fn get_credentials() -> Result<Option<StoredCredentials>, String> {
+    tokio::task::spawn_blocking(move || {
+        // First get the last used JID
+        let last_user_entry = Entry::new(KEYRING_SERVICE, "last_user")
+            .map_err(|e| {
+                tracing::error!("Keychain: failed to create last_user entry: {}", e);
+                format!("Failed to create last_user entry: {}", e)
+            })?;
+
+        let jid = match last_user_entry.get_password() {
+            Ok(jid) => jid,
+            Err(keyring::Error::NoEntry) => {
+                tracing::debug!("Keychain: no last_user entry found");
+                return Ok(None);
+            }
+            Err(e) => {
+                let desc = classify_keyring_error(&e, "read last_user");
+                tracing::error!("Keychain: {}", desc);
+                return Err(desc);
+            }
+        };
+
+        // Now get the credentials for that JID
+        let entry = Entry::new(KEYRING_SERVICE, &jid)
+            .map_err(|e| {
+                tracing::error!("Keychain: failed to create entry for {}: {}", jid, e);
+                format!("Failed to create keyring entry: {}", e)
+            })?;
+
+        match entry.get_password() {
+            Ok(json) => {
+                let credentials: StoredCredentials = serde_json::from_str(&json)
+                    .map_err(|e| {
+                        tracing::error!("Keychain: failed to parse credentials for {}: {}", jid, e);
+                        format!("Failed to parse credentials: {}", e)
+                    })?;
+                tracing::info!("Keychain: loaded credentials for {}", jid);
+                Ok(Some(credentials))
+            }
+            Err(keyring::Error::NoEntry) => {
+                tracing::debug!("Keychain: no credentials found for {}", jid);
+                Ok(None)
+            }
+            Err(e) => {
+                let desc = classify_keyring_error(&e, &format!("read credentials for {}", jid));
+                tracing::error!("Keychain: {}", desc);
+                Err(desc)
+            }
         }
-    } else {
-        tracing::debug!("Keychain: no last_user entry to look up for deletion");
-    }
+    })
+    .await
+    .map_err(|e| format!("Keychain task panicked: {}", e))?
+}
 
-    // Delete the last_user entry
-    match last_user_entry.delete_credential() {
-        Ok(()) => tracing::debug!("Keychain: deleted last_user entry"),
-        Err(keyring::Error::NoEntry) => tracing::debug!("Keychain: no last_user entry to delete"),
-        Err(e) => tracing::warn!("Keychain: failed to delete last_user entry: {}", e),
-    }
+/// Delete credentials from OS keychain.
+/// Runs on a background thread to avoid blocking the main thread when
+/// macOS shows a keychain authorization dialog.
+#[tauri::command]
+async fn delete_credentials() -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        // Get the last used JID
+        let last_user_entry = Entry::new(KEYRING_SERVICE, "last_user")
+            .map_err(|e| {
+                tracing::error!("Keychain: failed to create last_user entry: {}", e);
+                format!("Failed to create last_user entry: {}", e)
+            })?;
 
-    Ok(())
+        if let Ok(jid) = last_user_entry.get_password() {
+            // Delete the credentials entry
+            let entry = Entry::new(KEYRING_SERVICE, &jid)
+                .map_err(|e| {
+                    tracing::error!("Keychain: failed to create entry for {}: {}", jid, e);
+                    format!("Failed to create keyring entry: {}", e)
+                })?;
+            match entry.delete_credential() {
+                Ok(()) => tracing::info!("Keychain: deleted credentials for {}", jid),
+                Err(keyring::Error::NoEntry) => tracing::debug!("Keychain: no credentials to delete for {}", jid),
+                Err(e) => {
+                    let desc = classify_keyring_error(&e, &format!("delete credentials for {}", jid));
+                    tracing::warn!("Keychain: {}", desc);
+                }
+            }
+        } else {
+            tracing::debug!("Keychain: no last_user entry to look up for deletion");
+        }
+
+        // Delete the last_user entry
+        match last_user_entry.delete_credential() {
+            Ok(()) => tracing::debug!("Keychain: deleted last_user entry"),
+            Err(keyring::Error::NoEntry) => tracing::debug!("Keychain: no last_user entry to delete"),
+            Err(e) => {
+                let desc = classify_keyring_error(&e, "delete last_user");
+                tracing::warn!("Keychain: {}", desc);
+            }
+        }
+
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Keychain task panicked: {}", e))?
 }
 
 /// Exit the app (called by frontend after graceful disconnect)

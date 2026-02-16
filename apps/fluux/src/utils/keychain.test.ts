@@ -151,12 +151,21 @@ describe('keychain utilities', () => {
       expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
     })
 
-    it('should call invoke when in Tauri', async () => {
+    it('should call invoke when in Tauri and credentials were saved', async () => {
+      localStorage.setItem(STORAGE_KEY, 'true')
       mockInvoke.mockResolvedValue(undefined)
 
       await deleteCredentials()
 
       expect(mockInvoke).toHaveBeenCalledWith('delete_credentials')
+    })
+
+    it('should skip invoke when no credentials were saved', async () => {
+      mockInvoke.mockResolvedValue(undefined)
+
+      await deleteCredentials()
+
+      expect(mockInvoke).not.toHaveBeenCalled()
     })
 
     it('should clear localStorage flag even if invoke fails', async () => {

@@ -394,6 +394,7 @@ export class Connection extends BaseModule {
    * Disconnect from XMPP server.
    */
   async disconnect(): Promise<void> {
+    logInfo('disconnect(): starting user-initiated disconnect')
     // Signal machine: user-initiated disconnect
     this.connectionActor.send({ type: 'DISCONNECT' })
     this.clearTimers()
@@ -427,8 +428,11 @@ export class Connection extends BaseModule {
       flushSmAckDebounce(this.smPatchState, clientToStop)
       // Close the XMPP stream. The WS close terminates the proxy bridge naturally.
       // The proxy stays running for future reconnects.
+      logInfo('disconnect(): calling stop() on client')
       await withTimeout(clientToStop.stop(), CLIENT_STOP_TIMEOUT_MS)
+      logInfo('disconnect(): stop() completed')
     } else {
+      logInfo('disconnect(): no active client, setting status only')
       this.stores.connection.setStatus('disconnected')
       this.stores.connection.setJid(null)
       this.stores.console.addEvent('Disconnected', 'connection')

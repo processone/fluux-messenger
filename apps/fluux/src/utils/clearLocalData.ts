@@ -27,6 +27,8 @@ const USER_DATA_KEYS = [
  * Call on disconnect when the user opts to clean local data.
  */
 export async function clearLocalData(): Promise<void> {
+  console.log('[Fluux] clearLocalData: starting')
+
   // 1. Clear app-level sessionStorage keys
   clearSession()
 
@@ -44,16 +46,19 @@ export async function clearLocalData(): Promise<void> {
   consoleStore.getState().reset()
   adminStore.getState().reset()
   blockingStore.getState().reset()
+  console.log('[Fluux] clearLocalData: stores reset')
 
   // 4. Clear app-specific localStorage user data keys
   USER_DATA_KEYS.forEach((key) => localStorage.removeItem(key))
 
   // 5. Delete OS keychain credentials (desktop only, no-op on web)
   await deleteCredentials()
+  console.log('[Fluux] clearLocalData: keychain done')
 
   // 6. Clear IndexedDB avatar cache (blobs, hash mappings, no-avatar entries)
   //    Note: chatStore.reset() already handles clearing the message cache
   await clearAllAvatarData()
+  console.log('[Fluux] clearLocalData: complete')
 }
 
 /**
