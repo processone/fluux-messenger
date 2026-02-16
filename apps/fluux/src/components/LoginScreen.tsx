@@ -26,6 +26,28 @@ export function LoginScreen() {
   const { status, error, connect } = useConnection()
   const { dragRegionProps } = useWindowDrag()
 
+  // Workaround: On macOS, the WRY/WKWebView can lose native event delivery
+  // after large DOM changes (ChatLayout → LoginScreen). When this happens,
+  // the webview renders and runs JS, but mouse/keyboard events don't arrive —
+  // even Cmd+Opt+I (DevTools) stops working.
+  //
+  // The only reliable fix is to reload the webview, which resets WRY's native
+  // event pipeline. We detect post-disconnect transitions via a sessionStorage
+  // flag (set by App.tsx when status='online'). The key uses a '__wry_' prefix
+  // so it survives clearLocalData() which only removes 'fluux:' prefixed keys.
+  // After reload, the flag is gone (cleared here before reload) → no loop.
+  // See: https://github.com/tauri-apps/wry/issues/184
+  useEffect(() => {
+    if (!isTauri()) return
+    const flag = sessionStorage.getItem('__wry_was_online')
+    if (!flag) return
+
+    // Clear the flag before reload to prevent infinite reload loop.
+    sessionStorage.removeItem('__wry_was_online')
+    console.log('[Fluux] Reloading webview to restore native event delivery after disconnect')
+    window.location.reload()
+  }, [])
+
   const [jid, setJid] = useState('')
   const [password, setPassword] = useState('')
   const [server, setServer] = useState('')

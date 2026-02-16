@@ -139,6 +139,12 @@ html, body {
 
 #root {
   height: 100%;
+  /* Ensure the app content area is never treated as a window drag region.
+     The title bar sets -webkit-app-region:drag on its element; without this
+     counter-rule, WRY/WebKit can sometimes propagate the drag behavior to
+     the entire window after DOM re-renders (e.g., after disconnect). */
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 /* Safe area insets for mobile devices with gesture bars (e/OS, iOS, etc.) */
