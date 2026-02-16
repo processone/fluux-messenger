@@ -1,4 +1,4 @@
-name: Build & Deploy Fluux (static)
+name: Publish Live Demo to Github Pages
 
 on:
   push:
