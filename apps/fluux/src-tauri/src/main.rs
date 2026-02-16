@@ -1134,33 +1134,30 @@ fn main() {
         .expect("error while building tauri application");
 
     app.run(move |_app_handle, _event| {
+        // Handle clicking dock icon to show window again (macOS only)
         #[cfg(target_os = "macos")]
-        match &_event {
-            // Handle clicking dock icon to show window again
-            RunEvent::Reopen { .. } => {
-                if let Some(window) = _app_handle.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                }
+        if let RunEvent::Reopen { .. } = &_event {
+            if let Some(window) = _app_handle.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.set_focus();
             }
-            // Handle Command-Q or app termination: request graceful shutdown
-            RunEvent::ExitRequested { api, .. } => {
-                // Stop the keepalive thread to prevent 100% CPU on exit
-                keepalive_flag_for_run.store(false, Ordering::Relaxed);
-                // Save window state including position
-                let _ = _app_handle.save_window_state(StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED | StateFlags::FULLSCREEN);
-                // Emit event to frontend for graceful disconnect
-                let _ = _app_handle.emit("graceful-shutdown", ());
-                // Prevent immediate exit - frontend will call exit_app after disconnect
-                api.prevent_exit();
-                // Set a fallback timer to force exit after 2 seconds
-                let handle = _app_handle.clone();
-                std::thread::spawn(move || {
-                    std::thread::sleep(std::time::Duration::from_secs(2));
-                    handle.exit(0);
-                });
-            }
-            _ => {}
+        }
+        // Handle app termination: request graceful shutdown (all platforms)
+        if let RunEvent::ExitRequested { api, .. } = &_event {
+            // Stop the keepalive thread to prevent 100% CPU on exit
+            keepalive_flag_for_run.store(false, Ordering::Relaxed);
+            // Save window state including position
+            let _ = _app_handle.save_window_state(StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED | StateFlags::FULLSCREEN);
+            // Emit event to frontend for graceful disconnect
+            let _ = _app_handle.emit("graceful-shutdown", ());
+            // Prevent immediate exit - frontend will call exit_app after disconnect
+            api.prevent_exit();
+            // Set a fallback timer to force exit after 2 seconds
+            let handle = _app_handle.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(2));
+                handle.exit(0);
+            });
         }
     });
 }
