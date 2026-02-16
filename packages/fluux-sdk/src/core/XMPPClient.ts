@@ -35,6 +35,7 @@ import {
   blockingStore,
 } from '../stores'
 import { detectPlatform, getCachedPlatform } from './platform'
+import { isDeadSocketError } from './modules/connectionUtils'
 
 /**
  * Session storage key for persisting presence machine state.
@@ -1192,7 +1193,7 @@ export class XMPPClient {
       await (xmpp as any).write(xmlString)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err)
-      if (this.isDeadSocketError(errorMessage)) {
+      if (isDeadSocketError(errorMessage)) {
         this.connection.handleDeadSocket()
       }
       throw err
@@ -1366,7 +1367,7 @@ export class XMPPClient {
       await xmpp.send(stanza)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err)
-      if (this.isDeadSocketError(errorMessage)) {
+      if (isDeadSocketError(errorMessage)) {
         this.connection.handleDeadSocket()
       }
       throw err
@@ -1398,21 +1399,11 @@ export class XMPPClient {
       return await (xmpp as any).iqCaller.request(iq)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err)
-      if (this.isDeadSocketError(errorMessage)) {
+      if (isDeadSocketError(errorMessage)) {
         this.connection.handleDeadSocket()
       }
       throw err
     }
   }
 
-  private isDeadSocketError(errorMessage: string): boolean {
-    return (
-      errorMessage.includes('socket.write') ||
-      errorMessage.includes('null is not an object') ||
-      errorMessage.includes('Cannot read properties of null') ||
-      errorMessage.includes('socket is null') ||
-      errorMessage.includes('Socket not available') ||
-      errorMessage.includes('WebSocket is not open')
-    )
-  }
 }

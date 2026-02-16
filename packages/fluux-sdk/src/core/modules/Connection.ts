@@ -5,7 +5,6 @@ import type { ConnectOptions, ConnectionMethod } from '../types'
 import { getDomain, getLocalPart, getResource } from '../jid'
 import { getClientIdentity, CLIENT_FEATURES } from '../caps'
 import { NS_DISCO_INFO, NS_PING } from '../namespaces'
-import { discoverWebSocket } from '../../utils/websocketDiscovery'
 import { flushPendingRoomMessages } from '../../utils/messageCache'
 import { logInfo, logWarn, logError as logErr } from '../logger'
 import {
@@ -24,33 +23,19 @@ import {
   type ConnectionActor,
   type ConnectionStateValue,
 } from '../connectionMachine'
-
-// Timeout for graceful client stop (stream close + socket close)
-// When the socket is already dead, xmpp.js stop() can hang waiting for events
-const CLIENT_STOP_TIMEOUT_MS = 2000
-
-// Timeout for a single reconnection attempt (proxy restart + XMPP negotiation).
-// If xmpp.js hangs during connection negotiation (e.g., the WebSocket connects
-// but XMPP stream negotiation stalls), this ensures the attempt is abandoned
-// and the next retry can begin.
-const RECONNECT_ATTEMPT_TIMEOUT_MS = 30_000
-
-// Timeout for proxy adapter restart during reconnection.
-// After a WiFi switch, the proxy's TCP connection attempt may hang waiting for
-// DNS resolution on the old network. This ensures we fail fast and fall through
-// to the WebSocket fallback.
-const PROXY_RESTART_TIMEOUT_MS = 10_000
-
-/**
- * Race a promise against a timeout. Resolves with void if the timeout fires first.
- * Used to prevent hanging on xmpp.js stop() when the socket is already dead.
- */
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | void> {
-  return Promise.race([
-    promise,
-    new Promise<void>((resolve) => setTimeout(resolve, ms)),
-  ])
-}
+import {
+  withTimeout,
+  isDeadSocketError,
+  CLIENT_STOP_TIMEOUT_MS,
+  RECONNECT_ATTEMPT_TIMEOUT_MS,
+} from './connectionUtils'
+import {
+  shouldSkipDiscovery,
+  getWebSocketUrl,
+  resolveWebSocketUrl,
+} from './serverResolution'
+import { SmPersistence } from './smPersistence'
+import { ProxyManager } from './proxyManager'
 
 // Dev-only error logging (checks Vite dev mode, excludes test mode)
 const isDev = (() => {
@@ -119,22 +104,16 @@ export class Connection extends BaseModule {
    */
   private connectionActor: ConnectionActor
 
-  // Original server string before proxy resolution (e.g. "process-one.net", "tls://host:5223")
-  // Needed to restart the proxy on reconnect — credentials.server holds the resolved local WS URL
-  private originalServer: string = ''
-
-  // Resolved endpoint from proxy (e.g. "tls://chat.example.com:5223")
-  // Used on reconnect to skip SRV resolution which may return different results after DNS cache flush
-  private resolvedEndpoint: string | null = null
+  // Proxy lifecycle manager (start / restart / stop with fallback chain)
+  private proxyManager: ProxyManager
 
   // Track SM resume state to properly handle 'fail' events
   // Stanzas in queue BEFORE resume should report as lost
   // Stanzas sent AFTER resume are normal sends that failed for other reasons
   private smResumeCompleted = false
 
-  // Cached SM state - survives socket death for reconnection
-  // Updated when SM is enabled/resumed, cleared on manual disconnect
-  private cachedSmState: { id: string; inbound: number } | null = null
+  // SM state persistence (cache + storage)
+  private smPersistence: SmPersistence
 
   // SM patches state (ack debounce timer + original send reference)
   // See smPatches.ts for implementation details
@@ -159,6 +138,24 @@ export class Connection extends BaseModule {
 
   constructor(deps: ModuleDependencies) {
     super(deps)
+
+    // Create proxy manager
+    this.proxyManager = new ProxyManager({
+      proxyAdapter: deps.proxyAdapter,
+      console: { addEvent: (msg, cat) => this.stores.console.addEvent(msg, cat) },
+    })
+
+    // Create SM persistence helper
+    this.smPersistence = new SmPersistence({
+      storageAdapter: deps.storageAdapter,
+      getJoinedRooms: () => (this.stores.room.joinedRooms() ?? []).map(room => ({
+        jid: room.jid,
+        nickname: room.nickname,
+        password: room.password,
+        autojoin: room.autojoin,
+      })),
+      console: { addEvent: (msg, cat) => this.stores.console.addEvent(msg, cat) },
+    })
 
     // Create and start the connection state machine actor
     this.connectionActor = createActor(connectionMachine).start()
@@ -224,114 +221,20 @@ export class Connection extends BaseModule {
     return this.connectionActor.getSnapshot().value as ConnectionStateValue
   }
 
-  // ============================================================================
-  // Session State Persistence (via StorageAdapter)
-  // ============================================================================
-
-  /**
-   * Persist SM state to storage for session resumption across page reloads.
-   * Called whenever cachedSmState is updated.
-   * @internal
-   */
-  private async persistSmState(): Promise<void> {
-    if (!this.storageAdapter || !this.cachedSmState || !this.credentials?.jid) {
-      return
-    }
-    try {
-      // Include joined rooms for fallback rejoin if SM resumption fails
-      const joinedRooms = (this.stores.room.joinedRooms() ?? []).map(room => ({
-        jid: room.jid,
-        nickname: room.nickname,
-        password: room.password,
-        autojoin: room.autojoin,
-      }))
-
-      await this.storageAdapter.setSessionState(this.credentials.jid, {
-        smId: this.cachedSmState.id,
-        smInbound: this.cachedSmState.inbound,
-        resource: this.credentials.resource || '',
-        timestamp: Date.now(),
-        joinedRooms,
-      })
-    } catch {
-      // Storage errors are non-fatal - silently ignore
-    }
-  }
-
-  /**
-   * Load SM state from storage.
-   * @internal
-   */
-  private async loadSmStateFromStorage(jid: string): Promise<{
-    smState: { id: string; inbound: number } | null
-    joinedRooms: Array<{ jid: string; nickname: string; password?: string; autojoin?: boolean }>
-  }> {
-    if (!this.storageAdapter) {
-      return { smState: null, joinedRooms: [] }
-    }
-    try {
-      const state = await this.storageAdapter.getSessionState(jid)
-      if (state) {
-        // Check if state is stale (> 10 minutes old - typical SM timeout)
-        const SM_TIMEOUT = 10 * 60 * 1000 // 10 minutes
-        if (Date.now() - state.timestamp > SM_TIMEOUT) {
-          await this.storageAdapter.clearSessionState(jid)
-          // SM state is stale, but joined rooms are still useful for rejoin
-          return { smState: null, joinedRooms: state.joinedRooms ?? [] }
-        }
-        return {
-          smState: {
-            id: state.smId,
-            inbound: state.smInbound,
-          },
-          joinedRooms: state.joinedRooms ?? [],
-        }
-      }
-    } catch {
-      // Storage errors are non-fatal
-    }
-    return { smState: null, joinedRooms: [] }
-  }
-
-  /**
-   * Clear SM state from storage.
-   * Called on manual disconnect.
-   * @internal
-   */
-  private async clearSmStateFromStorage(): Promise<void> {
-    if (!this.storageAdapter || !this.credentials?.jid) {
-      return
-    }
-    try {
-      await this.storageAdapter.clearSessionState(this.credentials.jid)
-    } catch {
-      // Storage errors are non-fatal
-    }
-  }
-
   /**
    * Persist current SM state to storage synchronously.
    * Call this before page unload to capture the latest inbound counter.
    *
-   * @remarks
-   * The SM inbound counter is updated on each received stanza. To ensure
-   * session resumption works correctly after page reload, call this method
-   * in a beforeunload handler to capture the latest value.
-   *
-   * Also persists the list of currently joined rooms, so that if SM resumption
-   * fails after page reload, those rooms can be rejoined.
-   *
-   * This is a public wrapper around the internal persistSmState method.
-   * It uses synchronous storage (sessionStorage.setItem) to ensure the
-   * write completes before the page unloads.
+   * Uses synchronous sessionStorage write to ensure the write completes
+   * before the page unloads. Also persists joined rooms for fallback rejoin.
    */
   persistSmStateNow(): void {
-    if (!this.storageAdapter || !this.cachedSmState || !this.credentials?.jid) {
-      return
-    }
+    if (!this.credentials?.jid) return
 
-    // Get list of currently joined rooms for fallback rejoin if SM resumption fails
-    // Filter out quickchat rooms - they're transient and won't exist after everyone leaves
+    // Get latest SM state from live client (updates cache)
+    this.smPersistence.getState(this.xmpp)
+
+    // Filter out quickchat rooms — they're transient and won't exist after everyone leaves
     const joinedRooms = (this.stores.room.joinedRooms() ?? [])
       .filter(room => !room.isQuickChat)
       .map(room => ({
@@ -341,21 +244,7 @@ export class Connection extends BaseModule {
         autojoin: room.autojoin,
       }))
 
-    // Use synchronous storage write for beforeunload reliability
-    // The async persistSmState() may not complete before unload
-    const state = {
-      smId: this.cachedSmState.id,
-      smInbound: this.cachedSmState.inbound,
-      resource: this.credentials.resource || '',
-      timestamp: Date.now(),
-      joinedRooms,
-    }
-    try {
-      // Direct synchronous write for beforeunload
-      sessionStorage.setItem(`fluux:session:${this.credentials.jid}`, JSON.stringify(state))
-    } catch {
-      // Storage errors are non-fatal
-    }
+    this.smPersistence.persistNow(this.credentials.jid, this.credentials.resource || '', joinedRooms)
   }
 
   /**
@@ -415,59 +304,36 @@ export class Connection extends BaseModule {
     const userProvidedWebSocketUrl = server.startsWith('ws://') || server.startsWith('wss://')
     // tls:// and tcp:// URIs are explicit server specs for the proxy (not WebSocket URLs)
     const isExplicitTcpUri = server.startsWith('tls://') || server.startsWith('tcp://')
-    const hasProxy = !!this.deps.proxyAdapter
-    const useProxy = hasProxy && !userProvidedWebSocketUrl
+    const useProxy = this.proxyManager.hasProxy && !userProvidedWebSocketUrl
 
     // Debug logging
     this.stores.console.addEvent(
-      `Connection setup: hasProxy=${hasProxy}, userProvidedWebSocketUrl=${userProvidedWebSocketUrl}, isExplicitTcpUri=${isExplicitTcpUri}, server="${server}"`,
+      `Connection setup: hasProxy=${this.proxyManager.hasProxy}, userProvidedWebSocketUrl=${userProvidedWebSocketUrl}, isExplicitTcpUri=${isExplicitTcpUri}, server="${server}"`,
       'connection'
     )
 
     // Resolve server URL:
-    // - With proxy adapter: pass server string to proxy (handles URI parsing + SRV)
+    // - With proxy adapter: delegate to ProxyManager (handles URI parsing, SRV, fallback)
     // - Without proxy or explicit WebSocket URL: Perform WebSocket URL resolution
-    // Note: tls:// and tcp:// URIs are treated as proxy targets, not WebSocket URLs
     let resolvedServer: string
     let connectionMethod: ConnectionMethod = 'websocket'
     if (useProxy) {
-      // Proxy mode: pass server string as-is (proxy parses URI formats and does SRV)
-      resolvedServer = server || getDomain(jid)
-      this.stores.console.addEvent(`Proxy mode: using "${resolvedServer}" for proxy`, 'connection')
+      // Proxy mode: ProxyManager handles start with WebSocket fallback
+      this.proxyManager.setOriginalServer(server || getDomain(jid))
+      const result = await this.proxyManager.startForConnect(server, getDomain(jid), skipDiscovery)
+      resolvedServer = result.server
+      connectionMethod = result.connectionMethod
     } else if (isExplicitTcpUri) {
       // tls:// or tcp:// URI without proxy — not usable, fall back to domain
       this.stores.console.addEvent(`TCP URI "${server}" not usable without proxy, falling back to WebSocket discovery`, 'connection')
-      resolvedServer = this.shouldSkipDiscovery('', skipDiscovery)
-        ? this.getWebSocketUrl('', getDomain(jid))
-        : await this.resolveWebSocketUrl('', getDomain(jid))
+      resolvedServer = shouldSkipDiscovery('', skipDiscovery)
+        ? getWebSocketUrl('', getDomain(jid))
+        : await resolveWebSocketUrl('', getDomain(jid), this.stores.console)
     } else {
       // WebSocket mode: resolve WebSocket URL via discovery
-      resolvedServer = this.shouldSkipDiscovery(server, skipDiscovery)
-        ? this.getWebSocketUrl(server, getDomain(jid))
-        : await this.resolveWebSocketUrl(server, getDomain(jid))
-    }
-
-    // Start proxy if available
-    if (useProxy) {
-      this.stores.console.addEvent(`Starting proxy for: ${resolvedServer}`, 'connection')
-      try {
-        const proxyResult = await this.deps.proxyAdapter!.startProxy(resolvedServer)
-
-        resolvedServer = proxyResult.url
-        connectionMethod = proxyResult.connectionMethod
-        this.resolvedEndpoint = proxyResult.resolvedEndpoint ?? null
-        this.stores.console.addEvent(`Proxy started: ${server || getDomain(jid)} via ${proxyResult.url} (${connectionMethod})`, 'connection')
-      } catch (err) {
-        // If proxy fails to start, fall back to WebSocket connection
-        const errorMsg = err instanceof Error ? err.message : String(err)
-        this.stores.console.addEvent(`Failed to start proxy: ${errorMsg}, falling back to WebSocket`, 'error')
-        connectionMethod = 'websocket'
-        // Resolve proper WebSocket URL for fallback (resolvedServer is currently the raw domain)
-        const domain = getDomain(jid)
-        resolvedServer = this.shouldSkipDiscovery(server, skipDiscovery)
-          ? this.getWebSocketUrl(server, domain)
-          : await this.resolveWebSocketUrl(server, domain)
-      }
+      resolvedServer = shouldSkipDiscovery(server, skipDiscovery)
+        ? getWebSocketUrl(server, getDomain(jid))
+        : await resolveWebSocketUrl(server, getDomain(jid), this.stores.console)
     }
 
     // Store connection method for display
@@ -475,14 +341,14 @@ export class Connection extends BaseModule {
 
     // Store credentials for potential reconnection (with resolved URL)
     this.credentials = { jid, password, server: resolvedServer, resource, lang, disableSmKeepalive }
-    this.originalServer = server || getDomain(jid)
+    this.proxyManager.setOriginalServer(server || getDomain(jid))
 
     // Load SM state and joined rooms from storage if not provided (for session resumption across page reloads)
     // Note: Only await if storage adapter exists to avoid blocking tests using fake timers
     let effectiveSmState = smState
     let effectiveJoinedRooms = previouslyJoinedRooms
     if (this.storageAdapter) {
-      const storedState = await this.loadSmStateFromStorage(jid)
+      const storedState = await this.smPersistence.load(jid)
       if (!effectiveSmState && storedState.smState) {
         effectiveSmState = storedState.smState
         this.stores.console.addEvent('Loaded SM state from storage for session resumption', 'sm')
@@ -534,11 +400,11 @@ export class Connection extends BaseModule {
     this.clearTimers()
     this.reconnectInProgress = false
 
-    // Clear cached SM state - manual disconnect means fresh session next time
-    this.cachedSmState = null
-
-    // Clear SM state from storage (do this before nulling credentials since we need the JID)
-    await this.clearSmStateFromStorage()
+    // Clear SM state - manual disconnect means fresh session next time
+    this.smPersistence.clearCache()
+    if (this.credentials?.jid) {
+      await this.smPersistence.clear(this.credentials.jid)
+    }
 
     // Flush any pending room messages to IndexedDB before disconnecting
     // to ensure all messages received during this session are persisted
@@ -551,8 +417,7 @@ export class Connection extends BaseModule {
       const clientToStop = this.xmpp
       this.xmpp = null
       this.credentials = null
-      this.originalServer = ''
-      this.resolvedEndpoint = null
+      this.proxyManager.reset()
       // Set status and log BEFORE stop() to prevent race with session persistence
       this.stores.connection.setStatus('disconnected')
       this.stores.connection.setJid(null)
@@ -577,10 +442,7 @@ export class Connection extends BaseModule {
     // Stop the proxy AFTER the XMPP stream is closed (fire-and-forget).
     // The stream close already went through the proxy above, so this just
     // cleans up the listener. No need to await — avoid blocking on IPC.
-    if (this.deps.proxyAdapter) {
-      this.deps.proxyAdapter.stopProxy().catch(() => {})
-      this.stores.console.addEvent('Stopped proxy', 'connection')
-    }
+    this.proxyManager.stop()
   }
 
   /**
@@ -633,21 +495,7 @@ export class Connection extends BaseModule {
    * whenever SM is enabled or resumed.
    */
   getStreamManagementState(): { id: string; inbound: number } | null {
-    // Try to get live state from the xmpp client
-    if (this.xmpp?.streamManagement) {
-      const sm = this.xmpp.streamManagement as any
-      if (sm.id) {
-        // Update cache with latest state
-        this.cachedSmState = {
-          id: sm.id,
-          inbound: sm.inbound || 0,
-        }
-        return this.cachedSmState
-      }
-    }
-
-    // Fall back to cached state (survives socket death)
-    return this.cachedSmState
+    return this.smPersistence.getState(this.xmpp)
   }
 
   /**
@@ -714,7 +562,7 @@ export class Connection extends BaseModule {
       return true
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err)
-      if (this.isDeadSocketError(errorMessage) || errorMessage.includes('timeout')) {
+      if (isDeadSocketError(errorMessage) || errorMessage.includes('timeout')) {
         this.connectionActor.send({ type: 'VERIFY_FAILED' })
         this.handleDeadSocket()
       }
@@ -930,74 +778,6 @@ export class Connection extends BaseModule {
   // ==================== Private Methods ====================
 
   /**
-   * Check if WebSocket discovery should be skipped.
-   * Returns true if:
-   * - skipDiscovery option is explicitly set
-   * - server is already a WebSocket URL (no discovery needed)
-   */
-  private shouldSkipDiscovery(server: string, skipDiscovery?: boolean): boolean {
-    return skipDiscovery === true || server.startsWith('ws://') || server.startsWith('wss://')
-  }
-
-  /**
-   * Get WebSocket URL synchronously (used when discovery is skipped).
-   * Returns the server if it's already a WebSocket URL, otherwise constructs default URL.
-   */
-  private getWebSocketUrl(server: string, domain: string): string {
-    if (server.startsWith('ws://') || server.startsWith('wss://')) {
-      return server
-    }
-    return `wss://${server || domain}/ws`
-  }
-
-  /**
-   * Resolve WebSocket URL for a server via XEP-0156 discovery.
-   *
-   * Attempts discovery on the domain and falls back to default URL if discovery fails.
-   * Note: This method is only called when discovery is NOT skipped.
-   *
-   * @param server - Server parameter (domain name)
-   * @param domain - XMPP domain from the JID (used for discovery)
-   * @returns Resolved WebSocket URL
-   */
-  private async resolveWebSocketUrl(server: string, domain: string): Promise<string> {
-    // The server parameter might be a domain - attempt XEP-0156 discovery
-    // Use the JID domain for discovery (more reliable than server param)
-    const discoveryDomain = server || domain
-
-    this.stores.console.addEvent(
-      `Attempting XEP-0156 WebSocket discovery for ${discoveryDomain}...`,
-      'connection'
-    )
-
-    try {
-      const discoveredUrl = await discoverWebSocket(discoveryDomain, 5000)
-      if (discoveredUrl) {
-        this.stores.console.addEvent(
-          `XEP-0156 discovery successful: ${discoveredUrl}`,
-          'connection'
-        )
-        return discoveredUrl
-      }
-    } catch (err) {
-      // Discovery failed - will use fallback
-      const errorMsg = err instanceof Error ? err.message : String(err)
-      this.stores.console.addEvent(
-        `XEP-0156 discovery failed: ${errorMsg}`,
-        'connection'
-      )
-    }
-
-    // Fall back to default URL pattern
-    const fallbackUrl = `wss://${discoveryDomain}/ws`
-    this.stores.console.addEvent(
-      `Using default WebSocket URL: ${fallbackUrl}`,
-      'connection'
-    )
-    return fallbackUrl
-  }
-
-  /**
    * Create an xmpp.js client instance with the given options.
    * Centralizes client creation for both initial connect and reconnect.
    *
@@ -1120,12 +900,11 @@ export class Connection extends BaseModule {
         this.smResumeCompleted = true
         // Cache SM state for reconnection (survives socket death)
         if (sm.id) {
-          this.cachedSmState = {
-            id: sm.id,
-            inbound: sm.inbound || 0,
-          }
+          this.smPersistence.updateCache(sm.id, sm.inbound || 0)
           // Persist to storage for session resumption across page reloads
-          void this.persistSmState()
+          if (this.credentials?.jid) {
+            void this.smPersistence.persist(this.credentials.jid, this.credentials.resource || '')
+          }
         }
       })
       // SM session successfully resumed (from xmpp.js plugin)
@@ -1136,12 +915,11 @@ export class Connection extends BaseModule {
         this.smResumeCompleted = true
         // Update cached SM state (survives socket death for next reconnection)
         if (sm.id) {
-          this.cachedSmState = {
-            id: sm.id,
-            inbound: sm.inbound || 0,
-          }
+          this.smPersistence.updateCache(sm.id, sm.inbound || 0)
           // Persist to storage for session resumption across page reloads
-          void this.persistSmState()
+          if (this.credentials?.jid) {
+            void this.smPersistence.persist(this.credentials.jid, this.credentials.resource || '')
+          }
         }
         handleResult(true)
       })
@@ -1174,12 +952,11 @@ export class Connection extends BaseModule {
         this.stores.console.addEvent(`Stream Management session resumed (id: ${previd.slice(0, 8)}...)`, 'sm')
 
         // Update cached SM state (survives socket death for next reconnection)
-        this.cachedSmState = {
-          id: previd,
-          inbound: inbound,
-        }
+        this.smPersistence.updateCache(previd, inbound)
         // Persist to storage for session resumption across page reloads
-        void this.persistSmState()
+        if (this.credentials?.jid) {
+          void this.smPersistence.persist(this.credentials.jid, this.credentials.resource || '')
+        }
 
         // Delay to run after xmpp.js's SM plugin finishes processing
         setTimeout(() => {
@@ -1382,7 +1159,7 @@ export class Connection extends BaseModule {
           // with code 1006 typically means the OS firewall blocked the connection
           // to the local proxy listener (common on Windows first launch).
           const proxyServer = this.credentials?.server ?? ''
-          const isProxyMode = !!this.deps.proxyAdapter
+          const isProxyMode = this.proxyManager.hasProxy
             && (proxyServer.startsWith('ws://127.0.0.1:') || proxyServer.startsWith('ws://[::1]:'))
           const isAbnormalClose = rawReason && typeof rawReason === 'object' && 'code' in rawReason
             && (rawReason as { code: number }).code === 1006
@@ -1396,7 +1173,7 @@ export class Connection extends BaseModule {
           }
           this.stores.connection.setError(errorMsg)
           this.stores.console.addEvent('Initial connection failed (no auto-reconnect)', 'connection')
-          console.warn(`[XMPP] Initial connection failed (clean: ${wasClean}, reason: ${reason || 'unknown'}). Server: ${this.originalServer || 'unknown'}`)
+          console.warn(`[XMPP] Initial connection failed (clean: ${wasClean}, reason: ${reason || 'unknown'}). Server: ${this.proxyManager.getOriginalServer() || 'unknown'}`)
           // Clear credentials so login form shows fresh
           this.credentials = null
         }
@@ -1588,63 +1365,13 @@ export class Connection extends BaseModule {
       // Restart the proxy if available
       // The proxy must be restarted with the original server string (not the local WS URL)
       // because the previous proxy's TCP connection to the XMPP server is dead
-      const userProvidedWebSocketUrl = this.originalServer.startsWith('ws://') || this.originalServer.startsWith('wss://')
+      const originalServer = this.proxyManager.getOriginalServer()
+      const userProvidedWebSocketUrl = originalServer.startsWith('ws://') || originalServer.startsWith('wss://')
 
-      if (this.deps.proxyAdapter && !userProvidedWebSocketUrl) {
-        try {
-          // Stop the old proxy first (if still running)
-          try { await this.deps.proxyAdapter.stopProxy() } catch { /* may not be running */ }
-          // Prefer cached resolved endpoint to skip SRV re-resolution
-          // (SRV may return different results after DNS cache flush, e.g. after system sleep)
-          const proxyServer = this.resolvedEndpoint || this.originalServer
-          const proxyResult = await Promise.race([
-            this.deps.proxyAdapter.startProxy(proxyServer),
-            new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error('Proxy restart timed out')), PROXY_RESTART_TIMEOUT_MS)
-            ),
-          ])
-          this.credentials.server = proxyResult.url
-          this.stores.connection.setConnectionMethod(proxyResult.connectionMethod)
-          this.resolvedEndpoint = proxyResult.resolvedEndpoint ?? null
-          this.stores.console.addEvent(
-            `Proxy restarted for reconnect: ${proxyResult.url} (${proxyResult.connectionMethod}) [endpoint: ${proxyServer}]`,
-            'connection'
-          )
-        } catch (err) {
-          const errorMsg = err instanceof Error ? err.message : String(err)
-          // If reconnect with cached endpoint failed, retry with original server (fresh SRV)
-          if (this.resolvedEndpoint) {
-            this.stores.console.addEvent(
-              `Cached endpoint failed: ${errorMsg}, retrying with SRV resolution`,
-              'connection'
-            )
-            this.resolvedEndpoint = null
-            try {
-              const proxyResult = await Promise.race([
-                this.deps.proxyAdapter.startProxy(this.originalServer),
-                new Promise<never>((_, reject) =>
-                  setTimeout(() => reject(new Error('Proxy restart timed out (SRV fallback)')), PROXY_RESTART_TIMEOUT_MS)
-                ),
-              ])
-              this.credentials.server = proxyResult.url
-              this.stores.connection.setConnectionMethod(proxyResult.connectionMethod)
-              this.resolvedEndpoint = proxyResult.resolvedEndpoint ?? null
-              this.stores.console.addEvent(
-                `Proxy restarted via SRV fallback: ${proxyResult.url} (${proxyResult.connectionMethod})`,
-                'connection'
-              )
-            } catch (fallbackErr) {
-              const fallbackMsg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)
-              this.stores.console.addEvent(`Failed to restart proxy on reconnect: ${fallbackMsg}`, 'error')
-              this.credentials.server = `wss://${getDomain(this.credentials.jid)}/ws`
-              this.stores.connection.setConnectionMethod('websocket')
-            }
-          } else {
-            this.stores.console.addEvent(`Failed to restart proxy on reconnect: ${errorMsg}`, 'error')
-            this.credentials.server = `wss://${getDomain(this.credentials.jid)}/ws`
-            this.stores.connection.setConnectionMethod('websocket')
-          }
-        }
+      if (this.proxyManager.hasProxy && !userProvidedWebSocketUrl) {
+        const result = await this.proxyManager.restartForReconnect(getDomain(this.credentials.jid))
+        this.credentials.server = result.server
+        this.stores.connection.setConnectionMethod(result.connectionMethod)
       }
 
       // Create new client with stored credentials (server may have been updated by proxy restart)
@@ -1720,19 +1447,4 @@ export class Connection extends BaseModule {
     }
   }
 
-  /**
-   * Check if an error indicates a dead WebSocket connection.
-   * This can happen after system sleep when the socket dies silently.
-   */
-  private isDeadSocketError(errorMessage: string): boolean {
-    // Common dead socket error patterns
-    return (
-      errorMessage.includes('socket.write') ||
-      errorMessage.includes('null is not an object') ||
-      errorMessage.includes('Cannot read properties of null') ||
-      errorMessage.includes('socket is null') ||
-      errorMessage.includes('Socket not available') ||
-      errorMessage.includes('WebSocket is not open')
-    )
-  }
 }
