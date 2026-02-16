@@ -4,9 +4,9 @@ import LanguageDetector from 'i18next-browser-languagedetector'
 import resourcesToBackend from 'i18next-resources-to-backend'
 
 export const supportedLanguages = [
-  'bg', 'ca', 'cs', 'da', 'de', 'el', 'en', 'es', 'et', 'fi', 'fr',
+  'be', 'bg', 'ca', 'cs', 'da', 'de', 'el', 'en', 'es', 'et', 'fi', 'fr',
   'ga', 'hr', 'hu', 'is', 'it', 'lt', 'lv', 'mt', 'nb', 'nl',
-  'pl', 'pt', 'ro', 'sk', 'sl', 'sv',
+  'pl', 'pt', 'ro', 'ru', 'sk', 'sl', 'sv', 'uk',
 ] as const
 
 i18n
