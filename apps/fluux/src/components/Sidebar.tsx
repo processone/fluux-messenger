@@ -79,7 +79,18 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
   // Use focused selectors instead of useConnection() to avoid re-renders when unrelated values change
   // (e.g., ownResources updates shouldn't re-render the entire sidebar)
   const jid = useConnectionStore((s) => s.jid)
-  const status = useConnectionStore((s) => s.status)
+  const rawStatus = useConnectionStore((s) => s.status)
+
+  // Suppress brief 'verifying' flashes: only show verifying status after a 2s delay.
+  // This avoids distracting orange flickers during routine connection checks.
+  const [status, setStatus] = useState(rawStatus)
+  useEffect(() => {
+    if (rawStatus === 'verifying') {
+      const timer = setTimeout(() => setStatus('verifying'), 2000)
+      return () => clearTimeout(timer)
+    }
+    setStatus(rawStatus)
+  }, [rawStatus])
   const reconnectAttempt = useConnectionStore((s) => s.reconnectAttempt)
   const reconnectTargetTime = useConnectionStore((s) => s.reconnectTargetTime)
   const ownAvatar = useConnectionStore((s) => s.ownAvatar)
