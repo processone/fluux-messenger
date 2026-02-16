@@ -69,6 +69,17 @@ interface MAMModifications {
 }
 
 /**
+ * Modifications that could not be applied to messages within the current MAM page.
+ * These target messages already in the store/cache and need to be emitted as events.
+ */
+interface UnresolvedModifications {
+  retractions: { targetId: string; from: string }[]
+  corrections: { targetId: string; from: string; body: string; messageEl: Element }[]
+  fastenings: { targetId: string; applyToEl: Element }[]
+  reactions: { targetId: string; from: string; emojis: string[] }[]
+}
+
+/**
  * Message Archive Management (XEP-0313) module.
  *
  * Retrieves archived messages from the server's message archive for both
@@ -190,7 +201,10 @@ export class MAM extends BaseModule {
           const { complete, rsm } = this.parseMAMResponse(response)
 
           // Apply modifications to collected messages
-          this.applyModifications(collectedMessages, modifications, (msg, from) => msg.from === from)
+          const unresolved = this.applyModifications(collectedMessages, modifications, (msg, from) => msg.from === from)
+
+          // Emit modifications targeting messages already in the store (from prior queries/cache)
+          this.emitUnresolvedChatModifications(conversationId, unresolved)
 
           allMessages.push(...collectedMessages)
           isComplete = complete
@@ -324,7 +338,10 @@ export class MAM extends BaseModule {
           const { complete, rsm } = this.parseMAMResponse(response)
 
           // Apply modifications to collected messages (full JID comparison for rooms)
-          this.applyModifications(collectedMessages, modifications, (msg, from) => msg.from === from)
+          const unresolved = this.applyModifications(collectedMessages, modifications, (msg, from) => msg.from === from)
+
+          // Emit modifications targeting messages already in the store (from prior queries/cache)
+          this.emitUnresolvedRoomModifications(roomJid, unresolved)
 
           // Emit each page's messages immediately so the store can update incrementally
           const direction = isForward ? 'forward' : 'backward'
@@ -1083,7 +1100,14 @@ export class MAM extends BaseModule {
     messages: T[],
     modifications: MAMModifications,
     senderMatches: (msg: T, from: string) => boolean
-  ): void {
+  ): UnresolvedModifications {
+    const unresolved: UnresolvedModifications = {
+      retractions: [],
+      corrections: [],
+      fastenings: [],
+      reactions: [],
+    }
+
     // Apply retractions
     for (const retraction of modifications.retractions) {
       const target = messages.find(m => m.id === retraction.targetId || m.stanzaId === retraction.targetId)
@@ -1093,6 +1117,8 @@ export class MAM extends BaseModule {
           target.isRetracted = retractionData.isRetracted
           target.retractedAt = retractionData.retractedAt
         }
+      } else {
+        unresolved.retractions.push(retraction)
       }
     }
 
@@ -1111,6 +1137,8 @@ export class MAM extends BaseModule {
         if (correctionData.attachment) {
           target.attachment = correctionData.attachment
         }
+      } else if (!target) {
+        unresolved.corrections.push(correction)
       }
     }
 
@@ -1122,6 +1150,8 @@ export class MAM extends BaseModule {
         if (linkPreview) {
           target.linkPreview = linkPreview
         }
+      } else {
+        unresolved.fastenings.push(fastening)
       }
     }
 
@@ -1157,7 +1187,111 @@ export class MAM extends BaseModule {
         if (Object.keys(target.reactions).length === 0) {
           target.reactions = undefined
         }
+      } else {
+        unresolved.reactions.push(reaction)
       }
+    }
+
+    return unresolved
+  }
+
+  /**
+   * Emit unresolved chat modifications as store events.
+   * These target messages already in the store (from previous queries or cache).
+   */
+  private emitUnresolvedChatModifications(
+    conversationId: string,
+    unresolved: UnresolvedModifications
+  ): void {
+    for (const retraction of unresolved.retractions) {
+      this.deps.emitSDK('chat:message-updated', {
+        conversationId,
+        messageId: retraction.targetId,
+        updates: { isRetracted: true, retractedAt: new Date() },
+      })
+    }
+
+    for (const correction of unresolved.corrections) {
+      const correctionData = applyCorrection(correction.messageEl, correction.body, '')
+      this.deps.emitSDK('chat:message-updated', {
+        conversationId,
+        messageId: correction.targetId,
+        updates: {
+          body: correctionData.body,
+          isEdited: correctionData.isEdited,
+          ...(correctionData.attachment ? { attachment: correctionData.attachment } : {}),
+        },
+      })
+    }
+
+    for (const fastening of unresolved.fastenings) {
+      const linkPreview = parseOgpFastening(fastening.applyToEl)
+      if (linkPreview) {
+        this.deps.emitSDK('chat:message-updated', {
+          conversationId,
+          messageId: fastening.targetId,
+          updates: { linkPreview },
+        })
+      }
+    }
+
+    for (const reaction of unresolved.reactions) {
+      this.deps.emitSDK('chat:reactions', {
+        conversationId,
+        messageId: reaction.targetId,
+        reactorJid: reaction.from,
+        emojis: reaction.emojis,
+      })
+    }
+  }
+
+  /**
+   * Emit unresolved room modifications as store events.
+   * These target messages already in the store (from previous queries or cache).
+   */
+  private emitUnresolvedRoomModifications(
+    roomJid: string,
+    unresolved: UnresolvedModifications
+  ): void {
+    for (const retraction of unresolved.retractions) {
+      this.deps.emitSDK('room:message-updated', {
+        roomJid,
+        messageId: retraction.targetId,
+        updates: { isRetracted: true, retractedAt: new Date() },
+      })
+    }
+
+    for (const correction of unresolved.corrections) {
+      const correctionData = applyCorrection(correction.messageEl, correction.body, '')
+      this.deps.emitSDK('room:message-updated', {
+        roomJid,
+        messageId: correction.targetId,
+        updates: {
+          body: correctionData.body,
+          isEdited: correctionData.isEdited,
+          ...(correctionData.attachment ? { attachment: correctionData.attachment } : {}),
+        },
+      })
+    }
+
+    for (const fastening of unresolved.fastenings) {
+      const linkPreview = parseOgpFastening(fastening.applyToEl)
+      if (linkPreview) {
+        this.deps.emitSDK('room:message-updated', {
+          roomJid,
+          messageId: fastening.targetId,
+          updates: { linkPreview },
+        })
+      }
+    }
+
+    for (const reaction of unresolved.reactions) {
+      this.deps.emitSDK('room:reactions', {
+        roomJid,
+        messageId: reaction.targetId,
+        reactorNick: getResource(reaction.from) || reaction.from,
+        emojis: reaction.emojis,
+      })
     }
   }
 
