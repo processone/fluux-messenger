@@ -28,6 +28,9 @@ let pendingNavigation: PendingNavigation | null = null
 // Time window (ms) to consider a pending navigation valid after app activation
 const NOTIFICATION_CLICK_WINDOW = 3000
 
+// Module-level flag to check permission only once per session
+let permissionChecked = false
+
 /**
  * Hook to show desktop notifications for new messages and room mentions.
  * - Requests permission on mount (after login)
@@ -87,6 +90,10 @@ export function useDesktopNotifications(): void {
   useEffect(() => {
     if (status !== 'online') return
 
+    if (permissionChecked) {
+      return
+    }
+
     const requestNotificationPermission = async () => {
       try {
         if (isTauri) {
@@ -116,6 +123,7 @@ export function useDesktopNotifications(): void {
             console.log('[Notifications] Permission request result:', permission)
           }
         }
+        permissionChecked = true
       } catch (error) {
         console.error('[Notifications] Error requesting permission:', error)
       }

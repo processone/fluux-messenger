@@ -10,6 +10,9 @@ import {
 // Check if we're running in Tauri (v2 uses __TAURI_INTERNALS__)
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
+// Module-level flag to check permission only once per session
+let permissionChecked = false
+
 /**
  * Hook to show desktop notifications for new events (subscription requests).
  * - Requests permission on mount (after login)
@@ -26,6 +29,10 @@ export function useEventsDesktopNotifications(): void {
   // Request notification permission when connected
   useEffect(() => {
     if (status !== 'online') return
+
+    if (permissionChecked) {
+      return
+    }
 
     const requestNotificationPermission = async () => {
       try {
@@ -53,6 +60,7 @@ export function useEventsDesktopNotifications(): void {
             console.log('[EventsNotifications] Permission request result:', permission)
           }
         }
+        permissionChecked = true
       } catch (error) {
         console.error('[EventsNotifications] Error requesting permission:', error)
       }
