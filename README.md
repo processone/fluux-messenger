@@ -4,14 +4,16 @@
 
 # Fluux Messenger
 
-[![Release](https://img.shields.io/github/v/release/processone/fluux-messenger)](https://github.com/processone/fluux-messenger/releases)
-[![Downloads](https://img.shields.io/github/downloads/processone/fluux-messenger/total)](https://github.com/processone/fluux-messenger/releases)
-[![Repo Size](https://img.shields.io/github/repo-size/processone/ejabberd)](https://github.com/processone/fluux-messenger/releases)
+[![Release](https://img.shields.io/github/v/release/processone/fluux-messenger?logo=github)](https://github.com/processone/fluux-messenger/releases)
+[![Downloads](https://img.shields.io/github/downloads/processone/fluux-messenger/total?logo=files&logoColor=white)](https://github.com/processone/fluux-messenger/releases)
+[![Repo Size](https://img.shields.io/github/repo-size/processone/fluux-messenger?logo=github&logoColor=white)](https://github.com/processone/fluux-messenger)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg?logo=opensourceinitiative&logoColor=white)](https://www.gnu.org/licenses/agpl-3.0)
 [![Build Status](https://github.com/processone/fluux-messenger/workflows/CI/badge.svg)](https://github.com/processone/fluux-messenger/actions)
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?logo=git&logoColor=white)](CONTRIBUTING.md)
 
 *A modern, cross-platform XMPP client for communities and organizations*
+
+[![Try the Live Demo](https://img.shields.io/badge/🚀_Try_the_Live_Demo-demo.fluux.io-2ea44f?style=for-the-badge)](https://demo.fluux.io)
 
 </div>
 
