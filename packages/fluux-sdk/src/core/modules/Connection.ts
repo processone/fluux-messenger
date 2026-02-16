@@ -149,6 +149,9 @@ export class Connection extends BaseModule {
   // Callback for stanza routing
   private onStanza?: (stanza: Element) => void
 
+  // Mutex to prevent concurrent attemptReconnect() calls
+  private reconnectInProgress = false
+
   // Convenience accessors
   protected get stores() { return this.deps.stores! }
   protected get emit() { return this.deps.emit }
@@ -529,6 +532,7 @@ export class Connection extends BaseModule {
     // Signal machine: user-initiated disconnect
     this.connectionActor.send({ type: 'DISCONNECT' })
     this.clearTimers()
+    this.reconnectInProgress = false
 
     // Clear cached SM state - manual disconnect means fresh session next time
     this.cachedSmState = null
@@ -584,6 +588,7 @@ export class Connection extends BaseModule {
    */
   cancelReconnect(): void {
     this.clearTimers()
+    this.reconnectInProgress = false
     // Signal machine: cancel reconnect → transitions to disconnected
     this.connectionActor.send({ type: 'CANCEL_RECONNECT' })
   }
@@ -734,6 +739,7 @@ export class Connection extends BaseModule {
       const cleanup = (timeoutId: ReturnType<typeof setTimeout>) => {
         clearTimeout(timeoutId)
         ;(this.xmpp as any)?.off?.('nonza', handleNonza)
+        ;(this.xmpp as any)?.off?.('disconnect', handleDisconnect)
       }
 
       // Listen for <a/> nonza - defined as a hoisted function for cleanup reference
@@ -745,13 +751,24 @@ export class Connection extends BaseModule {
         }
       }
 
+      // Abort immediately if socket disconnects during verification
+      const handleDisconnect = () => {
+        if (!resolved) {
+          resolved = true
+          cleanup(timeoutId)
+          resolve(false)
+        }
+      }
+
       ;(this.xmpp as any)?.on?.('nonza', handleNonza)
+      ;(this.xmpp as any)?.on?.('disconnect', handleDisconnect)
 
       // Timeout - must be set up before send() to be in scope for cleanup
       const timeoutId = setTimeout(() => {
         if (!resolved) {
           resolved = true
           ;(this.xmpp as any)?.off?.('nonza', handleNonza)
+          ;(this.xmpp as any)?.off?.('disconnect', handleDisconnect)
           resolve(false)
         }
       }, timeoutMs)
@@ -870,11 +887,10 @@ export class Connection extends BaseModule {
             // Short sleep — verify connection health
             this.stores.console.addEvent(`System state: ${state}, verifying connection`, 'connection')
             const isHealthy = await this.verifyConnection()
-            if (!isHealthy) {
+            if (!isHealthy && !this.isInReconnectingState()) {
+              // Only trigger reconnection if the disconnect handler hasn't already done so
+              // during the async verifyConnection() await
               this.stores.console.addEvent('Connection dead after wake, reconnecting...', 'connection')
-              // verifyConnection() already sent VERIFY_FAILED and called handleDeadSocket
-              // internally on timeout/error. But if xmpp was null, it returns false
-              // without triggering reconnect. Ensure reconnection is triggered.
               this.handleDeadSocket()
             }
           }
@@ -1194,6 +1210,16 @@ export class Connection extends BaseModule {
       onError(err)
     })
 
+    // Handle disconnect during connection handshake.
+    // If the socket closes before 'online' or 'error' fires (e.g., proxy TCP
+    // connect failed, network not ready after wake), reject immediately instead
+    // of waiting for the 30s reconnect attempt timeout.
+    ;(this.xmpp as any).on('disconnect', () => {
+      if (resolved) return
+      resolved = true
+      onError(new Error('Socket disconnected during connection handshake'))
+    })
+
     this.xmpp.start().catch((err: Error) => {
       if (resolved) return
       resolved = true
@@ -1389,6 +1415,17 @@ export class Connection extends BaseModule {
         // Unexpected disconnect while connected — send SOCKET_DIED to trigger reconnect
         this.stores.console.addEvent('Connection lost unexpectedly, will reconnect', 'connection')
         this.connectionActor.send({ type: 'SOCKET_DIED' })
+
+        // Null the client reference synchronously to prevent race conditions:
+        // - verifyConnection() may be awaiting and will see xmpp=null, returning false fast
+        // - attemptReconnect() won't try to check status of dead client
+        const clientToClean = this.xmpp
+        this.xmpp = null
+        clearSmAckDebounce(this.smPatchState)
+        if (clientToClean) {
+          clientToClean.stop().catch(() => {})
+        }
+
         this.startReconnectTimer()
       }
     })
@@ -1510,6 +1547,13 @@ export class Connection extends BaseModule {
     if (!this.credentials || !this.isInReconnectingState()) {
       return
     }
+
+    // Prevent concurrent reconnect attempts (e.g., timer + triggerReconnect racing)
+    if (this.reconnectInProgress) {
+      this.stores.console.addEvent('Reconnect attempt already in progress, skipping', 'connection')
+      return
+    }
+    this.reconnectInProgress = true
 
     // Defensive check: verify xmpp.js client is not already online.
     // This shouldn't happen in normal flow, but guards against edge cases.
@@ -1646,6 +1690,8 @@ export class Connection extends BaseModule {
       }
       // If machine went to terminal.maxRetries, no more timers needed
       // (the subscription will sync the error status to the store)
+    } finally {
+      this.reconnectInProgress = false
     }
   }
 

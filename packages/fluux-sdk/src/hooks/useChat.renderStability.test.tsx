@@ -9,7 +9,6 @@ import { chatStore } from '../stores'
 import {
   wrapper,
   useRenderCount,
-  createConversation,
   createMessage,
   generateConversations,
 } from './renderStability.helpers'

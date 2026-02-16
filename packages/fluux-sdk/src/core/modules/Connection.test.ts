@@ -224,7 +224,7 @@ describe('XMPPClient Connection', () => {
 
       // Should be in reconnecting state
       expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
-      expect(mockStores.connection.setReconnectState).toHaveBeenCalledWith(1, 1) // attempt 1, 1 second
+      expect(mockStores.connection.setReconnectState).toHaveBeenCalledWith(1, expect.any(Number)) // attempt 1, target time
     })
 
     it('should not reconnect after manual disconnect', async () => {
@@ -665,7 +665,7 @@ describe('XMPPClient Connection', () => {
 
       // First disconnect - attempt 1
       mockXmppClientInstance._emit('disconnect', { clean: false })
-      expect(mockStores.connection.setReconnectState).toHaveBeenCalledWith(1, 1) // 1s delay
+      expect(mockStores.connection.setReconnectState).toHaveBeenCalledWith(1, expect.any(Number)) // attempt 1, target time
 
       // Simulate failed reconnect by making start() reject
       mockXmppClientInstance = createMockXmppClient()
@@ -680,7 +680,7 @@ describe('XMPPClient Connection', () => {
       await vi.advanceTimersByTimeAsync(0)
 
       // Second attempt should have 2s delay
-      expect(mockStores.connection.setReconnectState).toHaveBeenCalledWith(2, 2)
+      expect(mockStores.connection.setReconnectState).toHaveBeenCalledWith(2, expect.any(Number)) // attempt 2, target time
     })
 
     it('should reset attempt counter on successful reconnection', async () => {
@@ -1814,6 +1814,209 @@ describe('XMPPClient Connection', () => {
 
       // Should verify (status set to verifying)
       expect(mockStores.connection.setStatus).toHaveBeenCalledWith('verifying')
+    })
+  })
+
+  // ── Wake-from-sleep reconnection regression tests ─────────────────────────
+  // These tests verify the fixes for the 30-second freeze that occurred when
+  // reconnecting after system wake. The root causes were:
+  // 1. Missing disconnect handler in setupConnectionHandlers (30s hang)
+  // 2. Stale this.xmpp reference after unexpected disconnect
+  // 3. No mutex on concurrent attemptReconnect calls
+
+  describe('wake-from-sleep reconnection', () => {
+    beforeEach(async () => {
+      // Set up a connected client with SM enabled
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+      mockStores.connection.getStatus.mockReturnValue('online')
+      mockStores.connection.setStatus.mockClear()
+      mockStores.console.addEvent.mockClear()
+      mockClientFactory.mockClear()
+    })
+
+    it('should not hang when new socket disconnects during XMPP handshake', async () => {
+      // Simulate unexpected disconnect (bridge died during sleep)
+      mockXmppClientInstance._emit('disconnect', { clean: true, reason: { code: 1000, reason: 'Bridge closed' } })
+
+      // Reconnect timer scheduled (attempt 1, 1s delay)
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
+
+      // Prepare new mock client for reconnect attempt
+      const reconnectClient = createMockXmppClient()
+      mockClientFactory._setInstance(reconnectClient)
+
+      // Advance timer to trigger reconnect
+      await vi.advanceTimersByTimeAsync(1000)
+
+      // New client should have been created
+      expect(mockClientFactory).toHaveBeenCalledTimes(1)
+
+      // Simulate: new WebSocket connects but XMPP server TCP connect fails,
+      // so proxy closes the WebSocket immediately. Neither 'online' nor 'error'
+      // fires — only 'disconnect'. Without Fix 1, this would hang for 30s.
+      reconnectClient._emit('disconnect', { clean: false })
+
+      // Allow error handling to propagate
+      await vi.advanceTimersByTimeAsync(0)
+
+      // Should have logged the handshake disconnect as a failure
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        expect.stringContaining('Socket disconnected during connection handshake'),
+        'error'
+      )
+
+      // Should schedule another reconnect attempt (not stuck forever)
+      expect(mockStores.connection.setReconnectState).toHaveBeenCalledWith(2, expect.any(Number))
+    })
+
+    it('should null xmpp reference on unexpected disconnect to prevent stale operations', async () => {
+      // Add SM to enable verification path
+      mockXmppClientInstance.streamManagement = {
+        id: 'sm-123',
+        inbound: 5,
+        outbound: 0,
+        enabled: true,
+        on: vi.fn(),
+      }
+
+      // Start wake verification (sends SM <r/> request)
+      // Don't resolve SM ack — simulate dead socket
+      mockXmppClientInstance.send.mockImplementationOnce(() => {
+        // Send succeeds (buffered) but no ack will come
+        return Promise.resolve()
+      })
+
+      const notifyPromise = xmppClient.notifySystemState('awake')
+
+      // Before verify timeout, the bridge close frame arrives
+      mockXmppClientInstance._emit('disconnect', { clean: true, reason: { code: 1000, reason: 'Bridge closed' } })
+
+      // The disconnect handler should have:
+      // 1. Sent SOCKET_DIED to machine
+      // 2. Nulled this.xmpp (Fix 2)
+      // 3. Started reconnect timer
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
+
+      // Complete the verify (it should return false quickly since xmpp is now null)
+      // Without Fix 2, the verify would hang for 10s waiting for SM ack on dead socket.
+      // With Fix 2, xmpp is null so verify returns false immediately.
+      await vi.advanceTimersByTimeAsync(0)
+      await notifyPromise
+
+      // The reconnect timer should be running (not stuck in verification loop)
+      // Verify by advancing timer and confirming a reconnect attempt is made
+      const reconnectClient = createMockXmppClient()
+      mockClientFactory._setInstance(reconnectClient)
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockClientFactory).toHaveBeenCalled()
+    })
+
+    it('should prevent concurrent reconnect attempts via mutex', async () => {
+      // Trigger unexpected disconnect to enter reconnecting state
+      mockXmppClientInstance._emit('disconnect', { clean: false })
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
+
+      // Prepare mock client for reconnect
+      const reconnectClient = createMockXmppClient()
+      // Make start() hang (simulate slow connection)
+      reconnectClient.start = vi.fn().mockReturnValue(new Promise(() => {}))
+      mockClientFactory._setInstance(reconnectClient)
+
+      // Advance timer to trigger first reconnect attempt
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockClientFactory).toHaveBeenCalledTimes(1)
+
+      // Now call triggerReconnect() while the first attempt is still in progress
+      // (simulates app becoming visible while reconnecting)
+      mockClientFactory.mockClear()
+      xmppClient.triggerReconnect()
+
+      // Should NOT create another client — mutex prevents concurrent attempts
+      expect(mockClientFactory).not.toHaveBeenCalled()
+
+      // Verify the skip was logged
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        expect.stringContaining('already in progress'),
+        'connection'
+      )
+    })
+
+    it('should handle full overnight sleep sequence (bridge closed hours ago)', async () => {
+      // Step 1: Bridge watchdog closes connection during sleep
+      // The WebSocket close frame is queued (JS runtime is suspended)
+      // Step 2: System wakes — both the close frame and wake event arrive
+
+      // Simulate the close frame arriving first (within same tick as wake)
+      mockXmppClientInstance._emit('disconnect', { clean: true, reason: { code: 1000, reason: 'Bridge closed' } })
+
+      // Machine enters reconnecting state
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
+
+      // Prepare mock for reconnect BEFORE calling notifySystemState,
+      // because triggerReconnect() fires attemptReconnect() synchronously
+      const reconnectClient = createMockXmppClient()
+      mockClientFactory._setInstance(reconnectClient)
+
+      // Now the wake event fires with a long sleep duration (8 hours)
+      // Since we're already in reconnecting state, this should triggerReconnect
+      const eightHoursMs = 8 * 60 * 60 * 1000
+      await xmppClient.notifySystemState('awake', eightHoursMs)
+
+      // Should log the immediate reconnect trigger
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        expect.stringContaining('triggering immediate reconnect'),
+        'connection'
+      )
+
+      // Allow the async attemptReconnect to progress (cleanupClient, createXmppClient, start)
+      await vi.advanceTimersByTimeAsync(100)
+
+      // The triggerReconnect should have started attemptReconnect
+      expect(mockClientFactory).toHaveBeenCalledTimes(1)
+
+      // Simulate successful reconnection on the new client
+      reconnectClient._emit('online')
+      await vi.advanceTimersByTimeAsync(100)
+
+      // Machine should have received CONNECTION_SUCCESS → connected.healthy
+      const statusCalls = vi.mocked(mockStores.connection.setStatus).mock.calls.map(c => c[0])
+      expect(statusCalls).toContain('online')
+    })
+
+    it('should abort SM ack verification immediately when socket disconnects', async () => {
+      // Add SM for verification path
+      mockXmppClientInstance.streamManagement = {
+        id: 'sm-123',
+        inbound: 5,
+        outbound: 0,
+        enabled: true,
+        on: vi.fn(),
+      }
+
+      // Mock send to succeed (buffered) but never get an ack
+      mockXmppClientInstance.send.mockImplementation(() => Promise.resolve())
+
+      // Start verification
+      const verifyPromise = xmppClient.verifyConnection()
+
+      // Socket disconnects during verification (bridge closed)
+      mockXmppClientInstance._emit('disconnect', { clean: true })
+
+      // Verification should resolve false immediately (not wait 10s)
+      const startTime = Date.now()
+      const result = await verifyPromise
+      const elapsed = Date.now() - startTime
+
+      expect(result).toBe(false)
+      // Should resolve nearly instantly, not after the 10s timeout
+      expect(elapsed).toBeLessThan(1000)
     })
   })
 })
