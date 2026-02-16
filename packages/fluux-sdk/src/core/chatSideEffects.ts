@@ -79,7 +79,7 @@ export function setupChatSideEffects(
     // The MAM module will also emit mam-loading=true, but that's idempotent.
     chatStore.getState().setMAMLoading(conversationId, true)
 
-    logInfo(`Chat: starting MAM sync for ${getDomain(conversationId) || '*'}@...`)
+    logInfo(`Chat: starting MAM sync for ...@${getDomain(conversationId) || '*'}`)
 
     try {
       // Load IndexedDB cache first to ensure we have the latest messages
@@ -134,7 +134,7 @@ export function setupChatSideEffects(
         return
       }
 
-      logInfo(`Chat: switched to conversation ${getDomain(activeConversationId) || '*'}@...`)
+      logInfo(`Chat: switched to conversation ...@${getDomain(activeConversationId) || '*'}`)
 
       const conversation = chatStore.getState().conversations.get(activeConversationId)
       if (!conversation || conversation.type !== 'chat') {
