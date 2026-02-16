@@ -128,9 +128,6 @@ export class MAM extends BaseModule {
     const { with: withJid, max = 50, before = '', start, end } = options
     const conversationId = getBareJid(withJid)
     const mamStart = Date.now()
-    const direction = start ? 'forward' : 'backward'
-
-    logInfo(`MAM query: ...@${getDomain(conversationId) || '*'}, max=${max}, ${direction}${start ? ` from ${start}` : ''}`)
 
     // Track total messages across automatic pagination
     const allMessages: Message[] = []
@@ -186,6 +183,9 @@ export class MAM extends BaseModule {
         }
 
         try {
+          if (page === 0) {
+            logInfo(`MAM query: ...@${getDomain(conversationId) || '*'}, max=${max}, ${start ? 'forward' : 'backward'}${start ? ` from ${start}` : ''}`)
+          }
           const response = await this.deps.sendIQ(iq)
           const { complete, rsm } = this.parseMAMResponse(response)
 
@@ -261,7 +261,6 @@ export class MAM extends BaseModule {
     const { roomJid, max = 50, before, after, start } = options
     const roomMamStart = Date.now()
     const roomDirection = start ? 'forward' : 'backward'
-    logInfo(`Room MAM query: ${roomJid}, max=${max}, ${roomDirection}${start ? ` from ${start}` : ''}`)
     const queryId = `mam_${generateUUID()}`
 
     // Room MAM doesn't need a 'with' filter - we query the room's archive directly
@@ -305,6 +304,7 @@ export class MAM extends BaseModule {
     this.deps.emitSDK('room:mam-loading', { roomJid, isLoading: true })
 
     try {
+      logInfo(`Room MAM query: ${roomJid}, max=${max}, ${roomDirection}${start ? ` from ${start}` : ''}`)
       const response = await this.deps.sendIQ(iq)
       const { complete, rsm } = this.parseMAMResponse(response)
 
