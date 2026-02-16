@@ -1063,9 +1063,10 @@ export class Connection extends BaseModule {
       }
     })
 
-    // Handle stream errors (including resource conflict)
+    // Handle stream errors (including resource conflict and server shutdown)
     this.xmpp.on('error', (err: Error) => {
       const message = err.message?.toLowerCase() || ''
+      logInfo(`Stream error: ${message}`)
 
       // Detect resource conflict (another client logged in with same resource)
       if (message.includes('conflict')) {
@@ -1086,6 +1087,29 @@ export class Connection extends BaseModule {
         this.stores.console.addEvent('Disconnected: Authentication error', 'error')
         console.error('[XMPP] Authentication failed: not-authorized')
         this.credentials = null
+      } else if (message.includes('system-shutdown') || message.includes('reset')) {
+        // Server is restarting — proactively clean up and reconnect.
+        // xmpp.js calls disconnect() fire-and-forget on stream errors, which creates
+        // a complex race with the incoming <close/> frame. By handling the error here,
+        // we null the client reference immediately, preventing the disconnect handler
+        // from firing when xmpp.js's own disconnect() completes later.
+        this.stores.console.addEvent('Server restarting (system-shutdown), will reconnect', 'connection')
+        logInfo('Server restart detected (system-shutdown), initiating proactive reconnect')
+
+        // Notify disconnect handler (for presence machine, etc.)
+        this.onDisconnect?.()
+
+        const clientToClean = this.xmpp
+        this.xmpp = null
+        clearSmAckDebounce(this.smPatchState)
+
+        this.connectionActor.send({ type: 'SOCKET_DIED' })
+
+        // Fire-and-forget stop on old client — won't re-trigger our handlers
+        // since this.xmpp is null (stale-client guard in disconnect handler)
+        clientToClean?.stop().catch(() => {})
+
+        this.startReconnectTimer()
       }
     })
 
@@ -1099,6 +1123,13 @@ export class Connection extends BaseModule {
     // inherit the 'disconnect' event from @types/xmpp__connection's StatusEvents.
     // The event is documented and works at runtime. A fix should be submitted to:
     // https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/xmpp__client
+    //
+    // Capture current client reference for stale-client detection.
+    // When the error handler (e.g., system-shutdown) nulls this.xmpp and starts
+    // reconnection, the old client's async disconnect() still fires 'disconnect'
+    // events. Without this guard, those stale events would interfere with the
+    // reconnect already in progress.
+    const registeredClient = this.xmpp
     ;(this.xmpp as any).on('disconnect', (context: { clean: boolean; reason?: unknown }) => {
       const wasClean = context?.clean ?? false
       // Extract close code for file log diagnostics
@@ -1114,6 +1145,16 @@ export class Connection extends BaseModule {
         'connection'
       )
 
+      // Guard: ignore events from clients that have been replaced or cleaned up.
+      // This happens when the error handler (system-shutdown, etc.) already nulled
+      // this.xmpp and started reconnection — the old client's async disconnect()
+      // fires 'disconnect' later, but we must not act on it.
+      if (this.xmpp !== registeredClient) {
+        logInfo('Disconnect from stale client, ignoring')
+        this.stores.console.addEvent('Socket closed (stale client, ignoring)', 'connection')
+        return
+      }
+
       // Notify disconnect handler (for presence machine, etc.)
       // Skip during reconnection - we're not truly disconnected, just cycling the socket
       if (!this.isInReconnectingState()) {
@@ -1124,6 +1165,7 @@ export class Connection extends BaseModule {
       // Terminal states (conflict, auth) and disconnected state are already handled
       // by the error handler or disconnect() method above.
       const machineState = this.getMachineState()
+      logInfo(`Disconnect handler: machineState=${JSON.stringify(machineState)}`)
 
       if (machineState === 'disconnected') {
         // Manual disconnect - will transition to offline via stop()
@@ -1182,17 +1224,18 @@ export class Connection extends BaseModule {
       } else {
         // Unexpected disconnect while connected — send SOCKET_DIED to trigger reconnect
         this.stores.console.addEvent('Connection lost unexpectedly, will reconnect', 'connection')
+        logInfo('Unexpected disconnect, initiating reconnect')
         this.connectionActor.send({ type: 'SOCKET_DIED' })
 
         // Null the client reference synchronously to prevent race conditions:
         // - verifyConnection() may be awaiting and will see xmpp=null, returning false fast
         // - attemptReconnect() won't try to check status of dead client
-        const clientToClean = this.xmpp
         this.xmpp = null
         clearSmAckDebounce(this.smPatchState)
-        if (clientToClean) {
-          clientToClean.stop().catch(() => {})
-        }
+        // Don't call stop() on the old client — it's already cleaning itself up
+        // via xmpp.js's own disconnect(). Calling stop() triggers a second disconnect()
+        // on the same client, causing duplicate state transitions and event emissions
+        // that can saturate the main thread and prevent the reconnect timer from firing.
 
         this.startReconnectTimer()
       }
@@ -1297,6 +1340,7 @@ export class Connection extends BaseModule {
     // No interval needed here — the machine already set the target time.
 
     this.reconnectTimeout = setTimeout(() => {
+      logInfo('Reconnect timer fired')
       // Signal machine: timer expired → transitions to reconnecting.attempting
       this.connectionActor.send({ type: 'RETRY_TIMER_EXPIRED' })
       void this.attemptReconnect()
@@ -1311,14 +1355,18 @@ export class Connection extends BaseModule {
    * (e.g., during sleep) and the connection state may have changed.
    */
   private async attemptReconnect(): Promise<void> {
+    logInfo('attemptReconnect: starting')
+
     // Guard: only attempt if machine is still in reconnecting state
     if (!this.credentials || !this.isInReconnectingState()) {
+      logInfo('attemptReconnect: guard failed (no credentials or not in reconnecting state)')
       return
     }
 
     // Prevent concurrent reconnect attempts (e.g., timer + triggerReconnect racing)
     if (this.reconnectInProgress) {
       this.stores.console.addEvent('Reconnect attempt already in progress, skipping', 'connection')
+      logInfo('attemptReconnect: already in progress, skipping')
       return
     }
     this.reconnectInProgress = true
@@ -1353,11 +1401,13 @@ export class Connection extends BaseModule {
       // Clean up old client (the proxy stays running — each new WS connection
       // creates a fresh TCP/TLS connection with independent DNS resolution)
       await this.cleanupClient()
+      logInfo('attemptReconnect: old client cleaned up')
 
       // Create new client with stored credentials (proxy URL is still valid)
       this.xmpp = this.createXmppClient(this.credentials)
       this.hydrateStreamManagement(smState ?? undefined)
       this.setupHandlers()
+      logInfo('attemptReconnect: new client created, calling start()')
 
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => {
@@ -1412,7 +1462,12 @@ export class Connection extends BaseModule {
    */
   private async cleanupClient(): Promise<void> {
     const clientToClean = this.xmpp
-    if (!clientToClean) return
+    if (!clientToClean) {
+      logInfo('cleanupClient: no client to clean')
+      return
+    }
+
+    logInfo('cleanupClient: stopping old client')
 
     // Null the reference FIRST to prevent race conditions
     this.xmpp = null
@@ -1422,8 +1477,9 @@ export class Connection extends BaseModule {
 
     try {
       await withTimeout(clientToClean.stop(), CLIENT_STOP_TIMEOUT_MS)
+      logInfo('cleanupClient: old client stopped')
     } catch {
-      // Ignore stop errors during cleanup
+      logInfo('cleanupClient: old client stop timed out or errored (ignored)')
     }
   }
 
