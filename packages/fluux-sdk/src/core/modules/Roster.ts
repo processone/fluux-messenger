@@ -204,9 +204,10 @@ export class Roster extends BaseModule {
         }
       } else if (!isSelfPresence) {
         if (photo) {
-          // Contact has XEP-0153 avatar hash - only emit if hash changed
+          // Contact has XEP-0153 avatar hash - emit if hash changed OR avatar blob is missing
+          // (blob can be missing when hash was restored from cache but blob was evicted)
           const contact = this.deps.stores?.roster.getContact(bareFrom)
-          if (contact?.avatarHash !== photo) {
+          if (contact?.avatarHash !== photo || !contact?.avatar) {
             this.deps.emit('avatarMetadataUpdate', bareFrom, photo)
           }
         } else {
