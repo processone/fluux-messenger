@@ -838,6 +838,12 @@ fn main() {
                         console.warn = function() { origWarn.apply(console, arguments); forward('warn', arguments); };
                         console.error = function() { origError.apply(console, arguments); forward('error', arguments); };
                         console.debug = function() { origDebug.apply(console, arguments); forward('debug', arguments); };
+                        window.addEventListener('error', function(e) {
+                            if (e.target !== window && e.target.tagName) {
+                                var src = e.target.src || e.target.href || '(unknown)';
+                                forward('error', ['Failed to load resource: ' + e.target.tagName.toLowerCase() + ' ' + src]);
+                            }
+                        }, true);
                     })();
                 "#);
             }
