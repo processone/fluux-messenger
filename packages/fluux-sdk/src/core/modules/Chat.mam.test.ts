@@ -13,6 +13,7 @@ import {
   type MockXmppClient,
   type MockStoreBindings,
 } from '../test-utils'
+import { generateStableMessageId } from '../../utils/uuid'
 
 let mockXmppClientInstance: MockXmppClient
 
@@ -3265,6 +3266,240 @@ describe('XMPPClient MAM', () => {
         message: expect.stringContaining('Fetching missed messages for 1 joined room(s)'),
         category: 'sm'
       })
+    })
+  })
+
+  describe('stable message ID for messages without id attribute (issue #117)', () => {
+    it('should generate stable IDs for chat MAM messages without id attribute', async () => {
+      // IMPORTANT: Set up capture BEFORE connectClient() so we capture the listener
+      let stanzaListener: ((stanza: any) => void) | null = null
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') {
+          stanzaListener = listener as (stanza: any) => void
+        }
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+
+      await connectClient()
+
+      const mamResponse = createMockElement('iq', { type: 'result' }, [
+        {
+          name: 'fin',
+          attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' },
+          children: [
+            {
+              name: 'set',
+              attrs: { xmlns: 'http://jabber.org/protocol/rsm' },
+              children: [
+                { name: 'first', attrs: { index: '0' }, text: 'archive-no-id-1' },
+                { name: 'last', text: 'archive-no-id-1' },
+                { name: 'count', text: '1' },
+              ],
+            },
+          ],
+        },
+      ])
+
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockImplementation(async (iq) => {
+        const queryChild = iq.children?.find((c: any) => c.name === 'query')
+        const actualQueryId = queryChild?.attrs?.queryid || 'test'
+
+        if (stanzaListener) {
+          // Message WITHOUT id attribute (like from IRC bridges via Biboumi)
+          const msg = createMockElement('message', { from: 'example.com' }, [
+            {
+              name: 'result',
+              attrs: { xmlns: 'urn:xmpp:mam:2', queryid: actualQueryId, id: 'archive-no-id-1' },
+              children: [
+                {
+                  name: 'forwarded',
+                  attrs: { xmlns: 'urn:xmpp:forward:0' },
+                  children: [
+                    {
+                      name: 'delay',
+                      attrs: { xmlns: 'urn:xmpp:delay', stamp: '2024-01-15T10:00:00Z' },
+                    },
+                    {
+                      // No 'id' attribute on this message — typical for IRC-bridged messages
+                      name: 'message',
+                      attrs: { from: 'alice@example.com/resource', to: 'me@example.com', type: 'chat' },
+                      children: [
+                        { name: 'body', text: 'Hello from IRC!' },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ])
+          stanzaListener(msg)
+        }
+        return mamResponse
+      })
+
+      vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com/myresource')
+
+      // Query MAM twice — same message should get the same stable ID
+      const result1 = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+      const result2 = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+
+      expect(result1.messages.length).toBe(1)
+      expect(result2.messages.length).toBe(1)
+
+      // The ID should be deterministic (stable), not random
+      const expectedId = generateStableMessageId(
+        'alice@example.com/resource',
+        '2024-01-15T10:00:00.000Z',
+        'Hello from IRC!'
+      )
+      expect(result1.messages[0].id).toBe(expectedId)
+      expect(result1.messages[0].id).toMatch(/^stable-/)
+
+      // Same message queried again should produce the exact same ID (deduplication)
+      expect(result1.messages[0].id).toBe(result2.messages[0].id)
+    })
+
+    it('should use MAM archive ID as stanzaId fallback when message has no stanza-id element', async () => {
+      let stanzaListener: ((stanza: any) => void) | null = null
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') {
+          stanzaListener = listener as (stanza: any) => void
+        }
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+
+      await connectClient()
+
+      const mamResponse = createMockElement('iq', { type: 'result' }, [
+        {
+          name: 'fin',
+          attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' },
+          children: [
+            {
+              name: 'set',
+              attrs: { xmlns: 'http://jabber.org/protocol/rsm' },
+              children: [
+                { name: 'first', attrs: { index: '0' }, text: 'mam-archive-uuid-123' },
+                { name: 'last', text: 'mam-archive-uuid-123' },
+                { name: 'count', text: '1' },
+              ],
+            },
+          ],
+        },
+      ])
+
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockImplementation(async (iq) => {
+        const queryChild = iq.children?.find((c: any) => c.name === 'query')
+        const actualQueryId = queryChild?.attrs?.queryid || 'test'
+
+        if (stanzaListener) {
+          // Message without stanza-id element — the MAM result id should be used as stanzaId
+          const msg = createMockElement('message', { from: 'example.com' }, [
+            {
+              name: 'result',
+              attrs: { xmlns: 'urn:xmpp:mam:2', queryid: actualQueryId, id: 'mam-archive-uuid-123' },
+              children: [
+                {
+                  name: 'forwarded',
+                  attrs: { xmlns: 'urn:xmpp:forward:0' },
+                  children: [
+                    {
+                      name: 'delay',
+                      attrs: { xmlns: 'urn:xmpp:delay', stamp: '2024-01-15T11:00:00Z' },
+                    },
+                    {
+                      name: 'message',
+                      attrs: { from: 'bob@example.com/resource', to: 'me@example.com', type: 'chat' },
+                      children: [
+                        { name: 'body', text: 'Message without stanza-id' },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ])
+          stanzaListener(msg)
+        }
+        return mamResponse
+      })
+
+      vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com/myresource')
+
+      const result = await xmppClient.chat.queryMAM({ with: 'bob@example.com' })
+
+      expect(result.messages.length).toBe(1)
+      // stanzaId should fall back to the MAM archive result id
+      expect(result.messages[0].stanzaId).toBe('mam-archive-uuid-123')
+    })
+
+    it('should prefer stanza-id over MAM archive ID when both are present', async () => {
+      let stanzaListener: ((stanza: any) => void) | null = null
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') {
+          stanzaListener = listener as (stanza: any) => void
+        }
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+
+      await connectClient()
+
+      const mamResponse = createMockElement('iq', { type: 'result' }, [
+        {
+          name: 'fin',
+          attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' },
+          children: [],
+        },
+      ])
+
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockImplementation(async (iq) => {
+        const queryChild = iq.children?.find((c: any) => c.name === 'query')
+        const actualQueryId = queryChild?.attrs?.queryid || 'test'
+
+        if (stanzaListener) {
+          const msg = createMockElement('message', { from: 'example.com' }, [
+            {
+              name: 'result',
+              attrs: { xmlns: 'urn:xmpp:mam:2', queryid: actualQueryId, id: 'archive-id-fallback' },
+              children: [
+                {
+                  name: 'forwarded',
+                  attrs: { xmlns: 'urn:xmpp:forward:0' },
+                  children: [
+                    {
+                      name: 'delay',
+                      attrs: { xmlns: 'urn:xmpp:delay', stamp: '2024-01-15T12:00:00Z' },
+                    },
+                    {
+                      name: 'message',
+                      attrs: { from: 'carol@example.com/resource', to: 'me@example.com', type: 'chat', id: 'msg-with-stanza-id' },
+                      children: [
+                        { name: 'body', text: 'Message with stanza-id' },
+                        { name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'preferred-stanza-id', by: 'example.com' } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ])
+          stanzaListener(msg)
+        }
+        return mamResponse
+      })
+
+      vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com/myresource')
+
+      const result = await xmppClient.chat.queryMAM({ with: 'carol@example.com' })
+
+      expect(result.messages.length).toBe(1)
+      // stanza-id from the message element should take priority over archive id
+      expect(result.messages[0].stanzaId).toBe('preferred-stanza-id')
+      // message id should be the explicit one
+      expect(result.messages[0].id).toBe('msg-with-stanza-id')
     })
   })
 })
