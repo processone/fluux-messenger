@@ -164,7 +164,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   } = useMessageSelection(activeMessages, scrollRef, isAtBottomRef, {
     onReachedFirstMessage: fetchOlderHistory,
     isLoadingOlder: activeMAMState?.isLoading,
-    isHistoryComplete: !activeRoom?.supportsMAM || activeMAMState?.isHistoryComplete,
+    isHistoryComplete: activeRoom?.supportsMAM === false || activeMAMState?.isHistoryComplete,
     onEnterPressed: useExpandedMessagesStore.getState().toggle,
   })
 
@@ -305,7 +305,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             onMediaLoad={handleMediaLoad}
             onScrollToTop={fetchOlderHistory}
             isLoadingOlder={activeMAMState?.isLoading}
-            isHistoryComplete={!activeRoom.supportsMAM || activeMAMState?.isHistoryComplete}
+            isHistoryComplete={activeRoom.supportsMAM === false || activeMAMState?.isHistoryComplete}
           />
         </div>
 
