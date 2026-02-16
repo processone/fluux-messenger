@@ -67,10 +67,10 @@ export function setupRoomSideEffects(
       return
     }
 
-    // Check connection
+    // Check connection (both store status and actual client availability)
     const connectionStatus = connectionStore.getState().status
-    if (connectionStatus !== 'online') {
-      if (debug) console.log('[SideEffects] Room: Skipping MAM (status:', connectionStatus, ')')
+    if (connectionStatus !== 'online' || !client.isConnected()) {
+      if (debug) console.log('[SideEffects] Room: Skipping MAM (status:', connectionStatus, ', connected:', client.isConnected(), ')')
       return
     }
 

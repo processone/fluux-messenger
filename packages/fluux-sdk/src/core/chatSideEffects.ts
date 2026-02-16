@@ -55,12 +55,12 @@ export function setupChatSideEffects(
       return
     }
 
-    // Check connection and MAM support
+    // Check connection and MAM support (both store status and actual client availability)
     const connectionStatus = connectionStore.getState().status
     const supportsMAM = connectionStore.getState().serverInfo?.features?.includes(NS_MAM) ?? false
 
-    if (connectionStatus !== 'online' || !supportsMAM) {
-      if (debug) console.log('[SideEffects] Chat: Skipping MAM (status:', connectionStatus, ', MAM supported:', supportsMAM, ')')
+    if (connectionStatus !== 'online' || !supportsMAM || !client.isConnected()) {
+      if (debug) console.log('[SideEffects] Chat: Skipping MAM (status:', connectionStatus, ', MAM supported:', supportsMAM, ', connected:', client.isConnected(), ')')
       return
     }
 
