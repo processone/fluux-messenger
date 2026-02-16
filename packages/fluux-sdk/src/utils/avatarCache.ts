@@ -44,6 +44,13 @@ interface NoAvatarEntry {
 let dbPromise: Promise<IDBDatabase> | null = null
 
 /**
+ * In-memory pool of active blob URLs, keyed by avatar hash.
+ * Ensures deduplication (same hash = same blob URL) and enables
+ * proper cleanup via URL.revokeObjectURL().
+ */
+const blobUrlPool = new Map<string, string>()
+
+/**
  * Check if IndexedDB is available in the current environment
  */
 function isIndexedDBAvailable(): boolean {
@@ -103,6 +110,10 @@ function getDB(): Promise<IDBDatabase> {
  * @returns Blob URL if cached, null otherwise
  */
 export async function getCachedAvatar(hash: string): Promise<string | null> {
+  // Return existing blob URL if already created for this hash
+  const existing = blobUrlPool.get(hash)
+  if (existing) return existing
+
   try {
     const db = await getDB()
     return new Promise((resolve, reject) => {
@@ -114,8 +125,8 @@ export async function getCachedAvatar(hash: string): Promise<string | null> {
       request.onsuccess = () => {
         const result = request.result as CachedAvatar | undefined
         if (result) {
-          // Create blob URL from cached data
           const url = URL.createObjectURL(result.data)
+          blobUrlPool.set(hash, url)
           resolve(url)
         } else {
           resolve(null)
@@ -143,6 +154,13 @@ export async function cacheAvatar(
   base64: string,
   mimeType: string
 ): Promise<string> {
+  // Revoke any existing blob URL for this hash before creating a new one
+  const existingUrl = blobUrlPool.get(hash)
+  if (existingUrl) {
+    URL.revokeObjectURL(existingUrl)
+    blobUrlPool.delete(hash)
+  }
+
   // Convert base64 to blob
   const binaryString = atob(base64)
   const bytes = new Uint8Array(binaryString.length)
@@ -174,8 +192,10 @@ export async function cacheAvatar(
     }
   }
 
-  // Return blob URL regardless of cache success
-  return URL.createObjectURL(blob)
+  // Create blob URL, track in pool, and return
+  const url = URL.createObjectURL(blob)
+  blobUrlPool.set(hash, url)
+  return url
 }
 
 /**
@@ -514,9 +534,38 @@ export async function clearAllNoAvatarEntries(): Promise<void> {
 }
 
 /**
+ * Revoke all tracked avatar blob URLs.
+ * Call on disconnect or when clearing all avatar data.
+ */
+export function revokeAllBlobUrls(): void {
+  for (const url of blobUrlPool.values()) {
+    URL.revokeObjectURL(url)
+  }
+  blobUrlPool.clear()
+}
+
+/**
+ * Reset the blob URL pool without revoking URLs.
+ * For test isolation only.
+ */
+export function _resetBlobUrlPoolForTesting(): void {
+  blobUrlPool.clear()
+}
+
+/**
+ * Reset the database instance.
+ * For test isolation only.
+ * @internal
+ */
+export function _resetDBForTesting(): void {
+  dbPromise = null
+}
+
+/**
  * Clear all avatar data (blobs, hash mappings, and no-avatar entries)
  */
 export async function clearAllAvatarData(): Promise<void> {
+  revokeAllBlobUrls()
   await Promise.all([
     clearAllAvatars(),
     clearAllAvatarHashes(),

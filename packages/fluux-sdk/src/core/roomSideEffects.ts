@@ -142,10 +142,9 @@ export function setupRoomSideEffects(
     // Selector: only react to activeRoomJid changes
     (state) => state.activeRoomJid,
     // Handler: runs when activeRoomJid changes
-    (activeRoomJid, previousRoomJid) => {
-      // No need to clear fetchInitiated for previous room —
-      // within the same connected session, MAM catch-up only needs to run once per room.
-      // fetchInitiated is cleared on disconnect / fresh session instead.
+    (activeRoomJid) => {
+      // fetchInitiated is NOT cleared on room switch — within the same connected session,
+      // MAM catch-up only needs to run once per room. It's cleared on disconnect / fresh session.
 
       if (!activeRoomJid) {
         if (debug) console.log('[SideEffects] Room: No active room')

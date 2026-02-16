@@ -260,72 +260,106 @@ export class MAM extends BaseModule {
   async queryRoomArchive(options: RoomMAMQueryOptions): Promise<RoomMAMResult> {
     const { roomJid, max = 50, before, after, start } = options
     const roomMamStart = Date.now()
-    const roomDirection = start ? 'forward' : 'backward'
-    const queryId = `mam_${generateUUID()}`
+    const isForward = !!start
+    const roomDirection = isForward ? 'forward' : 'backward'
 
-    // Room MAM doesn't need a 'with' filter - we query the room's archive directly
-    const formFields: Element[] = [
-      xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, NS_MAM)),
-    ]
-
-    // Add time filter if specified
-    if (start) {
-      formFields.push(xml('field', { var: 'start' }, xml('value', {}, start)))
-    }
-
-    // Send IQ to room JID (not user's archive)
-    const iq = this.buildMAMQuery(queryId, formFields, max, before, roomJid, after)
-
-    const collectedMessages: RoomMessage[] = []
-    const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
+    // For forward catch-up queries, auto-paginate to retrieve all missed messages.
+    // Backward queries (scroll-up) remain single-page — the caller controls pagination.
+    const maxAutoPages = isForward ? 5 : 1
+    const allMessages: RoomMessage[] = []
+    let isComplete = false
+    let lastRsm: RSMResponse = {}
+    let currentAfter = after
 
     const room = this.deps.stores?.room.getRoom(roomJid)
     const myNickname = room?.nickname || ''
 
-    const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl) => {
-      // Check for modifications first (keep full JID for room messages)
-      if (this.collectModification(messageEl, modifications, (from) => from)) {
-        return
-      }
-
-      const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname)
-      if (msg) collectedMessages.push(msg)
-    })
-
-    // Use the collector registry if available, otherwise fall back to direct listeners
-    let unregister: () => void
-    if (this.deps.registerMAMCollector) {
-      unregister = this.deps.registerMAMCollector(queryId, collectMessage)
-    } else {
-      const xmpp = this.deps.getXmpp()
-      xmpp?.on('stanza', collectMessage)
-      unregister = () => xmpp?.removeListener('stanza', collectMessage)
-    }
     this.deps.emitSDK('room:mam-loading', { roomJid, isLoading: true })
 
     try {
-      logInfo(`Room MAM query: ${roomJid}, max=${max}, ${roomDirection}${start ? ` from ${start}` : ''}`)
-      const response = await this.deps.sendIQ(iq)
-      const { complete, rsm } = this.parseMAMResponse(response)
+      for (let page = 0; page < maxAutoPages; page++) {
+        const queryId = `mam_${generateUUID()}`
 
-      // Apply modifications to collected messages (full JID comparison for rooms)
-      this.applyModifications(collectedMessages, modifications, (msg, from) => msg.from === from)
+        // Room MAM doesn't need a 'with' filter - we query the room's archive directly
+        const formFields: Element[] = [
+          xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, NS_MAM)),
+        ]
 
-      // Determine query direction:
-      // - Forward: has `start` filter (fetching messages after a timestamp, like catching up)
-      // - Backward: no `start` filter (fetching older history with `before` cursor)
-      const direction = start ? 'forward' : 'backward'
+        // Add time filter if specified
+        if (start) {
+          formFields.push(xml('field', { var: 'start' }, xml('value', {}, start)))
+        }
 
-      logInfo(`Room MAM result: ${roomJid} → ${collectedMessages.length} msg(s), complete=${complete}, ${Date.now() - roomMamStart}ms`)
+        // Send IQ to room JID (not user's archive)
+        const iq = this.buildMAMQuery(queryId, formFields, max, before, roomJid, currentAfter)
 
-      this.deps.emitSDK('room:mam-messages', {
-        roomJid,
-        messages: collectedMessages,
-        rsm,
-        complete,
-        direction,
-      })
-      return { messages: collectedMessages, complete, rsm }
+        const collectedMessages: RoomMessage[] = []
+        const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
+
+        const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl) => {
+          // Check for modifications first (keep full JID for room messages)
+          if (this.collectModification(messageEl, modifications, (from) => from)) {
+            return
+          }
+
+          const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname)
+          if (msg) collectedMessages.push(msg)
+        })
+
+        // Use the collector registry if available, otherwise fall back to direct listeners
+        let unregister: () => void
+        if (this.deps.registerMAMCollector) {
+          unregister = this.deps.registerMAMCollector(queryId, collectMessage)
+        } else {
+          const xmpp = this.deps.getXmpp()
+          xmpp?.on('stanza', collectMessage)
+          unregister = () => xmpp?.removeListener('stanza', collectMessage)
+        }
+
+        try {
+          if (page === 0) {
+            logInfo(`Room MAM query: ${roomJid}, max=${max}, ${roomDirection}${start ? ` from ${start}` : ''}`)
+          }
+          const response = await this.deps.sendIQ(iq)
+          const { complete, rsm } = this.parseMAMResponse(response)
+
+          // Apply modifications to collected messages (full JID comparison for rooms)
+          this.applyModifications(collectedMessages, modifications, (msg, from) => msg.from === from)
+
+          // Emit each page's messages immediately so the store can update incrementally
+          const direction = isForward ? 'forward' : 'backward'
+          this.deps.emitSDK('room:mam-messages', {
+            roomJid,
+            messages: collectedMessages,
+            rsm,
+            complete,
+            direction,
+          })
+
+          allMessages.push(...collectedMessages)
+          isComplete = complete
+          lastRsm = rsm
+
+          // Stop if archive is complete (no more messages)
+          if (complete) {
+            break
+          }
+
+          // For forward pagination: use `last` as the next `after` cursor
+          if (isForward && rsm.last) {
+            currentAfter = rsm.last
+          } else {
+            // No pagination cursor or single-page mode — stop
+            break
+          }
+        } finally {
+          unregister()
+        }
+      }
+
+      logInfo(`Room MAM result: ${roomJid} → ${allMessages.length} msg(s), complete=${isComplete}, ${Date.now() - roomMamStart}ms`)
+
+      return { messages: allMessages, complete: isComplete, rsm: lastRsm }
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error'
       const isConnectionError = msg.includes('Not connected') || msg.includes('Socket not available')
@@ -337,7 +371,6 @@ export class MAM extends BaseModule {
       this.deps.emitSDK('room:mam-error', { roomJid, error: msg })
       throw error
     } finally {
-      unregister()
       this.deps.emitSDK('room:mam-loading', { roomJid, isLoading: false })
     }
   }
