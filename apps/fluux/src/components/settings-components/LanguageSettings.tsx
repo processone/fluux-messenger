@@ -35,6 +35,7 @@ const languages = [
   { code: 'sl', name: 'Slovenščina' },
   { code: 'sv', name: 'Svenska' },
   { code: 'uk', name: 'Українська' },
+  { code: 'zh-CN', name: '简体中文' },
 ]
 
 const timeFormatOptions: { value: TimeFormat; labelKey: string }[] = [

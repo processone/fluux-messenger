@@ -346,5 +346,14 @@ describe('i18n', () => {
       expect(testI18n.t('common.save')).toBe('Зберегти')
       expect(testI18n.t('common.cancel')).toBe('Скасувати')
     })
+
+    it('should have correct Simplified Chinese translations for key UI elements', async () => {
+      await testI18n.changeLanguage('zh-CN')
+      expect(testI18n.t('sidebar.messages')).toBe('消息')
+      expect(testI18n.t('sidebar.rooms')).toBe('房间')
+      expect(testI18n.t('presence.online')).toBe('在线')
+      expect(testI18n.t('common.save')).toBe('保存')
+      expect(testI18n.t('common.cancel')).toBe('取消')
+    })
   })
 })
