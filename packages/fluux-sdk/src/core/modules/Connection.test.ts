@@ -404,8 +404,6 @@ describe('XMPPClient Connection', () => {
       const mockProxyAdapter = {
         startProxy: vi.fn().mockResolvedValue({
           url: 'ws://127.0.0.1:12345',
-          connectionMethod: 'starttls',
-          resolvedEndpoint: 'tcp://xmpp.example.com:5222',
         }),
         stopProxy: vi.fn().mockResolvedValue(undefined),
       }

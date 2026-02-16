@@ -1,15 +1,14 @@
 /**
  * Proxy lifecycle manager.
  *
- * Handles proxy start/stop/restart with a three-level fallback chain
- * for reconnection: cached endpoint → SRV → WebSocket fallback.
+ * Manages the always-on proxy: started once and reused across reconnects.
+ * DNS/SRV resolution is handled per-connection by the Rust proxy, so
+ * the SDK only needs to ensure the proxy is running.
  *
- * Extracted from Connection.ts for independent testing and to provide
- * a clean seam for future Option E (replacing proxy with Rust IPC).
+ * Falls back to WebSocket if the proxy fails to start.
  */
 
-import type { ProxyAdapter, ProxyStartResult, ConnectionMethod } from '../types'
-import { PROXY_RESTART_TIMEOUT_MS } from './connectionUtils'
+import type { ProxyAdapter } from '../types'
 import { shouldSkipDiscovery, getWebSocketUrl, resolveWebSocketUrl, type ResolutionLogger } from './serverResolution'
 
 /** Dependencies injected by Connection. */
@@ -21,21 +20,20 @@ export interface ProxyManagerDeps {
 /** Result from proxy operations: where to connect + how. */
 export interface ServerResult {
   server: string
-  connectionMethod: ConnectionMethod
+  connectionMethod: 'proxy' | 'websocket'
 }
 
 /**
- * Manages the proxy lifecycle (start / restart / stop) and the
- * three-level reconnection fallback chain.
+ * Manages the always-on proxy lifecycle.
  *
- * State fields moved here from Connection.ts:
- * - `originalServer`: pre-proxy server string (needed to restart proxy)
- * - `resolvedEndpoint`: cached endpoint from proxy (skips SRV on reconnect)
+ * The proxy is started once and reused across reconnects. Each new
+ * WebSocket connection to the proxy creates a fresh TCP/TLS connection
+ * with independent DNS resolution (handled by the Rust side).
  */
 export class ProxyManager {
   private deps: ProxyManagerDeps
   private originalServer: string = ''
-  private resolvedEndpoint: string | null = null
+  private proxyUrl: string | null = null
 
   constructor(deps: ProxyManagerDeps) {
     this.deps = deps
@@ -58,24 +56,25 @@ export class ProxyManager {
     return this.originalServer
   }
 
-  /** Get cached resolved endpoint (for logging). */
-  getResolvedEndpoint(): string | null {
-    return this.resolvedEndpoint
+  /** Get the cached proxy WS URL (for reconnection without IPC). */
+  getProxyUrl(): string | null {
+    return this.proxyUrl
   }
 
-  // ── Initial connect ───────────────────────────────────────────────────────
+  // ── Ensure proxy is running ─────────────────────────────────────────────
 
   /**
-   * Start proxy for initial connection.
+   * Ensure the proxy is running for the given server.
    *
-   * Returns the resolved server URL and connection method.
-   * Falls back to WebSocket discovery if proxy fails.
+   * If already running for the same server, returns the cached URL
+   * (the Rust side also checks this, but caching avoids the IPC round-trip).
+   * Falls back to WebSocket discovery if the proxy fails to start.
    *
    * @param server - Original server string (domain, tls://host:port, etc.)
    * @param domain - XMPP domain from the JID
-   * @param skipDiscovery - Whether to skip XEP-0156 discovery
+   * @param skipDiscovery - Whether to skip XEP-0156 discovery on fallback
    */
-  async startForConnect(
+  async ensureProxy(
     server: string,
     domain: string,
     skipDiscovery?: boolean
@@ -84,18 +83,25 @@ export class ProxyManager {
       throw new Error('No proxy adapter available')
     }
 
+    // If we already have a proxy URL for the same server, reuse it
+    if (this.proxyUrl && this.originalServer === (server || domain)) {
+      this.deps.console.addEvent(`Reusing proxy: ${this.proxyUrl}`, 'connection')
+      return { server: this.proxyUrl, connectionMethod: 'proxy' }
+    }
+
     this.deps.console.addEvent(`Starting proxy for: ${server || domain}`, 'connection')
 
     try {
       const proxyResult = await this.deps.proxyAdapter.startProxy(server || domain)
-      this.resolvedEndpoint = proxyResult.resolvedEndpoint ?? null
+      this.proxyUrl = proxyResult.url
+      this.originalServer = server || domain
       this.deps.console.addEvent(
-        `Proxy started: ${server || domain} via ${proxyResult.url} (${proxyResult.connectionMethod})`,
+        `Proxy started: ${server || domain} via ${proxyResult.url}`,
         'connection'
       )
       return {
         server: proxyResult.url,
-        connectionMethod: proxyResult.connectionMethod,
+        connectionMethod: 'proxy',
       }
     } catch (err) {
       // Proxy failed — fall back to WebSocket
@@ -111,104 +117,5 @@ export class ProxyManager {
         connectionMethod: 'websocket',
       }
     }
-  }
-
-  // ── Reconnect ─────────────────────────────────────────────────────────────
-
-  /**
-   * Restart proxy for reconnection with three-level fallback:
-   * 1. Cached resolved endpoint (skip SRV re-resolution)
-   * 2. Original server (fresh SRV)
-   * 3. Plain WebSocket fallback
-   *
-   * @param domain - XMPP domain for WebSocket fallback URL
-   * @returns The resolved server URL and connection method
-   */
-  async restartForReconnect(domain: string): Promise<ServerResult> {
-    if (!this.deps.proxyAdapter) {
-      throw new Error('No proxy adapter available')
-    }
-
-    try {
-      // Stop the old proxy first (if still running)
-      try { await this.deps.proxyAdapter.stopProxy() } catch { /* may not be running */ }
-
-      // Prefer cached resolved endpoint to skip SRV re-resolution
-      const proxyServer = this.resolvedEndpoint || this.originalServer
-      const proxyResult = await this.startProxyWithTimeout(proxyServer)
-
-      this.resolvedEndpoint = proxyResult.resolvedEndpoint ?? null
-      this.deps.console.addEvent(
-        `Proxy restarted for reconnect: ${proxyResult.url} (${proxyResult.connectionMethod}) [endpoint: ${proxyServer}]`,
-        'connection'
-      )
-      return {
-        server: proxyResult.url,
-        connectionMethod: proxyResult.connectionMethod,
-      }
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err)
-
-      // If cached endpoint failed, retry with original server (fresh SRV)
-      if (this.resolvedEndpoint) {
-        this.deps.console.addEvent(
-          `Cached endpoint failed: ${errorMsg}, retrying with SRV resolution`,
-          'connection'
-        )
-        this.resolvedEndpoint = null
-
-        try {
-          const proxyResult = await this.startProxyWithTimeout(this.originalServer)
-          this.resolvedEndpoint = proxyResult.resolvedEndpoint ?? null
-          this.deps.console.addEvent(
-            `Proxy restarted via SRV fallback: ${proxyResult.url} (${proxyResult.connectionMethod})`,
-            'connection'
-          )
-          return {
-            server: proxyResult.url,
-            connectionMethod: proxyResult.connectionMethod,
-          }
-        } catch (fallbackErr) {
-          const fallbackMsg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)
-          this.deps.console.addEvent(`Failed to restart proxy on reconnect: ${fallbackMsg}`, 'error')
-        }
-      } else {
-        this.deps.console.addEvent(`Failed to restart proxy on reconnect: ${errorMsg}`, 'error')
-      }
-
-      // Ultimate fallback: plain WebSocket
-      return {
-        server: `wss://${domain}/ws`,
-        connectionMethod: 'websocket',
-      }
-    }
-  }
-
-  // ── Stop / Reset ──────────────────────────────────────────────────────────
-
-  /** Stop proxy (fire-and-forget, used on disconnect). */
-  stop(): void {
-    if (this.deps.proxyAdapter) {
-      this.deps.proxyAdapter.stopProxy().catch(() => {})
-      this.deps.console.addEvent('Stopped proxy', 'connection')
-    }
-  }
-
-  /** Reset state on disconnect. */
-  reset(): void {
-    this.originalServer = ''
-    this.resolvedEndpoint = null
-  }
-
-  // ── Internal ──────────────────────────────────────────────────────────────
-
-  /** Start proxy with timeout to prevent hanging on dead connections. */
-  private startProxyWithTimeout(server: string): Promise<ProxyStartResult> {
-    return Promise.race([
-      this.deps.proxyAdapter!.startProxy(server),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Proxy restart timed out')), PROXY_RESTART_TIMEOUT_MS)
-      ),
-    ])
   }
 }

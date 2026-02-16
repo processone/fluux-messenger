@@ -200,21 +200,6 @@ pub async fn resolve_xmpp_server(domain: &str) -> Result<XmppEndpoint, String> {
     })
 }
 
-/// Build the `resolved_endpoint` URI for caching across reconnects.
-/// Encodes XMPP domain as `?domain=` so TLS SNI is correct on reconnect.
-pub fn build_resolved_endpoint(endpoint: &XmppEndpoint) -> String {
-    match (&endpoint.mode, &endpoint.domain) {
-        (ConnectionMode::DirectTls, Some(d)) =>
-            format!("tls://{}:{}?domain={}", endpoint.host, endpoint.port, d),
-        (ConnectionMode::DirectTls, None) =>
-            format!("tls://{}:{}", endpoint.host, endpoint.port),
-        (ConnectionMode::Tcp, Some(d)) =>
-            format!("tcp://{}:{}?domain={}", endpoint.host, endpoint.port, d),
-        (ConnectionMode::Tcp, None) =>
-            format!("tcp://{}:{}", endpoint.host, endpoint.port),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

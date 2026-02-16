@@ -318,9 +318,8 @@ export class Connection extends BaseModule {
     let resolvedServer: string
     let connectionMethod: ConnectionMethod = 'websocket'
     if (useProxy) {
-      // Proxy mode: ProxyManager handles start with WebSocket fallback
-      this.proxyManager.setOriginalServer(server || getDomain(jid))
-      const result = await this.proxyManager.startForConnect(server, getDomain(jid), skipDiscovery)
+      // Proxy mode: ensure always-on proxy is running (idempotent)
+      const result = await this.proxyManager.ensureProxy(server, getDomain(jid), skipDiscovery)
       resolvedServer = result.server
       connectionMethod = result.connectionMethod
     } else if (isExplicitTcpUri) {
@@ -341,7 +340,6 @@ export class Connection extends BaseModule {
 
     // Store credentials for potential reconnection (with resolved URL)
     this.credentials = { jid, password, server: resolvedServer, resource, lang, disableSmKeepalive }
-    this.proxyManager.setOriginalServer(server || getDomain(jid))
 
     // Load SM state and joined rooms from storage if not provided (for session resumption across page reloads)
     // Note: Only await if storage adapter exists to avoid blocking tests using fake timers
@@ -417,7 +415,6 @@ export class Connection extends BaseModule {
       const clientToStop = this.xmpp
       this.xmpp = null
       this.credentials = null
-      this.proxyManager.reset()
       // Set status and log BEFORE stop() to prevent race with session persistence
       this.stores.connection.setStatus('disconnected')
       this.stores.connection.setJid(null)
@@ -427,9 +424,8 @@ export class Connection extends BaseModule {
       this.deps.emitSDK('connection:status', { status: 'offline' })
       // Flush any pending debounced SM ack before closing the stream
       flushSmAckDebounce(this.smPatchState, clientToStop)
-      // Close the XMPP stream BEFORE stopping the proxy so the </stream:stream>
-      // close can flow through the WebSocket-to-TLS bridge. If we stop the proxy
-      // first, xmpp.js tries to write to a dead WebSocket and gets stuck.
+      // Close the XMPP stream. The WS close terminates the proxy bridge naturally.
+      // The proxy stays running for future reconnects.
       await withTimeout(clientToStop.stop(), CLIENT_STOP_TIMEOUT_MS)
     } else {
       this.stores.connection.setStatus('disconnected')
@@ -438,11 +434,6 @@ export class Connection extends BaseModule {
       // Emit SDK event for disconnect
       this.deps.emitSDK('connection:status', { status: 'offline' })
     }
-
-    // Stop the proxy AFTER the XMPP stream is closed (fire-and-forget).
-    // The stream close already went through the proxy above, so this just
-    // cleans up the listener. No need to await — avoid blocking on IPC.
-    this.proxyManager.stop()
   }
 
   /**
@@ -1359,22 +1350,11 @@ export class Connection extends BaseModule {
       // These are rooms that were actively joined but may not have autojoin=true
       const previouslyJoinedRooms = this.stores.room.joinedRooms() ?? []
 
-      // Clean up old client and stop the proxy (the TCP connection is dead)
+      // Clean up old client (the proxy stays running — each new WS connection
+      // creates a fresh TCP/TLS connection with independent DNS resolution)
       await this.cleanupClient()
 
-      // Restart the proxy if available
-      // The proxy must be restarted with the original server string (not the local WS URL)
-      // because the previous proxy's TCP connection to the XMPP server is dead
-      const originalServer = this.proxyManager.getOriginalServer()
-      const userProvidedWebSocketUrl = originalServer.startsWith('ws://') || originalServer.startsWith('wss://')
-
-      if (this.proxyManager.hasProxy && !userProvidedWebSocketUrl) {
-        const result = await this.proxyManager.restartForReconnect(getDomain(this.credentials.jid))
-        this.credentials.server = result.server
-        this.stores.connection.setConnectionMethod(result.connectionMethod)
-      }
-
-      // Create new client with stored credentials (server may have been updated by proxy restart)
+      // Create new client with stored credentials (proxy URL is still valid)
       this.xmpp = this.createXmppClient(this.credentials)
       this.hydrateStreamManagement(smState ?? undefined)
       this.setupHandlers()

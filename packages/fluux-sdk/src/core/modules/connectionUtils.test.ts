@@ -4,7 +4,6 @@ import {
   isDeadSocketError,
   CLIENT_STOP_TIMEOUT_MS,
   RECONNECT_ATTEMPT_TIMEOUT_MS,
-  PROXY_RESTART_TIMEOUT_MS,
 } from './connectionUtils'
 
 describe('connectionUtils', () => {
@@ -52,7 +51,6 @@ describe('connectionUtils', () => {
     it('should export expected timeout values', () => {
       expect(CLIENT_STOP_TIMEOUT_MS).toBe(2000)
       expect(RECONNECT_ATTEMPT_TIMEOUT_MS).toBe(30_000)
-      expect(PROXY_RESTART_TIMEOUT_MS).toBe(10_000)
     })
   })
 })
