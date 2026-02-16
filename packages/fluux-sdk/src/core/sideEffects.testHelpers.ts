@@ -31,7 +31,10 @@ export const localStorageMock = (() => {
  * Create a minimal mock XMPPClient with event emitter support.
  */
 export function createMockClient() {
+  // Internal events (on/emit pattern: 'online', 'resumed', etc.)
   const handlers = new Map<string, Set<(...args: unknown[]) => void>>()
+  // SDK events (subscribe/emitSDK pattern: 'room:joined', 'chat:message', etc.)
+  const sdkHandlers = new Map<string, Set<(payload: unknown) => void>>()
 
   const client = {
     chat: {
@@ -51,9 +54,18 @@ export function createMockClient() {
       handlers.get(event)!.add(handler)
       return () => handlers.get(event)?.delete(handler)
     }),
-    // Helper for tests to emit events
+    subscribe: vi.fn((event: string, handler: (payload: unknown) => void) => {
+      if (!sdkHandlers.has(event)) sdkHandlers.set(event, new Set())
+      sdkHandlers.get(event)!.add(handler)
+      return () => sdkHandlers.get(event)?.delete(handler)
+    }),
+    // Helper for tests to emit internal events
     _emit: (event: string, ...args: unknown[]) => {
       handlers.get(event)?.forEach(h => h(...args))
+    },
+    // Helper for tests to emit SDK events
+    _emitSDK: (event: string, payload: unknown) => {
+      sdkHandlers.get(event)?.forEach(h => h(payload))
     },
   }
 
