@@ -343,8 +343,11 @@ export const chatStore = createStore<ChatState>()(
       },
 
       setActiveConversation: (id) => {
-        // Deactivate previous conversation (clears marker)
         const prevId = get().activeConversationId
+        // Skip if already the active conversation (prevents duplicate side effects)
+        if (id === prevId) return
+
+        // Deactivate previous conversation (clears marker)
         if (prevId && prevId !== id) {
           const prevMeta = get().conversationMeta.get(prevId)
           if (prevMeta?.firstNewMessageId) {

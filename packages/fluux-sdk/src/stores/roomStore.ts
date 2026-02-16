@@ -895,8 +895,11 @@ export const roomStore = createStore<RoomState>()(
   },
 
   setActiveRoom: (roomJid) => {
-    // Deactivate previous room (clears marker)
     const prevJid = get().activeRoomJid
+    // Skip if already the active room (prevents duplicate side effects)
+    if (roomJid === prevJid) return
+
+    // Deactivate previous room (clears marker)
     if (prevJid && prevJid !== roomJid) {
       const prevMeta = get().roomMeta.get(prevJid)
       if (prevMeta?.firstNewMessageId) {

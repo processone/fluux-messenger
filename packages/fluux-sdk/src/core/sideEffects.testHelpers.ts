@@ -45,6 +45,7 @@ export function createMockClient() {
       catchUpAllRooms: vi.fn().mockResolvedValue(undefined),
       discoverNewConversationsFromRoster: vi.fn().mockResolvedValue(undefined),
     },
+    isConnected: vi.fn().mockReturnValue(true),
     on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       if (!handlers.has(event)) handlers.set(event, new Set())
       handlers.get(event)!.add(handler)
