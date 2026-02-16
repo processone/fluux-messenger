@@ -143,10 +143,9 @@ export function setupRoomSideEffects(
     (state) => state.activeRoomJid,
     // Handler: runs when activeRoomJid changes
     (activeRoomJid, previousRoomJid) => {
-      // Clear tracking for previous room (allow re-fetch on return)
-      if (previousRoomJid) {
-        fetchInitiated.delete(previousRoomJid)
-      }
+      // No need to clear fetchInitiated for previous room —
+      // within the same connected session, MAM catch-up only needs to run once per room.
+      // fetchInitiated is cleared on disconnect / fresh session instead.
 
       if (!activeRoomJid) {
         if (debug) console.log('[SideEffects] Room: No active room')
@@ -198,8 +197,8 @@ export function setupRoomSideEffects(
     if (activeRoomJid) {
       if (debug) console.log('[SideEffects] Room: Fresh session, catching up active room', activeRoomJid)
 
-      // Clear the fetch tracking so we can re-fetch after reconnect
-      fetchInitiated.delete(activeRoomJid)
+      // Clear all fetch tracking so every room gets re-fetched after reconnect
+      fetchInitiated.clear()
 
       // Trigger MAM catch-up for the active room
       void fetchMAMForRoom(activeRoomJid)
@@ -226,6 +225,7 @@ export function setupRoomSideEffects(
     (status) => {
       if (status !== 'online' && previousStatus === 'online') {
         isFreshSession = false
+        fetchInitiated.clear()
       }
       previousStatus = status
     }

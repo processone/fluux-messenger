@@ -124,10 +124,9 @@ export function setupChatSideEffects(
     (state) => state.activeConversationId,
     // Handler: runs when activeConversationId changes
     (activeConversationId, previousConversationId) => {
-      // Clear fetch tracking for previous conversation (allow re-fetch on return)
-      if (previousConversationId) {
-        fetchInitiated.delete(previousConversationId)
-      }
+      // No need to clear fetchInitiated for previous conversation —
+      // within the same connected session, MAM catch-up only needs to run once per conversation.
+      // fetchInitiated is cleared on disconnect / fresh session instead.
 
       if (!activeConversationId) {
         if (debug) console.log('[SideEffects] Chat: No active conversation')
@@ -173,8 +172,8 @@ export function setupChatSideEffects(
     if (activeConversationId) {
       if (debug) console.log('[SideEffects] Chat: Fresh session, catching up active conversation', activeConversationId)
 
-      // Clear the fetch tracking so we can re-fetch after reconnect
-      fetchInitiated.delete(activeConversationId)
+      // Clear all fetch tracking so every conversation gets re-fetched after reconnect
+      fetchInitiated.clear()
 
       // Trigger MAM catch-up for the active conversation
       void fetchMAMForConversation(activeConversationId)
@@ -209,6 +208,7 @@ export function setupChatSideEffects(
         if (debug) console.log('[SideEffects] Chat: Going offline, clearing typing states')
         chatStore.getState().clearAllTyping()
         isFreshSession = false
+        fetchInitiated.clear()
       }
 
       previousStatus = status
