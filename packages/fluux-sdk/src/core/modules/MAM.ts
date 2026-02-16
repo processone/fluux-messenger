@@ -30,7 +30,7 @@
 import { xml, Element } from '@xmpp/client'
 import { BaseModule } from './BaseModule'
 import { getBareJid, getResource } from '../jid'
-import { generateUUID } from '../../utils/uuid'
+import { generateUUID, generateStableMessageId } from '../../utils/uuid'
 import { executeWithConcurrency } from '../../utils/concurrencyUtils'
 import { parseRSMResponse } from '../../utils/rsm'
 import {
@@ -161,13 +161,13 @@ export class MAM extends BaseModule {
         const collectedMessages: Message[] = []
         const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
 
-        const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl) => {
+        const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, archiveId) => {
           // Check for modifications first
           if (this.collectModification(messageEl, modifications, (from) => getBareJid(from))) {
             return
           }
 
-          const msg = this.parseArchiveMessage(forwarded, conversationId)
+          const msg = this.parseArchiveMessage(forwarded, conversationId, archiveId)
           if (msg) collectedMessages.push(msg)
         })
 
@@ -296,13 +296,13 @@ export class MAM extends BaseModule {
         const collectedMessages: RoomMessage[] = []
         const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
 
-        const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl) => {
+        const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, archiveId) => {
           // Check for modifications first (keep full JID for room messages)
           if (this.collectModification(messageEl, modifications, (from) => from)) {
             return
           }
 
-          const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname)
+          const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
           if (msg) collectedMessages.push(msg)
         })
 
@@ -802,8 +802,8 @@ export class MAM extends BaseModule {
 
       let latestMessage: Message | null = null
 
-      const collectMessage = this.createMessageCollector(queryId, (forwarded, _messageEl) => {
-        const msg = this.parseArchiveMessage(forwarded, conversationId)
+      const collectMessage = this.createMessageCollector(queryId, (forwarded, _messageEl, archiveId) => {
+        const msg = this.parseArchiveMessage(forwarded, conversationId, archiveId)
         if (msg) latestMessage = msg
       })
 
@@ -915,8 +915,8 @@ export class MAM extends BaseModule {
       const myNickname = room?.nickname || ''
       let latestMessage: RoomMessage | null = null
 
-      const collectMessage = this.createMessageCollector(queryId, (forwarded, _messageEl) => {
-        const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname)
+      const collectMessage = this.createMessageCollector(queryId, (forwarded, _messageEl, archiveId) => {
+        const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
         if (msg) latestMessage = msg
       })
 
@@ -1000,7 +1000,7 @@ export class MAM extends BaseModule {
    */
   private createMessageCollector(
     queryId: string,
-    onMessage: (forwarded: Element, messageEl: Element) => void
+    onMessage: (forwarded: Element, messageEl: Element, archiveId?: string) => void
   ): (stanza: Element) => void {
     return (stanza: Element) => {
       // Skip error stanzas - server may return error with stale MAM result inside
@@ -1015,7 +1015,8 @@ export class MAM extends BaseModule {
       const messageEl = forwarded.getChild('message')
       if (!messageEl) return
 
-      onMessage(forwarded, messageEl)
+      // The <result id="..."> is the MAM archive ID — stable and unique per message
+      onMessage(forwarded, messageEl, result.attrs.id)
     }
   }
 
@@ -1173,7 +1174,7 @@ export class MAM extends BaseModule {
   /**
    * Parse a single archived message for 1:1 conversations.
    */
-  private parseArchiveMessage(forwarded: Element, conversationId: string): Message | null {
+  private parseArchiveMessage(forwarded: Element, conversationId: string, archiveId?: string): Message | null {
     const messageEl = forwarded.getChild('message')
     const delayEl = forwarded.getChild('delay', NS_DELAY)
     if (!messageEl) return null
@@ -1195,10 +1196,16 @@ export class MAM extends BaseModule {
     const isOutgoing = bareFrom === getBareJid(this.deps.getCurrentJid() ?? '')
     const parsed = parseMessageContent({ messageEl, body: body || '', delayEl, forceDelayed: true })
 
+    // Use stanza-id from message element, or fall back to MAM archive ID (they're equivalent)
+    const stanzaId = parsed.stanzaId || archiveId
+
+    // For message ID: prefer message id attr, then generate stable ID from content
+    const messageId = messageEl.attrs.id || generateStableMessageId(from, parsed.timestamp, body || '')
+
     return {
       type: 'chat',
-      id: messageEl.attrs.id || generateUUID(),
-      ...(parsed.stanzaId && { stanzaId: parsed.stanzaId }),
+      id: messageId,
+      ...(stanzaId && { stanzaId }),
       conversationId,
       from: bareFrom,
       body: parsed.processedBody,
@@ -1214,7 +1221,7 @@ export class MAM extends BaseModule {
   /**
    * Parse a single archived message for MUC rooms.
    */
-  private parseRoomArchiveMessage(forwarded: Element, roomJid: string, myNickname: string): RoomMessage | null {
+  private parseRoomArchiveMessage(forwarded: Element, roomJid: string, myNickname: string, archiveId?: string): RoomMessage | null {
     const messageEl = forwarded.getChild('message')
     const delayEl = forwarded.getChild('delay', NS_DELAY)
     if (!messageEl) return null
@@ -1237,10 +1244,16 @@ export class MAM extends BaseModule {
     const isOutgoing = nick.toLowerCase() === myNickname.toLowerCase()
     const parsed = parseMessageContent({ messageEl, body: body || '', delayEl, forceDelayed: true, preserveFullReplyToJid: true })
 
+    // Use stanza-id from message element, or fall back to MAM archive ID (they're equivalent)
+    const stanzaId = parsed.stanzaId || archiveId
+
+    // For message ID: prefer message id attr, then generate stable ID from content
+    const messageId = messageEl.attrs.id || generateStableMessageId(from, parsed.timestamp, body || '')
+
     return {
       type: 'groupchat',
-      id: messageEl.attrs.id || generateUUID(),
-      ...(parsed.stanzaId && { stanzaId: parsed.stanzaId }),
+      id: messageId,
+      ...(stanzaId && { stanzaId }),
       roomJid,
       from,
       nick,
