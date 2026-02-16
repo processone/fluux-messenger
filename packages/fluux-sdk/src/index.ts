@@ -531,4 +531,5 @@ export type { GetMessagesOptions } from './utils/messageCache'
 // Avatar cache operations
 export {
   clearAllAvatarData,
+  revokeAllBlobUrls,
 } from './utils/avatarCache'

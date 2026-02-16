@@ -123,10 +123,9 @@ export function setupChatSideEffects(
     // Selector: only react to activeConversationId changes
     (state) => state.activeConversationId,
     // Handler: runs when activeConversationId changes
-    (activeConversationId, previousConversationId) => {
-      // No need to clear fetchInitiated for previous conversation —
-      // within the same connected session, MAM catch-up only needs to run once per conversation.
-      // fetchInitiated is cleared on disconnect / fresh session instead.
+    (activeConversationId) => {
+      // fetchInitiated is NOT cleared on conversation switch — within the same connected session,
+      // MAM catch-up only needs to run once per conversation. It's cleared on disconnect / fresh session.
 
       if (!activeConversationId) {
         if (debug) console.log('[SideEffects] Chat: No active conversation')
