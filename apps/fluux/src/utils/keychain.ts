@@ -37,10 +37,12 @@ export async function saveCredentials(
     return
   }
 
+  console.log('[Fluux] Keychain: saving credentials')
   const { invoke } = await import('@tauri-apps/api/core')
   await invoke('save_credentials', { jid, password, server })
   // Set flag so we know to check keychain on next launch
   localStorage.setItem(STORAGE_KEY_HAS_CREDENTIALS, 'true')
+  console.log('[Fluux] Keychain: credentials saved')
 }
 
 /**
@@ -53,15 +55,19 @@ export async function getCredentials(): Promise<StoredCredentials | null> {
   }
 
   try {
+    console.log('[Fluux] Keychain: loading credentials')
     const { invoke } = await import('@tauri-apps/api/core')
     const result = await invoke<StoredCredentials | null>('get_credentials')
     // If credentials were expected but not found, clear the flag to stay in sync
     if (result === null) {
+      console.log('[Fluux] Keychain: no credentials found, clearing flag')
       localStorage.removeItem(STORAGE_KEY_HAS_CREDENTIALS)
+    } else {
+      console.log('[Fluux] Keychain: credentials loaded')
     }
     return result
   } catch (error) {
-    console.error('Failed to get credentials from keychain:', error)
+    console.error('[Fluux] Keychain: failed to get credentials:', error)
     // Clear flag on error to prevent repeated failed attempts
     localStorage.removeItem(STORAGE_KEY_HAS_CREDENTIALS)
     return null
@@ -69,20 +75,27 @@ export async function getCredentials(): Promise<StoredCredentials | null> {
 }
 
 /**
- * Delete credentials from OS keychain (Tauri only)
+ * Delete credentials from OS keychain (Tauri only).
+ * Skips the keychain call if no credentials were previously saved,
+ * avoiding unnecessary macOS auth dialogs.
  */
 export async function deleteCredentials(): Promise<void> {
-  // Always clear the flag, even if not in Tauri
+  // If no credentials were saved, just clear the flag and skip the keychain call.
+  // This avoids triggering the macOS Keychain auth dialog when there's nothing to delete.
+  const hadCredentials = localStorage.getItem(STORAGE_KEY_HAS_CREDENTIALS) === 'true'
   localStorage.removeItem(STORAGE_KEY_HAS_CREDENTIALS)
 
-  if (!isTauri()) {
+  if (!isTauri() || !hadCredentials) {
+    console.log('[Fluux] Keychain: delete skipped (no credentials flag or not Tauri)')
     return
   }
 
   try {
+    console.log('[Fluux] Keychain: deleting credentials')
     const { invoke } = await import('@tauri-apps/api/core')
     await invoke('delete_credentials')
+    console.log('[Fluux] Keychain: credentials deleted')
   } catch (error) {
-    console.error('Failed to delete credentials from keychain:', error)
+    console.error('[Fluux] Keychain: failed to delete credentials:', error)
   }
 }

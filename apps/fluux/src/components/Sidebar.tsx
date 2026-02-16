@@ -419,14 +419,27 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
                 </button>
               </Tooltip>
             ) : (
-              <UserMenu onLogout={async (shouldCleanLocalData) => {
-                if (shouldCleanLocalData) {
-                  await clearLocalData()
-                } else {
-                  clearSession()
-                  await deleteCredentials()
-                }
+              <UserMenu onLogout={(shouldCleanLocalData) => {
+                // Clear session and disconnect first for instant UI feedback.
+                // Keychain deletion can block for seconds (macOS auth dialog),
+                // so it runs in the background after the UI has already transitioned.
+                console.log('[Fluux] Logout: clearing session')
+                clearSession()
+                console.log('[Fluux] Logout: disconnecting')
                 disconnect()
+                if (shouldCleanLocalData) {
+                  // Fire-and-forget: clean local data in background
+                  console.log('[Fluux] Logout: clearing local data (fire-and-forget)')
+                  clearLocalData()
+                    .then(() => console.log('[Fluux] Logout: local data cleared'))
+                    .catch((e) => console.warn('[Fluux] Logout: clearLocalData failed:', e))
+                } else {
+                  // Fire-and-forget: delete keychain credentials in background
+                  console.log('[Fluux] Logout: deleting keychain credentials (fire-and-forget)')
+                  deleteCredentials()
+                    .then(() => console.log('[Fluux] Logout: keychain credentials deleted'))
+                    .catch((e) => console.warn('[Fluux] Logout: deleteCredentials failed:', e))
+                }
               }} />
             )}
           </div>
