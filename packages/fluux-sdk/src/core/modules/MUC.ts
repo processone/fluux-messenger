@@ -205,6 +205,9 @@ export class MUC extends BaseModule {
       // Clear the join timeout - we successfully joined
       this.clearPendingJoin(roomJid)
 
+      // Capture occupant count before flushing (flush deletes the buffer)
+      const pendingCount = this.pendingOccupants.get(roomJid)?.length ?? 0
+
       // Flush any buffered occupants before processing self
       // This reduces store updates from ~N to 1 for large rooms
       this.flushPendingOccupants(roomJid)
@@ -213,7 +216,6 @@ export class MUC extends BaseModule {
       this.deps.emitSDK('room:joined', { roomJid, joined: true })
       this.deps.emitSDK('room:self-occupant', { roomJid, occupant })
 
-      const pendingCount = this.pendingOccupants.get(roomJid)?.length ?? 0
       logInfo(`Room joined: ${roomJid} (${affiliation}/${role}, ${pendingCount + 1} occupants)`)
 
       this.deps.emit('mucJoined', roomJid, nick)
