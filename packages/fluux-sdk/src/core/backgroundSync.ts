@@ -45,7 +45,7 @@ export function setupBackgroundSyncSideEffects(
   client: XMPPClient,
   options: SideEffectsOptions = {}
 ): () => void {
-  const { debug = false } = options
+  const { debug: _debug = false } = options
 
   // Track whether background sync has been triggered this connection cycle
   let backgroundSyncDone = false

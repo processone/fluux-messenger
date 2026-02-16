@@ -48,6 +48,7 @@ export function usePlatformState() {
   const lastWakeTimeRef = useRef(0)
   const hiddenAtRef = useRef<number | null>(null)
   const lastHeartbeatRef = useRef(Date.now())
+  const sleepStartRef = useRef<number | null>(null)
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -200,8 +201,10 @@ export function usePlatformState() {
       listen('system-did-wake', () => {
         if (cancelled) return
         if (!shouldHandleWake('system-did-wake')) return
-        logEvent('System woke from sleep (OS notification)')
-        client.notifySystemState('awake').catch(() => {})
+        const sleepDuration = sleepStartRef.current ? Date.now() - sleepStartRef.current : undefined
+        sleepStartRef.current = null
+        logEvent(`System woke from sleep (OS notification${sleepDuration ? `, ~${Math.round(sleepDuration / 1000)}s` : ''})`)
+        client.notifySystemState('awake', sleepDuration).catch(() => {})
         lastActivityRef.current = Date.now()
         dispatchResizeWorkaround()
       }).then(fn => {
@@ -212,9 +215,11 @@ export function usePlatformState() {
       listen<number>('system-did-wake-deferred', (event) => {
         if (cancelled) return
         if (!shouldHandleWake('system-did-wake-deferred')) return
+        const sleepDuration = sleepStartRef.current ? Date.now() - sleepStartRef.current : undefined
+        sleepStartRef.current = null
         const delaySecs = event.payload || 0
-        logEvent(`System woke from sleep (deferred ${delaySecs}s - app was in background)`)
-        client.notifySystemState('awake').catch(() => {})
+        logEvent(`System woke from sleep (deferred ${delaySecs}s - app was in background${sleepDuration ? `, ~${Math.round(sleepDuration / 1000)}s sleep` : ''})`)
+        client.notifySystemState('awake', sleepDuration).catch(() => {})
         lastActivityRef.current = Date.now()
         dispatchResizeWorkaround()
       }).then(fn => {
@@ -224,6 +229,7 @@ export function usePlatformState() {
       // Sleep notification
       listen('system-will-sleep', () => {
         if (cancelled) return
+        sleepStartRef.current = Date.now()
         logEvent('System going to sleep')
         client.notifySystemState('sleeping').catch(() => {})
       }).then(fn => {

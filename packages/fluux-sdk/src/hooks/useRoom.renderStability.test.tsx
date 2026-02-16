@@ -138,7 +138,7 @@ describe('useRoom render stability', () => {
     // totalUnreadCount should be 0
     expect(result.current.totalUnreadCount).toBe(0)
 
-    const rendersAfterMount = result.current.renderCount
+    const _rendersAfterMount = result.current.renderCount
 
     // Add a message to the active room — active rooms don't increment unread
     act(() => {

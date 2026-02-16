@@ -53,7 +53,7 @@ describe('chatSelectors reference stability', () => {
     chatStore.getState().addConversation(convB)
 
     const selectorA = chatSelectors.conversationById('alice@example.com')
-    const refBefore = selectorA(chatStore.getState())
+    const _refBefore = selectorA(chatStore.getState())
 
     // Modify conversation B (add message)
     chatStore.getState().addMessage(createMessage('bob@example.com', 'Hello', 'msg-1'))
