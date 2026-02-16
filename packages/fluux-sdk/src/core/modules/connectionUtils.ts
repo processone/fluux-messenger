@@ -11,17 +11,11 @@
  *  When the socket is already dead, xmpp.js stop() can hang waiting for events. */
 export const CLIENT_STOP_TIMEOUT_MS = 2000
 
-/** Timeout for a single reconnection attempt (proxy restart + XMPP negotiation).
+/** Timeout for a single reconnection attempt (XMPP negotiation).
  *  If xmpp.js hangs during connection negotiation (e.g., the WebSocket connects
  *  but XMPP stream negotiation stalls), this ensures the attempt is abandoned
  *  and the next retry can begin. */
 export const RECONNECT_ATTEMPT_TIMEOUT_MS = 30_000
-
-/** Timeout for proxy adapter restart during reconnection.
- *  After a WiFi switch, the proxy's TCP connection attempt may hang waiting for
- *  DNS resolution on the old network. This ensures we fail fast and fall through
- *  to the WebSocket fallback. */
-export const PROXY_RESTART_TIMEOUT_MS = 10_000
 
 // ── Functions ──────────────────────────────────────────────────────────────────
 

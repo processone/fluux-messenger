@@ -5,11 +5,12 @@
  * connections to XMPP servers. The proxy bridges between a local WebSocket
  * (used by xmpp.js) and a remote TCP/TLS connection.
  *
+ * The proxy is always-on: started once and reused across reconnects.
+ * DNS/SRV resolution happens per WebSocket connection, not at proxy start.
+ *
  * @packageDocumentation
  * @module Types/Proxy
  */
-
-import type { ConnectionMethod } from './connection'
 
 /**
  * Result of starting the proxy.
@@ -17,12 +18,6 @@ import type { ConnectionMethod } from './connection'
 export interface ProxyStartResult {
   /** Local WebSocket URL to connect to (e.g., "ws://127.0.0.1:12345") */
   url: string
-  /** Connection method used: 'tls' for direct TLS, 'starttls' for STARTTLS upgrade */
-  connectionMethod: ConnectionMethod
-  /** Resolved endpoint URI for reuse on reconnect (e.g., "tls://chat.example.com:5223").
-   *  Passing this to startProxy() on reconnect avoids SRV re-resolution
-   *  which may yield different results after DNS cache flush (e.g., after system sleep). */
-  resolvedEndpoint?: string
 }
 
 /**

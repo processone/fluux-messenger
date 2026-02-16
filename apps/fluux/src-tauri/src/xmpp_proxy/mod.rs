@@ -1,7 +1,7 @@
 mod dns;
 mod framing;
 
-use dns::{ConnectionMode, XmppEndpoint, ParsedServer, parse_server_input, resolve_xmpp_server, build_resolved_endpoint};
+use dns::{ConnectionMode, XmppEndpoint, ParsedServer, parse_server_input, resolve_xmpp_server};
 use framing::{translate_ws_to_tcp, translate_tcp_to_ws, extract_stanza};
 
 use std::net::SocketAddr;
@@ -49,8 +49,7 @@ const TCP_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(
 /// Inactivity watchdog timeout for the WebSocket-TLS bridge.
 ///
 /// If no data flows in either direction for this duration, the connection is
-/// force-closed to release the single-connection lock. This prevents zombie
-/// connections from permanently blocking the proxy.
+/// force-closed. This prevents zombie connections from consuming resources.
 ///
 /// 5 minutes is generous: XMPP with XEP-0198 Stream Management sends periodic
 /// `<r/>` pings (typically every 60-90 seconds). A 5-minute silence means the
@@ -213,28 +212,33 @@ impl Drop for ConnectionGuard {
     }
 }
 
-/// Result of starting the XMPP proxy, returned to the frontend
+/// Result of starting the XMPP proxy, returned to the frontend.
+///
+/// The proxy is always-on: started once and reused across reconnects.
+/// DNS/SRV resolution happens per WebSocket connection, not at proxy start.
 #[derive(Debug, Clone, Serialize)]
 pub struct ProxyStartResult {
     /// Local WebSocket URL to connect to (e.g., "ws://127.0.0.1:12345")
     pub url: String,
-    /// Connection method used: "tls" for direct TLS, "starttls" for STARTTLS upgrade
-    pub connection_method: String,
-    /// Resolved endpoint URI for reuse on reconnect (e.g., "tls://chat.example.com:5223").
-    /// Passing this back to startProxy() on reconnect avoids SRV re-resolution,
-    /// which may yield different results after DNS cache flush (e.g., after system sleep).
-    pub resolved_endpoint: String,
 }
 
-/// XMPP WebSocket-to-TCP proxy state
+/// XMPP WebSocket-to-TCP proxy state.
+///
+/// The proxy is always-on: it binds a local WebSocket listener once and keeps it
+/// running. Each incoming WebSocket connection independently resolves DNS/SRV and
+/// creates its own TCP/TLS connection to the XMPP server.
 pub struct XmppProxy {
+    /// Server input string this proxy was started for (for idempotent reuse)
+    server_input: String,
+    /// Full local WebSocket URL (e.g., "ws://127.0.0.1:12345")
+    ws_url: String,
     /// Local WebSocket server address
     local_addr: Option<SocketAddr>,
     /// Background task handle
     task: Option<JoinHandle<()>>,
     /// Shutdown signal
     shutdown_tx: Option<tokio::sync::broadcast::Sender<()>>,
-    /// Active connection counter (for limiting to one connection)
+    /// Active connection counter (for diagnostics/logging)
     active_connections: Arc<AtomicUsize>,
     /// Tauri app handle for emitting events to the frontend
     app_handle: Option<tauri::AppHandle>,
@@ -243,6 +247,8 @@ pub struct XmppProxy {
 impl XmppProxy {
     pub fn new() -> Self {
         Self {
+            server_input: String::new(),
+            ws_url: String::new(),
             local_addr: None,
             task: None,
             shutdown_tx: None,
@@ -258,6 +264,9 @@ impl XmppProxy {
 
     /// Start the proxy server.
     ///
+    /// Binds a local WebSocket listener. DNS/SRV resolution is deferred to
+    /// each incoming WebSocket connection (fresh resolution per connect).
+    ///
     /// The `server` parameter supports multiple formats:
     /// - `tls://host:port` or `tcp://host:port` — explicit endpoint, skip SRV
     /// - `host:port` — explicit endpoint, mode inferred from port (5223=TLS, else STARTTLS)
@@ -267,31 +276,7 @@ impl XmppProxy {
             return Err("Proxy already running".to_string());
         }
 
-        // Parse server input and resolve endpoint
-        let endpoint = match parse_server_input(&server) {
-            ParsedServer::Direct(host, port, mode, domain) => {
-                info!(host = %host, port, mode = ?mode, domain = ?domain, "Using explicit endpoint");
-                XmppEndpoint { host, port, mode, domain }
-            }
-            ParsedServer::Domain(domain) => {
-                resolve_xmpp_server(&domain)
-                    .await
-                    .map_err(|e| format!("Failed to resolve XMPP server: {}", e))?
-            }
-        };
-
-        info!(host = %endpoint.host, port = endpoint.port, mode = ?endpoint.mode,
-            domain = ?endpoint.domain, tls_name = endpoint.tls_name(), "Resolved endpoint");
-
-        // Determine connection method string for the frontend
-        let connection_method = match endpoint.mode {
-            ConnectionMode::DirectTls => "tls".to_string(),
-            ConnectionMode::Tcp => "starttls".to_string(),
-        };
-
-        // Build resolved endpoint URI for reuse on reconnect (skips SRV re-resolution).
-        // Encode XMPP domain as ?domain= so TLS SNI is correct on reconnect.
-        let resolved_endpoint = build_resolved_endpoint(&endpoint);
+        info!(server = %server, "Starting proxy (DNS resolution deferred to per-connection)");
 
         // Bind to localhost on a random port.
         // Try IPv6 loopback first, fall back to IPv4. On some systems (especially
@@ -320,6 +305,9 @@ impl XmppProxy {
             .map_err(|e| format!("Failed to get local address: {}", e))?;
 
         self.local_addr = Some(local_addr);
+        let ws_url = format!("ws://{}:{}", loopback_host, local_addr.port());
+        self.ws_url = ws_url.clone();
+        self.server_input = server.clone();
 
         // Create shutdown channel
         let (shutdown_tx, _) = tokio::sync::broadcast::channel(1);
@@ -329,7 +317,9 @@ impl XmppProxy {
         let active_connections = self.active_connections.clone();
         let app_handle = self.app_handle.clone();
 
-        // Spawn background task to handle connections
+        // Spawn background task to handle connections.
+        // Each connection independently resolves DNS/SRV using the server string.
+        let server_for_task = Arc::new(server);
         let task = tokio::spawn(async move {
             let mut shutdown_rx = shutdown_tx.subscribe();
 
@@ -337,13 +327,13 @@ impl XmppProxy {
                 tokio::select! {
                     Ok((stream, addr)) = listener.accept() => {
                         info!(addr = %addr, "New WebSocket connection");
-                        let ep = endpoint.clone();
+                        let server_str = server_for_task.clone();
                         let shutdown = shutdown_tx.subscribe();
                         let conn_counter = active_connections.clone();
                         let handle = app_handle.clone();
 
                         tokio::spawn(async move {
-                            if let Err(e) = handle_connection(stream, ep, shutdown, conn_counter, handle).await {
+                            if let Err(e) = handle_connection(stream, &server_str, shutdown, conn_counter, handle).await {
                                 error!(error = %e, "Connection error");
                             }
                         });
@@ -358,11 +348,7 @@ impl XmppProxy {
 
         self.task = Some(task);
 
-        Ok(ProxyStartResult {
-            url: format!("ws://{}:{}", loopback_host, local_addr.port()),
-            connection_method,
-            resolved_endpoint,
-        })
+        Ok(ProxyStartResult { url: ws_url })
     }
 
     /// Stop the proxy server
@@ -380,19 +366,19 @@ impl XmppProxy {
     }
 }
 
-/// Handle a single WebSocket <-> XMPP server connection
+/// Handle a single WebSocket <-> XMPP server connection.
+///
+/// Each connection independently resolves DNS/SRV using the server string,
+/// creates its own TCP/TLS connection, and bridges WS ↔ TLS.
 async fn handle_connection(
     ws_stream: tokio::net::TcpStream,
-    endpoint: XmppEndpoint,
+    server_input: &str,
     shutdown: tokio::sync::broadcast::Receiver<()>,
     active_connections: Arc<AtomicUsize>,
     app_handle: Option<tauri::AppHandle>,
 ) -> Result<(), String> {
-    // Check connection limit: only allow one active connection
-    if active_connections.compare_exchange(0, 1, Ordering::SeqCst, Ordering::Relaxed).is_err() {
-        warn!("Connection rejected: proxy already in use");
-        return Err("Proxy already in use by another connection".to_string());
-    }
+    // Track active connections for diagnostics (no connection limit)
+    active_connections.fetch_add(1, Ordering::SeqCst);
     let _guard = ConnectionGuard::new(active_connections.clone());
 
     // Upgrade to WebSocket
@@ -401,6 +387,22 @@ async fn handle_connection(
         .map_err(|e| format!("WebSocket handshake failed: {}", e))?;
 
     info!("WebSocket connection established");
+
+    // Resolve DNS/SRV per connection (fresh resolution handles DNS changes after sleep)
+    let endpoint = match parse_server_input(server_input) {
+        ParsedServer::Direct(host, port, mode, domain) => {
+            info!(host = %host, port, mode = ?mode, domain = ?domain, "Using explicit endpoint");
+            XmppEndpoint { host, port, mode, domain }
+        }
+        ParsedServer::Domain(domain) => {
+            resolve_xmpp_server(&domain)
+                .await
+                .map_err(|e| format!("Failed to resolve XMPP server: {}", e))?
+        }
+    };
+
+    info!(host = %endpoint.host, port = endpoint.port, mode = ?endpoint.mode,
+        domain = ?endpoint.domain, tls_name = endpoint.tls_name(), "Resolved endpoint");
 
     // Connect to XMPP server (STARTTLS or direct TLS)
     match endpoint.mode {
@@ -820,7 +822,11 @@ async fn bridge_websocket_tls(
 /// Global proxy singleton
 static PROXY: RwLock<Option<XmppProxy>> = RwLock::const_new(None);
 
-/// Start the XMPP proxy (exposed to Tauri commands)
+/// Start the XMPP proxy (exposed to Tauri commands).
+///
+/// Idempotent: if a proxy is already running for the same server, returns
+/// the existing WebSocket URL without restarting. If the server changed
+/// (or on page reload), stops the old proxy and starts a new one.
 ///
 /// The `server` parameter supports: `tls://host:port`, `tcp://host:port`, `host:port`, or bare `domain`.
 pub async fn start_proxy(server: String, app_handle: Option<tauri::AppHandle>) -> Result<ProxyStartResult, String> {
@@ -829,10 +835,21 @@ pub async fn start_proxy(server: String, app_handle: Option<tauri::AppHandle>) -
 
     let mut proxy_guard = PROXY.write().await;
 
-    // Stop existing proxy if running (idempotent restart for page reload).
-    // On WebView reload the Rust process stays alive but the old proxy's
-    // WebSocket client is gone, so the old proxy is useless.
+    // If proxy is already running for the same server, reuse it
+    if let Some(ref existing) = *proxy_guard {
+        if existing.server_input == server && existing.local_addr.is_some() {
+            info!(server = %server, url = %existing.ws_url, "Proxy already running for this server, reusing");
+            return Ok(ProxyStartResult {
+                url: existing.ws_url.clone(),
+            });
+        }
+    }
+
+    // Different server or stale proxy: stop the old one and start fresh.
+    // Also handles WebView reload where the Rust process stays alive but
+    // the old proxy's WebSocket client is gone.
     if let Some(mut old_proxy) = proxy_guard.take() {
+        info!("Stopping existing proxy before starting new one");
         old_proxy.stop().await.ok();
     }
 
@@ -877,24 +894,22 @@ mod tests {
     }
 
     #[test]
-    fn test_connection_limit_rejects_second_connection() {
+    fn test_connection_guard_tracks_multiple_connections() {
         let counter = Arc::new(AtomicUsize::new(0));
 
-        // Simulate first connection accepted
-        let current = counter.fetch_add(1, Ordering::SeqCst);
-        assert_eq!(current, 0); // First connection is accepted
+        // Simulate two concurrent connections
+        counter.fetch_add(1, Ordering::SeqCst);
+        let _guard1 = ConnectionGuard::new(counter.clone());
+        counter.fetch_add(1, Ordering::SeqCst);
+        let _guard2 = ConnectionGuard::new(counter.clone());
+        assert_eq!(counter.load(Ordering::SeqCst), 2);
 
-        // Simulate second connection attempt
-        let current = counter.fetch_add(1, Ordering::SeqCst);
-        assert!(current > 0); // Should be rejected
-        // Clean up the rejected attempt
-        counter.fetch_sub(1, Ordering::SeqCst);
-
-        // Counter should still be 1 (first connection active)
+        // Drop first connection
+        drop(_guard1);
         assert_eq!(counter.load(Ordering::SeqCst), 1);
 
-        // Clean up first connection
-        counter.fetch_sub(1, Ordering::SeqCst);
+        // Drop second connection
+        drop(_guard2);
         assert_eq!(counter.load(Ordering::SeqCst), 0);
     }
 
