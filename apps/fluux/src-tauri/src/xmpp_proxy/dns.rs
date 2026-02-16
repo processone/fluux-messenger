@@ -6,7 +6,7 @@
 
 use tracing::{info, warn};
 use trust_dns_resolver::TokioAsyncResolver;
-use trust_dns_resolver::config::*;
+use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
 
 /// Connection mode for XMPP proxy
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -117,10 +117,16 @@ pub fn parse_server_input(server: &str) -> ParsedServer {
 /// SRV records are sorted by priority (ascending — lower value = higher preference)
 /// per RFC 2782. The XMPP domain is preserved in the returned endpoint for TLS SNI.
 pub async fn resolve_xmpp_server(domain: &str) -> Result<XmppEndpoint, String> {
-    let resolver = TokioAsyncResolver::tokio(
-        ResolverConfig::default(),
-        ResolverOpts::default()
-    );
+    let resolver = match TokioAsyncResolver::tokio_from_system_conf() {
+        Ok(r) => {
+            info!("Using system DNS resolver");
+            r
+        }
+        Err(e) => {
+            warn!("Failed to load system DNS config: {}, falling back to default resolver", e);
+            TokioAsyncResolver::tokio(ResolverConfig::default(), ResolverOpts::default())
+        }
+    };
 
     // Try direct TLS SRV first
     let srv_name = format!("_xmpps-client._tcp.{}", domain);
