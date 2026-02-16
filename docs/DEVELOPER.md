@@ -71,6 +71,12 @@ When `--verbose` is active:
 
 On Linux, GPU rendering is disabled by default (WebKitGTK workaround). Set `FLUUX_ENABLE_GPU=1` to re-enable.
 
+The environment variable `NO_COLOR` can be set to disable console color output. It can be useful to redirect the output to a file:
+
+```
+NO_COLOR=1 ./fluux --verbose=xmpp 2> xmpp-debug.log
+```
+
 ## Building Debian Packages
 
 You can build `.deb` packages locally using standard Debian tooling.
