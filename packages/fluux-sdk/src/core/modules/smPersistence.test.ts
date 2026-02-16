@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { SmPersistence, type SmPersistenceDeps } from './smPersistence'
 import type { StorageAdapter, SessionState } from '../types'
 
@@ -137,28 +137,33 @@ describe('SmPersistence', () => {
   })
 
   describe('persistNow', () => {
+    const sessionKey = 'fluux:session:user@example.com'
+
+    afterEach(() => {
+      sessionStorage.removeItem(sessionKey)
+    })
+
     it('should write to sessionStorage synchronously', () => {
-      const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {})
       const sm = new SmPersistence(createDeps({ storageAdapter: mockStorage.adapter }))
       sm.updateCache('sm-sync', 20)
 
       sm.persistNow('user@example.com', 'res1')
 
-      expect(setItemSpy).toHaveBeenCalledWith(
-        'fluux:session:user@example.com',
-        expect.stringContaining('"smId":"sm-sync"')
-      )
-      setItemSpy.mockRestore()
+      const stored = sessionStorage.getItem(sessionKey)
+      expect(stored).toBeTruthy()
+      const parsed = JSON.parse(stored!)
+      expect(parsed.smId).toBe('sm-sync')
+      expect(parsed.smInbound).toBe(20)
+      expect(parsed.resource).toBe('res1')
+      expect(parsed.timestamp).toEqual(expect.any(Number))
     })
 
     it('should no-op when no cache', () => {
-      const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {})
       const sm = new SmPersistence(createDeps({ storageAdapter: mockStorage.adapter }))
 
       sm.persistNow('user@example.com', 'res1')
 
-      expect(setItemSpy).not.toHaveBeenCalled()
-      setItemSpy.mockRestore()
+      expect(sessionStorage.getItem(sessionKey)).toBeNull()
     })
   })
 
