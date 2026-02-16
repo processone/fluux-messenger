@@ -261,6 +261,7 @@ export const roomStore = createStore<RoomState>()(
         autojoin: room.autojoin,
         password: room.password,
         isQuickChat: room.isQuickChat,
+        supportsMAM: room.supportsMAM,
       }
       const meta: RoomMetadata = {
         unreadCount: room.unreadCount,
@@ -313,7 +314,8 @@ export const roomStore = createStore<RoomState>()(
 
       // Update entity fields if any changed
       const entityFields = ['name', 'nickname', 'joined', 'isJoining', 'subject', 'avatar',
-        'avatarHash', 'avatarFromPresence', 'isBookmarked', 'autojoin', 'password', 'isQuickChat'] as const
+        'avatarHash', 'avatarFromPresence', 'isBookmarked', 'autojoin', 'password', 'isQuickChat',
+        'supportsMAM'] as const
       const hasEntityUpdate = entityFields.some((f) => f in update)
 
       // Update metadata fields if any changed
@@ -345,6 +347,7 @@ export const roomStore = createStore<RoomState>()(
             autojoin: updatedRoom.autojoin,
             password: updatedRoom.password,
             isQuickChat: updatedRoom.isQuickChat,
+            supportsMAM: updatedRoom.supportsMAM,
           })
         }
         result.roomEntities = newEntities
