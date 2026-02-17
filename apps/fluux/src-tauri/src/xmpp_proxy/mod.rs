@@ -79,6 +79,9 @@ const WATCHDOG_CHECK_INTERVAL: std::time::Duration = std::time::Duration::from_s
 /// legitimate stanzas (vCard avatars, MAM result pages) rarely exceed 100 KB.
 const MAX_STANZA_BUFFER_SIZE: usize = 1_024 * 1_024;
 
+/// Monotonic connection id for correlating proxy logs across tasks and frontend events.
+static NEXT_PROXY_CONNECTION_ID: AtomicU64 = AtomicU64::new(1);
+
 /// Current time as milliseconds since UNIX epoch (for activity tracking).
 fn now_millis() -> u64 {
     std::time::SystemTime::now()
@@ -403,6 +406,10 @@ async fn handle_connection(
     active_connections: Arc<AtomicUsize>,
     app_handle: Option<tauri::AppHandle>,
 ) -> Result<(), String> {
+    let conn_id = NEXT_PROXY_CONNECTION_ID.fetch_add(1, Ordering::Relaxed);
+    let connection_started = Instant::now();
+    info!(conn_id, server_input = %server_input, "Proxy connection handling started");
+
     // Track active connections for diagnostics (no connection limit)
     active_connections.fetch_add(1, Ordering::SeqCst);
     let _guard = ConnectionGuard::new(active_connections.clone());
@@ -412,29 +419,46 @@ async fn handle_connection(
         .await
         .map_err(|e| format!("WebSocket handshake failed: {}", e))?;
 
-    info!("WebSocket connection established");
+    info!(conn_id, "WebSocket connection established");
 
     // Wait for the initial client stanza before doing expensive network work.
     // This avoids DNS/TCP/STARTTLS churn when stale sockets disconnect immediately.
+    let initial_wait_started = Instant::now();
     let initial_ws_text = match wait_for_initial_client_stanza(&mut ws).await? {
         Some(text) => text,
         None => {
-            info!("WebSocket closed before initial client stanza");
+            info!(
+                conn_id,
+                wait_ms = initial_wait_started.elapsed().as_millis() as u64,
+                "WebSocket closed before initial client stanza"
+            );
             return Ok(());
         }
     };
+    info!(
+        conn_id,
+        wait_ms = initial_wait_started.elapsed().as_millis() as u64,
+        "Received initial client stanza"
+    );
 
     // Buffer client text frames received while upstream connect/STARTTLS is in progress.
     // They are flushed to TLS once the bridge starts.
     let mut pending_ws_texts = vec![initial_ws_text];
 
+    let upstream_connect_started = Instant::now();
     let connect_future = connect_upstream_tls(server_input);
     tokio::pin!(connect_future);
 
     let tls_stream = loop {
         tokio::select! {
             result = &mut connect_future => {
-                break result?;
+                let tls_stream = result?;
+                info!(
+                    conn_id,
+                    connect_ms = upstream_connect_started.elapsed().as_millis() as u64,
+                    "Upstream TLS connected"
+                );
+                break tls_stream;
             }
             msg = ws.next() => {
                 match msg {
@@ -442,28 +466,52 @@ async fn handle_connection(
                         pending_ws_texts.push(text.to_string());
                     }
                     Some(Ok(Message::Close(_))) => {
-                        info!("WebSocket closed by client during upstream connection setup");
+                        info!(
+                            conn_id,
+                            setup_ms = upstream_connect_started.elapsed().as_millis() as u64,
+                            "WebSocket closed by client during upstream connection setup"
+                        );
                         return Ok(());
                     }
                     Some(Err(e)) => {
-                        info!(error = %e, "WebSocket read error during upstream connection setup");
+                        info!(
+                            conn_id,
+                            error = %e,
+                            setup_ms = upstream_connect_started.elapsed().as_millis() as u64,
+                            "WebSocket read error during upstream connection setup"
+                        );
                         return Ok(());
                     }
                     Some(_) => {}
                     None => {
-                        info!("WebSocket closed during upstream connection setup");
+                        info!(
+                            conn_id,
+                            setup_ms = upstream_connect_started.elapsed().as_millis() as u64,
+                            "WebSocket closed during upstream connection setup"
+                        );
                         return Ok(());
                     }
                 }
             }
             _ = shutdown.recv() => {
-                info!("Connection closed by shutdown before upstream connection setup completed");
+                info!(
+                    conn_id,
+                    setup_ms = upstream_connect_started.elapsed().as_millis() as u64,
+                    "Connection closed by shutdown before upstream connection setup completed"
+                );
                 return Ok(());
             }
         }
     };
 
-    bridge_websocket_tls(ws, tls_stream, shutdown, app_handle, pending_ws_texts).await
+    let bridge_result = bridge_websocket_tls(ws, tls_stream, shutdown, app_handle, pending_ws_texts, conn_id).await;
+    info!(
+        conn_id,
+        total_ms = connection_started.elapsed().as_millis() as u64,
+        ok = bridge_result.is_ok(),
+        "Proxy connection handling finished"
+    );
+    bridge_result
 }
 
 /// Wait for the first client text stanza after WebSocket handshake.
@@ -797,7 +845,17 @@ async fn bridge_websocket_tls(
     mut shutdown: tokio::sync::broadcast::Receiver<()>,
     app_handle: Option<tauri::AppHandle>,
     pending_ws_texts: Vec<String>,
+    conn_id: u64,
 ) -> Result<(), String> {
+    #[derive(Debug, Clone, Serialize)]
+    struct ProxyConnectionClosedEvent {
+        conn_id: u64,
+        reason: String,
+    }
+
+    let bridge_started = Instant::now();
+    info!(conn_id, buffered_frames = pending_ws_texts.len(), "Bridge started");
+
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum BridgeEndReason {
         WebSocketClosedByClient,
@@ -1000,11 +1058,22 @@ async fn bridge_websocket_tls(
         BridgeEndReason::Shutdown | BridgeEndReason::WebSocketClosedByClient
     ) {
         if let Some(ref handle) = app_handle {
-            let _ = handle.emit("proxy-connection-closed", end_reason_label.clone());
+            let _ = handle.emit(
+                "proxy-connection-closed",
+                ProxyConnectionClosedEvent {
+                    conn_id,
+                    reason: end_reason_label.clone(),
+                },
+            );
         }
     }
 
-    info!(reason = %end_reason_label, "Bridge ended");
+    info!(
+        conn_id,
+        reason = %end_reason_label,
+        bridge_ms = bridge_started.elapsed().as_millis() as u64,
+        "Bridge ended"
+    );
 
     Ok(())
 }

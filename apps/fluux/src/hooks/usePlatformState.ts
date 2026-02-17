@@ -384,9 +384,19 @@ export function usePlatformState() {
       void listen('proxy-connection-closed', (event) => {
         const currentStatus = statusRef.current
         if (!shouldHandleProxyClosedStatus(currentStatus)) return
-        const reason = typeof event.payload === 'string' ? event.payload : 'unknown'
+        const payload = event.payload as unknown
+        let reason = 'unknown'
+        let connId = 'unknown'
+        if (typeof payload === 'string') {
+          reason = payload
+        } else if (payload && typeof payload === 'object') {
+          const record = payload as Record<string, unknown>
+          if (typeof record.reason === 'string') reason = record.reason
+          if (typeof record.conn_id === 'number') connId = String(record.conn_id)
+          if (typeof record.connId === 'number') connId = String(record.connId)
+        }
         console.log(
-          `[PlatformState] Proxy connection closed (reason=${reason}, status=${currentStatus})`
+          `[PlatformState] Proxy connection closed (conn=${connId}, reason=${reason}, status=${currentStatus})`
         )
       }).then((fn) => {
         if (cleanedUp) { fn() } else { unlistenProxyClosed = fn }
