@@ -53,7 +53,7 @@ user-idle = "0.6"
 # ctor for Linux to set env vars before main() - required for WebKitGTK workaround
 [target.'cfg(target_os = "linux")'.dependencies]
 ctor = "0.2"
-x11 = "2"
+x11 = { version = "2", features = ["xlib", "xss"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
