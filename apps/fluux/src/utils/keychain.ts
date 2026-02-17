@@ -23,6 +23,7 @@ export interface DeleteCredentialsOptions {
 
 // Flag to track if credentials exist without triggering keychain prompt
 const STORAGE_KEY_HAS_CREDENTIALS = 'xmpp-has-saved-credentials'
+const KEYCHAIN_DELETE_TIMEOUT_MS = 2500
 
 /**
  * Check if credentials might be saved (without triggering keychain prompt)
@@ -103,10 +104,34 @@ export async function deleteCredentials(options: DeleteCredentialsOptions = {}):
   try {
     console.log('[Fluux] Keychain: deleting credentials')
     const { invoke } = await import('@tauri-apps/api/core')
-    await invoke('delete_credentials')
-    localStorage.removeItem(STORAGE_KEY_HAS_CREDENTIALS)
+
+    const deleteOp = invoke('delete_credentials').then(
+      () => ({ ok: true as const }),
+      (error) => ({ ok: false as const, error })
+    )
+
+    const timeoutSentinel = Symbol('keychain-delete-timeout')
+    const result = await Promise.race([
+      deleteOp,
+      new Promise<typeof timeoutSentinel>((resolve) => {
+        setTimeout(() => resolve(timeoutSentinel), KEYCHAIN_DELETE_TIMEOUT_MS)
+      }),
+    ])
+
+    if (result === timeoutSentinel) {
+      throw new Error(`delete_credentials timed out after ${KEYCHAIN_DELETE_TIMEOUT_MS}ms`)
+    }
+
+    if (!result.ok) {
+      throw result.error
+    }
+
     console.log('[Fluux] Keychain: credentials deleted')
   } catch (error) {
     console.error('[Fluux] Keychain: failed to delete credentials:', error)
+  } finally {
+    // Clear the local flag even when native keychain access fails/times out.
+    // This prevents the app from repeatedly waiting on a broken keychain backend.
+    localStorage.removeItem(STORAGE_KEY_HAS_CREDENTIALS)
   }
 }

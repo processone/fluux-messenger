@@ -134,6 +134,7 @@ export class Connection extends BaseModule {
 
   // Track previous machine state to detect state-entry side effects
   private previousMachineState: ConnectionStateValue = 'idle'
+  private disconnectOperationSeq = 0
 
   // Convenience accessors
   protected get stores() { return this.deps.stores! }
@@ -464,6 +465,17 @@ export class Connection extends BaseModule {
    * Disconnect from XMPP server.
    */
   async disconnect(): Promise<void> {
+    const disconnectOp = ++this.disconnectOperationSeq
+    const disconnectStart = Date.now()
+    const logDisconnect = (message: string) => {
+      const elapsed = Date.now() - disconnectStart
+      const line = `Disconnect op#${disconnectOp} +${elapsed}ms: ${message}`
+      this.stores.console.addEvent(line, 'connection')
+      logInfo(line)
+    }
+
+    logDisconnect(`begin (state=${JSON.stringify(this.getMachineState())}, hasClient=${!!this.xmpp}, hasCredentials=${!!this.credentials})`)
+
     // Signal machine: user-initiated disconnect
     this.sendMachineEvent({ type: 'DISCONNECT' }, 'disconnect:user')
 
@@ -490,13 +502,16 @@ export class Connection extends BaseModule {
     this.stores.connection.setConnectionMethod(null)
     this.stores.console.addEvent('Disconnected', 'connection')
     this.deps.emitSDK('connection:status', { status: 'offline' })
+    logDisconnect('sync phase complete (store transitioned to disconnected)')
 
     // ── Async cleanup phase ──
     // SM persistence, room message flush, and XMPP stream close.
     // Safe to run after UI has transitioned.
 
     this.smPersistence.clearCache()
+    logDisconnect('SM in-memory cache cleared')
     if (jidForSmCleanup) {
+      logDisconnect(`clearing persisted SM state for ${jidForSmCleanup}`)
       try {
         let timedOut = false
         await Promise.race([
@@ -511,14 +526,19 @@ export class Connection extends BaseModule {
         if (timedOut) {
           logWarn(`Disconnect cleanup: SM state clear timed out after ${DISCONNECT_CLEANUP_TIMEOUT_MS}ms`)
           this.stores.console.addEvent('Disconnect cleanup warning: SM state clear timed out', 'error')
+          logDisconnect('persisted SM state clear timed out')
+        } else {
+          logDisconnect('persisted SM state clear complete')
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
         logWarn(`Disconnect cleanup: failed to clear SM state for ${jidForSmCleanup}: ${message}`)
         this.stores.console.addEvent(`Disconnect cleanup warning: failed to clear SM state (${message})`, 'error')
+        logDisconnect(`persisted SM state clear failed (${message})`)
       }
     }
 
+    logDisconnect('flushing pending room message cache')
     try {
       let timedOut = false
       await Promise.race([
@@ -533,28 +553,38 @@ export class Connection extends BaseModule {
       if (timedOut) {
         logWarn(`Disconnect cleanup: room message flush timed out after ${DISCONNECT_CLEANUP_TIMEOUT_MS}ms`)
         this.stores.console.addEvent('Disconnect cleanup warning: room message flush timed out', 'error')
+        logDisconnect('room message flush timed out')
+      } else {
+        logDisconnect('room message flush complete')
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       logWarn(`Disconnect cleanup: failed to flush room message buffer: ${message}`)
       this.stores.console.addEvent(`Disconnect cleanup warning: failed to flush message cache (${message})`, 'error')
+      logDisconnect(`room message flush failed (${message})`)
     }
 
     if (clientToStop) {
+      logDisconnect('stopping xmpp client')
       flushSmAckDebounce(this.smPatchState, clientToStop)
       try {
         await withTimeout(clientToStop.stop(), CLIENT_STOP_TIMEOUT_MS)
+        logDisconnect('xmpp client stop completed (or timed out safely)')
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
         logWarn(`Disconnect cleanup: client stop failed: ${message}`)
         this.stores.console.addEvent(`Disconnect cleanup warning: socket close failed (${message})`, 'error')
+        logDisconnect(`xmpp client stop failed (${message})`)
       } finally {
         // Ensure the old transport is really closed. A graceful stop can return
         // while the underlying socket is still lingering, which delays a fast
         // manual re-login on the same resource.
         forceDestroyClient(clientToStop)
+        logDisconnect('force-destroyed xmpp client transport')
       }
     }
+
+    logDisconnect('complete')
   }
 
   /**

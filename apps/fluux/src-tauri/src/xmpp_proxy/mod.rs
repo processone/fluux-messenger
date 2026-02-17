@@ -1032,21 +1032,39 @@ async fn bridge_websocket_tls(
     ws_to_tls.abort();
     tls_to_ws.abort();
 
-    // Send a proper WebSocket close frame so xmpp.js receives a 'disconnect' event.
-    // Without this, the JS side never learns the connection died (especially after
-    // watchdog or shutdown, where the bridge tasks are aborted without closing the WS).
-    let close_result = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+    // Send an explicit RFC7395 stream close and a WebSocket close frame so xmpp.js
+    // receives a deterministic disconnect path even when upstream TLS died abruptly.
+    let close_handshake_result = tokio::time::timeout(std::time::Duration::from_secs(2), async {
         let mut writer = ws_write.lock().await;
-        let _ = writer
+
+        writer
+            .send(Message::Text(
+                r#"<close xmlns="urn:ietf:params:xml:ns:xmpp-framing"/>"#.into(),
+            ))
+            .await
+            .map_err(|e| format!("failed to send RFC7395 <close/>: {}", e))?;
+
+        writer
             .send(Message::Close(Some(CloseFrame {
                 code: CloseCode::Normal,
                 reason: "Bridge closed".into(),
             })))
-            .await;
+            .await
+            .map_err(|e| format!("failed to send WebSocket close frame: {}", e))?;
+
+        Ok::<(), String>(())
     })
     .await;
-    if close_result.is_err() {
-        debug!("WebSocket close frame send timed out");
+    match close_handshake_result {
+        Ok(Ok(())) => {
+            info!(conn_id, "Sent RFC7395/WebSocket close handshake to client");
+        }
+        Ok(Err(err)) => {
+            warn!(conn_id, error = %err, "Failed to send clean close handshake to client");
+        }
+        Err(_) => {
+            warn!(conn_id, "WebSocket close handshake send timed out");
+        }
     }
 
     let end_reason_label = format!("{:?}", end_reason);
