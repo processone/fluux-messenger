@@ -97,7 +97,7 @@ localStorage.removeItem('DEBUG_CONNECTION_TRACE')
 delete globalThis.__FLUUX_DEBUG_CONNECTION_TRACE__
 ```
 
-On Linux, GPU rendering is disabled by default (WebKitGTK workaround). Set `FLUUX_ENABLE_GPU=1` to re-enable.
+On Linux, GPU rendering is enabled by default. If rendering issues occur, set `FLUUX_DISABLE_GPU=1` to apply WebKitGTK GPU workarounds.
 
 The environment variable `NO_COLOR` can be set to disable console color output. It can be useful to redirect the output to a file:
 
