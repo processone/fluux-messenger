@@ -578,14 +578,14 @@ describe('XMPPClient Connection', () => {
         'connection'
       )
       expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
-
-      // Dead-socket path should not race a fire-and-forget stop; proxy lifecycle
-      // restart is centralized in attemptReconnect().
-      expect(mockProxyAdapter.stopProxy).not.toHaveBeenCalled()
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        expect.stringContaining('Dead-socket recovery: triggering immediate reconnect'),
+        'connection'
+      )
 
       const reconnectClient = createMockXmppClient()
       mockClientFactory._setInstance(reconnectClient)
-      await vi.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(0)
       expect(mockProxyAdapter.stopProxy).toHaveBeenCalledTimes(1)
 
       proxyClient.cancelReconnect()

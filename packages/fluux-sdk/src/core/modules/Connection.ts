@@ -598,7 +598,7 @@ export class Connection extends BaseModule {
           // Timeout waiting for ack - connection is dead
           this.stores.console.addEvent('Verification timed out waiting for SM ack', 'connection')
           this.connectionActor.send({ type: 'VERIFY_FAILED' })
-          this.handleDeadSocket()
+          this.handleDeadSocket({ source: 'verify-timeout' })
           return false
         }
       } else {
@@ -635,7 +635,7 @@ export class Connection extends BaseModule {
       const errorMessage = err instanceof Error ? err.message : String(err)
       if (isDeadSocketError(errorMessage) || errorMessage.includes('timeout')) {
         this.connectionActor.send({ type: 'VERIFY_FAILED' })
-        this.handleDeadSocket()
+        this.handleDeadSocket({ source: 'verify-error' })
       }
       return false
     }
@@ -707,13 +707,26 @@ export class Connection extends BaseModule {
    * Handle a dead socket by cleaning up and scheduling reconnection.
    * This is called when we detect the WebSocket died silently (e.g., after sleep).
    */
-  handleDeadSocket(): void {
+  handleDeadSocket(options?: { immediateReconnect?: boolean; source?: string }): void {
+    const immediateReconnect = options?.immediateReconnect ?? false
+    const source = options?.source ?? 'unknown'
+
+    this.stores.console.addEvent(
+      `Dead-socket recovery invoked (source=${source}, state=${JSON.stringify(this.getMachineState())})`,
+      'connection'
+    )
+
     // Don't reconnect from terminal states.
     if (this.isInTerminalState()) {
+      this.stores.console.addEvent('Dead-socket recovery skipped: machine in terminal state', 'connection')
       return
     }
     const machineState = this.getMachineState()
     if (machineState === 'disconnected' || machineState === 'idle') {
+      this.stores.console.addEvent(
+        `Dead-socket recovery skipped: machine state is ${JSON.stringify(machineState)}`,
+        'connection'
+      )
       return
     }
 
@@ -742,6 +755,14 @@ export class Connection extends BaseModule {
     // Forcefully destroy old client (socket is already dead, graceful stop() can hang)
     if (clientToClean) {
       forceDestroyClient(clientToClean)
+    }
+
+    if (immediateReconnect) {
+      this.stores.console.addEvent(
+        `Dead-socket recovery: triggering immediate reconnect (state=${JSON.stringify(this.getMachineState())})`,
+        'connection'
+      )
+      this.triggerReconnect()
     }
 
     // Reconnect scheduling is handled by the state machine (`reconnecting.waiting`).
@@ -1197,9 +1218,13 @@ export class Connection extends BaseModule {
         // Transport is definitively broken (commonly reported as "websocket econnerror"
         // when the Rust proxy bridge dies). Trigger dead-socket recovery immediately
         // instead of waiting for disconnect-event ordering.
+        this.stores.console.addEvent(
+          `Stream transport error context: state=${JSON.stringify(this.getMachineState())}`,
+          'connection'
+        )
         this.stores.console.addEvent('Stream transport error, forcing reconnect recovery', 'connection')
         logWarn('Stream transport error detected, initiating dead-socket recovery')
-        this.handleDeadSocket()
+        this.handleDeadSocket({ immediateReconnect: true, source: 'stream-error' })
       }
     })
 
