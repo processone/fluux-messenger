@@ -24,6 +24,17 @@ export interface ServerResult {
 }
 
 /**
+ * Upper bounds for proxy IPC operations.
+ *
+ * These prevent lifecycle serialization from stalling forever if the
+ * platform bridge hangs during start/stop.
+ */
+export const PROXY_START_TIMEOUT_MS = 10_000
+export const PROXY_STOP_TIMEOUT_MS = 5_000
+
+type ProxyLifecycleState = 'stopped' | 'starting' | 'running' | 'stopping'
+
+/**
  * Manages the always-on proxy lifecycle.
  *
  * The proxy is started once and reused across reconnects. Each new
@@ -34,6 +45,8 @@ export class ProxyManager {
   private deps: ProxyManagerDeps
   private originalServer: string = ''
   private proxyUrl: string | null = null
+  private lifecycleState: ProxyLifecycleState = 'stopped'
+  private lifecycleQueue: Promise<void> = Promise.resolve()
 
   constructor(deps: ProxyManagerDeps) {
     this.deps = deps
@@ -61,6 +74,94 @@ export class ProxyManager {
     return this.proxyUrl
   }
 
+  /** Current proxy lifecycle state (for diagnostics). */
+  getLifecycleState(): ProxyLifecycleState {
+    return this.lifecycleState
+  }
+
+  // ── Serialized lifecycle operations ───────────────────────────────────────
+
+  /**
+   * Serialize proxy lifecycle operations to prevent concurrent start/stop races.
+   */
+  private runSerialized<T>(operation: () => Promise<T>): Promise<T> {
+    const run = this.lifecycleQueue.then(operation, operation)
+    this.lifecycleQueue = run.then(() => undefined, () => undefined)
+    return run
+  }
+
+  /**
+   * Bound adapter calls so a hung IPC operation cannot wedge the lifecycle queue.
+   *
+   * Uses a settled-result race to avoid unhandled rejections when the timeout
+   * wins and the original promise settles later.
+   */
+  private async runWithTimeout<T>(
+    operationName: string,
+    timeoutMs: number,
+    operation: Promise<T>
+  ): Promise<T> {
+    const timeoutSentinel = Symbol('proxy-timeout')
+    const settledOperation = operation.then(
+      (value) => ({ ok: true as const, value }),
+      (error) => ({ ok: false as const, error })
+    )
+
+    let timeoutId: ReturnType<typeof setTimeout> | undefined
+    try {
+      const result = await Promise.race([
+        settledOperation,
+        new Promise<typeof timeoutSentinel>((resolve) => {
+          timeoutId = setTimeout(() => resolve(timeoutSentinel), timeoutMs)
+        }),
+      ])
+
+      if (result === timeoutSentinel) {
+        throw new Error(`${operationName} timed out after ${timeoutMs}ms`)
+      }
+
+      if (!result.ok) {
+        throw result.error
+      }
+
+      return result.value
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
+    }
+  }
+
+  // ── Stop proxy ────────────────────────────────────────────────────────────
+
+  /**
+   * Stop the running proxy (best-effort) and clear the cached local URL.
+   *
+   * Does not fail when no proxy adapter is configured.
+   */
+  async stopProxy(): Promise<void> {
+    return this.runSerialized(async () => {
+      await this.stopProxyUnlocked()
+    })
+  }
+
+  private async stopProxyUnlocked(): Promise<void> {
+    if (!this.deps.proxyAdapter) return
+    if (this.lifecycleState === 'stopped' && !this.proxyUrl) return
+
+    this.lifecycleState = 'stopping'
+    try {
+      await this.runWithTimeout(
+        'stopProxy',
+        PROXY_STOP_TIMEOUT_MS,
+        this.deps.proxyAdapter.stopProxy()
+      )
+    } finally {
+      this.proxyUrl = null
+      this.lifecycleState = 'stopped'
+    }
+  }
+
   // ── Ensure proxy is running ─────────────────────────────────────────────
 
   /**
@@ -79,24 +180,52 @@ export class ProxyManager {
     domain: string,
     skipDiscovery?: boolean
   ): Promise<ServerResult> {
+    return this.runSerialized(async () => this.ensureProxyUnlocked(server, domain, skipDiscovery))
+  }
+
+  private async ensureProxyUnlocked(
+    server: string,
+    domain: string,
+    skipDiscovery?: boolean
+  ): Promise<ServerResult> {
     if (!this.deps.proxyAdapter) {
       throw new Error('No proxy adapter available')
     }
 
+    const target = server || domain
+
     // If we already have a proxy URL for the same server, reuse it
     if (this.proxyUrl && this.originalServer === (server || domain)) {
       this.deps.console.addEvent(`Reusing proxy: ${this.proxyUrl}`, 'connection')
+      this.lifecycleState = 'running'
       return { server: this.proxyUrl, connectionMethod: 'proxy' }
     }
 
-    this.deps.console.addEvent(`Starting proxy for: ${server || domain}`, 'connection')
+    // Different target while running: stop first so Rust side starts cleanly.
+    if (this.proxyUrl && this.originalServer !== target) {
+      this.deps.console.addEvent(`Proxy target changed: ${this.originalServer} -> ${target}, restarting`, 'connection')
+      try {
+        await this.stopProxyUnlocked()
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err)
+        this.deps.console.addEvent(`Failed to stop proxy before restart: ${errorMsg}`, 'error')
+      }
+    }
+
+    this.deps.console.addEvent(`Starting proxy for: ${target}`, 'connection')
+    this.lifecycleState = 'starting'
 
     try {
-      const proxyResult = await this.deps.proxyAdapter.startProxy(server || domain)
+      const proxyResult = await this.runWithTimeout(
+        'startProxy',
+        PROXY_START_TIMEOUT_MS,
+        this.deps.proxyAdapter.startProxy(target)
+      )
       this.proxyUrl = proxyResult.url
-      this.originalServer = server || domain
+      this.originalServer = target
+      this.lifecycleState = 'running'
       this.deps.console.addEvent(
-        `Proxy started: ${server || domain} via ${proxyResult.url}`,
+        `Proxy started: ${target} via ${proxyResult.url}`,
         'connection'
       )
       return {
@@ -107,6 +236,8 @@ export class ProxyManager {
       // Proxy failed — fall back to WebSocket
       const errorMsg = err instanceof Error ? err.message : String(err)
       this.deps.console.addEvent(`Failed to start proxy: ${errorMsg}, falling back to WebSocket`, 'error')
+      this.proxyUrl = null
+      this.lifecycleState = 'stopped'
 
       const resolvedServer = shouldSkipDiscovery(server, skipDiscovery)
         ? getWebSocketUrl(server, domain)
@@ -130,24 +261,22 @@ export class ProxyManager {
     domain: string,
     skipDiscovery?: boolean
   ): Promise<ServerResult> {
-    if (!this.deps.proxyAdapter) {
-      throw new Error('No proxy adapter available')
-    }
+    return this.runSerialized(async () => {
+      if (!this.deps.proxyAdapter) {
+        throw new Error('No proxy adapter available')
+      }
 
-    const target = server || domain
-    this.deps.console.addEvent(`Restarting proxy for: ${target}`, 'connection')
+      const target = server || domain
+      this.deps.console.addEvent(`Restarting proxy for: ${target}`, 'connection')
 
-    try {
-      await this.deps.proxyAdapter.stopProxy()
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err)
-      this.deps.console.addEvent(`Failed to stop proxy during restart: ${errorMsg}`, 'error')
-    }
+      try {
+        await this.stopProxyUnlocked()
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err)
+        this.deps.console.addEvent(`Failed to stop proxy during restart: ${errorMsg}`, 'error')
+      }
 
-    // Clear cache to force a fresh IPC startProxy call.
-    this.proxyUrl = null
-    this.originalServer = ''
-
-    return this.ensureProxy(target, domain, skipDiscovery)
+      return this.ensureProxyUnlocked(target, domain, skipDiscovery)
+    })
   }
 }

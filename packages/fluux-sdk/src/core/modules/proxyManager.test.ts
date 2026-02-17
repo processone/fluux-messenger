@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ProxyManager, type ProxyManagerDeps } from './proxyManager'
+import {
+  ProxyManager,
+  type ProxyManagerDeps,
+  PROXY_START_TIMEOUT_MS,
+  PROXY_STOP_TIMEOUT_MS,
+} from './proxyManager'
 import type { ProxyAdapter, ProxyStartResult } from '../types'
 
 function createMockProxyAdapter(): ProxyAdapter {
@@ -114,6 +119,88 @@ describe('ProxyManager', () => {
     it('should throw when no proxy adapter', async () => {
       const pm = new ProxyManager(createDeps({ proxyAdapter: undefined }))
       await expect(pm.ensureProxy('example.com', 'example.com')).rejects.toThrow('No proxy adapter')
+    })
+
+    it('should serialize concurrent ensureProxy calls for same target', async () => {
+      let resolveStart: ((value: ProxyStartResult) => void) | undefined
+      const startPromise = new Promise<ProxyStartResult>((resolve) => {
+        resolveStart = resolve
+      })
+      vi.mocked(proxyAdapter.startProxy).mockReturnValue(startPromise)
+
+      const pm = new ProxyManager(deps)
+
+      const first = pm.ensureProxy('example.com', 'example.com')
+      const second = pm.ensureProxy('example.com', 'example.com')
+
+      resolveStart!(PROXY_RESULT)
+
+      await expect(first).resolves.toEqual({
+        server: 'ws://127.0.0.1:12345',
+        connectionMethod: 'proxy',
+      })
+      await expect(second).resolves.toEqual({
+        server: 'ws://127.0.0.1:12345',
+        connectionMethod: 'proxy',
+      })
+      expect(proxyAdapter.startProxy).toHaveBeenCalledTimes(1)
+    })
+
+    it('should fall back when startProxy hangs past timeout', async () => {
+      vi.useFakeTimers()
+      vi.mocked(proxyAdapter.startProxy).mockReturnValue(new Promise(() => {}))
+      const pm = new ProxyManager(deps)
+
+      const resultPromise = pm.ensureProxy('example.com', 'example.com', true)
+      await vi.advanceTimersByTimeAsync(PROXY_START_TIMEOUT_MS + 1)
+
+      await expect(resultPromise).resolves.toEqual({
+        server: 'wss://example.com/ws',
+        connectionMethod: 'websocket',
+      })
+      expect(pm.getLifecycleState()).toBe('stopped')
+
+      vi.useRealTimers()
+    })
+  })
+
+  describe('stopProxy', () => {
+    it('should stop proxy and clear cached URL', async () => {
+      vi.mocked(proxyAdapter.startProxy).mockResolvedValue(PROXY_RESULT)
+      const pm = new ProxyManager(deps)
+
+      await pm.ensureProxy('example.com', 'example.com')
+      expect(pm.getProxyUrl()).toBe('ws://127.0.0.1:12345')
+
+      await pm.stopProxy()
+
+      expect(proxyAdapter.stopProxy).toHaveBeenCalledTimes(1)
+      expect(pm.getProxyUrl()).toBeNull()
+    })
+
+    it('should no-op when no proxy adapter exists', async () => {
+      const pm = new ProxyManager(createDeps({ proxyAdapter: undefined }))
+      await expect(pm.stopProxy()).resolves.toBeUndefined()
+    })
+
+    it('should timeout a hung stopProxy call and still clear local state', async () => {
+      vi.useFakeTimers()
+      vi.mocked(proxyAdapter.startProxy).mockResolvedValue(PROXY_RESULT)
+      vi.mocked(proxyAdapter.stopProxy).mockReturnValue(new Promise(() => {}))
+      const pm = new ProxyManager(deps)
+
+      await pm.ensureProxy('example.com', 'example.com')
+      const stopPromise = pm.stopProxy()
+      const stopAssertion = expect(stopPromise).rejects.toThrow(
+        `stopProxy timed out after ${PROXY_STOP_TIMEOUT_MS}ms`
+      )
+      await vi.advanceTimersByTimeAsync(PROXY_STOP_TIMEOUT_MS + 1)
+
+      await stopAssertion
+      expect(pm.getProxyUrl()).toBeNull()
+      expect(pm.getLifecycleState()).toBe('stopped')
+
+      vi.useRealTimers()
     })
   })
 })

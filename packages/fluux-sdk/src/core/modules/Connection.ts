@@ -745,6 +745,8 @@ export class Connection extends BaseModule {
     }
 
     // Reconnect scheduling is handled by the state machine (`reconnecting.waiting`).
+    // Proxy restart is centralized in attemptReconnect() to keep start/stop
+    // ordering serialized in one place.
   }
 
   /**
@@ -1191,6 +1193,13 @@ export class Connection extends BaseModule {
         if (clientToClean) {
           forceDestroyClient(clientToClean)
         }
+      } else if (message.includes('econnerror') || isDeadSocketError(message)) {
+        // Transport is definitively broken (commonly reported as "websocket econnerror"
+        // when the Rust proxy bridge dies). Trigger dead-socket recovery immediately
+        // instead of waiting for disconnect-event ordering.
+        this.stores.console.addEvent('Stream transport error, forcing reconnect recovery', 'connection')
+        logWarn('Stream transport error detected, initiating dead-socket recovery')
+        this.handleDeadSocket()
       }
     })
 
