@@ -21,6 +21,7 @@ import {
   getReconnectInfoFromContext,
   isTerminalState,
   type ConnectionActor,
+  type ConnectionMachineEvent,
   type ConnectionStateValue,
 } from '../connectionMachine'
 import {
@@ -171,6 +172,14 @@ export class Connection extends BaseModule {
       const status = getConnectionStatusFromState(stateValue)
       const { attempt, reconnectTargetTime } = getReconnectInfoFromContext(snapshot.context)
 
+      const previousText = JSON.stringify(previousState)
+      const currentText = JSON.stringify(stateValue)
+      if (previousText !== currentText) {
+        const transitionMessage = `Machine transition: ${previousText} -> ${currentText} (attempt=${attempt}, target=${reconnectTargetTime ?? 'none'}, error=${snapshot.context.lastError ?? 'none'})`
+        this.stores.console.addEvent(transitionMessage, 'connection')
+        logInfo(transitionMessage)
+      }
+
       // Sync status to store
       this.stores.connection.setStatus(status)
       this.stores.connection.setReconnectState(attempt, reconnectTargetTime)
@@ -245,6 +254,20 @@ export class Connection extends BaseModule {
   /** Get the current machine state value. */
   private getMachineState(): ConnectionStateValue {
     return this.connectionActor.getSnapshot().value as ConnectionStateValue
+  }
+
+  /**
+   * Send an event to the connection state machine with verbose transition logging.
+   */
+  private sendMachineEvent(event: ConnectionMachineEvent, source: string): void {
+    const before = this.getMachineState()
+    this.connectionActor.send(event)
+    const after = this.getMachineState()
+    const beforeText = JSON.stringify(before)
+    const afterText = JSON.stringify(after)
+    const message = `Machine event ${event.type} from ${source}: ${beforeText} -> ${afterText}`
+    this.stores.console.addEvent(message, 'connection')
+    logInfo(message)
   }
 
   /** Check whether a machine state is a specific reconnecting substate. */
@@ -339,11 +362,11 @@ export class Connection extends BaseModule {
     // (e.g., user clicks Connect again after a previous session).
     const currentState = this.getMachineState()
     if (currentState !== 'idle') {
-      this.connectionActor.send({ type: 'DISCONNECT' })
+      this.sendMachineEvent({ type: 'DISCONNECT' }, 'connect:reset-before-connect')
     }
     // Signal the machine that a user-initiated connection is starting.
     // This resets any terminal/disconnected state back to idle, then transitions to connecting.
-    this.connectionActor.send({ type: 'CONNECT' })
+    this.sendMachineEvent({ type: 'CONNECT' }, 'connect:start')
 
     // Emit SDK event for connection starting
     this.deps.emitSDK('connection:status', { status: 'connecting' })
@@ -418,7 +441,7 @@ export class Connection extends BaseModule {
       this.setupConnectionHandlers(
         async (isResumption) => {
           // Signal machine: initial connection succeeded
-          this.connectionActor.send({ type: 'CONNECTION_SUCCESS' })
+          this.sendMachineEvent({ type: 'CONNECTION_SUCCESS' }, 'connect:connection-success')
           await this.handleConnectionSuccess(isResumption, `Connected as ${jid}`, effectiveJoinedRooms)
           resolve()
         },
@@ -426,7 +449,7 @@ export class Connection extends BaseModule {
           logError('Connection error:', err.message)
           logErr(`Connection error: ${err.message}`)
           // Signal machine: initial connection failed → terminal.initialFailure
-          this.connectionActor.send({ type: 'CONNECTION_ERROR', error: err.message })
+          this.sendMachineEvent({ type: 'CONNECTION_ERROR', error: err.message }, 'connect:connection-error')
           this.stores.console.addEvent(`Connection error: ${err.message}`, 'error')
           // Emit SDK event for connection error
           this.deps.emitSDK('connection:status', { status: 'error', error: err.message })
@@ -442,7 +465,7 @@ export class Connection extends BaseModule {
    */
   async disconnect(): Promise<void> {
     // Signal machine: user-initiated disconnect
-    this.connectionActor.send({ type: 'DISCONNECT' })
+    this.sendMachineEvent({ type: 'DISCONNECT' }, 'disconnect:user')
 
     // ── Synchronous phase ──
     // All state transitions happen BEFORE any await, so the UI sees
@@ -539,7 +562,7 @@ export class Connection extends BaseModule {
    */
   cancelReconnect(): void {
     // Signal machine: cancel reconnect → transitions to disconnected
-    this.connectionActor.send({ type: 'CANCEL_RECONNECT' })
+    this.sendMachineEvent({ type: 'CANCEL_RECONNECT' }, 'cancelReconnect:user')
   }
 
   /**
@@ -554,7 +577,7 @@ export class Connection extends BaseModule {
 
     // Signal machine: skip waiting, go directly to attempting.
     // The state-machine subscription starts the reconnect attempt.
-    this.connectionActor.send({ type: 'TRIGGER_RECONNECT' })
+    this.sendMachineEvent({ type: 'TRIGGER_RECONNECT' }, 'triggerReconnect')
   }
 
   /**
@@ -585,7 +608,7 @@ export class Connection extends BaseModule {
     // directly (e.g., client.verifyConnection()), we send WAKE here so the
     // machine state and store stay consistent.
     if (this.isInConnectedState()) {
-      this.connectionActor.send({ type: 'WAKE' })
+      this.sendMachineEvent({ type: 'WAKE' }, 'verifyConnection:wake')
     }
 
     try {
@@ -597,7 +620,7 @@ export class Connection extends BaseModule {
         if (!ackReceived) {
           // Timeout waiting for ack - connection is dead
           this.stores.console.addEvent('Verification timed out waiting for SM ack', 'connection')
-          this.connectionActor.send({ type: 'VERIFY_FAILED' })
+          this.sendMachineEvent({ type: 'VERIFY_FAILED' }, 'verifyConnection:sm-timeout')
           this.handleDeadSocket({ source: 'verify-timeout' })
           return false
         }
@@ -628,13 +651,13 @@ export class Connection extends BaseModule {
       }
 
       // Connection verified — signal machine: verifying → healthy
-      this.connectionActor.send({ type: 'VERIFY_SUCCESS' })
+      this.sendMachineEvent({ type: 'VERIFY_SUCCESS' }, 'verifyConnection:success')
       logInfo(`Connection verified (${Date.now() - verifyStart}ms)`)
       return true
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err)
       if (isDeadSocketError(errorMessage) || errorMessage.includes('timeout')) {
-        this.connectionActor.send({ type: 'VERIFY_FAILED' })
+        this.sendMachineEvent({ type: 'VERIFY_FAILED' }, 'verifyConnection:error')
         this.handleDeadSocket({ source: 'verify-error' })
       }
       return false
@@ -739,7 +762,7 @@ export class Connection extends BaseModule {
 
       // Signal machine: SOCKET_DIED → transitions to reconnecting.waiting
       // (incrementAttempt action computes backoff delay)
-      this.connectionActor.send({ type: 'SOCKET_DIED' })
+      this.sendMachineEvent({ type: 'SOCKET_DIED' }, `handleDeadSocket:${source}`)
     }
 
     // IMPORTANT: Null the client reference SYNCHRONOUSLY before any async operations.
@@ -811,7 +834,8 @@ export class Connection extends BaseModule {
           // Send WAKE to the machine — if sleep exceeds SM timeout, the guard
           // transitions directly to reconnecting (skipping verification).
           // Otherwise, transitions to connected.verifying.
-          this.connectionActor.send({ type: 'WAKE', sleepDurationMs })
+          this.sendMachineEvent({ type: 'WAKE', sleepDurationMs }, 'notifySystemState:awake')
+          
 
           // After the machine transition, check if we went to reconnecting
           // (long sleep) or verifying (short sleep)
@@ -1176,7 +1200,7 @@ export class Connection extends BaseModule {
 
       // Detect resource conflict (another client logged in with same resource)
       if (message.includes('conflict')) {
-        this.connectionActor.send({ type: 'CONFLICT' })
+        this.sendMachineEvent({ type: 'CONFLICT' }, 'stream-error:conflict')
         this.stores.console.addEvent('Disconnected: Resource conflict (another client connected)', 'error')
         console.error('[XMPP] Resource conflict: another client connected with the same account')
         this.stores.events.addSystemNotification(
@@ -1187,7 +1211,7 @@ export class Connection extends BaseModule {
         // Clear credentials to prevent accidental reconnect
         this.credentials = null
       } else if (message.includes('not-authorized') || message.includes('auth')) {
-        this.connectionActor.send({ type: 'AUTH_ERROR' })
+        this.sendMachineEvent({ type: 'AUTH_ERROR' }, 'stream-error:auth')
         this.stores.console.addEvent('Disconnected: Authentication error', 'error')
         console.error('[XMPP] Authentication failed: not-authorized')
         this.credentials = null
@@ -1207,7 +1231,7 @@ export class Connection extends BaseModule {
         this.xmpp = null
         clearSmAckDebounce(this.smPatchState)
 
-        this.connectionActor.send({ type: 'SOCKET_DIED' })
+        this.sendMachineEvent({ type: 'SOCKET_DIED' }, 'stream-error:system-shutdown')
 
         // Forcefully destroy old client — strip listeners and close socket
         // to prevent stale events from interfering with reconnection
@@ -1291,7 +1315,7 @@ export class Connection extends BaseModule {
             'Socket closed from stale client while connected, forcing reconnect recovery',
             'connection'
           )
-          this.connectionActor.send({ type: 'SOCKET_DIED' })
+          this.sendMachineEvent({ type: 'SOCKET_DIED' }, 'disconnect:stale-connected')
         }
         return
       }
@@ -1366,7 +1390,7 @@ export class Connection extends BaseModule {
         // Unexpected disconnect while connected — send SOCKET_DIED to trigger reconnect
         this.stores.console.addEvent('Connection lost unexpectedly, will reconnect', 'connection')
         logInfo('Unexpected disconnect, initiating reconnect')
-        this.connectionActor.send({ type: 'SOCKET_DIED' })
+        this.sendMachineEvent({ type: 'SOCKET_DIED' }, 'disconnect:unexpected')
 
         // Null the client reference synchronously to prevent race conditions:
         // - verifyConnection() may be awaiting and will see xmpp=null, returning false fast
@@ -1468,7 +1492,7 @@ export class Connection extends BaseModule {
       // This shouldn't happen in normal flow, but guards against edge cases.
       if (this.xmpp && (this.xmpp as any).status === 'online') {
         this.stores.console.addEvent('Connection still online - cancelling reconnect attempt', 'connection')
-        this.connectionActor.send({ type: 'CONNECTION_SUCCESS' })
+        this.sendMachineEvent({ type: 'CONNECTION_SUCCESS' }, 'attemptReconnect:already-online')
         return
       }
 
@@ -1533,7 +1557,7 @@ export class Connection extends BaseModule {
           async (isResumption) => {
             clearTimeout(timeout)
             // Signal machine: reconnect succeeded → connected.healthy
-            this.connectionActor.send({ type: 'CONNECTION_SUCCESS' })
+            this.sendMachineEvent({ type: 'CONNECTION_SUCCESS' }, 'attemptReconnect:success')
             await this.handleConnectionSuccess(
               isResumption,
               'Reconnected',
@@ -1554,7 +1578,7 @@ export class Connection extends BaseModule {
       logErr(`Reconnect failed: ${errorMsg}`)
       // Signal machine: reconnect failed → either back to waiting (with incrementAttempt)
       // or terminal.maxRetries (if exhausted)
-      this.connectionActor.send({ type: 'CONNECTION_ERROR', error: errorMsg })
+      this.sendMachineEvent({ type: 'CONNECTION_ERROR', error: errorMsg }, 'attemptReconnect:error')
     }
   }
 
