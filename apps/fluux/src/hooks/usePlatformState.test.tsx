@@ -4,20 +4,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 
-// Mock Tauri APIs
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(),
-}))
-
-vi.mock('@tauri-apps/api/event', () => ({
-  listen: vi.fn(() => Promise.resolve(() => {})),
-}))
-
-vi.mock('@/utils/renderLoopDetector', () => ({
-  startWakeGracePeriod: vi.fn(),
-}))
-
-// Mock functions - use vi.hoisted to ensure they're available before vi.mock
+// Hoisted mocks/state so vi.mock factories can reference them
 const {
   mockNotifyIdle,
   mockNotifyActive,
@@ -25,17 +12,47 @@ const {
   mockPresenceConnect,
   mockPresenceDisconnect,
   mockClientNotifySystemState,
-} = vi.hoisted(() => ({
-  mockNotifyIdle: vi.fn(),
-  mockNotifyActive: vi.fn(),
-  mockNotifySystemState: vi.fn(),
-  mockPresenceConnect: vi.fn(),
-  mockPresenceDisconnect: vi.fn(),
-  mockClientNotifySystemState: vi.fn().mockResolvedValue(undefined),
+  mockConnectionStatus,
+  tauriListeners,
+  mockListen,
+} = vi.hoisted(() => {
+  const listeners = new Map<string, (event?: { payload?: unknown }) => unknown>()
+  return {
+    mockNotifyIdle: vi.fn(),
+    mockNotifyActive: vi.fn(),
+    mockNotifySystemState: vi.fn(),
+    mockPresenceConnect: vi.fn(),
+    mockPresenceDisconnect: vi.fn(),
+    mockClientNotifySystemState: vi.fn().mockResolvedValue(undefined),
+    mockConnectionStatus: { current: 'online' },
+    tauriListeners: listeners,
+    mockListen: vi.fn((event: string, handler: (event?: { payload?: unknown }) => unknown) => {
+      listeners.set(event, handler)
+      return Promise.resolve(() => {
+        if (listeners.get(event) === handler) {
+          listeners.delete(event)
+        }
+      })
+    }),
+  }
+})
+
+// Mock Tauri APIs
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn(),
+}))
+
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: mockListen,
+}))
+
+vi.mock('@/utils/renderLoopDetector', () => ({
+  startWakeGracePeriod: vi.fn(),
 }))
 
 vi.mock('@fluux/sdk/react', () => ({
-  useConnectionStore: (selector: (state: { status: string }) => string) => selector({ status: 'online' }),
+  useConnectionStore: (selector: (state: { status: string }) => string) =>
+    selector({ status: mockConnectionStatus.current }),
 }))
 
 vi.mock('@fluux/sdk', () => ({
@@ -66,16 +83,19 @@ vi.mock('@fluux/sdk', () => ({
 }))
 
 // Import after mocks are set up
-import { usePlatformState } from './usePlatformState'
+import { usePlatformState, shouldHandleProxyClosedStatus } from './usePlatformState'
 
 describe('usePlatformState', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.useFakeTimers()
+    mockConnectionStatus.current = 'online'
+    tauriListeners.clear()
   })
 
   afterEach(() => {
     vi.useRealTimers()
+    delete (window as any).__TAURI_INTERNALS__
   })
 
   describe('activity detection', () => {
@@ -187,6 +207,20 @@ describe('usePlatformState', () => {
       unmount()
 
       expect(removeEventListenerSpy).toHaveBeenCalledWith('mousemove', expect.any(Function))
+    })
+  })
+
+  describe('proxy-close status guard', () => {
+    it('should handle proxy close when online or verifying', () => {
+      expect(shouldHandleProxyClosedStatus('online')).toBe(true)
+      expect(shouldHandleProxyClosedStatus('verifying')).toBe(true)
+    })
+
+    it('should ignore proxy close for non-connected states', () => {
+      expect(shouldHandleProxyClosedStatus('connecting')).toBe(false)
+      expect(shouldHandleProxyClosedStatus('reconnecting')).toBe(false)
+      expect(shouldHandleProxyClosedStatus('disconnected')).toBe(false)
+      expect(shouldHandleProxyClosedStatus('error')).toBe(false)
     })
   })
 })

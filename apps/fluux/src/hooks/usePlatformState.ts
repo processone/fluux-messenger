@@ -22,6 +22,14 @@ const MIN_HIDDEN_TIME_MS = 60_000
 /** Debounce window to prevent duplicate wake handling (ms). */
 const WAKE_DEBOUNCE_MS = 2000
 
+/**
+ * Proxy-close events should only trigger wake/reconnect while the app was
+ * previously connected. Reconnect loops already manage backoff internally.
+ */
+export function shouldHandleProxyClosedStatus(status: string): boolean {
+  return status === 'online' || status === 'verifying'
+}
+
 // ── Hook ───────────────────────────────────────────────────────────────────────
 
 /**
@@ -374,7 +382,8 @@ export function usePlatformState() {
 
       // Proxy watchdog detected dead connection
       void listen('proxy-connection-closed', () => {
-        if (statusRef.current === 'disconnected' || statusRef.current === 'error') return
+        const currentStatus = statusRef.current
+        if (!shouldHandleProxyClosedStatus(currentStatus)) return
         console.log('[PlatformState] Proxy connection closed by watchdog, triggering reconnect')
         if (!shouldHandleWake('proxy-closed')) return
         client.notifySystemState('awake')
