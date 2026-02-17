@@ -2001,6 +2001,23 @@ describe('XMPPClient Connection', () => {
       expect(mockClientFactory).toHaveBeenCalled()
     })
 
+    it('should force reconnect recovery when stale disconnect arrives while still connected', async () => {
+      // Simulate the race: internal xmpp ref was already replaced/nulled,
+      // but the old socket disconnect event arrives while machine is connected.
+      ;(xmppClient.connection as any).xmpp = null
+
+      mockXmppClientInstance._emit('disconnect', {
+        clean: false,
+        reason: { code: 1006, reason: 'ECONNERROR' },
+      })
+
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        'Socket closed from stale client while connected, forcing reconnect recovery',
+        'connection'
+      )
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
+    })
+
     it('should schedule reconnect after SM verify timeout without disconnect event', async () => {
       // Add SM to enable verification path
       mockXmppClientInstance.streamManagement = {

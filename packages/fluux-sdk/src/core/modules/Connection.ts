@@ -1226,6 +1226,7 @@ export class Connection extends BaseModule {
       // this.xmpp and started reconnection — the old client's async disconnect()
       // fires 'disconnect' later, but we must not act on it.
       if (this.xmpp !== registeredClient) {
+        const machineState = this.getMachineState()
         const isExpectedBridgeClose = wasClean
           && rawReason
           && typeof rawReason === 'object'
@@ -1236,6 +1237,18 @@ export class Connection extends BaseModule {
         if (!isExpectedBridgeClose) {
           logInfo('Disconnect from stale client, ignoring')
           this.stores.console.addEvent('Socket closed (stale client, ignoring)', 'connection')
+        }
+
+        // Recovery fallback: if the machine still believes we're connected
+        // when a stale disconnect arrives, force reconnect transition instead
+        // of silently staying in a wedged connected state.
+        if (typeof machineState === 'object' && 'connected' in machineState) {
+          logWarn(`Stale disconnect arrived while machine still connected (state=${JSON.stringify(machineState)}${closeInfo})`)
+          this.stores.console.addEvent(
+            'Socket closed from stale client while connected, forcing reconnect recovery',
+            'connection'
+          )
+          this.connectionActor.send({ type: 'SOCKET_DIED' })
         }
         return
       }
