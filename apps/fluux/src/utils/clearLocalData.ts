@@ -8,8 +8,9 @@ import {
   adminStore,
   blockingStore,
   clearAllAvatarData,
+  getBareJid,
 } from '@fluux/sdk'
-import { clearSession } from '@/hooks/useSessionPersistence'
+import { clearSession, getSession } from '@/hooks/useSessionPersistence'
 import { deleteCredentials } from '@/utils/keychain'
 
 /** localStorage keys containing user data (not app preferences) */
@@ -20,18 +21,36 @@ const USER_DATA_KEYS = [
   'xmpp-has-saved-credentials',
 ]
 
+interface ClearLocalDataOptions {
+  /**
+   * When true, clears all local account data.
+   * Use for CLI --clear-storage and explicit full wipes only.
+   */
+  allAccounts?: boolean
+}
+
 /**
  * Clear all local user data (localStorage, sessionStorage, IndexedDB).
  * Preserves app preferences (theme, language, time format).
  *
  * Call on disconnect when the user opts to clean local data.
  */
-export async function clearLocalData(): Promise<void> {
-  console.log('[Fluux] clearLocalData: starting')
+export async function clearLocalData(options: ClearLocalDataOptions = {}): Promise<void> {
+  const allAccounts = options.allAccounts ?? false
+  const session = getSession()
+  const scopedJid = session?.jid ? getBareJid(session.jid) : null
+
+  console.log(`[Fluux] clearLocalData: starting (${allAccounts ? 'all accounts' : (scopedJid ?? 'current account')})`)
 
   try {
-    // 1. Clear SDK sessionStorage keys (fluux:session:{jid}, fluux:presence-machine, etc.)
-    clearFluuxSessionStorageKeys()
+    // 1. Clear SDK sessionStorage keys
+    // - account-scoped on regular logout
+    // - all accounts for CLI --clear-storage
+    if (allAccounts) {
+      clearAllFluuxSessionStorageKeys()
+    } else {
+      clearScopedFluuxSessionStorageKeys(scopedJid)
+    }
 
     // 2. Reset Zustand stores (clears in-memory state + their localStorage)
     //    chatStore.reset() clears 'xmpp-chat-storage' localStorage + IndexedDB messages
@@ -54,22 +73,41 @@ export async function clearLocalData(): Promise<void> {
     await deleteCredentials({ force: true })
     console.log('[Fluux] clearLocalData: keychain done')
 
-    // 5. Clear IndexedDB avatar cache (blobs, hash mappings, no-avatar entries)
-    //    Note: chatStore.reset() already handles clearing the message cache
-    await clearAllAvatarData()
+    // 5. Clear avatar cache only for explicit full wipe.
+    //    Avatar cache is currently global; account-scoped deletion is not supported yet.
+    //    Note: chatStore.reset() already handles clearing the message cache.
+    if (allAccounts) {
+      await clearAllAvatarData()
+    }
     console.log('[Fluux] clearLocalData: complete')
   } finally {
     // Clear app-level session keys last so the logout transition happens
     // after cleanup has run.
-    clearSession()
+    clearSession(allAccounts ? { allAccounts: true } : undefined)
   }
 }
 
 /**
- * Clear all fluux: prefixed keys from sessionStorage.
- * These are created by the SDK's sessionStorageAdapter and presence machine.
+ * Clear scoped SDK sessionStorage keys for one account.
  */
-function clearFluuxSessionStorageKeys(): void {
+function clearScopedFluuxSessionStorageKeys(jid: string | null): void {
+  if (!jid) return
+
+  const keys = [
+    `fluux:session:${jid}`,
+    `fluux:roster:${jid}`,
+    `fluux:rooms:${jid}`,
+    `fluux:server-info:${jid}`,
+    `fluux:profile:${jid}`,
+  ]
+
+  keys.forEach((key) => sessionStorage.removeItem(key))
+}
+
+/**
+ * Clear all fluux: prefixed keys from sessionStorage (all accounts).
+ */
+function clearAllFluuxSessionStorageKeys(): void {
   const keysToRemove: string[] = []
   for (let i = 0; i < sessionStorage.length; i++) {
     const key = sessionStorage.key(i)

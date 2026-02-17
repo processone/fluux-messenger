@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { chatStore } from './chatStore'
 import type { Message, Conversation } from '../core/types'
 import { getLocalPart } from '../core/jid'
+import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/storageScope'
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -69,6 +70,7 @@ function createMessage(conversationId: string, body: string, isOutgoing = false)
 
 describe('chatStore', () => {
   beforeEach(() => {
+    _resetStorageScopeForTesting()
     // Reset store state before each test
     localStorageMock.clear()
     chatStore.setState({
@@ -712,6 +714,67 @@ describe('chatStore', () => {
       chatStore.getState().reset()
 
       expect(localStorageMock.removeItem).toHaveBeenCalledWith('xmpp-chat-storage')
+    })
+  })
+
+  describe('switchAccount', () => {
+    it('should load account-scoped conversations and drafts', () => {
+      const aliceState = JSON.stringify({
+        state: {
+          conversations: [['alice@example.com', { id: 'alice@example.com', name: 'Alice', type: 'chat', unreadCount: 0 }]],
+          archivedConversations: [],
+          drafts: [['alice@example.com', 'Alice draft']],
+        },
+      })
+      localStorageMock._store['xmpp-chat-storage:alice@example.com'] = aliceState
+
+      setStorageScopeJid('alice@example.com')
+      chatStore.getState().switchAccount('alice@example.com')
+
+      expect(chatStore.getState().conversations.has('alice@example.com')).toBe(true)
+      expect(chatStore.getState().getDraft('alice@example.com')).toBe('Alice draft')
+    })
+
+    it('should clear in-memory state when switching to an account without saved data', () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      chatStore.getState().setDraft('alice@example.com', 'local draft')
+
+      localStorageMock.removeItem('xmpp-chat-storage')
+      setStorageScopeJid('bob@example.com')
+      chatStore.getState().switchAccount('bob@example.com')
+
+      expect(chatStore.getState().conversations.size).toBe(0)
+      expect(chatStore.getState().drafts.size).toBe(0)
+    })
+
+    it('should migrate only conversation lists from legacy storage', () => {
+      const legacyData = JSON.stringify({
+        state: {
+          conversations: [
+            ['alice@example.com', { id: 'alice@example.com', name: 'Alice', type: 'chat', unreadCount: 0 }],
+            ['bob@example.com', { id: 'bob@example.com', name: 'Bob', type: 'chat', unreadCount: 0 }],
+          ],
+          archivedConversations: ['bob@example.com'],
+          drafts: [['alice@example.com', 'legacy draft should not migrate']],
+        },
+      })
+      localStorageMock._store['xmpp-chat-storage'] = legacyData
+
+      setStorageScopeJid('me@example.com')
+      chatStore.getState().switchAccount('me@example.com')
+
+      // Legacy key should be consumed after successful migration
+      expect(localStorageMock._store['xmpp-chat-storage']).toBeUndefined()
+      expect(localStorageMock._store['xmpp-chat-storage:me@example.com']).toBeDefined()
+
+      // Conversation lists should be restored
+      expect(chatStore.getState().conversations.has('alice@example.com')).toBe(true)
+      expect(chatStore.getState().conversations.has('bob@example.com')).toBe(true)
+      expect(chatStore.getState().archivedConversations.has('bob@example.com')).toBe(true)
+
+      // Drafts are intentionally not migrated
+      expect(chatStore.getState().drafts.size).toBe(0)
+      expect(chatStore.getState().getDraft('alice@example.com')).toBe('')
     })
   })
 

@@ -11,13 +11,14 @@ import { buildMessageKeySet, isMessageDuplicate, sortMessagesByTimestamp, trimMe
 import { shouldUpdateLastMessage } from './shared/lastMessageUtils'
 import * as notifState from './shared/notificationState'
 import { connectionStore } from './connectionStore'
+import { buildScopedStorageKey } from '../utils/storageScope'
 
 // Maximum messages to keep in memory per conversation (display buffer)
 // This is a memory/performance tradeoff - higher values allow smoother scrolling
 // but use more RAM. 1000 is enough for typical usage with lazy loading.
 // All messages are stored in IndexedDB regardless of this limit.
 const MAX_MESSAGES_PER_CONVERSATION = 1000
-const STORAGE_KEY = 'xmpp-chat-storage'
+const STORAGE_KEY_BASE = 'xmpp-chat-storage'
 
 /**
  * Stable empty array reference to prevent infinite re-renders.
@@ -25,6 +26,14 @@ const STORAGE_KEY = 'xmpp-chat-storage'
  * constant instead of creating a new [] instances each time.
  */
 const EMPTY_MESSAGE_ARRAY: Message[] = []
+
+function getScopedStorageKey(jid?: string | null): string {
+  return buildScopedStorageKey(STORAGE_KEY_BASE, jid)
+}
+
+function getLegacyStorageKey(): string {
+  return STORAGE_KEY_BASE
+}
 
 /**
  * Extract deduplication keys for a chat message.
@@ -148,6 +157,7 @@ interface ChatState {
   // IndexedDB message loading
   loadMessagesFromCache: (conversationId: string, options?: { limit?: number; before?: Date }) => Promise<Message[]>
   loadOlderMessagesFromCache: (conversationId: string, limit?: number) => Promise<Message[]>
+  switchAccount: (jid: string | null) => void
   reset: () => void
 }
 
@@ -300,20 +310,103 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
   }
 }
 
+function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates'> {
+  return {
+    conversationEntities: new Map(),
+    conversationMeta: new Map(),
+    conversations: new Map(),
+    messages: new Map(),
+    activeConversationId: null,
+    archivedConversations: new Set(),
+    typingStates: new Map(),
+    activeAnimation: null,
+    drafts: new Map(),
+    mamQueryStates: new Map(),
+  }
+}
+
+/**
+ * One-time migration from pre-scope storage.
+ *
+ * Legacy versions stored chat data under a single unscoped key. For safety, we only migrate
+ * conversation lists (active + archived classification) and intentionally skip drafts/messages.
+ */
+function migrateLegacyConversationListsToScoped(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates'> | null {
+  if (!jid) return null
+
+  const legacyKey = getLegacyStorageKey()
+  const scopedStorageKey = getScopedStorageKey(jid)
+  if (legacyKey === scopedStorageKey) return null
+
+  try {
+    const legacyRaw = localStorage.getItem(legacyKey)
+    if (!legacyRaw) return null
+
+    const parsed = JSON.parse(legacyRaw)
+    const restored = deserializeState(parsed.state)
+    const migrated = createEmptyChatState()
+
+    migrated.conversationEntities = restored.conversationEntities
+    migrated.conversationMeta = restored.conversationMeta
+    migrated.conversations = restored.conversations
+    migrated.archivedConversations = restored.archivedConversations
+
+    const serialized = serializeState({
+      conversationEntities: migrated.conversationEntities,
+      conversationMeta: migrated.conversationMeta,
+      conversations: migrated.conversations,
+      messages: migrated.messages,
+      archivedConversations: migrated.archivedConversations,
+      drafts: migrated.drafts,
+    })
+
+    // Persist migrated conversation lists to scoped storage and clear the legacy key.
+    localStorage.setItem(scopedStorageKey, JSON.stringify({ state: serialized }))
+    localStorage.removeItem(legacyKey)
+
+    return migrated
+  } catch {
+    return null
+  }
+}
+
+function loadScopedChatState(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates'> {
+  const baseState = createEmptyChatState()
+  const scopedStorageKey = getScopedStorageKey(jid)
+
+  try {
+    const str = localStorage.getItem(scopedStorageKey)
+    if (!str) {
+      const migrated = migrateLegacyConversationListsToScoped(jid)
+      return migrated ?? baseState
+    }
+    const parsed = JSON.parse(str)
+    const restored = deserializeState(parsed.state)
+    return {
+      ...baseState,
+      conversationEntities: restored.conversationEntities,
+      conversationMeta: restored.conversationMeta,
+      conversations: restored.conversations,
+      messages: restored.messages,
+      activeConversationId: restored.activeConversationId,
+      archivedConversations: restored.archivedConversations,
+      drafts: restored.drafts,
+    }
+  } catch {
+    try {
+      localStorage.removeItem(scopedStorageKey)
+    } catch {
+      // Ignore storage errors
+    }
+    return baseState
+  }
+}
+
 export const chatStore = createStore<ChatState>()(
   subscribeWithSelector(
     persist(
     (set, get) => ({
-      conversationEntities: new Map(),
-      conversationMeta: new Map(),
-      conversations: new Map(),
-      messages: new Map(),
-      activeConversationId: null,
-      archivedConversations: new Set(),
-      typingStates: new Map(),
-      activeAnimation: null,
-      drafts: new Map(),
-      mamQueryStates: new Map(),
+      ...createEmptyChatState(),
 
       activeConversation: () => {
         const { activeConversationId, conversations } = get()
@@ -1122,50 +1215,57 @@ export const chatStore = createStore<ChatState>()(
         }
       },
 
+      switchAccount: (jid) => {
+        clearAllTypingTimeouts()
+        set(loadScopedChatState(jid))
+      },
+
       reset: () => {
+        clearAllTypingTimeouts()
         // Clear persisted data on logout
-        localStorage.removeItem(STORAGE_KEY)
+        try {
+          localStorage.removeItem(getScopedStorageKey())
+        } catch {
+          // Ignore storage errors
+        }
         // Clear IndexedDB messages asynchronously
         void messageCache.clearAllMessages()
-        set({
-          conversationEntities: new Map(),
-          conversationMeta: new Map(),
-          conversations: new Map(),
-          messages: new Map(),
-          activeConversationId: null,
-          archivedConversations: new Set(),
-          typingStates: new Map(),
-          activeAnimation: null,
-          drafts: new Map(),
-          mamQueryStates: new Map(),
-        })
+        set(createEmptyChatState())
       },
     }),
     {
-      name: STORAGE_KEY,
+      name: STORAGE_KEY_BASE,
       storage: {
-        getItem: (name) => {
+        getItem: () => {
+          const scopedStorageKey = getScopedStorageKey()
           try {
-            const str = localStorage.getItem(name)
+            const str = localStorage.getItem(scopedStorageKey)
             if (!str) return null
             const parsed = JSON.parse(str)
             return { state: deserializeState(parsed.state) }
           } catch {
             // Corrupted data, clear and start fresh
-            localStorage.removeItem(name)
+            localStorage.removeItem(scopedStorageKey)
             return null
           }
         },
-        setItem: (name, value) => {
+        setItem: (_, value) => {
+          const scopedStorageKey = getScopedStorageKey()
           try {
             const state = value.state as ChatState
             const serialized = serializeState(state)
-            localStorage.setItem(name, JSON.stringify({ state: serialized }))
+            localStorage.setItem(scopedStorageKey, JSON.stringify({ state: serialized }))
           } catch {
             // Storage quota exceeded or other error, continue without persistence
           }
         },
-        removeItem: (name) => localStorage.removeItem(name),
+        removeItem: () => {
+          try {
+            localStorage.removeItem(getScopedStorageKey())
+          } catch {
+            // Ignore storage errors
+          }
+        },
       },
       partialize: (state) => ({
         // Persist separated maps (Phase 6)

@@ -20,9 +20,27 @@ import {
 } from './useSessionPersistence'
 import type { Contact, Room, RoomMessage, ServerInfo, HttpUploadService, ResourcePresence } from '@fluux/sdk'
 
+const TEST_JID = 'user@example.com'
+const OTHER_JID = 'other@example.com'
+const TEST_SERVER = 'wss://example.com/ws'
+const ACTIVE_SESSION_JID_KEY = 'xmpp-active-session-jid'
+const SESSION_KEY = 'xmpp-session'
+const ROSTER_KEY = 'xmpp-roster'
+const ROOMS_KEY = 'xmpp-rooms'
+const VIEW_STATE_KEY = 'xmpp-view-state'
+const OWN_RESOURCES_KEY = 'xmpp-own-resources'
+
+function scopedKey(baseKey: string, jid: string = TEST_JID): string {
+  return `${baseKey}:${jid}`
+}
+
 // Mock sessionStorage
 const mockStorage: Record<string, string> = {}
 const mockSessionStorage = {
+  get length() {
+    return Object.keys(mockStorage).length
+  },
+  key: vi.fn((index: number) => Object.keys(mockStorage)[index] ?? null),
   getItem: vi.fn((key: string) => mockStorage[key] || null),
   setItem: vi.fn((key: string, value: string) => {
     mockStorage[key] = value
@@ -44,19 +62,23 @@ describe('useSessionPersistence', () => {
   beforeEach(() => {
     // Clear mock storage before each test
     Object.keys(mockStorage).forEach((key) => delete mockStorage[key])
+    mockStorage[ACTIVE_SESSION_JID_KEY] = TEST_JID
     vi.clearAllMocks()
   })
 
   describe('Session credentials', () => {
     it('should save and retrieve session credentials', () => {
-      saveSession('user@example.com', 'password123', 'wss://example.com/ws')
+      saveSession(TEST_JID, 'password123', TEST_SERVER)
 
       const session = getSession()
       expect(session).toEqual({
-        jid: 'user@example.com',
+        jid: TEST_JID,
         password: 'password123',
-        server: 'wss://example.com/ws',
+        server: TEST_SERVER,
       })
+      expect(mockStorage[ACTIVE_SESSION_JID_KEY]).toBe(TEST_JID)
+      expect(mockStorage[scopedKey(SESSION_KEY)]).toBeDefined()
+      expect(mockStorage[SESSION_KEY]).toBeUndefined()
     })
 
     // Note: SM state tests removed - SM state is now managed by SDK's storage adapter
@@ -69,22 +91,49 @@ describe('useSessionPersistence', () => {
   describe('clearSession', () => {
     it('should remove all session-related keys', () => {
       // Set up all keys
-      saveSession('user@example.com', 'password', 'wss://example.com/ws')
+      saveSession(TEST_JID, 'password', TEST_SERVER)
       saveViewState({
         sidebarView: 'messages',
         activeConversationId: null,
         activeRoomJid: null,
         selectedContactJid: null,
-      })
+      }, TEST_JID)
 
       clearSession()
 
       expect(getSession()).toBeNull()
-      expect(getSavedViewState()).toBeNull()
-      expect(getSavedRoster()).toBeNull()
-      expect(getSavedRooms()).toBeNull()
-      expect(getSavedServerInfo()).toBeNull()
+      expect(getSavedViewState(TEST_JID)).toBeNull()
+      expect(getSavedRoster(TEST_JID)).toBeNull()
+      expect(getSavedRooms(TEST_JID)).toBeNull()
+      expect(getSavedServerInfo(TEST_JID)).toBeNull()
+      expect(mockStorage[ACTIVE_SESSION_JID_KEY]).toBeUndefined()
       // Note: Presence is now managed by XState machine with key 'fluux:presence-machine'
+    })
+
+    it('should clear scoped data for all accounts', () => {
+      saveSession(TEST_JID, 'password', TEST_SERVER)
+      saveViewState({
+        sidebarView: 'messages',
+        activeConversationId: null,
+        activeRoomJid: null,
+        selectedContactJid: null,
+      }, TEST_JID)
+
+      saveSession(OTHER_JID, 'password', 'wss://other.example/ws')
+      saveViewState({
+        sidebarView: 'rooms',
+        activeConversationId: null,
+        activeRoomJid: 'room@conference.other.example',
+        selectedContactJid: null,
+      }, OTHER_JID)
+
+      clearSession({ allAccounts: true })
+
+      expect(mockStorage[scopedKey(SESSION_KEY, TEST_JID)]).toBeUndefined()
+      expect(mockStorage[scopedKey(SESSION_KEY, OTHER_JID)]).toBeUndefined()
+      expect(mockStorage[scopedKey(VIEW_STATE_KEY, TEST_JID)]).toBeUndefined()
+      expect(mockStorage[scopedKey(VIEW_STATE_KEY, OTHER_JID)]).toBeUndefined()
+      expect(mockStorage[ACTIVE_SESSION_JID_KEY]).toBeUndefined()
     })
   })
 
@@ -100,9 +149,9 @@ describe('useSessionPersistence', () => {
         selectedContactJid: 'bob@example.com',
       }
 
-      saveViewState(viewState)
+      saveViewState(viewState, TEST_JID)
 
-      const restored = getSavedViewState()
+      const restored = getSavedViewState(TEST_JID)
       expect(restored).toEqual(viewState)
     })
 
@@ -125,8 +174,8 @@ describe('useSessionPersistence', () => {
           selectedContactJid: null,
         }
 
-        saveViewState(viewState)
-        const restored = getSavedViewState()
+        saveViewState(viewState, TEST_JID)
+        const restored = getSavedViewState(TEST_JID)
         expect(restored?.sidebarView).toBe(view)
       })
     })
@@ -140,15 +189,61 @@ describe('useSessionPersistence', () => {
         showRoomOccupants: true,
       }
 
-      saveViewState(viewState)
-      const restored = getSavedViewState()
+      saveViewState(viewState, TEST_JID)
+      const restored = getSavedViewState(TEST_JID)
       expect(restored?.showRoomOccupants).toBe(true)
 
       // Also test with false
       viewState.showRoomOccupants = false
-      saveViewState(viewState)
-      const restoredFalse = getSavedViewState()
+      saveViewState(viewState, TEST_JID)
+      const restoredFalse = getSavedViewState(TEST_JID)
       expect(restoredFalse?.showRoomOccupants).toBe(false)
+    })
+
+    it('should isolate view state by jid', () => {
+      const firstState: ViewStateData = {
+        sidebarView: 'messages',
+        activeConversationId: 'alice@example.com',
+        activeRoomJid: null,
+        selectedContactJid: null,
+      }
+      const secondState: ViewStateData = {
+        sidebarView: 'rooms',
+        activeConversationId: null,
+        activeRoomJid: 'room@conference.other.example',
+        selectedContactJid: null,
+      }
+
+      saveViewState(firstState, TEST_JID)
+      saveViewState(secondState, OTHER_JID)
+
+      expect(getSavedViewState(TEST_JID)).toEqual(firstState)
+      expect(getSavedViewState(OTHER_JID)).toEqual(secondState)
+    })
+
+    it('should read legacy unscoped view state when no account scope is known', () => {
+      const legacyState: ViewStateData = {
+        sidebarView: 'archive',
+        activeConversationId: null,
+        activeRoomJid: null,
+        selectedContactJid: null,
+      }
+
+      mockStorage[VIEW_STATE_KEY] = JSON.stringify(legacyState)
+      delete mockStorage[ACTIVE_SESSION_JID_KEY]
+      expect(getSavedViewState()).toEqual(legacyState)
+    })
+
+    it('should not read legacy unscoped view state when account scope is known', () => {
+      const legacyState: ViewStateData = {
+        sidebarView: 'archive',
+        activeConversationId: 'alice@example.com',
+        activeRoomJid: null,
+        selectedContactJid: null,
+      }
+
+      mockStorage[VIEW_STATE_KEY] = JSON.stringify(legacyState)
+      expect(getSavedViewState(TEST_JID)).toBeNull()
     })
   })
 
@@ -168,8 +263,8 @@ describe('useSessionPersistence', () => {
         },
       ]
 
-      saveRoster(contacts)
-      const restored = getSavedRoster()
+      saveRoster(contacts, TEST_JID)
+      const restored = getSavedRoster(TEST_JID)
 
       expect(restored).toHaveLength(1)
       expect(restored![0].lastInteraction).toBeInstanceOf(Date)
@@ -201,8 +296,8 @@ describe('useSessionPersistence', () => {
         },
       ]
 
-      saveRoster(contacts)
-      const restored = getSavedRoster()
+      saveRoster(contacts, TEST_JID)
+      const restored = getSavedRoster(TEST_JID)
 
       expect(restored).toHaveLength(1)
       expect(restored![0].resources).toBeInstanceOf(Map)
@@ -221,8 +316,8 @@ describe('useSessionPersistence', () => {
         },
       ]
 
-      saveRoster(contacts)
-      const restored = getSavedRoster()
+      saveRoster(contacts, TEST_JID)
+      const restored = getSavedRoster(TEST_JID)
 
       expect(restored).toHaveLength(1)
       expect(restored![0].lastInteraction).toBeUndefined()
@@ -230,9 +325,9 @@ describe('useSessionPersistence', () => {
     })
 
     it('should handle empty roster', () => {
-      saveRoster([])
+      saveRoster([], TEST_JID)
       // Note: empty array is saved but getSavedRoster returns null for empty
-      const stored = mockStorage['xmpp-roster']
+      const stored = mockStorage[scopedKey(ROSTER_KEY)]
       expect(stored).toBe('[]')
     })
   })
@@ -270,8 +365,8 @@ describe('useSessionPersistence', () => {
         ],
       ])
 
-      saveRooms(rooms)
-      const restored = getSavedRooms()
+      saveRooms(rooms, TEST_JID)
+      const restored = getSavedRooms(TEST_JID)
 
       expect(restored).toHaveLength(1)
       expect(restored![0].messages).toHaveLength(1)
@@ -301,8 +396,8 @@ describe('useSessionPersistence', () => {
         ],
       ])
 
-      saveRooms(rooms)
-      const restored = getSavedRooms()
+      saveRooms(rooms, TEST_JID)
+      const restored = getSavedRooms(TEST_JID)
 
       expect(restored![0].messages[0].retractedAt).toBeInstanceOf(Date)
       expect(restored![0].messages[0].retractedAt?.getTime()).toBe(retractedAt.getTime())
@@ -332,8 +427,8 @@ describe('useSessionPersistence', () => {
         ],
       ])
 
-      saveRooms(rooms)
-      const restored = getSavedRooms()
+      saveRooms(rooms, TEST_JID)
+      const restored = getSavedRooms(TEST_JID)
 
       expect(restored![0].messages).toHaveLength(50)
       // Should be the LAST 50 messages (msg50-msg99)
@@ -363,8 +458,8 @@ describe('useSessionPersistence', () => {
         ],
       ])
 
-      saveRooms(rooms)
-      const restored = getSavedRooms()
+      saveRooms(rooms, TEST_JID)
+      const restored = getSavedRooms(TEST_JID)
 
       expect(restored![0].lastReadAt).toBeInstanceOf(Date)
       expect(restored![0].lastReadAt?.getTime()).toBe(lastReadAt.getTime())
@@ -391,8 +486,8 @@ describe('useSessionPersistence', () => {
         ],
       ])
 
-      saveRooms(rooms)
-      const restored = getSavedRooms()
+      saveRooms(rooms, TEST_JID)
+      const restored = getSavedRooms(TEST_JID)
 
       expect(restored![0].occupants).toBeInstanceOf(Map)
       expect(restored![0].occupants.get('alice')?.jid).toBe('alice@example.com')
@@ -420,8 +515,8 @@ describe('useSessionPersistence', () => {
         ],
       ])
 
-      saveRooms(rooms)
-      const restored = getSavedRooms()
+      saveRooms(rooms, TEST_JID)
+      const restored = getSavedRooms(TEST_JID)
 
       expect(restored![0].messages).toEqual([])
     })
@@ -452,8 +547,8 @@ describe('useSessionPersistence', () => {
         ],
       ])
 
-      saveRooms(rooms)
-      const restored = getSavedRooms()
+      saveRooms(rooms, TEST_JID)
+      const restored = getSavedRooms(TEST_JID)
 
       expect(restored![0].name).toBe('Test Room')
       expect(restored![0].nickname).toBe('mynick')
@@ -481,16 +576,16 @@ describe('useSessionPersistence', () => {
         maxFileSize: 10485760,
       }
 
-      saveServerInfo(serverInfo, httpUploadService)
-      const restored = getSavedServerInfo()
+      saveServerInfo(serverInfo, httpUploadService, TEST_JID)
+      const restored = getSavedServerInfo(TEST_JID)
 
       expect(restored?.serverInfo).toEqual(serverInfo)
       expect(restored?.httpUploadService).toEqual(httpUploadService)
     })
 
     it('should handle null values', () => {
-      saveServerInfo(null, null)
-      const restored = getSavedServerInfo()
+      saveServerInfo(null, null, TEST_JID)
+      const restored = getSavedServerInfo(TEST_JID)
 
       expect(restored?.serverInfo).toBeNull()
       expect(restored?.httpUploadService).toBeNull()
@@ -504,8 +599,8 @@ describe('useSessionPersistence', () => {
         ['mobile', { show: null, priority: 10, status: 'On the go', client: 'Conversations' }],
       ])
 
-      saveOwnResources(ownResources)
-      const restored = getSavedOwnResources()
+      saveOwnResources(ownResources, TEST_JID)
+      const restored = getSavedOwnResources(TEST_JID)
 
       expect(restored).toBeInstanceOf(Map)
       expect(restored?.size).toBe(2)
@@ -521,8 +616,8 @@ describe('useSessionPersistence', () => {
         ['desktop', { show: 'away', priority: 5, lastInteraction, client: 'Fluux Desktop' }],
       ])
 
-      saveOwnResources(ownResources)
-      const restored = getSavedOwnResources()
+      saveOwnResources(ownResources, TEST_JID)
+      const restored = getSavedOwnResources(TEST_JID)
 
       expect(restored?.get('desktop')?.lastInteraction).toBeInstanceOf(Date)
       expect(restored?.get('desktop')?.lastInteraction?.getTime()).toBe(lastInteraction.getTime())
@@ -533,8 +628,8 @@ describe('useSessionPersistence', () => {
         ['mobile', { show: 'dnd', priority: -1, client: 'Mobile Client' }],
       ])
 
-      saveOwnResources(ownResources)
-      const restored = getSavedOwnResources()
+      saveOwnResources(ownResources, TEST_JID)
+      const restored = getSavedOwnResources(TEST_JID)
 
       expect(restored?.get('mobile')?.lastInteraction).toBeUndefined()
     })
@@ -542,46 +637,46 @@ describe('useSessionPersistence', () => {
     it('should handle empty Map', () => {
       const ownResources = new Map<string, ResourcePresence>()
 
-      saveOwnResources(ownResources)
-      const stored = mockStorage['xmpp-own-resources']
+      saveOwnResources(ownResources, TEST_JID)
+      const stored = mockStorage[scopedKey(OWN_RESOURCES_KEY)]
       expect(stored).toBe('[]')
     })
 
     it('should return null when no own resources exist', () => {
-      expect(getSavedOwnResources()).toBeNull()
+      expect(getSavedOwnResources(TEST_JID)).toBeNull()
     })
 
     it('should be cleared by clearSession', () => {
       const ownResources = new Map<string, ResourcePresence>([
         ['desktop', { show: 'away', priority: 5, client: 'Fluux Desktop' }],
       ])
-      saveOwnResources(ownResources)
+      saveOwnResources(ownResources, TEST_JID)
 
       clearSession()
 
-      expect(getSavedOwnResources()).toBeNull()
+      expect(getSavedOwnResources(TEST_JID)).toBeNull()
     })
 
     it('should return null for invalid JSON', () => {
-      mockStorage['xmpp-own-resources'] = 'invalid json{'
-      expect(getSavedOwnResources()).toBeNull()
+      mockStorage[scopedKey(OWN_RESOURCES_KEY)] = 'invalid json{'
+      expect(getSavedOwnResources(TEST_JID)).toBeNull()
     })
   })
 
   describe('Error handling', () => {
     it('should return null for invalid JSON in roster', () => {
-      mockStorage['xmpp-roster'] = 'invalid json{'
-      expect(getSavedRoster()).toBeNull()
+      mockStorage[scopedKey(ROSTER_KEY)] = 'invalid json{'
+      expect(getSavedRoster(TEST_JID)).toBeNull()
     })
 
     it('should return null for invalid JSON in rooms', () => {
-      mockStorage['xmpp-rooms'] = 'not valid json'
-      expect(getSavedRooms()).toBeNull()
+      mockStorage[scopedKey(ROOMS_KEY)] = 'not valid json'
+      expect(getSavedRooms(TEST_JID)).toBeNull()
     })
 
     it('should return null for invalid JSON in view state', () => {
-      mockStorage['xmpp-view-state'] = '{ broken'
-      expect(getSavedViewState()).toBeNull()
+      mockStorage[scopedKey(VIEW_STATE_KEY)] = '{ broken'
+      expect(getSavedViewState(TEST_JID)).toBeNull()
     })
 
     it('should return null for invalid JSON in session', () => {

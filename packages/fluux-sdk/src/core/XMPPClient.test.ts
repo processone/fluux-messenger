@@ -23,6 +23,7 @@ import {
   type MockStoreBindings,
 } from './test-utils'
 import { VERIFY_CONNECTION_TIMEOUT_MS } from './modules/connectionTimeouts'
+import { _resetStorageScopeForTesting } from '../utils/storageScope'
 
 let mockXmppClientInstance: MockXmppClient
 
@@ -61,6 +62,7 @@ describe('XMPPClient', () => {
   let mockStores: MockStoreBindings
 
   beforeEach(() => {
+    _resetStorageScopeForTesting()
     vi.useFakeTimers()
     mockXmppClientInstance = createMockXmppClient()
     mockClientFactory.mockClear()

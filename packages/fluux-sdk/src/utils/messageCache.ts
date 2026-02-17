@@ -9,6 +9,7 @@
 
 import { openDB, type IDBPDatabase, type DBSchema } from 'idb'
 import type { Message, RoomMessage } from '../core/types'
+import { getStorageScopeJid } from './storageScope'
 
 const DB_NAME = 'fluux-message-cache'
 const DB_VERSION = 2
@@ -92,6 +93,7 @@ interface MessageCacheSchema extends DBSchema {
 }
 
 let dbPromise: Promise<IDBPDatabase<MessageCacheSchema>> | null = null
+let dbNameForPromise: string | null = null
 
 /**
  * Check if IndexedDB is available in the current environment.
@@ -104,17 +106,33 @@ function isIndexedDBAvailable(): boolean {
   }
 }
 
-/**
- * Get or initialize the IndexedDB database.
- */
-function getDB(): Promise<IDBPDatabase<MessageCacheSchema>> {
-  if (dbPromise) return dbPromise
+function getScopedDbName(scopeJid: string | null): string {
+  return scopeJid ? `${DB_NAME}:${scopeJid}` : DB_NAME
+}
 
+/**
+ * Get or initialize the IndexedDB database for the current account scope.
+ */
+function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPDatabase<MessageCacheSchema>> {
   if (!isIndexedDBAvailable()) {
     return Promise.reject(new Error('IndexedDB not available'))
   }
 
-  dbPromise = openDB<MessageCacheSchema>(DB_NAME, DB_VERSION, {
+  const targetDbName = getScopedDbName(scopeJid)
+
+  if (dbPromise && dbNameForPromise === targetDbName) {
+    return dbPromise
+  }
+
+  if (dbPromise && dbNameForPromise && dbNameForPromise !== targetDbName) {
+    const previousPromise = dbPromise
+    dbPromise = null
+    dbNameForPromise = null
+    void previousPromise.then((db) => db.close()).catch(() => {})
+  }
+
+  dbNameForPromise = targetDbName
+  dbPromise = openDB<MessageCacheSchema>(targetDbName, DB_VERSION, {
     upgrade(db, oldVersion) {
       // Chat messages store (unchanged)
       if (!db.objectStoreNames.contains(MESSAGES_STORE)) {
@@ -210,7 +228,7 @@ function deserializeRoomMessage(stored: StoredRoomMessage): RoomMessage {
  */
 export async function saveMessage(message: Message): Promise<void> {
   try {
-    const db = await getDB()
+    const db = await getDB(getStorageScopeJid())
     await db.put(MESSAGES_STORE, serializeMessage(message))
   } catch (error) {
     if (isIndexedDBAvailable()) {
@@ -226,7 +244,7 @@ export async function saveMessages(messages: Message[]): Promise<void> {
   if (messages.length === 0) return
 
   try {
-    const db = await getDB()
+    const db = await getDB(getStorageScopeJid())
     const tx = db.transaction(MESSAGES_STORE, 'readwrite')
     const store = tx.objectStore(MESSAGES_STORE)
 
@@ -244,7 +262,7 @@ export async function saveMessages(messages: Message[]): Promise<void> {
  */
 export async function getMessage(id: string): Promise<Message | null> {
   try {
-    const db = await getDB()
+    const db = await getDB(getStorageScopeJid())
     const stored = await db.get(MESSAGES_STORE, id)
     return stored ? deserializeMessage(stored) : null
   } catch (error) {
@@ -260,7 +278,7 @@ export async function getMessage(id: string): Promise<Message | null> {
  */
 export async function getMessageByStanzaId(stanzaId: string): Promise<Message | null> {
   try {
-    const db = await getDB()
+    const db = await getDB(getStorageScopeJid())
     const stored = await db.getFromIndex(MESSAGES_STORE, 'stanzaId', stanzaId)
     return stored ? deserializeMessage(stored) : null
   } catch (error) {
@@ -296,7 +314,7 @@ export async function getMessages(
   options: GetMessagesOptions = {}
 ): Promise<Message[]> {
   try {
-    const db = await getDB()
+    const db = await getDB(getStorageScopeJid())
     const { limit, before, after, latest } = options
 
     // Use compound index for efficient range queries
@@ -361,7 +379,7 @@ export async function getMessages(
  */
 export async function getMessageCount(conversationId: string): Promise<number> {
   try {
-    const db = await getDB()
+    const db = await getDB(getStorageScopeJid())
     const tx = db.transaction(MESSAGES_STORE, 'readonly')
     const index = tx.store.index('conv_timestamp')
     const range = IDBKeyRange.bound(
@@ -385,7 +403,7 @@ export async function updateMessage(
   updates: Partial<Message>
 ): Promise<void> {
   try {
-    const db = await getDB()
+    const db = await getDB(getStorageScopeJid())
     const existing = await db.get(MESSAGES_STORE, id)
     if (!existing) return
 
@@ -416,7 +434,7 @@ export async function updateMessage(
  */
 export async function deleteMessage(id: string): Promise<void> {
   try {
-    const db = await getDB()
+    const db = await getDB(getStorageScopeJid())
     await db.delete(MESSAGES_STORE, id)
   } catch (error) {
     if (isIndexedDBAvailable()) {
@@ -430,7 +448,7 @@ export async function deleteMessage(id: string): Promise<void> {
  */
 export async function deleteConversationMessages(conversationId: string): Promise<void> {
   try {
-    const db = await getDB()
+    const db = await getDB(getStorageScopeJid())
     const tx = db.transaction(MESSAGES_STORE, 'readwrite')
     const index = tx.store.index('conversationId')
 
@@ -459,19 +477,20 @@ export async function deleteConversationMessages(conversationId: string): Promis
  */
 const roomMessageBuffer: RoomMessage[] = []
 let roomMessageFlushTimer: ReturnType<typeof setTimeout> | null = null
+let roomMessageBufferScope: string | null = null
 const ROOM_MESSAGE_FLUSH_DELAY = 100 // ms - flush after 100ms of inactivity
 
 /**
  * Flush the room message buffer to IndexedDB.
  */
-async function flushRoomMessageBuffer(): Promise<void> {
+async function flushRoomMessageBuffer(scopeJid: string | null): Promise<void> {
   if (roomMessageBuffer.length === 0) return
 
   // Take all messages from buffer
   const messagesToSave = roomMessageBuffer.splice(0, roomMessageBuffer.length)
 
   try {
-    const db = await getDB()
+    const db = await getDB(scopeJid)
     const tx = db.transaction(ROOM_MESSAGES_STORE, 'readwrite')
     const store = tx.objectStore(ROOM_MESSAGES_STORE)
 
@@ -489,6 +508,15 @@ async function flushRoomMessageBuffer(): Promise<void> {
  * Uses a write buffer to batch rapid writes for better performance.
  */
 export async function saveRoomMessage(message: RoomMessage): Promise<void> {
+  const currentScope = getStorageScopeJid()
+
+  // Ensure queued messages are flushed to the account-specific DB they belong to.
+  if (roomMessageBuffer.length > 0 && roomMessageBufferScope !== currentScope) {
+    await flushPendingRoomMessages()
+  }
+
+  roomMessageBufferScope = currentScope
+
   // Add to buffer
   roomMessageBuffer.push(message)
 
@@ -500,7 +528,9 @@ export async function saveRoomMessage(message: RoomMessage): Promise<void> {
   // Set new timer to flush after delay
   roomMessageFlushTimer = setTimeout(() => {
     roomMessageFlushTimer = null
-    void flushRoomMessageBuffer()
+    const flushScope = roomMessageBufferScope
+    roomMessageBufferScope = null
+    void flushRoomMessageBuffer(flushScope)
   }, ROOM_MESSAGE_FLUSH_DELAY)
 }
 
@@ -513,7 +543,9 @@ export async function flushPendingRoomMessages(): Promise<void> {
     clearTimeout(roomMessageFlushTimer)
     roomMessageFlushTimer = null
   }
-  await flushRoomMessageBuffer()
+  const flushScope = roomMessageBufferScope
+  roomMessageBufferScope = null
+  await flushRoomMessageBuffer(flushScope)
 }
 
 /**
@@ -523,7 +555,7 @@ export async function saveRoomMessages(messages: RoomMessage[]): Promise<void> {
   if (messages.length === 0) return
 
   try {
-    const db = await getDB()
+    const db = await getDB(getStorageScopeJid())
     const tx = db.transaction(ROOM_MESSAGES_STORE, 'readwrite')
     const store = tx.objectStore(ROOM_MESSAGES_STORE)
 
@@ -542,7 +574,7 @@ export async function saveRoomMessages(messages: RoomMessage[]): Promise<void> {
  */
 export async function getRoomMessage(id: string): Promise<RoomMessage | null> {
   try {
-    const db = await getDB()
+    const db = await getDB(getStorageScopeJid())
     // Use the id index since the primary key is now cacheKey
     const stored = await db.getFromIndex(ROOM_MESSAGES_STORE, 'id', id)
     return stored ? deserializeRoomMessage(stored) : null
@@ -561,7 +593,7 @@ export async function getRoomMessageByStanzaId(
   stanzaId: string
 ): Promise<RoomMessage | null> {
   try {
-    const db = await getDB()
+    const db = await getDB(getStorageScopeJid())
     const stored = await db.getFromIndex(ROOM_MESSAGES_STORE, 'stanzaId', stanzaId)
     return stored ? deserializeRoomMessage(stored) : null
   } catch (error) {
@@ -581,7 +613,7 @@ export async function getRoomMessages(
   options: GetMessagesOptions = {}
 ): Promise<RoomMessage[]> {
   try {
-    const db = await getDB()
+    const db = await getDB(getStorageScopeJid())
     const { limit, before, after, latest } = options
 
     const tx = db.transaction(ROOM_MESSAGES_STORE, 'readonly')
@@ -636,7 +668,7 @@ export async function getRoomMessages(
  */
 export async function getRoomMessageCount(roomJid: string): Promise<number> {
   try {
-    const db = await getDB()
+    const db = await getDB(getStorageScopeJid())
     const tx = db.transaction(ROOM_MESSAGES_STORE, 'readonly')
     const index = tx.store.index('room_timestamp')
     const range = IDBKeyRange.bound([roomJid, 0], [roomJid, Number.MAX_SAFE_INTEGER])
@@ -658,7 +690,7 @@ export async function updateRoomMessage(
   updates: Partial<RoomMessage>
 ): Promise<void> {
   try {
-    const db = await getDB()
+    const db = await getDB(getStorageScopeJid())
     // Look up by id index since primary key is now cacheKey
     const existing = await db.getFromIndex(ROOM_MESSAGES_STORE, 'id', id)
     if (!existing) return
@@ -692,7 +724,7 @@ export async function updateRoomMessage(
  */
 export async function deleteRoomMessage(id: string): Promise<void> {
   try {
-    const db = await getDB()
+    const db = await getDB(getStorageScopeJid())
     // Look up by id index to find the cacheKey
     const existing = await db.getFromIndex(ROOM_MESSAGES_STORE, 'id', id)
     if (!existing) return
@@ -710,7 +742,7 @@ export async function deleteRoomMessage(id: string): Promise<void> {
  */
 export async function deleteRoomMessages(roomJid: string): Promise<void> {
   try {
-    const db = await getDB()
+    const db = await getDB(getStorageScopeJid())
     const tx = db.transaction(ROOM_MESSAGES_STORE, 'readwrite')
     const index = tx.store.index('roomJid')
 
@@ -737,7 +769,8 @@ export async function deleteRoomMessages(roomJid: string): Promise<void> {
  */
 export async function clearAllMessages(): Promise<void> {
   try {
-    const db = await getDB()
+    await flushPendingRoomMessages()
+    const db = await getDB(getStorageScopeJid())
     const tx = db.transaction([MESSAGES_STORE, ROOM_MESSAGES_STORE], 'readwrite')
     await Promise.all([tx.objectStore(MESSAGES_STORE).clear(), tx.objectStore(ROOM_MESSAGES_STORE).clear()])
     await tx.done
@@ -755,7 +788,7 @@ export async function getOldestMessageTimestamp(
   conversationId: string
 ): Promise<Date | null> {
   try {
-    const db = await getDB()
+    const db = await getDB(getStorageScopeJid())
     const tx = db.transaction(MESSAGES_STORE, 'readonly')
     const index = tx.store.index('conv_timestamp')
     const range = IDBKeyRange.bound(
@@ -783,7 +816,7 @@ export async function getOldestRoomMessageTimestamp(
   roomJid: string
 ): Promise<Date | null> {
   try {
-    const db = await getDB()
+    const db = await getDB(getStorageScopeJid())
     const tx = db.transaction(ROOM_MESSAGES_STORE, 'readonly')
     const index = tx.store.index('room_timestamp')
     const range = IDBKeyRange.bound([roomJid, 0], [roomJid, Number.MAX_SAFE_INTEGER])
@@ -817,5 +850,12 @@ export function isMessageCacheAvailable(): boolean {
  * @internal
  */
 export function _resetDBForTesting(): void {
+  if (roomMessageFlushTimer) {
+    clearTimeout(roomMessageFlushTimer)
+    roomMessageFlushTimer = null
+  }
+  roomMessageBuffer.length = 0
+  roomMessageBufferScope = null
   dbPromise = null
+  dbNameForPromise = null
 }
