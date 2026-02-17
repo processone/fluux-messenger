@@ -467,7 +467,7 @@ export function useSessionPersistence(): void {
   const setOwnNickname = useConnectionStore((s) => s.setOwnNickname)
   const updateOwnResource = useConnectionStore((s) => s.updateOwnResource)
   const addRoom = useRoomStore((s) => s.addRoom)
-  const attemptedRef = useRef(false)
+  const autoReconnectCheckedRef = useRef(false)
   const isResumptionRef = useRef(false)
 
   // Wrap connect in useCallback for stability
@@ -508,12 +508,14 @@ export function useSessionPersistence(): void {
 
   // Auto-reconnect on page reload
   useEffect(() => {
-    // Only attempt once, and only if disconnected
-    if (attemptedRef.current || status !== 'disconnected') return
+    // Only evaluate auto-reconnect once per app startup, and only from an
+    // initial disconnected state. Without this guard, a later manual
+    // disconnect can accidentally trigger an "auto-reconnect on reload".
+    if (autoReconnectCheckedRef.current || status !== 'disconnected') return
+    autoReconnectCheckedRef.current = true
 
     const session = getSession()
     if (session) {
-      attemptedRef.current = true
       isResumptionRef.current = true
 
       // Note: SM state is now managed by SDK's storage adapter.

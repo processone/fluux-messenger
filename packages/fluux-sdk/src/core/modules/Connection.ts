@@ -55,6 +55,9 @@ const logError = (...args: unknown[]) => {
   }
 }
 
+/** Upper bound for best-effort disconnect cleanup tasks (storage/cache). */
+const DISCONNECT_CLEANUP_TIMEOUT_MS = 2000
+
 /**
  * Connection lifecycle and stream management module.
  *
@@ -447,8 +450,12 @@ export class Connection extends BaseModule {
 
     if (clientToStop) {
       this.xmpp = null
-      this.credentials = null
     }
+    this.credentials = null
+
+    // Ensure presence machine and listeners get a deterministic disconnect signal
+    // even when socket close events are ignored as stale.
+    this.onDisconnect?.()
 
     this.stores.connection.setStatus('disconnected')
     this.stores.connection.setJid(null)
@@ -463,7 +470,20 @@ export class Connection extends BaseModule {
     this.smPersistence.clearCache()
     if (jidForSmCleanup) {
       try {
-        await this.smPersistence.clear(jidForSmCleanup)
+        let timedOut = false
+        await Promise.race([
+          this.smPersistence.clear(jidForSmCleanup),
+          new Promise<void>((resolve) => {
+            setTimeout(() => {
+              timedOut = true
+              resolve()
+            }, DISCONNECT_CLEANUP_TIMEOUT_MS)
+          }),
+        ])
+        if (timedOut) {
+          logWarn(`Disconnect cleanup: SM state clear timed out after ${DISCONNECT_CLEANUP_TIMEOUT_MS}ms`)
+          this.stores.console.addEvent('Disconnect cleanup warning: SM state clear timed out', 'error')
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
         logWarn(`Disconnect cleanup: failed to clear SM state for ${jidForSmCleanup}: ${message}`)
@@ -472,7 +492,20 @@ export class Connection extends BaseModule {
     }
 
     try {
-      await flushPendingRoomMessages()
+      let timedOut = false
+      await Promise.race([
+        flushPendingRoomMessages(),
+        new Promise<void>((resolve) => {
+          setTimeout(() => {
+            timedOut = true
+            resolve()
+          }, DISCONNECT_CLEANUP_TIMEOUT_MS)
+        }),
+      ])
+      if (timedOut) {
+        logWarn(`Disconnect cleanup: room message flush timed out after ${DISCONNECT_CLEANUP_TIMEOUT_MS}ms`)
+        this.stores.console.addEvent('Disconnect cleanup warning: room message flush timed out', 'error')
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       logWarn(`Disconnect cleanup: failed to flush room message buffer: ${message}`)
@@ -1193,8 +1226,17 @@ export class Connection extends BaseModule {
       // this.xmpp and started reconnection — the old client's async disconnect()
       // fires 'disconnect' later, but we must not act on it.
       if (this.xmpp !== registeredClient) {
-        logInfo('Disconnect from stale client, ignoring')
-        this.stores.console.addEvent('Socket closed (stale client, ignoring)', 'connection')
+        const isExpectedBridgeClose = wasClean
+          && rawReason
+          && typeof rawReason === 'object'
+          && 'code' in rawReason
+          && (rawReason as { code: number }).code === 1000
+          && 'reason' in rawReason
+          && (rawReason as { reason?: string }).reason === 'Bridge closed'
+        if (!isExpectedBridgeClose) {
+          logInfo('Disconnect from stale client, ignoring')
+          this.stores.console.addEvent('Socket closed (stale client, ignoring)', 'connection')
+        }
         return
       }
 
