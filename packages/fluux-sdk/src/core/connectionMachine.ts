@@ -94,7 +94,6 @@ export type ConnectionMachineEvent =
   | { type: 'VERIFY_FAILED' }
   | { type: 'CONFLICT' }
   | { type: 'AUTH_ERROR' }
-  | { type: 'RETRY_TIMER_EXPIRED' }
   | { type: 'CANCEL_RECONNECT' }
   | { type: 'TRIGGER_RECONNECT' }
 
@@ -228,6 +227,9 @@ export const connectionMachine = setup({
       }
       return false
     },
+  },
+  delays: {
+    reconnectDelay: ({ context }) => context.nextRetryDelayMs,
   },
 }).createMachine({
   id: 'connection',
@@ -376,11 +378,13 @@ export const connectionMachine = setup({
          * Timer expiry or user trigger starts attempt.
          */
         waiting: {
-          on: {
-            RETRY_TIMER_EXPIRED: {
+          after: {
+            reconnectDelay: {
               target: 'attempting',
               actions: 'clearTargetTime',
             },
+          },
+          on: {
             TRIGGER_RECONNECT: {
               target: 'attempting',
               actions: 'clearTargetTime',

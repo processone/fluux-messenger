@@ -95,7 +95,6 @@ const logError = (...args: unknown[]) => {
 export class Connection extends BaseModule {
   private xmpp: Client | null = null
   private credentials: ConnectOptions | null = null
-  private reconnectTimeout: ReturnType<typeof setTimeout> | null = null
 
   /**
    * XState connection state machine actor.
@@ -129,8 +128,8 @@ export class Connection extends BaseModule {
   // Callback for stanza routing
   private onStanza?: (stanza: Element) => void
 
-  // Mutex to prevent concurrent attemptReconnect() calls
-  private reconnectInProgress = false
+  // Track previous machine state to detect state-entry side effects
+  private previousMachineState: ConnectionStateValue = 'idle'
 
   // Convenience accessors
   protected get stores() { return this.deps.stores! }
@@ -160,9 +159,11 @@ export class Connection extends BaseModule {
 
     // Create and start the connection state machine actor
     this.connectionActor = createActor(connectionMachine).start()
+    this.previousMachineState = this.getMachineState()
 
     // Subscribe to machine state changes to sync with the connection store
     this.connectionActor.subscribe((snapshot) => {
+      const previousState = this.previousMachineState
       const stateValue = snapshot.value as ConnectionStateValue
       const status = getConnectionStatusFromState(stateValue)
       const { attempt, reconnectTargetTime } = getReconnectInfoFromContext(snapshot.context)
@@ -175,6 +176,27 @@ export class Connection extends BaseModule {
       if (snapshot.context.lastError) {
         this.stores.connection.setError(snapshot.context.lastError)
       }
+
+      // Entering reconnecting.waiting schedules the next attempt in the state machine.
+      // Emit reconnect diagnostics once per waiting entry.
+      if (this.didEnterReconnectingSubstate(previousState, stateValue, 'waiting')) {
+        const { reconnectAttempt, nextRetryDelayMs } = snapshot.context
+        this.stores.console.addEvent(
+          `Reconnecting (attempt ${reconnectAttempt}, delay ${Math.round(nextRetryDelayMs / 1000)}s)`,
+          'connection'
+        )
+        logInfo(`Reconnecting (attempt ${reconnectAttempt}, delay ${Math.round(nextRetryDelayMs / 1000)}s)`)
+        this.deps.emitSDK('connection:status', { status: 'reconnecting' })
+        this.deps.emitSDK('connection:reconnecting', { attempt: reconnectAttempt, delayMs: nextRetryDelayMs })
+        this.emit('reconnecting', reconnectAttempt, nextRetryDelayMs)
+      }
+
+      // Entering reconnecting.attempting is the single place we start a reconnect try.
+      if (this.didEnterReconnectingSubstate(previousState, stateValue, 'attempting')) {
+        void this.attemptReconnect()
+      }
+
+      this.previousMachineState = stateValue
     })
   }
 
@@ -220,6 +242,23 @@ export class Connection extends BaseModule {
   /** Get the current machine state value. */
   private getMachineState(): ConnectionStateValue {
     return this.connectionActor.getSnapshot().value as ConnectionStateValue
+  }
+
+  /** Check whether a machine state is a specific reconnecting substate. */
+  private isReconnectingSubstate(
+    state: ConnectionStateValue,
+    substate: 'waiting' | 'attempting'
+  ): boolean {
+    return typeof state === 'object' && 'reconnecting' in state && state.reconnecting === substate
+  }
+
+  /** Detect entry into a reconnecting substate. */
+  private didEnterReconnectingSubstate(
+    previous: ConnectionStateValue,
+    current: ConnectionStateValue,
+    substate: 'waiting' | 'attempting'
+  ): boolean {
+    return !this.isReconnectingSubstate(previous, substate) && this.isReconnectingSubstate(current, substate)
   }
 
   /**
@@ -396,8 +435,6 @@ export class Connection extends BaseModule {
   async disconnect(): Promise<void> {
     // Signal machine: user-initiated disconnect
     this.connectionActor.send({ type: 'DISCONNECT' })
-    this.clearTimers()
-    this.reconnectInProgress = false
 
     // ── Synchronous phase ──
     // All state transitions happen BEFORE any await, so the UI sees
@@ -463,21 +500,8 @@ export class Connection extends BaseModule {
    * Cancel any pending reconnection attempts.
    */
   cancelReconnect(): void {
-    this.clearTimers()
-    this.reconnectInProgress = false
     // Signal machine: cancel reconnect → transitions to disconnected
     this.connectionActor.send({ type: 'CANCEL_RECONNECT' })
-  }
-
-  /**
-   * Clear reconnection timer handles without changing machine state.
-   * Used by disconnect(), cancelReconnect(), and triggerReconnect().
-   */
-  private clearTimers(): void {
-    if (this.reconnectTimeout) {
-      clearTimeout(this.reconnectTimeout)
-      this.reconnectTimeout = null
-    }
   }
 
   /**
@@ -490,14 +514,9 @@ export class Connection extends BaseModule {
   triggerReconnect(): void {
     if (!this.isInReconnectingState() || !this.credentials) return
 
-    // Cancel the pending scheduled reconnect timers
-    this.clearTimers()
-
-    // Signal machine: skip waiting, go directly to attempting
+    // Signal machine: skip waiting, go directly to attempting.
+    // The state-machine subscription starts the reconnect attempt.
     this.connectionActor.send({ type: 'TRIGGER_RECONNECT' })
-
-    // Attempt immediately (fire-and-forget, errors handled internally)
-    void this.attemptReconnect()
   }
 
   /**
@@ -651,8 +670,8 @@ export class Connection extends BaseModule {
    * This is called when we detect the WebSocket died silently (e.g., after sleep).
    */
   handleDeadSocket(): void {
-    // Don't reconnect if already reconnecting, in terminal state, or disconnected
-    if (this.isInReconnectingState() || this.isInTerminalState()) {
+    // Don't reconnect from terminal states.
+    if (this.isInTerminalState()) {
       return
     }
     const machineState = this.getMachineState()
@@ -660,12 +679,17 @@ export class Connection extends BaseModule {
       return
     }
 
-    this.stores.console.addEvent('Dead connection detected, will reconnect', 'connection')
-    logWarn('Dead connection detected, will reconnect')
+    // If we're not already reconnecting, transition now.
+    // When VERIFY_FAILED already moved the machine to reconnecting, we still need
+    // the cleanup side effects below.
+    if (!this.isInReconnectingState()) {
+      this.stores.console.addEvent('Dead connection detected, will reconnect', 'connection')
+      logWarn('Dead connection detected, will reconnect')
 
-    // Signal machine: SOCKET_DIED → transitions to reconnecting.waiting
-    // (incrementAttempt action computes backoff delay)
-    this.connectionActor.send({ type: 'SOCKET_DIED' })
+      // Signal machine: SOCKET_DIED → transitions to reconnecting.waiting
+      // (incrementAttempt action computes backoff delay)
+      this.connectionActor.send({ type: 'SOCKET_DIED' })
+    }
 
     // IMPORTANT: Null the client reference SYNCHRONOUSLY before any async operations.
     // This prevents a race condition where the old client's 'online' event fires
@@ -682,8 +706,7 @@ export class Connection extends BaseModule {
       forceDestroyClient(clientToClean)
     }
 
-    // Start timer-driven reconnection based on machine context
-    this.startReconnectTimer()
+    // Reconnect scheduling is handled by the state machine (`reconnecting.waiting`).
   }
 
   /**
@@ -737,14 +760,13 @@ export class Connection extends BaseModule {
               `System state: ${state}, sleep duration ${sleepSecs}s exceeds SM timeout - reconnecting immediately`,
               'connection'
             )
-            // Machine already transitioned to reconnecting — clean up and start timer
+            // Machine already transitioned to reconnecting — clean up dead client.
             const clientToClean = this.xmpp
             this.xmpp = null
             clearSmAckDebounce(this.smPatchState)
             if (clientToClean) {
               forceDestroyClient(clientToClean)
             }
-            this.startReconnectTimer()
           } else {
             // Short sleep — verify connection health
             this.stores.console.addEvent(`System state: ${state}, verifying connection`, 'connection')
@@ -1094,7 +1116,6 @@ export class Connection extends BaseModule {
       // Detect resource conflict (another client logged in with same resource)
       if (message.includes('conflict')) {
         this.connectionActor.send({ type: 'CONFLICT' })
-        this.clearTimers()
         this.stores.console.addEvent('Disconnected: Resource conflict (another client connected)', 'error')
         console.error('[XMPP] Resource conflict: another client connected with the same account')
         this.stores.events.addSystemNotification(
@@ -1106,7 +1127,6 @@ export class Connection extends BaseModule {
         this.credentials = null
       } else if (message.includes('not-authorized') || message.includes('auth')) {
         this.connectionActor.send({ type: 'AUTH_ERROR' })
-        this.clearTimers()
         this.stores.console.addEvent('Disconnected: Authentication error', 'error')
         console.error('[XMPP] Authentication failed: not-authorized')
         this.credentials = null
@@ -1133,8 +1153,6 @@ export class Connection extends BaseModule {
         if (clientToClean) {
           forceDestroyClient(clientToClean)
         }
-
-        this.startReconnectTimer()
       }
     })
 
@@ -1259,10 +1277,7 @@ export class Connection extends BaseModule {
         clearSmAckDebounce(this.smPatchState)
         // Don't call stop() on the old client — it's already cleaning itself up
         // via xmpp.js's own disconnect(). Calling stop() triggers a second disconnect()
-        // on the same client, causing duplicate state transitions and event emissions
-        // that can saturate the main thread and prevent the reconnect timer from firing.
-
-        this.startReconnectTimer()
+        // on the same client, causing duplicate state transitions and event emissions.
       }
     })
 
@@ -1298,8 +1313,6 @@ export class Connection extends BaseModule {
 
     // Machine state is already updated: CONNECTION_SUCCESS was sent before this call.
     // The subscription will sync status='online' and reset reconnect state.
-    // Clear any lingering timers from a previous reconnect cycle.
-    this.clearTimers()
 
     this.stores.console.addEvent(
       isResumption ? logMessage.replace('Connected', 'Session resumed') : logMessage,
@@ -1334,81 +1347,32 @@ export class Connection extends BaseModule {
   }
 
   /**
-   * Start timer-driven reconnection based on the machine's context.
-   *
-   * The machine has already transitioned to reconnecting.waiting and computed
-   * the backoff delay (context.nextRetryDelayMs). This method reads that delay,
-   * starts the countdown timer, and fires RETRY_TIMER_EXPIRED when done.
-   *
-   * Orchestration in machine, execution in Connection.ts.
-   */
-  private startReconnectTimer(): void {
-    // Guard: only start timers if machine is in reconnecting state
-    if (!this.isInReconnectingState() || !this.credentials) {
-      return
-    }
-
-    // Read delay from machine context (already computed by incrementAttempt action)
-    const snapshot = this.connectionActor.getSnapshot()
-    const { reconnectAttempt, nextRetryDelayMs } = snapshot.context
-
-    this.stores.console.addEvent(
-      `Reconnecting (attempt ${reconnectAttempt}, delay ${Math.round(nextRetryDelayMs / 1000)}s)`,
-      'connection'
-    )
-    logInfo(`Reconnecting (attempt ${reconnectAttempt}, delay ${Math.round(nextRetryDelayMs / 1000)}s)`)
-    // Emit SDK events for reconnecting status
-    this.deps.emitSDK('connection:status', { status: 'reconnecting' })
-    this.deps.emitSDK('connection:reconnecting', { attempt: reconnectAttempt, delayMs: nextRetryDelayMs })
-    this.emit('reconnecting', reconnectAttempt, nextRetryDelayMs)
-
-    // The UI reads reconnectTargetTime from the store to display a local countdown.
-    // No interval needed here — the machine already set the target time.
-
-    this.reconnectTimeout = setTimeout(() => {
-      logInfo('Reconnect timer fired')
-      // Signal machine: timer expired → transitions to reconnecting.attempting
-      this.connectionActor.send({ type: 'RETRY_TIMER_EXPIRED' })
-      void this.attemptReconnect()
-    }, nextRetryDelayMs)
-  }
-
-  /**
    * Attempt to reconnect with saved credentials.
    *
-   * Includes a defensive check for the xmpp.js client status before proceeding.
-   * This handles edge cases where the reconnect timer was suspended by the OS
-   * (e.g., during sleep) and the connection state may have changed.
+   * Called when the machine enters `reconnecting.attempting`.
    */
   private async attemptReconnect(): Promise<void> {
     logInfo('attemptReconnect: starting')
 
-    // Guard: only attempt if machine is still in reconnecting state
-    if (!this.credentials || !this.isInReconnectingState()) {
-      logInfo('attemptReconnect: guard failed (no credentials or not in reconnecting state)')
+    // Guard: only attempt from reconnecting.attempting with credentials.
+    const machineState = this.getMachineState()
+    if (!this.credentials || !this.isReconnectingSubstate(machineState, 'attempting')) {
+      logInfo('attemptReconnect: guard failed (no credentials or not in reconnecting.attempting)')
       return
     }
-
-    // Prevent concurrent reconnect attempts (e.g., timer + triggerReconnect racing)
-    if (this.reconnectInProgress) {
-      this.stores.console.addEvent('Reconnect attempt already in progress, skipping', 'connection')
-      logInfo('attemptReconnect: already in progress, skipping')
-      return
-    }
-    this.reconnectInProgress = true
-
-    // Defensive check: verify xmpp.js client is not already online.
-    // This shouldn't happen in normal flow, but guards against edge cases.
-    if (this.xmpp && (this.xmpp as any).status === 'online') {
-      this.stores.console.addEvent('Connection still online - cancelling reconnect attempt', 'connection')
-      this.connectionActor.send({ type: 'CONNECTION_SUCCESS' })
-      return
-    }
-
-    // Emit SDK event for connecting status (machine is in reconnecting.attempting)
-    this.deps.emitSDK('connection:status', { status: 'connecting' })
 
     try {
+      // Defensive check: verify xmpp.js client is not already online.
+      // This shouldn't happen in normal flow, but guards against edge cases.
+      if (this.xmpp && (this.xmpp as any).status === 'online') {
+        this.stores.console.addEvent('Connection still online - cancelling reconnect attempt', 'connection')
+        this.connectionActor.send({ type: 'CONNECTION_SUCCESS' })
+        return
+      }
+
+      // Emit SDK event for connecting status (machine is in reconnecting.attempting)
+      this.deps.emitSDK('connection:status', { status: 'connecting' })
+
       // Save SM state before stopping the old client (for session resumption)
       const smState = this.getStreamManagementState()
       if (smState) {
@@ -1466,15 +1430,6 @@ export class Connection extends BaseModule {
       // Signal machine: reconnect failed → either back to waiting (with incrementAttempt)
       // or terminal.maxRetries (if exhausted)
       this.connectionActor.send({ type: 'CONNECTION_ERROR', error: errorMsg })
-
-      // If machine transitioned back to reconnecting.waiting, start another timer
-      if (this.isInReconnectingState()) {
-        this.startReconnectTimer()
-      }
-      // If machine went to terminal.maxRetries, no more timers needed
-      // (the subscription will sync the error status to the store)
-    } finally {
-      this.reconnectInProgress = false
     }
   }
 

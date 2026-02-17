@@ -8,7 +8,7 @@
  * 4. Terminal states block auto-recovery but allow fresh CONNECT
  * 5. Exponential backoff computation is correct
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createActor } from 'xstate'
 import {
   connectionMachine,
@@ -254,15 +254,31 @@ describe('connectionMachine', () => {
       // Now in reconnecting.waiting, attempt=1
     })
 
-    it('should transition to attempting on RETRY_TIMER_EXPIRED', () => {
-      actor.send({ type: 'RETRY_TIMER_EXPIRED' })
+    it('should transition to attempting automatically after reconnect delay', async () => {
+      vi.useFakeTimers()
+      try {
+        const timedActor = createActor(connectionMachine).start()
+        timedActor.send({ type: 'CONNECT' })
+        timedActor.send({ type: 'CONNECTION_SUCCESS' })
+        timedActor.send({ type: 'SOCKET_DIED' })
+        expect(timedActor.getSnapshot().value).toEqual({ reconnecting: 'waiting' })
+        await vi.advanceTimersByTimeAsync(INITIAL_RECONNECT_DELAY)
+        expect(timedActor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
+        timedActor.stop()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('should transition to attempting on TRIGGER_RECONNECT', () => {
+      actor.send({ type: 'TRIGGER_RECONNECT' })
       expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
       expect(actor.getSnapshot().context.reconnectTargetTime).toBeNull()
       actor.stop()
     })
 
     it('should transition to connected.healthy on successful reconnect', () => {
-      actor.send({ type: 'RETRY_TIMER_EXPIRED' })
+      actor.send({ type: 'TRIGGER_RECONNECT' })
       actor.send({ type: 'CONNECTION_SUCCESS' })
       expect(actor.getSnapshot().value).toEqual({ connected: 'healthy' })
       // Should reset reconnect state
@@ -272,7 +288,7 @@ describe('connectionMachine', () => {
     })
 
     it('should go back to waiting on failed reconnect attempt', () => {
-      actor.send({ type: 'RETRY_TIMER_EXPIRED' })
+      actor.send({ type: 'TRIGGER_RECONNECT' })
       actor.send({ type: 'CONNECTION_ERROR', error: 'timeout' })
 
       expect(actor.getSnapshot().value).toEqual({ reconnecting: 'waiting' })
@@ -301,7 +317,7 @@ describe('connectionMachine', () => {
     })
 
     it('should handle SOCKET_DIED during attempting (canReconnect)', () => {
-      actor.send({ type: 'RETRY_TIMER_EXPIRED' })
+      actor.send({ type: 'TRIGGER_RECONNECT' })
       expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
 
       actor.send({ type: 'SOCKET_DIED' })
@@ -314,12 +330,12 @@ describe('connectionMachine', () => {
       // We start at attempt 1 from beforeEach (SOCKET_DIED from connected)
       // Exhaust remaining attempts via SOCKET_DIED in attempting state
       for (let i = 1; i < DEFAULT_MAX_RECONNECT_ATTEMPTS; i++) {
-        actor.send({ type: 'RETRY_TIMER_EXPIRED' })
+        actor.send({ type: 'TRIGGER_RECONNECT' })
         // Fail via SOCKET_DIED instead of CONNECTION_ERROR
         actor.send({ type: 'SOCKET_DIED' })
       }
       // Now at maxReconnectAttempts, next SOCKET_DIED should go terminal
-      actor.send({ type: 'RETRY_TIMER_EXPIRED' })
+      actor.send({ type: 'TRIGGER_RECONNECT' })
       actor.send({ type: 'SOCKET_DIED' })
 
       expect(actor.getSnapshot().value).toEqual({ terminal: 'maxRetries' })
@@ -339,17 +355,17 @@ describe('connectionMachine', () => {
       expect(actor.getSnapshot().context.nextRetryDelayMs).toBe(1000)
 
       // Fail and check attempt 2: 2000ms
-      actor.send({ type: 'RETRY_TIMER_EXPIRED' })
+      actor.send({ type: 'TRIGGER_RECONNECT' })
       actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
       expect(actor.getSnapshot().context.nextRetryDelayMs).toBe(2000)
 
       // Fail and check attempt 3: 4000ms
-      actor.send({ type: 'RETRY_TIMER_EXPIRED' })
+      actor.send({ type: 'TRIGGER_RECONNECT' })
       actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
       expect(actor.getSnapshot().context.nextRetryDelayMs).toBe(4000)
 
       // Fail and check attempt 4: 8000ms
-      actor.send({ type: 'RETRY_TIMER_EXPIRED' })
+      actor.send({ type: 'TRIGGER_RECONNECT' })
       actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
       expect(actor.getSnapshot().context.nextRetryDelayMs).toBe(8000)
 
@@ -364,7 +380,7 @@ describe('connectionMachine', () => {
 
       // Run through enough attempts to exceed the cap
       for (let i = 0; i < 9; i++) {
-        actor.send({ type: 'RETRY_TIMER_EXPIRED' })
+        actor.send({ type: 'TRIGGER_RECONNECT' })
         actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
       }
 
@@ -386,7 +402,7 @@ describe('connectionMachine', () => {
 
       // Fail: attempt 2: delay=2000ms → targetTime ≈ now + 2000
       const beforeAttempt2 = Date.now()
-      actor.send({ type: 'RETRY_TIMER_EXPIRED' })
+      actor.send({ type: 'TRIGGER_RECONNECT' })
       actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
       const target2 = actor.getSnapshot().context.reconnectTargetTime!
       expect(target2).toBeGreaterThanOrEqual(beforeAttempt2 + 2000)
@@ -427,7 +443,7 @@ describe('connectionMachine', () => {
         actor.send({ type: 'CONNECT' })
         actor.send({ type: 'CONNECTION_SUCCESS' })
         actor.send({ type: 'SOCKET_DIED' })
-        actor.send({ type: 'RETRY_TIMER_EXPIRED' })
+        actor.send({ type: 'TRIGGER_RECONNECT' })
         expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
 
         actor.send({ type: 'CONFLICT' })
@@ -479,7 +495,7 @@ describe('connectionMachine', () => {
         actor.send({ type: 'CONNECT' })
         actor.send({ type: 'CONNECTION_SUCCESS' })
         actor.send({ type: 'SOCKET_DIED' })
-        actor.send({ type: 'RETRY_TIMER_EXPIRED' })
+        actor.send({ type: 'TRIGGER_RECONNECT' })
         expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
 
         actor.send({ type: 'AUTH_ERROR' })
@@ -514,7 +530,7 @@ describe('connectionMachine', () => {
           if (i > 0) {
             // Already in waiting from previous CONNECTION_ERROR
           }
-          actor.send({ type: 'RETRY_TIMER_EXPIRED' })
+          actor.send({ type: 'TRIGGER_RECONNECT' })
           actor.send({ type: 'CONNECTION_ERROR', error: `fail ${i + 1}` })
         }
 
@@ -530,7 +546,7 @@ describe('connectionMachine', () => {
         actor.send({ type: 'SOCKET_DIED' })
 
         for (let i = 0; i < DEFAULT_MAX_RECONNECT_ATTEMPTS; i++) {
-          actor.send({ type: 'RETRY_TIMER_EXPIRED' })
+          actor.send({ type: 'TRIGGER_RECONNECT' })
           actor.send({ type: 'CONNECTION_ERROR', error: `fail` })
         }
         expect(actor.getSnapshot().value).toEqual({ terminal: 'maxRetries' })
@@ -585,7 +601,7 @@ describe('connectionMachine', () => {
       actor.send({ type: 'CONNECT' })
       actor.send({ type: 'CONNECTION_SUCCESS' })
       actor.send({ type: 'SOCKET_DIED' })
-      actor.send({ type: 'RETRY_TIMER_EXPIRED' })
+      actor.send({ type: 'TRIGGER_RECONNECT' })
       expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
 
       actor.send({ type: 'CANCEL_RECONNECT' })
@@ -637,15 +653,6 @@ describe('connectionMachine', () => {
       actor.send({ type: 'CONNECT' })
       actor.send({ type: 'CONNECTION_SUCCESS' })
       actor.send({ type: 'VISIBLE' })
-      expect(actor.getSnapshot().value).toEqual({ connected: 'healthy' })
-      actor.stop()
-    })
-
-    it('should ignore RETRY_TIMER_EXPIRED in connected.healthy', () => {
-      const actor = createActor(connectionMachine).start()
-      actor.send({ type: 'CONNECT' })
-      actor.send({ type: 'CONNECTION_SUCCESS' })
-      actor.send({ type: 'RETRY_TIMER_EXPIRED' })
       expect(actor.getSnapshot().value).toEqual({ connected: 'healthy' })
       actor.stop()
     })
@@ -737,11 +744,11 @@ describe('connectionMachine', () => {
       actor.stop()
     })
 
-    it('should ignore RETRY_TIMER_EXPIRED in terminal', () => {
+    it('should ignore TRIGGER_RECONNECT in terminal', () => {
       const actor = createActor(connectionMachine).start()
       actor.send({ type: 'CONNECT' })
       actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
-      actor.send({ type: 'RETRY_TIMER_EXPIRED' })
+      actor.send({ type: 'TRIGGER_RECONNECT' })
       expect(actor.getSnapshot().value).toEqual({ terminal: 'initialFailure' })
       actor.stop()
     })
@@ -774,7 +781,7 @@ describe('connectionMachine', () => {
       actor.send({ type: 'CONNECT' })
       actor.send({ type: 'CONNECTION_SUCCESS' })
       actor.send({ type: 'SOCKET_DIED' })
-      actor.send({ type: 'RETRY_TIMER_EXPIRED' })
+      actor.send({ type: 'TRIGGER_RECONNECT' })
       expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
 
       actor.send({ type: 'VISIBLE' })
@@ -798,7 +805,7 @@ describe('connectionMachine', () => {
       expect(actor.getSnapshot().value).toEqual({ reconnecting: 'waiting' })
 
       // Timer expires, attempt reconnect
-      actor.send({ type: 'RETRY_TIMER_EXPIRED' })
+      actor.send({ type: 'TRIGGER_RECONNECT' })
       expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
 
       // First attempt fails
@@ -807,7 +814,7 @@ describe('connectionMachine', () => {
       expect(actor.getSnapshot().context.reconnectAttempt).toBe(2)
 
       // Second attempt succeeds
-      actor.send({ type: 'RETRY_TIMER_EXPIRED' })
+      actor.send({ type: 'TRIGGER_RECONNECT' })
       actor.send({ type: 'CONNECTION_SUCCESS' })
       expect(actor.getSnapshot().value).toEqual({ connected: 'healthy' })
       expect(actor.getSnapshot().context.reconnectAttempt).toBe(0)
@@ -829,7 +836,7 @@ describe('connectionMachine', () => {
       expect(actor.getSnapshot().value).toEqual({ reconnecting: 'waiting' })
 
       // Reconnect succeeds
-      actor.send({ type: 'RETRY_TIMER_EXPIRED' })
+      actor.send({ type: 'TRIGGER_RECONNECT' })
       actor.send({ type: 'CONNECTION_SUCCESS' })
       expect(actor.getSnapshot().value).toEqual({ connected: 'healthy' })
 
@@ -858,7 +865,7 @@ describe('connectionMachine', () => {
       expect(actor.getSnapshot().context.reconnectAttempt).toBe(1)
 
       // Fail the reconnect to get an error
-      actor.send({ type: 'RETRY_TIMER_EXPIRED' })
+      actor.send({ type: 'TRIGGER_RECONNECT' })
       actor.send({ type: 'CONNECTION_ERROR', error: 'network down' })
       expect(actor.getSnapshot().context.lastError).toBe('network down')
 
@@ -882,7 +889,7 @@ describe('connectionMachine', () => {
 
       // Exhaust all attempts
       for (let i = 0; i < DEFAULT_MAX_RECONNECT_ATTEMPTS; i++) {
-        actor.send({ type: 'RETRY_TIMER_EXPIRED' })
+        actor.send({ type: 'TRIGGER_RECONNECT' })
         actor.send({ type: 'CONNECTION_ERROR', error: `fail ${i}` })
       }
       expect(actor.getSnapshot().value).toEqual({ terminal: 'maxRetries' })
@@ -919,7 +926,7 @@ describe('connectionMachine', () => {
 
       // Socket dies and reconnects
       actor.send({ type: 'SOCKET_DIED' })
-      actor.send({ type: 'RETRY_TIMER_EXPIRED' })
+      actor.send({ type: 'TRIGGER_RECONNECT' })
       actor.send({ type: 'CONNECTION_SUCCESS' })
       expect(actor.getSnapshot().value).toEqual({ connected: 'healthy' })
 

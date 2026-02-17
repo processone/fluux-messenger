@@ -1956,7 +1956,44 @@ describe('XMPPClient Connection', () => {
       expect(mockClientFactory).toHaveBeenCalled()
     })
 
-    it('should prevent concurrent reconnect attempts via mutex', async () => {
+    it('should schedule reconnect after SM verify timeout without disconnect event', async () => {
+      // Add SM to enable verification path
+      mockXmppClientInstance.streamManagement = {
+        id: 'sm-123',
+        inbound: 5,
+        outbound: 0,
+        enabled: true,
+        on: vi.fn(),
+      }
+
+      // Simulate a silent dead socket:
+      // <r/> send succeeds (buffered) but no <a/> ever comes back.
+      mockXmppClientInstance.send.mockImplementation(() => Promise.resolve())
+
+      // Prepare reconnect client before timer fires
+      const reconnectClient = createMockXmppClient()
+      mockClientFactory.mockClear()
+      mockClientFactory._setInstance(reconnectClient)
+
+      const notifyPromise = xmppClient.notifySystemState('awake')
+
+      // Verification timeout is 10s by default
+      await vi.advanceTimersByTimeAsync(10_000)
+      await notifyPromise
+
+      // Timeout should transition to reconnecting and arm backoff timer
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        'Verification timed out waiting for SM ack',
+        'connection'
+      )
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
+
+      // First reconnect attempt uses 1s delay
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockClientFactory).toHaveBeenCalledTimes(1)
+    })
+
+    it('should prevent concurrent reconnect attempts via state-machine sequencing', async () => {
       // Trigger unexpected disconnect to enter reconnecting state
       mockXmppClientInstance._emit('disconnect', { clean: false })
       expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
@@ -1976,12 +2013,31 @@ describe('XMPPClient Connection', () => {
       mockClientFactory.mockClear()
       xmppClient.triggerReconnect()
 
-      // Should NOT create another client — mutex prevents concurrent attempts
+      // No second reconnect attempt should start while machine stays in attempting.
       expect(mockClientFactory).not.toHaveBeenCalled()
+    })
 
-      // Verify the skip was logged
+    it('should allow repeated reconnect triggers after "still online" short-circuit', async () => {
+      // Force the defensive online short-circuit path in attemptReconnect()
+      ;(mockXmppClientInstance as any).status = 'online'
+
+      // First immediate reconnect short-circuits
+      xmppClient.connectionActor.send({ type: 'SOCKET_DIED' })
+      xmppClient.triggerReconnect()
+      await vi.advanceTimersByTimeAsync(0)
+
+      // A second trigger should still run through attempting, not get stuck.
+      vi.mocked(mockStores.console.addEvent).mockClear()
+      xmppClient.connectionActor.send({ type: 'SOCKET_DIED' })
+      xmppClient.triggerReconnect()
+      await vi.advanceTimersByTimeAsync(0)
+
       expect(mockStores.console.addEvent).toHaveBeenCalledWith(
-        expect.stringContaining('already in progress'),
+        'Connection still online - cancelling reconnect attempt',
+        'connection'
+      )
+      expect(mockStores.console.addEvent).not.toHaveBeenCalledWith(
+        'Reconnect attempt already in progress, skipping',
         'connection'
       )
     })
