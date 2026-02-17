@@ -550,6 +550,47 @@ describe('XMPPClient Connection', () => {
       )
     })
 
+    it('should trigger dead-socket recovery on websocket econnerror stream error', async () => {
+      const mockProxyAdapter = {
+        startProxy: vi.fn().mockResolvedValue({ url: 'ws://127.0.0.1:12345' }),
+        stopProxy: vi.fn().mockResolvedValue(undefined),
+      }
+      const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
+      proxyClient.bindStores(mockStores)
+
+      const connectPromise = proxyClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      vi.mocked(mockStores.connection.setStatus).mockClear()
+      vi.mocked(mockStores.console.addEvent).mockClear()
+
+      mockXmppClientInstance._emit('error', new Error('websocket econnerror ws://[::1]:42583'))
+
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        'Stream transport error, forcing reconnect recovery',
+        'connection'
+      )
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
+
+      // Dead-socket path should not race a fire-and-forget stop; proxy lifecycle
+      // restart is centralized in attemptReconnect().
+      expect(mockProxyAdapter.stopProxy).not.toHaveBeenCalled()
+
+      const reconnectClient = createMockXmppClient()
+      mockClientFactory._setInstance(reconnectClient)
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockProxyAdapter.stopProxy).toHaveBeenCalledTimes(1)
+
+      proxyClient.cancelReconnect()
+    })
+
     it('should NOT auto-reconnect on fresh connect() after a previous successful session', async () => {
       // Scenario: User had a successful session, reconnect exhausted max retries,
       // user clicks Connect again. This fresh connect() should NOT auto-reconnect
