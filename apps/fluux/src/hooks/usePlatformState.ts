@@ -49,12 +49,34 @@ export function usePlatformState() {
   const hiddenAtRef = useRef<number | null>(null)
   const lastHeartbeatRef = useRef(Date.now())
   const sleepStartRef = useRef<number | null>(null)
+  const statusRef = useRef(status)
+  const osIdleUnavailableRef = useRef(false)
+  const osIdleUnavailableLoggedRef = useRef(false)
+
+  useEffect(() => {
+    statusRef.current = status
+  }, [status])
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   const logEvent = useCallback((message: string) => {
     consoleStore.getState().addEvent(message, 'presence')
   }, [])
+
+  const markOsIdleUnavailable = useCallback((err: unknown): boolean => {
+    const message = err instanceof Error ? err.message : String(err)
+    const unsupported = message.includes('Linux idle detection unavailable')
+      || message.includes('MIT-SCREEN-SAVER')
+      || message.includes('XScreenSaver')
+    if (unsupported) {
+      osIdleUnavailableRef.current = true
+      if (!osIdleUnavailableLoggedRef.current) {
+        osIdleUnavailableLoggedRef.current = true
+        logEvent('[idle] OS idle detection unavailable, using DOM fallback')
+      }
+    }
+    return unsupported
+  }, [logEvent])
 
   /**
    * Check if a wake event should be processed (debounce).
@@ -94,7 +116,7 @@ export function usePlatformState() {
     lastActivityEventRef.current = now
 
     // In Tauri, verify with OS idle time before signaling
-    if (isTauri()) {
+    if (isTauri() && !osIdleUnavailableRef.current) {
       try {
         const { invoke } = await import('@tauri-apps/api/core')
         const idleSeconds = await invoke<number>('get_idle_time')
@@ -102,13 +124,14 @@ export function usePlatformState() {
           // System says user is idle, ignore DOM event
           return
         }
-      } catch {
+      } catch (err) {
+        markOsIdleUnavailable(err)
         // Fall through and trust DOM event
       }
     }
 
     notifyActive()
-  }, [notifyActive])
+  }, [notifyActive, markOsIdleUnavailable])
 
   /**
    * Check if user is idle and notify SDK.
@@ -120,7 +143,7 @@ export function usePlatformState() {
     let idleMs: number
     let idleSource: string
 
-    if (isTauri()) {
+    if (isTauri() && !osIdleUnavailableRef.current) {
       try {
         const { invoke } = await import('@tauri-apps/api/core')
         const idleSeconds = await invoke<number>('get_idle_time')
@@ -128,9 +151,15 @@ export function usePlatformState() {
         idleSource = 'OS'
       } catch (err) {
         idleMs = Date.now() - lastActivityRef.current
-        idleSource = 'DOM (Tauri fallback)'
-        logEvent(`[checkIdle] Tauri get_idle_time failed: ${err}, falling back to DOM`)
+        const unsupported = markOsIdleUnavailable(err)
+        idleSource = unsupported ? 'DOM (Tauri fallback cached)' : 'DOM (Tauri fallback)'
+        if (!unsupported) {
+          logEvent(`[checkIdle] Tauri get_idle_time failed: ${err}, falling back to DOM`)
+        }
       }
+    } else if (isTauri()) {
+      idleMs = Date.now() - lastActivityRef.current
+      idleSource = 'DOM (Tauri fallback cached)'
     } else {
       idleMs = Date.now() - lastActivityRef.current
       idleSource = 'DOM'
@@ -148,7 +177,7 @@ export function usePlatformState() {
       const idleSince = new Date(Date.now() - idleMs)
       notifyIdle(idleSince)
     }
-  }, [status, notifyIdle, logEvent, autoAwayConfig])
+  }, [status, notifyIdle, logEvent, autoAwayConfig, markOsIdleUnavailable])
 
   // ── Effect 1: Activity tracking + idle checking ───────────────────────────
 
@@ -324,7 +353,7 @@ export function usePlatformState() {
   // ── Effect 5: Tauri native events (keepalive + proxy watchdog) ────────────
 
   useEffect(() => {
-    if (!isTauri() || status !== 'online') return
+    if (!isTauri()) return
 
     let unlistenKeepalive: UnlistenFn | undefined
     let unlistenProxyClosed: UnlistenFn | undefined
@@ -333,6 +362,7 @@ export function usePlatformState() {
     void import('@tauri-apps/api/event').then(({ listen }) => {
       // Keepalive: verify connection health every 30s (Rust-driven, immune to JS throttling)
       void listen('xmpp-keepalive', () => {
+        if (statusRef.current !== 'online') return
         if (!shouldHandleWake('keepalive')) return
         client.notifySystemState('awake')
           .catch((err) => {
@@ -344,6 +374,7 @@ export function usePlatformState() {
 
       // Proxy watchdog detected dead connection
       void listen('proxy-connection-closed', () => {
+        if (statusRef.current === 'disconnected' || statusRef.current === 'error') return
         console.log('[PlatformState] Proxy connection closed by watchdog, triggering reconnect')
         if (!shouldHandleWake('proxy-closed')) return
         client.notifySystemState('awake')
@@ -360,7 +391,7 @@ export function usePlatformState() {
       unlistenKeepalive?.()
       unlistenProxyClosed?.()
     }
-  }, [status, client, shouldHandleWake])
+  }, [client, shouldHandleWake])
 
   // ── Effect 6: Presence machine sync with connection status ────────────────
 
@@ -370,7 +401,7 @@ export function usePlatformState() {
       presenceConnect()
 
       // Check if user is active after connection established
-      if (isTauri()) {
+      if (isTauri() && !osIdleUnavailableRef.current) {
         import('@tauri-apps/api/core').then(({ invoke }) => {
           invoke<number>('get_idle_time').then((idleSeconds) => {
             if (idleSeconds < 60) {
@@ -379,11 +410,19 @@ export function usePlatformState() {
             } else {
               logEvent(`Connection restored, user idle (${idleSeconds}s)`)
             }
-          }).catch(() => {
-            logEvent('Connection restored, triggering activity (idle check failed)')
+          }).catch((err) => {
+            const unsupported = markOsIdleUnavailable(err)
+            logEvent(
+              unsupported
+                ? 'Connection restored, OS idle unavailable (DOM fallback), triggering activity'
+                : 'Connection restored, triggering activity (idle check failed)'
+            )
             notifyActive()
           })
         })
+      } else if (isTauri()) {
+        logEvent('Connection restored, OS idle unavailable (DOM fallback), triggering activity')
+        notifyActive()
       } else {
         // Web browser: assume user is active on reconnect
         logEvent('Connection restored (web), notifying activity')
@@ -392,5 +431,5 @@ export function usePlatformState() {
     } else if (status === 'disconnected' || status === 'error') {
       presenceDisconnect()
     }
-  }, [status, presenceConnect, presenceDisconnect, notifyActive, logEvent])
+  }, [status, presenceConnect, presenceDisconnect, notifyActive, logEvent, markOsIdleUnavailable])
 }

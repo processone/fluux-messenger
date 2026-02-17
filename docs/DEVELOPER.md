@@ -1,6 +1,6 @@
 # Development
 
-This are a few commands to get you started building the client locally.
+These are a few commands to get you started building the client locally.
 
 ## Quick Start
 
@@ -83,10 +83,10 @@ You can build `.deb` packages locally using standard Debian tooling.
 
 ### Prerequisites
 
-Install Node.js 20 (Ubuntu's default is too old):
+Install Node.js 22 (Ubuntu 22.04 LTS version is too old):
 
 ```bash
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 ```
 
 Install Rust via rustup:
