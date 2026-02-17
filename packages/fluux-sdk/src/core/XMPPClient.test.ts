@@ -22,6 +22,7 @@ import {
   type MockXmppClient,
   type MockStoreBindings,
 } from './test-utils'
+import { _resetStorageScopeForTesting } from '../utils/storageScope'
 
 let mockXmppClientInstance: MockXmppClient
 
@@ -60,6 +61,7 @@ describe('XMPPClient', () => {
   let mockStores: MockStoreBindings
 
   beforeEach(() => {
+    _resetStorageScopeForTesting()
     vi.useFakeTimers()
     mockXmppClientInstance = createMockXmppClient()
     mockClientFactory.mockClear()

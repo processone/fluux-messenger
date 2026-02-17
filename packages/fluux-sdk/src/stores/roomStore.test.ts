@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { roomStore } from './roomStore'
 import type { Room, RoomMessage } from '../core/types'
 import { getLocalPart } from '../core/jid'
+import { _resetStorageScopeForTesting } from '../utils/storageScope'
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -96,6 +97,7 @@ function createMessage(
 
 describe('roomStore', () => {
   beforeEach(() => {
+    _resetStorageScopeForTesting()
     // Reset store state before each test
     roomStore.setState({
       rooms: new Map(),
@@ -1807,6 +1809,26 @@ describe('roomStore', () => {
 
       // Draft should still be preserved for Room 1
       expect(roomStore.getState().getDraft('room1@conference.example.com')).toBe('Draft for Room 1')
+    })
+
+    it('should load account-scoped drafts when switching account', () => {
+      localStorageMock._store['fluux-room-drafts:alice@example.com'] = JSON.stringify([
+        ['room1@conference.example.com', 'Alice draft'],
+      ])
+
+      roomStore.getState().switchAccount('alice@example.com')
+
+      expect(roomStore.getState().getDraft('room1@conference.example.com')).toBe('Alice draft')
+    })
+
+    it('should clear room state when switching account', () => {
+      roomStore.getState().addRoom(createRoom('room1@conference.example.com'))
+      roomStore.getState().setDraft('room1@conference.example.com', 'Draft for Room 1')
+
+      roomStore.getState().switchAccount('bob@example.com')
+
+      expect(roomStore.getState().rooms.size).toBe(0)
+      expect(roomStore.getState().drafts.size).toBe(0)
     })
 
     // localStorage persistence tests

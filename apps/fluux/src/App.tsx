@@ -59,7 +59,7 @@ function App() {
         } catch {
           // Ignore disconnect errors during forced cleanup
         }
-        await clearLocalData()
+        await clearLocalData({ allAccounts: true })
         window.location.reload()
       }).then((fn) => {
         unlisten = fn

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { connectionStore, rosterStore, roomStore, useXMPPContext } from '@fluux/sdk'
+import { connectionStore, rosterStore, roomStore, useXMPPContext, getBareJid } from '@fluux/sdk'
 import { useRosterStore, useConnectionStore, useRoomStore } from '@fluux/sdk/react'
 import type { Contact, Room, RoomOccupant, ServerInfo, HttpUploadService, RoomMessage, ResourcePresence } from '@fluux/sdk'
 import { getResource } from '@/utils/xmppResource'
@@ -13,6 +13,95 @@ const SERVER_INFO_KEY = 'xmpp-server-info'
 const VIEW_STATE_KEY = 'xmpp-view-state'
 const PROFILE_KEY = 'xmpp-profile'
 const OWN_RESOURCES_KEY = 'xmpp-own-resources'
+const ACTIVE_SESSION_JID_KEY = 'xmpp-active-session-jid'
+
+const SCOPED_SESSION_KEYS = [
+  SESSION_KEY,
+  ROSTER_KEY,
+  ROOMS_KEY,
+  SERVER_INFO_KEY,
+  VIEW_STATE_KEY,
+  PROFILE_KEY,
+  OWN_RESOURCES_KEY,
+]
+
+function normalizeSessionJid(jid: string | null | undefined): string | null {
+  if (!jid) return null
+  const bareJid = getBareJid(jid).trim()
+  return bareJid.length > 0 ? bareJid : null
+}
+
+function setActiveSessionJid(jid: string | null | undefined): string | null {
+  const normalized = normalizeSessionJid(jid)
+  if (normalized) {
+    sessionStorage.setItem(ACTIVE_SESSION_JID_KEY, normalized)
+    return normalized
+  }
+  sessionStorage.removeItem(ACTIVE_SESSION_JID_KEY)
+  return null
+}
+
+function resolveSessionScopeJid(jid?: string | null): string | null {
+  const explicit = normalizeSessionJid(jid)
+  if (explicit) return explicit
+
+  const connectedJid = normalizeSessionJid(connectionStore.getState().jid)
+  if (connectedJid) return connectedJid
+
+  return normalizeSessionJid(sessionStorage.getItem(ACTIVE_SESSION_JID_KEY))
+}
+
+function getScopedSessionKey(baseKey: string, jid?: string | null): string {
+  const scopeJid = resolveSessionScopeJid(jid)
+  return scopeJid ? `${baseKey}:${scopeJid}` : baseKey
+}
+
+function setScopedSessionItem(baseKey: string, value: string, jid?: string | null): void {
+  sessionStorage.setItem(getScopedSessionKey(baseKey, jid), value)
+}
+
+function getScopedSessionItem(baseKey: string, jid?: string | null): string | null {
+  const scopedKey = getScopedSessionKey(baseKey, jid)
+  const scopedValue = sessionStorage.getItem(scopedKey)
+  if (scopedValue !== null) return scopedValue
+
+  const hasExplicitJid = normalizeSessionJid(jid) !== null
+  if (hasExplicitJid || scopedKey !== baseKey) {
+    return null
+  }
+
+  // Legacy fallback: read old unscoped keys only when no account scope is known.
+  return sessionStorage.getItem(baseKey)
+}
+
+function clearScopedSessionItems(jid?: string | null): void {
+  const scopeJid = resolveSessionScopeJid(jid)
+
+  SCOPED_SESSION_KEYS.forEach((baseKey) => {
+    if (scopeJid) {
+      sessionStorage.removeItem(`${baseKey}:${scopeJid}`)
+    } else {
+      sessionStorage.removeItem(baseKey)
+    }
+    sessionStorage.removeItem(baseKey)
+  })
+}
+
+function clearAllScopedSessionItems(): void {
+  const keysToRemove: string[] = []
+  for (let i = 0; i < sessionStorage.length; i++) {
+    const key = sessionStorage.key(i)
+    if (!key) continue
+    if (key === ACTIVE_SESSION_JID_KEY) {
+      keysToRemove.push(key)
+      continue
+    }
+    if (SCOPED_SESSION_KEYS.some((baseKey) => key === baseKey || key.startsWith(`${baseKey}:`))) {
+      keysToRemove.push(key)
+    }
+  }
+  keysToRemove.forEach((key) => sessionStorage.removeItem(key))
+}
 
 interface SessionData {
   jid: string
@@ -43,7 +132,8 @@ export interface ViewStateData {
  */
 export function saveSession(jid: string, password: string, server: string): void {
   const data: SessionData = { jid, password, server }
-  sessionStorage.setItem(SESSION_KEY, JSON.stringify(data))
+  const scopeJid = setActiveSessionJid(jid)
+  setScopedSessionItem(SESSION_KEY, JSON.stringify(data), scopeJid)
 }
 
 // Note: SM state persistence is now handled by SDK's storage adapter.
@@ -53,14 +143,18 @@ export function saveSession(jid: string, password: string, server: string): void
  * Clears session credentials from sessionStorage.
  * Called on manual disconnect.
  */
-export function clearSession(): void {
-  sessionStorage.removeItem(SESSION_KEY)
-  sessionStorage.removeItem(ROSTER_KEY)
-  sessionStorage.removeItem(ROOMS_KEY)
-  sessionStorage.removeItem(SERVER_INFO_KEY)
-  sessionStorage.removeItem(VIEW_STATE_KEY)
-  sessionStorage.removeItem(PROFILE_KEY)
-  sessionStorage.removeItem(OWN_RESOURCES_KEY)
+interface ClearSessionOptions {
+  allAccounts?: boolean
+}
+
+export function clearSession(options: ClearSessionOptions = {}): void {
+  if (options.allAccounts) {
+    clearAllScopedSessionItems()
+    return
+  }
+
+  clearScopedSessionItems()
+  setActiveSessionJid(null)
   // Note: Presence is now managed by XState machine with its own persistence
   // in XMPPProvider (key: 'fluux:presence-machine')
 }
@@ -68,17 +162,17 @@ export function clearSession(): void {
 /**
  * Saves profile data (avatar hash, nickname) to sessionStorage.
  */
-export function saveProfile(ownAvatarHash: string | null, ownNickname: string | null): void {
+export function saveProfile(ownAvatarHash: string | null, ownNickname: string | null, jid?: string | null): void {
   const data: ProfileData = { ownAvatarHash, ownNickname }
-  sessionStorage.setItem(PROFILE_KEY, JSON.stringify(data))
+  setScopedSessionItem(PROFILE_KEY, JSON.stringify(data), jid)
 }
 
 /**
  * Gets stored profile data.
  */
-export function getSavedProfile(): ProfileData | null {
+export function getSavedProfile(jid?: string | null): ProfileData | null {
   try {
-    const stored = sessionStorage.getItem(PROFILE_KEY)
+    const stored = getScopedSessionItem(PROFILE_KEY, jid)
     if (!stored) return null
     return JSON.parse(stored) as ProfileData
   } catch {
@@ -90,7 +184,7 @@ export function getSavedProfile(): ProfileData | null {
  * Saves own resources (other connected devices) to sessionStorage.
  * Map is converted to array of entries for JSON serialization.
  */
-export function saveOwnResources(ownResources: Map<string, ResourcePresence>): void {
+export function saveOwnResources(ownResources: Map<string, ResourcePresence>, jid?: string | null): void {
   // Convert Map to array of entries, and Date to ISO string
   const serializable = Array.from(ownResources.entries()).map(([key, resource]) => [
     key,
@@ -99,15 +193,15 @@ export function saveOwnResources(ownResources: Map<string, ResourcePresence>): v
       lastInteraction: resource.lastInteraction?.toISOString(),
     },
   ])
-  sessionStorage.setItem(OWN_RESOURCES_KEY, JSON.stringify(serializable))
+  setScopedSessionItem(OWN_RESOURCES_KEY, JSON.stringify(serializable), jid)
 }
 
 /**
  * Gets stored own resources.
  */
-export function getSavedOwnResources(): Map<string, ResourcePresence> | null {
+export function getSavedOwnResources(jid?: string | null): Map<string, ResourcePresence> | null {
   try {
-    const stored = sessionStorage.getItem(OWN_RESOURCES_KEY)
+    const stored = getScopedSessionItem(OWN_RESOURCES_KEY, jid)
     if (!stored) return null
      
     const parsed = JSON.parse(stored) as Array<[string, any]>
@@ -130,16 +224,16 @@ export function getSavedOwnResources(): Map<string, ResourcePresence> | null {
  * Saves view state to sessionStorage.
  * Called when view state changes to restore UI on page reload.
  */
-export function saveViewState(viewState: ViewStateData): void {
-  sessionStorage.setItem(VIEW_STATE_KEY, JSON.stringify(viewState))
+export function saveViewState(viewState: ViewStateData, jid?: string | null): void {
+  setScopedSessionItem(VIEW_STATE_KEY, JSON.stringify(viewState), jid)
 }
 
 /**
  * Gets stored view state.
  */
-export function getSavedViewState(): ViewStateData | null {
+export function getSavedViewState(jid?: string | null): ViewStateData | null {
   try {
-    const stored = sessionStorage.getItem(VIEW_STATE_KEY)
+    const stored = getScopedSessionItem(VIEW_STATE_KEY, jid)
     if (!stored) return null
     return JSON.parse(stored) as ViewStateData
   } catch {
@@ -152,21 +246,21 @@ export function getSavedViewState(): ViewStateData | null {
  * Called when contacts change to preserve presence across page reloads.
  * Note: Map objects need to be converted to arrays for JSON serialization.
  */
-export function saveRoster(contacts: Contact[]): void {
+export function saveRoster(contacts: Contact[], jid?: string | null): void {
   // Convert Map to array of entries for JSON serialization
   const serializable = contacts.map((contact) => ({
     ...contact,
     resources: contact.resources ? Array.from(contact.resources.entries()) : undefined,
   }))
-  sessionStorage.setItem(ROSTER_KEY, JSON.stringify(serializable))
+  setScopedSessionItem(ROSTER_KEY, JSON.stringify(serializable), jid)
 }
 
 /**
  * Gets stored roster state.
  */
-export function getSavedRoster(): Contact[] | null {
+export function getSavedRoster(jid?: string | null): Contact[] | null {
   try {
-    const stored = sessionStorage.getItem(ROSTER_KEY)
+    const stored = getScopedSessionItem(ROSTER_KEY, jid)
     if (!stored) return null
      
     const parsed = JSON.parse(stored) as Array<Contact & { resources?: [string, any][] }>
@@ -249,7 +343,7 @@ function serializeRoomMessage(message: RoomMessage): SerializableRoomMessage {
  * Called when room state changes to preserve it across page reloads.
  * Includes the last 50 messages per room to restore context on reload.
  */
-export function saveRooms(rooms: Map<string, Room>): void {
+export function saveRooms(rooms: Map<string, Room>, jid?: string | null): void {
   const serializable: SerializableRoom[] = Array.from(rooms.values()).map((room) => ({
     jid: room.jid,
     name: room.name,
@@ -271,7 +365,7 @@ export function saveRooms(rooms: Map<string, Room>): void {
     // Persist last N messages for context on reload (like history on fresh join)
     messages: room.messages.slice(-MAX_MESSAGES_PER_ROOM).map(serializeRoomMessage),
   }))
-  sessionStorage.setItem(ROOMS_KEY, JSON.stringify(serializable))
+  setScopedSessionItem(ROOMS_KEY, JSON.stringify(serializable), jid)
 }
 
 /**
@@ -288,9 +382,9 @@ function deserializeRoomMessage(message: SerializableRoomMessage): RoomMessage {
 /**
  * Gets stored room state.
  */
-export function getSavedRooms(): Room[] | null {
+export function getSavedRooms(jid?: string | null): Room[] | null {
   try {
-    const stored = sessionStorage.getItem(ROOMS_KEY)
+    const stored = getScopedSessionItem(ROOMS_KEY, jid)
     if (!stored) return null
     const parsed = JSON.parse(stored) as SerializableRoom[]
     return parsed.map((room) => ({
@@ -318,17 +412,17 @@ interface ServerDiscoveryData {
 /**
  * Saves server discovery state to sessionStorage.
  */
-export function saveServerInfo(serverInfo: ServerInfo | null, httpUploadService: HttpUploadService | null): void {
+export function saveServerInfo(serverInfo: ServerInfo | null, httpUploadService: HttpUploadService | null, jid?: string | null): void {
   const data: ServerDiscoveryData = { serverInfo, httpUploadService }
-  sessionStorage.setItem(SERVER_INFO_KEY, JSON.stringify(data))
+  setScopedSessionItem(SERVER_INFO_KEY, JSON.stringify(data), jid)
 }
 
 /**
  * Gets stored server discovery state.
  */
-export function getSavedServerInfo(): ServerDiscoveryData | null {
+export function getSavedServerInfo(jid?: string | null): ServerDiscoveryData | null {
   try {
-    const stored = sessionStorage.getItem(SERVER_INFO_KEY)
+    const stored = getScopedSessionItem(SERVER_INFO_KEY, jid)
     if (!stored) return null
     return JSON.parse(stored) as ServerDiscoveryData
   } catch {
@@ -339,11 +433,13 @@ export function getSavedServerInfo(): ServerDiscoveryData | null {
 /**
  * Gets stored session credentials.
  */
-export function getSession(): SessionData | null {
+export function getSession(jid?: string | null): SessionData | null {
   try {
-    const stored = sessionStorage.getItem(SESSION_KEY)
+    const stored = getScopedSessionItem(SESSION_KEY, jid)
     if (!stored) return null
-    return JSON.parse(stored) as SessionData
+    const parsed = JSON.parse(stored) as SessionData
+    setActiveSessionJid(parsed.jid)
+    return parsed
   } catch {
     return null
   }
@@ -425,19 +521,19 @@ export function useSessionPersistence(): void {
       // We restore cached state here in case SM resumption succeeds (server sends deltas only).
 
       // Restore roster (for SM resumption case where server sends deltas)
-      const savedRoster = getSavedRoster()
+      const savedRoster = getSavedRoster(session.jid)
       if (savedRoster && savedRoster.length > 0) {
         setContacts(savedRoster)
       }
 
       // Restore rooms (bookmarks, join status, occupants)
-      const savedRooms = getSavedRooms()
+      const savedRooms = getSavedRooms(session.jid)
       if (savedRooms && savedRooms.length > 0) {
         savedRooms.forEach((room) => addRoom(room))
       }
 
       // Restore server discovery info
-      const savedServerInfo = getSavedServerInfo()
+      const savedServerInfo = getSavedServerInfo(session.jid)
       if (savedServerInfo) {
         if (savedServerInfo.serverInfo) {
           setServerInfo(savedServerInfo.serverInfo)
@@ -451,7 +547,7 @@ export function useSessionPersistence(): void {
       // in XMPPProvider (key: 'fluux:presence-machine')
 
       // Restore profile data (nickname, avatar from cache)
-      const savedProfile = getSavedProfile()
+      const savedProfile = getSavedProfile(session.jid)
       if (savedProfile) {
         if (savedProfile.ownNickname) {
           setOwnNickname(savedProfile.ownNickname)
@@ -465,7 +561,7 @@ export function useSessionPersistence(): void {
       }
 
       // Restore own resources (other connected devices)
-      const savedOwnResources = getSavedOwnResources()
+      const savedOwnResources = getSavedOwnResources(session.jid)
       if (savedOwnResources && savedOwnResources.size > 0) {
         savedOwnResources.forEach((resource, resourceKey) => {
           updateOwnResource(resourceKey, resource.show, resource.priority, resource.status, resource.lastInteraction, resource.client)
@@ -507,15 +603,18 @@ export function useSessionPersistence(): void {
 
     // Helper to save current state
     const saveCurrentState = () => {
+      const state = connectionStore.getState()
+      const scopeJid = state.jid
+
       const contacts = rosterStore.getState().contacts
       const contactsArray = Array.from(contacts.values())
       if (contactsArray.length > 0) {
-        saveRoster(contactsArray)
+        saveRoster(contactsArray, scopeJid)
       }
 
       const rooms = roomStore.getState().rooms
       if (rooms.size > 0) {
-        saveRooms(rooms)
+        saveRooms(rooms, scopeJid)
       }
     }
 
@@ -551,12 +650,12 @@ export function useSessionPersistence(): void {
     // Save immediately on becoming online
     const saveAll = () => {
       const connectionState = connectionStore.getState()
-      saveProfile(connectionState.ownAvatarHash, connectionState.ownNickname)
+      saveProfile(connectionState.ownAvatarHash, connectionState.ownNickname, connectionState.jid)
       if (connectionState.ownResources.size > 0) {
-        saveOwnResources(connectionState.ownResources)
+        saveOwnResources(connectionState.ownResources, connectionState.jid)
       }
       if (connectionState.serverInfo || connectionState.httpUploadService) {
-        saveServerInfo(connectionState.serverInfo, connectionState.httpUploadService)
+        saveServerInfo(connectionState.serverInfo, connectionState.httpUploadService, connectionState.jid)
       }
     }
 

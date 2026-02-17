@@ -50,6 +50,7 @@ import { chatStore } from '../stores/chatStore'
 import { roomStore } from '../stores/roomStore'
 import { NS_MAM } from './namespaces'
 import { createMockClient, simulateFreshSession } from './sideEffects.testHelpers'
+import { _resetStorageScopeForTesting } from '../utils/storageScope'
 
 describe('setupBackgroundSyncSideEffects', () => {
   const ARCHIVED_CHECK_KEY = 'fluux:lastArchivedPreviewCheck'
@@ -58,6 +59,7 @@ describe('setupBackgroundSyncSideEffects', () => {
   let cleanup: () => void
 
   beforeEach(() => {
+    _resetStorageScopeForTesting()
     connectionStore.getState().reset()
     mockClient = createMockClient()
     localStorageMock.clear()

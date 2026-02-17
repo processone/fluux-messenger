@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
 import type { Message, RoomMessage } from '../core/types'
+import { _resetStorageScopeForTesting, setStorageScopeJid } from './storageScope'
 
 // Must import after fake-indexeddb/auto
 import * as messageCache from './messageCache'
@@ -41,6 +42,7 @@ function createMockRoomMessage(roomJid: string, overrides: Partial<RoomMessage> 
 
 describe('messageCache', () => {
   beforeEach(async () => {
+    _resetStorageScopeForTesting()
     // Reset IndexedDB completely before each test
     // This ensures test isolation with fake-indexeddb
     globalThis.indexedDB = new IDBFactory()
@@ -65,6 +67,22 @@ describe('messageCache', () => {
 
   describe('Chat Messages', () => {
     const conversationId = 'alice@example.com'
+
+    it('should isolate messages per account scope', async () => {
+      setStorageScopeJid('alice@example.com')
+      await messageCache.saveMessage(createMockMessage(conversationId, { id: 'shared-id', body: 'Alice message' }))
+
+      setStorageScopeJid('bob@example.com')
+      await messageCache.saveMessage(createMockMessage(conversationId, { id: 'shared-id', body: 'Bob message' }))
+
+      setStorageScopeJid('alice@example.com')
+      const aliceMessage = await messageCache.getMessage('shared-id')
+      expect(aliceMessage?.body).toBe('Alice message')
+
+      setStorageScopeJid('bob@example.com')
+      const bobMessage = await messageCache.getMessage('shared-id')
+      expect(bobMessage?.body).toBe('Bob message')
+    })
 
     describe('saveMessage', () => {
       it('should save a message to IndexedDB', async () => {

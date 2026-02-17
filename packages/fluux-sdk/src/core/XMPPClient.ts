@@ -36,6 +36,8 @@ import {
 } from '../stores'
 import { detectPlatform, getCachedPlatform } from './platform'
 import { isDeadSocketError } from './modules/connectionUtils'
+import { getBareJid } from './jid'
+import { getStorageScopeJid, setStorageScopeJid } from '../utils/storageScope'
 
 /**
  * Session storage key for persisting presence machine state.
@@ -811,6 +813,14 @@ export class XMPPClient {
    * ```
    */
   async connect(options: ConnectOptions): Promise<void> {
+    const scopedJid = getBareJid(options.jid)
+    const previousScope = getStorageScopeJid()
+    if (previousScope !== scopedJid) {
+      setStorageScopeJid(scopedJid)
+      chatStore.getState().switchAccount(scopedJid)
+      roomStore.getState().switchAccount(scopedJid)
+    }
+
     this.currentJid = options.jid
     this.stores?.connection.setJid(options.jid)
     return this.connection.connect(options)

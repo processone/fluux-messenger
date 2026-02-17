@@ -19,6 +19,7 @@ import type { SideEffectsOptions } from './chatSideEffects'
 import { connectionStore, chatStore, roomStore } from '../stores'
 import { NS_MAM } from './namespaces'
 import { logInfo } from './logger'
+import { buildScopedStorageKey } from '../utils/storageScope'
 
 /**
  * Sets up background sync side effects that run after a fresh session.
@@ -55,12 +56,16 @@ export function setupBackgroundSyncSideEffects(
   let roomCatchUpTimer: ReturnType<typeof setTimeout> | undefined
 
   // --- Daily archived check helpers ---
-  const ARCHIVED_CHECK_KEY = 'fluux:lastArchivedPreviewCheck'
+  const ARCHIVED_CHECK_KEY_BASE = 'fluux:lastArchivedPreviewCheck'
   const ONE_DAY_MS = 24 * 60 * 60 * 1000
+
+  function getArchivedCheckKey(): string {
+    return buildScopedStorageKey(ARCHIVED_CHECK_KEY_BASE)
+  }
 
   function shouldCheckArchived(): boolean {
     try {
-      const lastCheck = localStorage.getItem(ARCHIVED_CHECK_KEY)
+      const lastCheck = localStorage.getItem(getArchivedCheckKey())
       if (!lastCheck) return true
       return Date.now() - parseInt(lastCheck, 10) > ONE_DAY_MS
     } catch {
@@ -70,19 +75,23 @@ export function setupBackgroundSyncSideEffects(
 
   function markArchivedChecked(): void {
     try {
-      localStorage.setItem(ARCHIVED_CHECK_KEY, String(Date.now()))
+      localStorage.setItem(getArchivedCheckKey(), String(Date.now()))
     } catch {
       // Silently ignore localStorage errors
     }
   }
 
   // --- Hourly roster discovery helpers ---
-  const ROSTER_DISCOVERY_KEY = 'fluux:lastRosterDiscovery'
+  const ROSTER_DISCOVERY_KEY_BASE = 'fluux:lastRosterDiscovery'
   const ONE_HOUR_MS = 60 * 60 * 1000
+
+  function getRosterDiscoveryKey(): string {
+    return buildScopedStorageKey(ROSTER_DISCOVERY_KEY_BASE)
+  }
 
   function shouldDiscoverRoster(): boolean {
     try {
-      const lastCheck = localStorage.getItem(ROSTER_DISCOVERY_KEY)
+      const lastCheck = localStorage.getItem(getRosterDiscoveryKey())
       if (!lastCheck) return true
       return Date.now() - parseInt(lastCheck, 10) > ONE_HOUR_MS
     } catch {
@@ -92,7 +101,7 @@ export function setupBackgroundSyncSideEffects(
 
   function markRosterDiscovered(): void {
     try {
-      localStorage.setItem(ROSTER_DISCOVERY_KEY, String(Date.now()))
+      localStorage.setItem(getRosterDiscoveryKey(), String(Date.now()))
     } catch {
       // Silently ignore localStorage errors
     }

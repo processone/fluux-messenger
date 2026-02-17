@@ -22,6 +22,7 @@ import { buildMessageKeySet, isMessageDuplicate, sortMessagesByTimestamp, trimMe
 import { shouldUpdateLastMessage } from './shared/lastMessageUtils'
 import * as notifState from './shared/notificationState'
 import { connectionStore } from './connectionStore'
+import { buildScopedStorageKey } from '../utils/storageScope'
 
 /**
  * Maximum messages to keep in memory per room.
@@ -35,14 +36,19 @@ const MAX_MESSAGES_PER_ROOM = 1000
  * room data is restored from server bookmarks on reconnect, but drafts
  * should survive page reloads.
  */
-const ROOM_DRAFTS_STORAGE_KEY = 'fluux-room-drafts'
+const ROOM_DRAFTS_STORAGE_KEY_BASE = 'fluux-room-drafts'
+
+function getRoomDraftsStorageKey(jid?: string | null): string {
+  return buildScopedStorageKey(ROOM_DRAFTS_STORAGE_KEY_BASE, jid)
+}
 
 /**
  * Load room drafts from localStorage.
  */
-function loadDraftsFromStorage(): Map<string, string> {
+function loadDraftsFromStorage(jid?: string | null): Map<string, string> {
+  const storageKey = getRoomDraftsStorageKey(jid)
   try {
-    const stored = localStorage.getItem(ROOM_DRAFTS_STORAGE_KEY)
+    const stored = localStorage.getItem(storageKey)
     if (stored) {
       const entries = JSON.parse(stored) as [string, string][]
       return new Map(entries)
@@ -56,10 +62,11 @@ function loadDraftsFromStorage(): Map<string, string> {
 /**
  * Save room drafts to localStorage.
  */
-function saveDraftsToStorage(drafts: Map<string, string>): void {
+function saveDraftsToStorage(drafts: Map<string, string>, jid?: string | null): void {
+  const storageKey = getRoomDraftsStorageKey(jid)
   try {
     const entries = Array.from(drafts.entries())
-    localStorage.setItem(ROOM_DRAFTS_STORAGE_KEY, JSON.stringify(entries))
+    localStorage.setItem(storageKey, JSON.stringify(entries))
   } catch {
     // Ignore storage errors (quota exceeded, etc.)
   }
@@ -160,6 +167,7 @@ export interface RoomState {
   updateOccupantAvatar: (roomJid: string, nick: string, avatar: string | null, avatarHash: string | null) => void
   setSelfOccupant: (roomJid: string, occupant: RoomOccupant) => void
   getRoom: (roomJid: string) => Room | undefined
+  switchAccount: (jid: string | null) => void
   reset: () => void
 
   // Message actions
@@ -233,16 +241,22 @@ export interface RoomState {
   roomsWithUnreadCount: () => number // Number of rooms with unread activity (for dock badge)
 }
 
+function createEmptyRoomState(drafts: Map<string, string> = new Map()): Pick<RoomState, 'rooms' | 'roomEntities' | 'roomMeta' | 'roomRuntime' | 'activeRoomJid' | 'activeAnimation' | 'drafts' | 'mamQueryStates'> {
+  return {
+    rooms: new Map(),
+    roomEntities: new Map(),
+    roomMeta: new Map(),
+    roomRuntime: new Map(),
+    activeRoomJid: null,
+    activeAnimation: null,
+    drafts,
+    mamQueryStates: new Map(),
+  }
+}
+
 export const roomStore = createStore<RoomState>()(
   subscribeWithSelector((set, get) => ({
-  rooms: new Map(),
-  roomEntities: new Map(),
-  roomMeta: new Map(),
-  roomRuntime: new Map(),
-  activeRoomJid: null,
-  activeAnimation: null,
-  drafts: loadDraftsFromStorage(), // Restore drafts from localStorage
-  mamQueryStates: new Map(),
+  ...createEmptyRoomState(loadDraftsFromStorage()), // Restore drafts from localStorage
 
   addRoom: (room) => {
     set((state) => {
@@ -640,21 +654,17 @@ export const roomStore = createStore<RoomState>()(
 
   getRoom: (roomJid) => get().rooms.get(roomJid),
 
+  switchAccount: (jid) => {
+    set(createEmptyRoomState(loadDraftsFromStorage(jid)))
+  },
+
   reset: () => {
     // Note: We don't clear IndexedDB on reset - room messages are valuable cache
     // They will be cleared when rooms are explicitly removed or user logs out
     // (The connection store's reset handles full logout cleanup via clearAllMessages)
     // Clear persisted room drafts on logout
-    localStorage.removeItem(ROOM_DRAFTS_STORAGE_KEY)
-    set({
-      rooms: new Map(),
-      roomEntities: new Map(),
-      roomMeta: new Map(),
-      roomRuntime: new Map(),
-      activeRoomJid: null,
-      drafts: new Map(),
-      mamQueryStates: new Map(),
-    })
+    localStorage.removeItem(getRoomDraftsStorageKey())
+    set(createEmptyRoomState())
   },
 
   // Message actions
