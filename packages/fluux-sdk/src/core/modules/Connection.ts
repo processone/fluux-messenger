@@ -264,6 +264,11 @@ export class Connection extends BaseModule {
     return !this.isReconnectingSubstate(previous, substate) && this.isReconnectingSubstate(current, substate)
   }
 
+  /** Detect the local Rust proxy WebSocket endpoint format. */
+  private isLocalProxyServer(server: string): boolean {
+    return server.startsWith('ws://127.0.0.1:') || server.startsWith('ws://[::1]:')
+  }
+
   /**
    * Persist current SM state to storage synchronously.
    * Call this before page unload to capture the latest inbound counter.
@@ -1448,8 +1453,22 @@ export class Connection extends BaseModule {
       this.cleanupClient()
       logInfo('attemptReconnect: old client cleaned up')
 
+      // In desktop proxy mode, force-refresh the proxy before each reconnect
+      // attempt to recover from local ws://[::1]:PORT listener failures.
+      let reconnectOptions = this.credentials
+      if (this.proxyManager.hasProxy && this.isLocalProxyServer(reconnectOptions.server)) {
+        const domain = getDomain(reconnectOptions.jid)
+        const proxyServer = this.proxyManager.getOriginalServer() || domain
+        const refreshed = await this.proxyManager.restartProxy(proxyServer, domain)
+        reconnectOptions = { ...reconnectOptions, server: refreshed.server }
+        this.credentials = reconnectOptions
+        this.stores.connection.setConnectionMethod(refreshed.connectionMethod)
+        this.stores.console.addEvent(`Proxy refreshed for reconnect: ${refreshed.server}`, 'connection')
+        logInfo(`attemptReconnect: proxy refreshed (${refreshed.server})`)
+      }
+
       // Create new client with stored credentials (proxy URL is still valid)
-      this.xmpp = this.createXmppClient(this.credentials)
+      this.xmpp = this.createXmppClient(reconnectOptions)
       this.hydrateStreamManagement(smState ?? undefined)
       this.setupHandlers()
       logInfo('attemptReconnect: new client created, calling start()')

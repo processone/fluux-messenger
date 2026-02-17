@@ -118,4 +118,36 @@ export class ProxyManager {
       }
     }
   }
+
+  /**
+   * Force a proxy restart and return a fresh connection target.
+   *
+   * Useful for recovery after local proxy/socket failures where a cached
+   * localhost WebSocket URL may no longer be valid.
+   */
+  async restartProxy(
+    server: string,
+    domain: string,
+    skipDiscovery?: boolean
+  ): Promise<ServerResult> {
+    if (!this.deps.proxyAdapter) {
+      throw new Error('No proxy adapter available')
+    }
+
+    const target = server || domain
+    this.deps.console.addEvent(`Restarting proxy for: ${target}`, 'connection')
+
+    try {
+      await this.deps.proxyAdapter.stopProxy()
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err)
+      this.deps.console.addEvent(`Failed to stop proxy during restart: ${errorMsg}`, 'error')
+    }
+
+    // Clear cache to force a fresh IPC startProxy call.
+    this.proxyUrl = null
+    this.originalServer = ''
+
+    return this.ensureProxy(target, domain, skipDiscovery)
+  }
 }
