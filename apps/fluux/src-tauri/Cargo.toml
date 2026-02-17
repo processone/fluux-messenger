@@ -46,13 +46,14 @@ keyring = { version = "3", features = ["apple-native", "windows-native", "linux-
 reqwest = { version = "0.12", features = ["blocking"] }
 scraper = "0.22"
 
-# user-idle for non-macOS platforms (macOS uses ioreg directly)
-[target.'cfg(not(target_os = "macos"))'.dependencies]
+# user-idle for Windows (macOS uses ioreg, Linux uses direct X11 calls)
+[target.'cfg(target_os = "windows")'.dependencies]
 user-idle = "0.6"
 
 # ctor for Linux to set env vars before main() - required for WebKitGTK workaround
 [target.'cfg(target_os = "linux")'.dependencies]
 ctor = "0.2"
+x11 = "2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"

@@ -75,7 +75,7 @@ mod idle {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
 mod idle {
     use user_idle::UserIdle;
 
@@ -86,6 +86,72 @@ mod idle {
                 tracing::warn!("Idle: failed to get user idle time: {}", e);
                 e.to_string()
             })
+    }
+}
+
+#[cfg(target_os = "linux")]
+mod idle {
+    use std::ptr;
+    use std::sync::OnceLock;
+    use x11::xlib;
+    use x11::xss;
+
+    const UNSUPPORTED_IDLE_REASON: &str = "Linux idle detection unavailable (MIT-SCREEN-SAVER extension missing)";
+
+    /// Cache XScreenSaver support so we avoid repeatedly probing an unsupported
+    /// display and flooding logs.
+    static HAS_XSCREENSAVER_EXTENSION: OnceLock<bool> = OnceLock::new();
+
+    fn has_xscreensaver_extension() -> bool {
+        *HAS_XSCREENSAVER_EXTENSION.get_or_init(|| unsafe {
+            let display = xlib::XOpenDisplay(ptr::null());
+            if display.is_null() {
+                tracing::info!("Idle: no X11 display available, falling back to DOM idle detection");
+                return false;
+            }
+
+            let mut event_base = 0;
+            let mut error_base = 0;
+            let has_extension = xss::XScreenSaverQueryExtension(display, &mut event_base, &mut error_base) != 0;
+            xlib::XCloseDisplay(display);
+
+            if !has_extension {
+                tracing::info!("Idle: MIT-SCREEN-SAVER extension missing, falling back to DOM idle detection");
+            }
+
+            has_extension
+        })
+    }
+
+    pub fn get_idle_seconds() -> Result<u64, String> {
+        if !has_xscreensaver_extension() {
+            return Err(UNSUPPORTED_IDLE_REASON.to_string());
+        }
+
+        unsafe {
+            let display = xlib::XOpenDisplay(ptr::null());
+            if display.is_null() {
+                return Err("Linux idle detection unavailable (failed to open X11 display)".to_string());
+            }
+
+            let root = xlib::XDefaultRootWindow(display);
+            let info = xss::XScreenSaverAllocInfo();
+            if info.is_null() {
+                xlib::XCloseDisplay(display);
+                return Err("Linux idle detection failed (could not allocate XScreenSaverInfo)".to_string());
+            }
+
+            let status = xss::XScreenSaverQueryInfo(display, root, info);
+            let idle_seconds = if status == 0 {
+                Err("Linux idle detection failed (XScreenSaverQueryInfo status not OK)".to_string())
+            } else {
+                Ok((*info).idle as u64 / 1000)
+            };
+
+            xlib::XFree(info as *mut _);
+            xlib::XCloseDisplay(display);
+            idle_seconds
+        }
     }
 }
 
