@@ -15,10 +15,8 @@ fn set_linux_webkit_env() {
     }
 }
 
-use tauri::{Emitter, Manager};
-#[cfg(target_os = "macos")]
-use tauri::{RunEvent, WindowEvent};
-#[cfg(target_os = "windows")]
+use tauri::{Emitter, Manager, RunEvent};
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 use tauri::WindowEvent;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
@@ -1147,8 +1145,11 @@ fn main() {
         if let RunEvent::ExitRequested { api, .. } = &_event {
             // Stop the keepalive thread to prevent 100% CPU on exit
             keepalive_flag_for_run.store(false, Ordering::Relaxed);
-            // Save window state including position
-            let _ = _app_handle.save_window_state(StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED | StateFlags::FULLSCREEN);
+            // Save window state including position (macOS and Windows only)
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            {
+                let _ = _app_handle.save_window_state(StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED | StateFlags::FULLSCREEN);
+            }
             // Emit event to frontend for graceful disconnect
             let _ = _app_handle.emit("graceful-shutdown", ());
             // Prevent immediate exit - frontend will call exit_app after disconnect
