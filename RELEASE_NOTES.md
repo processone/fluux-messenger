@@ -1,4 +1,4 @@
-## What's New in v0.13.2-beta.2
+## What's New in v0.13.2-beta.3
 
 ### Added
 
@@ -21,6 +21,7 @@
 ### Fixed
 
 - Connection error handling with firewall hint for proxy mode failures
+- harden shutdown/cleanup flow and add DNS timing logs
 - Proxy memory handling with buffer size limits and better stanza extraction
 - Reconnection logic and login display optimizations
 - Connection error message formatting

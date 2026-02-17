@@ -43,6 +43,7 @@ export const changelog: ChangelogEntry[] = [
         type: 'fixed',
         items: [
           'Connection error handling with firewall hint for proxy mode failures',
+          'harden shutdown/cleanup flow and add DNS timing logs',
           'Proxy memory handling with buffer size limits and better stanza extraction',
           'Reconnection logic and login display optimizations',
           'Connection error message formatting',
