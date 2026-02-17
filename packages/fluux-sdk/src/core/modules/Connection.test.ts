@@ -622,6 +622,49 @@ describe('XMPPClient Connection', () => {
       proxyClient.cancelReconnect()
     })
 
+    it('should not restart proxy from stale transport error after manual disconnect', async () => {
+      const mockProxyAdapter = {
+        startProxy: vi.fn().mockResolvedValue({ url: 'ws://127.0.0.1:12345' }),
+        stopProxy: vi.fn().mockResolvedValue(undefined),
+      }
+      const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
+      proxyClient.bindStores(mockStores)
+
+      const connectPromise = proxyClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      await proxyClient.disconnect()
+
+      vi.mocked(mockStores.connection.setStatus).mockClear()
+      vi.mocked(mockStores.connection.setReconnectState).mockClear()
+      vi.mocked(mockStores.console.addEvent).mockClear()
+      vi.mocked(mockProxyAdapter.stopProxy).mockClear()
+      mockClientFactory.mockClear()
+
+      // Simulate delayed error from old socket after user-initiated disconnect.
+      mockXmppClientInstance._emit('error', new Error('websocket econnerror ws://[::1]:42583'))
+
+      await vi.advanceTimersByTimeAsync(0)
+
+      // Proxy restart remains single-owner: only attemptReconnect() may refresh proxy.
+      expect(mockProxyAdapter.stopProxy).not.toHaveBeenCalled()
+      expect(mockClientFactory).not.toHaveBeenCalled()
+      expect(vi.mocked(mockStores.connection.setStatus).mock.calls.some((c) => c[0] === 'reconnecting')).toBe(false)
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        'Dead-socket recovery skipped: machine state is "disconnected"',
+        'connection'
+      )
+
+      proxyClient.cancelReconnect()
+    })
+
     it('should NOT auto-reconnect on fresh connect() after a previous successful session', async () => {
       // Scenario: User had a successful session, then connection recovery failed,
       // user clicks Connect again. This fresh connect() should NOT auto-reconnect

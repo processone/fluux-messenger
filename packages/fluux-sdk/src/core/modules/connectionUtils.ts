@@ -6,16 +6,12 @@
  */
 
 // ── Constants ──────────────────────────────────────────────────────────────────
-
-/** Timeout for graceful client stop (stream close + socket close).
- *  When the socket is already dead, xmpp.js stop() can hang waiting for events. */
-export const CLIENT_STOP_TIMEOUT_MS = 2000
-
-/** Timeout for a single reconnection attempt (XMPP negotiation).
- *  If xmpp.js hangs during connection negotiation (e.g., the WebSocket connects
- *  but XMPP stream negotiation stalls), this ensures the attempt is abandoned
- *  and the next retry can begin. */
-export const RECONNECT_ATTEMPT_TIMEOUT_MS = 30_000
+//
+// Re-exported for backward compatibility with existing imports/tests.
+export {
+  CLIENT_STOP_TIMEOUT_MS,
+  RECONNECT_ATTEMPT_TIMEOUT_MS,
+} from './connectionTimeouts'
 
 // ── Functions ──────────────────────────────────────────────────────────────────
 

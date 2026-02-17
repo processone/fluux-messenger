@@ -28,9 +28,13 @@ import {
   withTimeout,
   forceDestroyClient,
   isDeadSocketError,
-  CLIENT_STOP_TIMEOUT_MS,
-  RECONNECT_ATTEMPT_TIMEOUT_MS,
 } from './connectionUtils'
+import {
+  CLIENT_STOP_TIMEOUT_MS,
+  DISCONNECT_CLEANUP_TIMEOUT_MS,
+  RECONNECT_ATTEMPT_TIMEOUT_MS,
+  VERIFY_CONNECTION_TIMEOUT_MS,
+} from './connectionTimeouts'
 import {
   shouldSkipDiscovery,
   getWebSocketUrl,
@@ -38,6 +42,7 @@ import {
 } from './serverResolution'
 import { SmPersistence } from './smPersistence'
 import { ProxyManager } from './proxyManager'
+import { isConnectionTraceEnabled } from './connectionDiagnostics'
 
 // Dev-only error logging (checks Vite dev mode, excludes test mode)
 const isDev = (() => {
@@ -55,9 +60,6 @@ const logError = (...args: unknown[]) => {
     console.error('[XMPP]', ...args)
   }
 }
-
-/** Upper bound for best-effort disconnect cleanup tasks (storage/cache). */
-const DISCONNECT_CLEANUP_TIMEOUT_MS = 2000
 
 /**
  * Connection lifecycle and stream management module.
@@ -177,8 +179,7 @@ export class Connection extends BaseModule {
       const currentText = JSON.stringify(stateValue)
       if (previousText !== currentText) {
         const transitionMessage = `Machine transition: ${previousText} -> ${currentText} (attempt=${attempt}, target=${reconnectTargetTime ?? 'none'}, error=${snapshot.context.lastError ?? 'none'})`
-        this.stores.console.addEvent(transitionMessage, 'connection')
-        logInfo(transitionMessage)
+        this.logTrace(transitionMessage)
       }
 
       // Sync status to store
@@ -257,6 +258,13 @@ export class Connection extends BaseModule {
     return this.connectionActor.getSnapshot().value as ConnectionStateValue
   }
 
+  /** Emit verbose connection diagnostics only when trace mode is enabled. */
+  private logTrace(message: string): void {
+    if (!isConnectionTraceEnabled()) return
+    this.stores.console.addEvent(message, 'connection')
+    logInfo(message)
+  }
+
   /**
    * Send an event to the connection state machine with verbose transition logging.
    */
@@ -267,8 +275,7 @@ export class Connection extends BaseModule {
     const beforeText = JSON.stringify(before)
     const afterText = JSON.stringify(after)
     const message = `Machine event ${event.type} from ${source}: ${beforeText} -> ${afterText}`
-    this.stores.console.addEvent(message, 'connection')
-    logInfo(message)
+    this.logTrace(message)
   }
 
   /** Check whether a machine state is a specific reconnecting substate. */
@@ -470,8 +477,7 @@ export class Connection extends BaseModule {
     const logDisconnect = (message: string) => {
       const elapsed = Date.now() - disconnectStart
       const line = `Disconnect op#${disconnectOp} +${elapsed}ms: ${message}`
-      this.stores.console.addEvent(line, 'connection')
-      logInfo(line)
+      this.logTrace(line)
     }
 
     logDisconnect(`begin (state=${JSON.stringify(this.getMachineState())}, hasClient=${!!this.xmpp}, hasCredentials=${!!this.credentials})`)
@@ -648,7 +654,7 @@ export class Connection extends BaseModule {
    *
    * @param timeoutMs - Maximum time to wait for response (default: 10 seconds)
    */
-  async verifyConnection(timeoutMs = 10000): Promise<boolean> {
+  async verifyConnection(timeoutMs = VERIFY_CONNECTION_TIMEOUT_MS): Promise<boolean> {
     if (!this.xmpp) return false
     const verifyStart = Date.now()
 
@@ -783,9 +789,8 @@ export class Connection extends BaseModule {
     const immediateReconnect = options?.immediateReconnect ?? false
     const source = options?.source ?? 'unknown'
 
-    this.stores.console.addEvent(
-      `Dead-socket recovery invoked (source=${source}, state=${JSON.stringify(this.getMachineState())}, reconnecting=${this.isInReconnectingState()}, hasCredentials=${!!this.credentials})`,
-      'connection'
+    this.logTrace(
+      `Dead-socket recovery invoked (source=${source}, state=${JSON.stringify(this.getMachineState())}, reconnecting=${this.isInReconnectingState()}, hasCredentials=${!!this.credentials})`
     )
 
     // Don't reconnect from terminal states.

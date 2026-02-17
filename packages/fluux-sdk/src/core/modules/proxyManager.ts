@@ -10,6 +10,8 @@
 
 import type { ProxyAdapter } from '../types'
 import { shouldSkipDiscovery, getWebSocketUrl, resolveWebSocketUrl, type ResolutionLogger } from './serverResolution'
+import { isConnectionTraceEnabled } from './connectionDiagnostics'
+import { PROXY_START_TIMEOUT_MS, PROXY_STOP_TIMEOUT_MS } from './connectionTimeouts'
 
 /** Dependencies injected by Connection. */
 export interface ProxyManagerDeps {
@@ -23,14 +25,8 @@ export interface ServerResult {
   connectionMethod: 'proxy' | 'websocket'
 }
 
-/**
- * Upper bounds for proxy IPC operations.
- *
- * These prevent lifecycle serialization from stalling forever if the
- * platform bridge hangs during start/stop.
- */
-export const PROXY_START_TIMEOUT_MS = 10_000
-export const PROXY_STOP_TIMEOUT_MS = 5_000
+// Re-exported for backward compatibility with existing imports/tests.
+export { PROXY_START_TIMEOUT_MS, PROXY_STOP_TIMEOUT_MS }
 
 type ProxyLifecycleState = 'stopped' | 'starting' | 'running' | 'stopping'
 
@@ -90,18 +86,22 @@ export class ProxyManager {
     const queuedAt = Date.now()
     const execute = async () => {
       const waitedMs = Date.now() - queuedAt
-      this.deps.console.addEvent(
-        `Proxy op#${opId} start: ${operationName} (wait=${waitedMs}ms, state=${this.lifecycleState})`,
-        'connection'
-      )
+      if (isConnectionTraceEnabled()) {
+        this.deps.console.addEvent(
+          `Proxy op#${opId} start: ${operationName} (wait=${waitedMs}ms, state=${this.lifecycleState})`,
+          'connection'
+        )
+      }
       const startedAt = Date.now()
       try {
         const result = await operation()
         const durationMs = Date.now() - startedAt
-        this.deps.console.addEvent(
-          `Proxy op#${opId} done: ${operationName} (${durationMs}ms, state=${this.lifecycleState})`,
-          'connection'
-        )
+        if (isConnectionTraceEnabled()) {
+          this.deps.console.addEvent(
+            `Proxy op#${opId} done: ${operationName} (${durationMs}ms, state=${this.lifecycleState})`,
+            'connection'
+          )
+        }
         return result
       } catch (err) {
         const durationMs = Date.now() - startedAt
