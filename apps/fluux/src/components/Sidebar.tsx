@@ -57,6 +57,9 @@ import {
 // Re-export SidebarView for external use
 export type { SidebarView }
 
+const LOGOUT_DISCONNECT_TIMEOUT_MS = 2500
+const LOGOUT_KEYCHAIN_TIMEOUT_MS = 2500
+
 interface SidebarProps {
   onSelectContact?: (contact: Contact) => void
   onStartChat?: (contact: Contact) => void
@@ -421,14 +424,37 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
             ) : (
               <UserMenu onLogout={async (shouldCleanLocalData) => {
                 // Always attempt disconnect first.
-                await disconnect().catch(() => {})
+                const disconnectSettled = await Promise.race([
+                  disconnect().then(() => 'done' as const).catch(() => 'error' as const),
+                  new Promise<'timeout'>((resolve) => {
+                    setTimeout(() => resolve('timeout'), LOGOUT_DISCONNECT_TIMEOUT_MS)
+                  }),
+                ])
+                if (disconnectSettled === 'timeout') {
+                  console.warn(
+                    `[Fluux] Logout: disconnect timed out after ${LOGOUT_DISCONNECT_TIMEOUT_MS}ms, continuing cleanup`
+                  )
+                }
+
+                // Clear persisted session immediately so the UI can leave ChatLayout
+                // even if OS keychain or storage cleanup stalls on this platform.
+                clearSession()
 
                 if (shouldCleanLocalData) {
                   // clearLocalData() clears session at the end of cleanup.
                   await clearLocalData().catch(() => {})
                 } else {
-                  await deleteCredentials().catch(() => {})
-                  clearSession()
+                  const keychainSettled = await Promise.race([
+                    deleteCredentials().then(() => 'done' as const).catch(() => 'error' as const),
+                    new Promise<'timeout'>((resolve) => {
+                      setTimeout(() => resolve('timeout'), LOGOUT_KEYCHAIN_TIMEOUT_MS)
+                    }),
+                  ])
+                  if (keychainSettled === 'timeout') {
+                    console.warn(
+                      `[Fluux] Logout: keychain cleanup timed out after ${LOGOUT_KEYCHAIN_TIMEOUT_MS}ms`
+                    )
+                  }
                 }
               }} />
             )}

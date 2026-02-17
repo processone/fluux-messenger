@@ -178,7 +178,7 @@ describe('keychain utilities', () => {
       expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
     })
 
-    it('should keep localStorage flag if keychain delete fails', async () => {
+    it('should clear localStorage flag if keychain delete fails', async () => {
       localStorage.setItem(STORAGE_KEY, 'true')
       mockInvoke.mockRejectedValue(new Error('Delete failed'))
       // Silence expected console.error
@@ -186,8 +186,7 @@ describe('keychain utilities', () => {
 
       await deleteCredentials()
 
-      // Keep flag so app can retry keychain deletion on next attempt
-      expect(localStorage.getItem(STORAGE_KEY)).toBe('true')
+      expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
       expect(errorSpy).toHaveBeenCalled()
       errorSpy.mockRestore()
     })
