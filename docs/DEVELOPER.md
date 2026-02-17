@@ -69,6 +69,34 @@ When `--verbose` is active:
 - WebView `console.log/warn/error` messages are forwarded to stderr
 - Startup diagnostics show version, platform, and GPU workaround status (Linux)
 
+For deep SDK connection/proxy tracing (high-volume logs such as machine transitions, disconnect phase timing, and proxy op lifecycle), enable the connection trace flag:
+
+```bash
+# Desktop / Node environment
+FLUUX_DEBUG_CONNECTION_TRACE=1 fluux --verbose
+```
+
+In a browser/WebView dev console:
+
+```js
+localStorage.setItem('DEBUG_CONNECTION_TRACE', 'true')
+// optional global toggle
+globalThis.__FLUUX_DEBUG_CONNECTION_TRACE__ = true
+```
+
+Build-time (Vite) toggle:
+
+```bash
+VITE_FLUUX_DEBUG_CONNECTION_TRACE=true npm run tauri:dev
+```
+
+Disable again with:
+
+```js
+localStorage.removeItem('DEBUG_CONNECTION_TRACE')
+delete globalThis.__FLUUX_DEBUG_CONNECTION_TRACE__
+```
+
 On Linux, GPU rendering is disabled by default (WebKitGTK workaround). Set `FLUUX_ENABLE_GPU=1` to re-enable.
 
 The environment variable `NO_COLOR` can be set to disable console color output. It can be useful to redirect the output to a file:
