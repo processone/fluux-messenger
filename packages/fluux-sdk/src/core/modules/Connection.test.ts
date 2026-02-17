@@ -483,6 +483,47 @@ describe('XMPPClient Connection', () => {
       proxyClient.cancelReconnect()
     })
 
+    it('should refresh proxy endpoint before automatic reconnect in proxy mode', async () => {
+      const mockProxyAdapter = {
+        startProxy: vi.fn()
+          .mockResolvedValueOnce({ url: 'ws://127.0.0.1:12345' })
+          .mockResolvedValueOnce({ url: 'ws://127.0.0.1:22345' }),
+        stopProxy: vi.fn().mockResolvedValue(undefined),
+      }
+      const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
+      proxyClient.bindStores(mockStores)
+
+      // Initial connect uses first proxy URL
+      const connectPromise = proxyClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+      expect(mockProxyAdapter.startProxy).toHaveBeenCalledTimes(1)
+
+      // Trigger automatic reconnect
+      mockXmppClientInstance._emit('disconnect', { clean: false })
+
+      // Provide fresh xmpp instance for reconnect attempt
+      const reconnectClient = createMockXmppClient()
+      mockClientFactory._setInstance(reconnectClient)
+
+      await vi.advanceTimersByTimeAsync(1000)
+
+      // Auto-reconnect should restart proxy and use a fresh local WS URL
+      expect(mockProxyAdapter.stopProxy).toHaveBeenCalledTimes(1)
+      expect(mockProxyAdapter.startProxy).toHaveBeenCalledTimes(2)
+      expect(mockClientFactory).toHaveBeenLastCalledWith(
+        expect.objectContaining({ service: 'ws://127.0.0.1:22345' })
+      )
+
+      proxyClient.cancelReconnect()
+    })
+
     it('should auto-reconnect when connection drops after successful connection', async () => {
       // First, connect successfully
       const connectPromise = xmppClient.connect({
