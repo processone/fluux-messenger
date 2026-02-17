@@ -592,7 +592,7 @@ describe('XMPPClient Connection', () => {
     })
 
     it('should NOT auto-reconnect on fresh connect() after a previous successful session', async () => {
-      // Scenario: User had a successful session, reconnect exhausted max retries,
+      // Scenario: User had a successful session, then connection recovery failed,
       // user clicks Connect again. This fresh connect() should NOT auto-reconnect
       // if it fails, because hasEverConnected is reset at the start of connect().
 
