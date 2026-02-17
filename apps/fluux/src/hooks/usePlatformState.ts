@@ -381,15 +381,13 @@ export function usePlatformState() {
       })
 
       // Proxy watchdog detected dead connection
-      void listen('proxy-connection-closed', () => {
+      void listen('proxy-connection-closed', (event) => {
         const currentStatus = statusRef.current
         if (!shouldHandleProxyClosedStatus(currentStatus)) return
-        console.log('[PlatformState] Proxy connection closed by watchdog, triggering reconnect')
-        if (!shouldHandleWake('proxy-closed')) return
-        client.notifySystemState('awake')
-          .catch((err) => {
-            console.debug('[PlatformState] Error on proxy-closed notification:', err)
-          })
+        const reason = typeof event.payload === 'string' ? event.payload : 'unknown'
+        console.log(
+          `[PlatformState] Proxy connection closed (reason=${reason}, status=${currentStatus})`
+        )
       }).then((fn) => {
         if (cleanedUp) { fn() } else { unlistenProxyClosed = fn }
       })

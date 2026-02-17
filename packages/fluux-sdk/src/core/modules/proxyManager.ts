@@ -47,6 +47,7 @@ export class ProxyManager {
   private proxyUrl: string | null = null
   private lifecycleState: ProxyLifecycleState = 'stopped'
   private lifecycleQueue: Promise<void> = Promise.resolve()
+  private operationId: number = 0
 
   constructor(deps: ProxyManagerDeps) {
     this.deps = deps
@@ -84,8 +85,36 @@ export class ProxyManager {
   /**
    * Serialize proxy lifecycle operations to prevent concurrent start/stop races.
    */
-  private runSerialized<T>(operation: () => Promise<T>): Promise<T> {
-    const run = this.lifecycleQueue.then(operation, operation)
+  private runSerialized<T>(operationName: string, operation: () => Promise<T>): Promise<T> {
+    const opId = ++this.operationId
+    const queuedAt = Date.now()
+    const execute = async () => {
+      const waitedMs = Date.now() - queuedAt
+      this.deps.console.addEvent(
+        `Proxy op#${opId} start: ${operationName} (wait=${waitedMs}ms, state=${this.lifecycleState})`,
+        'connection'
+      )
+      const startedAt = Date.now()
+      try {
+        const result = await operation()
+        const durationMs = Date.now() - startedAt
+        this.deps.console.addEvent(
+          `Proxy op#${opId} done: ${operationName} (${durationMs}ms, state=${this.lifecycleState})`,
+          'connection'
+        )
+        return result
+      } catch (err) {
+        const durationMs = Date.now() - startedAt
+        const errorMsg = err instanceof Error ? err.message : String(err)
+        this.deps.console.addEvent(
+          `Proxy op#${opId} failed: ${operationName} after ${durationMs}ms (${errorMsg})`,
+          'error'
+        )
+        throw err
+      }
+    }
+
+    const run = this.lifecycleQueue.then(execute, execute)
     this.lifecycleQueue = run.then(() => undefined, () => undefined)
     return run
   }
@@ -117,6 +146,10 @@ export class ProxyManager {
       ])
 
       if (result === timeoutSentinel) {
+        this.deps.console.addEvent(
+          `Proxy operation timeout: ${operationName} after ${timeoutMs}ms`,
+          'error'
+        )
         throw new Error(`${operationName} timed out after ${timeoutMs}ms`)
       }
 
@@ -140,7 +173,7 @@ export class ProxyManager {
    * Does not fail when no proxy adapter is configured.
    */
   async stopProxy(): Promise<void> {
-    return this.runSerialized(async () => {
+    return this.runSerialized('stopProxy', async () => {
       await this.stopProxyUnlocked()
     })
   }
@@ -180,7 +213,11 @@ export class ProxyManager {
     domain: string,
     skipDiscovery?: boolean
   ): Promise<ServerResult> {
-    return this.runSerialized(async () => this.ensureProxyUnlocked(server, domain, skipDiscovery))
+    const target = server || domain
+    return this.runSerialized(
+      `ensureProxy(${target})`,
+      async () => this.ensureProxyUnlocked(server, domain, skipDiscovery)
+    )
   }
 
   private async ensureProxyUnlocked(
@@ -261,12 +298,12 @@ export class ProxyManager {
     domain: string,
     skipDiscovery?: boolean
   ): Promise<ServerResult> {
-    return this.runSerialized(async () => {
+    const target = server || domain
+    return this.runSerialized(`restartProxy(${target})`, async () => {
       if (!this.deps.proxyAdapter) {
         throw new Error('No proxy adapter available')
       }
 
-      const target = server || domain
       this.deps.console.addEvent(`Restarting proxy for: ${target}`, 'connection')
 
       try {
