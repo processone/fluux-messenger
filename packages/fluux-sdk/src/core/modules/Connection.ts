@@ -1241,6 +1241,7 @@ export class Connection extends BaseModule {
       // fires 'disconnect' later, but we must not act on it.
       if (this.xmpp !== registeredClient) {
         const machineState = this.getMachineState()
+        const machineStateText = JSON.stringify(machineState)
         const isExpectedBridgeClose = wasClean
           && rawReason
           && typeof rawReason === 'object'
@@ -1249,8 +1250,11 @@ export class Connection extends BaseModule {
           && 'reason' in rawReason
           && (rawReason as { reason?: string }).reason === 'Bridge closed'
         if (!isExpectedBridgeClose) {
-          logInfo('Disconnect from stale client, ignoring')
-          this.stores.console.addEvent('Socket closed (stale client, ignoring)', 'connection')
+          logInfo(`Disconnect from stale client, ignoring (state=${machineStateText}${closeInfo})`)
+          this.stores.console.addEvent(
+            `Socket closed (stale client, state=${machineStateText}, ignoring)`,
+            'connection'
+          )
         }
 
         // Recovery fallback: if the machine still believes we're connected
@@ -1422,6 +1426,10 @@ export class Connection extends BaseModule {
    */
   private async attemptReconnect(): Promise<void> {
     logInfo('attemptReconnect: starting')
+    this.stores.console.addEvent(
+      `Reconnect attempt starting (state=${JSON.stringify(this.getMachineState())})`,
+      'connection'
+    )
 
     // Guard: only attempt from reconnecting.attempting with credentials.
     const machineState = this.getMachineState()
@@ -1468,12 +1476,21 @@ export class Connection extends BaseModule {
       if (this.proxyManager.hasProxy && this.isLocalProxyServer(reconnectOptions.server)) {
         const domain = getDomain(reconnectOptions.jid)
         const proxyServer = this.proxyManager.getOriginalServer() || domain
+        const proxyRefreshStart = Date.now()
+        this.stores.console.addEvent(
+          `Reconnect: refreshing proxy endpoint (target=${proxyServer})`,
+          'connection'
+        )
         const refreshed = await this.proxyManager.restartProxy(proxyServer, domain)
+        const proxyRefreshMs = Date.now() - proxyRefreshStart
         reconnectOptions = { ...reconnectOptions, server: refreshed.server }
         this.credentials = reconnectOptions
         this.stores.connection.setConnectionMethod(refreshed.connectionMethod)
-        this.stores.console.addEvent(`Proxy refreshed for reconnect: ${refreshed.server}`, 'connection')
-        logInfo(`attemptReconnect: proxy refreshed (${refreshed.server})`)
+        this.stores.console.addEvent(
+          `Reconnect: proxy refreshed in ${proxyRefreshMs}ms -> ${refreshed.server}`,
+          'connection'
+        )
+        logInfo(`attemptReconnect: proxy refreshed (${refreshed.server}) in ${proxyRefreshMs}ms`)
       }
 
       // Create new client with stored credentials (proxy URL is still valid)

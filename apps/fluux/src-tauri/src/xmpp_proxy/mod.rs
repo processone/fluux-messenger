@@ -991,6 +991,8 @@ async fn bridge_websocket_tls(
         debug!("WebSocket close frame send timed out");
     }
 
+    let end_reason_label = format!("{:?}", end_reason);
+
     // Emit Tauri event so the frontend can immediately verify/reconnect after
     // abnormal bridge exits. Clean client-initiated close and app shutdown are excluded.
     if !matches!(
@@ -998,11 +1000,11 @@ async fn bridge_websocket_tls(
         BridgeEndReason::Shutdown | BridgeEndReason::WebSocketClosedByClient
     ) {
         if let Some(ref handle) = app_handle {
-            let _ = handle.emit("proxy-connection-closed", ());
+            let _ = handle.emit("proxy-connection-closed", end_reason_label.clone());
         }
     }
 
-    info!(reason = ?end_reason, "Bridge ended");
+    info!(reason = %end_reason_label, "Bridge ended");
 
     Ok(())
 }
