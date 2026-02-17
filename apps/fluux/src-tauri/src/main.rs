@@ -16,15 +16,15 @@ fn set_linux_webkit_env() {
 }
 
 use tauri::{Emitter, Manager, RunEvent};
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 use tauri::WindowEvent;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 // Menu support
 #[cfg(target_os = "macos")]
 use tauri::menu::{MenuBuilder, PredefinedMenuItem, SubmenuBuilder};
-// System tray support for Windows
-#[cfg(target_os = "windows")]
+// System tray support for Linux and Windows
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -1157,6 +1157,66 @@ fn main() {
                 });
                 macos::setup_activation_observer(main_window.clone(), app.handle().clone());
                 macos::setup_sleep_observer(app.handle().clone());
+            }
+
+            // Linux: Hide to system tray when close button is clicked.
+            // Left-clicking the tray icon restores the window.
+            #[cfg(target_os = "linux")]
+            {
+                let show_item = MenuItem::with_id(app, "show", "Show Fluux", true, None::<&str>)?;
+                let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+                let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+
+                let _tray = TrayIconBuilder::new()
+                    .icon(app.default_window_icon().unwrap().clone())
+                    .menu(&menu)
+                    .tooltip("Fluux Messenger")
+                    .on_menu_event({
+                        let keepalive_flag = keepalive_flag_for_setup.clone();
+                        move |app, event| match event.id.as_ref() {
+                            "show" => {
+                                if let Some(window) = app.get_webview_window("main") {
+                                    let _ = window.show();
+                                    let _ = window.unminimize();
+                                    let _ = window.set_focus();
+                                }
+                            }
+                            "quit" => {
+                                keepalive_flag.store(false, Ordering::Relaxed);
+                                let _ = app.emit("graceful-shutdown", ());
+                                let handle = app.clone();
+                                std::thread::spawn(move || {
+                                    std::thread::sleep(std::time::Duration::from_secs(2));
+                                    handle.exit(0);
+                                });
+                            }
+                            _ => {}
+                        }
+                    })
+                    .on_tray_icon_event(|tray, event| {
+                        if let TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            ..
+                        } = event
+                        {
+                            if let Some(window) = tray.app_handle().get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.unminimize();
+                                let _ = window.set_focus();
+                            }
+                        }
+                    })
+                    .build(app)?;
+
+                let main_window = app.get_webview_window("main").unwrap();
+                let window = main_window.clone();
+                main_window.on_window_event(move |event| {
+                    if let WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = window.hide();
+                    }
+                });
             }
 
             // Windows: Hide to system tray when close button is clicked
