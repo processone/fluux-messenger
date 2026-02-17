@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { useConnection } from '@fluux/sdk'
+import { useConnection, useXMPPContext } from '@fluux/sdk'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { LoginScreen } from './components/LoginScreen'
 import { ChatLayout } from './components/ChatLayout'
@@ -41,6 +41,7 @@ function App() {
   detectRenderLoop('App')
 
   const { status } = useConnection()
+  const { client } = useXMPPContext()
   useTauriCloseHandler()
   const update = useAutoUpdate({ autoCheck: true })
 
@@ -51,9 +52,15 @@ function App() {
 
     let unlisten: (() => void) | undefined
     import('@tauri-apps/api/event').then(({ listen }) => {
-      listen('clear-storage-requested', () => {
+      listen('clear-storage-requested', async () => {
         console.log('[CLI] Clearing local storage due to --clear-storage flag')
-        void clearLocalData()
+        try {
+          await client.disconnect()
+        } catch {
+          // Ignore disconnect errors during forced cleanup
+        }
+        await clearLocalData()
+        window.location.reload()
       }).then((fn) => {
         unlisten = fn
       })
@@ -62,7 +69,7 @@ function App() {
     return () => {
       unlisten?.()
     }
-  }, [])
+  }, [client])
 
   // Track if we've shown the update modal this session (don't show again after dismiss)
   const [showUpdateModal, setShowUpdateModal] = useState(false)

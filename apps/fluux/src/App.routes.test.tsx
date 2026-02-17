@@ -14,6 +14,11 @@ vi.mock('@fluux/sdk', () => ({
   useConnection: vi.fn(() => ({
     status: 'online',
   })),
+  useXMPPContext: vi.fn(() => ({
+    client: {
+      disconnect: vi.fn().mockResolvedValue(undefined),
+    },
+  })),
 }))
 
 // Mock session persistence

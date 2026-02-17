@@ -13,6 +13,14 @@ export interface StoredCredentials {
   server: string | null
 }
 
+export interface DeleteCredentialsOptions {
+  /**
+   * Force a keychain deletion attempt even when the local "has credentials" flag
+   * is missing. Useful for full data wipes where localStorage may be cleared first.
+   */
+  force?: boolean
+}
+
 // Flag to track if credentials exist without triggering keychain prompt
 const STORAGE_KEY_HAS_CREDENTIALS = 'xmpp-has-saved-credentials'
 
@@ -79,14 +87,16 @@ export async function getCredentials(): Promise<StoredCredentials | null> {
  * Skips the keychain call if no credentials were previously saved,
  * avoiding unnecessary macOS auth dialogs.
  */
-export async function deleteCredentials(): Promise<void> {
-  // If no credentials were saved, just clear the flag and skip the keychain call.
-  // This avoids triggering the macOS Keychain auth dialog when there's nothing to delete.
+export async function deleteCredentials(options: DeleteCredentialsOptions = {}): Promise<void> {
+  const { force = false } = options
+  // If no credentials were saved, skip the keychain call to avoid unnecessary
+  // macOS auth dialogs. Clear the local flag in this skip path to recover from
+  // stale local state.
   const hadCredentials = localStorage.getItem(STORAGE_KEY_HAS_CREDENTIALS) === 'true'
-  localStorage.removeItem(STORAGE_KEY_HAS_CREDENTIALS)
 
-  if (!isTauri() || !hadCredentials) {
-    console.log('[Fluux] Keychain: delete skipped (no credentials flag or not Tauri)')
+  if (!isTauri() || (!hadCredentials && !force)) {
+    localStorage.removeItem(STORAGE_KEY_HAS_CREDENTIALS)
+    console.log('[Fluux] Keychain: delete skipped (no credentials flag, not Tauri, or not forced)')
     return
   }
 
@@ -94,6 +104,7 @@ export async function deleteCredentials(): Promise<void> {
     console.log('[Fluux] Keychain: deleting credentials')
     const { invoke } = await import('@tauri-apps/api/core')
     await invoke('delete_credentials')
+    localStorage.removeItem(STORAGE_KEY_HAS_CREDENTIALS)
     console.log('[Fluux] Keychain: credentials deleted')
   } catch (error) {
     console.error('[Fluux] Keychain: failed to delete credentials:', error)

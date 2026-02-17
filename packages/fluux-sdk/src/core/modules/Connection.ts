@@ -425,14 +425,37 @@ export class Connection extends BaseModule {
 
     this.smPersistence.clearCache()
     if (jidForSmCleanup) {
-      await this.smPersistence.clear(jidForSmCleanup)
+      try {
+        await this.smPersistence.clear(jidForSmCleanup)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        logWarn(`Disconnect cleanup: failed to clear SM state for ${jidForSmCleanup}: ${message}`)
+        this.stores.console.addEvent(`Disconnect cleanup warning: failed to clear SM state (${message})`, 'error')
+      }
     }
 
-    await flushPendingRoomMessages()
+    try {
+      await flushPendingRoomMessages()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      logWarn(`Disconnect cleanup: failed to flush room message buffer: ${message}`)
+      this.stores.console.addEvent(`Disconnect cleanup warning: failed to flush message cache (${message})`, 'error')
+    }
 
     if (clientToStop) {
       flushSmAckDebounce(this.smPatchState, clientToStop)
-      await withTimeout(clientToStop.stop(), CLIENT_STOP_TIMEOUT_MS)
+      try {
+        await withTimeout(clientToStop.stop(), CLIENT_STOP_TIMEOUT_MS)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        logWarn(`Disconnect cleanup: client stop failed: ${message}`)
+        this.stores.console.addEvent(`Disconnect cleanup warning: socket close failed (${message})`, 'error')
+      } finally {
+        // Ensure the old transport is really closed. A graceful stop can return
+        // while the underlying socket is still lingering, which delays a fast
+        // manual re-login on the same resource.
+        forceDestroyClient(clientToStop)
+      }
     }
   }
 

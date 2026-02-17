@@ -616,6 +616,46 @@ describe('XMPPClient Connection', () => {
       expect(mockStores.connection.setStatus).toHaveBeenCalledWith('disconnected')
     })
 
+    it('should not reject disconnect when client.stop fails', async () => {
+      // Connect first
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      mockXmppClientInstance.stop.mockRejectedValue(new Error('stop failed'))
+
+      await expect(xmppClient.disconnect()).resolves.not.toThrow()
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('disconnected')
+    })
+
+    it('should force-close transport after disconnect cleanup', async () => {
+      // Connect first
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      // Provide explicit transport hooks so we can assert force cleanup happened
+      const removeAllListeners = vi.fn()
+      const socketEnd = vi.fn()
+      ;(mockXmppClientInstance as any).removeAllListeners = removeAllListeners
+      ;(mockXmppClientInstance as any).socket = { writable: true, end: socketEnd }
+
+      await xmppClient.disconnect()
+
+      expect(removeAllListeners).toHaveBeenCalled()
+      expect(socketEnd).toHaveBeenCalled()
+    })
+
     it('should set status before stopping client to prevent race conditions', async () => {
       // Connect first
       const connectPromise = xmppClient.connect({

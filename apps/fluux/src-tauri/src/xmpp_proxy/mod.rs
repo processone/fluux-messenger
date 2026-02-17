@@ -1,25 +1,26 @@
 mod dns;
 mod framing;
 
-use dns::{ConnectionMode, XmppEndpoint, ParsedServer, parse_server_input, resolve_xmpp_server};
-use framing::{translate_ws_to_tcp, translate_tcp_to_ws, extract_stanza};
+use dns::{parse_server_input, resolve_xmpp_server, ConnectionMode, ParsedServer, XmppEndpoint};
+use framing::{extract_stanza, translate_tcp_to_ws, translate_ws_to_tcp};
 
+use futures_util::{SinkExt, StreamExt};
+use serde::Serialize;
 use std::net::SocketAddr;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::time::Instant;
+use tauri::Emitter;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{Mutex, RwLock};
 use tokio::task::JoinHandle;
-use tokio_tungstenite::{accept_async, tungstenite::Message};
-use tokio_tungstenite::tungstenite::protocol::CloseFrame;
-use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
-use futures_util::{SinkExt, StreamExt};
 use tokio_rustls::rustls::pki_types::ServerName;
 use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 use tokio_rustls::TlsConnector;
-use serde::Serialize;
-use tauri::Emitter;
+use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
+use tokio_tungstenite::tungstenite::protocol::CloseFrame;
+use tokio_tungstenite::{accept_async, tungstenite::Message};
 use tracing::{debug, error, info, warn};
 
 /// Global flag to disable TLS certificate verification.
@@ -45,6 +46,13 @@ fn is_insecure_tls() -> bool {
 /// enough to provide timely failure feedback. The STARTTLS negotiation phase has its
 /// own separate 10-second timeout (see `perform_starttls`).
 const TCP_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
+/// Timeout waiting for the first client stanza after WebSocket handshake.
+///
+/// The proxy now waits for the initial `<open/>` from the client before starting
+/// DNS/TCP/STARTTLS work. This avoids unnecessary outbound work for stale sockets
+/// that disconnect immediately after handshake.
+const INITIAL_CLIENT_STANZA_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
 /// Inactivity watchdog timeout for the WebSocket-TLS bridge.
 ///
@@ -89,7 +97,6 @@ fn init_crypto_provider() {
     });
 }
 
-
 /// TLS certificate verifier that accepts all certificates without validation.
 ///
 /// **DANGEROUS**: Only used when `--dangerous-insecure-tls` CLI flag is set.
@@ -115,7 +122,12 @@ impl rustls::client::danger::ServerCertVerifier for InsecureCertVerifier {
         cert: &rustls::pki_types::CertificateDer<'_>,
         dss: &rustls::DigitallySignedStruct,
     ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        rustls::crypto::verify_tls12_signature(message, cert, dss, &self.0.signature_verification_algorithms)
+        rustls::crypto::verify_tls12_signature(
+            message,
+            cert,
+            dss,
+            &self.0.signature_verification_algorithms,
+        )
     }
 
     fn verify_tls13_signature(
@@ -124,7 +136,12 @@ impl rustls::client::danger::ServerCertVerifier for InsecureCertVerifier {
         cert: &rustls::pki_types::CertificateDer<'_>,
         dss: &rustls::DigitallySignedStruct,
     ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
-        rustls::crypto::verify_tls13_signature(message, cert, dss, &self.0.signature_verification_algorithms)
+        rustls::crypto::verify_tls13_signature(
+            message,
+            cert,
+            dss,
+            &self.0.signature_verification_algorithms,
+        )
     }
 
     fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
@@ -152,11 +169,16 @@ fn create_tls_connector() -> Result<TlsConnector, String> {
     let mut root_store = RootCertStore::empty();
     let native_certs = rustls_native_certs::load_native_certs();
     if native_certs.certs.is_empty() {
-        return Err("No system root certificates found. TLS connections will fail. \
-            Ensure CA certificates are installed (e.g., ca-certificates package on Linux).".to_string());
+        return Err(
+            "No system root certificates found. TLS connections will fail. \
+            Ensure CA certificates are installed (e.g., ca-certificates package on Linux)."
+                .to_string(),
+        );
     }
     for cert in native_certs.certs {
-        root_store.add(cert).map_err(|e| format!("Failed to add cert: {}", e))?;
+        root_store
+            .add(cert)
+            .map_err(|e| format!("Failed to add cert: {}", e))?;
     }
 
     let config = ClientConfig::builder()
@@ -175,7 +197,8 @@ async fn upgrade_to_tls(
     let server_name = ServerName::try_from(host.to_string())
         .map_err(|e| format!("Invalid server name: {}", e))?;
 
-    connector.connect(server_name, tcp_stream)
+    connector
+        .connect(server_name, tcp_stream)
         .await
         .map_err(|e| {
             let error_detail = format!("{}", e);
@@ -189,7 +212,10 @@ async fn upgrade_to_tls(
                 "other"
             };
             error!(host, error = %e, error_class = classification, "TLS handshake failed");
-            format!("TLS handshake failed with {} ({}): {}", host, classification, e)
+            format!(
+                "TLS handshake failed with {} ({}): {}",
+                host, classification, e
+            )
         })
 }
 
@@ -289,12 +315,12 @@ impl XmppProxy {
             }
             Err(ipv6_err) => {
                 debug!(error = %ipv6_err, "IPv6 loopback bind failed, falling back to IPv4");
-                let l = TcpListener::bind("127.0.0.1:0")
-                    .await
-                    .map_err(|e| format!(
+                let l = TcpListener::bind("127.0.0.1:0").await.map_err(|e| {
+                    format!(
                         "Failed to bind WebSocket server (IPv6: {}, IPv4: {})",
                         ipv6_err, e
-                    ))?;
+                    )
+                })?;
                 info!("WebSocket server bound to IPv4 loopback (127.0.0.1)");
                 (l, "127.0.0.1")
             }
@@ -373,7 +399,7 @@ impl XmppProxy {
 async fn handle_connection(
     ws_stream: tokio::net::TcpStream,
     server_input: &str,
-    shutdown: tokio::sync::broadcast::Receiver<()>,
+    mut shutdown: tokio::sync::broadcast::Receiver<()>,
     active_connections: Arc<AtomicUsize>,
     app_handle: Option<tauri::AppHandle>,
 ) -> Result<(), String> {
@@ -382,29 +408,127 @@ async fn handle_connection(
     let _guard = ConnectionGuard::new(active_connections.clone());
 
     // Upgrade to WebSocket
-    let ws = accept_async(ws_stream)
+    let mut ws = accept_async(ws_stream)
         .await
         .map_err(|e| format!("WebSocket handshake failed: {}", e))?;
 
     info!("WebSocket connection established");
 
-    // Resolve DNS/SRV per connection (fresh resolution handles DNS changes after sleep)
-    let endpoint = match parse_server_input(server_input) {
-        ParsedServer::Direct(host, port, mode, domain) => {
-            info!(host = %host, port, mode = ?mode, domain = ?domain, "Using explicit endpoint");
-            XmppEndpoint { host, port, mode, domain }
-        }
-        ParsedServer::Domain(domain) => {
-            resolve_xmpp_server(&domain)
-                .await
-                .map_err(|e| format!("Failed to resolve XMPP server: {}", e))?
+    // Wait for the initial client stanza before doing expensive network work.
+    // This avoids DNS/TCP/STARTTLS churn when stale sockets disconnect immediately.
+    let initial_ws_text = match wait_for_initial_client_stanza(&mut ws).await? {
+        Some(text) => text,
+        None => {
+            info!("WebSocket closed before initial client stanza");
+            return Ok(());
         }
     };
 
-    info!(host = %endpoint.host, port = endpoint.port, mode = ?endpoint.mode,
-        domain = ?endpoint.domain, tls_name = endpoint.tls_name(), "Resolved endpoint");
+    // Buffer client text frames received while upstream connect/STARTTLS is in progress.
+    // They are flushed to TLS once the bridge starts.
+    let mut pending_ws_texts = vec![initial_ws_text];
 
-    // Connect to XMPP server (STARTTLS or direct TLS)
+    let connect_future = connect_upstream_tls(server_input);
+    tokio::pin!(connect_future);
+
+    let tls_stream = loop {
+        tokio::select! {
+            result = &mut connect_future => {
+                break result?;
+            }
+            msg = ws.next() => {
+                match msg {
+                    Some(Ok(Message::Text(text))) => {
+                        pending_ws_texts.push(text.to_string());
+                    }
+                    Some(Ok(Message::Close(_))) => {
+                        info!("WebSocket closed by client during upstream connection setup");
+                        return Ok(());
+                    }
+                    Some(Err(e)) => {
+                        info!(error = %e, "WebSocket read error during upstream connection setup");
+                        return Ok(());
+                    }
+                    Some(_) => {}
+                    None => {
+                        info!("WebSocket closed during upstream connection setup");
+                        return Ok(());
+                    }
+                }
+            }
+            _ = shutdown.recv() => {
+                info!("Connection closed by shutdown before upstream connection setup completed");
+                return Ok(());
+            }
+        }
+    };
+
+    bridge_websocket_tls(ws, tls_stream, shutdown, app_handle, pending_ws_texts).await
+}
+
+/// Wait for the first client text stanza after WebSocket handshake.
+async fn wait_for_initial_client_stanza(
+    ws: &mut tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>,
+) -> Result<Option<String>, String> {
+    let read_deadline = tokio::time::Instant::now() + INITIAL_CLIENT_STANZA_TIMEOUT;
+
+    loop {
+        let remaining = read_deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            return Err(format!(
+                "Timed out after {}s waiting for initial client stanza",
+                INITIAL_CLIENT_STANZA_TIMEOUT.as_secs()
+            ));
+        }
+
+        let msg = tokio::time::timeout(remaining, ws.next())
+            .await
+            .map_err(|_| {
+                format!(
+                    "Timed out after {}s waiting for initial client stanza",
+                    INITIAL_CLIENT_STANZA_TIMEOUT.as_secs()
+                )
+            })?;
+
+        match msg {
+            Some(Ok(Message::Text(text))) => return Ok(Some(text.to_string())),
+            Some(Ok(Message::Close(_))) => return Ok(None),
+            Some(Err(e)) => {
+                info!(error = %e, "WebSocket read error before initial client stanza");
+                return Ok(None);
+            }
+            Some(_) => {}
+            None => return Ok(None),
+        }
+    }
+}
+
+/// Resolve upstream endpoint and establish a TLS stream (direct TLS or STARTTLS).
+async fn connect_upstream_tls(
+    server_input: &str,
+) -> Result<tokio_rustls::client::TlsStream<TcpStream>, String> {
+    // Resolve DNS/SRV per connection (fresh resolution handles DNS changes after sleep)
+    let resolve_started = Instant::now();
+    let endpoint = match parse_server_input(server_input) {
+        ParsedServer::Direct(host, port, mode, domain) => {
+            info!(host = %host, port, mode = ?mode, domain = ?domain, "Using explicit endpoint");
+            XmppEndpoint {
+                host,
+                port,
+                mode,
+                domain,
+            }
+        }
+        ParsedServer::Domain(domain) => resolve_xmpp_server(&domain)
+            .await
+            .map_err(|e| format!("Failed to resolve XMPP server: {}", e))?,
+    };
+
+    let dns_resolve_ms = resolve_started.elapsed().as_millis() as u64;
+    info!(host = %endpoint.host, port = endpoint.port, mode = ?endpoint.mode,
+        domain = ?endpoint.domain, tls_name = endpoint.tls_name(),
+        dns_resolve_ms, "Resolved endpoint");
+
     match endpoint.mode {
         ConnectionMode::Tcp => {
             let tcp_stream = tokio::time::timeout(
@@ -420,7 +544,9 @@ async fn handle_connection(
                 );
                 format!(
                     "TCP connect timed out after {}s to {}:{}",
-                    TCP_CONNECT_TIMEOUT.as_secs(), endpoint.host, endpoint.port
+                    TCP_CONNECT_TIMEOUT.as_secs(),
+                    endpoint.host,
+                    endpoint.port
                 )
             })?
             .map_err(|e| {
@@ -436,12 +562,11 @@ async fn handle_connection(
             })?;
             info!(host = %endpoint.host, port = endpoint.port, "Connected (TCP), performing STARTTLS");
 
-            // Perform STARTTLS negotiation: the proxy handles the TLS upgrade transparently
-            // so that xmpp.js (which cannot do STARTTLS over WebSocket) sees a ready-to-use connection.
             // Use tls_name() for the XMPP domain (TLS SNI + stream `to=`), host for TCP target.
-            let tls_stream = perform_starttls(tcp_stream, endpoint.tls_name(), &endpoint.host).await?;
+            let tls_stream =
+                perform_starttls(tcp_stream, endpoint.tls_name(), &endpoint.host).await?;
             info!(host = %endpoint.host, port = endpoint.port, "STARTTLS upgrade complete");
-            bridge_websocket_tls(ws, tls_stream, shutdown, app_handle).await
+            Ok(tls_stream)
         }
         ConnectionMode::DirectTls => {
             let tcp_stream = tokio::time::timeout(
@@ -457,7 +582,9 @@ async fn handle_connection(
                 );
                 format!(
                     "TCP connect timed out after {}s to {}:{}",
-                    TCP_CONNECT_TIMEOUT.as_secs(), endpoint.host, endpoint.port
+                    TCP_CONNECT_TIMEOUT.as_secs(),
+                    endpoint.host,
+                    endpoint.port
                 )
             })?
             .map_err(|e| {
@@ -477,7 +604,7 @@ async fn handle_connection(
 
             info!(host = %endpoint.host, port = endpoint.port,
                 tls_name = endpoint.tls_name(), "Connected (direct TLS)");
-            bridge_websocket_tls(ws, tls_stream, shutdown, app_handle).await
+            Ok(tls_stream)
         }
     }
 }
@@ -510,9 +637,13 @@ async fn perform_starttls(
         domain
     );
     debug!(domain, host, "STARTTLS: Sending stream open");
-    tcp_stream.write_all(stream_open.as_bytes()).await
+    tcp_stream
+        .write_all(stream_open.as_bytes())
+        .await
         .map_err(|e| format!("STARTTLS: Failed to send stream open: {}", e))?;
-    tcp_stream.flush().await
+    tcp_stream
+        .flush()
+        .await
         .map_err(|e| format!("STARTTLS: Failed to flush stream open: {}", e))?;
 
     // Step 2: Read server's response (stream:stream + stream:features)
@@ -588,9 +719,13 @@ async fn perform_starttls(
 
     // Step 3: Send <starttls>
     let starttls_request = "<starttls xmlns='urn:ietf:params:xml:ns:xmpp-tls'/>";
-    tcp_stream.write_all(starttls_request.as_bytes()).await
+    tcp_stream
+        .write_all(starttls_request.as_bytes())
+        .await
         .map_err(|e| format!("STARTTLS: Failed to send starttls request: {}", e))?;
-    tcp_stream.flush().await
+    tcp_stream
+        .flush()
+        .await
         .map_err(|e| format!("STARTTLS: Failed to flush starttls request: {}", e))?;
     debug!("STARTTLS: Sent <starttls/> request");
 
@@ -624,7 +759,10 @@ async fn perform_starttls(
     }
 
     if proceed_xml.contains("<failure") {
-        return Err(format!("STARTTLS: Server rejected STARTTLS: {}", proceed_xml));
+        return Err(format!(
+            "STARTTLS: Server rejected STARTTLS: {}",
+            proceed_xml
+        ));
     }
 
     if !proceed_xml.contains("<proceed") {
@@ -633,10 +771,14 @@ async fn perform_starttls(
             proceed_xml
         ));
     }
-    info!(domain, host, "STARTTLS: Received <proceed/>, upgrading to TLS");
+    info!(
+        domain,
+        host, "STARTTLS: Received <proceed/>, upgrading to TLS"
+    );
 
     // Step 5: Upgrade TCP socket to TLS (use XMPP domain for SNI, not connection host)
-    let tls_stream = upgrade_to_tls(tcp_stream, domain).await
+    let tls_stream = upgrade_to_tls(tcp_stream, domain)
+        .await
         .map_err(|e| format!("STARTTLS: {}", e))?;
 
     info!(domain, host, "STARTTLS: TLS handshake complete");
@@ -654,7 +796,18 @@ async fn bridge_websocket_tls(
     tls_stream: tokio_rustls::client::TlsStream<TcpStream>,
     mut shutdown: tokio::sync::broadcast::Receiver<()>,
     app_handle: Option<tauri::AppHandle>,
+    pending_ws_texts: Vec<String>,
 ) -> Result<(), String> {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum BridgeEndReason {
+        WebSocketClosedByClient,
+        WebSocketReadError,
+        TlsClosed,
+        TlsReadError,
+        WatchdogTimeout,
+        Shutdown,
+    }
+
     let (ws_write, mut ws_read) = ws.split();
     let (mut tls_read, mut tls_write) = tokio::io::split(tls_stream);
 
@@ -664,6 +817,17 @@ async fn bridge_websocket_tls(
 
     // Shared activity timestamp for inactivity watchdog (epoch millis)
     let last_activity = Arc::new(AtomicU64::new(now_millis()));
+
+    // Flush any buffered client text stanzas collected before bridge startup.
+    for text in pending_ws_texts {
+        let translated = translate_ws_to_tcp(&text);
+        debug!(data = %translated, "WS->TLS translated (buffered pre-bridge)");
+        tls_write
+            .write_all(translated.as_bytes())
+            .await
+            .map_err(|e| format!("Failed to write buffered client stanza to TLS: {}", e))?;
+        last_activity.store(now_millis(), Ordering::Relaxed);
+    }
 
     // Task 1: WebSocket -> TLS (translate RFC 7395 WebSocket framing to traditional XMPP)
     let activity_ws = last_activity.clone();
@@ -680,21 +844,22 @@ async fn bridge_websocket_tls(
 
                     if let Err(e) = tls_write.write_all(translated.as_bytes()).await {
                         error!(error = %e, "WS->TLS write error");
-                        break;
+                        return BridgeEndReason::TlsReadError;
                     }
                     activity_ws.store(now_millis(), Ordering::Relaxed);
                 }
                 Ok(Message::Close(_)) => {
                     info!("WebSocket closed by client");
-                    break;
+                    return BridgeEndReason::WebSocketClosedByClient;
                 }
                 Err(e) => {
                     error!(error = %e, "WebSocket read error");
-                    break;
+                    return BridgeEndReason::WebSocketReadError;
                 }
                 _ => {}
             }
         }
+        BridgeEndReason::WebSocketClosedByClient
     });
 
     // Task 2: TLS -> WebSocket (requires stanza boundary detection)
@@ -709,7 +874,7 @@ async fn bridge_websocket_tls(
             match tls_read.read(&mut read_buf).await {
                 Ok(0) => {
                     info!("TLS connection closed");
-                    break;
+                    return BridgeEndReason::TlsClosed;
                 }
                 Ok(n) => {
                     buffer.extend_from_slice(&read_buf[..n]);
@@ -723,9 +888,14 @@ async fn bridge_websocket_tls(
                         consumed += bytes_used;
                         let translated = translate_tcp_to_ws(&stanza);
                         debug!(data = %translated, "TLS->WS");
-                        if let Err(e) = ws_write_for_tls.lock().await.send(Message::Text(translated.into_owned())).await {
+                        if let Err(e) = ws_write_for_tls
+                            .lock()
+                            .await
+                            .send(Message::Text(translated.into_owned()))
+                            .await
+                        {
                             debug!(error = %e, "TLS->WS write error (WebSocket likely closed)");
-                            return;
+                            return BridgeEndReason::WebSocketReadError;
                         }
                     }
                     if consumed > 0 {
@@ -739,14 +909,14 @@ async fn bridge_websocket_tls(
                             limit = MAX_STANZA_BUFFER_SIZE,
                             "Stanza buffer exceeded size limit, closing connection"
                         );
-                        break;
+                        return BridgeEndReason::TlsReadError;
                     }
 
                     activity_tls.store(now_millis(), Ordering::Relaxed);
                 }
                 Err(e) => {
                     error!(error = %e, "TLS read error");
-                    break;
+                    return BridgeEndReason::TlsReadError;
                 }
             }
         }
@@ -770,21 +940,35 @@ async fn bridge_websocket_tls(
         }
     };
 
-    // Track why the bridge ended for cleanup
-    let mut watchdog_triggered = false;
-
     // Wait for any task to complete, watchdog to trigger, or shutdown signal
-    tokio::select! {
-        _ = &mut ws_to_tls => {}
-        _ = &mut tls_to_ws => {}
+    let end_reason = tokio::select! {
+        result = &mut ws_to_tls => {
+            match result {
+                Ok(reason) => reason,
+                Err(e) => {
+                    error!(error = %e, "WS->TLS task join error");
+                    BridgeEndReason::WebSocketReadError
+                }
+            }
+        }
+        result = &mut tls_to_ws => {
+            match result {
+                Ok(reason) => reason,
+                Err(e) => {
+                    error!(error = %e, "TLS->WS task join error");
+                    BridgeEndReason::TlsReadError
+                }
+            }
+        }
         _ = watchdog => {
             info!("Connection closed by inactivity watchdog");
-            watchdog_triggered = true;
+            BridgeEndReason::WatchdogTimeout
         }
         _ = shutdown.recv() => {
             info!("Connection closed by shutdown");
+            BridgeEndReason::Shutdown
         }
-    }
+    };
 
     // Abort both bridge tasks so they don't linger holding resources
     ws_to_tls.abort();
@@ -793,28 +977,32 @@ async fn bridge_websocket_tls(
     // Send a proper WebSocket close frame so xmpp.js receives a 'disconnect' event.
     // Without this, the JS side never learns the connection died (especially after
     // watchdog or shutdown, where the bridge tasks are aborted without closing the WS).
-    let close_result = tokio::time::timeout(
-        std::time::Duration::from_secs(2),
-        async {
-            let mut writer = ws_write.lock().await;
-            let _ = writer.send(Message::Close(Some(CloseFrame {
+    let close_result = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        let mut writer = ws_write.lock().await;
+        let _ = writer
+            .send(Message::Close(Some(CloseFrame {
                 code: CloseCode::Normal,
                 reason: "Bridge closed".into(),
-            }))).await;
-        }
-    ).await;
+            })))
+            .await;
+    })
+    .await;
     if close_result.is_err() {
         debug!("WebSocket close frame send timed out");
     }
 
-    // Emit Tauri event so the frontend can immediately trigger reconnection
-    // (belt-and-suspenders: the WS close frame above should suffice, but this
-    // provides a faster, more reliable signal)
-    if watchdog_triggered {
+    // Emit Tauri event so the frontend can immediately verify/reconnect after
+    // abnormal bridge exits. Clean client-initiated close and app shutdown are excluded.
+    if !matches!(
+        end_reason,
+        BridgeEndReason::Shutdown | BridgeEndReason::WebSocketClosedByClient
+    ) {
         if let Some(ref handle) = app_handle {
             let _ = handle.emit("proxy-connection-closed", ());
         }
     }
+
+    info!(reason = ?end_reason, "Bridge ended");
 
     Ok(())
 }
@@ -829,7 +1017,10 @@ static PROXY: RwLock<Option<XmppProxy>> = RwLock::const_new(None);
 /// (or on page reload), stops the old proxy and starts a new one.
 ///
 /// The `server` parameter supports: `tls://host:port`, `tcp://host:port`, `host:port`, or bare `domain`.
-pub async fn start_proxy(server: String, app_handle: Option<tauri::AppHandle>) -> Result<ProxyStartResult, String> {
+pub async fn start_proxy(
+    server: String,
+    app_handle: Option<tauri::AppHandle>,
+) -> Result<ProxyStartResult, String> {
     // Initialize crypto provider before any TLS operations
     init_crypto_provider();
 
@@ -877,6 +1068,8 @@ pub async fn stop_proxy() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures_util::SinkExt;
+    use tokio::io::AsyncReadExt;
 
     // Note: DNS/parsing tests are in dns.rs, framing/stanza tests are in framing.rs.
 
@@ -919,6 +1112,104 @@ mod tests {
     fn test_create_tls_connector() {
         init_crypto_provider();
         let result = create_tls_connector();
-        assert!(result.is_ok(), "Should create TLS connector with system certs");
+        assert!(
+            result.is_ok(),
+            "Should create TLS connector with system certs"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_handle_connection_exits_when_websocket_closes_during_upstream_setup() {
+        let upstream_listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind fake upstream listener");
+        let upstream_port = upstream_listener
+            .local_addr()
+            .expect("get fake upstream listener addr")
+            .port();
+        let (upstream_connected_tx, upstream_connected_rx) = tokio::sync::oneshot::channel();
+
+        tokio::spawn(async move {
+            let (mut upstream_socket, _) = upstream_listener
+                .accept()
+                .await
+                .expect("accept fake upstream connection");
+            let _ = upstream_connected_tx.send(());
+
+            // Read the client's initial stream opening and then stay silent.
+            // This keeps STARTTLS setup in-flight so we can verify WS-close cancellation.
+            let mut read_buf = [0u8; 2048];
+            let _ = tokio::time::timeout(
+                std::time::Duration::from_secs(2),
+                upstream_socket.read(&mut read_buf),
+            )
+            .await;
+            let _ = tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                upstream_socket.read(&mut read_buf),
+            )
+            .await;
+        });
+
+        let ws_listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind local WebSocket listener");
+        let ws_addr = ws_listener
+            .local_addr()
+            .expect("get local ws listener addr");
+
+        let (shutdown_tx, _) = tokio::sync::broadcast::channel(1);
+        let active_connections = Arc::new(AtomicUsize::new(0));
+        let active_for_handler = active_connections.clone();
+        let server_input = format!("tcp://127.0.0.1:{upstream_port}");
+
+        let handler_task = tokio::spawn(async move {
+            let (ws_stream, _) = ws_listener.accept().await.expect("accept ws client");
+            handle_connection(
+                ws_stream,
+                &server_input,
+                shutdown_tx.subscribe(),
+                active_for_handler,
+                None,
+            )
+            .await
+        });
+
+        let ws_url = format!("ws://{}", ws_addr);
+        let (mut ws_client, _) = tokio_tungstenite::connect_async(ws_url)
+            .await
+            .expect("connect ws client");
+
+        ws_client
+            .send(Message::Text(
+                "<open xmlns='urn:ietf:params:xml:ns:xmpp-framing' to='example.org' version='1.0'/>"
+                    .into(),
+            ))
+            .await
+            .expect("send initial client stanza");
+
+        tokio::time::timeout(std::time::Duration::from_secs(2), upstream_connected_rx)
+            .await
+            .expect("upstream connection should be established")
+            .expect("upstream connection signal should succeed");
+
+        // Drop without sending a close handshake to simulate abrupt WebSocket loss.
+        drop(ws_client);
+
+        let handler_result = tokio::time::timeout(std::time::Duration::from_secs(2), handler_task)
+            .await
+            .expect("handler should exit promptly after ws close")
+            .expect("handler task should not panic");
+
+        assert!(
+            handler_result.is_ok(),
+            "handle_connection should treat ws-close during setup as a clean early exit, got: {:?}",
+            handler_result
+        );
+        assert_eq!(
+            active_connections.load(Ordering::SeqCst),
+            0,
+            "connection guard should decrement active connection count on early exit"
+        );
     }
 }

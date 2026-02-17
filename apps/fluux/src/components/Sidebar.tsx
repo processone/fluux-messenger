@@ -419,18 +419,17 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
                 </button>
               </Tooltip>
             ) : (
-              <UserMenu onLogout={(shouldCleanLocalData) => {
-                // Clear session first so App.tsx sees hasSession=false immediately,
-                // then disconnect (sync state transitions ensure instant UI feedback).
-                // Chain cleanup AFTER disconnect to avoid racing with store updates.
-                clearSession()
-                disconnect().then(() => {
-                  if (shouldCleanLocalData) {
-                    clearLocalData().catch(() => {})
-                  } else {
-                    deleteCredentials().catch(() => {})
-                  }
-                })
+              <UserMenu onLogout={async (shouldCleanLocalData) => {
+                // Always attempt disconnect first.
+                await disconnect().catch(() => {})
+
+                if (shouldCleanLocalData) {
+                  // clearLocalData() clears session at the end of cleanup.
+                  await clearLocalData().catch(() => {})
+                } else {
+                  await deleteCredentials().catch(() => {})
+                  clearSession()
+                }
               }} />
             )}
           </div>

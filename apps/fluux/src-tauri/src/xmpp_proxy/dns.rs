@@ -8,6 +8,10 @@ use tracing::{info, warn};
 use trust_dns_resolver::TokioAsyncResolver;
 use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
 
+fn elapsed_ms(start: std::time::Instant) -> u64 {
+    start.elapsed().as_millis() as u64
+}
+
 /// Connection mode for XMPP proxy
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConnectionMode {
@@ -117,13 +121,22 @@ pub fn parse_server_input(server: &str) -> ParsedServer {
 /// SRV records are sorted by priority (ascending — lower value = higher preference)
 /// per RFC 2782. The XMPP domain is preserved in the returned endpoint for TLS SNI.
 pub async fn resolve_xmpp_server(domain: &str) -> Result<XmppEndpoint, String> {
+    let resolve_started = std::time::Instant::now();
+    let resolver_init_started = std::time::Instant::now();
     let resolver = match TokioAsyncResolver::tokio_from_system_conf() {
         Ok(r) => {
-            info!("Using system DNS resolver");
+            info!(
+                resolver_init_ms = elapsed_ms(resolver_init_started),
+                "Using system DNS resolver"
+            );
             r
         }
         Err(e) => {
-            warn!("Failed to load system DNS config: {}, falling back to default resolver", e);
+            warn!(
+                resolver_init_ms = elapsed_ms(resolver_init_started),
+                "Failed to load system DNS config: {}, falling back to default resolver",
+                e
+            );
             TokioAsyncResolver::tokio(ResolverConfig::default(), ResolverOpts::default())
         }
     };
@@ -131,8 +144,10 @@ pub async fn resolve_xmpp_server(domain: &str) -> Result<XmppEndpoint, String> {
     // Try direct TLS SRV first
     let srv_name = format!("_xmpps-client._tcp.{}", domain);
     info!(domain, srv = %srv_name, "SRV lookup: trying direct TLS");
+    let srv_lookup_started = std::time::Instant::now();
     match resolver.srv_lookup(&srv_name).await {
         Ok(lookup) => {
+            let lookup_ms = elapsed_ms(srv_lookup_started);
             let mut records: Vec<_> = lookup.iter().collect();
             if !records.is_empty() {
                 // Sort by priority ascending (lower = preferred), then weight descending (higher = preferred)
@@ -147,7 +162,8 @@ pub async fn resolve_xmpp_server(domain: &str) -> Result<XmppEndpoint, String> {
                 }
                 let srv = &records[0];
                 info!(domain, host = %srv.target(), port = srv.port(),
-                    priority = srv.priority(), "SRV selected (direct TLS)");
+                    priority = srv.priority(), lookup_ms,
+                    resolve_total_ms = elapsed_ms(resolve_started), "SRV selected (direct TLS)");
                 return Ok(XmppEndpoint {
                     host: srv.target().to_string().trim_end_matches('.').to_string(),
                     port: srv.port(),
@@ -155,18 +171,26 @@ pub async fn resolve_xmpp_server(domain: &str) -> Result<XmppEndpoint, String> {
                     domain: Some(domain.to_string()),
                 });
             }
-            info!(domain, srv = %srv_name, "SRV lookup returned empty results");
+            info!(domain, srv = %srv_name, lookup_ms, "SRV lookup returned empty results");
         }
         Err(e) => {
-            info!(domain, srv = %srv_name, error = %e, "SRV lookup failed");
+            info!(
+                domain,
+                srv = %srv_name,
+                lookup_ms = elapsed_ms(srv_lookup_started),
+                error = %e,
+                "SRV lookup failed"
+            );
         }
     }
 
     // Try STARTTLS SRV
     let srv_name = format!("_xmpp-client._tcp.{}", domain);
     info!(domain, srv = %srv_name, "SRV lookup: trying STARTTLS");
+    let srv_lookup_started = std::time::Instant::now();
     match resolver.srv_lookup(&srv_name).await {
         Ok(lookup) => {
+            let lookup_ms = elapsed_ms(srv_lookup_started);
             let mut records: Vec<_> = lookup.iter().collect();
             if !records.is_empty() {
                 records.sort_by(|a, b| {
@@ -180,7 +204,8 @@ pub async fn resolve_xmpp_server(domain: &str) -> Result<XmppEndpoint, String> {
                 }
                 let srv = &records[0];
                 info!(domain, host = %srv.target(), port = srv.port(),
-                    priority = srv.priority(), "SRV selected (STARTTLS)");
+                    priority = srv.priority(), lookup_ms,
+                    resolve_total_ms = elapsed_ms(resolve_started), "SRV selected (STARTTLS)");
                 return Ok(XmppEndpoint {
                     host: srv.target().to_string().trim_end_matches('.').to_string(),
                     port: srv.port(),
@@ -188,16 +213,27 @@ pub async fn resolve_xmpp_server(domain: &str) -> Result<XmppEndpoint, String> {
                     domain: Some(domain.to_string()),
                 });
             }
-            info!(domain, srv = %srv_name, "SRV lookup returned empty results");
+            info!(domain, srv = %srv_name, lookup_ms, "SRV lookup returned empty results");
         }
         Err(e) => {
-            info!(domain, srv = %srv_name, error = %e, "SRV lookup failed");
+            info!(
+                domain,
+                srv = %srv_name,
+                lookup_ms = elapsed_ms(srv_lookup_started),
+                error = %e,
+                "SRV lookup failed"
+            );
         }
     }
 
     // Fallback to direct connection on standard XMPP client port (RFC 6120)
     // No SRV target, so host IS the domain — no separate domain field needed
-    warn!(domain, "No SRV records found, using fallback: {}:5222 (STARTTLS)", domain);
+    warn!(
+        domain,
+        resolve_total_ms = elapsed_ms(resolve_started),
+        "No SRV records found, using fallback: {}:5222 (STARTTLS)",
+        domain
+    );
     Ok(XmppEndpoint {
         host: domain.to_string(),
         port: 5222,

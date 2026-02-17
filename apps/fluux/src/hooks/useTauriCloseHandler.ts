@@ -26,6 +26,19 @@ export function useTauriCloseHandler(): void {
         const { invoke } = await import('@tauri-apps/api/core')
         const currentWindow = getCurrentWindow()
 
+        const disconnectBestEffort = async () => {
+          try {
+            await Promise.race([
+              client.disconnect(),
+              new Promise<void>((resolve) => {
+                setTimeout(resolve, 2000)
+              }),
+            ])
+          } catch (err) {
+            console.warn('[Fluux] Disconnect during close failed:', err)
+          }
+        }
+
         const isMacOS = navigator.platform.toLowerCase().includes('mac')
         const isWindows = navigator.platform.toLowerCase().includes('win')
 
@@ -34,8 +47,9 @@ export function useTauriCloseHandler(): void {
             if (isClosing) return
             isClosing = true
 
-            await client.disconnect()
-            await invoke('exit_app')
+            await disconnectBestEffort()
+            await invoke('stop_xmpp_proxy').catch(() => {})
+            await invoke('exit_app').catch(() => {})
           })
         } else {
           // Linux: Handle close button (no system tray)
@@ -44,8 +58,9 @@ export function useTauriCloseHandler(): void {
             isClosing = true
             event.preventDefault()
 
-            await client.disconnect()
-            await currentWindow.destroy()
+            await disconnectBestEffort()
+            await invoke('stop_xmpp_proxy').catch(() => {})
+            await currentWindow.destroy().catch(() => {})
           })
         }
       } catch {

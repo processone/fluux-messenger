@@ -18,7 +18,7 @@ import {
 } from 'lucide-react'
 
 interface UserMenuProps {
-  onLogout: (shouldCleanLocalData: boolean) => void
+  onLogout: (shouldCleanLocalData: boolean) => void | Promise<void>
 }
 
 export function UserMenu({ onLogout }: UserMenuProps) {
@@ -190,7 +190,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
                 <button
                   onClick={() => {
                     setShowLogoutConfirm(false)
-                    onLogout(cleanLocalData)
+                    void onLogout(cleanLocalData)
                   }}
                   className="flex-1 px-4 py-2 text-white bg-fluux-red rounded hover:bg-fluux-red/80 transition-colors"
                 >
