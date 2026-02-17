@@ -246,6 +246,37 @@ describe('XMPPClient Connection', () => {
         'error'
       )
     })
+
+    it('should resolve disconnect even when client.stop never settles', async () => {
+      // First connect
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      // Simulate a hanging graceful stop() (observed on Linux/proxy paths)
+      mockXmppClientInstance.stop.mockImplementation(() => new Promise<void>(() => {}))
+
+      const disconnectPromise = xmppClient.disconnect()
+      let settled = false
+      void disconnectPromise.then(() => { settled = true })
+
+      // Disconnect should complete immediately without waiting for stop timeout.
+      await vi.advanceTimersByTimeAsync(0)
+      expect(settled).toBe(true)
+
+      if (settled) {
+        await disconnectPromise
+      }
+
+      expect(mockXmppClientInstance.stop).toHaveBeenCalled()
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('disconnected')
+      expect(mockStores.connection.setJid).toHaveBeenCalledWith(null)
+    })
   })
 
   describe('reconnection with exponential backoff', () => {
@@ -735,6 +766,44 @@ describe('XMPPClient Connection', () => {
       // Advance timers - no reconnection should happen
       await vi.advanceTimersByTimeAsync(5000)
       expect(mockClientFactory).not.toHaveBeenCalled()
+    })
+
+    it('should ignore stale post-disconnect econnerror without triggering reconnect', async () => {
+      // First connect
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      // Manual disconnect transitions machine to disconnected and nulls active client.
+      await xmppClient.disconnect()
+
+      vi.mocked(mockStores.connection.setStatus).mockClear()
+      vi.mocked(mockStores.connection.setReconnectState).mockClear()
+      vi.mocked(mockStores.console.addEvent).mockClear()
+      mockClientFactory.mockClear()
+
+      // Late stale transport error/disconnect from old socket.
+      mockXmppClientInstance._emit('error', new Error('websocket econnerror ws://[::1]:42583'))
+      mockXmppClientInstance._emit('disconnect', {
+        clean: false,
+        reason: { code: 1006, reason: 'ECONNERROR' },
+      })
+
+      await vi.advanceTimersByTimeAsync(5000)
+
+      // Must not re-enter reconnect flow from stale events after manual disconnect.
+      const statusCalls = vi.mocked(mockStores.connection.setStatus).mock.calls
+      expect(statusCalls.some((call) => call[0] === 'reconnecting')).toBe(false)
+      expect(mockClientFactory).not.toHaveBeenCalled()
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        'Dead-socket recovery skipped: machine state is "disconnected"',
+        'connection'
+      )
     })
 
     it('should handle disconnect when already disconnected', async () => {
