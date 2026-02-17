@@ -71,13 +71,60 @@
 
 Get started with Fluux Messenger in a few simple steps:
 
-1. **Download** the latest release for your platform from the [releases page](https://github.com/processone/fluux-messenger/releases/latest). Compatible with **Windows**, **macOS** and **Linux** - choose your preferred format (installer, portable, or package).
+> **Want to try it first?** Head over to [demo.fluux.io](https://demo.fluux.io) for an instant live demo, no installation needed.
 
-2. **Install** the application following your platform's standard installation process.
+1. **Download** the latest release for your platform from the [releases page](https://github.com/processone/fluux-messenger/releases/latest).
+
+2. **Install** using the instructions for your platform below.
 
 3. **Connect** to any XMPP server with your credentials and start chatting!
 
-Need help? Check out our [support options](#-support-and-community) below.
+<details>
+<summary><b>Windows (x64)</b></summary>
+
+| Format | How to install |
+|--------|---------------|
+| `.exe` | Run the setup wizard (recommended) |
+| `.msi` | Run `msiexec /i Fluux-Messenger_*_Windows_x64.msi` or double-click to install |
+
+</details>
+
+<details>
+<summary><b>macOS (Intel & Apple Silicon)</b></summary>
+
+| Format | How to install |
+|--------|---------------|
+| `.dmg` | Open the image and drag **Fluux Messenger** to **Applications** (recommended) |
+| `.app.tar.gz` | Extract with `tar xzf` and move the `.app` to **Applications** |
+
+Both `x64` (Intel) and `arm64` (Apple Silicon) builds are available.
+
+</details>
+
+<details>
+<summary><b>Linux (x64 & arm64)</b></summary>
+
+| Format | How to install |
+|--------|---------------|
+| `.deb` | `sudo dpkg -i Fluux-Messenger_*.deb` (Debian, Ubuntu, Mint...) |
+| `.rpm` | `sudo rpm -i Fluux-Messenger_*.rpm` (Fedora, RHEL, openSUSE...) |
+| `.flatpak` | `flatpak install Fluux-Messenger_*.flatpak` |
+| `.tar.gz` | Extract with `tar xzf` and run the binary directly |
+
+Both `x64` and `arm64` builds are available for all formats.
+
+**Arch Linux** users can install from the AUR: [`fluux-messenger`](https://aur.archlinux.org/packages/fluux-messenger)
+
+</details>
+
+<details>
+<summary><b>Build from source</b></summary>
+
+See the [Developer Guide](docs/DEVELOPER.md) for instructions on building and running Fluux Messenger locally.
+
+</details>
+
+Need help? Check out our [support options](#support-and-community) below.
 
 ## Technology Stack
 
