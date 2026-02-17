@@ -326,20 +326,16 @@ describe('connectionMachine', () => {
       actor.stop()
     })
 
-    it('should transition to terminal.maxRetries on SOCKET_DIED when attempts exhausted', () => {
+    it('should keep retrying and cap attempt growth on repeated SOCKET_DIED failures', () => {
       // We start at attempt 1 from beforeEach (SOCKET_DIED from connected)
-      // Exhaust remaining attempts via SOCKET_DIED in attempting state
-      for (let i = 1; i < DEFAULT_MAX_RECONNECT_ATTEMPTS; i++) {
+      for (let i = 0; i < 30; i++) {
         actor.send({ type: 'TRIGGER_RECONNECT' })
-        // Fail via SOCKET_DIED instead of CONNECTION_ERROR
         actor.send({ type: 'SOCKET_DIED' })
       }
-      // Now at maxReconnectAttempts, next SOCKET_DIED should go terminal
-      actor.send({ type: 'TRIGGER_RECONNECT' })
-      actor.send({ type: 'SOCKET_DIED' })
 
-      expect(actor.getSnapshot().value).toEqual({ terminal: 'maxRetries' })
-      expect(actor.getSnapshot().context.lastError).toBe('Connection failed after multiple retry attempts')
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'waiting' })
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(DEFAULT_MAX_RECONNECT_ATTEMPTS)
+      expect(actor.getSnapshot().context.nextRetryDelayMs).toBe(MAX_RECONNECT_DELAY)
       actor.stop()
     })
   })
@@ -518,41 +514,42 @@ describe('connectionMachine', () => {
       })
     })
 
-    describe('max retries exhausted', () => {
-      it('should transition to terminal.maxRetries when attempts exhausted', () => {
+    describe('capped backoff retries', () => {
+      it('should keep retrying after many failures and cap delay growth', () => {
         const actor = createActor(connectionMachine).start()
         actor.send({ type: 'CONNECT' })
         actor.send({ type: 'CONNECTION_SUCCESS' })
         actor.send({ type: 'SOCKET_DIED' })
 
-        // Exhaust all attempts
-        for (let i = 0; i < DEFAULT_MAX_RECONNECT_ATTEMPTS; i++) {
-          if (i > 0) {
-            // Already in waiting from previous CONNECTION_ERROR
-          }
+        for (let i = 0; i < 30; i++) {
           actor.send({ type: 'TRIGGER_RECONNECT' })
           actor.send({ type: 'CONNECTION_ERROR', error: `fail ${i + 1}` })
         }
 
-        expect(actor.getSnapshot().value).toEqual({ terminal: 'maxRetries' })
-        expect(actor.getSnapshot().context.lastError).toBe('Connection failed after multiple retry attempts')
+        expect(actor.getSnapshot().value).toEqual({ reconnecting: 'waiting' })
+        expect(actor.getSnapshot().context.reconnectAttempt).toBe(DEFAULT_MAX_RECONNECT_ATTEMPTS)
+        expect(actor.getSnapshot().context.nextRetryDelayMs).toBe(MAX_RECONNECT_DELAY)
+        expect(actor.getSnapshot().context.lastError).toBe('fail 30')
         actor.stop()
       })
 
-      it('should allow CONNECT after max retries', () => {
+      it('should allow successful recovery after long failure streak', () => {
         const actor = createActor(connectionMachine).start()
         actor.send({ type: 'CONNECT' })
         actor.send({ type: 'CONNECTION_SUCCESS' })
         actor.send({ type: 'SOCKET_DIED' })
 
-        for (let i = 0; i < DEFAULT_MAX_RECONNECT_ATTEMPTS; i++) {
+        for (let i = 0; i < 20; i++) {
           actor.send({ type: 'TRIGGER_RECONNECT' })
           actor.send({ type: 'CONNECTION_ERROR', error: `fail` })
         }
-        expect(actor.getSnapshot().value).toEqual({ terminal: 'maxRetries' })
 
-        actor.send({ type: 'CONNECT' })
-        expect(actor.getSnapshot().value).toBe('idle')
+        expect(actor.getSnapshot().value).toEqual({ reconnecting: 'waiting' })
+        expect(actor.getSnapshot().context.reconnectAttempt).toBe(DEFAULT_MAX_RECONNECT_ATTEMPTS)
+
+        actor.send({ type: 'TRIGGER_RECONNECT' })
+        actor.send({ type: 'CONNECTION_SUCCESS' })
+        expect(actor.getSnapshot().value).toEqual({ connected: 'healthy' })
         expect(actor.getSnapshot().context.reconnectAttempt).toBe(0)
         actor.stop()
       })
@@ -881,32 +878,29 @@ describe('connectionMachine', () => {
       actor.stop()
     })
 
-    it('should reset context fully when CONNECT from terminal after max retries', () => {
+    it('should reset context fully after successful reconnect from capped backoff state', () => {
       const actor = createActor(connectionMachine).start()
       actor.send({ type: 'CONNECT' })
       actor.send({ type: 'CONNECTION_SUCCESS' })
       actor.send({ type: 'SOCKET_DIED' })
 
-      // Exhaust all attempts
-      for (let i = 0; i < DEFAULT_MAX_RECONNECT_ATTEMPTS; i++) {
+      // Drive many failures to hit capped backoff
+      for (let i = 0; i < 25; i++) {
         actor.send({ type: 'TRIGGER_RECONNECT' })
         actor.send({ type: 'CONNECTION_ERROR', error: `fail ${i}` })
       }
-      expect(actor.getSnapshot().value).toEqual({ terminal: 'maxRetries' })
-      expect(actor.getSnapshot().context.lastError).toBe('Connection failed after multiple retry attempts')
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'waiting' })
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(DEFAULT_MAX_RECONNECT_ATTEMPTS)
+      expect(actor.getSnapshot().context.nextRetryDelayMs).toBe(MAX_RECONNECT_DELAY)
 
-      // CONNECT resets everything
-      actor.send({ type: 'CONNECT' })
-      expect(actor.getSnapshot().value).toBe('idle')
+      // Successful reconnect resets everything
+      actor.send({ type: 'TRIGGER_RECONNECT' })
+      actor.send({ type: 'CONNECTION_SUCCESS' })
+      expect(actor.getSnapshot().value).toEqual({ connected: 'healthy' })
       expect(actor.getSnapshot().context.reconnectAttempt).toBe(0)
       expect(actor.getSnapshot().context.nextRetryDelayMs).toBe(0)
       expect(actor.getSnapshot().context.reconnectTargetTime).toBeNull()
       expect(actor.getSnapshot().context.lastError).toBeNull()
-
-      // And we can connect again successfully
-      actor.send({ type: 'CONNECT' })
-      actor.send({ type: 'CONNECTION_SUCCESS' })
-      expect(actor.getSnapshot().value).toEqual({ connected: 'healthy' })
       actor.stop()
     })
 

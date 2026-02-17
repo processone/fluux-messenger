@@ -565,23 +565,37 @@ export class Connection extends BaseModule {
     }
 
     if (clientToStop) {
-      logDisconnect('stopping xmpp client')
+      logDisconnect('stopping xmpp client (non-blocking)')
       flushSmAckDebounce(this.smPatchState, clientToStop)
+
+      // Start graceful stop in background but never block disconnect() completion on it.
+      // On Linux/proxy paths, xmpp.js stop can stall even after the machine is already
+      // in disconnected state, which leaves UI flows waiting on a promise that should
+      // only be best-effort cleanup.
       try {
-        await withTimeout(clientToStop.stop(), CLIENT_STOP_TIMEOUT_MS)
-        logDisconnect('xmpp client stop completed (or timed out safely)')
+        const stopPromise = clientToStop.stop()
+        void withTimeout(stopPromise, CLIENT_STOP_TIMEOUT_MS)
+          .then(() => {
+            logDisconnect('xmpp client stop completed in background (or timed out safely)')
+          })
+          .catch((err) => {
+            const message = err instanceof Error ? err.message : String(err)
+            logWarn(`Disconnect cleanup: client stop failed: ${message}`)
+            this.stores.console.addEvent(`Disconnect cleanup warning: socket close failed (${message})`, 'error')
+            logDisconnect(`xmpp client stop failed in background (${message})`)
+          })
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
         logWarn(`Disconnect cleanup: client stop failed: ${message}`)
         this.stores.console.addEvent(`Disconnect cleanup warning: socket close failed (${message})`, 'error')
-        logDisconnect(`xmpp client stop failed (${message})`)
-      } finally {
-        // Ensure the old transport is really closed. A graceful stop can return
-        // while the underlying socket is still lingering, which delays a fast
-        // manual re-login on the same resource.
-        forceDestroyClient(clientToStop)
-        logDisconnect('force-destroyed xmpp client transport')
+        logDisconnect(`xmpp client stop failed to start (${message})`)
       }
+
+      // Ensure the old transport is really closed immediately. A graceful stop can
+      // return late or never, and keeping this synchronous prevents disconnect() from
+      // wedging UI flows.
+      forceDestroyClient(clientToStop)
+      logDisconnect('force-destroyed xmpp client transport')
     }
 
     logDisconnect('complete')
@@ -1362,7 +1376,7 @@ export class Connection extends BaseModule {
       }
 
       // The machine state determines what to do on socket disconnect.
-      // Terminal states (conflict, auth) and disconnected state are already handled
+      // Terminal states (conflict/auth/initialFailure) and disconnected state are already handled
       // by the error handler or disconnect() method above.
       const machineState = this.getMachineState()
       logInfo(`Disconnect handler: machineState=${JSON.stringify(machineState)}`)
@@ -1371,7 +1385,7 @@ export class Connection extends BaseModule {
         // Manual disconnect - will transition to offline via stop()
         this.stores.console.addEvent('Socket closed (manual disconnect)', 'connection')
       } else if (this.isInTerminalState()) {
-        // Terminal state (conflict, auth, maxRetries, initialFailure)
+        // Terminal state (conflict, authFailed, initialFailure)
         // Already handled — the error handler or connect() rejection sent the event.
         // For initial failure, provide a helpful error message.
         const stateValue = machineState as { terminal: string }
@@ -1611,8 +1625,8 @@ export class Connection extends BaseModule {
       const errorMsg = err instanceof Error ? err.message : 'Unknown error'
       this.stores.console.addEvent(`Reconnect attempt failed: ${errorMsg}`, 'error')
       logErr(`Reconnect failed: ${errorMsg}`)
-      // Signal machine: reconnect failed → either back to waiting (with incrementAttempt)
-      // or terminal.maxRetries (if exhausted)
+      // Signal machine: reconnect failed → back to waiting (attempt/delay are
+      // saturated by the state machine once the backoff ceiling is reached).
       this.sendMachineEvent({ type: 'CONNECTION_ERROR', error: errorMsg }, 'attemptReconnect:error')
     }
   }

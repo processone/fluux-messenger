@@ -19,23 +19,23 @@
  * └──────┬─────┘                    │  ┌──────────────────┐         │
  *        │                          │  │  initialFailure  │         │
  *        │ CONNECTION_SUCCESS       │  ├──────────────────┤         │
- *        ▼                          │  │    conflict       │         │
+ *        ▼                          │  │    conflict      │         │
  * ┌──────────────────────────┐      │  ├──────────────────┤         │
  * │        connected          │─────►│  │   authFailed     │         │
- * │ ┌─────────┐ ┌──────────┐│CONFLICT│  ├──────────────────┤         │
- * │ │ healthy  │ │verifying ││AUTH_ERR│  │   maxRetries     │         │
- * │ └────┬────┘ └────┬─────┘│      │  └──────────────────┘         │
+ * │ ┌─────────┐ ┌──────────┐│CONFLICT│  └──────────────────┘         │
+ * │ │ healthy │ │verifying ││AUTH_ERR│                               │
+ * │ └────┬────┘ └────┬─────┘│      │                                │
  * │      │           │       │      └───────────────────────────────┘
- * │  SOCKET_DIED  VERIFY_FAILED                                 ▲
- * │  WAKE(long)      │       │                                  │
- * └──────┬───────────┘       │               CONNECTION_ERROR   │
- *        ▼                   │               (!canReconnect)    │
- * ┌──────────────────────────┴──┐                               │
- * │        reconnecting          │──────────────────────────────┘
- * │ ┌──────────┐ ┌────────────┐ │
- * │ │ waiting   │ │ attempting │ │
- * │ └──────────┘ └────────────┘ │
- * └──────┬───────────────────────┘
+ * │  SOCKET_DIED  VERIFY_FAILED
+ * │  WAKE(long)      │
+ * └──────┬───────────┘
+ *        ▼
+ * ┌──────────────────────────┐
+ * │        reconnecting       │
+ * │ ┌──────────┐ ┌──────────┐ │
+ * │ │ waiting   │ │attempting│ │
+ * │ └──────────┘ └──────────┘ │
+ * └──────┬─────────────────────┘
  *        │ DISCONNECT / CANCEL_RECONNECT
  *        ▼
  * ┌──────────────┐
@@ -50,6 +50,8 @@
  * 3. `connecting` state only transitions to `connected` or `terminal.initialFailure`
  * 4. Exponential backoff context is always consistent with the current state
  * 5. CONFLICT and AUTH_ERROR are terminal from any connected/reconnecting state
+ * 6. Reconnect retries are unbounded for non-fatal errors, but delay growth is capped
+ *    (`nextRetryDelayMs` stops increasing after `MAX_RECONNECT_DELAY`)
  *
  * @module Core/ConnectionMachine
  */
@@ -69,7 +71,7 @@ export const MAX_RECONNECT_DELAY = 120_000
 /** Multiplier for exponential backoff */
 export const RECONNECT_MULTIPLIER = 2
 
-/** Maximum number of reconnect attempts before giving up */
+/** Maximum reconnect attempt value used to cap backoff growth (retries continue). */
 export const DEFAULT_MAX_RECONNECT_ATTEMPTS = 10
 
 /** Stream Management session timeout — server-side, typically 10 minutes (ms) */
@@ -103,7 +105,7 @@ export type ConnectionMachineEvent =
 export interface ConnectionMachineContext {
   /** Current reconnect attempt number (1-based during reconnection, 0 when not reconnecting) */
   reconnectAttempt: number
-  /** Maximum number of reconnect attempts before terminal failure */
+  /** Maximum reconnect attempt value used for backoff growth saturation */
   maxReconnectAttempts: number
   /** Delay before next reconnect attempt (ms), computed via exponential backoff */
   nextRetryDelayMs: number
@@ -173,9 +175,11 @@ export const connectionMachine = setup({
     }),
 
     // Increment attempt counter and compute next backoff delay.
+    // Attempt value saturates at maxReconnectAttempts so the UI attempt label
+    // and delay remain stable after hitting the backoff ceiling.
     // Sets reconnectTargetTime as an absolute timestamp for UI countdown.
     incrementAttempt: assign(({ context }) => {
-      const attempt = context.reconnectAttempt + 1
+      const attempt = Math.min(context.reconnectAttempt + 1, context.maxReconnectAttempts)
       const delay = computeBackoffDelay(attempt)
       return {
         reconnectAttempt: attempt,
@@ -201,10 +205,6 @@ export const connectionMachine = setup({
       lastError: 'Authentication failed',
     }),
 
-    setMaxRetriesError: assign({
-      lastError: 'Connection failed after multiple retry attempts',
-    }),
-
     // Clear target time (entering attempting state)
     clearTargetTime: assign({
       reconnectTargetTime: null,
@@ -216,10 +216,6 @@ export const connectionMachine = setup({
     }),
   },
   guards: {
-    // Can we attempt another reconnect?
-    canReconnect: ({ context }) =>
-      context.reconnectAttempt < context.maxReconnectAttempts,
-
     // Did the sleep duration exceed SM session timeout?
     sleepExceedsSMTimeout: ({ event }) => {
       if (event.type === 'WAKE') {
@@ -411,30 +407,15 @@ export const connectionMachine = setup({
               target: '#connection.connected',
               actions: 'resetReconnectState',
             },
-            CONNECTION_ERROR: [
-              {
-                guard: 'canReconnect',
-                target: 'waiting',
-                actions: ['setError', 'incrementAttempt'],
-              },
-              {
-                // Exhausted all attempts
-                target: '#connection.terminal.maxRetries',
-                actions: 'setMaxRetriesError',
-              },
-            ],
+            CONNECTION_ERROR: {
+              target: 'waiting',
+              actions: ['setError', 'incrementAttempt'],
+            },
             // Socket can die during reconnect attempt (e.g., proxy failure)
-            SOCKET_DIED: [
-              {
-                guard: 'canReconnect',
-                target: 'waiting',
-                actions: 'incrementAttempt',
-              },
-              {
-                target: '#connection.terminal.maxRetries',
-                actions: 'setMaxRetriesError',
-              },
-            ],
+            SOCKET_DIED: {
+              target: 'waiting',
+              actions: 'incrementAttempt',
+            },
           },
         },
       },
