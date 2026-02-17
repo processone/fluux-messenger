@@ -1,7 +1,7 @@
 // Prevents additional console window on Windows in release
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-// Linux: Set WebKitGTK workaround env vars BEFORE main() runs
+// Linux: Apply WebKitGTK GPU workaround env vars BEFORE main() runs when requested.
 // This uses ctor to run a static constructor before any other code,
 // ensuring the env vars are set before WebKitGTK initializes.
 // Fixes grey screen / "Could not create default EGL display: EGL_BAD_PARAMETER"
@@ -9,7 +9,7 @@
 #[cfg(target_os = "linux")]
 #[ctor::ctor]
 fn set_linux_webkit_env() {
-    if std::env::var("FLUUX_ENABLE_GPU").is_err() {
+    if std::env::var("FLUUX_DISABLE_GPU").is_ok() {
         std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
     }
@@ -786,7 +786,7 @@ fn print_startup_diagnostics() {
 
     #[cfg(target_os = "linux")]
     {
-        let gpu_enabled = std::env::var("FLUUX_ENABLE_GPU").is_ok();
+        let gpu_disabled = std::env::var("FLUUX_DISABLE_GPU").is_ok();
         let dmabuf_disabled = std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER")
             .map(|v| v == "1")
             .unwrap_or(false);
@@ -794,13 +794,13 @@ fn print_startup_diagnostics() {
             .map(|v| v == "1")
             .unwrap_or(false);
 
-        eprintln!("WebKitGTK GPU workarounds:");
+        eprintln!("WebKitGTK GPU settings:");
         eprintln!(
-            "  FLUUX_ENABLE_GPU: {}",
-            if gpu_enabled {
-                "set (GPU workarounds disabled)"
+            "  FLUUX_DISABLE_GPU: {}",
+            if gpu_disabled {
+                "set (hardware acceleration disabled)"
             } else {
-                "not set"
+                "not set (hardware acceleration enabled)"
             }
         );
         eprintln!("  WEBKIT_DISABLE_DMABUF_RENDERER: {}", dmabuf_disabled);
@@ -866,7 +866,7 @@ fn main() {
         eprintln!();
         eprintln!("Environment variables:");
         eprintln!("  RUST_LOG              Override log filter (e.g. RUST_LOG=debug)");
-        eprintln!("  FLUUX_ENABLE_GPU      Disable WebKitGTK GPU workarounds (Linux)");
+        eprintln!("  FLUUX_DISABLE_GPU     Disable hardware acceleration (Linux troubleshooting)");
         std::process::exit(0);
     }
 
