@@ -50,10 +50,23 @@ const { mockDiscoverWebSocket } = vi.hoisted(() => ({
   mockDiscoverWebSocket: vi.fn(),
 }))
 
+const { mockFlushPendingRoomMessages } = vi.hoisted(() => ({
+  mockFlushPendingRoomMessages: vi.fn(),
+}))
+
 // Mock websocketDiscovery to prevent real network calls
 vi.mock('../../utils/websocketDiscovery', () => ({
   discoverWebSocket: mockDiscoverWebSocket,
 }))
+
+// Mock message cache flushing so disconnect tests can control stall behavior
+vi.mock('../../utils/messageCache', async () => {
+  const actual = await vi.importActual<typeof import('../../utils/messageCache')>('../../utils/messageCache')
+  return {
+    ...actual,
+    flushPendingRoomMessages: mockFlushPendingRoomMessages,
+  }
+})
 
 describe('XMPPClient Connection', () => {
   let xmppClient: XMPPClient
@@ -69,6 +82,8 @@ describe('XMPPClient Connection', () => {
     // Reset WebSocket discovery mock to return null (discovery failed -> use fallback URL)
     mockDiscoverWebSocket.mockClear()
     mockDiscoverWebSocket.mockResolvedValue(null)
+    mockFlushPendingRoomMessages.mockClear()
+    mockFlushPendingRoomMessages.mockResolvedValue(undefined)
 
     mockStores = createMockStores()
     xmppClient = new XMPPClient({ debug: false })
@@ -200,6 +215,36 @@ describe('XMPPClient Connection', () => {
       expect(mockXmppClientInstance.stop).toHaveBeenCalled()
       expect(mockStores.connection.setStatus).toHaveBeenCalledWith('disconnected')
       expect(mockStores.connection.setJid).toHaveBeenCalledWith(null)
+    })
+
+    it('should not hang disconnect when room message flush stalls', async () => {
+      // First connect
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      // Simulate IndexedDB/WebKit stall in flushPendingRoomMessages()
+      mockFlushPendingRoomMessages.mockImplementation(
+        () => new Promise<void>(() => {})
+      )
+
+      const disconnectPromise = xmppClient.disconnect()
+
+      // Fast-forward cleanup timeout (2s) so disconnect can proceed to stop()
+      await vi.advanceTimersByTimeAsync(2000)
+      await disconnectPromise
+
+      expect(mockXmppClientInstance.stop).toHaveBeenCalled()
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('disconnected')
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        'Disconnect cleanup warning: room message flush timed out',
+        'error'
+      )
     })
   })
 
