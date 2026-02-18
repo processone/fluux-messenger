@@ -12,6 +12,15 @@ export interface ResolutionLogger {
   addEvent(message: string, category?: 'connection' | 'error' | 'sm' | 'presence'): void
 }
 
+/** Default timeout budget for XEP-0156 discovery. */
+export const XEP0156_DISCOVERY_TIMEOUT_MS = 5000
+
+/**
+ * Shorter timeout used for desktop proxy pre-checks where we'll quickly
+ * fall back to TCP/SRV via proxy if no endpoint is discovered.
+ */
+export const FAST_XEP0156_DISCOVERY_TIMEOUT_MS = 2500
+
 /**
  * Check if WebSocket discovery should be skipped.
  * Returns true if:
@@ -34,6 +43,52 @@ export function getWebSocketUrl(server: string, domain: string): string {
 }
 
 /**
+ * Discover a WebSocket URL via XEP-0156 only (no default URL fallback).
+ *
+ * @param server - Server parameter (domain name)
+ * @param domain - XMPP domain from the JID (used for discovery)
+ * @param logger - Optional logger for console events
+ * @param timeoutMs - Discovery timeout in milliseconds
+ * @returns Discovered WebSocket URL, or null when none is advertised
+ */
+export async function discoverWebSocketUrl(
+  server: string,
+  domain: string,
+  logger?: ResolutionLogger,
+  timeoutMs: number = XEP0156_DISCOVERY_TIMEOUT_MS
+): Promise<string | null> {
+  const discoveryDomain = server || domain
+
+  logger?.addEvent(
+    `Attempting XEP-0156 WebSocket discovery for ${discoveryDomain}...`,
+    'connection'
+  )
+
+  try {
+    const discoveredUrl = await discoverWebSocket(discoveryDomain, timeoutMs)
+    if (discoveredUrl) {
+      logger?.addEvent(
+        `XEP-0156 discovery successful: ${discoveredUrl}`,
+        'connection'
+      )
+      return discoveredUrl
+    }
+    logger?.addEvent(
+      `XEP-0156 discovery returned no WebSocket endpoint for ${discoveryDomain}`,
+      'connection'
+    )
+    return null
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err)
+    logger?.addEvent(
+      `XEP-0156 discovery failed: ${errorMsg}`,
+      'connection'
+    )
+    return null
+  }
+}
+
+/**
  * Resolve WebSocket URL for a server via XEP-0156 discovery.
  *
  * Attempts discovery on the domain and falls back to default URL if discovery fails.
@@ -53,27 +108,14 @@ export async function resolveWebSocketUrl(
   // Use the JID domain for discovery (more reliable than server param)
   const discoveryDomain = server || domain
 
-  logger?.addEvent(
-    `Attempting XEP-0156 WebSocket discovery for ${discoveryDomain}...`,
-    'connection'
+  const discoveredUrl = await discoverWebSocketUrl(
+    server,
+    domain,
+    logger,
+    XEP0156_DISCOVERY_TIMEOUT_MS
   )
-
-  try {
-    const discoveredUrl = await discoverWebSocket(discoveryDomain, 5000)
-    if (discoveredUrl) {
-      logger?.addEvent(
-        `XEP-0156 discovery successful: ${discoveredUrl}`,
-        'connection'
-      )
-      return discoveredUrl
-    }
-  } catch (err) {
-    // Discovery failed - will use fallback
-    const errorMsg = err instanceof Error ? err.message : String(err)
-    logger?.addEvent(
-      `XEP-0156 discovery failed: ${errorMsg}`,
-      'connection'
-    )
+  if (discoveredUrl) {
+    return discoveredUrl
   }
 
   // Fall back to default URL pattern
