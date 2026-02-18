@@ -414,8 +414,13 @@ export class Roster extends BaseModule {
     const iq = xml('iq', { type: 'get', id: `roster_${generateUUID()}` },
       xml('query', { xmlns: 'jabber:iq:roster' })
     )
-    // Send roster request (response handled by handleRosterIQ via stanza routing)
-    await this.deps.sendStanza(iq)
+    // Use sendIQ to wait for the response, ensuring the roster is loaded
+    // before initial presence is sent (prevents presence race condition)
+    const result = await this.deps.sendIQ(iq)
+    const query = result.getChild('query', 'jabber:iq:roster')
+    if (query) {
+      this.handleRosterIQ(result, query)
+    }
   }
 
   async addContact(jid: string, name?: string): Promise<void> {
