@@ -306,6 +306,15 @@ export class XMPPClient {
   private isSmResumedSession = false
 
   /**
+   * Monotonically increasing session generation counter.
+   * Incremented each time handleConnectionSuccess runs.
+   * Used by handleFreshSession/handleSmResumption to detect stale runs and abort early
+   * when a newer connection supersedes the current one (e.g., system sleep during async chain).
+   * @internal
+   */
+  private sessionGeneration = 0
+
+  /**
    * Cleanup functions for all subscriptions and bindings.
    * Torn down in destroy() and re-established by setupBindings().
    * @internal
@@ -1223,8 +1232,13 @@ export class XMPPClient {
     isResumption: boolean,
     previouslyJoinedRooms?: Array<{ jid: string; nickname: string; password?: string; autojoin?: boolean }>
   ): Promise<void> {
+    // Increment session generation to invalidate any in-progress handleFreshSession/handleSmResumption.
+    // If the system sleeps during an await below and a reconnect fires, the new call increments
+    // this counter again, causing the stale run to bail out at its next checkpoint.
+    const generation = ++this.sessionGeneration
+
     const platform = getCachedPlatform() ?? 'unknown'
-    logInfo(`SDK v${SDK_VERSION}, platform: ${platform}`)
+    logInfo(`SDK v${SDK_VERSION}, platform: ${platform}, session #${generation}`)
 
     // Transition presence machine to connected state
     this.presenceActor.send({ type: 'CONNECT' })
@@ -1233,13 +1247,26 @@ export class XMPPClient {
     this.isSmResumedSession = isResumption
 
     if (isResumption) {
-      await this.handleSmResumption()
+      await this.handleSmResumption(generation)
     } else {
-      await this.handleFreshSession(previouslyJoinedRooms)
+      await this.handleFreshSession(previouslyJoinedRooms, generation)
     }
+
+    // Only run post-session tasks if this generation is still current
+    if (this.isSessionStale(generation)) return
 
     // Always re-discover admin commands (lightweight, no MAM)
     this.admin.discoverAdminCommands().catch(() => {})
+  }
+
+  /**
+   * Check if the current session generation is still active.
+   * Returns true if a newer connection was established, meaning
+   * the current async chain should abort.
+   * @internal
+   */
+  private isSessionStale(generation: number): boolean {
+    return this.sessionGeneration !== generation
   }
 
   /**
@@ -1252,8 +1279,14 @@ export class XMPPClient {
    * 1) Send initial presence
    * 2) Send presence probes to refresh contact status
    */
-  private async handleSmResumption(): Promise<void> {
+  private async handleSmResumption(generation?: number): Promise<void> {
+    const gen = generation ?? this.sessionGeneration
+
     await this.roster.sendInitialPresence()
+    if (this.isSessionStale(gen)) {
+      logInfo('SM resumption aborted after sendInitialPresence (session superseded)')
+      return
+    }
 
     this.stores?.console.addEvent('Sending presence probes to refresh contact status', 'sm')
     this.roster.sendPresenceProbes().catch(() => {})
@@ -1274,8 +1307,11 @@ export class XMPPClient {
    * Background sync side effects trigger MAM queries once server info is available.
    */
   private async handleFreshSession(
-    previouslyJoinedRooms?: Array<{ jid: string; nickname: string; password?: string; autojoin?: boolean }>
+    previouslyJoinedRooms?: Array<{ jid: string; nickname: string; password?: string; autojoin?: boolean }>,
+    generation?: number
   ): Promise<void> {
+    const gen = generation ?? this.sessionGeneration
+
     // Reset MAM states so background sync will re-fetch message history
     this.stores?.chat.resetMAMStates()
     this.stores?.room.resetRoomMAMStates()
@@ -1286,14 +1322,26 @@ export class XMPPClient {
 
     // Fetch roster before sending presence
     await this.roster.fetchRoster()
+    if (this.isSessionStale(gen)) {
+      logInfo('Fresh session aborted after fetchRoster (session superseded)')
+      return
+    }
     this.enableCarbons()
     logInfo('Fresh session: roster fetched, enabling carbons')
 
     // Send initial presence
     await this.roster.sendInitialPresence()
+    if (this.isSessionStale(gen)) {
+      logInfo('Fresh session aborted after sendInitialPresence (session superseded)')
+      return
+    }
 
     // Bookmarks and room joins
     const { roomsToAutojoin } = await this.muc.fetchBookmarks()
+    if (this.isSessionStale(gen)) {
+      logInfo('Fresh session aborted after fetchBookmarks (session superseded)')
+      return
+    }
 
     // Discover MUC service and check service-level MAM support BEFORE joining rooms
     // This allows queryRoomFeatures() to fall back to service-level MAM detection
@@ -1323,6 +1371,10 @@ export class XMPPClient {
       const nonAutojoinRooms = previouslyJoinedRooms.filter(r => !autojoinJids.has(r.jid))
       if (nonAutojoinRooms.length > 0) {
         await this.muc.rejoinActiveRooms(nonAutojoinRooms)
+        if (this.isSessionStale(gen)) {
+          logInfo('Fresh session aborted after rejoinActiveRooms (session superseded)')
+          return
+        }
       }
     }
 
