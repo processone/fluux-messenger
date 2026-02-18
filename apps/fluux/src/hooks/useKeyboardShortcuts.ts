@@ -18,6 +18,7 @@ interface UseKeyboardShortcutsOptions {
   onToggleShortcutHelp: () => void
   onToggleConsole: () => void
   onOpenSettings: () => void
+  onQuitApp?: () => void
   onCreateQuickChat: () => void
   onOpenCommandPalette: () => void
   onOpenPresenceMenu: () => void
@@ -106,6 +107,18 @@ function matchesShortcut(e: KeyboardEvent, shortcut: ShortcutDefinition): boolea
  * during MAM loading.
  */
 export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): ShortcutDefinition[] {
+  const platform = getPlatform()
+  const supportsQuitShortcut = platform === 'windows' || platform === 'linux'
+  const quitShortcut: ShortcutDefinition | null = supportsQuitShortcut && options.onQuitApp
+    ? {
+      key: 'q',
+      modifiers: ['meta'],
+      description: 'Quit app',
+      category: 'general',
+      action: options.onQuitApp,
+    }
+    : null
+
   // NOTE: Use direct store subscriptions instead of useChat()/useRoom() hooks.
   // Those hooks subscribe to conversations/rooms which change during MAM loading,
   // causing unnecessary re-renders. We only need the setters as stable references.
@@ -436,6 +449,7 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
         }
       },
     },
+    ...(quitShortcut ? [quitShortcut] : []),
     {
       key: 'Escape',
       modifiers: [],
@@ -473,7 +487,9 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
                          (shortcut.modifiers?.includes('meta') || shortcut.modifiers?.includes('ctrl'))
           const isCmdU = shortcut.key.toLowerCase() === 'u' &&
                          (shortcut.modifiers?.includes('meta') || shortcut.modifiers?.includes('ctrl'))
-          const allowInInput = shortcut.key === '?' || shortcut.key === 'F12' || shortcut.key === 'Escape' || isAltArrow || isCmdK || isCmdU
+          const isCmdQ = shortcut.key.toLowerCase() === 'q' &&
+                         (shortcut.modifiers?.includes('meta') || shortcut.modifiers?.includes('ctrl'))
+          const allowInInput = shortcut.key === '?' || shortcut.key === 'F12' || shortcut.key === 'Escape' || isAltArrow || isCmdK || isCmdU || isCmdQ
 
           if (!isInputField || allowInInput) {
             e.preventDefault()

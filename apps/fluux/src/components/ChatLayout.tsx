@@ -397,6 +397,24 @@ function ChatLayoutContent() {
     modalActions.toggle('presenceMenu')
   }, [modalActions])
 
+  // Handle fully quitting desktop app (Linux/Windows)
+  const handleQuitApp = useCallback(() => {
+    const platform = navigator.platform.toLowerCase()
+    const isWindowsOrLinux = platform.includes('win') || platform.includes('linux')
+    if (!isWindowsOrLinux) return
+
+    const requestQuit = async () => {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core')
+        await invoke('exit_app')
+      } catch {
+        // Not in Tauri environment, ignore
+      }
+    }
+
+    void requestQuit()
+  }, [])
+
   // Handler for closing contact profile (used by keyboard shortcuts)
   const handleContactBack = () => setSelectedContactJid(null)
 
@@ -415,6 +433,7 @@ function ChatLayoutContent() {
     onToggleShortcutHelp: toggleShortcutHelp,
     onToggleConsole: toggleConsole,
     onOpenSettings: () => navigateToSettings(),
+    onQuitApp: handleQuitApp,
     onCreateQuickChat: handleCreateQuickChat,
     onOpenCommandPalette: toggleCommandPalette,
     onOpenPresenceMenu: handleTogglePresenceMenu,
