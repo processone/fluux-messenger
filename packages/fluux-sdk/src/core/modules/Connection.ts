@@ -1604,11 +1604,16 @@ export class Connection extends BaseModule {
     }
 
     try {
+      // Capture rooms early so reconnect recovery can still rejoin them even if
+      // we short-circuit because the transport is already back online.
+      const previouslyJoinedRooms = this.stores.room.joinedRooms() ?? []
+
       // Defensive check: verify xmpp.js client is not already online.
       // This shouldn't happen in normal flow, but guards against edge cases.
       if (this.xmpp && (this.xmpp as any).status === 'online') {
         this.stores.console.addEvent('Connection still online - cancelling reconnect attempt', 'connection')
         this.sendMachineEvent({ type: 'CONNECTION_SUCCESS' }, 'attemptReconnect:already-online')
+        await this.handleConnectionSuccess(false, 'Reconnected', previouslyJoinedRooms)
         return
       }
 
@@ -1625,10 +1630,6 @@ export class Connection extends BaseModule {
       } else {
         this.stores.console.addEvent('No SM state available, will start new session', 'sm')
       }
-
-      // Save joined rooms before cleanup (for rejoin on new session)
-      // These are rooms that were actively joined but may not have autojoin=true
-      const previouslyJoinedRooms = this.stores.room.joinedRooms() ?? []
 
       // Clean up old client (the proxy stays running — each new WS connection
       // creates a fresh TCP/TLS connection with independent DNS resolution)

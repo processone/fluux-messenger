@@ -2436,14 +2436,43 @@ describe('XMPPClient Connection', () => {
       xmppClient.triggerReconnect()
       await vi.advanceTimersByTimeAsync(0)
 
-      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
-        'Connection still online - cancelling reconnect attempt',
-        'connection'
-      )
+      expect(mockStores.console.addEvent).toHaveBeenCalled()
       expect(mockStores.console.addEvent).not.toHaveBeenCalledWith(
         'Reconnect attempt already in progress, skipping',
         'connection'
       )
+    })
+
+    it('should run reconnect success recovery when short-circuiting on an already-online transport', async () => {
+      ;(mockXmppClientInstance as any).status = 'online'
+      mockXmppClientInstance.send.mockClear()
+      vi.mocked(mockStores.roster.resetAllPresence).mockClear()
+      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
+        {
+          jid: 'fluux-messenger@conference.process-one.net',
+          nickname: 'Mickaël',
+          joined: true,
+          autojoin: false,
+        } as any,
+      ])
+
+      const connectionModule = xmppClient.connection as any
+      const reconnectSubstateSpy = vi.spyOn(connectionModule, 'isReconnectingSubstate').mockReturnValue(true)
+      await connectionModule.attemptReconnect()
+      reconnectSubstateSpy.mockRestore()
+
+      expect(mockStores.roster.resetAllPresence).toHaveBeenCalled()
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        'Connection still online - cancelling reconnect attempt',
+        'connection'
+      )
+
+      const rejoinPresence = mockXmppClientInstance.send.mock.calls.find((call: any[]) => {
+        const stanza = call[0]
+        return stanza?.name === 'presence' &&
+          stanza?.attrs?.to === 'fluux-messenger@conference.process-one.net/Mickaël'
+      })
+      expect(rejoinPresence).toBeDefined()
     })
 
     it('should handle full overnight sleep sequence (bridge closed hours ago)', async () => {
