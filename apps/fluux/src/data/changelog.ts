@@ -15,7 +15,7 @@ export interface ChangelogEntry {
 export const changelog: ChangelogEntry[] = [
   {
     version: '0.13.2',
-    date: '2026-02-16',
+    date: '2026-02-18',
     sections: [
       {
         type: 'added',
@@ -24,6 +24,8 @@ export const changelog: ChangelogEntry[] = [
           '`--dangerous-insecure-tls` CLI flag to disable TLS certificate verification',
           'SDK diagnostic logging for user troubleshooting, with shortcut to access log file',
           'Russian, Belarusian, Ukrainian, and Simplified Chinese translations (31 languages total)',
+          'Linux system tray support with close-to-tray functionality',
+          'Mod+Q full quit shortcut on Windows/Linux',
         ],
       },
       {
@@ -52,6 +54,10 @@ export const changelog: ChangelogEntry[] = [
           'Room avatar loss when occupant goes offline',
           'Duplicate messages from IRC bridges in MAM queries',
           'Avatar blob URL memory leak with deduplication pool',
+          'Status message updates while staying online',
+          'MUC nick preserved on reconnect short-circuit',
+          'Linux logout lockups on proxy disconnect',
+          'Non-fatal errors now keep reconnecting with capped backoff',
         ],
       },
     ],
