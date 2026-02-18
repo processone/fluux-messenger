@@ -395,45 +395,18 @@ export class Connection extends BaseModule {
     this.deps.emitSDK('connection:status', { status: 'connecting' })
 
     // Check connection mode
+    const domain = getDomain(jid)
     const userProvidedWebSocketUrl = server.startsWith('ws://') || server.startsWith('wss://')
     // tls:// and tcp:// URIs are explicit server specs for the proxy (not WebSocket URLs)
     const isExplicitTcpUri = server.startsWith('tls://') || server.startsWith('tcp://')
-    const useProxy = this.proxyManager.hasProxy && !userProvidedWebSocketUrl
+    const canUseProxy = this.proxyManager.hasProxy && !userProvidedWebSocketUrl
+    const preferWebSocketFirst = canUseProxy && !isExplicitTcpUri
 
     // Debug logging
     this.stores.console.addEvent(
-      `Connection setup: hasProxy=${this.proxyManager.hasProxy}, userProvidedWebSocketUrl=${userProvidedWebSocketUrl}, isExplicitTcpUri=${isExplicitTcpUri}, server="${server}"`,
+      `Connection setup: hasProxy=${this.proxyManager.hasProxy}, userProvidedWebSocketUrl=${userProvidedWebSocketUrl}, isExplicitTcpUri=${isExplicitTcpUri}, preferWebSocketFirst=${preferWebSocketFirst}, server="${server}"`,
       'connection'
     )
-
-    // Resolve server URL:
-    // - With proxy adapter: delegate to ProxyManager (handles URI parsing, SRV, fallback)
-    // - Without proxy or explicit WebSocket URL: Perform WebSocket URL resolution
-    let resolvedServer: string
-    let connectionMethod: ConnectionMethod = 'websocket'
-    if (useProxy) {
-      // Proxy mode: ensure always-on proxy is running (idempotent)
-      const result = await this.proxyManager.ensureProxy(server, getDomain(jid), skipDiscovery)
-      resolvedServer = result.server
-      connectionMethod = result.connectionMethod
-    } else if (isExplicitTcpUri) {
-      // tls:// or tcp:// URI without proxy — not usable, fall back to domain
-      this.stores.console.addEvent(`TCP URI "${server}" not usable without proxy, falling back to WebSocket discovery`, 'connection')
-      resolvedServer = shouldSkipDiscovery('', skipDiscovery)
-        ? getWebSocketUrl('', getDomain(jid))
-        : await resolveWebSocketUrl('', getDomain(jid), this.stores.console)
-    } else {
-      // WebSocket mode: resolve WebSocket URL via discovery
-      resolvedServer = shouldSkipDiscovery(server, skipDiscovery)
-        ? getWebSocketUrl(server, getDomain(jid))
-        : await resolveWebSocketUrl(server, getDomain(jid), this.stores.console)
-    }
-
-    // Store connection method for display
-    this.stores.connection.setConnectionMethod(connectionMethod)
-
-    // Store credentials for potential reconnection (with resolved URL)
-    this.credentials = { jid, password, server: resolvedServer, resource, lang, disableSmKeepalive }
 
     // Load SM state and joined rooms from storage if not provided (for session resumption across page reloads)
     // Note: Only await if storage adapter exists to avoid blocking tests using fake timers
@@ -456,31 +429,100 @@ export class Connection extends BaseModule {
       }
     }
 
-    this.xmpp = this.createXmppClient({ jid, password, server: resolvedServer, resource, lang })
-    this.hydrateStreamManagement(effectiveSmState)
-    this.setupHandlers()
+    const resolveDirectWebSocket = async (): Promise<string> => {
+      if (shouldSkipDiscovery(server, skipDiscovery)) {
+        return getWebSocketUrl(server, domain)
+      }
+      return resolveWebSocketUrl(server, domain, this.stores.console)
+    }
 
-    return new Promise((resolve, reject) => {
-      this.setupConnectionHandlers(
-        async (isResumption) => {
-          // Signal machine: initial connection succeeded
-          this.sendMachineEvent({ type: 'CONNECTION_SUCCESS' }, 'connect:connection-success')
-          await this.handleConnectionSuccess(isResumption, `Connected as ${jid}`, effectiveJoinedRooms)
-          resolve()
-        },
-        (err) => {
-          logError('Connection error:', err.message)
-          logErr(`Connection error: ${err.message}`)
-          // Signal machine: initial connection failed → terminal.initialFailure
-          this.sendMachineEvent({ type: 'CONNECTION_ERROR', error: err.message }, 'connect:connection-error')
-          this.stores.console.addEvent(`Connection error: ${err.message}`, 'error')
-          // Emit SDK event for connection error
-          this.deps.emitSDK('connection:status', { status: 'error', error: err.message })
-          this.emit('error', err)
-          reject(err)
+    const attemptConnection = async (resolvedServer: string, connectionMethod: ConnectionMethod): Promise<void> => {
+      this.stores.connection.setConnectionMethod(connectionMethod)
+      this.credentials = { jid, password, server: resolvedServer, resource, lang, disableSmKeepalive }
+      this.xmpp = this.createXmppClient({ jid, password, server: resolvedServer, resource, lang })
+      this.hydrateStreamManagement(effectiveSmState)
+      this.setupHandlers()
+
+      await new Promise<void>((resolve, reject) => {
+        this.setupConnectionHandlers(
+          async (isResumption) => {
+            // Signal machine: initial connection succeeded
+            this.sendMachineEvent({ type: 'CONNECTION_SUCCESS' }, 'connect:connection-success')
+            await this.handleConnectionSuccess(isResumption, `Connected as ${jid}`, effectiveJoinedRooms)
+            resolve()
+          },
+          (err) => reject(err)
+        )
+      })
+    }
+
+    try {
+      // Preferred path on desktop for domain inputs:
+      // 1) try direct WebSocket first (XEP-0156/default URL),
+      // 2) then fall back to SRV/proxy only if direct WebSocket fails.
+      // The winning endpoint is persisted in this.credentials.server and reused
+      // by reconnect attempts so we avoid repeating discovery/SRV checks each time.
+      if (preferWebSocketFirst) {
+        const directWebSocketUrl = await resolveDirectWebSocket()
+        this.stores.console.addEvent(
+          `Connection strategy: trying direct WebSocket first (${directWebSocketUrl})`,
+          'connection'
+        )
+
+        try {
+          await attemptConnection(directWebSocketUrl, 'websocket')
+          return
+        } catch (webSocketError) {
+          const errorMsg = webSocketError instanceof Error ? webSocketError.message : String(webSocketError)
+          if (this.isInTerminalState()) {
+            throw webSocketError
+          }
+          this.stores.console.addEvent(
+            `Direct WebSocket connection failed (${errorMsg}), falling back to SRV/proxy`,
+            'error'
+          )
+          this.cleanupClient()
         }
-      )
-    })
+
+        const proxyFallback = await this.proxyManager.ensureProxy(server, domain, skipDiscovery)
+        this.stores.console.addEvent(
+          `Connection strategy: retrying via proxy (${proxyFallback.server})`,
+          'connection'
+        )
+        await attemptConnection(proxyFallback.server, proxyFallback.connectionMethod)
+        return
+      }
+
+      if (canUseProxy) {
+        // Explicit tcp:// or tls:// inputs should remain proxy-first.
+        const proxyResult = await this.proxyManager.ensureProxy(server, domain, skipDiscovery)
+        await attemptConnection(proxyResult.server, proxyResult.connectionMethod)
+        return
+      }
+
+      if (isExplicitTcpUri) {
+        // tls:// or tcp:// URI without proxy — not usable, fall back to domain
+        this.stores.console.addEvent(`TCP URI "${server}" not usable without proxy, falling back to WebSocket discovery`, 'connection')
+        const fallbackWebSocket = shouldSkipDiscovery('', skipDiscovery)
+          ? getWebSocketUrl('', domain)
+          : await resolveWebSocketUrl('', domain, this.stores.console)
+        await attemptConnection(fallbackWebSocket, 'websocket')
+        return
+      }
+
+      await attemptConnection(await resolveDirectWebSocket(), 'websocket')
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err))
+      logError('Connection error:', error.message)
+      logErr(`Connection error: ${error.message}`)
+      // Signal machine: initial connection failed → terminal.initialFailure
+      this.sendMachineEvent({ type: 'CONNECTION_ERROR', error: error.message }, 'connect:connection-error')
+      this.stores.console.addEvent(`Connection error: ${error.message}`, 'error')
+      // Emit SDK event for connection error
+      this.deps.emitSDK('connection:status', { status: 'error', error: error.message })
+      this.emit('error', error)
+      throw error
+    }
   }
 
   /**
@@ -1593,18 +1635,69 @@ export class Connection extends BaseModule {
       this.cleanupClient()
       logInfo('attemptReconnect: old client cleaned up')
 
-      // In desktop proxy mode, force-refresh the proxy before each reconnect
-      // attempt to recover from local ws://[::1]:PORT listener failures.
+      const connectWithOptions = async (options: ConnectOptions): Promise<void> => {
+        this.xmpp = this.createXmppClient(options)
+        this.hydrateStreamManagement(smState ?? undefined)
+        this.setupHandlers()
+        logInfo(`attemptReconnect: new client created, calling start() (${options.server})`)
+
+        await new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error(`Reconnect attempt timed out after ${RECONNECT_ATTEMPT_TIMEOUT_MS / 1000}s`))
+          }, RECONNECT_ATTEMPT_TIMEOUT_MS)
+
+          this.setupConnectionHandlers(
+            async (isResumption) => {
+              clearTimeout(timeout)
+              // Signal machine: reconnect succeeded → connected.healthy
+              this.sendMachineEvent({ type: 'CONNECTION_SUCCESS' }, 'attemptReconnect:success')
+              await this.handleConnectionSuccess(
+                isResumption,
+                'Reconnected',
+                previouslyJoinedRooms
+              )
+              resolve()
+            },
+            (err) => {
+              clearTimeout(timeout)
+              reject(err)
+            }
+          )
+        })
+      }
+
       let reconnectOptions = this.credentials
-      if (this.proxyManager.hasProxy && this.isLocalProxyServer(reconnectOptions.server)) {
-        const domain = getDomain(reconnectOptions.jid)
-        const proxyServer = this.proxyManager.getOriginalServer() || domain
-        const proxyRefreshStart = Date.now()
+      // Reconnect should reuse the previously selected endpoint (direct WS or
+      // cached local proxy URL). This keeps reconnect fast and avoids repeating
+      // discovery/SRV resolution on every retry.
+      const reconnectUsesCachedProxy = this.proxyManager.hasProxy && this.isLocalProxyServer(reconnectOptions.server)
+      if (reconnectUsesCachedProxy) {
         this.stores.console.addEvent(
-          `Reconnect: refreshing proxy endpoint (target=${proxyServer})`,
+          `Reconnect: reusing cached proxy endpoint (${reconnectOptions.server})`,
           'connection'
         )
-        const refreshed = await this.proxyManager.restartProxy(proxyServer, domain)
+      }
+
+      try {
+        await connectWithOptions(reconnectOptions)
+      } catch (reconnectError) {
+        const errorMsg = reconnectError instanceof Error ? reconnectError.message : String(reconnectError)
+        // Only when reconnecting through a cached local proxy endpoint and that
+        // endpoint fails do we refresh/restart the proxy and retry once.
+        const shouldRefreshProxy = reconnectUsesCachedProxy && !this.isInTerminalState()
+        if (!shouldRefreshProxy) {
+          throw reconnectError
+        }
+
+        const reconnectDomain = getDomain(reconnectOptions.jid)
+        const proxyServer = this.proxyManager.getOriginalServer() || reconnectDomain
+        this.stores.console.addEvent(
+          `Reconnect: cached proxy endpoint failed (${errorMsg}), refreshing endpoint`,
+          'connection'
+        )
+        this.cleanupClient()
+        const proxyRefreshStart = Date.now()
+        const refreshed = await this.proxyManager.restartProxy(proxyServer, reconnectDomain)
         const proxyRefreshMs = Date.now() - proxyRefreshStart
         reconnectOptions = { ...reconnectOptions, server: refreshed.server }
         this.credentials = reconnectOptions
@@ -1614,37 +1707,9 @@ export class Connection extends BaseModule {
           'connection'
         )
         logInfo(`attemptReconnect: proxy refreshed (${refreshed.server}) in ${proxyRefreshMs}ms`)
+
+        await connectWithOptions(reconnectOptions)
       }
-
-      // Create new client with stored credentials (proxy URL is still valid)
-      this.xmpp = this.createXmppClient(reconnectOptions)
-      this.hydrateStreamManagement(smState ?? undefined)
-      this.setupHandlers()
-      logInfo('attemptReconnect: new client created, calling start()')
-
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error(`Reconnect attempt timed out after ${RECONNECT_ATTEMPT_TIMEOUT_MS / 1000}s`))
-        }, RECONNECT_ATTEMPT_TIMEOUT_MS)
-
-        this.setupConnectionHandlers(
-          async (isResumption) => {
-            clearTimeout(timeout)
-            // Signal machine: reconnect succeeded → connected.healthy
-            this.sendMachineEvent({ type: 'CONNECTION_SUCCESS' }, 'attemptReconnect:success')
-            await this.handleConnectionSuccess(
-              isResumption,
-              'Reconnected',
-              previouslyJoinedRooms
-            )
-            resolve()
-          },
-          (err) => {
-            clearTimeout(timeout)
-            reject(err)
-          }
-        )
-      })
     } catch (err) {
       logError('Reconnect failed:', err)
       const errorMsg = err instanceof Error ? err.message : 'Unknown error'

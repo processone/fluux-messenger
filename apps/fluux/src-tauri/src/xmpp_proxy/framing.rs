@@ -5,10 +5,10 @@
 //! (`<open/>`, `<close/>`). Also provides stateful stanza boundary extraction
 //! from a TCP byte stream.
 
-use std::borrow::Cow;
 use quick_xml::errors::SyntaxError;
 use quick_xml::events::Event;
 use quick_xml::Reader;
+use std::borrow::Cow;
 use tracing::error;
 
 /// Translate RFC 7395 WebSocket framing to traditional XMPP
@@ -56,7 +56,8 @@ pub fn translate_ws_to_tcp<'a>(text: &'a str) -> Cow<'a, str> {
         if !lang.is_empty() {
             stream_tag.push_str(&format!(" xml:lang='{}'", lang));
         }
-        stream_tag.push_str(" xmlns='jabber:client' xmlns:stream='http://etherx.jabber.org/streams'>");
+        stream_tag
+            .push_str(" xmlns='jabber:client' xmlns:stream='http://etherx.jabber.org/streams'>");
 
         return Cow::Owned(stream_tag);
     }
@@ -217,7 +218,9 @@ fn bytes_to_string(bytes: &[u8]) -> String {
 pub fn extract_stanza(buffer: &[u8]) -> Option<(String, usize)> {
     // Special case: check for stream closing tag first
     // This appears alone without a matching opening tag in the buffer
-    let trimmed = buffer.iter().position(|&b| b != b' ' && b != b'\t' && b != b'\n' && b != b'\r');
+    let trimmed = buffer
+        .iter()
+        .position(|&b| b != b' ' && b != b'\t' && b != b'\n' && b != b'\r');
     if let Some(start) = trimmed {
         if buffer[start..].starts_with(b"</stream:stream>") {
             let tag_end = start + b"</stream:stream>".len();
@@ -237,7 +240,10 @@ pub fn extract_stanza(buffer: &[u8]) -> Option<(String, usize)> {
         let pos = reader.buffer_position() as usize;
 
         match reader.read_event() {
-            Ok(Event::Decl(_)) | Ok(Event::PI(_)) | Ok(Event::Comment(_)) | Ok(Event::DocType(_)) => {
+            Ok(Event::Decl(_))
+            | Ok(Event::PI(_))
+            | Ok(Event::Comment(_))
+            | Ok(Event::DocType(_)) => {
                 // Stream-level metadata — ignore
                 continue;
             }
@@ -245,7 +251,9 @@ pub fn extract_stanza(buffer: &[u8]) -> Option<(String, usize)> {
                 let local_name = e.name().local_name();
 
                 // Handle stream:stream wrapper
-                if state == ParserState::Idle && (local_name.as_ref() == b"stream" || e.name().as_ref() == b"stream:stream") {
+                if state == ParserState::Idle
+                    && (local_name.as_ref() == b"stream" || e.name().as_ref() == b"stream:stream")
+                {
                     // Return the stream opening immediately
                     let tag_end = reader.buffer_position() as usize;
                     return Some((bytes_to_string(&buffer[0..tag_end]), tag_end));
@@ -263,7 +271,9 @@ pub fn extract_stanza(buffer: &[u8]) -> Option<(String, usize)> {
                 let local_name = e.name().local_name();
 
                 // Self-closing stream:stream (rare, but possible)
-                if state == ParserState::Idle && (local_name.as_ref() == b"stream" || e.name().as_ref() == b"stream:stream") {
+                if state == ParserState::Idle
+                    && (local_name.as_ref() == b"stream" || e.name().as_ref() == b"stream:stream")
+                {
                     let tag_end = reader.buffer_position() as usize;
                     return Some((bytes_to_string(&buffer[0..tag_end]), tag_end));
                 }
@@ -283,7 +293,9 @@ pub fn extract_stanza(buffer: &[u8]) -> Option<(String, usize)> {
                 let local_name = e.name().local_name();
 
                 // Handle </stream:stream> closing
-                if (local_name.as_ref() == b"stream" || e.name().as_ref() == b"stream:stream") && depth == 0 {
+                if (local_name.as_ref() == b"stream" || e.name().as_ref() == b"stream:stream")
+                    && depth == 0
+                {
                     let tag_end = reader.buffer_position() as usize;
                     return Some(("</stream:stream>".to_string(), tag_end));
                 }
@@ -456,7 +468,10 @@ mod tests {
     #[test]
     fn test_tcp_to_ws_stream_closing() {
         let translated = translate_tcp_to_ws("</stream:stream>");
-        assert_eq!(&*translated, r#"<close xmlns="urn:ietf:params:xml:ns:xmpp-framing"/>"#);
+        assert_eq!(
+            &*translated,
+            r#"<close xmlns="urn:ietf:params:xml:ns:xmpp-framing"/>"#
+        );
     }
 
     #[test]
@@ -499,7 +514,10 @@ mod tests {
         assert_eq!(&*tcp_form, "</stream:stream>");
 
         let ws_form = translate_tcp_to_ws(&tcp_form);
-        assert_eq!(&*ws_form, r#"<close xmlns="urn:ietf:params:xml:ns:xmpp-framing"/>"#);
+        assert_eq!(
+            &*ws_form,
+            r#"<close xmlns="urn:ietf:params:xml:ns:xmpp-framing"/>"#
+        );
     }
 
     // --- Additional extract_stanza tests for real-world XMPP patterns ---
@@ -816,7 +834,8 @@ mod tests {
     #[test]
     fn test_ws_to_tcp_open_with_single_quotes() {
         // quick-xml handles both quote styles
-        let open_tag = r#"<open xmlns='urn:ietf:params:xml:ns:xmpp-framing' to='example.com' version='1.0'/>"#;
+        let open_tag =
+            r#"<open xmlns='urn:ietf:params:xml:ns:xmpp-framing' to='example.com' version='1.0'/>"#;
         let translated = translate_ws_to_tcp(open_tag);
         assert!(translated.contains("<stream:stream"));
         assert!(translated.contains("to='example.com'"));
@@ -873,7 +892,8 @@ mod tests {
 
     #[test]
     fn test_extract_stanza_with_cdata() {
-        let buf = b"<message from='a@b'><body><![CDATA[Some <raw> content & stuff]]></body></message>";
+        let buf =
+            b"<message from='a@b'><body><![CDATA[Some <raw> content & stuff]]></body></message>";
         let (stanza, consumed) = extract_stanza(buf).unwrap();
         assert!(stanza.contains("CDATA"));
         assert!(stanza.contains("</message>"));
