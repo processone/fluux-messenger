@@ -28,6 +28,12 @@ export const RECONNECT_ATTEMPT_TIMEOUT_MS = 30_000
 export const VERIFY_CONNECTION_TIMEOUT_MS = 10_000
 
 /**
+ * Timeout for the desktop direct-WebSocket pre-check when proxy is available.
+ * If the direct WS handshake stalls, we quickly fall back to TCP/SRV via proxy.
+ */
+export const DIRECT_WEBSOCKET_PRECHECK_TIMEOUT_MS = 5_000
+
+/**
  * Upper bound for proxy start IPC call.
  */
 export const PROXY_START_TIMEOUT_MS = 10_000

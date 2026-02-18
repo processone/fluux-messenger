@@ -30,6 +30,7 @@ import {
   isDeadSocketError,
 } from './connectionUtils'
 import {
+  DIRECT_WEBSOCKET_PRECHECK_TIMEOUT_MS,
   CLIENT_STOP_TIMEOUT_MS,
   DISCONNECT_CLEANUP_TIMEOUT_MS,
   RECONNECT_ATTEMPT_TIMEOUT_MS,
@@ -485,7 +486,27 @@ export class Connection extends BaseModule {
           )
 
           try {
-            await attemptConnection(directWebSocketUrl, 'websocket')
+            const timeoutSentinel = Symbol('direct-ws-precheck-timeout')
+            const result = await Promise.race([
+              attemptConnection(directWebSocketUrl, 'websocket').then(
+                () => ({ ok: true as const }),
+                (error) => ({ ok: false as const, error })
+              ),
+              new Promise<typeof timeoutSentinel>((resolve) => {
+                setTimeout(() => resolve(timeoutSentinel), DIRECT_WEBSOCKET_PRECHECK_TIMEOUT_MS)
+              }),
+            ])
+
+            if (result === timeoutSentinel) {
+              throw new Error(
+                `Direct WebSocket pre-check timed out after ${DIRECT_WEBSOCKET_PRECHECK_TIMEOUT_MS}ms`
+              )
+            }
+
+            if (!result.ok) {
+              throw result.error
+            }
+
             return
           } catch (webSocketError) {
             const errorMsg = webSocketError instanceof Error ? webSocketError.message : String(webSocketError)

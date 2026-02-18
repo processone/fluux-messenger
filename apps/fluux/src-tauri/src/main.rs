@@ -1238,6 +1238,9 @@ fn main() {
                 // and re-apply it when restoring from the tray menu.
                 let last_window_state =
                     Arc::new(std::sync::Mutex::new(None::<(i32, i32, bool, bool)>));
+                // Track whether the main window is currently hidden to tray.
+                // Linux visibility reporting can be inconsistent across WMs.
+                let window_hidden_to_tray = Arc::new(AtomicBool::new(false));
 
                 let _tray = TrayIconBuilder::new()
                     .icon(app.default_window_icon().unwrap().clone())
@@ -1246,12 +1249,13 @@ fn main() {
                     .on_menu_event({
                         let keepalive_flag = keepalive_flag_for_setup.clone();
                         let last_window_state = last_window_state.clone();
+                        let window_hidden_to_tray = window_hidden_to_tray.clone();
                         move |app, event| match event.id.as_ref() {
                             "show" => {
                                 if let Some(window) = app.get_webview_window("main") {
-                                    let already_visible = window.is_visible().unwrap_or(false);
-                                    let is_minimized = window.is_minimized().unwrap_or(false);
-                                    if already_visible && !is_minimized {
+                                    let was_hidden_to_tray =
+                                        window_hidden_to_tray.load(Ordering::Relaxed);
+                                    if !was_hidden_to_tray {
                                         let _ = window.set_focus();
                                         return;
                                     }
@@ -1259,35 +1263,29 @@ fn main() {
                                     let saved_state =
                                         last_window_state.lock().ok().and_then(|state| *state);
 
+                                    if let Some((x, y, maximized, fullscreen)) = saved_state {
+                                        if !fullscreen && !maximized {
+                                            let _ =
+                                                window.set_position(tauri::PhysicalPosition::new(
+                                                    x, y,
+                                                ));
+                                        }
+                                    }
+
                                     let _ = window.show();
-                                    if is_minimized {
+                                    if window.is_minimized().unwrap_or(false) {
                                         let _ = window.unminimize();
                                     }
 
-                                    if let Some((x, y, maximized, fullscreen)) = saved_state {
+                                    if let Some((_, _, maximized, fullscreen)) = saved_state {
                                         if fullscreen {
                                             let _ = window.set_fullscreen(true);
                                         } else if maximized {
                                             let _ = window.maximize();
-                                        } else {
-                                            // Only force position when GNOME reset it to top-left.
-                                            let should_restore_position =
-                                                match window.outer_position() {
-                                                    Ok(current) => {
-                                                        current.x == 0
-                                                            && current.y == 0
-                                                            && (x != 0 || y != 0)
-                                                    }
-                                                    Err(_) => true,
-                                                };
-                                            if should_restore_position {
-                                                let _ = window.set_position(
-                                                    tauri::PhysicalPosition::new(x, y),
-                                                );
-                                            }
                                         }
                                     }
 
+                                    window_hidden_to_tray.store(false, Ordering::Relaxed);
                                     let _ = window.set_focus();
                                 }
                             }
@@ -1303,26 +1301,31 @@ fn main() {
                             _ => {}
                         }
                     })
-                    .on_tray_icon_event(|tray, event| {
-                        if let TrayIconEvent::Click {
-                            button: MouseButton::Left,
-                            button_state: MouseButtonState::Up,
-                            ..
-                        } = event
-                        {
-                            if let Some(window) = tray.app_handle().get_webview_window("main") {
-                                let already_visible = window.is_visible().unwrap_or(false);
-                                let is_minimized = window.is_minimized().unwrap_or(false);
-                                if already_visible && !is_minimized {
-                                    let _ = window.set_focus();
-                                    return;
-                                }
+                    .on_tray_icon_event({
+                        let window_hidden_to_tray = window_hidden_to_tray.clone();
+                        move |tray, event| {
+                            if let TrayIconEvent::Click {
+                                button: MouseButton::Left,
+                                button_state: MouseButtonState::Up,
+                                ..
+                            } = event
+                            {
+                                if let Some(window) = tray.app_handle().get_webview_window("main")
+                                {
+                                    let was_hidden_to_tray =
+                                        window_hidden_to_tray.load(Ordering::Relaxed);
+                                    if !was_hidden_to_tray {
+                                        let _ = window.set_focus();
+                                        return;
+                                    }
 
-                                let _ = window.show();
-                                if is_minimized {
-                                    let _ = window.unminimize();
+                                    let _ = window.show();
+                                    if window.is_minimized().unwrap_or(false) {
+                                        let _ = window.unminimize();
+                                    }
+                                    window_hidden_to_tray.store(false, Ordering::Relaxed);
+                                    let _ = window.set_focus();
                                 }
-                                let _ = window.set_focus();
                             }
                         }
                     })
@@ -1331,6 +1334,7 @@ fn main() {
                 let main_window = app.get_webview_window("main").unwrap();
                 let window = main_window.clone();
                 let last_window_state_for_close = last_window_state.clone();
+                let window_hidden_to_tray_for_close = window_hidden_to_tray.clone();
                 main_window.on_window_event(move |event| {
                     if let WindowEvent::CloseRequested { api, .. } = event {
                         api.prevent_close();
@@ -1346,6 +1350,7 @@ fn main() {
                                 ));
                             }
                         }
+                        window_hidden_to_tray_for_close.store(true, Ordering::Relaxed);
                         let _ = window.hide();
                     }
                 });
