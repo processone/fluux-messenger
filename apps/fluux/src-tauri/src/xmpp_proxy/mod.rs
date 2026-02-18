@@ -18,9 +18,10 @@ use tokio::task::JoinHandle;
 use tokio_rustls::rustls::pki_types::ServerName;
 use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 use tokio_rustls::TlsConnector;
+use tokio_tungstenite::tungstenite::handshake::server::{Request, Response};
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::protocol::CloseFrame;
-use tokio_tungstenite::{accept_async, tungstenite::Message};
+use tokio_tungstenite::{accept_hdr_async, tungstenite::Message};
 use tracing::{debug, error, info, warn};
 
 #[cfg(target_os = "windows")]
@@ -423,10 +424,18 @@ async fn handle_connection(
     active_connections.fetch_add(1, Ordering::SeqCst);
     let _guard = ConnectionGuard::new(active_connections.clone());
 
-    // Upgrade to WebSocket
-    let mut ws = accept_async(ws_stream)
-        .await
-        .map_err(|e| format!("WebSocket handshake failed: {}", e))?;
+    // Upgrade to WebSocket, echoing any requested subprotocol (e.g. "xmpp" per RFC 7395).
+    // Browsers reject the connection if the server does not echo the Sec-WebSocket-Protocol
+    // header back when the client sends one.
+    let mut ws = accept_hdr_async(ws_stream, |req: &Request, mut resp: Response| {
+        if let Some(protocol) = req.headers().get("Sec-WebSocket-Protocol") {
+            resp.headers_mut()
+                .insert("Sec-WebSocket-Protocol", protocol.clone());
+        }
+        Ok(resp)
+    })
+    .await
+    .map_err(|e| format!("WebSocket handshake failed: {}", e))?;
 
     info!(conn_id, "WebSocket connection established");
 
