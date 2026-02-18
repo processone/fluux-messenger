@@ -1022,6 +1022,11 @@ fn main() {
     let keepalive_running = Arc::new(AtomicBool::new(true));
     let keepalive_flag_for_setup = keepalive_running.clone();
     let keepalive_flag_for_run = keepalive_running.clone();
+    // Tracks whether graceful shutdown has already started so we only prevent
+    // the first exit request. The second request (from frontend or fallback
+    // timer) is allowed to complete and terminate the app.
+    let graceful_shutdown_started = Arc::new(AtomicBool::new(false));
+    let graceful_shutdown_flag_for_run = graceful_shutdown_started.clone();
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -1386,6 +1391,12 @@ fn main() {
         }
         // Handle app termination: request graceful shutdown (all platforms)
         if let RunEvent::ExitRequested { api, .. } = &_event {
+            // First exit request: trigger graceful shutdown and delay exit.
+            // Subsequent request: allow exit to proceed.
+            if graceful_shutdown_flag_for_run.swap(true, Ordering::Relaxed) {
+                return;
+            }
+
             // Stop the keepalive thread to prevent 100% CPU on exit
             keepalive_flag_for_run.store(false, Ordering::Relaxed);
             // Save window state including position (macOS and Windows only)
