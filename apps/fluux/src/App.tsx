@@ -8,6 +8,7 @@ import { UpdateModal } from './components/UpdateModal'
 import { useSessionPersistence, getSession } from './hooks/useSessionPersistence'
 import { useFullscreen } from './hooks/useFullscreen'
 import { useTauriCloseHandler } from './hooks/useTauriCloseHandler'
+import { useTauriTrayRestore } from './hooks/useTauriTrayRestore'
 import { useAutoUpdate } from './hooks'
 import { clearLocalData } from './utils/clearLocalData'
 
@@ -43,6 +44,7 @@ function App() {
   const { status } = useConnection()
   const { client } = useXMPPContext()
   useTauriCloseHandler()
+  useTauriTrayRestore()
   const update = useAutoUpdate({ autoCheck: true })
 
   // Listen for --clear-storage CLI flag (Tauri only)
