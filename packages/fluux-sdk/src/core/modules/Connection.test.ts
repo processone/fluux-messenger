@@ -5,6 +5,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { XMPPClient } from '../XMPPClient'
+import { DIRECT_WEBSOCKET_PRECHECK_TIMEOUT_MS } from './connectionTimeouts'
 import {
   createMockXmppClient,
   createMockStores,
@@ -568,6 +569,42 @@ describe('XMPPClient Connection', () => {
       )
       expect(mockProxyAdapter.startProxy).toHaveBeenCalledTimes(1)
       expect(mockStores.connection.setConnectionMethod).toHaveBeenCalledWith('proxy')
+
+      proxyClient.cancelReconnect()
+    })
+
+    it('should fall back to proxy when direct WebSocket pre-check stalls', async () => {
+      mockDiscoverWebSocket.mockResolvedValue('wss://discovered.example.com/ws')
+
+      const stalledClient = createMockXmppClient()
+      stalledClient.start.mockReturnValue(new Promise(() => {}))
+      const fallbackClient = createMockXmppClient()
+      mockClientFactory.mockImplementationOnce(() => stalledClient).mockImplementationOnce(() => fallbackClient)
+
+      const mockProxyAdapter = {
+        startProxy: vi.fn().mockResolvedValue({ url: 'ws://127.0.0.1:12345' }),
+        stopProxy: vi.fn().mockResolvedValue(undefined),
+      }
+      const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
+      proxyClient.bindStores(mockStores)
+
+      const connectPromise = proxyClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+      })
+
+      await vi.advanceTimersByTimeAsync(DIRECT_WEBSOCKET_PRECHECK_TIMEOUT_MS)
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mockProxyAdapter.startProxy).toHaveBeenCalledTimes(1)
+      expect(mockClientFactory).toHaveBeenCalledTimes(2)
+
+      fallbackClient._emit('online')
+      await connectPromise
+
+      expect(mockClientFactory).toHaveBeenLastCalledWith(
+        expect.objectContaining({ service: 'ws://127.0.0.1:12345' })
+      )
 
       proxyClient.cancelReconnect()
     })
