@@ -435,18 +435,29 @@ export class Connection extends BaseModule {
     }
 
     const resolveDirectWebSocket = async (): Promise<string | null> => {
-      if (shouldSkipDiscovery(server, skipDiscovery)) {
-        return getWebSocketUrl(server, domain)
-      }
       // Proxy-capable desktop path: check XEP-0156 only with a short timeout.
       // If no endpoint is advertised, immediately switch to TCP/SRV proxy.
       if (preferWebSocketFirst) {
+        // In Tauri proxy-capable mode we only try WebSocket when explicitly
+        // configured by the app (already a ws:// / wss:// URL) or discovered
+        // via XEP-0156. For plain domains with skipDiscovery enabled, do not
+        // synthesize a default wss://domain/ws URL; switch directly to proxy.
+        if (skipDiscovery === true) {
+          this.stores.console.addEvent(
+            'Connection strategy: skipDiscovery enabled on proxy-capable desktop, switching directly to SRV/proxy',
+            'connection'
+          )
+          return null
+        }
         return discoverWebSocketUrl(
           server,
           domain,
           this.stores.console,
           FAST_XEP0156_DISCOVERY_TIMEOUT_MS
         )
+      }
+      if (shouldSkipDiscovery(server, skipDiscovery)) {
+        return getWebSocketUrl(server, domain)
       }
       return resolveWebSocketUrl(server, domain, this.stores.console)
     }

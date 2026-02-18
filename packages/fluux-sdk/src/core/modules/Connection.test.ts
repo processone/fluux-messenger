@@ -118,6 +118,26 @@ describe('XMPPClient Connection', () => {
       })
     })
 
+    it('should use XEP-0156 discovery first, then default wss://<domain>/ws as last resort on web/no-proxy', async () => {
+      mockDiscoverWebSocket.mockResolvedValueOnce(null)
+
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+      })
+
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      expect(mockDiscoverWebSocket).toHaveBeenCalledWith('example.com', 5000)
+      expect(mockClientFactory).toHaveBeenCalledWith(
+        expect.objectContaining({
+          service: 'wss://example.com/ws',
+        })
+      )
+    })
+
     it('should use custom WebSocket URL if provided', async () => {
       const connectPromise = xmppClient.connect({
         jid: 'user@example.com',
@@ -529,6 +549,35 @@ describe('XMPPClient Connection', () => {
       )
       expect(mockProxyAdapter.startProxy).toHaveBeenCalledTimes(1)
       expect(mockStores.connection.setConnectionMethod).toHaveBeenCalledWith('proxy')
+
+      proxyClient.cancelReconnect()
+    })
+
+    it('should skip WebSocket attempts entirely on proxy-capable desktop when skipDiscovery is enabled for a domain', async () => {
+      const mockProxyAdapter = {
+        startProxy: vi.fn().mockResolvedValue({ url: 'ws://127.0.0.1:12345' }),
+        stopProxy: vi.fn().mockResolvedValue(undefined),
+      }
+      const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
+      proxyClient.bindStores(mockStores)
+
+      const connectPromise = proxyClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+
+      await vi.advanceTimersByTimeAsync(0)
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      expect(mockDiscoverWebSocket).not.toHaveBeenCalled()
+      expect(mockProxyAdapter.startProxy).toHaveBeenCalledTimes(1)
+      expect(mockClientFactory).toHaveBeenCalledTimes(1)
+      expect(mockClientFactory).toHaveBeenCalledWith(
+        expect.objectContaining({ service: 'ws://127.0.0.1:12345' })
+      )
 
       proxyClient.cancelReconnect()
     })
