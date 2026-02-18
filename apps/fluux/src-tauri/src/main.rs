@@ -1230,7 +1230,7 @@ fn main() {
             // webview clicks unresponsive until the user manually maximizes.
             // Upstream: https://github.com/tauri-apps/tauri/issues/11856
             //           https://github.com/tauri-apps/tao/issues/1046
-            // Workaround: briefly toggle fullscreen after show() to force GTK to
+            // Workaround: briefly maximize after show() to force GTK to
             // recalculate decorations, then restore the saved window state.
             //
             // NOTE: With the current libappindicator-based tray backend, Linux
@@ -1280,12 +1280,15 @@ fn main() {
                                     // Workaround for tao CSD bug (tauri#11856): after a
                                     // hide→show cycle the client-side decoration hit-test
                                     // regions are stale, making titlebar buttons and
-                                    // webview clicks unresponsive.  A brief fullscreen
-                                    // toggle forces GTK to recalculate decorations.
-                                    let needs_fullscreen =
-                                        saved_state.map_or(true, |(_, _, _, fs)| !fs);
-                                    if needs_fullscreen {
-                                        let _ = window.set_fullscreen(true);
+                                    // webview clicks unresponsive.  A brief maximize
+                                    // toggle forces GTK to recalculate decorations while
+                                    // respecting the work area (top bar, dock).
+                                    let was_maximized =
+                                        saved_state.map_or(false, |(_, _, m, _)| m);
+                                    let was_fullscreen =
+                                        saved_state.map_or(false, |(_, _, _, fs)| fs);
+                                    if !was_maximized && !was_fullscreen {
+                                        let _ = window.maximize();
                                     }
 
                                     window_hidden_to_tray.store(false, Ordering::Relaxed);
@@ -1301,12 +1304,11 @@ fn main() {
                                                 saved_state
                                             {
                                                 if fullscreen {
-                                                    // Already fullscreen, nothing to undo.
+                                                    let _ = window.set_fullscreen(true);
                                                 } else if maximized {
-                                                    let _ = window.set_fullscreen(false);
-                                                    let _ = window.maximize();
+                                                    // Already maximized, nothing to undo.
                                                 } else {
-                                                    let _ = window.set_fullscreen(false);
+                                                    let _ = window.unmaximize();
                                                     // Restore position if GNOME reset it.
                                                     let should_restore =
                                                         match window.outer_position() {
@@ -1324,7 +1326,7 @@ fn main() {
                                                     }
                                                 }
                                             } else {
-                                                let _ = window.set_fullscreen(false);
+                                                let _ = window.unmaximize();
                                             }
 
                                             let _ = window.set_focus();
@@ -1369,7 +1371,7 @@ fn main() {
                                     }
 
                                     // CSD workaround — see menu "show" handler comment.
-                                    let _ = window.set_fullscreen(true);
+                                    let _ = window.maximize();
                                     window_hidden_to_tray.store(false, Ordering::Relaxed);
 
                                     let handle = tray.app_handle().clone();
@@ -1378,7 +1380,7 @@ fn main() {
                                             std::time::Duration::from_millis(80),
                                         );
                                         if let Some(window) = handle.get_webview_window("main") {
-                                            let _ = window.set_fullscreen(false);
+                                            let _ = window.unmaximize();
                                             let _ = window.set_focus();
                                             let _ = window.emit("tray-restore-focus", ());
                                         }
