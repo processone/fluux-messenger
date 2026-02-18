@@ -640,10 +640,20 @@ describe('XMPPClient', () => {
       const handlers: Record<string, Function[]> = {}
       const smHandlers: Record<string, Function[]> = {}
       const iqCalleeHandlers: Map<string, Function> = new Map()
+      const pendingLifecycleEvents: Record<string, unknown[][]> = {}
+      const pendingSmEvents: Record<string, unknown[][]> = {}
+      const queueableLifecycleEvents = new Set(['online', 'resumed', 'disconnect', 'error', 'nonza'])
       return {
         on: vi.fn((event: string, handler: Function) => {
           if (!handlers[event]) handlers[event] = []
           handlers[event].push(handler)
+          const pending = pendingLifecycleEvents[event]
+          if (pending?.length) {
+            for (const args of pending) {
+              handler(...args)
+            }
+            delete pendingLifecycleEvents[event]
+          }
           return this
         }),
         start: vi.fn().mockResolvedValue(undefined),
@@ -705,14 +715,35 @@ describe('XMPPClient', () => {
           on: vi.fn((event: string, handler: Function) => {
             if (!smHandlers[event]) smHandlers[event] = []
             smHandlers[event].push(handler)
+            const pending = pendingSmEvents[event]
+            if (pending?.length) {
+              for (const args of pending) {
+                handler(...args)
+              }
+              delete pendingSmEvents[event]
+            }
           }),
         },
         // Helper to trigger events in tests
         _emit: (event: string, ...args: unknown[]) => {
-          handlers[event]?.forEach(h => h(...args))
+          const eventHandlers = handlers[event]
+          if (eventHandlers?.length) {
+            eventHandlers.forEach(h => h(...args))
+            return
+          }
+          if (queueableLifecycleEvents.has(event)) {
+            if (!pendingLifecycleEvents[event]) pendingLifecycleEvents[event] = []
+            pendingLifecycleEvents[event].push(args)
+          }
         },
         _emitSM: (event: string, ...args: unknown[]) => {
-          smHandlers[event]?.forEach(h => h(...args))
+          const eventHandlers = smHandlers[event]
+          if (eventHandlers?.length) {
+            eventHandlers.forEach(h => h(...args))
+            return
+          }
+          if (!pendingSmEvents[event]) pendingSmEvents[event] = []
+          pendingSmEvents[event].push(args)
         },
         _handlers: handlers,
         _smHandlers: smHandlers,
