@@ -1272,6 +1272,7 @@ fn main() {
                                                     handle.get_webview_window("main")
                                                 {
                                                     let _ = window.set_always_on_top(false);
+                                                    let _ = window.emit("tray-restore-focus", ());
                                                 }
                                             });
                                         }
@@ -1338,6 +1339,11 @@ fn main() {
                                             if let Some(window) = handle.get_webview_window("main")
                                             {
                                                 let _ = window.set_always_on_top(false);
+                                                // After the window is raised, tell the frontend
+                                                // to grab webview input focus.  Without this,
+                                                // the WebKit widget stays unfocused after a
+                                                // hide→show cycle and buttons are unresponsive.
+                                                let _ = window.emit("tray-restore-focus", ());
                                             }
                                         });
                                     }
@@ -1383,6 +1389,7 @@ fn main() {
                                                     handle.get_webview_window("main")
                                                 {
                                                     let _ = window.set_always_on_top(false);
+                                                    let _ = window.emit("tray-restore-focus", ());
                                                 }
                                             });
                                         }
@@ -1408,6 +1415,7 @@ fn main() {
                                             if let Some(window) = handle.get_webview_window("main")
                                             {
                                                 let _ = window.set_always_on_top(false);
+                                                let _ = window.emit("tray-restore-focus", ());
                                             }
                                         });
                                     }
