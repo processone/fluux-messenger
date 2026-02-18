@@ -1256,37 +1256,91 @@ fn main() {
                                     let was_hidden_to_tray =
                                         window_hidden_to_tray.load(Ordering::Relaxed);
                                     if !was_hidden_to_tray {
-                                        let _ = window.set_focus();
+                                        // On GNOME, set_focus can trigger "Fluux is ready"
+                                        // notifications due to focus-stealing prevention.
+                                        // Pulse always-on-top briefly to raise without focus steal.
+                                        let was_always_on_top =
+                                            window.is_always_on_top().unwrap_or(false);
+                                        if !was_always_on_top {
+                                            let _ = window.set_always_on_top(true);
+                                            let handle = app.clone();
+                                            std::thread::spawn(move || {
+                                                std::thread::sleep(
+                                                    std::time::Duration::from_millis(120),
+                                                );
+                                                if let Some(window) =
+                                                    handle.get_webview_window("main")
+                                                {
+                                                    let _ = window.set_always_on_top(false);
+                                                }
+                                            });
+                                        }
                                         return;
                                     }
 
                                     let saved_state =
                                         last_window_state.lock().ok().and_then(|state| *state);
 
-                                    if let Some((x, y, maximized, fullscreen)) = saved_state {
-                                        if !fullscreen && !maximized {
-                                            let _ =
-                                                window.set_position(tauri::PhysicalPosition::new(
-                                                    x, y,
-                                                ));
-                                        }
-                                    }
-
                                     let _ = window.show();
                                     if window.is_minimized().unwrap_or(false) {
                                         let _ = window.unminimize();
                                     }
 
-                                    if let Some((_, _, maximized, fullscreen)) = saved_state {
+                                    if let Some((x, y, maximized, fullscreen)) = saved_state {
                                         if fullscreen {
                                             let _ = window.set_fullscreen(true);
                                         } else if maximized {
                                             let _ = window.maximize();
+                                        } else {
+                                            // Delayed GNOME correction: some shells restore to
+                                            // top-left after show; avoid immediate geometry
+                                            // changes because they can temporarily break
+                                            // titlebar button interactivity.
+                                            let handle = app.clone();
+                                            std::thread::spawn(move || {
+                                                std::thread::sleep(
+                                                    std::time::Duration::from_millis(80),
+                                                );
+                                                if let Some(window) =
+                                                    handle.get_webview_window("main")
+                                                {
+                                                    let should_restore = match window.outer_position()
+                                                    {
+                                                        Ok(current) => {
+                                                            current.x == 0
+                                                                && current.y == 0
+                                                                && (x != 0 || y != 0)
+                                                        }
+                                                        Err(_) => true,
+                                                    };
+                                                    if should_restore {
+                                                        let _ = window.set_position(
+                                                            tauri::PhysicalPosition::new(x, y),
+                                                        );
+                                                    }
+                                                }
+                                            });
                                         }
                                     }
 
                                     window_hidden_to_tray.store(false, Ordering::Relaxed);
-                                    let _ = window.set_focus();
+                                    // Raise without explicit focus steal to avoid GNOME
+                                    // "app is ready" notifications.
+                                    let was_always_on_top =
+                                        window.is_always_on_top().unwrap_or(false);
+                                    if !was_always_on_top {
+                                        let _ = window.set_always_on_top(true);
+                                        let handle = app.clone();
+                                        std::thread::spawn(move || {
+                                            std::thread::sleep(
+                                                std::time::Duration::from_millis(120),
+                                            );
+                                            if let Some(window) = handle.get_webview_window("main")
+                                            {
+                                                let _ = window.set_always_on_top(false);
+                                            }
+                                        });
+                                    }
                                 }
                             }
                             "quit" => {
@@ -1315,7 +1369,23 @@ fn main() {
                                     let was_hidden_to_tray =
                                         window_hidden_to_tray.load(Ordering::Relaxed);
                                     if !was_hidden_to_tray {
-                                        let _ = window.set_focus();
+                                        // See comment above in menu "show" handler.
+                                        let was_always_on_top =
+                                            window.is_always_on_top().unwrap_or(false);
+                                        if !was_always_on_top {
+                                            let _ = window.set_always_on_top(true);
+                                            let handle = tray.app_handle().clone();
+                                            std::thread::spawn(move || {
+                                                std::thread::sleep(
+                                                    std::time::Duration::from_millis(120),
+                                                );
+                                                if let Some(window) =
+                                                    handle.get_webview_window("main")
+                                                {
+                                                    let _ = window.set_always_on_top(false);
+                                                }
+                                            });
+                                        }
                                         return;
                                     }
 
@@ -1324,7 +1394,23 @@ fn main() {
                                         let _ = window.unminimize();
                                     }
                                     window_hidden_to_tray.store(false, Ordering::Relaxed);
-                                    let _ = window.set_focus();
+
+                                    // Match menu behavior: raise without explicit focus steal.
+                                    let was_always_on_top =
+                                        window.is_always_on_top().unwrap_or(false);
+                                    if !was_always_on_top {
+                                        let _ = window.set_always_on_top(true);
+                                        let handle = tray.app_handle().clone();
+                                        std::thread::spawn(move || {
+                                            std::thread::sleep(
+                                                std::time::Duration::from_millis(120),
+                                            );
+                                            if let Some(window) = handle.get_webview_window("main")
+                                            {
+                                                let _ = window.set_always_on_top(false);
+                                            }
+                                        });
+                                    }
                                 }
                             }
                         }
