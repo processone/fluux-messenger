@@ -7,11 +7,13 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
+      '@fluux/sdk': resolve(__dirname, '../../packages/fluux-sdk/src'),
     },
   },
   test: {
     globals: true,
     environment: 'jsdom',
+    silent: true,
     setupFiles: ['./src/test-setup.ts'],
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     coverage: {
