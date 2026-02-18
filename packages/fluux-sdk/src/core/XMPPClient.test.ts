@@ -22,6 +22,7 @@ import {
   type MockXmppClient,
   type MockStoreBindings,
 } from './test-utils'
+import { VERIFY_CONNECTION_TIMEOUT_MS } from './modules/connectionTimeouts'
 
 let mockXmppClientInstance: MockXmppClient
 
@@ -935,6 +936,26 @@ describe('XMPPClient', () => {
       await expect(xmppClient.blocking.fetchBlocklist()).rejects.toThrow('Not connected')
     })
 
+    it('should reject IQ traffic before auth phase is complete', async () => {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'password',
+        server: 'wss://example.com/ws',
+      })
+
+      mockXmppClientInstance.iqCaller.request.mockClear()
+
+      await expect(xmppClient.blocking.fetchBlocklist()).rejects.toThrow('Not connected')
+      expect(mockXmppClientInstance.iqCaller.request).not.toHaveBeenCalled()
+
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      const callsBeforeFetch = mockXmppClientInstance.iqCaller.request.mock.calls.length
+      await xmppClient.blocking.fetchBlocklist()
+      expect(mockXmppClientInstance.iqCaller.request.mock.calls.length).toBeGreaterThan(callsBeforeFetch)
+    })
+
     it('should trigger dead socket recovery when client is null but status is online', async () => {
       const connectPromise = xmppClient.connect({
         jid: 'user@example.com',
@@ -1159,11 +1180,11 @@ describe('XMPPClient', () => {
       mockStores.connection.setStatus.mockClear()
       // Don't simulate any ack response - let it timeout
 
-      // Use a shorter timeout for the test (100ms)
       const resultPromise = xmppClient.verifyConnection()
 
-      // Run all pending timers to completion
-      await vi.runAllTimersAsync()
+      // Advance just beyond the verification timeout. Using runAllTimersAsync()
+      // would also drain reconnect backoff timers and can loop indefinitely.
+      await vi.advanceTimersByTimeAsync(VERIFY_CONNECTION_TIMEOUT_MS + 50)
 
       const result = await resultPromise
 
