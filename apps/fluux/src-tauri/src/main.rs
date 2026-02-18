@@ -1234,10 +1234,10 @@ fn main() {
                 let show_item = MenuItem::with_id(app, "show", "Show Fluux", true, None::<&str>)?;
                 let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
                 let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
-                // GNOME can restore hidden windows at (0,0). Keep the last geometry
+                // GNOME can restore hidden windows at (0,0). Keep the last placement
                 // and re-apply it when restoring from the tray menu.
                 let last_window_state =
-                    Arc::new(std::sync::Mutex::new(None::<(i32, i32, u32, u32, bool, bool)>));
+                    Arc::new(std::sync::Mutex::new(None::<(i32, i32, bool, bool)>));
 
                 let _tray = TrayIconBuilder::new()
                     .icon(app.default_window_icon().unwrap().clone())
@@ -1249,29 +1249,42 @@ fn main() {
                         move |app, event| match event.id.as_ref() {
                             "show" => {
                                 if let Some(window) = app.get_webview_window("main") {
+                                    let already_visible = window.is_visible().unwrap_or(false);
+                                    let is_minimized = window.is_minimized().unwrap_or(false);
+                                    if already_visible && !is_minimized {
+                                        let _ = window.set_focus();
+                                        return;
+                                    }
+
                                     let saved_state =
                                         last_window_state.lock().ok().and_then(|state| *state);
 
-                                    if let Some((x, y, width, height, maximized, fullscreen)) =
-                                        saved_state
-                                    {
-                                        if !fullscreen && !maximized {
-                                            let _ = window
-                                                .set_size(tauri::PhysicalSize::new(width, height));
-                                            let _ = window.set_position(
-                                                tauri::PhysicalPosition::new(x, y),
-                                            );
-                                        }
+                                    let _ = window.show();
+                                    if is_minimized {
+                                        let _ = window.unminimize();
                                     }
 
-                                    let _ = window.show();
-                                    let _ = window.unminimize();
-
-                                    if let Some((_, _, _, _, maximized, fullscreen)) = saved_state {
+                                    if let Some((x, y, maximized, fullscreen)) = saved_state {
                                         if fullscreen {
                                             let _ = window.set_fullscreen(true);
                                         } else if maximized {
                                             let _ = window.maximize();
+                                        } else {
+                                            // Only force position when GNOME reset it to top-left.
+                                            let should_restore_position =
+                                                match window.outer_position() {
+                                                    Ok(current) => {
+                                                        current.x == 0
+                                                            && current.y == 0
+                                                            && (x != 0 || y != 0)
+                                                    }
+                                                    Err(_) => true,
+                                                };
+                                            if should_restore_position {
+                                                let _ = window.set_position(
+                                                    tauri::PhysicalPosition::new(x, y),
+                                                );
+                                            }
                                         }
                                     }
 
@@ -1298,8 +1311,17 @@ fn main() {
                         } = event
                         {
                             if let Some(window) = tray.app_handle().get_webview_window("main") {
+                                let already_visible = window.is_visible().unwrap_or(false);
+                                let is_minimized = window.is_minimized().unwrap_or(false);
+                                if already_visible && !is_minimized {
+                                    let _ = window.set_focus();
+                                    return;
+                                }
+
                                 let _ = window.show();
-                                let _ = window.unminimize();
+                                if is_minimized {
+                                    let _ = window.unminimize();
+                                }
                                 let _ = window.set_focus();
                             }
                         }
@@ -1312,16 +1334,13 @@ fn main() {
                 main_window.on_window_event(move |event| {
                     if let WindowEvent::CloseRequested { api, .. } = event {
                         api.prevent_close();
-                        if let (Ok(position), Ok(size)) = (window.outer_position(), window.outer_size())
-                        {
+                        if let Ok(position) = window.outer_position() {
                             let maximized = window.is_maximized().unwrap_or(false);
                             let fullscreen = window.is_fullscreen().unwrap_or(false);
                             if let Ok(mut state) = last_window_state_for_close.lock() {
                                 *state = Some((
                                     position.x,
                                     position.y,
-                                    size.width,
-                                    size.height,
                                     maximized,
                                     fullscreen,
                                 ));
@@ -1353,8 +1372,17 @@ fn main() {
                         move |app, event| match event.id.as_ref() {
                             "show" => {
                                 if let Some(window) = app.get_webview_window("main") {
+                                    let already_visible = window.is_visible().unwrap_or(false);
+                                    let is_minimized = window.is_minimized().unwrap_or(false);
+                                    if already_visible && !is_minimized {
+                                        let _ = window.set_focus();
+                                        return;
+                                    }
+
                                     let _ = window.show();
-                                    let _ = window.unminimize();
+                                    if is_minimized {
+                                        let _ = window.unminimize();
+                                    }
                                     let _ = window.set_focus();
                                 }
                             }
@@ -1385,8 +1413,17 @@ fn main() {
                         } = event
                         {
                             if let Some(window) = tray.app_handle().get_webview_window("main") {
+                                let already_visible = window.is_visible().unwrap_or(false);
+                                let is_minimized = window.is_minimized().unwrap_or(false);
+                                if already_visible && !is_minimized {
+                                    let _ = window.set_focus();
+                                    return;
+                                }
+
                                 let _ = window.show();
-                                let _ = window.unminimize();
+                                if is_minimized {
+                                    let _ = window.unminimize();
+                                }
                                 let _ = window.set_focus();
                             }
                         }
