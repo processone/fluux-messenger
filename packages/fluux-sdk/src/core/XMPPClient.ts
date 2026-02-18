@@ -20,7 +20,7 @@ import {
   type PresenceStateValue,
   type PresenceContext as PresenceMachineContext,
 } from './presenceMachine'
-import type { ConnectionActor } from './connectionMachine'
+import type { ConnectionActor, ConnectionStateValue } from './connectionMachine'
 import { generateUUID } from '../utils/uuid'
 import { createStoreBindings } from '../bindings/storeBindings'
 import { setupStoreSideEffects } from './sideEffects'
@@ -1215,7 +1215,15 @@ export class XMPPClient {
   // ============================================================================
 
   private getXmpp(): Client | null {
-    return this.connection.getClient()
+    const xmpp = this.connection.getClient()
+    if (!xmpp) return null
+
+    // Only expose the transport once the connection machine reached a connected state.
+    // This makes auth completion ("online"/SM resumed) the single synchronous gate.
+    const machineState = this.connectionActor.getSnapshot().value as ConnectionStateValue
+    const isConnectedState =
+      typeof machineState === 'object' && machineState !== null && 'connected' in machineState
+    return isConnectedState ? xmpp : null
   }
 
   /**
@@ -1249,7 +1257,10 @@ export class XMPPClient {
    *
    * When SM resumes successfully, the server replays all undelivered stanzas.
    * No MAM queries, no roster fetch, no carbons enable needed.
-   * Only send presence and probe offline contacts to refresh their status.
+   *
+   * Send sequence:
+   * 1) Send initial presence
+   * 2) Send presence probes to refresh contact status
    */
   private async handleSmResumption(): Promise<void> {
     await this.roster.sendInitialPresence()
@@ -1261,9 +1272,16 @@ export class XMPPClient {
   /**
    * Fresh session path (new session or SM resume failed).
    *
-   * Full initialization: reset MAM states, fetch roster, enable carbons,
-   * join rooms, discover server features. Background sync side effects
-   * will trigger MAM queries once server info is available.
+   * Full initialization with explicit send sequence:
+   * 1) Fetch roster
+   * 2) Enable carbons
+   * 3) Send initial presence
+   * 4) Fetch bookmarks
+   * 5) Discover MUC service (async)
+   * 6) Rejoin previously active rooms and autojoin bookmarked rooms
+   * 7) Run server/upload/profile discovery (async)
+   *
+   * Background sync side effects trigger MAM queries once server info is available.
    */
   private async handleFreshSession(
     previouslyJoinedRooms?: Array<{ jid: string; nickname: string; password?: string; autojoin?: boolean }>

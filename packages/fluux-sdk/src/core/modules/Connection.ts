@@ -61,6 +61,21 @@ const logError = (...args: unknown[]) => {
   }
 }
 
+// Stream/SASL auth failures are terminal and should not be retried.
+// Keep this list explicit to avoid classifying generic stanza `type="auth"`
+// errors (e.g. PEP/pubsub permissions) as account authentication failures.
+const AUTH_STREAM_ERROR_MARKERS = [
+  'not-authorized',
+  'invalid-authzid',
+  'invalid-mechanism',
+  'mechanism-too-weak',
+  'credentials-expired',
+  'temporary-auth-failure',
+]
+
+const isAuthStreamError = (message: string): boolean =>
+  AUTH_STREAM_ERROR_MARKERS.some(marker => message.includes(marker))
+
 /**
  * Connection lifecycle and stream management module.
  *
@@ -1264,7 +1279,7 @@ export class Connection extends BaseModule {
         )
         // Clear credentials to prevent accidental reconnect
         this.credentials = null
-      } else if (message.includes('not-authorized') || message.includes('auth')) {
+      } else if (isAuthStreamError(message)) {
         this.sendMachineEvent({ type: 'AUTH_ERROR' }, 'stream-error:auth')
         this.stores.console.addEvent('Disconnected: Authentication error', 'error')
         console.error('[XMPP] Authentication failed: not-authorized')
@@ -1470,6 +1485,11 @@ export class Connection extends BaseModule {
   /**
    * Handle successful connection (both initial connect and reconnect).
    * Centralizes post-connect logic: status update, presence, roster, carbons, bookmarks.
+   *
+   * Ordering note:
+   * - Emits `connection:status=online`, `connection:authenticated`, and `online/resumed` first.
+   * - Then delegates to XMPPClient post-connect flow (`onConnectionSuccess`) which sends
+   *   protocol traffic in its documented order.
    *
    * @param isResumption - True if this was an SM session resumption
    * @param logMessage - Message to log (different for connect vs reconnect)

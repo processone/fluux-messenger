@@ -1309,6 +1309,38 @@ describe('XMPPClient Connection', () => {
       expect(mockStores.connection.setError).toHaveBeenCalledWith('Authentication failed')
     })
 
+    it('should not classify stanza type=auth errors as auth stream failures', async () => {
+      // Connect first
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      // Clear previous calls
+      vi.mocked(mockStores.console.addEvent).mockClear()
+      vi.mocked(mockStores.connection.setStatus).mockClear()
+      vi.mocked(mockStores.connection.setError).mockClear()
+
+      // Simulate an IQ error payload that contains error type="auth"
+      // but is unrelated to stream authentication.
+      mockXmppClientInstance._emit(
+        'error',
+        new Error('<iq type="error"><error type="auth"><forbidden/></error></iq>')
+      )
+      mockXmppClientInstance._emit('disconnect', { clean: false })
+
+      expect(mockStores.console.addEvent).not.toHaveBeenCalledWith(
+        'Disconnected: Authentication error',
+        'error'
+      )
+      expect(mockStores.connection.setError).not.toHaveBeenCalledWith('Authentication failed')
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
+    })
+
     it('should still reconnect on normal disconnection', async () => {
       // Connect first
       const connectPromise = xmppClient.connect({
