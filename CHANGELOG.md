@@ -5,7 +5,7 @@ All notable changes to Fluux Messenger are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.13.2] - 2026-02-16
+## [0.13.2] - 2026-02-18
 
 ### Added
 
@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--dangerous-insecure-tls` CLI flag to disable TLS certificate verification
 - SDK diagnostic logging for user troubleshooting, with shortcut to access log file
 - Russian, Belarusian, Ukrainian, and Simplified Chinese translations (31 languages total)
+- Linux system tray support with close-to-tray functionality
+- Mod+Q full quit shortcut on Windows/Linux
 
 ### Changed
 
@@ -37,6 +39,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Room avatar loss when occupant goes offline
 - Duplicate messages from IRC bridges in MAM queries
 - Avatar blob URL memory leak with deduplication pool
+- Status message updates while staying online
+- MUC nick preserved on reconnect short-circuit
+- Linux logout lockups on proxy disconnect
+- Non-fatal errors now keep reconnecting with capped backoff
 
 ## [0.13.1] - 2026-02-13
 
