@@ -1,6 +1,8 @@
 import { useEffect } from 'react'
 import { useSettingsStore, type ThemeMode } from '@/stores/settingsStore'
 
+const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+
 /** Theme colors for status bar - using bg-secondary for better visual continuity */
 /** In dark mode, this matches the icon rail which is at the top-left corner */
 const THEME_COLORS = {
@@ -57,6 +59,13 @@ export function useMode() {
 
       // Sync Android/PWA status bar color with app theme
       updateThemeColorMeta(resolved)
+
+      // Sync native window theme (affects Linux/Windows title bar color)
+      if (isTauri) {
+        import('@tauri-apps/api/window').then(({ getCurrentWindow }) => {
+          getCurrentWindow().setTheme(resolved).catch(() => {})
+        })
+      }
     }
 
     applyMode()
