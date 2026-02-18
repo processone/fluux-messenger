@@ -372,7 +372,7 @@ jobs:
           # Copy desktop file and icons
           cp packaging/debian/fluux-messenger.desktop tarball-staging/fluux-messenger/
           cp apps/fluux/src-tauri/icons/128x128.png tarball-staging/fluux-messenger/fluux-messenger.png
-          cp apps/fluux/src-tauri/icons/icon.png tarball-staging/fluux-messenger/fluux-messenger-256.png
+          cp apps/fluux/src-tauri/icons/256x256.png tarball-staging/fluux-messenger/fluux-messenger-256.png
 
           # Create tarball
           mkdir -p dist
@@ -433,7 +433,7 @@ jobs:
           cp apps/fluux/src-tauri/target/release/fluux flatpak-build/fluux-messenger
           cp packaging/debian/fluux-messenger.desktop flatpak-build/
           cp apps/fluux/src-tauri/icons/128x128.png flatpak-build/fluux-messenger.png
-          cp apps/fluux/src-tauri/icons/icon.png flatpak-build/fluux-messenger-256.png
+          cp apps/fluux/src-tauri/icons/256x256.png flatpak-build/fluux-messenger-256.png
           cp packaging/flatpak/com.processone.fluux.metainfo.xml flatpak-build/
           cp packaging/flatpak/com.processone.fluux.yaml flatpak-build/
 
@@ -563,8 +563,9 @@ jobs:
           cp packaging/debian/fluux-messenger.desktop "fluux-messenger-${RPM_VERSION}/"
           mkdir -p "fluux-messenger-${RPM_VERSION}/icons"
           cp apps/fluux/src-tauri/icons/32x32.png "fluux-messenger-${RPM_VERSION}/icons/"
+          cp apps/fluux/src-tauri/icons/64x64.png "fluux-messenger-${RPM_VERSION}/icons/"
           cp apps/fluux/src-tauri/icons/128x128.png "fluux-messenger-${RPM_VERSION}/icons/"
-          cp apps/fluux/src-tauri/icons/icon.png "fluux-messenger-${RPM_VERSION}/icons/256x256.png"
+          cp apps/fluux/src-tauri/icons/256x256.png "fluux-messenger-${RPM_VERSION}/icons/"
 
           tar czvf ~/rpmbuild/SOURCES/fluux-messenger-${RPM_VERSION}.tar.gz "fluux-messenger-${RPM_VERSION}"
 
