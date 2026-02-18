@@ -475,7 +475,9 @@ describe('XMPPClient Connection', () => {
       expect(errorArg).toBe('Connection failed: WebSocket closed (code: 1008, Policy violation)')
     })
 
-    it('should prefer direct WebSocket before proxy for domain server inputs', async () => {
+    it('should prefer discovered XEP-0156 WebSocket endpoint before proxy for domain server inputs', async () => {
+      mockDiscoverWebSocket.mockResolvedValue('wss://discovered.example.com/ws')
+
       const mockProxyAdapter = {
         startProxy: vi.fn().mockResolvedValue({ url: 'ws://127.0.0.1:12345' }),
         stopProxy: vi.fn().mockResolvedValue(undefined),
@@ -487,21 +489,52 @@ describe('XMPPClient Connection', () => {
         jid: 'user@example.com',
         password: 'secret',
         server: 'example.com',
-        skipDiscovery: true,
       })
       await vi.advanceTimersByTimeAsync(0)
       mockXmppClientInstance._emit('online')
       await connectPromise
 
       expect(mockClientFactory).toHaveBeenCalledWith(
-        expect.objectContaining({ service: 'wss://example.com/ws' })
+        expect.objectContaining({ service: 'wss://discovered.example.com/ws' })
       )
       expect(mockProxyAdapter.startProxy).not.toHaveBeenCalled()
 
       proxyClient.cancelReconnect()
     })
 
+    it('should skip default /ws fallback and switch directly to proxy when XEP-0156 has no endpoint', async () => {
+      mockDiscoverWebSocket.mockResolvedValue(null)
+
+      const mockProxyAdapter = {
+        startProxy: vi.fn().mockResolvedValue({ url: 'ws://127.0.0.1:12345' }),
+        stopProxy: vi.fn().mockResolvedValue(undefined),
+      }
+      const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
+      proxyClient.bindStores(mockStores)
+
+      const connectPromise = proxyClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+      })
+
+      await vi.advanceTimersByTimeAsync(0)
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      expect(mockClientFactory).toHaveBeenCalledTimes(1)
+      expect(mockClientFactory).toHaveBeenCalledWith(
+        expect.objectContaining({ service: 'ws://127.0.0.1:12345' })
+      )
+      expect(mockProxyAdapter.startProxy).toHaveBeenCalledTimes(1)
+      expect(mockStores.connection.setConnectionMethod).toHaveBeenCalledWith('proxy')
+
+      proxyClient.cancelReconnect()
+    })
+
     it('should fall back to proxy when direct WebSocket attempt fails', async () => {
+      mockDiscoverWebSocket.mockResolvedValue('wss://discovered.example.com/ws')
+
       const firstClient = createMockXmppClient()
       firstClient.start.mockRejectedValue(new Error('direct websocket failed'))
       const fallbackClient = createMockXmppClient()
@@ -518,7 +551,6 @@ describe('XMPPClient Connection', () => {
         jid: 'user@example.com',
         password: 'secret',
         server: 'example.com',
-        skipDiscovery: true,
       })
 
       await vi.advanceTimersByTimeAsync(0)
@@ -528,7 +560,7 @@ describe('XMPPClient Connection', () => {
 
       expect(mockClientFactory).toHaveBeenNthCalledWith(
         1,
-        expect.objectContaining({ service: 'wss://example.com/ws' })
+        expect.objectContaining({ service: 'wss://discovered.example.com/ws' })
       )
       expect(mockClientFactory).toHaveBeenNthCalledWith(
         2,

@@ -38,6 +38,8 @@ import {
 import {
   shouldSkipDiscovery,
   getWebSocketUrl,
+  discoverWebSocketUrl,
+  FAST_XEP0156_DISCOVERY_TIMEOUT_MS,
   resolveWebSocketUrl,
 } from './serverResolution'
 import { SmPersistence } from './smPersistence'
@@ -377,7 +379,9 @@ export class Connection extends BaseModule {
    *
    * The server parameter can be:
    * - A full WebSocket URL (wss://example.com:5443/ws) - used directly
-   * - A domain name (example.com) - XEP-0156 discovery is attempted, falls back to wss://{domain}/ws
+   * - A domain name (example.com)
+   *   - Web/no-proxy: XEP-0156 discovery, then fallback to wss://{domain}/ws
+   *   - Desktop with proxy: fast XEP-0156 check only, then fallback to TCP/SRV via proxy
    */
   async connect({ jid, password, server, resource, smState, lang, previouslyJoinedRooms, skipDiscovery, disableSmKeepalive }: ConnectOptions): Promise<void> {
     // If the machine is not in idle state, reset it first.
@@ -429,9 +433,19 @@ export class Connection extends BaseModule {
       }
     }
 
-    const resolveDirectWebSocket = async (): Promise<string> => {
+    const resolveDirectWebSocket = async (): Promise<string | null> => {
       if (shouldSkipDiscovery(server, skipDiscovery)) {
         return getWebSocketUrl(server, domain)
+      }
+      // Proxy-capable desktop path: check XEP-0156 only with a short timeout.
+      // If no endpoint is advertised, immediately switch to TCP/SRV proxy.
+      if (preferWebSocketFirst) {
+        return discoverWebSocketUrl(
+          server,
+          domain,
+          this.stores.console,
+          FAST_XEP0156_DISCOVERY_TIMEOUT_MS
+        )
       }
       return resolveWebSocketUrl(server, domain, this.stores.console)
     }
@@ -458,30 +472,40 @@ export class Connection extends BaseModule {
 
     try {
       // Preferred path on desktop for domain inputs:
-      // 1) try direct WebSocket first (XEP-0156/default URL),
+      // 1) try direct WebSocket first (XEP-0156 discovery only),
       // 2) then fall back to SRV/proxy only if direct WebSocket fails.
       // The winning endpoint is persisted in this.credentials.server and reused
       // by reconnect attempts so we avoid repeating discovery/SRV checks each time.
       if (preferWebSocketFirst) {
         const directWebSocketUrl = await resolveDirectWebSocket()
-        this.stores.console.addEvent(
-          `Connection strategy: trying direct WebSocket first (${directWebSocketUrl})`,
-          'connection'
-        )
-
-        try {
-          await attemptConnection(directWebSocketUrl, 'websocket')
-          return
-        } catch (webSocketError) {
-          const errorMsg = webSocketError instanceof Error ? webSocketError.message : String(webSocketError)
-          if (this.isInTerminalState()) {
-            throw webSocketError
-          }
+        if (directWebSocketUrl) {
           this.stores.console.addEvent(
-            `Direct WebSocket connection failed (${errorMsg}), falling back to SRV/proxy`,
-            'error'
+            `Connection strategy: trying direct WebSocket first (${directWebSocketUrl})`,
+            'connection'
           )
-          this.cleanupClient()
+
+          try {
+            await attemptConnection(directWebSocketUrl, 'websocket')
+            return
+          } catch (webSocketError) {
+            const errorMsg = webSocketError instanceof Error ? webSocketError.message : String(webSocketError)
+            if (this.isInTerminalState()) {
+              throw webSocketError
+            }
+            this.stores.console.addEvent(
+              `Direct WebSocket connection failed (${errorMsg}), falling back to SRV/proxy`,
+              'error'
+            )
+            this.cleanupClient()
+          }
+        } else {
+          const xepFallbackMessage =
+            `XEP-0156 discovery returned no WebSocket endpoint for ${server || domain}, switching to SRV/proxy`
+          this.stores.console.addEvent(
+            `Connection strategy: ${xepFallbackMessage}`,
+            'connection'
+          )
+          logInfo(xepFallbackMessage)
         }
 
         const proxyFallback = await this.proxyManager.ensureProxy(server, domain, skipDiscovery)
@@ -510,7 +534,11 @@ export class Connection extends BaseModule {
         return
       }
 
-      await attemptConnection(await resolveDirectWebSocket(), 'websocket')
+      const directWebSocketUrl = await resolveDirectWebSocket()
+      if (!directWebSocketUrl) {
+        throw new Error('No WebSocket endpoint discovered via XEP-0156')
+      }
+      await attemptConnection(directWebSocketUrl, 'websocket')
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err))
       logError('Connection error:', error.message)

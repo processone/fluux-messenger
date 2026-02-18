@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { shouldSkipDiscovery, getWebSocketUrl, resolveWebSocketUrl } from './serverResolution'
+import {
+  shouldSkipDiscovery,
+  getWebSocketUrl,
+  discoverWebSocketUrl,
+  FAST_XEP0156_DISCOVERY_TIMEOUT_MS,
+  resolveWebSocketUrl,
+} from './serverResolution'
 
 // Mock the discovery module
 vi.mock('../../utils/websocketDiscovery', () => ({
@@ -120,6 +126,42 @@ describe('serverResolution', () => {
         expect.stringContaining('discovery failed: DNS failed'),
         'connection'
       )
+    })
+  })
+
+  describe('discoverWebSocketUrl', () => {
+    it('should return discovered URL without default fallback', async () => {
+      mockDiscover.mockResolvedValue('wss://discovered.example.com/ws')
+
+      const result = await discoverWebSocketUrl('example.com', 'example.com')
+      expect(result).toBe('wss://discovered.example.com/ws')
+    })
+
+    it('should return null when discovery returns null', async () => {
+      mockDiscover.mockResolvedValue(null)
+
+      const result = await discoverWebSocketUrl('example.com', 'example.com')
+      expect(result).toBeNull()
+    })
+
+    it('should return null when discovery throws', async () => {
+      mockDiscover.mockRejectedValue(new Error('Discovery failed'))
+
+      const result = await discoverWebSocketUrl('example.com', 'example.com')
+      expect(result).toBeNull()
+    })
+
+    it('should allow custom timeout values', async () => {
+      mockDiscover.mockResolvedValue(null)
+
+      await discoverWebSocketUrl(
+        'example.com',
+        'example.com',
+        undefined,
+        FAST_XEP0156_DISCOVERY_TIMEOUT_MS
+      )
+
+      expect(mockDiscover).toHaveBeenCalledWith('example.com', FAST_XEP0156_DISCOVERY_TIMEOUT_MS)
     })
   })
 })
