@@ -282,6 +282,11 @@ export const presenceMachine = setup({
           on: {
             SET_PRESENCE: [
               {
+                // Allow updating status message while staying online
+                guard: ({ event }) => event.show === 'online',
+                actions: 'setStatusMessage',
+              },
+              {
                 guard: ({ event }) => event.show === 'away',
                 target: 'userAway',
                 actions: 'setStatusMessage',
