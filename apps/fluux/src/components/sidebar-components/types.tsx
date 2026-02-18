@@ -16,7 +16,15 @@ export function useSidebarZone() {
  * Generate rich tooltip content for contact's connected devices.
  * Returns a ReactNode with proper formatting for the Tooltip component.
  */
-export function ContactDevicesTooltip({ contact, t }: { contact: Contact; t: (key: string) => string }): ReactNode {
+export function ContactDevicesTooltip({
+  contact,
+  t,
+  forceOffline = false,
+}: {
+  contact: Contact
+  t: (key: string) => string
+  forceOffline?: boolean
+}): ReactNode {
   const hasDevices = contact.resources && contact.resources.size > 0
 
   return (
@@ -27,7 +35,7 @@ export function ContactDevicesTooltip({ contact, t }: { contact: Contact; t: (ke
         <div className="pt-1 border-t border-fluux-border mt-1 space-y-0.5">
           {Array.from(contact.resources!.entries()).map(([resource, presence]) => {
             const clientName = presence.client || resource || t('contacts.unknown')
-            const status = getTranslatedShowText(presence.show, t)
+            const status = getTranslatedShowText(presence.show, t, forceOffline)
             return (
               <div key={resource} className="text-xs whitespace-nowrap">
                 <span className="text-fluux-text">{clientName}:</span>{' '}
@@ -38,7 +46,9 @@ export function ContactDevicesTooltip({ contact, t }: { contact: Contact; t: (ke
         </div>
       )}
       {!hasDevices && (
-        <div className="text-xs text-fluux-muted">{getTranslatedStatusText(contact, t)}</div>
+        <div className="text-xs text-fluux-muted">
+          {forceOffline ? t('presence.offline') : getTranslatedStatusText(contact, t)}
+        </div>
       )}
     </div>
   )

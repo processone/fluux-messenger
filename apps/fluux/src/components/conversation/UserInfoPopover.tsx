@@ -7,6 +7,7 @@ import { useState, useRef, useEffect, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import type { Contact, ContactIdentity, RoomAffiliation, RoomRole } from '@fluux/sdk'
+import { useConnectionStore } from '@fluux/sdk/react'
 import { useClickOutside } from '@/hooks'
 import { getTranslatedShowText } from '@/utils/presence'
 import { Monitor, Smartphone, Tablet, Globe, HelpCircle, Shield, Crown, UserCheck } from 'lucide-react'
@@ -66,6 +67,8 @@ function getDeviceIcon(clientName: string) {
 
 export function UserInfoPopover({ contact, jid, role, affiliation, children, className = '' }: UserInfoPopoverProps) {
   const { t } = useTranslation()
+  const connectionStatus = useConnectionStore((s) => s.status)
+  const forceOffline = connectionStatus !== 'online'
   const [isOpen, setIsOpen] = useState(false)
   const [position, setPosition] = useState<{ x: number; top?: number; bottom?: number }>({ x: 0 })
   const triggerRef = useRef<HTMLDivElement>(null)
@@ -124,7 +127,7 @@ export function UserInfoPopover({ contact, jid, role, affiliation, children, cla
   if (contact && 'resources' in contact && contact.resources) {
     for (const [resource, presence] of contact.resources.entries()) {
       const clientName = presence.client || resource || t('contacts.unknown')
-      const status = getTranslatedShowText(presence.show, t)
+      const status = getTranslatedShowText(presence.show, t, forceOffline)
       devices.push({ name: clientName, status, resource })
     }
   }

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { X, Monitor, Smartphone, Globe, Pencil, Camera, Trash2, Key, Network } from 'lucide-react'
 import { type ResourcePresence, getClientType, getLocalPart, useConnection, usePresence } from '@fluux/sdk'
 import { Avatar } from './Avatar'
-import { PRESENCE_COLORS } from '@/constants/ui'
+import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS } from '@/constants/ui'
 import { getShowColor } from '@/utils/presence'
 import { useWindowDrag } from '@/hooks'
 import { AvatarCropModal } from './AvatarCropModal'
@@ -121,7 +121,7 @@ export function ProfileView({ onClose }: ProfileViewProps) {
   }
 
   // Map presenceShow to color
-  const presenceColor = PRESENCE_COLORS[presenceShow]
+  const presenceColor = isConnected ? PRESENCE_COLORS[presenceShow] : APP_OFFLINE_PRESENCE_COLOR
 
   return (
     <div className="h-full flex flex-col bg-fluux-chat">
@@ -246,11 +246,13 @@ export function ProfileView({ onClose }: ProfileViewProps) {
           )}
           {!connectionMethod && <div className="mb-2" />}
 
-          {/* Presence status - always Active since you're using the app */}
+          {/* Presence status */}
           <div className="flex items-center gap-2 mb-2">
             <div className={`w-2 h-2 rounded-full ${presenceColor}`} />
             <span className="text-fluux-text">
-              {t(`presence.${presenceShow}`)} · {t('profile.active')}
+              {isConnected
+                ? `${t(`presence.${presenceShow}`)} · ${t('profile.active')}`
+                : t('presence.offline')}
             </span>
           </div>
 
@@ -278,14 +280,14 @@ export function ProfileView({ onClose }: ProfileViewProps) {
                       key={resource}
                       className="flex items-center gap-2 px-3 py-2 bg-fluux-bg rounded-lg"
                     >
-                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getShowColor(presence.show)}`} />
+                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getShowColor(presence.show, !isConnected)}`} />
                       <DeviceIcon className="w-4 h-4 text-fluux-muted flex-shrink-0" />
                       <div className="flex-1 min-w-0">
                         <div className="text-sm text-fluux-text truncate">
                           {presence.client || resource || t('profile.unknown')}
                         </div>
                         <div className="text-xs text-fluux-muted">
-                          {t(`presence.${presence.show || 'online'}`)}
+                          {t(`presence.${isConnected ? (presence.show || 'online') : 'offline'}`)}
                           <span className="text-fluux-muted/60"> · {t('profile.priority')}: {presence.priority}</span>
                           {presence.client && resource && (
                             <span className="text-fluux-muted/60"> · {resource}</span>

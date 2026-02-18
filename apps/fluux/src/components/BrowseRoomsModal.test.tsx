@@ -29,6 +29,8 @@ vi.mock('@fluux/sdk/react', () => ({
   // useChatStore is callable (hook-style) for selector subscriptions
   useChatStore: (selector: (state: { setActiveConversation: typeof mockSetActiveConversation }) => unknown) =>
     selector({ setActiveConversation: mockSetActiveConversation }),
+  useConnectionStore: (selector: (state: { status: string }) => unknown) =>
+    selector({ status: 'online' }),
 }))
 
 // Mock hooks

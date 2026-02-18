@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useRoster, useChat, matchNameOrJid } from '@fluux/sdk'
+import { useConnectionStore } from '@fluux/sdk/react'
 import { X } from 'lucide-react'
-import { PRESENCE_COLORS } from '@/constants/ui'
+import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS } from '@/constants/ui'
 
 /**
  * Check if a string looks like a valid JID (user@domain).
@@ -57,6 +58,8 @@ export function ContactSelector({
 }: ContactSelectorProps) {
   const { t } = useTranslation()
   const { contacts } = useRoster()
+  const connectionStatus = useConnectionStore((s) => s.status)
+  const forceOffline = connectionStatus !== 'online'
   const { conversations } = useChat()
   const [search, setSearch] = useState('')
   const [highlightedIndex, setHighlightedIndex] = useState(0)
@@ -286,24 +289,29 @@ export function ContactSelector({
           <div className={`absolute left-0 right-0 max-h-40 overflow-y-auto bg-fluux-bg rounded border border-fluux-hover shadow-lg z-10 ${
             flipUp ? 'bottom-full mb-1' : 'top-full mt-1'
           }`}>
-            {filteredContacts.map((contact, index) => (
-              <div
-                key={contact.jid}
-                onClick={() => selectContact(contact.jid)}
-                className={`flex items-center gap-2 px-3 py-2 cursor-pointer ${
-                  index === highlightedIndex
-                    ? 'bg-fluux-brand/20 text-fluux-text'
-                    : 'hover:bg-fluux-hover text-fluux-text'
-                }`}
-              >
-                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${PRESENCE_COLORS[contact.presence]}`} />
-                <span className="text-sm truncate flex-1">{contact.name}</span>
-                <span className="text-xs text-fluux-muted truncate">{contact.jid}</span>
-                {index === highlightedIndex && (
-                  <span className="text-xs text-fluux-muted ml-1">↵</span>
-                )}
-              </div>
-            ))}
+            {filteredContacts.map((contact, index) => {
+              const presenceColor = forceOffline
+                ? APP_OFFLINE_PRESENCE_COLOR
+                : PRESENCE_COLORS[contact.presence]
+              return (
+                <div
+                  key={contact.jid}
+                  onClick={() => selectContact(contact.jid)}
+                  className={`flex items-center gap-2 px-3 py-2 cursor-pointer ${
+                    index === highlightedIndex
+                      ? 'bg-fluux-brand/20 text-fluux-text'
+                      : 'hover:bg-fluux-hover text-fluux-text'
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${presenceColor}`} />
+                  <span className="text-sm truncate flex-1">{contact.name}</span>
+                  <span className="text-xs text-fluux-muted truncate">{contact.jid}</span>
+                  {index === highlightedIndex && (
+                    <span className="text-xs text-fluux-muted ml-1">↵</span>
+                  )}
+                </div>
+              )
+            })}
             <div className="px-3 py-1.5 text-xs text-fluux-muted border-t border-fluux-hover bg-fluux-sidebar">
               {t('contacts.keyboardHint')}
             </div>

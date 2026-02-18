@@ -80,6 +80,8 @@ vi.mock('@fluux/sdk/react', () => ({
       subscribe: vi.fn(() => () => {}),
     }
   ),
+  useConnectionStore: (selector: (s: { status: string }) => unknown) =>
+    selector({ status: 'online' }),
 }))
 
 // Helper to create a conversation and add to mock data

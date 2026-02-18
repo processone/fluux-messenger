@@ -3,8 +3,9 @@ import { useTranslation } from 'react-i18next'
 import { MessageCircle, Trash2, Pencil, Monitor, Smartphone, Globe, ArrowLeft } from 'lucide-react'
 import { Tooltip } from './Tooltip'
 import { type Contact, getClientType } from '@fluux/sdk'
+import { useConnectionStore } from '@fluux/sdk/react'
 import { Avatar } from './Avatar'
-import { PRESENCE_COLORS } from '@/constants/ui'
+import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS } from '@/constants/ui'
 import { getShowColor, getTranslatedShowText } from '@/utils/presence'
 import { getTranslatedStatusText } from '@/utils/statusText'
 import { useWindowDrag } from '@/hooks'
@@ -27,6 +28,8 @@ export function ContactProfileView({
   onBack,
 }: ContactProfileViewProps) {
   const { t } = useTranslation()
+  const connectionStatus = useConnectionStore((s) => s.status)
+  const forceOffline = connectionStatus !== 'online'
   const { titleBarClass, dragRegionProps } = useWindowDrag()
   const [isEditing, setIsEditing] = useState(false)
   const [editName, setEditName] = useState(contact.name)
@@ -36,8 +39,8 @@ export function ContactProfileView({
   const [pepNickname, setPepNickname] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const presenceColor = PRESENCE_COLORS[contact.presence]
-  const statusText = getTranslatedStatusText(contact, t)
+  const presenceColor = forceOffline ? APP_OFFLINE_PRESENCE_COLOR : PRESENCE_COLORS[contact.presence]
+  const statusText = forceOffline ? t('presence.offline') : getTranslatedStatusText(contact, t)
 
   // Focus and select input when editing starts
   useEffect(() => {
@@ -139,7 +142,7 @@ export function ContactProfileView({
               name={contact.name}
               avatarUrl={contact.avatar}
               size="xl"
-              presence={contact.presence}
+              presence={forceOffline ? 'offline' : contact.presence}
               presenceBorderColor="border-fluux-chat"
             />
           </div>
@@ -233,14 +236,14 @@ export function ContactProfileView({
                     key={resource}
                     className="flex items-center gap-2 px-3 py-2 bg-fluux-bg rounded-lg"
                   >
-                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getShowColor(presence.show)}`} />
+                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getShowColor(presence.show, forceOffline)}`} />
                     <DeviceIcon className="w-4 h-4 text-fluux-muted flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <div className="text-sm text-fluux-text truncate">
                         {presence.client || resource || t('contacts.unknown')}
                       </div>
                       <div className="text-xs text-fluux-muted">
-                        {getTranslatedShowText(presence.show, t)}
+                        {getTranslatedShowText(presence.show, t, forceOffline)}
                         <span className="text-fluux-muted/60"> · {t('profile.priority')}: {presence.priority}</span>
                         {presence.client && resource && (
                           <span className="text-fluux-muted/60"> · {resource}</span>
