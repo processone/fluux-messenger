@@ -1224,7 +1224,11 @@ fn main() {
             }
 
             // Linux: Hide to system tray when close button is clicked.
-            // Left-clicking the tray icon restores the window.
+            //
+            // NOTE: With the current libappindicator-based tray backend, Linux
+            // tray click events are not emitted, so left-click restore does not
+            // reliably fire. Users should restore via the tray menu ("Show Fluux").
+            // We keep the click handler below for parity/future backend support.
             #[cfg(target_os = "linux")]
             {
                 let show_item = MenuItem::with_id(app, "show", "Show Fluux", true, None::<&str>)?;
