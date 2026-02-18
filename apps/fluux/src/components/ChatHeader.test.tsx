@@ -27,6 +27,8 @@ vi.mock('@fluux/sdk/react', () => ({
   useRosterStore: (selector: (state: { contacts: Map<string, Contact> }) => unknown) => {
     return selector({ contacts: mockRosterContacts })
   },
+  useConnectionStore: (selector: (state: { status: string }) => unknown) =>
+    selector({ status: 'online' }),
 }))
 
 // Mock Avatar component

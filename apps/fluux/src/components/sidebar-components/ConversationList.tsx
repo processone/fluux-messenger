@@ -11,6 +11,7 @@ import {
   type Contact,
   type Room,
 } from '@fluux/sdk'
+import { useConnectionStore } from '@fluux/sdk/react'
 import { Avatar, TypingIndicator } from '../Avatar'
 import { Tooltip } from '../Tooltip'
 import { useSidebarZone, ContactDevicesTooltip } from './types'
@@ -225,6 +226,8 @@ export const ConversationItem = memo(function ConversationItem({
   ...rest
 }: ConversationItemProps) {
   const { t, i18n } = useTranslation()
+  const connectionStatus = useConnectionStore((s) => s.status)
+  const forceOffline = connectionStatus !== 'online'
   const { getItemMenuProps, isOpen, longPressTriggered } = useSidebarListMenu<Conversation>()
   const currentLang = i18n.language.split('-')[0]
   const timeFormat = useSettingsStore((s) => s.timeFormat)
@@ -239,7 +242,7 @@ export const ConversationItem = memo(function ConversationItem({
 
   return (
     <Tooltip
-      content={contact ? <ContactDevicesTooltip contact={contact} t={t} /> : null}
+      content={contact ? <ContactDevicesTooltip contact={contact} t={t} forceOffline={forceOffline} /> : null}
       position="right"
       delay={600}
       maxWidth={280}

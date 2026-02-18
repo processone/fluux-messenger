@@ -35,6 +35,11 @@ vi.mock('@fluux/sdk', () => ({
   },
 }))
 
+vi.mock('@fluux/sdk/react', () => ({
+  useConnectionStore: (selector: (state: { status: string }) => unknown) =>
+    selector({ status: 'online' }),
+}))
+
 // Mock react-i18next
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({

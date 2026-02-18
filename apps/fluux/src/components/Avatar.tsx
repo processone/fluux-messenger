@@ -1,6 +1,7 @@
 import { useMemo, type ReactNode } from 'react'
 import { generateConsistentColorHexSync, type PresenceStatus, type PresenceShow } from '@fluux/sdk'
-import { PRESENCE_COLORS } from '@/constants/ui'
+import { useConnectionStore } from '@fluux/sdk/react'
+import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS } from '@/constants/ui'
 
 /**
  * Avatar sizes and their corresponding Tailwind classes
@@ -192,6 +193,8 @@ export function Avatar({
   overlay,
   fallbackColor,
 }: AvatarProps) {
+  const connectionStatus = useConnectionStore((s) => s.status)
+
   // Generate consistent background color from identifier, or use custom fallbackColor
   // Own avatars also use consistent color (green is only used for own nickname text)
   const backgroundColor = useMemo(() => {
@@ -211,8 +214,11 @@ export function Avatar({
   const sizeClasses = SIZES[size]
 
   // Determine presence color
-  const effectivePresence = presenceShow ? getPresenceStatusFromShow(presenceShow) : presence
-  const presenceColor = effectivePresence ? PRESENCE_COLORS[effectivePresence] : undefined
+  const isOffline = connectionStatus !== 'online'
+  const resolvedPresence = presenceShow ? getPresenceStatusFromShow(presenceShow) : presence
+  const presenceColor = resolvedPresence
+    ? (isOffline ? APP_OFFLINE_PRESENCE_COLOR : PRESENCE_COLORS[resolvedPresence])
+    : undefined
 
   // Determine if clickable
   const isClickable = clickable ?? !!onClick
@@ -299,4 +305,3 @@ export function getConsistentTextColor(identifier: string, isDarkMode = true): s
     lightness: isDarkMode ? 65 : 30,
   })
 }
-

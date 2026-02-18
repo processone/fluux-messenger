@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useMemo, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useContextMenu, useTypeToFocus, useListKeyboardNav } from '@/hooks'
 import { useRoster, useAdmin, type Contact } from '@fluux/sdk'
+import { useConnectionStore } from '@fluux/sdk/react'
 import { Avatar } from '../Avatar'
 import { RenameContactModal } from '../RenameContactModal'
 import { Tooltip } from '../Tooltip'
@@ -19,6 +20,8 @@ interface ContactListProps {
 export function ContactList({ onStartChat, onSelectContact, onManageUser, activeContactJid }: ContactListProps) {
   const { t } = useTranslation()
   const { sortedContacts, removeContact, renameContact } = useRoster()
+  const connectionStatus = useConnectionStore((s) => s.status)
+  const forceOffline = connectionStatus !== 'online'
   const [searchQuery, setSearchQuery] = useState('')
   const searchInputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
@@ -39,13 +42,18 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
     })
   }, [sortedContacts, searchQuery])
 
+  const getDisplayPresence = useCallback(
+    (contact: Contact) => (forceOffline ? 'offline' : contact.presence),
+    [forceOffline]
+  )
+
   // Flat list of contacts in display order (online, offline, errored)
   const flatContactList = useMemo(() => {
     const errored = filteredContacts.filter(c => c.presenceError)
-    const online = filteredContacts.filter(c => !c.presenceError && c.presence !== 'offline')
-    const offline = filteredContacts.filter(c => !c.presenceError && c.presence === 'offline')
+    const online = filteredContacts.filter(c => !c.presenceError && getDisplayPresence(c) !== 'offline')
+    const offline = filteredContacts.filter(c => !c.presenceError && getDisplayPresence(c) === 'offline')
     return [...online, ...offline, ...errored]
-  }, [filteredContacts])
+  }, [filteredContacts, getDisplayPresence])
 
   // Map from jid to flat index for quick lookup
   const jidToIndex = useMemo(() => new Map(flatContactList.map((c, i) => [c.jid, i])), [flatContactList])
@@ -76,8 +84,8 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
 
   // Group filtered contacts
   const errored = filteredContacts.filter(c => c.presenceError)
-  const online = filteredContacts.filter(c => !c.presenceError && c.presence !== 'offline')
-  const offline = filteredContacts.filter(c => !c.presenceError && c.presence === 'offline')
+  const online = filteredContacts.filter(c => !c.presenceError && getDisplayPresence(c) !== 'offline')
+  const offline = filteredContacts.filter(c => !c.presenceError && getDisplayPresence(c) === 'offline')
 
   // Get selected contact JID for highlighting (keyboard selection takes precedence for navigation)
   const selectedJid = selectedIndex >= 0 ? (flatContactList[selectedIndex]?.jid ?? null) : (activeContactJid ?? null)
@@ -128,6 +136,7 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
                 onRename={renameContact}
                 onManageUser={onManageUser}
                 getItemProps={getItemProps}
+                forceOffline={forceOffline}
               />
             )}
             {offline.length > 0 && (
@@ -143,6 +152,7 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
                 onRename={renameContact}
                 onManageUser={onManageUser}
                 getItemProps={getItemProps}
+                forceOffline={forceOffline}
               />
             )}
             {errored.length > 0 && (
@@ -158,6 +168,7 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
                 onRename={renameContact}
                 onManageUser={onManageUser}
                 getItemProps={getItemProps}
+                forceOffline={forceOffline}
               />
             )}
           </>
@@ -183,6 +194,7 @@ interface ContactGroupProps {
     onMouseEnter: () => void
     onMouseMove: () => void
   }
+  forceOffline: boolean
 }
 
 function ContactGroup({
@@ -197,6 +209,7 @@ function ContactGroup({
   onRename,
   onManageUser,
   getItemProps,
+  forceOffline,
 }: ContactGroupProps) {
   return (
     <div className="mb-4">
@@ -220,6 +233,7 @@ function ContactGroup({
               onManageUser={onManageUser ? () => onManageUser(contact.jid) : undefined}
               onMouseEnter={itemProps.onMouseEnter}
               onMouseMove={itemProps.onMouseMove}
+              forceOffline={forceOffline}
             />
           )
         })}
@@ -239,6 +253,7 @@ interface ContactItemProps {
   onManageUser?: () => void
   onMouseEnter?: () => void
   onMouseMove?: () => void
+  forceOffline: boolean
 }
 
 const ContactItem = memo(function ContactItem({
@@ -252,6 +267,7 @@ const ContactItem = memo(function ContactItem({
   onManageUser,
   onMouseEnter,
   onMouseMove,
+  forceOffline,
 }: ContactItemProps) {
   const { t } = useTranslation()
   const menu = useContextMenu()
@@ -290,7 +306,7 @@ const ContactItem = memo(function ContactItem({
   return (
     <>
       <Tooltip
-        content={<ContactDevicesTooltip contact={contact} t={t} />}
+        content={<ContactDevicesTooltip contact={contact} t={t} forceOffline={forceOffline} />}
         position="right"
         delay={600}
         maxWidth={280}
@@ -321,13 +337,15 @@ const ContactItem = memo(function ContactItem({
             name={contact.name}
             avatarUrl={contact.avatar}
             size="sm"
-            presence={contact.presence}
+            presence={forceOffline ? 'offline' : contact.presence}
           />
 
           <div className="flex-1 min-w-0">
             <p className="truncate font-medium">{contact.name}</p>
             {contact.presenceError ? (
               <p className="truncate text-xs opacity-75">{contact.presenceError}</p>
+            ) : forceOffline ? (
+              <p className="truncate text-xs opacity-75">{t('presence.offline')}</p>
             ) : contact.statusMessage ? (
               <p className="truncate text-xs opacity-75">{contact.statusMessage}</p>
             ) : (

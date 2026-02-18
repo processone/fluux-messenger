@@ -12,6 +12,7 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Room, RoomOccupant, Contact, PresenceShow } from '@fluux/sdk'
 import { getPresenceFromShow, getBareJid, getBestPresenceShow, generateConsistentColorHexSync } from '@fluux/sdk'
+import { useConnectionStore } from '@fluux/sdk/react'
 import { Avatar } from './Avatar'
 import { Tooltip } from './Tooltip'
 import { useWindowDrag } from '@/hooks'
@@ -40,6 +41,8 @@ export function OccupantPanel({
   onClose,
 }: OccupantPanelProps) {
   const { t } = useTranslation()
+  const connectionStatus = useConnectionStore((s) => s.status)
+  const forceOffline = connectionStatus !== 'online'
   const { titleBarClass } = useWindowDrag()
 
   // Sort occupants by role priority: moderator > participant > visitor
@@ -179,7 +182,7 @@ export function OccupantPanel({
               // Build tooltip showing all nicks if multiple connections
               const tooltip = hasMultipleConnections
                 ? `${group.connections.map(c => c.nick).join(', ')} (${group.connections.length} ${t('rooms.connections')})`
-                : getOccupantTooltip(primaryOccupant, t)
+                : getOccupantTooltip(primaryOccupant, t, forceOffline)
 
               // Collect all unique hats from all connections
               const allHats = new Map<string, { uri: string; title: string; hue?: number }>()
@@ -274,13 +277,17 @@ export function OccupantPanel({
 /**
  * Generate unified tooltip text for room occupant (status, role, affiliation, hats)
  */
-function getOccupantTooltip(occupant: RoomOccupant | undefined, t: (key: string) => string): string | undefined {
+function getOccupantTooltip(
+  occupant: RoomOccupant | undefined,
+  t: (key: string) => string,
+  forceOffline: boolean
+): string | undefined {
   if (!occupant) return undefined
 
   const parts: string[] = []
 
   // Status (online, away, dnd, etc.)
-  const status = getTranslatedShowText(occupant.show, t) || 'online'
+  const status = getTranslatedShowText(occupant.show, t, forceOffline)
   parts.push(status)
 
   // Role (moderator only - participant/visitor are default)
