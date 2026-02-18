@@ -23,6 +23,12 @@ use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 use tracing::{debug, error, info, warn};
 
+#[cfg(target_os = "windows")]
+const LOOPBACK_BIND_ORDER: [(&str, &str); 2] = [("127.0.0.1:0", "127.0.0.1"), ("[::1]:0", "[::1]")];
+
+#[cfg(not(target_os = "windows"))]
+const LOOPBACK_BIND_ORDER: [(&str, &str); 2] = [("[::1]:0", "[::1]"), ("127.0.0.1:0", "127.0.0.1")];
+
 /// Global flag to disable TLS certificate verification.
 /// Set once at startup via `set_dangerous_insecure_tls()` from the CLI `--dangerous-insecure-tls` flag.
 static DANGEROUS_INSECURE_TLS: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
@@ -307,27 +313,30 @@ impl XmppProxy {
 
         info!(server = %server, "Starting proxy (DNS resolution deferred to per-connection)");
 
-        // Bind to localhost on a random port.
-        // Try IPv6 loopback first, fall back to IPv4. On some systems (especially
-        // Windows with IPv6-preferred network stacks), IPv6 loopback may be faster
-        // or preferred by the WebView.
-        let (listener, loopback_host) = match TcpListener::bind("[::1]:0").await {
-            Ok(l) => {
-                info!("WebSocket server bound to IPv6 loopback ([::1])");
-                (l, "[::1]")
+        // Bind to loopback on a random port.
+        // Windows currently prefers IPv4 to avoid WebView2 loopback issues seen with
+        // literal IPv6 URLs (`ws://[::1]:PORT`). Other platforms keep IPv6-first.
+        let mut bind_errors = Vec::new();
+        let mut bound = None;
+        for (bind_addr, host) in LOOPBACK_BIND_ORDER {
+            match TcpListener::bind(bind_addr).await {
+                Ok(listener) => {
+                    info!(bind_addr, host, "WebSocket server bound to loopback");
+                    bound = Some((listener, host));
+                    break;
+                }
+                Err(err) => {
+                    debug!(bind_addr, error = %err, "Loopback bind attempt failed");
+                    bind_errors.push(format!("{}: {}", bind_addr, err));
+                }
             }
-            Err(ipv6_err) => {
-                debug!(error = %ipv6_err, "IPv6 loopback bind failed, falling back to IPv4");
-                let l = TcpListener::bind("127.0.0.1:0").await.map_err(|e| {
-                    format!(
-                        "Failed to bind WebSocket server (IPv6: {}, IPv4: {})",
-                        ipv6_err, e
-                    )
-                })?;
-                info!("WebSocket server bound to IPv4 loopback (127.0.0.1)");
-                (l, "127.0.0.1")
-            }
-        };
+        }
+        let (listener, loopback_host) = bound.ok_or_else(|| {
+            format!(
+                "Failed to bind WebSocket server on loopback ({})",
+                bind_errors.join(", ")
+            )
+        })?;
 
         let local_addr = listener
             .local_addr()
@@ -504,7 +513,15 @@ async fn handle_connection(
         }
     };
 
-    let bridge_result = bridge_websocket_tls(ws, tls_stream, shutdown, app_handle, pending_ws_texts, conn_id).await;
+    let bridge_result = bridge_websocket_tls(
+        ws,
+        tls_stream,
+        shutdown,
+        app_handle,
+        pending_ws_texts,
+        conn_id,
+    )
+    .await;
     info!(
         conn_id,
         total_ms = connection_started.elapsed().as_millis() as u64,
@@ -854,7 +871,11 @@ async fn bridge_websocket_tls(
     }
 
     let bridge_started = Instant::now();
-    info!(conn_id, buffered_frames = pending_ws_texts.len(), "Bridge started");
+    info!(
+        conn_id,
+        buffered_frames = pending_ws_texts.len(),
+        "Bridge started"
+    );
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum BridgeEndReason {

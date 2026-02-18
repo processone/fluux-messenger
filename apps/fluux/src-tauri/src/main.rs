@@ -15,15 +15,20 @@ fn set_linux_webkit_env() {
     }
 }
 
-use tauri::{Emitter, Manager, RunEvent};
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 use tauri::WindowEvent;
+use tauri::{Emitter, Manager, RunEvent};
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 // Menu support
 #[cfg(target_os = "macos")]
 use tauri::menu::{MenuBuilder, PredefinedMenuItem, SubmenuBuilder};
 // System tray support for Linux and Windows
+use keyring::Entry;
+use scraper::{Html, Selector};
+use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 use tauri::{
     menu::{Menu, MenuItem},
@@ -33,11 +38,6 @@ use tauri::{
 use tauri_plugin_deep_link::DeepLinkExt;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use tauri_plugin_opener::OpenerExt;
-use keyring::Entry;
-use serde::{Deserialize, Serialize};
-use scraper::{Html, Selector};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 mod xmpp_proxy;
 
@@ -98,8 +98,10 @@ mod idle {
     use x11::xlib;
     use x11::xss;
 
-    const UNSUPPORTED_IDLE_REASON: &str = "Linux idle detection unavailable (MIT-SCREEN-SAVER extension missing)";
-    const QUERY_FAILED_IDLE_REASON: &str = "Linux idle detection unavailable (XScreenSaver query failed)";
+    const UNSUPPORTED_IDLE_REASON: &str =
+        "Linux idle detection unavailable (MIT-SCREEN-SAVER extension missing)";
+    const QUERY_FAILED_IDLE_REASON: &str =
+        "Linux idle detection unavailable (XScreenSaver query failed)";
 
     /// Cache XScreenSaver support so we avoid repeatedly probing an unsupported
     /// display and flooding logs.
@@ -110,7 +112,9 @@ mod idle {
         *HAS_XSCREENSAVER_EXTENSION.get_or_init(|| unsafe {
             let display = xlib::XOpenDisplay(ptr::null());
             if display.is_null() {
-                tracing::info!("Idle: no X11 display available, falling back to DOM idle detection");
+                tracing::info!(
+                    "Idle: no X11 display available, falling back to DOM idle detection"
+                );
                 return false;
             }
 
@@ -131,7 +135,9 @@ mod idle {
             xlib::XCloseDisplay(display);
 
             if !has_extension {
-                tracing::info!("Idle: MIT-SCREEN-SAVER extension missing, falling back to DOM idle detection");
+                tracing::info!(
+                    "Idle: MIT-SCREEN-SAVER extension missing, falling back to DOM idle detection"
+                );
             }
 
             has_extension
@@ -152,8 +158,12 @@ mod idle {
             let display = xlib::XOpenDisplay(ptr::null());
             if display.is_null() {
                 IDLE_BACKEND_UNAVAILABLE.store(true, Ordering::Relaxed);
-                tracing::info!("Idle: failed to open X11 display, falling back to DOM idle detection");
-                return Err("Linux idle detection unavailable (failed to open X11 display)".to_string());
+                tracing::info!(
+                    "Idle: failed to open X11 display, falling back to DOM idle detection"
+                );
+                return Err(
+                    "Linux idle detection unavailable (failed to open X11 display)".to_string(),
+                );
             }
 
             let root = xlib::XDefaultRootWindow(display);
@@ -161,8 +171,12 @@ mod idle {
             if info.is_null() {
                 xlib::XCloseDisplay(display);
                 IDLE_BACKEND_UNAVAILABLE.store(true, Ordering::Relaxed);
-                tracing::info!("Idle: could not allocate XScreenSaverInfo, falling back to DOM idle detection");
-                return Err("Linux idle detection failed (could not allocate XScreenSaverInfo)".to_string());
+                tracing::info!(
+                    "Idle: could not allocate XScreenSaverInfo, falling back to DOM idle detection"
+                );
+                return Err(
+                    "Linux idle detection failed (could not allocate XScreenSaverInfo)".to_string(),
+                );
             }
 
             let status = xss::XScreenSaverQueryInfo(display, root, info);
@@ -209,11 +223,17 @@ fn classify_keyring_error(e: &keyring::Error, operation: &str) -> String {
         format!("Keychain access denied by user during {}", operation)
     } else if msg.contains("already exists") {
         // This can also surface when access is denied on some macOS versions
-        format!("Keychain access conflict during {} (item may exist or access was denied)", operation)
+        format!(
+            "Keychain access conflict during {} (item may exist or access was denied)",
+            operation
+        )
     } else {
         match e {
             keyring::Error::NoStorageAccess(_) => {
-                format!("Keychain locked or inaccessible during {}: {}", operation, msg)
+                format!(
+                    "Keychain locked or inaccessible during {}: {}",
+                    operation, msg
+                )
             }
             keyring::Error::PlatformFailure(_) => {
                 format!("Keychain platform error during {}: {}", operation, msg)
@@ -227,35 +247,44 @@ fn classify_keyring_error(e: &keyring::Error, operation: &str) -> String {
 /// Runs on a background thread to avoid blocking the main thread when
 /// macOS shows a keychain authorization dialog.
 #[tauri::command]
-async fn save_credentials(jid: String, password: String, server: Option<String>) -> Result<(), String> {
+async fn save_credentials(
+    jid: String,
+    password: String,
+    server: Option<String>,
+) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
-        let entry = Entry::new(KEYRING_SERVICE, &jid)
-            .map_err(|e| {
-                tracing::error!("Keychain: failed to create entry for {}: {}", jid, e);
-                format!("Failed to create keyring entry: {}", e)
-            })?;
+        let entry = Entry::new(KEYRING_SERVICE, &jid).map_err(|e| {
+            tracing::error!("Keychain: failed to create entry for {}: {}", jid, e);
+            format!("Failed to create keyring entry: {}", e)
+        })?;
 
-        let credentials = StoredCredentials { jid: jid.clone(), password, server };
-        let json = serde_json::to_string(&credentials)
-            .map_err(|e| {
-                tracing::error!("Keychain: failed to serialize credentials for {}: {}", jid, e);
-                format!("Failed to serialize credentials: {}", e)
-            })?;
+        let credentials = StoredCredentials {
+            jid: jid.clone(),
+            password,
+            server,
+        };
+        let json = serde_json::to_string(&credentials).map_err(|e| {
+            tracing::error!(
+                "Keychain: failed to serialize credentials for {}: {}",
+                jid,
+                e
+            );
+            format!("Failed to serialize credentials: {}", e)
+        })?;
 
-        entry.set_password(&json)
-            .map_err(|e| {
-                let desc = classify_keyring_error(&e, "save");
-                tracing::error!("Keychain: {} for {}", desc, jid);
-                desc
-            })?;
+        entry.set_password(&json).map_err(|e| {
+            let desc = classify_keyring_error(&e, "save");
+            tracing::error!("Keychain: {} for {}", desc, jid);
+            desc
+        })?;
 
         // Also store the JID as the "last user" so we know which account to load
-        let last_user_entry = Entry::new(KEYRING_SERVICE, "last_user")
-            .map_err(|e| {
-                tracing::error!("Keychain: failed to create last_user entry: {}", e);
-                format!("Failed to create last_user entry: {}", e)
-            })?;
-        last_user_entry.set_password(&credentials.jid)
+        let last_user_entry = Entry::new(KEYRING_SERVICE, "last_user").map_err(|e| {
+            tracing::error!("Keychain: failed to create last_user entry: {}", e);
+            format!("Failed to create last_user entry: {}", e)
+        })?;
+        last_user_entry
+            .set_password(&credentials.jid)
             .map_err(|e| {
                 let desc = classify_keyring_error(&e, "save last_user");
                 tracing::error!("Keychain: {} for {}", desc, jid);
@@ -276,11 +305,10 @@ async fn save_credentials(jid: String, password: String, server: Option<String>)
 async fn get_credentials() -> Result<Option<StoredCredentials>, String> {
     tokio::task::spawn_blocking(move || {
         // First get the last used JID
-        let last_user_entry = Entry::new(KEYRING_SERVICE, "last_user")
-            .map_err(|e| {
-                tracing::error!("Keychain: failed to create last_user entry: {}", e);
-                format!("Failed to create last_user entry: {}", e)
-            })?;
+        let last_user_entry = Entry::new(KEYRING_SERVICE, "last_user").map_err(|e| {
+            tracing::error!("Keychain: failed to create last_user entry: {}", e);
+            format!("Failed to create last_user entry: {}", e)
+        })?;
 
         let jid = match last_user_entry.get_password() {
             Ok(jid) => jid,
@@ -296,19 +324,17 @@ async fn get_credentials() -> Result<Option<StoredCredentials>, String> {
         };
 
         // Now get the credentials for that JID
-        let entry = Entry::new(KEYRING_SERVICE, &jid)
-            .map_err(|e| {
-                tracing::error!("Keychain: failed to create entry for {}: {}", jid, e);
-                format!("Failed to create keyring entry: {}", e)
-            })?;
+        let entry = Entry::new(KEYRING_SERVICE, &jid).map_err(|e| {
+            tracing::error!("Keychain: failed to create entry for {}: {}", jid, e);
+            format!("Failed to create keyring entry: {}", e)
+        })?;
 
         match entry.get_password() {
             Ok(json) => {
-                let credentials: StoredCredentials = serde_json::from_str(&json)
-                    .map_err(|e| {
-                        tracing::error!("Keychain: failed to parse credentials for {}: {}", jid, e);
-                        format!("Failed to parse credentials: {}", e)
-                    })?;
+                let credentials: StoredCredentials = serde_json::from_str(&json).map_err(|e| {
+                    tracing::error!("Keychain: failed to parse credentials for {}: {}", jid, e);
+                    format!("Failed to parse credentials: {}", e)
+                })?;
                 tracing::info!("Keychain: loaded credentials for {}", jid);
                 Ok(Some(credentials))
             }
@@ -334,24 +360,25 @@ async fn get_credentials() -> Result<Option<StoredCredentials>, String> {
 async fn delete_credentials() -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
         // Get the last used JID
-        let last_user_entry = Entry::new(KEYRING_SERVICE, "last_user")
-            .map_err(|e| {
-                tracing::error!("Keychain: failed to create last_user entry: {}", e);
-                format!("Failed to create last_user entry: {}", e)
-            })?;
+        let last_user_entry = Entry::new(KEYRING_SERVICE, "last_user").map_err(|e| {
+            tracing::error!("Keychain: failed to create last_user entry: {}", e);
+            format!("Failed to create last_user entry: {}", e)
+        })?;
 
         if let Ok(jid) = last_user_entry.get_password() {
             // Delete the credentials entry
-            let entry = Entry::new(KEYRING_SERVICE, &jid)
-                .map_err(|e| {
-                    tracing::error!("Keychain: failed to create entry for {}: {}", jid, e);
-                    format!("Failed to create keyring entry: {}", e)
-                })?;
+            let entry = Entry::new(KEYRING_SERVICE, &jid).map_err(|e| {
+                tracing::error!("Keychain: failed to create entry for {}: {}", jid, e);
+                format!("Failed to create keyring entry: {}", e)
+            })?;
             match entry.delete_credential() {
                 Ok(()) => tracing::info!("Keychain: deleted credentials for {}", jid),
-                Err(keyring::Error::NoEntry) => tracing::debug!("Keychain: no credentials to delete for {}", jid),
+                Err(keyring::Error::NoEntry) => {
+                    tracing::debug!("Keychain: no credentials to delete for {}", jid)
+                }
                 Err(e) => {
-                    let desc = classify_keyring_error(&e, &format!("delete credentials for {}", jid));
+                    let desc =
+                        classify_keyring_error(&e, &format!("delete credentials for {}", jid));
                     tracing::warn!("Keychain: {}", desc);
                 }
             }
@@ -362,7 +389,9 @@ async fn delete_credentials() -> Result<(), String> {
         // Delete the last_user entry
         match last_user_entry.delete_credential() {
             Ok(()) => tracing::debug!("Keychain: deleted last_user entry"),
-            Err(keyring::Error::NoEntry) => tracing::debug!("Keychain: no last_user entry to delete"),
+            Err(keyring::Error::NoEntry) => {
+                tracing::debug!("Keychain: no last_user entry to delete")
+            }
             Err(e) => {
                 let desc = classify_keyring_error(&e, "delete last_user");
                 tracing::warn!("Keychain: {}", desc);
@@ -391,7 +420,10 @@ const STOP_XMPP_PROXY_COMMAND_TIMEOUT: std::time::Duration = std::time::Duration
 /// Start XMPP WebSocket-to-TCP proxy.
 /// The `server` parameter supports: `tls://host:port`, `tcp://host:port`, `host:port`, or bare `domain`.
 #[tauri::command]
-async fn start_xmpp_proxy(app: tauri::AppHandle, server: String) -> Result<xmpp_proxy::ProxyStartResult, String> {
+async fn start_xmpp_proxy(
+    app: tauri::AppHandle,
+    server: String,
+) -> Result<xmpp_proxy::ProxyStartResult, String> {
     tokio::time::timeout(
         START_XMPP_PROXY_COMMAND_TIMEOUT,
         xmpp_proxy::start_proxy(server, Some(app)),
@@ -455,13 +487,10 @@ fn fetch_url_metadata(url: String) -> Result<UrlMetadata, String> {
         })?;
 
     // Fetch the URL
-    let response = client
-        .get(&url)
-        .send()
-        .map_err(|e| {
-            tracing::warn!(url = %url, "Link preview: failed to fetch URL: {}", e);
-            format!("Failed to fetch URL: {}", e)
-        })?;
+    let response = client.get(&url).send().map_err(|e| {
+        tracing::warn!(url = %url, "Link preview: failed to fetch URL: {}", e);
+        format!("Failed to fetch URL: {}", e)
+    })?;
 
     // Check content type - only process HTML
     let content_type = response
@@ -475,12 +504,10 @@ fn fetch_url_metadata(url: String) -> Result<UrlMetadata, String> {
         return Err("URL does not return HTML content".to_string());
     }
 
-    let html = response
-        .text()
-        .map_err(|e| {
-            tracing::warn!(url = %url, "Link preview: failed to read response body: {}", e);
-            format!("Failed to read response: {}", e)
-        })?;
+    let html = response.text().map_err(|e| {
+        tracing::warn!(url = %url, "Link preview: failed to read response body: {}", e);
+        format!("Failed to read response: {}", e)
+    })?;
 
     // Parse HTML and extract OG metadata
     let document = Html::parse_document(&html);
@@ -579,9 +606,15 @@ fn fetch_url_metadata(url: String) -> Result<UrlMetadata, String> {
 fn ensure_window_visible(window: &tauri::WebviewWindow) {
     use tauri::PhysicalPosition;
 
-    let Ok(position) = window.outer_position() else { return };
-    let Ok(size) = window.outer_size() else { return };
-    let Ok(monitors) = window.available_monitors() else { return };
+    let Ok(position) = window.outer_position() else {
+        return;
+    };
+    let Ok(size) = window.outer_size() else {
+        return;
+    };
+    let Ok(monitors) = window.available_monitors() else {
+        return;
+    };
 
     // Check if any part of the window's title bar (top 50px) is visible on any monitor
     // We check the title bar area specifically so the user can always drag the window
@@ -620,17 +653,20 @@ fn ensure_window_visible(window: &tauri::WebviewWindow) {
 
 #[cfg(target_os = "macos")]
 mod macos {
-    use std::ptr::NonNull;
-    use std::sync::{Arc, Mutex};
-    use std::sync::atomic::{AtomicU64, Ordering};
     use block2::RcBlock;
-    use objc2_foundation::{NSNotification, NSNotificationCenter, NSNotificationName, NSProcessInfo, NSString};
     use objc2_app_kit::NSWorkspace;
     use objc2_foundation::NSActivityOptions;
+    use objc2_foundation::{
+        NSNotification, NSNotificationCenter, NSNotificationName, NSProcessInfo, NSString,
+    };
+    use std::ptr::NonNull;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::{Arc, Mutex};
     use tauri::WebviewWindow;
 
     // Store the window reference for the observer callback
-    static WINDOW: std::sync::OnceLock<Arc<Mutex<Option<WebviewWindow>>>> = std::sync::OnceLock::new();
+    static WINDOW: std::sync::OnceLock<Arc<Mutex<Option<WebviewWindow>>>> =
+        std::sync::OnceLock::new();
 
     // Store the app handle for emitting events from activation observer
     static APP_HANDLE: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();
@@ -661,8 +697,8 @@ mod macos {
     }
 
     pub fn setup_activation_observer(window: WebviewWindow, app_handle: tauri::AppHandle) {
-        use tauri::Emitter;
         use std::time::{SystemTime, UNIX_EPOCH};
+        use tauri::Emitter;
 
         // Store window reference
         let window_holder = WINDOW.get_or_init(|| Arc::new(Mutex::new(None)));
@@ -720,8 +756,8 @@ mod macos {
     /// WebView throttling. We store the wake timestamp so that when the app becomes
     /// active, we can emit a deferred wake event with the actual sleep duration.
     pub fn setup_sleep_observer(app_handle: tauri::AppHandle) {
-        use tauri::Emitter;
         use std::time::{SystemTime, UNIX_EPOCH};
+        use tauri::Emitter;
 
         unsafe {
             // NSWorkspace notifications use the shared workspace's notification center
@@ -781,8 +817,16 @@ fn log_to_terminal(level: String, message: String) {
 
 /// Print startup diagnostics to stderr for debugging.
 fn print_startup_diagnostics() {
-    eprintln!("Fluux Messenger v{} (build {})", env!("CARGO_PKG_VERSION"), env!("GIT_HASH"));
-    eprintln!("Platform: {} / {}", std::env::consts::OS, std::env::consts::ARCH);
+    eprintln!(
+        "Fluux Messenger v{} (build {})",
+        env!("CARGO_PKG_VERSION"),
+        env!("GIT_HASH")
+    );
+    eprintln!(
+        "Platform: {} / {}",
+        std::env::consts::OS,
+        std::env::consts::ARCH
+    );
 
     #[cfg(target_os = "linux")]
     {
@@ -804,7 +848,10 @@ fn print_startup_diagnostics() {
             }
         );
         eprintln!("  WEBKIT_DISABLE_DMABUF_RENDERER: {}", dmabuf_disabled);
-        eprintln!("  WEBKIT_DISABLE_COMPOSITING_MODE: {}", compositing_disabled);
+        eprintln!(
+            "  WEBKIT_DISABLE_COMPOSITING_MODE: {}",
+            compositing_disabled
+        );
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -818,7 +865,9 @@ fn print_startup_diagnostics() {
 fn main() {
     // Parse CLI flags early, before tracing subscriber init
     let args: Vec<String> = std::env::args().collect();
-    let clear_storage = args.iter().any(|arg| arg == "--clear-storage" || arg == "-c");
+    let clear_storage = args
+        .iter()
+        .any(|arg| arg == "--clear-storage" || arg == "-c");
     let dangerous_insecure_tls = args.iter().any(|arg| arg == "--dangerous-insecure-tls");
 
     // Set insecure TLS flag before any proxy can start
@@ -841,9 +890,9 @@ fn main() {
     let verbose = verbose_level.is_some();
 
     // Parse --log-file=<path> option
-    let log_file_path = args.iter().find_map(|arg| {
-        arg.strip_prefix("--log-file=").map(|s| s.to_string())
-    });
+    let log_file_path = args
+        .iter()
+        .find_map(|arg| arg.strip_prefix("--log-file=").map(|s| s.to_string()));
 
     if args.iter().any(|arg| arg == "--help" || arg == "-h") {
         eprintln!("Fluux Messenger v{}", env!("CARGO_PKG_VERSION"));
@@ -853,7 +902,9 @@ fn main() {
         eprintln!("Options:");
         eprintln!("  -v, --verbose         Enable verbose logging to stderr (no XMPP traffic)");
         eprintln!("      --verbose=xmpp    Enable verbose logging including XMPP packet content");
-        eprintln!("      --log-file=PATH   Override log file directory (default: platform log dir)");
+        eprintln!(
+            "      --log-file=PATH   Override log file directory (default: platform log dir)"
+        );
         eprintln!("  -c, --clear-storage   Clear local storage on startup");
         eprintln!("      --dangerous-insecure-tls");
         eprintln!("                        Disable TLS certificate verification (INSECURE!)");
@@ -881,8 +932,7 @@ fn main() {
         //   macOS:   ~/Library/Logs/com.processone.fluux/
         //   Linux:   ~/.local/share/com.processone.fluux/logs/  (or $XDG_DATA_HOME)
         //   Windows: %APPDATA%\com.processone.fluux\logs\
-        let base = dirs::data_local_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."));
+        let base = dirs::data_local_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
         let dir = base.join("com.processone.fluux").join("logs");
 
         #[cfg(target_os = "macos")]
@@ -902,7 +952,11 @@ fn main() {
 
         // Ensure log directory exists
         if let Err(e) = std::fs::create_dir_all(&log_dir) {
-            eprintln!("Warning: could not create log directory '{}': {}", log_dir.display(), e);
+            eprintln!(
+                "Warning: could not create log directory '{}': {}",
+                log_dir.display(),
+                e
+            );
         }
 
         // File log filter: always at info level (captures app + webview logs)
@@ -921,25 +975,30 @@ fn main() {
             .with_filter(file_filter);
 
         // Stderr layer: only when --verbose or --log-file is passed
-        let stderr_layer = if verbose || log_file_path.is_some() || std::env::var("RUST_LOG").is_ok() {
-            let effective_level = verbose_level.or(if log_file_path.is_some() { Some("default") } else { None });
+        let stderr_layer =
+            if verbose || log_file_path.is_some() || std::env::var("RUST_LOG").is_ok() {
+                let effective_level = verbose_level.or(if log_file_path.is_some() {
+                    Some("default")
+                } else {
+                    None
+                });
 
-            let stderr_filter = if std::env::var("RUST_LOG").is_ok() {
-                EnvFilter::from_default_env()
-            } else if effective_level == Some("xmpp") {
-                EnvFilter::new("fluux=info,fluux::xmpp_proxy=debug,webview=debug,info")
+                let stderr_filter = if std::env::var("RUST_LOG").is_ok() {
+                    EnvFilter::from_default_env()
+                } else if effective_level == Some("xmpp") {
+                    EnvFilter::new("fluux=info,fluux::xmpp_proxy=debug,webview=debug,info")
+                } else {
+                    EnvFilter::new("fluux=info,info")
+                };
+
+                Some(
+                    tracing_subscriber::fmt::layer()
+                        .with_writer(std::io::stderr)
+                        .with_filter(stderr_filter),
+                )
             } else {
-                EnvFilter::new("fluux=info,info")
+                None
             };
-
-            Some(
-                tracing_subscriber::fmt::layer()
-                    .with_writer(std::io::stderr)
-                    .with_filter(stderr_filter),
-            )
-        } else {
-            None
-        };
 
         tracing_subscriber::registry()
             .with(file_layer)
@@ -1332,7 +1391,12 @@ fn main() {
             // Save window state including position (macOS and Windows only)
             #[cfg(any(target_os = "macos", target_os = "windows"))]
             {
-                let _ = _app_handle.save_window_state(StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED | StateFlags::FULLSCREEN);
+                let _ = _app_handle.save_window_state(
+                    StateFlags::SIZE
+                        | StateFlags::POSITION
+                        | StateFlags::MAXIMIZED
+                        | StateFlags::FULLSCREEN,
+                );
             }
             // Emit event to frontend for graceful disconnect
             let _ = _app_handle.emit("graceful-shutdown", ());

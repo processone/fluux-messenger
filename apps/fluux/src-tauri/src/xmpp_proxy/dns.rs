@@ -5,8 +5,8 @@
 //! lookup with priority sorting per RFC 2782.
 
 use tracing::{info, warn};
-use trust_dns_resolver::TokioAsyncResolver;
 use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
+use trust_dns_resolver::TokioAsyncResolver;
 
 fn elapsed_ms(start: std::time::Instant) -> u64 {
     start.elapsed().as_millis() as u64
@@ -81,11 +81,21 @@ pub fn parse_server_input(server: &str) -> ParsedServer {
         let (host_port, domain) = split_domain_param(rest);
         if let Some((host, port_str)) = host_port.rsplit_once(':') {
             if let Ok(port) = port_str.parse::<u16>() {
-                return ParsedServer::Direct(host.to_string(), port, ConnectionMode::DirectTls, domain);
+                return ParsedServer::Direct(
+                    host.to_string(),
+                    port,
+                    ConnectionMode::DirectTls,
+                    domain,
+                );
             }
         }
         // No port specified — default to 5223
-        return ParsedServer::Direct(host_port.to_string(), 5223, ConnectionMode::DirectTls, domain);
+        return ParsedServer::Direct(
+            host_port.to_string(),
+            5223,
+            ConnectionMode::DirectTls,
+            domain,
+        );
     }
 
     // tcp:// scheme
@@ -103,7 +113,11 @@ pub fn parse_server_input(server: &str) -> ParsedServer {
     // host:port (no scheme) — use rsplit_once to handle IPv6 addresses
     if let Some((host, port_str)) = trimmed.rsplit_once(':') {
         if let Ok(port) = port_str.parse::<u16>() {
-            let mode = if port == 5223 { ConnectionMode::DirectTls } else { ConnectionMode::Tcp };
+            let mode = if port == 5223 {
+                ConnectionMode::DirectTls
+            } else {
+                ConnectionMode::Tcp
+            };
             return ParsedServer::Direct(host.to_string(), port, mode, None);
         }
     }
@@ -134,8 +148,7 @@ pub async fn resolve_xmpp_server(domain: &str) -> Result<XmppEndpoint, String> {
         Err(e) => {
             warn!(
                 resolver_init_ms = elapsed_ms(resolver_init_started),
-                "Failed to load system DNS config: {}, falling back to default resolver",
-                e
+                "Failed to load system DNS config: {}, falling back to default resolver", e
             );
             TokioAsyncResolver::tokio(ResolverConfig::default(), ResolverOpts::default())
         }
@@ -152,7 +165,8 @@ pub async fn resolve_xmpp_server(domain: &str) -> Result<XmppEndpoint, String> {
             if !records.is_empty() {
                 // Sort by priority ascending (lower = preferred), then weight descending (higher = preferred)
                 records.sort_by(|a, b| {
-                    a.priority().cmp(&b.priority())
+                    a.priority()
+                        .cmp(&b.priority())
                         .then(b.weight().cmp(&a.weight()))
                 });
                 for r in &records {
@@ -194,7 +208,8 @@ pub async fn resolve_xmpp_server(domain: &str) -> Result<XmppEndpoint, String> {
             let mut records: Vec<_> = lookup.iter().collect();
             if !records.is_empty() {
                 records.sort_by(|a, b| {
-                    a.priority().cmp(&b.priority())
+                    a.priority()
+                        .cmp(&b.priority())
                         .then(b.weight().cmp(&a.weight()))
                 });
                 for r in &records {
@@ -252,7 +267,12 @@ mod tests {
     fn test_parse_tls_uri_with_port() {
         assert_eq!(
             parse_server_input("tls://chat.example.com:5223"),
-            ParsedServer::Direct("chat.example.com".to_string(), 5223, ConnectionMode::DirectTls, None)
+            ParsedServer::Direct(
+                "chat.example.com".to_string(),
+                5223,
+                ConnectionMode::DirectTls,
+                None
+            )
         );
     }
 
@@ -260,7 +280,12 @@ mod tests {
     fn test_parse_tls_uri_custom_port() {
         assert_eq!(
             parse_server_input("tls://chat.example.com:5270"),
-            ParsedServer::Direct("chat.example.com".to_string(), 5270, ConnectionMode::DirectTls, None)
+            ParsedServer::Direct(
+                "chat.example.com".to_string(),
+                5270,
+                ConnectionMode::DirectTls,
+                None
+            )
         );
     }
 
@@ -268,7 +293,12 @@ mod tests {
     fn test_parse_tls_uri_no_port() {
         assert_eq!(
             parse_server_input("tls://chat.example.com"),
-            ParsedServer::Direct("chat.example.com".to_string(), 5223, ConnectionMode::DirectTls, None)
+            ParsedServer::Direct(
+                "chat.example.com".to_string(),
+                5223,
+                ConnectionMode::DirectTls,
+                None
+            )
         );
     }
 
@@ -276,7 +306,12 @@ mod tests {
     fn test_parse_tcp_uri_with_port() {
         assert_eq!(
             parse_server_input("tcp://chat.example.com:5222"),
-            ParsedServer::Direct("chat.example.com".to_string(), 5222, ConnectionMode::Tcp, None)
+            ParsedServer::Direct(
+                "chat.example.com".to_string(),
+                5222,
+                ConnectionMode::Tcp,
+                None
+            )
         );
     }
 
@@ -284,7 +319,12 @@ mod tests {
     fn test_parse_tcp_uri_no_port() {
         assert_eq!(
             parse_server_input("tcp://chat.example.com"),
-            ParsedServer::Direct("chat.example.com".to_string(), 5222, ConnectionMode::Tcp, None)
+            ParsedServer::Direct(
+                "chat.example.com".to_string(),
+                5222,
+                ConnectionMode::Tcp,
+                None
+            )
         );
     }
 
@@ -293,7 +333,12 @@ mod tests {
         // Port 5223 is conventionally direct TLS
         assert_eq!(
             parse_server_input("chat.example.com:5223"),
-            ParsedServer::Direct("chat.example.com".to_string(), 5223, ConnectionMode::DirectTls, None)
+            ParsedServer::Direct(
+                "chat.example.com".to_string(),
+                5223,
+                ConnectionMode::DirectTls,
+                None
+            )
         );
     }
 
@@ -301,7 +346,12 @@ mod tests {
     fn test_parse_host_port_5222_is_tcp() {
         assert_eq!(
             parse_server_input("chat.example.com:5222"),
-            ParsedServer::Direct("chat.example.com".to_string(), 5222, ConnectionMode::Tcp, None)
+            ParsedServer::Direct(
+                "chat.example.com".to_string(),
+                5222,
+                ConnectionMode::Tcp,
+                None
+            )
         );
     }
 
@@ -310,7 +360,12 @@ mod tests {
         // Non-standard port defaults to STARTTLS mode
         assert_eq!(
             parse_server_input("chat.example.com:5280"),
-            ParsedServer::Direct("chat.example.com".to_string(), 5280, ConnectionMode::Tcp, None)
+            ParsedServer::Direct(
+                "chat.example.com".to_string(),
+                5280,
+                ConnectionMode::Tcp,
+                None
+            )
         );
     }
 
@@ -334,7 +389,12 @@ mod tests {
     fn test_parse_tls_uri_with_whitespace() {
         assert_eq!(
             parse_server_input("  tls://chat.example.com:5223  "),
-            ParsedServer::Direct("chat.example.com".to_string(), 5223, ConnectionMode::DirectTls, None)
+            ParsedServer::Direct(
+                "chat.example.com".to_string(),
+                5223,
+                ConnectionMode::DirectTls,
+                None
+            )
         );
     }
 
@@ -344,7 +404,12 @@ mod tests {
     fn test_parse_tls_uri_with_domain() {
         assert_eq!(
             parse_server_input("tls://v6.mdosch.de:5223?domain=diebesban.de"),
-            ParsedServer::Direct("v6.mdosch.de".to_string(), 5223, ConnectionMode::DirectTls, Some("diebesban.de".to_string()))
+            ParsedServer::Direct(
+                "v6.mdosch.de".to_string(),
+                5223,
+                ConnectionMode::DirectTls,
+                Some("diebesban.de".to_string())
+            )
         );
     }
 
@@ -352,7 +417,12 @@ mod tests {
     fn test_parse_tcp_uri_with_domain() {
         assert_eq!(
             parse_server_input("tcp://v4.mdosch.de:5222?domain=diebesban.de"),
-            ParsedServer::Direct("v4.mdosch.de".to_string(), 5222, ConnectionMode::Tcp, Some("diebesban.de".to_string()))
+            ParsedServer::Direct(
+                "v4.mdosch.de".to_string(),
+                5222,
+                ConnectionMode::Tcp,
+                Some("diebesban.de".to_string())
+            )
         );
     }
 
@@ -360,7 +430,12 @@ mod tests {
     fn test_parse_tls_uri_with_domain_no_port() {
         assert_eq!(
             parse_server_input("tls://v6.mdosch.de?domain=diebesban.de"),
-            ParsedServer::Direct("v6.mdosch.de".to_string(), 5223, ConnectionMode::DirectTls, Some("diebesban.de".to_string()))
+            ParsedServer::Direct(
+                "v6.mdosch.de".to_string(),
+                5223,
+                ConnectionMode::DirectTls,
+                Some("diebesban.de".to_string())
+            )
         );
     }
 
