@@ -577,32 +577,10 @@ async fn wait_for_initial_client_stanza(
     }
 }
 
-/// Resolve upstream endpoint and establish a TLS stream (direct TLS or STARTTLS).
-async fn connect_upstream_tls(
-    server_input: &str,
+/// Attempt to connect to a single XMPP endpoint (TCP + TLS or TCP + STARTTLS).
+async fn try_connect_endpoint(
+    endpoint: &XmppEndpoint,
 ) -> Result<tokio_rustls::client::TlsStream<TcpStream>, String> {
-    // Resolve DNS/SRV per connection (fresh resolution handles DNS changes after sleep)
-    let resolve_started = Instant::now();
-    let endpoint = match parse_server_input(server_input) {
-        ParsedServer::Direct(host, port, mode, domain) => {
-            info!(host = %host, port, mode = ?mode, domain = ?domain, "Using explicit endpoint");
-            XmppEndpoint {
-                host,
-                port,
-                mode,
-                domain,
-            }
-        }
-        ParsedServer::Domain(domain) => resolve_xmpp_server(&domain)
-            .await
-            .map_err(|e| format!("Failed to resolve XMPP server: {}", e))?,
-    };
-
-    let dns_resolve_ms = resolve_started.elapsed().as_millis() as u64;
-    info!(host = %endpoint.host, port = endpoint.port, mode = ?endpoint.mode,
-        domain = ?endpoint.domain, tls_name = endpoint.tls_name(),
-        dns_resolve_ms, "Resolved endpoint");
-
     match endpoint.mode {
         ConnectionMode::Tcp => {
             let tcp_stream = tokio::time::timeout(
@@ -611,11 +589,6 @@ async fn connect_upstream_tls(
             )
             .await
             .map_err(|_| {
-                error!(
-                    host = %endpoint.host, port = endpoint.port, mode = "starttls",
-                    timeout_secs = TCP_CONNECT_TIMEOUT.as_secs(),
-                    "TCP connect timed out"
-                );
                 format!(
                     "TCP connect timed out after {}s to {}:{}",
                     TCP_CONNECT_TIMEOUT.as_secs(),
@@ -624,19 +597,13 @@ async fn connect_upstream_tls(
                 )
             })?
             .map_err(|e| {
-                error!(
-                    host = %endpoint.host, port = endpoint.port, mode = "starttls",
-                    error = %e, error_kind = ?e.kind(),
-                    "TCP connect failed"
-                );
                 format!(
-                    "Failed to connect to XMPP server {}:{} (STARTTLS): {}",
+                    "TCP connect failed to {}:{} (STARTTLS): {}",
                     endpoint.host, endpoint.port, e
                 )
             })?;
             info!(host = %endpoint.host, port = endpoint.port, "Connected (TCP), performing STARTTLS");
 
-            // Use tls_name() for the XMPP domain (TLS SNI + stream `to=`), host for TCP target.
             let tls_stream =
                 perform_starttls(tcp_stream, endpoint.tls_name(), &endpoint.host).await?;
             info!(host = %endpoint.host, port = endpoint.port, "STARTTLS upgrade complete");
@@ -649,11 +616,6 @@ async fn connect_upstream_tls(
             )
             .await
             .map_err(|_| {
-                error!(
-                    host = %endpoint.host, port = endpoint.port, mode = "direct_tls",
-                    timeout_secs = TCP_CONNECT_TIMEOUT.as_secs(),
-                    "TCP connect timed out"
-                );
                 format!(
                     "TCP connect timed out after {}s to {}:{}",
                     TCP_CONNECT_TIMEOUT.as_secs(),
@@ -662,25 +624,101 @@ async fn connect_upstream_tls(
                 )
             })?
             .map_err(|e| {
-                error!(
-                    host = %endpoint.host, port = endpoint.port, mode = "direct_tls",
-                    error = %e, error_kind = ?e.kind(),
-                    "TCP connect failed"
-                );
                 format!(
-                    "Failed to connect to XMPP server {}:{} (direct TLS): {}",
+                    "TCP connect failed to {}:{} (direct TLS): {}",
                     endpoint.host, endpoint.port, e
                 )
             })?;
 
-            // Use tls_name() for SNI — the XMPP domain, not the SRV target host
             let tls_stream = upgrade_to_tls(tcp_stream, endpoint.tls_name()).await?;
-
             info!(host = %endpoint.host, port = endpoint.port,
                 tls_name = endpoint.tls_name(), "Connected (direct TLS)");
             Ok(tls_stream)
         }
     }
+}
+
+/// Resolve upstream endpoint(s) and establish a TLS stream (direct TLS or STARTTLS).
+///
+/// For explicit endpoints (`tls://`, `tcp://`, `host:port`), tries a single connection.
+/// For bare domains, resolves all SRV records and tries each in priority order,
+/// falling through to the next endpoint on TCP or TLS failure.
+async fn connect_upstream_tls(
+    server_input: &str,
+) -> Result<tokio_rustls::client::TlsStream<TcpStream>, String> {
+    // Resolve DNS/SRV per connection (fresh resolution handles DNS changes after sleep)
+    let resolve_started = Instant::now();
+    let endpoints = match parse_server_input(server_input) {
+        ParsedServer::Direct(host, port, mode, domain) => {
+            info!(host = %host, port, mode = ?mode, domain = ?domain, "Using explicit endpoint");
+            vec![XmppEndpoint {
+                host,
+                port,
+                mode,
+                domain,
+            }]
+        }
+        ParsedServer::Domain(domain) => resolve_xmpp_server(&domain)
+            .await
+            .map_err(|e| format!("Failed to resolve XMPP server: {}", e))?,
+    };
+
+    let dns_resolve_ms = resolve_started.elapsed().as_millis() as u64;
+    let endpoint_count = endpoints.len();
+    info!(endpoint_count, dns_resolve_ms, "Resolved endpoints, attempting connections");
+
+    let mut errors: Vec<String> = Vec::new();
+
+    for (i, endpoint) in endpoints.iter().enumerate() {
+        let attempt = i + 1;
+        info!(
+            attempt, total = endpoint_count,
+            host = %endpoint.host, port = endpoint.port,
+            mode = ?endpoint.mode, tls_name = endpoint.tls_name(),
+            "Trying endpoint"
+        );
+
+        match try_connect_endpoint(endpoint).await {
+            Ok(tls_stream) => {
+                if attempt > 1 {
+                    info!(
+                        attempt, total = endpoint_count,
+                        host = %endpoint.host, port = endpoint.port,
+                        "Connected after {} failed attempt(s)", attempt - 1
+                    );
+                }
+                return Ok(tls_stream);
+            }
+            Err(e) => {
+                let has_more = attempt < endpoint_count;
+                if has_more {
+                    warn!(
+                        attempt, total = endpoint_count,
+                        host = %endpoint.host, port = endpoint.port,
+                        mode = ?endpoint.mode, error = %e,
+                        "Endpoint failed, trying next"
+                    );
+                } else {
+                    error!(
+                        attempt, total = endpoint_count,
+                        host = %endpoint.host, port = endpoint.port,
+                        mode = ?endpoint.mode, error = %e,
+                        "Endpoint failed, no more endpoints"
+                    );
+                }
+                errors.push(format!(
+                    "{}:{} ({:?}): {}",
+                    endpoint.host, endpoint.port, endpoint.mode, e
+                ));
+            }
+        }
+    }
+
+    Err(format!(
+        "All {} endpoint(s) failed:\n  - {}",
+        errors.len(),
+        errors.join("\n  - ")
+    ))
 }
 
 /// Perform XMPP STARTTLS negotiation on a plain TCP connection.

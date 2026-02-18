@@ -100,6 +100,13 @@ describe('XMPPClient Quick Chat', () => {
         return createMockElement('vCard', { xmlns: 'vcard-temp' }, [])
       }
 
+      // Roster fetch (Roster.fetchRoster)
+      if (xmlns === 'jabber:iq:roster') {
+        return createMockElement('iq', { type: 'result' }, [
+          { name: 'query', attrs: { xmlns: 'jabber:iq:roster' }, children: [] },
+        ])
+      }
+
       // Bookmarks fetch (RoomModule.fetchBookmarks)
       if (xmlns === 'http://jabber.org/protocol/pubsub') {
         return createMockElement('pubsub', { xmlns: 'http://jabber.org/protocol/pubsub' }, [
