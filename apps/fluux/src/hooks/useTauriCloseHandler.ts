@@ -4,10 +4,8 @@ import { useXMPPContext } from '@fluux/sdk'
 /**
  * Set up Tauri app close handlers for graceful XMPP disconnect.
  *
- * - macOS: Command-Q triggers graceful-shutdown from RunEvent::ExitRequested
- * - Windows: Tray "Quit" menu item emits graceful-shutdown
- *   Close button (X) hides to tray (handled in Rust), not quit
- * - Linux: Close button triggers onCloseRequested (no system tray)
+ * On desktop platforms, Rust emits `graceful-shutdown` before app exit
+ * (e.g. Cmd+Q, tray Quit). We disconnect XMPP, stop the proxy, then exit.
  *
  * No-op in non-Tauri environments (web browsers).
  */
@@ -15,16 +13,13 @@ export function useTauriCloseHandler(): void {
   const { client } = useXMPPContext()
 
   useEffect(() => {
-    let unlistenTauri: (() => void) | null = null
     let unlistenShutdown: (() => void) | null = null
     let isClosing = false
 
     const setup = async () => {
       try {
-        const { getCurrentWindow } = await import('@tauri-apps/api/window')
         const { listen } = await import('@tauri-apps/api/event')
         const { invoke } = await import('@tauri-apps/api/core')
-        const currentWindow = getCurrentWindow()
 
         const disconnectBestEffort = async () => {
           try {
@@ -39,30 +34,19 @@ export function useTauriCloseHandler(): void {
           }
         }
 
-        const isMacOS = navigator.platform.toLowerCase().includes('mac')
-        const isWindows = navigator.platform.toLowerCase().includes('win')
+        const platform = navigator.platform.toLowerCase()
+        const isDesktopPlatform =
+          platform.includes('mac') || platform.includes('win') || platform.includes('linux')
+        if (!isDesktopPlatform) return
 
-        if (isMacOS || isWindows) {
-          unlistenShutdown = await listen('graceful-shutdown', async () => {
-            if (isClosing) return
-            isClosing = true
+        unlistenShutdown = await listen('graceful-shutdown', async () => {
+          if (isClosing) return
+          isClosing = true
 
-            await disconnectBestEffort()
-            await invoke('stop_xmpp_proxy').catch(() => {})
-            await invoke('exit_app').catch(() => {})
-          })
-        } else {
-          // Linux: Handle close button (no system tray)
-          unlistenTauri = await currentWindow.onCloseRequested(async (event) => {
-            if (isClosing) return
-            isClosing = true
-            event.preventDefault()
-
-            await disconnectBestEffort()
-            await invoke('stop_xmpp_proxy').catch(() => {})
-            await currentWindow.destroy().catch(() => {})
-          })
-        }
+          await disconnectBestEffort()
+          await invoke('stop_xmpp_proxy').catch(() => {})
+          await invoke('exit_app').catch(() => {})
+        })
       } catch {
         // Not in Tauri environment, ignore
       }
@@ -71,7 +55,6 @@ export function useTauriCloseHandler(): void {
     void setup()
 
     return () => {
-      unlistenTauri?.()
       unlistenShutdown?.()
     }
   }, [client])
