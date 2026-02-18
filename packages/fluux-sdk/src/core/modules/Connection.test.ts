@@ -1291,9 +1291,9 @@ describe('XMPPClient Connection', () => {
       // Give time for async operations
       await vi.advanceTimersByTimeAsync(100)
 
-      // Should have requested roster via send() (roster response handled by stanza routing)
-      const sendCalls = mockXmppClientInstance.send.mock.calls
-      const rosterCall = sendCalls.find((call: any[]) => {
+      // Should have requested roster via sendIQ (iqCaller.request)
+      const iqCalls = mockXmppClientInstance.iqCaller.request.mock.calls
+      const rosterCall = iqCalls.find((call: any[]) => {
         const stanza = call[0]
         return stanza?.name === 'iq' &&
                stanza?.attrs?.type === 'get' &&
