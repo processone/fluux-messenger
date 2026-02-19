@@ -33,7 +33,7 @@ finish-args:
 
 modules:
   # System tray support (libappindicator-sys loads this via dlopen at runtime)
-  - shared-modules/libayatana-appindicator/libayatana-appindicator-gtk3.json
+  - modules/libayatana-appindicator/libayatana-appindicator-gtk3.json
 
   - name: fluux-messenger
     buildsystem: simple
