@@ -53,6 +53,7 @@ interface ConnectionState {
   reconnectTargetTime: number | null
   serverInfo: ServerInfo | null
   connectionMethod: ConnectionMethod | null
+  authMechanism: string | null
   // Own profile data
   ownAvatar: string | null  // Blob URL for display
   ownAvatarHash: string | null  // Hash for cache lookup
@@ -70,6 +71,7 @@ interface ConnectionState {
   setReconnectState: (attempt: number, reconnectTargetTime: number | null) => void
   setServerInfo: (info: ServerInfo | null) => void
   setConnectionMethod: (method: ConnectionMethod | null) => void
+  setAuthMechanism: (mechanism: string | null) => void
   // Own profile actions
   setOwnAvatar: (avatar: string | null, hash?: string | null) => void
   setOwnNickname: (nickname: string | null) => void
@@ -91,6 +93,7 @@ const initialState = {
   reconnectTargetTime: null,
   serverInfo: null as ServerInfo | null,
   connectionMethod: null as ConnectionMethod | null,
+  authMechanism: null as string | null,
   ownAvatar: null as string | null,
   ownAvatarHash: null as string | null,
   ownNickname: null as string | null,
@@ -109,6 +112,7 @@ export const connectionStore = createStore<ConnectionState>()(
   setReconnectState: (attempt, reconnectTargetTime) => set({ reconnectAttempt: attempt, reconnectTargetTime }),
   setServerInfo: (info) => set({ serverInfo: info }),
   setConnectionMethod: (method) => set({ connectionMethod: method }),
+  setAuthMechanism: (mechanism) => set({ authMechanism: mechanism }),
 
   setOwnAvatar: (avatar, hash) => set({
     ownAvatar: avatar,

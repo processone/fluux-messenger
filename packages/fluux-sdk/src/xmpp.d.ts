@@ -40,14 +40,29 @@ declare module '@xmpp/client' {
   export interface ClientOptions {
     service: string
     domain: string
-    username: string
-    password: string
+    username?: string
+    password?: string
     resource?: string
     lang?: string  // Sets xml:lang attribute on the stream
+    /** Custom SASL credentials handler. When provided, username/password are ignored. */
+    credentials?: (
+      authenticate: (creds: Record<string, unknown>, mechanism: string, userAgent?: unknown) => Promise<void>,
+      mechanisms: string[],
+      fast: { fetch: () => Promise<string | null> } | null,
+      entity: { isSecure: () => boolean }
+    ) => Promise<void>
   }
 
   export function client(options: ClientOptions): Client
   export function xml(name: string, attrs?: Record<string, string>, ...children: unknown[]): Element
+}
+
+declare module '@xmpp/client/lib/createOnAuthenticate.js' {
+  export function getMechanism(options: {
+    mechanisms: string[]
+    entity: { isSecure: () => boolean }
+    credentials: Record<string, unknown>
+  }): string
 }
 
 declare module '@xmpp/debug' {

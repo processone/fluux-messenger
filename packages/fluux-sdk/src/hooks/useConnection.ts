@@ -99,6 +99,7 @@ export function useConnection() {
   const reconnectTargetTime = useConnectionStore((s) => s.reconnectTargetTime)
   const serverInfo = useConnectionStore((s) => s.serverInfo)
   const connectionMethod = useConnectionStore((s) => s.connectionMethod)
+  const authMechanism = useConnectionStore((s) => s.authMechanism)
   // Own profile state
   const ownAvatar = useConnectionStore((s) => s.ownAvatar)
   const ownAvatarHash = useConnectionStore((s) => s.ownAvatarHash)
@@ -272,6 +273,7 @@ export function useConnection() {
       reconnectTargetTime,
       serverInfo,
       connectionMethod,
+      authMechanism,
       // Own profile state
       ownAvatar,
       ownAvatarHash,
@@ -297,6 +299,7 @@ export function useConnection() {
       reconnectTargetTime,
       serverInfo,
       connectionMethod,
+      authMechanism,
       ownAvatar,
       ownAvatarHash,
       ownNickname,

@@ -1,4 +1,5 @@
 import { client, Client, Element, xml } from '@xmpp/client'
+import { getMechanism } from '@xmpp/client/lib/createOnAuthenticate.js'
 import { createActor } from 'xstate'
 import { BaseModule, type ModuleDependencies } from './BaseModule'
 import type { ConnectOptions, ConnectionMethod } from '../types'
@@ -623,6 +624,7 @@ export class Connection extends BaseModule {
     this.stores.connection.setStatus('disconnected')
     this.stores.connection.setJid(null)
     this.stores.connection.setConnectionMethod(null)
+    this.stores.connection.setAuthMechanism(null)
     this.stores.console.addEvent('Disconnected', 'connection')
     this.deps.emitSDK('connection:status', { status: 'offline' })
     logDisconnect('sync phase complete (store transitioned to disconnected)')
@@ -1087,10 +1089,24 @@ export class Connection extends BaseModule {
     const xmppClient = client({
       service: wsUrl,
       domain,
-      username,
-      password,
       resource,
       lang,
+      credentials: async (
+        authenticate: (creds: Record<string, unknown>, mechanism: string, userAgent?: unknown) => Promise<void>,
+        mechanisms: string[],
+        fast: { fetch: () => Promise<string | null> } | null,
+        entity: { isSecure: () => boolean }
+      ) => {
+        const creds: Record<string, unknown> = { username, password }
+        if (fast) {
+          creds.token ??= await fast.fetch()
+        }
+        const mechanism: string = getMechanism({ mechanisms, entity, credentials: creds })
+        this.stores.connection.setAuthMechanism(mechanism)
+        this.stores.console.addEvent(`SASL mechanism: ${mechanism}`, 'connection')
+        logInfo(`SASL mechanism: ${mechanism} (offered: ${mechanisms.join(', ')})`)
+        await authenticate(creds, mechanism)
+      },
     })
 
     this.disableBuiltInReconnect(xmppClient)
