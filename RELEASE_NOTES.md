@@ -1,4 +1,4 @@
-## What's New in v0.13.2-beta.4
+## What's New in v0.13.2
 
 ### Added
 
@@ -8,6 +8,8 @@
 - Russian, Belarusian, Ukrainian, and Simplified Chinese translations (31 languages total)
 - Linux system tray support with close-to-tray functionality
 - Mod+Q full quit shortcut on Windows/Linux
+- SCRAM authentication mechanism support with browser polyfills and UI display
+- Windows drag and drop support
 
 ### Changed
 
@@ -36,6 +38,10 @@
 - MUC nick preserved on reconnect short-circuit
 - Linux logout lockups on proxy disconnect
 - Non-fatal errors now keep reconnecting with capped backoff
+- WebSocket protocol header compliance (RFC 7395) preventing browser rejection on Windows
+- Try all SRV record endpoints on connection failure instead of only the first
+- macOS reconnect reliability during sleep and focus events
+- Flatpak build updated for system tray support
 
 ---
 [Full Changelog](https://github.com/processone/fluux-messenger/blob/main/CHANGELOG.md)
