@@ -25,9 +25,9 @@ import { useDesktopNotifications } from '@/hooks/useDesktopNotifications'
 import { useSoundNotification } from '@/hooks/useSoundNotification'
 import { useEventsSoundNotification } from '@/hooks/useEventsSoundNotification'
 import { useEventsDesktopNotifications } from '@/hooks/useEventsDesktopNotifications'
-import { useAutoAway } from '@/hooks/useAutoAway'
+import { usePlatformState } from '@/hooks/usePlatformState'
 import { useSDKErrorToasts } from '@/hooks/useSDKErrorToasts'
-import { useWakeDetector, useSleepDetector, useFocusZones, useViewNavigation, isMobileWeb, useWindowVisibility, useRouteSync, type FocusZoneRefs } from '@/hooks'
+import { useFocusZones, useViewNavigation, isMobileWeb, useWindowVisibility, useRouteSync, type FocusZoneRefs } from '@/hooks'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useDeepLink } from '@/hooks/useDeepLink'
 import { saveViewState, getSavedViewState, type ViewStateData } from '@/hooks/useSessionPersistence'
@@ -73,14 +73,8 @@ function GlobalEffects() {
   // Show desktop notifications for new messages
   useDesktopNotifications()
 
-  // Auto-away after inactivity
-  useAutoAway()
-
-  // Verify connection after wake from sleep
-  useWakeDetector()
-
-  // Set XA presence before laptop sleeps
-  useSleepDetector()
+  // Platform state detection: wake/sleep, idle/activity, visibility
+  usePlatformState()
 
   // Track window visibility for new message markers
   useWindowVisibility()
@@ -403,6 +397,24 @@ function ChatLayoutContent() {
     modalActions.toggle('presenceMenu')
   }, [modalActions])
 
+  // Handle fully quitting desktop app (Linux/Windows)
+  const handleQuitApp = useCallback(() => {
+    const platform = navigator.platform.toLowerCase()
+    const isWindowsOrLinux = platform.includes('win') || platform.includes('linux')
+    if (!isWindowsOrLinux) return
+
+    const requestQuit = async () => {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core')
+        await invoke('exit_app')
+      } catch {
+        // Not in Tauri environment, ignore
+      }
+    }
+
+    void requestQuit()
+  }, [])
+
   // Handler for closing contact profile (used by keyboard shortcuts)
   const handleContactBack = () => setSelectedContactJid(null)
 
@@ -421,6 +433,7 @@ function ChatLayoutContent() {
     onToggleShortcutHelp: toggleShortcutHelp,
     onToggleConsole: toggleConsole,
     onOpenSettings: () => navigateToSettings(),
+    onQuitApp: handleQuitApp,
     onCreateQuickChat: handleCreateQuickChat,
     onOpenCommandPalette: toggleCommandPalette,
     onOpenPresenceMenu: handleTogglePresenceMenu,

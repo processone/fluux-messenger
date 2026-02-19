@@ -94,6 +94,17 @@ describe('presenceMachine', () => {
       actor.stop()
     })
 
+    it('should update status message while staying in userOnline', () => {
+      actor.send({ type: 'SET_PRESENCE', show: 'online', status: 'Working' })
+      expect(actor.getSnapshot().value).toEqual({ connected: 'userOnline' })
+      expect(actor.getSnapshot().context.statusMessage).toBe('Working')
+
+      actor.send({ type: 'SET_PRESENCE', show: 'online', status: undefined })
+      expect(actor.getSnapshot().value).toEqual({ connected: 'userOnline' })
+      expect(actor.getSnapshot().context.statusMessage).toBeNull()
+      actor.stop()
+    })
+
     it('should transition from userAway to userOnline', () => {
       actor.send({ type: 'SET_PRESENCE', show: 'away' })
       actor.send({ type: 'SET_PRESENCE', show: 'online' })
@@ -141,6 +152,7 @@ describe('presenceMachine', () => {
 
       const { context } = actor.getSnapshot()
       expect(context.preAutoAwayState).toBe('online')
+      expect(context.preAutoAwayStatusMessage).toBe('Working')
       expect(context.idleSince).toEqual(idleSince)
       actor.stop()
     })

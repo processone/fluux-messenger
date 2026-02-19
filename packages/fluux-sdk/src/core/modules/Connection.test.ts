@@ -5,6 +5,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { XMPPClient } from '../XMPPClient'
+import { DIRECT_WEBSOCKET_PRECHECK_TIMEOUT_MS } from './connectionTimeouts'
 import {
   createMockXmppClient,
   createMockStores,
@@ -50,10 +51,23 @@ const { mockDiscoverWebSocket } = vi.hoisted(() => ({
   mockDiscoverWebSocket: vi.fn(),
 }))
 
+const { mockFlushPendingRoomMessages } = vi.hoisted(() => ({
+  mockFlushPendingRoomMessages: vi.fn(),
+}))
+
 // Mock websocketDiscovery to prevent real network calls
 vi.mock('../../utils/websocketDiscovery', () => ({
   discoverWebSocket: mockDiscoverWebSocket,
 }))
+
+// Mock message cache flushing so disconnect tests can control stall behavior
+vi.mock('../../utils/messageCache', async () => {
+  const actual = await vi.importActual<typeof import('../../utils/messageCache')>('../../utils/messageCache')
+  return {
+    ...actual,
+    flushPendingRoomMessages: mockFlushPendingRoomMessages,
+  }
+})
 
 describe('XMPPClient Connection', () => {
   let xmppClient: XMPPClient
@@ -69,6 +83,8 @@ describe('XMPPClient Connection', () => {
     // Reset WebSocket discovery mock to return null (discovery failed -> use fallback URL)
     mockDiscoverWebSocket.mockClear()
     mockDiscoverWebSocket.mockResolvedValue(null)
+    mockFlushPendingRoomMessages.mockClear()
+    mockFlushPendingRoomMessages.mockResolvedValue(undefined)
 
     mockStores = createMockStores()
     xmppClient = new XMPPClient({ debug: false })
@@ -94,12 +110,33 @@ describe('XMPPClient Connection', () => {
 
       await connectPromise
 
-      expect(mockClientFactory).toHaveBeenCalledWith({
-        service: 'wss://example.com/ws',
-        domain: 'example.com',
-        username: 'user',
+      expect(mockClientFactory).toHaveBeenCalledWith(
+        expect.objectContaining({
+          service: 'wss://example.com/ws',
+          domain: 'example.com',
+          credentials: expect.any(Function),
+        })
+      )
+    })
+
+    it('should use XEP-0156 discovery first, then default wss://<domain>/ws as last resort on web/no-proxy', async () => {
+      mockDiscoverWebSocket.mockResolvedValueOnce(null)
+
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
         password: 'secret',
+        server: 'example.com',
       })
+
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      expect(mockDiscoverWebSocket).toHaveBeenCalledWith('example.com', 5000)
+      expect(mockClientFactory).toHaveBeenCalledWith(
+        expect.objectContaining({
+          service: 'wss://example.com/ws',
+        })
+      )
     })
 
     it('should use custom WebSocket URL if provided', async () => {
@@ -201,6 +238,67 @@ describe('XMPPClient Connection', () => {
       expect(mockStores.connection.setStatus).toHaveBeenCalledWith('disconnected')
       expect(mockStores.connection.setJid).toHaveBeenCalledWith(null)
     })
+
+    it('should not hang disconnect when room message flush stalls', async () => {
+      // First connect
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      // Simulate IndexedDB/WebKit stall in flushPendingRoomMessages()
+      mockFlushPendingRoomMessages.mockImplementation(
+        () => new Promise<void>(() => {})
+      )
+
+      const disconnectPromise = xmppClient.disconnect()
+
+      // Fast-forward cleanup timeout (2s) so disconnect can proceed to stop()
+      await vi.advanceTimersByTimeAsync(2000)
+      await disconnectPromise
+
+      expect(mockXmppClientInstance.stop).toHaveBeenCalled()
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('disconnected')
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        'Disconnect cleanup warning: room message flush timed out',
+        'error'
+      )
+    })
+
+    it('should resolve disconnect even when client.stop never settles', async () => {
+      // First connect
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      // Simulate a hanging graceful stop() (observed on Linux/proxy paths)
+      mockXmppClientInstance.stop.mockImplementation(() => new Promise<void>(() => {}))
+
+      const disconnectPromise = xmppClient.disconnect()
+      let settled = false
+      void disconnectPromise.then(() => { settled = true })
+
+      // Disconnect should complete immediately without waiting for stop timeout.
+      await vi.advanceTimersByTimeAsync(0)
+      expect(settled).toBe(true)
+
+      if (settled) {
+        await disconnectPromise
+      }
+
+      expect(mockXmppClientInstance.stop).toHaveBeenCalled()
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('disconnected')
+      expect(mockStores.connection.setJid).toHaveBeenCalledWith(null)
+    })
   })
 
   describe('reconnection with exponential backoff', () => {
@@ -224,7 +322,7 @@ describe('XMPPClient Connection', () => {
 
       // Should be in reconnecting state
       expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
-      expect(mockStores.connection.setReconnectState).toHaveBeenCalledWith(1, 1) // attempt 1, 1 second
+      expect(mockStores.connection.setReconnectState).toHaveBeenCalledWith(1, expect.any(Number)) // attempt 1, target time
     })
 
     it('should not reconnect after manual disconnect', async () => {
@@ -399,13 +497,173 @@ describe('XMPPClient Connection', () => {
       expect(errorArg).toBe('Connection failed: WebSocket closed (code: 1008, Policy violation)')
     })
 
+    it('should prefer discovered XEP-0156 WebSocket endpoint before proxy for domain server inputs', async () => {
+      mockDiscoverWebSocket.mockResolvedValue('wss://discovered.example.com/ws')
+
+      const mockProxyAdapter = {
+        startProxy: vi.fn().mockResolvedValue({ url: 'ws://127.0.0.1:12345' }),
+        stopProxy: vi.fn().mockResolvedValue(undefined),
+      }
+      const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
+      proxyClient.bindStores(mockStores)
+
+      const connectPromise = proxyClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      expect(mockClientFactory).toHaveBeenCalledWith(
+        expect.objectContaining({ service: 'wss://discovered.example.com/ws' })
+      )
+      expect(mockProxyAdapter.startProxy).not.toHaveBeenCalled()
+
+      proxyClient.cancelReconnect()
+    })
+
+    it('should skip default /ws fallback and switch directly to proxy when XEP-0156 has no endpoint', async () => {
+      mockDiscoverWebSocket.mockResolvedValue(null)
+
+      const mockProxyAdapter = {
+        startProxy: vi.fn().mockResolvedValue({ url: 'ws://127.0.0.1:12345' }),
+        stopProxy: vi.fn().mockResolvedValue(undefined),
+      }
+      const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
+      proxyClient.bindStores(mockStores)
+
+      const connectPromise = proxyClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+      })
+
+      await vi.advanceTimersByTimeAsync(0)
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      expect(mockClientFactory).toHaveBeenCalledTimes(1)
+      expect(mockClientFactory).toHaveBeenCalledWith(
+        expect.objectContaining({ service: 'ws://127.0.0.1:12345' })
+      )
+      expect(mockProxyAdapter.startProxy).toHaveBeenCalledTimes(1)
+      expect(mockStores.connection.setConnectionMethod).toHaveBeenCalledWith('proxy')
+
+      proxyClient.cancelReconnect()
+    })
+
+    it('should skip WebSocket attempts entirely on proxy-capable desktop when skipDiscovery is enabled for a domain', async () => {
+      const mockProxyAdapter = {
+        startProxy: vi.fn().mockResolvedValue({ url: 'ws://127.0.0.1:12345' }),
+        stopProxy: vi.fn().mockResolvedValue(undefined),
+      }
+      const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
+      proxyClient.bindStores(mockStores)
+
+      const connectPromise = proxyClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+
+      await vi.advanceTimersByTimeAsync(0)
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      expect(mockDiscoverWebSocket).not.toHaveBeenCalled()
+      expect(mockProxyAdapter.startProxy).toHaveBeenCalledTimes(1)
+      expect(mockClientFactory).toHaveBeenCalledTimes(1)
+      expect(mockClientFactory).toHaveBeenCalledWith(
+        expect.objectContaining({ service: 'ws://127.0.0.1:12345' })
+      )
+
+      proxyClient.cancelReconnect()
+    })
+
+    it('should fall back to proxy when direct WebSocket attempt fails', async () => {
+      mockDiscoverWebSocket.mockResolvedValue('wss://discovered.example.com/ws')
+
+      const firstClient = createMockXmppClient()
+      firstClient.start.mockRejectedValue(new Error('direct websocket failed'))
+      const fallbackClient = createMockXmppClient()
+      mockClientFactory.mockImplementationOnce(() => firstClient).mockImplementationOnce(() => fallbackClient)
+
+      const mockProxyAdapter = {
+        startProxy: vi.fn().mockResolvedValue({ url: 'ws://127.0.0.1:12345' }),
+        stopProxy: vi.fn().mockResolvedValue(undefined),
+      }
+      const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
+      proxyClient.bindStores(mockStores)
+
+      const connectPromise = proxyClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+      })
+
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mockClientFactory).toHaveBeenCalledTimes(2)
+      fallbackClient._emit('online')
+      await connectPromise
+
+      expect(mockClientFactory).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ service: 'wss://discovered.example.com/ws' })
+      )
+      expect(mockClientFactory).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ service: 'ws://127.0.0.1:12345' })
+      )
+      expect(mockProxyAdapter.startProxy).toHaveBeenCalledTimes(1)
+      expect(mockStores.connection.setConnectionMethod).toHaveBeenCalledWith('proxy')
+
+      proxyClient.cancelReconnect()
+    })
+
+    it('should fall back to proxy when direct WebSocket pre-check stalls', async () => {
+      mockDiscoverWebSocket.mockResolvedValue('wss://discovered.example.com/ws')
+
+      const stalledClient = createMockXmppClient()
+      stalledClient.start.mockReturnValue(new Promise(() => {}))
+      const fallbackClient = createMockXmppClient()
+      mockClientFactory.mockImplementationOnce(() => stalledClient).mockImplementationOnce(() => fallbackClient)
+
+      const mockProxyAdapter = {
+        startProxy: vi.fn().mockResolvedValue({ url: 'ws://127.0.0.1:12345' }),
+        stopProxy: vi.fn().mockResolvedValue(undefined),
+      }
+      const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
+      proxyClient.bindStores(mockStores)
+
+      const connectPromise = proxyClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+      })
+
+      await vi.advanceTimersByTimeAsync(DIRECT_WEBSOCKET_PRECHECK_TIMEOUT_MS)
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mockProxyAdapter.startProxy).toHaveBeenCalledTimes(1)
+      expect(mockClientFactory).toHaveBeenCalledTimes(2)
+
+      fallbackClient._emit('online')
+      await connectPromise
+
+      expect(mockClientFactory).toHaveBeenLastCalledWith(
+        expect.objectContaining({ service: 'ws://127.0.0.1:12345' })
+      )
+
+      proxyClient.cancelReconnect()
+    })
+
     it('should show firewall hint when proxy mode connection fails with code 1006', async () => {
       // Create a client with proxy adapter (simulating Tauri desktop mode)
       const mockProxyAdapter = {
         startProxy: vi.fn().mockResolvedValue({
           url: 'ws://127.0.0.1:12345',
-          connectionMethod: 'starttls',
-          resolvedEndpoint: 'tcp://xmpp.example.com:5222',
         }),
         stopProxy: vi.fn().mockResolvedValue(undefined),
       }
@@ -420,7 +678,7 @@ describe('XMPPClient Connection', () => {
         proxyClient.connect({
           jid: 'user@example.com',
           password: 'secret',
-          server: 'example.com',
+          server: 'tls://example.com:5223',
           skipDiscovery: true,
         })
       ).rejects.toThrow('Connection refused')
@@ -436,6 +694,98 @@ describe('XMPPClient Connection', () => {
       const errorArg = vi.mocked(mockStores.connection.setError).mock.calls[0][0]
       expect(errorArg).toContain('Unable to reach local proxy')
       expect(errorArg).toContain('firewall')
+
+      proxyClient.cancelReconnect()
+    })
+
+    it('should reuse cached proxy endpoint before refreshing on automatic reconnect', async () => {
+      const mockProxyAdapter = {
+        startProxy: vi.fn()
+          .mockResolvedValueOnce({ url: 'ws://127.0.0.1:12345' })
+          .mockResolvedValueOnce({ url: 'ws://127.0.0.1:22345' }),
+        stopProxy: vi.fn().mockResolvedValue(undefined),
+      }
+      const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
+      proxyClient.bindStores(mockStores)
+
+      // Initial connect uses first proxy URL
+      const connectPromise = proxyClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'tls://example.com:5223',
+        skipDiscovery: true,
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+      expect(mockProxyAdapter.startProxy).toHaveBeenCalledTimes(1)
+
+      // Trigger automatic reconnect
+      mockXmppClientInstance._emit('disconnect', { clean: false })
+
+      // Provide fresh xmpp instance for reconnect attempt
+      const reconnectClient = createMockXmppClient()
+      mockClientFactory._setInstance(reconnectClient)
+
+      await vi.advanceTimersByTimeAsync(1000)
+      reconnectClient._emit('online')
+      await vi.advanceTimersByTimeAsync(0)
+
+      // Auto-reconnect should reuse the cached proxy URL first.
+      expect(mockProxyAdapter.stopProxy).not.toHaveBeenCalled()
+      expect(mockProxyAdapter.startProxy).toHaveBeenCalledTimes(1)
+      expect(mockClientFactory).toHaveBeenLastCalledWith(
+        expect.objectContaining({ service: 'ws://127.0.0.1:12345' })
+      )
+
+      proxyClient.cancelReconnect()
+    })
+
+    it('should refresh proxy endpoint when cached proxy reconnect fails', async () => {
+      const mockProxyAdapter = {
+        startProxy: vi.fn()
+          .mockResolvedValueOnce({ url: 'ws://127.0.0.1:12345' })
+          .mockResolvedValueOnce({ url: 'ws://127.0.0.1:22345' }),
+        stopProxy: vi.fn().mockResolvedValue(undefined),
+      }
+      const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
+      proxyClient.bindStores(mockStores)
+
+      // Initial connect uses first proxy URL
+      const connectPromise = proxyClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'tls://example.com:5223',
+        skipDiscovery: true,
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+      expect(mockProxyAdapter.startProxy).toHaveBeenCalledTimes(1)
+
+      // Trigger automatic reconnect
+      mockXmppClientInstance._emit('disconnect', { clean: false })
+
+      const failedReconnectClient = createMockXmppClient()
+      failedReconnectClient.start.mockRejectedValue(
+        new Error('Socket disconnected during connection handshake')
+      )
+      const recoveredReconnectClient = createMockXmppClient()
+      mockClientFactory
+        .mockImplementationOnce(() => failedReconnectClient)
+        .mockImplementationOnce(() => recoveredReconnectClient)
+
+      await vi.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(0)
+
+      recoveredReconnectClient._emit('online')
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(mockProxyAdapter.stopProxy).toHaveBeenCalledTimes(1)
+      expect(mockProxyAdapter.startProxy).toHaveBeenCalledTimes(2)
+      expect(mockClientFactory).toHaveBeenLastCalledWith(
+        expect.objectContaining({ service: 'ws://127.0.0.1:22345' })
+      )
 
       proxyClient.cancelReconnect()
     })
@@ -466,8 +816,92 @@ describe('XMPPClient Connection', () => {
       )
     })
 
+    it('should trigger dead-socket recovery on websocket econnerror stream error', async () => {
+      const mockProxyAdapter = {
+        startProxy: vi.fn().mockResolvedValue({ url: 'ws://127.0.0.1:12345' }),
+        stopProxy: vi.fn().mockResolvedValue(undefined),
+      }
+      const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
+      proxyClient.bindStores(mockStores)
+
+      const connectPromise = proxyClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'tls://example.com:5223',
+        skipDiscovery: true,
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      vi.mocked(mockStores.connection.setStatus).mockClear()
+      vi.mocked(mockStores.console.addEvent).mockClear()
+
+      mockXmppClientInstance._emit('error', new Error('websocket econnerror ws://[::1]:42583'))
+
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        'Stream transport error, forcing reconnect recovery',
+        'connection'
+      )
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        expect.stringContaining('Dead-socket recovery: triggering immediate reconnect'),
+        'connection'
+      )
+
+      const reconnectClient = createMockXmppClient()
+      mockClientFactory._setInstance(reconnectClient)
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mockProxyAdapter.stopProxy).not.toHaveBeenCalled()
+
+      proxyClient.cancelReconnect()
+    })
+
+    it('should not restart proxy from stale transport error after manual disconnect', async () => {
+      const mockProxyAdapter = {
+        startProxy: vi.fn().mockResolvedValue({ url: 'ws://127.0.0.1:12345' }),
+        stopProxy: vi.fn().mockResolvedValue(undefined),
+      }
+      const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
+      proxyClient.bindStores(mockStores)
+
+      const connectPromise = proxyClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'tls://example.com:5223',
+        skipDiscovery: true,
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      await proxyClient.disconnect()
+
+      vi.mocked(mockStores.connection.setStatus).mockClear()
+      vi.mocked(mockStores.connection.setReconnectState).mockClear()
+      vi.mocked(mockStores.console.addEvent).mockClear()
+      vi.mocked(mockProxyAdapter.stopProxy).mockClear()
+      mockClientFactory.mockClear()
+
+      // Simulate delayed error from old socket after user-initiated disconnect.
+      mockXmppClientInstance._emit('error', new Error('websocket econnerror ws://[::1]:42583'))
+
+      await vi.advanceTimersByTimeAsync(0)
+
+      // Proxy restart remains single-owner: only attemptReconnect() may refresh proxy.
+      expect(mockProxyAdapter.stopProxy).not.toHaveBeenCalled()
+      expect(mockClientFactory).not.toHaveBeenCalled()
+      expect(vi.mocked(mockStores.connection.setStatus).mock.calls.some((c) => c[0] === 'reconnecting')).toBe(false)
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        'Dead-socket recovery skipped: machine state is "disconnected"',
+        'connection'
+      )
+
+      proxyClient.cancelReconnect()
+    })
+
     it('should NOT auto-reconnect on fresh connect() after a previous successful session', async () => {
-      // Scenario: User had a successful session, reconnect exhausted max retries,
+      // Scenario: User had a successful session, then connection recovery failed,
       // user clicks Connect again. This fresh connect() should NOT auto-reconnect
       // if it fails, because hasEverConnected is reset at the start of connect().
 
@@ -612,10 +1046,88 @@ describe('XMPPClient Connection', () => {
       expect(mockClientFactory).not.toHaveBeenCalled()
     })
 
+    it('should ignore stale post-disconnect econnerror without triggering reconnect', async () => {
+      // First connect
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      // Manual disconnect transitions machine to disconnected and nulls active client.
+      await xmppClient.disconnect()
+
+      vi.mocked(mockStores.connection.setStatus).mockClear()
+      vi.mocked(mockStores.connection.setReconnectState).mockClear()
+      vi.mocked(mockStores.console.addEvent).mockClear()
+      mockClientFactory.mockClear()
+
+      // Late stale transport error/disconnect from old socket.
+      mockXmppClientInstance._emit('error', new Error('websocket econnerror ws://[::1]:42583'))
+      mockXmppClientInstance._emit('disconnect', {
+        clean: false,
+        reason: { code: 1006, reason: 'ECONNERROR' },
+      })
+
+      await vi.advanceTimersByTimeAsync(5000)
+
+      // Must not re-enter reconnect flow from stale events after manual disconnect.
+      const statusCalls = vi.mocked(mockStores.connection.setStatus).mock.calls
+      expect(statusCalls.some((call) => call[0] === 'reconnecting')).toBe(false)
+      expect(mockClientFactory).not.toHaveBeenCalled()
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        'Dead-socket recovery skipped: machine state is "disconnected"',
+        'connection'
+      )
+    })
+
     it('should handle disconnect when already disconnected', async () => {
       // Disconnect without connecting first - should not throw
       await expect(xmppClient.disconnect()).resolves.not.toThrow()
       expect(mockStores.connection.setStatus).toHaveBeenCalledWith('disconnected')
+    })
+
+    it('should not reject disconnect when client.stop fails', async () => {
+      // Connect first
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      mockXmppClientInstance.stop.mockRejectedValue(new Error('stop failed'))
+
+      await expect(xmppClient.disconnect()).resolves.not.toThrow()
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('disconnected')
+    })
+
+    it('should force-close transport after disconnect cleanup', async () => {
+      // Connect first
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      // Provide explicit transport hooks so we can assert force cleanup happened
+      const removeAllListeners = vi.fn()
+      const socketEnd = vi.fn()
+      ;(mockXmppClientInstance as any).removeAllListeners = removeAllListeners
+      ;(mockXmppClientInstance as any).socket = { writable: true, end: socketEnd }
+
+      await xmppClient.disconnect()
+
+      expect(removeAllListeners).toHaveBeenCalled()
+      expect(socketEnd).toHaveBeenCalled()
     })
 
     it('should set status before stopping client to prevent race conditions', async () => {
@@ -665,7 +1177,7 @@ describe('XMPPClient Connection', () => {
 
       // First disconnect - attempt 1
       mockXmppClientInstance._emit('disconnect', { clean: false })
-      expect(mockStores.connection.setReconnectState).toHaveBeenCalledWith(1, 1) // 1s delay
+      expect(mockStores.connection.setReconnectState).toHaveBeenCalledWith(1, expect.any(Number)) // attempt 1, target time
 
       // Simulate failed reconnect by making start() reject
       mockXmppClientInstance = createMockXmppClient()
@@ -680,7 +1192,7 @@ describe('XMPPClient Connection', () => {
       await vi.advanceTimersByTimeAsync(0)
 
       // Second attempt should have 2s delay
-      expect(mockStores.connection.setReconnectState).toHaveBeenCalledWith(2, 2)
+      expect(mockStores.connection.setReconnectState).toHaveBeenCalledWith(2, expect.any(Number)) // attempt 2, target time
     })
 
     it('should reset attempt counter on successful reconnection', async () => {
@@ -780,9 +1292,9 @@ describe('XMPPClient Connection', () => {
       // Give time for async operations
       await vi.advanceTimersByTimeAsync(100)
 
-      // Should have requested roster via send() (roster response handled by stanza routing)
-      const sendCalls = mockXmppClientInstance.send.mock.calls
-      const rosterCall = sendCalls.find((call: any[]) => {
+      // Should have requested roster via sendIQ (iqCaller.request)
+      const iqCalls = mockXmppClientInstance.iqCaller.request.mock.calls
+      const rosterCall = iqCalls.find((call: any[]) => {
         const stanza = call[0]
         return stanza?.name === 'iq' &&
                stanza?.attrs?.type === 'get' &&
@@ -897,7 +1409,7 @@ describe('XMPPClient Connection', () => {
       expect(mockStores.chat.resetMAMStates).toHaveBeenCalled()
     })
 
-    it('should also reset MAM states on SM resumption', async () => {
+    it('should NOT reset MAM states on SM resumption', async () => {
       // Connect with SM state
       const connectPromise = xmppClient.connect({
         jid: 'user@example.com',
@@ -927,11 +1439,11 @@ describe('XMPPClient Connection', () => {
       // Give time for async operations
       await vi.advanceTimersByTimeAsync(100)
 
-      // Should have reset MAM states even on SM resumption
-      // SM guarantees delivery of in-flight messages, but MAM may have accumulated
-      // new messages (especially in MUC rooms) while we were offline
-      expect(mockStores.chat.resetMAMStates).toHaveBeenCalled()
+      // Should NOT reset MAM states on SM resumption — the server replays
+      // undelivered stanzas, so no MAM catchup is needed
+      expect(mockStores.chat.resetMAMStates).not.toHaveBeenCalled()
     })
+
   })
 
   describe('resource conflict handling', () => {
@@ -985,8 +1497,8 @@ describe('XMPPClient Connection', () => {
       mockXmppClientInstance._emit('error', new Error('conflict'))
       mockXmppClientInstance._emit('disconnect', { clean: false })
 
-      // Should set status to disconnected (not reconnecting)
-      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('disconnected')
+      // Should set status to error (not reconnecting) — terminal state
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('error')
 
       // Should set error message
       expect(mockStores.connection.setError).toHaveBeenCalledWith('Session replaced by another client')
@@ -1030,6 +1542,38 @@ describe('XMPPClient Connection', () => {
 
       // Should set error message
       expect(mockStores.connection.setError).toHaveBeenCalledWith('Authentication failed')
+    })
+
+    it('should not classify stanza type=auth errors as auth stream failures', async () => {
+      // Connect first
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      // Clear previous calls
+      vi.mocked(mockStores.console.addEvent).mockClear()
+      vi.mocked(mockStores.connection.setStatus).mockClear()
+      vi.mocked(mockStores.connection.setError).mockClear()
+
+      // Simulate an IQ error payload that contains error type="auth"
+      // but is unrelated to stream authentication.
+      mockXmppClientInstance._emit(
+        'error',
+        new Error('<iq type="error"><error type="auth"><forbidden/></error></iq>')
+      )
+      mockXmppClientInstance._emit('disconnect', { clean: false })
+
+      expect(mockStores.console.addEvent).not.toHaveBeenCalledWith(
+        'Disconnected: Authentication error',
+        'error'
+      )
+      expect(mockStores.connection.setError).not.toHaveBeenCalledWith('Authentication failed')
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
     })
 
     it('should still reconnect on normal disconnection', async () => {
@@ -1755,7 +2299,10 @@ describe('XMPPClient Connection', () => {
     })
 
     it('should trigger reconnect on "visible" state when reconnecting', async () => {
-      mockStores.connection.getStatus.mockReturnValue('reconnecting')
+      // Put the connection machine into reconnecting state by simulating a dead socket
+      // The machine is in connected.healthy after the connect above — SOCKET_DIED
+      // transitions it to reconnecting.waiting
+      xmppClient.connectionActor.send({ type: 'SOCKET_DIED' })
 
       await xmppClient.notifySystemState('visible')
 
@@ -1811,6 +2358,311 @@ describe('XMPPClient Connection', () => {
 
       // Should verify (status set to verifying)
       expect(mockStores.connection.setStatus).toHaveBeenCalledWith('verifying')
+    })
+  })
+
+  // ── Wake-from-sleep reconnection regression tests ─────────────────────────
+  // These tests verify the fixes for the 30-second freeze that occurred when
+  // reconnecting after system wake. The root causes were:
+  // 1. Missing disconnect handler in setupConnectionHandlers (30s hang)
+  // 2. Stale this.xmpp reference after unexpected disconnect
+  // 3. No mutex on concurrent attemptReconnect calls
+
+  describe('wake-from-sleep reconnection', () => {
+    beforeEach(async () => {
+      // Set up a connected client with SM enabled
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+      mockStores.connection.getStatus.mockReturnValue('online')
+      mockStores.connection.setStatus.mockClear()
+      mockStores.console.addEvent.mockClear()
+      mockClientFactory.mockClear()
+    })
+
+    it('should not hang when new socket disconnects during XMPP handshake', async () => {
+      // Simulate unexpected disconnect (bridge died during sleep)
+      mockXmppClientInstance._emit('disconnect', { clean: true, reason: { code: 1000, reason: 'Bridge closed' } })
+
+      // Reconnect timer scheduled (attempt 1, 1s delay)
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
+
+      // Prepare new mock client for reconnect attempt
+      const reconnectClient = createMockXmppClient()
+      mockClientFactory._setInstance(reconnectClient)
+
+      // Advance timer to trigger reconnect
+      await vi.advanceTimersByTimeAsync(1000)
+
+      // New client should have been created
+      expect(mockClientFactory).toHaveBeenCalledTimes(1)
+
+      // Simulate: new WebSocket connects but XMPP server TCP connect fails,
+      // so proxy closes the WebSocket immediately. Neither 'online' nor 'error'
+      // fires — only 'disconnect'. Without Fix 1, this would hang for 30s.
+      reconnectClient._emit('disconnect', { clean: false })
+
+      // Allow error handling to propagate
+      await vi.advanceTimersByTimeAsync(0)
+
+      // Should have logged the handshake disconnect as a failure
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        expect.stringContaining('Socket disconnected during connection handshake'),
+        'error'
+      )
+
+      // Should schedule another reconnect attempt (not stuck forever)
+      expect(mockStores.connection.setReconnectState).toHaveBeenCalledWith(2, expect.any(Number))
+    })
+
+    it('should null xmpp reference on unexpected disconnect to prevent stale operations', async () => {
+      // Add SM to enable verification path
+      mockXmppClientInstance.streamManagement = {
+        id: 'sm-123',
+        inbound: 5,
+        outbound: 0,
+        enabled: true,
+        on: vi.fn(),
+      }
+
+      // Start wake verification (sends SM <r/> request)
+      // Don't resolve SM ack — simulate dead socket
+      mockXmppClientInstance.send.mockImplementationOnce(() => {
+        // Send succeeds (buffered) but no ack will come
+        return Promise.resolve()
+      })
+
+      const notifyPromise = xmppClient.notifySystemState('awake')
+
+      // Before verify timeout, the bridge close frame arrives
+      mockXmppClientInstance._emit('disconnect', { clean: true, reason: { code: 1000, reason: 'Bridge closed' } })
+
+      // The disconnect handler should have:
+      // 1. Sent SOCKET_DIED to machine
+      // 2. Nulled this.xmpp (Fix 2)
+      // 3. Started reconnect timer
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
+
+      // Complete the verify (it should return false quickly since xmpp is now null)
+      // Without Fix 2, the verify would hang for 10s waiting for SM ack on dead socket.
+      // With Fix 2, xmpp is null so verify returns false immediately.
+      await vi.advanceTimersByTimeAsync(0)
+      await notifyPromise
+
+      // The reconnect timer should be running (not stuck in verification loop)
+      // Verify by advancing timer and confirming a reconnect attempt is made
+      const reconnectClient = createMockXmppClient()
+      mockClientFactory._setInstance(reconnectClient)
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockClientFactory).toHaveBeenCalled()
+    })
+
+    it('should force reconnect recovery when stale disconnect arrives while still connected', async () => {
+      // Simulate the race: internal xmpp ref was already replaced/nulled,
+      // but the old socket disconnect event arrives while machine is connected.
+      ;(xmppClient.connection as any).xmpp = null
+
+      mockXmppClientInstance._emit('disconnect', {
+        clean: false,
+        reason: { code: 1006, reason: 'ECONNERROR' },
+      })
+
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        'Socket closed from stale client while connected, forcing reconnect recovery',
+        'connection'
+      )
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
+    })
+
+    it('should schedule reconnect after SM verify timeout without disconnect event', async () => {
+      // Add SM to enable verification path
+      mockXmppClientInstance.streamManagement = {
+        id: 'sm-123',
+        inbound: 5,
+        outbound: 0,
+        enabled: true,
+        on: vi.fn(),
+      }
+
+      // Simulate a silent dead socket:
+      // <r/> send succeeds (buffered) but no <a/> ever comes back.
+      mockXmppClientInstance.send.mockImplementation(() => Promise.resolve())
+
+      // Prepare reconnect client before timer fires
+      const reconnectClient = createMockXmppClient()
+      mockClientFactory.mockClear()
+      mockClientFactory._setInstance(reconnectClient)
+
+      const notifyPromise = xmppClient.notifySystemState('awake')
+
+      // Verification timeout is 10s by default
+      await vi.advanceTimersByTimeAsync(10_000)
+      await notifyPromise
+
+      // Timeout should transition to reconnecting and arm backoff timer
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        'Verification timed out waiting for SM ack',
+        'connection'
+      )
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
+
+      // First reconnect attempt uses 1s delay
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockClientFactory).toHaveBeenCalledTimes(1)
+    })
+
+    it('should prevent concurrent reconnect attempts via state-machine sequencing', async () => {
+      // Trigger unexpected disconnect to enter reconnecting state
+      mockXmppClientInstance._emit('disconnect', { clean: false })
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
+
+      // Prepare mock client for reconnect
+      const reconnectClient = createMockXmppClient()
+      // Make start() hang (simulate slow connection)
+      reconnectClient.start = vi.fn().mockReturnValue(new Promise(() => {}))
+      mockClientFactory._setInstance(reconnectClient)
+
+      // Advance timer to trigger first reconnect attempt
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockClientFactory).toHaveBeenCalledTimes(1)
+
+      // Now call triggerReconnect() while the first attempt is still in progress
+      // (simulates app becoming visible while reconnecting)
+      mockClientFactory.mockClear()
+      xmppClient.triggerReconnect()
+
+      // No second reconnect attempt should start while machine stays in attempting.
+      expect(mockClientFactory).not.toHaveBeenCalled()
+    })
+
+    it('should allow repeated reconnect triggers after "still online" short-circuit', async () => {
+      // Force the defensive online short-circuit path in attemptReconnect()
+      ;(mockXmppClientInstance as any).status = 'online'
+
+      // First immediate reconnect short-circuits
+      xmppClient.connectionActor.send({ type: 'SOCKET_DIED' })
+      xmppClient.triggerReconnect()
+      await vi.advanceTimersByTimeAsync(0)
+
+      // A second trigger should still run through attempting, not get stuck.
+      vi.mocked(mockStores.console.addEvent).mockClear()
+      xmppClient.connectionActor.send({ type: 'SOCKET_DIED' })
+      xmppClient.triggerReconnect()
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(mockStores.console.addEvent).toHaveBeenCalled()
+      expect(mockStores.console.addEvent).not.toHaveBeenCalledWith(
+        'Reconnect attempt already in progress, skipping',
+        'connection'
+      )
+    })
+
+    it('should run reconnect success recovery when short-circuiting on an already-online transport', async () => {
+      ;(mockXmppClientInstance as any).status = 'online'
+      mockXmppClientInstance.send.mockClear()
+      vi.mocked(mockStores.roster.resetAllPresence).mockClear()
+      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
+        {
+          jid: 'fluux-messenger@conference.process-one.net',
+          nickname: 'Mickaël',
+          joined: true,
+          autojoin: false,
+        } as any,
+      ])
+
+      const connectionModule = xmppClient.connection as any
+      const reconnectSubstateSpy = vi.spyOn(connectionModule, 'isReconnectingSubstate').mockReturnValue(true)
+      await connectionModule.attemptReconnect()
+      reconnectSubstateSpy.mockRestore()
+
+      expect(mockStores.roster.resetAllPresence).toHaveBeenCalled()
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        'Connection still online - cancelling reconnect attempt',
+        'connection'
+      )
+
+      const rejoinPresence = mockXmppClientInstance.send.mock.calls.find((call: any[]) => {
+        const stanza = call[0]
+        return stanza?.name === 'presence' &&
+          stanza?.attrs?.to === 'fluux-messenger@conference.process-one.net/Mickaël'
+      })
+      expect(rejoinPresence).toBeDefined()
+    })
+
+    it('should handle full overnight sleep sequence (bridge closed hours ago)', async () => {
+      // Step 1: Bridge watchdog closes connection during sleep
+      // The WebSocket close frame is queued (JS runtime is suspended)
+      // Step 2: System wakes — both the close frame and wake event arrive
+
+      // Simulate the close frame arriving first (within same tick as wake)
+      mockXmppClientInstance._emit('disconnect', { clean: true, reason: { code: 1000, reason: 'Bridge closed' } })
+
+      // Machine enters reconnecting state
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
+
+      // Prepare mock for reconnect BEFORE calling notifySystemState,
+      // because triggerReconnect() fires attemptReconnect() synchronously
+      const reconnectClient = createMockXmppClient()
+      mockClientFactory._setInstance(reconnectClient)
+
+      // Now the wake event fires with a long sleep duration (8 hours)
+      // Since we're already in reconnecting state, this should triggerReconnect
+      const eightHoursMs = 8 * 60 * 60 * 1000
+      await xmppClient.notifySystemState('awake', eightHoursMs)
+
+      // Should log the immediate reconnect trigger
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        expect.stringContaining('triggering immediate reconnect'),
+        'connection'
+      )
+
+      // Allow the async attemptReconnect to progress (cleanupClient, createXmppClient, start)
+      await vi.advanceTimersByTimeAsync(100)
+
+      // The triggerReconnect should have started attemptReconnect
+      expect(mockClientFactory).toHaveBeenCalledTimes(1)
+
+      // Simulate successful reconnection on the new client
+      reconnectClient._emit('online')
+      await vi.advanceTimersByTimeAsync(100)
+
+      // Machine should have received CONNECTION_SUCCESS → connected.healthy
+      const statusCalls = vi.mocked(mockStores.connection.setStatus).mock.calls.map(c => c[0])
+      expect(statusCalls).toContain('online')
+    })
+
+    it('should abort SM ack verification immediately when socket disconnects', async () => {
+      // Add SM for verification path
+      mockXmppClientInstance.streamManagement = {
+        id: 'sm-123',
+        inbound: 5,
+        outbound: 0,
+        enabled: true,
+        on: vi.fn(),
+      }
+
+      // Mock send to succeed (buffered) but never get an ack
+      mockXmppClientInstance.send.mockImplementation(() => Promise.resolve())
+
+      // Start verification
+      const verifyPromise = xmppClient.verifyConnection()
+
+      // Socket disconnects during verification (bridge closed)
+      mockXmppClientInstance._emit('disconnect', { clean: true })
+
+      // Verification should resolve false immediately (not wait 10s)
+      const startTime = Date.now()
+      const result = await verifyPromise
+      const elapsed = Date.now() - startTime
+
+      expect(result).toBe(false)
+      // Should resolve nearly instantly, not after the 10s timeout
+      expect(elapsed).toBeLessThan(1000)
     })
   })
 })

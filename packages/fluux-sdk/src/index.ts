@@ -85,11 +85,14 @@ export type { XMPPProviderProps } from './provider'
 // High-level React hooks
 export { useConnection } from './hooks/useConnection'
 export { useChat } from './hooks/useChat'
+export { useChatActive } from './hooks/useChatActive'
 export { useRoster } from './hooks/useRoster'
 export { useRosterActions } from './hooks/useRosterActions'
+export { useContactIdentities, type ContactIdentity } from './hooks/useContactIdentities'
 export { useConsole } from './hooks/useConsole'
 export { useEvents } from './hooks/useEvents'
 export { useRoom } from './hooks/useRoom'
+export { useRoomActive } from './hooks/useRoomActive'
 export { useXMPP } from './hooks/useXMPP'
 export { useAdmin } from './hooks/useAdmin'
 export { useBlocking } from './hooks/useBlocking'
@@ -133,6 +136,20 @@ export {
   getConnectedStateName,
   DEFAULT_AUTO_AWAY_CONFIG,
 } from './core/presenceMachine'
+
+// Connection state machine types (for advanced usage)
+export type {
+  ConnectionMachineContext,
+  ConnectionMachineEvent,
+  ConnectionStateValue,
+  ConnectionActor,
+} from './core/connectionMachine'
+export {
+  connectionMachine,
+  getConnectionStatusFromState,
+  isTerminalState,
+  getReconnectInfoFromContext,
+} from './core/connectionMachine'
 
 // =============================================================================
 // ZUSTAND STORES (framework-agnostic state management)
@@ -514,4 +531,5 @@ export type { GetMessagesOptions } from './utils/messageCache'
 // Avatar cache operations
 export {
   clearAllAvatarData,
+  revokeAllBlobUrls,
 } from './utils/avatarCache'

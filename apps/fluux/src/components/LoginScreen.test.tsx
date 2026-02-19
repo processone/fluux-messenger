@@ -1,12 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { LoginScreen } from './LoginScreen'
+
+const mockConnect = vi.fn()
 
 // Mock the SDK hooks
 const mockUseConnection = vi.fn(() => ({
     status: 'offline',
     error: null as string | null,
-    connect: vi.fn(),
+    connect: mockConnect,
 }))
 
 vi.mock('@fluux/sdk', () => ({
@@ -38,6 +40,11 @@ vi.mock('@/utils/xmppResource', () => ({
     getResource: () => 'test-resource',
 }))
 
+const { mockGetDomainFromJid, mockGetWebsocketUrlForDomain } = vi.hoisted(() => ({
+    mockGetDomainFromJid: vi.fn(),
+    mockGetWebsocketUrlForDomain: vi.fn(),
+}))
+
 vi.mock('@/utils/keychain', () => ({
     hasSavedCredentials: () => false,
     getCredentials: vi.fn(),
@@ -50,19 +57,22 @@ vi.mock('@/utils/tauri', () => ({
 }))
 
 vi.mock('@/config/wellKnownServers', () => ({
-    getDomainFromJid: () => null,
-    getWebsocketUrlForDomain: () => null,
+    getDomainFromJid: (...args: unknown[]) => mockGetDomainFromJid(...args),
+    getWebsocketUrlForDomain: (...args: unknown[]) => mockGetWebsocketUrlForDomain(...args),
 }))
 
 describe('LoginScreen', () => {
     beforeEach(() => {
         vi.clearAllMocks()
         localStorage.clear()
+        mockConnect.mockResolvedValue(undefined)
+        mockGetDomainFromJid.mockReturnValue(null)
+        mockGetWebsocketUrlForDomain.mockReturnValue(null)
         // Reset to default offline state
         mockUseConnection.mockReturnValue({
             status: 'offline',
             error: null,
-            connect: vi.fn(),
+            connect: mockConnect,
         })
     })
 
@@ -202,6 +212,58 @@ describe('LoginScreen', () => {
 
             const toggleButton = screen.getByRole('button', { name: 'login.showPassword' })
             expect(toggleButton).toHaveAttribute('tabIndex', '-1')
+        })
+    })
+
+    describe('server resolution priority', () => {
+        it('should prefer well-known websocket URL when server field is empty', async () => {
+            mockGetDomainFromJid.mockReturnValue('process-one.net')
+            mockGetWebsocketUrlForDomain.mockReturnValue('wss://chat.process-one.net/xmpp')
+
+            render(<LoginScreen />)
+
+            fireEvent.change(screen.getByLabelText('login.jidLabel'), { target: { value: 'alice@process-one.net' } })
+            fireEvent.change(screen.getByLabelText('login.passwordLabel'), { target: { value: 'secret' } })
+            fireEvent.click(screen.getByRole('button', { name: 'login.connect' }))
+
+            await waitFor(() => {
+                expect(mockConnect).toHaveBeenCalledWith(
+                    'alice@process-one.net',
+                    'secret',
+                    'wss://chat.process-one.net/xmpp',
+                    undefined,
+                    'test-resource',
+                    'en',
+                    false
+                )
+            })
+        })
+
+        it('should keep explicit server input over well-known mapping', async () => {
+            mockGetDomainFromJid.mockReturnValue('process-one.net')
+            mockGetWebsocketUrlForDomain.mockReturnValue('wss://chat.process-one.net/xmpp')
+
+            render(<LoginScreen />)
+
+            fireEvent.change(screen.getByLabelText('login.jidLabel'), { target: { value: 'alice@process-one.net' } })
+            await waitFor(() => {
+                expect(screen.getByPlaceholderText('login.serverPlaceholder')).toBeInTheDocument()
+            })
+            fireEvent.change(screen.getByLabelText('login.passwordLabel'), { target: { value: 'secret' } })
+            fireEvent.change(screen.getByPlaceholderText('login.serverPlaceholder'), { target: { value: 'chat.custom.net' } })
+            fireEvent.click(screen.getByRole('button', { name: 'login.connect' }))
+
+            await waitFor(() => {
+                expect(mockConnect).toHaveBeenCalledWith(
+                    'alice@process-one.net',
+                    'secret',
+                    'chat.custom.net',
+                    undefined,
+                    'test-resource',
+                    'en',
+                    false
+                )
+            })
         })
     })
 })

@@ -20,11 +20,46 @@ function isAuthError(error: string): boolean {
   return lower.includes('not-authorized') || lower.includes('authentication failed')
 }
 
+/**
+ * Resolve the connection target with explicit priority:
+ * 1. User-provided server value
+ * 2. Well-known WebSocket endpoint for the JID domain
+ * 3. Raw JID domain (for XEP-0156 / proxy fallback paths)
+ */
+function resolveServerForConnection(jid: string, server: string): string {
+  if (server) return server
+  const domain = getDomainFromJid(jid) || jid.split('@')[1] || ''
+  if (!domain) return ''
+  return getWebsocketUrlForDomain(domain) || domain
+}
+
 export function LoginScreen() {
   detectRenderLoop('LoginScreen')
   const { t, i18n } = useTranslation()
   const { status, error, connect } = useConnection()
   const { dragRegionProps } = useWindowDrag()
+
+  // Workaround: On macOS, the WRY/WKWebView can lose native event delivery
+  // after large DOM changes (ChatLayout → LoginScreen). When this happens,
+  // the webview renders and runs JS, but mouse/keyboard events don't arrive —
+  // even Cmd+Opt+I (DevTools) stops working.
+  //
+  // The only reliable fix is to reload the webview, which resets WRY's native
+  // event pipeline. We detect post-disconnect transitions via a sessionStorage
+  // flag (set by App.tsx when status='online'). The key uses a '__wry_' prefix
+  // so it survives clearLocalData() which only removes 'fluux:' prefixed keys.
+  // After reload, the flag is gone (cleared here before reload) → no loop.
+  // See: https://github.com/tauri-apps/wry/issues/184
+  useEffect(() => {
+    if (!isTauri()) return
+    const flag = sessionStorage.getItem('__wry_was_online')
+    if (!flag) return
+
+    // Clear the flag before reload to prevent infinite reload loop.
+    sessionStorage.removeItem('__wry_was_online')
+    console.log('[Fluux] Reloading webview to restore native event delivery after disconnect')
+    window.location.reload()
+  }, [])
 
   const [jid, setJid] = useState('')
   const [password, setPassword] = useState('')
@@ -98,8 +133,9 @@ export function LoginScreen() {
     loadCredentials()
   }, [])
 
-  // Auto-fill WebSocket URL for well-known servers when JID domain changes (web only)
-  // Desktop app uses TCP proxy with SRV resolution, so WebSocket URLs are not needed
+  // Auto-fill WebSocket URL for well-known servers when JID domain changes (web only).
+  // Desktop keeps the field untouched, but submit-time resolution still prefers
+  // known WebSocket URLs before falling back to domain/proxy flow.
   // Track if user has manually interacted with server field to prevent auto-fill after user clears it
   const [hasManuallySetServer, setHasManuallySetServer] = useState(false)
 
@@ -176,7 +212,7 @@ export function LoginScreen() {
 
     // Trigger connection with keychain credentials
     const autoConnect = async () => {
-      const actualServer = server || jid.split('@')[1]
+      const actualServer = resolveServerForConnection(jid, server)
       try {
         const resource = getResource()
         await connect(jid, password, actualServer, undefined, resource, i18n.language, isTauri())
@@ -197,8 +233,7 @@ export function LoginScreen() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // Default server from JID domain if not specified
-    const actualServer = server || jid.split('@')[1]
+    const actualServer = resolveServerForConnection(jid, server)
 
     // Save JID and server for next time
     localStorage.setItem(STORAGE_KEY_JID, jid)
@@ -232,7 +267,7 @@ export function LoginScreen() {
       // Save to keychain immediately after successful connect (before component unmounts)
       if (shouldSaveToKeychain) {
         try {
-          await saveCredentials(jid, password, server || null)
+          await saveCredentials(jid, password, actualServer || null)
           setLoadedFromKeychain(true)
         } catch (err) {
           console.error('Failed to save credentials to keychain:', err)

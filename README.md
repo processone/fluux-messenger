@@ -43,7 +43,7 @@
 | Language Settings | Login Screen | Theme System |
 |-------------------|---|-------------|
 | <a href="assets/readme/languages.png"><img src="assets/readme/languages.png" width="250" style="border-radius: 8px;" alt="Language Settings"/></a> | <a href="assets/readme/login.png"><img src="assets/readme/login.png" width="250" style="border-radius: 8px;" alt="Login Screen"/></a> | <a href="assets/readme/split.png"><img src="assets/readme/split.png" width="250" style="border-radius: 8px;" alt="Theme System"/></a> |
-| *27 languages including all EU official languages* | *Simple Login Interface* | *Light and dark themes, more to come* |
+| *31 languages including all EU official languages* | *Simple Login Interface* | *Light and dark themes, more to come* |
 
 | Admin Server Commands | Chat Rooms Management | Users Management |
 |----------------------|-----------------------|------------------|
@@ -63,7 +63,7 @@
 - **Real-time Messaging** - Typing indicators, message corrections, and delivery features
 - **Offline Support** - IndexedDB storage with automatic sync on reconnect
 - **Theme System** - Light/dark themes synchronized across devices
-- **Internationalization** - 26 languages including complete EU coverage (Bulgarian, Croatian, Czech, Danish, Dutch, English, Estonian, Finnish, French, German, Greek, Hungarian, Icelandic, Irish, Italian, Latvian, Lithuanian, Maltese, Norwegian, Polish, Portuguese, Romanian, Slovak, Slovenian, Spanish, Swedish)
+- **Internationalization** - 31 languages including complete EU coverage (Belarusian, Bulgarian, Catalan, Chinese (Simplified), Croatian, Czech, Danish, Dutch, English, Estonian, Finnish, French, German, Greek, Hungarian, Icelandic, Irish, Italian, Latvian, Lithuanian, Maltese, Norwegian, Polish, Portuguese, Romanian, Russian, Slovak, Slovenian, Spanish, Swedish, Ukrainian)
 - **Self-hostable** - Connect to any XMPP server, no vendor lock-in
 - **Open Source** - AGPL-3.0 licensed
 

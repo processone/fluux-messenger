@@ -24,14 +24,13 @@ export type ConnectionStatus = 'disconnected' | 'connecting' | 'online' | 'recon
  * The transport method used for the XMPP connection.
  *
  * @remarks
- * - `tls`: Direct TLS connection via native TCP proxy (port 5223, Tauri desktop)
- * - `starttls`: STARTTLS upgrade via native TCP proxy (port 5222, Tauri desktop)
+ * - `proxy`: Native TCP/TLS connection via the always-on proxy (Tauri desktop)
  * - `websocket`: WebSocket connection (web browser or explicit ws:// URL)
  * - `null`: Not yet connected or unknown
  *
  * @category Connection
  */
-export type ConnectionMethod = 'tls' | 'starttls' | 'websocket'
+export type ConnectionMethod = 'proxy' | 'websocket'
 
 /**
  * System state changes that the app can signal to the SDK.

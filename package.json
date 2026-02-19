@@ -2,7 +2,7 @@
   "name": "fluux",
   "private": true,
   "license": "AGPL-3.0-or-later",
-  "version": "0.13.1",
+  "version": "0.13.2",
   "type": "module",
   "workspaces": [
     "packages/*",
@@ -26,6 +26,8 @@
     "docs:watch": "npm run docs:watch -w @fluux/sdk"
   },
   "devDependencies": {
+    "buffer": "^6.0.3",
+    "stream-browserify": "^3.0.0",
     "typescript": "^5.3.3"
   },
   "engines": {

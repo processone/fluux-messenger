@@ -72,9 +72,44 @@ vi.mock('@fluux/sdk', () => ({
     isArchived: vi.fn(() => false),
     unarchiveConversation: vi.fn(),
   }),
+  useChatActive: () => ({
+    activeConversation: mockActiveConversation,
+    activeConversationId: mockActiveConversation?.id ?? null,
+    activeMessages: mockActiveMessages,
+    activeTypingUsers: mockTypingUsers,
+    sendMessage: mockSendMessage,
+    sendReaction: mockSendReaction,
+    sendCorrection: mockSendCorrection,
+    retractMessage: mockRetractMessage,
+    activeAnimation: null,
+    sendEasterEgg: vi.fn(),
+    clearAnimation: mockClearAnimation,
+    clearFirstNewMessageId: mockClearFirstNewMessageId,
+    updateLastSeenMessageId: vi.fn(),
+    supportsMAM: mockSupportsMAM,
+    activeMAMState: mockActiveMAMState,
+    fetchHistory: mockFetchHistory,
+    fetchOlderHistory: vi.fn(),
+    getDraft: vi.fn(() => ''),
+    setDraft: vi.fn(),
+    clearDraft: vi.fn(),
+    sendChatState: vi.fn(),
+    isArchived: vi.fn(() => false),
+    unarchiveConversation: vi.fn(),
+    setActiveConversation: vi.fn(),
+    addConversation: vi.fn(),
+    deleteConversation: vi.fn(),
+    markAsRead: vi.fn(),
+    archiveConversation: vi.fn(),
+  }),
   useRoster: () => ({
     contacts: mockContacts,
   }),
+  useContactIdentities: () => {
+    const map = new Map()
+    mockContacts.forEach((c: Contact) => map.set(c.jid, { jid: c.jid, name: c.name, avatar: c.avatar, colorLight: c.colorLight, colorDark: c.colorDark }))
+    return map
+  },
   useConnection: () => ({
     jid: 'me@example.com/resource',
     ownAvatar: null,
@@ -106,6 +141,11 @@ vi.mock('@fluux/sdk/react', () => ({
       ownNickname: 'Me',
       status: 'online',
     })
+  },
+  useRosterStore: (selector: (state: { contacts: Map<string, Contact> }) => unknown) => {
+    const contactsMap = new Map<string, Contact>()
+    mockContacts.forEach((c: Contact) => contactsMap.set(c.jid, c))
+    return selector({ contacts: contactsMap })
   },
 }))
 

@@ -135,6 +135,25 @@ describe('usePresence hook', () => {
       expect(result.current.statusMessage).toBe('In a meeting')
     })
 
+    it('should update status message while staying online', () => {
+      const { result } = renderHook(() => usePresence(), { wrapper })
+
+      act(() => {
+        result.current.setPresence('online', 'Heads down')
+      })
+
+      expect(result.current.presenceStatus).toBe('online')
+      expect(result.current.presenceShow).toBeUndefined()
+      expect(result.current.statusMessage).toBe('Heads down')
+
+      act(() => {
+        result.current.setPresence('online', undefined)
+      })
+
+      expect(result.current.presenceStatus).toBe('online')
+      expect(result.current.statusMessage).toBeNull()
+    })
+
     it('should set status message when setting away', () => {
       const { result } = renderHook(() => usePresence(), { wrapper })
 

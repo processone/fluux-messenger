@@ -14,7 +14,7 @@ describe('connectionStore', () => {
       expect(state.jid).toBeNull()
       expect(state.error).toBeNull()
       expect(state.reconnectAttempt).toBe(0)
-      expect(state.reconnectIn).toBeNull()
+      expect(state.reconnectTargetTime).toBeNull()
     })
   })
 
@@ -52,19 +52,20 @@ describe('connectionStore', () => {
   })
 
   describe('setReconnectState', () => {
-    it('should update reconnect attempt and countdown', () => {
-      connectionStore.getState().setReconnectState(3, 15)
+    it('should update reconnect attempt and target time', () => {
+      const targetTime = Date.now() + 15000
+      connectionStore.getState().setReconnectState(3, targetTime)
 
       expect(connectionStore.getState().reconnectAttempt).toBe(3)
-      expect(connectionStore.getState().reconnectIn).toBe(15)
+      expect(connectionStore.getState().reconnectTargetTime).toBe(targetTime)
     })
 
-    it('should allow setting reconnectIn to null', () => {
-      connectionStore.getState().setReconnectState(1, 10)
+    it('should allow setting reconnectTargetTime to null', () => {
+      connectionStore.getState().setReconnectState(1, Date.now() + 10000)
       connectionStore.getState().setReconnectState(1, null)
 
       expect(connectionStore.getState().reconnectAttempt).toBe(1)
-      expect(connectionStore.getState().reconnectIn).toBeNull()
+      expect(connectionStore.getState().reconnectTargetTime).toBeNull()
     })
   })
 
@@ -77,7 +78,7 @@ describe('connectionStore', () => {
         jid: 'user@example.com',
         error: 'some error',
         reconnectAttempt: 5,
-        reconnectIn: 30,
+        reconnectTargetTime: Date.now() + 30000,
       })
 
       connectionStore.getState().reset()
@@ -87,7 +88,7 @@ describe('connectionStore', () => {
       expect(state.jid).toBeNull()
       expect(state.error).toBeNull()
       expect(state.reconnectAttempt).toBe(0)
-      expect(state.reconnectIn).toBeNull()
+      expect(state.reconnectTargetTime).toBeNull()
     })
 
     it('should reset serverInfo to null', () => {
@@ -236,4 +237,5 @@ describe('connectionStore', () => {
       expect(connectionStore.getState().httpUploadService).toBeNull()
     })
   })
+
 })

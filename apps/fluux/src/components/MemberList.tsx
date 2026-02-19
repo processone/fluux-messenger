@@ -1,17 +1,20 @@
 import { useChat, useRoster, type PresenceStatus } from '@fluux/sdk'
+import { useConnectionStore } from '@fluux/sdk/react'
 import { Avatar } from './Avatar'
 
 export function MemberList() {
   const { activeConversation } = useChat()
   const { sortedContacts } = useRoster()
+  const connectionStatus = useConnectionStore((s) => s.status)
+  const forceOffline = connectionStatus !== 'online'
 
   // Only show for group chats
   if (!activeConversation || activeConversation.type !== 'groupchat') return null
 
   // TODO: For MUC, this should show room participants, not the roster
   // For now, show roster contacts as a placeholder
-  const online = sortedContacts.filter(c => c.presence !== 'offline')
-  const offline = sortedContacts.filter(c => c.presence === 'offline')
+  const online = sortedContacts.filter(c => (forceOffline ? 'offline' : c.presence) !== 'offline')
+  const offline = sortedContacts.filter(c => (forceOffline ? 'offline' : c.presence) === 'offline')
 
   return (
     <aside className="w-60 bg-fluux-sidebar border-l border-fluux-bg overflow-y-auto hidden lg:block">
@@ -22,7 +25,7 @@ export function MemberList() {
             members={online.map(c => ({
               jid: c.jid,
               name: c.name,
-              presence: c.presence,
+              presence: forceOffline ? 'offline' : c.presence,
               status: c.statusMessage,
               avatar: c.avatar,
             }))}
@@ -35,7 +38,7 @@ export function MemberList() {
             members={offline.map(c => ({
               jid: c.jid,
               name: c.name,
-              presence: c.presence,
+              presence: forceOffline ? 'offline' : c.presence,
               status: c.statusMessage,
               avatar: c.avatar,
             }))}

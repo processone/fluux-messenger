@@ -428,8 +428,7 @@
         "priority": "Prioritat",
         "offlineNotice": "L'edició del perfil no està disponible mentre estàs fora de línia",
         "connection": "Connexió",
-        "connectionMethod_tls": "TLS",
-        "connectionMethod_starttls": "StartTLS",
+        "connectionMethod_proxy": "TCP/TLS",
         "connectionMethod_websocket": "WebSocket"
     },
     "console": {

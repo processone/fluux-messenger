@@ -28,9 +28,7 @@
  * @category Hooks
  */
 import { useCallback, useMemo } from 'react'
-import { useXMPPContext } from '../provider/XMPPProvider'
 import { usePresenceContext } from '../provider/PresenceContext'
-import { connectionStore } from '../stores'
 import type { AutoAwayConfig } from '../core/presenceMachine'
 
 /**
@@ -126,18 +124,19 @@ export interface UseSystemStateReturn {
  * @category Hooks
  */
 export function useSystemState(): UseSystemStateReturn {
-  const { client } = useXMPPContext()
   const { presenceActor } = usePresenceContext()
 
   // Get auto-away config from presence machine context
   const autoAwayConfig = presenceActor.getSnapshot().context.autoAwayConfig
 
   /**
-   * Main system state notification method.
+   * Presence-focused system state notification.
+   *
+   * This hook handles presence machine transitions only. For connection-level
+   * concerns (verification, reconnection), use `client.notifySystemState()`
+   * directly — it orchestrates both presence and connection in one call.
    */
   const notifySystemState = useCallback((state: SystemState, idleSince?: Date) => {
-    const connectionStatus = connectionStore.getState().status
-
     switch (state) {
       case 'idle':
         // Signal idle to presence machine - it will transition to auto-away
@@ -158,33 +157,19 @@ export function useSystemState(): UseSystemStateReturn {
         break
 
       case 'awake':
-        // System woke from sleep
-        // 1. Signal wake to presence machine (restores from auto-away)
+        // Signal wake to presence machine (restores from auto-away).
+        // Connection verification is handled by client.notifySystemState('awake')
+        // when called by the app's platform detection hook.
         presenceActor.send({ type: 'WAKE_DETECTED' })
-
-        // 2. Verify connection is still alive (socket may have died during sleep)
-        if (connectionStatus === 'online') {
-          // Use verifyConnection which sends a ping and triggers reconnect if needed
-          client.verifyConnection().catch(() => {
-            // Connection dead, reconnect will be triggered by the connection module
-          })
-        }
         break
 
       case 'visible':
-        // App/tab became visible - treat as potential activity
-        // Only signal activity if we're connected
-        if (connectionStatus === 'online') {
-          presenceActor.send({ type: 'ACTIVITY_DETECTED' })
-        }
-        break
-
       case 'hidden':
-        // App/tab hidden - currently no action
-        // Future: could adjust keepalive frequency
+        // No presence action — app handles visibility-based activity detection
+        // with appropriate time thresholds.
         break
     }
-  }, [client, presenceActor])
+  }, [presenceActor])
 
   // Convenience methods
   const notifyIdle = useCallback((since: Date) => {

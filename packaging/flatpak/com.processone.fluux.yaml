@@ -23,6 +23,7 @@ finish-args:
 
   # System tray
   - --talk-name=org.kde.StatusNotifierWatcher
+  - --filesystem=xdg-run/tray-icon:create
 
   # Secrets/Keyring (for storing credentials)
   - --talk-name=org.freedesktop.secrets
@@ -31,6 +32,9 @@ finish-args:
   - --filesystem=xdg-download
 
 modules:
+  # System tray support (libappindicator-sys loads this via dlopen at runtime)
+  - shared-modules/libayatana-appindicator/libayatana-appindicator-gtk3.json
+
   - name: fluux-messenger
     buildsystem: simple
     build-commands:

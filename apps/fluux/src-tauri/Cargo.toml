@@ -1,6 +1,6 @@
 [package]
 name = "fluux"
-version = "0.13.1"
+version = "0.13.2"
 description = "A powerful, productive messaging client that's pleasant to use."
 authors = ["ProcessOne"]
 license = "AGPL-3.0-or-later"
@@ -35,6 +35,8 @@ rustls-native-certs = "0.8"
 trust-dns-resolver = "0.23"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+dirs = "5"
 
 # Updater plugin for auto-updates (desktop only)
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
@@ -44,13 +46,14 @@ keyring = { version = "3", features = ["apple-native", "windows-native", "linux-
 reqwest = { version = "0.12", features = ["blocking"] }
 scraper = "0.22"
 
-# user-idle for non-macOS platforms (macOS uses ioreg directly)
-[target.'cfg(not(target_os = "macos"))'.dependencies]
+# user-idle for Windows (macOS uses ioreg, Linux uses direct X11 calls)
+[target.'cfg(target_os = "windows")'.dependencies]
 user-idle = "0.6"
 
 # ctor for Linux to set env vars before main() - required for WebKitGTK workaround
 [target.'cfg(target_os = "linux")'.dependencies]
 ctor = "0.2"
+x11 = { version = "2", features = ["xlib", "xss"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"

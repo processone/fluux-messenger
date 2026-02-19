@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { ChatHeader } from './ChatHeader'
 import type { Contact } from '@fluux/sdk'
@@ -17,6 +17,18 @@ vi.mock('@/hooks', () => ({
     titleBarClass: 'mt-5',
     dragRegionProps: { 'data-tauri-drag-region': true },
   }),
+}))
+
+// Mock @fluux/sdk/react store hooks
+// Track contacts so tests can control what useRosterStore returns
+const mockRosterContacts = new Map<string, Contact>()
+
+vi.mock('@fluux/sdk/react', () => ({
+  useRosterStore: (selector: (state: { contacts: Map<string, Contact> }) => unknown) => {
+    return selector({ contacts: mockRosterContacts })
+  },
+  useConnectionStore: (selector: (state: { status: string }) => unknown) =>
+    selector({ status: 'online' }),
 }))
 
 // Mock Avatar component
@@ -43,13 +55,25 @@ const createContact = (overrides: Partial<Contact> = {}): Contact => ({
 })
 
 describe('ChatHeader', () => {
+  beforeEach(() => {
+    mockRosterContacts.clear()
+  })
+
+  // Helper to set up a contact in both the prop and the roster store
+  function setupContact(overrides: Partial<Contact> = {}): Contact {
+    const contact = createContact(overrides)
+    mockRosterContacts.set(contact.jid, contact)
+    return contact
+  }
+
   describe('1:1 Chat Mode', () => {
     it('renders contact name', () => {
+      const contact = setupContact()
       render(
         <ChatHeader
           name="Alice Smith"
           type="chat"
-          contact={createContact()}
+          contact={contact}
           jid="alice@example.com"
         />
       )
@@ -58,11 +82,12 @@ describe('ChatHeader', () => {
     })
 
     it('renders contact avatar with presence', () => {
+      const contact = setupContact({ presence: 'away' })
       render(
         <ChatHeader
           name="Alice Smith"
           type="chat"
-          contact={createContact({ presence: 'away' })}
+          contact={contact}
           jid="alice@example.com"
         />
       )
@@ -73,11 +98,12 @@ describe('ChatHeader', () => {
     })
 
     it('renders status text for contact', () => {
+      const contact = setupContact({ statusMessage: 'Working from home' })
       render(
         <ChatHeader
           name="Alice Smith"
           type="chat"
-          contact={createContact({ statusMessage: 'Working from home' })}
+          contact={contact}
           jid="alice@example.com"
         />
       )
@@ -133,11 +159,12 @@ describe('ChatHeader', () => {
     })
 
     it('does not show status text for group chat', () => {
+      const contact = setupContact({ statusMessage: 'Should not show' })
       render(
         <ChatHeader
           name="Team Chat"
           type="groupchat"
-          contact={createContact({ statusMessage: 'Should not show' })}
+          contact={contact}
           jid="team@conference.example.com"
         />
       )

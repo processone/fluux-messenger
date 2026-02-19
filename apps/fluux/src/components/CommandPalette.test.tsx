@@ -62,6 +62,8 @@ vi.mock('@fluux/sdk/react', () => ({
   useChatStore: () => ({
     setActiveConversation: mockSetActiveConversation,
   }),
+  useConnectionStore: (selector: (state: { status: string }) => unknown) =>
+    selector({ status: 'online' }),
 }))
 
 // Mock i18n

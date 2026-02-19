@@ -108,6 +108,21 @@ jobs:
           echo "$NOTES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
+      - name: Patch version for Tauri semver compatibility
+        run: |
+          # Tauri v2 requires strict semver (X.Y.Z) — prerelease suffixes are rejected
+          # Strip prerelease suffix: 0.13.2-beta.1 → 0.13.2
+          # For stable versions (no hyphen), this is a no-op
+          VERSION="${RELEASE_TAG#v}"
+          if [[ "$VERSION" == *-* ]]; then
+            BASE_VERSION="${VERSION%%-*}"
+            echo "Patching version for Tauri build: $VERSION → $BASE_VERSION"
+            sed -i '' "s|\"version\": \".*\"|\"version\": \"$BASE_VERSION\"|" apps/fluux/src-tauri/tauri.conf.json
+            sed -i '' "s|^version = \".*\"|version = \"$BASE_VERSION\"|" apps/fluux/src-tauri/Cargo.toml
+          else
+            echo "Stable version $VERSION — no patching needed"
+          fi
+
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
@@ -175,6 +190,22 @@ jobs:
           echo "notes<<EOF" >> $GITHUB_OUTPUT
           echo "$NOTES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Patch version for Tauri semver compatibility
+        shell: bash
+        run: |
+          # Tauri v2 requires strict semver (X.Y.Z) — prerelease suffixes are rejected
+          # Strip prerelease suffix: 0.13.2-beta.1 → 0.13.2
+          # For stable versions (no hyphen), this is a no-op
+          VERSION="${RELEASE_TAG#v}"
+          if [[ "$VERSION" == *-* ]]; then
+            BASE_VERSION="${VERSION%%-*}"
+            echo "Patching version for Tauri build: $VERSION → $BASE_VERSION"
+            sed -i "s|\"version\": \".*\"|\"version\": \"$BASE_VERSION\"|" apps/fluux/src-tauri/tauri.conf.json
+            sed -i "s|^version = \".*\"|version = \"$BASE_VERSION\"|" apps/fluux/src-tauri/Cargo.toml
+          else
+            echo "Stable version $VERSION — no patching needed"
+          fi
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
@@ -255,6 +286,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ env.RELEASE_TAG }}
+          submodules: true
 
       - name: Install Linux dependencies
         run: |
@@ -303,6 +335,21 @@ jobs:
           echo "$NOTES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
+      - name: Patch version for Tauri semver compatibility
+        run: |
+          # Tauri v2 requires strict semver (X.Y.Z) — prerelease suffixes are rejected
+          # Strip prerelease suffix: 0.13.2-beta.1 → 0.13.2
+          # For stable versions (no hyphen), this is a no-op
+          VERSION="${RELEASE_TAG#v}"
+          if [[ "$VERSION" == *-* ]]; then
+            BASE_VERSION="${VERSION%%-*}"
+            echo "Patching version for Tauri build: $VERSION → $BASE_VERSION"
+            sed -i "s|\"version\": \".*\"|\"version\": \"$BASE_VERSION\"|" apps/fluux/src-tauri/tauri.conf.json
+            sed -i "s|^version = \".*\"|version = \"$BASE_VERSION\"|" apps/fluux/src-tauri/Cargo.toml
+          else
+            echo "Stable version $VERSION — no patching needed"
+          fi
+
       - name: Build Tauri binary
         run: |
           cd apps/fluux
@@ -326,7 +373,7 @@ jobs:
           # Copy desktop file and icons
           cp packaging/debian/fluux-messenger.desktop tarball-staging/fluux-messenger/
           cp apps/fluux/src-tauri/icons/128x128.png tarball-staging/fluux-messenger/fluux-messenger.png
-          cp apps/fluux/src-tauri/icons/icon.png tarball-staging/fluux-messenger/fluux-messenger-256.png
+          cp apps/fluux/src-tauri/icons/256x256.png tarball-staging/fluux-messenger/fluux-messenger-256.png
 
           # Create tarball
           mkdir -p dist
@@ -350,8 +397,12 @@ jobs:
           export FLUUX_BINARY="apps/fluux/src-tauri/target/release/fluux"
 
           # Update debian/changelog version from release tag
+          # Convert pre-release for Debian (~ sorts before release, so 0.13.2~beta.1 < 0.13.2)
+          # Note: cannot use ${VERSION//-/~} because bash 5+ applies tilde expansion
+          # to the replacement string, turning ~ into $HOME
           VERSION="${RELEASE_TAG#v}"
-          sed -i "1s/([^)]*)/($VERSION-1)/" debian/changelog
+          DEB_VERSION=$(echo "$VERSION" | sed 's/-/~/g')
+          sed -i "1s#([^)]*)#($DEB_VERSION-1)#" debian/changelog
 
           # Build the .deb package (-d skips build dependency check since we use pre-built binary)
           dpkg-buildpackage -d -uc -us -b
@@ -383,9 +434,10 @@ jobs:
           cp apps/fluux/src-tauri/target/release/fluux flatpak-build/fluux-messenger
           cp packaging/debian/fluux-messenger.desktop flatpak-build/
           cp apps/fluux/src-tauri/icons/128x128.png flatpak-build/fluux-messenger.png
-          cp apps/fluux/src-tauri/icons/icon.png flatpak-build/fluux-messenger-256.png
+          cp apps/fluux/src-tauri/icons/256x256.png flatpak-build/fluux-messenger-256.png
           cp packaging/flatpak/com.processone.fluux.metainfo.xml flatpak-build/
           cp packaging/flatpak/com.processone.fluux.yaml flatpak-build/
+          cp -r packaging/flatpak/shared-modules flatpak-build/
 
           # Build Flatpak
           cd flatpak-build
@@ -465,6 +517,21 @@ jobs:
       - name: Build SDK
         run: npm run build:sdk
 
+      - name: Patch version for Tauri semver compatibility
+        run: |
+          # Tauri v2 requires strict semver (X.Y.Z) — prerelease suffixes are rejected
+          # Strip prerelease suffix: 0.13.2-beta.1 → 0.13.2
+          # For stable versions (no hyphen), this is a no-op
+          VERSION="${RELEASE_TAG#v}"
+          if [[ "$VERSION" == *-* ]]; then
+            BASE_VERSION="${VERSION%%-*}"
+            echo "Patching version for Tauri build: $VERSION → $BASE_VERSION"
+            sed -i "s|\"version\": \".*\"|\"version\": \"$BASE_VERSION\"|" apps/fluux/src-tauri/tauri.conf.json
+            sed -i "s|^version = \".*\"|version = \"$BASE_VERSION\"|" apps/fluux/src-tauri/Cargo.toml
+          else
+            echo "Stable version $VERSION — no patching needed"
+          fi
+
       - name: Build Tauri binary
         run: |
           cd apps/fluux
@@ -477,23 +544,37 @@ jobs:
         run: |
           VERSION="${RELEASE_TAG#v}"
 
+          # Convert pre-release version for RPM (hyphens not allowed in Version field)
+          # 0.13.2-beta.1 → RPM_VERSION=0.13.2, RPM_RELEASE=0.1.beta.1
+          # 0.13.2        → RPM_VERSION=0.13.2, RPM_RELEASE=1
+          if [[ "$VERSION" == *-* ]]; then
+            RPM_VERSION="${VERSION%%-*}"
+            RPM_PRERELEASE="${VERSION#*-}"
+            RPM_RELEASE="0.1.${RPM_PRERELEASE//-/.}"
+          else
+            RPM_VERSION="$VERSION"
+            RPM_RELEASE="1"
+          fi
+
           # Setup RPM build directories
           mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
 
-          # Create source tarball for rpmbuild
-          mkdir -p "fluux-messenger-${VERSION}"
-          cp apps/fluux/src-tauri/target/release/fluux "fluux-messenger-${VERSION}/fluux-messenger"
-          cp packaging/debian/fluux-messenger.desktop "fluux-messenger-${VERSION}/"
-          mkdir -p "fluux-messenger-${VERSION}/icons"
-          cp apps/fluux/src-tauri/icons/32x32.png "fluux-messenger-${VERSION}/icons/"
-          cp apps/fluux/src-tauri/icons/128x128.png "fluux-messenger-${VERSION}/icons/"
-          cp apps/fluux/src-tauri/icons/icon.png "fluux-messenger-${VERSION}/icons/256x256.png"
+          # Create source tarball for rpmbuild (directory name must match %{version} in spec)
+          mkdir -p "fluux-messenger-${RPM_VERSION}"
+          cp apps/fluux/src-tauri/target/release/fluux "fluux-messenger-${RPM_VERSION}/fluux-messenger"
+          cp packaging/debian/fluux-messenger.desktop "fluux-messenger-${RPM_VERSION}/"
+          mkdir -p "fluux-messenger-${RPM_VERSION}/icons"
+          cp apps/fluux/src-tauri/icons/32x32.png "fluux-messenger-${RPM_VERSION}/icons/"
+          cp apps/fluux/src-tauri/icons/64x64.png "fluux-messenger-${RPM_VERSION}/icons/"
+          cp apps/fluux/src-tauri/icons/128x128.png "fluux-messenger-${RPM_VERSION}/icons/"
+          cp apps/fluux/src-tauri/icons/256x256.png "fluux-messenger-${RPM_VERSION}/icons/"
 
-          tar czvf ~/rpmbuild/SOURCES/fluux-messenger-${VERSION}.tar.gz "fluux-messenger-${VERSION}"
+          tar czvf ~/rpmbuild/SOURCES/fluux-messenger-${RPM_VERSION}.tar.gz "fluux-messenger-${RPM_VERSION}"
 
           # Copy and update spec file
           cp packaging/rpm/fluux-messenger.spec ~/rpmbuild/SPECS/
-          sed -i "s/^Version:.*/Version:        ${VERSION}/" ~/rpmbuild/SPECS/fluux-messenger.spec
+          sed -i "s/^Version:.*/Version:        ${RPM_VERSION}/" ~/rpmbuild/SPECS/fluux-messenger.spec
+          sed -i "s/^Release:.*/Release:        ${RPM_RELEASE}%{?dist}/" ~/rpmbuild/SPECS/fluux-messenger.spec
 
           # Build RPM
           rpmbuild -bb ~/rpmbuild/SPECS/fluux-messenger.spec --target ${{ matrix.rpm_arch }}

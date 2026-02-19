@@ -35,10 +35,14 @@ override_dh_auto_install:
 	install -Dm644 debian/fluux-messenger.desktop \
 		$(CURDIR)/debian/fluux-messenger/usr/share/applications/fluux-messenger.desktop
 	# Install icons
-	install -Dm644 apps/fluux/src-tauri/icons/128x128.png \
-		$(CURDIR)/debian/fluux-messenger/usr/share/icons/hicolor/128x128/apps/fluux-messenger.png
 	install -Dm644 apps/fluux/src-tauri/icons/32x32.png \
 		$(CURDIR)/debian/fluux-messenger/usr/share/icons/hicolor/32x32/apps/fluux-messenger.png
+	install -Dm644 apps/fluux/src-tauri/icons/64x64.png \
+		$(CURDIR)/debian/fluux-messenger/usr/share/icons/hicolor/64x64/apps/fluux-messenger.png
+	install -Dm644 apps/fluux/src-tauri/icons/128x128.png \
+		$(CURDIR)/debian/fluux-messenger/usr/share/icons/hicolor/128x128/apps/fluux-messenger.png
+	install -Dm644 apps/fluux/src-tauri/icons/256x256.png \
+		$(CURDIR)/debian/fluux-messenger/usr/share/icons/hicolor/256x256/apps/fluux-messenger.png
 
 override_dh_auto_clean:
 	cd apps/fluux/src-tauri && cargo clean || true

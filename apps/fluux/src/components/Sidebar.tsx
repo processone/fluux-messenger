@@ -5,14 +5,10 @@ import { useClickOutside, useWindowDrag, useRouteSync } from '@/hooks'
 import { useModals } from '@/contexts'
 import {
   useXMPP,
-  useChat,
-  useEvents,
-  useRoom,
-  useAdmin,
   type Contact,
   type AdminCategory,
 } from '@fluux/sdk'
-import { useConnectionStore } from '@fluux/sdk/react'
+import { useConnectionStore, useChatStore, useRoomStore, useEventsStore, useAdminStore } from '@fluux/sdk/react'
 import { AdminDashboard } from './AdminDashboard'
 import { BrowseRoomsModal } from './BrowseRoomsModal'
 import { Avatar } from './Avatar'
@@ -61,6 +57,9 @@ import {
 // Re-export SidebarView for external use
 export type { SidebarView }
 
+const LOGOUT_DISCONNECT_TIMEOUT_MS = 2500
+const LOGOUT_KEYCHAIN_TIMEOUT_MS = 2500
+
 interface SidebarProps {
   onSelectContact?: (contact: Contact) => void
   onStartChat?: (contact: Contact) => void
@@ -83,19 +82,43 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
   // Use focused selectors instead of useConnection() to avoid re-renders when unrelated values change
   // (e.g., ownResources updates shouldn't re-render the entire sidebar)
   const jid = useConnectionStore((s) => s.jid)
-  const status = useConnectionStore((s) => s.status)
+  const rawStatus = useConnectionStore((s) => s.status)
+
+  // Suppress brief 'verifying' flashes: only show verifying status after a 2s delay.
+  // This avoids distracting orange flickers during routine connection checks.
+  const [status, setStatus] = useState(rawStatus)
+  useEffect(() => {
+    if (rawStatus === 'verifying') {
+      const timer = setTimeout(() => setStatus('verifying'), 2000)
+      return () => clearTimeout(timer)
+    }
+    setStatus(rawStatus)
+  }, [rawStatus])
   const reconnectAttempt = useConnectionStore((s) => s.reconnectAttempt)
-  const reconnectIn = useConnectionStore((s) => s.reconnectIn)
+  const reconnectTargetTime = useConnectionStore((s) => s.reconnectTargetTime)
   const ownAvatar = useConnectionStore((s) => s.ownAvatar)
   const ownNickname = useConnectionStore((s) => s.ownNickname)
   // Get methods from client (not from store)
   const { client } = useXMPP()
   const disconnect = useCallback(() => client.disconnect(), [client])
   const cancelReconnect = useCallback(() => client.cancelReconnect(), [client])
-  const { isAdmin } = useAdmin()
-  const { conversations } = useChat()
-  const { pendingCount } = useEvents()
-  const { totalMentionsCount, totalNotifiableUnreadCount } = useRoom()
+  const isAdmin = useAdminStore((s) => s.isAdmin)
+  // Use targeted store selectors instead of useChat()/useRoom() to avoid render loops.
+  // Those hooks subscribe to many store properties (conversations array, messages, etc.)
+  // which create new references during the post-connection initialization burst.
+  const totalUnread = useChatStore((s) => {
+    let sum = 0
+    for (const meta of s.conversationMeta.values()) sum += meta.unreadCount
+    return sum
+  })
+  const pendingCount = useEventsStore((s) =>
+    s.subscriptionRequests.length +
+    new Set(s.strangerMessages.map((m) => m.from)).size +
+    s.mucInvitations.length +
+    s.systemNotifications.length
+  )
+  const totalMentionsCount = useRoomStore((s) => s.totalMentionsCount())
+  const totalNotifiableUnreadCount = useRoomStore((s) => s.totalNotifiableUnreadCount())
   const { titleBarClass, dragRegionProps } = useWindowDrag()
 
   // Modal state from context - shared with ChatLayout
@@ -179,8 +202,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
   const closeRoomDropdown = useCallback(() => setShowRoomDropdown(false), [])
   useClickOutside(roomDropdownRef, closeRoomDropdown, showRoomDropdown)
 
-  // Calculate total unread count across all conversations
-  const totalUnread = conversations.reduce((sum, conv) => sum + conv.unreadCount, 0)
+  // totalUnread is computed directly via useChatStore selector above
 
   return (
     <aside
@@ -386,7 +408,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
               {status === 'online' ? (
                 <PresenceSelector isOpen={showPresenceMenu} onOpenChange={(open) => open ? modalActions.open('presenceMenu') : modalActions.close('presenceMenu')} />
               ) : (
-                <StatusDisplay status={status} reconnectIn={reconnectIn} reconnectAttempt={reconnectAttempt} />
+                <StatusDisplay status={status} reconnectTargetTime={reconnectTargetTime} reconnectAttempt={reconnectAttempt} />
               )}
             </div>
             {/* Menu button */}
@@ -401,13 +423,39 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
               </Tooltip>
             ) : (
               <UserMenu onLogout={async (shouldCleanLocalData) => {
-                if (shouldCleanLocalData) {
-                  await clearLocalData()
-                } else {
-                  clearSession()
-                  await deleteCredentials()
+                // Always attempt disconnect first.
+                const disconnectSettled = await Promise.race([
+                  disconnect().then(() => 'done' as const).catch(() => 'error' as const),
+                  new Promise<'timeout'>((resolve) => {
+                    setTimeout(() => resolve('timeout'), LOGOUT_DISCONNECT_TIMEOUT_MS)
+                  }),
+                ])
+                if (disconnectSettled === 'timeout') {
+                  console.warn(
+                    `[Fluux] Logout: disconnect timed out after ${LOGOUT_DISCONNECT_TIMEOUT_MS}ms, continuing cleanup`
+                  )
                 }
-                disconnect()
+
+                // Clear persisted session immediately so the UI can leave ChatLayout
+                // even if OS keychain or storage cleanup stalls on this platform.
+                clearSession()
+
+                if (shouldCleanLocalData) {
+                  // clearLocalData() clears session at the end of cleanup.
+                  await clearLocalData().catch(() => {})
+                } else {
+                  const keychainSettled = await Promise.race([
+                    deleteCredentials().then(() => 'done' as const).catch(() => 'error' as const),
+                    new Promise<'timeout'>((resolve) => {
+                      setTimeout(() => resolve('timeout'), LOGOUT_KEYCHAIN_TIMEOUT_MS)
+                    }),
+                  ])
+                  if (keychainSettled === 'timeout') {
+                    console.warn(
+                      `[Fluux] Logout: keychain cleanup timed out after ${LOGOUT_KEYCHAIN_TIMEOUT_MS}ms`
+                    )
+                  }
+                }
               }} />
             )}
           </div>

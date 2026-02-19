@@ -38,11 +38,12 @@ export interface StoreBindings {
     getStatus: () => ConnectionStatus
     setJid: (jid: string | null) => void
     setError: (error: string | null) => void
-    setReconnectState: (attempt: number, reconnectIn: number | null) => void
+    setReconnectState: (attempt: number, reconnectTargetTime: number | null) => void
     setPresenceState: (show: PresenceStatus, message?: string | null) => void
     setAutoAway: (isAuto: boolean) => void
     setServerInfo: (info: ServerInfo | null) => void
     setConnectionMethod: (method: ConnectionMethod | null) => void
+    setAuthMechanism: (mechanism: string | null) => void
     // Getters for presence preservation on reconnect
     getPresenceShow: () => PresenceStatus
     getStatusMessage: () => string | null

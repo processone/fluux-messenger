@@ -130,8 +130,8 @@ export const chatSelectors = {
    */
   totalUnreadCount: (state: ChatState): number => {
     let total = 0
-    for (const conv of state.conversations.values()) {
-      total += conv.unreadCount
+    for (const meta of state.conversationMeta.values()) {
+      total += meta.unreadCount
     }
     return total
   },

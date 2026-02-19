@@ -27,33 +27,42 @@ const USER_DATA_KEYS = [
  * Call on disconnect when the user opts to clean local data.
  */
 export async function clearLocalData(): Promise<void> {
-  // 1. Clear app-level sessionStorage keys
-  clearSession()
+  console.log('[Fluux] clearLocalData: starting')
 
-  // 2. Clear SDK sessionStorage keys (fluux:session:{jid}, fluux:presence-machine, etc.)
-  clearFluuxSessionStorageKeys()
+  try {
+    // 1. Clear SDK sessionStorage keys (fluux:session:{jid}, fluux:presence-machine, etc.)
+    clearFluuxSessionStorageKeys()
 
-  // 3. Reset Zustand stores (clears in-memory state + their localStorage)
-  //    chatStore.reset() clears 'xmpp-chat-storage' localStorage + IndexedDB messages
-  //    roomStore.reset() clears 'fluux-room-drafts' localStorage
-  chatStore.getState().reset()
-  roomStore.getState().reset()
-  connectionStore.getState().reset()
-  rosterStore.getState().reset()
-  eventsStore.getState().reset()
-  consoleStore.getState().reset()
-  adminStore.getState().reset()
-  blockingStore.getState().reset()
+    // 2. Reset Zustand stores (clears in-memory state + their localStorage)
+    //    chatStore.reset() clears 'xmpp-chat-storage' localStorage + IndexedDB messages
+    //    roomStore.reset() clears 'fluux-room-drafts' localStorage
+    chatStore.getState().reset()
+    roomStore.getState().reset()
+    connectionStore.getState().reset()
+    rosterStore.getState().reset()
+    eventsStore.getState().reset()
+    consoleStore.getState().reset()
+    adminStore.getState().reset()
+    blockingStore.getState().reset()
+    console.log('[Fluux] clearLocalData: stores reset')
 
-  // 4. Clear app-specific localStorage user data keys
-  USER_DATA_KEYS.forEach((key) => localStorage.removeItem(key))
+    // 3. Clear app-specific localStorage user data keys
+    USER_DATA_KEYS.forEach((key) => localStorage.removeItem(key))
 
-  // 5. Delete OS keychain credentials (desktop only, no-op on web)
-  await deleteCredentials()
+    // 4. Delete OS keychain credentials (desktop only, no-op on web)
+    // Force deletion even if localStorage flags were already cleared above.
+    await deleteCredentials({ force: true })
+    console.log('[Fluux] clearLocalData: keychain done')
 
-  // 6. Clear IndexedDB avatar cache (blobs, hash mappings, no-avatar entries)
-  //    Note: chatStore.reset() already handles clearing the message cache
-  await clearAllAvatarData()
+    // 5. Clear IndexedDB avatar cache (blobs, hash mappings, no-avatar entries)
+    //    Note: chatStore.reset() already handles clearing the message cache
+    await clearAllAvatarData()
+    console.log('[Fluux] clearLocalData: complete')
+  } finally {
+    // Clear app-level session keys last so the logout transition happens
+    // after cleanup has run.
+    clearSession()
+  }
 }
 
 /**

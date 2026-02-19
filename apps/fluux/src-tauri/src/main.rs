@@ -1,7 +1,7 @@
 // Prevents additional console window on Windows in release
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-// Linux: Set WebKitGTK workaround env vars BEFORE main() runs
+// Linux: Apply WebKitGTK GPU workaround env vars BEFORE main() runs when requested.
 // This uses ctor to run a static constructor before any other code,
 // ensuring the env vars are set before WebKitGTK initializes.
 // Fixes grey screen / "Could not create default EGL display: EGL_BAD_PARAMETER"
@@ -9,35 +9,35 @@
 #[cfg(target_os = "linux")]
 #[ctor::ctor]
 fn set_linux_webkit_env() {
-    if std::env::var("FLUUX_ENABLE_GPU").is_err() {
+    if std::env::var("FLUUX_DISABLE_GPU").is_ok() {
         std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
     }
 }
 
-use tauri::{Emitter, Manager};
-#[cfg(target_os = "macos")]
-use tauri::{RunEvent, WindowEvent};
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
 use tauri::WindowEvent;
+use tauri::{Emitter, Manager, RunEvent};
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 // Menu support
 #[cfg(target_os = "macos")]
 use tauri::menu::{MenuBuilder, PredefinedMenuItem, SubmenuBuilder};
-// System tray support for Windows
-#[cfg(target_os = "windows")]
+// System tray support for Linux and Windows
+use keyring::Entry;
+use scraper::{Html, Selector};
+use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 use tauri_plugin_deep_link::DeepLinkExt;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 use tauri_plugin_opener::OpenerExt;
-use keyring::Entry;
-use serde::{Deserialize, Serialize};
-use scraper::{Html, Selector};
 
 mod xmpp_proxy;
 
@@ -75,7 +75,7 @@ mod idle {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
 mod idle {
     use user_idle::UserIdle;
 
@@ -86,6 +86,112 @@ mod idle {
                 tracing::warn!("Idle: failed to get user idle time: {}", e);
                 e.to_string()
             })
+    }
+}
+
+#[cfg(target_os = "linux")]
+mod idle {
+    use std::ffi::CString;
+    use std::ptr;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::OnceLock;
+    use x11::xlib;
+    use x11::xss;
+
+    const UNSUPPORTED_IDLE_REASON: &str =
+        "Linux idle detection unavailable (MIT-SCREEN-SAVER extension missing)";
+    const QUERY_FAILED_IDLE_REASON: &str =
+        "Linux idle detection unavailable (XScreenSaver query failed)";
+
+    /// Cache XScreenSaver support so we avoid repeatedly probing an unsupported
+    /// display and flooding logs.
+    static HAS_XSCREENSAVER_EXTENSION: OnceLock<bool> = OnceLock::new();
+    static IDLE_BACKEND_UNAVAILABLE: AtomicBool = AtomicBool::new(false);
+
+    fn has_xscreensaver_extension() -> bool {
+        *HAS_XSCREENSAVER_EXTENSION.get_or_init(|| unsafe {
+            let display = xlib::XOpenDisplay(ptr::null());
+            if display.is_null() {
+                tracing::info!(
+                    "Idle: no X11 display available, falling back to DOM idle detection"
+                );
+                return false;
+            }
+
+            let extension_name = CString::new("MIT-SCREEN-SAVER")
+                .expect("MIT-SCREEN-SAVER extension name must not contain interior NUL bytes");
+            let mut major_opcode = 0;
+            let mut event_base = 0;
+            let mut error_base = 0;
+            // Query through Xlib directly to avoid XScreenSaver's missing-extension
+            // stderr spam on desktops that do not expose MIT-SCREEN-SAVER.
+            let has_extension = xlib::XQueryExtension(
+                display,
+                extension_name.as_ptr(),
+                &mut major_opcode,
+                &mut event_base,
+                &mut error_base,
+            ) != 0;
+            xlib::XCloseDisplay(display);
+
+            if !has_extension {
+                tracing::info!(
+                    "Idle: MIT-SCREEN-SAVER extension missing, falling back to DOM idle detection"
+                );
+            }
+
+            has_extension
+        })
+    }
+
+    pub fn get_idle_seconds() -> Result<u64, String> {
+        if IDLE_BACKEND_UNAVAILABLE.load(Ordering::Relaxed) {
+            return Err(UNSUPPORTED_IDLE_REASON.to_string());
+        }
+
+        if !has_xscreensaver_extension() {
+            IDLE_BACKEND_UNAVAILABLE.store(true, Ordering::Relaxed);
+            return Err(UNSUPPORTED_IDLE_REASON.to_string());
+        }
+
+        unsafe {
+            let display = xlib::XOpenDisplay(ptr::null());
+            if display.is_null() {
+                IDLE_BACKEND_UNAVAILABLE.store(true, Ordering::Relaxed);
+                tracing::info!(
+                    "Idle: failed to open X11 display, falling back to DOM idle detection"
+                );
+                return Err(
+                    "Linux idle detection unavailable (failed to open X11 display)".to_string(),
+                );
+            }
+
+            let root = xlib::XDefaultRootWindow(display);
+            let info = xss::XScreenSaverAllocInfo();
+            if info.is_null() {
+                xlib::XCloseDisplay(display);
+                IDLE_BACKEND_UNAVAILABLE.store(true, Ordering::Relaxed);
+                tracing::info!(
+                    "Idle: could not allocate XScreenSaverInfo, falling back to DOM idle detection"
+                );
+                return Err(
+                    "Linux idle detection failed (could not allocate XScreenSaverInfo)".to_string(),
+                );
+            }
+
+            let status = xss::XScreenSaverQueryInfo(display, root, info);
+            let idle_seconds = if status == 0 {
+                IDLE_BACKEND_UNAVAILABLE.store(true, Ordering::Relaxed);
+                tracing::info!("Idle: XScreenSaverQueryInfo returned status 0, falling back to DOM idle detection");
+                Err(QUERY_FAILED_IDLE_REASON.to_string())
+            } else {
+                Ok((*info).idle as u64 / 1000)
+            };
+
+            xlib::XFree(info as *mut _);
+            xlib::XCloseDisplay(display);
+            idle_seconds
+        }
     }
 }
 
@@ -106,128 +212,196 @@ pub struct StoredCredentials {
     pub server: Option<String>,
 }
 
-/// Save credentials to OS keychain
+/// Classify a keyring error into a user-friendly description.
+/// macOS wraps most keychain errors as PlatformFailure with the raw Security
+/// framework message (e.g., "User canceled the operation", "The specified item
+/// already exists in the keychain"). This function checks the error string to
+/// provide a clearer diagnosis.
+fn classify_keyring_error(e: &keyring::Error, operation: &str) -> String {
+    let msg = e.to_string();
+    if msg.contains("User canceled") || msg.contains("user canceled") {
+        format!("Keychain access denied by user during {}", operation)
+    } else if msg.contains("already exists") {
+        // This can also surface when access is denied on some macOS versions
+        format!(
+            "Keychain access conflict during {} (item may exist or access was denied)",
+            operation
+        )
+    } else {
+        match e {
+            keyring::Error::NoStorageAccess(_) => {
+                format!(
+                    "Keychain locked or inaccessible during {}: {}",
+                    operation, msg
+                )
+            }
+            keyring::Error::PlatformFailure(_) => {
+                format!("Keychain platform error during {}: {}", operation, msg)
+            }
+            _ => format!("Keychain error during {}: {}", operation, msg),
+        }
+    }
+}
+
+/// Save credentials to OS keychain.
+/// Runs on a background thread to avoid blocking the main thread when
+/// macOS shows a keychain authorization dialog.
 #[tauri::command]
-fn save_credentials(jid: String, password: String, server: Option<String>) -> Result<(), String> {
-    let entry = Entry::new(KEYRING_SERVICE, &jid)
-        .map_err(|e| {
+async fn save_credentials(
+    jid: String,
+    password: String,
+    server: Option<String>,
+) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let entry = Entry::new(KEYRING_SERVICE, &jid).map_err(|e| {
             tracing::error!("Keychain: failed to create entry for {}: {}", jid, e);
             format!("Failed to create keyring entry: {}", e)
         })?;
 
-    let credentials = StoredCredentials { jid: jid.clone(), password, server };
-    let json = serde_json::to_string(&credentials)
-        .map_err(|e| {
-            tracing::error!("Keychain: failed to serialize credentials for {}: {}", jid, e);
+        let credentials = StoredCredentials {
+            jid: jid.clone(),
+            password,
+            server,
+        };
+        let json = serde_json::to_string(&credentials).map_err(|e| {
+            tracing::error!(
+                "Keychain: failed to serialize credentials for {}: {}",
+                jid,
+                e
+            );
             format!("Failed to serialize credentials: {}", e)
         })?;
 
-    entry.set_password(&json)
-        .map_err(|e| {
-            tracing::error!("Keychain: failed to save credentials for {}: {}", jid, e);
-            format!("Failed to save to keychain: {}", e)
+        entry.set_password(&json).map_err(|e| {
+            let desc = classify_keyring_error(&e, "save");
+            tracing::error!("Keychain: {} for {}", desc, jid);
+            desc
         })?;
 
-    // Also store the JID as the "last user" so we know which account to load
-    let last_user_entry = Entry::new(KEYRING_SERVICE, "last_user")
-        .map_err(|e| {
+        // Also store the JID as the "last user" so we know which account to load
+        let last_user_entry = Entry::new(KEYRING_SERVICE, "last_user").map_err(|e| {
             tracing::error!("Keychain: failed to create last_user entry: {}", e);
             format!("Failed to create last_user entry: {}", e)
         })?;
-    last_user_entry.set_password(&credentials.jid)
-        .map_err(|e| {
-            tracing::error!("Keychain: failed to save last_user: {}", e);
-            format!("Failed to save last_user: {}", e)
-        })?;
+        last_user_entry
+            .set_password(&credentials.jid)
+            .map_err(|e| {
+                let desc = classify_keyring_error(&e, "save last_user");
+                tracing::error!("Keychain: {} for {}", desc, jid);
+                desc
+            })?;
 
-    tracing::info!("Keychain: saved credentials for {}", jid);
-    Ok(())
+        tracing::info!("Keychain: saved credentials for {}", jid);
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Keychain task panicked: {}", e))?
 }
 
-/// Get credentials from OS keychain
+/// Get credentials from OS keychain.
+/// Runs on a background thread to avoid blocking the main thread when
+/// macOS shows a keychain authorization dialog.
 #[tauri::command]
-fn get_credentials() -> Result<Option<StoredCredentials>, String> {
-    // First get the last used JID
-    let last_user_entry = Entry::new(KEYRING_SERVICE, "last_user")
-        .map_err(|e| {
+async fn get_credentials() -> Result<Option<StoredCredentials>, String> {
+    tokio::task::spawn_blocking(move || {
+        // First get the last used JID
+        let last_user_entry = Entry::new(KEYRING_SERVICE, "last_user").map_err(|e| {
             tracing::error!("Keychain: failed to create last_user entry: {}", e);
             format!("Failed to create last_user entry: {}", e)
         })?;
 
-    let jid = match last_user_entry.get_password() {
-        Ok(jid) => jid,
-        Err(keyring::Error::NoEntry) => {
-            tracing::debug!("Keychain: no last_user entry found");
-            return Ok(None);
-        }
-        Err(e) => {
-            tracing::error!("Keychain: failed to get last_user: {}", e);
-            return Err(format!("Failed to get last_user: {}", e));
-        }
-    };
+        let jid = match last_user_entry.get_password() {
+            Ok(jid) => jid,
+            Err(keyring::Error::NoEntry) => {
+                tracing::debug!("Keychain: no last_user entry found");
+                return Ok(None);
+            }
+            Err(e) => {
+                let desc = classify_keyring_error(&e, "read last_user");
+                tracing::error!("Keychain: {}", desc);
+                return Err(desc);
+            }
+        };
 
-    // Now get the credentials for that JID
-    let entry = Entry::new(KEYRING_SERVICE, &jid)
-        .map_err(|e| {
+        // Now get the credentials for that JID
+        let entry = Entry::new(KEYRING_SERVICE, &jid).map_err(|e| {
             tracing::error!("Keychain: failed to create entry for {}: {}", jid, e);
             format!("Failed to create keyring entry: {}", e)
         })?;
 
-    match entry.get_password() {
-        Ok(json) => {
-            let credentials: StoredCredentials = serde_json::from_str(&json)
-                .map_err(|e| {
+        match entry.get_password() {
+            Ok(json) => {
+                let credentials: StoredCredentials = serde_json::from_str(&json).map_err(|e| {
                     tracing::error!("Keychain: failed to parse credentials for {}: {}", jid, e);
                     format!("Failed to parse credentials: {}", e)
                 })?;
-            tracing::info!("Keychain: loaded credentials for {}", jid);
-            Ok(Some(credentials))
+                tracing::info!("Keychain: loaded credentials for {}", jid);
+                Ok(Some(credentials))
+            }
+            Err(keyring::Error::NoEntry) => {
+                tracing::debug!("Keychain: no credentials found for {}", jid);
+                Ok(None)
+            }
+            Err(e) => {
+                let desc = classify_keyring_error(&e, &format!("read credentials for {}", jid));
+                tracing::error!("Keychain: {}", desc);
+                Err(desc)
+            }
         }
-        Err(keyring::Error::NoEntry) => {
-            tracing::debug!("Keychain: no credentials found for {}", jid);
-            Ok(None)
-        }
-        Err(e) => {
-            tracing::error!("Keychain: failed to get credentials for {}: {}", jid, e);
-            Err(format!("Failed to get credentials: {}", e))
-        }
-    }
+    })
+    .await
+    .map_err(|e| format!("Keychain task panicked: {}", e))?
 }
 
-/// Delete credentials from OS keychain
+/// Delete credentials from OS keychain.
+/// Runs on a background thread to avoid blocking the main thread when
+/// macOS shows a keychain authorization dialog.
 #[tauri::command]
-fn delete_credentials() -> Result<(), String> {
-    // Get the last used JID
-    let last_user_entry = Entry::new(KEYRING_SERVICE, "last_user")
-        .map_err(|e| {
+async fn delete_credentials() -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        // Get the last used JID
+        let last_user_entry = Entry::new(KEYRING_SERVICE, "last_user").map_err(|e| {
             tracing::error!("Keychain: failed to create last_user entry: {}", e);
             format!("Failed to create last_user entry: {}", e)
         })?;
 
-    if let Ok(jid) = last_user_entry.get_password() {
-        // Delete the credentials entry
-        let entry = Entry::new(KEYRING_SERVICE, &jid)
-            .map_err(|e| {
+        if let Ok(jid) = last_user_entry.get_password() {
+            // Delete the credentials entry
+            let entry = Entry::new(KEYRING_SERVICE, &jid).map_err(|e| {
                 tracing::error!("Keychain: failed to create entry for {}: {}", jid, e);
                 format!("Failed to create keyring entry: {}", e)
             })?;
-        match entry.delete_credential() {
-            Ok(()) => tracing::info!("Keychain: deleted credentials for {}", jid),
-            Err(keyring::Error::NoEntry) => tracing::debug!("Keychain: no credentials to delete for {}", jid),
-            Err(e) => tracing::warn!("Keychain: failed to delete credentials for {}: {}", jid, e),
+            match entry.delete_credential() {
+                Ok(()) => tracing::info!("Keychain: deleted credentials for {}", jid),
+                Err(keyring::Error::NoEntry) => {
+                    tracing::debug!("Keychain: no credentials to delete for {}", jid)
+                }
+                Err(e) => {
+                    let desc =
+                        classify_keyring_error(&e, &format!("delete credentials for {}", jid));
+                    tracing::warn!("Keychain: {}", desc);
+                }
+            }
+        } else {
+            tracing::debug!("Keychain: no last_user entry to look up for deletion");
         }
-    } else {
-        tracing::debug!("Keychain: no last_user entry to look up for deletion");
-    }
 
-    // Delete the last_user entry
-    match last_user_entry.delete_credential() {
-        Ok(()) => tracing::debug!("Keychain: deleted last_user entry"),
-        Err(keyring::Error::NoEntry) => tracing::debug!("Keychain: no last_user entry to delete"),
-        Err(e) => tracing::warn!("Keychain: failed to delete last_user entry: {}", e),
-    }
+        // Delete the last_user entry
+        match last_user_entry.delete_credential() {
+            Ok(()) => tracing::debug!("Keychain: deleted last_user entry"),
+            Err(keyring::Error::NoEntry) => {
+                tracing::debug!("Keychain: no last_user entry to delete")
+            }
+            Err(e) => {
+                let desc = classify_keyring_error(&e, "delete last_user");
+                tracing::warn!("Keychain: {}", desc);
+            }
+        }
 
-    Ok(())
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Keychain task panicked: {}", e))?
 }
 
 /// Exit the app (called by frontend after graceful disconnect)
@@ -236,17 +410,52 @@ fn exit_app(app: tauri::AppHandle) {
     app.exit(0);
 }
 
+/// Upper bound for one start/stop proxy IPC command.
+///
+/// Normal operation is expected to complete quickly; these are circuit breakers
+/// so a wedged proxy command cannot block the frontend indefinitely.
+const START_XMPP_PROXY_COMMAND_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+const STOP_XMPP_PROXY_COMMAND_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
 /// Start XMPP WebSocket-to-TCP proxy.
 /// The `server` parameter supports: `tls://host:port`, `tcp://host:port`, `host:port`, or bare `domain`.
 #[tauri::command]
-async fn start_xmpp_proxy(server: String) -> Result<xmpp_proxy::ProxyStartResult, String> {
-    xmpp_proxy::start_proxy(server).await
+async fn start_xmpp_proxy(
+    app: tauri::AppHandle,
+    server: String,
+) -> Result<xmpp_proxy::ProxyStartResult, String> {
+    tokio::time::timeout(
+        START_XMPP_PROXY_COMMAND_TIMEOUT,
+        xmpp_proxy::start_proxy(server, Some(app)),
+    )
+    .await
+    .map_err(|_| {
+        tracing::warn!(
+            timeout_secs = START_XMPP_PROXY_COMMAND_TIMEOUT.as_secs(),
+            "start_xmpp_proxy command timed out"
+        );
+        format!(
+            "start_xmpp_proxy timed out after {}s",
+            START_XMPP_PROXY_COMMAND_TIMEOUT.as_secs()
+        )
+    })?
 }
 
 /// Stop XMPP WebSocket-to-TCP proxy
 #[tauri::command]
 async fn stop_xmpp_proxy() -> Result<(), String> {
-    xmpp_proxy::stop_proxy().await
+    tokio::time::timeout(STOP_XMPP_PROXY_COMMAND_TIMEOUT, xmpp_proxy::stop_proxy())
+        .await
+        .map_err(|_| {
+            tracing::warn!(
+                timeout_secs = STOP_XMPP_PROXY_COMMAND_TIMEOUT.as_secs(),
+                "stop_xmpp_proxy command timed out"
+            );
+            format!(
+                "stop_xmpp_proxy timed out after {}s",
+                STOP_XMPP_PROXY_COMMAND_TIMEOUT.as_secs()
+            )
+        })?
 }
 
 /// Open Graph metadata extracted from a URL
@@ -278,13 +487,10 @@ fn fetch_url_metadata(url: String) -> Result<UrlMetadata, String> {
         })?;
 
     // Fetch the URL
-    let response = client
-        .get(&url)
-        .send()
-        .map_err(|e| {
-            tracing::warn!(url = %url, "Link preview: failed to fetch URL: {}", e);
-            format!("Failed to fetch URL: {}", e)
-        })?;
+    let response = client.get(&url).send().map_err(|e| {
+        tracing::warn!(url = %url, "Link preview: failed to fetch URL: {}", e);
+        format!("Failed to fetch URL: {}", e)
+    })?;
 
     // Check content type - only process HTML
     let content_type = response
@@ -298,12 +504,10 @@ fn fetch_url_metadata(url: String) -> Result<UrlMetadata, String> {
         return Err("URL does not return HTML content".to_string());
     }
 
-    let html = response
-        .text()
-        .map_err(|e| {
-            tracing::warn!(url = %url, "Link preview: failed to read response body: {}", e);
-            format!("Failed to read response: {}", e)
-        })?;
+    let html = response.text().map_err(|e| {
+        tracing::warn!(url = %url, "Link preview: failed to read response body: {}", e);
+        format!("Failed to read response: {}", e)
+    })?;
 
     // Parse HTML and extract OG metadata
     let document = Html::parse_document(&html);
@@ -402,9 +606,15 @@ fn fetch_url_metadata(url: String) -> Result<UrlMetadata, String> {
 fn ensure_window_visible(window: &tauri::WebviewWindow) {
     use tauri::PhysicalPosition;
 
-    let Ok(position) = window.outer_position() else { return };
-    let Ok(size) = window.outer_size() else { return };
-    let Ok(monitors) = window.available_monitors() else { return };
+    let Ok(position) = window.outer_position() else {
+        return;
+    };
+    let Ok(size) = window.outer_size() else {
+        return;
+    };
+    let Ok(monitors) = window.available_monitors() else {
+        return;
+    };
 
     // Check if any part of the window's title bar (top 50px) is visible on any monitor
     // We check the title bar area specifically so the user can always drag the window
@@ -443,17 +653,20 @@ fn ensure_window_visible(window: &tauri::WebviewWindow) {
 
 #[cfg(target_os = "macos")]
 mod macos {
-    use std::ptr::NonNull;
-    use std::sync::{Arc, Mutex};
-    use std::sync::atomic::{AtomicU64, Ordering};
     use block2::RcBlock;
-    use objc2_foundation::{NSNotification, NSNotificationCenter, NSNotificationName, NSProcessInfo, NSString};
     use objc2_app_kit::NSWorkspace;
     use objc2_foundation::NSActivityOptions;
+    use objc2_foundation::{
+        NSNotification, NSNotificationCenter, NSNotificationName, NSProcessInfo, NSString,
+    };
+    use std::ptr::NonNull;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::{Arc, Mutex};
     use tauri::WebviewWindow;
 
     // Store the window reference for the observer callback
-    static WINDOW: std::sync::OnceLock<Arc<Mutex<Option<WebviewWindow>>>> = std::sync::OnceLock::new();
+    static WINDOW: std::sync::OnceLock<Arc<Mutex<Option<WebviewWindow>>>> =
+        std::sync::OnceLock::new();
 
     // Store the app handle for emitting events from activation observer
     static APP_HANDLE: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();
@@ -484,8 +697,8 @@ mod macos {
     }
 
     pub fn setup_activation_observer(window: WebviewWindow, app_handle: tauri::AppHandle) {
-        use tauri::Emitter;
         use std::time::{SystemTime, UNIX_EPOCH};
+        use tauri::Emitter;
 
         // Store window reference
         let window_holder = WINDOW.get_or_init(|| Arc::new(Mutex::new(None)));
@@ -543,8 +756,8 @@ mod macos {
     /// WebView throttling. We store the wake timestamp so that when the app becomes
     /// active, we can emit a deferred wake event with the actual sleep duration.
     pub fn setup_sleep_observer(app_handle: tauri::AppHandle) {
-        use tauri::Emitter;
         use std::time::{SystemTime, UNIX_EPOCH};
+        use tauri::Emitter;
 
         unsafe {
             // NSWorkspace notifications use the shared workspace's notification center
@@ -604,12 +817,20 @@ fn log_to_terminal(level: String, message: String) {
 
 /// Print startup diagnostics to stderr for debugging.
 fn print_startup_diagnostics() {
-    eprintln!("Fluux Messenger v{}", env!("CARGO_PKG_VERSION"));
-    eprintln!("Platform: {} / {}", std::env::consts::OS, std::env::consts::ARCH);
+    eprintln!(
+        "Fluux Messenger v{} (build {})",
+        env!("CARGO_PKG_VERSION"),
+        env!("GIT_HASH")
+    );
+    eprintln!(
+        "Platform: {} / {}",
+        std::env::consts::OS,
+        std::env::consts::ARCH
+    );
 
     #[cfg(target_os = "linux")]
     {
-        let gpu_enabled = std::env::var("FLUUX_ENABLE_GPU").is_ok();
+        let gpu_disabled = std::env::var("FLUUX_DISABLE_GPU").is_ok();
         let dmabuf_disabled = std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER")
             .map(|v| v == "1")
             .unwrap_or(false);
@@ -617,17 +838,20 @@ fn print_startup_diagnostics() {
             .map(|v| v == "1")
             .unwrap_or(false);
 
-        eprintln!("WebKitGTK GPU workarounds:");
+        eprintln!("WebKitGTK GPU settings:");
         eprintln!(
-            "  FLUUX_ENABLE_GPU: {}",
-            if gpu_enabled {
-                "set (GPU workarounds disabled)"
+            "  FLUUX_DISABLE_GPU: {}",
+            if gpu_disabled {
+                "set (hardware acceleration disabled)"
             } else {
-                "not set"
+                "not set (hardware acceleration enabled)"
             }
         );
         eprintln!("  WEBKIT_DISABLE_DMABUF_RENDERER: {}", dmabuf_disabled);
-        eprintln!("  WEBKIT_DISABLE_COMPOSITING_MODE: {}", compositing_disabled);
+        eprintln!(
+            "  WEBKIT_DISABLE_COMPOSITING_MODE: {}",
+            compositing_disabled
+        );
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -641,7 +865,17 @@ fn print_startup_diagnostics() {
 fn main() {
     // Parse CLI flags early, before tracing subscriber init
     let args: Vec<String> = std::env::args().collect();
-    let clear_storage = args.iter().any(|arg| arg == "--clear-storage" || arg == "-c");
+    let clear_storage = args
+        .iter()
+        .any(|arg| arg == "--clear-storage" || arg == "-c");
+    let dangerous_insecure_tls = args.iter().any(|arg| arg == "--dangerous-insecure-tls");
+
+    // Set insecure TLS flag before any proxy can start
+    xmpp_proxy::set_dangerous_insecure_tls(dangerous_insecure_tls);
+    if dangerous_insecure_tls {
+        eprintln!("WARNING: TLS certificate verification is DISABLED (--dangerous-insecure-tls)");
+        eprintln!("         This is insecure and should only be used for development/testing.");
+    }
 
     // Parse verbose level: --verbose / -v (default, no XMPP packets) or --verbose=xmpp (with packets)
     let verbose_level = args.iter().find_map(|arg| {
@@ -656,9 +890,9 @@ fn main() {
     let verbose = verbose_level.is_some();
 
     // Parse --log-file=<path> option
-    let log_file_path = args.iter().find_map(|arg| {
-        arg.strip_prefix("--log-file=").map(|s| s.to_string())
-    });
+    let log_file_path = args
+        .iter()
+        .find_map(|arg| arg.strip_prefix("--log-file=").map(|s| s.to_string()));
 
     if args.iter().any(|arg| arg == "--help" || arg == "-h") {
         eprintln!("Fluux Messenger v{}", env!("CARGO_PKG_VERSION"));
@@ -668,69 +902,131 @@ fn main() {
         eprintln!("Options:");
         eprintln!("  -v, --verbose         Enable verbose logging to stderr (no XMPP traffic)");
         eprintln!("      --verbose=xmpp    Enable verbose logging including XMPP packet content");
-        eprintln!("      --log-file=PATH   Write log output to a file instead of stderr");
+        eprintln!(
+            "      --log-file=PATH   Override log file directory (default: platform log dir)"
+        );
         eprintln!("  -c, --clear-storage   Clear local storage on startup");
+        eprintln!("      --dangerous-insecure-tls");
+        eprintln!("                        Disable TLS certificate verification (INSECURE!)");
         eprintln!("  -h, --help            Show this help message");
+        eprintln!();
+        eprintln!("Logs are always written to a daily-rotating file in:");
+        eprintln!("  macOS:   ~/Library/Logs/com.processone.fluux/");
+        eprintln!("  Linux:   ~/.local/share/com.processone.fluux/logs/");
+        eprintln!("  Windows: %APPDATA%\\com.processone.fluux\\logs\\");
         eprintln!();
         eprintln!("Environment variables:");
         eprintln!("  RUST_LOG              Override log filter (e.g. RUST_LOG=debug)");
-        eprintln!("  FLUUX_ENABLE_GPU      Disable WebKitGTK GPU workarounds (Linux)");
+        eprintln!("  FLUUX_DISABLE_GPU     Disable hardware acceleration (Linux troubleshooting)");
         std::process::exit(0);
     }
 
-    // Initialize tracing subscriber when --verbose, --log-file, or RUST_LOG is set
-    if verbose || log_file_path.is_some() || std::env::var("RUST_LOG").is_ok() {
+    // Determine the log directory: --log-file=<path> overrides the default platform path
+    let log_dir = if let Some(ref path) = log_file_path {
+        std::path::PathBuf::from(path)
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+    } else {
+        // Platform log directory:
+        //   macOS:   ~/Library/Logs/com.processone.fluux/
+        //   Linux:   ~/.local/share/com.processone.fluux/logs/  (or $XDG_DATA_HOME)
+        //   Windows: %APPDATA%\com.processone.fluux\logs\
+        let base = dirs::data_local_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+        let dir = base.join("com.processone.fluux").join("logs");
+
+        #[cfg(target_os = "macos")]
+        let dir = dirs::home_dir()
+            .map(|h| h.join("Library").join("Logs").join("com.processone.fluux"))
+            .unwrap_or(dir);
+
+        dir
+    };
+
+    // Initialize tracing subscriber:
+    // - Always write to a log file in the platform log directory (for bug reports)
+    // - Optionally add stderr output when --verbose is passed
+    {
+        use tracing_subscriber::prelude::*;
         use tracing_subscriber::EnvFilter;
 
-        // --log-file implies at least default verbose level
-        let effective_verbose = verbose || log_file_path.is_some();
-        let effective_level = verbose_level.or(if log_file_path.is_some() { Some("default") } else { None });
+        // Ensure log directory exists
+        if let Err(e) = std::fs::create_dir_all(&log_dir) {
+            eprintln!(
+                "Warning: could not create log directory '{}': {}",
+                log_dir.display(),
+                e
+            );
+        }
 
-        let filter = if std::env::var("RUST_LOG").is_ok() {
-            // RUST_LOG takes precedence for fine-grained control
+        // File log filter: always at info level (captures app + webview logs)
+        let file_filter = if std::env::var("RUST_LOG").is_ok() {
             EnvFilter::from_default_env()
-        } else if effective_level == Some("xmpp") {
-            // --verbose=xmpp: include XMPP packet content (debug level on xmpp_proxy)
-            EnvFilter::new("fluux=info,fluux::xmpp_proxy=debug,info")
-        } else if effective_verbose {
-            // --verbose: app logging without XMPP packet dumps (info level only)
-            EnvFilter::new("fluux=info,info")
         } else {
-            EnvFilter::new("info")
+            EnvFilter::new("fluux=info,webview=info,info")
         };
 
-        if let Some(ref path) = log_file_path {
-            // Write logs to file
-            match std::fs::File::create(path) {
-                Ok(file) => {
-                    tracing_subscriber::fmt()
-                        .with_env_filter(filter)
-                        .with_writer(std::sync::Mutex::new(file))
-                        .with_ansi(false)
-                        .init();
-                    eprintln!("Logging to file: {}", path);
-                }
-                Err(e) => {
-                    eprintln!("Failed to open log file '{}': {}", path, e);
-                    eprintln!("Falling back to stderr");
-                    tracing_subscriber::fmt()
-                        .with_env_filter(filter)
+        // File layer: daily-rotating log file, non-blocking writes
+        let file_appender = tracing_appender::rolling::daily(&log_dir, "fluux.log");
+        let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+        let file_layer = tracing_subscriber::fmt::layer()
+            .with_writer(non_blocking)
+            .with_ansi(false)
+            .with_filter(file_filter);
+
+        // Stderr layer: only when --verbose or --log-file is passed
+        let stderr_layer =
+            if verbose || log_file_path.is_some() || std::env::var("RUST_LOG").is_ok() {
+                let effective_level = verbose_level.or(if log_file_path.is_some() {
+                    Some("default")
+                } else {
+                    None
+                });
+
+                let stderr_filter = if std::env::var("RUST_LOG").is_ok() {
+                    EnvFilter::from_default_env()
+                } else if effective_level == Some("xmpp") {
+                    EnvFilter::new("fluux=info,fluux::xmpp_proxy=debug,webview=debug,info")
+                } else {
+                    EnvFilter::new("fluux=info,info")
+                };
+
+                Some(
+                    tracing_subscriber::fmt::layer()
                         .with_writer(std::io::stderr)
-                        .init();
-                }
-            }
-        } else {
-            tracing_subscriber::fmt()
-                .with_env_filter(filter)
-                .with_writer(std::io::stderr)
-                .init();
-        }
+                        .with_filter(stderr_filter),
+                )
+            } else {
+                None
+            };
+
+        tracing_subscriber::registry()
+            .with(file_layer)
+            .with(stderr_layer)
+            .init();
+
+        // Keep the non-blocking guard alive for the entire program lifetime.
+        // Dropping it would flush and stop the background writer thread.
+        // We use forget() since we want it to live until process exit.
+        std::mem::forget(_guard);
+
+        eprintln!("Log file: {}", log_dir.display());
     }
 
     // Print startup diagnostics when verbose or logging to file
     if verbose || log_file_path.is_some() {
         print_startup_diagnostics();
     }
+
+    // Shared flag to signal the keepalive thread to stop on app exit
+    let keepalive_running = Arc::new(AtomicBool::new(true));
+    let keepalive_flag_for_setup = keepalive_running.clone();
+    let keepalive_flag_for_run = keepalive_running.clone();
+    // Tracks whether graceful shutdown has already started so we only prevent
+    // the first exit request. The second request (from frontend or fallback
+    // timer) is allowed to complete and terminate the app.
+    let graceful_shutdown_started = Arc::new(AtomicBool::new(false));
+    let graceful_shutdown_flag_for_run = graceful_shutdown_started.clone();
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -755,6 +1051,43 @@ fn main() {
             stop_xmpp_proxy,
             log_to_terminal
         ])
+        .on_page_load(move |webview, payload| {
+            // Always inject console-forwarding script so SDK diagnostic logs
+            // (prefixed with [Fluux]) reach the Rust file log for troubleshooting.
+            // When --verbose is not active, this is the only way JS logs reach the file.
+            if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                let _ = webview.eval(r#"
+                    (function() {
+                        if (window.__consoleForwardingActive) return;
+                        window.__consoleForwardingActive = true;
+                        var origLog = console.log;
+                        var origInfo = console.info;
+                        var origWarn = console.warn;
+                        var origError = console.error;
+                        var origDebug = console.debug;
+                        function forward(level, args) {
+                            try {
+                                var msg = Array.prototype.slice.call(args).map(function(a) {
+                                    return typeof a === 'string' ? a : JSON.stringify(a);
+                                }).join(' ');
+                                window.__TAURI_INTERNALS__.invoke('log_to_terminal', { level: level, message: msg });
+                            } catch(e) {}
+                        }
+                        console.log = function() { origLog.apply(console, arguments); forward('info', arguments); };
+                        console.info = function() { origInfo.apply(console, arguments); forward('info', arguments); };
+                        console.warn = function() { origWarn.apply(console, arguments); forward('warn', arguments); };
+                        console.error = function() { origError.apply(console, arguments); forward('error', arguments); };
+                        console.debug = function() { origDebug.apply(console, arguments); forward('debug', arguments); };
+                        window.addEventListener('error', function(e) {
+                            if (e.target !== window && e.target.tagName) {
+                                var src = e.target.src || e.target.href || '(unknown)';
+                                forward('error', ['Failed to load resource: ' + e.target.tagName.toLowerCase() + ' ' + src]);
+                            }
+                        }, true);
+                    })();
+                "#);
+            }
+        })
         .setup(move |app| {
             // Handle --clear-storage CLI flag (useful for debugging connection issues)
             if clear_storage {
@@ -766,32 +1099,6 @@ fn main() {
                     std::thread::sleep(std::time::Duration::from_millis(500));
                     let _ = app_handle.emit("clear-storage-requested", ());
                 });
-            }
-
-            // Verbose: inject console-forwarding script into WebView
-            if verbose {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.eval(r#"
-                        (function() {
-                            var origLog = console.log;
-                            var origWarn = console.warn;
-                            var origError = console.error;
-                            var origDebug = console.debug;
-                            function forward(level, args) {
-                                try {
-                                    var msg = Array.prototype.slice.call(args).map(function(a) {
-                                        return typeof a === 'string' ? a : JSON.stringify(a);
-                                    }).join(' ');
-                                    window.__TAURI__.core.invoke('log_to_terminal', { level: level, message: msg });
-                                } catch(e) {}
-                            }
-                            console.log = function() { origLog.apply(console, arguments); forward('info', arguments); };
-                            console.warn = function() { origWarn.apply(console, arguments); forward('warn', arguments); };
-                            console.error = function() { origError.apply(console, arguments); forward('error', arguments); };
-                            console.debug = function() { origDebug.apply(console, arguments); forward('debug', arguments); };
-                        })();
-                    "#);
-                }
             }
 
             // Register xmpp: URI scheme for deep linking (RFC 5122)
@@ -850,13 +1157,16 @@ fn main() {
                     .item(&PredefinedMenuItem::close_window(app, None)?)
                     .build()?;
 
-                // Help menu with GitHub link
+                // Help menu with GitHub link and log access
                 let github_item = MenuItem::with_id(app, "github", "Fluux Messenger on GitHub", true, None::<&str>)?;
                 let report_issue_item = MenuItem::with_id(app, "report_issue", "Report an Issue...", true, None::<&str>)?;
+                let show_logs_item = MenuItem::with_id(app, "show_logs", "Reveal Logs in Finder", true, None::<&str>)?;
 
                 let help_menu = SubmenuBuilder::new(app, "Help")
                     .item(&github_item)
                     .item(&report_issue_item)
+                    .separator()
+                    .item(&show_logs_item)
                     .build()?;
 
                 // Build and set the menu
@@ -866,7 +1176,8 @@ fn main() {
 
                 app.set_menu(menu)?;
 
-                // Handle Help menu events
+                // Handle menu events
+                let log_dir_for_menu = log_dir.clone();
                 app.on_menu_event(move |app_handle, event| {
                     match event.id().as_ref() {
                         "github" => {
@@ -874,6 +1185,9 @@ fn main() {
                         }
                         "report_issue" => {
                             let _ = app_handle.opener().open_url("https://github.com/processone/fluux-messenger/issues/new", None::<&str>);
+                        }
+                        "show_logs" => {
+                            let _ = app_handle.opener().reveal_item_in_dir(&log_dir_for_menu);
                         }
                         _ => {}
                     }
@@ -909,39 +1223,251 @@ fn main() {
                 macos::setup_sleep_observer(app.handle().clone());
             }
 
+            // Linux: Hide to system tray when close button is clicked.
+            //
+            // KNOWN ISSUE: After a hide→show cycle, tao's client-side decoration
+            // (CSD) hit-test regions become stale, making titlebar buttons and
+            // webview clicks unresponsive until the user manually maximizes.
+            // Upstream: https://github.com/tauri-apps/tauri/issues/11856
+            //           https://github.com/tauri-apps/tao/issues/1046
+            // Workaround: briefly maximize after show() to force GTK to
+            // recalculate decorations, then restore the saved window state.
+            //
+            // NOTE: With the current libappindicator-based tray backend, Linux
+            // tray click events are not emitted, so left-click restore does not
+            // reliably fire. Users should restore via the tray menu ("Show Fluux").
+            // We keep the click handler below for parity/future backend support.
+            #[cfg(target_os = "linux")]
+            {
+                let show_item = MenuItem::with_id(app, "show", "Show Fluux", true, None::<&str>)?;
+                let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+                let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+                // GNOME can restore hidden windows at (0,0). Keep the last placement
+                // and re-apply it when restoring from the tray menu.
+                let last_window_state =
+                    Arc::new(std::sync::Mutex::new(None::<(i32, i32, bool, bool)>));
+                // Track whether the main window is currently hidden to tray.
+                // Linux visibility reporting can be inconsistent across WMs.
+                let window_hidden_to_tray = Arc::new(AtomicBool::new(false));
+
+                let _tray = TrayIconBuilder::new()
+                    .icon(app.default_window_icon().unwrap().clone())
+                    .menu(&menu)
+                    .tooltip("Fluux Messenger")
+                    .on_menu_event({
+                        let keepalive_flag = keepalive_flag_for_setup.clone();
+                        let last_window_state = last_window_state.clone();
+                        let window_hidden_to_tray = window_hidden_to_tray.clone();
+                        move |app, event| match event.id.as_ref() {
+                            "show" => {
+                                if let Some(window) = app.get_webview_window("main") {
+                                    let was_hidden_to_tray =
+                                        window_hidden_to_tray.load(Ordering::Relaxed);
+                                    if !was_hidden_to_tray {
+                                        // Already visible — just focus.
+                                        let _ = window.set_focus();
+                                        return;
+                                    }
+
+                                    let saved_state =
+                                        last_window_state.lock().ok().and_then(|state| *state);
+
+                                    let _ = window.show();
+                                    if window.is_minimized().unwrap_or(false) {
+                                        let _ = window.unminimize();
+                                    }
+
+                                    // Workaround for tao CSD bug (tauri#11856): after a
+                                    // hide→show cycle the client-side decoration hit-test
+                                    // regions are stale, making titlebar buttons and
+                                    // webview clicks unresponsive.  A brief maximize
+                                    // toggle forces GTK to recalculate decorations while
+                                    // respecting the work area (top bar, dock).
+                                    let was_maximized =
+                                        saved_state.map_or(false, |(_, _, m, _)| m);
+                                    let was_fullscreen =
+                                        saved_state.map_or(false, |(_, _, _, fs)| fs);
+                                    if !was_maximized && !was_fullscreen {
+                                        let _ = window.maximize();
+                                    }
+
+                                    window_hidden_to_tray.store(false, Ordering::Relaxed);
+
+                                    let handle = app.clone();
+                                    std::thread::spawn(move || {
+                                        std::thread::sleep(
+                                            std::time::Duration::from_millis(80),
+                                        );
+                                        if let Some(window) = handle.get_webview_window("main") {
+                                            // Restore the saved window state.
+                                            if let Some((x, y, maximized, fullscreen)) =
+                                                saved_state
+                                            {
+                                                if fullscreen {
+                                                    let _ = window.set_fullscreen(true);
+                                                } else if maximized {
+                                                    // Already maximized, nothing to undo.
+                                                } else {
+                                                    let _ = window.unmaximize();
+                                                    // Restore position if GNOME reset it.
+                                                    let should_restore =
+                                                        match window.outer_position() {
+                                                            Ok(cur) => {
+                                                                cur.x == 0
+                                                                    && cur.y == 0
+                                                                    && (x != 0 || y != 0)
+                                                            }
+                                                            Err(_) => true,
+                                                        };
+                                                    if should_restore {
+                                                        let _ = window.set_position(
+                                                            tauri::PhysicalPosition::new(x, y),
+                                                        );
+                                                    }
+                                                }
+                                            } else {
+                                                let _ = window.unmaximize();
+                                            }
+
+                                            let _ = window.set_focus();
+                                            let _ = window.emit("tray-restore-focus", ());
+                                        }
+                                    });
+                                }
+                            }
+                            "quit" => {
+                                keepalive_flag.store(false, Ordering::Relaxed);
+                                let _ = app.emit("graceful-shutdown", ());
+                                let handle = app.clone();
+                                std::thread::spawn(move || {
+                                    std::thread::sleep(std::time::Duration::from_secs(2));
+                                    handle.exit(0);
+                                });
+                            }
+                            _ => {}
+                        }
+                    })
+                    .on_tray_icon_event({
+                        let window_hidden_to_tray = window_hidden_to_tray.clone();
+                        move |tray, event| {
+                            if let TrayIconEvent::Click {
+                                button: MouseButton::Left,
+                                button_state: MouseButtonState::Up,
+                                ..
+                            } = event
+                            {
+                                if let Some(window) = tray.app_handle().get_webview_window("main")
+                                {
+                                    let was_hidden_to_tray =
+                                        window_hidden_to_tray.load(Ordering::Relaxed);
+                                    if !was_hidden_to_tray {
+                                        let _ = window.set_focus();
+                                        return;
+                                    }
+
+                                    let _ = window.show();
+                                    if window.is_minimized().unwrap_or(false) {
+                                        let _ = window.unminimize();
+                                    }
+
+                                    // CSD workaround — see menu "show" handler comment.
+                                    let _ = window.maximize();
+                                    window_hidden_to_tray.store(false, Ordering::Relaxed);
+
+                                    let handle = tray.app_handle().clone();
+                                    std::thread::spawn(move || {
+                                        std::thread::sleep(
+                                            std::time::Duration::from_millis(80),
+                                        );
+                                        if let Some(window) = handle.get_webview_window("main") {
+                                            let _ = window.unmaximize();
+                                            let _ = window.set_focus();
+                                            let _ = window.emit("tray-restore-focus", ());
+                                        }
+                                    });
+                                }
+                            }
+                        }
+                    })
+                    .build(app)?;
+
+                let main_window = app.get_webview_window("main").unwrap();
+                let window = main_window.clone();
+                let last_window_state_for_close = last_window_state.clone();
+                let window_hidden_to_tray_for_close = window_hidden_to_tray.clone();
+                main_window.on_window_event(move |event| {
+                    if let WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        if let Ok(position) = window.outer_position() {
+                            let maximized = window.is_maximized().unwrap_or(false);
+                            let fullscreen = window.is_fullscreen().unwrap_or(false);
+                            if let Ok(mut state) = last_window_state_for_close.lock() {
+                                *state = Some((
+                                    position.x,
+                                    position.y,
+                                    maximized,
+                                    fullscreen,
+                                ));
+                            }
+                        }
+                        window_hidden_to_tray_for_close.store(true, Ordering::Relaxed);
+                        let _ = window.hide();
+                    }
+                });
+            }
+
             // Windows: Hide to system tray when close button is clicked
             // Minimize button works normally (minimize to taskbar)
             #[cfg(target_os = "windows")]
             {
                 // Create system tray menu
                 let show_item = MenuItem::with_id(app, "show", "Show Fluux", true, None::<&str>)?;
+                let show_logs_item = MenuItem::with_id(app, "show_logs", "Open Logs Folder", true, None::<&str>)?;
                 let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-                let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+                let menu = Menu::with_items(app, &[&show_item, &show_logs_item, &quit_item])?;
 
                 // Build the system tray icon
                 let _tray = TrayIconBuilder::new()
                     .icon(app.default_window_icon().unwrap().clone())
                     .menu(&menu)
                     .tooltip("Fluux Messenger")
-                    .on_menu_event(|app, event| match event.id.as_ref() {
-                        "show" => {
-                            if let Some(window) = app.get_webview_window("main") {
-                                let _ = window.show();
-                                let _ = window.unminimize();
-                                let _ = window.set_focus();
+                    .on_menu_event({
+                        let keepalive_flag = keepalive_flag_for_setup.clone();
+                        let log_dir_for_tray = log_dir.clone();
+                        move |app, event| match event.id.as_ref() {
+                            "show" => {
+                                if let Some(window) = app.get_webview_window("main") {
+                                    let already_visible = window.is_visible().unwrap_or(false);
+                                    let is_minimized = window.is_minimized().unwrap_or(false);
+                                    if already_visible && !is_minimized {
+                                        let _ = window.set_focus();
+                                        return;
+                                    }
+
+                                    let _ = window.show();
+                                    if is_minimized {
+                                        let _ = window.unminimize();
+                                    }
+                                    let _ = window.set_focus();
+                                }
                             }
+                            "show_logs" => {
+                                let _ = app.opener().reveal_item_in_dir(&log_dir_for_tray);
+                            }
+                            "quit" => {
+                                // Stop the keepalive thread
+                                keepalive_flag.store(false, Ordering::Relaxed);
+                                // Emit graceful shutdown event to frontend
+                                let _ = app.emit("graceful-shutdown", ());
+                                // Set a fallback timer to force exit after 2 seconds
+                                let handle = app.clone();
+                                std::thread::spawn(move || {
+                                    std::thread::sleep(std::time::Duration::from_secs(2));
+                                    handle.exit(0);
+                                });
+                            }
+                            _ => {}
                         }
-                        "quit" => {
-                            // Emit graceful shutdown event to frontend
-                            let _ = app.emit("graceful-shutdown", ());
-                            // Set a fallback timer to force exit after 2 seconds
-                            let handle = app.clone();
-                            std::thread::spawn(move || {
-                                std::thread::sleep(std::time::Duration::from_secs(2));
-                                handle.exit(0);
-                            });
-                        }
-                        _ => {}
                     })
                     .on_tray_icon_event(|tray, event| {
                         // Show window on left-click (single or double)
@@ -952,8 +1478,17 @@ fn main() {
                         } = event
                         {
                             if let Some(window) = tray.app_handle().get_webview_window("main") {
+                                let already_visible = window.is_visible().unwrap_or(false);
+                                let is_minimized = window.is_minimized().unwrap_or(false);
+                                if already_visible && !is_minimized {
+                                    let _ = window.set_focus();
+                                    return;
+                                }
+
                                 let _ = window.show();
-                                let _ = window.unminimize();
+                                if is_minimized {
+                                    let _ = window.unminimize();
+                                }
                                 let _ = window.set_focus();
                             }
                         }
@@ -976,11 +1511,16 @@ fn main() {
 
             // Start XMPP keepalive timer (30 seconds)
             // This runs in Rust and is immune to WKWebView JS timer throttling
-            // which can suspend timers when the app is on another virtual desktop
+            // which can suspend timers when the app is on another virtual desktop.
+            // Uses an AtomicBool flag to stop cleanly on app exit (prevents 100% CPU).
             if let Some(window) = app.get_webview_window("main") {
+                let running = keepalive_flag_for_setup.clone();
                 std::thread::spawn(move || {
-                    loop {
+                    while running.load(Ordering::Relaxed) {
                         std::thread::sleep(std::time::Duration::from_secs(30));
+                        if !running.load(Ordering::Relaxed) {
+                            break;
+                        }
                         let _ = window.emit("xmpp-keepalive", ());
                     }
                 });
@@ -991,32 +1531,45 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
-    app.run(|_app_handle, _event| {
+    app.run(move |_app_handle, _event| {
+        // Handle clicking dock icon to show window again (macOS only)
         #[cfg(target_os = "macos")]
-        match &_event {
-            // Handle clicking dock icon to show window again
-            RunEvent::Reopen { .. } => {
-                if let Some(window) = _app_handle.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                }
+        if let RunEvent::Reopen { .. } = &_event {
+            if let Some(window) = _app_handle.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.set_focus();
             }
-            // Handle Command-Q or app termination: request graceful shutdown
-            RunEvent::ExitRequested { api, .. } => {
-                // Save window state including position
-                let _ = _app_handle.save_window_state(StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED | StateFlags::FULLSCREEN);
-                // Emit event to frontend for graceful disconnect
-                let _ = _app_handle.emit("graceful-shutdown", ());
-                // Prevent immediate exit - frontend will call exit_app after disconnect
-                api.prevent_exit();
-                // Set a fallback timer to force exit after 2 seconds
-                let handle = _app_handle.clone();
-                std::thread::spawn(move || {
-                    std::thread::sleep(std::time::Duration::from_secs(2));
-                    handle.exit(0);
-                });
+        }
+        // Handle app termination: request graceful shutdown (all platforms)
+        if let RunEvent::ExitRequested { api, .. } = &_event {
+            // First exit request: trigger graceful shutdown and delay exit.
+            // Subsequent request: allow exit to proceed.
+            if graceful_shutdown_flag_for_run.swap(true, Ordering::Relaxed) {
+                return;
             }
-            _ => {}
+
+            // Stop the keepalive thread to prevent 100% CPU on exit
+            keepalive_flag_for_run.store(false, Ordering::Relaxed);
+            // Save window state including position (macOS and Windows only)
+            #[cfg(any(target_os = "macos", target_os = "windows"))]
+            {
+                let _ = _app_handle.save_window_state(
+                    StateFlags::SIZE
+                        | StateFlags::POSITION
+                        | StateFlags::MAXIMIZED
+                        | StateFlags::FULLSCREEN,
+                );
+            }
+            // Emit event to frontend for graceful disconnect
+            let _ = _app_handle.emit("graceful-shutdown", ());
+            // Prevent immediate exit - frontend will call exit_app after disconnect
+            api.prevent_exit();
+            // Set a fallback timer to force exit after 2 seconds
+            let handle = _app_handle.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(2));
+                handle.exit(0);
+            });
         }
     });
 }

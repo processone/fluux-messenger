@@ -1,6 +1,6 @@
 # Development
 
-This are a few commands to get you started building the client locally.
+These are a few commands to get you started building the client locally.
 
 ## Quick Start
 
@@ -69,7 +69,41 @@ When `--verbose` is active:
 - WebView `console.log/warn/error` messages are forwarded to stderr
 - Startup diagnostics show version, platform, and GPU workaround status (Linux)
 
-On Linux, GPU rendering is disabled by default (WebKitGTK workaround). Set `FLUUX_ENABLE_GPU=1` to re-enable.
+For deep SDK connection/proxy tracing (high-volume logs such as machine transitions, disconnect phase timing, and proxy op lifecycle), enable the connection trace flag:
+
+```bash
+# Desktop / Node environment
+FLUUX_DEBUG_CONNECTION_TRACE=1 fluux --verbose
+```
+
+In a browser/WebView dev console:
+
+```js
+localStorage.setItem('DEBUG_CONNECTION_TRACE', 'true')
+// optional global toggle
+globalThis.__FLUUX_DEBUG_CONNECTION_TRACE__ = true
+```
+
+Build-time (Vite) toggle:
+
+```bash
+VITE_FLUUX_DEBUG_CONNECTION_TRACE=true npm run tauri:dev
+```
+
+Disable again with:
+
+```js
+localStorage.removeItem('DEBUG_CONNECTION_TRACE')
+delete globalThis.__FLUUX_DEBUG_CONNECTION_TRACE__
+```
+
+On Linux, GPU rendering is enabled by default. If rendering issues occur, set `FLUUX_DISABLE_GPU=1` to apply WebKitGTK GPU workarounds.
+
+The environment variable `NO_COLOR` can be set to disable console color output. It can be useful to redirect the output to a file:
+
+```
+NO_COLOR=1 ./fluux --verbose=xmpp 2> xmpp-debug.log
+```
 
 ## Building Debian Packages
 
@@ -77,10 +111,10 @@ You can build `.deb` packages locally using standard Debian tooling.
 
 ### Prerequisites
 
-Install Node.js 20 (Ubuntu's default is too old):
+Install Node.js 22 (Ubuntu 22.04 LTS version is too old):
 
 ```bash
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 ```
 
 Install Rust via rustup:
@@ -100,6 +134,7 @@ sudo apt-get install -y \
   libwebkit2gtk-4.1-dev \
   libgtk-3-dev \
   libayatana-appindicator3-dev \
+  libxss-dev \
   librsvg2-dev \
   libssl-dev \
   pkg-config \

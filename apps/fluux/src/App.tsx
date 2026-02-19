@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { useConnection } from '@fluux/sdk'
+import { useConnection, useXMPPContext } from '@fluux/sdk'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { LoginScreen } from './components/LoginScreen'
 import { ChatLayout } from './components/ChatLayout'
@@ -8,6 +8,7 @@ import { UpdateModal } from './components/UpdateModal'
 import { useSessionPersistence, getSession } from './hooks/useSessionPersistence'
 import { useFullscreen } from './hooks/useFullscreen'
 import { useTauriCloseHandler } from './hooks/useTauriCloseHandler'
+import { useTauriTrayRestore } from './hooks/useTauriTrayRestore'
 import { useAutoUpdate } from './hooks'
 import { clearLocalData } from './utils/clearLocalData'
 
@@ -41,7 +42,9 @@ function App() {
   detectRenderLoop('App')
 
   const { status } = useConnection()
+  const { client } = useXMPPContext()
   useTauriCloseHandler()
+  useTauriTrayRestore()
   const update = useAutoUpdate({ autoCheck: true })
 
   // Listen for --clear-storage CLI flag (Tauri only)
@@ -51,9 +54,15 @@ function App() {
 
     let unlisten: (() => void) | undefined
     import('@tauri-apps/api/event').then(({ listen }) => {
-      listen('clear-storage-requested', () => {
+      listen('clear-storage-requested', async () => {
         console.log('[CLI] Clearing local storage due to --clear-storage flag')
-        void clearLocalData()
+        try {
+          await client.disconnect()
+        } catch {
+          // Ignore disconnect errors during forced cleanup
+        }
+        await clearLocalData()
+        window.location.reload()
       }).then((fn) => {
         unlisten = fn
       })
@@ -62,7 +71,7 @@ function App() {
     return () => {
       unlisten?.()
     }
-  }, [])
+  }, [client])
 
   // Track if we've shown the update modal this session (don't show again after dismiss)
   const [showUpdateModal, setShowUpdateModal] = useState(false)
@@ -100,6 +109,12 @@ function App() {
     if (status === 'online') {
       setIsAutoReconnecting(false)
       setHasBeenOnline(true)
+      // Mark that we've been online this session. LoginScreen reads this flag
+      // to detect post-disconnect transitions and trigger a webview reload
+      // (workaround for WRY losing native event delivery on macOS).
+      // Uses '__wry_' prefix so clearLocalData() won't remove it (it only
+      // clears 'fluux:' prefixed keys).
+      sessionStorage.setItem('__wry_was_online', '1')
     } else if (status === 'error' || status === 'disconnected') {
       // If we get an error or stay disconnected, check if session still exists
       // (it's cleared on connection failure in useSessionPersistence)

@@ -71,6 +71,19 @@ function saveDraftsToStorage(drafts: Map<string, string>): void {
  * constants instead of creating new [] instances each time.
  */
 const EMPTY_ROOM_ARRAY: Room[] = []
+
+// Selector memoization caches.
+// Store selectors (joinedRooms, allRooms, etc.) are called on every Zustand subscription check.
+// Without caching, each call runs O(n) filter + O(n log n) sort even when the rooms Map hasn't changed.
+// Since Zustand creates new Map references on mutations, we can cache by Map identity.
+let _cachedJoinedRooms: Room[] = EMPTY_ROOM_ARRAY
+let _cachedJoinedRoomsSource: Map<string, Room> | null = null
+let _cachedBookmarkedRooms: Room[] = EMPTY_ROOM_ARRAY
+let _cachedBookmarkedRoomsSource: Map<string, Room> | null = null
+let _cachedAllRooms: Room[] = EMPTY_ROOM_ARRAY
+let _cachedAllRoomsSource: Map<string, Room> | null = null
+let _cachedQuickChatRooms: Room[] = EMPTY_ROOM_ARRAY
+let _cachedQuickChatRoomsSource: Map<string, Room> | null = null
 const EMPTY_MESSAGE_ARRAY: RoomMessage[] = []
 
 /**
@@ -248,6 +261,7 @@ export const roomStore = createStore<RoomState>()(
         autojoin: room.autojoin,
         password: room.password,
         isQuickChat: room.isQuickChat,
+        supportsMAM: room.supportsMAM,
       }
       const meta: RoomMetadata = {
         unreadCount: room.unreadCount,
@@ -300,7 +314,8 @@ export const roomStore = createStore<RoomState>()(
 
       // Update entity fields if any changed
       const entityFields = ['name', 'nickname', 'joined', 'isJoining', 'subject', 'avatar',
-        'avatarHash', 'avatarFromPresence', 'isBookmarked', 'autojoin', 'password', 'isQuickChat'] as const
+        'avatarHash', 'avatarFromPresence', 'isBookmarked', 'autojoin', 'password', 'isQuickChat',
+        'supportsMAM'] as const
       const hasEntityUpdate = entityFields.some((f) => f in update)
 
       // Update metadata fields if any changed
@@ -332,6 +347,7 @@ export const roomStore = createStore<RoomState>()(
             autojoin: updatedRoom.autojoin,
             password: updatedRoom.password,
             isQuickChat: updatedRoom.isQuickChat,
+            supportsMAM: updatedRoom.supportsMAM,
           })
         }
         result.roomEntities = newEntities
@@ -461,13 +477,20 @@ export const roomStore = createStore<RoomState>()(
         nickToJidCache.set(occupant.nick, getBareJid(occupant.jid))
       }
 
-      newRooms.set(roomJid, { ...existing, occupants: newOccupants, nickToJidCache })
+      // Update nick→avatar cache if occupant has avatar
+      let nickToAvatarCache = existing.nickToAvatarCache
+      if (occupant.avatar) {
+        nickToAvatarCache = new Map(nickToAvatarCache || [])
+        nickToAvatarCache.set(occupant.nick, occupant.avatar)
+      }
+
+      newRooms.set(roomJid, { ...existing, occupants: newOccupants, nickToJidCache, nickToAvatarCache })
 
       // Update runtime
       const newRuntime = new Map(state.roomRuntime)
       const existingRuntime = newRuntime.get(roomJid)
       if (existingRuntime) {
-        newRuntime.set(roomJid, { ...existingRuntime, occupants: newOccupants, nickToJidCache })
+        newRuntime.set(roomJid, { ...existingRuntime, occupants: newOccupants, nickToJidCache, nickToAvatarCache })
       }
 
       return { rooms: newRooms, roomRuntime: newRuntime }
@@ -484,6 +507,7 @@ export const roomStore = createStore<RoomState>()(
 
       const newOccupants = new Map(existing.occupants)
       let nickToJidCache = existing.nickToJidCache
+      let nickToAvatarCache = existing.nickToAvatarCache
 
       // Add all occupants in a single update
       for (const occupant of occupants) {
@@ -496,15 +520,23 @@ export const roomStore = createStore<RoomState>()(
           }
           nickToJidCache.set(occupant.nick, getBareJid(occupant.jid))
         }
+
+        // Update nick→avatar cache
+        if (occupant.avatar) {
+          if (!nickToAvatarCache || nickToAvatarCache === existing.nickToAvatarCache) {
+            nickToAvatarCache = new Map(nickToAvatarCache || [])
+          }
+          nickToAvatarCache.set(occupant.nick, occupant.avatar)
+        }
       }
 
-      newRooms.set(roomJid, { ...existing, occupants: newOccupants, nickToJidCache })
+      newRooms.set(roomJid, { ...existing, occupants: newOccupants, nickToJidCache, nickToAvatarCache })
 
       // Update runtime
       const newRuntime = new Map(state.roomRuntime)
       const existingRuntime = newRuntime.get(roomJid)
       if (existingRuntime) {
-        newRuntime.set(roomJid, { ...existingRuntime, occupants: newOccupants, nickToJidCache })
+        newRuntime.set(roomJid, { ...existingRuntime, occupants: newOccupants, nickToJidCache, nickToAvatarCache })
       }
 
       return { rooms: newRooms, roomRuntime: newRuntime }
@@ -557,13 +589,21 @@ export const roomStore = createStore<RoomState>()(
         avatar: avatar ?? undefined,
         avatarHash: avatarHash ?? undefined,
       })
-      newRooms.set(roomJid, { ...existing, occupants: newOccupants })
 
-      // Update runtime (occupants)
+      // Update nick→avatar cache so avatar persists after occupant leaves
+      let nickToAvatarCache = existing.nickToAvatarCache
+      if (avatar) {
+        nickToAvatarCache = new Map(nickToAvatarCache || [])
+        nickToAvatarCache.set(nick, avatar)
+      }
+
+      newRooms.set(roomJid, { ...existing, occupants: newOccupants, nickToAvatarCache })
+
+      // Update runtime (occupants + avatar cache)
       const newRuntime = new Map(state.roomRuntime)
       const existingRuntime = newRuntime.get(roomJid)
       if (existingRuntime) {
-        newRuntime.set(roomJid, { ...existingRuntime, occupants: newOccupants })
+        newRuntime.set(roomJid, { ...existingRuntime, occupants: newOccupants, nickToAvatarCache })
       }
 
       return { rooms: newRooms, roomRuntime: newRuntime }
@@ -855,8 +895,11 @@ export const roomStore = createStore<RoomState>()(
   },
 
   setActiveRoom: (roomJid) => {
-    // Deactivate previous room (clears marker)
     const prevJid = get().activeRoomJid
+    // Skip if already the active room (prevents duplicate side effects)
+    if (roomJid === prevJid) return
+
+    // Deactivate previous room (clears marker)
     if (prevJid && prevJid !== roomJid) {
       const prevMeta = get().roomMeta.get(prevJid)
       if (prevMeta?.firstNewMessageId) {
@@ -1535,21 +1578,32 @@ export const roomStore = createStore<RoomState>()(
   // Note: These return stable references (EMPTY_*_ARRAY) when empty to prevent infinite re-renders
   joinedRooms: () => {
     const rooms = get().rooms
+    if (rooms === _cachedJoinedRoomsSource) return _cachedJoinedRooms
+    _cachedJoinedRoomsSource = rooms
     const result = Array.from(rooms.values()).filter(r => r.joined)
-    return result.length > 0 ? result : EMPTY_ROOM_ARRAY
+    _cachedJoinedRooms = result.length > 0 ? result : EMPTY_ROOM_ARRAY
+    return _cachedJoinedRooms
   },
 
   bookmarkedRooms: () => {
     const rooms = get().rooms
+    if (rooms === _cachedBookmarkedRoomsSource) return _cachedBookmarkedRooms
+    _cachedBookmarkedRoomsSource = rooms
     const result = Array.from(rooms.values()).filter(r => r.isBookmarked)
-    return result.length > 0 ? result : EMPTY_ROOM_ARRAY
+    _cachedBookmarkedRooms = result.length > 0 ? result : EMPTY_ROOM_ARRAY
+    return _cachedBookmarkedRooms
   },
 
   allRooms: () => {
     const rooms = get().rooms
+    if (rooms === _cachedAllRoomsSource) return _cachedAllRooms
+    _cachedAllRoomsSource = rooms
     // Return all rooms that are either bookmarked or joined
     const result = Array.from(rooms.values()).filter(r => r.isBookmarked || r.joined)
-    if (result.length === 0) return EMPTY_ROOM_ARRAY
+    if (result.length === 0) {
+      _cachedAllRooms = EMPTY_ROOM_ARRAY
+      return EMPTY_ROOM_ARRAY
+    }
 
     // Sort by lastInteractedAt (when user opened the room) descending
     // This prevents high-traffic rooms from constantly jumping to the top
@@ -1560,13 +1614,17 @@ export const roomStore = createStore<RoomState>()(
       const bTime = b.lastInteractedAt?.getTime() ?? b.lastMessage?.timestamp?.getTime() ?? 0
       return bTime - aTime // Descending (most recent first)
     })
+    _cachedAllRooms = result
     return result
   },
 
   quickChatRooms: () => {
     const rooms = get().rooms
+    if (rooms === _cachedQuickChatRoomsSource) return _cachedQuickChatRooms
+    _cachedQuickChatRoomsSource = rooms
     const result = Array.from(rooms.values()).filter(r => r.isQuickChat)
-    return result.length > 0 ? result : EMPTY_ROOM_ARRAY
+    _cachedQuickChatRooms = result.length > 0 ? result : EMPTY_ROOM_ARRAY
+    return _cachedQuickChatRooms
   },
 
   activeRoom: () => {
@@ -1580,37 +1638,57 @@ export const roomStore = createStore<RoomState>()(
   },
 
   totalMentionsCount: () => {
-    const rooms = get().rooms
-    return Array.from(rooms.values())
-      .filter(r => r.joined)
-      .reduce((sum, room) => sum + room.mentionsCount, 0)
+    let total = 0
+    for (const [jid, entity] of get().roomEntities) {
+      if (entity.joined) {
+        const meta = get().roomMeta.get(jid)
+        if (meta) total += meta.mentionsCount
+      }
+    }
+    return total
   },
 
   totalUnreadCount: () => {
-    const rooms = get().rooms
-    return Array.from(rooms.values())
-      .filter(r => r.joined)
-      .reduce((sum, room) => sum + room.unreadCount, 0)
+    let total = 0
+    for (const [jid, entity] of get().roomEntities) {
+      if (entity.joined) {
+        const meta = get().roomMeta.get(jid)
+        if (meta) total += meta.unreadCount
+      }
+    }
+    return total
   },
 
   totalNotifiableUnreadCount: () => {
-    const rooms = get().rooms
-    return Array.from(rooms.values())
-      .filter(r => r.joined && (r.notifyAll || r.notifyAllPersistent))
-      .reduce((sum, room) => sum + room.unreadCount, 0)
+    let total = 0
+    for (const [jid, entity] of get().roomEntities) {
+      if (entity.joined) {
+        const meta = get().roomMeta.get(jid)
+        if (meta && (meta.notifyAll || meta.notifyAllPersistent)) {
+          total += meta.unreadCount
+        }
+      }
+    }
+    return total
   },
 
   roomsWithUnreadCount: () => {
     // Count rooms that would show a badge in the UI:
     // - Rooms with mentions (always show badge)
     // - Rooms with notifyAll enabled and any unread messages
-    const rooms = get().rooms
-    return Array.from(rooms.values())
-      .filter(r => r.joined && (
-        r.mentionsCount > 0 ||
-        ((r.notifyAll || r.notifyAllPersistent) && r.unreadCount > 0)
-      ))
-      .length
+    let count = 0
+    for (const [jid, entity] of get().roomEntities) {
+      if (entity.joined) {
+        const meta = get().roomMeta.get(jid)
+        if (meta) {
+          const hasActivity =
+            meta.mentionsCount > 0 ||
+            ((meta.notifyAll || meta.notifyAllPersistent) && meta.unreadCount > 0)
+          if (hasActivity) count++
+        }
+      }
+    }
+    return count
   },
 }))
 )

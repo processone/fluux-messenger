@@ -43,6 +43,7 @@ install -Dm644 fluux-messenger.desktop %{buildroot}%{_datadir}/applications/fluu
 
 # Install icons
 install -Dm644 icons/32x32.png %{buildroot}%{_datadir}/icons/hicolor/32x32/apps/fluux-messenger.png
+install -Dm644 icons/64x64.png %{buildroot}%{_datadir}/icons/hicolor/64x64/apps/fluux-messenger.png
 install -Dm644 icons/128x128.png %{buildroot}%{_datadir}/icons/hicolor/128x128/apps/fluux-messenger.png
 install -Dm644 icons/256x256.png %{buildroot}%{_datadir}/icons/hicolor/256x256/apps/fluux-messenger.png
 

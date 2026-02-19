@@ -14,10 +14,10 @@ import {
   Search,
 } from 'lucide-react'
 import { useChat, useRoom, useRoster, matchNameOrJid, getLocalPart } from '@fluux/sdk'
-import { useChatStore } from '@fluux/sdk/react'
+import { useChatStore, useConnectionStore } from '@fluux/sdk/react'
 import type { PresenceStatus } from '@fluux/sdk'
 import type { SidebarView } from './Sidebar'
-import { PRESENCE_COLORS } from '@/constants/ui'
+import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS } from '@/constants/ui'
 
 // =============================================================================
 // Types
@@ -171,6 +171,8 @@ export function CommandPalette({
   const { conversations, archivedConversations, isArchived } = useChat()
   const { joinedRooms, bookmarkedRooms, setActiveRoom } = useRoom()
   const { contacts } = useRoster()
+  const connectionStatus = useConnectionStore((s) => s.status)
+  const forceOffline = connectionStatus !== 'online'
   const { setActiveConversation } = useChatStore()
 
   // Stable callbacks that don't change between renders
@@ -546,7 +548,9 @@ export function CommandPalette({
                         {item.icon}
                       </span>
                       {item.presence && (
-                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${PRESENCE_COLORS[item.presence]}`} />
+                        <span
+                          className={`w-2 h-2 rounded-full flex-shrink-0 ${forceOffline ? APP_OFFLINE_PRESENCE_COLOR : PRESENCE_COLORS[item.presence]}`}
+                        />
                       )}
                       <div className="flex-1 min-w-0">
                         <div className="truncate">{item.label}</div>

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useRoom, useRoster, getBareJid, generateConsistentColorHexSync, getPresenceFromShow, createMessageLookup, type RoomMessage, type Room, type MentionReference, type ChatStateNotification, type Contact, type FileAttachment } from '@fluux/sdk'
+import { useRoomActive, useRoster, getBareJid, generateConsistentColorHexSync, getPresenceFromShow, createMessageLookup, type RoomMessage, type Room, type MentionReference, type ChatStateNotification, type Contact, type FileAttachment } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat } from '@/hooks'
 import { MessageBubble, MessageList, shouldShowAvatar, buildReplyContext } from './conversation'
@@ -49,7 +49,7 @@ const MAX_ROOM_SIZE_FOR_TYPING = 30
 export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange }: RoomViewProps) {
   detectRenderLoop('RoomView')
   const { t } = useTranslation()
-  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, sendChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, activeMAMState } = useRoom()
+  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, sendChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, activeMAMState } = useRoomActive()
   const { contacts } = useRoster()
   // NOTE: Use focused selectors instead of useConnection() hook to avoid
   // re-renders when unrelated connection state changes (error, reconnectAttempt, etc.)
@@ -164,7 +164,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   } = useMessageSelection(activeMessages, scrollRef, isAtBottomRef, {
     onReachedFirstMessage: fetchOlderHistory,
     isLoadingOlder: activeMAMState?.isLoading,
-    isHistoryComplete: !activeRoom?.supportsMAM || activeMAMState?.isHistoryComplete,
+    isHistoryComplete: activeRoom?.supportsMAM === false || activeMAMState?.isHistoryComplete,
     onEnterPressed: useExpandedMessagesStore.getState().toggle,
   })
 
@@ -305,7 +305,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             onMediaLoad={handleMediaLoad}
             onScrollToTop={fetchOlderHistory}
             isLoadingOlder={activeMAMState?.isLoading}
-            isHistoryComplete={!activeRoom.supportsMAM || activeMAMState?.isHistoryComplete}
+            isHistoryComplete={activeRoom.supportsMAM === false || activeMAMState?.isHistoryComplete}
           />
         </div>
 
@@ -626,15 +626,16 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
 
   // Get avatar for message sender:
   // 1. XEP-0398 occupant avatar (fetched from MUC presence vcard-temp:x:update)
-  // 2. Contact avatar (if occupant's real JID is in our roster)
-  // 3. Fall back to fallback avatar generation
+  // 2. Cached avatar from nickToAvatarCache (persists after occupant leaves)
+  // 3. Contact avatar (if occupant's real JID is in our roster)
+  // 4. Fall back to fallback avatar generation
   const senderBareJid = occupant?.jid
     ? getBareJid(occupant.jid)
     : room.nickToJidCache?.get(message.nick)
   const contact = senderBareJid ? contactsByJid.get(senderBareJid) : undefined
   const contactAvatar = contact?.avatar
-  // Prefer occupant's direct avatar (XEP-0398) over contact avatar
-  const senderAvatar = occupant?.avatar || contactAvatar
+  const cachedAvatar = room.nickToAvatarCache?.get(message.nick)
+  const senderAvatar = occupant?.avatar || cachedAvatar || contactAvatar
 
   // Get sender color: green for own messages, contact's pre-calculated color, or fallback to nick-based generation
   const senderColor = message.isOutgoing
@@ -686,14 +687,14 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
           avatarIdentifier: nick || 'unknown',
         }
       }
-      // Try to get avatar: XEP-0398 occupant avatar or contact avatar
+      // Try to get avatar: XEP-0398 occupant avatar, cached avatar, or contact avatar
       const occupantForReply = nick ? room.occupants.get(nick) : undefined
       const senderBareJid = occupantForReply?.jid
         ? getBareJid(occupantForReply.jid)
         : (nick ? room.nickToJidCache?.get(nick) : undefined)
       const contactAvatar = senderBareJid ? contactsByJid.get(senderBareJid)?.avatar : undefined
-      // Prefer occupant's direct avatar (XEP-0398) over contact avatar
-      const replyAvatar = occupantForReply?.avatar || contactAvatar
+      const cachedReplyAvatar = nick ? room.nickToAvatarCache?.get(nick) : undefined
+      const replyAvatar = occupantForReply?.avatar || cachedReplyAvatar || contactAvatar
       return {
         avatarUrl: replyAvatar,
         avatarIdentifier: nick || 'unknown',
@@ -825,7 +826,7 @@ const RoomMessageInput = React.forwardRef<MessageComposerHandle, RoomMessageInpu
   isConnected,
 }, ref) {
   const { t } = useTranslation()
-  const { setDraft, getDraft, clearDraft, clearFirstNewMessageId } = useRoom()
+  const { setDraft, getDraft, clearDraft, clearFirstNewMessageId } = useRoomActive()
 
   // Mention state
   const [cursorPosition, setCursorPosition] = useState(0)

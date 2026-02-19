@@ -142,7 +142,7 @@ describe('keychain utilities', () => {
   })
 
   describe('deleteCredentials', () => {
-    it('should always clear localStorage flag', async () => {
+    it('should clear localStorage flag on skip path', async () => {
       localStorage.setItem(STORAGE_KEY, 'true')
       mockIsTauri.mockReturnValue(false)
 
@@ -151,15 +151,34 @@ describe('keychain utilities', () => {
       expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
     })
 
-    it('should call invoke when in Tauri', async () => {
+    it('should call invoke when in Tauri and credentials were saved', async () => {
+      localStorage.setItem(STORAGE_KEY, 'true')
       mockInvoke.mockResolvedValue(undefined)
 
       await deleteCredentials()
 
       expect(mockInvoke).toHaveBeenCalledWith('delete_credentials')
+      expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
     })
 
-    it('should clear localStorage flag even if invoke fails', async () => {
+    it('should skip invoke when no credentials were saved', async () => {
+      mockInvoke.mockResolvedValue(undefined)
+
+      await deleteCredentials()
+
+      expect(mockInvoke).not.toHaveBeenCalled()
+    })
+
+    it('should call invoke when forced even if no credentials flag is set', async () => {
+      mockInvoke.mockResolvedValue(undefined)
+
+      await deleteCredentials({ force: true })
+
+      expect(mockInvoke).toHaveBeenCalledWith('delete_credentials')
+      expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
+    })
+
+    it('should clear localStorage flag if keychain delete fails', async () => {
       localStorage.setItem(STORAGE_KEY, 'true')
       mockInvoke.mockRejectedValue(new Error('Delete failed'))
       // Silence expected console.error
@@ -167,7 +186,6 @@ describe('keychain utilities', () => {
 
       await deleteCredentials()
 
-      // Flag should still be cleared even though invoke failed
       expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
       expect(errorSpy).toHaveBeenCalled()
       errorSpy.mockRestore()

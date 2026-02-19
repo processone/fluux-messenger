@@ -67,21 +67,25 @@ for (const file of VERSION_FILES) {
   console.log(`  ${file}: ${oldVersion} -> ${version}`)
 }
 
+// Tauri v2 requires strict semver (X.Y.Z) — prerelease suffixes are rejected.
+// Strip the prerelease suffix for tauri.conf.json and Cargo.toml.
+const tauriVersion = version.replace(/-.*$/, '')
+
 // 2. Update tauri.conf.json
 console.log('\nUpdating tauri.conf.json...')
 const tauriPath = path.join(ROOT, TAURI_CONF)
 const tauriConf = JSON.parse(fs.readFileSync(tauriPath, 'utf-8'))
 const oldTauriVersion = tauriConf.version
-tauriConf.version = version
+tauriConf.version = tauriVersion
 
 // Update bundleVersion with short git hash
 try {
   const gitHash = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim()
   tauriConf.bundle.macOS.bundleVersion = gitHash
-  console.log(`  version: ${oldTauriVersion} -> ${version}`)
+  console.log(`  version: ${oldTauriVersion} -> ${tauriVersion}${tauriVersion !== version ? ` (stripped from ${version})` : ''}`)
   console.log(`  bundleVersion: ${gitHash}`)
 } catch (e) {
-  console.log(`  version: ${oldTauriVersion} -> ${version}`)
+  console.log(`  version: ${oldTauriVersion} -> ${tauriVersion}${tauriVersion !== version ? ` (stripped from ${version})` : ''}`)
   console.log(`  bundleVersion: (unchanged, git not available)`)
 }
 fs.writeFileSync(tauriPath, JSON.stringify(tauriConf, null, 2) + '\n')
@@ -92,9 +96,9 @@ const cargoPath = path.join(ROOT, TAURI_CARGO)
 let cargoContent = fs.readFileSync(cargoPath, 'utf-8')
 const cargoVersionMatch = cargoContent.match(/^version\s*=\s*"([^"]+)"/m)
 const oldCargoVersion = cargoVersionMatch ? cargoVersionMatch[1] : 'unknown'
-cargoContent = cargoContent.replace(/^version\s*=\s*"[^"]+"/m, `version = "${version}"`)
+cargoContent = cargoContent.replace(/^version\s*=\s*"[^"]+"/m, `version = "${tauriVersion}"`)
 fs.writeFileSync(cargoPath, cargoContent)
-console.log(`  version: ${oldCargoVersion} -> ${version}`)
+console.log(`  version: ${oldCargoVersion} -> ${tauriVersion}${tauriVersion !== version ? ` (stripped from ${version})` : ''}`)
 
 // 4. Generate CHANGELOG.md from changelog.ts
 console.log('\nGenerating CHANGELOG.md from changelog.ts...')
@@ -212,8 +216,8 @@ if (entries.length === 0) {
   process.exit(1)
 }
 
-// Check if the new version exists in changelog.ts
-const hasNewVersion = entries.some(e => e.version === version)
+// Check if the new version (or its base version for prereleases) exists in changelog.ts
+const hasNewVersion = entries.some(e => e.version === version || e.version === version.replace(/-.*$/, ''))
 if (!hasNewVersion) {
   console.log(`  Warning: Version ${version} not found in changelog.ts`)
   console.log(`  Add the changelog entry to apps/fluux/src/data/changelog.ts first!`)
@@ -254,7 +258,10 @@ console.log(`  Generated ${CHANGELOG_MD} with ${entries.length} releases`)
 
 // 5. Generate RELEASE_NOTES.md (just the current version, for GitHub release body)
 console.log('\nGenerating RELEASE_NOTES.md for auto-updater...')
-const currentEntry = entries.find(e => e.version === version)
+// For prerelease versions (e.g. 0.13.2-beta.1), fall back to the base version (0.13.2)
+// since changelog.ts uses the target release version, not the prerelease suffix
+const baseVersion = version.replace(/-.*$/, '')
+const currentEntry = entries.find(e => e.version === version) || entries.find(e => e.version === baseVersion)
 if (currentEntry) {
   let releaseNotes = `## What's New in v${version}\n\n`
 

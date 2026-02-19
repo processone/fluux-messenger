@@ -51,10 +51,22 @@ export const createMockXmppClient = () => {
   const handlers: Record<string, Function[]> = {}
   const smHandlers: Record<string, Function[]> = {}
   const iqCalleeHandlers: Map<string, Function> = new Map()
+  // Some tests emit connection lifecycle events immediately after calling
+  // connect(); queue these until handlers are registered to avoid racey timeouts.
+  const pendingLifecycleEvents: Record<string, unknown[][]> = {}
+  const pendingSmEvents: Record<string, unknown[][]> = {}
+  const queueableLifecycleEvents = new Set(['online', 'resumed', 'disconnect', 'error', 'nonza'])
   return {
     on: vi.fn((event: string, handler: Function) => {
       if (!handlers[event]) handlers[event] = []
       handlers[event].push(handler)
+      const pending = pendingLifecycleEvents[event]
+      if (pending?.length) {
+        for (const args of pending) {
+          handler(...args)
+        }
+        delete pendingLifecycleEvents[event]
+      }
       return this
     }),
     removeListener: vi.fn((event: string, handler: Function) => {
@@ -227,15 +239,37 @@ export const createMockXmppClient = () => {
       on: vi.fn((event: string, handler: Function) => {
         if (!smHandlers[event]) smHandlers[event] = []
         smHandlers[event].push(handler)
+        const pending = pendingSmEvents[event]
+        if (pending?.length) {
+          for (const args of pending) {
+            handler(...args)
+          }
+          delete pendingSmEvents[event]
+        }
       }),
     },
     // Helper to trigger events in tests
     _emit: (event: string, ...args: unknown[]) => {
-      handlers[event]?.forEach(h => h(...args))
+      const eventHandlers = handlers[event]
+      if (eventHandlers?.length) {
+        eventHandlers.forEach(h => h(...args))
+        return
+      }
+
+      if (queueableLifecycleEvents.has(event)) {
+        if (!pendingLifecycleEvents[event]) pendingLifecycleEvents[event] = []
+        pendingLifecycleEvents[event].push(args)
+      }
     },
     // Helper to trigger SM events in tests
     _emitSM: (event: string, ...args: unknown[]) => {
-      smHandlers[event]?.forEach(h => h(...args))
+      const eventHandlers = smHandlers[event]
+      if (eventHandlers?.length) {
+        eventHandlers.forEach(h => h(...args))
+        return
+      }
+      if (!pendingSmEvents[event]) pendingSmEvents[event] = []
+      pendingSmEvents[event].push(args)
     },
     _handlers: handlers,
     _smHandlers: smHandlers,
@@ -564,6 +598,7 @@ export const createMockStores = (): MockStoreBindings => ({
     setAutoAway: vi.fn(),
     setServerInfo: vi.fn(),
     setConnectionMethod: vi.fn(),
+    setAuthMechanism: vi.fn(),
     getPresenceShow: vi.fn().mockReturnValue('online'),
     getStatusMessage: vi.fn().mockReturnValue(null),
     getIsAutoAway: vi.fn().mockReturnValue(false),

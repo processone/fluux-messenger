@@ -1,4 +1,5 @@
 import { createStore } from 'zustand/vanilla'
+import { subscribeWithSelector } from 'zustand/middleware'
 import type { ConnectionStatus, ConnectionMethod, PresenceShow, ServerInfo, ResourcePresence, HttpUploadService } from '../core/types'
 
 // Re-export for convenience
@@ -49,9 +50,10 @@ interface ConnectionState {
   jid: string | null
   error: string | null
   reconnectAttempt: number
-  reconnectIn: number | null
+  reconnectTargetTime: number | null
   serverInfo: ServerInfo | null
   connectionMethod: ConnectionMethod | null
+  authMechanism: string | null
   // Own profile data
   ownAvatar: string | null  // Blob URL for display
   ownAvatarHash: string | null  // Hash for cache lookup
@@ -66,9 +68,10 @@ interface ConnectionState {
   setStatus: (status: ConnectionStatus) => void
   setJid: (jid: string | null) => void
   setError: (error: string | null) => void
-  setReconnectState: (attempt: number, reconnectIn: number | null) => void
+  setReconnectState: (attempt: number, reconnectTargetTime: number | null) => void
   setServerInfo: (info: ServerInfo | null) => void
   setConnectionMethod: (method: ConnectionMethod | null) => void
+  setAuthMechanism: (mechanism: string | null) => void
   // Own profile actions
   setOwnAvatar: (avatar: string | null, hash?: string | null) => void
   setOwnNickname: (nickname: string | null) => void
@@ -87,9 +90,10 @@ const initialState = {
   jid: null,
   error: null,
   reconnectAttempt: 0,
-  reconnectIn: null,
+  reconnectTargetTime: null,
   serverInfo: null as ServerInfo | null,
   connectionMethod: null as ConnectionMethod | null,
+  authMechanism: null as string | null,
   ownAvatar: null as string | null,
   ownAvatarHash: null as string | null,
   ownNickname: null as string | null,
@@ -98,15 +102,17 @@ const initialState = {
   windowVisible: true, // Assume visible on startup
 }
 
-export const connectionStore = createStore<ConnectionState>((set) => ({
+export const connectionStore = createStore<ConnectionState>()(
+  subscribeWithSelector((set) => ({
   ...initialState,
 
   setStatus: (status) => set({ status }),
   setJid: (jid) => set({ jid }),
   setError: (error) => set({ error }),
-  setReconnectState: (attempt, reconnectIn) => set({ reconnectAttempt: attempt, reconnectIn }),
+  setReconnectState: (attempt, reconnectTargetTime) => set({ reconnectAttempt: attempt, reconnectTargetTime }),
   setServerInfo: (info) => set({ serverInfo: info }),
   setConnectionMethod: (method) => set({ connectionMethod: method }),
+  setAuthMechanism: (mechanism) => set({ authMechanism: mechanism }),
 
   setOwnAvatar: (avatar, hash) => set({
     ownAvatar: avatar,
@@ -143,6 +149,6 @@ export const connectionStore = createStore<ConnectionState>((set) => ({
     ...initialState,
     ownResources: new Map(), // Create new Map instance on reset
   }),
-}))
+})))
 
 export type { ConnectionState }

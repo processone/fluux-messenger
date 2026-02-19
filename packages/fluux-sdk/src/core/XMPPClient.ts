@@ -20,6 +20,7 @@ import {
   type PresenceStateValue,
   type PresenceContext as PresenceMachineContext,
 } from './presenceMachine'
+import type { ConnectionActor, ConnectionStateValue } from './connectionMachine'
 import { generateUUID } from '../utils/uuid'
 import { createStoreBindings } from '../bindings/storeBindings'
 import { setupStoreSideEffects } from './sideEffects'
@@ -33,7 +34,8 @@ import {
   adminStore,
   blockingStore,
 } from '../stores'
-import { detectPlatform } from './platform'
+import { detectPlatform, getCachedPlatform } from './platform'
+import { isDeadSocketError } from './modules/connectionUtils'
 
 /**
  * Session storage key for persisting presence machine state.
@@ -91,6 +93,8 @@ import { Blocking } from './modules/Blocking'
 import { MAM } from './modules/MAM'
 import { NS_CARBONS, NS_MAM } from './namespaces'
 import { createDefaultStoreBindings, type DefaultStoreBindingsOptions } from './defaultStoreBindings'
+import { logInfo } from './logger'
+import { SDK_VERSION } from '../version'
 
 /**
  * Core XMPP client with namespace-based module API.
@@ -244,7 +248,25 @@ export class XMPPClient {
    */
   public presenceActor!: PresenceActor
 
-
+  /**
+   * XState connection actor managing connection lifecycle state.
+   *
+   * The connection machine handles explicit state transitions for the XMPP
+   * connection (idle, connecting, connected, reconnecting, terminal, disconnected)
+   * with exponential backoff and proper error handling.
+   *
+   * **For React apps**: Access via XMPPProvider for UI status binding.
+   *
+   * **For bots/headless**: Access directly to monitor connection state:
+   *
+   * @example Monitoring connection state
+   * ```typescript
+   * client.connectionActor.subscribe((snapshot) => {
+   *   console.log('Connection state:', snapshot.value)
+   * })
+   * ```
+   */
+  public connectionActor!: ConnectionActor
 
   private stores: StoreBindings | null = null
   private eventHandlers: Map<keyof XMPPClientEvents, Set<XMPPClientEvents[keyof XMPPClientEvents]>> = new Map()
@@ -275,6 +297,22 @@ export class XMPPClient {
    * @internal
    */
   private modulesInitialized = false
+
+  /**
+   * Whether the current session was established via SM resumption.
+   * Used to skip MAM operations that are unnecessary after SM replay.
+   * @internal
+   */
+  private isSmResumedSession = false
+
+  /**
+   * Monotonically increasing session generation counter.
+   * Incremented each time handleConnectionSuccess runs.
+   * Used by handleFreshSession/handleSmResumption to detect stale runs and abort early
+   * when a newer connection supersedes the current one (e.g., system sleep during async chain).
+   * @internal
+   */
+  private sessionGeneration = 0
 
   /**
    * Cleanup functions for all subscriptions and bindings.
@@ -472,7 +510,7 @@ export class XMPPClient {
     const moduleDeps = {
       stores: this.stores,
       sendStanza: (stanza: Element) => this.sendStanza(stanza),
-      sendIQ: (iq: Element) => (this.getXmpp() as any)?.iqCaller?.request(iq),
+      sendIQ: (iq: Element) => this.sendIQ(iq),
       getCurrentJid: () => this.currentJid,
       emit: <K extends keyof XMPPClientEvents>(event: K, ...args: Parameters<XMPPClientEvents[K]>) => this.emit(event, ...args),
       emitSDK: <K extends keyof SDKEvents>(event: K, payload: SDKEvents[K]) => this.emitSDK(event, payload),
@@ -484,6 +522,7 @@ export class XMPPClient {
     }
 
     this.connection = new Connection(moduleDeps)
+    this.connectionActor = this.connection.getConnectionActor()
     this.pubsub = new PubSub(moduleDeps)
     this.mam = new MAM(moduleDeps)
     this.chat = new Chat(moduleDeps, this.mam)
@@ -532,7 +571,8 @@ export class XMPPClient {
         }
         // Fetch sidebar preview immediately for MAM-enabled rooms
         // For non-MAM rooms, history is requested via <history maxstanzas="50"/> on join
-        if (room?.supportsMAM && !room.isQuickChat) {
+        // Skip on SM resumption — server already replayed all undelivered stanzas
+        if (room?.supportsMAM && !room.isQuickChat && !this.isSmResumedSession) {
           this.mam.fetchPreviewForRoom(roomJid).catch(() => {})
         }
       })
@@ -842,6 +882,19 @@ export class XMPPClient {
   }
 
   /**
+   * Lightweight connection health check for routine keepalive.
+   *
+   * Unlike {@link verifyConnection}, this does NOT change connection status
+   * or trigger presence events. Suitable for periodic health checks where
+   * the connection is expected to be healthy.
+   *
+   * @returns Promise that resolves to true if healthy, false if dead
+   */
+  async verifyConnectionHealth(): Promise<boolean> {
+    return this.connection.verifyConnectionHealth()
+  }
+
+  /**
    * Notify the SDK of a system state change.
    *
    * This is the recommended way for apps to signal platform-specific events
@@ -876,6 +929,18 @@ export class XMPPClient {
     state: 'awake' | 'sleeping' | 'visible' | 'hidden',
     sleepDurationMs?: number
   ): Promise<void> {
+    // Signal presence machine for relevant states.
+    // This makes notifySystemState the single orchestration point:
+    // one call handles both presence transitions and connection verification.
+    switch (state) {
+      case 'awake':
+        this.presenceActor.send({ type: 'WAKE_DETECTED' })
+        break
+      case 'sleeping':
+        this.presenceActor.send({ type: 'SLEEP_DETECTED' })
+        break
+    }
+    // Delegate to connection module for connection-level handling
     return this.connection.notifySystemState(state, sleepDurationMs)
   }
 
@@ -1150,7 +1215,7 @@ export class XMPPClient {
       await (xmpp as any).write(xmlString)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err)
-      if (this.isDeadSocketError(errorMessage)) {
+      if (isDeadSocketError(errorMessage)) {
         this.connection.handleDeadSocket()
       }
       throw err
@@ -1162,100 +1227,184 @@ export class XMPPClient {
   // ============================================================================
 
   private getXmpp(): Client | null {
-    return this.connection.getClient()
+    const xmpp = this.connection.getClient()
+    if (!xmpp) return null
+
+    // Only expose the transport once the connection machine reached a connected state.
+    // This makes auth completion ("online"/SM resumed) the single synchronous gate.
+    const machineState = this.connectionActor.getSnapshot().value as ConnectionStateValue
+    const isConnectedState =
+      typeof machineState === 'object' && machineState !== null && 'connected' in machineState
+    return isConnectedState ? xmpp : null
   }
 
   /**
-   * Handle successful connection (both initial connect and reconnect).
+   * Handle successful connection — dispatches to SM resume or fresh session path.
    */
   private async handleConnectionSuccess(
     isResumption: boolean,
     previouslyJoinedRooms?: Array<{ jid: string; nickname: string; password?: string; autojoin?: boolean }>
   ): Promise<void> {
+    // Increment session generation to invalidate any in-progress handleFreshSession/handleSmResumption.
+    // If the system sleeps during an await below and a reconnect fires, the new call increments
+    // this counter again, causing the stale run to bail out at its next checkpoint.
+    const generation = ++this.sessionGeneration
+
+    const platform = getCachedPlatform() ?? 'unknown'
+    logInfo(`SDK v${SDK_VERSION}, platform: ${platform}, session #${generation}`)
+
     // Transition presence machine to connected state
-    // This is done early so the machine is in the correct state before sending presence
     this.presenceActor.send({ type: 'CONNECT' })
 
-    // Always reset MAM states on any reconnection (including SM resumption)
-    // This ensures we can fetch messages that arrived while we were disconnected.
-    // SM guarantees delivery of in-flight messages, but MAM may have accumulated
-    // new messages (especially in MUC rooms) while we were offline.
+    // Track session type for guards (e.g., skip MAM preview on mucJoined during SM replay)
+    this.isSmResumedSession = isResumption
+
+    if (isResumption) {
+      await this.handleSmResumption(generation)
+    } else {
+      await this.handleFreshSession(previouslyJoinedRooms, generation)
+    }
+
+    // Only run post-session tasks if this generation is still current
+    if (this.isSessionStale(generation)) return
+
+    // Always re-discover admin commands (lightweight, no MAM)
+    this.admin.discoverAdminCommands().catch(() => {})
+  }
+
+  /**
+   * Check if the current session generation is still active.
+   * Returns true if a newer connection was established, meaning
+   * the current async chain should abort.
+   * @internal
+   */
+  private isSessionStale(generation: number): boolean {
+    return this.sessionGeneration !== generation
+  }
+
+  /**
+   * SM Resumption path (XEP-0198).
+   *
+   * When SM resumes successfully, the server replays all undelivered stanzas.
+   * No MAM queries, no roster fetch, no carbons enable needed.
+   *
+   * Send sequence:
+   * 1) Send initial presence
+   * 2) Send presence probes to refresh contact status
+   */
+  private async handleSmResumption(generation?: number): Promise<void> {
+    const gen = generation ?? this.sessionGeneration
+
+    await this.roster.sendInitialPresence()
+    if (this.isSessionStale(gen)) {
+      logInfo('SM resumption aborted after sendInitialPresence (session superseded)')
+      return
+    }
+
+    this.stores?.console.addEvent('Sending presence probes to refresh contact status', 'sm')
+    this.roster.sendPresenceProbes().catch(() => {})
+  }
+
+  /**
+   * Fresh session path (new session or SM resume failed).
+   *
+   * Full initialization with explicit send sequence:
+   * 1) Fetch roster
+   * 2) Enable carbons
+   * 3) Send initial presence
+   * 4) Fetch bookmarks
+   * 5) Discover MUC service (async)
+   * 6) Rejoin previously active rooms and autojoin bookmarked rooms
+   * 7) Run server/upload/profile discovery (async)
+   *
+   * Background sync side effects trigger MAM queries once server info is available.
+   */
+  private async handleFreshSession(
+    previouslyJoinedRooms?: Array<{ jid: string; nickname: string; password?: string; autojoin?: boolean }>,
+    generation?: number
+  ): Promise<void> {
+    const gen = generation ?? this.sessionGeneration
+
+    // Reset MAM states so background sync will re-fetch message history
     this.stores?.chat.resetMAMStates()
     this.stores?.room.resetRoomMAMStates()
 
-    if (!isResumption) {
-      // Reset state for fresh session
-      this.stores?.roster.resetAllPresence()
-      this.stores?.connection.clearOwnResources()
+    // Reset presence and resources for fresh session
+    this.stores?.roster.resetAllPresence()
+    this.stores?.connection.clearOwnResources()
 
-      // Fetch roster before sending presence
-      await this.roster.fetchRoster()
-      this.enableCarbons()
+    // Fetch roster before sending presence
+    await this.roster.fetchRoster()
+    if (this.isSessionStale(gen)) {
+      logInfo('Fresh session aborted after fetchRoster (session superseded)')
+      return
     }
+    this.enableCarbons()
+    logInfo('Fresh session: roster fetched, enabling carbons')
 
     // Send initial presence
     await this.roster.sendInitialPresence()
-
-    // For SM resumption, probe offline contacts
-    if (isResumption) {
-      this.stores?.console.addEvent('Sending presence probes to refresh contact status', 'sm')
-      this.roster.sendPresenceProbes().catch(() => {})
+    if (this.isSessionStale(gen)) {
+      logInfo('Fresh session aborted after sendInitialPresence (session superseded)')
+      return
     }
 
-    // Continue setup for new sessions
-    if (!isResumption) {
-      const { roomsToAutojoin } = await this.muc.fetchBookmarks()
-
-      // Discover MUC service and check service-level MAM support BEFORE joining rooms
-      // This allows queryRoomFeatures() to fall back to service-level MAM detection
-      // when room-level disco fails (e.g., XSF rooms that don't respond to disco)
-      this.muc.discoverMucService().catch(() => {})
-
-      // Restore cached room avatars for bookmarked rooms
-      this.profile.restoreAllRoomAvatarHashes().catch(() => {})
-
-      // Rejoin rooms BEFORE server info fetch - server info can block on slow/unresponsive servers
-      // Two scenarios: reconnect (previouslyJoinedRooms provided) vs fresh connect
-      //
-      // On reconnect: rejoin non-autojoin rooms that were active, PLUS autojoin bookmarks
-      // On fresh connect: just join autojoin bookmarks
-      //
-      // Filter previouslyJoinedRooms to exclude any rooms that are in roomsToAutojoin
-      // (the autojoin state might have changed on another client since we captured it)
-      const autojoinJids = new Set(roomsToAutojoin.map(r => r.jid))
-
-      // Rejoin non-autojoin rooms that were previously joined (reconnect only)
-      if (previouslyJoinedRooms && previouslyJoinedRooms.length > 0) {
-        const nonAutojoinRooms = previouslyJoinedRooms.filter(r => !autojoinJids.has(r.jid))
-        if (nonAutojoinRooms.length > 0) {
-          await this.muc.rejoinActiveRooms(nonAutojoinRooms)
-        }
-      }
-
-      // Always join autojoin bookmarks (both fresh connect and reconnect)
-      if (roomsToAutojoin.length > 0) {
-        for (const room of roomsToAutojoin) {
-          this.muc.joinRoom(room.jid, room.nick, { password: room.password }).catch((err) => {
-            console.error(`[XMPPClient] Failed to autojoin room ${room.jid}:`, err)
-          })
-        }
-      }
-
-      // Server discovery is less critical - can block on slow servers, so do it after rooms are joined
-      await this.discovery.fetchServerInfo()
-      this.discovery.discoverHttpUploadService().catch(() => {})
-      this.profile.fetchOwnProfile().catch(() => {})
+    // Bookmarks and room joins
+    const { roomsToAutojoin } = await this.muc.fetchBookmarks()
+    if (this.isSessionStale(gen)) {
+      logInfo('Fresh session aborted after fetchBookmarks (session superseded)')
+      return
     }
 
-    // Always re-discover admin commands
-    this.admin.discoverAdminCommands().catch(() => {})
+    // Discover MUC service and check service-level MAM support BEFORE joining rooms
+    // This allows queryRoomFeatures() to fall back to service-level MAM detection
+    // when room-level disco fails (e.g., XSF rooms that don't respond to disco)
+    this.muc.discoverMucService().catch(() => {})
 
-    // Smart MAM strategy (see backgroundSync.ts setupBackgroundSyncSideEffects):
-    // - Active conversation: Full MAM catch-up on reconnect (sideEffects chat subscription)
-    // - Non-archived conversations: Lightweight preview refresh on connect (max=5 each, concurrency=3)
-    // - Archived conversations: Daily preview check, auto-unarchive on new incoming messages
-    // - Rooms: Preview is fetched on room join (room:joined event)
-    // Preview refresh is triggered by sideEffects when MAM support is available.
+    // Restore cached room avatars for bookmarked rooms
+    this.profile.restoreAllRoomAvatarHashes().catch(() => {})
+
+    // Rejoin rooms BEFORE server info fetch - server info can block on slow/unresponsive servers
+    // Two scenarios: reconnect (previouslyJoinedRooms provided) vs fresh connect
+    //
+    // On reconnect: rejoin non-autojoin rooms that were active, PLUS autojoin bookmarks
+    // On fresh connect: just join autojoin bookmarks
+    //
+    // Filter previouslyJoinedRooms to exclude any rooms that are in roomsToAutojoin
+    // (the autojoin state might have changed on another client since we captured it)
+    const autojoinJids = new Set(roomsToAutojoin.map(r => r.jid))
+
+    // Rejoin non-autojoin rooms that were previously joined (reconnect only)
+    const rejoinCount = previouslyJoinedRooms?.filter(r => !autojoinJids.has(r.jid)).length ?? 0
+    if (roomsToAutojoin.length > 0 || rejoinCount > 0) {
+      logInfo(`Fresh session: ${roomsToAutojoin.length} rooms to autojoin, ${rejoinCount} to rejoin`)
+    }
+
+    if (previouslyJoinedRooms && previouslyJoinedRooms.length > 0) {
+      const nonAutojoinRooms = previouslyJoinedRooms.filter(r => !autojoinJids.has(r.jid))
+      if (nonAutojoinRooms.length > 0) {
+        await this.muc.rejoinActiveRooms(nonAutojoinRooms)
+        if (this.isSessionStale(gen)) {
+          logInfo('Fresh session aborted after rejoinActiveRooms (session superseded)')
+          return
+        }
+      }
+    }
+
+    // Always join autojoin bookmarks (both fresh connect and reconnect)
+    if (roomsToAutojoin.length > 0) {
+      for (const room of roomsToAutojoin) {
+        this.muc.joinRoom(room.jid, room.nick, { password: room.password }).catch((err) => {
+          console.error(`[XMPPClient] Failed to autojoin room ${room.jid}:`, err)
+        })
+      }
+    }
+
+    // Server discovery is non-blocking to avoid stalling the reconnection flow.
+    // The backgroundSync serverInfo subscriber will detect when MAM becomes available.
+    this.discovery.fetchServerInfo().catch(() => {})
+    this.discovery.discoverHttpUploadService().catch(() => {})
+    this.profile.fetchOwnProfile().catch(() => {})
   }
 
   private enableCarbons(): void {
@@ -1301,21 +1450,43 @@ export class XMPPClient {
       await xmpp.send(stanza)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err)
-      if (this.isDeadSocketError(errorMessage)) {
+      if (isDeadSocketError(errorMessage)) {
         this.connection.handleDeadSocket()
       }
       throw err
     }
   }
 
-  private isDeadSocketError(errorMessage: string): boolean {
-    return (
-      errorMessage.includes('socket.write') ||
-      errorMessage.includes('null is not an object') ||
-      errorMessage.includes('Cannot read properties of null') ||
-      errorMessage.includes('socket is null') ||
-      errorMessage.includes('Socket not available') ||
-      errorMessage.includes('WebSocket is not open')
-    )
+  private async sendIQ(iq: Element): Promise<Element> {
+    const xmpp = this.getXmpp()
+    if (!xmpp) {
+      const currentStatus = this.stores?.connection.getStatus?.()
+      if (currentStatus === 'online') {
+        this.stores?.console.addEvent('Client null but status online (IQ) - triggering reconnect', 'error')
+        this.connection.handleDeadSocket()
+      }
+      throw new Error('Not connected')
+    }
+
+    const socket = (xmpp as any).socket
+    if (!socket) {
+      const currentStatus = this.stores?.connection.getStatus?.()
+      if (currentStatus === 'online') {
+        this.stores?.console.addEvent('Socket null but status online (IQ) - triggering reconnect', 'error')
+        this.connection.handleDeadSocket()
+      }
+      throw new Error('Socket not available')
+    }
+
+    try {
+      return await (xmpp as any).iqCaller.request(iq)
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err)
+      if (isDeadSocketError(errorMessage)) {
+        this.connection.handleDeadSocket()
+      }
+      throw err
+    }
   }
+
 }

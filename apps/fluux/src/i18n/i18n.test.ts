@@ -319,5 +319,41 @@ describe('i18n', () => {
       expect(testI18n.t('common.save')).toBe('Vista')
       expect(testI18n.t('common.cancel')).toBe('Hætta við')
     })
+
+    it('should have correct Russian translations for key UI elements', async () => {
+      await testI18n.changeLanguage('ru')
+      expect(testI18n.t('sidebar.messages')).toBe('Сообщения')
+      expect(testI18n.t('sidebar.rooms')).toBe('Конференции')
+      expect(testI18n.t('presence.online')).toBe('В сети')
+      expect(testI18n.t('common.save')).toBe('Сохранить')
+      expect(testI18n.t('common.cancel')).toBe('Отмена')
+    })
+
+    it('should have correct Belarusian translations for key UI elements', async () => {
+      await testI18n.changeLanguage('be')
+      expect(testI18n.t('sidebar.messages')).toBe('Паведамленні')
+      expect(testI18n.t('sidebar.rooms')).toBe('Пакоі')
+      expect(testI18n.t('presence.online')).toBe('У сетцы')
+      expect(testI18n.t('common.save')).toBe('Захаваць')
+      expect(testI18n.t('common.cancel')).toBe('Адмяніць')
+    })
+
+    it('should have correct Ukrainian translations for key UI elements', async () => {
+      await testI18n.changeLanguage('uk')
+      expect(testI18n.t('sidebar.messages')).toBe('Повідомлення')
+      expect(testI18n.t('sidebar.rooms')).toBe('Кімнати')
+      expect(testI18n.t('presence.online')).toBe('В мережі')
+      expect(testI18n.t('common.save')).toBe('Зберегти')
+      expect(testI18n.t('common.cancel')).toBe('Скасувати')
+    })
+
+    it('should have correct Simplified Chinese translations for key UI elements', async () => {
+      await testI18n.changeLanguage('zh-CN')
+      expect(testI18n.t('sidebar.messages')).toBe('消息')
+      expect(testI18n.t('sidebar.rooms')).toBe('房间')
+      expect(testI18n.t('presence.online')).toBe('在线')
+      expect(testI18n.t('common.save')).toBe('保存')
+      expect(testI18n.t('common.cancel')).toBe('取消')
+    })
   })
 })

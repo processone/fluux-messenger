@@ -64,6 +64,8 @@ vi.mock('@fluux/sdk/react', () => ({
   // useRoomStore is callable (hook-style) for selector subscriptions
   useRoomStore: (selector: (state: { setActiveRoom: typeof mockSetActiveRoom }) => unknown) =>
     selector({ setActiveRoom: mockSetActiveRoom }),
+  useConnectionStore: (selector: (state: { status: string }) => unknown) =>
+    selector({ status: 'online' }),
 }))
 
 // Mock react-i18next

@@ -96,9 +96,10 @@ export function useConnection() {
   const jid = useConnectionStore((s) => s.jid)
   const error = useConnectionStore((s) => s.error)
   const reconnectAttempt = useConnectionStore((s) => s.reconnectAttempt)
-  const reconnectIn = useConnectionStore((s) => s.reconnectIn)
+  const reconnectTargetTime = useConnectionStore((s) => s.reconnectTargetTime)
   const serverInfo = useConnectionStore((s) => s.serverInfo)
   const connectionMethod = useConnectionStore((s) => s.connectionMethod)
+  const authMechanism = useConnectionStore((s) => s.authMechanism)
   // Own profile state
   const ownAvatar = useConnectionStore((s) => s.ownAvatar)
   const ownAvatarHash = useConnectionStore((s) => s.ownAvatarHash)
@@ -269,9 +270,10 @@ export function useConnection() {
       jid,
       error,
       reconnectAttempt,
-      reconnectIn,
+      reconnectTargetTime,
       serverInfo,
       connectionMethod,
+      authMechanism,
       // Own profile state
       ownAvatar,
       ownAvatarHash,
@@ -294,9 +296,10 @@ export function useConnection() {
       jid,
       error,
       reconnectAttempt,
-      reconnectIn,
+      reconnectTargetTime,
       serverInfo,
       connectionMethod,
+      authMechanism,
       ownAvatar,
       ownAvatarHash,
       ownNickname,

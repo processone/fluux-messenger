@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useChat, useRoster, usePresence, createMessageLookup, getBareJid, getLocalPart, type Message, type Contact } from '@fluux/sdk'
+import { useChatActive, useContactIdentities, createMessageLookup, getBareJid, getLocalPart, type Message, type ContactIdentity } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { getConsistentTextColor } from './Avatar'
 import { useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat } from '@/hooks'
@@ -24,8 +24,12 @@ interface ChatViewProps {
 export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerRef }: ChatViewProps) {
   detectRenderLoop('ChatView')
   const { t } = useTranslation()
-  const { activeConversation, activeMessages, activeTypingUsers, sendReaction, sendCorrection, retractMessage, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, activeMAMState, fetchOlderHistory } = useChat()
-  const { contacts } = useRoster()
+  // Use useChatActive instead of useChat to avoid subscribing to the conversation list.
+  // This prevents re-renders during background MAM sync of other conversations.
+  const { activeConversation, activeMessages, activeTypingUsers, sendReaction, sendCorrection, retractMessage, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, activeMAMState, fetchOlderHistory } = useChatActive()
+  // Use useContactIdentities instead of useRoster() to avoid re-renders on
+  // presence changes. ChatView only needs contact names and avatars for display.
+  const contactsByJid = useContactIdentities()
   // NOTE: Use focused selectors instead of useConnection() hook to avoid
   // re-renders when unrelated connection state changes (error, reconnectAttempt, etc.)
   const jid = useConnectionStore((s) => s.jid)
@@ -33,7 +37,6 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
   const ownNickname = useConnectionStore((s) => s.ownNickname)
   const status = useConnectionStore((s) => s.status)
   const isConnected = status === 'online'
-  const { presenceStatus: presenceShow } = usePresence()
   const { uploadFile, isUploading, progress, isSupported } = useFileUpload()
   const { processMessageForLinkPreview } = useLinkPreview()
   const { resolvedMode } = useMode()
@@ -132,13 +135,6 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
 
   // Format copied messages with sender headers
   useMessageCopy(scrollRef)
-
-  // Create a lookup map for contacts by JID
-  const contactsByJid = useMemo(() => {
-    const map = new Map<string, Contact>()
-    contacts.forEach(c => map.set(c.jid, c))
-    return map
-  }, [contacts])
 
   // Create a lookup map for messages by ID (for reply context)
   // Index by both client id and stanza-id since replies may reference either
@@ -271,7 +267,6 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
           myBareJid={myBareJid}
           ownAvatar={ownAvatar}
           ownNickname={ownNickname}
-          ownPresence={presenceShow}
           onReply={handleReply}
           onEdit={setEditingMessage}
           lastOutgoingMessageId={lastOutgoingMessageId}
@@ -346,7 +341,6 @@ const ChatMessageList = memo(function ChatMessageList({
   myBareJid,
   ownAvatar,
   ownNickname,
-  ownPresence,
   onReply,
   onEdit,
   lastOutgoingMessageId,
@@ -368,7 +362,7 @@ const ChatMessageList = memo(function ChatMessageList({
   isInitialLoading,
 }: {
   messages: Message[]
-  contactsByJid: Map<string, Contact>
+  contactsByJid: Map<string, ContactIdentity>
   messagesById: Map<string, Message>
   typingUsers: string[]
   scrollerRef: React.RefObject<HTMLElement>
@@ -379,7 +373,6 @@ const ChatMessageList = memo(function ChatMessageList({
   myBareJid?: string
   ownAvatar?: string | null
   ownNickname?: string | null
-  ownPresence?: 'online' | 'away' | 'dnd' | 'offline'
   onReply: (message: Message) => void
   onEdit: (message: Message) => void
   lastOutgoingMessageId: string | null
@@ -461,7 +454,6 @@ const ChatMessageList = memo(function ChatMessageList({
       avatar={msg.isOutgoing ? ownAvatar ?? undefined : contactsByJid.get(msg.from)?.avatar}
       ownAvatar={ownAvatar}
       ownNickname={ownNickname}
-      ownPresence={ownPresence}
       conversationId={conversationId}
       conversationType={conversationType}
       sendReaction={sendReaction}
@@ -487,7 +479,7 @@ const ChatMessageList = memo(function ChatMessageList({
       timeFormat={effectiveTimeFormat}
     />
   ), [
-    ownAvatar, contactsByJid, ownNickname, ownPresence, conversationId, conversationType,
+    ownAvatar, contactsByJid, ownNickname, conversationId, conversationType,
     sendReaction, myBareJid, messagesById, onReply, onEdit, lastOutgoingMessageId, lastMessageId,
     isComposing, activeReactionPickerMessageId, onReactionPickerChange, retractMessage,
     selectedMessageId, hasKeyboardSelection, showToolbarForSelection, isDarkMode,
@@ -528,12 +520,11 @@ interface ChatMessageBubbleProps {
   avatar?: string
   ownAvatar?: string | null
   ownNickname?: string | null
-  ownPresence?: 'online' | 'away' | 'dnd' | 'offline'
   conversationId: string
   conversationType: 'chat' | 'groupchat'
   sendReaction: (to: string, messageId: string, emojis: string[], type: 'chat' | 'groupchat') => Promise<void>
   myBareJid?: string
-  contactsByJid: Map<string, Contact>
+  contactsByJid: Map<string, ContactIdentity>
   messagesById: Map<string, Message>
   onReply: (message: Message) => void
   onEdit: (message: Message) => void
@@ -563,7 +554,6 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
   avatar,
   ownAvatar,
   ownNickname,
-  ownPresence,
   conversationId,
   conversationType,
   sendReaction,
@@ -692,7 +682,6 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
       avatarUrl={avatar}
       avatarIdentifier={message.from}
       avatarFallbackColor={senderColor}
-      avatarPresence={message.isOutgoing ? ownPresence : senderContact?.presence}
       senderJid={message.isOutgoing ? myBareJid : message.from.split('/')[0]}
       senderContact={message.isOutgoing ? undefined : senderContact}
       myReactions={myReactions}
@@ -751,7 +740,7 @@ function MessageInput({
   onCancelEdit: () => void
   sendCorrection: (conversationId: string, messageId: string, newBody: string, attachment?: import('@fluux/sdk').FileAttachment) => Promise<void>
   retractMessage: (conversationId: string, messageId: string) => Promise<void>
-  contactsByJid: Map<string, Contact>
+  contactsByJid: Map<string, ContactIdentity>
   onComposingChange?: (isComposing: boolean) => void
   sendEasterEgg: (to: string, type: 'chat' | 'groupchat', animation: string) => Promise<void>
   isConnected: boolean
@@ -766,7 +755,7 @@ function MessageInput({
   onSwitchToMessages?: (conversationId: string) => void
 }) {
   const { t } = useTranslation()
-  const { sendMessage, sendChatState, isArchived, unarchiveConversation, setDraft, getDraft, clearDraft, clearFirstNewMessageId } = useChat()
+  const { sendMessage, sendChatState, isArchived, unarchiveConversation, setDraft, getDraft, clearDraft, clearFirstNewMessageId } = useChatActive()
 
   // Draft persistence - saves on conversation change, restores on load
   const [text, setText] = useConversationDraft({

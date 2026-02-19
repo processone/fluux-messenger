@@ -30,7 +30,7 @@
 import { xml, Element } from '@xmpp/client'
 import { BaseModule } from './BaseModule'
 import { getBareJid, getResource } from '../jid'
-import { generateUUID } from '../../utils/uuid'
+import { generateUUID, generateStableMessageId } from '../../utils/uuid'
 import { executeWithConcurrency } from '../../utils/concurrencyUtils'
 import { parseRSMResponse } from '../../utils/rsm'
 import {
@@ -55,11 +55,24 @@ import type {
   RSMResponse,
 } from '../types'
 import { parseMessageContent, parseOgpFastening, applyRetraction, applyCorrection } from './messagingUtils'
+import { getDomain } from '../jid'
+import { logInfo, logError as logErr } from '../logger'
 
 /**
  * Internal type for collected modifications during MAM query
  */
 interface MAMModifications {
+  retractions: { targetId: string; from: string }[]
+  corrections: { targetId: string; from: string; body: string; messageEl: Element }[]
+  fastenings: { targetId: string; applyToEl: Element }[]
+  reactions: { targetId: string; from: string; emojis: string[] }[]
+}
+
+/**
+ * Modifications that could not be applied to messages within the current MAM page.
+ * These target messages already in the store/cache and need to be emitted as events.
+ */
+interface UnresolvedModifications {
   retractions: { targetId: string; from: string }[]
   corrections: { targetId: string; from: string; body: string; messageEl: Element }[]
   fastenings: { targetId: string; applyToEl: Element }[]
@@ -125,6 +138,7 @@ export class MAM extends BaseModule {
   async queryArchive(options: MAMQueryOptions): Promise<MAMResult> {
     const { with: withJid, max = 50, before = '', start, end } = options
     const conversationId = getBareJid(withJid)
+    const mamStart = Date.now()
 
     // Track total messages across automatic pagination
     const allMessages: Message[] = []
@@ -158,13 +172,13 @@ export class MAM extends BaseModule {
         const collectedMessages: Message[] = []
         const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
 
-        const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl) => {
+        const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, archiveId) => {
           // Check for modifications first
           if (this.collectModification(messageEl, modifications, (from) => getBareJid(from))) {
             return
           }
 
-          const msg = this.parseArchiveMessage(forwarded, conversationId)
+          const msg = this.parseArchiveMessage(forwarded, conversationId, archiveId)
           if (msg) collectedMessages.push(msg)
         })
 
@@ -180,14 +194,17 @@ export class MAM extends BaseModule {
         }
 
         try {
-          const response = await this.deps.sendIQ(iq)
-          if (!response) {
-            throw new Error('No response from MAM query - client may be disconnected')
+          if (page === 0) {
+            logInfo(`MAM query: ...@${getDomain(conversationId) || '*'}, max=${max}, ${start ? 'forward' : 'backward'}${start ? ` from ${start}` : ''}`)
           }
+          const response = await this.deps.sendIQ(iq)
           const { complete, rsm } = this.parseMAMResponse(response)
 
           // Apply modifications to collected messages
-          this.applyModifications(collectedMessages, modifications, (msg, from) => msg.from === from)
+          const unresolved = this.applyModifications(collectedMessages, modifications, (msg, from) => msg.from === from)
+
+          // Emit modifications targeting messages already in the store (from prior queries/cache)
+          this.emitUnresolvedChatModifications(conversationId, unresolved)
 
           allMessages.push(...collectedMessages)
           isComplete = complete
@@ -220,6 +237,8 @@ export class MAM extends BaseModule {
       // - Backward: no `start` filter (fetching older history with `before` cursor)
       const direction = start ? 'forward' : 'backward'
 
+      logInfo(`MAM result: ...@${getDomain(conversationId) || '*'} → ${allMessages.length} msg(s), complete=${isComplete}, ${Date.now() - mamStart}ms`)
+
       this.deps.emitSDK('chat:mam-messages', {
         conversationId,
         messages: allMessages,
@@ -230,6 +249,12 @@ export class MAM extends BaseModule {
       return { messages: allMessages, complete: isComplete, rsm: lastRsm }
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error'
+      const isConnectionError = msg.includes('Not connected') || msg.includes('Socket not available')
+      if (isConnectionError) {
+        logInfo(`MAM skipped: ...@${getDomain(conversationId) || '*'} — ${msg}`)
+      } else {
+        logErr(`MAM error: ...@${getDomain(conversationId) || '*'} — ${msg}`)
+      }
       this.deps.emitSDK('chat:mam-error', { conversationId, error: msg })
       throw error
     } finally {
@@ -248,77 +273,121 @@ export class MAM extends BaseModule {
    */
   async queryRoomArchive(options: RoomMAMQueryOptions): Promise<RoomMAMResult> {
     const { roomJid, max = 50, before, after, start } = options
-    const queryId = `mam_${generateUUID()}`
+    const roomMamStart = Date.now()
+    const isForward = !!start
+    const roomDirection = isForward ? 'forward' : 'backward'
 
-    // Room MAM doesn't need a 'with' filter - we query the room's archive directly
-    const formFields: Element[] = [
-      xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, NS_MAM)),
-    ]
-
-    // Add time filter if specified
-    if (start) {
-      formFields.push(xml('field', { var: 'start' }, xml('value', {}, start)))
-    }
-
-    // Send IQ to room JID (not user's archive)
-    const iq = this.buildMAMQuery(queryId, formFields, max, before, roomJid, after)
-
-    const collectedMessages: RoomMessage[] = []
-    const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
+    // For forward catch-up queries, auto-paginate to retrieve all missed messages.
+    // Backward queries (scroll-up) remain single-page — the caller controls pagination.
+    const maxAutoPages = isForward ? 5 : 1
+    const allMessages: RoomMessage[] = []
+    let isComplete = false
+    let lastRsm: RSMResponse = {}
+    let currentAfter = after
 
     const room = this.deps.stores?.room.getRoom(roomJid)
     const myNickname = room?.nickname || ''
 
-    const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl) => {
-      // Check for modifications first (keep full JID for room messages)
-      if (this.collectModification(messageEl, modifications, (from) => from)) {
-        return
-      }
-
-      const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname)
-      if (msg) collectedMessages.push(msg)
-    })
-
-    // Use the collector registry if available, otherwise fall back to direct listeners
-    let unregister: () => void
-    if (this.deps.registerMAMCollector) {
-      unregister = this.deps.registerMAMCollector(queryId, collectMessage)
-    } else {
-      const xmpp = this.deps.getXmpp()
-      xmpp?.on('stanza', collectMessage)
-      unregister = () => xmpp?.removeListener('stanza', collectMessage)
-    }
     this.deps.emitSDK('room:mam-loading', { roomJid, isLoading: true })
 
     try {
-      const response = await this.deps.sendIQ(iq)
-      if (!response) {
-        throw new Error('No response from room MAM query - client may be disconnected')
+      for (let page = 0; page < maxAutoPages; page++) {
+        const queryId = `mam_${generateUUID()}`
+
+        // Room MAM doesn't need a 'with' filter - we query the room's archive directly
+        const formFields: Element[] = [
+          xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, NS_MAM)),
+        ]
+
+        // Add time filter if specified
+        if (start) {
+          formFields.push(xml('field', { var: 'start' }, xml('value', {}, start)))
+        }
+
+        // Send IQ to room JID (not user's archive)
+        const iq = this.buildMAMQuery(queryId, formFields, max, before, roomJid, currentAfter)
+
+        const collectedMessages: RoomMessage[] = []
+        const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
+
+        const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, archiveId) => {
+          // Check for modifications first (keep full JID for room messages)
+          if (this.collectModification(messageEl, modifications, (from) => from)) {
+            return
+          }
+
+          const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
+          if (msg) collectedMessages.push(msg)
+        })
+
+        // Use the collector registry if available, otherwise fall back to direct listeners
+        let unregister: () => void
+        if (this.deps.registerMAMCollector) {
+          unregister = this.deps.registerMAMCollector(queryId, collectMessage)
+        } else {
+          const xmpp = this.deps.getXmpp()
+          xmpp?.on('stanza', collectMessage)
+          unregister = () => xmpp?.removeListener('stanza', collectMessage)
+        }
+
+        try {
+          if (page === 0) {
+            logInfo(`Room MAM query: ${roomJid}, max=${max}, ${roomDirection}${start ? ` from ${start}` : ''}`)
+          }
+          const response = await this.deps.sendIQ(iq)
+          const { complete, rsm } = this.parseMAMResponse(response)
+
+          // Apply modifications to collected messages (full JID comparison for rooms)
+          const unresolved = this.applyModifications(collectedMessages, modifications, (msg, from) => msg.from === from)
+
+          // Emit modifications targeting messages already in the store (from prior queries/cache)
+          this.emitUnresolvedRoomModifications(roomJid, unresolved)
+
+          // Emit each page's messages immediately so the store can update incrementally
+          const direction = isForward ? 'forward' : 'backward'
+          this.deps.emitSDK('room:mam-messages', {
+            roomJid,
+            messages: collectedMessages,
+            rsm,
+            complete,
+            direction,
+          })
+
+          allMessages.push(...collectedMessages)
+          isComplete = complete
+          lastRsm = rsm
+
+          // Stop if archive is complete (no more messages)
+          if (complete) {
+            break
+          }
+
+          // For forward pagination: use `last` as the next `after` cursor
+          if (isForward && rsm.last) {
+            currentAfter = rsm.last
+          } else {
+            // No pagination cursor or single-page mode — stop
+            break
+          }
+        } finally {
+          unregister()
+        }
       }
-      const { complete, rsm } = this.parseMAMResponse(response)
 
-      // Apply modifications to collected messages (full JID comparison for rooms)
-      this.applyModifications(collectedMessages, modifications, (msg, from) => msg.from === from)
+      logInfo(`Room MAM result: ${roomJid} → ${allMessages.length} msg(s), complete=${isComplete}, ${Date.now() - roomMamStart}ms`)
 
-      // Determine query direction:
-      // - Forward: has `start` filter (fetching messages after a timestamp, like catching up)
-      // - Backward: no `start` filter (fetching older history with `before` cursor)
-      const direction = start ? 'forward' : 'backward'
-
-      this.deps.emitSDK('room:mam-messages', {
-        roomJid,
-        messages: collectedMessages,
-        rsm,
-        complete,
-        direction,
-      })
-      return { messages: collectedMessages, complete, rsm }
+      return { messages: allMessages, complete: isComplete, rsm: lastRsm }
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error'
+      const isConnectionError = msg.includes('Not connected') || msg.includes('Socket not available')
+      if (isConnectionError) {
+        logInfo(`Room MAM skipped: ${roomJid} — ${msg}`)
+      } else {
+        logErr(`Room MAM error: ${roomJid} — ${msg}`)
+      }
       this.deps.emitSDK('room:mam-error', { roomJid, error: msg })
       throw error
     } finally {
-      unregister()
       this.deps.emitSDK('room:mam-loading', { roomJid, isLoading: false })
     }
   }
@@ -492,6 +561,8 @@ export class MAM extends BaseModule {
     const conversations = this.deps.stores?.chat.getAllConversations() || []
     if (conversations.length === 0) return
 
+    logInfo(`Preview refresh for ${conversations.length} conversation(s)`)
+
     this.deps.emitSDK('console:event', {
       message: `Refreshing previews for ${conversations.length} conversation(s)`,
       category: 'sm',
@@ -504,6 +575,8 @@ export class MAM extends BaseModule {
       (conversationId) => this.fetchPreviewForConversation(conversationId),
       concurrency
     )
+
+    logInfo(`Preview refresh complete for ${conversations.length} conversation(s)`)
   }
 
   /**
@@ -549,11 +622,17 @@ export class MAM extends BaseModule {
    *
    * @param options - Optional configuration
    * @param options.concurrency - Maximum parallel requests (default: 2)
+   * @param options.exclude - Conversation ID to skip (e.g., the active conversation already handled by side effects)
    */
-  async catchUpAllConversations(options: { concurrency?: number } = {}): Promise<void> {
-    const { concurrency = 2 } = options
-    const conversations = this.deps.stores?.chat.getAllConversations() || []
+  async catchUpAllConversations(options: { concurrency?: number; exclude?: string | null } = {}): Promise<void> {
+    const { concurrency = 2, exclude } = options
+    let conversations = this.deps.stores?.chat.getAllConversations() || []
+    if (exclude) {
+      conversations = conversations.filter((c) => c.id !== exclude)
+    }
     if (conversations.length === 0) return
+
+    logInfo(`Background catch-up for ${conversations.length} conversation(s)`)
 
     this.deps.emitSDK('console:event', {
       message: `Background catch-up for ${conversations.length} conversation(s)`,
@@ -564,6 +643,9 @@ export class MAM extends BaseModule {
       conversations,
       async (conv) => {
         try {
+          // Skip if disconnected (avoid queuing doomed queries)
+          if (this.deps.stores?.connection.getStatus() !== 'online') return
+
           const messages = conv.messages || []
           const newestCachedMessage = messages[messages.length - 1]
 
@@ -589,6 +671,8 @@ export class MAM extends BaseModule {
       },
       concurrency
     )
+
+    logInfo(`Background catch-up for ${conversations.length} conversation(s) — complete`)
   }
 
   /**
@@ -617,6 +701,8 @@ export class MAM extends BaseModule {
     )
     if (newContacts.length === 0) return
 
+    logInfo(`Roster discovery for ${newContacts.length} contact(s)`)
+
     this.deps.emitSDK('console:event', {
       message: `Discovering conversations for ${newContacts.length} roster contact(s)`,
       category: 'sm',
@@ -626,10 +712,12 @@ export class MAM extends BaseModule {
       newContacts,
       async (contact) => {
         try {
+          if (this.deps.stores?.connection.getStatus() !== 'online') return
+
           await this.queryArchive({
             with: contact.jid,
             before: '',
-            max: 50,
+            max: 5,
           })
         } catch (_error) {
           // Silently ignore — individual failures shouldn't affect others
@@ -637,6 +725,8 @@ export class MAM extends BaseModule {
       },
       concurrency
     )
+
+    logInfo(`Roster discovery complete for ${newContacts.length} contact(s)`)
   }
 
   /**
@@ -650,14 +740,17 @@ export class MAM extends BaseModule {
    *
    * @param options - Optional configuration
    * @param options.concurrency - Maximum parallel requests (default: 2)
+   * @param options.exclude - Room JID to skip (e.g., the active room already handled by side effects)
    */
-  async catchUpAllRooms(options: { concurrency?: number } = {}): Promise<void> {
-    const { concurrency = 2 } = options
+  async catchUpAllRooms(options: { concurrency?: number; exclude?: string | null } = {}): Promise<void> {
+    const { concurrency = 2, exclude } = options
     const joinedRooms = this.deps.stores?.room.joinedRooms() || []
 
-    // Filter for MAM-enabled, non-Quick Chat rooms
-    const mamRooms = joinedRooms.filter((r) => r.supportsMAM && !r.isQuickChat)
+    // Filter for MAM-enabled, non-Quick Chat rooms (and exclude active room if specified)
+    const mamRooms = joinedRooms.filter((r) => r.supportsMAM && !r.isQuickChat && (!exclude || r.jid !== exclude))
     if (mamRooms.length === 0) return
+
+    logInfo(`Background catch-up for ${mamRooms.length} room(s)`)
 
     this.deps.emitSDK('console:event', {
       message: `Background catch-up for ${mamRooms.length} room(s)`,
@@ -668,6 +761,8 @@ export class MAM extends BaseModule {
       mamRooms,
       async (room) => {
         try {
+          if (this.deps.stores?.connection.getStatus() !== 'online') return
+
           const messages = room.messages || []
           const newestCachedMessage = messages[messages.length - 1]
 
@@ -693,6 +788,8 @@ export class MAM extends BaseModule {
       },
       concurrency
     )
+
+    logInfo(`Background catch-up for ${mamRooms.length} room(s) — complete`)
   }
 
   /**
@@ -722,8 +819,8 @@ export class MAM extends BaseModule {
 
       let latestMessage: Message | null = null
 
-      const collectMessage = this.createMessageCollector(queryId, (forwarded, _messageEl) => {
-        const msg = this.parseArchiveMessage(forwarded, conversationId)
+      const collectMessage = this.createMessageCollector(queryId, (forwarded, _messageEl, archiveId) => {
+        const msg = this.parseArchiveMessage(forwarded, conversationId, archiveId)
         if (msg) latestMessage = msg
       })
 
@@ -835,8 +932,8 @@ export class MAM extends BaseModule {
       const myNickname = room?.nickname || ''
       let latestMessage: RoomMessage | null = null
 
-      const collectMessage = this.createMessageCollector(queryId, (forwarded, _messageEl) => {
-        const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname)
+      const collectMessage = this.createMessageCollector(queryId, (forwarded, _messageEl, archiveId) => {
+        const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
         if (msg) latestMessage = msg
       })
 
@@ -920,7 +1017,7 @@ export class MAM extends BaseModule {
    */
   private createMessageCollector(
     queryId: string,
-    onMessage: (forwarded: Element, messageEl: Element) => void
+    onMessage: (forwarded: Element, messageEl: Element, archiveId?: string) => void
   ): (stanza: Element) => void {
     return (stanza: Element) => {
       // Skip error stanzas - server may return error with stale MAM result inside
@@ -935,7 +1032,8 @@ export class MAM extends BaseModule {
       const messageEl = forwarded.getChild('message')
       if (!messageEl) return
 
-      onMessage(forwarded, messageEl)
+      // The <result id="..."> is the MAM archive ID — stable and unique per message
+      onMessage(forwarded, messageEl, result.attrs.id)
     }
   }
 
@@ -1002,7 +1100,14 @@ export class MAM extends BaseModule {
     messages: T[],
     modifications: MAMModifications,
     senderMatches: (msg: T, from: string) => boolean
-  ): void {
+  ): UnresolvedModifications {
+    const unresolved: UnresolvedModifications = {
+      retractions: [],
+      corrections: [],
+      fastenings: [],
+      reactions: [],
+    }
+
     // Apply retractions
     for (const retraction of modifications.retractions) {
       const target = messages.find(m => m.id === retraction.targetId || m.stanzaId === retraction.targetId)
@@ -1012,6 +1117,8 @@ export class MAM extends BaseModule {
           target.isRetracted = retractionData.isRetracted
           target.retractedAt = retractionData.retractedAt
         }
+      } else {
+        unresolved.retractions.push(retraction)
       }
     }
 
@@ -1030,6 +1137,8 @@ export class MAM extends BaseModule {
         if (correctionData.attachment) {
           target.attachment = correctionData.attachment
         }
+      } else if (!target) {
+        unresolved.corrections.push(correction)
       }
     }
 
@@ -1041,6 +1150,8 @@ export class MAM extends BaseModule {
         if (linkPreview) {
           target.linkPreview = linkPreview
         }
+      } else {
+        unresolved.fastenings.push(fastening)
       }
     }
 
@@ -1076,7 +1187,111 @@ export class MAM extends BaseModule {
         if (Object.keys(target.reactions).length === 0) {
           target.reactions = undefined
         }
+      } else {
+        unresolved.reactions.push(reaction)
       }
+    }
+
+    return unresolved
+  }
+
+  /**
+   * Emit unresolved chat modifications as store events.
+   * These target messages already in the store (from previous queries or cache).
+   */
+  private emitUnresolvedChatModifications(
+    conversationId: string,
+    unresolved: UnresolvedModifications
+  ): void {
+    for (const retraction of unresolved.retractions) {
+      this.deps.emitSDK('chat:message-updated', {
+        conversationId,
+        messageId: retraction.targetId,
+        updates: { isRetracted: true, retractedAt: new Date() },
+      })
+    }
+
+    for (const correction of unresolved.corrections) {
+      const correctionData = applyCorrection(correction.messageEl, correction.body, '')
+      this.deps.emitSDK('chat:message-updated', {
+        conversationId,
+        messageId: correction.targetId,
+        updates: {
+          body: correctionData.body,
+          isEdited: correctionData.isEdited,
+          ...(correctionData.attachment ? { attachment: correctionData.attachment } : {}),
+        },
+      })
+    }
+
+    for (const fastening of unresolved.fastenings) {
+      const linkPreview = parseOgpFastening(fastening.applyToEl)
+      if (linkPreview) {
+        this.deps.emitSDK('chat:message-updated', {
+          conversationId,
+          messageId: fastening.targetId,
+          updates: { linkPreview },
+        })
+      }
+    }
+
+    for (const reaction of unresolved.reactions) {
+      this.deps.emitSDK('chat:reactions', {
+        conversationId,
+        messageId: reaction.targetId,
+        reactorJid: reaction.from,
+        emojis: reaction.emojis,
+      })
+    }
+  }
+
+  /**
+   * Emit unresolved room modifications as store events.
+   * These target messages already in the store (from previous queries or cache).
+   */
+  private emitUnresolvedRoomModifications(
+    roomJid: string,
+    unresolved: UnresolvedModifications
+  ): void {
+    for (const retraction of unresolved.retractions) {
+      this.deps.emitSDK('room:message-updated', {
+        roomJid,
+        messageId: retraction.targetId,
+        updates: { isRetracted: true, retractedAt: new Date() },
+      })
+    }
+
+    for (const correction of unresolved.corrections) {
+      const correctionData = applyCorrection(correction.messageEl, correction.body, '')
+      this.deps.emitSDK('room:message-updated', {
+        roomJid,
+        messageId: correction.targetId,
+        updates: {
+          body: correctionData.body,
+          isEdited: correctionData.isEdited,
+          ...(correctionData.attachment ? { attachment: correctionData.attachment } : {}),
+        },
+      })
+    }
+
+    for (const fastening of unresolved.fastenings) {
+      const linkPreview = parseOgpFastening(fastening.applyToEl)
+      if (linkPreview) {
+        this.deps.emitSDK('room:message-updated', {
+          roomJid,
+          messageId: fastening.targetId,
+          updates: { linkPreview },
+        })
+      }
+    }
+
+    for (const reaction of unresolved.reactions) {
+      this.deps.emitSDK('room:reactions', {
+        roomJid,
+        messageId: reaction.targetId,
+        reactorNick: getResource(reaction.from) || reaction.from,
+        emojis: reaction.emojis,
+      })
     }
   }
 
@@ -1093,7 +1308,7 @@ export class MAM extends BaseModule {
   /**
    * Parse a single archived message for 1:1 conversations.
    */
-  private parseArchiveMessage(forwarded: Element, conversationId: string): Message | null {
+  private parseArchiveMessage(forwarded: Element, conversationId: string, archiveId?: string): Message | null {
     const messageEl = forwarded.getChild('message')
     const delayEl = forwarded.getChild('delay', NS_DELAY)
     if (!messageEl) return null
@@ -1115,10 +1330,16 @@ export class MAM extends BaseModule {
     const isOutgoing = bareFrom === getBareJid(this.deps.getCurrentJid() ?? '')
     const parsed = parseMessageContent({ messageEl, body: body || '', delayEl, forceDelayed: true })
 
+    // Use stanza-id from message element, or fall back to MAM archive ID (they're equivalent)
+    const stanzaId = parsed.stanzaId || archiveId
+
+    // For message ID: prefer message id attr, then generate stable ID from content
+    const messageId = messageEl.attrs.id || generateStableMessageId(from, parsed.timestamp, body || '')
+
     return {
       type: 'chat',
-      id: messageEl.attrs.id || generateUUID(),
-      ...(parsed.stanzaId && { stanzaId: parsed.stanzaId }),
+      id: messageId,
+      ...(stanzaId && { stanzaId }),
       conversationId,
       from: bareFrom,
       body: parsed.processedBody,
@@ -1134,7 +1355,7 @@ export class MAM extends BaseModule {
   /**
    * Parse a single archived message for MUC rooms.
    */
-  private parseRoomArchiveMessage(forwarded: Element, roomJid: string, myNickname: string): RoomMessage | null {
+  private parseRoomArchiveMessage(forwarded: Element, roomJid: string, myNickname: string, archiveId?: string): RoomMessage | null {
     const messageEl = forwarded.getChild('message')
     const delayEl = forwarded.getChild('delay', NS_DELAY)
     if (!messageEl) return null
@@ -1157,10 +1378,16 @@ export class MAM extends BaseModule {
     const isOutgoing = nick.toLowerCase() === myNickname.toLowerCase()
     const parsed = parseMessageContent({ messageEl, body: body || '', delayEl, forceDelayed: true, preserveFullReplyToJid: true })
 
+    // Use stanza-id from message element, or fall back to MAM archive ID (they're equivalent)
+    const stanzaId = parsed.stanzaId || archiveId
+
+    // For message ID: prefer message id attr, then generate stable ID from content
+    const messageId = messageEl.attrs.id || generateStableMessageId(from, parsed.timestamp, body || '')
+
     return {
       type: 'groupchat',
-      id: messageEl.attrs.id || generateUUID(),
-      ...(parsed.stanzaId && { stanzaId: parsed.stanzaId }),
+      id: messageId,
+      ...(stanzaId && { stanzaId }),
       roomJid,
       from,
       nick,

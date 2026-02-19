@@ -24,35 +24,19 @@ describe('createStoreBindings', () => {
   })
 
   describe('connection events', () => {
-    it('should handle connection:status connecting', () => {
-      mockClient.emit('connection:status', { status: 'connecting' })
-      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('connecting')
-    })
+    // Note: connection:status and connection:authenticated store updates are
+    // handled directly by Connection.ts to avoid duplicate store mutations.
+    // The SDK events are still emitted for external consumers, but storeBindings
+    // no longer updates the store for these events.
 
-    it('should handle connection:status online', () => {
+    it('should NOT update store for connection:status (handled directly by Connection.ts)', () => {
       mockClient.emit('connection:status', { status: 'online' })
-      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('online')
+      expect(mockStores.connection.setStatus).not.toHaveBeenCalled()
     })
 
-    it('should handle connection:status offline', () => {
-      mockClient.emit('connection:status', { status: 'offline' })
-      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('disconnected')
-    })
-
-    it('should handle connection:status error with error message', () => {
-      mockClient.emit('connection:status', { status: 'error', error: 'Auth failed' })
-      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('error')
-      expect(mockStores.connection.setError).toHaveBeenCalledWith('Auth failed')
-    })
-
-    it('should handle connection:status reconnecting', () => {
-      mockClient.emit('connection:status', { status: 'reconnecting' })
-      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
-    })
-
-    it('should handle connection:authenticated', () => {
+    it('should NOT update store for connection:authenticated (handled directly by Connection.ts)', () => {
       mockClient.emit('connection:authenticated', { jid: 'user@example.com' })
-      expect(mockStores.connection.setJid).toHaveBeenCalledWith('user@example.com')
+      expect(mockStores.connection.setJid).not.toHaveBeenCalled()
     })
 
     it('should handle connection:server-info', () => {
@@ -473,18 +457,19 @@ describe('createStoreBindings', () => {
   describe('unsubscribe', () => {
     it('should unsubscribe all handlers when called', () => {
       // Emit an event before unsubscribe
-      mockClient.emit('connection:status', { status: 'connecting' })
-      expect(mockStores.connection.setStatus).toHaveBeenCalledTimes(1)
+      const contacts = [{ jid: 'alice@example.com', name: 'Alice', presence: 'online' as const, subscription: 'both' as const }]
+      mockClient.emit('roster:loaded', { contacts })
+      expect(mockStores.roster.setContacts).toHaveBeenCalledTimes(1)
 
       // Call unsubscribe
       unsubscribe()
 
       // Clear the mock
-      vi.mocked(mockStores.connection.setStatus).mockClear()
+      vi.mocked(mockStores.roster.setContacts).mockClear()
 
       // Emit the event again - should not be handled
-      mockClient.emit('connection:status', { status: 'online' })
-      expect(mockStores.connection.setStatus).not.toHaveBeenCalled()
+      mockClient.emit('roster:loaded', { contacts })
+      expect(mockStores.roster.setContacts).not.toHaveBeenCalled()
     })
   })
 })
