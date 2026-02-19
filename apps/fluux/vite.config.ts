@@ -104,8 +104,13 @@ export default defineConfig({
   },
   define: {
     global: 'globalThis',
-    'process.env': {},
+    'process.env': '{}',
     'process.version': '"v18.0.0"',
+    // Shim process properties needed by SCRAM-SHA-1 crypto deps (stream-browserify, safe-buffer).
+    // process.nextTick is shimmed via global injection in index.html since define only supports literals.
+    'process.browser': 'true',
+    'process.stdout': 'null',
+    'process.stderr': 'null',
     // Inject version info at build time
     __APP_VERSION__: JSON.stringify(appVersion),
     __GIT_COMMIT__: JSON.stringify(gitCommit),

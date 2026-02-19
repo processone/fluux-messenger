@@ -839,6 +839,57 @@ export class Connection extends BaseModule {
   }
 
   /**
+   * Lightweight connection health check for routine keepalive.
+   *
+   * Unlike {@link verifyConnection}, this does NOT transition the state machine
+   * to `connected.verifying`. It silently sends an SM `<r/>` request and waits
+   * for an `<a/>` acknowledgment. If the check passes, nothing happens (no
+   * status change, no logging). If it fails, {@link handleDeadSocket} triggers
+   * reconnection.
+   *
+   * Use this for periodic health checks (e.g., Rust-driven keepalive) where the
+   * connection is expected to be healthy.
+   */
+  async verifyConnectionHealth(timeoutMs = VERIFY_CONNECTION_TIMEOUT_MS): Promise<boolean> {
+    if (!this.xmpp || !this.isInConnectedState()) return false
+
+    try {
+      const sm = this.xmpp.streamManagement as any
+      if (sm?.enabled) {
+        const ackReceived = await this.waitForSmAck(timeoutMs)
+        if (!ackReceived) {
+          this.stores.console.addEvent('Keepalive health check failed (SM ack timeout)', 'connection')
+          this.handleDeadSocket({ source: 'keepalive-timeout' })
+          return false
+        }
+      } else {
+        const iqCaller = (this.xmpp as any).iqCaller
+        if (iqCaller) {
+          const ping = xml(
+            'iq',
+            { type: 'get', id: `keepalive_${Date.now()}`, to: getDomain(this.credentials?.jid || '') },
+            xml('ping', { xmlns: NS_PING })
+          )
+          await Promise.race([
+            iqCaller.request(ping),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Keepalive ping timeout')), timeoutMs)
+            ),
+          ])
+        }
+      }
+      return true
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err)
+      if (isDeadSocketError(errorMessage) || errorMessage.includes('timeout')) {
+        this.stores.console.addEvent('Keepalive health check failed, reconnecting', 'connection')
+        this.handleDeadSocket({ source: 'keepalive-error' })
+      }
+      return false
+    }
+  }
+
+  /**
    * Wait for a Stream Management acknowledgment (<a/>) with timeout.
    * @internal
    */

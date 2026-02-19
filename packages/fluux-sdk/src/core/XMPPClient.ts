@@ -892,6 +892,19 @@ export class XMPPClient {
   }
 
   /**
+   * Lightweight connection health check for routine keepalive.
+   *
+   * Unlike {@link verifyConnection}, this does NOT change connection status
+   * or trigger presence events. Suitable for periodic health checks where
+   * the connection is expected to be healthy.
+   *
+   * @returns Promise that resolves to true if healthy, false if dead
+   */
+  async verifyConnectionHealth(): Promise<boolean> {
+    return this.connection.verifyConnectionHealth()
+  }
+
+  /**
    * Notify the SDK of a system state change.
    *
    * This is the recommended way for apps to signal platform-specific events
