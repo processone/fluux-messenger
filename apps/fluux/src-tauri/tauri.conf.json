@@ -37,7 +37,7 @@
         "devtools": true,
         "backgroundColor": "#313338",
         "backgroundThrottling": "disabled",
-        "dragDropEnabled": false,
+        "dragDropEnabled": true,
         "acceptFirstMouse": true
       }
     ],
@@ -59,7 +59,7 @@
     ],
     "macOS": {
       "minimumSystemVersion": "10.13",
-      "bundleVersion": "b7fa214",
+      "bundleVersion": "8727073",
       "entitlements": "Entitlements.plist",
       "signingIdentity": null
     },
