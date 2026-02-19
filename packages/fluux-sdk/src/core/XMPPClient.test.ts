@@ -1226,6 +1226,117 @@ describe('XMPPClient', () => {
     })
   })
 
+  describe('verifyConnectionHealth', () => {
+    it('should return false when not connected', async () => {
+      const result = await xmppClient.verifyConnectionHealth()
+      expect(result).toBe(false)
+    })
+
+    it('should return true on successful SM ack without changing status', async () => {
+      mockXmppClientInstance.streamManagement = {
+        id: 'sm-123',
+        inbound: 5,
+        outbound: 0,
+        enabled: true,
+        on: vi.fn(),
+      }
+
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'password',
+        server: 'wss://example.com/ws',
+      })
+
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      await vi.advanceTimersByTimeAsync(100)
+      mockStores.connection.setStatus.mockClear()
+      mockXmppClientInstance.send.mockClear()
+
+      // Simulate SM ack response when send() is called
+      mockXmppClientInstance.send.mockImplementationOnce(() => {
+        setTimeout(() => {
+          const ackNonza = createMockElement('a', { xmlns: 'urn:xmpp:sm:3', h: '5' })
+          mockXmppClientInstance._emit('nonza', ackNonza)
+        }, 10)
+        return Promise.resolve()
+      })
+
+      const resultPromise = xmppClient.verifyConnectionHealth()
+      await vi.advanceTimersByTimeAsync(100)
+      const result = await resultPromise
+
+      expect(result).toBe(true)
+      // Should NOT change status (no verifying → online transition)
+      expect(mockStores.connection.setStatus).not.toHaveBeenCalled()
+    })
+
+    it('should return false and trigger reconnect on SM ack timeout', async () => {
+      mockXmppClientInstance.streamManagement = {
+        id: 'sm-123',
+        inbound: 5,
+        outbound: 0,
+        enabled: true,
+        on: vi.fn(),
+      }
+
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'password',
+        server: 'wss://example.com/ws',
+      })
+
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      mockStores.connection.getStatus.mockReturnValue('online')
+      mockStores.connection.setStatus.mockClear()
+
+      const resultPromise = xmppClient.verifyConnectionHealth()
+
+      await vi.advanceTimersByTimeAsync(VERIFY_CONNECTION_TIMEOUT_MS + 50)
+
+      const result = await resultPromise
+
+      expect(result).toBe(false)
+      // Should trigger reconnect (via handleDeadSocket) but NOT go through verifying status
+      expect(mockStores.connection.setStatus).not.toHaveBeenCalledWith('verifying')
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
+    })
+
+    it('should return false and trigger reconnect on dead socket error', async () => {
+      mockXmppClientInstance.streamManagement = {
+        id: 'sm-123',
+        inbound: 5,
+        outbound: 0,
+        enabled: true,
+        on: vi.fn(),
+      }
+
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'password',
+        server: 'wss://example.com/ws',
+      })
+
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      mockStores.connection.getStatus.mockReturnValue('online')
+      mockStores.connection.setStatus.mockClear()
+      mockXmppClientInstance.send.mockRejectedValueOnce(
+        new Error("Cannot read properties of null")
+      )
+
+      const result = await xmppClient.verifyConnectionHealth()
+
+      expect(result).toBe(false)
+      expect(mockStores.connection.setStatus).not.toHaveBeenCalledWith('verifying')
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
+    })
+  })
+
   describe('internal event wiring (regression tests)', () => {
     // These tests ensure internal events are properly connected to their handlers.
     // They prevent regressions where events are emitted but have no listeners.

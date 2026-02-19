@@ -399,13 +399,13 @@ export function usePlatformState() {
     let cleanedUp = false
 
     void import('@tauri-apps/api/event').then(({ listen }) => {
-      // Keepalive: verify connection health every 30s (Rust-driven, immune to JS throttling)
+      // Keepalive: lightweight connection health check every 30s (Rust-driven, immune to JS throttling).
+      // Uses verifyConnectionHealth() which silently sends SM <r/> without changing status.
       void listen('xmpp-keepalive', () => {
         if (statusRef.current !== 'online') return
-        if (!shouldHandleWake('keepalive')) return
-        client.notifySystemState('awake')
+        client.verifyConnectionHealth()
           .catch((err) => {
-            console.debug('[PlatformState] Error on keepalive notification:', err)
+            console.debug('[PlatformState] Keepalive health check error:', err)
           })
       }).then((fn) => {
         if (cleanedUp) { fn() } else { unlistenKeepalive = fn }
@@ -439,7 +439,7 @@ export function usePlatformState() {
       unlistenKeepalive?.()
       unlistenProxyClosed?.()
     }
-  }, [client, shouldHandleWake])
+  }, [client])
 
   // ── Effect 6: Presence machine sync with connection status ────────────────
 
