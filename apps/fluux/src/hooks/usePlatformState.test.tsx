@@ -210,6 +210,115 @@ describe('usePlatformState', () => {
     })
   })
 
+  describe('window focus reconnect trigger', () => {
+    it('should trigger reconnect when window gains focus while reconnecting', async () => {
+      mockConnectionStatus.current = 'reconnecting'
+      renderHook(() => usePlatformState())
+
+      await act(async () => {
+        window.dispatchEvent(new Event('focus'))
+        await Promise.resolve()
+      })
+
+      expect(mockClientNotifySystemState).toHaveBeenCalledWith('visible')
+    })
+
+    it('should NOT trigger reconnect on focus when status is online', async () => {
+      mockConnectionStatus.current = 'online'
+      renderHook(() => usePlatformState())
+
+      // Clear any calls from mount (presence sync calls notifyActive → setTimeout → notifyActive)
+      await act(async () => {
+        vi.advanceTimersByTime(200)
+        await Promise.resolve()
+      })
+      vi.clearAllMocks()
+
+      await act(async () => {
+        window.dispatchEvent(new Event('focus'))
+        await Promise.resolve()
+      })
+
+      // Should not call notifySystemState('visible') from the focus handler
+      expect(mockClientNotifySystemState).not.toHaveBeenCalledWith('visible')
+    })
+
+    it('should register focus listener during connecting status', () => {
+      // When status is 'connecting' (reconnect attempt in progress), the
+      // effect should still be active — not torn down. This ensures the
+      // focus handler is ready if status transitions to reconnecting.
+      const addSpy = vi.spyOn(window, 'addEventListener')
+      mockConnectionStatus.current = 'connecting'
+      renderHook(() => usePlatformState())
+
+      expect(addSpy).toHaveBeenCalledWith('focus', expect.any(Function))
+      addSpy.mockRestore()
+    })
+
+    it('should NOT register focus listener when disconnected', () => {
+      const addSpy = vi.spyOn(window, 'addEventListener')
+      mockConnectionStatus.current = 'disconnected'
+      renderHook(() => usePlatformState())
+
+      const focusCalls = addSpy.mock.calls.filter(
+        ([event]) => event === 'focus'
+      )
+      expect(focusCalls).toHaveLength(0)
+      addSpy.mockRestore()
+    })
+  })
+
+  describe('heartbeat during connecting status', () => {
+    it('should keep heartbeat running during connecting status', async () => {
+      const startTime = Date.now()
+      // Start with connecting status (reconnect attempt in progress)
+      mockConnectionStatus.current = 'connecting'
+      renderHook(() => usePlatformState())
+
+      // Let the first heartbeat tick fire (10s) to establish baseline
+      await act(async () => {
+        vi.advanceTimersByTime(10_000)
+        await Promise.resolve()
+      })
+      vi.clearAllMocks()
+
+      // Simulate macOS sleep: jump system time forward by 40s, then fire the
+      // next interval tick. This creates a gap of 40s between the last heartbeat
+      // check and now, exceeding the 30s SLEEP_THRESHOLD_MS.
+      vi.setSystemTime(new Date(startTime + 10_000 + 40_000))
+      await act(async () => {
+        vi.advanceTimersByTime(10_000)
+        await Promise.resolve()
+      })
+
+      // Should detect the time gap and call notifySystemState('awake')
+      expect(mockClientNotifySystemState).toHaveBeenCalledWith('awake', expect.any(Number))
+    })
+
+    it('should NOT run heartbeat when status is disconnected', async () => {
+      const startTime = Date.now()
+      mockConnectionStatus.current = 'disconnected'
+      renderHook(() => usePlatformState())
+
+      // Let the first tick pass, then simulate a gap
+      await act(async () => {
+        vi.advanceTimersByTime(10_000)
+        await Promise.resolve()
+      })
+      vi.clearAllMocks()
+
+      // Simulate sleep gap
+      vi.setSystemTime(new Date(startTime + 10_000 + 40_000))
+      await act(async () => {
+        vi.advanceTimersByTime(10_000)
+        await Promise.resolve()
+      })
+
+      // Should not call notifySystemState('awake') since heartbeat is inactive
+      expect(mockClientNotifySystemState).not.toHaveBeenCalledWith('awake', expect.any(Number))
+    })
+  })
+
   describe('proxy-close status guard', () => {
     it('should handle proxy close when online or verifying', () => {
       expect(shouldHandleProxyClosedStatus('online')).toBe(true)
