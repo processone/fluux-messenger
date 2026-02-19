@@ -89,6 +89,14 @@ export default defineConfig({
       '@': '/src',
       // Alias SDK to source for chunk splitting (allows manualChunks to split core vs react)
       '@fluux/sdk': resolve(__dirname, '../../packages/fluux-sdk/src'),
+      // Override @xmpp/client's browser field which excludes SCRAM-SHA-1 from browser builds.
+      // The sasl-scram-sha-1 package uses create-hash/create-hmac (browserify-era crypto)
+      // which need buffer and stream polyfills. Without this, servers that only offer
+      // SCRAM-SHA-1 (no PLAIN) cannot authenticate.
+      '@xmpp/sasl-scram-sha-1': resolve(__dirname, '../../node_modules/@xmpp/sasl-scram-sha-1/index.js'),
+      // Node.js polyfills needed by SCRAM-SHA-1's crypto dependencies (cipher-base, safe-buffer)
+      buffer: 'buffer/',
+      stream: 'stream-browserify',
     },
     // Force single instance of @xmpp/xml to fix instanceof checks in iqCallee
     // See: https://github.com/xmppjs/xmpp.js/issues/1108
@@ -109,8 +117,8 @@ export default defineConfig({
     rollupOptions: {
       onwarn(warning, warn) {
         // Suppress warnings about Node.js modules being externalized for browser compatibility
-        // These come from @xmpp/resolve which uses DNS for SRV lookups (not needed for WebSocket connections)
-        if (warning.message?.includes('Module "node:') && warning.message?.includes('externalized for browser compatibility')) {
+        // These come from @xmpp/resolve (DNS for SRV lookups) and SCRAM-SHA-1 crypto deps
+        if (warning.message?.includes('externalized for browser compatibility')) {
           return
         }
         warn(warning)
