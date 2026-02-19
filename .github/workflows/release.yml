@@ -286,6 +286,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ env.RELEASE_TAG }}
+          submodules: true
 
       - name: Install Linux dependencies
         run: |
@@ -436,6 +437,7 @@ jobs:
           cp apps/fluux/src-tauri/icons/256x256.png flatpak-build/fluux-messenger-256.png
           cp packaging/flatpak/com.processone.fluux.metainfo.xml flatpak-build/
           cp packaging/flatpak/com.processone.fluux.yaml flatpak-build/
+          cp -r packaging/flatpak/shared-modules flatpak-build/
 
           # Build Flatpak
           cd flatpak-build

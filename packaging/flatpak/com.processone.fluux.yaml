@@ -23,6 +23,7 @@ finish-args:
 
   # System tray
   - --talk-name=org.kde.StatusNotifierWatcher
+  - --filesystem=xdg-run/tray-icon:create
 
   # Secrets/Keyring (for storing credentials)
   - --talk-name=org.freedesktop.secrets
@@ -31,23 +32,8 @@ finish-args:
   - --filesystem=xdg-download
 
 modules:
-  # Required for system tray support (libappindicator-sys loads this via dlopen)
-  - name: libayatana-indicator
-    buildsystem: cmake-ninja
-    sources:
-      - type: git
-        url: https://github.com/AyatanaIndicators/libayatana-indicator.git
-        tag: 0.9.4
-
-  - name: libayatana-appindicator
-    buildsystem: cmake-ninja
-    config-opts:
-      - -DENABLE_BINDINGS_MONO=NO
-      - -DENABLE_BINDINGS_VALA=NO
-    sources:
-      - type: git
-        url: https://github.com/AyatanaIndicators/libayatana-appindicator.git
-        tag: 0.5.93
+  # System tray support (libappindicator-sys loads this via dlopen at runtime)
+  - shared-modules/libayatana-appindicator/libayatana-appindicator-gtk3.json
 
   - name: fluux-messenger
     buildsystem: simple
