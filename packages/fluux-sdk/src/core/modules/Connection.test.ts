@@ -110,12 +110,13 @@ describe('XMPPClient Connection', () => {
 
       await connectPromise
 
-      expect(mockClientFactory).toHaveBeenCalledWith({
-        service: 'wss://example.com/ws',
-        domain: 'example.com',
-        username: 'user',
-        password: 'secret',
-      })
+      expect(mockClientFactory).toHaveBeenCalledWith(
+        expect.objectContaining({
+          service: 'wss://example.com/ws',
+          domain: 'example.com',
+          credentials: expect.any(Function),
+        })
+      )
     })
 
     it('should use XEP-0156 discovery first, then default wss://<domain>/ws as last resort on web/no-proxy', async () => {

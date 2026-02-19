@@ -598,6 +598,7 @@ export const createMockStores = (): MockStoreBindings => ({
     setAutoAway: vi.fn(),
     setServerInfo: vi.fn(),
     setConnectionMethod: vi.fn(),
+    setAuthMechanism: vi.fn(),
     getPresenceShow: vi.fn().mockReturnValue('online'),
     getStatusMessage: vi.fn().mockReturnValue(null),
     getIsAutoAway: vi.fn().mockReturnValue(false),

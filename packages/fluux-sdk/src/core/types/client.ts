@@ -43,6 +43,7 @@ export interface StoreBindings {
     setAutoAway: (isAuto: boolean) => void
     setServerInfo: (info: ServerInfo | null) => void
     setConnectionMethod: (method: ConnectionMethod | null) => void
+    setAuthMechanism: (mechanism: string | null) => void
     // Getters for presence preservation on reconnect
     getPresenceShow: () => PresenceStatus
     getStatusMessage: () => string | null

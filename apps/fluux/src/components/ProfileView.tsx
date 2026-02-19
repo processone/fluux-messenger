@@ -16,7 +16,7 @@ interface ProfileViewProps {
 
 export function ProfileView({ onClose }: ProfileViewProps) {
   const { t } = useTranslation()
-  const { jid, isConnected, ownAvatar, ownNickname, ownResources, connectionMethod, setOwnNickname, setOwnAvatar, clearOwnAvatar, clearOwnNickname, supportsPasswordChange } = useConnection()
+  const { jid, isConnected, ownAvatar, ownNickname, ownResources, connectionMethod, authMechanism, setOwnNickname, setOwnAvatar, clearOwnAvatar, clearOwnNickname, supportsPasswordChange } = useConnection()
   const { presenceStatus: presenceShow, statusMessage } = usePresence()
   const { titleBarClass, dragRegionProps } = useWindowDrag()
 
@@ -235,12 +235,13 @@ export function ProfileView({ onClose }: ProfileViewProps) {
           {/* JID */}
           <p className="text-fluux-muted text-sm mb-1">{bareJid}</p>
 
-          {/* Connection method */}
+          {/* Connection method and auth mechanism */}
           {connectionMethod && (
             <div className="flex items-center gap-1.5 mb-3">
               <Network className="w-3 h-3 text-fluux-muted" />
               <span className="text-xs text-fluux-muted">
                 {t(`profile.connectionMethod_${connectionMethod}`)}
+                {authMechanism && ` · ${authMechanism}`}
               </span>
             </div>
           )}

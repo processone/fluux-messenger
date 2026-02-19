@@ -74,6 +74,7 @@ export function createDefaultStoreBindings(options: DefaultStoreBindingsOptions 
       setReconnectState: connectionStore.getState().setReconnectState,
       setServerInfo: connectionStore.getState().setServerInfo,
       setConnectionMethod: connectionStore.getState().setConnectionMethod,
+      setAuthMechanism: connectionStore.getState().setAuthMechanism,
       // Presence from external machine (or defaults for headless)
       getPresenceShow,
       getStatusMessage,
