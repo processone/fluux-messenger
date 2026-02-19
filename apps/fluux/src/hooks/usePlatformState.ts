@@ -237,9 +237,11 @@ export function usePlatformState() {
       // Immediate wake notification
       listen('system-did-wake', () => {
         if (cancelled) return
+        console.log('[PlatformState] Tauri system-did-wake event received')
         if (!shouldHandleWake('system-did-wake')) return
         const sleepDuration = sleepStartRef.current ? Date.now() - sleepStartRef.current : undefined
         sleepStartRef.current = null
+        console.log(`[PlatformState] System woke from sleep (OS notification${sleepDuration ? `, ~${Math.round(sleepDuration / 1000)}s` : ''})`)
         logEvent(`System woke from sleep (OS notification${sleepDuration ? `, ~${Math.round(sleepDuration / 1000)}s` : ''})`)
         client.notifySystemState('awake', sleepDuration).catch(() => {})
         lastActivityRef.current = Date.now()
@@ -251,10 +253,12 @@ export function usePlatformState() {
       // Deferred wake notification (app was in background during wake)
       listen<number>('system-did-wake-deferred', (event) => {
         if (cancelled) return
+        const delaySecs = event.payload || 0
+        console.log(`[PlatformState] Tauri system-did-wake-deferred event received (delay=${delaySecs}s)`)
         if (!shouldHandleWake('system-did-wake-deferred')) return
         const sleepDuration = sleepStartRef.current ? Date.now() - sleepStartRef.current : undefined
         sleepStartRef.current = null
-        const delaySecs = event.payload || 0
+        console.log(`[PlatformState] System woke from sleep (deferred ${delaySecs}s${sleepDuration ? `, ~${Math.round(sleepDuration / 1000)}s sleep` : ''})`)
         logEvent(`System woke from sleep (deferred ${delaySecs}s - app was in background${sleepDuration ? `, ~${Math.round(sleepDuration / 1000)}s sleep` : ''})`)
         client.notifySystemState('awake', sleepDuration).catch(() => {})
         lastActivityRef.current = Date.now()
@@ -266,6 +270,7 @@ export function usePlatformState() {
       // Sleep notification
       listen('system-will-sleep', () => {
         if (cancelled) return
+        console.log('[PlatformState] Tauri system-will-sleep event received')
         sleepStartRef.current = Date.now()
         logEvent('System going to sleep')
         client.notifySystemState('sleeping').catch(() => {})
@@ -283,9 +288,13 @@ export function usePlatformState() {
   }, [client, shouldHandleWake, logEvent, dispatchResizeWorkaround])
 
   // ── Effect 3: Time-gap wake detection (JS heartbeat) ──────────────────────
+  // Also runs during 'connecting' status: when a reconnect attempt is in
+  // progress (reconnecting.attempting → status 'connecting'), macOS may freeze
+  // JS. Without 'connecting', the heartbeat would be torn down and couldn't
+  // detect sleep gaps that occur mid-reconnect.
 
   useEffect(() => {
-    if (status !== 'online' && status !== 'reconnecting') return
+    if (status !== 'online' && status !== 'reconnecting' && status !== 'connecting') return
 
     const checkForWake = async () => {
       const now = Date.now()
@@ -313,10 +322,14 @@ export function usePlatformState() {
     }
   }, [status, client, shouldHandleWake, dispatchResizeWorkaround])
 
-  // ── Effect 4: Page visibility change ──────────────────────────────────────
+  // ── Effect 4: Page visibility and window focus ──────────────────────────────
+  // Also runs during 'connecting' status: when reconnecting.attempting starts,
+  // status becomes 'connecting' and macOS may freeze JS. Without 'connecting'
+  // here, the focus listener would be torn down and couldn't trigger reconnect
+  // when the user returns to the app.
 
   useEffect(() => {
-    if (status !== 'online' && status !== 'reconnecting') return
+    if (status !== 'online' && status !== 'reconnecting' && status !== 'connecting') return
 
     const handleVisibilityChange = async () => {
       if (document.hidden) {
@@ -336,7 +349,7 @@ export function usePlatformState() {
 
       // Skip if not hidden long enough (brief tab switches)
       // But always notify when reconnecting (timers may have been suspended)
-      if (hiddenDuration < MIN_HIDDEN_TIME_MS && status !== 'reconnecting') {
+      if (hiddenDuration < MIN_HIDDEN_TIME_MS && statusRef.current !== 'reconnecting') {
         return
       }
 
@@ -351,10 +364,28 @@ export function usePlatformState() {
       }
     }
 
+    // Window focus: fires when user clicks the app window, Cmd+Tabs to it, or
+    // clicks the Dock icon. Unlike visibilitychange, this fires even when the
+    // page was never hidden (e.g., app was just behind another window).
+    // This is critical for macOS: when the app is reconnecting and JS timers
+    // are frozen by the OS, gaining focus unfreezes JS and this handler
+    // immediately triggers the stalled reconnect.
+    const handleWindowFocus = () => {
+      if (statusRef.current !== 'reconnecting') return
+      if (!shouldHandleWake('window-focus')) return
+
+      console.log('[PlatformState] Window focused while reconnecting, triggering reconnect')
+      client.notifySystemState('visible').catch((err) => {
+        console.error('[PlatformState] Error handling window focus:', err)
+      })
+    }
+
     document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('focus', handleWindowFocus)
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleWindowFocus)
     }
   }, [status, client, shouldHandleWake, dispatchResizeWorkaround])
 
