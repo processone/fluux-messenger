@@ -147,12 +147,14 @@ html, body {
   app-region: no-drag;
 }
 
-/* Safe area insets for mobile devices with gesture bars (e/OS, iOS, etc.) */
-/* This allows the app background to extend behind the gesture bar while */
-/* keeping interactive content above it */
+/* Safe area insets for mobile devices with notch/camera cutout and gesture bars */
+/* viewport-fit=cover in <meta> extends content behind safe areas; these insets */
+/* keep interactive content within the visible area while the body background */
+/* color fills the unsafe zones (notch, home indicator, rounded corners) */
 @supports (padding-bottom: env(safe-area-inset-bottom)) {
-  body {
-    /* Extend background into safe areas */
+  #root {
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
