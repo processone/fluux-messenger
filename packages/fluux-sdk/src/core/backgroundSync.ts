@@ -149,11 +149,30 @@ export function setupBackgroundSyncSideEffects(
       }
     })()
 
-    // Stage 4: Room catch-up (delayed to let rooms finish joining and discover MAM)
+    // Stage 4: Room catch-up + member discovery (delayed to let rooms finish joining and discover MAM)
     roomCatchUpTimer = setTimeout(() => {
       roomCatchUpTimer = undefined
-      logInfo('Background sync: room catch-up (delayed 10s)')
-      void client.mam.catchUpAllRooms({ concurrency: 2, exclude: activeRoomJid }).catch(() => {})
+      void (async () => {
+        try {
+          logInfo('Background sync: room catch-up (delayed 10s)')
+          await client.mam.catchUpAllRooms({ concurrency: 2, exclude: activeRoomJid })
+        } catch {
+          // Silently ignore MAM catch-up errors
+        }
+        // Stage 5: Room member discovery (sequential, gentle on server)
+        try {
+          const joinedRooms = roomStore.getState().joinedRooms()
+          const nonQuickChatRooms = joinedRooms.filter(r => !r.isQuickChat)
+          if (nonQuickChatRooms.length > 0) {
+            logInfo(`Background sync: member discovery for ${nonQuickChatRooms.length} rooms`)
+            for (const room of nonQuickChatRooms) {
+              await client.muc.queryRoomMembers(room.jid)
+            }
+          }
+        } catch {
+          // Silently ignore member discovery errors
+        }
+      })()
     }, 10_000)
   }
 

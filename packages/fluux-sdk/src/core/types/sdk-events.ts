@@ -11,7 +11,7 @@
 import type { Element } from '@xmpp/client'
 import type { Message, Conversation } from './chat'
 import type { Contact, PresenceShow } from './roster'
-import type { Room, RoomOccupant, RoomMessage } from './room'
+import type { Room, RoomOccupant, RoomMember, RoomMessage } from './room'
 import type { ServerInfo } from './discovery'
 import type { HttpUploadService } from './upload'
 import type { WebPushService, WebPushStatus } from './webpush'
@@ -309,6 +309,12 @@ export interface RoomEvents {
     rsm: RSMResponse
     complete: boolean
     direction: MAMQueryDirection
+  }
+
+  /** Room member affiliations discovered (XEP-0045 admin query) */
+  'room:members': {
+    roomJid: string
+    members: RoomMember[]
   }
 }
 

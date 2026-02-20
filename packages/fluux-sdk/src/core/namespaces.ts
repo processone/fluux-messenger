@@ -78,6 +78,7 @@ export const NS_NICK = 'http://jabber.org/protocol/nick'
 export const NS_MUC = 'http://jabber.org/protocol/muc'
 export const NS_MUC_USER = 'http://jabber.org/protocol/muc#user'
 export const NS_MUC_OWNER = 'http://jabber.org/protocol/muc#owner'
+export const NS_MUC_ADMIN = 'http://jabber.org/protocol/muc#admin'
 
 // XEP-0249: Direct MUC Invitations
 export const NS_CONFERENCE = 'jabber:x:conference'

@@ -854,14 +854,22 @@ const RoomMessageInput = React.forwardRef<MessageComposerHandle, RoomMessageInpu
   // Check if room is small enough to send typing notifications
   const shouldSendTypingNotifications = room.occupants.size < MAX_ROOM_SIZE_FOR_TYPING
 
-  // Collect unique nicks from message history for mention suggestions
+  // Collect unique nicks from message history and affiliated members for mention suggestions
   const messageNicks = useMemo(() => {
     const nicks = new Set<string>()
     for (const msg of room.messages) {
       nicks.add(msg.nick)
     }
+    // Add nicks from affiliated members (offline users with known nicks)
+    if (room.affiliatedMembers) {
+      for (const member of room.affiliatedMembers) {
+        if (member.nick) {
+          nicks.add(member.nick)
+        }
+      }
+    }
     return nicks
-  }, [room.messages])
+  }, [room.messages, room.affiliatedMembers])
 
   // Mention autocomplete hook
   const { state: mentionState, selectMatch, moveSelection, dismiss } = useMentionAutocomplete(

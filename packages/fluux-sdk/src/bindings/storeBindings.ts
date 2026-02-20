@@ -302,6 +302,13 @@ export function createStoreBindings(
     stores.room.mergeRoomMAMMessages(roomJid, messages, rsm, complete, direction)
   })
 
+  on('room:members', ({ roomJid, members }) => {
+    const stores = getStores()
+    stores.room.mergeRoomMembers(roomJid, members, (jid) => {
+      return stores.roster.getContact(jid)?.avatar ?? null
+    })
+  })
+
   // ============================================================================
   // Roster Events
   // ============================================================================

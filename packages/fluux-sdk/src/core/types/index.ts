@@ -39,6 +39,7 @@ export type {
   RoomRole,
   Hat,
   RoomOccupant,
+  RoomMember,
   RoomMessage,
   RoomEntity,
   RoomMetadata,

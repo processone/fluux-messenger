@@ -95,6 +95,30 @@ export function OccupantPanel({
     return groups
   }, [sortedOccupants])
 
+  // Compute offline members: affiliated members not currently online as occupants
+  const offlineMembers = useMemo(() => {
+    if (!room.affiliatedMembers || room.affiliatedMembers.length === 0) return []
+
+    // Collect all online JIDs and nicks from occupants
+    const onlineJids = new Set<string>()
+    const onlineNicks = new Set<string>()
+    for (const occupant of room.occupants.values()) {
+      if (occupant.jid) onlineJids.add(getBareJid(occupant.jid))
+      onlineNicks.add(occupant.nick)
+    }
+
+    // Filter to members not currently online (check by JID, fall back to nick)
+    return room.affiliatedMembers.filter(member => {
+      if (onlineJids.has(member.jid)) return false
+      if (member.nick && onlineNicks.has(member.nick)) return false
+      return true
+    }).sort((a, b) => {
+      const nameA = a.nick || a.jid
+      const nameB = b.nick || b.jid
+      return nameA.localeCompare(nameB)
+    })
+  }, [room.affiliatedMembers, room.occupants])
+
   const getRoleLabel = (role: string) => {
     switch (role) {
       case 'moderator': return t('rooms.moderators')
@@ -262,7 +286,49 @@ export function OccupantPanel({
           </div>
         ))}
 
-        {sortedOccupants.length === 0 && (
+        {/* Offline affiliated members */}
+        {offlineMembers.length > 0 && (
+          <div className="py-2">
+            <div className="px-4 py-1 flex items-center gap-2 text-xs font-semibold text-fluux-muted uppercase">
+              <span>{t('rooms.offlineMembers')}</span>
+              <span className="text-fluux-muted/60">— {offlineMembers.length}</span>
+            </div>
+            {offlineMembers.map((member) => {
+              const contact = contactsByJid.get(member.jid)
+              const displayName = member.nick || contact?.name || member.jid
+              return (
+                <Tooltip
+                  key={member.jid}
+                  content={`${t(`rooms.${member.affiliation}`)} · ${member.jid}`}
+                  position="left"
+                  className="block"
+                >
+                  <div className="px-4 py-1.5 flex items-center gap-2 hover:bg-fluux-hover/50 cursor-default opacity-60">
+                    <Avatar
+                      identifier={displayName}
+                      name={displayName}
+                      avatarUrl={contact?.avatar}
+                      size="sm"
+                      presence="offline"
+                      presenceBorderColor="border-fluux-sidebar"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="truncate text-sm text-fluux-text">
+                          {displayName}
+                        </span>
+                        {getAffiliationBadge(member.affiliation)}
+                      </div>
+                      <p className="text-xs text-fluux-muted truncate">{member.jid}</p>
+                    </div>
+                  </div>
+                </Tooltip>
+              )
+            })}
+          </div>
+        )}
+
+        {sortedOccupants.length === 0 && offlineMembers.length === 0 && (
           <div className="px-4 py-8 text-center text-fluux-muted text-sm">
             {t('rooms.noMembersInRoom')}
           </div>

@@ -7,6 +7,7 @@ import {
   NS_MUC,
   NS_MUC_USER,
   NS_MUC_OWNER,
+  NS_MUC_ADMIN,
   NS_BOOKMARKS,
   NS_PUBSUB,
   NS_HATS,
@@ -1361,5 +1362,75 @@ export class MUC extends BaseModule {
       console.error(`[MUC] Failed to fetch room options for ${roomJid}:`, err)
       return null
     }
+  }
+
+  /**
+   * Query room member affiliations via XEP-0045 admin queries.
+   *
+   * Queries owner, admin, and member affiliation lists to discover
+   * all affiliated members including those currently offline. Results
+   * are emitted as a `room:members` SDK event and used to populate
+   * nick-to-JID caches for avatar resolution and mention autocomplete.
+   *
+   * @param roomJid - The room JID to query
+   * @returns Array of members with JIDs, optional nicks, and affiliations
+   *
+   * @example
+   * ```typescript
+   * const members = await client.muc.queryRoomMembers('room@conference.example.com')
+   * for (const member of members) {
+   *   console.log(`${member.nick || member.jid}: ${member.affiliation}`)
+   * }
+   * ```
+   *
+   * @remarks
+   * - Requires at least member affiliation to query in most room configurations
+   * - Nick attribute is optional in the response; some items may only have JID
+   * - Each affiliation is queried separately; failures on one don't block others
+   */
+  async queryRoomMembers(
+    roomJid: string
+  ): Promise<Array<{ jid: string; nick?: string; affiliation: RoomAffiliation }>> {
+    const allMembers: Array<{ jid: string; nick?: string; affiliation: RoomAffiliation }> = []
+
+    const affiliations: RoomAffiliation[] = ['owner', 'admin', 'member']
+
+    for (const affiliation of affiliations) {
+      try {
+        const iq = xml(
+          'iq',
+          { type: 'get', to: roomJid, id: `members_${affiliation}_${generateUUID()}` },
+          xml('query', { xmlns: NS_MUC_ADMIN },
+            xml('item', { affiliation })
+          )
+        )
+
+        const response = await this.deps.sendIQ(iq)
+        const query = response.getChild('query', NS_MUC_ADMIN)
+        if (!query) continue
+
+        for (const item of query.getChildren('item')) {
+          const jid = item.attrs.jid
+          if (!jid) continue
+
+          allMembers.push({
+            jid: getBareJid(jid),
+            nick: item.attrs.nick || undefined,
+            affiliation,
+          })
+        }
+      } catch (err) {
+        // Some affiliations may not be queryable depending on room config
+        // and our own affiliation level. Log but continue with others.
+        logWarn(`Member query failed for ${roomJid} (${affiliation}): ${err instanceof Error ? err.message : String(err)}`)
+      }
+    }
+
+    if (allMembers.length > 0) {
+      logInfo(`Room members: ${roomJid} — ${allMembers.length} affiliated members`)
+      this.deps.emitSDK('room:members', { roomJid, members: allMembers })
+    }
+
+    return allMembers
   }
 }

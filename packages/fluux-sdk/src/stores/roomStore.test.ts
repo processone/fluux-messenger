@@ -2670,4 +2670,119 @@ describe('roomStore', () => {
       expect(messageCache.getRoomMessages).not.toHaveBeenCalled()
     })
   })
+
+  describe('mergeRoomMembers', () => {
+    const roomJid = 'room@conference.example.com'
+
+    beforeEach(() => {
+      roomStore.getState().addRoom(createRoom(roomJid, { joined: true }))
+    })
+
+    it('stores affiliatedMembers on the room', () => {
+      const members = [
+        { jid: 'alice@example.com', nick: 'Alice', affiliation: 'owner' as const },
+        { jid: 'bob@example.com', nick: 'Bob', affiliation: 'member' as const },
+      ]
+
+      roomStore.getState().mergeRoomMembers(roomJid, members)
+
+      const room = roomStore.getState().rooms.get(roomJid)
+      expect(room?.affiliatedMembers).toEqual(members)
+    })
+
+    it('populates nickToJidCache from members with nicks', () => {
+      const members = [
+        { jid: 'alice@example.com', nick: 'Alice', affiliation: 'owner' as const },
+        { jid: 'bob@example.com', nick: 'Bob', affiliation: 'member' as const },
+      ]
+
+      roomStore.getState().mergeRoomMembers(roomJid, members)
+
+      const room = roomStore.getState().rooms.get(roomJid)
+      expect(room?.nickToJidCache?.get('Alice')).toBe('alice@example.com')
+      expect(room?.nickToJidCache?.get('Bob')).toBe('bob@example.com')
+    })
+
+    it('skips members without nicks for cache population', () => {
+      const members = [
+        { jid: 'alice@example.com', nick: 'Alice', affiliation: 'owner' as const },
+        { jid: 'bob@example.com', affiliation: 'member' as const },
+      ]
+
+      roomStore.getState().mergeRoomMembers(roomJid, members)
+
+      const room = roomStore.getState().rooms.get(roomJid)
+      expect(room?.nickToJidCache?.get('Alice')).toBe('alice@example.com')
+      expect(room?.nickToJidCache?.size).toBe(1)
+    })
+
+    it('does not override existing nickToJidCache entries (occupant precedence)', () => {
+      // First, set up an existing cache entry from an online occupant
+      roomStore.getState().addOccupant(roomJid, {
+        nick: 'Alice',
+        jid: 'alice@example.com/desktop',
+        affiliation: 'owner',
+        role: 'moderator',
+      })
+
+      const room = roomStore.getState().rooms.get(roomJid)
+      expect(room?.nickToJidCache?.get('Alice')).toBe('alice@example.com')
+
+      // Now merge members — Alice's cache entry should NOT be overwritten
+      const members = [
+        { jid: 'alice@different.com', nick: 'Alice', affiliation: 'owner' as const },
+      ]
+
+      roomStore.getState().mergeRoomMembers(roomJid, members)
+
+      const updatedRoom = roomStore.getState().rooms.get(roomJid)
+      expect(updatedRoom?.nickToJidCache?.get('Alice')).toBe('alice@example.com')
+      // But affiliatedMembers should still be stored
+      expect(updatedRoom?.affiliatedMembers).toEqual(members)
+    })
+
+    it('populates nickToAvatarCache using contactAvatarLookup', () => {
+      const members = [
+        { jid: 'alice@example.com', nick: 'Alice', affiliation: 'owner' as const },
+        { jid: 'bob@example.com', nick: 'Bob', affiliation: 'member' as const },
+      ]
+
+      const avatarLookup = (jid: string) => {
+        if (jid === 'alice@example.com') return 'blob:alice-avatar'
+        return null
+      }
+
+      roomStore.getState().mergeRoomMembers(roomJid, members, avatarLookup)
+
+      const room = roomStore.getState().rooms.get(roomJid)
+      expect(room?.nickToAvatarCache?.get('Alice')).toBe('blob:alice-avatar')
+      expect(room?.nickToAvatarCache?.has('Bob')).toBe(false)
+    })
+
+    it('does nothing for empty members array', () => {
+      roomStore.getState().mergeRoomMembers(roomJid, [])
+
+      const room = roomStore.getState().rooms.get(roomJid)
+      expect(room?.affiliatedMembers).toBeUndefined()
+    })
+
+    it('does nothing for non-existent room', () => {
+      // Should not throw
+      roomStore.getState().mergeRoomMembers('nonexistent@conference.example.com', [
+        { jid: 'alice@example.com', nick: 'Alice', affiliation: 'owner' as const },
+      ])
+    })
+
+    it('updates roomRuntime alongside rooms map', () => {
+      const members = [
+        { jid: 'alice@example.com', nick: 'Alice', affiliation: 'owner' as const },
+      ]
+
+      roomStore.getState().mergeRoomMembers(roomJid, members)
+
+      const runtime = roomStore.getState().roomRuntime.get(roomJid)
+      expect(runtime?.affiliatedMembers).toEqual(members)
+      expect(runtime?.nickToJidCache?.get('Alice')).toBe('alice@example.com')
+    })
+  })
 })

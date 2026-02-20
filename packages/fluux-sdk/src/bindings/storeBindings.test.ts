@@ -278,6 +278,28 @@ describe('createStoreBindings', () => {
       mockClient.emit('room:animation', { roomJid: 'room@conference.example.com', animation: 'confetti' })
       expect(mockStores.room.triggerAnimation).toHaveBeenCalledWith('room@conference.example.com', 'confetti')
     })
+
+    it('should handle room:members with avatar lookup', () => {
+      const members = [
+        { jid: 'alice@example.com', nick: 'Alice', affiliation: 'owner' as const },
+        { jid: 'bob@example.com', affiliation: 'member' as const },
+      ]
+      mockClient.emit('room:members', { roomJid: 'room@conference.example.com', members })
+
+      expect(mockStores.room.mergeRoomMembers).toHaveBeenCalledWith(
+        'room@conference.example.com',
+        members,
+        expect.any(Function)
+      )
+
+      // Verify the avatar lookup function uses roster getContact
+      const avatarLookup = (mockStores.room.mergeRoomMembers as ReturnType<typeof vi.fn>).mock.calls[0][2]
+      ;(mockStores.roster as Record<string, unknown>).getContact = vi.fn()
+        .mockReturnValueOnce({ avatar: 'blob:avatar-data' })
+        .mockReturnValueOnce(undefined)
+      expect(avatarLookup('alice@example.com')).toBe('blob:avatar-data')
+      expect(avatarLookup('unknown@example.com')).toBeNull()
+    })
   })
 
   describe('roster events', () => {

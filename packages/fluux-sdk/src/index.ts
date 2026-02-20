@@ -217,6 +217,7 @@ export type {
   Room,
   RoomMessage,
   RoomOccupant,
+  RoomMember,
   RoomAffiliation,
   RoomRole,
   MentionReference,
