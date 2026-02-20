@@ -182,6 +182,7 @@
         "moderators": "Moderaatorid",
         "participants": "Osalejad",
         "visitors": "Külastajad",
+        "offlineMembers": "Võrguühenduseta",
         "others": "Teised",
         "moderator": "Moderaator",
         "owner": "Omanik",

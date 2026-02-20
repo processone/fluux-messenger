@@ -479,4 +479,102 @@ describe('setupBackgroundSyncSideEffects', () => {
       roomStore.getState().setActiveRoom(null)
     })
   })
+
+  describe('room member discovery (Stage 5)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+      roomStore.getState().reset()
+    })
+
+    it('should query members for joined non-quickchat rooms after room catch-up', async () => {
+      // Add joined rooms
+      roomStore.getState().addRoom({
+        jid: 'room1@conference.example.com',
+        name: 'Room 1',
+        nickname: 'me',
+        joined: true,
+        isBookmarked: true,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+      })
+      roomStore.getState().addRoom({
+        jid: 'room2@conference.example.com',
+        name: 'Room 2',
+        nickname: 'me',
+        joined: true,
+        isBookmarked: true,
+        isQuickChat: true, // Should be excluded
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+      })
+
+      connectionStore.getState().setServerInfo({
+        identities: [],
+        domain: 'example.com',
+        features: [NS_MAM],
+      })
+
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateFreshSession(mockClient)
+
+      // Advance past room catch-up timer (10s)
+      await vi.advanceTimersByTimeAsync(10_000)
+
+      // Wait for room catch-up to complete and member discovery to start
+      await vi.waitFor(() => {
+        expect(mockClient.muc.queryRoomMembers).toHaveBeenCalledTimes(1)
+      })
+
+      // Should query Room 1 but NOT quickchat Room 2
+      expect(mockClient.muc.queryRoomMembers).toHaveBeenCalledWith('room1@conference.example.com')
+      expect(mockClient.muc.queryRoomMembers).not.toHaveBeenCalledWith('room2@conference.example.com')
+    })
+
+    it('should not crash if member discovery fails', async () => {
+      roomStore.getState().addRoom({
+        jid: 'room1@conference.example.com',
+        name: 'Room 1',
+        nickname: 'me',
+        joined: true,
+        isBookmarked: true,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+      })
+
+      ;(mockClient.muc.queryRoomMembers as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('network error'))
+
+      connectionStore.getState().setServerInfo({
+        identities: [],
+        domain: 'example.com',
+        features: [NS_MAM],
+      })
+
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateFreshSession(mockClient)
+
+      await vi.advanceTimersByTimeAsync(10_000)
+
+      // Should not throw — error is silently caught
+      await vi.waitFor(() => {
+        expect(mockClient.muc.queryRoomMembers).toHaveBeenCalled()
+      })
+    })
+  })
 })

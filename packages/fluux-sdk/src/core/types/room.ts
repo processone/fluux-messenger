@@ -84,6 +84,23 @@ export interface RoomOccupant {
 }
 
 /**
+ * An affiliated room member discovered via XEP-0045 affiliation query.
+ *
+ * Unlike {@link RoomOccupant}, members may be offline (not currently in the room).
+ * Used to populate nick-to-JID caches for avatar resolution and mention autocomplete.
+ *
+ * @category MUC
+ */
+export interface RoomMember {
+  /** Member's bare JID */
+  jid: string
+  /** Member's nickname in the room (optional — server may not include it) */
+  nick?: string
+  /** Member's affiliation level */
+  affiliation: RoomAffiliation
+}
+
+/**
  * A message in a MUC room.
  *
  * Extends {@link BaseMessage} with MUC-specific fields like
@@ -205,6 +222,8 @@ export interface RoomRuntime {
   nickToJidCache?: Map<string, string>
   /** Cache of nick→avatar blob URL for users who have left (preserves avatars across leave/join) */
   nickToAvatarCache?: Map<string, string>
+  /** Affiliated members discovered via XEP-0045 admin query (includes offline members) */
+  affiliatedMembers?: RoomMember[]
   /** Our own occupant info (when joined) */
   selfOccupant?: RoomOccupant
   /** Messages in this room */

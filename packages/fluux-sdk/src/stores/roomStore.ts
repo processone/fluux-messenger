@@ -6,6 +6,7 @@ import type {
   RoomMetadata,
   RoomRuntime,
   RoomOccupant,
+  RoomAffiliation,
   RoomMessage,
   MAMQueryState,
   RSMResponse,
@@ -166,6 +167,7 @@ export interface RoomState {
   removeOccupant: (roomJid: string, nick: string) => void
   updateOccupantAvatar: (roomJid: string, nick: string, avatar: string | null, avatarHash: string | null) => void
   setSelfOccupant: (roomJid: string, occupant: RoomOccupant) => void
+  mergeRoomMembers: (roomJid: string, members: Array<{ jid: string; nick?: string; affiliation: RoomAffiliation }>, contactAvatarLookup?: (jid: string) => string | null) => void
   getRoom: (roomJid: string) => Room | undefined
   switchAccount: (jid: string | null) => void
   reset: () => void
@@ -338,7 +340,7 @@ export const roomStore = createStore<RoomState>()(
       const hasMetaUpdate = metaFields.some((f) => f in update)
 
       // Update runtime fields if any changed
-      const runtimeFields = ['occupants', 'nickToJidCache', 'selfOccupant', 'messages'] as const
+      const runtimeFields = ['occupants', 'nickToJidCache', 'nickToAvatarCache', 'affiliatedMembers', 'selfOccupant', 'messages'] as const
       const hasRuntimeUpdate = runtimeFields.some((f) => f in update)
 
       const result: Partial<RoomState> = { rooms: newRooms }
@@ -392,6 +394,8 @@ export const roomStore = createStore<RoomState>()(
           newRuntime.set(roomJid, {
             occupants: updatedRoom.occupants,
             nickToJidCache: updatedRoom.nickToJidCache,
+            nickToAvatarCache: updatedRoom.nickToAvatarCache,
+            affiliatedMembers: updatedRoom.affiliatedMembers,
             selfOccupant: updatedRoom.selfOccupant,
             messages: updatedRoom.messages,
           })
@@ -649,6 +653,63 @@ export const roomStore = createStore<RoomState>()(
       }
 
       return { rooms: newRooms, roomEntities: newEntities, roomRuntime: newRuntime }
+    })
+  },
+
+  mergeRoomMembers: (roomJid, members, contactAvatarLookup) => {
+    if (members.length === 0) return
+
+    set((state) => {
+      const newRooms = new Map(state.rooms)
+      const existing = newRooms.get(roomJid)
+      if (!existing) return state
+
+      // Build updated caches with member data
+      let nickToJidCache = existing.nickToJidCache
+      let nickToAvatarCache = existing.nickToAvatarCache
+      let cacheChanged = false
+
+      for (const member of members) {
+        if (member.nick) {
+          // Only add if nick is not already mapped (online occupant data takes precedence)
+          if (!nickToJidCache?.has(member.nick)) {
+            if (!cacheChanged) {
+              nickToJidCache = new Map(nickToJidCache || [])
+              nickToAvatarCache = new Map(nickToAvatarCache || [])
+              cacheChanged = true
+            }
+            nickToJidCache!.set(member.nick, member.jid)
+
+            // Populate avatar cache from roster contact if available
+            if (contactAvatarLookup) {
+              const avatar = contactAvatarLookup(member.jid)
+              if (avatar && !nickToAvatarCache!.has(member.nick)) {
+                nickToAvatarCache!.set(member.nick, avatar)
+              }
+            }
+          }
+        }
+      }
+
+      const updatedRoom = {
+        ...existing,
+        affiliatedMembers: members,
+        ...(cacheChanged && { nickToJidCache, nickToAvatarCache }),
+      }
+      newRooms.set(roomJid, updatedRoom)
+
+      // Update runtime
+      const newRuntime = new Map(state.roomRuntime)
+      const existingRuntime = newRuntime.get(roomJid)
+      if (existingRuntime) {
+        newRuntime.set(roomJid, {
+          ...existingRuntime,
+          affiliatedMembers: members,
+          ...(cacheChanged && { nickToJidCache, nickToAvatarCache }),
+        })
+      }
+
+      return { rooms: newRooms, roomRuntime: newRuntime }
     })
   },
 

@@ -704,6 +704,7 @@ export const createMockStores = (): MockStoreBindings => ({
     clearRoomNeedsCatchUp: vi.fn(),
     updateLastMessagePreview: vi.fn(),
     loadPreviewFromCache: vi.fn().mockResolvedValue(null),
+    mergeRoomMembers: vi.fn(),
   },
   admin: {
     setIsAdmin: vi.fn(),
@@ -951,6 +952,7 @@ export const createMockStoreRefs = (): MockStoreRefs => ({
     removePresence: vi.fn(),
     setPresenceError: vi.fn(),
     updateAvatar: vi.fn(),
+    getContact: vi.fn().mockReturnValue(undefined),
   } as unknown as MockStoreRefs['roster'],
   room: {
     addRoom: vi.fn(),
@@ -968,6 +970,7 @@ export const createMockStoreRefs = (): MockStoreRefs => ({
     setBookmark: vi.fn(),
     removeBookmark: vi.fn(),
     triggerAnimation: vi.fn(),
+    mergeRoomMembers: vi.fn(),
   } as unknown as MockStoreRefs['room'],
   events: {
     addSubscriptionRequest: vi.fn(),

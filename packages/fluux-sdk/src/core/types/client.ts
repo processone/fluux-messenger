@@ -9,7 +9,7 @@ import type { Element } from '@xmpp/client'
 import type { ConnectionStatus, ConnectionMethod } from './connection'
 import type { Message, Conversation } from './chat'
 import type { PresenceStatus, PresenceShow, Contact } from './roster'
-import type { Room, RoomOccupant, RoomMessage } from './room'
+import type { Room, RoomOccupant, RoomMessage, RoomMember } from './room'
 import type { SystemNotificationType } from './events'
 import type { ServerInfo } from './discovery'
 import type { HttpUploadService } from './upload'
@@ -177,6 +177,8 @@ export interface StoreBindings {
     updateLastMessagePreview: (roomJid: string, lastMessage: RoomMessage) => void
     // Load preview from cache for non-MAM rooms (only updates lastMessage, not messages array)
     loadPreviewFromCache: (roomJid: string) => Promise<RoomMessage | null>
+    // XEP-0045: Merge affiliated members (for offline member display, avatar resolution, mentions)
+    mergeRoomMembers: (roomJid: string, members: RoomMember[], contactAvatarLookup?: (jid: string) => string | null) => void
   }
   admin: {
     setIsAdmin: (isAdmin: boolean) => void
