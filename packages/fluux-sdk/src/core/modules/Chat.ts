@@ -340,7 +340,9 @@ export class Chat extends BaseModule {
     ]
 
     if (replyTo) {
-      const replyAttrs: Record<string, string> = { xmlns: NS_REPLY, id: replyTo.id }
+      // For MUC, prefer stanzaId (server-assigned, stable) for the reply reference
+      const replyReferenceId = this.getMessageReferenceId(to, replyTo.id, type)
+      const replyAttrs: Record<string, string> = { xmlns: NS_REPLY, id: replyReferenceId }
       if (replyTo.to) replyAttrs.to = replyTo.to
       children.push(xml('reply', replyAttrs))
 
@@ -497,14 +499,20 @@ export class Chat extends BaseModule {
    */
   async sendReaction(to: string, messageId: string, emojis: string[], type: 'chat' | 'groupchat' = 'chat'): Promise<void> {
     const recipient = type === 'chat' ? getBareJid(to) : to
+
+    // For MUC, prefer stanzaId (server-assigned, stable) over client-generated id
+    // Other clients (e.g. Gajim) reference messages by stanzaId in reactions
+    const referenceId = this.getMessageReferenceId(to, messageId, type)
+
     const reactionElements = emojis.map(emoji => xml('reaction', {}, emoji))
     const message = xml('message', { to: recipient, type, id: generateUUID() },
-      xml('reactions', { xmlns: NS_REACTIONS, id: messageId }, ...reactionElements)
+      xml('reactions', { xmlns: NS_REACTIONS, id: referenceId }, ...reactionElements)
     )
 
     await this.deps.sendStanza(message)
 
     // SDK events only - bindings call store methods
+    // Use the original messageId for local store updates (store matches by both id and stanzaId)
     if (type === 'groupchat') {
       const room = this.deps.stores?.room.getRoom(to)
       if (room) this.deps.emitSDK('room:reactions', { roomJid: to, messageId, reactorNick: room.nickname, emojis })
@@ -543,6 +551,10 @@ export class Chat extends BaseModule {
    */
   async sendCorrection(to: string, originalMessageId: string, newBody: string, type: 'chat' | 'groupchat' = 'chat', attachment?: FileAttachment): Promise<void> {
     const recipient = type === 'chat' ? getBareJid(to) : to
+
+    // For MUC, prefer stanzaId (server-assigned, stable) for the correction reference
+    const referenceId = this.getMessageReferenceId(to, originalMessageId, type)
+
     const correctionPrefix = '[Corrected] '
     const correctionFallbackEnd = correctionPrefix.length
 
@@ -567,7 +579,7 @@ export class Chat extends BaseModule {
 
     const children = [
       xml('body', {}, fallbackBody),
-      xml('replace', { xmlns: NS_CORRECTION, id: originalMessageId }),
+      xml('replace', { xmlns: NS_CORRECTION, id: referenceId }),
       xml('fallback', { xmlns: NS_FALLBACK, for: NS_CORRECTION },
         xml('body', { start: '0', end: String(correctionFallbackEnd) })
       )
@@ -644,7 +656,10 @@ export class Chat extends BaseModule {
    */
   async sendRetraction(to: string, originalMessageId: string, type: 'chat' | 'groupchat' = 'chat'): Promise<void> {
     const recipient = type === 'chat' ? getBareJid(to) : to
-    
+
+    // For MUC, prefer stanzaId (server-assigned, stable) for the retraction reference
+    const referenceId = this.getMessageReferenceId(to, originalMessageId, type)
+
     // XEP-0424: Message Retraction with fallback for non-supporting clients
     const fallbackBody = 'This person attempted to retract a previous message, but it\'s unsupported by your client.'
 
@@ -652,7 +667,7 @@ export class Chat extends BaseModule {
       'message',
       { to: recipient, type, id: generateUUID() },
       xml('body', {}, fallbackBody),
-      xml('retract', { xmlns: NS_RETRACT, id: originalMessageId }),
+      xml('retract', { xmlns: NS_RETRACT, id: referenceId }),
       // XEP-0428: Mark the entire body as fallback
       xml('fallback', { xmlns: NS_FALLBACK, for: NS_RETRACT })
     )
@@ -902,6 +917,22 @@ export class Chat extends BaseModule {
       if (bareFrom === myBareJid) return
       this.deps.emitSDK('chat:typing', { conversationId: bareFrom, jid: bareFrom, isTyping })
     }
+  }
+
+  /**
+   * Get the best message ID for referencing in protocol stanzas (reactions, etc.).
+   * For MUC, prefers the server-assigned stanzaId since it is the canonical, stable
+   * identifier that other clients will also reference.
+   */
+  private getMessageReferenceId(entityId: string, messageId: string, type: 'chat' | 'groupchat'): string {
+    if (type === 'groupchat') {
+      const msg = this.deps.stores?.room.getMessage(entityId, messageId)
+      if (msg?.stanzaId) return msg.stanzaId
+    } else {
+      const msg = this.deps.stores?.chat.getMessage(entityId, messageId)
+      if (msg?.stanzaId) return msg.stanzaId
+    }
+    return messageId
   }
 
   private handleIncomingReaction(reactionsEl: Element, from: string, bareFrom: string, bareTo: string | undefined, type: string, isSentCarbon: boolean): void {

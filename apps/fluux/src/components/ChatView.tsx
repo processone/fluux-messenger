@@ -802,7 +802,7 @@ function MessageInput({
     }
 
     // Include reply info if replying to a message (with XEP-0428 fallback for compatibility)
-    // XEP-0461: for chat-type messages, use the client-generated id (not stanza-id, which is only for groupchat)
+    // SDK resolves stanzaId vs id for the protocol reference (XEP-0461)
     let replyTo: { id: string; to: string; fallback?: { author: string; body: string } } | undefined
     if (replyingTo) {
       const authorName = contactsByJid.get(replyingTo.from.split('/')[0])?.name || replyingTo.from.split('@')[0]

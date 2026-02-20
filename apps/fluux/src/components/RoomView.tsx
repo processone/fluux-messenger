@@ -916,11 +916,11 @@ const RoomMessageInput = React.forwardRef<MessageComposerHandle, RoomMessageInpu
   // Handle send
   const handleSend = async (sendText: string): Promise<boolean> => {
     // Include reply info if replying to a message
-    // Use stanzaId (XEP-0359) for MUC messages - this is what other clients use to look up the referenced message
+    // SDK resolves stanzaId vs id for the protocol reference (XEP-0461)
     let replyTo: { id: string; to: string; fallback?: { author: string; body: string } } | undefined
     if (replyingTo) {
       replyTo = {
-        id: replyingTo.stanzaId || replyingTo.id,
+        id: replyingTo.id,
         to: replyingTo.from,
         fallback: { author: replyingTo.nick, body: replyingTo.body }
       }
