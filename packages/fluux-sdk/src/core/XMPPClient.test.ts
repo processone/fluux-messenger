@@ -24,7 +24,6 @@ import {
 } from './test-utils'
 import { _resetStorageScopeForTesting } from '../utils/storageScope'
 import { VERIFY_CONNECTION_TIMEOUT_MS } from './modules/connectionTimeouts'
-import { _resetStorageScopeForTesting } from '../utils/storageScope'
 
 let mockXmppClientInstance: MockXmppClient
 
