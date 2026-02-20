@@ -95,7 +95,8 @@ export function useMentionAutocomplete(
 
     // Store current trigger position for dismiss tracking
     currentTriggerRef.current = atIndex
-    return { isActive: true, query: queryText.toLowerCase(), triggerIndex: atIndex }
+    // Normalize to NFC so that composed (ë) and decomposed (e + ̈) forms match consistently
+    return { isActive: true, query: queryText.normalize('NFC').toLowerCase(), triggerIndex: atIndex }
   }, [text, cursorPosition, dismissed])
 
   // Build matches list
@@ -110,9 +111,10 @@ export function useMentionAutocomplete(
     }
 
     // Filter occupants by nickname prefix (exclude self)
+    // Normalize nicknames to NFC for consistent matching across Unicode forms
     const occupantMatches: MentionMatch[] = []
     occupants.forEach((occupant, nick) => {
-      if (nick !== ownNickname && nick.toLowerCase().startsWith(query)) {
+      if (nick !== ownNickname && nick.normalize('NFC').toLowerCase().startsWith(query)) {
         occupantMatches.push({ nick, role: occupant.role })
       }
     })
