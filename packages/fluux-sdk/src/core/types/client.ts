@@ -13,6 +13,7 @@ import type { Room, RoomOccupant, RoomMessage } from './room'
 import type { SystemNotificationType } from './events'
 import type { ServerInfo } from './discovery'
 import type { HttpUploadService } from './upload'
+import type { WebPushService, WebPushStatus } from './webpush'
 import type { RSMResponse, MAMQueryState } from './pagination'
 import type { MAMQueryDirection } from '../../stores/shared/mamState'
 import type { AdminCommand, AdminSession, EntityCounts } from './admin'
@@ -63,6 +64,10 @@ export interface StoreBindings {
     // HTTP Upload (XEP-0363)
     setHttpUploadService: (service: HttpUploadService | null) => void
     getHttpUploadService: () => HttpUploadService | null
+    // Web Push (p1:push)
+    setWebPushStatus: (status: WebPushStatus) => void
+    setWebPushServices: (services: WebPushService[]) => void
+    getWebPushServices: () => WebPushService[]
     // Server info getter (for MAM support detection)
     getServerInfo?: () => ServerInfo | null
   }

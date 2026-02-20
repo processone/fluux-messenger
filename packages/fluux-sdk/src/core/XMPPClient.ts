@@ -92,8 +92,9 @@ import { Discovery } from './modules/Discovery'
 import { Connection } from './modules/Connection'
 import { PubSub } from './modules/PubSub'
 import { Blocking } from './modules/Blocking'
+import { WebPush } from './modules/WebPush'
 import { MAM } from './modules/MAM'
-import { NS_CARBONS, NS_MAM } from './namespaces'
+import { NS_CARBONS, NS_MAM, NS_P1_PUSH_WEBPUSH } from './namespaces'
 import { createDefaultStoreBindings, type DefaultStoreBindingsOptions } from './defaultStoreBindings'
 import { logInfo } from './logger'
 import { SDK_VERSION } from '../version'
@@ -221,6 +222,12 @@ export class XMPPClient {
    * Handles blocklist management for blocking/unblocking JIDs.
    */
   public blocking!: Blocking
+
+  /**
+   * Web Push module (p1:push).
+   * Handles VAPID-based push notification registration with ejabberd Business Edition.
+   */
+  public webPush!: WebPush
 
   /**
    * Message Archive Management module (XEP-0313).
@@ -534,6 +541,7 @@ export class XMPPClient {
     this.profile = new Profile(moduleDeps)
     this.discovery = new Discovery(moduleDeps)
     this.blocking = new Blocking(moduleDeps)
+    this.webPush = new WebPush(moduleDeps)
 
     // Set up post-connection handler
     this.connection.setConnectionSuccessHandler(async (isResumption, previouslyJoinedRooms) => {
@@ -1412,7 +1420,13 @@ export class XMPPClient {
 
     // Server discovery is non-blocking to avoid stalling the reconnection flow.
     // The backgroundSync serverInfo subscriber will detect when MAM becomes available.
-    this.discovery.fetchServerInfo().catch(() => {})
+    // Web Push service discovery is chained after server info to check for p1:push:webpush feature.
+    this.discovery.fetchServerInfo().then(() => {
+      const serverInfo = this.stores?.connection.getServerInfo?.()
+      if (serverInfo?.features.includes(NS_P1_PUSH_WEBPUSH)) {
+        this.webPush.queryServices().catch(() => {})
+      }
+    }).catch(() => {})
     this.discovery.discoverHttpUploadService().catch(() => {})
     this.profile.fetchOwnProfile().catch(() => {})
   }

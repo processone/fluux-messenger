@@ -145,3 +145,7 @@ export const NS_BLOCKING = 'urn:xmpp:blocking'
 
 // RFC 6120: XMPP Stanza Error Conditions
 export const NS_XMPP_STANZAS = 'urn:ietf:params:xml:ns:xmpp-stanzas'
+
+// p1:push - ejabberd Business Edition Push Notifications
+export const NS_P1_PUSH = 'p1:push'
+export const NS_P1_PUSH_WEBPUSH = 'p1:push:webpush'

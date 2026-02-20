@@ -61,6 +61,7 @@
 - **Multi-user Chat** - Complete MUC support with roles, affiliations, @mentions, and bookmarks
 - **File Sharing** - HTTP uploads with thumbnails, progress indicators, and previews
 - **Real-time Messaging** - Typing indicators, message corrections, and delivery features
+- **Web Push Notifications** - Receive notifications even when the browser tab is closed (via Service Worker and VAPID)
 - **Offline Support** - IndexedDB storage with automatic sync on reconnect
 - **Theme System** - Light/dark themes synchronized across devices
 - **Internationalization** - 31 languages including complete EU coverage (Belarusian, Bulgarian, Catalan, Chinese (Simplified), Croatian, Czech, Danish, Dutch, English, Estonian, Finnish, French, German, Greek, Hungarian, Icelandic, Irish, Italian, Latvian, Lithuanian, Maltese, Norwegian, Polish, Portuguese, Romanian, Russian, Slovak, Slovenian, Spanish, Swedish, Ukrainian)

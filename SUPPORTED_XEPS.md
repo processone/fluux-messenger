@@ -121,3 +121,11 @@ Fluux also uses custom extensions in the `urn:xmpp:fluux:0` namespace:
 - **Room notification preferences**: Stored in XEP-0402 bookmark extensions to enable per-room notification settings (mentions only vs. all messages)
 - **@all mentions**: Room-wide mention indicator for notifying all participants
 - **Quick chat marker**: `<quickchat xmlns="urn:xmpp:fluux:0"/>` element included in MUC invitations to indicate the room is a temporary quick chat (non-persistent, auto-destroys when empty)
+
+## ejabberd Business Edition Extensions
+
+Fluux supports the following proprietary extensions from ejabberd Business Edition:
+
+| Extension        | Namespace                     | Status        | Notes                                                                                                                                                                                   |
+|------------------|-------------------------------|---------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Web Push (VAPID) | `p1:push` / `p1:push:webpush` | ✅ Implemented | VAPID service discovery, browser push subscription via W3C Push API, registration with XMPP server. Enables OS-level notifications when the browser tab is closed (web only, not Tauri) |

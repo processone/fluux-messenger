@@ -95,6 +95,10 @@ export function createDefaultStoreBindings(options: DefaultStoreBindingsOptions 
       // HTTP Upload (XEP-0363)
       setHttpUploadService: connectionStore.getState().setHttpUploadService,
       getHttpUploadService: () => connectionStore.getState().httpUploadService,
+      // Web Push (p1:push)
+      setWebPushStatus: connectionStore.getState().setWebPushStatus,
+      setWebPushServices: connectionStore.getState().setWebPushServices,
+      getWebPushServices: () => connectionStore.getState().webPushServices,
       // Server info getter
       getServerInfo: () => connectionStore.getState().serverInfo,
     },

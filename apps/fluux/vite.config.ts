@@ -34,6 +34,10 @@ export default defineConfig({
       registerType: 'autoUpdate',
       // Don't auto-inject registration - we'll do it manually to skip in Tauri
       injectRegister: false,
+      // Use injectManifest strategy for custom service worker with push notification support
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       includeAssets: ['favicon.png', 'apple-touch-icon.png', 'logo.png'],
       manifest: {
         name: 'Fluux Messenger',
@@ -71,16 +75,9 @@ export default defineConfig({
           },
         ],
       },
-      workbox: {
-        // Activate new SW immediately without waiting for tabs to close
-        skipWaiting: true,
-        clientsClaim: true,
+      injectManifest: {
         // Cache app shell and assets
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
-        // Don't cache API/WebSocket requests
-        navigateFallback: 'index.html',
-        navigateFallbackDenylist: [/^\/api/],
-        runtimeCaching: [],
       },
     }),
   ],

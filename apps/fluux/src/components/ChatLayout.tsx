@@ -22,6 +22,7 @@ import {
 import { useChatStore, useRoomStore, useRosterStore, useConnectionStore, useConsoleStore, useAdminStore } from '@fluux/sdk/react'
 import { useNotificationBadge } from '@/hooks/useNotificationBadge'
 import { useDesktopNotifications } from '@/hooks/useDesktopNotifications'
+import { useWebPush } from '@/hooks/useWebPush'
 import { useSoundNotification } from '@/hooks/useSoundNotification'
 import { useEventsSoundNotification } from '@/hooks/useEventsSoundNotification'
 import { useEventsDesktopNotifications } from '@/hooks/useEventsDesktopNotifications'
@@ -72,6 +73,9 @@ function GlobalEffects() {
 
   // Show desktop notifications for new messages
   useDesktopNotifications()
+
+  // Register for web push notifications (browser only, skipped in Tauri)
+  useWebPush()
 
   // Platform state detection: wake/sleep, idle/activity, visibility
   usePlatformState()

@@ -261,7 +261,7 @@ describe('usePlatformState', () => {
       renderHook(() => usePlatformState())
 
       const focusCalls = addSpy.mock.calls.filter(
-        ([event]) => event === 'focus'
+        ([event]) => (event as string) === 'focus'
       )
       expect(focusCalls).toHaveLength(0)
       addSpy.mockRestore()

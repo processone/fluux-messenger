@@ -236,6 +236,11 @@ export type {
   HttpUploadService,
   UploadSlot,
 
+  // Web Push types (p1:push)
+  WebPushService,
+  WebPushRegistration,
+  WebPushStatus,
+
   // File attachment types (XEP-0066, XEP-0264)
   FileAttachment,
   ThumbnailInfo,
@@ -453,6 +458,9 @@ export {
   NS_PING,
   // XEP-0191: Blocking Command
   NS_BLOCKING,
+  // p1:push: ejabberd Push Notifications
+  NS_P1_PUSH,
+  NS_P1_PUSH_WEBPUSH,
 } from './core/namespaces'
 
 // =============================================================================
