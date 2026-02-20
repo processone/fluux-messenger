@@ -1,9 +1,9 @@
 import { createStore } from 'zustand/vanilla'
 import { subscribeWithSelector } from 'zustand/middleware'
-import type { ConnectionStatus, ConnectionMethod, PresenceShow, ServerInfo, ResourcePresence, HttpUploadService } from '../core/types'
+import type { ConnectionStatus, ConnectionMethod, PresenceShow, ServerInfo, ResourcePresence, HttpUploadService, WebPushService, WebPushStatus } from '../core/types'
 
 // Re-export for convenience
-export type { ServerInfo, ServerIdentity, HttpUploadService } from '../core/types'
+export type { ServerInfo, ServerIdentity, HttpUploadService, WebPushService, WebPushStatus } from '../core/types'
 
 /**
  * Connection state interface for the XMPP connection store.
@@ -61,6 +61,9 @@ interface ConnectionState {
   ownResources: Map<string, ResourcePresence>  // Other connected resources
   // XEP-0363: HTTP File Upload service
   httpUploadService: HttpUploadService | null
+  // p1:push Web Push
+  webPushStatus: WebPushStatus
+  webPushServices: WebPushService[]
   // Window visibility - used to determine if user can see new messages
   windowVisible: boolean
 
@@ -80,6 +83,9 @@ interface ConnectionState {
   clearOwnResources: () => void
   // HTTP Upload actions
   setHttpUploadService: (service: HttpUploadService | null) => void
+  // Web Push actions
+  setWebPushStatus: (status: WebPushStatus) => void
+  setWebPushServices: (services: WebPushService[]) => void
   // Window visibility actions
   setWindowVisible: (visible: boolean) => void
   reset: () => void
@@ -99,6 +105,8 @@ const initialState = {
   ownNickname: null as string | null,
   ownResources: new Map<string, ResourcePresence>(),
   httpUploadService: null as HttpUploadService | null,
+  webPushStatus: 'unavailable' as WebPushStatus,
+  webPushServices: [] as WebPushService[],
   windowVisible: true, // Assume visible on startup
 }
 
@@ -142,6 +150,9 @@ export const connectionStore = createStore<ConnectionState>()(
   clearOwnResources: () => set({ ownResources: new Map() }),
 
   setHttpUploadService: (service) => set({ httpUploadService: service }),
+
+  setWebPushStatus: (status) => set({ webPushStatus: status }),
+  setWebPushServices: (services) => set({ webPushServices: services }),
 
   setWindowVisible: (visible) => set({ windowVisible: visible }),
 

@@ -1643,6 +1643,32 @@ describe('roomStore', () => {
       const room = roomStore.getState().rooms.get('test@conference.example.com')
       expect(room?.messages[0].reactions).toBeUndefined()
     })
+
+    it('should find message by stanzaId when reaction references server-assigned ID', () => {
+      const messages = [createMessage('msg1', 'test@conference.example.com', 'alice', 'Hello')]
+      messages[0].stanzaId = 'server-stanza-id-123'
+      roomStore.getState().addRoom(createRoom('test@conference.example.com', { messages }))
+
+      // Reaction references the stanzaId (as other clients like Gajim may do)
+      roomStore.getState().updateReactions('test@conference.example.com', 'server-stanza-id-123', 'bob', ['👍'])
+
+      const room = roomStore.getState().rooms.get('test@conference.example.com')
+      expect(room?.messages[0].reactions).toEqual({ '👍': ['bob'] })
+    })
+
+    it('should replace reactions when referenced by stanzaId', () => {
+      const messages = [createMessage('msg1', 'test@conference.example.com', 'alice', 'Hello')]
+      messages[0].stanzaId = 'server-stanza-id-456'
+      roomStore.getState().addRoom(createRoom('test@conference.example.com', { messages }))
+
+      // First reaction via stanzaId
+      roomStore.getState().updateReactions('test@conference.example.com', 'server-stanza-id-456', 'bob', ['👍'])
+      // Bob changes reaction (still via stanzaId)
+      roomStore.getState().updateReactions('test@conference.example.com', 'server-stanza-id-456', 'bob', ['❤️'])
+
+      const room = roomStore.getState().rooms.get('test@conference.example.com')
+      expect(room?.messages[0].reactions).toEqual({ '❤️': ['bob'] })
+    })
   })
 
   describe('setTyping', () => {

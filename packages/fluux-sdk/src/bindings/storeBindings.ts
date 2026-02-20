@@ -133,6 +133,17 @@ export function createStoreBindings(
     stores.connection.removeOwnResource(resource)
   })
 
+  on('connection:webpush-services', ({ services }) => {
+    const stores = getStores()
+    stores.connection.setWebPushServices(services)
+    stores.connection.setWebPushStatus(services.length > 0 ? 'available' : 'unavailable')
+  })
+
+  on('connection:webpush-status', ({ status }) => {
+    const stores = getStores()
+    stores.connection.setWebPushStatus(status)
+  })
+
   // ============================================================================
   // Chat Events (1:1 Messaging)
   // ============================================================================

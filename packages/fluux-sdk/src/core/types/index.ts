@@ -67,6 +67,13 @@ export type {
   ServerInfo,
 } from './discovery'
 
+// Web Push types
+export type {
+  WebPushService,
+  WebPushRegistration,
+  WebPushStatus,
+} from './webpush'
+
 // Upload/attachment types
 export type {
   HttpUploadService,

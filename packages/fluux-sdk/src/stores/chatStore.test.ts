@@ -1093,6 +1093,34 @@ describe('chatStore', () => {
         '💯': ['bob@example.com'],
       })
     })
+
+    it('should find message by stanzaId when reaction references server-assigned ID', () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      const msg = createMessage('alice@example.com', 'Hello!')
+      msg.stanzaId = 'server-stanza-id-123'
+      chatStore.getState().addMessage(msg)
+
+      // Reaction references the stanzaId (as other clients like Gajim may do)
+      chatStore.getState().updateReactions('alice@example.com', 'server-stanza-id-123', 'bob@example.com', ['👍'])
+
+      const messages = chatStore.getState().messages.get('alice@example.com')
+      expect(messages?.[0].reactions).toEqual({ '👍': ['bob@example.com'] })
+    })
+
+    it('should replace reactions when referenced by stanzaId', () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      const msg = createMessage('alice@example.com', 'Hello!')
+      msg.stanzaId = 'server-stanza-id-456'
+      chatStore.getState().addMessage(msg)
+
+      // First reaction via stanzaId
+      chatStore.getState().updateReactions('alice@example.com', 'server-stanza-id-456', 'bob@example.com', ['👍'])
+      // Bob changes reaction (still via stanzaId)
+      chatStore.getState().updateReactions('alice@example.com', 'server-stanza-id-456', 'bob@example.com', ['❤️'])
+
+      const messages = chatStore.getState().messages.get('alice@example.com')
+      expect(messages?.[0].reactions).toEqual({ '❤️': ['bob@example.com'] })
+    })
   })
 
   describe('draft management', () => {

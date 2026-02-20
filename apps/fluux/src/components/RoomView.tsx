@@ -854,13 +854,23 @@ const RoomMessageInput = React.forwardRef<MessageComposerHandle, RoomMessageInpu
   // Check if room is small enough to send typing notifications
   const shouldSendTypingNotifications = room.occupants.size < MAX_ROOM_SIZE_FOR_TYPING
 
+  // Collect unique nicks from message history for mention suggestions
+  const messageNicks = useMemo(() => {
+    const nicks = new Set<string>()
+    for (const msg of room.messages) {
+      nicks.add(msg.nick)
+    }
+    return nicks
+  }, [room.messages])
+
   // Mention autocomplete hook
   const { state: mentionState, selectMatch, moveSelection, dismiss } = useMentionAutocomplete(
     text,
     cursorPosition,
     room.occupants,
     room.nickname,
-    room.jid
+    room.jid,
+    messageNicks
   )
 
   // Handle mention selection
@@ -916,11 +926,11 @@ const RoomMessageInput = React.forwardRef<MessageComposerHandle, RoomMessageInpu
   // Handle send
   const handleSend = async (sendText: string): Promise<boolean> => {
     // Include reply info if replying to a message
-    // Use stanzaId (XEP-0359) for MUC messages - this is what other clients use to look up the referenced message
+    // SDK resolves stanzaId vs id for the protocol reference (XEP-0461)
     let replyTo: { id: string; to: string; fallback?: { author: string; body: string } } | undefined
     if (replyingTo) {
       replyTo = {
-        id: replyingTo.stanzaId || replyingTo.id,
+        id: replyingTo.id,
         to: replyingTo.from,
         fallback: { author: replyingTo.nick, body: replyingTo.body }
       }

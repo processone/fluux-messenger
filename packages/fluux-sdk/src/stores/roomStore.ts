@@ -769,7 +769,8 @@ export const roomStore = createStore<RoomState>()(
 
       let updatedMessage: RoomMessage | undefined
       const newMessages = existing.messages.map((msg) => {
-        if (msg.id !== messageId) return msg
+        // Match by id or stanzaId (reactions may reference either)
+        if (msg.id !== messageId && msg.stanzaId !== messageId) return msg
 
         // Build new reactions map
         const newReactions: Record<string, string[]> = {}
@@ -799,9 +800,9 @@ export const roomStore = createStore<RoomState>()(
         return updatedMessage
       })
 
-      // Update IndexedDB (non-blocking)
+      // Update IndexedDB (non-blocking) — use actual message id, not the lookup key
       if (updatedMessage) {
-        void messageCache.updateRoomMessage(messageId, {
+        void messageCache.updateRoomMessage(updatedMessage.id, {
           reactions: updatedMessage.reactions,
         })
       }

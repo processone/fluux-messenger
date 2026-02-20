@@ -869,7 +869,8 @@ export const chatStore = createStore<ChatState>()(
           const convMessages = state.messages.get(conversationId)
           if (!convMessages) return state
 
-          const messageIndex = convMessages.findIndex((m) => m.id === messageId)
+          // Find message by id or stanzaId (reactions may reference either)
+          const messageIndex = convMessages.findIndex((m) => m.id === messageId || m.stanzaId === messageId)
           if (messageIndex === -1) return state
 
           const message = convMessages[messageIndex]

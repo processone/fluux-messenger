@@ -120,6 +120,64 @@ describe('useMentionAutocomplete', () => {
       expect(nicks).toContain('Alice')
     })
 
+    it('should match nicknames with accented characters', () => {
+      const occupants = createOccupants(['Micka\u00EBl', 'bob'])
+      const { result } = renderHook(() =>
+        useMentionAutocomplete('@mick', 5, occupants, ownNickname, roomJid)
+      )
+
+      const nicks = result.current.state.matches.map((m) => m.nick)
+      expect(nicks).toContain('Micka\u00EBl')
+    })
+
+    it('should match NFD-encoded nicknames with NFC query', () => {
+      // Server sends NFD (e + combining diaeresis), user types NFC (ë)
+      const nfdNick = 'Micka\u0065\u0308l' // NFD: e + combining diaeresis
+      const occupants = createOccupants([nfdNick, 'bob'])
+      const nfcQuery = '@micka\u00EBl' // NFC: ë as single char
+      const { result } = renderHook(() =>
+        useMentionAutocomplete(nfcQuery, nfcQuery.length, occupants, ownNickname, roomJid)
+      )
+
+      const nicks = result.current.state.matches.map((m) => m.nick)
+      expect(nicks).toContain(nfdNick)
+    })
+
+    it('should match NFC-encoded nicknames with NFD query', () => {
+      // Server sends NFC (ë), user types NFD (e + combining diaeresis)
+      const nfcNick = 'Micka\u00EBl' // NFC: ë as single char
+      const occupants = createOccupants([nfcNick, 'bob'])
+      const nfdQuery = '@micka\u0065\u0308l' // NFD: e + combining diaeresis
+      const { result } = renderHook(() =>
+        useMentionAutocomplete(nfdQuery, nfdQuery.length, occupants, ownNickname, roomJid)
+      )
+
+      const nicks = result.current.state.matches.map((m) => m.nick)
+      expect(nicks).toContain(nfcNick)
+    })
+
+    it('should match nicknames with other special characters', () => {
+      const occupants = createOccupants(['José', 'François', 'Ñoño', 'bob'])
+      const { result } = renderHook(() =>
+        useMentionAutocomplete('@', 1, occupants, ownNickname, roomJid)
+      )
+
+      const nicks = result.current.state.matches.map((m) => m.nick)
+      expect(nicks).toContain('José')
+      expect(nicks).toContain('François')
+      expect(nicks).toContain('Ñoño')
+    })
+
+    it('should match accented nicknames case-insensitively', () => {
+      const occupants = createOccupants(['Élodie', 'ÑOÑO', 'bob'])
+      const { result } = renderHook(() =>
+        useMentionAutocomplete('@é', 2, occupants, ownNickname, roomJid)
+      )
+
+      const nicks = result.current.state.matches.map((m) => m.nick)
+      expect(nicks).toContain('Élodie')
+    })
+
     it('should sort matches alphabetically', () => {
       const occupants = createOccupants(['charlie', 'alice', 'bob'])
       const { result } = renderHook(() =>
@@ -187,6 +245,26 @@ describe('useMentionAutocomplete', () => {
         end: 6, // @alice
         type: 'mention',
         uri: 'xmpp:room@conference.example.com/alice',
+      })
+    })
+
+    it('should return correct reference for accented nickname', () => {
+      const nick = 'Micka\u00EBl' // NFC ë
+      const occupants = createOccupants([nick])
+      const { result } = renderHook(() =>
+        useMentionAutocomplete('@mick', 5, occupants, ownNickname, roomJid)
+      )
+
+      const idx = result.current.state.matches.findIndex((m) => m.nick === nick)
+      const { newText, newCursorPosition, reference } = result.current.selectMatch(idx)
+
+      expect(newText).toBe('@Micka\u00EBl ')
+      expect(newCursorPosition).toBe(9) // @Mickaël + space
+      expect(reference).toEqual({
+        begin: 0,
+        end: 8, // @Mickaël (without trailing space)
+        type: 'mention',
+        uri: `xmpp:${roomJid}/${nick}`,
       })
     })
 
@@ -296,6 +374,98 @@ describe('useMentionAutocomplete', () => {
       })
 
       expect(result.current.state.selectedIndex).toBe(0)
+    })
+  })
+
+  describe('messageNicks (history authors)', () => {
+    it('should suggest nicks from message history', () => {
+      const occupants = createOccupants(['alice'])
+      const messageNicks = new Set(['dave', 'eve'])
+      const { result } = renderHook(() =>
+        useMentionAutocomplete('@', 1, occupants, ownNickname, roomJid, messageNicks)
+      )
+
+      const nicks = result.current.state.matches.map((m) => m.nick)
+      expect(nicks).toContain('dave')
+      expect(nicks).toContain('eve')
+    })
+
+    it('should list occupants before history nicks', () => {
+      const occupants = createOccupants(['bob'])
+      const messageNicks = new Set(['alice']) // alice is alphabetically before bob
+      const { result } = renderHook(() =>
+        useMentionAutocomplete('@', 1, occupants, ownNickname, roomJid, messageNicks)
+      )
+
+      const nicks = result.current.state.matches.map((m) => m.nick)
+      // Order: @all, then occupants (bob), then history (alice)
+      expect(nicks).toEqual(['all', 'bob', 'alice'])
+    })
+
+    it('should not duplicate nicks already in occupants', () => {
+      const occupants = createOccupants(['alice', 'bob'])
+      const messageNicks = new Set(['alice', 'charlie']) // alice is both occupant and history
+      const { result } = renderHook(() =>
+        useMentionAutocomplete('@', 1, occupants, ownNickname, roomJid, messageNicks)
+      )
+
+      const nicks = result.current.state.matches.map((m) => m.nick)
+      // alice should appear only once (from occupants)
+      expect(nicks.filter((n) => n === 'alice')).toHaveLength(1)
+      expect(nicks).toContain('charlie')
+    })
+
+    it('should exclude own nickname from history nicks', () => {
+      const occupants = createOccupants(['alice'])
+      const messageNicks = new Set([ownNickname, 'dave'])
+      const { result } = renderHook(() =>
+        useMentionAutocomplete('@', 1, occupants, ownNickname, roomJid, messageNicks)
+      )
+
+      const nicks = result.current.state.matches.map((m) => m.nick)
+      expect(nicks).not.toContain(ownNickname)
+      expect(nicks).toContain('dave')
+    })
+
+    it('should filter history nicks by query prefix', () => {
+      const occupants = createOccupants([])
+      const messageNicks = new Set(['dave', 'diana', 'eve'])
+      const { result } = renderHook(() =>
+        useMentionAutocomplete('@d', 2, occupants, ownNickname, roomJid, messageNicks)
+      )
+
+      const nicks = result.current.state.matches.map((m) => m.nick)
+      expect(nicks).toContain('dave')
+      expect(nicks).toContain('diana')
+      expect(nicks).not.toContain('eve')
+    })
+
+    it('should match history nicks with special characters', () => {
+      const occupants = createOccupants([])
+      const messageNicks = new Set(['Micka\u00EBl', 'François'])
+      const { result } = renderHook(() =>
+        useMentionAutocomplete('@mick', 5, occupants, ownNickname, roomJid, messageNicks)
+      )
+
+      const nicks = result.current.state.matches.map((m) => m.nick)
+      expect(nicks).toContain('Micka\u00EBl')
+      expect(nicks).not.toContain('François')
+    })
+
+    it('should not include role for history-only nicks', () => {
+      const occupants = createOccupants(['alice'])
+      const messageNicks = new Set(['dave'])
+      const { result } = renderHook(() =>
+        useMentionAutocomplete('@', 1, occupants, ownNickname, roomJid, messageNicks)
+      )
+
+      const daveMatch = result.current.state.matches.find((m) => m.nick === 'dave')
+      expect(daveMatch).toBeDefined()
+      expect(daveMatch!.role).toBeUndefined()
+
+      const aliceMatch = result.current.state.matches.find((m) => m.nick === 'alice')
+      expect(aliceMatch).toBeDefined()
+      expect(aliceMatch!.role).toBe('participant')
     })
   })
 })
