@@ -14,6 +14,7 @@ import type { Contact, PresenceShow } from './roster'
 import type { Room, RoomOccupant, RoomMessage } from './room'
 import type { ServerInfo } from './discovery'
 import type { HttpUploadService } from './upload'
+import type { WebPushService, WebPushStatus } from './webpush'
 import type { AdminCommand, AdminSession } from './admin'
 import type { RSMResponse } from './pagination'
 import type { MAMQueryDirection } from '../../stores/shared/mamState'
@@ -76,6 +77,16 @@ export interface ConnectionEvents {
   /** Own resource went offline */
   'connection:own-resource-offline': {
     resource: string
+  }
+
+  /** Web Push services discovered from server */
+  'connection:webpush-services': {
+    services: WebPushService[]
+  }
+
+  /** Web Push registration status changed */
+  'connection:webpush-status': {
+    status: WebPushStatus
   }
 }
 

@@ -614,6 +614,9 @@ export const createMockStores = (): MockStoreBindings => ({
     getJid: vi.fn().mockReturnValue(null),
     setHttpUploadService: vi.fn(),
     getHttpUploadService: vi.fn().mockReturnValue(null),
+    setWebPushStatus: vi.fn(),
+    setWebPushServices: vi.fn(),
+    getWebPushServices: vi.fn().mockReturnValue([]),
     getServerInfo: vi.fn().mockReturnValue(null),
   },
   chat: {
