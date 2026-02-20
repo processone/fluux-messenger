@@ -25,7 +25,9 @@ export interface MentionAutocompleteState {
  * Hook for mention autocomplete in MUC rooms
  *
  * Detects @ mentions in text and provides autocomplete suggestions
- * from room occupants, plus @all for room-wide mentions.
+ * from room occupants and message history authors, plus @all for
+ * room-wide mentions. Occupants are listed first, followed by
+ * history-only nicks (people who posted but are no longer present).
  *
  * @example
  * ```tsx
@@ -34,7 +36,8 @@ export interface MentionAutocompleteState {
  *   cursorPosition,
  *   room.occupants,
  *   room.nickname,
- *   room.jid
+ *   room.jid,
+ *   messageNicks
  * )
  * ```
  */
@@ -43,7 +46,8 @@ export function useMentionAutocomplete(
   cursorPosition: number,
   occupants: Map<string, RoomOccupant>,
   ownNickname: string,
-  roomJid: string
+  roomJid: string,
+  messageNicks?: Set<string>
 ): {
   state: MentionAutocompleteState
   selectMatch: (index: number) => { newText: string; newCursorPosition: number; reference: MentionReference }
@@ -118,12 +122,21 @@ export function useMentionAutocomplete(
         occupantMatches.push({ nick, role: occupant.role })
       }
     })
-
-    // Sort by nickname
     occupantMatches.sort((a, b) => a.nick.localeCompare(b.nick))
 
-    return [...result, ...occupantMatches]
-  }, [isActive, query, occupants, ownNickname])
+    // Add nicks from message history that are not already in occupants
+    const historyMatches: MentionMatch[] = []
+    if (messageNicks) {
+      messageNicks.forEach((nick) => {
+        if (nick !== ownNickname && !occupants.has(nick) && nick.normalize('NFC').toLowerCase().startsWith(query)) {
+          historyMatches.push({ nick })
+        }
+      })
+      historyMatches.sort((a, b) => a.nick.localeCompare(b.nick))
+    }
+
+    return [...result, ...occupantMatches, ...historyMatches]
+  }, [isActive, query, occupants, ownNickname, messageNicks])
 
   // Reset selection when matches change
   useMemo(() => {
