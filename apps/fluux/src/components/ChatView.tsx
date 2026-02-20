@@ -765,10 +765,10 @@ function MessageInput({
   })
 
   // Convert Message to ReplyInfo for the composer
-  // Use stanzaId (XEP-0359) if available - this is what other clients may use to look up the referenced message
+  // XEP-0461: for chat-type messages, use the client-generated id (not stanza-id, which is only for groupchat)
   const replyInfo: ReplyInfo | null = replyingTo
     ? {
-        id: replyingTo.stanzaId || replyingTo.id,
+        id: replyingTo.id,
         from: replyingTo.from,
         senderName: contactsByJid.get(replyingTo.from.split('/')[0])?.name || replyingTo.from.split('@')[0],
         body: replyingTo.body,
@@ -802,12 +802,12 @@ function MessageInput({
     }
 
     // Include reply info if replying to a message (with XEP-0428 fallback for compatibility)
-    // Use stanzaId (XEP-0359) if available - this is what other clients may use to look up the referenced message
+    // XEP-0461: for chat-type messages, use the client-generated id (not stanza-id, which is only for groupchat)
     let replyTo: { id: string; to: string; fallback?: { author: string; body: string } } | undefined
     if (replyingTo) {
       const authorName = contactsByJid.get(replyingTo.from.split('/')[0])?.name || replyingTo.from.split('@')[0]
       replyTo = {
-        id: replyingTo.stanzaId || replyingTo.id,
+        id: replyingTo.id,
         to: replyingTo.from,
         fallback: { author: authorName, body: replyingTo.body }
       }
