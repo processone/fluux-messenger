@@ -52,9 +52,11 @@ function App() {
   useEffect(() => {
     if (!isTauri) return
 
-    let unlisten: (() => void) | undefined
-    import('@tauri-apps/api/event').then(({ listen }) => {
-      listen('clear-storage-requested', async () => {
+    let disposed = false
+    let unlisten: (() => void) | null = null
+
+    const onClearStorageRequested = () => {
+      void (async () => {
         console.log('[CLI] Clearing local storage due to --clear-storage flag')
         try {
           await client.disconnect()
@@ -63,13 +65,31 @@ function App() {
         }
         await clearLocalData({ allAccounts: true })
         window.location.reload()
-      }).then((fn) => {
-        unlisten = fn
-      })
-    })
+      })()
+    }
+
+    const setupListener = async () => {
+      try {
+        const { listen } = await import('@tauri-apps/api/event')
+        const stop = await listen('clear-storage-requested', onClearStorageRequested)
+
+        // Component unmounted before async listener setup completed.
+        if (disposed) {
+          stop()
+        } else {
+          unlisten = stop
+        }
+      } catch (err) {
+        console.error('[CLI] Failed to register clear-storage listener:', err)
+      }
+    }
+
+    void setupListener()
 
     return () => {
+      disposed = true
       unlisten?.()
+      unlisten = null
     }
   }, [client])
 
