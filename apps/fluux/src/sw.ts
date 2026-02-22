@@ -83,8 +83,8 @@ self.addEventListener('notificationclick', (event) => {
 // ============================================================================
 
 // Skip waiting on install for immediate activation
-self.addEventListener('install', () => {
-  self.skipWaiting()
+self.addEventListener('install', (event) => {
+  event.waitUntil(self.skipWaiting())
 })
 
 // Claim all clients immediately

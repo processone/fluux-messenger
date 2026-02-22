@@ -9,15 +9,21 @@ function createNotificationSound(): () => void {
   let audioContext: AudioContext | null = null
 
   return () => {
+    if (typeof window === 'undefined' || typeof window.AudioContext === 'undefined') {
+      return
+    }
+
     try {
       // Create or reuse AudioContext
       if (!audioContext) {
-        audioContext = new AudioContext()
+        audioContext = new window.AudioContext()
       }
 
       // Resume if suspended (required after user interaction)
       if (audioContext.state === 'suspended') {
-        audioContext.resume()
+        void audioContext.resume().catch(() => {
+          // Some browsers may reject resume() until user gesture is trusted
+        })
       }
 
       const now = audioContext.currentTime
@@ -61,7 +67,7 @@ export function useSoundNotification(): void {
 
   // Initialize sound player
   useEffect(() => {
-    if (typeof AudioContext !== 'undefined' || typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && typeof window.AudioContext !== 'undefined') {
       playSoundRef.current = createNotificationSound()
     }
 
