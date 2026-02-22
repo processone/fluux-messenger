@@ -49,8 +49,8 @@ export function ConversationList() {
   const contactMap = new Map(contacts.map(c => [c.jid, c]))
 
   const handleConversationClick = useCallback((convId: string) => {
-    setActiveRoom(null)
-    setActiveConversation(convId)
+    void setActiveRoom(null)
+    void setActiveConversation(convId)
   }, [setActiveRoom, setActiveConversation])
 
   // Keyboard navigation
@@ -131,8 +131,8 @@ export function ArchiveList() {
   const contactMap = new Map(contacts.map(c => [c.jid, c]))
 
   const handleConversationClick = useCallback((convId: string) => {
-    setActiveRoom(null)
-    setActiveConversation(convId)
+    void setActiveRoom(null)
+    void setActiveConversation(convId)
   }, [setActiveRoom, setActiveConversation])
 
   const { selectedIndex, isKeyboardNav, getItemProps, getItemAttribute, getContainerProps } = useListKeyboardNav({

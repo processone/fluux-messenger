@@ -62,11 +62,15 @@ export function ContactProfileView({
   // Lazily fetch PEP nickname when contact view opens
   useEffect(() => {
     let cancelled = false
-    onFetchNickname(contact.jid).then((nick) => {
-      if (!cancelled && nick && nick !== contact.name) {
-        setPepNickname(nick)
-      }
-    })
+    void onFetchNickname(contact.jid)
+      .then((nick) => {
+        if (!cancelled && nick && nick !== contact.name) {
+          setPepNickname(nick)
+        }
+      })
+      .catch(() => {
+        // Ignore nickname fetch errors; we can still render the contact profile.
+      })
     return () => { cancelled = true }
   }, [contact.jid, contact.name, onFetchNickname])
 
@@ -109,7 +113,7 @@ export function ContactProfileView({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       e.preventDefault()
-      handleSaveEdit()
+      void handleSaveEdit()
     } else if (e.key === 'Escape') {
       handleCancelEdit()
     }

@@ -59,21 +59,21 @@ export function RoomsList() {
     // Non-joined rooms will show cached history with a "join to participate" prompt
     void isJoined // Unused now, but kept for API consistency
     // Clear any active 1:1 conversation
-    setActiveConversation(null)
+    void setActiveConversation(null)
     // Set this room as active
-    setActiveRoom(roomJid)
+    void setActiveRoom(roomJid)
   }, [setActiveConversation, setActiveRoom])
 
   const handleRoomDoubleClick = useCallback(async (roomJid: string, isJoined: boolean, nickname: string) => {
     if (isJoined) {
       // If already joined, just select it
-      setActiveConversation(null)
-      setActiveRoom(roomJid)
+      void setActiveConversation(null)
+      void setActiveRoom(roomJid)
     } else {
       // Join the bookmarked room and switch to it
       await joinRoom(roomJid, nickname)
-      setActiveConversation(null)
-      setActiveRoom(roomJid)
+      void setActiveConversation(null)
+      void setActiveRoom(roomJid)
     }
   }, [setActiveConversation, setActiveRoom, joinRoom])
 
@@ -81,8 +81,8 @@ export function RoomsList() {
   const handleRoomSelect = useCallback((room: Room) => {
     // Select the room (joined or bookmarked) to show its content
     // Non-joined rooms will show cached history with join prompt
-    setActiveConversation(null)
-    setActiveRoom(room.jid)
+    void setActiveConversation(null)
+    void setActiveRoom(room.jid)
   }, [setActiveConversation, setActiveRoom])
 
   // Keyboard navigation:
@@ -137,8 +137,8 @@ export function RoomsList() {
                 onDoubleClick={() => handleRoomDoubleClick(room.jid, true, room.nickname)}
                 onJoin={() => joinRoom(room.jid, room.nickname)}
                 onLeave={() => {
-                  if (activeRoomJid === room.jid) setActiveRoom(null)
-                  leaveRoom(room.jid)
+                  if (activeRoomJid === room.jid) void setActiveRoom(null)
+                  void leaveRoom(room.jid)
                 }}
                 onEditBookmark={() => {}} // Quick chats don't have bookmark editing
                 onRemoveBookmark={() => {}} // Quick chats aren't bookmarked
@@ -173,8 +173,8 @@ export function RoomsList() {
                 onDoubleClick={() => handleRoomDoubleClick(room.jid, true, room.nickname)}
                 onJoin={() => joinRoom(room.jid, room.nickname)}
                 onLeave={() => {
-                  if (activeRoomJid === room.jid) setActiveRoom(null)
-                  leaveRoom(room.jid)
+                  if (activeRoomJid === room.jid) void setActiveRoom(null)
+                  void leaveRoom(room.jid)
                 }}
                 onEditBookmark={() => setEditingRoom(room)}
                 onRemoveBookmark={() => removeBookmark(room.jid)}

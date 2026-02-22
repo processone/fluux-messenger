@@ -62,10 +62,10 @@ export function useNavigateToTarget() {
    */
   const navigateToConversation = useCallback((conversationId: string) => {
     // Navigate via URL (this updates sidebarView via useRouteSync)
-    navigateRef.current(`/messages/${encodeURIComponent(conversationId)}`)
+    void navigateRef.current(`/messages/${encodeURIComponent(conversationId)}`)
     // Also set active conversation in state
-    setActiveConversationRef.current(conversationId)
-    clearAllNotifications()
+    void setActiveConversationRef.current(conversationId)
+    void clearAllNotifications()
   }, [])
 
   /**
@@ -75,10 +75,10 @@ export function useNavigateToTarget() {
    */
   const navigateToRoom = useCallback((roomJid: string) => {
     // Navigate via URL (this updates sidebarView via useRouteSync)
-    navigateRef.current(`/rooms/${encodeURIComponent(roomJid)}`)
+    void navigateRef.current(`/rooms/${encodeURIComponent(roomJid)}`)
     // Also set active room in state
-    setActiveRoomRef.current(roomJid)
-    clearAllNotifications()
+    void setActiveRoomRef.current(roomJid)
+    void clearAllNotifications()
   }, [])
 
   return { navigateToConversation, navigateToRoom }

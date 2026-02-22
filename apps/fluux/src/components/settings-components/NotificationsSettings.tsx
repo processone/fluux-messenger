@@ -52,7 +52,9 @@ export function NotificationsSettings() {
   const [notificationStatus, setNotificationStatus] = useState<NotificationStatus>('checking')
 
   useEffect(() => {
-    checkNotificationPermission().then(setNotificationStatus)
+    void checkNotificationPermission()
+      .then(setNotificationStatus)
+      .catch(() => setNotificationStatus('unavailable'))
   }, [])
 
   const handleRequestPermission = useCallback(async () => {

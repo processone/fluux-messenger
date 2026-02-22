@@ -66,7 +66,7 @@ export function useEventsDesktopNotifications(): void {
       }
     }
 
-    requestNotificationPermission()
+    void requestNotificationPermission()
   }, [status])
 
   // Watch for new subscription requests

@@ -52,7 +52,7 @@ export function LanguageSettings() {
   const setTimeFormat = useSettingsStore((s) => s.setTimeFormat)
 
   const handleLanguageChange = (langCode: string) => {
-    i18n.changeLanguage(langCode)
+    void i18n.changeLanguage(langCode)
     localStorage.setItem('i18nextLng', langCode)
     setLanguageChanged(true)
   }

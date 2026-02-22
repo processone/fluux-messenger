@@ -48,7 +48,7 @@ vi.mock('react-virtuoso', () => ({
 }))
 
 // Initialize i18n for tests (silences useTranslation warnings)
-i18n.use(initReactI18next).init({
+void i18n.use(initReactI18next).init({
   lng: 'en',
   fallbackLng: 'en',
   resources: {
@@ -291,4 +291,3 @@ vi.mock('@fluux/sdk/react', () => ({
     return selector ? selector(state) : state
   }),
 }))
-

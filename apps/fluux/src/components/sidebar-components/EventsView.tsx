@@ -56,15 +56,15 @@ export function EventsView() {
   const handleAcceptStranger = async (jid: string) => {
     await acceptStranger(jid)
     const bareJid = getBareJid(jid)
-    navigate(`/messages/${encodeURIComponent(bareJid)}`)
-    setActiveConversation(bareJid)
+    void navigate(`/messages/${encodeURIComponent(bareJid)}`)
+    void setActiveConversation(bareJid)
   }
 
   // Accept invitation and navigate to the room
   const handleAcceptInvitation = async (roomJid: string, password?: string) => {
     await acceptInvitation(roomJid, password)
-    navigate(`/rooms/${encodeURIComponent(roomJid)}`)
-    setActiveRoom(roomJid)
+    void navigate(`/rooms/${encodeURIComponent(roomJid)}`)
+    void setActiveRoom(roomJid)
   }
 
   const strangerJids = Object.keys(strangerConversations)

@@ -62,9 +62,11 @@ export function useMode() {
 
       // Sync native window theme (affects Linux/Windows title bar color)
       if (isTauri) {
-        import('@tauri-apps/api/window').then(({ getCurrentWindow }) => {
-          getCurrentWindow().setTheme(resolved).catch(() => {})
-        })
+        void import('@tauri-apps/api/window')
+          .then(({ getCurrentWindow }) => {
+            void getCurrentWindow().setTheme(resolved).catch(() => {})
+          })
+          .catch(() => {})
       }
     }
 

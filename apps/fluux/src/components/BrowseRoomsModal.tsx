@@ -157,8 +157,8 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
     setError(null)
     try {
       await joinRoom(roomJid, nickname.trim())
-      setActiveConversation(null)
-      setActiveRoom(roomJid)
+      void setActiveConversation(null)
+      void setActiveRoom(roomJid)
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : t('rooms.failedToJoinRoom'))
@@ -171,8 +171,8 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
   const handleSelectRoom = useCallback((room: { jid: string; name: string; occupants?: number }) => {
     if (isRoomJoined(room.jid)) {
       // Already joined - just open it
-      setActiveConversation(null)
-      setActiveRoom(room.jid)
+      void setActiveConversation(null)
+      void setActiveRoom(room.jid)
       onClose()
     } else {
       // Need to join
