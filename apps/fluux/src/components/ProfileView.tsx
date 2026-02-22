@@ -90,7 +90,7 @@ export function ProfileView({ onClose }: ProfileViewProps) {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       e.preventDefault()
-      handleSaveEdit()
+      void handleSaveEdit()
     } else if (e.key === 'Escape') {
       handleCancelEdit()
     }

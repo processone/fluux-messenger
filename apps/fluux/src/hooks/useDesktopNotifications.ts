@@ -129,7 +129,7 @@ export function useDesktopNotifications(): void {
       }
     }
 
-    requestNotificationPermission()
+    void requestNotificationPermission()
   }, [status])
 
   // Show conversation notification

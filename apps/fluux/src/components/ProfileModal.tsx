@@ -105,7 +105,7 @@ export function ProfileModal({ onClose }: ProfileModalProps) {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       e.preventDefault()
-      handleSaveEdit()
+      void handleSaveEdit()
     } else if (e.key === 'Escape') {
       handleCancelEdit()
     }

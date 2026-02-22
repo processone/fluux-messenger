@@ -9,7 +9,7 @@ export const supportedLanguages = [
   'pl', 'pt', 'ro', 'ru', 'sk', 'sl', 'sv', 'uk', 'zh-CN',
 ] as const
 
-i18n
+void i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .use(resourcesToBackend((language: string) =>

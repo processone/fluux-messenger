@@ -130,7 +130,10 @@ export function LoginScreen() {
       setIsLoadingCredentials(false)
     }
 
-    loadCredentials()
+    void loadCredentials().catch((error) => {
+      console.error('[LoginScreen] Failed to load credentials:', error)
+      setIsLoadingCredentials(false)
+    })
   }, [])
 
   // Auto-fill WebSocket URL for well-known servers when JID domain changes (web only).
@@ -170,7 +173,9 @@ export function LoginScreen() {
     // Delete keychain credentials on "not-authorized" error (invalid password)
     if (loadedFromKeychain && isDesktopApp && error.includes('not-authorized')) {
       console.log('[LoginScreen] Deleting keychain credentials after auth failure')
-      deleteCredentials()
+      void deleteCredentials().catch((err) => {
+        console.error('[LoginScreen] Failed to delete keychain credentials:', err)
+      })
       setLoadedFromKeychain(false)
     }
 
@@ -224,7 +229,7 @@ export function LoginScreen() {
       }
     }
 
-    autoConnect()
+    void autoConnect()
   }, [isLoadingCredentials, loadedFromKeychain, jid, password, server, status, connect, i18n.language])
 
   const isConnecting = status === 'connecting'

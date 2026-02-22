@@ -42,7 +42,7 @@ export function useWebPush(): void {
         if (services.length === 0) return
         if (registering.current) return
 
-        registerPush(services[0])
+        void registerPush(services[0])
       },
       { equalityFn: (a, b) => a.status === b.status && a.services === b.services }
     )
@@ -54,7 +54,7 @@ export function useWebPush(): void {
       webPushServices.length > 0 &&
       !registering.current
     ) {
-      registerPush(webPushServices[0])
+      void registerPush(webPushServices[0])
     }
 
     return unsub

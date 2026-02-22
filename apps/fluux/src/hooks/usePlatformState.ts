@@ -210,7 +210,7 @@ export function usePlatformState() {
 
     // Periodic idle check
     const interval = setInterval(checkIdle, autoAwayConfig.checkIntervalMs)
-    checkIdle() // Initial check
+    void checkIdle() // Initial check
 
     return () => {
       events.forEach(event =>
@@ -233,9 +233,9 @@ export function usePlatformState() {
     let unlistenWakeDeferred: UnlistenFn | undefined
     let unlistenSleep: UnlistenFn | undefined
 
-    import('@tauri-apps/api/event').then(({ listen }) => {
+    void import('@tauri-apps/api/event').then(({ listen }) => {
       // Immediate wake notification
-      listen('system-did-wake', () => {
+      void listen('system-did-wake', () => {
         if (cancelled) return
         console.log('[PlatformState] Tauri system-did-wake event received')
         if (!shouldHandleWake('system-did-wake')) return
@@ -251,7 +251,7 @@ export function usePlatformState() {
       })
 
       // Deferred wake notification (app was in background during wake)
-      listen<number>('system-did-wake-deferred', (event) => {
+      void listen<number>('system-did-wake-deferred', (event) => {
         if (cancelled) return
         const delaySecs = event.payload || 0
         console.log(`[PlatformState] Tauri system-did-wake-deferred event received (delay=${delaySecs}s)`)
@@ -268,7 +268,7 @@ export function usePlatformState() {
       })
 
       // Sleep notification
-      listen('system-will-sleep', () => {
+      void listen('system-will-sleep', () => {
         if (cancelled) return
         console.log('[PlatformState] Tauri system-will-sleep event received')
         sleepStartRef.current = Date.now()
@@ -450,7 +450,7 @@ export function usePlatformState() {
 
       // Check if user is active after connection established
       if (isTauri() && !osIdleUnavailableRef.current) {
-        import('@tauri-apps/api/core').then(({ invoke }) => {
+        void import('@tauri-apps/api/core').then(({ invoke }) => {
           invoke<number>('get_idle_time').then((idleSeconds) => {
             if (idleSeconds < 60) {
               logEvent(`Connection restored, user active (${idleSeconds}s idle)`)

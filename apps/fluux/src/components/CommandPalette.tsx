@@ -191,8 +191,8 @@ export function CommandPalette({
       // Archived conversations open in the archive tab
       const targetView = isArchived(jid) ? 'archive' : 'messages'
       closeAndNavigate(targetView)
-      setActiveConversation(jid)
-      setActiveRoom(null)
+      void setActiveConversation(jid)
+      void setActiveRoom(null)
     },
     [setActiveConversation, setActiveRoom, closeAndNavigate, isArchived]
   )
@@ -202,8 +202,8 @@ export function CommandPalette({
       // Navigate first, THEN set room - otherwise handleSidebarViewChange
       // will overwrite our selection with the "last room" restore logic
       closeAndNavigate('rooms')
-      setActiveRoom(jid)
-      setActiveConversation(null)
+      void setActiveRoom(jid)
+      void setActiveConversation(null)
     },
     [setActiveRoom, setActiveConversation, closeAndNavigate]
   )

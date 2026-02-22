@@ -18,7 +18,7 @@ export function BlockedUsersSettings() {
 
   // Fetch blocklist on mount
   useEffect(() => {
-    fetchBlocklist()
+    void fetchBlocklist()
   }, [fetchBlocklist])
 
   // Filter blocked JIDs by search query
@@ -109,7 +109,7 @@ export function BlockedUsersSettings() {
                 setBlockError(null)
               }}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') handleAddBlock()
+                if (e.key === 'Enter') void handleAddBlock()
                 if (e.key === 'Escape') handleCancelAdd()
               }}
               placeholder={t('settings.blocked.jidPlaceholder')}

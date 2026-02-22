@@ -49,8 +49,8 @@ export function CreateQuickChatModal({ onClose }: CreateQuickChatModalProps) {
     try {
       const invitees = Array.from(selectedContacts)
       const roomJid = await createQuickChat(trimmedNickname, trimmedTopic || undefined, invitees.length > 0 ? invitees : undefined)
-      setActiveConversation(null)
-      setActiveRoom(roomJid)
+      void setActiveConversation(null)
+      void setActiveRoom(roomJid)
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : t('rooms.failedToCreateQuickChat'))

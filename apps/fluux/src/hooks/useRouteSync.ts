@@ -178,62 +178,62 @@ export function useRouteSync(): RouteState & RouteActions {
   // Navigation actions
   const navigateToMessages = useCallback((jid?: string) => {
     if (jid) {
-      navigate(`/messages/${encodeURIComponent(jid)}`)
+      void navigate(`/messages/${encodeURIComponent(jid)}`)
     } else {
-      navigate('/messages')
+      void navigate('/messages')
     }
   }, [navigate])
 
   const navigateToRooms = useCallback((jid?: string) => {
     if (jid) {
-      navigate(`/rooms/${encodeURIComponent(jid)}`)
+      void navigate(`/rooms/${encodeURIComponent(jid)}`)
     } else {
-      navigate('/rooms')
+      void navigate('/rooms')
     }
   }, [navigate])
 
   const navigateToContacts = useCallback((jid?: string) => {
     if (jid) {
-      navigate(`/contacts/${encodeURIComponent(jid)}`)
+      void navigate(`/contacts/${encodeURIComponent(jid)}`)
     } else {
-      navigate('/contacts')
+      void navigate('/contacts')
     }
   }, [navigate])
 
   const navigateToArchive = useCallback((jid?: string) => {
     if (jid) {
-      navigate(`/archive/${encodeURIComponent(jid)}`)
+      void navigate(`/archive/${encodeURIComponent(jid)}`)
     } else {
-      navigate('/archive')
+      void navigate('/archive')
     }
   }, [navigate])
 
   const navigateToEvents = useCallback(() => {
-    navigate('/events')
+    void navigate('/events')
   }, [navigate])
 
   const navigateToAdmin = useCallback((category?: string) => {
     if (category) {
-      navigate(`/admin/${encodeURIComponent(category)}`)
+      void navigate(`/admin/${encodeURIComponent(category)}`)
     } else {
-      navigate('/admin')
+      void navigate('/admin')
     }
   }, [navigate])
 
   const navigateToSettings = useCallback((category?: string) => {
     if (category) {
-      navigate(`/settings/${encodeURIComponent(category)}`)
+      void navigate(`/settings/${encodeURIComponent(category)}`)
     } else {
-      navigate('/settings')
+      void navigate('/settings')
     }
   }, [navigate])
 
   const goBack = useCallback(() => {
     // Use browser history if available, otherwise go to messages
     if (window.history.length > 1) {
-      navigate(-1)
+      void navigate(-1)
     } else {
-      navigate('/messages')
+      void navigate('/messages')
     }
   }, [navigate])
 

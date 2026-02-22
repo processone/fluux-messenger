@@ -73,7 +73,7 @@ export function useFullscreen(): boolean {
 
     // Set up detection if this is the first subscriber
     if (listenerCount === 1) {
-      setupFullscreenDetection()
+      void setupFullscreenDetection()
     }
 
     return () => {
