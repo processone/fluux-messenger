@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useMemo, useRef } from 'react'
 import { chatStore, roomStore } from '@fluux/sdk'
 import { useChatStore, useRoomStore } from '@fluux/sdk/react'
 
@@ -107,17 +107,34 @@ function matchesShortcut(e: KeyboardEvent, shortcut: ShortcutDefinition): boolea
  * during MAM loading.
  */
 export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): ShortcutDefinition[] {
+  const {
+    onToggleShortcutHelp,
+    onToggleConsole,
+    onOpenSettings,
+    onQuitApp,
+    onCreateQuickChat,
+    onOpenCommandPalette,
+    onOpenPresenceMenu,
+    sidebarView,
+    onSidebarViewChange,
+    navigateToMessages,
+    navigateToRooms,
+    escapeHierarchy,
+  } = options
+
   const platform = getPlatform()
   const supportsQuitShortcut = platform === 'windows' || platform === 'linux'
-  const quitShortcut: ShortcutDefinition | null = supportsQuitShortcut && options.onQuitApp
-    ? {
-      key: 'q',
-      modifiers: ['meta'],
-      description: 'Quit app',
-      category: 'general',
-      action: options.onQuitApp,
-    }
-    : null
+  const quitShortcut = useMemo<ShortcutDefinition | null>(() => (
+    supportsQuitShortcut && onQuitApp
+      ? {
+        key: 'q',
+        modifiers: ['meta'],
+        description: 'Quit app',
+        category: 'general',
+        action: onQuitApp,
+      }
+      : null
+  ), [supportsQuitShortcut, onQuitApp])
 
   // NOTE: Use direct store subscriptions instead of useChat()/useRoom() hooks.
   // Those hooks subscribe to conversations/rooms which change during MAM loading,
@@ -148,7 +165,7 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
     if (unreadConv) {
       setActiveRoom(null)
       setActiveConversation(unreadConv.id)
-      options.navigateToMessages(unreadConv.id)
+      navigateToMessages(unreadConv.id)
       return
     }
 
@@ -169,15 +186,13 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
     if (unreadRooms.length > 0) {
       setActiveConversation(null)
       setActiveRoom(unreadRooms[0].room.jid)
-      options.navigateToRooms(unreadRooms[0].room.jid)
+      navigateToRooms(unreadRooms[0].room.jid)
     }
-  }, [setActiveConversation, setActiveRoom, options.navigateToMessages, options.navigateToRooms])
+  }, [setActiveConversation, setActiveRoom, navigateToMessages, navigateToRooms])
 
   // Navigate to previous item in current sidebar view (stops at top, no wrap)
   // NOTE: Uses getState() to read current data without creating subscriptions
   const goToPreviousItem = useCallback(() => {
-    const sidebarView = options.sidebarView
-
     if (sidebarView === 'messages' || sidebarView === 'archive') {
       // Read current state without subscribing
       const conversations = Array.from(chatStore.getState().conversations.values())
@@ -207,13 +222,11 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
       setActiveConversation(null)
       setActiveRoom(joinedRooms[currentIndex - 1].jid)
     }
-  }, [options.sidebarView, setActiveConversation, setActiveRoom])
+  }, [sidebarView, setActiveConversation, setActiveRoom])
 
   // Navigate to next item in current sidebar view (stops at bottom, no wrap)
   // NOTE: Uses getState() to read current data without creating subscriptions
   const goToNextItem = useCallback(() => {
-    const sidebarView = options.sidebarView
-
     if (sidebarView === 'messages' || sidebarView === 'archive') {
       // Read current state without subscribing
       const conversations = Array.from(chatStore.getState().conversations.values())
@@ -255,11 +268,11 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
       }
       // At bottom: do nothing
     }
-  }, [options.sidebarView, setActiveConversation, setActiveRoom])
+  }, [sidebarView, setActiveConversation, setActiveRoom])
 
   // Handle escape key with hierarchy (closes innermost context first)
   const handleEscape = useCallback(() => {
-    const esc = options.escapeHierarchy
+    const esc = escapeHierarchy
     if (!esc) return false
 
     // Priority order: modals first, then panels, then focus states
@@ -311,23 +324,23 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
     }
 
     return false
-  }, [options.escapeHierarchy])
+  }, [escapeHierarchy])
 
   // Define all shortcuts
-  const shortcuts: ShortcutDefinition[] = [
+  const shortcuts = useMemo<ShortcutDefinition[]>(() => [
     {
       key: '?',
       modifiers: ['ctrl'],
       description: 'Show keyboard shortcuts',
       category: 'general',
-      action: options.onToggleShortcutHelp,
+      action: onToggleShortcutHelp,
     },
     {
       key: 'F12',
       modifiers: [],
       description: 'Toggle XMPP Console',
       category: 'general',
-      action: options.onToggleConsole,
+      action: onToggleConsole,
     },
     {
       key: 'i',
@@ -349,42 +362,42 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
       modifiers: ['alt'],
       description: 'Messages view',
       category: 'navigation',
-      action: () => options.onSidebarViewChange('messages'),
+      action: () => onSidebarViewChange('messages'),
     },
     {
       key: '2',
       modifiers: ['alt'],
       description: 'Rooms view',
       category: 'navigation',
-      action: () => options.onSidebarViewChange('rooms'),
+      action: () => onSidebarViewChange('rooms'),
     },
     {
       key: '3',
       modifiers: ['alt'],
       description: 'Connections view',
       category: 'navigation',
-      action: () => options.onSidebarViewChange('directory'),
+      action: () => onSidebarViewChange('directory'),
     },
     {
       key: '4',
       modifiers: ['alt'],
       description: 'Archive view',
       category: 'navigation',
-      action: () => options.onSidebarViewChange('archive'),
+      action: () => onSidebarViewChange('archive'),
     },
     {
       key: '5',
       modifiers: ['alt'],
       description: 'Events view',
       category: 'navigation',
-      action: () => options.onSidebarViewChange('events'),
+      action: () => onSidebarViewChange('events'),
     },
     {
       key: '0',
       modifiers: ['alt'],
       description: 'Admin view',
       category: 'navigation',
-      action: () => options.onSidebarViewChange('admin'),
+      action: () => onSidebarViewChange('admin'),
     },
     {
       key: 'ArrowUp',
@@ -407,10 +420,10 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
       category: 'general',
       action: () => {
         // Navigate to settings view (toggle: go back to messages if already in settings)
-        if (options.sidebarView === 'settings') {
-          options.onSidebarViewChange('messages')
+        if (sidebarView === 'settings') {
+          onSidebarViewChange('messages')
         } else {
-          options.onOpenSettings()
+          onOpenSettings()
         }
       },
     },
@@ -421,10 +434,10 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
       category: 'actions',
       action: () => {
         // Toggle presence menu - close if open, open if closed
-        if (options.escapeHierarchy?.isPresenceMenuOpen) {
-          options.escapeHierarchy.onClosePresenceMenu()
+        if (escapeHierarchy?.isPresenceMenuOpen) {
+          escapeHierarchy.onClosePresenceMenu()
         } else {
-          options.onOpenPresenceMenu()
+          onOpenPresenceMenu()
         }
       },
     },
@@ -433,7 +446,7 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
       modifiers: ['meta'],
       description: 'Create quick chat',
       category: 'actions',
-      action: options.onCreateQuickChat,
+      action: onCreateQuickChat,
     },
     {
       key: 'k',
@@ -442,10 +455,10 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
       category: 'general',
       action: () => {
         // Toggle command palette - close if open, open if closed
-        if (options.escapeHierarchy?.isCommandPaletteOpen) {
-          options.escapeHierarchy.onCloseCommandPalette()
+        if (escapeHierarchy?.isCommandPaletteOpen) {
+          escapeHierarchy.onCloseCommandPalette()
         } else {
-          options.onOpenCommandPalette()
+          onOpenCommandPalette()
         }
       },
     },
@@ -457,7 +470,33 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
       category: 'general',
       action: handleEscape,
     },
-  ]
+  ], [
+    onToggleShortcutHelp,
+    onToggleConsole,
+    goToNextUnread,
+    onSidebarViewChange,
+    goToPreviousItem,
+    goToNextItem,
+    sidebarView,
+    onOpenSettings,
+    escapeHierarchy,
+    onOpenPresenceMenu,
+    onCreateQuickChat,
+    onOpenCommandPalette,
+    quitShortcut,
+    handleEscape,
+  ])
+
+  const shortcutsRef = useRef<ShortcutDefinition[]>(shortcuts)
+  const isCommandPaletteOpenRef = useRef(escapeHierarchy?.isCommandPaletteOpen ?? false)
+
+  useEffect(() => {
+    shortcutsRef.current = shortcuts
+  }, [shortcuts])
+
+  useEffect(() => {
+    isCommandPaletteOpenRef.current = escapeHierarchy?.isCommandPaletteOpen ?? false
+  }, [escapeHierarchy?.isCommandPaletteOpen])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -468,9 +507,9 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
                           target.isContentEditable
 
       // Skip navigation shortcuts when command palette is open (it handles its own keyboard nav)
-      const isCommandPaletteOpen = options.escapeHierarchy?.isCommandPaletteOpen
+      const isCommandPaletteOpen = isCommandPaletteOpenRef.current
 
-      for (const shortcut of shortcuts) {
+      for (const shortcut of shortcutsRef.current) {
         // Skip display-only shortcuts - let browser/system handle them
         if (shortcut.displayOnly) continue
 
@@ -502,7 +541,7 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [shortcuts, options.escapeHierarchy?.isCommandPaletteOpen])
+  }, [])
 
   return shortcuts
 }
