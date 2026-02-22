@@ -105,6 +105,12 @@ export function useDeepLink() {
     }
   }, [navigateToConversation, navigateToRoom, addConversation, joinRoom])
 
+  const handleXmppUriSafely = useCallback((uri: string) => {
+    void handleXmppUri(uri).catch((error) => {
+      console.error('[DeepLink] Failed to process URI:', uri, error)
+    })
+  }, [handleXmppUri])
+
   // Set up deep link listener
   useEffect(() => {
     if (!isTauri) return
@@ -121,7 +127,7 @@ export function useDeepLink() {
         const unlisten = await onOpenUrl((urls) => {
           console.log('[DeepLink] onOpenUrl received:', urls)
           for (const url of urls) {
-            handleXmppUri(url)
+            handleXmppUriSafely(url)
           }
         })
 
@@ -136,7 +142,7 @@ export function useDeepLink() {
         if (initialUrls && initialUrls.length > 0) {
           console.log('[DeepLink] Initial URIs:', initialUrls)
           for (const url of initialUrls) {
-            handleXmppUri(url)
+            handleXmppUriSafely(url)
           }
         }
 
@@ -146,11 +152,11 @@ export function useDeepLink() {
       }
     }
 
-    setupDeepLink()
+    void setupDeepLink()
 
     return () => {
       cleanedUp = true
       cleanup?.()
     }
-  }, [handleXmppUri])
+  }, [handleXmppUriSafely])
 }
