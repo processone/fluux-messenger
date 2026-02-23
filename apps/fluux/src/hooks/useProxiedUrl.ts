@@ -10,16 +10,42 @@ interface ProxiedUrlState {
 }
 
 /**
+ * Percent-encode special characters in URL path segments for use in
+ * HTML media element src attributes.
+ *
+ * Characters like & and = are valid in URL paths per RFC 3986, but some
+ * media loading implementations (e.g., macOS WKWebView / AVFoundation)
+ * misinterpret them as query parameter delimiters, causing fetch failures.
+ *
+ * This function round-trips each path segment through decodeURIComponent /
+ * encodeURIComponent so that bare & becomes %26, = becomes %3D, etc.
+ * Normal URLs without special path characters pass through unchanged.
+ */
+export function sanitizeMediaUrl(url: string): string {
+  try {
+    const parsed = new URL(url)
+    const encodedPath = parsed.pathname
+      .split('/')
+      .map(segment => {
+        if (!segment) return segment
+        try {
+          return encodeURIComponent(decodeURIComponent(segment))
+        } catch {
+          return encodeURIComponent(segment)
+        }
+      })
+      .join('/')
+    return `${parsed.origin}${encodedPath}${parsed.search}${parsed.hash}`
+  } catch {
+    return url
+  }
+}
+
+/**
  * Hook that returns a URL suitable for use in img/video/audio elements.
  *
- * Previously this used Tauri's HTTP plugin to proxy requests and bypass CORS,
- * but this caused issues with certain XMPP servers due to reqwest/TLS
- * compatibility problems.
- *
- * Now it simply returns the original URL directly, which works because:
- * - HTML media elements (<img>, <video>, <audio>) don't have the same CORS
- *   restrictions as fetch() requests
- * - The WebView can load cross-origin media directly
+ * Applies path-segment sanitization so that special characters (& = etc.)
+ * in filenames are percent-encoded before reaching the media loader.
  *
  * @param originalUrl - The URL to use
  * @param enabled - Whether to return the URL (useful for conditional loading)
@@ -38,8 +64,8 @@ export function useProxiedUrl(originalUrl: string | undefined, enabled: boolean 
       return
     }
 
-    // Return the original URL directly - WebView can load cross-origin media
-    setState({ url: originalUrl, isLoading: false, error: null })
+    // Sanitize path segments and return the URL for WebView media loading
+    setState({ url: sanitizeMediaUrl(originalUrl), isLoading: false, error: null })
   }, [originalUrl, enabled])
 
   return state
@@ -47,11 +73,10 @@ export function useProxiedUrl(originalUrl: string | undefined, enabled: boolean 
 
 /**
  * Preload a URL by triggering browser prefetch.
- * Since we no longer proxy URLs, this just returns the original URL.
- * The browser will cache it when the image is actually loaded.
+ * Returns the sanitized URL for consistent caching.
  */
 export async function preloadUrl(url: string): Promise<string | null> {
-  return url
+  return sanitizeMediaUrl(url)
 }
 
 /**

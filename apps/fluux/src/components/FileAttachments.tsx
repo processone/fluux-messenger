@@ -26,7 +26,7 @@ interface AttachmentProps {
 /**
  * Image attachment preview with clickable link to full image
  * Falls back to main URL when no thumbnail is provided (e.g., from other XMPP clients)
- * Uses Tauri HTTP plugin to bypass CORS in desktop app.
+ * Uses direct media URLs for browser/WebView loading.
  */
 export function ImageAttachment({ attachment, onLoad }: AttachmentProps) {
   const { t } = useTranslation()
@@ -126,7 +126,7 @@ export function ImageAttachment({ attachment, onLoad }: AttachmentProps) {
 
 /**
  * Video attachment with inline player and info bar
- * Uses Tauri HTTP plugin to bypass CORS in desktop app.
+ * Uses direct media URLs for browser/WebView loading.
  */
 export function VideoAttachment({ attachment, onLoad }: AttachmentProps) {
   const { t } = useTranslation()
@@ -135,7 +135,7 @@ export function VideoAttachment({ attachment, onLoad }: AttachmentProps) {
   // Check if this URL previously failed - initialize state from cache
   const [loadError, setLoadError] = useState(() => failedUrlCache.has(attachment.url))
 
-  // Fetch video via Tauri HTTP plugin to bypass CORS (only when it's a video)
+  // Resolve URL for video playback (only when it's a video)
   const { url: proxiedVideoUrl, isLoading, error } = useProxiedUrl(attachment.url, isVideo)
   // Also fetch poster/thumbnail if available
   const { url: proxiedPosterUrl } = useProxiedUrl(attachment.thumbnail?.uri, isVideo && !!attachment.thumbnail?.uri)
@@ -162,12 +162,25 @@ export function VideoAttachment({ attachment, onLoad }: AttachmentProps) {
           <FileX className="w-8 h-8" />
           <span>{t('chat.videoUnavailable')}</span>
         </div>
-        {attachment.name && (
-          <div className="flex items-center gap-2 px-3 py-2 bg-fluux-bg/40">
+        <div className="flex items-center gap-2 px-3 py-2 bg-fluux-bg/40">
+          {attachment.name && (
+            <div className="flex items-center gap-2 min-w-0">
             <Film className="w-4 h-4 text-fluux-muted flex-shrink-0" />
             <span className="text-sm text-fluux-muted truncate">{attachment.name}</span>
-          </div>
-        )}
+            </div>
+          )}
+          <Tooltip content={t('common.download')} position="top">
+            <a
+              href={attachment.url}
+              download={attachment.name || 'video'}
+              className="ml-auto p-1 rounded hover:bg-fluux-bg transition-colors flex-shrink-0"
+              aria-label={t('common.download')}
+              tabIndex={-1}
+            >
+              <Download className="w-4 h-4 text-fluux-muted hover:text-fluux-text" />
+            </a>
+          </Tooltip>
+        </div>
       </div>
     )
   }
@@ -175,6 +188,7 @@ export function VideoAttachment({ attachment, onLoad }: AttachmentProps) {
   return (
     <div className="pt-2 max-w-md rounded-lg overflow-hidden bg-black">
       <video
+        src={proxiedVideoUrl}
         controls
         preload="metadata"
         poster={proxiedPosterUrl || undefined}
@@ -185,9 +199,7 @@ export function VideoAttachment({ attachment, onLoad }: AttachmentProps) {
           failedUrlCache.add(attachment.url)
           setLoadError(true)
         }}
-      >
-        <source src={proxiedVideoUrl} type={attachment.mediaType} />
-      </video>
+      />
       {/* Video info bar */}
       {attachment.name && (
         <div className="flex items-center gap-2 px-3 py-2 bg-fluux-bg/60 border-t border-fluux-border">
@@ -217,7 +229,7 @@ export function VideoAttachment({ attachment, onLoad }: AttachmentProps) {
 
 /**
  * Audio attachment with inline player
- * Uses Tauri HTTP plugin to bypass CORS in desktop app.
+ * Uses direct media URLs for browser/WebView loading.
  */
 export function AudioAttachment({ attachment }: AttachmentProps) {
   const { t } = useTranslation()
@@ -226,7 +238,7 @@ export function AudioAttachment({ attachment }: AttachmentProps) {
   // Check if this URL previously failed - initialize state from cache
   const [loadError, setLoadError] = useState(() => failedUrlCache.has(attachment.url))
 
-  // Fetch audio via Tauri HTTP plugin to bypass CORS (only when it's audio)
+  // Resolve URL for audio playback (only when it's audio)
   const { url: proxiedAudioUrl, isLoading, error } = useProxiedUrl(attachment.url, isAudio)
 
   // Early return after hooks
@@ -278,6 +290,7 @@ export function AudioAttachment({ attachment }: AttachmentProps) {
         <div className="w-full rounded-b-lg bg-fluux-bg/40 border border-t-0 border-fluux-border h-10" />
       ) : (
         <audio
+          src={proxiedAudioUrl}
           controls
           preload="metadata"
           className="w-full rounded-b-lg"
@@ -287,9 +300,7 @@ export function AudioAttachment({ attachment }: AttachmentProps) {
             failedUrlCache.add(attachment.url)
             setLoadError(true)
           }}
-        >
-          <source src={proxiedAudioUrl} type={attachment.mediaType} />
-        </audio>
+        />
       )}
     </div>
   )
