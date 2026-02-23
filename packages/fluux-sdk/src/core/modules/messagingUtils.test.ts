@@ -390,6 +390,28 @@ describe('messagingUtils', () => {
       expect(result?.height).toBeUndefined()
       expect(result?.mediaType).toBe('video/mp4') // Falls back to URL extension
     })
+
+    it('should handle Prosody http_file_share URL with & and = in path', () => {
+      const url = 'https://upload.isacloud.im:5281/file_share/019c54ed-91f2-7434-b717-6fdd8296c5b3/uuid=51B2BBEE-EAA7-4738-BEB6-F32AC33B16A2&code=001&library=1&type=3&mode=2&loc=true&cap=true.mov'
+      const stanza = createMockElement('message', { id: 'msg-1' }, [
+        {
+          name: 'x',
+          attrs: { xmlns: 'jabber:x:oob' },
+          children: [
+            { name: 'url', text: url },
+          ],
+        },
+      ])
+
+      const result = parseOobData(stanza)
+
+      expect(result).toBeDefined()
+      expect(result?.url).toBe(url)
+      expect(result?.mediaType).toBe('video/quicktime')
+      expect(result?.name).toBe(
+        'uuid=51B2BBEE-EAA7-4738-BEB6-F32AC33B16A2&code=001&library=1&type=3&mode=2&loc=true&cap=true.mov'
+      )
+    })
   })
 
   describe('parseMessageContent - OOB URL stripping', () => {

@@ -101,6 +101,8 @@ describe('FileAttachments', () => {
 
       const video = document.querySelector('video')
       expect(video).toBeInTheDocument()
+      expect(video).toHaveAttribute('src', 'blob:http://localhost/image123')
+      expect(document.querySelector('source')).not.toBeInTheDocument()
     })
 
     it('should show loading state', () => {
@@ -125,6 +127,7 @@ describe('FileAttachments', () => {
       render(<VideoAttachment attachment={videoAttachment} />)
 
       expect(screen.getByText('chat.videoUnavailable')).toBeInTheDocument()
+      expect(screen.getByLabelText('common.download')).toHaveAttribute('href', videoAttachment.url)
     })
 
     it('should show unavailable message when video fails to load (onError)', () => {
@@ -146,6 +149,24 @@ describe('FileAttachments', () => {
 
       const { container } = render(<VideoAttachment attachment={imageAttachment} />)
       expect(container.firstChild).toBeNull()
+    })
+
+    it('should preserve Prosody-style file_share URL in fallback download link', () => {
+      const prosodyVideoAttachment: FileAttachment = {
+        url: 'https://upload.example.com:5281/file_share/019c54ed-91f2-7434-b717-6fdd8296c5b3/uuid=51B2BBEE-EAA7-4738-BEB6-F32AC33B16A2&code=001&library=1&type=3&mode=2&loc=true&cap=true.mov',
+        mediaType: 'video/quicktime',
+        name: 'uuid=51B2BBEE-EAA7-4738-BEB6-F32AC33B16A2&code=001&library=1&type=3&mode=2&loc=true&cap=true.mov',
+      }
+
+      mockUseProxiedUrl.mockReturnValue({
+        url: null,
+        isLoading: false,
+        error: new Error('Failed to fetch'),
+      })
+
+      render(<VideoAttachment attachment={prosodyVideoAttachment} />)
+
+      expect(screen.getByLabelText('common.download')).toHaveAttribute('href', prosodyVideoAttachment.url)
     })
   })
 
