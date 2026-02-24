@@ -43,6 +43,8 @@ import { logInfo } from '../logger'
  */
 export class Roster extends BaseModule {
   private capsHash: string | null = null
+  /** Track JIDs for which we received 'unsubscribed' but haven't seen the roster push yet */
+  private _pendingSubscriptionDenials = new Set<string>()
 
   handle(stanza: Element): boolean | void {
     if (stanza.is('iq')) {
@@ -70,7 +72,12 @@ export class Roster extends BaseModule {
         return true
       }
 
-      if (type === 'subscribed' || type === 'unsubscribe' || type === 'unsubscribed') {
+      if (type === 'unsubscribed') {
+        this.handleUnsubscribed(bareFrom)
+        return true
+      }
+
+      if (type === 'subscribed' || type === 'unsubscribe') {
         return true
       }
 
@@ -124,6 +131,16 @@ export class Roster extends BaseModule {
               groups: item.getChildren('group').map((g: Element) => g.getText()),
               presence: 'offline',
             }
+
+            // Deferred cleanup: if we received 'unsubscribed' before this roster push,
+            // and the contact now has subscription="none", remove the ghost entry.
+            if (contact.subscription === 'none' && this._pendingSubscriptionDenials.has(contact.jid)) {
+              this._pendingSubscriptionDenials.delete(contact.jid)
+              this.deps.emitSDK('roster:contact-removed', { jid: contact.jid })
+              this.removeContact(contact.jid)
+              return
+            }
+
             // SDK events only - bindings call store methods
             this.deps.emitSDK('roster:contact', { contact })
             this.deps.emitSDK('chat:conversation-name', { conversationId: contact.jid, name: contact.name })
@@ -147,13 +164,36 @@ export class Roster extends BaseModule {
       return
     }
 
-    // Auto-accept if they're already in our roster (mutual subscription flow)
-    if (this.deps.stores?.roster.hasContact(bareFrom)) {
+    // Auto-accept only if they're already in our roster with an active subscription.
+    // A subscription="none" ghost entry (e.g., from a previous rejected request)
+    // should NOT trigger auto-accept — the user must explicitly approve.
+    const contact = this.deps.stores?.roster.getContact(bareFrom)
+    if (contact && contact.subscription !== 'none') {
       this.deps.sendStanza(xml('presence', { to: bareFrom, type: 'subscribed' }))
     } else {
       // SDK event only - binding calls store.addSubscriptionRequest
       this.deps.emitSDK('events:subscription-request', { from: bareFrom })
     }
+  }
+
+  private handleUnsubscribed(bareFrom: string): void {
+    // The remote contact denied our subscription request or revoked an existing subscription.
+    // Track this JID so we can also handle the deferred case (roster push arriving later).
+    this._pendingSubscriptionDenials.add(bareFrom)
+
+    // If the contact is in our roster with subscription="none", it's a ghost entry — remove it.
+    const contact = this.deps.stores?.roster.getContact(bareFrom)
+    if (contact && contact.subscription === 'none') {
+      this.removeContact(bareFrom)
+      this._pendingSubscriptionDenials.delete(bareFrom)
+    }
+
+    // Notify the user that their subscription request was denied
+    this.deps.emitSDK('events:system-notification', {
+      type: 'subscription-denied',
+      title: 'Subscription denied',
+      message: `${getLocalPart(bareFrom)} declined your contact request`,
+    })
   }
 
   private handleRegularPresence(stanza: Element, from: string, bareFrom: string, type?: string): void {
@@ -479,5 +519,12 @@ export class Roster extends BaseModule {
     await this.deps.sendStanza(unsubscribed)
     // SDK event only - binding calls store.removeSubscriptionRequest
     this.deps.emitSDK('events:subscription-request-removed', { from: bareJid })
+
+    // Defensively clean up any ghost roster entry with subscription="none".
+    // This prevents a rejected contact from being auto-accepted on future requests.
+    const contact = this.deps.stores?.roster.getContact(bareJid)
+    if (contact && contact.subscription === 'none') {
+      await this.removeContact(bareJid)
+    }
   }
 }

@@ -64,7 +64,7 @@ export interface MucInvitation {
  *
  * @category Events
  */
-export type SystemNotificationType = 'resource-conflict' | 'auth-error' | 'connection-error'
+export type SystemNotificationType = 'resource-conflict' | 'auth-error' | 'connection-error' | 'subscription-denied'
 
 /**
  * A system notification (connection errors, auth failures, etc.).

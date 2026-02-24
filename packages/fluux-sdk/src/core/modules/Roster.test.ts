@@ -878,8 +878,8 @@ describe('XMPPClient Roster', () => {
       await connectClient()
       const emitSDKSpy = vi.spyOn(xmppClient as any, 'emitSDK')
 
-      // Mock hasContact to return false for the stranger JID
-      mockStores.roster.hasContact.mockReturnValue(false)
+      // Mock getContact to return undefined (not in roster)
+      mockStores.roster.getContact.mockReturnValue(undefined)
 
       // Simulate a subscription request from a regular user JID
       const userSubscribePresence = createMockElement('presence', {
@@ -895,6 +895,296 @@ describe('XMPPClient Roster', () => {
         'events:subscription-request',
         { from: 'stranger@example.com' }
       )
+    })
+  })
+
+  describe('subscription refusal handling', () => {
+    describe('handleSubscribe auto-accept guard', () => {
+      it('should NOT auto-accept a contact with subscription="none"', async () => {
+        await connectClient()
+        const emitSDKSpy = vi.spyOn(xmppClient as any, 'emitSDK')
+
+        // Mock a ghost roster entry with subscription="none"
+        mockStores.roster.getContact.mockReturnValue({
+          jid: 'ghost@example.com',
+          name: 'Ghost',
+          subscription: 'none',
+          presence: 'offline',
+        })
+
+        const subscribePresence = createMockElement('presence', {
+          from: 'ghost@example.com',
+          type: 'subscribe',
+        })
+
+        mockXmppClientInstance._emit('stanza', subscribePresence)
+
+        // Should NOT auto-accept (no subscribed presence sent)
+        expect(mockXmppClientInstance.send).not.toHaveBeenCalled()
+
+        // Should emit subscription-request for user to decide
+        expect(emitSDKSpy).toHaveBeenCalledWith(
+          'events:subscription-request',
+          { from: 'ghost@example.com' }
+        )
+      })
+
+      it('should auto-accept a contact with subscription="to"', async () => {
+        await connectClient()
+
+        mockStores.roster.getContact.mockReturnValue({
+          jid: 'friend@example.com',
+          name: 'Friend',
+          subscription: 'to',
+          presence: 'online',
+        })
+
+        const subscribePresence = createMockElement('presence', {
+          from: 'friend@example.com',
+          type: 'subscribe',
+        })
+
+        mockXmppClientInstance._emit('stanza', subscribePresence)
+
+        // Should auto-accept (send subscribed presence)
+        expect(mockXmppClientInstance.send).toHaveBeenCalledTimes(1)
+        const sent = vi.mocked(mockXmppClientInstance.send).mock.calls[0][0]
+        expect(sent.attrs.type).toBe('subscribed')
+        expect(sent.attrs.to).toBe('friend@example.com')
+      })
+
+      it('should auto-accept a contact with subscription="both"', async () => {
+        await connectClient()
+
+        mockStores.roster.getContact.mockReturnValue({
+          jid: 'mutual@example.com',
+          name: 'Mutual',
+          subscription: 'both',
+          presence: 'online',
+        })
+
+        const subscribePresence = createMockElement('presence', {
+          from: 'mutual@example.com',
+          type: 'subscribe',
+        })
+
+        mockXmppClientInstance._emit('stanza', subscribePresence)
+
+        expect(mockXmppClientInstance.send).toHaveBeenCalledTimes(1)
+        const sent = vi.mocked(mockXmppClientInstance.send).mock.calls[0][0]
+        expect(sent.attrs.type).toBe('subscribed')
+      })
+    })
+
+    describe('rejectSubscription cleanup', () => {
+      it('should remove subscription="none" roster entry after rejection', async () => {
+        await connectClient()
+
+        // Mock a ghost roster entry with subscription="none"
+        mockStores.roster.getContact.mockReturnValue({
+          jid: 'requester@example.com',
+          name: 'Requester',
+          subscription: 'none',
+          presence: 'offline',
+        })
+
+        await xmppClient.roster.rejectSubscription('requester@example.com')
+
+        // Should have sent 2 stanzas: unsubscribed + roster remove
+        expect(mockXmppClientInstance.send).toHaveBeenCalledTimes(2)
+
+        const unsubscribedPresence = vi.mocked(mockXmppClientInstance.send).mock.calls[0][0]
+        expect(unsubscribedPresence.attrs.type).toBe('unsubscribed')
+
+        const removeIq = vi.mocked(mockXmppClientInstance.send).mock.calls[1][0]
+        expect(removeIq.name).toBe('iq')
+        expect(removeIq.attrs.type).toBe('set')
+        expect(removeIq.children[0].children[0].attrs.subscription).toBe('remove')
+        expect(removeIq.children[0].children[0].attrs.jid).toBe('requester@example.com')
+      })
+
+      it('should NOT remove roster entry if subscription is active', async () => {
+        await connectClient()
+
+        mockStores.roster.getContact.mockReturnValue({
+          jid: 'requester@example.com',
+          name: 'Requester',
+          subscription: 'from',
+          presence: 'offline',
+        })
+
+        await xmppClient.roster.rejectSubscription('requester@example.com')
+
+        // Should only send unsubscribed, not roster remove
+        expect(mockXmppClientInstance.send).toHaveBeenCalledTimes(1)
+        const sent = vi.mocked(mockXmppClientInstance.send).mock.calls[0][0]
+        expect(sent.attrs.type).toBe('unsubscribed')
+      })
+    })
+
+    describe('incoming unsubscribed handling', () => {
+      it('should remove subscription="none" contact when receiving unsubscribed', async () => {
+        await connectClient()
+
+        // Mock a ghost roster entry with subscription="none"
+        mockStores.roster.getContact.mockReturnValue({
+          jid: 'denied@example.com',
+          name: 'Denied',
+          subscription: 'none',
+          presence: 'offline',
+        })
+
+        const unsubscribedPresence = createMockElement('presence', {
+          from: 'denied@example.com',
+          type: 'unsubscribed',
+        })
+
+        mockXmppClientInstance._emit('stanza', unsubscribedPresence)
+
+        // Should send roster remove IQ
+        expect(mockXmppClientInstance.send).toHaveBeenCalledTimes(1)
+        const removeIq = vi.mocked(mockXmppClientInstance.send).mock.calls[0][0]
+        expect(removeIq.name).toBe('iq')
+        expect(removeIq.attrs.type).toBe('set')
+        expect(removeIq.children[0].children[0].attrs.jid).toBe('denied@example.com')
+        expect(removeIq.children[0].children[0].attrs.subscription).toBe('remove')
+      })
+
+      it('should NOT remove contact with active subscription when receiving unsubscribed', async () => {
+        await connectClient()
+
+        // Contact has subscription="both" — they're revoking our subscription
+        mockStores.roster.getContact.mockReturnValue({
+          jid: 'revoker@example.com',
+          name: 'Revoker',
+          subscription: 'both',
+          presence: 'online',
+        })
+
+        const unsubscribedPresence = createMockElement('presence', {
+          from: 'revoker@example.com',
+          type: 'unsubscribed',
+        })
+
+        mockXmppClientInstance._emit('stanza', unsubscribedPresence)
+
+        // Should NOT send roster remove
+        expect(mockXmppClientInstance.send).not.toHaveBeenCalled()
+      })
+
+      it('should emit system notification when receiving unsubscribed', async () => {
+        await connectClient()
+
+        mockStores.roster.getContact.mockReturnValue(undefined)
+
+        const unsubscribedPresence = createMockElement('presence', {
+          from: 'denied@example.com',
+          type: 'unsubscribed',
+        })
+
+        mockXmppClientInstance._emit('stanza', unsubscribedPresence)
+
+        expect(emitSDKSpy).toHaveBeenCalledWith('events:system-notification', {
+          type: 'subscription-denied',
+          title: 'Subscription denied',
+          message: 'denied declined your contact request',
+        })
+      })
+    })
+
+    describe('deferred cleanup (roster push after unsubscribed)', () => {
+      it('should remove ghost entry when roster push arrives after unsubscribed', async () => {
+        await connectClient()
+
+        // No contact in roster when unsubscribed arrives
+        mockStores.roster.getContact.mockReturnValue(undefined)
+
+        const unsubscribedPresence = createMockElement('presence', {
+          from: 'denied@example.com',
+          type: 'unsubscribed',
+        })
+
+        mockXmppClientInstance._emit('stanza', unsubscribedPresence)
+
+        // No roster remove yet (contact wasn't in roster at the time)
+        expect(mockXmppClientInstance.send).not.toHaveBeenCalled()
+
+        vi.mocked(mockXmppClientInstance.send).mockClear()
+        emitSDKSpy.mockClear()
+
+        // Now the roster push arrives with subscription="none"
+        const rosterPush = createMockElement('iq', {
+          type: 'set',
+          id: 'push-denied',
+        }, [
+          {
+            name: 'query',
+            attrs: { xmlns: 'jabber:iq:roster' },
+            children: [
+              {
+                name: 'item',
+                attrs: {
+                  jid: 'denied@example.com',
+                  name: 'Denied',
+                  subscription: 'none',
+                },
+              },
+            ],
+          },
+        ])
+
+        mockXmppClientInstance._emit('stanza', rosterPush)
+
+        // Should emit roster:contact-removed (not roster:contact)
+        expect(emitSDKSpy).toHaveBeenCalledWith('roster:contact-removed', { jid: 'denied@example.com' })
+        expect(emitSDKSpy).not.toHaveBeenCalledWith('roster:contact', expect.anything())
+
+        // Should also send roster remove IQ to server
+        expect(mockXmppClientInstance.send).toHaveBeenCalledTimes(1)
+        const removeIq = vi.mocked(mockXmppClientInstance.send).mock.calls[0][0]
+        expect(removeIq.name).toBe('iq')
+        expect(removeIq.children[0].children[0].attrs.subscription).toBe('remove')
+      })
+
+      it('should NOT trigger deferred removal for non-denied roster pushes', async () => {
+        await connectClient()
+
+        // Regular roster push with subscription="none" (e.g., during add contact flow)
+        // without a preceding unsubscribed — should NOT be removed
+        const rosterPush = createMockElement('iq', {
+          type: 'set',
+          id: 'push-add',
+        }, [
+          {
+            name: 'query',
+            attrs: { xmlns: 'jabber:iq:roster' },
+            children: [
+              {
+                name: 'item',
+                attrs: {
+                  jid: 'newcontact@example.com',
+                  name: 'New Contact',
+                  subscription: 'none',
+                },
+              },
+            ],
+          },
+        ])
+
+        mockXmppClientInstance._emit('stanza', rosterPush)
+
+        // Should emit roster:contact normally (not removed)
+        expect(emitSDKSpy).toHaveBeenCalledWith('roster:contact', {
+          contact: {
+            jid: 'newcontact@example.com',
+            name: 'New Contact',
+            subscription: 'none',
+            presence: 'offline',
+            groups: [],
+          },
+        })
+        expect(emitSDKSpy).not.toHaveBeenCalledWith('roster:contact-removed', expect.anything())
+      })
     })
   })
 })

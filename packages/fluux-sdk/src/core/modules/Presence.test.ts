@@ -449,9 +449,14 @@ describe('XMPPClient Presence', () => {
       })
     })
 
-    it('should auto-accept subscription from existing contact', async () => {
+    it('should auto-accept subscription from existing contact with active subscription', async () => {
       await connectClient()
-      vi.mocked(mockStores.roster.hasContact).mockReturnValue(true)
+      vi.mocked(mockStores.roster.getContact).mockReturnValue({
+        jid: 'existingcontact@example.com',
+        name: 'Existing Contact',
+        subscription: 'to',
+        presence: 'online',
+      })
 
       const subscribeStanza = createMockElement('presence', {
         from: 'existingcontact@example.com',
@@ -493,7 +498,7 @@ describe('XMPPClient Presence', () => {
       expect(emitSDKSpy).not.toHaveBeenCalledWith('roster:presence', expect.anything())
     })
 
-    it('should ignore unsubscribed presence type', async () => {
+    it('should handle unsubscribed presence without emitting roster:presence', async () => {
       await connectClient()
 
       const unsubscribedStanza = createMockElement('presence', {
@@ -503,7 +508,13 @@ describe('XMPPClient Presence', () => {
 
       mockXmppClientInstance._emit('stanza', unsubscribedStanza)
 
+      // Should NOT emit roster:presence (unsubscribed is not a presence update)
       expect(emitSDKSpy).not.toHaveBeenCalledWith('roster:presence', expect.anything())
+      // Should emit system notification about the denial
+      expect(emitSDKSpy).toHaveBeenCalledWith('events:system-notification', expect.objectContaining({
+        type: 'subscription-denied',
+        title: 'Subscription denied',
+      }))
     })
   })
 
