@@ -1,16 +1,24 @@
 // Prevents additional console window on Windows in release
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-// Linux: Apply WebKitGTK GPU workaround env vars BEFORE main() runs when requested.
+// Linux: Apply WebKitGTK GPU workaround env vars BEFORE main() runs.
 // This uses ctor to run a static constructor before any other code,
 // ensuring the env vars are set before WebKitGTK initializes.
-// Fixes grey screen / "Could not create default EGL display: EGL_BAD_PARAMETER"
-// See: https://github.com/tauri-apps/tauri/issues/11988
+//
+// WEBKIT_DISABLE_DMABUF_RENDERER is always set to work around a Wayland crash:
+// "Error 71 (Protocol error) dispatching to Wayland display."
+// See: https://github.com/tauri-apps/tauri/issues/10702
+//
+// WEBKIT_DISABLE_COMPOSITING_MODE is additionally set when FLUUX_DISABLE_GPU
+// is defined, for NVIDIA EGL display issues (grey screen / EGL_BAD_PARAMETER).
 #[cfg(target_os = "linux")]
 #[ctor::ctor]
 fn set_linux_webkit_env() {
+    // Work around WebKitGTK dmabuf renderer crash on Wayland
+    std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+
+    // Full GPU disable on request (for NVIDIA EGL issues)
     if std::env::var("FLUUX_DISABLE_GPU").is_ok() {
-        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
     }
 }
@@ -830,27 +838,19 @@ fn print_startup_diagnostics() {
 
     #[cfg(target_os = "linux")]
     {
-        let gpu_disabled = std::env::var("FLUUX_DISABLE_GPU").is_ok();
-        let dmabuf_disabled = std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER")
-            .map(|v| v == "1")
-            .unwrap_or(false);
         let compositing_disabled = std::env::var("WEBKIT_DISABLE_COMPOSITING_MODE")
             .map(|v| v == "1")
             .unwrap_or(false);
 
         eprintln!("WebKitGTK GPU settings:");
-        eprintln!(
-            "  FLUUX_DISABLE_GPU: {}",
-            if gpu_disabled {
-                "set (hardware acceleration disabled)"
-            } else {
-                "not set (hardware acceleration enabled)"
-            }
-        );
-        eprintln!("  WEBKIT_DISABLE_DMABUF_RENDERER: {}", dmabuf_disabled);
+        eprintln!("  WEBKIT_DISABLE_DMABUF_RENDERER: always enabled (Wayland crash workaround)");
         eprintln!(
             "  WEBKIT_DISABLE_COMPOSITING_MODE: {}",
-            compositing_disabled
+            if compositing_disabled {
+                "enabled (FLUUX_DISABLE_GPU set)"
+            } else {
+                "disabled (set FLUUX_DISABLE_GPU to enable)"
+            }
         );
     }
 
@@ -917,7 +917,7 @@ fn main() {
         eprintln!();
         eprintln!("Environment variables:");
         eprintln!("  RUST_LOG              Override log filter (e.g. RUST_LOG=debug)");
-        eprintln!("  FLUUX_DISABLE_GPU     Disable hardware acceleration (Linux troubleshooting)");
+        eprintln!("  FLUUX_DISABLE_GPU     Disable compositing mode (Linux, for NVIDIA EGL issues)");
         std::process::exit(0);
     }
 
