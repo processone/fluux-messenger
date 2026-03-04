@@ -27,7 +27,7 @@ vi.mock('zustand/middleware', () => ({
   persist: (fn: unknown) => fn,
 }))
 
-import { ignoreStore } from './ignoreStore'
+import { ignoreStore, isMessageFromIgnoredUser } from './ignoreStore'
 
 const ROOM_JID = 'room@conference.example.com'
 const ROOM_JID_2 = 'room2@conference.example.com'
@@ -206,6 +206,76 @@ describe('ignoreStore', () => {
       ignoreStore.getState().reset()
 
       expect(ignoreStore.getState().getIgnoredForRoom(ROOM_JID)).toEqual([])
+    })
+  })
+
+  describe('isMessageFromIgnoredUser', () => {
+    it('should match by occupantId (highest priority)', () => {
+      const ignored = [{ identifier: 'occ-alice', displayName: 'Alice', jid: 'alice@example.com' }]
+      const msg = { occupantId: 'occ-alice', nick: 'Alice' }
+
+      expect(isMessageFromIgnoredUser(ignored, msg)).toBe(true)
+    })
+
+    it('should match by nick when identifier is nick', () => {
+      const ignored = [{ identifier: 'Alice', displayName: 'Alice' }]
+      const msg = { nick: 'Alice' }
+
+      expect(isMessageFromIgnoredUser(ignored, msg)).toBe(true)
+    })
+
+    it('should match by JID via nickToJidCache when identifier is bareJid', () => {
+      const ignored = [{ identifier: 'alice@example.com', displayName: 'Alice', jid: 'alice@example.com' }]
+      const msg = { nick: 'Alice' }
+      const cache = new Map([['Alice', 'alice@example.com']])
+
+      expect(isMessageFromIgnoredUser(ignored, msg, cache)).toBe(true)
+    })
+
+    it('should cross-match via jid field when identifier is occupantId (MAM history case)', () => {
+      // Identifier is occupantId, message has no occupantId (old MAM message),
+      // but the stored jid field can be matched via nickToJidCache
+      const ignored = [{ identifier: 'occ-alice', displayName: 'Alice', jid: 'alice@example.com' }]
+      const msg = { nick: 'Alice' } // No occupantId
+      const cache = new Map([['Alice', 'alice@example.com']])
+
+      expect(isMessageFromIgnoredUser(ignored, msg, cache)).toBe(true)
+    })
+
+    it('should not match unrelated users', () => {
+      const ignored = [{ identifier: 'occ-alice', displayName: 'Alice', jid: 'alice@example.com' }]
+      const msg = { occupantId: 'occ-bob', nick: 'Bob' }
+      const cache = new Map([['Bob', 'bob@example.com']])
+
+      expect(isMessageFromIgnoredUser(ignored, msg, cache)).toBe(false)
+    })
+
+    it('should return false for empty ignored list', () => {
+      const msg = { occupantId: 'occ-alice', nick: 'Alice' }
+
+      expect(isMessageFromIgnoredUser([], msg)).toBe(false)
+    })
+
+    it('should not match when no occupantId and no cache', () => {
+      // Identifier is occupantId, message has no occupantId, no cache available
+      const ignored = [{ identifier: 'occ-alice', displayName: 'Alice', jid: 'alice@example.com' }]
+      const msg = { nick: 'Alice' }
+
+      expect(isMessageFromIgnoredUser(ignored, msg)).toBe(false)
+    })
+
+    it('should match multiple ignored users', () => {
+      const ignored = [
+        { identifier: 'occ-alice', displayName: 'Alice' },
+        { identifier: 'occ-bob', displayName: 'Bob' },
+      ]
+      const msgAlice = { occupantId: 'occ-alice', nick: 'Alice' }
+      const msgBob = { occupantId: 'occ-bob', nick: 'Bob' }
+      const msgCharlie = { occupantId: 'occ-charlie', nick: 'Charlie' }
+
+      expect(isMessageFromIgnoredUser(ignored, msgAlice)).toBe(true)
+      expect(isMessageFromIgnoredUser(ignored, msgBob)).toBe(true)
+      expect(isMessageFromIgnoredUser(ignored, msgCharlie)).toBe(false)
     })
   })
 

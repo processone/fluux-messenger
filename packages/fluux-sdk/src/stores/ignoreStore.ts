@@ -112,4 +112,33 @@ export const ignoreStore = createStore<IgnoreState>()(
   )
 )
 
+/**
+ * Check whether a room message was sent by an ignored user.
+ *
+ * Matching priority: occupantId (XEP-0421) > JID via nickToJidCache > nick.
+ * Also cross-matches the stored `jid` field against `nickToJidCache` so that
+ * messages without occupantId (e.g., MAM history) are still caught when the
+ * identifier is an occupantId.
+ */
+export function isMessageFromIgnoredUser(
+  ignoredUsers: IgnoredUser[],
+  msg: { occupantId?: string; nick: string },
+  nickToJidCache?: Map<string, string>,
+): boolean {
+  if (ignoredUsers.length === 0) return false
+  const ignoredIds = new Set(ignoredUsers.map(u => u.identifier))
+  const ignoredJids = new Set(ignoredUsers.map(u => u.jid).filter(Boolean))
+
+  // Check occupantId first (XEP-0421, most reliable)
+  if (msg.occupantId && ignoredIds.has(msg.occupantId)) return true
+  // Check by JID via nickToJidCache (matches when identifier is bareJid OR occupantId with stored jid)
+  if (nickToJidCache) {
+    const jid = nickToJidCache.get(msg.nick)
+    if (jid && (ignoredIds.has(jid) || ignoredJids.has(jid))) return true
+  }
+  // Check by nick (least reliable, last resort)
+  if (ignoredIds.has(msg.nick)) return true
+  return false
+}
+
 export type { IgnoreState }

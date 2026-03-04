@@ -26,7 +26,9 @@ import type {
   adminStore,
   blockingStore,
   consoleStore,
+  ignoreStore,
 } from '../stores'
+import { isMessageFromIgnoredUser } from '../stores'
 
 /**
  * Store references for binding SDK events.
@@ -41,6 +43,7 @@ export interface StoreRefs {
   admin: ReturnType<typeof adminStore.getState>
   blocking: ReturnType<typeof blockingStore.getState>
   console: ReturnType<typeof consoleStore.getState>
+  ignore: ReturnType<typeof ignoreStore.getState>
 }
 
 /**
@@ -254,7 +257,16 @@ export function createStoreBindings(
 
   on('room:message', ({ roomJid, message, incrementUnread, incrementMentions }) => {
     const stores = getStores()
-    stores.room.addMessage(roomJid, message, { incrementUnread, incrementMentions })
+    // Suppress notifications for ignored users
+    const doNotNotify = isMessageFromIgnoredUser(
+      stores.ignore.getIgnoredForRoom(roomJid),
+      message,
+      stores.room.getRoom(roomJid)?.nickToJidCache,
+    )
+    stores.room.addMessage(roomJid, message, {
+      incrementUnread: incrementUnread && !doNotNotify,
+      incrementMentions: incrementMentions && !doNotNotify,
+    })
   })
 
   on('room:message-updated', ({ roomJid, messageId, updates }) => {
