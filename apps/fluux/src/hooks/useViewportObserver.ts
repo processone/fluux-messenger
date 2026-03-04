@@ -72,6 +72,13 @@ export function useViewportObserver({
   }, [])
 
   useEffect(() => {
+    // Flush pending report before resetting — ensures lastSeenMessageId is
+    // up-to-date before onDeactivate() clears the marker.  Without this,
+    // a throttled update can be lost when switching conversations, causing
+    // onActivate() to recompute a stale firstNewMessageId on re-entry.
+    if (pendingMessageIdRef.current && pendingMessageIdRef.current !== lastReportedRef.current) {
+      onMessageSeenRef.current?.(pendingMessageIdRef.current)
+    }
     // Reset tracking state on conversation switch
     lastReportedRef.current = null
     lastReportedTimeRef.current = 0

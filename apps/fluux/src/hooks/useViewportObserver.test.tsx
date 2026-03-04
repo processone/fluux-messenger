@@ -370,7 +370,7 @@ describe('useViewportObserver', () => {
     expect(onMessageSeen).toHaveBeenCalledTimes(2)
   })
 
-  it('cancels pending throttled report on conversation switch', () => {
+  it('flushes pending throttled report on conversation switch', () => {
     const onMessageSeen = vi.fn()
     const scrollContainerRef = createScrollContainer(['msg-1', 'msg-2'])
 
@@ -390,6 +390,7 @@ describe('useViewportObserver', () => {
       ioCallback([makeEntry('msg-1', true, 100)], {} as IntersectionObserver)
     })
     expect(onMessageSeen).toHaveBeenCalledTimes(1)
+    expect(onMessageSeen).toHaveBeenLastCalledWith('msg-1')
 
     // Quickly queue a throttled report
     act(() => {
@@ -397,14 +398,16 @@ describe('useViewportObserver', () => {
       ioCallback([makeEntry('msg-2', true, 200)], {} as IntersectionObserver)
     })
 
-    // Switch conversation before throttle fires
+    // Switch conversation — pending report should be flushed synchronously
+    // so that lastSeenMessageId is up-to-date before onDeactivate() clears the marker
     rerender({ conversationId: 'conv-2' })
 
-    // Advance past throttle — the old pending should NOT fire
-    act(() => { vi.advanceTimersByTime(400) })
+    expect(onMessageSeen).toHaveBeenCalledTimes(2)
+    expect(onMessageSeen).toHaveBeenLastCalledWith('msg-2')
 
-    // Only the initial immediate call should have fired
-    expect(onMessageSeen).toHaveBeenCalledTimes(1)
+    // Advance past throttle — no additional calls
+    act(() => { vi.advanceTimersByTime(400) })
+    expect(onMessageSeen).toHaveBeenCalledTimes(2)
   })
 
   // ========================================================================
