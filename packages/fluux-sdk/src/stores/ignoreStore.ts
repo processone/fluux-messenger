@@ -34,6 +34,8 @@ interface IgnoreState {
 
   addIgnored: (roomJid: string, user: IgnoredUser) => void
   removeIgnored: (roomJid: string, identifier: string) => void
+  /** Replace the full ignore list for a single room (used for server sync) */
+  setIgnoredForRoom: (roomJid: string, users: IgnoredUser[]) => void
   isIgnored: (roomJid: string, identifier: string) => boolean
   getIgnoredForRoom: (roomJid: string) => IgnoredUser[]
   reset: () => void
@@ -55,6 +57,18 @@ export const ignoreStore = createStore<IgnoreState>()(
               [roomJid]: [...existing, user],
             },
           }
+        })
+      },
+
+      setIgnoredForRoom: (roomJid, users) => {
+        set((state) => {
+          const newIgnored = { ...state.ignoredUsers }
+          if (users.length === 0) {
+            delete newIgnored[roomJid]
+          } else {
+            newIgnored[roomJid] = users
+          }
+          return { ignoredUsers: newIgnored }
         })
       },
 

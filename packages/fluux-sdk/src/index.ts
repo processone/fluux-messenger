@@ -180,7 +180,7 @@ export { chatSelectors, roomSelectors, rosterSelectors } from './stores'
 // Admin dashboard types
 export type { AdminStats } from './stores/adminStore'
 
-// Ignore store types
+// Room ignore store types
 export type { IgnoredUser } from './stores/ignoreStore'
 
 // Notification state utilities (pure functions for badge computation, etc.)
