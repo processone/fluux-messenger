@@ -19,6 +19,7 @@ import {
   NS_MAM,
   NS_NICK,
   NS_VCARD_UPDATE,
+  NS_OCCUPANT_ID,
 } from '../namespaces'
 import type {
   Room,
@@ -192,6 +193,10 @@ export class MUC extends BaseModule {
     const xUpdate = stanza.getChild('x', NS_VCARD_UPDATE)
     const avatarHash = xUpdate?.getChildText('photo') || undefined
 
+    // XEP-0421: Anonymous Unique Occupant Identifiers
+    const occupantIdEl = stanza.getChild('occupant-id', NS_OCCUPANT_ID)
+    const occupantId = occupantIdEl?.attrs.id
+
     const occupant: RoomOccupant = {
       nick,
       jid: realJid,
@@ -200,6 +205,7 @@ export class MUC extends BaseModule {
       show: show || undefined,
       hats: hats.length > 0 ? hats : undefined,
       avatarHash,
+      ...(occupantId && { occupantId }),
     }
 
     if (isSelf) {

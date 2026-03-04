@@ -81,6 +81,11 @@ export interface RoomOccupant {
    * Used to detect avatar changes and for cache lookup.
    */
   avatarHash?: string
+  /**
+   * XEP-0421: Stable anonymous occupant identifier.
+   * Survives nick changes and works in anonymous rooms.
+   */
+  occupantId?: string
 }
 
 /**
@@ -122,6 +127,11 @@ export interface RoomMessage extends Omit<BaseMessage, 'type'> {
   isMentionAll?: boolean
   /** XEP-0372: Parsed mention references */
   mentions?: MentionReference[]
+  /**
+   * XEP-0421: Stable anonymous occupant identifier of the sender.
+   * Survives nick changes and works in anonymous rooms.
+   */
+  occupantId?: string
 }
 
 /**

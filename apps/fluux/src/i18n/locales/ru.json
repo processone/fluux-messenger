@@ -162,7 +162,6 @@
     "pleaseEnterRoomAddress": "Пожалуйста, введите адрес конференции",
     "invalidRoomAddress": "Неверный адрес комнаты (должен быть типа room@conference.domain.tld)",
     "joinRoomHint": "Введите полный адрес конференции, чтобы войти в нее.",
-    "joining": "Вход...",
     "failedToJoinRoom": "Не удалось войти в конференцию",
     "joinToParticipate": "Войдите в конференцию, чтобы участвовать в беседе",
     "cachedHistoryWarning": "Кэшированная история до {{date}}. Войдите, чтобы получить свежие сообщения.",
@@ -242,7 +241,14 @@
     "inviteError": "Не удалось отправить приглашения",
     "invitationsSent": "Приглашение(я) отправлены",
     "inviteRejected": "Приглашение отклонено: {{error}}",
-    "sendInvitations": "Отправить {{count}} приглашение(я/ий)"
+    "sendInvitations": "Отправить {{count}} приглашение(я/ий)",
+    "sendPrivateMessage": "Send private message",
+    "copyJid": "Copy JID",
+    "jidCopied": "JID copied",
+    "ignoreUser": "Ignore in this room",
+    "stopIgnoring": "Stop ignoring",
+    "blockUser": "Block user",
+    "ignored": "ignored"
   },
   "events": {
     "noPendingEvents": "Нет ожидающих событий",
@@ -432,10 +438,10 @@
     "connection": "Соединение",
     "connectionMethod_proxy": "TCP/TLS",
     "connectionMethod_websocket": "WebSocket",
-        "webPush": "Web Push",
-        "webPush_unavailable": "Не поддерживается",
-        "webPush_available": "Ожидает регистрации",
-        "webPush_registered": "Зарегистрировано"
+    "webPush": "Web Push",
+    "webPush_unavailable": "Не поддерживается",
+    "webPush_available": "Ожидает регистрации",
+    "webPush_registered": "Зарегистрировано"
   },
   "console": {
     "title": "XMPP Консоль",

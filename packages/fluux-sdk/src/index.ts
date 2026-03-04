@@ -96,6 +96,7 @@ export { useRoomActive } from './hooks/useRoomActive'
 export { useXMPP } from './hooks/useXMPP'
 export { useAdmin } from './hooks/useAdmin'
 export { useBlocking } from './hooks/useBlocking'
+export { useIgnore } from './hooks/useIgnore'
 export { usePresence } from './hooks/usePresence'
 export type { UsePresenceReturn } from './hooks/usePresence'
 export { useSystemState } from './hooks/useSystemState'
@@ -178,6 +179,9 @@ export { chatSelectors, roomSelectors, rosterSelectors } from './stores'
 
 // Admin dashboard types
 export type { AdminStats } from './stores/adminStore'
+
+// Ignore store types
+export type { IgnoredUser } from './stores/ignoreStore'
 
 // Notification state utilities (pure functions for badge computation, etc.)
 export { computeBadgeCount, shouldNotifyConversation, shouldNotifyRoom } from './stores/shared/notificationState'

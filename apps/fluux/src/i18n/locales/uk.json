@@ -162,7 +162,6 @@
     "pleaseEnterRoomAddress": "Будь ласка, введіть адресу кімнати",
     "invalidRoomAddress": "Невірна адреса кімнати (має бути room@conference.domain.tld)",
     "joinRoomHint": "Введіть повну адресу кімнати, щоб приєднатися до публічної чат-кімнати.",
-    "joining": "Приєднання...",
     "failedToJoinRoom": "Не вдалося приєднатися до кімнати",
     "joinToParticipate": "Приєднайтеся до кімнати, щоб брати участь",
     "cachedHistoryWarning": "Кешована історія до {{date}}. Приєднайтеся, щоб отримати останні повідомлення.",
@@ -242,7 +241,14 @@
     "inviteError": "Не вдалося надіслати запрошення",
     "invitationsSent": "Запрошення надіслано",
     "inviteRejected": "Запрошення відхилено: {{error}}",
-    "sendInvitations": "Надіслати {{count}} запрошення(ь)"
+    "sendInvitations": "Надіслати {{count}} запрошення(ь)",
+    "sendPrivateMessage": "Send private message",
+    "copyJid": "Copy JID",
+    "jidCopied": "JID copied",
+    "ignoreUser": "Ignore in this room",
+    "stopIgnoring": "Stop ignoring",
+    "blockUser": "Block user",
+    "ignored": "ignored"
   },
   "events": {
     "noPendingEvents": "Немає очікуючих подій",
@@ -432,10 +438,10 @@
     "connection": "З'єднання",
     "connectionMethod_proxy": "TCP/TLS",
     "connectionMethod_websocket": "WebSocket",
-        "webPush": "Web Push",
-        "webPush_unavailable": "Не підтримується",
-        "webPush_available": "Очікує реєстрації",
-        "webPush_registered": "Зареєстровано"
+    "webPush": "Web Push",
+    "webPush_unavailable": "Не підтримується",
+    "webPush_available": "Очікує реєстрації",
+    "webPush_registered": "Зареєстровано"
   },
   "console": {
     "title": "XMPP консоль",

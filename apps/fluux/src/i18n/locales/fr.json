@@ -241,7 +241,14 @@
         "invitationsSent": "Invitation(s) envoyée(s)",
         "inviteRejected": "Invitation rejetée : {{error}}",
         "sendInvitations": "Envoyer {{count}} invitation(s)",
-        "outcast": "Banni"
+        "outcast": "Banni",
+        "sendPrivateMessage": "Envoyer un message privé",
+        "copyJid": "Copier le JID",
+        "jidCopied": "JID copié",
+        "ignoreUser": "Ignorer dans ce salon",
+        "stopIgnoring": "Ne plus ignorer",
+        "blockUser": "Bloquer l'utilisateur",
+        "ignored": "ignoré"
     },
     "events": {
         "noPendingEvents": "Aucun événement en attente",
