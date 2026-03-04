@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useRoomActive, useRoster, getBareJid, generateConsistentColorHexSync, getPresenceFromShow, createMessageLookup, type RoomMessage, type Room, type MentionReference, type ChatStateNotification, type Contact, type FileAttachment } from '@fluux/sdk'
+import { useRoomActive, useRoster, getBareJid, generateConsistentColorHexSync, getPresenceFromShow, createMessageLookup, isMessageFromIgnoredUser, type RoomMessage, type Room, type MentionReference, type ChatStateNotification, type Contact, type FileAttachment } from '@fluux/sdk'
 import { useConnectionStore, useIgnoreStore } from '@fluux/sdk/react'
 import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat } from '@/hooks'
 import { MessageBubble, MessageList, shouldShowAvatar, buildReplyContext } from './conversation'
@@ -75,21 +75,9 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   const ignoredForRoom = useIgnoreStore((s) => activeRoom ? (s.ignoredUsers[activeRoom.jid] || []) : [])
   const displayMessages = useMemo(() => {
     if (ignoredForRoom.length === 0) return activeMessages
-    const ignoredIds = new Set(ignoredForRoom.map(u => u.identifier))
-    // Build a separate set of known JIDs for cross-matching when identifier is occupantId
-    const ignoredJids = new Set(ignoredForRoom.map(u => u.jid).filter(Boolean))
-    return activeMessages.filter(msg => {
-      // Check occupantId first (XEP-0421, most reliable)
-      if (msg.occupantId && ignoredIds.has(msg.occupantId)) return false
-      // Check by JID via nickToJidCache (matches when identifier is bareJid OR occupantId with stored jid)
-      if (activeRoom?.nickToJidCache) {
-        const jid = activeRoom.nickToJidCache.get(msg.nick)
-        if (jid && (ignoredIds.has(jid) || ignoredJids.has(jid))) return false
-      }
-      // Check by nick (least reliable, last resort)
-      if (ignoredIds.has(msg.nick)) return false
-      return true
-    })
+    return activeMessages.filter(msg =>
+      !isMessageFromIgnoredUser(ignoredForRoom, msg, activeRoom?.nickToJidCache)
+    )
   }, [activeMessages, ignoredForRoom, activeRoom])
 
   // Reply state

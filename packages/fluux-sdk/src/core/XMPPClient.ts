@@ -33,6 +33,7 @@ import {
   roomStore,
   adminStore,
   blockingStore,
+  ignoreStore,
 } from '../stores'
 import { detectPlatform, getCachedPlatform } from './platform'
 import { isDeadSocketError } from './modules/connectionUtils'
@@ -485,6 +486,7 @@ export class XMPPClient {
       admin: adminStore.getState(),
       blocking: blockingStore.getState(),
       console: consoleStore.getState(),
+      ignore: ignoreStore.getState(),
     }))
     this.cleanupFunctions.push(unsubscribeStoreBindings)
 

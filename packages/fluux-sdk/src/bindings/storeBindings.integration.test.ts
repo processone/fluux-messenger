@@ -116,6 +116,7 @@ describe('SDK Event Bindings Integration', () => {
         setBookmark: mockStores.room.setBookmark,
         removeBookmark: mockStores.room.removeBookmark,
         triggerAnimation: mockStores.room.triggerAnimation,
+        getRoom: mockStores.room.getRoom,
       } as unknown as StoreRefs['room'],
       events: {
         addSubscriptionRequest: mockStores.events.addSubscriptionRequest,
@@ -143,6 +144,9 @@ describe('SDK Event Bindings Integration', () => {
         addEvent: mockStores.console.addEvent,
         addPacket: mockStores.console.addPacket,
       } as unknown as StoreRefs['console'],
+      ignore: {
+        getIgnoredForRoom: vi.fn().mockReturnValue([]),
+      } as unknown as StoreRefs['ignore'],
     }
 
     // Set up store bindings (simulating what XMPPProvider does)

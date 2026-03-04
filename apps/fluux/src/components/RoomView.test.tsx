@@ -70,7 +70,9 @@ const mockClearFirstNewMessageId = vi.fn()
 const mockClearAnimation = vi.fn()
 
 // Mock SDK hooks
-vi.mock('@fluux/sdk', () => ({
+vi.mock('@fluux/sdk', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@fluux/sdk')>()
+  return {
   useRoomActive: () => ({
     activeRoom: mockActiveRoom,
     activeMessages: mockActiveMessages,
@@ -127,7 +129,8 @@ vi.mock('@fluux/sdk', () => ({
     })
     return map
   },
-}))
+  isMessageFromIgnoredUser: actual.isMessageFromIgnoredUser,
+}})
 
 // Mock React store hooks (from @fluux/sdk/react)
 vi.mock('@fluux/sdk/react', () => ({

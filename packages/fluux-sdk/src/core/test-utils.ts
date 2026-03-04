@@ -971,6 +971,7 @@ export const createMockStoreRefs = (): MockStoreRefs => ({
     removeBookmark: vi.fn(),
     triggerAnimation: vi.fn(),
     mergeRoomMembers: vi.fn(),
+    getRoom: vi.fn().mockReturnValue(undefined),
   } as unknown as MockStoreRefs['room'],
   events: {
     addSubscriptionRequest: vi.fn(),
@@ -998,4 +999,7 @@ export const createMockStoreRefs = (): MockStoreRefs => ({
     addEvent: vi.fn(),
     addPacket: vi.fn(),
   } as unknown as MockStoreRefs['console'],
+  ignore: {
+    getIgnoredForRoom: vi.fn().mockReturnValue([]),
+  } as unknown as MockStoreRefs['ignore'],
 })
