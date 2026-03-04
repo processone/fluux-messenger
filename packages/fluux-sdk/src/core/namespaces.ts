@@ -144,6 +144,9 @@ export const NS_PING = 'urn:xmpp:ping'
 // XEP-0191: Blocking Command
 export const NS_BLOCKING = 'urn:xmpp:blocking'
 
+// XEP-0421: Anonymous Unique Occupant Identifiers for MUCs
+export const NS_OCCUPANT_ID = 'urn:xmpp:occupant-id:0'
+
 // RFC 6120: XMPP Stanza Error Conditions
 export const NS_XMPP_STANZAS = 'urn:ietf:params:xml:ns:xmpp-stanzas'
 

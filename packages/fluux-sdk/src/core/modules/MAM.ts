@@ -44,6 +44,7 @@ import {
   NS_FASTEN,
   NS_REACTIONS,
   NS_OOB,
+  NS_OCCUPANT_ID,
 } from '../namespaces'
 import type {
   Message,
@@ -1394,6 +1395,9 @@ export class MAM extends BaseModule {
     // For message ID: prefer message id attr, then generate stable ID from content
     const messageId = messageEl.attrs.id || generateStableMessageId(from, parsed.timestamp, body || '')
 
+    // XEP-0421: Anonymous Unique Occupant Identifiers
+    const occupantId = messageEl.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id
+
     return {
       type: 'groupchat',
       id: messageId,
@@ -1408,6 +1412,7 @@ export class MAM extends BaseModule {
       ...(parsed.noStyling && { noStyling: parsed.noStyling }),
       ...(parsed.replyTo && { replyTo: parsed.replyTo }),
       ...(parsed.attachment && { attachment: parsed.attachment }),
+      ...(occupantId && { occupantId }),
     }
   }
 }

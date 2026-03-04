@@ -503,6 +503,29 @@ function ChatLayoutContent() {
     // selectedContact will be cleared by useEffect
   }, [addConversation, setActiveConversation, setActiveRoom, handleSidebarViewChange])
 
+  // Handle starting a chat from a JID (e.g., from occupant panel context menu)
+  const handleStartChatWithJid = useCallback((jid: string) => {
+    const chatState = chatStore.getState()
+    if (chatState.isArchived(jid)) {
+      handleSidebarViewChange('archive')
+      setActiveConversation(jid)
+      setActiveRoom(null)
+      return
+    }
+    if (!chatState.hasConversation(jid)) {
+      const conversation: Conversation = {
+        id: jid,
+        name: jid,
+        type: 'chat',
+        unreadCount: 0,
+      }
+      addConversation(conversation)
+    }
+    handleSidebarViewChange('messages')
+    setActiveConversation(jid)
+    setActiveRoom(null)
+  }, [addConversation, setActiveConversation, setActiveRoom, handleSidebarViewChange])
+
   // Handle removing a contact
   const handleRemoveContact = useCallback(async (jid: string) => {
     await removeContact(jid)
@@ -573,7 +596,7 @@ function ChatLayoutContent() {
           {sidebarView === 'settings' ? (
             <SettingsView onBack={handleSettingsBack} />
           ) : activeRoomJid ? (
-            <RoomView onBack={handleRoomBack} mainContentRef={focusZoneRefs.mainContent} composerRef={focusZoneRefs.composer} showOccupants={showRoomOccupants} onShowOccupantsChange={setShowRoomOccupants} />
+            <RoomView onBack={handleRoomBack} mainContentRef={focusZoneRefs.mainContent} composerRef={focusZoneRefs.composer} showOccupants={showRoomOccupants} onShowOccupantsChange={setShowRoomOccupants} onStartChat={handleStartChatWithJid} />
           ) : activeConversationId ? (
             <ChatView onBack={handleChatBack} onSwitchToMessages={(conversationId) => navigateToMessages(conversationId)} mainContentRef={focusZoneRefs.mainContent} composerRef={focusZoneRefs.composer} />
           ) : selectedContact ? (

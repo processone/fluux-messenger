@@ -136,6 +136,16 @@ vi.mock('@fluux/sdk/react', () => ({
       status: 'online',
     })
   },
+  useIgnoreStore: (selector: (state: { ignoredUsers: Record<string, never[]> }) => unknown) => {
+    const state = {
+      ignoredUsers: {},
+      addIgnored: vi.fn(),
+      removeIgnored: vi.fn(),
+      isIgnored: () => false,
+      getIgnoredForRoom: () => [],
+    }
+    return selector ? selector(state) : state
+  },
 }))
 
 // Mock app hooks

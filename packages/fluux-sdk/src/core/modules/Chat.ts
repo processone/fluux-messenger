@@ -23,6 +23,7 @@ import {
   NS_MENTION_ALL,
   NS_HINTS,
   NS_FLUUX,
+  NS_OCCUPANT_ID,
 } from '../namespaces'
 import type {
   Message,
@@ -1152,6 +1153,9 @@ export class Chat extends BaseModule {
     // Use stable ID for messages without ID (e.g., from IRC bridges) to enable deduplication
     const messageId = stanza.attrs.id || generateStableMessageId(from, parsed.timestamp, body)
 
+    // XEP-0421: Anonymous Unique Occupant Identifiers
+    const occupantId = stanza.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id
+
     const message: RoomMessage = {
       type: 'groupchat',
       id: messageId,
@@ -1167,6 +1171,7 @@ export class Chat extends BaseModule {
       ...(parsed.replyTo && { replyTo: parsed.replyTo }),
       ...(parsed.attachment && { attachment: parsed.attachment }),
       ...(isCorrection && { isEdited: true }),
+      ...(occupantId && { occupantId }),
     }
 
     // Mentions logic

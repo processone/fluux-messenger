@@ -162,7 +162,6 @@
     "pleaseEnterRoomAddress": "Калі ласка, увядзіце адрас пакоя",
     "invalidRoomAddress": "Няправільны адрас пакоя (павінна быць room@conference.domain.tld)",
     "joinRoomHint": "Увядзіце поўны адрас пакоя, каб далучыцца да публічнага чат-пакоя.",
-    "joining": "Далучэнне...",
     "failedToJoinRoom": "Не атрымалася далучыцца да пакоя",
     "joinToParticipate": "Далучайцеся да пакоя, каб удзельнічаць",
     "cachedHistoryWarning": "Кэшаваная гісторыя да {{date}}. Далучайцеся, каб атрымаць апошнія паведамленні.",
@@ -242,7 +241,14 @@
     "inviteError": "Не атрымалася адправіць запрашэнні",
     "invitationsSent": "Запрашэнне(і) адпраўлена",
     "inviteRejected": "Запрашэнне адхілена: {{error}}",
-    "sendInvitations": "Адправіць {{count}} запрашэнне(няў)"
+    "sendInvitations": "Адправіць {{count}} запрашэнне(няў)",
+    "sendPrivateMessage": "Send private message",
+    "copyJid": "Copy JID",
+    "jidCopied": "JID copied",
+    "ignoreUser": "Ignore in this room",
+    "stopIgnoring": "Stop ignoring",
+    "blockUser": "Block user",
+    "ignored": "ignored"
   },
   "events": {
     "noPendingEvents": "Няма чакаючых падзей",
@@ -432,10 +438,10 @@
     "connection": "Падключэнне",
     "connectionMethod_proxy": "TCP/TLS",
     "connectionMethod_websocket": "WebSocket",
-        "webPush": "Web Push",
-        "webPush_unavailable": "Не падтрымліваецца",
-        "webPush_available": "Чакае рэгістрацыі",
-        "webPush_registered": "Зарэгістравана"
+    "webPush": "Web Push",
+    "webPush_unavailable": "Не падтрымліваецца",
+    "webPush_available": "Чакае рэгістрацыі",
+    "webPush_registered": "Зарэгістравана"
   },
   "console": {
     "title": "XMPP кансоль",

@@ -241,7 +241,14 @@
         "inviteError": "Failed to send invitations",
         "invitationsSent": "Invitation(s) sent",
         "inviteRejected": "Invitation rejected: {{error}}",
-        "sendInvitations": "Send {{count}} invitation(s)"
+        "sendInvitations": "Send {{count}} invitation(s)",
+        "sendPrivateMessage": "Send private message",
+        "copyJid": "Copy JID",
+        "jidCopied": "JID copied",
+        "ignoreUser": "Ignore in this room",
+        "stopIgnoring": "Stop ignoring",
+        "blockUser": "Block user",
+        "ignored": "ignored"
     },
     "events": {
         "noPendingEvents": "No pending events",

@@ -11,11 +11,19 @@ vi.mock('react-i18next', () => ({
   }),
 }))
 
-// Mock useWindowDrag hook
+// Mock hooks
 vi.mock('@/hooks', () => ({
   useWindowDrag: () => ({
     titleBarClass: 'mt-5',
     dragRegionProps: { 'data-tauri-drag-region': true },
+  }),
+  useContextMenu: () => ({
+    isOpen: false,
+    position: { x: 0, y: 0 },
+    open: vi.fn(),
+    close: vi.fn(),
+    menuRef: { current: null },
+    triggerHandlers: {},
   }),
 }))
 
@@ -37,8 +45,30 @@ vi.mock('@fluux/sdk', async () => {
     getBareJid: (jid: string) => jid.split('/')[0],
     getBestPresenceShow: (shows: (string | undefined)[]) => shows[0],
     generateConsistentColorHexSync: () => '#abc123',
+    useBlocking: () => ({
+      blockedJids: [],
+      fetchBlocklist: vi.fn(),
+      blockJid: vi.fn(),
+      unblockJid: vi.fn(),
+      unblockAll: vi.fn(),
+      isBlocked: () => false,
+    }),
   }
 })
+
+// Mock @fluux/sdk/stores
+vi.mock('@fluux/sdk/stores', () => ({
+  ignoreStore: {
+    getState: () => ({
+      ignoredUsers: {},
+      addIgnored: vi.fn(),
+      removeIgnored: vi.fn(),
+      isIgnored: () => false,
+      getIgnoredForRoom: () => [],
+    }),
+    subscribe: vi.fn(() => vi.fn()),
+  },
+}))
 
 // Mock presence utility
 vi.mock('@/utils/presence', () => ({

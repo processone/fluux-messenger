@@ -200,6 +200,43 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
     blockingStore: {
       getState: () => ({
         blockedJids: [],
+        isBlocked: () => false,
+      }),
+      subscribe: vi.fn(() => vi.fn()),
+    },
+    ignoreStore: {
+      getState: () => ({
+        ignoredUsers: {},
+        addIgnored: vi.fn(),
+        removeIgnored: vi.fn(),
+        isIgnored: () => false,
+        getIgnoredForRoom: () => [],
+      }),
+      subscribe: vi.fn(() => vi.fn()),
+    },
+    useBlocking: vi.fn(() => ({
+      blockedJids: [],
+      fetchBlocklist: vi.fn(),
+      blockJid: vi.fn(),
+      unblockJid: vi.fn(),
+      unblockAll: vi.fn(),
+      isBlocked: () => false,
+    })),
+  }
+})
+
+// Provide default vanilla store mocks for @fluux/sdk/stores
+vi.mock('@fluux/sdk/stores', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@fluux/sdk/stores')>()
+  return {
+    ...actual,
+    ignoreStore: {
+      getState: () => ({
+        ignoredUsers: {},
+        addIgnored: vi.fn(),
+        removeIgnored: vi.fn(),
+        isIgnored: () => false,
+        getIgnoredForRoom: () => [],
       }),
       subscribe: vi.fn(() => vi.fn()),
     },
@@ -287,6 +324,16 @@ vi.mock('@fluux/sdk/react', () => ({
   useBlockingStore: vi.fn((selector) => {
     const state = {
       blockedJids: [],
+    }
+    return selector ? selector(state) : state
+  }),
+  useIgnoreStore: vi.fn((selector) => {
+    const state = {
+      ignoredUsers: {},
+      addIgnored: vi.fn(),
+      removeIgnored: vi.fn(),
+      isIgnored: () => false,
+      getIgnoredForRoom: () => [],
     }
     return selector ? selector(state) : state
   }),
