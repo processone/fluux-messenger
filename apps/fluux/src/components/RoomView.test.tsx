@@ -944,6 +944,34 @@ describe('RoomView', () => {
       expect(screen.queryByText('Filtered message')).not.toBeInTheDocument()
     })
 
+    it('should filter messages via jid field when identifier is occupantId (cross-matching)', () => {
+      // Scenario: user ignored by occupantId, but message doesn't have occupantId
+      // (e.g., old MAM messages). The stored jid field should match via nickToJidCache.
+      const nickToJidCache = new Map([['Alice', 'alice@example.com']])
+      mockActiveRoom = createRoom({
+        jid: ROOM_JID,
+        isJoining: false,
+        joined: true,
+        nickToJidCache,
+        occupantsList: [
+          createOccupant({ nick: 'Alice' }),
+          createOccupant({ nick: 'Bob' }),
+        ],
+      })
+      mockActiveMessages = [
+        createRoomMessage({ id: 'msg-1', nick: 'Alice', body: 'Old message without occupantId' }),
+        createRoomMessage({ id: 'msg-2', nick: 'Bob', body: 'Bob message' }),
+      ]
+      mockIgnoredUsers = {
+        [ROOM_JID]: [{ identifier: 'occ-alice', displayName: 'Alice', jid: 'alice@example.com' }],
+      }
+
+      render(<RoomView />)
+
+      expect(screen.queryByText('Old message without occupantId')).not.toBeInTheDocument()
+      expect(screen.getByText('Bob message')).toBeInTheDocument()
+    })
+
     it('should not filter messages from a different room', () => {
       mockActiveMessages = [
         createRoomMessage({ id: 'msg-1', nick: 'Alice', body: 'Visible message', occupantId: 'occ-alice' }),

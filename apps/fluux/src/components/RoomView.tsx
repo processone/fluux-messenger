@@ -76,16 +76,18 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   const displayMessages = useMemo(() => {
     if (ignoredForRoom.length === 0) return activeMessages
     const ignoredIds = new Set(ignoredForRoom.map(u => u.identifier))
+    // Build a separate set of known JIDs for cross-matching when identifier is occupantId
+    const ignoredJids = new Set(ignoredForRoom.map(u => u.jid).filter(Boolean))
     return activeMessages.filter(msg => {
       // Check occupantId first (XEP-0421, most reliable)
       if (msg.occupantId && ignoredIds.has(msg.occupantId)) return false
-      // Check by nick
-      if (ignoredIds.has(msg.nick)) return false
-      // Check by JID via nickToJidCache
+      // Check by JID via nickToJidCache (matches when identifier is bareJid OR occupantId with stored jid)
       if (activeRoom?.nickToJidCache) {
         const jid = activeRoom.nickToJidCache.get(msg.nick)
-        if (jid && ignoredIds.has(jid)) return false
+        if (jid && (ignoredIds.has(jid) || ignoredJids.has(jid))) return false
       }
+      // Check by nick (least reliable, last resort)
+      if (ignoredIds.has(msg.nick)) return false
       return true
     })
   }, [activeMessages, ignoredForRoom, activeRoom])
