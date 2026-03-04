@@ -54,6 +54,7 @@ let mockActiveRoom: Room | null = null
 let mockActiveMessages: RoomMessage[] = []
 let mockTypingUsers: string[] = []
 let mockContacts: Contact[] = []
+let mockIgnoredUsers: Record<string, { identifier: string; displayName: string; jid?: string }[]> = {}
 
 // Mock functions
 const mockSendMessage = vi.fn()
@@ -136,9 +137,9 @@ vi.mock('@fluux/sdk/react', () => ({
       status: 'online',
     })
   },
-  useIgnoreStore: (selector: (state: { ignoredUsers: Record<string, never[]> }) => unknown) => {
+  useIgnoreStore: (selector?: (state: Record<string, unknown>) => unknown) => {
     const state = {
-      ignoredUsers: {},
+      ignoredUsers: mockIgnoredUsers,
       addIgnored: vi.fn(),
       removeIgnored: vi.fn(),
       isIgnored: () => false,
@@ -379,6 +380,7 @@ describe('RoomView', () => {
     mockActiveMessages = []
     mockTypingUsers = []
     mockContacts = []
+    mockIgnoredUsers = {}
 
     // Reset mock functions
     vi.clearAllMocks()
@@ -820,6 +822,140 @@ describe('RoomView', () => {
       // Should show empty state immediately (SDK loads cache in background)
       expect(screen.queryByText('chat.loadingMessages')).not.toBeInTheDocument()
       expect(screen.getByText('chat.noMessages')).toBeInTheDocument()
+    })
+  })
+
+  describe('Ignored user message filtering', () => {
+    const ROOM_JID = 'room@conference.example.com'
+
+    beforeEach(() => {
+      mockActiveRoom = createRoom({
+        jid: ROOM_JID,
+        isJoining: false,
+        joined: true,
+        occupantsList: [
+          createOccupant({ nick: 'Alice' }),
+          createOccupant({ nick: 'Bob' }),
+        ],
+      })
+    })
+
+    it('should filter out messages from user ignored by occupantId', () => {
+      mockActiveMessages = [
+        createRoomMessage({ id: 'msg-1', nick: 'Alice', body: 'Alice says hi', occupantId: 'occ-alice' }),
+        createRoomMessage({ id: 'msg-2', nick: 'Bob', body: 'Bob says hello', occupantId: 'occ-bob' }),
+      ]
+      mockIgnoredUsers = {
+        [ROOM_JID]: [{ identifier: 'occ-alice', displayName: 'Alice' }],
+      }
+
+      render(<RoomView />)
+
+      expect(screen.queryByText('Alice says hi')).not.toBeInTheDocument()
+      expect(screen.getByText('Bob says hello')).toBeInTheDocument()
+    })
+
+    it('should filter out messages from user ignored by nick', () => {
+      mockActiveMessages = [
+        createRoomMessage({ id: 'msg-1', nick: 'Alice', body: 'Alice message' }),
+        createRoomMessage({ id: 'msg-2', nick: 'Bob', body: 'Bob message' }),
+      ]
+      mockIgnoredUsers = {
+        [ROOM_JID]: [{ identifier: 'Alice', displayName: 'Alice' }],
+      }
+
+      render(<RoomView />)
+
+      expect(screen.queryByText('Alice message')).not.toBeInTheDocument()
+      expect(screen.getByText('Bob message')).toBeInTheDocument()
+    })
+
+    it('should filter out messages from user ignored by JID via nickToJidCache', () => {
+      const nickToJidCache = new Map([['Alice', 'alice@example.com']])
+      mockActiveRoom = createRoom({
+        jid: ROOM_JID,
+        isJoining: false,
+        joined: true,
+        nickToJidCache,
+        occupantsList: [
+          createOccupant({ nick: 'Alice' }),
+          createOccupant({ nick: 'Bob' }),
+        ],
+      })
+      mockActiveMessages = [
+        createRoomMessage({ id: 'msg-1', nick: 'Alice', body: 'Message from Alice' }),
+        createRoomMessage({ id: 'msg-2', nick: 'Bob', body: 'Message from Bob' }),
+      ]
+      mockIgnoredUsers = {
+        [ROOM_JID]: [{ identifier: 'alice@example.com', displayName: 'Alice', jid: 'alice@example.com' }],
+      }
+
+      render(<RoomView />)
+
+      expect(screen.queryByText('Message from Alice')).not.toBeInTheDocument()
+      expect(screen.getByText('Message from Bob')).toBeInTheDocument()
+    })
+
+    it('should show all messages when no users are ignored', () => {
+      mockActiveMessages = [
+        createRoomMessage({ id: 'msg-1', nick: 'Alice', body: 'Hello from Alice' }),
+        createRoomMessage({ id: 'msg-2', nick: 'Bob', body: 'Hello from Bob' }),
+      ]
+      mockIgnoredUsers = {}
+
+      render(<RoomView />)
+
+      expect(screen.getByText('Hello from Alice')).toBeInTheDocument()
+      expect(screen.getByText('Hello from Bob')).toBeInTheDocument()
+    })
+
+    it('should filter multiple ignored users', () => {
+      mockActiveMessages = [
+        createRoomMessage({ id: 'msg-1', nick: 'Alice', body: 'Alice text', occupantId: 'occ-alice' }),
+        createRoomMessage({ id: 'msg-2', nick: 'Bob', body: 'Bob text', occupantId: 'occ-bob' }),
+        createRoomMessage({ id: 'msg-3', nick: 'Charlie', body: 'Charlie text', occupantId: 'occ-charlie' }),
+      ]
+      mockIgnoredUsers = {
+        [ROOM_JID]: [
+          { identifier: 'occ-alice', displayName: 'Alice' },
+          { identifier: 'occ-charlie', displayName: 'Charlie' },
+        ],
+      }
+
+      render(<RoomView />)
+
+      expect(screen.queryByText('Alice text')).not.toBeInTheDocument()
+      expect(screen.getByText('Bob text')).toBeInTheDocument()
+      expect(screen.queryByText('Charlie text')).not.toBeInTheDocument()
+    })
+
+    it('should prioritize occupantId match over nick match', () => {
+      // User has occupantId "occ-alice" but nick "Alice"
+      // Ignore list targets occupantId — should filter
+      mockActiveMessages = [
+        createRoomMessage({ id: 'msg-1', nick: 'Alice', body: 'Filtered message', occupantId: 'occ-alice' }),
+      ]
+      mockIgnoredUsers = {
+        [ROOM_JID]: [{ identifier: 'occ-alice', displayName: 'Alice' }],
+      }
+
+      render(<RoomView />)
+
+      expect(screen.queryByText('Filtered message')).not.toBeInTheDocument()
+    })
+
+    it('should not filter messages from a different room', () => {
+      mockActiveMessages = [
+        createRoomMessage({ id: 'msg-1', nick: 'Alice', body: 'Visible message', occupantId: 'occ-alice' }),
+      ]
+      // Ignored in a different room, not the active room
+      mockIgnoredUsers = {
+        'other-room@conference.example.com': [{ identifier: 'occ-alice', displayName: 'Alice' }],
+      }
+
+      render(<RoomView />)
+
+      expect(screen.getByText('Visible message')).toBeInTheDocument()
     })
   })
 })

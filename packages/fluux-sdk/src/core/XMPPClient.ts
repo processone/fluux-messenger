@@ -92,6 +92,7 @@ import { Discovery } from './modules/Discovery'
 import { Connection } from './modules/Connection'
 import { PubSub } from './modules/PubSub'
 import { Blocking } from './modules/Blocking'
+import { Ignore } from './modules/Ignore'
 import { WebPush } from './modules/WebPush'
 import { MAM } from './modules/MAM'
 import { NS_CARBONS, NS_MAM, NS_P1_PUSH_WEBPUSH } from './namespaces'
@@ -222,6 +223,12 @@ export class XMPPClient {
    * Handles blocklist management for blocking/unblocking JIDs.
    */
   public blocking!: Blocking
+
+  /**
+   * Ignore module.
+   * Manages per-room ignored user lists via PEP (XEP-0223 private storage).
+   */
+  public ignore!: Ignore
 
   /**
    * Web Push module (p1:push).
@@ -541,6 +548,7 @@ export class XMPPClient {
     this.profile = new Profile(moduleDeps)
     this.discovery = new Discovery(moduleDeps)
     this.blocking = new Blocking(moduleDeps)
+    this.ignore = new Ignore(moduleDeps)
     this.webPush = new WebPush(moduleDeps)
 
     // Set up post-connection handler
