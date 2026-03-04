@@ -35,20 +35,20 @@
 
 *Click on any screenshot to view full size*
 
-| Chat Room | XMPP Console |
-|-----------|--------------|
+| Chat Room                                                                                                                                | XMPP Console                                                                                                                              |
+|------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------|
 | <a href="assets/readme/chatroom.png"><img src="assets/readme/chatroom.png" width="250" style="border-radius: 8px;" alt="Chat Room"/></a> | <a href="assets/readme/console.png"><img src="assets/readme/console.png" width="250" style="border-radius: 8px;" alt="XMPP Console"/></a> |
-| *Multi-user Chat* | *XMPP Debug Interface* |
+| *Multi-user Chat*                                                                                                                        | *XMPP Debug Interface*                                                                                                                    |
 
-| Language Settings | Login Screen | Theme System |
-|-------------------|---|-------------|
+| Language Settings                                                                                                                                  | Login Screen                                                                                                                          | Theme System                                                                                                                          |
+|----------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
 | <a href="assets/readme/languages.png"><img src="assets/readme/languages.png" width="250" style="border-radius: 8px;" alt="Language Settings"/></a> | <a href="assets/readme/login.png"><img src="assets/readme/login.png" width="250" style="border-radius: 8px;" alt="Login Screen"/></a> | <a href="assets/readme/split.png"><img src="assets/readme/split.png" width="250" style="border-radius: 8px;" alt="Theme System"/></a> |
-| *31 languages including all EU official languages* | *Simple Login Interface* | *Light and dark themes, more to come* |
+| *31 languages including all EU official languages*                                                                                                 | *Simple Login Interface*                                                                                                              | *Light and dark themes, more to come*                                                                                                 |
 
-| Admin Server Commands | Chat Rooms Management | Users Management |
-|----------------------|-----------------------|------------------|
+| Admin Server Commands                                                                                                                                      | Chat Rooms Management                                                                                                                                              | Users Management                                                                                                                                      |
+|------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
 | <a href="assets/readme/admin-other.png"><img src="assets/readme/admin-other.png" width="250" style="border-radius: 8px;" alt="Admin Server Commands"/></a> | <a href="assets/readme/admin-chatrooms.png"><img src="assets/readme/admin-chatrooms.png" width="250" style="border-radius: 8px;" alt="Chat Rooms Management"/></a> | <a href="assets/readme/admin-users.png"><img src="assets/readme/admin-users.png" width="250" style="border-radius: 8px;" alt="Users Management"/></a> |
-| *Manage your server right from your client* | *Moderate your rooms easily* | *User management in your client* |
+| *Manage your server right from your client*                                                                                                                | *Moderate your rooms easily*                                                                                                                                       | *User management in your client*                                                                                                                      |
 
 </div>
 
@@ -83,9 +83,9 @@ Get started with Fluux Messenger in a few simple steps:
 <details>
 <summary><b>Windows (x64)</b></summary>
 
-| Format | How to install |
-|--------|---------------|
-| `.exe` | Run the setup wizard (recommended) |
+| Format | How to install                                                                |
+|--------|-------------------------------------------------------------------------------|
+| `.exe` | Run the setup wizard (recommended)                                            |
 | `.msi` | Run `msiexec /i Fluux-Messenger_*_Windows_x64.msi` or double-click to install |
 
 </details>
@@ -93,10 +93,10 @@ Get started with Fluux Messenger in a few simple steps:
 <details>
 <summary><b>macOS (Intel & Apple Silicon)</b></summary>
 
-| Format | How to install |
-|--------|---------------|
-| `.dmg` | Open the image and drag **Fluux Messenger** to **Applications** (recommended) |
-| `.app.tar.gz` | Extract with `tar xzf` and move the `.app` to **Applications** |
+| Format        | How to install                                                                |
+|---------------|-------------------------------------------------------------------------------|
+| `.dmg`        | Open the image and drag **Fluux Messenger** to **Applications** (recommended) |
+| `.app.tar.gz` | Extract with `tar xzf` and move the `.app` to **Applications**                |
 
 Both `x64` (Intel) and `arm64` (Apple Silicon) builds are available.
 
@@ -105,12 +105,12 @@ Both `x64` (Intel) and `arm64` (Apple Silicon) builds are available.
 <details>
 <summary><b>Linux (x64 & arm64)</b></summary>
 
-| Format | How to install |
-|--------|---------------|
-| `.deb` | `sudo dpkg -i Fluux-Messenger_*.deb` (Debian, Ubuntu, Mint...) |
-| `.rpm` | `sudo rpm -i Fluux-Messenger_*.rpm` (Fedora, RHEL, openSUSE...) |
-| `.flatpak` | `flatpak install Fluux-Messenger_*.flatpak` |
-| `.tar.gz` | Extract with `tar xzf` and run the binary directly |
+| Format     | How to install                                                  |
+|------------|-----------------------------------------------------------------|
+| `.deb`     | `sudo dpkg -i Fluux-Messenger_*.deb` (Debian, Ubuntu, Mint...)  |
+| `.rpm`     | `sudo rpm -i Fluux-Messenger_*.rpm` (Fedora, RHEL, openSUSE...) |
+| `.flatpak` | `flatpak install Fluux-Messenger_*.flatpak`                     |
+| `.tar.gz`  | Extract with `tar xzf` and run the binary directly              |
 
 Both `x64` and `arm64` builds are available for all formats.
 
