@@ -1,17 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useEvents } from '@fluux/sdk'
-import { useConnectionStore } from '@fluux/sdk/react'
-import {
-  isPermissionGranted,
-  requestPermission,
-  sendNotification,
-} from '@tauri-apps/plugin-notification'
-
-// Check if we're running in Tauri (v2 uses __TAURI_INTERNALS__)
-const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
-
-// Module-level flag to check permission only once per session
-let permissionChecked = false
+import { sendNotification } from '@tauri-apps/plugin-notification'
+import { useNotificationPermission, isTauri } from './useNotificationPermission'
 
 /**
  * Hook to show desktop notifications for new events (subscription requests).
@@ -21,53 +11,8 @@ let permissionChecked = false
  */
 export function useEventsDesktopNotifications(): void {
   const { subscriptionRequests } = useEvents()
-  // Use focused selector to only subscribe to status
-  const status = useConnectionStore((s) => s.status)
   const prevRequestsRef = useRef<typeof subscriptionRequests>([])
-  const permissionGranted = useRef(false)
-
-  // Request notification permission when connected
-  useEffect(() => {
-    if (status !== 'online') return
-
-    if (permissionChecked) {
-      return
-    }
-
-    const requestNotificationPermission = async () => {
-      try {
-        if (isTauri) {
-          // Tauri notification API
-          let granted = await isPermissionGranted()
-          console.log('[EventsNotifications] Initial permission status:', granted ? 'granted' : 'not granted')
-          if (!granted) {
-            console.log('[EventsNotifications] Requesting permission...')
-            const permission = await requestPermission()
-            granted = permission === 'granted'
-            console.log('[EventsNotifications] Permission request result:', permission)
-          }
-          permissionGranted.current = granted
-        } else {
-          // Web Notification API
-          if (typeof Notification === 'undefined') return
-          console.log('[EventsNotifications] Web API permission:', Notification.permission)
-          if (Notification.permission === 'granted') {
-            permissionGranted.current = true
-          } else if (Notification.permission !== 'denied') {
-            console.log('[EventsNotifications] Requesting permission...')
-            const permission = await Notification.requestPermission()
-            permissionGranted.current = permission === 'granted'
-            console.log('[EventsNotifications] Permission request result:', permission)
-          }
-        }
-        permissionChecked = true
-      } catch (error) {
-        console.error('[EventsNotifications] Error requesting permission:', error)
-      }
-    }
-
-    void requestNotificationPermission()
-  }, [status])
+  const permissionGranted = useNotificationPermission()
 
   // Watch for new subscription requests
   useEffect(() => {
@@ -107,5 +52,5 @@ export function useEventsDesktopNotifications(): void {
     }
 
     prevRequestsRef.current = subscriptionRequests
-  }, [subscriptionRequests])
+  }, [subscriptionRequests, permissionGranted])
 }
