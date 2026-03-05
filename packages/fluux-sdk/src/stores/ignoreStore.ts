@@ -1,5 +1,6 @@
 import { createStore } from 'zustand/vanilla'
 import { persist } from 'zustand/middleware'
+import { getResource } from '../core/jid'
 
 const STORAGE_KEY = 'fluux-ignored-users'
 
@@ -139,6 +140,26 @@ export function isMessageFromIgnoredUser(
   // Check by nick (least reliable, last resort)
   if (ignoredIds.has(msg.nick)) return true
   return false
+}
+
+/**
+ * Check whether a room message is a reply quoting an ignored user.
+ *
+ * When `replyTo.to` is present (XEP-0461), the value is the full occupant JID
+ * (e.g. `room@conference/nick`).  We extract the nick and run the same
+ * matching logic used for direct messages from ignored users.
+ */
+export function isReplyToIgnoredUser(
+  ignoredUsers: IgnoredUser[],
+  replyTo: { to?: string } | undefined,
+  nickToJidCache?: Map<string, string>,
+): boolean {
+  if (!replyTo?.to || ignoredUsers.length === 0) return false
+
+  const nick = getResource(replyTo.to)
+  if (!nick) return false
+
+  return isMessageFromIgnoredUser(ignoredUsers, { nick }, nickToJidCache)
 }
 
 export type { IgnoreState }

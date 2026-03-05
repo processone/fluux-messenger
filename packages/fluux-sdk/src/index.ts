@@ -182,7 +182,7 @@ export type { AdminStats } from './stores/adminStore'
 
 // Room ignore store types and utilities
 export type { IgnoredUser } from './stores/ignoreStore'
-export { isMessageFromIgnoredUser } from './stores/ignoreStore'
+export { isMessageFromIgnoredUser, isReplyToIgnoredUser } from './stores/ignoreStore'
 
 // Notification state utilities (pure functions for badge computation, etc.)
 export { computeBadgeCount, shouldNotifyConversation, shouldNotifyRoom } from './stores/shared/notificationState'

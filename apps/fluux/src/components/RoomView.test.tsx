@@ -130,6 +130,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
     return map
   },
   isMessageFromIgnoredUser: actual.isMessageFromIgnoredUser,
+  isReplyToIgnoredUser: actual.isReplyToIgnoredUser,
 }})
 
 // Mock React store hooks (from @fluux/sdk/react)

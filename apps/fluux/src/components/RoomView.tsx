@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useRoomActive, useRoster, getBareJid, generateConsistentColorHexSync, getPresenceFromShow, createMessageLookup, isMessageFromIgnoredUser, type RoomMessage, type Room, type MentionReference, type ChatStateNotification, type Contact, type FileAttachment } from '@fluux/sdk'
+import { useRoomActive, useRoster, getBareJid, generateConsistentColorHexSync, getPresenceFromShow, createMessageLookup, isMessageFromIgnoredUser, isReplyToIgnoredUser, type RoomMessage, type Room, type MentionReference, type ChatStateNotification, type Contact, type FileAttachment } from '@fluux/sdk'
 import { useConnectionStore, useIgnoreStore } from '@fluux/sdk/react'
 import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat } from '@/hooks'
 import { MessageBubble, MessageList, shouldShowAvatar, buildReplyContext } from './conversation'
@@ -71,12 +71,14 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     return map
   }, [contacts])
 
-  // Filter out messages from ignored users (client-side ignore)
+  // Filter out messages from ignored users and replies quoting them (client-side ignore)
   const ignoredForRoom = useIgnoreStore((s) => activeRoom ? (s.ignoredUsers[activeRoom.jid] || []) : [])
   const displayMessages = useMemo(() => {
     if (ignoredForRoom.length === 0) return activeMessages
+    const cache = activeRoom?.nickToJidCache
     return activeMessages.filter(msg =>
-      !isMessageFromIgnoredUser(ignoredForRoom, msg, activeRoom?.nickToJidCache)
+      !isMessageFromIgnoredUser(ignoredForRoom, msg, cache) &&
+      !isReplyToIgnoredUser(ignoredForRoom, msg.replyTo, cache)
     )
   }, [activeMessages, ignoredForRoom, activeRoom])
 

@@ -27,7 +27,7 @@ vi.mock('zustand/middleware', () => ({
   persist: (fn: unknown) => fn,
 }))
 
-import { ignoreStore, isMessageFromIgnoredUser } from './ignoreStore'
+import { ignoreStore, isMessageFromIgnoredUser, isReplyToIgnoredUser } from './ignoreStore'
 
 const ROOM_JID = 'room@conference.example.com'
 const ROOM_JID_2 = 'room2@conference.example.com'
@@ -276,6 +276,59 @@ describe('ignoreStore', () => {
       expect(isMessageFromIgnoredUser(ignored, msgAlice)).toBe(true)
       expect(isMessageFromIgnoredUser(ignored, msgBob)).toBe(true)
       expect(isMessageFromIgnoredUser(ignored, msgCharlie)).toBe(false)
+    })
+  })
+
+  describe('isReplyToIgnoredUser', () => {
+    const ROOM = 'room@conference.example.com'
+
+    it('should return true when replyTo.to nick matches ignored nick identifier', () => {
+      const ignored = [{ identifier: 'Alice', displayName: 'Alice' }]
+
+      expect(isReplyToIgnoredUser(ignored, { to: `${ROOM}/Alice` })).toBe(true)
+    })
+
+    it('should return true when replyTo.to nick matches via nickToJidCache', () => {
+      const ignored = [{ identifier: 'alice@example.com', displayName: 'Alice', jid: 'alice@example.com' }]
+      const cache = new Map([['Alice', 'alice@example.com']])
+
+      expect(isReplyToIgnoredUser(ignored, { to: `${ROOM}/Alice` }, cache)).toBe(true)
+    })
+
+    it('should return true when identifier is occupantId but jid cross-matches via cache', () => {
+      const ignored = [{ identifier: 'occ-alice', displayName: 'Alice', jid: 'alice@example.com' }]
+      const cache = new Map([['Alice', 'alice@example.com']])
+
+      expect(isReplyToIgnoredUser(ignored, { to: `${ROOM}/Alice` }, cache)).toBe(true)
+    })
+
+    it('should return false when replyTo.to nick does not match any ignored user', () => {
+      const ignored = [{ identifier: 'occ-alice', displayName: 'Alice' }]
+
+      expect(isReplyToIgnoredUser(ignored, { to: `${ROOM}/Bob` })).toBe(false)
+    })
+
+    it('should return false when replyTo is undefined', () => {
+      const ignored = [{ identifier: 'occ-alice', displayName: 'Alice' }]
+
+      expect(isReplyToIgnoredUser(ignored, undefined)).toBe(false)
+    })
+
+    it('should return false when replyTo.to is undefined', () => {
+      const ignored = [{ identifier: 'occ-alice', displayName: 'Alice' }]
+
+      expect(isReplyToIgnoredUser(ignored, {})).toBe(false)
+    })
+
+    it('should return false for empty ignored list', () => {
+      expect(isReplyToIgnoredUser([], { to: `${ROOM}/Alice` })).toBe(false)
+    })
+
+    it('should not match when identifier is occupantId without jid and no cache', () => {
+      // occupantId-only identifier cannot match a nick from replyTo.to
+      const ignored = [{ identifier: 'occ-alice', displayName: 'Alice' }]
+
+      expect(isReplyToIgnoredUser(ignored, { to: `${ROOM}/Alice` })).toBe(false)
     })
   })
 
