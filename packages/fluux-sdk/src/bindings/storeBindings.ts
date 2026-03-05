@@ -28,7 +28,7 @@ import type {
   consoleStore,
   ignoreStore,
 } from '../stores'
-import { isMessageFromIgnoredUser } from '../stores'
+import { isMessageFromIgnoredUser, isReplyToIgnoredUser } from '../stores'
 
 /**
  * Store references for binding SDK events.
@@ -257,12 +257,12 @@ export function createStoreBindings(
 
   on('room:message', ({ roomJid, message, incrementUnread, incrementMentions }) => {
     const stores = getStores()
-    // Suppress notifications for ignored users
-    const doNotNotify = isMessageFromIgnoredUser(
-      stores.ignore.getIgnoredForRoom(roomJid),
-      message,
-      stores.room.getRoom(roomJid)?.nickToJidCache,
-    )
+    const ignoredUsers = stores.ignore.getIgnoredForRoom(roomJid)
+    const nickToJidCache = stores.room.getRoom(roomJid)?.nickToJidCache
+    // Suppress notifications for ignored users and replies quoting them
+    const doNotNotify =
+      isMessageFromIgnoredUser(ignoredUsers, message, nickToJidCache) ||
+      isReplyToIgnoredUser(ignoredUsers, message.replyTo, nickToJidCache)
     stores.room.addMessage(roomJid, message, {
       incrementUnread: incrementUnread && !doNotNotify,
       incrementMentions: incrementMentions && !doNotNotify,
