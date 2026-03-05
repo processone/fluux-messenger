@@ -1,9 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X } from 'lucide-react'
-import { Tooltip } from './Tooltip'
 import { useConnection, useRoom } from '@fluux/sdk'
 import { useModalInput } from '@/hooks'
+import { ModalShell } from './ModalShell'
 
 interface JoinRoomModalProps {
   onClose: () => void
@@ -17,7 +16,7 @@ export function JoinRoomModal({ onClose }: JoinRoomModalProps) {
   const [nickname, setNickname] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [joining, setJoining] = useState(false)
-  const inputRef = useModalInput<HTMLInputElement>(onClose)
+  const inputRef = useModalInput<HTMLInputElement>()
   const nicknameInitialized = useRef(false)
 
   // Default nickname from user JID (only once)
@@ -63,88 +62,68 @@ export function JoinRoomModal({ onClose }: JoinRoomModalProps) {
   }
 
   return (
-    <div
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div className="bg-fluux-sidebar rounded-lg shadow-xl w-full max-w-sm mx-4">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-fluux-hover">
-          <h2 className="text-lg font-semibold text-fluux-text">{t('rooms.joinRoomTitle')}</h2>
-          <Tooltip content={t('common.close')}>
-            <button
-              onClick={onClose}
-              aria-label={t('common.close')}
-              className="p-1 text-fluux-muted hover:text-fluux-text rounded hover:bg-fluux-hover"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </Tooltip>
+    <ModalShell title={t('rooms.joinRoomTitle')} onClose={onClose}>
+      <form onSubmit={handleSubmit} className="p-4 space-y-4">
+        <div>
+          <label htmlFor="room-jid" className="block text-xs font-semibold text-fluux-muted uppercase mb-2">
+            {t('rooms.roomAddress')}
+          </label>
+          <input
+            ref={inputRef}
+            id="room-jid"
+            type="text"
+            value={roomJid}
+            onChange={(e) => setRoomJid(e.target.value)}
+            placeholder={t('rooms.roomAddressPlaceholder')}
+            disabled={joining}
+            className="w-full px-3 py-2 bg-fluux-bg text-fluux-text rounded
+                       border border-transparent focus:border-fluux-brand
+                       placeholder:text-fluux-muted disabled:opacity-50"
+          />
         </div>
 
-        {/* Content */}
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
-          <div>
-            <label htmlFor="room-jid" className="block text-xs font-semibold text-fluux-muted uppercase mb-2">
-              {t('rooms.roomAddress')}
-            </label>
-            <input
-              ref={inputRef}
-              id="room-jid"
-              type="text"
-              value={roomJid}
-              onChange={(e) => setRoomJid(e.target.value)}
-              placeholder={t('rooms.roomAddressPlaceholder')}
-              disabled={joining}
-              className="w-full px-3 py-2 bg-fluux-bg text-fluux-text rounded
-                         border border-transparent focus:border-fluux-brand
-                         placeholder:text-fluux-muted disabled:opacity-50"
-            />
-          </div>
+        <div>
+          <label htmlFor="room-nickname" className="block text-xs font-semibold text-fluux-muted uppercase mb-2">
+            {t('rooms.nickname')}
+          </label>
+          <input
+            id="room-nickname"
+            type="text"
+            value={nickname}
+            onChange={(e) => setNickname(e.target.value)}
+            placeholder={t('rooms.nicknamePlaceholder')}
+            disabled={joining}
+            className="w-full px-3 py-2 bg-fluux-bg text-fluux-text rounded
+                       border border-transparent focus:border-fluux-brand
+                       placeholder:text-fluux-muted disabled:opacity-50"
+          />
+        </div>
 
-          <div>
-            <label htmlFor="room-nickname" className="block text-xs font-semibold text-fluux-muted uppercase mb-2">
-              {t('rooms.nickname')}
-            </label>
-            <input
-              id="room-nickname"
-              type="text"
-              value={nickname}
-              onChange={(e) => setNickname(e.target.value)}
-              placeholder={t('rooms.nicknamePlaceholder')}
-              disabled={joining}
-              className="w-full px-3 py-2 bg-fluux-bg text-fluux-text rounded
-                         border border-transparent focus:border-fluux-brand
-                         placeholder:text-fluux-muted disabled:opacity-50"
-            />
-          </div>
+        {error && (
+          <p className="text-sm text-fluux-red">{error}</p>
+        )}
+        <p className="text-xs text-fluux-muted">
+          {t('rooms.joinRoomHint')}
+        </p>
 
-          {error && (
-            <p className="text-sm text-fluux-red">{error}</p>
-          )}
-          <p className="text-xs text-fluux-muted">
-            {t('rooms.joinRoomHint')}
-          </p>
-
-          {/* Actions */}
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-2 text-fluux-text bg-fluux-bg rounded hover:bg-fluux-hover transition-colors"
-            >
-              {t('common.cancel')}
-            </button>
-            <button
-              type="submit"
-              disabled={joining || !roomJid.trim() || !nickname.trim()}
-              className="flex-1 px-4 py-2 text-white bg-fluux-brand rounded hover:bg-fluux-brand/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {joining ? t('rooms.joining') : t('rooms.joinRoom')}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        {/* Actions */}
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 px-4 py-2 text-fluux-text bg-fluux-bg rounded hover:bg-fluux-hover transition-colors"
+          >
+            {t('common.cancel')}
+          </button>
+          <button
+            type="submit"
+            disabled={joining || !roomJid.trim() || !nickname.trim()}
+            className="flex-1 px-4 py-2 text-white bg-fluux-brand rounded hover:bg-fluux-brand/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {joining ? t('rooms.joining') : t('rooms.joinRoom')}
+          </button>
+        </div>
+      </form>
+    </ModalShell>
   )
 }
