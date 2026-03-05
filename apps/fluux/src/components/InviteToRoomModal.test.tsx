@@ -127,7 +127,7 @@ describe('InviteToRoomModal', () => {
   let mockRoom: Room
 
   beforeEach(() => {
-    vi.resetAllMocks()
+    vi.clearAllMocks()
     mockRoom = createMockRoom()
     useToastStore.setState({ toasts: [] })
   })

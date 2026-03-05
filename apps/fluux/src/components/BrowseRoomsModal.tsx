@@ -9,8 +9,9 @@ import {
   generateConsistentColorHexSync,
 } from '@fluux/sdk'
 import { useChatStore } from '@fluux/sdk/react'
-import { X, Search, Hash, Loader2, ChevronDown, Server } from 'lucide-react'
+import { Search, Hash, Loader2, ChevronDown, Server, X } from 'lucide-react'
 import { Tooltip } from './Tooltip'
+import { ModalShell } from './ModalShell'
 
 const PAGE_SIZE = 50
 
@@ -31,7 +32,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
   const [joiningRoom, setJoiningRoom] = useState<string | null>(null)
   const [nickname, setNickname] = useState('')
   const nicknameInitialized = useRef(false)
-  const inputRef = useModalInput<HTMLInputElement>(onClose)
+  const inputRef = useModalInput<HTMLInputElement>()
   const listRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   // Pagination state
@@ -274,26 +275,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
 
 
   return (
-    <div
-      data-modal="true"
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div className="bg-fluux-sidebar rounded-lg shadow-xl w-full max-w-lg mx-4 max-h-[80vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-fluux-hover flex-shrink-0">
-          <h2 className="text-lg font-semibold text-fluux-text">{t('rooms.browseRoomsTitle')}</h2>
-          <Tooltip content={t('common.close')}>
-            <button
-              onClick={onClose}
-              aria-label={t('common.close')}
-              className="p-1 text-fluux-muted hover:text-fluux-text rounded hover:bg-fluux-hover"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </Tooltip>
-        </div>
-
+    <ModalShell title={t('rooms.browseRoomsTitle')} onClose={onClose} width="max-w-lg" panelClassName="max-h-[80vh] flex flex-col">
         {/* MUC Service selector */}
         <div className="px-4 py-3 border-b border-fluux-hover flex-shrink-0">
           <label htmlFor="muc-service" className="block text-xs font-semibold text-fluux-muted uppercase mb-2">
@@ -497,7 +479,6 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
             {totalCount !== undefined && totalCount > rooms.length && ` / ${totalCount}`}
           </p>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   )
 }
