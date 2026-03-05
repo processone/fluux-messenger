@@ -34,13 +34,16 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
   const inputRef = useModalInput<HTMLInputElement>(onClose)
   const listRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
-  const loadMoreRef = useRef<HTMLDivElement>(null)
-
   // Pagination state
   const [paginationCursor, setPaginationCursor] = useState<string | undefined>(undefined)
   const [totalCount, setTotalCount] = useState<number | undefined>(undefined)
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
+
+  // Refs for stable IntersectionObserver (avoids recreating on every state change)
+  const onLoadMoreRef = useRef<() => void>(() => {})
+  const observerRef = useRef<IntersectionObserver | null>(null)
+  const isLoadingMoreRef = useRef(false)
 
   // MUC service selection
   const [selectedService, setSelectedService] = useState<string>(mucServiceJid || '')
@@ -127,55 +130,61 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
     void fetchRooms()
   }, [effectiveService, showCustomInput, committedCustomService, browsePublicRooms, t])
 
-  // Load more rooms on scroll
-  const handleLoadMore = useCallback(async () => {
-    if (loadingMore || !hasMore || !paginationCursor) return
-
+  // Load more handler - always reads latest state via closure (updated every render)
+  onLoadMoreRef.current = () => {
+    if (isLoadingMoreRef.current || !hasMore || !paginationCursor || loading) return
+    isLoadingMoreRef.current = true
     setLoadingMore(true)
-    try {
-      const result = await browsePublicRooms(effectiveService || undefined, {
-        max: PAGE_SIZE,
-        after: paginationCursor,
-      })
-      if (result.rooms.length === 0) {
-        setHasMore(false)
-      } else {
-        setRooms((prev) => [...prev, ...result.rooms])
-        setPaginationCursor(result.pagination.last)
-        if (result.pagination.count !== undefined) {
-          setTotalCount(result.pagination.count)
-        }
-        if (result.pagination.count !== undefined) {
-          const newTotal = rooms.length + result.rooms.length
-          setHasMore(newTotal < result.pagination.count)
+
+    browsePublicRooms(effectiveService || undefined, {
+      max: PAGE_SIZE,
+      after: paginationCursor,
+    })
+      .then((result) => {
+        if (result.rooms.length === 0) {
+          setHasMore(false)
         } else {
-          setHasMore(result.rooms.length >= PAGE_SIZE && !!result.pagination.last)
+          setRooms((prev) => {
+            const updated = [...prev, ...result.rooms]
+            // Compute hasMore from the actual new total (avoids stale closure)
+            if (result.pagination.count !== undefined) {
+              setHasMore(updated.length < result.pagination.count)
+              setTotalCount(result.pagination.count)
+            } else {
+              setHasMore(result.rooms.length >= PAGE_SIZE && !!result.pagination.last)
+            }
+            return updated
+          })
+          setPaginationCursor(result.pagination.last)
         }
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('rooms.failedToLoadRooms'))
-    } finally {
-      setLoadingMore(false)
+      })
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : t('rooms.failedToLoadRooms'))
+      })
+      .finally(() => {
+        isLoadingMoreRef.current = false
+        setLoadingMore(false)
+      })
+  }
+
+  // Callback ref for sentinel element - creates observer once, stable across re-renders
+  const sentinelRef = useCallback((node: HTMLDivElement | null) => {
+    if (observerRef.current) {
+      observerRef.current.disconnect()
+      observerRef.current = null
     }
-  }, [loadingMore, hasMore, paginationCursor, browsePublicRooms, effectiveService, rooms.length, t])
-
-  // IntersectionObserver for infinite scroll
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasMore && !loadingMore && !loading) {
-          void handleLoadMore()
-        }
-      },
-      { threshold: 0.1 }
-    )
-
-    if (loadMoreRef.current) {
-      observer.observe(loadMoreRef.current)
+    if (node) {
+      observerRef.current = new IntersectionObserver(
+        (entries) => {
+          if (entries[0].isIntersecting) {
+            onLoadMoreRef.current()
+          }
+        },
+        { threshold: 0.1 }
+      )
+      observerRef.current.observe(node)
     }
-
-    return () => observer.disconnect()
-  }, [hasMore, loadingMore, loading, handleLoadMore])
+  }, [])
 
   // Handle service selection from dropdown
   const handleServiceChange = (value: string) => {
@@ -470,7 +479,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
               })}
 
               {/* Load more sentinel */}
-              <div ref={loadMoreRef} className="py-2">
+              <div ref={sentinelRef} className="py-2">
                 {loadingMore && (
                   <div className="flex items-center justify-center gap-2 text-fluux-muted">
                     <Loader2 className="w-4 h-4 animate-spin" />
