@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { ArrowLeft, Trash2, Power, Key } from 'lucide-react'
 import type { AdminUser } from '@fluux/sdk'
 import { Tooltip } from './Tooltip'
+import { ConfirmDialog } from './ConfirmDialog'
 
 interface AdminUserViewProps {
   user: AdminUser
@@ -102,64 +103,25 @@ export function AdminUserView({
         </div>
       </div>
 
-      {/* Delete Confirmation Dialog */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-fluux-sidebar rounded-lg p-4 max-w-sm w-full mx-4 shadow-xl">
-            <h3 className="text-lg font-semibold text-fluux-text mb-2">
-              {t('admin.userView.confirmDelete')}
-            </h3>
-            <p className="text-sm text-fluux-muted mb-4">
-              {t('admin.userView.confirmDeleteMessage', { jid: user.jid })}
-            </p>
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-sidebar
-                           rounded-lg transition-colors"
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                onClick={handleDelete}
-                className="px-4 py-2 text-sm text-white bg-red-500 hover:bg-red-600
-                           rounded-lg transition-colors"
-              >
-                {t('admin.users.delete')}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title={t('admin.userView.confirmDelete')}
+          message={t('admin.userView.confirmDeleteMessage', { jid: user.jid })}
+          confirmLabel={t('admin.users.delete')}
+          onConfirm={handleDelete}
+          onCancel={() => setShowDeleteConfirm(false)}
+        />
       )}
 
-      {/* End Sessions Confirmation Dialog */}
       {showEndSessionsConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-fluux-sidebar rounded-lg p-4 max-w-sm w-full mx-4 shadow-xl">
-            <h3 className="text-lg font-semibold text-fluux-text mb-2">
-              {t('admin.userView.confirmEndSessions')}
-            </h3>
-            <p className="text-sm text-fluux-muted mb-4">
-              {t('admin.userView.confirmEndSessionsMessage', { jid: user.jid })}
-            </p>
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setShowEndSessionsConfirm(false)}
-                className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-sidebar
-                           rounded-lg transition-colors"
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                onClick={handleEndSessions}
-                className="px-4 py-2 text-sm text-white bg-orange-500 hover:bg-orange-600
-                           rounded-lg transition-colors"
-              >
-                {t('admin.users.endSessions')}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title={t('admin.userView.confirmEndSessions')}
+          message={t('admin.userView.confirmEndSessionsMessage', { jid: user.jid })}
+          confirmLabel={t('admin.users.endSessions')}
+          variant="warning"
+          onConfirm={handleEndSessions}
+          onCancel={() => setShowEndSessionsConfirm(false)}
+        />
       )}
     </div>
   )

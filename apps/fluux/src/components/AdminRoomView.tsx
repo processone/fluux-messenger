@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { ArrowLeft, Trash2, Settings, Loader2 } from 'lucide-react'
 import type { AdminRoom, DataForm } from '@fluux/sdk'
 import { Tooltip } from './Tooltip'
+import { ConfirmDialog } from './ConfirmDialog'
 
 interface RoomOption {
   name: string
@@ -170,34 +171,14 @@ export function AdminRoomView({
         </div>
       </div>
 
-      {/* Delete Confirmation Dialog */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-fluux-sidebar rounded-lg p-4 max-w-sm w-full mx-4 shadow-xl">
-            <h3 className="text-lg font-semibold text-fluux-text mb-2">
-              {t('admin.roomView.confirmDestroy')}
-            </h3>
-            <p className="text-sm text-fluux-muted mb-4">
-              {t('admin.roomView.confirmDestroyMessage', { room: room.name })}
-            </p>
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-sidebar
-                           rounded-lg transition-colors"
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                onClick={handleDelete}
-                className="px-4 py-2 text-sm text-white bg-red-500 hover:bg-red-600
-                           rounded-lg transition-colors"
-              >
-                {t('admin.roomView.destroy')}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title={t('admin.roomView.confirmDestroy')}
+          message={t('admin.roomView.confirmDestroyMessage', { room: room.name })}
+          confirmLabel={t('admin.roomView.destroy')}
+          onConfirm={handleDelete}
+          onCancel={() => setShowDeleteConfirm(false)}
+        />
       )}
     </div>
   )
