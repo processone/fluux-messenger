@@ -285,14 +285,14 @@ describe('BrowseRoomsModal', () => {
       render(<BrowseRoomsModal onClose={mockOnClose} />)
 
       await waitFor(() => {
-        expect(mockBrowsePublicRooms).toHaveBeenCalledWith('conference.example.com')
+        expect(mockBrowsePublicRooms).toHaveBeenCalledWith('conference.example.com', { max: 50 })
       })
 
       const select = screen.getByRole('combobox')
       fireEvent.change(select, { target: { value: 'muc.xmpp.org' } })
 
       await waitFor(() => {
-        expect(mockBrowsePublicRooms).toHaveBeenCalledWith('muc.xmpp.org')
+        expect(mockBrowsePublicRooms).toHaveBeenCalledWith('muc.xmpp.org', { max: 50 })
       })
     })
 
@@ -319,7 +319,7 @@ describe('BrowseRoomsModal', () => {
       fireEvent.keyDown(customInput, { key: 'Enter' })
 
       await waitFor(() => {
-        expect(mockBrowsePublicRooms).toHaveBeenCalledWith('custom.server.com')
+        expect(mockBrowsePublicRooms).toHaveBeenCalledWith('custom.server.com', { max: 50 })
       })
     })
 
@@ -339,7 +339,7 @@ describe('BrowseRoomsModal', () => {
       fireEvent.click(discoverButton)
 
       await waitFor(() => {
-        expect(mockBrowsePublicRooms).toHaveBeenCalledWith('custom.server.com')
+        expect(mockBrowsePublicRooms).toHaveBeenCalledWith('custom.server.com', { max: 50 })
       })
     })
 
@@ -554,6 +554,76 @@ describe('BrowseRoomsModal', () => {
       await waitFor(() => {
         expect(screen.getByText('rooms.failedToLoadRooms')).toBeInTheDocument()
       })
+    })
+  })
+
+  describe('pagination', () => {
+    it('should pass RSM max parameter on initial fetch', async () => {
+      render(<BrowseRoomsModal onClose={mockOnClose} />)
+
+      await waitFor(() => {
+        expect(mockBrowsePublicRooms).toHaveBeenCalledWith('conference.example.com', { max: 50 })
+      })
+    })
+
+    it('should show total count in footer when server provides it', async () => {
+      mockBrowsePublicRooms.mockResolvedValue({
+        rooms: sampleRooms,
+        pagination: { first: 'first-id', last: 'last-id', count: 150 },
+      })
+
+      render(<BrowseRoomsModal onClose={mockOnClose} />)
+
+      await waitFor(() => {
+        expect(screen.getByText(/\/ 150/)).toBeInTheDocument()
+      })
+    })
+
+    it('should not show total count when rooms are fully loaded', async () => {
+      mockBrowsePublicRooms.mockResolvedValue({
+        rooms: sampleRooms,
+        pagination: { first: 'first-id', last: 'last-id', count: 3 },
+      })
+
+      render(<BrowseRoomsModal onClose={mockOnClose} />)
+
+      await waitFor(() => {
+        expect(screen.getByText('General Chat')).toBeInTheDocument()
+      })
+
+      // Should NOT show "/ 3" since all rooms are loaded
+      expect(screen.queryByText(/\/ 3/)).not.toBeInTheDocument()
+    })
+
+    it('should reset pagination when switching MUC service', async () => {
+      // First call returns paginated results
+      mockBrowsePublicRooms.mockResolvedValueOnce({
+        rooms: sampleRooms,
+        pagination: { first: 'first-id', last: 'last-id', count: 150 },
+      })
+
+      render(<BrowseRoomsModal onClose={mockOnClose} />)
+
+      await waitFor(() => {
+        expect(screen.getByText('General Chat')).toBeInTheDocument()
+      })
+
+      // Second call returns different rooms with no pagination
+      mockBrowsePublicRooms.mockResolvedValueOnce({
+        rooms: [{ jid: 'test@muc.xmpp.org', name: 'Test Room' }],
+        pagination: {},
+      })
+
+      // Switch service
+      const select = screen.getByRole('combobox')
+      fireEvent.change(select, { target: { value: 'muc.xmpp.org' } })
+
+      await waitFor(() => {
+        expect(screen.getByText('Test Room')).toBeInTheDocument()
+      })
+
+      // Old rooms should be gone
+      expect(screen.queryByText('General Chat')).not.toBeInTheDocument()
     })
   })
 })
