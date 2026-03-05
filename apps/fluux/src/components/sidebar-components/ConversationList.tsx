@@ -26,8 +26,12 @@ import {
 } from './SidebarListMenu'
 
 // ============================================================================
-// ConversationList
+// ConversationList & ArchiveList
 // ============================================================================
+// These two components share similar structure (keyboard nav, render loop,
+// context menu) but are kept separate intentionally. Each is ~80 lines and
+// self-contained; a parametrized base would save lines but add indirection
+// for little readability gain. Revisit if they grow more shared behaviour.
 
 export function ConversationList() {
   const { t } = useTranslation()
@@ -108,9 +112,7 @@ export function ConversationList() {
   )
 }
 
-// ============================================================================
-// ArchiveList
-// ============================================================================
+// ArchiveList — see rationale above for why this isn't merged with ConversationList
 
 export function ArchiveList() {
   const { t } = useTranslation()
