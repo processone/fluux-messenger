@@ -12,6 +12,8 @@ import { useChatStore } from '@fluux/sdk/react'
 import { X, Search, Hash, Loader2, ChevronDown, Server } from 'lucide-react'
 import { Tooltip } from './Tooltip'
 
+const PAGE_SIZE = 50
+
 interface BrowseRoomsModalProps {
   onClose: () => void
 }
@@ -32,6 +34,13 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
   const inputRef = useModalInput<HTMLInputElement>(onClose)
   const listRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const loadMoreRef = useRef<HTMLDivElement>(null)
+
+  // Pagination state
+  const [paginationCursor, setPaginationCursor] = useState<string | undefined>(undefined)
+  const [totalCount, setTotalCount] = useState<number | undefined>(undefined)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
 
   // MUC service selection
   const [selectedService, setSelectedService] = useState<string>(mucServiceJid || '')
@@ -85,6 +94,9 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
       // If custom input is shown but not yet committed, don't fetch
       if (showCustomInput && !committedCustomService) {
         setRooms([])
+        setPaginationCursor(undefined)
+        setTotalCount(undefined)
+        setHasMore(false)
         setLoading(false)
         return
       }
@@ -92,18 +104,78 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
       setLoading(true)
       setError(null)
       try {
-        // Call browsePublicRooms - if no service provided, it will auto-discover
-        const result = await browsePublicRooms(effectiveService || undefined)
+        const result = await browsePublicRooms(effectiveService || undefined, { max: PAGE_SIZE })
         setRooms(result.rooms)
+        setPaginationCursor(result.pagination.last)
+        setTotalCount(result.pagination.count)
+        // Determine if there are more pages
+        if (result.pagination.count !== undefined) {
+          setHasMore(result.rooms.length < result.pagination.count)
+        } else {
+          setHasMore(result.rooms.length >= PAGE_SIZE && !!result.pagination.last)
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : t('rooms.failedToLoadRooms'))
         setRooms([])
+        setPaginationCursor(undefined)
+        setTotalCount(undefined)
+        setHasMore(false)
       } finally {
         setLoading(false)
       }
     }
     void fetchRooms()
   }, [effectiveService, showCustomInput, committedCustomService, browsePublicRooms, t])
+
+  // Load more rooms on scroll
+  const handleLoadMore = useCallback(async () => {
+    if (loadingMore || !hasMore || !paginationCursor) return
+
+    setLoadingMore(true)
+    try {
+      const result = await browsePublicRooms(effectiveService || undefined, {
+        max: PAGE_SIZE,
+        after: paginationCursor,
+      })
+      if (result.rooms.length === 0) {
+        setHasMore(false)
+      } else {
+        setRooms((prev) => [...prev, ...result.rooms])
+        setPaginationCursor(result.pagination.last)
+        if (result.pagination.count !== undefined) {
+          setTotalCount(result.pagination.count)
+        }
+        if (result.pagination.count !== undefined) {
+          const newTotal = rooms.length + result.rooms.length
+          setHasMore(newTotal < result.pagination.count)
+        } else {
+          setHasMore(result.rooms.length >= PAGE_SIZE && !!result.pagination.last)
+        }
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('rooms.failedToLoadRooms'))
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [loadingMore, hasMore, paginationCursor, browsePublicRooms, effectiveService, rooms.length, t])
+
+  // IntersectionObserver for infinite scroll
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loadingMore && !loading) {
+          void handleLoadMore()
+        }
+      },
+      { threshold: 0.1 }
+    )
+
+    if (loadMoreRef.current) {
+      observer.observe(loadMoreRef.current)
+    }
+
+    return () => observer.disconnect()
+  }, [hasMore, loadingMore, loading, handleLoadMore])
 
   // Handle service selection from dropdown
   const handleServiceChange = (value: string) => {
@@ -396,6 +468,15 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
                   </div>
                 )
               })}
+
+              {/* Load more sentinel */}
+              <div ref={loadMoreRef} className="py-2">
+                {loadingMore && (
+                  <div className="flex items-center justify-center gap-2 text-fluux-muted">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -404,6 +485,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
         <div className="px-4 py-3 border-t border-fluux-hover flex-shrink-0">
           <p className="text-xs text-fluux-muted">
             {t('rooms.browseRoomsHint', { count: rooms.length })}
+            {totalCount !== undefined && totalCount > rooms.length && ` / ${totalCount}`}
           </p>
         </div>
       </div>
