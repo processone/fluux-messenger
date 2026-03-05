@@ -407,10 +407,6 @@ vi.mock('./ContactProfileView', () => ({
   ),
 }))
 
-vi.mock('./ProfileView', () => ({
-  ProfileView: () => <div data-testid="profile-view">Profile</div>,
-}))
-
 vi.mock('./SettingsView', () => ({
   SettingsView: () => <div data-testid="settings-view">Settings</div>,
 }))
