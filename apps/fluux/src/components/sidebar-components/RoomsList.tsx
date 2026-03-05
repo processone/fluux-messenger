@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useMemo, memo } from 'react'
+import React, { useState, useRef, useCallback, useMemo, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useContextMenu, useListKeyboardNav } from '@/hooks'
 import {
@@ -255,8 +255,8 @@ interface RoomItemProps {
   onEditBookmark: () => void
   onRemoveBookmark: () => void
   onToggleAutojoin: () => void
-  onMouseEnter?: () => void
-  onMouseMove?: () => void
+  onMouseEnter?: (e: React.MouseEvent) => void
+  onMouseMove?: (e: React.MouseEvent) => void
   isQuickChat?: boolean
   'data-room-jid'?: string
   'data-selected'?: boolean

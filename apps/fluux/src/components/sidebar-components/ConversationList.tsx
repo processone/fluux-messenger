@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, memo } from 'react'
+import React, { useState, useRef, useCallback, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useListKeyboardNav } from '@/hooks'
 import {
@@ -204,8 +204,8 @@ interface ConversationItemProps {
   isTyping?: boolean
   draft?: string
   onClick: () => void
-  onMouseEnter?: () => void
-  onMouseMove?: () => void
+  onMouseEnter?: (e: React.MouseEvent) => void
+  onMouseMove?: (e: React.MouseEvent) => void
   'data-conv-id'?: string
   'data-selected'?: boolean
 }

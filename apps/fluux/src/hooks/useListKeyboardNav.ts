@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, RefObject } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef, RefObject } from 'react'
 
 /**
  * Options for the useListKeyboardNav hook
@@ -49,8 +49,8 @@ interface UseListKeyboardNavReturn {
   /** Props to spread on each list item */
   getItemProps: (index: number) => {
     'data-selected': boolean
-    onMouseEnter: () => void
-    onMouseMove: () => void
+    onMouseEnter: (e: React.MouseEvent) => void
+    onMouseMove: (e: React.MouseEvent) => void
   }
   /** Data attribute value for the item at given index */
   getItemAttribute: (index: number) => Record<string, string>
@@ -110,6 +110,12 @@ export function useListKeyboardNav<T>({
   const [selectedIndex, setSelectedIndex] = useState(-1)
   // Track if we're in keyboard navigation mode (suppresses mouse hover updates)
   const [isKeyboardNav, setIsKeyboardNav] = useState(false)
+  // Track the selected item's ID so we can preserve selection when items change (e.g., pagination append)
+  const selectedItemIdRef = useRef<string | null>(null)
+  // Track the last mouse position to distinguish real mouse movement from scroll-induced mousemove events.
+  // When scrollIntoView shifts the list, the browser fires mousemove on items passing under the
+  // stationary cursor — we must ignore those.
+  const lastMousePosRef = useRef<{ x: number; y: number } | null>(null)
 
   // Trigger bounce animation at list boundaries
   const triggerBounce = useCallback(
@@ -135,9 +141,24 @@ export function useListKeyboardNav<T>({
     [altKeyItems, getItemId]
   )
 
-  // Reset selection when items actually change (by ID)
+  // Keep a ref to the latest itemIdToIndex map so the reset effect can use it
+  // without depending on its identity (which changes when getItemId is recreated).
+  const itemIdToIndexRef = useRef(itemIdToIndex)
+  itemIdToIndexRef.current = itemIdToIndex
+
+  // When items change, try to preserve the selection by matching the previously selected item ID.
+  // This prevents the selection from resetting to -1 when items are appended (e.g., pagination).
   useEffect(() => {
+    const prevId = selectedItemIdRef.current
+    if (prevId) {
+      const newIndex = itemIdToIndexRef.current.get(prevId)
+      if (newIndex !== undefined) {
+        setSelectedIndex(newIndex)
+        return
+      }
+    }
     setSelectedIndex(-1)
+    selectedItemIdRef.current = null
   }, [itemsKey])
 
   // Keyboard event handler
@@ -153,6 +174,16 @@ export function useListKeyboardNav<T>({
       if (modalBackdrop) {
         const ourListIsInModal = listRef.current && modalBackdrop.contains(listRef.current)
         if (!ourListIsInModal) return
+      }
+
+      // If focus is not in a modal (e.g., on document.body after search input blur),
+      // but a modal IS open in the document, only handle if our list is inside that modal.
+      // This prevents sidebar lists from stealing keyboard events when a modal is active.
+      if (!modalBackdrop) {
+        const openModal = document.querySelector('[data-modal="true"]')
+        if (openModal && listRef.current && !openModal.contains(listRef.current)) {
+          return
+        }
       }
 
       // If zoneRef is provided, only handle keys when focus is within that zone
@@ -242,8 +273,9 @@ export function useListKeyboardNav<T>({
         // Calculate new index based on current state
         const { newIndex, bounced } = calculateNewIndex(selectedIndex)
 
-        // Update state
+        // Update state and track selected item ID for preservation across list changes
         setSelectedIndex(newIndex)
+        selectedItemIdRef.current = newIndex >= 0 && newIndex < items.length ? getItemId(items[newIndex]) : null
 
         // If Alt+arrow and activateOnAltNav, call onSelect (only if actually navigated)
         if (e.altKey && activateOnAltNav && !bounced && newIndex !== selectedIndex && newIndex >= 0 && newIndex < items.length) {
@@ -280,14 +312,27 @@ export function useListKeyboardNav<T>({
   const getItemProps = useCallback(
     (index: number) => ({
       'data-selected': index === selectedIndex,
-      onMouseEnter: () => {
-        // Only update selection on mouse hover if not in keyboard nav mode
-        if (!isKeyboardNav) {
-          setSelectedIndex(index)
-        }
+      onMouseEnter: (e: React.MouseEvent) => {
+        if (isKeyboardNav) return
+        // Ignore scroll-induced enters: when the list scrolls (keyboard auto-scroll or mouse wheel),
+        // items pass under a stationary cursor, triggering onMouseEnter. We detect this by checking
+        // whether the mouse actually moved to new coordinates.
+        const prev = lastMousePosRef.current
+        const x = e.clientX
+        const y = e.clientY
+        if (prev && prev.x === x && prev.y === y) return
+        lastMousePosRef.current = { x, y }
+        setSelectedIndex(index)
       },
-      onMouseMove: () => {
-        // Exit keyboard nav mode when mouse moves
+      onMouseMove: (e: React.MouseEvent) => {
+        // Only exit keyboard nav mode when the mouse ACTUALLY moves to new coordinates.
+        // scrollIntoView causes the browser to fire mousemove on items passing under a
+        // stationary cursor — we must ignore those phantom events.
+        const prev = lastMousePosRef.current
+        const x = e.clientX
+        const y = e.clientY
+        if (prev && prev.x === x && prev.y === y) return
+        lastMousePosRef.current = { x, y }
         if (isKeyboardNav) {
           setIsKeyboardNav(false)
         }

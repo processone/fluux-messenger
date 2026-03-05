@@ -1,10 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useListKeyboardNav } from './useListKeyboardNav'
-import { useRef } from 'react'
+import React, { useRef } from 'react'
 
 type TestItem = { id: string; name: string }
 type OnSelectFn = (item: TestItem, index: number) => void
+
+/** Create a mock React.MouseEvent with the given coordinates */
+function mockMouseEvent(x = 100, y = 100) {
+  return { clientX: x, clientY: y } as React.MouseEvent
+}
 
 function createWrapper(items: TestItem[], onSelect: OnSelectFn, enabled = true) {
   return () => {
@@ -282,7 +287,7 @@ describe('useListKeyboardNav', () => {
       const props = result.current.getItemProps(2)
 
       act(() => {
-        props.onMouseEnter()
+        props.onMouseEnter(mockMouseEvent(50, 50))
       })
 
       expect(result.current.selectedIndex).toBe(2)
@@ -312,19 +317,19 @@ describe('useListKeyboardNav', () => {
 
       // Mouse enter should NOT change selection during keyboard nav mode
       act(() => {
-        result.current.getItemProps(2).onMouseEnter()
+        result.current.getItemProps(2).onMouseEnter(mockMouseEvent(50, 50))
       })
       // Selection should still be 0, not 2
       expect(result.current.selectedIndex).toBe(0)
 
-      // Mouse move should exit keyboard nav mode
+      // Mouse move should exit keyboard nav mode (different coordinates = real movement)
       act(() => {
-        result.current.getItemProps(2).onMouseMove()
+        result.current.getItemProps(2).onMouseMove(mockMouseEvent(60, 60))
       })
 
       // Now mouse enter should work again (need fresh props after state change)
       act(() => {
-        result.current.getItemProps(2).onMouseEnter()
+        result.current.getItemProps(2).onMouseEnter(mockMouseEvent(70, 70))
       })
       expect(result.current.selectedIndex).toBe(2)
     })
@@ -924,7 +929,7 @@ describe('useListKeyboardNav', () => {
 
       // Set selection via mouse enter
       act(() => {
-        result.current.getItemProps(1).onMouseEnter()
+        result.current.getItemProps(1).onMouseEnter(mockMouseEvent(50, 50))
       })
       expect(result.current.selectedIndex).toBe(1)
 
@@ -962,9 +967,9 @@ describe('useListKeyboardNav', () => {
       expect(result.current.selectedIndex).toBe(0)
       expect(result.current.isKeyboardNav).toBe(true)
 
-      // Exit keyboard nav mode via mouse move
+      // Exit keyboard nav mode via mouse move (different coordinates = real movement)
       act(() => {
-        result.current.getItemProps(0).onMouseMove()
+        result.current.getItemProps(0).onMouseMove(mockMouseEvent(80, 80))
       })
       expect(result.current.isKeyboardNav).toBe(false)
 
