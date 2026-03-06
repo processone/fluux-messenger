@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { useEvents } from '@fluux/sdk'
+import { useEvents, usePresence } from '@fluux/sdk'
 import { sendNotification } from '@tauri-apps/plugin-notification'
 import { useNotificationPermission, isTauri } from './useNotificationPermission'
 
@@ -11,12 +11,17 @@ import { useNotificationPermission, isTauri } from './useNotificationPermission'
  */
 export function useEventsDesktopNotifications(): void {
   const { subscriptionRequests } = useEvents()
+  const { presenceStatus } = usePresence()
   const prevRequestsRef = useRef<typeof subscriptionRequests>([])
   const permissionGranted = useNotificationPermission()
 
   // Watch for new subscription requests
   useEffect(() => {
     if (!permissionGranted.current) return
+    if (presenceStatus === 'dnd') {
+      prevRequestsRef.current = subscriptionRequests
+      return
+    }
 
     const prevRequests = prevRequestsRef.current
 
@@ -52,5 +57,5 @@ export function useEventsDesktopNotifications(): void {
     }
 
     prevRequestsRef.current = subscriptionRequests
-  }, [subscriptionRequests, permissionGranted])
+  }, [subscriptionRequests, permissionGranted, presenceStatus])
 }

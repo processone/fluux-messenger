@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react'
-import { rosterStore } from '@fluux/sdk'
+import { rosterStore, usePresence } from '@fluux/sdk'
 import type { Conversation, Message, Room, RoomMessage } from '@fluux/sdk'
 import { sendNotification } from '@tauri-apps/plugin-notification'
 import { useNotificationEvents } from './useNotificationEvents'
@@ -32,15 +32,21 @@ const NOTIFICATION_CLICK_WINDOW = 3000
 export function useDesktopNotifications(): void {
   const { navigateToConversation, navigateToRoom } = useNavigateToTarget()
   const permissionGranted = useNotificationPermission()
+  const { presenceStatus } = usePresence()
 
   // Refs for stable access in async callbacks (useNavigateToTarget uses refs internally)
   const navigateToConversationRef = useRef(navigateToConversation)
   const navigateToRoomRef = useRef(navigateToRoom)
+  const presenceStatusRef = useRef(presenceStatus)
 
   useEffect(() => {
     navigateToConversationRef.current = navigateToConversation
     navigateToRoomRef.current = navigateToRoom
   }, [navigateToConversation, navigateToRoom])
+
+  useEffect(() => {
+    presenceStatusRef.current = presenceStatus
+  }, [presenceStatus])
 
   // Handle notification clicks via app activation (macOS workaround)
   // The onAction() API is mobile-only, so on desktop we detect when the app
@@ -76,6 +82,7 @@ export function useDesktopNotifications(): void {
 
   // Show conversation notification
   const showConversationNotification = useCallback(async (conv: Conversation, message: Message) => {
+    if (presenceStatusRef.current === 'dnd') return
     if (!permissionGranted.current) {
       notificationDebug.desktopNotification({
         title: conv.name || message.from.split('@')[0],
@@ -132,6 +139,7 @@ export function useDesktopNotifications(): void {
 
   // Show room notification
   const showRoomNotification = useCallback(async (room: Room, message: RoomMessage) => {
+    if (presenceStatusRef.current === 'dnd') return
     if (!permissionGranted.current) {
       notificationDebug.desktopNotification({
         title: `${message.nick} @ ${room.name}`,

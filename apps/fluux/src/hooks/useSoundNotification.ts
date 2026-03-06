@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react'
+import { usePresence } from '@fluux/sdk'
 import { useNotificationEvents } from './useNotificationEvents'
 
 /**
@@ -63,7 +64,13 @@ function createNotificationSound(): () => void {
  * Uses the shared useNotificationEvents hook for detection logic.
  */
 export function useSoundNotification(): void {
+  const { presenceStatus } = usePresence()
+  const presenceStatusRef = useRef(presenceStatus)
   const playSoundRef = useRef<(() => void) | null>(null)
+
+  useEffect(() => {
+    presenceStatusRef.current = presenceStatus
+  }, [presenceStatus])
 
   // Initialize sound player
   useEffect(() => {
@@ -77,6 +84,7 @@ export function useSoundNotification(): void {
   }, [])
 
   const playSound = useCallback(() => {
+    if (presenceStatusRef.current === 'dnd') return
     playSoundRef.current?.()
   }, [])
 
