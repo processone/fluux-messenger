@@ -590,11 +590,55 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  build-web:
+    name: Build Web Static Assets
+    needs: create-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build SDK
+        run: npm run build:sdk
+
+      - name: Build web app
+        run: npm run build
+
+      - name: Create web zip
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          ZIP_NAME="fluux-messenger-${VERSION}-web.zip"
+          cd apps/fluux/dist
+          zip -r "../../../${ZIP_NAME}" .
+          echo "ZIP_NAME=${ZIP_NAME}" >> $GITHUB_ENV
+
+      - name: Upload web zip to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ${{ env.ZIP_NAME }}
+          tag_name: ${{ env.RELEASE_TAG }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   # Final job to rename all assets to consistent, user-friendly names
   rename-assets:
     name: Rename Release Assets
     runs-on: ubuntu-latest
-    needs: [create-release, build-macos, build-windows, build-linux, build-linux-rpm]
+    needs: [create-release, build-macos, build-windows, build-linux, build-linux-rpm, build-web]
     permissions:
       contents: write
 
