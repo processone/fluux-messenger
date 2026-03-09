@@ -410,6 +410,49 @@ describe('useViewportObserver', () => {
     expect(onMessageSeen).toHaveBeenCalledTimes(2)
   })
 
+  it('flushes pending report using the OLD conversation callback on switch', () => {
+    // Regression test: when switching conversations, the pending viewport report
+    // from the old conversation must be flushed using the old callback (which
+    // targets the old conversationId), NOT the new one.  Otherwise, the old
+    // conversation's lastSeenMessageId never advances and the "new messages"
+    // marker lags behind by one or two activations.
+    const onMessageSeenConv1 = vi.fn()
+    const onMessageSeenConv2 = vi.fn()
+    const scrollContainerRef = createScrollContainer(['msg-1', 'msg-2'])
+
+    const { rerender } = renderHook(
+      ({ conversationId, onMessageSeen }) =>
+        useViewportObserver({
+          scrollContainerRef,
+          conversationId,
+          onMessageSeen,
+          enabled: true,
+        }),
+      { initialProps: { conversationId: 'conv-1', onMessageSeen: onMessageSeenConv1 } },
+    )
+
+    // First report — immediate (conv-1 callback)
+    act(() => {
+      ioCallback([makeEntry('msg-1', true, 100)], {} as IntersectionObserver)
+    })
+    expect(onMessageSeenConv1).toHaveBeenCalledTimes(1)
+
+    // Quickly queue a throttled report
+    act(() => {
+      vi.advanceTimersByTime(50)
+      ioCallback([makeEntry('msg-2', true, 200)], {} as IntersectionObserver)
+    })
+
+    // Switch conversation AND callback simultaneously (simulating real behavior
+    // where ChatView recreates handleMessageSeen with new conversationId)
+    rerender({ conversationId: 'conv-2', onMessageSeen: onMessageSeenConv2 })
+
+    // The flush should use conv-1's callback, NOT conv-2's
+    expect(onMessageSeenConv1).toHaveBeenCalledTimes(2)
+    expect(onMessageSeenConv1).toHaveBeenLastCalledWith('msg-2')
+    expect(onMessageSeenConv2).not.toHaveBeenCalled()
+  })
+
   // ========================================================================
   // Cleanup on unmount
   // ========================================================================
@@ -435,7 +478,7 @@ describe('useViewportObserver', () => {
     expect(mo.disconnect).toHaveBeenCalled()
   })
 
-  it('clears throttle timer on unmount', () => {
+  it('flushes pending report and clears throttle timer on unmount', () => {
     const onMessageSeen = vi.fn()
     const scrollContainerRef = createScrollContainer(['msg-1', 'msg-2'])
 
@@ -459,10 +502,13 @@ describe('useViewportObserver', () => {
 
     unmount()
 
-    // Advance time — throttled callback should not fire after unmount
-    act(() => { vi.advanceTimersByTime(400) })
+    // Pending report should have been flushed during cleanup
+    expect(onMessageSeen).toHaveBeenCalledTimes(2)
+    expect(onMessageSeen).toHaveBeenLastCalledWith('msg-2')
 
-    expect(onMessageSeen).toHaveBeenCalledTimes(1) // only the first immediate one
+    // Advance time — throttled callback should not fire again after unmount
+    act(() => { vi.advanceTimersByTime(400) })
+    expect(onMessageSeen).toHaveBeenCalledTimes(2)
   })
 
   // ========================================================================

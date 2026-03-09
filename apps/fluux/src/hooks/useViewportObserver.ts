@@ -72,20 +72,30 @@ export function useViewportObserver({
   }, [])
 
   useEffect(() => {
-    // Flush pending report before resetting — ensures lastSeenMessageId is
-    // up-to-date before onDeactivate() clears the marker.  Without this,
-    // a throttled update can be lost when switching conversations, causing
-    // onActivate() to recompute a stale firstNewMessageId on re-entry.
-    if (pendingMessageIdRef.current && pendingMessageIdRef.current !== lastReportedRef.current) {
-      onMessageSeenRef.current?.(pendingMessageIdRef.current)
-    }
-    // Reset tracking state on conversation switch
-    lastReportedRef.current = null
-    lastReportedTimeRef.current = 0
-    pendingMessageIdRef.current = null
-    if (throttleTimerRef.current) {
-      clearTimeout(throttleTimerRef.current)
-      throttleTimerRef.current = null
+    // Capture the callback at setup time.  When this effect is cleaned up
+    // (conversationId changes or unmount), the captured callback still
+    // targets the CORRECT conversation — even though onMessageSeenRef.current
+    // may already point at the new conversation's callback (updated during
+    // render).  Without this, the pending flush would go to the wrong
+    // conversation, causing lastSeenMessageId to never advance and the
+    // "new messages" marker to lag behind by one or two activations.
+    const callbackForFlush = onMessageSeenRef.current
+
+    return () => {
+      // Flush pending report using the callback captured at setup time,
+      // ensuring lastSeenMessageId is updated for the CORRECT conversation
+      // before onDeactivate() clears the marker.
+      if (pendingMessageIdRef.current && pendingMessageIdRef.current !== lastReportedRef.current) {
+        callbackForFlush?.(pendingMessageIdRef.current)
+      }
+      // Reset tracking state on conversation switch
+      lastReportedRef.current = null
+      lastReportedTimeRef.current = 0
+      pendingMessageIdRef.current = null
+      if (throttleTimerRef.current) {
+        clearTimeout(throttleTimerRef.current)
+        throttleTimerRef.current = null
+      }
     }
   }, [conversationId])
 
