@@ -121,11 +121,7 @@ Both `x64` and `arm64` builds are available for all formats.
 <details>
 <summary><b>Web (self-hosted)</b></summary>
 
-Download the `fluux-messenger-*-web.zip` asset from the [releases page](https://github.com/processone/fluux-messenger/releases/latest), extract it, and serve it with any web server of your choice.
-
-> **Note:** Opening `index.html` directly in your browser will not work — the app must be served over HTTP.
-
-This also works as a PWA on mobile devices when served from your own domain.
+Download the `fluux-messenger-*-web.zip` asset from the [releases page](https://github.com/processone/fluux-messenger/releases/latest), extract it, and serve it with any web server of your choice (app must be served over HTTP). This also works as a PWA on mobile devices when served from your own domain.
 
 </details>
 
@@ -166,7 +162,7 @@ We aim to create an XMPP client that respects standards, but currently the proje
 
 ### Will there be other installations methods? Can I run it on my own server?
 
-Yes. A pre-built static web bundle (`-web.zip`) is available on the [releases page](https://github.com/processone/fluux-messenger/releases/latest). Simply extract it and serve it with any web server. See the [Web (self-hosted)](#quick-start) section above for instructions. This also works as a PWA on mobile devices when served from your own domain.
+Yes. A pre-built static web bundle (`-web.zip`) is available on the [releases page](https://github.com/processone/fluux-messenger/releases/latest). Simply extract it and serve it with any web server.
 
 Looking ahead, we also plan to make Fluux Messenger available on F-Droid, and possibly on the Google Play Store as well.
 
