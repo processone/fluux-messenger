@@ -1071,7 +1071,7 @@ describe('MUC Module', () => {
 
       const result = await muc.queryRoomFeatures('room@conference.example.org')
 
-      expect(result).toEqual({ supportsMAM: true, name: 'Test Room' })
+      expect(result).toEqual({ supportsMAM: true, supportsReactions: true, name: 'Test Room' })
       expect(mockSendIQ).toHaveBeenCalledWith(
         expect.objectContaining({
           attrs: expect.objectContaining({
@@ -1099,7 +1099,50 @@ describe('MUC Module', () => {
 
       const result = await muc.queryRoomFeatures('room@conference.example.org')
 
-      expect(result).toEqual({ supportsMAM: false, name: 'Test Room' })
+      expect(result).toEqual({ supportsMAM: false, supportsReactions: true, name: 'Test Room' })
+    })
+
+    it('returns supportsReactions: false for open semi-anonymous rooms without occupant-id', async () => {
+      const response = createMockElement('iq', { type: 'result', from: 'room@conference.example.org' }, [
+        {
+          name: 'query',
+          attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
+          children: [
+            { name: 'identity', attrs: { category: 'conference', type: 'text', name: 'IRC Bridge' } },
+            { name: 'feature', attrs: { var: 'http://jabber.org/protocol/muc' } },
+            { name: 'feature', attrs: { var: 'muc_semianonymous' } },
+            { name: 'feature', attrs: { var: 'muc_open' } },
+          ],
+        },
+      ])
+
+      mockSendIQ.mockResolvedValue(response)
+
+      const result = await muc.queryRoomFeatures('room@conference.example.org')
+
+      expect(result).toEqual({ supportsMAM: false, supportsReactions: false, name: 'IRC Bridge' })
+    })
+
+    it('returns supportsReactions: true for open semi-anonymous rooms with occupant-id', async () => {
+      const response = createMockElement('iq', { type: 'result', from: 'room@conference.example.org' }, [
+        {
+          name: 'query',
+          attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
+          children: [
+            { name: 'identity', attrs: { category: 'conference', type: 'text', name: 'Modern Room' } },
+            { name: 'feature', attrs: { var: 'http://jabber.org/protocol/muc' } },
+            { name: 'feature', attrs: { var: 'muc_semianonymous' } },
+            { name: 'feature', attrs: { var: 'muc_open' } },
+            { name: 'feature', attrs: { var: 'urn:xmpp:occupant-id:0' } },
+          ],
+        },
+      ])
+
+      mockSendIQ.mockResolvedValue(response)
+
+      const result = await muc.queryRoomFeatures('room@conference.example.org')
+
+      expect(result).toEqual({ supportsMAM: false, supportsReactions: true, name: 'Modern Room' })
     })
 
     it('returns null when disco#info query fails', async () => {

@@ -773,7 +773,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
       senderAffiliation={occupant?.affiliation}
       nickExtras={nickExtras}
       myReactions={myReactions}
-      onReaction={handleReaction}
+      onReaction={room.supportsReactions !== false ? handleReaction : undefined}
       getReactorName={getReactorName}
       onReply={() => onReply(message)}
       onEdit={() => onEdit(message)}

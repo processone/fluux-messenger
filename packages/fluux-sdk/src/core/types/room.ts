@@ -178,6 +178,10 @@ export interface RoomEntity {
   // Room capabilities (from disco#info)
   /** True if room supports MAM (XEP-0313) for message archiving */
   supportsMAM?: boolean
+  /** True if room provides stable occupant identity for reliable reactions.
+   *  False for open semi-anonymous rooms without XEP-0421 occupant-id support,
+   *  where nicks can change freely making reaction attribution unreliable. */
+  supportsReactions?: boolean
 }
 
 /**

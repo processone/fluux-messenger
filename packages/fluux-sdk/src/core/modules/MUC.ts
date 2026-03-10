@@ -3,6 +3,7 @@ import { BaseModule } from './BaseModule'
 import { getBareJid, getLocalPart, getResource, getDomain } from '../jid'
 import { generateUUID } from '../../utils/uuid'
 import { generateQuickChatSlug } from '../wordlist'
+import { hasStableOccupantIdentity } from '../roomCapabilities'
 import {
   NS_MUC,
   NS_MUC_USER,
@@ -424,6 +425,7 @@ export class MUC extends BaseModule {
     // but skip MAM since quickchats are transient
     const roomFeatures = await this.queryRoomFeatures(roomJid)
     const supportsMAM = isQuickChat ? false : (roomFeatures?.supportsMAM ?? false)
+    const supportsReactions = roomFeatures?.supportsReactions ?? true
     const roomName = roomFeatures?.name || existingRoom?.name || getLocalPart(roomJid)
 
     if (!existingRoom) {
@@ -436,6 +438,7 @@ export class MUC extends BaseModule {
         isBookmarked: false,
         isQuickChat: options?.isQuickChat,
         supportsMAM,
+        supportsReactions,
         occupants: new Map(),
         messages: [],
         unreadCount: 0,
@@ -449,6 +452,7 @@ export class MUC extends BaseModule {
         nickname,
         isJoining: true,
         supportsMAM,
+        supportsReactions,
         occupants: new Map() as Map<string, RoomOccupant>,
         selfOccupant: undefined,
         typingUsers: new Set() as Set<string>,
@@ -736,7 +740,7 @@ export class MUC extends BaseModule {
    *   since MAM provides a more reliable and complete archive
    * - Has a 10-second timeout to prevent hanging if remote server doesn't respond
    */
-  async queryRoomFeatures(roomJid: string): Promise<{ supportsMAM: boolean; name?: string } | null> {
+  async queryRoomFeatures(roomJid: string): Promise<{ supportsMAM: boolean; supportsReactions: boolean; name?: string } | null> {
     try {
       const iq = xml(
         'iq',
@@ -763,6 +767,7 @@ export class MUC extends BaseModule {
         .filter(Boolean)
 
       const supportsMAM = features.includes(NS_MAM)
+      const supportsReactions = hasStableOccupantIdentity(features)
 
       // Parse room name from identity element
       // <identity category="conference" type="text" name="Room Name"/>
@@ -770,9 +775,9 @@ export class MUC extends BaseModule {
         .find((i: Element) => i.attrs.category === 'conference')
       const name = identity?.attrs.name as string | undefined
 
-      logInfo(`Room features: ${roomJid} MAM=${supportsMAM}`)
+      logInfo(`Room features: ${roomJid} MAM=${supportsMAM} reactions=${supportsReactions}`)
 
-      return { supportsMAM, name }
+      return { supportsMAM, supportsReactions, name }
     } catch (err) {
       // Room disco#info not available - that's fine, room may not exist yet
       // or may not support disco queries, or the query timed out

@@ -57,7 +57,8 @@ export interface MessageBubbleProps {
 
   // Reactions
   myReactions: string[]
-  onReaction: (emoji: string) => void
+  /** Handler for reaction clicks. When undefined, reaction UI is hidden (room lacks stable identity). */
+  onReaction?: (emoji: string) => void
   getReactorName: (reactor: string) => string
 
   // Actions
@@ -201,16 +202,19 @@ export const MessageBubble = memo(function MessageBubble({
   const [showReactionPicker, setShowReactionPickerState] = useState(false)
   const [showMoreMenu, setShowMoreMenu] = useState(false)
 
+  // Whether reactions are enabled for this message (room has stable occupant identity)
+  const reactionsEnabled = onReaction !== undefined
+
   // Wrap setShowReactionPicker to notify parent
   const setShowReactionPicker = (isOpen: boolean) => {
     setShowReactionPickerState(isOpen)
     onReactionPickerChange?.(isOpen)
   }
 
-  const handleReaction = (emoji: string) => {
+  const handleReaction = reactionsEnabled ? (emoji: string) => {
     onReaction(emoji)
     setShowReactionPicker(false)
-  }
+  } : undefined
 
   // Determine hover state: use controlled isHovered if provided, otherwise fall back to CSS hover
   const useControlledHover = isHovered !== undefined
@@ -265,7 +269,7 @@ export const MessageBubble = memo(function MessageBubble({
             onReply={onReply}
             onEdit={onEdit}
             onDelete={onDelete}
-            myReactions={myReactions}
+            myReactions={reactionsEnabled ? myReactions : []}
             canReply={!isLastMessage}
             canEdit={message.isOutgoing && isLastOutgoing}
             canDelete={message.isOutgoing}
