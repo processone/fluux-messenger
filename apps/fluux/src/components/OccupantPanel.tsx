@@ -500,8 +500,8 @@ export function OccupantPanel({
             icon={<EyeOff className="w-4 h-4" />}
             label={isOccupantIgnored(menuTarget) ? t('rooms.stopIgnoring') : t('rooms.ignoreUser')}
           />
-          {/* User info (only for roster contacts) */}
-          {menuTarget.bareJid && contactsByJid.has(menuTarget.bareJid) && (
+          {/* User info */}
+          {menuTarget.bareJid && (
             <MenuButton
               onClick={() => handleShowProfile(menuTarget.bareJid!)}
               icon={<User className="w-4 h-4" />}

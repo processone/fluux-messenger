@@ -151,9 +151,17 @@ function ChatLayoutContent() {
   // Store only the JID, derive contact from store so presence updates in real-time
   // Use focused selector that only re-renders when THIS specific contact changes
   const [selectedContactJid, setSelectedContactJid] = useState<string | null>(null)
-  const selectedContact = useRosterStore((s) =>
+  const selectedRosterContact = useRosterStore((s) =>
     selectedContactJid ? s.contacts.get(selectedContactJid) ?? null : null
   )
+  // For non-roster users (e.g. room occupants), create a minimal Contact object
+  const selectedContact = selectedRosterContact ?? (selectedContactJid ? {
+    jid: selectedContactJid,
+    name: selectedContactJid.split('@')[0],
+    presence: 'offline' as const,
+    subscription: 'none' as const,
+  } : null)
+  const isSelectedContactInRoster = !!selectedRosterContact
 
   // Room occupants panel state (persisted across view switches)
   const [showRoomOccupants, setShowRoomOccupants] = useState(false)
@@ -530,8 +538,9 @@ function ChatLayoutContent() {
   const handleShowProfileFromRoom = useCallback((jid: string) => {
     setActiveConversation(null)
     setActiveRoom(null)
-    setSelectedContactJid(jid)
+    // Navigate first (which clears selectedContactJid), then set JID
     handleSidebarViewChange('directory')
+    setSelectedContactJid(jid)
   }, [setActiveConversation, setActiveRoom, handleSidebarViewChange])
 
   // Handle removing a contact
@@ -610,6 +619,7 @@ function ChatLayoutContent() {
           ) : selectedContact ? (
             <ContactProfileView
               contact={selectedContact}
+              isInRoster={isSelectedContactInRoster}
               onStartConversation={() => handleStartConversation(selectedContact)}
               onRemoveContact={() => handleRemoveContact(selectedContact.jid)}
               onRenameContact={(name) => handleRenameContact(selectedContact.jid, name)}

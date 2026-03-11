@@ -17,6 +17,8 @@ interface ContactProfileViewProps {
   onRenameContact: (name: string) => Promise<void>
   onFetchNickname: (jid: string) => Promise<string | null>
   onBack?: () => void
+  /** Whether the contact is in the user's roster (enables rename/remove actions) */
+  isInRoster?: boolean
 }
 
 export function ContactProfileView({
@@ -26,6 +28,7 @@ export function ContactProfileView({
   onRenameContact,
   onFetchNickname,
   onBack,
+  isInRoster = true,
 }: ContactProfileViewProps) {
   const { t } = useTranslation()
   const connectionStatus = useConnectionStore((s) => s.status)
@@ -155,8 +158,8 @@ export function ContactProfileView({
             />
           </div>
 
-          {/* Name - editable */}
-          {isEditing ? (
+          {/* Name - editable only for roster contacts */}
+          {isInRoster && isEditing ? (
             <div className="flex flex-col items-center gap-1 mb-1 w-full max-w-xs">
               <input
                 ref={inputRef}
@@ -175,15 +178,17 @@ export function ContactProfileView({
           ) : (
             <div className="group relative flex items-center justify-center mb-1">
               <h1 className="text-xl font-bold text-fluux-text">{contact.name}</h1>
-              <Tooltip content={t('contacts.rename')} position="top">
-                <button
-                  onClick={handleStartEdit}
-                  className="absolute left-full ml-1 p-1 text-fluux-muted hover:text-fluux-text rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                  aria-label={t('contacts.rename')}
-                >
-                  <Pencil className="w-4 h-4" />
-                </button>
-              </Tooltip>
+              {isInRoster && (
+                <Tooltip content={t('contacts.rename')} position="top">
+                  <button
+                    onClick={handleStartEdit}
+                    className="absolute left-full ml-1 p-1 text-fluux-muted hover:text-fluux-text rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                    aria-label={t('contacts.rename')}
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                </Tooltip>
+              )}
             </div>
           )}
 
@@ -280,7 +285,7 @@ export function ContactProfileView({
               {t('contacts.startConversation')}
             </button>
 
-            {showRemoveConfirm ? (
+            {isInRoster && (showRemoveConfirm ? (
               <div className="flex flex-col gap-2 p-3 bg-fluux-red/10 border border-fluux-red/30 rounded-lg">
                 <p className="text-sm text-fluux-text text-center">
                   {t('contacts.removeConfirm', { name: contact.name })}
@@ -308,7 +313,7 @@ export function ContactProfileView({
                 <Trash2 className="w-5 h-5" />
                 {t('contacts.removeFromRoster')}
               </button>
-            )}
+            ))}
 
             {/* Block / Unblock user */}
             {isBlocked ? (
