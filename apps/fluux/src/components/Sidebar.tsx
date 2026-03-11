@@ -286,7 +286,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header - with drag region for window movement */}
         <div className={`h-12 ${titleBarClass} px-4 flex items-center border-b border-fluux-bg shadow-sm`} {...dragRegionProps}>
-          <h1 className="font-semibold text-fluux-text truncate">
+          <h1 className="flex-1 font-semibold text-fluux-text truncate">
             {sidebarView === 'messages' ? t('sidebar.messages')
               : sidebarView === 'rooms' ? t('sidebar.rooms')
               : sidebarView === 'directory' ? t('sidebar.connections')
@@ -299,7 +299,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
             <Tooltip content={t('sidebar.addContact')} position="bottom">
               <button
                 onClick={() => modalActions.open('addContact')}
-                className="ml-auto p-1 text-fluux-muted hover:text-fluux-text"
+                className="p-1 text-fluux-muted hover:text-fluux-text"
               >
                 <Plus className="w-5 h-5" />
               </button>
