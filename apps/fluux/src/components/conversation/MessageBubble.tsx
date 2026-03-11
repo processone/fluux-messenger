@@ -80,6 +80,11 @@ export interface MessageBubbleProps {
   // Room-specific: mentions for highlighting
   mentions?: MentionReference[]
 
+  // Right-click / long-press context menu on nick/avatar (for room occupant actions)
+  onNickContextMenu?: (e: React.MouseEvent) => void
+  onNickTouchStart?: (e: React.TouchEvent) => void
+  onNickTouchEnd?: () => void
+
   // Callback when reaction picker opens/closes (for hiding other toolbars)
   onReactionPickerChange?: (isOpen: boolean) => void
 
@@ -195,6 +200,9 @@ export const MessageBubble = memo(function MessageBubble({
   onMediaLoad,
   replyContext,
   mentions,
+  onNickContextMenu,
+  onNickTouchStart,
+  onNickTouchEnd,
   onReactionPickerChange,
   formatTime,
   timeFormat,
@@ -241,7 +249,7 @@ export const MessageBubble = memo(function MessageBubble({
           </span>
         ) : showAvatar ? (
           <UserInfoPopover contact={senderContact} jid={senderJid} role={senderRole} affiliation={senderAffiliation}>
-            <div className="select-none">
+            <div className="select-none" onContextMenu={onNickContextMenu} onTouchStart={onNickTouchStart} onTouchEnd={onNickTouchEnd}>
               <Avatar
                 identifier={avatarIdentifier}
                 name={senderName}
@@ -294,6 +302,9 @@ export const MessageBubble = memo(function MessageBubble({
               <span
                 className="font-medium"
                 style={{ color: senderColor }}
+                onContextMenu={onNickContextMenu}
+                onTouchStart={onNickTouchStart}
+                onTouchEnd={onNickTouchEnd}
               >
                 {senderName}
               </span>

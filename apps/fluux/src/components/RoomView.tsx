@@ -1,17 +1,21 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useRoomActive, useRoster, getBareJid, generateConsistentColorHexSync, getPresenceFromShow, createMessageLookup, isMessageFromIgnoredUser, isReplyToIgnoredUser, type RoomMessage, type Room, type MentionReference, type ChatStateNotification, type Contact, type FileAttachment } from '@fluux/sdk'
+import { useRoomActive, useRoster, useRoom, getBareJid, generateConsistentColorHexSync, getPresenceFromShow, createMessageLookup, isMessageFromIgnoredUser, isReplyToIgnoredUser, canKick, canBan, getAvailableAffiliations, getAvailableRoles, type RoomMessage, type Room, type MentionReference, type ChatStateNotification, type Contact, type FileAttachment, type RoomAffiliation, type RoomRole } from '@fluux/sdk'
 import { useConnectionStore, useIgnoreStore } from '@fluux/sdk/react'
-import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat } from '@/hooks'
+import { ignoreStore, type IgnoredUser } from '@fluux/sdk/stores'
+import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat, useContextMenu } from '@/hooks'
 import { MessageBubble, MessageList, shouldShowAvatar, buildReplyContext } from './conversation'
 import { Avatar, getConsistentTextColor } from './Avatar'
 import { format } from 'date-fns'
-import { Shield, Upload, Loader2, LogIn, AlertCircle, Users } from 'lucide-react'
+import { Shield, Upload, Loader2, LogIn, AlertCircle, Users, MessageCircle, EyeOff, User, Settings } from 'lucide-react'
 import { ChristmasAnimation } from './ChristmasAnimation'
 import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment, MESSAGE_INPUT_BASE_CLASSES, MESSAGE_INPUT_OVERLAY_CLASSES } from './MessageComposer'
 import { RoomHeader } from './RoomHeader'
 import { OccupantPanel } from './OccupantPanel'
+import { OccupantModerationModal } from './OccupantModerationModal'
+import { MenuButton, MenuDivider } from './sidebar-components/SidebarListMenu'
+import { useToastStore } from '@/stores/toastStore'
 import { findLastEditableMessage, findLastEditableMessageId } from '@/utils/messageUtils'
 import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
 
@@ -129,6 +133,29 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     setActiveReactionPickerMessageId(isOpen ? messageId : null)
   }, [])
   const handleCloseOccupants = useCallback(() => setShowOccupants(false), [setShowOccupants])
+
+  // Nick context menu state (right-click / long-press on nick in messages)
+  const nickMenu = useContextMenu()
+  const [nickMenuTarget, setNickMenuTarget] = useState<string | null>(null) // nick string
+  const [nickModerationTarget, setNickModerationTarget] = useState<string | null>(null)
+  const { setAffiliation, setRole } = useRoom()
+  const addToast = useToastStore((s) => s.addToast)
+
+  const handleNickContextMenu = useCallback((nick: string, e: React.MouseEvent) => {
+    if (!activeRoom || nick === activeRoom.nickname) return
+    setNickMenuTarget(nick)
+    nickMenu.handleContextMenu(e)
+  }, [activeRoom, nickMenu])
+
+  const handleNickTouchStart = useCallback((nick: string, e: React.TouchEvent) => {
+    if (!activeRoom || nick === activeRoom.nickname) return
+    setNickMenuTarget(nick)
+    nickMenu.handleTouchStart(e)
+  }, [activeRoom, nickMenu])
+
+  const handleNickTouchEnd = useCallback(() => {
+    nickMenu.handleTouchEnd()
+  }, [nickMenu])
 
   // Memoized upload state to prevent new object reference on every render
   const uploadStateObj = useMemo(() => ({ isUploading, progress }), [isUploading, progress])
@@ -324,6 +351,9 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             onScrollToTop={fetchOlderHistory}
             isLoadingOlder={activeMAMState?.isLoading}
             isHistoryComplete={activeRoom.supportsMAM === false || activeMAMState?.isHistoryComplete}
+            onNickContextMenu={handleNickContextMenu}
+            onNickTouchStart={handleNickTouchStart}
+            onNickTouchEnd={handleNickTouchEnd}
           />
         </div>
 
@@ -378,6 +408,140 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
       {activeAnimation?.roomJid === activeRoom.jid && activeAnimation.animation === 'christmas' && (
         <ChristmasAnimation onComplete={clearAnimation} />
       )}
+
+      {/* Nick context menu (right-click / long-press on nick in messages) */}
+      {nickMenu.isOpen && nickMenuTarget && activeRoom && (() => {
+        const occupant = activeRoom.occupants.get(nickMenuTarget)
+        const bareJid = occupant?.jid
+          ? getBareJid(occupant.jid)
+          : activeRoom.nickToJidCache?.get(nickMenuTarget)
+        const selfOccupant = activeRoom.nickname ? activeRoom.occupants.get(activeRoom.nickname) : undefined
+        const selfAff: RoomAffiliation = selfOccupant?.affiliation ?? 'none'
+        const selfRol: RoomRole = selfOccupant?.role ?? 'none'
+        const targetAff = occupant?.affiliation ?? 'none'
+        const targetRole = occupant?.role ?? 'none'
+
+        // Determine ignore state
+        const ignoredUsers = ignoreStore.getState().ignoredUsers[activeRoom.jid] || []
+        const occupantId = occupant?.occupantId
+        const identifier = occupantId || bareJid || nickMenuTarget
+        const isIgnored = ignoredUsers.some(u => u.identifier === identifier)
+
+        // Moderation permissions
+        const availableRoles = getAvailableRoles(selfRol, selfAff, targetRole, targetAff)
+        const availableAffs = bareJid ? getAvailableAffiliations(selfAff, targetAff) : []
+        const showKick = canKick(selfRol, selfAff, targetAff)
+        const showBan = bareJid ? canBan(selfAff, targetAff) : false
+        const hasModActions = showKick || showBan || availableRoles.length > 0 || availableAffs.length > 0
+
+        return (
+          <div
+            ref={nickMenu.menuRef}
+            className="fixed bg-fluux-bg rounded-lg shadow-xl border border-fluux-hover py-1 z-50 min-w-40"
+            style={{ left: nickMenu.position.x, top: nickMenu.position.y }}
+          >
+            {bareJid && onStartChat && (
+              <MenuButton
+                onClick={() => { onStartChat(bareJid); nickMenu.close() }}
+                icon={<MessageCircle className="w-4 h-4" />}
+                label={t('rooms.sendPrivateMessage')}
+              />
+            )}
+            <MenuButton
+              onClick={() => {
+                if (isIgnored) {
+                  ignoreStore.getState().removeIgnored(activeRoom.jid, identifier)
+                } else {
+                  const user: IgnoredUser = {
+                    identifier,
+                    displayName: nickMenuTarget,
+                    jid: bareJid,
+                  }
+                  ignoreStore.getState().addIgnored(activeRoom.jid, user)
+                }
+                nickMenu.close()
+              }}
+              icon={<EyeOff className="w-4 h-4" />}
+              label={isIgnored ? t('rooms.stopIgnoring') : t('rooms.ignoreUser')}
+            />
+            {bareJid && onShowProfile && (
+              <MenuButton
+                onClick={() => { onShowProfile(bareJid); nickMenu.close() }}
+                icon={<User className="w-4 h-4" />}
+                label={t('rooms.userInfo')}
+              />
+            )}
+            {hasModActions && (
+              <>
+                <MenuDivider />
+                <MenuButton
+                  onClick={() => {
+                    setNickModerationTarget(nickMenuTarget)
+                    nickMenu.close()
+                  }}
+                  icon={<Settings className="w-4 h-4" />}
+                  label={t('rooms.manageOccupant')}
+                />
+              </>
+            )}
+          </div>
+        )
+      })()}
+
+      {/* Nick moderation modal (from context menu) */}
+      {nickModerationTarget && activeRoom && (() => {
+        const occupant = activeRoom.occupants.get(nickModerationTarget)
+        if (!occupant) return null
+        const bareJid = occupant.jid ? getBareJid(occupant.jid) : activeRoom.nickToJidCache?.get(nickModerationTarget)
+        const contact = bareJid ? contactsByJid.get(bareJid) : undefined
+        const selfOccupant = activeRoom.nickname ? activeRoom.occupants.get(activeRoom.nickname) : undefined
+        return (
+          <OccupantModerationModal
+            occupant={{
+              nick: nickModerationTarget,
+              bareJid,
+              role: occupant.role,
+              affiliation: occupant.affiliation,
+              avatar: occupant.avatar || contact?.avatar,
+            }}
+            selfRole={selfOccupant?.role ?? 'none'}
+            selfAffiliation={selfOccupant?.affiliation ?? 'none'}
+            onSetRole={async (nick, role) => {
+              try {
+                await setRole(activeRoom.jid, nick, role)
+                addToast('success', t('rooms.roleChanged'))
+              } catch {
+                addToast('error', t('rooms.roleError'))
+              }
+            }}
+            onSetAffiliation={async (jid, aff) => {
+              try {
+                await setAffiliation(activeRoom.jid, jid, aff)
+                addToast('success', t('rooms.affiliationChanged'))
+              } catch {
+                addToast('error', t('rooms.affiliationError'))
+              }
+            }}
+            onKick={async (nick, reason) => {
+              try {
+                await setRole(activeRoom.jid, nick, 'none', reason)
+                addToast('success', t('rooms.roleChanged'))
+              } catch {
+                addToast('error', t('rooms.kickError'))
+              }
+            }}
+            onBan={async (jid, reason) => {
+              try {
+                await setAffiliation(activeRoom.jid, jid, 'outcast', reason)
+                addToast('success', t('rooms.affiliationChanged'))
+              } catch {
+                addToast('error', t('rooms.banError'))
+              }
+            }}
+            onClose={() => setNickModerationTarget(null)}
+          />
+        )
+      })()}
     </div>
   )
 }
@@ -412,6 +576,9 @@ const RoomMessageList = memo(function RoomMessageList({
   onScrollToTop,
   isLoadingOlder,
   isHistoryComplete,
+  onNickContextMenu,
+  onNickTouchStart,
+  onNickTouchEnd,
 }: {
   messages: RoomMessage[]
   messagesById: Map<string, RoomMessage>
@@ -442,6 +609,9 @@ const RoomMessageList = memo(function RoomMessageList({
   onScrollToTop?: () => void
   isLoadingOlder?: boolean
   isHistoryComplete?: boolean
+  onNickContextMenu?: (nick: string, e: React.MouseEvent) => void
+  onNickTouchStart?: (nick: string, e: React.TouchEvent) => void
+  onNickTouchEnd?: () => void
 }) {
   const { t } = useTranslation()
   const { formatTime, effectiveTimeFormat } = useTimeFormat()
@@ -551,13 +721,16 @@ const RoomMessageList = memo(function RoomMessageList({
       onMouseLeave={handleMessageLeave}
       formatTime={formatTime}
       timeFormat={effectiveTimeFormat}
+      onNickContextMenu={onNickContextMenu}
+      onNickTouchStart={onNickTouchStart}
+      onNickTouchEnd={onNickTouchEnd}
     />
   ), [
     messagesById, room, contactsByJid, ownAvatar, sendReaction, onReply, onEdit,
     lastOutgoingMessageId, lastMessageId, isComposing, activeReactionPickerMessageId,
     onReactionPickerChange, retractMessage, selectedMessageId, hasKeyboardSelection,
     showToolbarForSelection, isDarkMode, onMediaLoad, hoveredMessageId, handleMessageHover, handleMessageLeave,
-    formatTime, effectiveTimeFormat
+    formatTime, effectiveTimeFormat, onNickContextMenu, onNickTouchStart, onNickTouchEnd
   ])
 
   return (
@@ -610,6 +783,10 @@ interface RoomMessageBubbleWrapperProps {
   formatTime: (date: Date) => string
   // Effective time format for layout width calculations
   timeFormat: '12h' | '24h'
+  // Nick context menu callbacks (right-click / long-press)
+  onNickContextMenu?: (nick: string, e: React.MouseEvent) => void
+  onNickTouchStart?: (nick: string, e: React.TouchEvent) => void
+  onNickTouchEnd?: () => void
 }
 
 const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
@@ -637,6 +814,9 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   onMouseLeave,
   formatTime,
   timeFormat,
+  onNickContextMenu,
+  onNickTouchStart,
+  onNickTouchEnd,
 }: RoomMessageBubbleWrapperProps) {
   const { t } = useTranslation()
 
@@ -753,6 +933,15 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
     </>
   ), [occupant])
 
+  // Bind nick to context menu callbacks for this message
+  const handleNickContextMenu = useCallback((e: React.MouseEvent) => {
+    onNickContextMenu?.(message.nick, e)
+  }, [message.nick, onNickContextMenu])
+
+  const handleNickTouchStart = useCallback((e: React.TouchEvent) => {
+    onNickTouchStart?.(message.nick, e)
+  }, [message.nick, onNickTouchStart])
+
   return (
     <MessageBubble
       message={message}
@@ -787,6 +976,9 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
       onMediaLoad={onMediaLoad}
       replyContext={replyContext}
       mentions={message.mentions}
+      onNickContextMenu={!message.isOutgoing ? handleNickContextMenu : undefined}
+      onNickTouchStart={!message.isOutgoing ? handleNickTouchStart : undefined}
+      onNickTouchEnd={!message.isOutgoing ? onNickTouchEnd : undefined}
       onReactionPickerChange={onReactionPickerChange}
       formatTime={formatTime}
       timeFormat={timeFormat}

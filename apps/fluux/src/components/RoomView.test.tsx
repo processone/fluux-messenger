@@ -131,6 +131,14 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
   },
   isMessageFromIgnoredUser: actual.isMessageFromIgnoredUser,
   isReplyToIgnoredUser: actual.isReplyToIgnoredUser,
+  useRoom: () => ({
+    setAffiliation: vi.fn(),
+    setRole: vi.fn(),
+  }),
+  canKick: () => false,
+  canBan: () => false,
+  getAvailableAffiliations: () => [],
+  getAvailableRoles: () => [],
 }})
 
 // Mock React store hooks (from @fluux/sdk/react)
@@ -221,6 +229,16 @@ vi.mock('@/hooks', () => ({
     const [text, setText] = React.useState('')
     return [text, setText]
   },
+  useContextMenu: () => ({
+    isOpen: false,
+    position: { x: 0, y: 0 },
+    menuRef: { current: null },
+    longPressTriggered: { current: false },
+    close: vi.fn(),
+    handleContextMenu: vi.fn(),
+    handleTouchStart: vi.fn(),
+    handleTouchEnd: vi.fn(),
+  }),
 }))
 
 // Mock utils
