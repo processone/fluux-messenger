@@ -23,7 +23,7 @@ import { MenuButton, MenuDivider } from './sidebar-components/SidebarListMenu'
 import { useContextMenu, useWindowDrag } from '@/hooks'
 import { useToastStore } from '@/stores/toastStore'
 import { getTranslatedShowText } from '@/utils/presence'
-import { Shield, Crown, UserCheck, X, MessageCircle, Copy, EyeOff, User, UserMinus, Ban, Mic, MicOff, ShieldPlus, ShieldMinus } from 'lucide-react'
+import { Shield, Crown, UserCheck, X, MessageCircle, EyeOff, User, UserMinus, Ban, Mic, MicOff, ShieldPlus, ShieldMinus } from 'lucide-react'
 
 // Type for grouped occupants (multiple connections from same bare JID)
 interface GroupedOccupant {
@@ -102,11 +102,6 @@ export function OccupantPanel({
     }
     menu.close()
   }, [room.jid, getOccupantIdentifier, menu])
-
-  const handleCopyJid = useCallback((jid: string) => {
-    void navigator.clipboard.writeText(jid)
-    menu.close()
-  }, [menu])
 
   const handleStartChat = useCallback((jid: string) => {
     onStartChat?.(jid)
@@ -484,14 +479,6 @@ export function OccupantPanel({
               onClick={() => handleStartChat(menuTarget.bareJid!)}
               icon={<MessageCircle className="w-4 h-4" />}
               label={t('rooms.sendPrivateMessage')}
-            />
-          )}
-          {/* Copy JID */}
-          {menuTarget.bareJid && (
-            <MenuButton
-              onClick={() => handleCopyJid(menuTarget.bareJid!)}
-              icon={<Copy className="w-4 h-4" />}
-              label={t('rooms.copyJid')}
             />
           )}
           {/* Ignore / Stop ignoring */}
