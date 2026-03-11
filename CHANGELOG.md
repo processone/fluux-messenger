@@ -9,8 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- MUC room creation, configuration, and destruction support
+- MUC room user management: affiliation/role changes, kick, and ban
 - MUC hat management UI for room owners (XEP-0317): define, assign, and remove hats via ad-hoc commands
 - SDK: hat management methods in MUC module (listHats, createHat, destroyHat, listHatAssignments, assignHat, unassignHat)
+- Per-room ignored user management with server-side storage (XEP-0223)
+- RSM pagination support for MUC room browsing
+- SDK: ConversationSync module for PEP-based conversation list management
+- Contact management dropdown in the sidebar
+- Suppress sound and desktop notifications when presence is Do Not Disturb
+- Open external links in Tauri webview popup instead of system browser
+
+### Changed
+
+- Revamped RoomMembersModal with segmented control and localized role/permission strings
+- Replaced "Block user" with "User info" in room occupant context menu
+- Removed "Copy JID" option from OccupantPanel context menu
+- Context menus close on scroll for better UX
+- Extracted reusable ModalShell, ConfirmDialog, and useNotificationPermission components
+
+### Fixed
+
+- Room creation UX: consolidated buttons, fixed MUC service spinner, pre-check existing rooms
+- Active room not moving to top of sidebar on new messages
+- New message marker lagging behind when switching conversations
+- Blank window in MUC rooms caused by stale ResizeObserver ref
+- Reactions UI disabled in rooms without stable occupant identity
+- Lazy loading pagination in room discovery
+- Ignored user filtering improved by cross-matching JIDs and occupant IDs
+- Notifications suppressed for replies quoting ignored users in MUC rooms
+- Native window theme syncing for 'system' mode in Tauri
+- Contacts sidebar button alignment
 
 ## [0.13.3] - 2026-03-04
 
