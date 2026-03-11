@@ -128,7 +128,11 @@
         "addMoreContacts": "添加更多联系人…",
         "keyboardHint": "Tab/↑↓ 键导航，Enter 键选择",
         "noContactsFound": "未找到联系人",
-        "pressEnterToAdd": "按 Enter 键添加"
+        "pressEnterToAdd": "按 Enter 键添加",
+        "blockUser": "Block user",
+        "unblockUser": "Unblock user",
+        "block": "Block",
+        "blockConfirm": "Block {{name}}? They won't be able to contact you."
     },
     "rooms": {
         "noRooms": "暂无房间",
@@ -275,7 +279,8 @@
         "templatePrivateHelp": "The room is hidden from the directory. Only people you invite can join. Best for team or group conversations.",
         "templateOpenHelp": "The room is listed in the public directory. Anyone can find it and join without an invitation. Best for community channels.",
         "templateUnlistedHelp": "The room is hidden from the directory, but anyone who has the address can join freely. Best for sharing a link to a room.",
-        "roomAlreadyExists": "A room with this address already exists. Please choose a different address."
+        "roomAlreadyExists": "A room with this address already exists. Please choose a different address.",
+        "userInfo": "User info"
     },
     "events": {
         "noPendingEvents": "无待处理事件",

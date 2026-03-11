@@ -43,12 +43,14 @@ interface RoomViewProps {
   onShowOccupantsChange?: (show: boolean) => void
   // Callback to start a direct chat with a JID (from occupant panel)
   onStartChat?: (jid: string) => void
+  // Callback to show user profile (from occupant panel)
+  onShowProfile?: (jid: string) => void
 }
 
 // Max room size for sending typing indicators (to avoid noise in large rooms)
 const MAX_ROOM_SIZE_FOR_TYPING = 30
 
-export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange, onStartChat }: RoomViewProps) {
+export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange, onStartChat, onShowProfile }: RoomViewProps) {
   detectRenderLoop('RoomView')
   const { t } = useTranslation()
   const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, sendChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, activeMAMState, submitRoomConfig, setSubject, destroyRoom } = useRoomActive()
@@ -368,6 +370,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
           ownAvatar={ownAvatar}
           onClose={handleCloseOccupants}
           onStartChat={onStartChat}
+          onShowProfile={onShowProfile}
         />
       )}
 

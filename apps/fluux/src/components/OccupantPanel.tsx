@@ -7,21 +7,20 @@
  * - Shows affiliation badges (owner, admin, member)
  * - Shows XEP-0317 hats with consistent colors
  * - Shows contact avatars for known roster contacts
- * - Right-click context menu: private message, copy JID, ignore, block
+ * - Right-click context menu: private message, copy JID, ignore, user info
  */
 import { useMemo, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Room, RoomOccupant, Contact, PresenceShow } from '@fluux/sdk'
 import { getPresenceFromShow, getBareJid, getBestPresenceShow, generateConsistentColorHexSync } from '@fluux/sdk'
 import { useConnectionStore, useIgnoreStore } from '@fluux/sdk/react'
-import { useBlocking } from '@fluux/sdk'
 import { ignoreStore, type IgnoredUser } from '@fluux/sdk/stores'
 import { Avatar } from './Avatar'
 import { Tooltip } from './Tooltip'
 import { MenuButton, MenuDivider } from './sidebar-components/SidebarListMenu'
 import { useContextMenu, useWindowDrag } from '@/hooks'
 import { getTranslatedShowText } from '@/utils/presence'
-import { Shield, Crown, UserCheck, X, MessageCircle, Copy, EyeOff, Ban } from 'lucide-react'
+import { Shield, Crown, UserCheck, X, MessageCircle, Copy, EyeOff, User } from 'lucide-react'
 
 // Type for grouped occupants (multiple connections from same bare JID)
 interface GroupedOccupant {
@@ -37,6 +36,7 @@ export interface OccupantPanelProps {
   ownAvatar?: string | null
   onClose: () => void
   onStartChat?: (jid: string) => void
+  onShowProfile?: (jid: string) => void
 }
 
 export function OccupantPanel({
@@ -45,12 +45,12 @@ export function OccupantPanel({
   ownAvatar,
   onClose,
   onStartChat,
+  onShowProfile,
 }: OccupantPanelProps) {
   const { t } = useTranslation()
   const connectionStatus = useConnectionStore((s) => s.status)
   const forceOffline = connectionStatus !== 'online'
   const { titleBarClass } = useWindowDrag()
-  const { blockJid } = useBlocking()
   const ignoredForRoom = useIgnoreStore((s) => s.ignoredUsers[room.jid] || [])
 
   // Context menu state
@@ -110,10 +110,10 @@ export function OccupantPanel({
     menu.close()
   }, [onStartChat, menu])
 
-  const handleBlock = useCallback((jid: string) => {
-    blockJid(jid)
+  const handleShowProfile = useCallback((jid: string) => {
+    onShowProfile?.(jid)
     menu.close()
-  }, [blockJid, menu])
+  }, [onShowProfile, menu])
 
   // Sort occupants by role priority: moderator > participant > visitor
   const sortedOccupants = useMemo(() => {
@@ -445,15 +445,14 @@ export function OccupantPanel({
             icon={<EyeOff className="w-4 h-4" />}
             label={isOccupantIgnored(menuTarget) ? t('rooms.stopIgnoring') : t('rooms.ignoreUser')}
           />
-          {/* Block user (danger) */}
-          {menuTarget.bareJid && (
+          {/* User info (only for roster contacts) */}
+          {menuTarget.bareJid && contactsByJid.has(menuTarget.bareJid) && (
             <>
               <MenuDivider />
               <MenuButton
-                onClick={() => handleBlock(menuTarget.bareJid!)}
-                icon={<Ban className="w-4 h-4" />}
-                label={t('rooms.blockUser')}
-                variant="danger"
+                onClick={() => handleShowProfile(menuTarget.bareJid!)}
+                icon={<User className="w-4 h-4" />}
+                label={t('rooms.userInfo')}
               />
             </>
           )}

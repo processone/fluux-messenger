@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { MessageCircle, Trash2, Pencil, Monitor, Smartphone, Globe, ArrowLeft } from 'lucide-react'
+import { MessageCircle, Trash2, Pencil, Monitor, Smartphone, Globe, ArrowLeft, Ban } from 'lucide-react'
 import { Tooltip } from './Tooltip'
-import { type Contact, getClientType } from '@fluux/sdk'
-import { useConnectionStore } from '@fluux/sdk/react'
+import { type Contact, getClientType, useBlocking } from '@fluux/sdk'
+import { useConnectionStore, useBlockingStore } from '@fluux/sdk/react'
 import { Avatar } from './Avatar'
 import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS } from '@/constants/ui'
 import { getShowColor, getTranslatedShowText } from '@/utils/presence'
@@ -36,8 +36,11 @@ export function ContactProfileView({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false)
+  const [showBlockConfirm, setShowBlockConfirm] = useState(false)
   const [pepNickname, setPepNickname] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const { blockJid, unblockJid } = useBlocking()
+  const isBlocked = useBlockingStore((s) => s.blockedJids.has(contact.jid))
 
   const presenceColor = forceOffline ? APP_OFFLINE_PRESENCE_COLOR : PRESENCE_COLORS[contact.presence]
   const statusText = forceOffline ? t('presence.offline') : getTranslatedStatusText(contact, t)
@@ -56,6 +59,7 @@ export function ContactProfileView({
     setIsEditing(false)
     setError(null)
     setShowRemoveConfirm(false)
+    setShowBlockConfirm(false)
     setPepNickname(null)
   }, [contact.jid, contact.name])
 
@@ -303,6 +307,45 @@ export function ContactProfileView({
               >
                 <Trash2 className="w-5 h-5" />
                 {t('contacts.removeFromRoster')}
+              </button>
+            )}
+
+            {/* Block / Unblock user */}
+            {isBlocked ? (
+              <button
+                onClick={() => unblockJid(contact.jid)}
+                className="flex items-center justify-center gap-2 px-4 py-3 bg-fluux-bg hover:bg-fluux-hover text-fluux-text border border-fluux-hover rounded-lg transition-colors"
+              >
+                <Ban className="w-5 h-5" />
+                {t('contacts.unblockUser')}
+              </button>
+            ) : showBlockConfirm ? (
+              <div className="flex flex-col gap-2 p-3 bg-fluux-red/10 border border-fluux-red/30 rounded-lg">
+                <p className="text-sm text-fluux-text text-center">
+                  {t('contacts.blockConfirm', { name: contact.name })}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowBlockConfirm(false)}
+                    className="flex-1 px-3 py-2 bg-fluux-bg hover:bg-fluux-hover text-fluux-text rounded transition-colors"
+                  >
+                    {t('common.cancel')}
+                  </button>
+                  <button
+                    onClick={() => { blockJid(contact.jid); setShowBlockConfirm(false) }}
+                    className="flex-1 px-3 py-2 bg-fluux-red hover:bg-fluux-red/80 text-white rounded transition-colors"
+                  >
+                    {t('contacts.block')}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowBlockConfirm(true)}
+                className="flex items-center justify-center gap-2 px-4 py-3 bg-fluux-red/10 hover:bg-fluux-red/20 text-fluux-red border border-fluux-red rounded-lg transition-colors"
+              >
+                <Ban className="w-5 h-5" />
+                {t('contacts.blockUser')}
               </button>
             )}
           </div>

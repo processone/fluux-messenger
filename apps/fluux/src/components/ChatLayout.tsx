@@ -526,6 +526,14 @@ function ChatLayoutContent() {
     setActiveRoom(null)
   }, [addConversation, setActiveConversation, setActiveRoom, handleSidebarViewChange])
 
+  // Handle showing user profile from occupant panel context menu
+  const handleShowProfileFromRoom = useCallback((jid: string) => {
+    setActiveConversation(null)
+    setActiveRoom(null)
+    setSelectedContactJid(jid)
+    handleSidebarViewChange('directory')
+  }, [setActiveConversation, setActiveRoom, handleSidebarViewChange])
+
   // Handle removing a contact
   const handleRemoveContact = useCallback(async (jid: string) => {
     await removeContact(jid)
@@ -596,7 +604,7 @@ function ChatLayoutContent() {
           {sidebarView === 'settings' ? (
             <SettingsView onBack={handleSettingsBack} />
           ) : activeRoomJid ? (
-            <RoomView onBack={handleRoomBack} mainContentRef={focusZoneRefs.mainContent} composerRef={focusZoneRefs.composer} showOccupants={showRoomOccupants} onShowOccupantsChange={setShowRoomOccupants} onStartChat={handleStartChatWithJid} />
+            <RoomView onBack={handleRoomBack} mainContentRef={focusZoneRefs.mainContent} composerRef={focusZoneRefs.composer} showOccupants={showRoomOccupants} onShowOccupantsChange={setShowRoomOccupants} onStartChat={handleStartChatWithJid} onShowProfile={handleShowProfileFromRoom} />
           ) : activeConversationId ? (
             <ChatView onBack={handleChatBack} onSwitchToMessages={(conversationId) => navigateToMessages(conversationId)} mainContentRef={focusZoneRefs.mainContent} composerRef={focusZoneRefs.composer} />
           ) : selectedContact ? (

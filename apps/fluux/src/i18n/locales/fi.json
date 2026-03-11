@@ -128,7 +128,11 @@
         "addMoreContacts": "Lisää yhteystietoja...",
         "keyboardHint": "Tab/↑↓ navigointiin, Enter valintaan",
         "noContactsFound": "Yhteystietoja ei löytynyt",
-        "pressEnterToAdd": "Paina Enter lisätäksesi"
+        "pressEnterToAdd": "Paina Enter lisätäksesi",
+        "blockUser": "Block user",
+        "unblockUser": "Unblock user",
+        "block": "Block",
+        "blockConfirm": "Block {{name}}? They won't be able to contact you."
     },
     "rooms": {
         "noRooms": "Ei huoneita vielä",
@@ -275,7 +279,8 @@
         "templatePrivateHelp": "The room is hidden from the directory. Only people you invite can join. Best for team or group conversations.",
         "templateOpenHelp": "The room is listed in the public directory. Anyone can find it and join without an invitation. Best for community channels.",
         "templateUnlistedHelp": "The room is hidden from the directory, but anyone who has the address can join freely. Best for sharing a link to a room.",
-        "roomAlreadyExists": "A room with this address already exists. Please choose a different address."
+        "roomAlreadyExists": "A room with this address already exists. Please choose a different address.",
+        "userInfo": "User info"
     },
     "events": {
         "noPendingEvents": "Ei odottavia tapahtumia",
