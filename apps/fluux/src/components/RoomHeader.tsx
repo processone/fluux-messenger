@@ -17,6 +17,7 @@ import { renderTextWithLinks } from '@/utils/messageStyles'
 import { AvatarCropModal } from './AvatarCropModal'
 import { InviteToRoomModal } from './InviteToRoomModal'
 import { RoomConfigModal } from './RoomConfigModal'
+import { RoomMembersModal } from './RoomMembersModal'
 import {
   Hash,
   ArrowLeft,
@@ -70,6 +71,7 @@ export function RoomHeader({
   const [showAvatarModal, setShowAvatarModal] = useState(false)
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [showConfigModal, setShowConfigModal] = useState(false)
+  const [showMembersModal, setShowMembersModal] = useState(false)
   const [avatarError, setAvatarError] = useState<string | null>(null)
   const notifyMenuRef = useRef<HTMLDivElement>(null)
   const ownerMenuRef = useRef<HTMLDivElement>(null)
@@ -336,24 +338,21 @@ export function RoomHeader({
                 </button>
               )}
 
-              {/* Kick/Ban Member (placeholder) - owner only */}
-              {isOwner && (
-                <Tooltip content={t('common.comingSoon')} position="left" className='w-full'>
-                  <button
-                    onClick={() => {
-                      // TODO: Open kick/ban member modal
-                      setShowOwnerMenu(false)
-                    }}
-                    className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-left transition-colors opacity-60 cursor-not-allowed"
-                    disabled
-                  >
-                    <UserMinus className="w-4 h-4 text-fluux-muted" />
-                    <div className="flex-1">
-                      <div className="text-sm text-fluux-text">{t('rooms.manageMembership')}</div>
-                      <div className="text-xs text-fluux-muted">{t('rooms.kickBanMembers')}</div>
-                    </div>
-                  </button>
-                </Tooltip>
+              {/* Manage Membership - owner and admin */}
+              {canManageRoom && (
+                <button
+                  onClick={() => {
+                    setShowMembersModal(true)
+                    setShowOwnerMenu(false)
+                  }}
+                  className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-left transition-colors"
+                >
+                  <UserMinus className="w-4 h-4 text-fluux-muted" />
+                  <div className="flex-1">
+                    <div className="text-sm text-fluux-text">{t('rooms.manageMembership')}</div>
+                    <div className="text-xs text-fluux-muted">{t('rooms.kickBanMembers')}</div>
+                  </div>
+                </button>
               )}
             </div>
           )}
@@ -420,6 +419,13 @@ export function RoomHeader({
           submitRoomConfig={submitRoomConfig}
           setSubject={setSubject}
           destroyRoom={destroyRoom}
+        />
+      )}
+
+      {showMembersModal && (
+        <RoomMembersModal
+          room={room}
+          onClose={() => setShowMembersModal(false)}
         />
       )}
     </header>

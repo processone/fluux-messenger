@@ -1650,4 +1650,109 @@ export class MUC extends BaseModule {
 
     return allMembers
   }
+
+  /**
+   * Set a user's affiliation in a MUC room (XEP-0045).
+   *
+   * Affiliations are persistent and determine long-term permissions.
+   * The server will broadcast updated presence to all occupants after a successful change.
+   *
+   * @param roomJid - Room JID
+   * @param userJid - Bare JID of the user to modify
+   * @param affiliation - New affiliation level
+   * @param reason - Optional reason for the change
+   *
+   * @throws If the server rejects the request (insufficient permissions, etc.)
+   */
+  async setAffiliation(
+    roomJid: string,
+    userJid: string,
+    affiliation: RoomAffiliation,
+    reason?: string
+  ): Promise<void> {
+    const itemChildren = reason ? [xml('reason', {}, reason)] : []
+    const iq = xml(
+      'iq',
+      { type: 'set', to: roomJid, id: `set_aff_${generateUUID()}` },
+      xml('query', { xmlns: NS_MUC_ADMIN },
+        xml('item', { affiliation, jid: userJid }, ...itemChildren)
+      )
+    )
+    await this.deps.sendIQ(iq)
+    logInfo(`Affiliation set: ${userJid} → ${affiliation} in ${roomJid}`)
+    this.deps.emitSDK('room:affiliation-changed', { roomJid, userJid, affiliation })
+  }
+
+  /**
+   * Set an occupant's role in a MUC room (XEP-0045).
+   *
+   * Roles are session-based and addressed by nickname, not JID.
+   * Setting role to 'none' kicks the occupant from the room.
+   *
+   * @param roomJid - Room JID
+   * @param nick - Occupant's nickname in the room
+   * @param role - New role
+   * @param reason - Optional reason for the change
+   *
+   * @throws If the server rejects the request (insufficient permissions, etc.)
+   */
+  async setRole(
+    roomJid: string,
+    nick: string,
+    role: RoomRole,
+    reason?: string
+  ): Promise<void> {
+    const itemChildren = reason ? [xml('reason', {}, reason)] : []
+    const iq = xml(
+      'iq',
+      { type: 'set', to: roomJid, id: `set_role_${generateUUID()}` },
+      xml('query', { xmlns: NS_MUC_ADMIN },
+        xml('item', { role, nick }, ...itemChildren)
+      )
+    )
+    await this.deps.sendIQ(iq)
+    logInfo(`Role set: ${nick} → ${role} in ${roomJid}`)
+    this.deps.emitSDK('room:role-changed', { roomJid, nick, role })
+  }
+
+  /**
+   * Query the list of users with a specific affiliation in a MUC room.
+   *
+   * Unlike {@link queryRoomMembers} which queries owner/admin/member together,
+   * this queries a single affiliation level. Useful for loading the outcast (ban)
+   * list or refreshing a specific tab in the members modal.
+   *
+   * @param roomJid - Room JID
+   * @param affiliation - Affiliation level to query
+   * @returns Array of room members with the given affiliation
+   *
+   * @throws If the server rejects the query
+   */
+  async queryAffiliationList(
+    roomJid: string,
+    affiliation: RoomAffiliation
+  ): Promise<Array<{ jid: string; nick?: string; affiliation: RoomAffiliation }>> {
+    const iq = xml(
+      'iq',
+      { type: 'get', to: roomJid, id: `afflist_${affiliation}_${generateUUID()}` },
+      xml('query', { xmlns: NS_MUC_ADMIN },
+        xml('item', { affiliation })
+      )
+    )
+    const response = await this.deps.sendIQ(iq)
+    const query = response.getChild('query', NS_MUC_ADMIN)
+    if (!query) return []
+
+    const members: Array<{ jid: string; nick?: string; affiliation: RoomAffiliation }> = []
+    for (const item of query.getChildren('item')) {
+      const jid = item.attrs.jid
+      if (!jid) continue
+      members.push({
+        jid: getBareJid(jid),
+        nick: item.attrs.nick || undefined,
+        affiliation,
+      })
+    }
+    return members
+  }
 }

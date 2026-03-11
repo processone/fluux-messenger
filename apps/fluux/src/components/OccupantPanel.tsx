@@ -11,16 +11,19 @@
  */
 import { useMemo, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { Room, RoomOccupant, Contact, PresenceShow } from '@fluux/sdk'
-import { getPresenceFromShow, getBareJid, getBestPresenceShow, generateConsistentColorHexSync } from '@fluux/sdk'
+import type { Room, RoomOccupant, Contact, PresenceShow, RoomAffiliation, RoomRole } from '@fluux/sdk'
+import { getPresenceFromShow, getBareJid, getBestPresenceShow, generateConsistentColorHexSync, canKick, canBan, getAvailableAffiliations, getAvailableRoles } from '@fluux/sdk'
+import { useRoom } from '@fluux/sdk'
 import { useConnectionStore, useIgnoreStore } from '@fluux/sdk/react'
 import { ignoreStore, type IgnoredUser } from '@fluux/sdk/stores'
 import { Avatar } from './Avatar'
 import { Tooltip } from './Tooltip'
+import { ConfirmDialog } from './ConfirmDialog'
 import { MenuButton, MenuDivider } from './sidebar-components/SidebarListMenu'
 import { useContextMenu, useWindowDrag } from '@/hooks'
+import { useToastStore } from '@/stores/toastStore'
 import { getTranslatedShowText } from '@/utils/presence'
-import { Shield, Crown, UserCheck, X, MessageCircle, Copy, EyeOff, User } from 'lucide-react'
+import { Shield, Crown, UserCheck, X, MessageCircle, Copy, EyeOff, User, UserMinus, Ban, Mic, MicOff, ShieldPlus, ShieldMinus } from 'lucide-react'
 
 // Type for grouped occupants (multiple connections from same bare JID)
 interface GroupedOccupant {
@@ -101,7 +104,7 @@ export function OccupantPanel({
   }, [room.jid, getOccupantIdentifier, menu])
 
   const handleCopyJid = useCallback((jid: string) => {
-    navigator.clipboard.writeText(jid)
+    void navigator.clipboard.writeText(jid)
     menu.close()
   }, [menu])
 
@@ -114,6 +117,58 @@ export function OccupantPanel({
     onShowProfile?.(jid)
     menu.close()
   }, [onShowProfile, menu])
+
+  // Moderation actions
+  const { setAffiliation, setRole } = useRoom()
+  const addToast = useToastStore((s) => s.addToast)
+  const [confirmAction, setConfirmAction] = useState<{ type: 'kick' | 'ban'; nick: string; jid?: string } | null>(null)
+  const [reason, setReason] = useState('')
+
+  const selfOccupant = room.nickname ? room.occupants.get(room.nickname) : undefined
+  const selfAffiliation: RoomAffiliation = selfOccupant?.affiliation ?? 'none'
+  const selfRole: RoomRole = selfOccupant?.role ?? 'none'
+
+  const handleKick = useCallback(async (nick: string) => {
+    try {
+      await setRole(room.jid, nick, 'none', reason || undefined)
+      addToast('success', t('rooms.roleChanged'))
+    } catch {
+      addToast('error', t('rooms.kickError'))
+    }
+    setConfirmAction(null)
+    setReason('')
+  }, [room.jid, setRole, reason, addToast, t])
+
+  const handleBan = useCallback(async (jid: string) => {
+    try {
+      await setAffiliation(room.jid, jid, 'outcast', reason || undefined)
+      addToast('success', t('rooms.affiliationChanged'))
+    } catch {
+      addToast('error', t('rooms.banError'))
+    }
+    setConfirmAction(null)
+    setReason('')
+  }, [room.jid, setAffiliation, reason, addToast, t])
+
+  const handleSetRole = useCallback(async (nick: string, role: RoomRole) => {
+    try {
+      await setRole(room.jid, nick, role)
+      addToast('success', t('rooms.roleChanged'))
+    } catch {
+      addToast('error', t('rooms.roleError'))
+    }
+    menu.close()
+  }, [room.jid, setRole, addToast, t, menu])
+
+  const handleSetAffiliation = useCallback(async (jid: string, aff: RoomAffiliation) => {
+    try {
+      await setAffiliation(room.jid, jid, aff)
+      addToast('success', t('rooms.affiliationChanged'))
+    } catch {
+      addToast('error', t('rooms.affiliationError'))
+    }
+    menu.close()
+  }, [room.jid, setAffiliation, addToast, t, menu])
 
   // Sort occupants by role priority: moderator > participant > visitor
   const sortedOccupants = useMemo(() => {
@@ -447,16 +502,150 @@ export function OccupantPanel({
           />
           {/* User info (only for roster contacts) */}
           {menuTarget.bareJid && contactsByJid.has(menuTarget.bareJid) && (
-            <>
-              <MenuDivider />
-              <MenuButton
-                onClick={() => handleShowProfile(menuTarget.bareJid!)}
-                icon={<User className="w-4 h-4" />}
-                label={t('rooms.userInfo')}
-              />
-            </>
+            <MenuButton
+              onClick={() => handleShowProfile(menuTarget.bareJid!)}
+              icon={<User className="w-4 h-4" />}
+              label={t('rooms.userInfo')}
+            />
           )}
+
+          {/* --- Moderation actions --- */}
+          {(() => {
+            const targetOccupant = menuTarget.connections[0]
+            const targetAff = targetOccupant.affiliation
+            const targetRole = targetOccupant.role
+
+            // Role changes (grant/revoke voice and moderator)
+            const availableRoles = getAvailableRoles(selfRole, selfAffiliation, targetRole, targetAff)
+
+            // Affiliation changes (make owner/admin/member, remove)
+            const availableAffs = menuTarget.bareJid
+              ? getAvailableAffiliations(selfAffiliation, targetAff)
+              : []
+
+            const showKick = canKick(selfRole, selfAffiliation, targetAff)
+            const showBan = menuTarget.bareJid && canBan(selfAffiliation, targetAff)
+            const hasModActions = showKick || showBan || availableRoles.length > 0 || availableAffs.length > 0
+
+            if (!hasModActions) return null
+
+            const roleLabel = (role: RoomRole) => {
+              switch (role) {
+                case 'moderator': return targetRole === 'moderator' ? null : t('rooms.grantModerator')
+                case 'participant': return targetRole === 'visitor' ? t('rooms.grantVoice') : (targetRole === 'moderator' ? t('rooms.revokeModerator') : null)
+                case 'visitor': return t('rooms.revokeVoice')
+                default: return null
+              }
+            }
+
+            const roleIcon = (role: RoomRole) => {
+              switch (role) {
+                case 'moderator': return <ShieldPlus className="w-4 h-4" />
+                case 'participant': return targetRole === 'moderator' ? <ShieldMinus className="w-4 h-4" /> : <Mic className="w-4 h-4" />
+                case 'visitor': return <MicOff className="w-4 h-4" />
+                default: return null
+              }
+            }
+
+            const affLabel = (aff: RoomAffiliation) => {
+              switch (aff) {
+                case 'owner': return t('rooms.makeOwner')
+                case 'admin': return t('rooms.makeAdmin')
+                case 'member': return t('rooms.makeMember')
+                case 'none': return t('rooms.removeAffiliation')
+                case 'outcast': return t('rooms.ban')
+                default: return aff
+              }
+            }
+
+            const affIcon = (aff: RoomAffiliation) => {
+              switch (aff) {
+                case 'owner': return <Crown className="w-4 h-4" />
+                case 'admin': return <Shield className="w-4 h-4" />
+                case 'member': return <UserCheck className="w-4 h-4" />
+                case 'none': return <UserMinus className="w-4 h-4" />
+                case 'outcast': return <Ban className="w-4 h-4" />
+                default: return null
+              }
+            }
+
+            return (
+              <>
+                <MenuDivider />
+                {/* Role changes */}
+                {availableRoles.map(role => {
+                  const label = roleLabel(role)
+                  if (!label) return null
+                  return (
+                    <MenuButton
+                      key={`role-${role}`}
+                      onClick={() => handleSetRole(targetOccupant.nick, role)}
+                      icon={roleIcon(role)}
+                      label={label}
+                    />
+                  )
+                })}
+                {/* Affiliation changes (excluding outcast — that's the Ban button below) */}
+                {availableAffs.filter(a => a !== 'outcast').map(aff => (
+                  <MenuButton
+                    key={`aff-${aff}`}
+                    onClick={() => handleSetAffiliation(menuTarget.bareJid!, aff)}
+                    icon={affIcon(aff)}
+                    label={affLabel(aff)}
+                  />
+                ))}
+                {/* Kick & Ban (danger zone) */}
+                {(showKick || showBan) && <MenuDivider />}
+                {showKick && (
+                  <MenuButton
+                    onClick={() => {
+                      setConfirmAction({ type: 'kick', nick: targetOccupant.nick, jid: menuTarget.bareJid })
+                      menu.close()
+                    }}
+                    icon={<UserMinus className="w-4 h-4" />}
+                    label={t('rooms.kick')}
+                    variant="danger"
+                  />
+                )}
+                {showBan && (
+                  <MenuButton
+                    onClick={() => {
+                      setConfirmAction({ type: 'ban', nick: targetOccupant.nick, jid: menuTarget.bareJid })
+                      menu.close()
+                    }}
+                    icon={<Ban className="w-4 h-4" />}
+                    label={t('rooms.ban')}
+                    variant="danger"
+                  />
+                )}
+              </>
+            )
+          })()}
         </div>
+      )}
+
+      {/* Kick/Ban confirmation dialog */}
+      {confirmAction && (
+        <ConfirmDialog
+          title={confirmAction.type === 'kick'
+            ? t('rooms.kick')
+            : t('rooms.ban')}
+          message={confirmAction.type === 'kick'
+            ? t('rooms.kickConfirm', { nick: confirmAction.nick })
+            : t('rooms.banConfirm', { jid: confirmAction.jid || confirmAction.nick })}
+          confirmLabel={confirmAction.type === 'kick' ? t('rooms.kick') : t('rooms.ban')}
+          onConfirm={() => {
+            if (confirmAction.type === 'kick') {
+              void handleKick(confirmAction.nick)
+            } else if (confirmAction.jid) {
+              void handleBan(confirmAction.jid)
+            }
+          }}
+          onCancel={() => {
+            setConfirmAction(null)
+            setReason('')
+          }}
+        />
       )}
     </div>
   )

@@ -495,6 +495,9 @@ export type { FallbackProcessingResult, FallbackProcessingOptions } from './util
 export { parseXMPPError, formatXMPPError } from './utils/xmppError'
 export type { XMPPStanzaError, XMPPErrorType } from './utils/xmppError'
 
+// XEP-0045: MUC Permission Utilities
+export { canSetAffiliation, canSetRole, canKick, canBan, getAvailableAffiliations, getAvailableRoles } from './utils/mucPermissions'
+
 // XEP-0156: Discovering Alternative XMPP Connection Methods
 export { discoverWebSocket, discoverXmppEndpoints } from './utils/websocketDiscovery'
 export type { DiscoveryResult } from './utils/websocketDiscovery'

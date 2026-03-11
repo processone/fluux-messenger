@@ -599,7 +599,7 @@ describe('RoomHeader', () => {
       expect(screen.getByText('Manage membership')).toBeInTheDocument()
     })
 
-    it('hides "Manage membership" for admins', () => {
+    it('shows "Manage membership" for admins', () => {
       const room = createRoom({
         occupantsList: [createOccupant({ nick: 'Me', affiliation: 'admin' })],
       })
@@ -619,7 +619,7 @@ describe('RoomHeader', () => {
       )
 
       fireEvent.click(screen.getByLabelText('Manage room'))
-      expect(screen.queryByText('Manage membership')).not.toBeInTheDocument()
+      expect(screen.getByText('Manage membership')).toBeInTheDocument()
     })
   })
 

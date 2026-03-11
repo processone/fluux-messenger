@@ -55,6 +55,11 @@ vi.mock('@fluux/sdk', async () => {
       unblockAll: vi.fn(),
       isBlocked: () => false,
     }),
+    useRoom: () => ({
+      setAffiliation: vi.fn(),
+      setRole: vi.fn(),
+      queryAffiliationList: vi.fn(),
+    }),
   }
 })
 
@@ -642,8 +647,7 @@ describe('OccupantPanel', () => {
 
   describe('Ignored Users', () => {
     // Store original mock implementations to restore after each test
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let originalUseIgnoreStore: any
+    let originalUseIgnoreStore: ReturnType<typeof vi.mocked<typeof useIgnoreStore>['getMockImplementation']>
     let originalIgnoreStoreGetState: typeof ignoreStore.getState
 
     beforeEach(() => {
@@ -676,8 +680,7 @@ describe('OccupantPanel', () => {
           reset: vi.fn(),
         } as IgnoreState
         return selector ? selector(state) : state
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      }) as any)
+      }) as unknown as typeof useIgnoreStore)
 
       // Override ignoreStore.getState for the imperative calls in handleToggleIgnore
       ;(ignoreStore as { getState: typeof ignoreStore.getState }).getState = () => ({

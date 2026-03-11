@@ -3,7 +3,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { roomStore } from '../stores'
 import { useRoomStore, useAdminStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
-import type { MentionReference, ChatStateNotification, FileAttachment, RSMRequest, AdminRoom, RSMResponse, MAMQueryState } from '../core/types'
+import type { MentionReference, ChatStateNotification, FileAttachment, RSMRequest, AdminRoom, RSMResponse, MAMQueryState, RoomAffiliation, RoomRole } from '../core/types'
 import { createFetchOlderHistory } from './shared'
 
 /**
@@ -409,6 +409,40 @@ export function useRoom() {
   )
 
   /**
+   * Set a user's affiliation in a room.
+   * @see MUC.setAffiliation
+   */
+  const setAffiliation = useCallback(
+    async (roomJid: string, userJid: string, affiliation: RoomAffiliation, reason?: string) => {
+      await client.muc.setAffiliation(roomJid, userJid, affiliation, reason)
+    },
+    [client]
+  )
+
+  /**
+   * Set an occupant's role in a room.
+   * Setting role to 'none' kicks the occupant.
+   * @see MUC.setRole
+   */
+  const setRole = useCallback(
+    async (roomJid: string, nick: string, role: RoomRole, reason?: string) => {
+      await client.muc.setRole(roomJid, nick, role, reason)
+    },
+    [client]
+  )
+
+  /**
+   * Query the list of users with a specific affiliation.
+   * @see MUC.queryAffiliationList
+   */
+  const queryAffiliationList = useCallback(
+    async (roomJid: string, affiliation: RoomAffiliation) => {
+      return client.muc.queryAffiliationList(roomJid, affiliation)
+    },
+    [client]
+  )
+
+  /**
    * Fetch older room history (pagination) - for lazy loading on scroll up.
    * First checks IndexedDB cache, then falls back to room MAM if:
    * - Cache is empty/exhausted
@@ -480,6 +514,9 @@ export function useRoom() {
       createRoom,
       destroyRoom,
       roomExists,
+      setAffiliation,
+      setRole,
+      queryAffiliationList,
     }),
     [
       joinRoom,
@@ -515,6 +552,9 @@ export function useRoom() {
       createRoom,
       destroyRoom,
       roomExists,
+      setAffiliation,
+      setRole,
+      queryAffiliationList,
     ]
   )
 
