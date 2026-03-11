@@ -442,6 +442,76 @@ export function useRoom() {
     [client]
   )
 
+  // -----------------------------------------------------------------------
+  // XEP-0317: Hat Management
+  // -----------------------------------------------------------------------
+
+  /**
+   * List all hat definitions for a room.
+   * @see MUC.listHats
+   */
+  const listHats = useCallback(
+    async (roomJid: string) => {
+      return client.muc.listHats(roomJid)
+    },
+    [client]
+  )
+
+  /**
+   * Create a new hat definition for a room.
+   * @see MUC.createHat
+   */
+  const createHat = useCallback(
+    async (roomJid: string, title: string, uri: string, hue?: number) => {
+      await client.muc.createHat(roomJid, title, uri, hue)
+    },
+    [client]
+  )
+
+  /**
+   * Destroy a hat definition from a room.
+   * @see MUC.destroyHat
+   */
+  const destroyHat = useCallback(
+    async (roomJid: string, uri: string) => {
+      await client.muc.destroyHat(roomJid, uri)
+    },
+    [client]
+  )
+
+  /**
+   * List all hat assignments in a room.
+   * @see MUC.listHatAssignments
+   */
+  const listHatAssignments = useCallback(
+    async (roomJid: string) => {
+      return client.muc.listHatAssignments(roomJid)
+    },
+    [client]
+  )
+
+  /**
+   * Assign a hat to a user in a room.
+   * @see MUC.assignHat
+   */
+  const assignHat = useCallback(
+    async (roomJid: string, userJid: string, hatUri: string) => {
+      await client.muc.assignHat(roomJid, userJid, hatUri)
+    },
+    [client]
+  )
+
+  /**
+   * Remove a hat from a user in a room.
+   * @see MUC.unassignHat
+   */
+  const unassignHat = useCallback(
+    async (roomJid: string, userJid: string, hatUri: string) => {
+      await client.muc.unassignHat(roomJid, userJid, hatUri)
+    },
+    [client]
+  )
+
   /**
    * Fetch older room history (pagination) - for lazy loading on scroll up.
    * First checks IndexedDB cache, then falls back to room MAM if:
@@ -517,6 +587,12 @@ export function useRoom() {
       setAffiliation,
       setRole,
       queryAffiliationList,
+      listHats,
+      createHat,
+      destroyHat,
+      listHatAssignments,
+      assignHat,
+      unassignHat,
     }),
     [
       joinRoom,
@@ -555,6 +631,12 @@ export function useRoom() {
       setAffiliation,
       setRole,
       queryAffiliationList,
+      listHats,
+      createHat,
+      destroyHat,
+      listHatAssignments,
+      assignHat,
+      unassignHat,
     ]
   )
 

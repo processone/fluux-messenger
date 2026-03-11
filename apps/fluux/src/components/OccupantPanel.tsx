@@ -18,12 +18,12 @@ import { useConnectionStore, useIgnoreStore } from '@fluux/sdk/react'
 import { ignoreStore, type IgnoredUser } from '@fluux/sdk/stores'
 import { Avatar } from './Avatar'
 import { Tooltip } from './Tooltip'
-import { ConfirmDialog } from './ConfirmDialog'
 import { MenuButton, MenuDivider } from './sidebar-components/SidebarListMenu'
 import { useContextMenu, useWindowDrag } from '@/hooks'
 import { useToastStore } from '@/stores/toastStore'
 import { getTranslatedShowText } from '@/utils/presence'
-import { Shield, Crown, UserCheck, X, MessageCircle, EyeOff, User, UserMinus, Ban, Mic, MicOff, ShieldPlus, ShieldMinus } from 'lucide-react'
+import { OccupantModerationModal } from './OccupantModerationModal'
+import { Shield, Crown, UserCheck, X, MessageCircle, EyeOff, User, Settings } from 'lucide-react'
 
 // Type for grouped occupants (multiple connections from same bare JID)
 interface GroupedOccupant {
@@ -116,34 +116,11 @@ export function OccupantPanel({
   // Moderation actions
   const { setAffiliation, setRole } = useRoom()
   const addToast = useToastStore((s) => s.addToast)
-  const [confirmAction, setConfirmAction] = useState<{ type: 'kick' | 'ban'; nick: string; jid?: string } | null>(null)
-  const [reason, setReason] = useState('')
+  const [moderationTarget, setModerationTarget] = useState<GroupedOccupant | null>(null)
 
   const selfOccupant = room.nickname ? room.occupants.get(room.nickname) : undefined
   const selfAffiliation: RoomAffiliation = selfOccupant?.affiliation ?? 'none'
   const selfRole: RoomRole = selfOccupant?.role ?? 'none'
-
-  const handleKick = useCallback(async (nick: string) => {
-    try {
-      await setRole(room.jid, nick, 'none', reason || undefined)
-      addToast('success', t('rooms.roleChanged'))
-    } catch {
-      addToast('error', t('rooms.kickError'))
-    }
-    setConfirmAction(null)
-    setReason('')
-  }, [room.jid, setRole, reason, addToast, t])
-
-  const handleBan = useCallback(async (jid: string) => {
-    try {
-      await setAffiliation(room.jid, jid, 'outcast', reason || undefined)
-      addToast('success', t('rooms.affiliationChanged'))
-    } catch {
-      addToast('error', t('rooms.banError'))
-    }
-    setConfirmAction(null)
-    setReason('')
-  }, [room.jid, setAffiliation, reason, addToast, t])
 
   const handleSetRole = useCallback(async (nick: string, role: RoomRole) => {
     try {
@@ -152,8 +129,7 @@ export function OccupantPanel({
     } catch {
       addToast('error', t('rooms.roleError'))
     }
-    menu.close()
-  }, [room.jid, setRole, addToast, t, menu])
+  }, [room.jid, setRole, addToast, t])
 
   const handleSetAffiliation = useCallback(async (jid: string, aff: RoomAffiliation) => {
     try {
@@ -162,8 +138,25 @@ export function OccupantPanel({
     } catch {
       addToast('error', t('rooms.affiliationError'))
     }
-    menu.close()
-  }, [room.jid, setAffiliation, addToast, t, menu])
+  }, [room.jid, setAffiliation, addToast, t])
+
+  const handleKick = useCallback(async (nick: string, reason?: string) => {
+    try {
+      await setRole(room.jid, nick, 'none', reason)
+      addToast('success', t('rooms.roleChanged'))
+    } catch {
+      addToast('error', t('rooms.kickError'))
+    }
+  }, [room.jid, setRole, addToast, t])
+
+  const handleBan = useCallback(async (jid: string, reason?: string) => {
+    try {
+      await setAffiliation(room.jid, jid, 'outcast', reason)
+      addToast('success', t('rooms.affiliationChanged'))
+    } catch {
+      addToast('error', t('rooms.banError'))
+    }
+  }, [room.jid, setAffiliation, addToast, t])
 
   // Sort occupants by role priority: moderator > participant > visitor
   const sortedOccupants = useMemo(() => {
@@ -496,144 +489,63 @@ export function OccupantPanel({
             />
           )}
 
-          {/* --- Moderation actions --- */}
+          {/* --- Moderation: single "Manage" button --- */}
           {(() => {
             const targetOccupant = menuTarget.connections[0]
             const targetAff = targetOccupant.affiliation
             const targetRole = targetOccupant.role
 
-            // Role changes (grant/revoke voice and moderator)
             const availableRoles = getAvailableRoles(selfRole, selfAffiliation, targetRole, targetAff)
-
-            // Affiliation changes (make owner/admin/member, remove)
             const availableAffs = menuTarget.bareJid
               ? getAvailableAffiliations(selfAffiliation, targetAff)
               : []
-
             const showKick = canKick(selfRole, selfAffiliation, targetAff)
             const showBan = menuTarget.bareJid && canBan(selfAffiliation, targetAff)
             const hasModActions = showKick || showBan || availableRoles.length > 0 || availableAffs.length > 0
 
             if (!hasModActions) return null
 
-            const roleLabel = (role: RoomRole) => {
-              switch (role) {
-                case 'moderator': return targetRole === 'moderator' ? null : t('rooms.grantModerator')
-                case 'participant': return targetRole === 'visitor' ? t('rooms.grantVoice') : (targetRole === 'moderator' ? t('rooms.revokeModerator') : null)
-                case 'visitor': return t('rooms.revokeVoice')
-                default: return null
-              }
-            }
-
-            const roleIcon = (role: RoomRole) => {
-              switch (role) {
-                case 'moderator': return <ShieldPlus className="w-4 h-4" />
-                case 'participant': return targetRole === 'moderator' ? <ShieldMinus className="w-4 h-4" /> : <Mic className="w-4 h-4" />
-                case 'visitor': return <MicOff className="w-4 h-4" />
-                default: return null
-              }
-            }
-
-            const affLabel = (aff: RoomAffiliation) => {
-              switch (aff) {
-                case 'owner': return t('rooms.makeOwner')
-                case 'admin': return t('rooms.makeAdmin')
-                case 'member': return t('rooms.makeMember')
-                case 'none': return t('rooms.removeAffiliation')
-                case 'outcast': return t('rooms.ban')
-                default: return aff
-              }
-            }
-
-            const affIcon = (aff: RoomAffiliation) => {
-              switch (aff) {
-                case 'owner': return <Crown className="w-4 h-4" />
-                case 'admin': return <Shield className="w-4 h-4" />
-                case 'member': return <UserCheck className="w-4 h-4" />
-                case 'none': return <UserMinus className="w-4 h-4" />
-                case 'outcast': return <Ban className="w-4 h-4" />
-                default: return null
-              }
-            }
-
             return (
               <>
                 <MenuDivider />
-                {/* Role changes */}
-                {availableRoles.map(role => {
-                  const label = roleLabel(role)
-                  if (!label) return null
-                  return (
-                    <MenuButton
-                      key={`role-${role}`}
-                      onClick={() => handleSetRole(targetOccupant.nick, role)}
-                      icon={roleIcon(role)}
-                      label={label}
-                    />
-                  )
-                })}
-                {/* Affiliation changes (excluding outcast — that's the Ban button below) */}
-                {availableAffs.filter(a => a !== 'outcast').map(aff => (
-                  <MenuButton
-                    key={`aff-${aff}`}
-                    onClick={() => handleSetAffiliation(menuTarget.bareJid!, aff)}
-                    icon={affIcon(aff)}
-                    label={affLabel(aff)}
-                  />
-                ))}
-                {/* Kick & Ban (danger zone) */}
-                {(showKick || showBan) && <MenuDivider />}
-                {showKick && (
-                  <MenuButton
-                    onClick={() => {
-                      setConfirmAction({ type: 'kick', nick: targetOccupant.nick, jid: menuTarget.bareJid })
-                      menu.close()
-                    }}
-                    icon={<UserMinus className="w-4 h-4" />}
-                    label={t('rooms.kick')}
-                    variant="danger"
-                  />
-                )}
-                {showBan && (
-                  <MenuButton
-                    onClick={() => {
-                      setConfirmAction({ type: 'ban', nick: targetOccupant.nick, jid: menuTarget.bareJid })
-                      menu.close()
-                    }}
-                    icon={<Ban className="w-4 h-4" />}
-                    label={t('rooms.ban')}
-                    variant="danger"
-                  />
-                )}
+                <MenuButton
+                  onClick={() => {
+                    setModerationTarget(menuTarget)
+                    menu.close()
+                  }}
+                  icon={<Settings className="w-4 h-4" />}
+                  label={t('rooms.manageOccupant')}
+                />
               </>
             )
           })()}
         </div>
       )}
 
-      {/* Kick/Ban confirmation dialog */}
-      {confirmAction && (
-        <ConfirmDialog
-          title={confirmAction.type === 'kick'
-            ? t('rooms.kick')
-            : t('rooms.ban')}
-          message={confirmAction.type === 'kick'
-            ? t('rooms.kickConfirm', { nick: confirmAction.nick })
-            : t('rooms.banConfirm', { jid: confirmAction.jid || confirmAction.nick })}
-          confirmLabel={confirmAction.type === 'kick' ? t('rooms.kick') : t('rooms.ban')}
-          onConfirm={() => {
-            if (confirmAction.type === 'kick') {
-              void handleKick(confirmAction.nick)
-            } else if (confirmAction.jid) {
-              void handleBan(confirmAction.jid)
-            }
-          }}
-          onCancel={() => {
-            setConfirmAction(null)
-            setReason('')
-          }}
-        />
-      )}
+      {/* Occupant moderation modal */}
+      {moderationTarget && (() => {
+        const target = moderationTarget.connections[0]
+        const occupantAvatar = moderationTarget.connections.find(c => c.avatar)?.avatar
+        const contact = moderationTarget.bareJid ? contactsByJid.get(moderationTarget.bareJid) : undefined
+        return (
+          <OccupantModerationModal
+            occupant={{
+              nick: moderationTarget.primaryNick,
+              bareJid: moderationTarget.bareJid,
+              role: target.role,
+              affiliation: target.affiliation,
+              avatar: occupantAvatar || contact?.avatar,
+            }}
+            selfRole={selfRole}
+            selfAffiliation={selfAffiliation}
+            onSetRole={handleSetRole}
+            onSetAffiliation={handleSetAffiliation}
+            onKick={handleKick}
+            onBan={handleBan}
+            onClose={() => setModerationTarget(null)}
+          />
+        )
+      })()}
     </div>
   )
 }

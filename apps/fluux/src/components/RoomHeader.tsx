@@ -18,6 +18,7 @@ import { AvatarCropModal } from './AvatarCropModal'
 import { InviteToRoomModal } from './InviteToRoomModal'
 import { RoomConfigModal } from './RoomConfigModal'
 import { RoomMembersModal } from './RoomMembersModal'
+import { RoomHatsModal } from './RoomHatsModal'
 import {
   Hash,
   ArrowLeft,
@@ -35,6 +36,7 @@ import {
   UserMinus,
   Image,
   Type,
+  Award,
 } from 'lucide-react'
 
 // Notification mode for rooms
@@ -72,6 +74,7 @@ export function RoomHeader({
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [showConfigModal, setShowConfigModal] = useState(false)
   const [showMembersModal, setShowMembersModal] = useState(false)
+  const [showHatsModal, setShowHatsModal] = useState(false)
   const [avatarError, setAvatarError] = useState<string | null>(null)
   const notifyMenuRef = useRef<HTMLDivElement>(null)
   const ownerMenuRef = useRef<HTMLDivElement>(null)
@@ -354,6 +357,23 @@ export function RoomHeader({
                   </div>
                 </button>
               )}
+
+              {/* Manage Hats - owner only */}
+              {isOwner && (
+                <button
+                  onClick={() => {
+                    setShowHatsModal(true)
+                    setShowOwnerMenu(false)
+                  }}
+                  className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-left transition-colors"
+                >
+                  <Award className="w-4 h-4 text-fluux-muted" />
+                  <div className="flex-1">
+                    <div className="text-sm text-fluux-text">{t('rooms.manageHats')}</div>
+                    <div className="text-xs text-fluux-muted">{t('rooms.manageHatsDesc')}</div>
+                  </div>
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -426,6 +446,13 @@ export function RoomHeader({
         <RoomMembersModal
           room={room}
           onClose={() => setShowMembersModal(false)}
+        />
+      )}
+
+      {showHatsModal && (
+        <RoomHatsModal
+          room={room}
+          onClose={() => setShowHatsModal(false)}
         />
       )}
     </header>

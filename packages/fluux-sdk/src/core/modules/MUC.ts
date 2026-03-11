@@ -21,6 +21,7 @@ import {
   NS_NICK,
   NS_VCARD_UPDATE,
   NS_OCCUPANT_ID,
+  NS_COMMANDS,
 } from '../namespaces'
 import type {
   Room,
@@ -1754,5 +1755,193 @@ export class MUC extends BaseModule {
       })
     }
     return members
+  }
+
+  // ---------------------------------------------------------------------------
+  // XEP-0317: Hats — Management via XEP-0050 Ad-Hoc Commands
+  // ---------------------------------------------------------------------------
+
+  /** FORM_TYPE for hat management commands */
+  private static readonly HATS_FORM_TYPE = 'urn:xmpp:hats:commands'
+
+  /**
+   * Execute an XEP-0050 ad-hoc command targeted at a MUC room for hat management.
+   *
+   * @param roomJid - Room JID to send the command to
+   * @param node - Command node URI
+   * @param fields - Optional form fields to submit (excluding FORM_TYPE)
+   * @returns The IQ response element
+   */
+  private async executeHatCommand(
+    roomJid: string,
+    node: string,
+    fields?: Record<string, string>,
+  ): Promise<Element> {
+    const commandChildren: Element[] = []
+
+    if (fields && Object.keys(fields).length > 0) {
+      commandChildren.push(
+        buildDataFormSubmit(fields, MUC.HATS_FORM_TYPE)
+      )
+    }
+
+    const iq = xml(
+      'iq',
+      { type: 'set', to: roomJid, id: `hat_${generateUUID()}` },
+      xml('command', { xmlns: NS_COMMANDS, action: 'execute', node },
+        ...commandChildren
+      )
+    )
+    return this.deps.sendIQ(iq)
+  }
+
+  /**
+   * Parse a hat list response from an ad-hoc command result.
+   *
+   * The server returns a data form with `type="result"` containing `<reported>`
+   * field definitions and `<item>` rows. Each row has `hats#uri`, `hats#title`,
+   * and optionally `hats#hue` and `hats#jid` fields.
+   *
+   * @param response - IQ response element
+   * @returns Array of parsed hat entries
+   */
+  private parseHatListResponse(response: Element): Array<{
+    jid?: string
+    uri: string
+    title: string
+    hue?: number
+  }> {
+    const command = response.getChild('command', NS_COMMANDS)
+    if (!command) return []
+
+    const form = command.getChild('x', NS_DATA_FORMS)
+    if (!form) return []
+
+    const results: Array<{ jid?: string; uri: string; title: string; hue?: number }> = []
+
+    for (const item of form.getChildren('item')) {
+      let uri = ''
+      let title = ''
+      let hue: number | undefined
+      let jid: string | undefined
+
+      for (const field of item.getChildren('field')) {
+        const varName = field.attrs.var
+        const value = field.getChildText('value') ?? ''
+        switch (varName) {
+          case 'hats#uri': uri = value; break
+          case 'hats#title': title = value; break
+          case 'hats#hue': hue = value ? parseFloat(value) : undefined; break
+          case 'hats#jid': jid = value || undefined; break
+        }
+      }
+
+      if (uri && title) {
+        results.push({ uri, title, hue, jid })
+      }
+    }
+
+    return results
+  }
+
+  /**
+   * List all hat definitions for a room (XEP-0317).
+   *
+   * Sends an ad-hoc command to retrieve the room's configured hats.
+   *
+   * @param roomJid - Room JID
+   * @returns Array of hat definitions
+   */
+  async listHats(roomJid: string): Promise<Hat[]> {
+    const response = await this.executeHatCommand(roomJid, 'urn:xmpp:hats:commands:list')
+    return this.parseHatListResponse(response).map(({ uri, title, hue }) => ({
+      uri,
+      title,
+      hue,
+    }))
+  }
+
+  /**
+   * Create a new hat definition for a room (XEP-0317).
+   *
+   * @param roomJid - Room JID
+   * @param title - Human-readable hat title
+   * @param uri - Unique URI identifying the hat
+   * @param hue - Optional color hue (0-360) for UI styling
+   */
+  async createHat(roomJid: string, title: string, uri: string, hue?: number): Promise<void> {
+    const fields: Record<string, string> = {
+      'hats#title': title,
+      'hats#uri': uri,
+    }
+    if (hue !== undefined) {
+      fields['hats#hue'] = String(hue)
+    }
+    await this.executeHatCommand(roomJid, 'urn:xmpp:hats:commands:create', fields)
+    logInfo(`Hat created: "${title}" (${uri}) in ${roomJid}`)
+  }
+
+  /**
+   * Destroy a hat definition for a room (XEP-0317).
+   *
+   * Removing a hat definition also removes it from all assigned users.
+   *
+   * @param roomJid - Room JID
+   * @param uri - URI of the hat to destroy
+   */
+  async destroyHat(roomJid: string, uri: string): Promise<void> {
+    await this.executeHatCommand(roomJid, 'urn:xmpp:hats:commands:destroy', {
+      'hats#uri': uri,
+    })
+    logInfo(`Hat destroyed: ${uri} in ${roomJid}`)
+  }
+
+  /**
+   * List all hat assignments in a room (XEP-0317).
+   *
+   * Returns which users have which hats assigned.
+   *
+   * @param roomJid - Room JID
+   * @returns Array of hat assignment entries (jid + hat info)
+   */
+  async listHatAssignments(roomJid: string): Promise<Array<{
+    jid: string
+    uri: string
+    title: string
+    hue?: number
+  }>> {
+    const response = await this.executeHatCommand(roomJid, 'urn:xmpp:hats:commands:list-assigned')
+    return this.parseHatListResponse(response)
+      .filter((entry): entry is { jid: string; uri: string; title: string; hue?: number } => !!entry.jid)
+  }
+
+  /**
+   * Assign a hat to a user in a room (XEP-0317).
+   *
+   * @param roomJid - Room JID
+   * @param userJid - Bare JID of the user to assign the hat to
+   * @param hatUri - URI of the hat to assign
+   */
+  async assignHat(roomJid: string, userJid: string, hatUri: string): Promise<void> {
+    await this.executeHatCommand(roomJid, 'urn:xmpp:hats:commands:assign', {
+      'hats#jid': userJid,
+      'hats#uri': hatUri,
+    })
+    logInfo(`Hat assigned: ${hatUri} → ${userJid} in ${roomJid}`)
+  }
+
+  /**
+   * Remove a hat from a user in a room (XEP-0317).
+   *
+   * @param roomJid - Room JID
+   * @param userJid - Bare JID of the user to unassign from
+   * @param hatUri - URI of the hat to remove
+   */
+  async unassignHat(roomJid: string, userJid: string, hatUri: string): Promise<void> {
+    await this.executeHatCommand(roomJid, 'urn:xmpp:hats:commands:unassign', {
+      'hats#jid': userJid,
+      'hats#uri': hatUri,
+    })
+    logInfo(`Hat unassigned: ${hatUri} from ${userJid} in ${roomJid}`)
   }
 }

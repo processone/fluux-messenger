@@ -27,6 +27,8 @@ vi.mock('react-i18next', () => ({
         'rooms.showMembers': 'Show members',
         'rooms.avatarClearFailed': 'Failed to clear avatar',
         'rooms.avatarChangeFailed': 'Failed to change avatar',
+        'rooms.manageHats': 'Manage Hats',
+        'rooms.manageHatsDesc': 'Define and assign hats',
         'common.comingSoon': 'Coming soon',
       }
       return translations[key] || key
@@ -71,6 +73,20 @@ vi.mock('./InviteToRoomModal', () => ({
 vi.mock('./RoomConfigModal', () => ({
   RoomConfigModal: ({ onClose }: { onClose: () => void }) => (
     <div data-testid="room-config-modal"><button onClick={onClose}>Close</button></div>
+  ),
+}))
+
+// Mock RoomMembersModal
+vi.mock('./RoomMembersModal', () => ({
+  RoomMembersModal: ({ onClose }: { onClose: () => void }) => (
+    <div data-testid="members-modal"><button onClick={onClose}>Close</button></div>
+  ),
+}))
+
+// Mock RoomHatsModal
+vi.mock('./RoomHatsModal', () => ({
+  RoomHatsModal: ({ onClose }: { onClose: () => void }) => (
+    <div data-testid="hats-modal"><button onClick={onClose}>Close</button></div>
   ),
 }))
 
@@ -746,6 +762,131 @@ describe('RoomHeader', () => {
 
       const header = container.querySelector('header')
       expect(header).toHaveClass('mt-5')
+    })
+  })
+
+  describe('Manage Hats', () => {
+    it('shows "Manage Hats" only for owners', () => {
+      const room = createRoom({
+        occupantsList: [createOccupant({ nick: 'Me', affiliation: 'owner' })],
+      })
+
+      render(
+        <RoomHeader
+          room={room}
+          showOccupants={false}
+          onToggleOccupants={mockOnToggleOccupants}
+          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomAvatar={mockSetRoomAvatar}
+          clearRoomAvatar={mockClearRoomAvatar}
+          submitRoomConfig={mockSubmitRoomConfig}
+          setSubject={mockSetSubject}
+          destroyRoom={mockDestroyRoom}
+        />
+      )
+
+      fireEvent.click(screen.getByLabelText('Manage room'))
+      expect(screen.getByText('Manage Hats')).toBeInTheDocument()
+    })
+
+    it('hides "Manage Hats" for admins', () => {
+      const room = createRoom({
+        occupantsList: [createOccupant({ nick: 'Me', affiliation: 'admin' })],
+      })
+
+      render(
+        <RoomHeader
+          room={room}
+          showOccupants={false}
+          onToggleOccupants={mockOnToggleOccupants}
+          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomAvatar={mockSetRoomAvatar}
+          clearRoomAvatar={mockClearRoomAvatar}
+          submitRoomConfig={mockSubmitRoomConfig}
+          setSubject={mockSetSubject}
+          destroyRoom={mockDestroyRoom}
+        />
+      )
+
+      fireEvent.click(screen.getByLabelText('Manage room'))
+      expect(screen.queryByText('Manage Hats')).not.toBeInTheDocument()
+    })
+
+    it('hides "Manage Hats" for regular members', () => {
+      const room = createRoom({
+        occupantsList: [createOccupant({ nick: 'Me', affiliation: 'member' })],
+      })
+
+      render(
+        <RoomHeader
+          room={room}
+          showOccupants={false}
+          onToggleOccupants={mockOnToggleOccupants}
+          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomAvatar={mockSetRoomAvatar}
+          clearRoomAvatar={mockClearRoomAvatar}
+          submitRoomConfig={mockSubmitRoomConfig}
+          setSubject={mockSetSubject}
+          destroyRoom={mockDestroyRoom}
+        />
+      )
+
+      // No manage room button for regular members
+      expect(screen.queryByLabelText('Manage room')).not.toBeInTheDocument()
+    })
+
+    it('opens hats modal when clicking "Manage Hats"', () => {
+      const room = createRoom({
+        occupantsList: [createOccupant({ nick: 'Me', affiliation: 'owner' })],
+      })
+
+      render(
+        <RoomHeader
+          room={room}
+          showOccupants={false}
+          onToggleOccupants={mockOnToggleOccupants}
+          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomAvatar={mockSetRoomAvatar}
+          clearRoomAvatar={mockClearRoomAvatar}
+          submitRoomConfig={mockSubmitRoomConfig}
+          setSubject={mockSetSubject}
+          destroyRoom={mockDestroyRoom}
+        />
+      )
+
+      fireEvent.click(screen.getByLabelText('Manage room'))
+      fireEvent.click(screen.getByText('Manage Hats'))
+
+      expect(screen.getByTestId('hats-modal')).toBeInTheDocument()
+    })
+
+    it('closes the management dropdown when opening hats modal', () => {
+      const room = createRoom({
+        occupantsList: [createOccupant({ nick: 'Me', affiliation: 'owner' })],
+      })
+
+      render(
+        <RoomHeader
+          room={room}
+          showOccupants={false}
+          onToggleOccupants={mockOnToggleOccupants}
+          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomAvatar={mockSetRoomAvatar}
+          clearRoomAvatar={mockClearRoomAvatar}
+          submitRoomConfig={mockSubmitRoomConfig}
+          setSubject={mockSetSubject}
+          destroyRoom={mockDestroyRoom}
+        />
+      )
+
+      fireEvent.click(screen.getByLabelText('Manage room'))
+      expect(screen.getByText('Room settings')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByText('Manage Hats'))
+
+      // Dropdown should close, modal should be open
+      expect(screen.queryByText('Room settings')).not.toBeInTheDocument()
+      expect(screen.getByTestId('hats-modal')).toBeInTheDocument()
     })
   })
 })
