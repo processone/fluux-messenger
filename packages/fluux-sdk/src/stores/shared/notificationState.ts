@@ -119,13 +119,16 @@ export function onMessageReceived(
     return state
   }
 
-  // User sees the message: update lastReadAt, keep unread at 0
+  // User sees the message: update lastReadAt, advance lastSeenMessageId, keep unread at 0.
+  // Advancing lastSeenMessageId here ensures the "new messages" marker is correctly
+  // positioned (or absent) when the user leaves and re-enters the entity — without
+  // relying solely on the IntersectionObserver which may lag due to throttling.
   if (userSeesMessage) {
     return {
       unreadCount: 0,
       mentionsCount: 0,
       lastReadAt: msg.timestamp,
-      lastSeenMessageId: state.lastSeenMessageId,
+      lastSeenMessageId: msg.id,
       firstNewMessageId: state.firstNewMessageId,
     }
   }
