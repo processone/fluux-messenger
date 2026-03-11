@@ -5,7 +5,7 @@
  * the common bubble structure.
  */
 import { useState, memo, type ReactNode } from 'react'
-import { CornerUpLeft } from 'lucide-react'
+import { CornerUpRight } from 'lucide-react'
 import { formatMessagePreview, type BaseMessage, type MentionReference, type Contact, type ContactIdentity, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
 import { Avatar } from '../Avatar'
 import { MessageToolbar } from './MessageToolbar'
@@ -241,7 +241,7 @@ export const MessageBubble = memo(function MessageBubble({
       onMouseLeave={onMouseLeave}
     >
       {/* Avatar, timestamp (when selected), or spacer - width adapts to time format */}
-      <div className={`${timeFormat === '12h' ? 'w-12' : 'w-10'} flex-shrink-0`}>
+      <div className={`${timeFormat === '12h' ? 'w-12' : 'w-10'} flex-shrink-0 flex flex-col`}>
         {/* /me action messages always show timestamp instead of avatar */}
         {isActionMessage(message.body) ? (
           <span className={`block text-center text-[10px] text-fluux-muted font-mono pt-0.5 ${isSelected ? 'opacity-100' : hasKeyboardSelection ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
@@ -265,6 +265,15 @@ export const MessageBubble = memo(function MessageBubble({
           <span className={`block text-center text-[10px] text-fluux-muted font-mono pt-0.5 ${isSelected ? 'opacity-100' : hasKeyboardSelection ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
             {formatTime(message.timestamp)}
           </span>
+        )}
+        {/* Reply arrow — visually connects to the quote content on the right */}
+        {!message.isRetracted && replyContext && (
+          <button
+            onClick={() => scrollToMessage(replyContext.messageId)}
+            className="flex justify-center pt-0.5 cursor-pointer"
+          >
+            <CornerUpRight className="w-3.5 h-3.5 text-fluux-muted" />
+          </button>
         )}
       </div>
 
@@ -323,7 +332,6 @@ export const MessageBubble = memo(function MessageBubble({
             className="flex items-start gap-1.5 pb-1 pl-2 border-l-2 text-left w-full hover:bg-fluux-hover/50 rounded-r transition-colors cursor-pointer select-none"
             style={{ borderColor: replyContext.senderColor }}
           >
-            <CornerUpLeft className="w-3.5 h-3.5 text-fluux-muted flex-shrink-0 mt-0.5" />
             <Avatar
               identifier={replyContext.avatarIdentifier}
               name={replyContext.senderName}
