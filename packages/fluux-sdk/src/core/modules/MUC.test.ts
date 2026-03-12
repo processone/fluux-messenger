@@ -1071,7 +1071,7 @@ describe('MUC Module', () => {
 
       const result = await muc.queryRoomFeatures('room@conference.example.org')
 
-      expect(result).toEqual({ supportsMAM: true, supportsReactions: true, name: 'Test Room' })
+      expect(result).toEqual({ supportsMAM: true, supportsReactions: true, supportsHats: false, name: 'Test Room' })
       expect(mockSendIQ).toHaveBeenCalledWith(
         expect.objectContaining({
           attrs: expect.objectContaining({
@@ -1099,7 +1099,7 @@ describe('MUC Module', () => {
 
       const result = await muc.queryRoomFeatures('room@conference.example.org')
 
-      expect(result).toEqual({ supportsMAM: false, supportsReactions: true, name: 'Test Room' })
+      expect(result).toEqual({ supportsMAM: false, supportsReactions: true, supportsHats: false, name: 'Test Room' })
     })
 
     it('returns supportsReactions: false for open semi-anonymous rooms without occupant-id', async () => {
@@ -1120,7 +1120,7 @@ describe('MUC Module', () => {
 
       const result = await muc.queryRoomFeatures('room@conference.example.org')
 
-      expect(result).toEqual({ supportsMAM: false, supportsReactions: false, name: 'IRC Bridge' })
+      expect(result).toEqual({ supportsMAM: false, supportsReactions: false, supportsHats: false, name: 'IRC Bridge' })
     })
 
     it('returns supportsReactions: true for open semi-anonymous rooms with occupant-id', async () => {
@@ -1142,7 +1142,7 @@ describe('MUC Module', () => {
 
       const result = await muc.queryRoomFeatures('room@conference.example.org')
 
-      expect(result).toEqual({ supportsMAM: false, supportsReactions: true, name: 'Modern Room' })
+      expect(result).toEqual({ supportsMAM: false, supportsReactions: true, supportsHats: false, name: 'Modern Room' })
     })
 
     it('returns null when disco#info query fails', async () => {
