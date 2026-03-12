@@ -421,7 +421,7 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
 
       {/* ---- Add forms ---- */}
       {activeTab === 'definitions' && (
-        <div className="px-4 py-3 border-t border-fluux-hover">
+        <div className="px-4 py-3 border-t border-fluux-hover space-y-2">
           <div className="flex items-center gap-2">
             <input
               type="text"
@@ -434,6 +434,16 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
             />
             <input
               type="text"
+              value={newHue}
+              onChange={(e) => setNewHue(e.target.value)}
+              placeholder={t('rooms.hatHuePlaceholder')}
+              className="w-16 px-2 py-1.5 text-sm bg-fluux-hover/50 rounded-lg border border-transparent
+                         focus:border-fluux-brand/50 focus:outline-none text-fluux-text placeholder-fluux-muted text-center"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
               value={newUri}
               onChange={(e) => setNewUri(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') void handleCreate() }}
@@ -441,20 +451,12 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
               className="flex-1 px-3 py-1.5 text-sm bg-fluux-hover/50 rounded-lg border border-transparent
                          focus:border-fluux-brand/50 focus:outline-none text-fluux-text placeholder-fluux-muted"
             />
-            <input
-              type="text"
-              value={newHue}
-              onChange={(e) => setNewHue(e.target.value)}
-              placeholder={t('rooms.hatHuePlaceholder')}
-              className="w-16 px-2 py-1.5 text-sm bg-fluux-hover/50 rounded-lg border border-transparent
-                         focus:border-fluux-brand/50 focus:outline-none text-fluux-text placeholder-fluux-muted text-center"
-            />
             <button
               onClick={() => void handleCreate()}
               disabled={!newTitle.trim() || !newUri.trim() || isCreating}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white
                          bg-fluux-brand hover:bg-fluux-brand/80 disabled:opacity-50
-                         rounded-lg transition-colors"
+                         rounded-lg transition-colors whitespace-nowrap"
             >
               {isCreating ? (
                 <Loader2 className="w-4 h-4 animate-spin" />

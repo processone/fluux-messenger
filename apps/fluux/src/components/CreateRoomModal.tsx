@@ -98,20 +98,18 @@ export function CreateRoomModal({ onClose }: CreateRoomModalProps) {
             {t('rooms.roomAddress')}
             <span className="text-red-400 ml-1">*</span>
           </label>
-          <div className="flex items-center gap-1">
-            <input
-              type="text"
-              value={roomLocal}
-              onChange={e => setRoomLocal(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''))}
-              disabled={creating}
-              required
-              placeholder="my-room"
-              className="flex-1 px-3 py-2 text-sm bg-fluux-bg border border-fluux-border rounded-lg text-fluux-text placeholder-fluux-muted focus:outline-none focus:ring-2 focus:ring-fluux-brand/50 disabled:opacity-50"
-            />
-            <span className="text-sm text-fluux-muted flex-shrink-0">
-              @{mucService || <Loader2 className="w-3 h-3 inline animate-spin" />}
-            </span>
-          </div>
+          <input
+            type="text"
+            value={roomLocal}
+            onChange={e => setRoomLocal(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''))}
+            disabled={creating}
+            required
+            placeholder="my-room"
+            className="w-full px-3 py-2 text-sm bg-fluux-bg border border-fluux-border rounded-lg text-fluux-text placeholder-fluux-muted focus:outline-none focus:ring-2 focus:ring-fluux-brand/50 disabled:opacity-50"
+          />
+          <p className="text-xs text-fluux-muted mt-1">
+            @{mucService || <Loader2 className="w-3 h-3 inline animate-spin" />}
+          </p>
         </div>
 
         {/* Room name */}
