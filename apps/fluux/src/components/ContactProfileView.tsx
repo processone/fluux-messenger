@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { MessageCircle, Trash2, Pencil, Monitor, Smartphone, Globe, ArrowLeft, Ban } from 'lucide-react'
+import { MessageCircle, Trash2, Pencil, Monitor, Smartphone, Globe, ArrowLeft, Ban, UserPlus } from 'lucide-react'
 import { Tooltip } from './Tooltip'
 import { type Contact, getClientType, useBlocking } from '@fluux/sdk'
 import { useConnectionStore, useBlockingStore } from '@fluux/sdk/react'
@@ -16,6 +16,7 @@ interface ContactProfileViewProps {
   onRemoveContact: () => void
   onRenameContact: (name: string) => Promise<void>
   onFetchNickname: (jid: string) => Promise<string | null>
+  onAddContact?: () => void
   onBack?: () => void
   /** Whether the contact is in the user's roster (enables rename/remove actions) */
   isInRoster?: boolean
@@ -26,6 +27,7 @@ export function ContactProfileView({
   onStartConversation,
   onRemoveContact,
   onRenameContact,
+  onAddContact,
   onFetchNickname,
   onBack,
   isInRoster = true,
@@ -284,6 +286,16 @@ export function ContactProfileView({
               <MessageCircle className="w-5 h-5" />
               {t('contacts.startConversation')}
             </button>
+
+            {!isInRoster && onAddContact && (
+              <button
+                onClick={onAddContact}
+                className="flex items-center justify-center gap-2 px-4 py-3 bg-fluux-bg hover:bg-fluux-hover text-fluux-text border border-fluux-hover rounded-lg transition-colors"
+              >
+                <UserPlus className="w-5 h-5" />
+                {t('contacts.addToContacts')}
+              </button>
+            )}
 
             {isInRoster && (showRemoveConfirm ? (
               <div className="flex flex-col gap-2 p-3 bg-fluux-red/10 border border-fluux-red/30 rounded-lg">

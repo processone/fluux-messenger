@@ -119,6 +119,7 @@
         "sending": "Envoi...",
         "contact": "Contact",
         "startConversation": "Démarrer une conversation",
+        "addToContacts": "Ajouter aux contacts",
         "connectedDevices": "Appareils connectés",
         "nameCannotBeEmpty": "Le nom ne peut pas être vide",
         "removeConfirm": "Supprimer {{name}} de vos contacts ?",

@@ -111,7 +111,7 @@ function ChatLayoutContent() {
   // NOTE: Don't use useRoster() hook here - it subscribes to ALL contacts and triggers
   // re-renders when ANY contact's presence changes. Use useRosterActions() for actions
   // without state subscription, and focused selectors for specific contact state.
-  const { removeContact, renameContact, fetchContactNickname } = useRosterActions()
+  const { addContact, removeContact, renameContact, fetchContactNickname } = useRosterActions()
   // NOTE: Don't use useConnection() hook - it subscribes to MANY state values (jid, error,
   // reconnectAttempt, ownAvatar, etc.) and re-renders when ANY changes. We only need status.
   const status = useConnectionStore((s) => s.status)
@@ -543,6 +543,11 @@ function ChatLayoutContent() {
     setSelectedContactJid(jid)
   }, [setActiveConversation, setActiveRoom, handleSidebarViewChange])
 
+  // Handle adding a contact (subscription request)
+  const handleAddContactFromProfile = useCallback(async (jid: string) => {
+    await addContact(jid)
+  }, [addContact])
+
   // Handle removing a contact
   const handleRemoveContact = useCallback(async (jid: string) => {
     await removeContact(jid)
@@ -621,6 +626,7 @@ function ChatLayoutContent() {
               contact={selectedContact}
               isInRoster={isSelectedContactInRoster}
               onStartConversation={() => handleStartConversation(selectedContact)}
+              onAddContact={() => handleAddContactFromProfile(selectedContact.jid)}
               onRemoveContact={() => handleRemoveContact(selectedContact.jid)}
               onRenameContact={(name) => handleRenameContact(selectedContact.jid, name)}
               onFetchNickname={handleFetchContactNickname}
