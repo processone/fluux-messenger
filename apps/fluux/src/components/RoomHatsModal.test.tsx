@@ -273,10 +273,10 @@ describe('RoomHatsModal', () => {
       await waitFor(() => {
         expect(screen.getByText('Moderator')).toBeInTheDocument()
       })
-      // Two inputs with "e.g. Speaker" (search + form), one with URI, one with hue
+      // Two inputs with "e.g. Speaker" (search + form), one with URI, one hue slider
       expect(screen.getAllByPlaceholderText('e.g. Speaker').length).toBeGreaterThanOrEqual(2)
       expect(screen.getByPlaceholderText('e.g. urn:example:speaker')).toBeInTheDocument()
-      expect(screen.getByPlaceholderText('0–360')).toBeInTheDocument()
+      expect(screen.getByRole('slider')).toBeInTheDocument()
     })
 
     it('disables Add button when title is empty', async () => {
@@ -345,7 +345,7 @@ describe('RoomHatsModal', () => {
 
       fireEvent.change(getFormInput('e.g. Speaker'), { target: { value: 'VIP' } })
       fireEvent.change(screen.getByPlaceholderText('e.g. urn:example:speaker'), { target: { value: 'urn:hat:vip' } })
-      fireEvent.change(screen.getByPlaceholderText('0–360'), { target: { value: '120' } })
+      fireEvent.change(screen.getByRole('slider'), { target: { value: '120' } })
 
       fireEvent.click(screen.getByText('Add hat'))
 

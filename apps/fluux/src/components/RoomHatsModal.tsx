@@ -435,17 +435,6 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
                            focus:border-fluux-brand/50 focus:outline-none text-fluux-text placeholder-fluux-muted"
               />
             </div>
-            <div className="space-y-1">
-              <label className="block text-xs text-fluux-muted">{t('rooms.hatHue')}</label>
-              <input
-                type="text"
-                value={newHue}
-                onChange={(e) => setNewHue(e.target.value)}
-                placeholder={t('rooms.hatHuePlaceholder')}
-                className="w-16 px-2 py-1.5 text-sm bg-fluux-hover/50 rounded-lg border border-transparent
-                           focus:border-fluux-brand/50 focus:outline-none text-fluux-text placeholder-fluux-muted text-center"
-              />
-            </div>
           </div>
           <div className="flex items-end gap-2">
             <div className="flex-1 space-y-1">
@@ -474,6 +463,43 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
               )}
               {t('rooms.addHat')}
             </button>
+          </div>
+          {/* Hue slider with live preview */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs text-fluux-muted">{t('rooms.hatHue')}</label>
+              {/* Live preview badge */}
+              {(newTitle.trim() || newUri.trim()) && (
+                <span
+                  className="inline-block px-2 py-0.5 text-xs font-medium rounded-full"
+                  style={getHatColors({
+                    uri: newUri.trim() || 'preview',
+                    hue: newHue ? parseFloat(newHue) : undefined,
+                  })}
+                >
+                  {newTitle.trim() || t('rooms.hatTitlePlaceholder')}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min="0"
+                max="360"
+                value={newHue || '180'}
+                onChange={(e) => setNewHue(e.target.value)}
+                className="flex-1 h-2 rounded-full appearance-none cursor-pointer
+                           [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4
+                           [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-md
+                           [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-fluux-muted/50 [&::-webkit-slider-thumb]:cursor-pointer"
+                style={{
+                  background: 'linear-gradient(to right, hsl(0,70%,55%), hsl(60,70%,55%), hsl(120,70%,55%), hsl(180,70%,55%), hsl(240,70%,55%), hsl(300,70%,55%), hsl(360,70%,55%))',
+                }}
+              />
+              <span className="text-xs text-fluux-muted w-8 text-right tabular-nums">
+                {newHue || '—'}
+              </span>
+            </div>
           </div>
         </div>
       )}
