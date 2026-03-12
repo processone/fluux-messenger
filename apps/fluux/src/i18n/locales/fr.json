@@ -391,6 +391,7 @@
         "moderateMessageConfirm": "Ce message sera supprimé pour tous les participants. Cette action est irréversible.",
         "moderateReason": "Raison (optionnel)",
         "moderateReasonPlaceholder": "Pourquoi ce message est-il supprimé ?",
+        "moderateAndBan": "Bannir également cet utilisateur du salon",
         "imageUnavailable": "Image non disponible",
         "videoUnavailable": "Vidéo non disponible",
         "audioUnavailable": "Audio non disponible",

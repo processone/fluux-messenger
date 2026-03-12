@@ -391,6 +391,7 @@
         "moderateMessageConfirm": "Wiadomość zostanie usunięta dla wszystkich uczestników. Tej czynności nie można cofnąć.",
         "moderateReason": "Powód (opcjonalnie)",
         "moderateReasonPlaceholder": "Dlaczego ta wiadomość jest usuwana?",
+        "moderateAndBan": "Również zbanuj tego użytkownika z pokoju",
         "imageUnavailable": "Obraz już niedostępny",
         "videoUnavailable": "Film już niedostępny",
         "audioUnavailable": "Audio już niedostępne",

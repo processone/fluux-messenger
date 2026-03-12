@@ -391,6 +391,7 @@
         "moderateMessageConfirm": "Tato zpráva bude odstraněna pro všechny účastníky. Tuto akci nelze vrátit zpět.",
         "moderateReason": "Důvod (volitelný)",
         "moderateReasonPlaceholder": "Proč je tato zpráva odstraňována?",
+        "moderateAndBan": "Také zakázat tohoto uživatele v místnosti",
         "imageUnavailable": "Obrázek již není k dispozici",
         "videoUnavailable": "Video již není k dispozici",
         "audioUnavailable": "Zvuk již není k dispozici",

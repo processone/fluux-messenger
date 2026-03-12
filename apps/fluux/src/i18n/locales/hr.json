@@ -391,6 +391,7 @@
         "moderateMessageConfirm": "Ovo će ukloniti poruku za sve sudionike. Ova radnja se ne može poništiti.",
         "moderateReason": "Razlog (neobavezno)",
         "moderateReasonPlaceholder": "Zašto se ova poruka uklanja?",
+        "moderateAndBan": "Također zabrani ovog korisnika iz sobe",
         "imageUnavailable": "Slika više nije dostupna",
         "videoUnavailable": "Video više nije dostupan",
         "audioUnavailable": "Audio više nije dostupan",

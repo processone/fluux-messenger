@@ -391,6 +391,7 @@
         "moderateMessageConfirm": "Bainfidh sé seo an teachtaireacht do gach rannpháirtí. Ní féidir an gníomh seo a chealú.",
         "moderateReason": "Fáth (roghnach)",
         "moderateReasonPlaceholder": "Cén fáth a bhfuil an teachtaireacht seo á baint?",
+        "moderateAndBan": "Coisc an t-úsáideoir seo ón seomra freisin",
         "imageUnavailable": "Níl an íomhá ar fáil a thuilleadh",
         "videoUnavailable": "Níl an físeán ar fáil a thuilleadh",
         "audioUnavailable": "Níl an fhuaim ar fáil a thuilleadh",

@@ -391,6 +391,7 @@
         "moderateMessageConfirm": "Это удалит сообщение для всех участников. Это действие нельзя отменить.",
         "moderateReason": "Причина (необязательно)",
         "moderateReasonPlaceholder": "Почему это сообщение удаляется?",
+        "moderateAndBan": "Также забанить этого пользователя в комнате",
         "imageUnavailable": "Изображение больше недоступно",
         "videoUnavailable": "Видео больше недоступно",
         "audioUnavailable": "Аудио больше недоступно",

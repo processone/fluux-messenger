@@ -391,6 +391,7 @@
         "moderateMessageConfirm": "Това ще премахне съобщението за всички участници. Това действие не може да бъде отменено.",
         "moderateReason": "Причина (по избор)",
         "moderateReasonPlaceholder": "Защо това съобщение се премахва?",
+        "moderateAndBan": "Също забрани този потребител от стаята",
         "imageUnavailable": "Изображението вече не е налично",
         "videoUnavailable": "Видеото вече не е налично",
         "audioUnavailable": "Аудиото вече не е налично",

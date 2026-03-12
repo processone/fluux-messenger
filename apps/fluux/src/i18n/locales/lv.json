@@ -391,6 +391,7 @@
         "moderateMessageConfirm": "Tas noņems ziņojumu visiem dalībniekiem. Šo darbību nevar atsaukt.",
         "moderateReason": "Iemesls (neobligāts)",
         "moderateReasonPlaceholder": "Kāpēc šis ziņojums tiek noņemts?",
+        "moderateAndBan": "Arī aizliegt šim lietotājam piekļuvi istabai",
         "imageUnavailable": "Attēls vairs nav pieejams",
         "videoUnavailable": "Video vairs nav pieejams",
         "audioUnavailable": "Audio vairs nav pieejams",

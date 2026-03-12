@@ -391,6 +391,7 @@
         "moderateMessageConfirm": "Això eliminarà aquest missatge per a tots els participants. Aquesta acció no es pot desfer.",
         "moderateReason": "Motiu (opcional)",
         "moderateReasonPlaceholder": "Per què s'elimina aquest missatge?",
+        "moderateAndBan": "Baneja també aquest usuari de la sala",
         "imageUnavailable": "La imatge ja no està disponible",
         "videoUnavailable": "El vídeo ja no està disponible",
         "audioUnavailable": "L'àudio ja no està disponible",

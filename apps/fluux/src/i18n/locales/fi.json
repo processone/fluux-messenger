@@ -391,6 +391,7 @@
         "moderateMessageConfirm": "Tämä poistaa viestin kaikilta osallistujilta. Tätä toimintoa ei voi kumota.",
         "moderateReason": "Syy (valinnainen)",
         "moderateReasonPlaceholder": "Miksi tämä viesti poistetaan?",
+        "moderateAndBan": "Estä myös tämä käyttäjä huoneesta",
         "imageUnavailable": "Kuva ei ole enää saatavilla",
         "videoUnavailable": "Video ei ole enää saatavilla",
         "audioUnavailable": "Ääni ei ole enää saatavilla",

@@ -391,6 +391,7 @@
         "moderateMessageConfirm": "Detta tar bort meddelandet för alla deltagare. Denna åtgärd kan inte ångras.",
         "moderateReason": "Anledning (valfritt)",
         "moderateReasonPlaceholder": "Varför tas detta meddelande bort?",
+        "moderateAndBan": "Blockera även denna användare från rummet",
         "imageUnavailable": "Bilden är inte längre tillgänglig",
         "videoUnavailable": "Videon är inte längre tillgänglig",
         "audioUnavailable": "Ljudet är inte längre tillgängligt",

@@ -391,6 +391,7 @@
         "moderateMessageConfirm": "Dette vil fjerne beskeden for alle deltagere. Denne handling kan ikke fortrydes.",
         "moderateReason": "Årsag (valgfri)",
         "moderateReasonPlaceholder": "Hvorfor fjernes denne besked?",
+        "moderateAndBan": "Udeluk også denne bruger fra rummet",
         "imageUnavailable": "Billedet er ikke længere tilgængeligt",
         "videoUnavailable": "Videoen er ikke længere tilgængelig",
         "audioUnavailable": "Lyden er ikke længere tilgængelig",

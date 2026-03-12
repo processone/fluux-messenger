@@ -391,6 +391,7 @@
         "moderateMessageConfirm": "Ez az üzenet minden résztvevő számára eltávolításra kerül. Ez a művelet nem vonható vissza.",
         "moderateReason": "Ok (nem kötelező)",
         "moderateReasonPlaceholder": "Miért kerül eltávolításra ez az üzenet?",
+        "moderateAndBan": "A felhasználó kitiltása is a szobából",
         "imageUnavailable": "A kép már nem érhető el",
         "videoUnavailable": "A videó már nem érhető el",
         "audioUnavailable": "A hang már nem érhető el",

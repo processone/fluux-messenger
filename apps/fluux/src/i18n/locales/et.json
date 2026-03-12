@@ -391,6 +391,7 @@
         "moderateMessageConfirm": "See eemaldab sõnumi kõigi osalejate jaoks. Seda toimingut ei saa tagasi võtta.",
         "moderateReason": "Põhjus (valikuline)",
         "moderateReasonPlaceholder": "Miks see sõnum eemaldatakse?",
+        "moderateAndBan": "Keela ka see kasutaja ruumist",
         "imageUnavailable": "Pilt pole enam saadaval",
         "videoUnavailable": "Video pole enam saadaval",
         "audioUnavailable": "Heli pole enam saadaval",

@@ -391,6 +391,7 @@
         "moderateMessageConfirm": "Diese Nachricht wird für alle Teilnehmer entfernt. Diese Aktion kann nicht rückgängig gemacht werden.",
         "moderateReason": "Grund (optional)",
         "moderateReasonPlaceholder": "Warum wird diese Nachricht entfernt?",
+        "moderateAndBan": "Benutzer auch aus dem Raum verbannen",
         "imageUnavailable": "Bild nicht mehr verfügbar",
         "videoUnavailable": "Video nicht mehr verfügbar",
         "audioUnavailable": "Audio nicht mehr verfügbar",

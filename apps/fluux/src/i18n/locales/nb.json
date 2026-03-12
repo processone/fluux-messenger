@@ -391,6 +391,7 @@
         "moderateMessageConfirm": "Dette vil fjerne meldingen for alle deltakere. Denne handlingen kan ikke angres.",
         "moderateReason": "Årsak (valgfri)",
         "moderateReasonPlaceholder": "Hvorfor fjernes denne meldingen?",
+        "moderateAndBan": "Utesteng også denne brukeren fra rommet",
         "imageUnavailable": "Bildet er ikke lenger tilgjengelig",
         "videoUnavailable": "Videoen er ikke lenger tilgjengelig",
         "audioUnavailable": "Lyden er ikke lenger tilgjengelig",

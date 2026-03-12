@@ -391,6 +391,7 @@
         "moderateMessageConfirm": "Dit verwijdert het bericht voor alle deelnemers. Deze actie kan niet ongedaan worden gemaakt.",
         "moderateReason": "Reden (optioneel)",
         "moderateReasonPlaceholder": "Waarom wordt dit bericht verwijderd?",
+        "moderateAndBan": "Deze gebruiker ook verbannen uit de kamer",
         "imageUnavailable": "Afbeelding niet meer beschikbaar",
         "videoUnavailable": "Video niet meer beschikbaar",
         "audioUnavailable": "Audio niet meer beschikbaar",

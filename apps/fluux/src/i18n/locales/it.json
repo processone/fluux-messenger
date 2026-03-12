@@ -391,6 +391,7 @@
         "moderateMessageConfirm": "Questo rimuoverà il messaggio per tutti i partecipanti. Questa azione non può essere annullata.",
         "moderateReason": "Motivo (facoltativo)",
         "moderateReasonPlaceholder": "Perché viene rimosso questo messaggio?",
+        "moderateAndBan": "Bandisci anche questo utente dalla stanza",
         "imageUnavailable": "Immagine non più disponibile",
         "videoUnavailable": "Video non più disponibile",
         "audioUnavailable": "Audio non più disponibile",

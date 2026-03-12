@@ -391,6 +391,7 @@
         "moderateMessageConfirm": "Þetta mun fjarlægja skilaboðin fyrir alla þátttakendur. Ekki er hægt að afturkalla þessa aðgerð.",
         "moderateReason": "Ástæða (valfrjálst)",
         "moderateReasonPlaceholder": "Hvers vegna eru þessi skilaboð fjarlægð?",
+        "moderateAndBan": "Banna einnig þennan notanda úr herberginu",
         "imageUnavailable": "Mynd ekki lengur tiltæk",
         "videoUnavailable": "Myndband ekki lengur tiltækt",
         "audioUnavailable": "Hljóð ekki lengur tiltækt",

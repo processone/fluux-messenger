@@ -391,6 +391,7 @@
         "moderateMessageConfirm": "Esto eliminará el mensaje para todos los participantes. Esta acción no se puede deshacer.",
         "moderateReason": "Motivo (opcional)",
         "moderateReasonPlaceholder": "¿Por qué se elimina este mensaje?",
+        "moderateAndBan": "También expulsar a este usuario de la sala",
         "imageUnavailable": "Imagen ya no disponible",
         "videoUnavailable": "Video ya no disponible",
         "audioUnavailable": "Audio ya no disponible",

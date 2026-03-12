@@ -391,6 +391,7 @@
         "moderateMessageConfirm": "Ši žinutė bus pašalinta visiems dalyviams. Šio veiksmo negalima atšaukti.",
         "moderateReason": "Priežastis (neprivaloma)",
         "moderateReasonPlaceholder": "Kodėl ši žinutė šalinama?",
+        "moderateAndBan": "Taip pat uždrausti šiam naudotojui prieigą prie kambario",
         "imageUnavailable": "Paveikslėlis nebepasiekiamas",
         "videoUnavailable": "Vaizdo įrašas nebepasiekiamas",
         "audioUnavailable": "Garso įrašas nebepasiekiamas",

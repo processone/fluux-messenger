@@ -391,6 +391,7 @@
         "moderateMessageConfirm": "这将为所有参与者移除此消息。此操作无法撤销。",
         "moderateReason": "原因（可选）",
         "moderateReasonPlaceholder": "为什么要移除此消息？",
+        "moderateAndBan": "同时将此用户从房间中封禁",
         "imageUnavailable": "图片已不可用",
         "videoUnavailable": "视频已不可用",
         "audioUnavailable": "音频已不可用",

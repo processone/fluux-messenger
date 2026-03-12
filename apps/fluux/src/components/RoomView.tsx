@@ -825,10 +825,12 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   onNickTouchEnd,
 }: RoomMessageBubbleWrapperProps) {
   const { t } = useTranslation()
+  const { setAffiliation } = useRoom()
 
   // Moderation confirmation state
   const [showModerateConfirm, setShowModerateConfirm] = useState(false)
   const [moderateReason, setModerateReason] = useState('')
+  const [banAfterModerate, setBanAfterModerate] = useState(false)
 
   // Get occupant info if available
   const occupant = room.occupants.get(message.nick)
@@ -838,6 +840,14 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   const selfOccupant = myNick ? room.occupants.get(myNick) : undefined
   const canModerateMsg = !message.isOutgoing && selfOccupant
     ? canModerate(selfOccupant.role, selfOccupant.affiliation, occupant?.affiliation ?? 'none')
+    : false
+
+  // Can we ban this user? Need their real JID and ban permission
+  const senderBareJidForBan = occupant?.jid
+    ? getBareJid(occupant.jid)
+    : room.nickToJidCache?.get(message.nick)
+  const canBanUser = !message.isOutgoing && selfOccupant && senderBareJidForBan
+    ? canBan(selfOccupant.affiliation, occupant?.affiliation ?? 'none')
     : false
 
   // Get avatar for message sender:
@@ -1013,12 +1023,18 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         <div
           data-modal="true"
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-          onClick={(e) => { if (e.target === e.currentTarget) { setShowModerateConfirm(false); setModerateReason('') } }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowModerateConfirm(false)
+              setModerateReason('')
+              setBanAfterModerate(false)
+            }
+          }}
         >
           <div className="bg-fluux-sidebar rounded-lg p-4 max-w-sm w-full mx-4 shadow-xl">
             <h3 className="text-lg font-semibold text-fluux-text mb-2">{t('chat.moderateMessage')}</h3>
             <p className="text-sm text-fluux-muted mb-3">{t('chat.moderateMessageConfirm')}</p>
-            <div className="mb-4">
+            <div className="mb-3">
               <label className="block text-xs text-fluux-muted mb-1">{t('chat.moderateReason')}</label>
               <input
                 type="text"
@@ -1030,6 +1046,10 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
                     const reason = moderateReason.trim() || undefined
                     setModerateReason('')
                     void moderateMessage(room.jid, message.stanzaId ?? message.id, reason)
+                    if (banAfterModerate && senderBareJidForBan) {
+                      void setAffiliation(room.jid, senderBareJidForBan, 'outcast', reason)
+                    }
+                    setBanAfterModerate(false)
                   }
                 }}
                 placeholder={t('chat.moderateReasonPlaceholder')}
@@ -1037,9 +1057,24 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
                 autoFocus
               />
             </div>
+            {canBanUser && senderBareJidForBan && (
+              <label className="flex items-center gap-2 mb-4 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={banAfterModerate}
+                  onChange={(e) => setBanAfterModerate(e.target.checked)}
+                  className="w-4 h-4 rounded border-fluux-border text-fluux-brand focus:ring-fluux-brand/50"
+                />
+                <span className="text-sm text-fluux-text">{t('chat.moderateAndBan')}</span>
+              </label>
+            )}
             <div className="flex gap-2 justify-end">
               <button
-                onClick={() => { setShowModerateConfirm(false); setModerateReason('') }}
+                onClick={() => {
+                  setShowModerateConfirm(false)
+                  setModerateReason('')
+                  setBanAfterModerate(false)
+                }}
                 className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors"
               >
                 {t('common.cancel')}
@@ -1050,6 +1085,10 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
                   const reason = moderateReason.trim() || undefined
                   setModerateReason('')
                   void moderateMessage(room.jid, message.stanzaId ?? message.id, reason)
+                  if (banAfterModerate && senderBareJidForBan) {
+                    void setAffiliation(room.jid, senderBareJidForBan, 'outcast', reason)
+                  }
+                  setBanAfterModerate(false)
                 }}
                 className="px-4 py-2 text-sm text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
               >

@@ -391,6 +391,7 @@
         "moderateMessageConfirm": "To bo odstranilo sporočilo za vse udeležence. Tega dejanja ni mogoče razveljaviti.",
         "moderateReason": "Razlog (neobvezno)",
         "moderateReasonPlaceholder": "Zakaj se to sporočilo odstranjuje?",
+        "moderateAndBan": "Tudi prepovej tega uporabnika iz sobe",
         "imageUnavailable": "Slika ni več na voljo",
         "videoUnavailable": "Video ni več na voljo",
         "audioUnavailable": "Zvok ni več na voljo",

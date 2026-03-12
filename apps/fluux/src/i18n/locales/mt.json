@@ -391,6 +391,7 @@
         "moderateMessageConfirm": "Dan se jneħħi l-messaġġ għall-parteċipanti kollha. Din l-azzjoni ma tistax tiġi rriversjata.",
         "moderateReason": "Raġuni (mhux obbligatorju)",
         "moderateReasonPlaceholder": "Għaliex qed jitneħħa dan il-messaġġ?",
+        "moderateAndBan": "Ipprojbixxi wkoll dan l-utent mill-kamra",
         "imageUnavailable": "L-immaġni m'għadhiex disponibbli",
         "videoUnavailable": "Il-vidjo m'għadux disponibbli",
         "audioUnavailable": "L-awdjo m'għadux disponibbli",

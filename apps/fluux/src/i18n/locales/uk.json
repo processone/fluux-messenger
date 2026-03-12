@@ -391,6 +391,7 @@
         "moderateMessageConfirm": "Це видалить повідомлення для всіх учасників. Цю дію неможливо скасувати.",
         "moderateReason": "Причина (необов'язково)",
         "moderateReasonPlaceholder": "Чому це повідомлення видаляється?",
+        "moderateAndBan": "Також заблокувати цього користувача в кімнаті",
         "imageUnavailable": "Зображення більше недоступне",
         "videoUnavailable": "Відео більше недоступне",
         "audioUnavailable": "Аудіо більше недоступне",
