@@ -91,16 +91,12 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                     class="w-10 flex-shrink-0 flex flex-col"
                   >
                     <div
-                      class="cursor-pointer "
+                      class="select-none cursor-pointer"
                     >
                       <div
-                        class="select-none"
+                        data-testid="avatar"
                       >
-                        <div
-                          data-testid="avatar"
-                        >
-                          Alice Smith
-                        </div>
+                        Alice Smith
                       </div>
                     </div>
                   </div>
@@ -248,16 +244,12 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                     class="w-10 flex-shrink-0 flex flex-col"
                   >
                     <div
-                      class="cursor-pointer "
+                      class="select-none cursor-pointer"
                     >
                       <div
-                        class="select-none"
+                        data-testid="avatar"
                       >
-                        <div
-                          data-testid="avatar"
-                        >
-                          Me
-                        </div>
+                        Me
                       </div>
                     </div>
                   </div>

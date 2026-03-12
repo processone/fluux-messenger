@@ -8,6 +8,7 @@ import { useState, memo, type ReactNode } from 'react'
 import { CornerUpRight } from 'lucide-react'
 import { formatMessagePreview, type BaseMessage, type MentionReference, type Contact, type ContactIdentity, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
 import { Avatar } from '../Avatar'
+import { AvatarLightbox } from '../AvatarLightbox'
 import { MessageToolbar } from './MessageToolbar'
 import { MessageBody } from './MessageBody'
 import { MessageReactions } from './MessageReactions'
@@ -219,6 +220,7 @@ export const MessageBubble = memo(function MessageBubble({
 }: MessageBubbleProps) {
   const [showReactionPicker, setShowReactionPickerState] = useState(false)
   const [showMoreMenu, setShowMoreMenu] = useState(false)
+  const [showAvatarLightbox, setShowAvatarLightbox] = useState(false)
 
   // Whether reactions are enabled for this message (room has stable occupant identity)
   const reactionsEnabled = onReaction !== undefined
@@ -258,19 +260,23 @@ export const MessageBubble = memo(function MessageBubble({
             {formatTime(message.timestamp)}
           </span>
         ) : showAvatar ? (
-          <UserInfoPopover contact={senderContact} jid={senderJid} occupantJid={senderOccupantJid} role={senderRole} affiliation={senderAffiliation}>
-            <div className="select-none" onContextMenu={onNickContextMenu} onTouchStart={onNickTouchStart} onTouchEnd={onNickTouchEnd}>
-              <Avatar
-                identifier={avatarIdentifier}
-                name={senderName}
-                avatarUrl={avatarUrl}
-                fallbackColor={avatarFallbackColor}
-                size="md"
-                presence={avatarPresence}
-                presenceBorderColor="border-fluux-chat"
-              />
-            </div>
-          </UserInfoPopover>
+          <div
+            className="select-none cursor-pointer"
+            onClick={(e) => { e.stopPropagation(); setShowAvatarLightbox(true) }}
+            onContextMenu={onNickContextMenu}
+            onTouchStart={onNickTouchStart}
+            onTouchEnd={onNickTouchEnd}
+          >
+            <Avatar
+              identifier={avatarIdentifier}
+              name={senderName}
+              avatarUrl={avatarUrl}
+              fallbackColor={avatarFallbackColor}
+              size="md"
+              presence={avatarPresence}
+              presenceBorderColor="border-fluux-chat"
+            />
+          </div>
         ) : (
           <span className={`block text-center text-[10px] text-fluux-muted font-mono pt-0.5 ${isSelected ? 'opacity-100' : hasKeyboardSelection ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
             {formatTime(message.timestamp)}
@@ -392,6 +398,17 @@ export const MessageBubble = memo(function MessageBubble({
           isRetracted={message.isRetracted}
         />
       </div>
+
+      {/* Avatar lightbox overlay */}
+      {showAvatarLightbox && (
+        <AvatarLightbox
+          avatarUrl={avatarUrl}
+          identifier={avatarIdentifier}
+          name={senderName}
+          fallbackColor={avatarFallbackColor}
+          onClose={() => setShowAvatarLightbox(false)}
+        />
+      )}
     </div>
   )
 }, arePropsEqual)
