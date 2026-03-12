@@ -372,6 +372,110 @@ describe('MUC Hat Management (XEP-0317)', () => {
     })
   })
 
+  // ---------- multi-step ad-hoc command handling ------------------------------
+
+  describe('multi-step ad-hoc commands', () => {
+    /**
+     * Build an "executing" response that mimics a server returning a form
+     * with different field names than the client originally sent.
+     * This reproduces the real-world scenario where the server uses e.g. `hat`
+     * (list-single with options) instead of `hats#uri`.
+     */
+    function executingResponse(sessionid: string, formFields: MockChild[]): MockChild {
+      const dataForm = mockEl('x', { xmlns: 'jabber:x:data', type: 'form' }, formFields)
+      const actions = mockEl('actions', { execute: 'complete' }, [
+        mockEl('complete', {}),
+      ])
+      const command = mockEl('command', {
+        xmlns: 'http://jabber.org/protocol/commands',
+        status: 'executing',
+        sessionid,
+        node: 'urn:xmpp:hats:commands:assign',
+      }, [actions, dataForm])
+      return mockEl('iq', { type: 'result' }, [command])
+    }
+
+    /** Build a field with options (list-single) */
+    function listField(varName: string, label: string, options: Array<{ label: string; value: string }>): MockChild {
+      const optionChildren = options.map(opt => {
+        const valueChild: MockChild = {
+          name: 'value',
+          attrs: {},
+          children: [],
+          text: () => opt.value,
+          getChildren: () => [],
+          getChild: () => undefined,
+          getChildText: () => null,
+        }
+        return mockEl('option', { label: opt.label }, [valueChild])
+      })
+      const field = mockEl('field', { var: varName, type: 'list-single', label }, optionChildren)
+      return field
+    }
+
+    /** Build a jid-single field with a required child */
+    function jidField(varName: string, label: string): MockChild {
+      const required = mockEl('required', {})
+      return mockEl('field', { var: varName, type: 'jid-single', label }, [required])
+    }
+
+    it('should map original field values to server form fields when names differ', async () => {
+      await connectClient()
+
+      // First call returns "executing" with a form using field `hat` (list-single)
+      // instead of the `hats#uri` that the client originally sent
+      const serverForm = executingResponse('session-123', [
+        jidField('hats#jid', 'Jabber ID'),
+        listField('hat', 'The role', [
+          { label: 'Dev Team', value: 'xmpp:process-one:devteam' },
+          { label: 'Support', value: 'xmpp:process-one:support' },
+        ]),
+      ])
+
+      // Second call (completion) should succeed
+      const completedResponse = emptyResultResponse()
+
+      mockXmppClientInstance.iqCaller.request
+        .mockResolvedValueOnce(serverForm)
+        .mockResolvedValueOnce(completedResponse)
+
+      await xmppClient.muc.assignHat(
+        'room@conference.example.com',
+        'user@example.com',
+        'xmpp:process-one:devteam',
+      )
+
+      // Verify the completion IQ was sent
+      expect(mockXmppClientInstance.iqCaller.request).toHaveBeenCalledTimes(2)
+
+      const completeIq = mockXmppClientInstance.iqCaller.request.mock.calls[1][0]
+      const command = completeIq.children[0]
+      expect(command.attrs.action).toBe('complete')
+      expect(command.attrs.sessionid).toBe('session-123')
+
+      // Verify the completion form uses the server's field names
+      const dataForm = command.children[0]
+      const fields = dataForm.children.filter((c: { name: string }) => c.name === 'field')
+      const fieldMap = new Map(
+        fields.map((f: { attrs: { var: string }; children: Array<{ children: unknown[] }> }) => {
+          const value = f.children[0]?.children?.[0]
+          return [f.attrs.var, value]
+        })
+      )
+
+      // `hats#jid` should be present (exact match)
+      expect(fieldMap.has('hats#jid')).toBe(true)
+      expect(fieldMap.get('hats#jid')).toBe('user@example.com')
+
+      // `hat` should be used (server's field name), NOT `hats#uri`
+      expect(fieldMap.has('hat')).toBe(true)
+      expect(fieldMap.get('hat')).toBe('xmpp:process-one:devteam')
+
+      // `hats#uri` should NOT be present (server didn't use this field name)
+      expect(fieldMap.has('hats#uri')).toBe(false)
+    })
+  })
+
   // ---------- unassignHat ----------------------------------------------------
 
   describe('unassignHat', () => {

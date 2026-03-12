@@ -37,7 +37,7 @@ import type {
   AdminRoom,
 } from '../types'
 import { parseXMPPError, formatXMPPError } from '../../utils/xmppError'
-import { buildDataFormSubmit } from '../../utils/dataForm'
+import { buildDataFormSubmit, parseDataForm } from '../../utils/dataForm'
 import { logInfo, logWarn, logError as logErr } from '../logger'
 
 /**
@@ -1857,12 +1857,16 @@ export class MUC extends BaseModule {
     // Handle multi-step ad-hoc commands (XEP-0050):
     // Some servers return status="executing" with a sessionid, expecting a
     // second round-trip with action="complete" to finalize the command.
+    // The server's response form may use different field names than our initial
+    // request (e.g. "hat" instead of "hats#uri"), so we must parse the server
+    // form and populate it using the values we originally provided.
     const command = response.getChild('command', NS_COMMANDS)
     if (command?.attrs.status === 'executing' && command.attrs.sessionid) {
+      const completeFields = this.buildCompletionFields(command, fields)
       const completeChildren: Element[] = []
-      if (fields && Object.keys(fields).length > 0) {
+      if (Object.keys(completeFields).length > 0) {
         completeChildren.push(
-          buildDataFormSubmit(fields, MUC.HATS_FORM_TYPE)
+          buildDataFormSubmit(completeFields, MUC.HATS_FORM_TYPE)
         )
       }
       const completeIq = xml(
@@ -1881,6 +1885,75 @@ export class MUC extends BaseModule {
     }
 
     return response
+  }
+
+  /**
+   * Build completion fields for a multi-step ad-hoc command by reading the
+   * server's response form and populating it with values from our original
+   * fields.
+   *
+   * The server may use different field names than the ones we sent in the
+   * initial request (e.g. `hat` as a `list-single` instead of `hats#uri`).
+   * For each server field, we try to match it by:
+   * 1. Exact match with an original field var name
+   * 2. For list-single/list-multi fields: find an original value among the
+   *    field's options
+   * 3. For jid-single fields: use a jid value from the original fields
+   */
+  private buildCompletionFields(
+    command: Element,
+    originalFields?: Record<string, string>,
+  ): Record<string, string> {
+    if (!originalFields || Object.keys(originalFields).length === 0) {
+      return {}
+    }
+
+    const formEl = command.getChild('x', NS_DATA_FORMS)
+    if (!formEl) {
+      // No server form — fall back to sending original fields as-is
+      return { ...originalFields }
+    }
+
+    const serverForm = parseDataForm(formEl)
+    const result: Record<string, string> = {}
+    const originalValues = Object.values(originalFields)
+
+    for (const field of serverForm.fields) {
+      if (!field.var || field.var === 'FORM_TYPE') continue
+
+      // 1. Exact match with original field name
+      if (originalFields[field.var] !== undefined) {
+        result[field.var] = originalFields[field.var]
+        continue
+      }
+
+      // 2. For list fields, check if any original value matches an option
+      if (field.options && field.options.length > 0) {
+        const matchingOption = field.options.find(opt =>
+          originalValues.includes(opt.value)
+        )
+        if (matchingOption) {
+          result[field.var] = matchingOption.value
+          continue
+        }
+      }
+
+      // 3. For jid-single fields, look for a JID value in original fields
+      if (field.type === 'jid-single') {
+        const jidValue = originalFields['hats#jid']
+        if (jidValue) {
+          result[field.var] = jidValue
+          continue
+        }
+      }
+
+      // 4. If the server provided a default value, use it
+      if (field.value && !Array.isArray(field.value)) {
+        result[field.var] = field.value
+      }
+    }
+
+    return result
   }
 
   /**
