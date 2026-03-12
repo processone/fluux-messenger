@@ -252,7 +252,7 @@ export function UserInfoPopover({ contact, jid, occupantJid, role, affiliation, 
           )}
 
           {/* Devices */}
-          {devices.length > 0 ? (
+          {devices.length > 0 && (
             <div className="space-y-1.5">
               <div className="text-xs font-medium text-fluux-text">
                 {t('contacts.connectedDevices')}
@@ -270,11 +270,7 @@ export function UserInfoPopover({ contact, jid, occupantJid, role, affiliation, 
                 </div>
               ))}
             </div>
-          ) : contact ? (
-            <div className="text-sm text-fluux-muted">
-              {t('contacts.offline')}
-            </div>
-          ) : null}
+          )}
         </div>,
         document.body
       )}
