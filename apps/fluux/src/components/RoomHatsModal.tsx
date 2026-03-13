@@ -13,6 +13,8 @@ import type { Room, Hat } from '@fluux/sdk'
 import { useRoom, generateConsistentColorHexSync } from '@fluux/sdk'
 import { ModalShell } from './ModalShell'
 import { ConfirmDialog } from './ConfirmDialog'
+import { ContactSelector } from './ContactSelector'
+import { buildRoomContactSuggestions } from '@/utils/roomSuggestions'
 import { useToastStore } from '@/stores/toastStore'
 import { Loader2, Search, X, Plus, Trash2 } from 'lucide-react'
 
@@ -79,7 +81,7 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
   const [isCreating, setIsCreating] = useState(false)
 
   // --- Assign form ---
-  const [assignJid, setAssignJid] = useState('')
+  const [jidSelection, setJidSelection] = useState<string[]>([])
   const [assignUri, setAssignUri] = useState('')
   const [isAssigning, setIsAssigning] = useState(false)
 
@@ -93,6 +95,19 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
 
   const mountedRef = useRef(true)
   useEffect(() => () => { mountedRef.current = false }, [])
+
+  const extraSuggestions = useMemo(
+    () => buildRoomContactSuggestions(room),
+    [room.occupants, room.affiliatedMembers],
+  )
+
+  // Exclude JIDs that already have the selected hat assigned
+  const selectorExcludeJids = useMemo(() => {
+    if (!assignUri) return []
+    return assignments
+      .filter(a => a.uri === assignUri)
+      .map(a => a.jid)
+  }, [assignments, assignUri])
 
   // ---------------------------------------------------------------------------
   // Data loading
@@ -204,13 +219,14 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
   // ---------------------------------------------------------------------------
 
   const handleAssign = useCallback(async () => {
-    const jid = assignJid.trim()
-    if (!jid || !jid.includes('@') || !assignUri) return
+    if (jidSelection.length === 0 || !assignUri) return
     setIsAssigning(true)
     try {
-      await assignHat(room.jid, jid, assignUri)
+      for (const jid of jidSelection) {
+        await assignHat(room.jid, jid, assignUri)
+      }
       addToast('success', t('rooms.hatAssigned'))
-      setAssignJid('')
+      setJidSelection([])
       // Refresh
       const result = await listHatAssignments(room.jid)
       if (mountedRef.current) setAssignments(result)
@@ -219,7 +235,7 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
     } finally {
       if (mountedRef.current) setIsAssigning(false)
     }
-  }, [assignJid, assignUri, room.jid, assignHat, listHatAssignments, addToast, t])
+  }, [jidSelection, assignUri, room.jid, assignHat, listHatAssignments, addToast, t])
 
   const handleUnassign = useCallback(async (a: HatAssignment) => {
     const key = `${a.jid}:${a.uri}`
@@ -506,16 +522,16 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
 
       {activeTab === 'assignments' && (
         <div className="px-4 py-3 border-t border-fluux-hover">
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              value={assignJid}
-              onChange={(e) => setAssignJid(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') void handleAssign() }}
-              placeholder={t('rooms.hatJidPlaceholder')}
-              className="flex-1 px-3 py-1.5 text-sm bg-fluux-hover/50 rounded-lg border border-transparent
-                         focus:border-fluux-brand/50 focus:outline-none text-fluux-text placeholder-fluux-muted"
-            />
+          <div className="flex items-end gap-2">
+            <div className="flex-1">
+              <ContactSelector
+                selectedContacts={jidSelection}
+                onSelectionChange={setJidSelection}
+                placeholder={t('rooms.hatJidPlaceholder')}
+                excludeJids={selectorExcludeJids}
+                extraSuggestions={extraSuggestions}
+              />
+            </div>
             <select
               value={assignUri}
               onChange={(e) => setAssignUri(e.target.value)}
@@ -532,7 +548,7 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
             </select>
             <button
               onClick={() => void handleAssign()}
-              disabled={!assignJid.trim() || !assignJid.includes('@') || !assignUri || isAssigning}
+              disabled={jidSelection.length === 0 || !assignUri || isAssigning}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white
                          bg-fluux-brand hover:bg-fluux-brand/80 disabled:opacity-50
                          rounded-lg transition-colors"

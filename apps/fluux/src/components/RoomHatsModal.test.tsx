@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { RoomHatsModal } from './RoomHatsModal'
 import { useToastStore } from '@/stores/toastStore'
 import type { Room, Hat } from '@fluux/sdk'
@@ -64,6 +64,32 @@ vi.mock('react-i18next', () => ({
     },
     i18n: { language: 'en' },
   }),
+}))
+
+// ---- Mock ContactSelector -----------------------------------------------
+
+let capturedOnSelectionChange: ((jids: string[]) => void) | null = null
+
+vi.mock('./ContactSelector', () => ({
+  ContactSelector: ({ selectedContacts, onSelectionChange, placeholder }: {
+    selectedContacts: string[]
+    onSelectionChange: (jids: string[]) => void
+    placeholder?: string
+  }) => {
+    capturedOnSelectionChange = onSelectionChange
+    return (
+      <div data-testid="contact-selector">
+        {selectedContacts.map(jid => (
+          <span key={jid} data-testid="selected-contact">{jid}</span>
+        ))}
+        <input
+          data-testid="contact-selector-input"
+          placeholder={placeholder}
+          readOnly
+        />
+      </div>
+    )
+  },
 }))
 
 // ---- Mock ModalShell / ConfirmDialog -----------------------------------
@@ -154,6 +180,7 @@ function getFormInput(placeholder: string): HTMLInputElement {
 describe('RoomHatsModal', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    capturedOnSelectionChange = null
     mockListHats.mockResolvedValue(sampleHats)
     mockListHatAssignments.mockResolvedValue(sampleAssignments)
     mockCreateHat.mockResolvedValue(undefined)
@@ -524,8 +551,8 @@ describe('RoomHatsModal', () => {
         expect(screen.getByText('alice@example.com')).toBeInTheDocument()
       })
 
-      // Search input is the first "user@example.com" placeholder
-      const searchInput = getSearchInput('user@example.com')
+      // Search input on assignments tab (first one with this placeholder, before ContactSelector)
+      const searchInput = screen.getAllByPlaceholderText('user@example.com')[0] as HTMLInputElement
       fireEvent.change(searchInput, { target: { value: 'alice' } })
 
       expect(screen.getByText('alice@example.com')).toBeInTheDocument()
@@ -564,7 +591,7 @@ describe('RoomHatsModal', () => {
   // ---------- Assign hat ---------------------------------------------------
 
   describe('Assign hat', () => {
-    it('renders assign form on assignments tab', async () => {
+    it('renders ContactSelector on assignments tab', async () => {
       renderModal()
       await waitFor(() => {
         expect(screen.getByText('Moderator')).toBeInTheDocument()
@@ -573,7 +600,7 @@ describe('RoomHatsModal', () => {
       fireEvent.click(screen.getByText('Assignments'))
 
       await waitFor(() => {
-        expect(screen.getAllByPlaceholderText('user@example.com').length).toBeGreaterThanOrEqual(1)
+        expect(screen.getByTestId('contact-selector')).toBeInTheDocument()
         expect(screen.getByText('Assign')).toBeInTheDocument()
       })
     })
@@ -595,7 +622,7 @@ describe('RoomHatsModal', () => {
       })
     })
 
-    it('disables Assign button when JID is empty', async () => {
+    it('disables Assign button when no contacts selected', async () => {
       renderModal()
       await waitFor(() => {
         expect(screen.getByText('Moderator')).toBeInTheDocument()
@@ -609,7 +636,7 @@ describe('RoomHatsModal', () => {
       })
     })
 
-    it('disables Assign button when JID has no @', async () => {
+    it('calls assignHat with selected contacts and hat URI', async () => {
       renderModal()
       await waitFor(() => {
         expect(screen.getByText('Moderator')).toBeInTheDocument()
@@ -618,32 +645,11 @@ describe('RoomHatsModal', () => {
       fireEvent.click(screen.getByText('Assignments'))
 
       await waitFor(() => {
-        expect(screen.getByText('alice@example.com')).toBeInTheDocument()
+        expect(screen.getByTestId('contact-selector')).toBeInTheDocument()
       })
 
-      // Form JID input is the second one with "user@example.com" placeholder
-      const jidInput = getFormInput('user@example.com')
-      fireEvent.change(jidInput, { target: { value: 'invalid-jid' } })
-
-      const assignButton = screen.getByText('Assign').closest('button')!
-      expect(assignButton).toBeDisabled()
-    })
-
-    it('calls assignHat with valid JID and selected hat URI', async () => {
-      renderModal()
-      await waitFor(() => {
-        expect(screen.getByText('Moderator')).toBeInTheDocument()
-      })
-
-      fireEvent.click(screen.getByText('Assignments'))
-
-      await waitFor(() => {
-        expect(screen.getByText('alice@example.com')).toBeInTheDocument()
-      })
-
-      // Enter a JID (form input = second with this placeholder)
-      const jidInput = getFormInput('user@example.com')
-      fireEvent.change(jidInput, { target: { value: 'charlie@example.com' } })
+      // Simulate selecting a contact via the captured callback
+      act(() => { capturedOnSelectionChange!(['charlie@example.com']) })
 
       // Click Assign
       fireEvent.click(screen.getByText('Assign'))
@@ -657,7 +663,7 @@ describe('RoomHatsModal', () => {
       })
     })
 
-    it('clears JID input after successful assignment', async () => {
+    it('assigns hat to multiple selected contacts', async () => {
       renderModal()
       await waitFor(() => {
         expect(screen.getByText('Moderator')).toBeInTheDocument()
@@ -666,15 +672,47 @@ describe('RoomHatsModal', () => {
       fireEvent.click(screen.getByText('Assignments'))
 
       await waitFor(() => {
-        expect(screen.getByText('alice@example.com')).toBeInTheDocument()
+        expect(screen.getByTestId('contact-selector')).toBeInTheDocument()
       })
 
-      const jidInput = getFormInput('user@example.com')
-      fireEvent.change(jidInput, { target: { value: 'charlie@example.com' } })
+      // Select multiple contacts
+      act(() => { capturedOnSelectionChange!(['charlie@example.com', 'dave@example.com']) })
+
       fireEvent.click(screen.getByText('Assign'))
 
       await waitFor(() => {
-        expect(jidInput.value).toBe('')
+        expect(mockAssignHat).toHaveBeenCalledTimes(2)
+        expect(mockAssignHat).toHaveBeenCalledWith(
+          'room@conference.example.com',
+          'charlie@example.com',
+          'urn:hat:moderator',
+        )
+        expect(mockAssignHat).toHaveBeenCalledWith(
+          'room@conference.example.com',
+          'dave@example.com',
+          'urn:hat:moderator',
+        )
+      })
+    })
+
+    it('clears selection after successful assignment', async () => {
+      renderModal()
+      await waitFor(() => {
+        expect(screen.getByText('Moderator')).toBeInTheDocument()
+      })
+
+      fireEvent.click(screen.getByText('Assignments'))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('contact-selector')).toBeInTheDocument()
+      })
+
+      act(() => { capturedOnSelectionChange!(['charlie@example.com']) })
+      fireEvent.click(screen.getByText('Assign'))
+
+      await waitFor(() => {
+        // After assign, selection should be cleared (no selected-contact spans)
+        expect(screen.queryByTestId('selected-contact')).not.toBeInTheDocument()
       })
     })
   })
@@ -727,7 +765,7 @@ describe('RoomHatsModal', () => {
 
       // Search should be cleared (new placeholder for assignments tab)
       await waitFor(() => {
-        const newSearchInput = getSearchInput('user@example.com')
+        const newSearchInput = screen.getAllByPlaceholderText('user@example.com')[0] as HTMLInputElement
         expect(newSearchInput.value).toBe('')
       })
     })

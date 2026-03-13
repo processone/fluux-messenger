@@ -15,6 +15,7 @@ import type { Room, RoomAffiliation } from '@fluux/sdk'
 import { useRoom, getAvailableAffiliations } from '@fluux/sdk'
 import { ModalShell } from './ModalShell'
 import { ContactSelector } from './ContactSelector'
+import { buildRoomContactSuggestions } from '@/utils/roomSuggestions'
 import { useToastStore } from '@/stores/toastStore'
 import { Crown, Shield, UserCheck, Ban, UserPlus, Loader2, Search, X, ChevronDown } from 'lucide-react'
 
@@ -198,31 +199,10 @@ export function RoomMembersModal({ room, onClose }: RoomMembersModalProps) {
 
   const canManage = selfAffiliation === 'owner' || selfAffiliation === 'admin'
 
-  // Build extra suggestions from room occupants and affiliated members
-  const extraSuggestions = useMemo(() => {
-    const seen = new Set<string>()
-    const result: Array<{ jid: string; name?: string }> = []
-
-    // Add occupants that have a real JID
-    for (const occupant of room.occupants.values()) {
-      if (occupant.jid && !seen.has(occupant.jid)) {
-        seen.add(occupant.jid)
-        result.push({ jid: occupant.jid, name: occupant.nick })
-      }
-    }
-
-    // Add affiliated members
-    if (room.affiliatedMembers) {
-      for (const member of room.affiliatedMembers) {
-        if (!seen.has(member.jid)) {
-          seen.add(member.jid)
-          result.push({ jid: member.jid, name: member.nick })
-        }
-      }
-    }
-
-    return result
-  }, [room.occupants, room.affiliatedMembers])
+  const extraSuggestions = useMemo(
+    () => buildRoomContactSuggestions(room),
+    [room.occupants, room.affiliatedMembers],
+  )
 
   // Build excludeJids from all loaded affiliation members
   const selectorExcludeJids = useMemo(() => {
