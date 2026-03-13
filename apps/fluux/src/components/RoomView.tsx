@@ -8,7 +8,7 @@ import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, 
 import { MessageBubble, MessageList, shouldShowAvatar, buildReplyContext } from './conversation'
 import { Avatar, getConsistentTextColor } from './Avatar'
 import { format } from 'date-fns'
-import { Shield, Upload, Loader2, LogIn, AlertCircle, Users, MessageCircle, EyeOff, User, Settings } from 'lucide-react'
+import { Shield, Crown, Upload, Loader2, LogIn, AlertCircle, Users, MessageCircle, EyeOff, User, Settings } from 'lucide-react'
 import { ChristmasAnimation } from './ChristmasAnimation'
 import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment, MESSAGE_INPUT_BASE_CLASSES, MESSAGE_INPUT_OVERLAY_CLASSES } from './MessageComposer'
 import { RoomHeader } from './RoomHeader'
@@ -938,11 +938,17 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
     return nick
   }, [myNick, t])
 
-  // Build nick extras (moderator badge and XEP-0317 hats)
+  // Build nick extras (affiliation badge and XEP-0317 hats)
   // Note: individual tooltips removed - all info is now in the unified avatar/name tooltip
+  // Show affiliation (owner/admin) rather than role, consistent with the member list
   const nickExtras = useMemo(() => (
     <>
-      {occupant && occupant.role === 'moderator' && (
+      {occupant && occupant.affiliation === 'owner' && (
+        <span className="self-center">
+          <Crown className="w-3.5 h-3.5 text-fluux-muted" />
+        </span>
+      )}
+      {occupant && occupant.affiliation === 'admin' && (
         <span className="self-center">
           <Shield className="w-3.5 h-3.5 text-fluux-muted" />
         </span>
