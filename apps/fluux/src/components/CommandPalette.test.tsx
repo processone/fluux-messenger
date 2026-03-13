@@ -411,6 +411,7 @@ describe('CommandPalette', () => {
 
       // Click on the backdrop (the outer div)
       const backdrop = screen.getByPlaceholderText('Go to...').closest('div')?.parentElement?.parentElement
+      fireEvent.mouseDown(backdrop!)
       fireEvent.click(backdrop!)
 
       expect(defaultProps.onClose).toHaveBeenCalled()

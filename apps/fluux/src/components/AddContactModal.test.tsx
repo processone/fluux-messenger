@@ -262,6 +262,7 @@ describe('AddContactModal', () => {
 
       // The backdrop is the outermost div with the click handler
       const backdrop = screen.getByRole('heading', { name: 'contacts.addContact' }).closest('.fixed')!
+      fireEvent.mouseDown(backdrop)
       fireEvent.click(backdrop)
 
       expect(mockOnClose).toHaveBeenCalled()

@@ -2,7 +2,7 @@
  * Full-screen lightbox overlay for viewing avatars at a larger size.
  * Triggered by clicking on a message avatar in chat/room views.
  */
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { Avatar } from './Avatar'
@@ -21,6 +21,8 @@ interface AvatarLightboxProps {
 }
 
 export function AvatarLightbox({ avatarUrl, identifier, name, fallbackColor, onClose }: AvatarLightboxProps) {
+  const mouseDownTargetRef = useRef<EventTarget | null>(null)
+
   // Close on Escape
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -33,8 +35,9 @@ export function AvatarLightbox({ avatarUrl, identifier, name, fallbackColor, onC
   return createPortal(
     <div
       className="fixed inset-0 bg-black/70 flex flex-col items-center justify-center z-50"
+      onMouseDown={(e) => { mouseDownTargetRef.current = e.target }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose()
+        if (e.target === e.currentTarget && mouseDownTargetRef.current === e.currentTarget) onClose()
       }}
     >
       {/* Close button */}

@@ -127,6 +127,7 @@ describe('BrowseRoomsModal', () => {
 
       // Click the backdrop (the outermost div)
       const backdrop = screen.getByText('rooms.browseRoomsTitle').closest('.fixed')!
+      fireEvent.mouseDown(backdrop)
       fireEvent.click(backdrop)
 
       expect(mockOnClose).toHaveBeenCalled()

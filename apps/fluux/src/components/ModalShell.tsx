@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
 import { Tooltip } from './Tooltip'
@@ -21,6 +21,7 @@ export function ModalShell({
   children,
 }: ModalShellProps) {
   const { t } = useTranslation()
+  const mouseDownTargetRef = useRef<EventTarget | null>(null)
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -34,7 +35,8 @@ export function ModalShell({
     <div
       data-modal="true"
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
+      onMouseDown={(e) => { mouseDownTargetRef.current = e.target }}
+      onClick={(e) => e.target === e.currentTarget && mouseDownTargetRef.current === e.currentTarget && onClose()}
     >
       <div className={`bg-fluux-sidebar rounded-lg shadow-xl w-full ${width} mx-4 ${panelClassName ?? ''}`}>
         {/* Header */}

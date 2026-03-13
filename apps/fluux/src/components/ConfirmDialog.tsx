@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface ConfirmDialogProps {
@@ -19,6 +19,7 @@ export function ConfirmDialog({
   variant = 'danger',
 }: ConfirmDialogProps) {
   const { t } = useTranslation()
+  const mouseDownTargetRef = useRef<EventTarget | null>(null)
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -36,7 +37,8 @@ export function ConfirmDialog({
     <div
       data-modal="true"
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      onClick={(e) => e.target === e.currentTarget && onCancel()}
+      onMouseDown={(e) => { mouseDownTargetRef.current = e.target }}
+      onClick={(e) => e.target === e.currentTarget && mouseDownTargetRef.current === e.currentTarget && onCancel()}
     >
       <div className="bg-fluux-sidebar rounded-lg p-4 max-w-sm w-full mx-4 shadow-xl">
         <h3 className="text-lg font-semibold text-fluux-text mb-2">{title}</h3>

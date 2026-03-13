@@ -467,8 +467,12 @@ export function CommandPalette({
     }
   }
 
+  const backdropMouseDownRef = useRef<EventTarget | null>(null)
+  const handleBackdropMouseDown = (e: React.MouseEvent) => {
+    backdropMouseDownRef.current = e.target
+  }
   const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) onClose()
+    if (e.target === e.currentTarget && backdropMouseDownRef.current === e.currentTarget) onClose()
   }
 
   // Handle mouse movement to exit keyboard navigation mode
@@ -493,6 +497,7 @@ export function CommandPalette({
   return (
     <div
       className="fixed inset-0 bg-black/50 flex items-start justify-center pt-[15vh] z-50"
+      onMouseDown={handleBackdropMouseDown}
       onClick={handleBackdropClick}
     >
       <div

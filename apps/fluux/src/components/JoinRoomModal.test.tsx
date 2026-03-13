@@ -278,6 +278,7 @@ describe('JoinRoomModal', () => {
 
       // The backdrop is the outermost div with the click handler
       const backdrop = screen.getByText('rooms.joinRoomTitle').closest('.fixed')!
+      fireEvent.mouseDown(backdrop)
       fireEvent.click(backdrop)
 
       expect(mockOnClose).toHaveBeenCalled()
