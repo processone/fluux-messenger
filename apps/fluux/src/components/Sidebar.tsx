@@ -357,7 +357,6 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
                     <Zap className="w-4 h-4 text-amber-500" />
                     <span>{t('rooms.quickChat')}</span>
                   </button>
-                  <div className="border-t border-fluux-hover my-1" />
                   <button
                     onClick={() => { setShowRoomDropdown(false); setShowCreateRoom(true) }}
                     className="w-full px-3 py-2 text-left text-sm hover:bg-fluux-hover flex items-center gap-2"
