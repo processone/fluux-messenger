@@ -5,7 +5,7 @@ import { BaseModule, type ModuleDependencies } from './BaseModule'
 import type { ConnectOptions, ConnectionMethod } from '../types'
 import { getDomain, getLocalPart, getResource } from '../jid'
 import { getClientIdentity, CLIENT_FEATURES } from '../caps'
-import { NS_DISCO_INFO, NS_PING } from '../namespaces'
+import { NS_DISCO_INFO, NS_PING, NS_TIME } from '../namespaces'
 import { flushPendingRoomMessages } from '../../utils/messageCache'
 import { logInfo, logWarn, logError as logErr } from '../logger'
 import {
@@ -1417,6 +1417,21 @@ export class Connection extends BaseModule {
       // Ping queries (type="get") - XEP-0199
       iqCallee.get(NS_PING, 'ping', () => {
         return true // Return truthy to indicate we handled it (sends empty result)
+      })
+
+      // Entity Time queries (type="get") - XEP-0202
+      iqCallee.get(NS_TIME, 'time', () => {
+        const now = new Date()
+        const offsetMinutes = -now.getTimezoneOffset()
+        const sign = offsetMinutes >= 0 ? '+' : '-'
+        const hours = String(Math.floor(Math.abs(offsetMinutes) / 60)).padStart(2, '0')
+        const minutes = String(Math.abs(offsetMinutes) % 60).padStart(2, '0')
+        const tzo = `${sign}${hours}:${minutes}`
+        const utc = now.toISOString().replace(/\.\d{3}Z$/, 'Z')
+        return xml('time', { xmlns: NS_TIME },
+          xml('tzo', {}, tzo),
+          xml('utc', {}, utc)
+        )
       })
     }
 

@@ -14,6 +14,7 @@ import {
   NS_IDLE,
   NS_PING,
   NS_REACTIONS,
+  NS_TIME,
   NS_REPLY,
   NS_STYLING,
   NS_VCARD_UPDATE,
@@ -62,6 +63,7 @@ export const CLIENT_FEATURES = [
   NS_CARBONS,               // XEP-0280 Message Carbons
   NS_IDLE,                  // XEP-0319 Last User Interaction
   NS_PING,                  // XEP-0199 XMPP Ping
+  NS_TIME,                  // XEP-0202 Entity Time
   NS_REACTIONS,             // XEP-0444 Message Reactions
   NS_REPLY,                 // XEP-0461 Message Replies
   NS_STYLING,               // XEP-0393 Message Styling

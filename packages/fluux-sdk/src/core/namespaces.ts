@@ -150,6 +150,9 @@ export const NS_HATS = 'urn:xmpp:hats:0'
 // XEP-0199: XMPP Ping
 export const NS_PING = 'urn:xmpp:ping'
 
+// XEP-0202: Entity Time
+export const NS_TIME = 'urn:xmpp:time'
+
 // XEP-0191: Blocking Command
 export const NS_BLOCKING = 'urn:xmpp:blocking'
 
