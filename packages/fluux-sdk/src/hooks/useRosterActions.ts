@@ -92,6 +92,16 @@ export function useRosterActions() {
   )
 
   /**
+   * Fetch a contact's vCard (XEP-0054 vcard-temp).
+   */
+  const fetchVCard = useCallback(
+    async (jid: string) => {
+      return client.profile.fetchVCard(jid)
+    },
+    [client]
+  )
+
+  /**
    * Restore a contact's avatar from cache.
    * Useful when contacts have avatarHash but no blob URL (e.g., after app restart).
    */
@@ -131,6 +141,7 @@ export function useRosterActions() {
       renameContact,
       getContact,
       fetchContactNickname,
+      fetchVCard,
       restoreContactAvatarFromCache,
       acceptSubscription,
       rejectSubscription,
@@ -141,6 +152,7 @@ export function useRosterActions() {
       renameContact,
       getContact,
       fetchContactNickname,
+      fetchVCard,
       restoreContactAvatarFromCache,
       acceptSubscription,
       rejectSubscription,

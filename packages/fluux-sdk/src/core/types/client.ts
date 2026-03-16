@@ -8,7 +8,7 @@
 import type { Element } from '@xmpp/client'
 import type { ConnectionStatus, ConnectionMethod } from './connection'
 import type { Message, Conversation } from './chat'
-import type { PresenceStatus, PresenceShow, Contact } from './roster'
+import type { PresenceStatus, PresenceShow, Contact, VCardInfo } from './roster'
 import type { Room, RoomOccupant, RoomMessage, RoomMember } from './room'
 import type { SystemNotificationType } from './events'
 import type { ServerInfo } from './discovery'
@@ -56,6 +56,7 @@ export interface StoreBindings {
     // Own profile state
     setOwnAvatar: (avatar: string | null, hash?: string | null) => void
     setOwnNickname: (nickname: string | null) => void
+    setOwnVCard: (vcard: VCardInfo | null) => void
     getOwnNickname: () => string | null
     updateOwnResource: (resource: string, show: PresenceShow | null, priority: number, status?: string, lastInteraction?: Date, client?: string) => void
     removeOwnResource: (resource: string) => void
@@ -96,6 +97,7 @@ export interface StoreBindings {
     getAllConversations: () => Array<{ id: string; messages: Message[] }>
     // Smart MAM: archived conversation preview refresh
     getArchivedConversations?: () => Array<{ id: string; messages: Message[] }>
+    archiveConversation?: (id: string) => void
     unarchiveConversation?: (id: string) => void
     getLastMessage?: (conversationId: string) => Message | undefined
   }

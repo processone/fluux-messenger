@@ -1,7 +1,9 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { OccupantPanel } from './OccupantPanel'
 import type { Room, RoomOccupant, Contact } from '@fluux/sdk'
+import { useIgnoreStore } from '@fluux/sdk/react'
+import { ignoreStore, type IgnoreState } from '@fluux/sdk/stores'
 
 // Mock i18next
 vi.mock('react-i18next', () => ({
@@ -11,11 +13,19 @@ vi.mock('react-i18next', () => ({
   }),
 }))
 
-// Mock useWindowDrag hook
+// Mock hooks
 vi.mock('@/hooks', () => ({
   useWindowDrag: () => ({
     titleBarClass: 'mt-5',
     dragRegionProps: { 'data-tauri-drag-region': true },
+  }),
+  useContextMenu: () => ({
+    isOpen: false,
+    position: { x: 0, y: 0 },
+    open: vi.fn(),
+    close: vi.fn(),
+    menuRef: { current: null },
+    triggerHandlers: {},
   }),
 }))
 
@@ -37,8 +47,35 @@ vi.mock('@fluux/sdk', async () => {
     getBareJid: (jid: string) => jid.split('/')[0],
     getBestPresenceShow: (shows: (string | undefined)[]) => shows[0],
     generateConsistentColorHexSync: () => '#abc123',
+    useBlocking: () => ({
+      blockedJids: [],
+      fetchBlocklist: vi.fn(),
+      blockJid: vi.fn(),
+      unblockJid: vi.fn(),
+      unblockAll: vi.fn(),
+      isBlocked: () => false,
+    }),
+    useRoom: () => ({
+      setAffiliation: vi.fn(),
+      setRole: vi.fn(),
+      queryAffiliationList: vi.fn(),
+    }),
   }
 })
+
+// Mock @fluux/sdk/stores
+vi.mock('@fluux/sdk/stores', () => ({
+  ignoreStore: {
+    getState: () => ({
+      ignoredUsers: {},
+      addIgnored: vi.fn(),
+      removeIgnored: vi.fn(),
+      isIgnored: () => false,
+      getIgnoredForRoom: () => [],
+    }),
+    subscribe: vi.fn(() => vi.fn()),
+  },
+}))
 
 // Mock presence utility
 vi.mock('@/utils/presence', () => ({
@@ -605,6 +642,171 @@ describe('OccupantPanel', () => {
       // Verify the grouped occupant renders with connection count badge
       expect(screen.getByText('UserDesktop')).toBeInTheDocument()
       expect(screen.getByText('×2')).toBeInTheDocument()
+    })
+  })
+
+  describe('Ignored Users', () => {
+    // Store original mock implementations to restore after each test
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let originalUseIgnoreStore: ((...args: any[]) => any) | undefined
+    let originalIgnoreStoreGetState: typeof ignoreStore.getState
+
+    beforeEach(() => {
+      originalUseIgnoreStore = vi.mocked(useIgnoreStore).getMockImplementation()
+      originalIgnoreStoreGetState = ignoreStore.getState
+    })
+
+    afterEach(() => {
+      // Restore original mock implementations
+      if (originalUseIgnoreStore) {
+        vi.mocked(useIgnoreStore).mockImplementation(originalUseIgnoreStore)
+      }
+      ;(ignoreStore as { getState: typeof ignoreStore.getState }).getState = originalIgnoreStoreGetState
+    })
+
+    /** Helper: configure mocks so a specific occupant is ignored in the room */
+    const setupIgnoredUser = (roomJid: string, identifier: string, displayName: string, jid?: string) => {
+      const ignoredUser = { identifier, displayName, jid }
+      const ignoredUsers = { [roomJid]: [ignoredUser] }
+
+      // Override useIgnoreStore to return our ignored users
+      vi.mocked(useIgnoreStore).mockImplementation(((selector?: (state: IgnoreState) => unknown) => {
+        const state = {
+          ignoredUsers,
+          addIgnored: vi.fn(),
+          removeIgnored: vi.fn(),
+          setIgnoredForRoom: vi.fn(),
+          isIgnored: (rjid: string, id: string) => rjid === roomJid && id === identifier,
+          getIgnoredForRoom: (rjid: string) => rjid === roomJid ? [ignoredUser] : [],
+          reset: vi.fn(),
+        } as IgnoreState
+        return selector ? selector(state) : state
+      }) as unknown as typeof useIgnoreStore)
+
+      // Override ignoreStore.getState for the imperative calls in handleToggleIgnore
+      ;(ignoreStore as { getState: typeof ignoreStore.getState }).getState = () => ({
+        ignoredUsers,
+        addIgnored: vi.fn(),
+        removeIgnored: vi.fn(),
+        setIgnoredForRoom: vi.fn(),
+        isIgnored: (rjid: string, id: string) => rjid === roomJid && id === identifier,
+        getIgnoredForRoom: (rjid: string) => rjid === roomJid ? [ignoredUser] : [],
+        reset: vi.fn(),
+      })
+    }
+
+    it('applies opacity class to ignored occupant', () => {
+      const roomJid = 'room@conference.example.com'
+      const occupants = new Map<string, RoomOccupant>([
+        ['user@room', createOccupant({ nick: 'IgnoredUser', occupantId: 'occ-id-123' })],
+        ['other@room', createOccupant({ nick: 'NormalUser', occupantId: 'occ-id-456' })],
+      ])
+      const room = createRoom({ jid: roomJid, occupants })
+
+      setupIgnoredUser(roomJid, 'occ-id-123', 'IgnoredUser')
+
+      const { container } = render(
+        <OccupantPanel
+          room={room}
+          contactsByJid={new Map()}
+          onClose={() => {}}
+        />
+      )
+
+      // Find occupant rows by their text content
+      const rows = container.querySelectorAll('.px-4.py-1\\.5')
+      const ignoredRow = Array.from(rows).find(row => row.textContent?.includes('IgnoredUser'))
+      const normalRow = Array.from(rows).find(row => row.textContent?.includes('NormalUser'))
+
+      expect(ignoredRow).toHaveClass('opacity-40')
+      expect(normalRow).not.toHaveClass('opacity-40')
+    })
+
+    it('shows EyeOff icon for ignored occupant', () => {
+      const roomJid = 'room@conference.example.com'
+      const occupants = new Map<string, RoomOccupant>([
+        ['user@room', createOccupant({ nick: 'IgnoredUser', occupantId: 'occ-id-123' })],
+      ])
+      const room = createRoom({ jid: roomJid, occupants })
+
+      setupIgnoredUser(roomJid, 'occ-id-123', 'IgnoredUser')
+
+      const { container } = render(
+        <OccupantPanel
+          room={room}
+          contactsByJid={new Map()}
+          onClose={() => {}}
+        />
+      )
+
+      // EyeOff icon should be rendered (lucide renders as svg with class lucide-eye-off)
+      const eyeOffIcon = container.querySelector('.lucide-eye-off')
+      expect(eyeOffIcon).toBeInTheDocument()
+    })
+
+    it('does not show EyeOff icon for non-ignored occupant', () => {
+      // Default mock returns empty ignoredUsers, so no one is ignored
+      const occupants = new Map<string, RoomOccupant>([
+        ['user@room', createOccupant({ nick: 'NormalUser', occupantId: 'occ-id-456' })],
+      ])
+      const room = createRoom({ occupants })
+
+      const { container } = render(
+        <OccupantPanel
+          room={room}
+          contactsByJid={new Map()}
+          onClose={() => {}}
+        />
+      )
+
+      const eyeOffIcon = container.querySelector('.lucide-eye-off')
+      expect(eyeOffIcon).not.toBeInTheDocument()
+    })
+
+    it('matches ignored user by bare JID when no occupantId', () => {
+      const roomJid = 'room@conference.example.com'
+      const occupants = new Map<string, RoomOccupant>([
+        ['user@room', createOccupant({ nick: 'Alice', jid: 'alice@example.com/desktop' })],
+      ])
+      const room = createRoom({ jid: roomJid, occupants })
+
+      // Ignore by bare JID (occupant has no occupantId)
+      setupIgnoredUser(roomJid, 'alice@example.com', 'Alice', 'alice@example.com')
+
+      const { container } = render(
+        <OccupantPanel
+          room={room}
+          contactsByJid={new Map()}
+          onClose={() => {}}
+        />
+      )
+
+      const rows = container.querySelectorAll('.px-4.py-1\\.5')
+      const aliceRow = Array.from(rows).find(row => row.textContent?.includes('Alice'))
+      expect(aliceRow).toHaveClass('opacity-40')
+    })
+
+    it('matches ignored user by nick when no occupantId or JID', () => {
+      const roomJid = 'room@conference.example.com'
+      const occupants = new Map<string, RoomOccupant>([
+        ['anon@room', createOccupant({ nick: 'AnonUser' })],
+      ])
+      const room = createRoom({ jid: roomJid, occupants })
+
+      // Ignore by nick (no occupantId, no JID)
+      setupIgnoredUser(roomJid, 'AnonUser', 'AnonUser')
+
+      const { container } = render(
+        <OccupantPanel
+          room={room}
+          contactsByJid={new Map()}
+          onClose={() => {}}
+        />
+      )
+
+      const rows = container.querySelectorAll('.px-4.py-1\\.5')
+      const anonRow = Array.from(rows).find(row => row.textContent?.includes('AnonUser'))
+      expect(anonRow).toHaveClass('opacity-40')
     })
   })
 })

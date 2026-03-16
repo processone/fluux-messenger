@@ -278,6 +278,8 @@ export const roomStore = createStore<RoomState>()(
         password: room.password,
         isQuickChat: room.isQuickChat,
         supportsMAM: room.supportsMAM,
+        supportsReactions: room.supportsReactions,
+        supportsHats: room.supportsHats,
       }
       const meta: RoomMetadata = {
         unreadCount: room.unreadCount,
@@ -331,7 +333,7 @@ export const roomStore = createStore<RoomState>()(
       // Update entity fields if any changed
       const entityFields = ['name', 'nickname', 'joined', 'isJoining', 'subject', 'avatar',
         'avatarHash', 'avatarFromPresence', 'isBookmarked', 'autojoin', 'password', 'isQuickChat',
-        'supportsMAM'] as const
+        'supportsMAM', 'supportsReactions', 'supportsHats'] as const
       const hasEntityUpdate = entityFields.some((f) => f in update)
 
       // Update metadata fields if any changed
@@ -364,6 +366,8 @@ export const roomStore = createStore<RoomState>()(
             password: updatedRoom.password,
             isQuickChat: updatedRoom.isQuickChat,
             supportsMAM: updatedRoom.supportsMAM,
+            supportsReactions: updatedRoom.supportsReactions,
+            supportsHats: updatedRoom.supportsHats,
           })
         }
         result.roomEntities = newEntities
@@ -788,6 +792,12 @@ export const roomStore = createStore<RoomState>()(
       // Get the last message for both the combined room and metadata
       const lastMessage = newMessages[newMessages.length - 1]
 
+      // Update lastInteractedAt when the active room receives a message,
+      // so it moves to the top of the sidebar list
+      const newLastInteractedAt = isActive
+        ? (lastMessage.timestamp ?? existing.lastInteractedAt)
+        : existing.lastInteractedAt
+
       newRooms.set(roomJid, {
         ...existing,
         messages: newMessages,
@@ -796,6 +806,7 @@ export const roomStore = createStore<RoomState>()(
         lastReadAt: updated.lastReadAt,
         firstNewMessageId: updated.firstNewMessageId,
         lastMessage,
+        lastInteractedAt: newLastInteractedAt,
       })
 
       // Update runtime (messages)
@@ -815,6 +826,7 @@ export const roomStore = createStore<RoomState>()(
           lastReadAt: updated.lastReadAt,
           firstNewMessageId: updated.firstNewMessageId,
           lastMessage,
+          lastInteractedAt: newLastInteractedAt,
         })
       }
 

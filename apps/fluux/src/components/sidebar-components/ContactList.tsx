@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useMemo, memo } from 'react'
+import React, { useState, useRef, useCallback, useMemo, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useContextMenu, useTypeToFocus, useListKeyboardNav } from '@/hooks'
 import { useRoster, useAdmin, type Contact } from '@fluux/sdk'
@@ -191,8 +191,8 @@ interface ContactGroupProps {
   onManageUser?: (jid: string) => void
   getItemProps: (index: number) => {
     'data-selected': boolean
-    onMouseEnter: () => void
-    onMouseMove: () => void
+    onMouseEnter: (e: React.MouseEvent) => void
+    onMouseMove: (e: React.MouseEvent) => void
   }
   forceOffline: boolean
 }
@@ -251,8 +251,8 @@ interface ContactItemProps {
   onRemove: () => void
   onRename: (name: string) => Promise<void>
   onManageUser?: () => void
-  onMouseEnter?: () => void
-  onMouseMove?: () => void
+  onMouseEnter?: (e: React.MouseEvent) => void
+  onMouseMove?: (e: React.MouseEvent) => void
   forceOffline: boolean
 }
 

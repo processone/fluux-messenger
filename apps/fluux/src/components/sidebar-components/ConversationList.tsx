@@ -1,10 +1,11 @@
-import { useState, useRef, useCallback, memo } from 'react'
+import React, { useState, useRef, useCallback, memo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useListKeyboardNav } from '@/hooks'
+import { useListKeyboardNav, useRouteSync } from '@/hooks'
 import {
   useChat,
   useRoster,
   useRoom,
+  chatStore,
   generateConsistentColorHexSync,
   formatMessagePreview,
   type Conversation,
@@ -18,6 +19,7 @@ import { useSidebarZone, ContactDevicesTooltip } from './types'
 import { formatConversationTime } from '@/utils/dateFormat'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { Hash, Trash2, Archive, ArchiveRestore } from 'lucide-react'
+import { ConfirmDialog } from '../ConfirmDialog'
 import {
   SidebarListMenuProvider,
   SidebarListMenuPortal,
@@ -26,8 +28,12 @@ import {
 } from './SidebarListMenu'
 
 // ============================================================================
-// ConversationList
+// ConversationList & ArchiveList
 // ============================================================================
+// These two components share similar structure (keyboard nav, render loop,
+// context menu) but are kept separate intentionally. Each is ~80 lines and
+// self-contained; a parametrized base would save lines but add indirection
+// for little readability gain. Revisit if they grow more shared behaviour.
 
 export function ConversationList() {
   const { t } = useTranslation()
@@ -42,6 +48,7 @@ export function ConversationList() {
   } = useChat()
   const { setActiveRoom, getRoom } = useRoom()
   const { contacts } = useRoster()
+  const { navigateToMessages } = useRouteSync()
   const listRef = useRef<HTMLDivElement>(null)
   const zoneRef = useSidebarZone()
 
@@ -49,9 +56,12 @@ export function ConversationList() {
   const contactMap = new Map(contacts.map(c => [c.jid, c]))
 
   const handleConversationClick = useCallback((convId: string) => {
+    // Push if going from list to first item, replace if switching between items
+    const hasActive = !!chatStore.getState().activeConversationId
     void setActiveRoom(null)
     void setActiveConversation(convId)
-  }, [setActiveRoom, setActiveConversation])
+    navigateToMessages(convId, { replace: hasActive })
+  }, [setActiveRoom, setActiveConversation, navigateToMessages])
 
   // Keyboard navigation
   const { selectedIndex, isKeyboardNav, getItemProps, getItemAttribute, getContainerProps } = useListKeyboardNav({
@@ -108,9 +118,7 @@ export function ConversationList() {
   )
 }
 
-// ============================================================================
-// ArchiveList
-// ============================================================================
+// ArchiveList — see rationale above for why this isn't merged with ConversationList
 
 export function ArchiveList() {
   const { t } = useTranslation()
@@ -125,15 +133,18 @@ export function ArchiveList() {
   } = useChat()
   const { setActiveRoom, getRoom } = useRoom()
   const { contacts } = useRoster()
+  const { navigateToArchive } = useRouteSync()
   const listRef = useRef<HTMLDivElement>(null)
   const zoneRef = useSidebarZone()
 
   const contactMap = new Map(contacts.map(c => [c.jid, c]))
 
   const handleConversationClick = useCallback((convId: string) => {
+    const hasActive = !!chatStore.getState().activeConversationId
     void setActiveRoom(null)
     void setActiveConversation(convId)
-  }, [setActiveRoom, setActiveConversation])
+    navigateToArchive(convId, { replace: hasActive })
+  }, [setActiveRoom, setActiveConversation, navigateToArchive])
 
   const { selectedIndex, isKeyboardNav, getItemProps, getItemAttribute, getContainerProps } = useListKeyboardNav({
     items: archivedConversations,
@@ -204,8 +215,8 @@ interface ConversationItemProps {
   isTyping?: boolean
   draft?: string
   onClick: () => void
-  onMouseEnter?: () => void
-  onMouseMove?: () => void
+  onMouseEnter?: (e: React.MouseEvent) => void
+  onMouseMove?: (e: React.MouseEvent) => void
   'data-conv-id'?: string
   'data-selected'?: boolean
 }
@@ -404,37 +415,17 @@ function ConversationContextMenu({
         )}
       </SidebarListMenuPortal>
 
-      {/* Delete Confirmation Dialog */}
       {showDeleteConfirm && (
-        <div data-modal="true" className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-fluux-sidebar rounded-lg p-4 max-w-sm w-full mx-4 shadow-xl">
-            <h3 className="text-lg font-semibold text-fluux-text mb-2">
-              {t('conversations.delete')}
-            </h3>
-            <p className="text-sm text-fluux-muted mb-4">
-              {t('conversations.deleteConfirmMessage')}
-            </p>
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => {
-                  setShowDeleteConfirm(false)
-                  setDeleteTargetId(null)
-                }}
-                className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active
-                           rounded-lg transition-colors"
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                onClick={handleDeleteConfirm}
-                className="px-4 py-2 text-sm text-white bg-fluux-red hover:bg-fluux-red/80
-                           rounded-lg transition-colors"
-              >
-                {t('conversations.delete')}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title={t('conversations.delete')}
+          message={t('conversations.deleteConfirmMessage')}
+          confirmLabel={t('conversations.delete')}
+          onConfirm={handleDeleteConfirm}
+          onCancel={() => {
+            setShowDeleteConfirm(false)
+            setDeleteTargetId(null)
+          }}
+        />
       )}
     </>
   )

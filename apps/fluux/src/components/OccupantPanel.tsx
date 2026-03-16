@@ -7,17 +7,23 @@
  * - Shows affiliation badges (owner, admin, member)
  * - Shows XEP-0317 hats with consistent colors
  * - Shows contact avatars for known roster contacts
+ * - Right-click context menu: private message, copy JID, ignore, user info
  */
-import { useMemo } from 'react'
+import { useMemo, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { Room, RoomOccupant, Contact, PresenceShow } from '@fluux/sdk'
-import { getPresenceFromShow, getBareJid, getBestPresenceShow, generateConsistentColorHexSync } from '@fluux/sdk'
-import { useConnectionStore } from '@fluux/sdk/react'
+import type { Room, RoomOccupant, Contact, PresenceShow, RoomAffiliation, RoomRole } from '@fluux/sdk'
+import { getPresenceFromShow, getBareJid, getBestPresenceShow, generateConsistentColorHexSync, canKick, canBan, getAvailableAffiliations, getAvailableRoles } from '@fluux/sdk'
+import { useRoom } from '@fluux/sdk'
+import { useConnectionStore, useIgnoreStore } from '@fluux/sdk/react'
+import { ignoreStore, type IgnoredUser } from '@fluux/sdk/stores'
 import { Avatar } from './Avatar'
 import { Tooltip } from './Tooltip'
-import { useWindowDrag } from '@/hooks'
+import { MenuButton, MenuDivider } from './sidebar-components/SidebarListMenu'
+import { useContextMenu, useWindowDrag } from '@/hooks'
+import { useToastStore } from '@/stores/toastStore'
 import { getTranslatedShowText } from '@/utils/presence'
-import { Shield, Crown, UserCheck, X } from 'lucide-react'
+import { OccupantModerationModal } from './OccupantModerationModal'
+import { Shield, Crown, UserCheck, X, ArrowLeft, MessageCircle, EyeOff, User, Settings } from 'lucide-react'
 
 // Type for grouped occupants (multiple connections from same bare JID)
 interface GroupedOccupant {
@@ -32,6 +38,10 @@ export interface OccupantPanelProps {
   contactsByJid: Map<string, Contact>
   ownAvatar?: string | null
   onClose: () => void
+  onStartChat?: (jid: string) => void
+  onShowProfile?: (jid: string) => void
+  /** When true, renders as full-screen view with back arrow instead of inline sidebar */
+  fullScreen?: boolean
 }
 
 export function OccupantPanel({
@@ -39,11 +49,117 @@ export function OccupantPanel({
   contactsByJid,
   ownAvatar,
   onClose,
+  onStartChat,
+  onShowProfile,
+  fullScreen = false,
 }: OccupantPanelProps) {
   const { t } = useTranslation()
   const connectionStatus = useConnectionStore((s) => s.status)
   const forceOffline = connectionStatus !== 'online'
   const { titleBarClass } = useWindowDrag()
+  const ignoredForRoom = useIgnoreStore((s) => s.ignoredUsers[room.jid] || [])
+
+  // Context menu state
+  const menu = useContextMenu()
+  const [menuTarget, setMenuTarget] = useState<GroupedOccupant | null>(null)
+
+  const handleOccupantContextMenu = useCallback((e: React.MouseEvent, group: GroupedOccupant) => {
+    // Don't show menu for self
+    if (group.connections.some(conn => conn.nick === room.nickname)) return
+    setMenuTarget(group)
+    menu.handleContextMenu(e)
+  }, [room.nickname, menu])
+
+  const handleOccupantTouchStart = useCallback((e: React.TouchEvent, group: GroupedOccupant) => {
+    if (group.connections.some(conn => conn.nick === room.nickname)) return
+    setMenuTarget(group)
+    menu.handleTouchStart(e)
+  }, [room.nickname, menu])
+
+  /** Get the best stable identifier for an occupant group */
+  const getOccupantIdentifier = useCallback((group: GroupedOccupant): string => {
+    // Priority: occupantId (XEP-0421) > bareJid > nick
+    const occupantId = group.connections.find(c => c.occupantId)?.occupantId
+    if (occupantId) return occupantId
+    if (group.bareJid) return group.bareJid
+    return group.primaryNick
+  }, [])
+
+  /** Check if a grouped occupant is ignored */
+  const isOccupantIgnored = useCallback((group: GroupedOccupant): boolean => {
+    const identifier = getOccupantIdentifier(group)
+    return ignoredForRoom.some(u => u.identifier === identifier)
+  }, [ignoredForRoom, getOccupantIdentifier])
+
+  const handleToggleIgnore = useCallback((group: GroupedOccupant) => {
+    const identifier = getOccupantIdentifier(group)
+    if (ignoreStore.getState().isIgnored(room.jid, identifier)) {
+      ignoreStore.getState().removeIgnored(room.jid, identifier)
+    } else {
+      const user: IgnoredUser = {
+        identifier,
+        displayName: group.primaryNick,
+        jid: group.bareJid,
+      }
+      ignoreStore.getState().addIgnored(room.jid, user)
+    }
+    menu.close()
+  }, [room.jid, getOccupantIdentifier, menu])
+
+  const handleStartChat = useCallback((jid: string) => {
+    onStartChat?.(jid)
+    menu.close()
+  }, [onStartChat, menu])
+
+  const handleShowProfile = useCallback((jid: string) => {
+    onShowProfile?.(jid)
+    menu.close()
+  }, [onShowProfile, menu])
+
+  // Moderation actions
+  const { setAffiliation, setRole } = useRoom()
+  const addToast = useToastStore((s) => s.addToast)
+  const [moderationTarget, setModerationTarget] = useState<GroupedOccupant | null>(null)
+
+  const selfOccupant = room.nickname ? room.occupants.get(room.nickname) : undefined
+  const selfAffiliation: RoomAffiliation = selfOccupant?.affiliation ?? 'none'
+  const selfRole: RoomRole = selfOccupant?.role ?? 'none'
+
+  const handleSetRole = useCallback(async (nick: string, role: RoomRole) => {
+    try {
+      await setRole(room.jid, nick, role)
+      addToast('success', t('rooms.roleChanged'))
+    } catch {
+      addToast('error', t('rooms.roleError'))
+    }
+  }, [room.jid, setRole, addToast, t])
+
+  const handleSetAffiliation = useCallback(async (jid: string, aff: RoomAffiliation) => {
+    try {
+      await setAffiliation(room.jid, jid, aff)
+      addToast('success', t('rooms.affiliationChanged'))
+    } catch {
+      addToast('error', t('rooms.affiliationError'))
+    }
+  }, [room.jid, setAffiliation, addToast, t])
+
+  const handleKick = useCallback(async (nick: string, reason?: string) => {
+    try {
+      await setRole(room.jid, nick, 'none', reason)
+      addToast('success', t('rooms.roleChanged'))
+    } catch {
+      addToast('error', t('rooms.kickError'))
+    }
+  }, [room.jid, setRole, addToast, t])
+
+  const handleBan = useCallback(async (jid: string, reason?: string) => {
+    try {
+      await setAffiliation(room.jid, jid, 'outcast', reason)
+      addToast('success', t('rooms.affiliationChanged'))
+    } catch {
+      addToast('error', t('rooms.banError'))
+    }
+  }, [room.jid, setAffiliation, addToast, t])
 
   // Sort occupants by role priority: moderator > participant > visitor
   const sortedOccupants = useMemo(() => {
@@ -163,18 +279,32 @@ export function OccupantPanel({
   }
 
   return (
-    <div className="w-64 border-l border-fluux-bg flex flex-col bg-fluux-sidebar">
+    <div className={`${fullScreen ? 'w-full h-full' : 'w-64 border-l border-fluux-bg'} flex flex-col bg-fluux-sidebar`}>
       {/* Panel header */}
       <div className={`h-14 ${titleBarClass} px-4 flex items-center justify-between border-b border-fluux-bg`}>
-        <h3 className="font-semibold text-fluux-text">{t('rooms.members')}</h3>
-        <Tooltip content={t('rooms.closePanel')} position="left">
-          <button
-            onClick={onClose}
-            className="p-1 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </Tooltip>
+        {fullScreen ? (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="p-1 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <h3 className="font-semibold text-fluux-text">{t('rooms.members')}</h3>
+          </div>
+        ) : (
+          <>
+            <h3 className="font-semibold text-fluux-text">{t('rooms.members')}</h3>
+            <Tooltip content={t('rooms.closePanel')} position="left">
+              <button
+                onClick={onClose}
+                className="p-1 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </Tooltip>
+          </>
+        )}
       </div>
 
       {/* Occupant list */}
@@ -226,6 +356,8 @@ export function OccupantPanel({
                 return connPriority < bestPriority ? conn.affiliation : best
               }, 'none' as string)
 
+              const ignored = isOccupantIgnored(group)
+
               return (
                 <Tooltip
                   key={group.bareJid || group.primaryNick}
@@ -235,8 +367,13 @@ export function OccupantPanel({
                   className="block"
                 >
                   <div
+                    onContextMenu={(e) => handleOccupantContextMenu(e, group)}
+                    onTouchStart={(e) => handleOccupantTouchStart(e, group)}
+                    onTouchEnd={menu.handleTouchEnd}
+                    onTouchMove={menu.handleTouchEnd}
                     className={`px-4 py-1.5 flex items-center gap-2 hover:bg-fluux-hover/50 cursor-default
-                               ${isMe ? 'bg-fluux-brand/10' : ''}`}
+                               ${isMe ? 'bg-fluux-brand/10' : ''}
+                               ${ignored ? 'opacity-40' : ''}`}
                   >
                     {/* Avatar with best presence (XEP-0398 occupant avatar or roster contact avatar) */}
                     <Avatar
@@ -263,6 +400,10 @@ export function OccupantPanel({
                           </span>
                         )}
                         {getAffiliationBadge(bestAffiliation)}
+                        {/* Ignored indicator */}
+                        {ignored && (
+                          <EyeOff className="w-3 h-3 text-fluux-muted" />
+                        )}
                         {/* XEP-0317 Hats from all connections */}
                         {Array.from(allHats.values()).map((hat) => (
                           <span
@@ -334,6 +475,94 @@ export function OccupantPanel({
           </div>
         )}
       </div>
+
+      {/* Context menu */}
+      {menu.isOpen && menuTarget && (
+        <div
+          ref={menu.menuRef}
+          className="fixed bg-fluux-bg rounded-lg shadow-xl border border-fluux-hover py-1 z-50 min-w-40"
+          style={{ left: menu.position.x, top: menu.position.y }}
+        >
+          {/* Private message */}
+          {menuTarget.bareJid && (
+            <MenuButton
+              onClick={() => handleStartChat(menuTarget.bareJid!)}
+              icon={<MessageCircle className="w-4 h-4" />}
+              label={t('rooms.sendPrivateMessage')}
+            />
+          )}
+          {/* Ignore / Stop ignoring */}
+          <MenuButton
+            onClick={() => handleToggleIgnore(menuTarget)}
+            icon={<EyeOff className="w-4 h-4" />}
+            label={isOccupantIgnored(menuTarget) ? t('rooms.stopIgnoring') : t('rooms.ignoreUser')}
+          />
+          {/* User info */}
+          {menuTarget.bareJid && (
+            <MenuButton
+              onClick={() => handleShowProfile(menuTarget.bareJid!)}
+              icon={<User className="w-4 h-4" />}
+              label={t('rooms.userInfo')}
+            />
+          )}
+
+          {/* --- Moderation: single "Manage" button --- */}
+          {(() => {
+            const targetOccupant = menuTarget.connections[0]
+            const targetAff = targetOccupant.affiliation
+            const targetRole = targetOccupant.role
+
+            const availableRoles = getAvailableRoles(selfRole, selfAffiliation, targetRole, targetAff)
+            const availableAffs = menuTarget.bareJid
+              ? getAvailableAffiliations(selfAffiliation, targetAff)
+              : []
+            const showKick = canKick(selfRole, selfAffiliation, targetAff)
+            const showBan = menuTarget.bareJid && canBan(selfAffiliation, targetAff)
+            const hasModActions = showKick || showBan || availableRoles.length > 0 || availableAffs.length > 0
+
+            if (!hasModActions) return null
+
+            return (
+              <>
+                <MenuDivider />
+                <MenuButton
+                  onClick={() => {
+                    setModerationTarget(menuTarget)
+                    menu.close()
+                  }}
+                  icon={<Settings className="w-4 h-4" />}
+                  label={t('rooms.manageOccupant')}
+                />
+              </>
+            )
+          })()}
+        </div>
+      )}
+
+      {/* Occupant moderation modal */}
+      {moderationTarget && (() => {
+        const target = moderationTarget.connections[0]
+        const occupantAvatar = moderationTarget.connections.find(c => c.avatar)?.avatar
+        const contact = moderationTarget.bareJid ? contactsByJid.get(moderationTarget.bareJid) : undefined
+        return (
+          <OccupantModerationModal
+            occupant={{
+              nick: moderationTarget.primaryNick,
+              bareJid: moderationTarget.bareJid,
+              role: target.role,
+              affiliation: target.affiliation,
+              avatar: occupantAvatar || contact?.avatar,
+            }}
+            selfRole={selfRole}
+            selfAffiliation={selfAffiliation}
+            onSetRole={handleSetRole}
+            onSetAffiliation={handleSetAffiliation}
+            onKick={handleKick}
+            onBan={handleBan}
+            onClose={() => setModerationTarget(null)}
+          />
+        )
+      })()}
     </div>
   )
 }

@@ -607,6 +607,7 @@ export const createMockStores = (): MockStoreBindings => ({
     clearPreAutoAwayState: vi.fn(),
     setOwnAvatar: vi.fn(),
     setOwnNickname: vi.fn(),
+    setOwnVCard: vi.fn(),
     getOwnNickname: vi.fn().mockReturnValue(null),
     updateOwnResource: vi.fn(),
     removeOwnResource: vi.fn(),
@@ -640,6 +641,7 @@ export const createMockStores = (): MockStoreBindings => ({
     updateLastMessagePreview: vi.fn(),
     getAllConversations: vi.fn().mockReturnValue([]),
     getArchivedConversations: vi.fn().mockReturnValue([]),
+    archiveConversation: vi.fn(),
     unarchiveConversation: vi.fn(),
     getLastMessage: vi.fn().mockReturnValue(undefined),
   },
@@ -763,6 +765,9 @@ export const createMockXMPPClientForHooks = () => ({
   },
   profile: {
     fetchContactNickname: vi.fn(),
+    fetchVCard: vi.fn(),
+    fetchOwnVCard: vi.fn(),
+    publishOwnVCard: vi.fn(),
     fetchOwnNickname: vi.fn(),
     publishOwnNickname: vi.fn(),
     clearOwnNickname: vi.fn(),
@@ -932,6 +937,7 @@ export const createMockStoreRefs = (): MockStoreRefs => ({
     setHttpUploadService: vi.fn(),
     setOwnAvatar: vi.fn(),
     setOwnNickname: vi.fn(),
+    setOwnVCard: vi.fn(),
     updateOwnResource: vi.fn(),
     removeOwnResource: vi.fn(),
   } as unknown as MockStoreRefs['connection'],
@@ -971,6 +977,7 @@ export const createMockStoreRefs = (): MockStoreRefs => ({
     removeBookmark: vi.fn(),
     triggerAnimation: vi.fn(),
     mergeRoomMembers: vi.fn(),
+    getRoom: vi.fn().mockReturnValue(undefined),
   } as unknown as MockStoreRefs['room'],
   events: {
     addSubscriptionRequest: vi.fn(),
@@ -998,4 +1005,7 @@ export const createMockStoreRefs = (): MockStoreRefs => ({
     addEvent: vi.fn(),
     addPacket: vi.fn(),
   } as unknown as MockStoreRefs['console'],
+  ignore: {
+    getIgnoredForRoom: vi.fn().mockReturnValue([]),
+  } as unknown as MockStoreRefs['ignore'],
 })

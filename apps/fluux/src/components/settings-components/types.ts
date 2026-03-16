@@ -21,8 +21,8 @@ export const SETTINGS_CATEGORIES: SettingsCategoryConfig[] = [
   { id: 'appearance', labelKey: 'settings.categories.appearance', icon: Palette },
   { id: 'language', labelKey: 'settings.categories.language', icon: Globe },
   { id: 'notifications', labelKey: 'settings.categories.notifications', icon: Bell },
-  { id: 'updates', labelKey: 'settings.categories.updates', icon: Download, updaterOnly: true },
   { id: 'blocked', labelKey: 'settings.categories.blocked', icon: Ban },
+  { id: 'updates', labelKey: 'settings.categories.updates', icon: Download, updaterOnly: true },
 ]
 
 /**

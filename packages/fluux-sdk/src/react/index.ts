@@ -47,12 +47,14 @@ export { useRoomActive } from '../hooks/useRoomActive'
 export { useXMPP } from '../hooks/useXMPP'
 export { useAdmin } from '../hooks/useAdmin'
 export { useBlocking } from '../hooks/useBlocking'
+export { useIgnore } from '../hooks/useIgnore'
 export { usePresence } from '../hooks/usePresence'
 export type { UsePresenceReturn } from '../hooks/usePresence'
 export { useSystemState } from '../hooks/useSystemState'
 export type { UseSystemStateReturn, SystemState } from '../hooks/useSystemState'
 export { useNotificationEvents } from '../hooks/useNotificationEvents'
 export type { NotificationEventHandlers } from '../hooks/useNotificationEvents'
+export { useContactTime } from '../hooks/useContactTime'
 
 // Fine-grained metadata subscription hooks
 export {
@@ -89,6 +91,7 @@ export {
   useRoomStore,
   useAdminStore,
   useBlockingStore,
+  useIgnoreStore,
 } from './storeHooks'
 
 // Presence state machine types (for XState integration)

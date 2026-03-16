@@ -22,6 +22,12 @@ export interface MessageBodyProps {
   originalBody?: string
   /** Whether message has been retracted/deleted */
   isRetracted?: boolean
+  /** Whether message was moderated (retracted by a moderator) */
+  isModerated?: boolean
+  /** Nick of the moderator who retracted the message */
+  moderatedBy?: string
+  /** Reason provided for the moderation */
+  moderationReason?: string
   /** Whether to disable text styling (code blocks, links, etc.) */
   noStyling?: boolean
   /** Sender display name (for /me actions) */
@@ -44,6 +50,9 @@ export const MessageBody = memo(function MessageBody({
   isEdited,
   originalBody,
   isRetracted,
+  isModerated,
+  moderatedBy,
+  moderationReason,
   noStyling,
   senderName,
   senderColor,
@@ -53,9 +62,12 @@ export const MessageBody = memo(function MessageBody({
 
   // Retracted message
   if (isRetracted) {
+    const label = isModerated && moderatedBy
+      ? t('chat.messageModerated', { moderator: moderatedBy })
+      : t('chat.messageDeleted')
     return (
-      <div className="text-fluux-muted italic">
-        {t('chat.messageDeleted')}
+      <div className="text-fluux-muted italic" title={moderationReason || undefined}>
+        {label}
       </div>
     )
   }

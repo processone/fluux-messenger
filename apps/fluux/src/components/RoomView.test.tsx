@@ -54,6 +54,7 @@ let mockActiveRoom: Room | null = null
 let mockActiveMessages: RoomMessage[] = []
 let mockTypingUsers: string[] = []
 let mockContacts: Contact[] = []
+let mockIgnoredUsers: Record<string, { identifier: string; displayName: string; jid?: string }[]> = {}
 
 // Mock functions
 const mockSendMessage = vi.fn()
@@ -69,7 +70,9 @@ const mockClearFirstNewMessageId = vi.fn()
 const mockClearAnimation = vi.fn()
 
 // Mock SDK hooks
-vi.mock('@fluux/sdk', () => ({
+vi.mock('@fluux/sdk', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@fluux/sdk')>()
+  return {
   useRoomActive: () => ({
     activeRoom: mockActiveRoom,
     activeMessages: mockActiveMessages,
@@ -126,7 +129,27 @@ vi.mock('@fluux/sdk', () => ({
     })
     return map
   },
-}))
+  isMessageFromIgnoredUser: actual.isMessageFromIgnoredUser,
+  isReplyToIgnoredUser: actual.isReplyToIgnoredUser,
+  useRoom: () => ({
+    setAffiliation: vi.fn(),
+    setRole: vi.fn(),
+  }),
+  canKick: () => false,
+  canBan: () => false,
+  getAvailableAffiliations: () => [],
+  getAvailableRoles: () => [],
+  useXMPP: () => ({
+    client: { profile: { fetchVCard: vi.fn().mockResolvedValue(null) } },
+    sendRawXml: vi.fn(),
+    onStanza: vi.fn(() => vi.fn()),
+    on: vi.fn(() => vi.fn()),
+    setPresence: vi.fn(),
+    xml: vi.fn(),
+    isConnected: () => false,
+    getJid: () => null,
+  }),
+}})
 
 // Mock React store hooks (from @fluux/sdk/react)
 vi.mock('@fluux/sdk/react', () => ({
@@ -136,6 +159,17 @@ vi.mock('@fluux/sdk/react', () => ({
       status: 'online',
     })
   },
+  useIgnoreStore: (selector?: (state: Record<string, unknown>) => unknown) => {
+    const state = {
+      ignoredUsers: mockIgnoredUsers,
+      addIgnored: vi.fn(),
+      removeIgnored: vi.fn(),
+      isIgnored: () => false,
+      getIgnoredForRoom: () => [],
+    }
+    return selector ? selector(state) : state
+  },
+  useContactTime: () => null,
 }))
 
 // Mock app hooks
@@ -206,6 +240,16 @@ vi.mock('@/hooks', () => ({
     const [text, setText] = React.useState('')
     return [text, setText]
   },
+  useContextMenu: () => ({
+    isOpen: false,
+    position: { x: 0, y: 0 },
+    menuRef: { current: null },
+    longPressTriggered: { current: false },
+    close: vi.fn(),
+    handleContextMenu: vi.fn(),
+    handleTouchStart: vi.fn(),
+    handleTouchEnd: vi.fn(),
+  }),
 }))
 
 // Mock utils
@@ -369,6 +413,7 @@ describe('RoomView', () => {
     mockActiveMessages = []
     mockTypingUsers = []
     mockContacts = []
+    mockIgnoredUsers = {}
 
     // Reset mock functions
     vi.clearAllMocks()
@@ -810,6 +855,168 @@ describe('RoomView', () => {
       // Should show empty state immediately (SDK loads cache in background)
       expect(screen.queryByText('chat.loadingMessages')).not.toBeInTheDocument()
       expect(screen.getByText('chat.noMessages')).toBeInTheDocument()
+    })
+  })
+
+  describe('Ignored user message filtering', () => {
+    const ROOM_JID = 'room@conference.example.com'
+
+    beforeEach(() => {
+      mockActiveRoom = createRoom({
+        jid: ROOM_JID,
+        isJoining: false,
+        joined: true,
+        occupantsList: [
+          createOccupant({ nick: 'Alice' }),
+          createOccupant({ nick: 'Bob' }),
+        ],
+      })
+    })
+
+    it('should filter out messages from user ignored by occupantId', () => {
+      mockActiveMessages = [
+        createRoomMessage({ id: 'msg-1', nick: 'Alice', body: 'Alice says hi', occupantId: 'occ-alice' }),
+        createRoomMessage({ id: 'msg-2', nick: 'Bob', body: 'Bob says hello', occupantId: 'occ-bob' }),
+      ]
+      mockIgnoredUsers = {
+        [ROOM_JID]: [{ identifier: 'occ-alice', displayName: 'Alice' }],
+      }
+
+      render(<RoomView />)
+
+      expect(screen.queryByText('Alice says hi')).not.toBeInTheDocument()
+      expect(screen.getByText('Bob says hello')).toBeInTheDocument()
+    })
+
+    it('should filter out messages from user ignored by nick', () => {
+      mockActiveMessages = [
+        createRoomMessage({ id: 'msg-1', nick: 'Alice', body: 'Alice message' }),
+        createRoomMessage({ id: 'msg-2', nick: 'Bob', body: 'Bob message' }),
+      ]
+      mockIgnoredUsers = {
+        [ROOM_JID]: [{ identifier: 'Alice', displayName: 'Alice' }],
+      }
+
+      render(<RoomView />)
+
+      expect(screen.queryByText('Alice message')).not.toBeInTheDocument()
+      expect(screen.getByText('Bob message')).toBeInTheDocument()
+    })
+
+    it('should filter out messages from user ignored by JID via nickToJidCache', () => {
+      const nickToJidCache = new Map([['Alice', 'alice@example.com']])
+      mockActiveRoom = createRoom({
+        jid: ROOM_JID,
+        isJoining: false,
+        joined: true,
+        nickToJidCache,
+        occupantsList: [
+          createOccupant({ nick: 'Alice' }),
+          createOccupant({ nick: 'Bob' }),
+        ],
+      })
+      mockActiveMessages = [
+        createRoomMessage({ id: 'msg-1', nick: 'Alice', body: 'Message from Alice' }),
+        createRoomMessage({ id: 'msg-2', nick: 'Bob', body: 'Message from Bob' }),
+      ]
+      mockIgnoredUsers = {
+        [ROOM_JID]: [{ identifier: 'alice@example.com', displayName: 'Alice', jid: 'alice@example.com' }],
+      }
+
+      render(<RoomView />)
+
+      expect(screen.queryByText('Message from Alice')).not.toBeInTheDocument()
+      expect(screen.getByText('Message from Bob')).toBeInTheDocument()
+    })
+
+    it('should show all messages when no users are ignored', () => {
+      mockActiveMessages = [
+        createRoomMessage({ id: 'msg-1', nick: 'Alice', body: 'Hello from Alice' }),
+        createRoomMessage({ id: 'msg-2', nick: 'Bob', body: 'Hello from Bob' }),
+      ]
+      mockIgnoredUsers = {}
+
+      render(<RoomView />)
+
+      expect(screen.getByText('Hello from Alice')).toBeInTheDocument()
+      expect(screen.getByText('Hello from Bob')).toBeInTheDocument()
+    })
+
+    it('should filter multiple ignored users', () => {
+      mockActiveMessages = [
+        createRoomMessage({ id: 'msg-1', nick: 'Alice', body: 'Alice text', occupantId: 'occ-alice' }),
+        createRoomMessage({ id: 'msg-2', nick: 'Bob', body: 'Bob text', occupantId: 'occ-bob' }),
+        createRoomMessage({ id: 'msg-3', nick: 'Charlie', body: 'Charlie text', occupantId: 'occ-charlie' }),
+      ]
+      mockIgnoredUsers = {
+        [ROOM_JID]: [
+          { identifier: 'occ-alice', displayName: 'Alice' },
+          { identifier: 'occ-charlie', displayName: 'Charlie' },
+        ],
+      }
+
+      render(<RoomView />)
+
+      expect(screen.queryByText('Alice text')).not.toBeInTheDocument()
+      expect(screen.getByText('Bob text')).toBeInTheDocument()
+      expect(screen.queryByText('Charlie text')).not.toBeInTheDocument()
+    })
+
+    it('should prioritize occupantId match over nick match', () => {
+      // User has occupantId "occ-alice" but nick "Alice"
+      // Ignore list targets occupantId — should filter
+      mockActiveMessages = [
+        createRoomMessage({ id: 'msg-1', nick: 'Alice', body: 'Filtered message', occupantId: 'occ-alice' }),
+      ]
+      mockIgnoredUsers = {
+        [ROOM_JID]: [{ identifier: 'occ-alice', displayName: 'Alice' }],
+      }
+
+      render(<RoomView />)
+
+      expect(screen.queryByText('Filtered message')).not.toBeInTheDocument()
+    })
+
+    it('should filter messages via jid field when identifier is occupantId (cross-matching)', () => {
+      // Scenario: user ignored by occupantId, but message doesn't have occupantId
+      // (e.g., old MAM messages). The stored jid field should match via nickToJidCache.
+      const nickToJidCache = new Map([['Alice', 'alice@example.com']])
+      mockActiveRoom = createRoom({
+        jid: ROOM_JID,
+        isJoining: false,
+        joined: true,
+        nickToJidCache,
+        occupantsList: [
+          createOccupant({ nick: 'Alice' }),
+          createOccupant({ nick: 'Bob' }),
+        ],
+      })
+      mockActiveMessages = [
+        createRoomMessage({ id: 'msg-1', nick: 'Alice', body: 'Old message without occupantId' }),
+        createRoomMessage({ id: 'msg-2', nick: 'Bob', body: 'Bob message' }),
+      ]
+      mockIgnoredUsers = {
+        [ROOM_JID]: [{ identifier: 'occ-alice', displayName: 'Alice', jid: 'alice@example.com' }],
+      }
+
+      render(<RoomView />)
+
+      expect(screen.queryByText('Old message without occupantId')).not.toBeInTheDocument()
+      expect(screen.getByText('Bob message')).toBeInTheDocument()
+    })
+
+    it('should not filter messages from a different room', () => {
+      mockActiveMessages = [
+        createRoomMessage({ id: 'msg-1', nick: 'Alice', body: 'Visible message', occupantId: 'occ-alice' }),
+      ]
+      // Ignored in a different room, not the active room
+      mockIgnoredUsers = {
+        'other-room@conference.example.com': [{ identifier: 'occ-alice', displayName: 'Alice' }],
+      }
+
+      render(<RoomView />)
+
+      expect(screen.getByText('Visible message')).toBeInTheDocument()
     })
   })
 })

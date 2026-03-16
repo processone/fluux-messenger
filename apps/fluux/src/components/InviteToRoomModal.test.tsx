@@ -127,7 +127,7 @@ describe('InviteToRoomModal', () => {
   let mockRoom: Room
 
   beforeEach(() => {
-    vi.resetAllMocks()
+    vi.clearAllMocks()
     mockRoom = createMockRoom()
     useToastStore.setState({ toasts: [] })
   })
@@ -265,6 +265,7 @@ describe('InviteToRoomModal', () => {
 
       // Click on the backdrop (the outer div)
       const backdrop = screen.getByText('Invite to Room').closest('.fixed')
+      fireEvent.mouseDown(backdrop!)
       fireEvent.click(backdrop!)
 
       expect(mockOnClose).toHaveBeenCalledTimes(1)

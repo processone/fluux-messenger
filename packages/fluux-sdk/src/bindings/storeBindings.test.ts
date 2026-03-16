@@ -61,6 +61,12 @@ describe('createStoreBindings', () => {
       expect(mockStores.connection.setOwnNickname).toHaveBeenCalledWith('Alice')
     })
 
+    it('should handle connection:own-vcard', () => {
+      const vcard = { fullName: 'Alice Smith', org: 'Acme Corp', email: 'alice@acme.com', country: 'France' }
+      mockClient.emit('connection:own-vcard', { vcard })
+      expect(mockStores.connection.setOwnVCard).toHaveBeenCalledWith(vcard)
+    })
+
     it('should handle connection:own-resource', () => {
       mockClient.emit('connection:own-resource', {
         resource: 'mobile',
@@ -473,6 +479,104 @@ describe('createStoreBindings', () => {
       const xml = '<message to="user@example.com"><body>Hello</body></message>'
       mockClient.emit('console:packet', { direction: 'outgoing', xml })
       expect(mockStores.console.addPacket).toHaveBeenCalledWith('outgoing', xml)
+    })
+  })
+
+  describe('ignored user notification suppression', () => {
+    it('should suppress incrementUnread and incrementMentions for ignored users', () => {
+      const ignoreRef = mockStores.ignore as any
+      ignoreRef.getIgnoredForRoom.mockReturnValue([
+        { identifier: 'occ-alice', displayName: 'Alice', jid: 'alice@example.com' },
+      ])
+
+      const message: RoomMessage = {
+        id: 'msg1',
+        type: 'groupchat',
+        roomJid: 'room@conference.example.com',
+        from: 'room@conference.example.com/Alice',
+        nick: 'Alice',
+        body: 'Hello @you',
+        timestamp: new Date(),
+        isOutgoing: false,
+        occupantId: 'occ-alice',
+        isMention: true,
+      }
+
+      mockClient.emit('room:message', {
+        roomJid: 'room@conference.example.com',
+        message,
+        incrementUnread: true,
+        incrementMentions: true,
+      })
+
+      expect(mockStores.room.addMessage).toHaveBeenCalledWith(
+        'room@conference.example.com',
+        message,
+        { incrementUnread: false, incrementMentions: false },
+      )
+    })
+
+    it('should not suppress notifications for non-ignored users', () => {
+      const message: RoomMessage = {
+        id: 'msg2',
+        type: 'groupchat',
+        roomJid: 'room@conference.example.com',
+        from: 'room@conference.example.com/Bob',
+        nick: 'Bob',
+        body: 'Hey there',
+        timestamp: new Date(),
+        isOutgoing: false,
+        occupantId: 'occ-bob',
+      }
+
+      mockClient.emit('room:message', {
+        roomJid: 'room@conference.example.com',
+        message,
+        incrementUnread: true,
+        incrementMentions: false,
+      })
+
+      expect(mockStores.room.addMessage).toHaveBeenCalledWith(
+        'room@conference.example.com',
+        message,
+        { incrementUnread: true, incrementMentions: false },
+      )
+    })
+
+    it('should suppress notifications via jid cross-match when message lacks occupantId', () => {
+      const ignoreRef = mockStores.ignore as any
+      ignoreRef.getIgnoredForRoom.mockReturnValue([
+        { identifier: 'occ-alice', displayName: 'Alice', jid: 'alice@example.com' },
+      ])
+
+      const roomRef = mockStores.room as any
+      roomRef.getRoom.mockReturnValue({
+        nickToJidCache: new Map([['Alice', 'alice@example.com']]),
+      })
+
+      const message: RoomMessage = {
+        id: 'msg3',
+        type: 'groupchat',
+        roomJid: 'room@conference.example.com',
+        from: 'room@conference.example.com/Alice',
+        nick: 'Alice',
+        body: 'Old message',
+        timestamp: new Date(),
+        isOutgoing: false,
+      }
+
+      mockClient.emit('room:message', {
+        roomJid: 'room@conference.example.com',
+        message,
+        incrementUnread: true,
+        incrementMentions: false,
+      })
+
+      expect(mockStores.room.addMessage).toHaveBeenCalledWith(
+        'room@conference.example.com',
+        message,
+        { incrementUnread: false, incrementMentions: false },
+      )
     })
   })
 

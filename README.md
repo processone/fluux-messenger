@@ -58,7 +58,7 @@
 - **Cross-platform** - Available on web and desktop (Tauri-based)
 - **Extensive XMPP Protocol Support** - 40+ XEPs implemented, including MAM, MUC, HTTP File Upload, message carbons, and reactions (and more to come)
 - **Built-in XMPP Console** - Debug interface for developers and power users
-- **Multi-user Chat** - Complete MUC support with roles, affiliations, @mentions, and bookmarks
+- **Multi-user Chat** - Complete MUC support with roles, affiliations, hats, @mentions, and bookmarks
 - **File Sharing** - HTTP uploads with thumbnails, progress indicators, and previews
 - **Real-time Messaging** - Typing indicators, message corrections, and delivery features
 - **Web Push Notifications** - Receive notifications even when the browser tab is closed (via Service Worker and VAPID)

@@ -96,12 +96,14 @@ export { useRoomActive } from './hooks/useRoomActive'
 export { useXMPP } from './hooks/useXMPP'
 export { useAdmin } from './hooks/useAdmin'
 export { useBlocking } from './hooks/useBlocking'
+export { useIgnore } from './hooks/useIgnore'
 export { usePresence } from './hooks/usePresence'
 export type { UsePresenceReturn } from './hooks/usePresence'
 export { useSystemState } from './hooks/useSystemState'
 export type { UseSystemStateReturn, SystemState } from './hooks/useSystemState'
 export { useNotificationEvents } from './hooks/useNotificationEvents'
 export type { NotificationEventHandlers } from './hooks/useNotificationEvents'
+export { useContactTime } from './hooks/useContactTime'
 
 // Fine-grained metadata subscription hooks (Phase 6)
 export {
@@ -179,6 +181,13 @@ export { chatSelectors, roomSelectors, rosterSelectors } from './stores'
 // Admin dashboard types
 export type { AdminStats } from './stores/adminStore'
 
+// Room ignore store types and utilities
+export type { IgnoredUser } from './stores/ignoreStore'
+
+// Conversation sync types
+export type { SyncedConversation } from './core/modules/ConversationSync'
+export { isMessageFromIgnoredUser, isReplyToIgnoredUser } from './stores/ignoreStore'
+
 // Notification state utilities (pure functions for badge computation, etc.)
 export { computeBadgeCount, shouldNotifyConversation, shouldNotifyRoom } from './stores/shared/notificationState'
 export type { EntityNotificationState, NotificationMessage, EntityContext, BadgeInput } from './stores/shared/notificationState'
@@ -209,6 +218,7 @@ export type {
 
   // Roster types
   Contact,
+  VCardInfo,
   PresenceStatus,
   PresenceShow,
   ResourcePresence,
@@ -411,6 +421,8 @@ export {
   NS_CORRECTION,
   // XEP-0424: Message Retraction
   NS_RETRACT,
+  // XEP-0425: Message Moderation
+  NS_MESSAGE_MODERATE,
   // XEP-0319: Last User Interaction in Presence
   NS_IDLE,
   // PubSub namespaces
@@ -457,11 +469,15 @@ export {
   NS_HATS,
   // XEP-0199: XMPP Ping
   NS_PING,
+  // XEP-0202: Entity Time
+  NS_TIME,
   // XEP-0191: Blocking Command
   NS_BLOCKING,
   // p1:push: ejabberd Push Notifications
   NS_P1_PUSH,
   NS_P1_PUSH_WEBPUSH,
+  // Custom: Fluux conversation list sync
+  NS_CONVERSATIONS,
 } from './core/namespaces'
 
 // =============================================================================
@@ -469,7 +485,7 @@ export {
 // =============================================================================
 
 // XEP-0004: Data Form utilities
-export { parseDataForm, getFormFieldValue, getFormFieldValues } from './utils/dataForm'
+export { parseDataForm, getFormFieldValue, getFormFieldValues, buildDataFormSubmit } from './utils/dataForm'
 
 // XEP-0059: Result Set Management utilities
 export { parseRSMResponse, buildRSMElement } from './utils/rsm'
@@ -484,6 +500,9 @@ export type { FallbackProcessingResult, FallbackProcessingOptions } from './util
 // RFC 6120: XMPP Stanza Error parsing
 export { parseXMPPError, formatXMPPError } from './utils/xmppError'
 export type { XMPPStanzaError, XMPPErrorType } from './utils/xmppError'
+
+// XEP-0045: MUC Permission Utilities
+export { canSetAffiliation, canSetRole, canKick, canBan, canModerate, getAvailableAffiliations, getAvailableRoles } from './utils/mucPermissions'
 
 // XEP-0156: Discovering Alternative XMPP Connection Methods
 export { discoverWebSocket, discoverXmppEndpoints } from './utils/websocketDiscovery'

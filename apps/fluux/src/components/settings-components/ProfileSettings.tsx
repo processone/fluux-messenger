@@ -1,7 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Monitor, Smartphone, Globe, Pencil, Camera, Trash2, Key, Network, Bell } from 'lucide-react'
-import { type ResourcePresence, getClientType, getLocalPart, useConnection, usePresence } from '@fluux/sdk'
+import { Monitor, Smartphone, Globe, Pencil, Camera, Trash2, Key, Network, Bell, Plus, Building2, Mail, MapPin, User } from 'lucide-react'
+import { type ResourcePresence, type VCardInfo, getClientType, getLocalPart, useConnection, usePresence } from '@fluux/sdk'
 import { Avatar } from '../Avatar'
 import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS } from '@/constants/ui'
 import { getShowColor } from '@/utils/presence'
@@ -16,7 +16,7 @@ import { Tooltip } from '../Tooltip'
  */
 export function ProfileSettings() {
   const { t } = useTranslation()
-  const { jid, isConnected, ownAvatar, ownNickname, ownResources, connectionMethod, authMechanism, webPushStatus, setOwnNickname, setOwnAvatar, clearOwnAvatar, clearOwnNickname, supportsPasswordChange } = useConnection()
+  const { jid, isConnected, ownAvatar, ownNickname, ownVCard, ownResources, connectionMethod, authMechanism, webPushStatus, setOwnNickname, setOwnAvatar, clearOwnAvatar, clearOwnNickname, fetchOwnVCard, setOwnVCard, supportsPasswordChange } = useConnection()
   const { presenceStatus: presenceShow, statusMessage } = usePresence()
 
   const [isEditing, setIsEditing] = useState(false)
@@ -26,7 +26,12 @@ export function ProfileSettings() {
   const [error, setError] = useState<string | null>(null)
   const [showAvatarModal, setShowAvatarModal] = useState(false)
   const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const [showAddField, setShowAddField] = useState(false)
+  const [editingVCardField, setEditingVCardField] = useState<string | null>(null)
+  const [vcardEditValue, setVcardEditValue] = useState('')
+  const [vcardSaving, setVcardSaving] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const vcardInputRef = useRef<HTMLInputElement>(null)
 
   // Extract bare JID and local part for display
   const bareJid = jid ? jid.split('/')[0] : ''
@@ -118,6 +123,82 @@ export function ProfileSettings() {
       setClearing(null)
     }
   }
+
+  // vCard field definitions
+  const vcardFields = [
+    { key: 'fullName' as const, label: t('profile.fullName'), icon: User },
+    { key: 'org' as const, label: t('profile.company'), icon: Building2 },
+    { key: 'email' as const, label: t('profile.email'), icon: Mail },
+    { key: 'country' as const, label: t('profile.country'), icon: MapPin },
+  ]
+
+  const activeVCardFields = vcardFields.filter((f) => ownVCard?.[f.key])
+  const availableVCardFields = vcardFields.filter((f) => !ownVCard?.[f.key])
+
+  // Fetch own vCard on mount
+  useEffect(() => {
+    if (isConnected) {
+      void fetchOwnVCard()
+    }
+  }, [isConnected, fetchOwnVCard])
+
+  // Focus vCard input when editing starts
+  useEffect(() => {
+    if (editingVCardField) {
+      vcardInputRef.current?.focus()
+      vcardInputRef.current?.select()
+    }
+  }, [editingVCardField])
+
+  const handleStartVCardEdit = useCallback((key: string) => {
+    setVcardEditValue(ownVCard?.[key as keyof VCardInfo] || '')
+    setEditingVCardField(key)
+    setError(null)
+  }, [ownVCard])
+
+  const handleCancelVCardEdit = useCallback(() => {
+    setEditingVCardField(null)
+    setVcardEditValue('')
+    setError(null)
+  }, [])
+
+  const handleSaveVCardField = useCallback(async (key: string, value: string) => {
+    const trimmed = value.trim()
+    const newVCard: VCardInfo = { ...ownVCard }
+
+    if (trimmed) {
+      newVCard[key as keyof VCardInfo] = trimmed
+    } else {
+      delete newVCard[key as keyof VCardInfo]
+    }
+
+    setVcardSaving(true)
+    setError(null)
+    try {
+      await setOwnVCard(newVCard)
+      setEditingVCardField(null)
+      setVcardEditValue('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('profile.vcardSaveError'))
+    } finally {
+      setVcardSaving(false)
+    }
+  }, [ownVCard, setOwnVCard, t])
+
+  const handleAddVCardField = useCallback((key: string) => {
+    setShowAddField(false)
+    setVcardEditValue('')
+    setEditingVCardField(key)
+  }, [])
+
+  const handleVCardKeyDown = useCallback((e: React.KeyboardEvent, key: string) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      void handleSaveVCardField(key, vcardEditValue)
+    } else if (e.key === 'Escape') {
+      handleCancelVCardEdit()
+    }
+  }, [handleSaveVCardField, vcardEditValue, handleCancelVCardEdit])
 
   // Map presenceShow to color
   const presenceColor = isConnected ? PRESENCE_COLORS[presenceShow] : APP_OFFLINE_PRESENCE_COLOR
@@ -242,6 +323,112 @@ export function ProfileSettings() {
                 : webPushStatus === 'available' ? 'bg-yellow-500'
                 : 'bg-fluux-muted'
             }`} />
+          </div>
+        )}
+
+        {/* vCard fields */}
+        {isConnected && (activeVCardFields.length > 0 || editingVCardField) && (
+          <div className="w-full max-w-xs mb-3">
+            <div className="space-y-1">
+              {activeVCardFields.map(({ key, label, icon: Icon }) => (
+                <div key={key}>
+                  {editingVCardField === key ? (
+                    <div className="flex items-center gap-2 px-3 py-1.5">
+                      <Icon className="w-4 h-4 text-fluux-muted flex-shrink-0" />
+                      <input
+                        ref={vcardInputRef}
+                        type="text"
+                        value={vcardEditValue}
+                        onChange={(e) => setVcardEditValue(e.target.value)}
+                        onKeyDown={(e) => handleVCardKeyDown(e, key)}
+                        onBlur={() => void handleSaveVCardField(key, vcardEditValue)}
+                        disabled={vcardSaving}
+                        placeholder={label}
+                        className="flex-1 text-sm text-fluux-text bg-fluux-bg rounded px-2 py-0.5
+                                   border border-fluux-brand focus:outline-none disabled:opacity-50"
+                      />
+                    </div>
+                  ) : (
+                    <div className="group flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-fluux-bg">
+                      <Icon className="w-4 h-4 text-fluux-muted flex-shrink-0" />
+                      <span className="flex-1 text-sm text-fluux-text">{ownVCard?.[key]}</span>
+                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => handleStartVCardEdit(key)}
+                          className="p-0.5 text-fluux-muted hover:text-fluux-text rounded"
+                          aria-label={t('profile.editNickname')}
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => void handleSaveVCardField(key, '')}
+                          className="p-0.5 text-fluux-muted hover:text-fluux-red rounded"
+                          aria-label={t('common.remove')}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+              {/* Editing a newly added field (not yet in activeVCardFields) */}
+              {editingVCardField && !activeVCardFields.find((f) => f.key === editingVCardField) && (() => {
+                const field = vcardFields.find((f) => f.key === editingVCardField)
+                if (!field) return null
+                const Icon = field.icon
+                return (
+                  <div className="flex items-center gap-2 px-3 py-1.5">
+                    <Icon className="w-4 h-4 text-fluux-muted flex-shrink-0" />
+                    <input
+                      ref={vcardInputRef}
+                      type="text"
+                      value={vcardEditValue}
+                      onChange={(e) => setVcardEditValue(e.target.value)}
+                      onKeyDown={(e) => handleVCardKeyDown(e, editingVCardField)}
+                      onBlur={() => {
+                        if (!vcardEditValue.trim()) {
+                          handleCancelVCardEdit()
+                        } else {
+                          void handleSaveVCardField(editingVCardField, vcardEditValue)
+                        }
+                      }}
+                      disabled={vcardSaving}
+                      placeholder={field.label}
+                      className="flex-1 text-sm text-fluux-text bg-fluux-bg rounded px-2 py-0.5
+                                 border border-fluux-brand focus:outline-none disabled:opacity-50"
+                    />
+                  </div>
+                )
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* Add vCard field button */}
+        {isConnected && availableVCardFields.length > 0 && !editingVCardField && (
+          <div className="relative mb-3">
+            <button
+              onClick={() => setShowAddField(!showAddField)}
+              className="flex items-center gap-1 text-xs text-fluux-muted hover:text-fluux-text transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              {t('profile.addField')}
+            </button>
+            {showAddField && (
+              <div className="absolute top-full mt-1 left-0 bg-fluux-sidebar border border-fluux-hover rounded-lg shadow-lg py-1 z-10">
+                {availableVCardFields.map(({ key, label, icon: Icon }) => (
+                  <button
+                    key={key}
+                    onClick={() => handleAddVCardField(key)}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-fluux-text hover:bg-fluux-hover transition-colors"
+                  >
+                    <Icon className="w-4 h-4 text-fluux-muted" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

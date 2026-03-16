@@ -72,20 +72,30 @@ export function useViewportObserver({
   }, [])
 
   useEffect(() => {
-    // Flush pending report before resetting — ensures lastSeenMessageId is
-    // up-to-date before onDeactivate() clears the marker.  Without this,
-    // a throttled update can be lost when switching conversations, causing
-    // onActivate() to recompute a stale firstNewMessageId on re-entry.
-    if (pendingMessageIdRef.current && pendingMessageIdRef.current !== lastReportedRef.current) {
-      onMessageSeenRef.current?.(pendingMessageIdRef.current)
-    }
-    // Reset tracking state on conversation switch
-    lastReportedRef.current = null
-    lastReportedTimeRef.current = 0
-    pendingMessageIdRef.current = null
-    if (throttleTimerRef.current) {
-      clearTimeout(throttleTimerRef.current)
-      throttleTimerRef.current = null
+    // Capture the callback at setup time.  When this effect is cleaned up
+    // (conversationId changes or unmount), the captured callback still
+    // targets the CORRECT conversation — even though onMessageSeenRef.current
+    // may already point at the new conversation's callback (updated during
+    // render).  Without this, the pending flush would go to the wrong
+    // conversation, causing lastSeenMessageId to never advance and the
+    // "new messages" marker to lag behind by one or two activations.
+    const callbackForFlush = onMessageSeenRef.current
+
+    return () => {
+      // Flush pending report using the callback captured at setup time,
+      // ensuring lastSeenMessageId is updated for the CORRECT conversation
+      // before onDeactivate() clears the marker.
+      if (pendingMessageIdRef.current && pendingMessageIdRef.current !== lastReportedRef.current) {
+        callbackForFlush?.(pendingMessageIdRef.current)
+      }
+      // Reset tracking state on conversation switch
+      lastReportedRef.current = null
+      lastReportedTimeRef.current = 0
+      pendingMessageIdRef.current = null
+      if (throttleTimerRef.current) {
+        clearTimeout(throttleTimerRef.current)
+        throttleTimerRef.current = null
+      }
     }
   }, [conversationId])
 
@@ -95,7 +105,10 @@ export function useViewportObserver({
     const scrollContainer = scrollContainerRef.current
     if (!scrollContainer) return
 
-    // Find the bottom-most visible message from a set of intersection entries
+    // Find the bottom-most visible message from a set of intersection entries.
+    // Uses live getBoundingClientRect() instead of stale IO snapshots, because
+    // entries that didn't fire in the current IO callback round have outdated
+    // boundingClientRect values.
     const findBottomMostVisible = (entries: IntersectionObserverEntry[]): string | null => {
       let bottomMostId: string | null = null
       let bottomMostBottom = -Infinity
@@ -105,8 +118,7 @@ export function useViewportObserver({
         const messageId = (entry.target as HTMLElement).dataset.messageId
         if (!messageId) continue
 
-        // Use the element's position relative to the viewport
-        const rect = entry.boundingClientRect
+        const rect = entry.target.getBoundingClientRect()
         if (rect.bottom > bottomMostBottom) {
           bottomMostBottom = rect.bottom
           bottomMostId = messageId
@@ -179,9 +191,25 @@ export function useViewportObserver({
       subtree: true,
     })
 
+    // Re-evaluate bottom-most visible message on scroll.
+    // After height changes cause a scroll correction, the IO may not fire for
+    // all entries. This listener uses live rects to ensure the read marker
+    // advances after scroll-to-bottom corrections.
+    const handleScroll = () => {
+      if (visibleEntries.size === 0) return
+      const allVisible = Array.from(visibleEntries.values())
+      const bottomMostId = findBottomMostVisible(allVisible)
+      if (bottomMostId) {
+        reportMessageSeen(bottomMostId)
+      }
+    }
+
+    scrollContainer.addEventListener('scroll', handleScroll, { passive: true })
+
     return () => {
       observer.disconnect()
       mutationObserver.disconnect()
+      scrollContainer.removeEventListener('scroll', handleScroll)
       visibleEntries.clear()
       if (throttleTimerRef.current) {
         clearTimeout(throttleTimerRef.current)

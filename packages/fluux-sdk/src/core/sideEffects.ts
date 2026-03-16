@@ -12,11 +12,13 @@ import type { XMPPClient } from './XMPPClient'
 import { setupChatSideEffects } from './chatSideEffects'
 import { setupRoomSideEffects } from './roomSideEffects'
 import { setupBackgroundSyncSideEffects } from './backgroundSync'
+import { setupConversationSyncSideEffects } from './conversationSyncSideEffects'
 
 // Re-export individual setup functions and types
 export { setupChatSideEffects } from './chatSideEffects'
 export type { SideEffectsOptions } from './chatSideEffects'
 export { setupRoomSideEffects } from './roomSideEffects'
+export { setupConversationSyncSideEffects } from './conversationSyncSideEffects'
 
 /**
  * Sets up all store-based side effects for the SDK.
@@ -45,10 +47,12 @@ export function setupStoreSideEffects(
   const unsubscribeChat = setupChatSideEffects(client, options)
   const unsubscribeRoom = setupRoomSideEffects(client, options)
   const unsubscribeSync = setupBackgroundSyncSideEffects(client, options)
+  const unsubscribeConversationSync = setupConversationSyncSideEffects(client, options)
 
   return () => {
     unsubscribeChat()
     unsubscribeRoom()
     unsubscribeSync()
+    unsubscribeConversationSync()
   }
 }

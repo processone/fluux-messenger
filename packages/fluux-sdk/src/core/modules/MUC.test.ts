@@ -1071,7 +1071,7 @@ describe('MUC Module', () => {
 
       const result = await muc.queryRoomFeatures('room@conference.example.org')
 
-      expect(result).toEqual({ supportsMAM: true, name: 'Test Room' })
+      expect(result).toEqual({ supportsMAM: true, supportsReactions: true, supportsHats: false, name: 'Test Room' })
       expect(mockSendIQ).toHaveBeenCalledWith(
         expect.objectContaining({
           attrs: expect.objectContaining({
@@ -1099,7 +1099,50 @@ describe('MUC Module', () => {
 
       const result = await muc.queryRoomFeatures('room@conference.example.org')
 
-      expect(result).toEqual({ supportsMAM: false, name: 'Test Room' })
+      expect(result).toEqual({ supportsMAM: false, supportsReactions: true, supportsHats: false, name: 'Test Room' })
+    })
+
+    it('returns supportsReactions: false for open semi-anonymous rooms without occupant-id', async () => {
+      const response = createMockElement('iq', { type: 'result', from: 'room@conference.example.org' }, [
+        {
+          name: 'query',
+          attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
+          children: [
+            { name: 'identity', attrs: { category: 'conference', type: 'text', name: 'IRC Bridge' } },
+            { name: 'feature', attrs: { var: 'http://jabber.org/protocol/muc' } },
+            { name: 'feature', attrs: { var: 'muc_semianonymous' } },
+            { name: 'feature', attrs: { var: 'muc_open' } },
+          ],
+        },
+      ])
+
+      mockSendIQ.mockResolvedValue(response)
+
+      const result = await muc.queryRoomFeatures('room@conference.example.org')
+
+      expect(result).toEqual({ supportsMAM: false, supportsReactions: false, supportsHats: false, name: 'IRC Bridge' })
+    })
+
+    it('returns supportsReactions: true for open semi-anonymous rooms with occupant-id', async () => {
+      const response = createMockElement('iq', { type: 'result', from: 'room@conference.example.org' }, [
+        {
+          name: 'query',
+          attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
+          children: [
+            { name: 'identity', attrs: { category: 'conference', type: 'text', name: 'Modern Room' } },
+            { name: 'feature', attrs: { var: 'http://jabber.org/protocol/muc' } },
+            { name: 'feature', attrs: { var: 'muc_semianonymous' } },
+            { name: 'feature', attrs: { var: 'muc_open' } },
+            { name: 'feature', attrs: { var: 'urn:xmpp:occupant-id:0' } },
+          ],
+        },
+      ])
+
+      mockSendIQ.mockResolvedValue(response)
+
+      const result = await muc.queryRoomFeatures('room@conference.example.org')
+
+      expect(result).toEqual({ supportsMAM: false, supportsReactions: true, supportsHats: false, name: 'Modern Room' })
     })
 
     it('returns null when disco#info query fails', async () => {
@@ -1207,6 +1250,82 @@ describe('MUC Module', () => {
 
       expect(result).toBe('conference.example.com')
       expect(mockEmitSDK).toHaveBeenCalledWith('admin:muc-service-mam', { supportsMAM: false })
+    })
+
+    it('emits admin:muc-service event with discovered JID', async () => {
+      const itemsResponse = createMockElement('iq', { type: 'result' }, [
+        {
+          name: 'query',
+          attrs: { xmlns: 'http://jabber.org/protocol/disco#items' },
+          children: [
+            { name: 'item', attrs: { jid: 'conference.example.com' } },
+          ],
+        },
+      ])
+
+      const infoResponse = createMockElement('iq', { type: 'result' }, [
+        {
+          name: 'query',
+          attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
+          children: [
+            { name: 'identity', attrs: { category: 'conference', type: 'text', name: 'MUC' } },
+            { name: 'feature', attrs: { var: 'http://jabber.org/protocol/muc' } },
+          ],
+        },
+      ])
+
+      mockSendIQ
+        .mockResolvedValueOnce(itemsResponse)
+        .mockResolvedValueOnce(infoResponse)
+
+      const result = await muc.discoverMucService()
+
+      expect(result).toBe('conference.example.com')
+      expect(mockEmitSDK).toHaveBeenCalledWith('admin:muc-service', { mucServiceJid: 'conference.example.com' })
+    })
+  })
+
+  describe('roomExists', () => {
+    it('returns true when room has conference identity', async () => {
+      const response = createMockElement('iq', { type: 'result' }, [
+        {
+          name: 'query',
+          attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
+          children: [
+            { name: 'identity', attrs: { category: 'conference', type: 'text', name: 'My Room' } },
+            { name: 'feature', attrs: { var: 'http://jabber.org/protocol/muc' } },
+          ],
+        },
+      ])
+
+      mockSendIQ.mockResolvedValueOnce(response)
+
+      const exists = await muc.roomExists('room@conference.example.com')
+      expect(exists).toBe(true)
+    })
+
+    it('returns false when disco#info returns error', async () => {
+      mockSendIQ.mockRejectedValueOnce(new Error('item-not-found'))
+
+      const exists = await muc.roomExists('nonexistent@conference.example.com')
+      expect(exists).toBe(false)
+    })
+
+    it('returns false when response has no conference identity', async () => {
+      const response = createMockElement('iq', { type: 'result' }, [
+        {
+          name: 'query',
+          attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
+          children: [
+            { name: 'identity', attrs: { category: 'account', type: 'registered' } },
+          ],
+        },
+      ])
+
+      mockSendIQ.mockResolvedValueOnce(response)
+
+      const exists = await muc.roomExists('notaroom@example.com')
+      expect(exists).toBe(false)
     })
   })
 
@@ -1622,6 +1741,210 @@ describe('MUC Module', () => {
         const item = query.getChild('item')
         expect(item.attrs.affiliation).toBe(affiliations[i])
       }
+    })
+  })
+
+  describe('submitRoomConfig', () => {
+    it('sends IQ set with data form to room', async () => {
+      mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
+
+      await muc.submitRoomConfig('room@conference.example.com', {
+        'muc#roomconfig_roomname': 'New Name',
+        'muc#roomconfig_persistentroom': '1',
+      })
+
+      expect(mockSendIQ).toHaveBeenCalledTimes(1)
+      const iq = mockSendIQ.mock.calls[0][0]
+      expect(iq.attrs.type).toBe('set')
+      expect(iq.attrs.to).toBe('room@conference.example.com')
+
+      const query = iq.getChild('query', 'http://jabber.org/protocol/muc#owner')
+      expect(query).toBeDefined()
+
+      const form = query.getChild('x', 'jabber:x:data')
+      expect(form).toBeDefined()
+      expect(form.attrs.type).toBe('submit')
+
+      // Check FORM_TYPE
+      const formType = form.getChildren('field').find((f: { attrs: { var: string } }) => f.attrs.var === 'FORM_TYPE')
+      expect(formType).toBeDefined()
+      expect(formType.getChildText('value')).toBe('http://jabber.org/protocol/muc#roomconfig')
+    })
+
+    it('emits room:updated when name is changed', async () => {
+      mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
+
+      await muc.submitRoomConfig('room@conference.example.com', {
+        'muc#roomconfig_roomname': 'Updated Name',
+      })
+
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:updated', {
+        roomJid: 'room@conference.example.com',
+        updates: { name: 'Updated Name' },
+      })
+    })
+
+    it('updates supportsHats when enable_hats is in config', async () => {
+      mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
+
+      await muc.submitRoomConfig('room@conference.example.com', {
+        'enable_hats': '1',
+      })
+
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:updated', {
+        roomJid: 'room@conference.example.com',
+        updates: { supportsHats: true },
+      })
+    })
+
+    it('disables supportsHats when enable_hats is 0', async () => {
+      mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
+
+      await muc.submitRoomConfig('room@conference.example.com', {
+        'enable_hats': '0',
+      })
+
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:updated', {
+        roomJid: 'room@conference.example.com',
+        updates: { supportsHats: false },
+      })
+    })
+
+    it('does not emit room:updated when no relevant fields changed', async () => {
+      mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
+
+      await muc.submitRoomConfig('room@conference.example.com', {
+        'muc#roomconfig_persistentroom': '1',
+      })
+
+      expect(mockEmitSDK).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('setSubject', () => {
+    it('sends groupchat message with subject element', async () => {
+      mockSendStanza.mockResolvedValue(undefined)
+
+      await muc.setSubject('room@conference.example.com', 'New Topic')
+
+      expect(mockSendStanza).toHaveBeenCalledTimes(1)
+      const msg = mockSendStanza.mock.calls[0][0]
+      expect(msg.name).toBe('message')
+      expect(msg.attrs.to).toBe('room@conference.example.com')
+      expect(msg.attrs.type).toBe('groupchat')
+
+      const subject = msg.getChild('subject')
+      expect(subject).toBeDefined()
+      expect(subject.text()).toBe('New Topic')
+    })
+  })
+
+  describe('destroyRoom', () => {
+    it('sends IQ set with destroy element', async () => {
+      mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
+
+      await muc.destroyRoom('room@conference.example.com', 'Moving to new room')
+
+      // First call is destroy IQ, second is removeBookmark
+      expect(mockSendIQ).toHaveBeenCalled()
+      const iq = mockSendIQ.mock.calls[0][0]
+      expect(iq.attrs.type).toBe('set')
+      expect(iq.attrs.to).toBe('room@conference.example.com')
+
+      const query = iq.getChild('query', 'http://jabber.org/protocol/muc#owner')
+      const destroy = query.getChild('destroy')
+      expect(destroy).toBeDefined()
+
+      const reason = destroy.getChild('reason')
+      expect(reason).toBeDefined()
+      expect(reason.text()).toBe('Moving to new room')
+    })
+
+    it('includes alternate room JID when provided', async () => {
+      mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
+
+      await muc.destroyRoom('old@conference.example.com', 'Moved', 'new@conference.example.com')
+
+      const iq = mockSendIQ.mock.calls[0][0]
+      const destroy = iq.getChild('query', 'http://jabber.org/protocol/muc#owner').getChild('destroy')
+      expect(destroy.attrs.jid).toBe('new@conference.example.com')
+    })
+
+    it('emits room:removed after successful destroy', async () => {
+      mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
+
+      await muc.destroyRoom('room@conference.example.com')
+
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:removed', {
+        roomJid: 'room@conference.example.com',
+      })
+    })
+
+    it('works without reason', async () => {
+      mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
+
+      await muc.destroyRoom('room@conference.example.com')
+
+      const iq = mockSendIQ.mock.calls[0][0]
+      const destroy = iq.getChild('query', 'http://jabber.org/protocol/muc#owner').getChild('destroy')
+      const reason = destroy.getChild('reason')
+      expect(reason).toBeUndefined()
+    })
+  })
+
+  describe('moderateMessage (XEP-0425)', () => {
+    it('should send moderation IQ with correct structure', async () => {
+      mockSendIQ.mockResolvedValueOnce(createMockElement('iq', { type: 'result' }))
+
+      await muc.moderateMessage('room@conference.example.com', 'stanza-id-123', 'Spam')
+
+      expect(mockSendIQ).toHaveBeenCalledOnce()
+      const iq = mockSendIQ.mock.calls[0][0]
+      expect(iq.name).toBe('iq')
+      expect(iq.attrs.type).toBe('set')
+      expect(iq.attrs.to).toBe('room@conference.example.com')
+
+      // Find the moderate element
+      const moderateEl = iq.children.find((c: any) => c.name === 'moderate')
+      expect(moderateEl).toBeDefined()
+      expect(moderateEl.attrs.xmlns).toBe('urn:xmpp:message-moderate:1')
+      expect(moderateEl.attrs.id).toBe('stanza-id-123')
+
+      // Should contain retract child
+      const retractEl = moderateEl.children.find((c: any) => c.name === 'retract')
+      expect(retractEl).toBeDefined()
+      expect(retractEl.attrs.xmlns).toBe('urn:xmpp:message-retract:1')
+
+      // Should contain reason
+      const reasonEl = moderateEl.children.find((c: any) => c.name === 'reason')
+      expect(reasonEl).toBeDefined()
+    })
+
+    it('should send moderation IQ without reason when not provided', async () => {
+      mockSendIQ.mockResolvedValueOnce(createMockElement('iq', { type: 'result' }))
+
+      await muc.moderateMessage('room@conference.example.com', 'stanza-id-456')
+
+      const iq = mockSendIQ.mock.calls[0][0]
+      const moderateEl = iq.children.find((c: any) => c.name === 'moderate')
+      const reasonEl = moderateEl.children.find((c: any) => c.name === 'reason')
+      expect(reasonEl).toBeUndefined()
+    })
+
+    it('should emit optimistic room:message-updated event', async () => {
+      mockSendIQ.mockResolvedValueOnce(createMockElement('iq', { type: 'result' }))
+
+      await muc.moderateMessage('room@conference.example.com', 'stanza-id-789')
+
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:message-updated', {
+        roomJid: 'room@conference.example.com',
+        messageId: 'stanza-id-789',
+        updates: {
+          isRetracted: true,
+          retractedAt: expect.any(Date),
+          isModerated: true,
+        },
+      })
     })
   })
 })

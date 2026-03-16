@@ -17,6 +17,7 @@ import {
   roomStore,
   adminStore,
   blockingStore,
+  ignoreStore,
 } from '../stores'
 import type { ConnectionState } from '../stores/connectionStore'
 import type { ChatState } from '../stores/chatStore'
@@ -26,6 +27,7 @@ import type { EventsState } from '../stores/eventsStore'
 import type { RoomState } from '../stores/roomStore'
 import type { AdminState } from '../stores/adminStore'
 import type { BlockingState } from '../stores/blockingStore'
+import type { IgnoreState } from '../stores/ignoreStore'
 
 /**
  * React hook for the connection store.
@@ -105,4 +107,14 @@ export function useBlockingStore<T = BlockingState>(
   selector: (state: BlockingState) => T = (state) => state as unknown as T
 ): T {
   return useStore(blockingStore, selector)
+}
+
+/**
+ * React hook for the ignore store.
+ * @param selector - Optional selector function to pick specific state
+ */
+export function useIgnoreStore<T = IgnoreState>(
+  selector: (state: IgnoreState) => T = (state) => state as unknown as T
+): T {
+  return useStore(ignoreStore, selector)
 }

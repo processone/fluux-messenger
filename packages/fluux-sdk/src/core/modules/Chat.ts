@@ -23,6 +23,8 @@ import {
   NS_MENTION_ALL,
   NS_HINTS,
   NS_FLUUX,
+  NS_OCCUPANT_ID,
+  NS_MESSAGE_MODERATE,
 } from '../namespaces'
 import type {
   Message,
@@ -222,6 +224,14 @@ export class Chat extends BaseModule {
         type,
         isSentCarbon
       )) return { handled: true }
+    }
+
+    // XEP-0425: Message Moderation (server broadcast)
+    const moderatedEl = stanza.getChild('moderated', NS_MESSAGE_MODERATE)
+    if (moderatedEl) {
+      if (this.handleIncomingModeration(moderatedEl, bareFrom, type)) {
+        return { handled: true }
+      }
     }
 
     // Easter eggs
@@ -1028,6 +1038,40 @@ export class Chat extends BaseModule {
     return false
   }
 
+  /**
+   * Handle incoming XEP-0425 moderation broadcast from the room service.
+   *
+   * The server sends a groupchat message from the bare room JID with a
+   * `<moderated>` element containing the stanza ID of the retracted message.
+   */
+  private handleIncomingModeration(moderatedEl: Element, bareFrom: string, type: string): boolean {
+    // XEP-0425 moderation only applies to groupchat messages
+    if (type !== 'groupchat') return false
+
+    const stanzaId = moderatedEl.attrs.id
+    if (!stanzaId) return false
+
+    // Extract moderator nick from the "by" attribute (full MUC JID: room@server/nick)
+    const byJid = moderatedEl.attrs.by
+    const moderatedBy = byJid ? getResource(byJid) : undefined
+
+    // Extract optional reason
+    const reason = moderatedEl.getChildText('reason') || undefined
+
+    this.deps.emitSDK('room:message-updated', {
+      roomJid: bareFrom,
+      messageId: stanzaId,
+      updates: {
+        isRetracted: true,
+        retractedAt: new Date(),
+        isModerated: true,
+        moderatedBy,
+        moderationReason: reason,
+      },
+    })
+    return true
+  }
+
   private handleMucInvitation(stanza: Element, from: string): boolean {
     // Direct Invitation (XEP-0249)
     // For direct invitations, quickchat marker is a sibling of <x> (message goes directly to invitee)
@@ -1152,6 +1196,9 @@ export class Chat extends BaseModule {
     // Use stable ID for messages without ID (e.g., from IRC bridges) to enable deduplication
     const messageId = stanza.attrs.id || generateStableMessageId(from, parsed.timestamp, body)
 
+    // XEP-0421: Anonymous Unique Occupant Identifiers
+    const occupantId = stanza.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id
+
     const message: RoomMessage = {
       type: 'groupchat',
       id: messageId,
@@ -1167,6 +1214,7 @@ export class Chat extends BaseModule {
       ...(parsed.replyTo && { replyTo: parsed.replyTo }),
       ...(parsed.attachment && { attachment: parsed.attachment }),
       ...(isCorrection && { isEdited: true }),
+      ...(occupantId && { occupantId }),
     }
 
     // Mentions logic

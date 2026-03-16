@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { useRouteSync } from '@/hooks'
 import {
   useEvents,
   useBlocking,
@@ -21,7 +21,7 @@ import {
 
 export function EventsView() {
   const { t } = useTranslation()
-  const navigate = useNavigate()
+  const { navigateToMessages, navigateToRooms } = useRouteSync()
   // NOTE: Use direct store subscriptions to avoid re-renders from activeMessages changes
   const setActiveConversation = useChatStore((s) => s.setActiveConversation)
   const setActiveRoom = useRoomStore((s) => s.setActiveRoom)
@@ -56,15 +56,15 @@ export function EventsView() {
   const handleAcceptStranger = async (jid: string) => {
     await acceptStranger(jid)
     const bareJid = getBareJid(jid)
-    void navigate(`/messages/${encodeURIComponent(bareJid)}`)
     void setActiveConversation(bareJid)
+    navigateToMessages(bareJid)
   }
 
   // Accept invitation and navigate to the room
   const handleAcceptInvitation = async (roomJid: string, password?: string) => {
     await acceptInvitation(roomJid, password)
-    void navigate(`/rooms/${encodeURIComponent(roomJid)}`)
     void setActiveRoom(roomJid)
+    navigateToRooms(roomJid)
   }
 
   const strangerJids = Object.keys(strangerConversations)

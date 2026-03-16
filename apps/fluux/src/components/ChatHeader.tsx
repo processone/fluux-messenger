@@ -6,7 +6,7 @@
  */
 import { useTranslation } from 'react-i18next'
 import type { ContactIdentity } from '@fluux/sdk'
-import { useRosterStore } from '@fluux/sdk/react'
+import { useRosterStore, useContactTime } from '@fluux/sdk/react'
 import { Avatar } from './Avatar'
 import { useWindowDrag } from '@/hooks'
 import { getTranslatedStatusText } from '@/utils/statusText'
@@ -35,6 +35,7 @@ export function ChatHeader({
   // for presence display. This is a focused selector — only re-renders when
   // this specific contact changes, not when other contacts update.
   const fullContact = useRosterStore((s) => jid ? s.contacts.get(jid) : undefined)
+  const contactTime = useContactTime(!isGroupChat ? jid : null)
 
   return (
     <header className={`h-14 ${titleBarClass} px-4 flex items-center border-b border-fluux-bg shadow-sm gap-3`} {...dragRegionProps}>
@@ -69,9 +70,16 @@ export function ChatHeader({
       <div className="flex-1 min-w-0">
         <h2 className="font-semibold text-fluux-text truncate leading-tight">{name}</h2>
         {!isGroupChat && (
-          <p className="text-xs text-fluux-muted truncate">
-            {fullContact ? getTranslatedStatusText(fullContact, t) : jid}
-          </p>
+          <div className="flex items-center gap-1.5">
+            <p className="text-xs text-fluux-muted truncate">
+              {fullContact ? getTranslatedStatusText(fullContact, t) : jid}
+            </p>
+            {contactTime && (
+              <span className="text-xs text-fluux-muted flex-shrink-0">
+                · {contactTime}
+              </span>
+            )}
+          </div>
         )}
       </div>
     </header>

@@ -113,6 +113,13 @@ export function useRoster() {
     [client]
   )
 
+  const fetchVCard = useCallback(
+    async (jid: string) => {
+      return client.profile.fetchVCard(jid)
+    },
+    [client]
+  )
+
   const restoreContactAvatarFromCache = useCallback(
     async (jid: string, avatarHash: string) => {
       return client.profile.restoreContactAvatarFromCache(jid, avatarHash)
@@ -129,8 +136,9 @@ export function useRoster() {
       getContact,
       restoreContactAvatarFromCache,
       fetchContactNickname,
+      fetchVCard,
     }),
-    [addContact, removeContact, renameContact, getContact, restoreContactAvatarFromCache, fetchContactNickname]
+    [addContact, removeContact, renameContact, getContact, restoreContactAvatarFromCache, fetchContactNickname, fetchVCard]
   )
 
   // Memoize the entire return value to prevent render loops

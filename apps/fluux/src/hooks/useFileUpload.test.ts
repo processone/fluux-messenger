@@ -20,6 +20,7 @@ vi.mock('@fluux/sdk/react', () => ({
   useConnectionStore: (selector: (state: { httpUploadService: typeof mockHttpUploadService }) => typeof mockHttpUploadService) => {
     return selector({ httpUploadService: mockHttpUploadService })
   },
+  useContactTime: () => null,
 }))
 
 // Mock react-i18next

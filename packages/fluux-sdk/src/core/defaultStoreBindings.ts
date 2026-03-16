@@ -87,6 +87,7 @@ export function createDefaultStoreBindings(options: DefaultStoreBindingsOptions 
       // Own profile state
       setOwnAvatar: connectionStore.getState().setOwnAvatar,
       setOwnNickname: connectionStore.getState().setOwnNickname,
+      setOwnVCard: connectionStore.getState().setOwnVCard,
       getOwnNickname: () => connectionStore.getState().ownNickname,
       updateOwnResource: connectionStore.getState().updateOwnResource,
       removeOwnResource: connectionStore.getState().removeOwnResource,
@@ -140,6 +141,7 @@ export function createDefaultStoreBindings(options: DefaultStoreBindingsOptions 
         }
         return result
       },
+      archiveConversation: chatStore.getState().archiveConversation,
       unarchiveConversation: chatStore.getState().unarchiveConversation,
       getLastMessage: (conversationId: string) => {
         const meta = chatStore.getState().conversationMeta.get(conversationId)

@@ -237,6 +237,20 @@ describe('useRoster hook', () => {
 
       expect(mockClient.profile.fetchContactNickname).toHaveBeenCalledWith('alice@example.com')
     })
+
+    it('should call client.profile.fetchVCard when fetchVCard is called', async () => {
+      const { result } = renderHook(() => useRoster(), { wrapper })
+
+      const vcard = { fullName: 'Alice Smith', org: 'Acme Corp' }
+      mockClient.profile.fetchVCard.mockResolvedValue(vcard)
+
+      await act(async () => {
+        const res = await result.current.fetchVCard('alice@example.com')
+        expect(res).toEqual(vcard)
+      })
+
+      expect(mockClient.profile.fetchVCard).toHaveBeenCalledWith('alice@example.com')
+    })
   })
 
   describe('contact updates', () => {

@@ -61,6 +61,12 @@ export interface BaseMessage {
   isRetracted?: boolean
   /** XEP-0424: When the message was retracted */
   retractedAt?: Date
+  /** XEP-0425: Message was retracted by a moderator (not the sender) */
+  isModerated?: boolean
+  /** XEP-0425: Nick of the moderator who retracted the message */
+  moderatedBy?: string
+  /** XEP-0425: Reason provided by the moderator for the retraction */
+  moderationReason?: string
   /** XEP-0066/XEP-0264: File attachment with optional thumbnail */
   attachment?: FileAttachment
   /** XEP-0422 + OGP: Link preview metadata for URLs in message */

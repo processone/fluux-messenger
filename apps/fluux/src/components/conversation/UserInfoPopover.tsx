@@ -6,17 +6,20 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
-import type { Contact, ContactIdentity, RoomAffiliation, RoomRole } from '@fluux/sdk'
-import { useConnectionStore } from '@fluux/sdk/react'
+import type { Contact, ContactIdentity, RoomAffiliation, RoomRole, VCardInfo } from '@fluux/sdk'
+import { useXMPP } from '@fluux/sdk'
+import { useConnectionStore, useContactTime } from '@fluux/sdk/react'
 import { useClickOutside } from '@/hooks'
 import { getTranslatedShowText } from '@/utils/presence'
-import { Monitor, Smartphone, Tablet, Globe, HelpCircle, Shield, Crown, UserCheck } from 'lucide-react'
+import { Monitor, Smartphone, Tablet, Globe, HelpCircle, Shield, Crown, UserCheck, Building2, Mail, MapPin, Clock, Loader2 } from 'lucide-react'
 
 export interface UserInfoPopoverProps {
   /** The contact to show info for (Contact has device info, ContactIdentity is identity-only) */
   contact?: Contact | ContactIdentity
   /** The JID to display (fallback if no contact) */
   jid?: string
+  /** Occupant JID for vCard fetch in anonymous rooms (e.g. room@conf/nick) */
+  occupantJid?: string
   /** Room role (for MUC occupants) */
   role?: RoomRole
   /** Room affiliation (for MUC occupants) */
@@ -65,12 +68,21 @@ function getDeviceIcon(clientName: string) {
   return <HelpCircle className="w-3 h-3" />
 }
 
-export function UserInfoPopover({ contact, jid, role, affiliation, children, className = '' }: UserInfoPopoverProps) {
+// Cache vCard results across popover opens to avoid redundant fetches
+const vcardCache = new Map<string, VCardInfo | null>()
+
+/** @internal Exported for testing only */
+export const _vcardCacheForTesting = vcardCache
+
+export function UserInfoPopover({ contact, jid, occupantJid, role, affiliation, children, className = '' }: UserInfoPopoverProps) {
   const { t } = useTranslation()
+  const { client } = useXMPP()
   const connectionStatus = useConnectionStore((s) => s.status)
   const forceOffline = connectionStatus !== 'online'
   const [isOpen, setIsOpen] = useState(false)
   const [position, setPosition] = useState<{ x: number; top?: number; bottom?: number }>({ x: 0 })
+  const [vcard, setVcard] = useState<VCardInfo | null>(null)
+  const [vcardLoading, setVcardLoading] = useState(false)
   const triggerRef = useRef<HTMLDivElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
 
@@ -86,6 +98,35 @@ export function UserInfoPopover({ contact, jid, role, affiliation, children, cla
     window.addEventListener('scroll', handleScroll, true)
     return () => window.removeEventListener('scroll', handleScroll, true)
   }, [isOpen])
+
+  // Fetch vCard when popover opens
+  useEffect(() => {
+    if (!isOpen) return
+
+    const vcardJid = contact?.jid || jid || occupantJid
+    if (!vcardJid) return
+
+    // Check cache first
+    if (vcardCache.has(vcardJid)) {
+      setVcard(vcardCache.get(vcardJid) ?? null)
+      return
+    }
+
+    let cancelled = false
+    setVcardLoading(true)
+    client.profile.fetchVCard(vcardJid).then((result) => {
+      if (cancelled) return
+      vcardCache.set(vcardJid, result)
+      setVcard(result)
+      setVcardLoading(false)
+    }).catch(() => {
+      if (cancelled) return
+      vcardCache.set(vcardJid, null)
+      setVcardLoading(false)
+    })
+
+    return () => { cancelled = true }
+  }, [isOpen, contact?.jid, jid, occupantJid, client])
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -132,7 +173,12 @@ export function UserInfoPopover({ contact, jid, role, affiliation, children, cla
     }
   }
 
-  const displayJid = contact?.jid || jid
+  // Query entity time using the real JID (not occupant nick JID)
+  // Only query when the popover is open to avoid unnecessary traffic
+  const realJid = contact?.jid || jid
+  const contactTime = useContactTime(isOpen && realJid ? realJid : null)
+
+  const displayJid = realJid || (occupantJid?.split('/').pop())
 
   return (
     <>
@@ -157,6 +203,48 @@ export function UserInfoPopover({ contact, jid, role, affiliation, children, cla
             </div>
           )}
 
+          {/* vCard info */}
+          {vcardLoading && (
+            <div className="flex items-center gap-1.5 text-xs text-fluux-muted mb-2">
+              <Loader2 className="w-3 h-3 animate-spin" />
+            </div>
+          )}
+          {vcard && (
+            <div className="space-y-1 mb-2">
+              {vcard.fullName && (
+                <div className="text-sm font-medium text-fluux-text">
+                  {vcard.fullName}
+                </div>
+              )}
+              {vcard.org && (
+                <div className="flex items-center gap-1.5 text-xs text-fluux-muted">
+                  <Building2 className="w-3 h-3 shrink-0" />
+                  <span className="truncate">{vcard.org}</span>
+                </div>
+              )}
+              {vcard.email && (
+                <div className="flex items-center gap-1.5 text-xs text-fluux-muted">
+                  <Mail className="w-3 h-3 shrink-0" />
+                  <span className="truncate">{vcard.email}</span>
+                </div>
+              )}
+              {vcard.country && (
+                <div className="flex items-center gap-1.5 text-xs text-fluux-muted">
+                  <MapPin className="w-3 h-3 shrink-0" />
+                  <span className="truncate">{vcard.country}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Local time (XEP-0202) */}
+          {contactTime && (
+            <div className="flex items-center gap-1.5 text-xs text-fluux-muted mb-2">
+              <Clock className="w-3 h-3 shrink-0" />
+              <span>{t('Local time')}: {contactTime}</span>
+            </div>
+          )}
+
           {/* Role & Affiliation (for room occupants) */}
           {(role || affiliation) && (
             <div className="flex flex-wrap gap-1.5 mb-2">
@@ -177,7 +265,7 @@ export function UserInfoPopover({ contact, jid, role, affiliation, children, cla
           )}
 
           {/* Devices */}
-          {devices.length > 0 ? (
+          {devices.length > 0 && (
             <div className="space-y-1.5">
               <div className="text-xs font-medium text-fluux-text">
                 {t('contacts.connectedDevices')}
@@ -195,11 +283,7 @@ export function UserInfoPopover({ contact, jid, role, affiliation, children, cla
                 </div>
               ))}
             </div>
-          ) : contact ? (
-            <div className="text-sm text-fluux-muted">
-              {t('contacts.offline')}
-            </div>
-          ) : null}
+          )}
         </div>,
         document.body
       )}

@@ -1,8 +1,9 @@
-import { useState, useRef, useCallback, useMemo, memo } from 'react'
+import React, { useState, useRef, useCallback, useMemo, memo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useContextMenu, useListKeyboardNav } from '@/hooks'
+import { useContextMenu, useListKeyboardNav, useRouteSync } from '@/hooks'
 import {
   useRoom,
+  roomStore,
   generateConsistentColorHexSync,
   formatMessagePreview,
   type Room,
@@ -13,6 +14,7 @@ import { Tooltip } from '../Tooltip'
 import { useSidebarZone } from './types'
 import { formatConversationTime } from '@/utils/dateFormat'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { CreateRoomModal } from '../CreateRoomModal'
 import {
   Hash,
   LogIn,
@@ -23,6 +25,7 @@ import {
   ToggleRight,
   Zap,
   Loader2,
+  Plus,
 } from 'lucide-react'
 
 export function RoomsList() {
@@ -30,7 +33,9 @@ export function RoomsList() {
   const { allRooms: rooms, joinRoom, leaveRoom, setBookmark, removeBookmark, activeRoomJid, setActiveRoom, drafts } = useRoom()
   // NOTE: Use direct store subscription to avoid re-renders from activeMessages changes
   const setActiveConversation = useChatStore((s) => s.setActiveConversation)
+  const { navigateToRooms } = useRouteSync()
   const [editingRoom, setEditingRoom] = useState<Room | null>(null)
+  const [showCreateRoom, setShowCreateRoom] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
   const zoneRef = useSidebarZone()
 
@@ -58,13 +63,17 @@ export function RoomsList() {
     // Allow single-click to select any room (joined or bookmarked)
     // Non-joined rooms will show cached history with a "join to participate" prompt
     void isJoined // Unused now, but kept for API consistency
+    // Push if going from list to first item, replace if switching between rooms
+    const hasActive = !!roomStore.getState().activeRoomJid
     // Clear any active 1:1 conversation
     void setActiveConversation(null)
     // Set this room as active
     void setActiveRoom(roomJid)
-  }, [setActiveConversation, setActiveRoom])
+    navigateToRooms(roomJid, { replace: hasActive })
+  }, [setActiveConversation, setActiveRoom, navigateToRooms])
 
   const handleRoomDoubleClick = useCallback(async (roomJid: string, isJoined: boolean, nickname: string) => {
+    const hasActive = !!roomStore.getState().activeRoomJid
     if (isJoined) {
       // If already joined, just select it
       void setActiveConversation(null)
@@ -75,15 +84,18 @@ export function RoomsList() {
       void setActiveConversation(null)
       void setActiveRoom(roomJid)
     }
-  }, [setActiveConversation, setActiveRoom, joinRoom])
+    navigateToRooms(roomJid, { replace: hasActive })
+  }, [setActiveConversation, setActiveRoom, joinRoom, navigateToRooms])
 
   // Keyboard navigation - select room on Enter (same as single-click)
   const handleRoomSelect = useCallback((room: Room) => {
     // Select the room (joined or bookmarked) to show its content
     // Non-joined rooms will show cached history with join prompt
+    const hasActive = !!roomStore.getState().activeRoomJid
     void setActiveConversation(null)
     void setActiveRoom(room.jid)
-  }, [setActiveConversation, setActiveRoom])
+    navigateToRooms(room.jid, { replace: hasActive })
+  }, [setActiveConversation, setActiveRoom, navigateToRooms])
 
   // Keyboard navigation:
   // - Plain arrows: highlight rooms (all rooms including bookmarked)
@@ -103,13 +115,25 @@ export function RoomsList() {
 
   if (rooms.length === 0) {
     return (
-      <div className="px-3 py-4 text-fluux-muted text-sm text-center">
-        <Hash className="w-12 h-12 mx-auto mb-3 opacity-50" />
-        <p className="mb-2">{t('rooms.noRooms')}</p>
-        <p className="text-xs opacity-75">
-          {t('rooms.noRoomsHint')}
-        </p>
-      </div>
+      <>
+        <div className="px-3 py-4 text-fluux-muted text-sm text-center">
+          <Hash className="w-12 h-12 mx-auto mb-3 opacity-50" />
+          <p className="mb-2">{t('rooms.noRooms')}</p>
+          <p className="text-xs opacity-75 mb-3">
+            {t('rooms.noRoomsHint')}
+          </p>
+          <button
+            onClick={() => setShowCreateRoom(true)}
+            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs text-fluux-brand bg-fluux-brand/10 hover:bg-fluux-brand/20 rounded-lg transition-colors"
+          >
+            <Plus className="w-3 h-3" />
+            {t('rooms.createRoom')}
+          </button>
+        </div>
+        {showCreateRoom && (
+          <CreateRoomModal onClose={() => setShowCreateRoom(false)} />
+        )}
+      </>
     )
   }
 
@@ -156,7 +180,7 @@ export function RoomsList() {
       {joinedRooms.length > 0 && (
         <>
           <h3 className="text-xs font-semibold text-fluux-muted uppercase px-2 mb-2">
-            {t('rooms.joined')} — {joinedRooms.length}
+              {t('rooms.joined')} — {joinedRooms.length}
           </h3>
           {joinedRooms.map((room) => {
             const flatIndex = jidToIndex.get(room.jid) ?? -1
@@ -238,6 +262,11 @@ export function RoomsList() {
           onClose={() => setEditingRoom(null)}
         />
       )}
+
+      {/* Create Room Modal */}
+      {showCreateRoom && (
+        <CreateRoomModal onClose={() => setShowCreateRoom(false)} />
+      )}
     </div>
   )
 }
@@ -255,8 +284,8 @@ interface RoomItemProps {
   onEditBookmark: () => void
   onRemoveBookmark: () => void
   onToggleAutojoin: () => void
-  onMouseEnter?: () => void
-  onMouseMove?: () => void
+  onMouseEnter?: (e: React.MouseEvent) => void
+  onMouseMove?: (e: React.MouseEvent) => void
   isQuickChat?: boolean
   'data-room-jid'?: string
   'data-selected'?: boolean

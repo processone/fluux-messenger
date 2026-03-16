@@ -8,7 +8,7 @@ describe('settingsStore', () => {
     vi.mocked(localStorage.getItem).mockClear()
     vi.mocked(localStorage.setItem).mockClear()
     vi.mocked(localStorage.getItem).mockReturnValue(null)
-    useSettingsStore.setState({ themeMode: 'dark', timeFormat: 'auto' })
+    useSettingsStore.setState({ themeMode: 'dark', timeFormat: 'auto', fontSize: 100 })
   })
 
   describe('initial state', () => {
@@ -53,6 +53,28 @@ describe('settingsStore', () => {
 
       useSettingsStore.getState().setThemeMode('dark')
       expect(localStorage.setItem).toHaveBeenCalledWith('fluux-theme', 'dark')
+    })
+  })
+
+  describe('setFontSize', () => {
+    it('should update fontSize', () => {
+      useSettingsStore.getState().setFontSize(120)
+      expect(useSettingsStore.getState().fontSize).toBe(120)
+    })
+
+    it('should clamp fontSize to minimum 75', () => {
+      useSettingsStore.getState().setFontSize(50)
+      expect(useSettingsStore.getState().fontSize).toBe(75)
+    })
+
+    it('should clamp fontSize to maximum 150', () => {
+      useSettingsStore.getState().setFontSize(200)
+      expect(useSettingsStore.getState().fontSize).toBe(150)
+    })
+
+    it('should persist fontSize to localStorage', () => {
+      useSettingsStore.getState().setFontSize(110)
+      expect(localStorage.setItem).toHaveBeenCalledWith('fluux-font-size', '110')
     })
   })
 

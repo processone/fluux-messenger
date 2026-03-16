@@ -2,7 +2,7 @@ import { useCallback, useMemo } from 'react'
 import { connectionStore } from '../stores'
 import { useConnectionStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
-import type { LinkPreview } from '../core/types'
+import type { LinkPreview, VCardInfo } from '../core/types'
 import { NS_REGISTER } from '../core/namespaces'
 
 /**
@@ -104,6 +104,7 @@ export function useConnection() {
   const ownAvatar = useConnectionStore((s) => s.ownAvatar)
   const ownAvatarHash = useConnectionStore((s) => s.ownAvatarHash)
   const ownNickname = useConnectionStore((s) => s.ownNickname)
+  const ownVCard = useConnectionStore((s) => s.ownVCard)
   const ownResources = useConnectionStore((s) => s.ownResources)
   // HTTP Upload (XEP-0363)
   const httpUploadService = useConnectionStore((s) => s.httpUploadService)
@@ -174,6 +175,17 @@ export function useConnection() {
     await client.profile.clearOwnNickname()
   }, [client])
 
+  const fetchOwnVCard = useCallback(async () => {
+    return client.profile.fetchOwnVCard()
+  }, [client])
+
+  const setOwnVCard = useCallback(
+    async (info: VCardInfo) => {
+      await client.profile.publishOwnVCard(info)
+    },
+    [client]
+  )
+
   const restoreOwnAvatarFromCache = useCallback(
     async (avatarHash: string) => {
       return client.profile.restoreOwnAvatarFromCache(avatarHash)
@@ -238,6 +250,8 @@ export function useConnection() {
       setOwnAvatar,
       clearOwnNickname,
       clearOwnAvatar,
+      fetchOwnVCard,
+      setOwnVCard,
       restoreOwnAvatarFromCache,
       changePassword,
       getStreamManagementState,
@@ -253,6 +267,8 @@ export function useConnection() {
       setOwnAvatar,
       clearOwnNickname,
       clearOwnAvatar,
+      fetchOwnVCard,
+      setOwnVCard,
       restoreOwnAvatarFromCache,
       changePassword,
       getStreamManagementState,
@@ -280,6 +296,7 @@ export function useConnection() {
       ownAvatar,
       ownAvatarHash,
       ownNickname,
+      ownVCard,
       ownResources,
       // HTTP Upload (XEP-0363)
       httpUploadService,
@@ -307,6 +324,7 @@ export function useConnection() {
       ownAvatar,
       ownAvatarHash,
       ownNickname,
+      ownVCard,
       ownResources,
       httpUploadService,
       webPushStatus,

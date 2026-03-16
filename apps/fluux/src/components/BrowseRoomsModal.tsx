@@ -9,8 +9,11 @@ import {
   generateConsistentColorHexSync,
 } from '@fluux/sdk'
 import { useChatStore } from '@fluux/sdk/react'
-import { X, Search, Hash, Loader2, ChevronDown, Server } from 'lucide-react'
+import { Search, Hash, Loader2, ChevronDown, Server, X } from 'lucide-react'
 import { Tooltip } from './Tooltip'
+import { ModalShell } from './ModalShell'
+
+const PAGE_SIZE = 50
 
 interface BrowseRoomsModalProps {
   onClose: () => void
@@ -29,9 +32,19 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
   const [joiningRoom, setJoiningRoom] = useState<string | null>(null)
   const [nickname, setNickname] = useState('')
   const nicknameInitialized = useRef(false)
-  const inputRef = useModalInput<HTMLInputElement>(onClose)
+  const inputRef = useModalInput<HTMLInputElement>()
   const listRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  // Pagination state
+  const [paginationCursor, setPaginationCursor] = useState<string | undefined>(undefined)
+  const [totalCount, setTotalCount] = useState<number | undefined>(undefined)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+
+  // Refs for stable IntersectionObserver (avoids recreating on every state change)
+  const onLoadMoreRef = useRef<() => void>(() => {})
+  const observerRef = useRef<IntersectionObserver | null>(null)
+  const isLoadingMoreRef = useRef(false)
 
   // MUC service selection
   const [selectedService, setSelectedService] = useState<string>(mucServiceJid || '')
@@ -85,6 +98,9 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
       // If custom input is shown but not yet committed, don't fetch
       if (showCustomInput && !committedCustomService) {
         setRooms([])
+        setPaginationCursor(undefined)
+        setTotalCount(undefined)
+        setHasMore(false)
         setLoading(false)
         return
       }
@@ -92,18 +108,84 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
       setLoading(true)
       setError(null)
       try {
-        // Call browsePublicRooms - if no service provided, it will auto-discover
-        const result = await browsePublicRooms(effectiveService || undefined)
+        const result = await browsePublicRooms(effectiveService || undefined, { max: PAGE_SIZE })
         setRooms(result.rooms)
+        setPaginationCursor(result.pagination.last)
+        setTotalCount(result.pagination.count)
+        // Determine if there are more pages
+        if (result.pagination.count !== undefined) {
+          setHasMore(result.rooms.length < result.pagination.count)
+        } else {
+          setHasMore(result.rooms.length >= PAGE_SIZE && !!result.pagination.last)
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : t('rooms.failedToLoadRooms'))
         setRooms([])
+        setPaginationCursor(undefined)
+        setTotalCount(undefined)
+        setHasMore(false)
       } finally {
         setLoading(false)
       }
     }
     void fetchRooms()
   }, [effectiveService, showCustomInput, committedCustomService, browsePublicRooms, t])
+
+  // Load more handler - always reads latest state via closure (updated every render)
+  onLoadMoreRef.current = () => {
+    if (isLoadingMoreRef.current || !hasMore || !paginationCursor || loading) return
+    isLoadingMoreRef.current = true
+    setLoadingMore(true)
+
+    browsePublicRooms(effectiveService || undefined, {
+      max: PAGE_SIZE,
+      after: paginationCursor,
+    })
+      .then((result) => {
+        if (result.rooms.length === 0) {
+          setHasMore(false)
+        } else {
+          setRooms((prev) => {
+            const updated = [...prev, ...result.rooms]
+            // Compute hasMore from the actual new total (avoids stale closure)
+            if (result.pagination.count !== undefined) {
+              setHasMore(updated.length < result.pagination.count)
+              setTotalCount(result.pagination.count)
+            } else {
+              setHasMore(result.rooms.length >= PAGE_SIZE && !!result.pagination.last)
+            }
+            return updated
+          })
+          setPaginationCursor(result.pagination.last)
+        }
+      })
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : t('rooms.failedToLoadRooms'))
+      })
+      .finally(() => {
+        isLoadingMoreRef.current = false
+        setLoadingMore(false)
+      })
+  }
+
+  // Callback ref for sentinel element - creates observer once, stable across re-renders
+  const sentinelRef = useCallback((node: HTMLDivElement | null) => {
+    if (observerRef.current) {
+      observerRef.current.disconnect()
+      observerRef.current = null
+    }
+    if (node) {
+      observerRef.current = new IntersectionObserver(
+        (entries) => {
+          if (entries[0].isIntersecting) {
+            onLoadMoreRef.current()
+          }
+        },
+        { threshold: 0.1 }
+      )
+      observerRef.current.observe(node)
+    }
+  }, [])
 
   // Handle service selection from dropdown
   const handleServiceChange = (value: string) => {
@@ -193,26 +275,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
 
 
   return (
-    <div
-      data-modal="true"
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div className="bg-fluux-sidebar rounded-lg shadow-xl w-full max-w-lg mx-4 max-h-[80vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-fluux-hover flex-shrink-0">
-          <h2 className="text-lg font-semibold text-fluux-text">{t('rooms.browseRoomsTitle')}</h2>
-          <Tooltip content={t('common.close')}>
-            <button
-              onClick={onClose}
-              aria-label={t('common.close')}
-              className="p-1 text-fluux-muted hover:text-fluux-text rounded hover:bg-fluux-hover"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </Tooltip>
-        </div>
-
+    <ModalShell title={t('rooms.browseRoomsTitle')} onClose={onClose} width="max-w-lg" panelClassName="max-h-[80vh] flex flex-col">
         {/* MUC Service selector */}
         <div className="px-4 py-3 border-b border-fluux-hover flex-shrink-0">
           <label htmlFor="muc-service" className="block text-xs font-semibold text-fluux-muted uppercase mb-2">
@@ -396,6 +459,15 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
                   </div>
                 )
               })}
+
+              {/* Load more sentinel */}
+              <div ref={sentinelRef} className="py-2">
+                {loadingMore && (
+                  <div className="flex items-center justify-center gap-2 text-fluux-muted">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -404,9 +476,9 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
         <div className="px-4 py-3 border-t border-fluux-hover flex-shrink-0">
           <p className="text-xs text-fluux-muted">
             {t('rooms.browseRoomsHint', { count: rooms.length })}
+            {totalCount !== undefined && totalCount > rooms.length && ` / ${totalCount}`}
           </p>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   )
 }

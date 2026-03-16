@@ -399,10 +399,10 @@ describe('useRouteSync', () => {
       expect(currentPath).toBe('/settings/notifications')
     })
 
-    it('goBack navigates to previous entry in history', () => {
-      let currentPath = '/rooms'
+    it('navigateUp goes from detail to list within current tab', () => {
+      let currentPath = '/messages/user%40example.com'
       const wrapper = ({ children }: { children: ReactNode }) => (
-        <MemoryRouter initialEntries={['/messages', '/rooms']} initialIndex={1}>
+        <MemoryRouter initialEntries={['/messages/user%40example.com']}>
           {children}
           <LocationCapture onPathChange={(p) => (currentPath = p)} />
         </MemoryRouter>
@@ -411,7 +411,25 @@ describe('useRouteSync', () => {
       const { result } = renderHook(() => useRouteSync(), { wrapper })
 
       act(() => {
-        result.current.goBack()
+        result.current.navigateUp()
+      })
+
+      expect(currentPath).toBe('/messages')
+    })
+
+    it('navigateUp goes to messages when already at list level', () => {
+      let currentPath = '/rooms'
+      const wrapper = ({ children }: { children: ReactNode }) => (
+        <MemoryRouter initialEntries={['/rooms']}>
+          {children}
+          <LocationCapture onPathChange={(p) => (currentPath = p)} />
+        </MemoryRouter>
+      )
+
+      const { result } = renderHook(() => useRouteSync(), { wrapper })
+
+      act(() => {
+        result.current.navigateUp()
       })
 
       expect(currentPath).toBe('/messages')

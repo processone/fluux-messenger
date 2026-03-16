@@ -87,6 +87,7 @@ vi.mock('@fluux/sdk/react', () => ({
   useConnectionStore: (selector: (state: { jid: string }) => string) => {
     return selector({ jid: 'testuser@example.org' })
   },
+  useContactTime: () => null,
 }))
 
 // Mock the deep-link plugin

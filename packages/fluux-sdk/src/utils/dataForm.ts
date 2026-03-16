@@ -1,4 +1,4 @@
-import type { Element } from '@xmpp/client'
+import { xml, type Element } from '@xmpp/client'
 import type { DataForm, DataFormField, DataFormFieldType } from '../core/types'
 
 /**
@@ -75,6 +75,53 @@ export function getFormFieldValue(form: DataForm, varName: string): string | und
   const field = form.fields.find(f => f.var === varName)
   if (!field?.value) return undefined
   return Array.isArray(field.value) ? field.value[0] : field.value
+}
+
+/**
+ * Build an XEP-0004 Data Form submit element from key-value pairs.
+ *
+ * Converts a `Record<string, string | string[]>` into an
+ * `<x xmlns="jabber:x:data" type="submit">` XML element.
+ *
+ * @param values - Field var names mapped to values (string for single, string[] for multi)
+ * @param formType - Optional FORM_TYPE value (added as a hidden field)
+ * @returns An XML Element representing the submit form
+ */
+export function buildDataFormSubmit(
+  values: Record<string, string | string[]>,
+  formType?: string
+): Element {
+  const fields: Element[] = []
+
+  // Add FORM_TYPE hidden field if specified
+  if (formType) {
+    fields.push(
+      xml('field', { var: 'FORM_TYPE', type: 'hidden' },
+        xml('value', {}, formType)
+      )
+    )
+  }
+
+  for (const [varName, value] of Object.entries(values)) {
+    // Skip FORM_TYPE if already added above
+    if (varName === 'FORM_TYPE') continue
+
+    if (Array.isArray(value)) {
+      fields.push(
+        xml('field', { var: varName },
+          ...value.map(v => xml('value', {}, v))
+        )
+      )
+    } else {
+      fields.push(
+        xml('field', { var: varName },
+          xml('value', {}, value)
+        )
+      )
+    }
+  }
+
+  return xml('x', { xmlns: 'jabber:x:data', type: 'submit' }, ...fields)
 }
 
 /**

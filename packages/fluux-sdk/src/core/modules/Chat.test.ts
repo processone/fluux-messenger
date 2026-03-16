@@ -2173,4 +2173,103 @@ describe('XMPPClient Message', () => {
       })
     })
   })
+
+  describe('incoming message moderation (XEP-0425)', () => {
+    it('should handle moderation broadcast with moderator and reason', async () => {
+      await connectClient()
+
+      // Simulate incoming moderation broadcast from room service
+      const moderationStanza = createMockElement('message', {
+        from: 'room@conference.example.com',
+        type: 'groupchat',
+      }, [
+        {
+          name: 'moderated',
+          attrs: {
+            xmlns: 'urn:xmpp:message-moderate:1',
+            id: 'retracted-stanza-id',
+            by: 'room@conference.example.com/admin',
+          },
+          children: [
+            { name: 'retract', attrs: { xmlns: 'urn:xmpp:message-retract:1' } },
+            { name: 'reason', text: 'Spam' },
+          ],
+        },
+      ])
+
+      mockXmppClientInstance._emit('stanza', moderationStanza)
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:message-updated', {
+        roomJid: 'room@conference.example.com',
+        messageId: 'retracted-stanza-id',
+        updates: {
+          isRetracted: true,
+          retractedAt: expect.any(Date),
+          isModerated: true,
+          moderatedBy: 'admin',
+          moderationReason: 'Spam',
+        },
+      })
+    })
+
+    it('should handle moderation broadcast without reason', async () => {
+      await connectClient()
+
+      const moderationStanza = createMockElement('message', {
+        from: 'room@conference.example.com',
+        type: 'groupchat',
+      }, [
+        {
+          name: 'moderated',
+          attrs: {
+            xmlns: 'urn:xmpp:message-moderate:1',
+            id: 'retracted-stanza-id',
+            by: 'room@conference.example.com/moderator',
+          },
+          children: [
+            { name: 'retract', attrs: { xmlns: 'urn:xmpp:message-retract:1' } },
+          ],
+        },
+      ])
+
+      mockXmppClientInstance._emit('stanza', moderationStanza)
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:message-updated', {
+        roomJid: 'room@conference.example.com',
+        messageId: 'retracted-stanza-id',
+        updates: {
+          isRetracted: true,
+          retractedAt: expect.any(Date),
+          isModerated: true,
+          moderatedBy: 'moderator',
+          moderationReason: undefined,
+        },
+      })
+    })
+
+    it('should ignore moderation for non-groupchat messages', async () => {
+      await connectClient()
+
+      const moderationStanza = createMockElement('message', {
+        from: 'user@example.com',
+        type: 'chat',
+      }, [
+        {
+          name: 'moderated',
+          attrs: {
+            xmlns: 'urn:xmpp:message-moderate:1',
+            id: 'some-id',
+            by: 'user@example.com/resource',
+          },
+          children: [
+            { name: 'retract', attrs: { xmlns: 'urn:xmpp:message-retract:1' } },
+          ],
+        },
+      ])
+
+      mockXmppClientInstance._emit('stanza', moderationStanza)
+
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('room:message-updated', expect.anything())
+    })
+  })
 })

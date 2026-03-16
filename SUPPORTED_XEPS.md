@@ -20,6 +20,7 @@ This document lists the XMPP Extension Protocols (XEPs) and related RFCs impleme
 | [XEP-0156](https://xmpp.org/extensions/xep-0156.html) | Discovering Alternative XMPP Connection Methods | ✅ Implemented | Auto-discovers WebSocket endpoint via host-meta (HTTPS-only for security)                                   |
 | [XEP-0198](https://xmpp.org/extensions/xep-0198.html) | Stream Management                               | ✅ Implemented | Session resumption, message delivery reliability, ack tracking                                              |
 | [XEP-0199](https://xmpp.org/extensions/xep-0199.html) | XMPP Ping                                       | ✅ Implemented | Responds to server/contact pings, uses ping for connection liveness checks                                  |
+| [XEP-0202](https://xmpp.org/extensions/xep-0202.html) | Entity Time                                     | ✅ Implemented | Responds to queries; queries contacts and displays local time in chat header and contact popover            |
 | [XEP-0280](https://xmpp.org/extensions/xep-0280.html) | Message Carbons                                 | ✅ Implemented | Sync messages across multiple connected clients                                                             |
 | [XEP-0368](https://xmpp.org/extensions/xep-0368.html) | SRV Records for XMPP over TLS                   | ✅ Implemented | Desktop: SRV lookup for `_xmpps-client._tcp` (direct TLS) and `_xmpp-client._tcp` (STARTTLS) via Rust proxy |
 
@@ -59,6 +60,7 @@ This document lists the XMPP Extension Protocols (XEPs) and related RFCs impleme
 | [XEP-0461](https://xmpp.org/extensions/xep-0461.html) | Message Replies              | ✅ Implemented | Reply-to with quoted preview and fallback body                                                                             |
 | [XEP-0308](https://xmpp.org/extensions/xep-0308.html) | Last Message Correction      | ✅ Implemented | Edit last sent message with validation                                                                                     |
 | [XEP-0424](https://xmpp.org/extensions/xep-0424.html) | Message Retraction           | ✅ Implemented | Delete own messages with sender verification                                                                               |
+| [XEP-0425](https://xmpp.org/extensions/xep-0425.html) | Message Moderation           | ✅ Implemented | Moderators can retract other users' messages in MUC rooms, with reason display                                             |
 | [XEP-0363](https://xmpp.org/extensions/xep-0363.html) | HTTP File Upload             | ✅ Implemented | File upload with drag-and-drop, progress indicator, automatic service discovery                                            |
 | [XEP-0066](https://xmpp.org/extensions/xep-0066.html) | Out of Band Data             | ✅ Implemented | File URL sharing with thumbnails                                                                                           |
 | [XEP-0245](https://xmpp.org/extensions/xep-0245.html) | The /me Command              | ✅ Implemented | Action messages displayed in italic with sender name                                                                       |
@@ -76,15 +78,15 @@ This document lists the XMPP Extension Protocols (XEPs) and related RFCs impleme
 |-------------------------------------------------------|-----------------------------------------------|---------------|----------------------------------------------------------------------------------------------------------------------|
 | [XEP-0060](https://xmpp.org/extensions/xep-0060.html) | Publish-Subscribe                             | ✅ Implemented | PubSub event handling for avatars, nicknames, bookmarks, and settings                                                |
 | [XEP-0163](https://xmpp.org/extensions/xep-0163.html) | Personal Eventing Protocol                    | ✅ Implemented | PEP notifications for avatars (XEP-0084), nicknames (XEP-0172), bookmarks (XEP-0402), appearance settings (XEP-0223) |
-| [XEP-0223](https://xmpp.org/extensions/xep-0223.html) | Persistent Storage of Private Data via PubSub | ✅ Implemented | Theme/appearance settings sync across devices                                                                        |
+| [XEP-0223](https://xmpp.org/extensions/xep-0223.html) | Persistent Storage of Private Data via PubSub | ✅ Implemented | Private PEP storage for appearance settings, conversation list sync, and per-room ignored users                      |
 
 ## Multi-User Chat (MUC)
 
 | XEP                                                   | Name                        | Status        | Notes                                                                                                       |
 |-------------------------------------------------------|-----------------------------|---------------|-------------------------------------------------------------------------------------------------------------|
 | [XEP-0045](https://xmpp.org/extensions/xep-0045.html) | Multi-User Chat             | ✅ Implemented | Join/leave rooms, messaging, occupant list with presence tooltips, roles/affiliations, mediated invitations |
-| [XEP-0054](https://xmpp.org/extensions/xep-0054.html) | vCard-temp                  | ✅ Implemented | Room avatar retrieval and display                                                                           |
-| [XEP-0317](https://xmpp.org/extensions/xep-0317.html) | Hats                        | ✅ Implemented | Custom role tags displayed as colored badges in occupant panel and messages                                 |
+| [XEP-0054](https://xmpp.org/extensions/xep-0054.html) | vCard-temp                  | ✅ Implemented | Room avatar retrieval and display, contact vCard info in popover (full name, org, email, country)           |
+| [XEP-0317](https://xmpp.org/extensions/xep-0317.html) | Hats                        | ✅ Implemented | Custom role badges in occupant panel and messages, hat management UI (define, assign, unassign via ad-hoc commands) |
 | [XEP-0392](https://xmpp.org/extensions/xep-0392.html) | Consistent Color Generation | ✅ Implemented | Deterministic colors for avatars, nicknames, and hat badges based on identifier                             |
 | [XEP-0249](https://xmpp.org/extensions/xep-0249.html) | Direct MUC Invitations      | ✅ Implemented | Receive room invitations with Accept/Decline in Events view                                                 |
 | [XEP-0372](https://xmpp.org/extensions/xep-0372.html) | References                  | ✅ Implemented | @mention notifications with position-based highlighting                                                     |
@@ -116,11 +118,27 @@ The following XEPs are planned for future implementation:
 
 ## Custom Extensions
 
-Fluux also uses custom extensions in the `urn:xmpp:fluux:0` namespace:
+Fluux uses custom extensions across several namespaces:
+
+### Bookmark Extensions (`urn:xmpp:fluux:0`)
 
 - **Room notification preferences**: Stored in XEP-0402 bookmark extensions to enable per-room notification settings (mentions only vs. all messages)
-- **@all mentions**: Room-wide mention indicator for notifying all participants
+- **@all mentions**: Room-wide mention indicator (`urn:fluux:mentions:0`) for notifying all participants
 - **Quick chat marker**: `<quickchat xmlns="urn:xmpp:fluux:0"/>` element included in MUC invitations to indicate the room is a temporary quick chat (non-persistent, auto-destroys when empty)
+
+### Private PEP Storage (XEP-0223)
+
+| Namespace                            | Purpose                                                                                                            |
+|--------------------------------------|--------------------------------------------------------------------------------------------------------------------|
+| `urn:xmpp:fluux:appearance:0`        | Theme and appearance settings sync across devices                                                                  |
+| `urn:xmpp:fluux:conversations:0`     | Conversation list sync (active and archived 1:1 conversations) with debounced publishing and merge-on-reconnect    |
+| `urn:xmpp:fluux:ignored-users:0`     | Per-room ignored users list, stored as one PEP item per room                                                       |
+
+### Other
+
+| Namespace                | Purpose                                                           |
+|--------------------------|-------------------------------------------------------------------|
+| `urn:fluux:easter-egg:0` | Easter egg animations triggered by specific message content       |
 
 ## ejabberd Business Edition Extensions
 

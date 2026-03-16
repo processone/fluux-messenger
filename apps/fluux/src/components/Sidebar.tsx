@@ -14,7 +14,7 @@ import { BrowseRoomsModal } from './BrowseRoomsModal'
 import { Avatar } from './Avatar'
 import { Tooltip } from './Tooltip'
 import { AddContactModal } from './AddContactModal'
-import { JoinRoomModal } from './JoinRoomModal'
+import { CreateRoomModal } from './CreateRoomModal'
 import { CreateQuickChatModal } from './CreateQuickChatModal'
 import { SettingsSidebar, type SettingsCategory, DEFAULT_SETTINGS_CATEGORY } from './settings-components'
 import {
@@ -30,6 +30,8 @@ import {
   Wrench,
   Zap,
   Search,
+  Ban,
+  UserPlus,
 } from 'lucide-react'
 import { clearSession } from '@/hooks/useSessionPersistence'
 import { deleteCredentials } from '@/utils/keychain'
@@ -128,10 +130,12 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
   const showPresenceMenu = modalState.presenceMenu
 
   // Local UI state (not shared)
-  const [showJoinRoom, setShowJoinRoom] = useState(false)
+  const [showCreateRoom, setShowCreateRoom] = useState(false)
   const [showBrowseRooms, setShowBrowseRooms] = useState(false)
   const [showRoomDropdown, setShowRoomDropdown] = useState(false)
   const roomDropdownRef = useRef<HTMLDivElement>(null)
+  const [showContactDropdown, setShowContactDropdown] = useState(false)
+  const contactDropdownRef = useRef<HTMLDivElement>(null)
 
   // Sidebar resize state
   const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -198,9 +202,11 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
     localStorage.setItem(SIDEBAR_WIDTH_KEY, SIDEBAR_DEFAULT_WIDTH.toString())
   }, [])
 
-  // Close room dropdown when clicking outside
+  // Close dropdowns when clicking outside
   const closeRoomDropdown = useCallback(() => setShowRoomDropdown(false), [])
   useClickOutside(roomDropdownRef, closeRoomDropdown, showRoomDropdown)
+  const closeContactDropdown = useCallback(() => setShowContactDropdown(false), [])
+  useClickOutside(contactDropdownRef, closeContactDropdown, showContactDropdown)
 
   // totalUnread is computed directly via useChatStore selector above
 
@@ -286,7 +292,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header - with drag region for window movement */}
         <div className={`h-12 ${titleBarClass} px-4 flex items-center border-b border-fluux-bg shadow-sm`} {...dragRegionProps}>
-          <h1 className="font-semibold text-fluux-text truncate">
+          <h1 className="flex-1 font-semibold text-fluux-text truncate">
             {sidebarView === 'messages' ? t('sidebar.messages')
               : sidebarView === 'rooms' ? t('sidebar.rooms')
               : sidebarView === 'directory' ? t('sidebar.connections')
@@ -296,14 +302,36 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
               : t('sidebar.events')}
           </h1>
           {sidebarView === 'directory' && (
-            <Tooltip content={t('sidebar.addContact')} position="bottom">
-              <button
-                onClick={() => modalActions.open('addContact')}
-                className="ml-auto p-1 text-fluux-muted hover:text-fluux-text"
-              >
-                <Plus className="w-5 h-5" />
-              </button>
-            </Tooltip>
+            <div className="relative ml-auto" ref={contactDropdownRef}>
+              <Tooltip content={t('common.options')} position="bottom">
+                <button
+                  onClick={() => setShowContactDropdown(!showContactDropdown)}
+                  className="p-1 text-fluux-muted hover:text-fluux-text flex items-center"
+                >
+                  <Users className="w-5 h-5" />
+                  <ChevronDown className="w-3 h-3 -ml-0.5" />
+                </button>
+              </Tooltip>
+              {showContactDropdown && (
+                <div className="absolute right-0 mt-1 w-52 bg-fluux-bg rounded-lg shadow-xl border border-fluux-hover py-1 z-50">
+                  <button
+                    onClick={() => { setShowContactDropdown(false); modalActions.open('addContact') }}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-fluux-hover flex items-center gap-2"
+                  >
+                    <UserPlus className="w-4 h-4 text-fluux-muted" />
+                    <span>{t('sidebar.addContact')}</span>
+                  </button>
+                  <div className="border-t border-fluux-hover my-1" />
+                  <button
+                    onClick={() => { setShowContactDropdown(false); navigateToSettings('blocked') }}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-fluux-hover flex items-center gap-2"
+                  >
+                    <Ban className="w-4 h-4 text-fluux-muted" />
+                    <span>{t('sidebar.blockedUsers')}</span>
+                  </button>
+                </div>
+              )}
+            </div>
           )}
           {sidebarView === 'rooms' && (
             <div className="relative ml-auto" ref={roomDropdownRef}>
@@ -327,7 +355,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
                   </button>
                   <div className="border-t border-fluux-hover my-1" />
                   <button
-                    onClick={() => { setShowRoomDropdown(false); setShowJoinRoom(true) }}
+                    onClick={() => { setShowRoomDropdown(false); setShowCreateRoom(true) }}
                     className="w-full px-3 py-2 text-left text-sm hover:bg-fluux-hover flex items-center gap-2"
                   >
                     <Hash className="w-4 h-4 text-fluux-muted" />
@@ -480,9 +508,9 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
         <AddContactModal onClose={() => modalActions.close('addContact')} />
       )}
 
-      {/* Join Room Modal */}
-      {showJoinRoom && (
-        <JoinRoomModal onClose={() => setShowJoinRoom(false)} />
+      {/* Create Room Modal */}
+      {showCreateRoom && (
+        <CreateRoomModal onClose={() => setShowCreateRoom(false)} />
       )}
 
       {/* Quick Chat Modal */}

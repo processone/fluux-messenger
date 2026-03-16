@@ -64,6 +64,7 @@ vi.mock('@fluux/sdk/react', () => ({
   }),
   useConnectionStore: (selector: (state: { status: string }) => unknown) =>
     selector({ status: 'online' }),
+  useContactTime: () => null,
 }))
 
 // Mock i18n
@@ -411,6 +412,7 @@ describe('CommandPalette', () => {
 
       // Click on the backdrop (the outer div)
       const backdrop = screen.getByPlaceholderText('Go to...').closest('div')?.parentElement?.parentElement
+      fireEvent.mouseDown(backdrop!)
       fireEvent.click(backdrop!)
 
       expect(defaultProps.onClose).toHaveBeenCalled()

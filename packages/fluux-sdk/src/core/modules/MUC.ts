@@ -3,6 +3,7 @@ import { BaseModule } from './BaseModule'
 import { getBareJid, getLocalPart, getResource, getDomain } from '../jid'
 import { generateUUID } from '../../utils/uuid'
 import { generateQuickChatSlug } from '../wordlist'
+import { hasStableOccupantIdentity } from '../roomCapabilities'
 import {
   NS_MUC,
   NS_MUC_USER,
@@ -19,6 +20,10 @@ import {
   NS_MAM,
   NS_NICK,
   NS_VCARD_UPDATE,
+  NS_OCCUPANT_ID,
+  NS_COMMANDS,
+  NS_RETRACT,
+  NS_MESSAGE_MODERATE,
 } from '../namespaces'
 import type {
   Room,
@@ -32,6 +37,7 @@ import type {
   AdminRoom,
 } from '../types'
 import { parseXMPPError, formatXMPPError } from '../../utils/xmppError'
+import { buildDataFormSubmit, parseDataForm } from '../../utils/dataForm'
 import { logInfo, logWarn, logError as logErr } from '../logger'
 
 /**
@@ -192,6 +198,10 @@ export class MUC extends BaseModule {
     const xUpdate = stanza.getChild('x', NS_VCARD_UPDATE)
     const avatarHash = xUpdate?.getChildText('photo') || undefined
 
+    // XEP-0421: Anonymous Unique Occupant Identifiers
+    const occupantIdEl = stanza.getChild('occupant-id', NS_OCCUPANT_ID)
+    const occupantId = occupantIdEl?.attrs.id
+
     const occupant: RoomOccupant = {
       nick,
       jid: realJid,
@@ -200,6 +210,7 @@ export class MUC extends BaseModule {
       show: show || undefined,
       hats: hats.length > 0 ? hats : undefined,
       avatarHash,
+      ...(occupantId && { occupantId }),
     }
 
     if (isSelf) {
@@ -418,6 +429,8 @@ export class MUC extends BaseModule {
     // but skip MAM since quickchats are transient
     const roomFeatures = await this.queryRoomFeatures(roomJid)
     const supportsMAM = isQuickChat ? false : (roomFeatures?.supportsMAM ?? false)
+    const supportsReactions = roomFeatures?.supportsReactions ?? true
+    const supportsHats = roomFeatures?.supportsHats ?? false
     const roomName = roomFeatures?.name || existingRoom?.name || getLocalPart(roomJid)
 
     if (!existingRoom) {
@@ -430,6 +443,8 @@ export class MUC extends BaseModule {
         isBookmarked: false,
         isQuickChat: options?.isQuickChat,
         supportsMAM,
+        supportsReactions,
+        supportsHats,
         occupants: new Map(),
         messages: [],
         unreadCount: 0,
@@ -443,6 +458,8 @@ export class MUC extends BaseModule {
         nickname,
         isJoining: true,
         supportsMAM,
+        supportsReactions,
+        supportsHats,
         occupants: new Map() as Map<string, RoomOccupant>,
         selfOccupant: undefined,
         typingUsers: new Set() as Set<string>,
@@ -693,6 +710,9 @@ export class MUC extends BaseModule {
 
           logInfo(`MUC service: ${jid} (MAM=${serviceSupportsMAM})`)
 
+          // Emit MUC service JID so the admin store can populate it
+          this.deps.emitSDK('admin:muc-service', { mucServiceJid: jid })
+
           // Emit service-level MAM support for use as fallback
           this.deps.emitSDK('admin:muc-service-mam', { supportsMAM: serviceSupportsMAM })
 
@@ -730,7 +750,7 @@ export class MUC extends BaseModule {
    *   since MAM provides a more reliable and complete archive
    * - Has a 10-second timeout to prevent hanging if remote server doesn't respond
    */
-  async queryRoomFeatures(roomJid: string): Promise<{ supportsMAM: boolean; name?: string } | null> {
+  async queryRoomFeatures(roomJid: string): Promise<{ supportsMAM: boolean; supportsReactions: boolean; supportsHats: boolean; name?: string } | null> {
     try {
       const iq = xml(
         'iq',
@@ -757,6 +777,8 @@ export class MUC extends BaseModule {
         .filter(Boolean)
 
       const supportsMAM = features.includes(NS_MAM)
+      const supportsReactions = hasStableOccupantIdentity(features)
+      const supportsHats = features.includes(NS_HATS)
 
       // Parse room name from identity element
       // <identity category="conference" type="text" name="Room Name"/>
@@ -764,9 +786,9 @@ export class MUC extends BaseModule {
         .find((i: Element) => i.attrs.category === 'conference')
       const name = identity?.attrs.name as string | undefined
 
-      logInfo(`Room features: ${roomJid} MAM=${supportsMAM}`)
+      logInfo(`Room features: ${roomJid} MAM=${supportsMAM} reactions=${supportsReactions} hats=${supportsHats}`)
 
-      return { supportsMAM, name }
+      return { supportsMAM, supportsReactions, supportsHats, name }
     } catch (err) {
       // Room disco#info not available - that's fine, room may not exist yet
       // or may not support disco queries, or the query timed out
@@ -778,6 +800,43 @@ export class MUC extends BaseModule {
       // 2. Some rooms may explicitly have MAM disabled even if the service supports it
       // 3. Wrongly assuming MAM support causes UI issues (load more button when there's no MAM)
       return null
+    }
+  }
+
+  /**
+   * Check if a MUC room already exists by sending a disco#info query.
+   *
+   * Returns true if the room responds with a conference identity,
+   * false if the room returns an error (e.g. item-not-found) or times out.
+   *
+   * @param roomJid - The full room JID to check
+   */
+  async roomExists(roomJid: string): Promise<boolean> {
+    try {
+      const iq = xml(
+        'iq',
+        { type: 'get', to: roomJid, id: `disco_exists_${generateUUID()}` },
+        xml('query', { xmlns: NS_DISCO_INFO })
+      )
+
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error(`Room exists check timeout for ${roomJid}`)), DISCO_QUERY_TIMEOUT_MS)
+      })
+
+      const response = await Promise.race([
+        this.deps.sendIQ(iq),
+        timeoutPromise,
+      ])
+
+      const query = response.getChild('query', NS_DISCO_INFO)
+      if (!query) return false
+
+      const identity = query.getChildren('identity')
+        .find((i: Element) => i.attrs.category === 'conference')
+
+      return !!identity
+    } catch {
+      return false
     }
   }
 
@@ -926,49 +985,225 @@ export class MUC extends BaseModule {
   }
 
   /**
-   * Configure a room as a temporary quick chat (non-persistent, private).
+   * Submit room configuration (XEP-0045 room configuration).
+   *
+   * Sends a configuration form to the room. Only room owners can
+   * typically submit configuration changes.
+   *
+   * @param roomJid - The room JID
+   * @param values - Configuration field values as key-value pairs
+   *
+   * @example
+   * ```typescript
+   * await client.muc.submitRoomConfig('room@conference.example.com', {
+   *   'muc#roomconfig_roomname': 'New Room Name',
+   *   'muc#roomconfig_persistentroom': '1',
+   *   'muc#roomconfig_publicroom': '0',
+   * })
+   * ```
    */
-  private async configureQuickChat(roomJid: string, roomName: string, description?: string): Promise<void> {
-    // Build configuration fields
-    const fields = [
-      xml('field', { var: 'FORM_TYPE', type: 'hidden' },
-        xml('value', {}, 'http://jabber.org/protocol/muc#roomconfig')
-      ),
-      xml('field', { var: 'muc#roomconfig_persistentroom' },
-        xml('value', {}, '0')
-      ),
-      xml('field', { var: 'muc#roomconfig_roomname' },
-        xml('value', {}, roomName)
-      ),
-      xml('field', { var: 'muc#roomconfig_publicroom' },
-        xml('value', {}, '0')
-      ),
-      xml('field', { var: 'muc#roomconfig_allowinvites' },
-        xml('value', {}, '1')
-      ),
-    ]
-
-    // Add description if provided
-    if (description) {
-      fields.push(
-        xml('field', { var: 'muc#roomconfig_roomdesc' },
-          xml('value', {}, description)
-        )
-      )
-    }
+  async submitRoomConfig(
+    roomJid: string,
+    values: Record<string, string | string[]>
+  ): Promise<void> {
+    const formEl = buildDataFormSubmit(values, 'http://jabber.org/protocol/muc#roomconfig')
 
     const iq = xml(
       'iq',
       { type: 'set', to: roomJid, id: `config_${generateUUID()}` },
+      xml('query', { xmlns: NS_MUC_OWNER }, formEl)
+    )
+
+    await this.deps.sendIQ(iq)
+
+    // Update room state from submitted config values
+    const updates: Partial<Room> = {}
+
+    const name = typeof values['muc#roomconfig_roomname'] === 'string'
+      ? values['muc#roomconfig_roomname']
+      : undefined
+    if (name) {
+      updates.name = name
+    }
+
+    // Update hats support from the enable_hats config field
+    if ('enable_hats' in values) {
+      updates.supportsHats = values['enable_hats'] === '1'
+    }
+
+    if (Object.keys(updates).length > 0) {
+      this.deps.emitSDK('room:updated', { roomJid, updates })
+    }
+  }
+
+  /**
+   * Set the room subject/topic (XEP-0045).
+   *
+   * Sends a groupchat message with a `<subject>` element.
+   * The server will echo this back as a room subject change.
+   *
+   * @param roomJid - The room JID
+   * @param subject - The new subject text
+   *
+   * @example
+   * ```typescript
+   * await client.muc.setSubject('room@conference.example.com', 'New topic for discussion')
+   * ```
+   */
+  async setSubject(roomJid: string, subject: string): Promise<void> {
+    const msg = xml(
+      'message',
+      { to: roomJid, type: 'groupchat', id: `subject_${generateUUID()}` },
+      xml('subject', {}, subject)
+    )
+    await this.deps.sendStanza(msg)
+  }
+
+  /**
+   * Create a new persistent room with configuration.
+   *
+   * Orchestrates the full room creation flow: adds room to store,
+   * joins the room, submits configuration, sets a bookmark, and
+   * optionally sends invitations.
+   *
+   * @param roomJid - The full room JID (e.g., 'myroom@conference.example.com')
+   * @param nickname - Nickname to use in the room
+   * @param config - Room configuration options
+   * @param config.name - Display name for the room (required)
+   * @param config.description - Optional room description
+   * @param config.isPublic - Whether the room is publicly listed (default: false)
+   * @param config.membersOnly - Whether only members can join (default: false)
+   * @param config.extraFields - Additional configuration fields
+   * @param options - Optional parameters
+   * @param options.invitees - Array of JIDs to invite after creation
+   *
+   * @example
+   * ```typescript
+   * await client.muc.createRoom(
+   *   'team@conference.example.com',
+   *   'MyNick',
+   *   { name: 'Team Chat', description: 'Our team room', membersOnly: true },
+   *   { invitees: ['alice@example.com', 'bob@example.com'] }
+   * )
+   * ```
+   */
+  async createRoom(
+    roomJid: string,
+    nickname: string,
+    config: {
+      name: string
+      description?: string
+      isPublic?: boolean
+      membersOnly?: boolean
+      extraFields?: Record<string, string | string[]>
+    },
+    options?: { invitees?: string[] }
+  ): Promise<void> {
+    // 1. Add room to store
+    const room: Room = {
+      jid: roomJid,
+      name: config.name,
+      nickname,
+      joined: false,
+      isBookmarked: false,
+      occupants: new Map(),
+      messages: [],
+      unreadCount: 0,
+      mentionsCount: 0,
+      typingUsers: new Set(),
+    }
+    this.deps.emitSDK('room:added', { room })
+
+    // 2. Join room (sends presence, room auto-creates on first occupant)
+    await this.joinRoom(roomJid, nickname, { maxHistory: 0 })
+
+    // 3. Submit configuration
+    const configValues: Record<string, string | string[]> = {
+      'muc#roomconfig_roomname': config.name,
+      'muc#roomconfig_persistentroom': '1',
+      'muc#roomconfig_publicroom': config.isPublic ? '1' : '0',
+      ...(config.description ? { 'muc#roomconfig_roomdesc': config.description } : {}),
+      ...(config.membersOnly !== undefined ? { 'muc#roomconfig_membersonly': config.membersOnly ? '1' : '0' } : {}),
+      ...config.extraFields,
+    }
+    await this.submitRoomConfig(roomJid, configValues)
+
+    // 4. Set bookmark with autojoin
+    await this.setBookmark(roomJid, {
+      name: config.name,
+      nick: nickname,
+      autojoin: true,
+    })
+
+    // 5. Send invitations if any
+    if (options?.invitees && options.invitees.length > 0) {
+      await this.sendMediatedInvitations(roomJid, options.invitees)
+    }
+  }
+
+  /**
+   * Destroy a room (XEP-0045).
+   *
+   * Sends an IQ set with a `<destroy>` element to permanently remove
+   * the room. Only room owners can destroy rooms.
+   *
+   * @param roomJid - The room JID to destroy
+   * @param reason - Optional reason for destruction
+   * @param alternateRoomJid - Optional alternate room JID to redirect users to
+   *
+   * @example
+   * ```typescript
+   * await client.muc.destroyRoom('old-room@conference.example.com', 'Moving to new room')
+   * ```
+   */
+  async destroyRoom(roomJid: string, reason?: string, alternateRoomJid?: string): Promise<void> {
+    const destroyAttrs: Record<string, string> = {}
+    if (alternateRoomJid) {
+      destroyAttrs.jid = alternateRoomJid
+    }
+
+    const destroyChildren: Element[] = []
+    if (reason) {
+      destroyChildren.push(xml('reason', {}, reason))
+    }
+
+    const iq = xml(
+      'iq',
+      { type: 'set', to: roomJid, id: `destroy_${generateUUID()}` },
       xml('query', { xmlns: NS_MUC_OWNER },
-        xml('x', { xmlns: NS_DATA_FORMS, type: 'submit' }, ...fields)
+        xml('destroy', destroyAttrs, ...destroyChildren)
       )
     )
 
+    await this.deps.sendIQ(iq)
+
+    // Remove bookmark if exists
     try {
-      await this.deps.sendIQ(iq)
-      // SDK event only - binding calls store.updateRoom
-      this.deps.emitSDK('room:updated', { roomJid, updates: { name: roomName } })
+      await this.removeBookmark(roomJid)
+    } catch {
+      // Bookmark may not exist, ignore
+    }
+
+    // Emit room:removed
+    this.deps.emitSDK('room:removed', { roomJid })
+  }
+
+  /**
+   * Configure a room as a temporary quick chat (non-persistent, private).
+   */
+  private async configureQuickChat(roomJid: string, roomName: string, description?: string): Promise<void> {
+    const values: Record<string, string | string[]> = {
+      'muc#roomconfig_persistentroom': '0',
+      'muc#roomconfig_roomname': roomName,
+      'muc#roomconfig_publicroom': '0',
+      'muc#roomconfig_allowinvites': '1',
+    }
+    if (description) {
+      values['muc#roomconfig_roomdesc'] = description
+    }
+
+    try {
+      await this.submitRoomConfig(roomJid, values)
     } catch (err) {
       // Room configuration failed - log but don't throw
       // The room will still work, just won't be configured as temporary
@@ -1432,5 +1667,442 @@ export class MUC extends BaseModule {
     }
 
     return allMembers
+  }
+
+  /**
+   * Set a user's affiliation in a MUC room (XEP-0045).
+   *
+   * Affiliations are persistent and determine long-term permissions.
+   * The server will broadcast updated presence to all occupants after a successful change.
+   *
+   * @param roomJid - Room JID
+   * @param userJid - Bare JID of the user to modify
+   * @param affiliation - New affiliation level
+   * @param reason - Optional reason for the change
+   *
+   * @throws If the server rejects the request (insufficient permissions, etc.)
+   */
+  async setAffiliation(
+    roomJid: string,
+    userJid: string,
+    affiliation: RoomAffiliation,
+    reason?: string
+  ): Promise<void> {
+    const itemChildren = reason ? [xml('reason', {}, reason)] : []
+    const iq = xml(
+      'iq',
+      { type: 'set', to: roomJid, id: `set_aff_${generateUUID()}` },
+      xml('query', { xmlns: NS_MUC_ADMIN },
+        xml('item', { affiliation, jid: userJid }, ...itemChildren)
+      )
+    )
+    await this.deps.sendIQ(iq)
+    logInfo(`Affiliation set: ${userJid} → ${affiliation} in ${roomJid}`)
+    this.deps.emitSDK('room:affiliation-changed', { roomJid, userJid, affiliation })
+  }
+
+  /**
+   * Set an occupant's role in a MUC room (XEP-0045).
+   *
+   * Roles are session-based and addressed by nickname, not JID.
+   * Setting role to 'none' kicks the occupant from the room.
+   *
+   * @param roomJid - Room JID
+   * @param nick - Occupant's nickname in the room
+   * @param role - New role
+   * @param reason - Optional reason for the change
+   *
+   * @throws If the server rejects the request (insufficient permissions, etc.)
+   */
+  async setRole(
+    roomJid: string,
+    nick: string,
+    role: RoomRole,
+    reason?: string
+  ): Promise<void> {
+    const itemChildren = reason ? [xml('reason', {}, reason)] : []
+    const iq = xml(
+      'iq',
+      { type: 'set', to: roomJid, id: `set_role_${generateUUID()}` },
+      xml('query', { xmlns: NS_MUC_ADMIN },
+        xml('item', { role, nick }, ...itemChildren)
+      )
+    )
+    await this.deps.sendIQ(iq)
+    logInfo(`Role set: ${nick} → ${role} in ${roomJid}`)
+    this.deps.emitSDK('room:role-changed', { roomJid, nick, role })
+  }
+
+  /**
+   * Moderate (retract) another user's message in a MUC room (XEP-0425).
+   *
+   * Sends a moderation IQ to the room service. The server will broadcast
+   * a `<moderated>` notification to all occupants if successful.
+   *
+   * @param roomJid - Room JID
+   * @param stanzaId - The stanza ID (XEP-0359) of the message to retract
+   * @param reason - Optional reason for the moderation
+   *
+   * @throws If the server rejects the moderation request (e.g., insufficient permissions)
+   */
+  async moderateMessage(
+    roomJid: string,
+    stanzaId: string,
+    reason?: string
+  ): Promise<void> {
+    const moderateChildren = [
+      xml('retract', { xmlns: NS_RETRACT }),
+    ]
+    if (reason) {
+      moderateChildren.push(xml('reason', {}, reason))
+    }
+    const iq = xml(
+      'iq',
+      { type: 'set', to: roomJid, id: `moderate_${generateUUID()}` },
+      xml('moderate', { xmlns: NS_MESSAGE_MODERATE, id: stanzaId }, ...moderateChildren)
+    )
+    await this.deps.sendIQ(iq)
+    logInfo(`Message moderated: ${stanzaId} in ${roomJid}`)
+
+    // Optimistic update: mark message as retracted + moderated in the store
+    this.deps.emitSDK('room:message-updated', {
+      roomJid,
+      messageId: stanzaId,
+      updates: {
+        isRetracted: true,
+        retractedAt: new Date(),
+        isModerated: true,
+      },
+    })
+  }
+
+  /**
+   * Query the list of users with a specific affiliation in a MUC room.
+   *
+   * Unlike {@link queryRoomMembers} which queries owner/admin/member together,
+   * this queries a single affiliation level. Useful for loading the outcast (ban)
+   * list or refreshing a specific tab in the members modal.
+   *
+   * @param roomJid - Room JID
+   * @param affiliation - Affiliation level to query
+   * @returns Array of room members with the given affiliation
+   *
+   * @throws If the server rejects the query
+   */
+  async queryAffiliationList(
+    roomJid: string,
+    affiliation: RoomAffiliation
+  ): Promise<Array<{ jid: string; nick?: string; affiliation: RoomAffiliation }>> {
+    const iq = xml(
+      'iq',
+      { type: 'get', to: roomJid, id: `afflist_${affiliation}_${generateUUID()}` },
+      xml('query', { xmlns: NS_MUC_ADMIN },
+        xml('item', { affiliation })
+      )
+    )
+    const response = await this.deps.sendIQ(iq)
+    const query = response.getChild('query', NS_MUC_ADMIN)
+    if (!query) return []
+
+    const members: Array<{ jid: string; nick?: string; affiliation: RoomAffiliation }> = []
+    for (const item of query.getChildren('item')) {
+      const jid = item.attrs.jid
+      if (!jid) continue
+      members.push({
+        jid: getBareJid(jid),
+        nick: item.attrs.nick || undefined,
+        affiliation,
+      })
+    }
+    return members
+  }
+
+  // ---------------------------------------------------------------------------
+  // XEP-0317: Hats — Management via XEP-0050 Ad-Hoc Commands
+  // ---------------------------------------------------------------------------
+
+  /** FORM_TYPE for hat management commands */
+  private static readonly HATS_FORM_TYPE = 'urn:xmpp:hats:commands'
+
+  /**
+   * Execute an XEP-0050 ad-hoc command targeted at a MUC room for hat management.
+   *
+   * @param roomJid - Room JID to send the command to
+   * @param node - Command node URI
+   * @param fields - Optional form fields to submit (excluding FORM_TYPE)
+   * @returns The IQ response element
+   */
+  private async executeHatCommand(
+    roomJid: string,
+    node: string,
+    fields?: Record<string, string>,
+  ): Promise<Element> {
+    const commandChildren: Element[] = []
+
+    if (fields && Object.keys(fields).length > 0) {
+      commandChildren.push(
+        buildDataFormSubmit(fields, MUC.HATS_FORM_TYPE)
+      )
+    }
+
+    const iq = xml(
+      'iq',
+      { type: 'set', to: roomJid, id: `hat_${generateUUID()}` },
+      xml('command', { xmlns: NS_COMMANDS, action: 'execute', node },
+        ...commandChildren
+      )
+    )
+    const response = await this.deps.sendIQ(iq)
+
+    // Handle multi-step ad-hoc commands (XEP-0050):
+    // Some servers return status="executing" with a sessionid, expecting a
+    // second round-trip with action="complete" to finalize the command.
+    // The server's response form may use different field names than our initial
+    // request (e.g. "hat" instead of "hats#uri"), so we must parse the server
+    // form and populate it using the values we originally provided.
+    const command = response.getChild('command', NS_COMMANDS)
+    if (command?.attrs.status === 'executing' && command.attrs.sessionid) {
+      const completeFields = this.buildCompletionFields(command, fields)
+      const completeChildren: Element[] = []
+      if (Object.keys(completeFields).length > 0) {
+        completeChildren.push(
+          buildDataFormSubmit(completeFields, MUC.HATS_FORM_TYPE)
+        )
+      }
+      const completeIq = xml(
+        'iq',
+        { type: 'set', to: roomJid, id: `hat_${generateUUID()}` },
+        xml('command', {
+          xmlns: NS_COMMANDS,
+          action: 'complete',
+          node,
+          sessionid: command.attrs.sessionid,
+        },
+          ...completeChildren
+        )
+      )
+      return this.deps.sendIQ(completeIq)
+    }
+
+    return response
+  }
+
+  /**
+   * Build completion fields for a multi-step ad-hoc command by reading the
+   * server's response form and populating it with values from our original
+   * fields.
+   *
+   * The server may use different field names than the ones we sent in the
+   * initial request (e.g. `hat` as a `list-single` instead of `hats#uri`).
+   * For each server field, we try to match it by:
+   * 1. Exact match with an original field var name
+   * 2. For list-single/list-multi fields: find an original value among the
+   *    field's options
+   * 3. For jid-single fields: use a jid value from the original fields
+   */
+  private buildCompletionFields(
+    command: Element,
+    originalFields?: Record<string, string>,
+  ): Record<string, string> {
+    if (!originalFields || Object.keys(originalFields).length === 0) {
+      return {}
+    }
+
+    const formEl = command.getChild('x', NS_DATA_FORMS)
+    if (!formEl) {
+      // No server form — fall back to sending original fields as-is
+      return { ...originalFields }
+    }
+
+    const serverForm = parseDataForm(formEl)
+    const result: Record<string, string> = {}
+    const originalValues = Object.values(originalFields)
+
+    for (const field of serverForm.fields) {
+      if (!field.var || field.var === 'FORM_TYPE') continue
+
+      // 1. Exact match with original field name
+      if (originalFields[field.var] !== undefined) {
+        result[field.var] = originalFields[field.var]
+        continue
+      }
+
+      // 2. For list fields, check if any original value matches an option
+      if (field.options && field.options.length > 0) {
+        const matchingOption = field.options.find(opt =>
+          originalValues.includes(opt.value)
+        )
+        if (matchingOption) {
+          result[field.var] = matchingOption.value
+          continue
+        }
+      }
+
+      // 3. For jid-single fields, look for a JID value in original fields
+      if (field.type === 'jid-single') {
+        const jidValue = originalFields['hats#jid']
+        if (jidValue) {
+          result[field.var] = jidValue
+          continue
+        }
+      }
+
+      // 4. If the server provided a default value, use it
+      if (field.value && !Array.isArray(field.value)) {
+        result[field.var] = field.value
+      }
+    }
+
+    return result
+  }
+
+  /**
+   * Parse a hat list response from an ad-hoc command result.
+   *
+   * The server returns a data form with `type="result"` containing `<reported>`
+   * field definitions and `<item>` rows. Each row has `hats#uri`, `hats#title`,
+   * and optionally `hats#hue` and `hats#jid` fields.
+   *
+   * @param response - IQ response element
+   * @returns Array of parsed hat entries
+   */
+  private parseHatListResponse(response: Element): Array<{
+    jid?: string
+    uri: string
+    title: string
+    hue?: number
+  }> {
+    const command = response.getChild('command', NS_COMMANDS)
+    if (!command) return []
+
+    const form = command.getChild('x', NS_DATA_FORMS)
+    if (!form) return []
+
+    const results: Array<{ jid?: string; uri: string; title: string; hue?: number }> = []
+
+    for (const item of form.getChildren('item')) {
+      let uri = ''
+      let title = ''
+      let hue: number | undefined
+      let jid: string | undefined
+
+      for (const field of item.getChildren('field')) {
+        const varName = field.attrs.var
+        const value = field.getChildText('value') ?? ''
+        switch (varName) {
+          case 'hats#uri': uri = value; break
+          case 'hats#title': title = value; break
+          case 'hats#hue': hue = value ? parseFloat(value) : undefined; break
+          case 'hats#jid': jid = value || undefined; break
+        }
+      }
+
+      if (uri && title) {
+        results.push({ uri, title, hue, jid })
+      }
+    }
+
+    return results
+  }
+
+  /**
+   * List all hat definitions for a room (XEP-0317).
+   *
+   * Sends an ad-hoc command to retrieve the room's configured hats.
+   *
+   * @param roomJid - Room JID
+   * @returns Array of hat definitions
+   */
+  async listHats(roomJid: string): Promise<Hat[]> {
+    const response = await this.executeHatCommand(roomJid, 'urn:xmpp:hats:commands:list')
+    return this.parseHatListResponse(response).map(({ uri, title, hue }) => ({
+      uri,
+      title,
+      hue,
+    }))
+  }
+
+  /**
+   * Create a new hat definition for a room (XEP-0317).
+   *
+   * @param roomJid - Room JID
+   * @param title - Human-readable hat title
+   * @param uri - Unique URI identifying the hat
+   * @param hue - Optional color hue (0-360) for UI styling
+   */
+  async createHat(roomJid: string, title: string, uri: string, hue?: number): Promise<void> {
+    const fields: Record<string, string> = {
+      'hats#title': title,
+      'hats#uri': uri,
+    }
+    if (hue !== undefined) {
+      fields['hats#hue'] = String(hue)
+    }
+    await this.executeHatCommand(roomJid, 'urn:xmpp:hats:commands:create', fields)
+    logInfo(`Hat created: "${title}" (${uri}) in ${roomJid}`)
+  }
+
+  /**
+   * Destroy a hat definition for a room (XEP-0317).
+   *
+   * Removing a hat definition also removes it from all assigned users.
+   *
+   * @param roomJid - Room JID
+   * @param uri - URI of the hat to destroy
+   */
+  async destroyHat(roomJid: string, uri: string): Promise<void> {
+    await this.executeHatCommand(roomJid, 'urn:xmpp:hats:commands:destroy', {
+      'hats#uri': uri,
+    })
+    logInfo(`Hat destroyed: ${uri} in ${roomJid}`)
+  }
+
+  /**
+   * List all hat assignments in a room (XEP-0317).
+   *
+   * Returns which users have which hats assigned.
+   *
+   * @param roomJid - Room JID
+   * @returns Array of hat assignment entries (jid + hat info)
+   */
+  async listHatAssignments(roomJid: string): Promise<Array<{
+    jid: string
+    uri: string
+    title: string
+    hue?: number
+  }>> {
+    const response = await this.executeHatCommand(roomJid, 'urn:xmpp:hats:commands:list-assigned')
+    return this.parseHatListResponse(response)
+      .filter((entry): entry is { jid: string; uri: string; title: string; hue?: number } => !!entry.jid)
+  }
+
+  /**
+   * Assign a hat to a user in a room (XEP-0317).
+   *
+   * @param roomJid - Room JID
+   * @param userJid - Bare JID of the user to assign the hat to
+   * @param hatUri - URI of the hat to assign
+   */
+  async assignHat(roomJid: string, userJid: string, hatUri: string): Promise<void> {
+    await this.executeHatCommand(roomJid, 'urn:xmpp:hats:commands:assign', {
+      'hats#jid': userJid,
+      'hats#uri': hatUri,
+    })
+    logInfo(`Hat assigned: ${hatUri} → ${userJid} in ${roomJid}`)
+  }
+
+  /**
+   * Remove a hat from a user in a room (XEP-0317).
+   *
+   * @param roomJid - Room JID
+   * @param userJid - Bare JID of the user to unassign from
+   * @param hatUri - URI of the hat to remove
+   */
+  async unassignHat(roomJid: string, userJid: string, hatUri: string): Promise<void> {
+    await this.executeHatCommand(roomJid, 'urn:xmpp:hats:commands:unassign', {
+      'hats#jid': userJid,
+      'hats#uri': hatUri,
+    })
+    logInfo(`Hat unassigned: ${hatUri} from ${userJid} in ${roomJid}`)
   }
 }

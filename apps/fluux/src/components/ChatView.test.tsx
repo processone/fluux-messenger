@@ -130,6 +130,16 @@ vi.mock('@fluux/sdk', () => ({
     })
     return map
   },
+  useXMPP: () => ({
+    client: { profile: { fetchVCard: vi.fn().mockResolvedValue(null) } },
+    sendRawXml: vi.fn(),
+    onStanza: vi.fn(() => vi.fn()),
+    on: vi.fn(() => vi.fn()),
+    setPresence: vi.fn(),
+    xml: vi.fn(),
+    isConnected: () => false,
+    getJid: () => null,
+  }),
 }))
 
 // Mock React store hooks (from @fluux/sdk/react)
@@ -147,6 +157,7 @@ vi.mock('@fluux/sdk/react', () => ({
     mockContacts.forEach((c: Contact) => contactsMap.set(c.jid, c))
     return selector({ contacts: contactsMap })
   },
+  useContactTime: () => null,
 }))
 
 // Mock app hooks

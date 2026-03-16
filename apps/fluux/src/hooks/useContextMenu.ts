@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useLayoutEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react'
 import { useClickOutside } from './useClickOutside'
 
 export interface ContextMenuState {
@@ -83,6 +83,14 @@ export function useContextMenu(options: UseContextMenuOptions = {}): ContextMenu
 
   // Click outside to close
   useClickOutside(menuRef, close, isOpen)
+
+  // Close on scroll (capture phase to catch scrolls on any element)
+  useEffect(() => {
+    if (!isOpen) return
+    const handleScroll = () => close()
+    document.addEventListener('scroll', handleScroll, { capture: true })
+    return () => document.removeEventListener('scroll', handleScroll, { capture: true })
+  }, [isOpen, close])
 
   // Adjust position after menu renders to keep it within viewport
   useLayoutEffect(() => {

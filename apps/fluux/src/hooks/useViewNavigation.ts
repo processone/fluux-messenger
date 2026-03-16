@@ -12,7 +12,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { chatStore, roomStore, type Contact } from '@fluux/sdk'
 import { useChatStore, useRoomStore } from '@fluux/sdk/react'
-import { useRouteSync } from './useRouteSync'
+import { useRouteSync, type NavigateOptions } from './useRouteSync'
 import { isSmallScreen } from './useIsMobileWeb'
 import type { SidebarView } from '@/components/sidebar-components/types'
 
@@ -37,13 +37,13 @@ export interface ViewNavigationResult {
   navigateToView: (view: SidebarView) => void
 
   // Direct navigation functions (for session restore, without side effects)
-  navigateToMessages: (jid?: string) => void
-  navigateToRooms: (jid?: string) => void
-  navigateToContacts: (jid?: string) => void
-  navigateToArchive: (jid?: string) => void
-  navigateToEvents: () => void
-  navigateToAdmin: () => void
-  navigateToSettings: (category?: string) => void
+  navigateToMessages: (jid?: string, options?: NavigateOptions) => void
+  navigateToRooms: (jid?: string, options?: NavigateOptions) => void
+  navigateToContacts: (jid?: string, options?: NavigateOptions) => void
+  navigateToArchive: (jid?: string, options?: NavigateOptions) => void
+  navigateToEvents: (options?: NavigateOptions) => void
+  navigateToAdmin: (category?: string, options?: NavigateOptions) => void
+  navigateToSettings: (category?: string, options?: NavigateOptions) => void
 }
 
 /**
@@ -178,7 +178,7 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
         // Set store state AND navigate to URL
         // Always set conversation (even null) to clear any leftover archived conversation
         setActiveConversation(targetConversation ?? null)
-        navigateToMessages(targetConversation ?? undefined)
+        navigateToMessages(targetConversation ?? undefined, { replace: true })
         break
       }
       case 'rooms': {
@@ -194,14 +194,14 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
         // Set store state AND navigate to URL
         // Always set room (even null) to ensure clean state
         setActiveRoom(targetRoom ?? null)
-        navigateToRooms(targetRoom ?? undefined)
+        navigateToRooms(targetRoom ?? undefined, { replace: true })
         break
       }
       case 'directory':
         setActiveConversation(null)
         setActiveRoom(null)
         // On small screens, don't auto-restore last contact - let user choose
-        navigateToContacts(skipAutoSelect ? undefined : (lastDirectoryContact?.jid ?? undefined))
+        navigateToContacts(skipAutoSelect ? undefined : (lastDirectoryContact?.jid ?? undefined), { replace: true })
         break
       case 'archive': {
         setActiveRoom(null)
@@ -226,25 +226,25 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
         // Set store state AND navigate to URL
         // Always set conversation (even null) to clear any leftover non-archived conversation
         setActiveConversation(targetArchive ?? null)
-        navigateToArchive(targetArchive)
+        navigateToArchive(targetArchive, { replace: true })
         break
       }
       case 'events':
         // Events view has no main content - just show sidebar
         setActiveConversation(null)
         setActiveRoom(null)
-        navigateToEvents()
+        navigateToEvents({ replace: true })
         break
       case 'admin':
         setActiveConversation(null)
         setActiveRoom(null)
-        navigateToAdmin()
+        navigateToAdmin(undefined, { replace: true })
         break
       case 'settings':
         setActiveConversation(null)
         setActiveRoom(null)
         // On small screens, don't auto-select a category - let user choose from sidebar
-        navigateToSettings(skipAutoSelect ? undefined : 'profile')
+        navigateToSettings(skipAutoSelect ? undefined : 'profile', { replace: true })
         break
     }
   }, [

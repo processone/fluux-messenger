@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { MessageCircle, Trash2, Pencil, Monitor, Smartphone, Globe, ArrowLeft } from 'lucide-react'
+import { MessageCircle, Trash2, Pencil, Monitor, Smartphone, Globe, ArrowLeft, Ban, UserPlus, Building2, Mail, MapPin, User } from 'lucide-react'
 import { Tooltip } from './Tooltip'
-import { type Contact, getClientType } from '@fluux/sdk'
-import { useConnectionStore } from '@fluux/sdk/react'
+import { type Contact, type VCardInfo, getClientType, useBlocking } from '@fluux/sdk'
+import { useConnectionStore, useBlockingStore } from '@fluux/sdk/react'
 import { Avatar } from './Avatar'
 import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS } from '@/constants/ui'
 import { getShowColor, getTranslatedShowText } from '@/utils/presence'
@@ -16,7 +16,11 @@ interface ContactProfileViewProps {
   onRemoveContact: () => void
   onRenameContact: (name: string) => Promise<void>
   onFetchNickname: (jid: string) => Promise<string | null>
+  onFetchVCard?: (jid: string) => Promise<VCardInfo | null>
+  onAddContact?: () => void
   onBack?: () => void
+  /** Whether the contact is in the user's roster (enables rename/remove actions) */
+  isInRoster?: boolean
 }
 
 export function ContactProfileView({
@@ -24,8 +28,11 @@ export function ContactProfileView({
   onStartConversation,
   onRemoveContact,
   onRenameContact,
+  onAddContact,
   onFetchNickname,
+  onFetchVCard,
   onBack,
+  isInRoster = true,
 }: ContactProfileViewProps) {
   const { t } = useTranslation()
   const connectionStatus = useConnectionStore((s) => s.status)
@@ -36,8 +43,12 @@ export function ContactProfileView({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false)
+  const [showBlockConfirm, setShowBlockConfirm] = useState(false)
   const [pepNickname, setPepNickname] = useState<string | null>(null)
+  const [vcard, setVcard] = useState<VCardInfo | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const { blockJid, unblockJid } = useBlocking()
+  const isBlocked = useBlockingStore((s) => s.blockedJids.has(contact.jid))
 
   const presenceColor = forceOffline ? APP_OFFLINE_PRESENCE_COLOR : PRESENCE_COLORS[contact.presence]
   const statusText = forceOffline ? t('presence.offline') : getTranslatedStatusText(contact, t)
@@ -56,7 +67,9 @@ export function ContactProfileView({
     setIsEditing(false)
     setError(null)
     setShowRemoveConfirm(false)
+    setShowBlockConfirm(false)
     setPepNickname(null)
+    setVcard(null)
   }, [contact.jid, contact.name])
 
   // Lazily fetch PEP nickname when contact view opens
@@ -73,6 +86,22 @@ export function ContactProfileView({
       })
     return () => { cancelled = true }
   }, [contact.jid, contact.name, onFetchNickname])
+
+  // Lazily fetch vCard when contact view opens
+  useEffect(() => {
+    if (!onFetchVCard) return
+    let cancelled = false
+    void onFetchVCard(contact.jid)
+      .then((result) => {
+        if (!cancelled && result) {
+          setVcard(result)
+        }
+      })
+      .catch(() => {
+        // Ignore vCard fetch errors
+      })
+    return () => { cancelled = true }
+  }, [contact.jid, onFetchVCard])
 
   const handleStartEdit = () => {
     setEditName(contact.name)
@@ -151,8 +180,8 @@ export function ContactProfileView({
             />
           </div>
 
-          {/* Name - editable */}
-          {isEditing ? (
+          {/* Name - editable only for roster contacts */}
+          {isInRoster && isEditing ? (
             <div className="flex flex-col items-center gap-1 mb-1 w-full max-w-xs">
               <input
                 ref={inputRef}
@@ -171,15 +200,17 @@ export function ContactProfileView({
           ) : (
             <div className="group relative flex items-center justify-center mb-1">
               <h1 className="text-xl font-bold text-fluux-text">{contact.name}</h1>
-              <Tooltip content={t('contacts.rename')} position="top">
-                <button
-                  onClick={handleStartEdit}
-                  className="absolute left-full ml-1 p-1 text-fluux-muted hover:text-fluux-text rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                  aria-label={t('contacts.rename')}
-                >
-                  <Pencil className="w-4 h-4" />
-                </button>
-              </Tooltip>
+              {isInRoster && (
+                <Tooltip content={t('contacts.rename')} position="top">
+                  <button
+                    onClick={handleStartEdit}
+                    className="absolute left-full ml-1 p-1 text-fluux-muted hover:text-fluux-text rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                    aria-label={t('contacts.rename')}
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                </Tooltip>
+              )}
             </div>
           )}
 
@@ -207,6 +238,38 @@ export function ContactProfileView({
                   {group}
                 </span>
               ))}
+            </div>
+          )}
+
+          {/* vCard info */}
+          {vcard && (
+            <div className="w-full max-w-xs mb-3">
+              <div className="space-y-1">
+                {vcard.fullName && (
+                  <div className="flex items-center gap-2 px-3 py-1.5">
+                    <User className="w-4 h-4 text-fluux-muted flex-shrink-0" />
+                    <span className="text-sm text-fluux-text">{vcard.fullName}</span>
+                  </div>
+                )}
+                {vcard.org && (
+                  <div className="flex items-center gap-2 px-3 py-1.5">
+                    <Building2 className="w-4 h-4 text-fluux-muted flex-shrink-0" />
+                    <span className="text-sm text-fluux-text">{vcard.org}</span>
+                  </div>
+                )}
+                {vcard.email && (
+                  <div className="flex items-center gap-2 px-3 py-1.5">
+                    <Mail className="w-4 h-4 text-fluux-muted flex-shrink-0" />
+                    <span className="text-sm text-fluux-text">{vcard.email}</span>
+                  </div>
+                )}
+                {vcard.country && (
+                  <div className="flex items-center gap-2 px-3 py-1.5">
+                    <MapPin className="w-4 h-4 text-fluux-muted flex-shrink-0" />
+                    <span className="text-sm text-fluux-text">{vcard.country}</span>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -276,7 +339,17 @@ export function ContactProfileView({
               {t('contacts.startConversation')}
             </button>
 
-            {showRemoveConfirm ? (
+            {!isInRoster && onAddContact && (
+              <button
+                onClick={onAddContact}
+                className="flex items-center justify-center gap-2 px-4 py-3 bg-fluux-bg hover:bg-fluux-hover text-fluux-text border border-fluux-hover rounded-lg transition-colors"
+              >
+                <UserPlus className="w-5 h-5" />
+                {t('contacts.addToContacts')}
+              </button>
+            )}
+
+            {isInRoster && (showRemoveConfirm ? (
               <div className="flex flex-col gap-2 p-3 bg-fluux-red/10 border border-fluux-red/30 rounded-lg">
                 <p className="text-sm text-fluux-text text-center">
                   {t('contacts.removeConfirm', { name: contact.name })}
@@ -303,6 +376,45 @@ export function ContactProfileView({
               >
                 <Trash2 className="w-5 h-5" />
                 {t('contacts.removeFromRoster')}
+              </button>
+            ))}
+
+            {/* Block / Unblock user */}
+            {isBlocked ? (
+              <button
+                onClick={() => unblockJid(contact.jid)}
+                className="flex items-center justify-center gap-2 px-4 py-3 bg-fluux-bg hover:bg-fluux-hover text-fluux-text border border-fluux-hover rounded-lg transition-colors"
+              >
+                <Ban className="w-5 h-5" />
+                {t('contacts.unblockUser')}
+              </button>
+            ) : showBlockConfirm ? (
+              <div className="flex flex-col gap-2 p-3 bg-fluux-red/10 border border-fluux-red/30 rounded-lg">
+                <p className="text-sm text-fluux-text text-center">
+                  {t('contacts.blockConfirm', { name: contact.name })}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowBlockConfirm(false)}
+                    className="flex-1 px-3 py-2 bg-fluux-bg hover:bg-fluux-hover text-fluux-text rounded transition-colors"
+                  >
+                    {t('common.cancel')}
+                  </button>
+                  <button
+                    onClick={() => { blockJid(contact.jid); setShowBlockConfirm(false) }}
+                    className="flex-1 px-3 py-2 bg-fluux-red hover:bg-fluux-red/80 text-white rounded transition-colors"
+                  >
+                    {t('contacts.block')}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowBlockConfirm(true)}
+                className="flex items-center justify-center gap-2 px-4 py-3 bg-fluux-red/10 hover:bg-fluux-red/20 text-fluux-red border border-fluux-red rounded-lg transition-colors"
+              >
+                <Ban className="w-5 h-5" />
+                {t('contacts.blockUser')}
               </button>
             )}
           </div>

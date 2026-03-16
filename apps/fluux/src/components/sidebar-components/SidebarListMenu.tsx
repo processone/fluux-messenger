@@ -15,6 +15,7 @@ import {
   useState,
   useRef,
   useCallback,
+  useEffect,
   type ReactNode,
   type RefObject,
 } from 'react'
@@ -93,6 +94,14 @@ export function SidebarListMenuProvider<T>({
 
   // Click outside to close
   useClickOutside(menuRef, close, isOpen)
+
+  // Close on scroll (capture phase to catch scrolls on any element)
+  useEffect(() => {
+    if (!isOpen) return
+    const handleScroll = () => close()
+    document.addEventListener('scroll', handleScroll, { capture: true })
+    return () => document.removeEventListener('scroll', handleScroll, { capture: true })
+  }, [isOpen, close])
 
   // Open menu for an item
   const openMenu = useCallback((item: T, pos: MenuPosition) => {

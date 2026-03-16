@@ -11,8 +11,8 @@ const TOOLBAR_REACTIONS = ['👍', '❤️', '😂']
 const EXTENDED_REACTIONS = ['😮', '😢', '🎉', '👏', '🔥', '🙏', '👆', '👀']
 
 export interface MessageToolbarProps {
-  /** Handler for reaction button clicks */
-  onReaction: (emoji: string) => void
+  /** Handler for reaction button clicks. When undefined, reaction UI is hidden. */
+  onReaction?: (emoji: string) => void
   /** Handler for reply button click */
   onReply: () => void
   /** Handler for edit button click */
@@ -90,10 +90,10 @@ export const MessageToolbar = memo(function MessageToolbar({
   useClickOutside(moreMenuRef, closeMoreMenu, showMoreMenu)
 
   // Handle reaction click - close picker and notify parent
-  const handleReaction = (emoji: string) => {
+  const handleReaction = onReaction ? (emoji: string) => {
     onReaction(emoji)
     setShowReactionPicker(false)
-  }
+  } : undefined
 
   // Handle delete click - close menu and notify parent
   const handleDelete = () => {
@@ -127,8 +127,8 @@ export const MessageToolbar = memo(function MessageToolbar({
         ref={toolbarRef}
         className="flex items-center bg-fluux-bg rounded-md shadow-lg border border-fluux-hover transition-opacity"
       >
-      {/* Quick reaction emojis */}
-      {TOOLBAR_REACTIONS.map(emoji => (
+      {/* Quick reaction emojis (hidden when reactions are disabled) */}
+      {handleReaction && TOOLBAR_REACTIONS.map(emoji => (
         <button
           key={emoji}
           onClick={() => handleReaction(emoji)}
@@ -141,10 +141,11 @@ export const MessageToolbar = memo(function MessageToolbar({
         </button>
       ))}
 
-      {/* Divider */}
-      <div className="w-px h-5 bg-fluux-hover" />
+      {/* Divider (hidden when reactions are disabled) */}
+      {handleReaction && <div className="w-px h-5 bg-fluux-hover" />}
 
-      {/* More reactions button */}
+      {/* More reactions button (hidden when reactions are disabled) */}
+      {handleReaction && (
       <div className="relative">
         <button
           onClick={() => setShowReactionPicker(!showReactionPicker)}
@@ -171,6 +172,7 @@ export const MessageToolbar = memo(function MessageToolbar({
           </div>
         )}
       </div>
+      )}
 
       {/* Reply button - hidden for last message */}
       {canReply && (

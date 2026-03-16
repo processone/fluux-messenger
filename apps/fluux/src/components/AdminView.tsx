@@ -1,9 +1,10 @@
-import { useEffect, useCallback, useState, useRef } from 'react'
+import { useEffect, useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { X, Wrench, Users, Hash, User, Plus, ArrowLeft } from 'lucide-react'
+import { Wrench, Users, Hash, User, Plus, ArrowLeft } from 'lucide-react'
 import { useAdmin, type AdminCategory, type AdminUser, type AdminRoom } from '@fluux/sdk'
-import { useWindowDrag } from '@/hooks'
+import { useWindowDrag, useModalInput } from '@/hooks'
 import { Tooltip } from './Tooltip'
+import { ModalShell } from './ModalShell'
 import { AdminCommandForm, AdminCommandResult } from './AdminCommandForm'
 import { EntityListView } from './EntityListView'
 import { UserListItem } from './UserListItem'
@@ -446,23 +447,7 @@ function AddUserModal({ vhost, onSubmit, onClose }: AddUserModalProps) {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  // Focus input on mount
-  useEffect(() => {
-    inputRef.current?.focus()
-  }, [])
-
-  // Handle escape key
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose()
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
+  const inputRef = useModalInput<HTMLInputElement>()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -496,108 +481,88 @@ function AddUserModal({ vhost, onSubmit, onClose }: AddUserModalProps) {
   }
 
   return (
-    <div
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div className="bg-fluux-sidebar rounded-lg shadow-xl w-full max-w-sm mx-4">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-fluux-hover">
-          <h2 className="text-lg font-semibold text-fluux-text">{t('admin.addUser.title')}</h2>
-          <Tooltip content={t('common.close')} position="left">
-            <button
-              onClick={onClose}
-              className="p-1 text-fluux-muted hover:text-fluux-text rounded hover:bg-fluux-hover"
-              aria-label={t('common.close')}
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </Tooltip>
+    <ModalShell title={t('admin.addUser.title')} onClose={onClose}>
+      <form onSubmit={handleSubmit} className="p-4 space-y-4">
+        <div>
+          <label htmlFor="add-user-username" className="block text-xs font-semibold text-fluux-muted uppercase mb-2">
+            {t('admin.addUser.username')}
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              ref={inputRef}
+              id="add-user-username"
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder={t('admin.addUser.usernamePlaceholder')}
+              disabled={isSubmitting}
+              className="flex-1 px-3 py-2 bg-fluux-bg text-fluux-text rounded
+                         border border-transparent focus:border-fluux-brand
+                         placeholder:text-fluux-muted disabled:opacity-50"
+            />
+            <span className="text-fluux-muted">@{vhost}</span>
+          </div>
         </div>
 
-        {/* Content */}
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
-          <div>
-            <label htmlFor="add-user-username" className="block text-xs font-semibold text-fluux-muted uppercase mb-2">
-              {t('admin.addUser.username')}
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                ref={inputRef}
-                id="add-user-username"
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder={t('admin.addUser.usernamePlaceholder')}
-                disabled={isSubmitting}
-                className="flex-1 px-3 py-2 bg-fluux-bg text-fluux-text rounded
-                           border border-transparent focus:border-fluux-brand
-                           placeholder:text-fluux-muted disabled:opacity-50"
-              />
-              <span className="text-fluux-muted">@{vhost}</span>
-            </div>
-          </div>
+        <div>
+          <label htmlFor="add-user-password" className="block text-xs font-semibold text-fluux-muted uppercase mb-2">
+            {t('admin.addUser.password')}
+          </label>
+          <input
+            id="add-user-password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder={t('admin.addUser.passwordPlaceholder')}
+            disabled={isSubmitting}
+            className="w-full px-3 py-2 bg-fluux-bg text-fluux-text rounded
+                       border border-transparent focus:border-fluux-brand
+                       placeholder:text-fluux-muted disabled:opacity-50"
+          />
+        </div>
 
-          <div>
-            <label htmlFor="add-user-password" className="block text-xs font-semibold text-fluux-muted uppercase mb-2">
-              {t('admin.addUser.password')}
-            </label>
-            <input
-              id="add-user-password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder={t('admin.addUser.passwordPlaceholder')}
-              disabled={isSubmitting}
-              className="w-full px-3 py-2 bg-fluux-bg text-fluux-text rounded
-                         border border-transparent focus:border-fluux-brand
-                         placeholder:text-fluux-muted disabled:opacity-50"
-            />
-          </div>
+        <div>
+          <label htmlFor="add-user-confirm-password" className="block text-xs font-semibold text-fluux-muted uppercase mb-2">
+            {t('admin.addUser.confirmPassword')}
+          </label>
+          <input
+            id="add-user-confirm-password"
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder={t('admin.addUser.confirmPasswordPlaceholder')}
+            disabled={isSubmitting}
+            className="w-full px-3 py-2 bg-fluux-bg text-fluux-text rounded
+                       border border-transparent focus:border-fluux-brand
+                       placeholder:text-fluux-muted disabled:opacity-50"
+          />
+        </div>
 
-          <div>
-            <label htmlFor="add-user-confirm-password" className="block text-xs font-semibold text-fluux-muted uppercase mb-2">
-              {t('admin.addUser.confirmPassword')}
-            </label>
-            <input
-              id="add-user-confirm-password"
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder={t('admin.addUser.confirmPasswordPlaceholder')}
-              disabled={isSubmitting}
-              className="w-full px-3 py-2 bg-fluux-bg text-fluux-text rounded
-                         border border-transparent focus:border-fluux-brand
-                         placeholder:text-fluux-muted disabled:opacity-50"
-            />
-          </div>
+        {error && (
+          <p className="text-sm text-fluux-red">{error}</p>
+        )}
 
-          {error && (
-            <p className="text-sm text-fluux-red">{error}</p>
-          )}
-
-          {/* Buttons */}
-          <div className="flex gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isSubmitting}
-              className="flex-1 px-4 py-2 text-fluux-text bg-fluux-hover rounded
-                         hover:bg-fluux-muted/30 disabled:opacity-50 transition-colors"
-            >
-              {t('common.cancel')}
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="flex-1 px-4 py-2 text-white bg-fluux-brand rounded
-                         hover:bg-fluux-brand/90 disabled:opacity-50 transition-colors"
-            >
-              {isSubmitting ? t('admin.addUser.adding') : t('common.create')}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        {/* Buttons */}
+        <div className="flex gap-2 pt-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isSubmitting}
+            className="flex-1 px-4 py-2 text-fluux-text bg-fluux-hover rounded
+                       hover:bg-fluux-muted/30 disabled:opacity-50 transition-colors"
+          >
+            {t('common.cancel')}
+          </button>
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="flex-1 px-4 py-2 text-white bg-fluux-brand rounded
+                       hover:bg-fluux-brand/90 disabled:opacity-50 transition-colors"
+          >
+            {isSubmitting ? t('admin.addUser.adding') : t('common.create')}
+          </button>
+        </div>
+      </form>
+    </ModalShell>
   )
 }

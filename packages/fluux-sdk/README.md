@@ -507,7 +507,7 @@ See [SUPPORTED_XEPS.md](../../SUPPORTED_XEPS.md) for the complete list of implem
 - **Connection**: XEP-0156 (WebSocket discovery), XEP-0198 (Stream Management), XEP-0199 (Ping), XEP-0280 (Message Carbons), Web Push (VAPID via p1:push)
 - **Discovery**: XEP-0030 (Service Discovery), XEP-0059 (RSM pagination), XEP-0115 (Entity Capabilities)
 - **Roster & Presence**: XEP-0084 (User Avatar), XEP-0153 (vCard Avatars), XEP-0172 (Nickname), XEP-0191 (Blocking), XEP-0319 (Idle time)
-- **Messaging**: XEP-0085 (Typing indicators), XEP-0308 (Message Correction), XEP-0313 (MAM), XEP-0363 (HTTP Upload), XEP-0393 (Styling), XEP-0424 (Retraction), XEP-0444 (Reactions), XEP-0461 (Replies)
+- **Messaging**: XEP-0085 (Typing indicators), XEP-0308 (Message Correction), XEP-0313 (MAM), XEP-0363 (HTTP Upload), XEP-0393 (Styling), XEP-0424 (Retraction), XEP-0425 (Moderation), XEP-0444 (Reactions), XEP-0461 (Replies)
 - **MUC**: XEP-0045 (Multi-User Chat), XEP-0249 (Direct Invitations), XEP-0317 (Hats), XEP-0372 (References/@mentions), XEP-0392 (Consistent Colors), XEP-0402 (Bookmarks)
 - **Admin**: XEP-0004 (Data Forms), XEP-0050 (Ad-Hoc Commands), XEP-0133 (Service Administration)
 

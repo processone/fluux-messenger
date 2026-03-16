@@ -11,6 +11,7 @@ vi.mock('react-i18next', () => ({
       }
       if (key === 'chat.messageWasEdited') return 'Message was edited'
       if (key === 'chat.messageDeleted') return 'Message deleted'
+      if (key === 'chat.messageModerated' && options?.moderator) return `Message removed by ${options.moderator}`
       if (key === 'chat.edited') return '(edited)'
       return key
     },
@@ -55,6 +56,47 @@ describe('MessageBody', () => {
 
       expect(screen.getByText('Message deleted')).toBeInTheDocument()
       expect(screen.queryByText('Hello, world!')).not.toBeInTheDocument()
+    })
+
+    it('should show moderated placeholder with moderator name', () => {
+      render(
+        <MessageBody
+          {...defaultProps}
+          isRetracted={true}
+          isModerated={true}
+          moderatedBy="admin"
+        />
+      )
+
+      expect(screen.getByText('Message removed by admin')).toBeInTheDocument()
+      expect(screen.queryByText('Message deleted')).not.toBeInTheDocument()
+    })
+
+    it('should show moderation reason as tooltip', () => {
+      const { container } = render(
+        <MessageBody
+          {...defaultProps}
+          isRetracted={true}
+          isModerated={true}
+          moderatedBy="admin"
+          moderationReason="Spam"
+        />
+      )
+
+      const div = container.querySelector('.italic')
+      expect(div).toHaveAttribute('title', 'Spam')
+    })
+
+    it('should fall back to generic deleted text when moderated but no moderator name', () => {
+      render(
+        <MessageBody
+          {...defaultProps}
+          isRetracted={true}
+          isModerated={true}
+        />
+      )
+
+      expect(screen.getByText('Message deleted')).toBeInTheDocument()
     })
   })
 

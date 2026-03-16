@@ -18,10 +18,22 @@
  * - /admin/:category    → admin view, category selected
  * - /settings           → settings view
  * - /settings/:category → settings view with category selected
+ *
+ * Navigation uses a push/replace discipline for clean mobile back behavior:
+ * - Tab switches use `replace` (no history accumulation across tabs)
+ * - First item selection uses `push` (one back-able entry: detail → list)
+ * - Switching items uses `replace` (lateral moves don't accumulate)
+ * - Back/up navigation uses `replace` (clean return to list)
  */
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useCallback, useMemo } from 'react'
 import type { SidebarView } from '@/components/sidebar-components/types'
+
+/** Options for navigation functions to control history behavior */
+export interface NavigateOptions {
+  /** Use replace instead of push (prevents adding to browser history stack) */
+  replace?: boolean
+}
 
 export interface RouteState {
   /** Current sidebar view derived from URL path */
@@ -36,21 +48,21 @@ export interface RouteState {
 
 export interface RouteActions {
   /** Navigate to messages view, optionally selecting a conversation */
-  navigateToMessages: (jid?: string) => void
+  navigateToMessages: (jid?: string, options?: NavigateOptions) => void
   /** Navigate to rooms view, optionally selecting a room */
-  navigateToRooms: (jid?: string) => void
+  navigateToRooms: (jid?: string, options?: NavigateOptions) => void
   /** Navigate to contacts/directory view, optionally selecting a contact */
-  navigateToContacts: (jid?: string) => void
+  navigateToContacts: (jid?: string, options?: NavigateOptions) => void
   /** Navigate to archive view, optionally selecting an archived conversation */
-  navigateToArchive: (jid?: string) => void
+  navigateToArchive: (jid?: string, options?: NavigateOptions) => void
   /** Navigate to events view */
-  navigateToEvents: () => void
+  navigateToEvents: (options?: NavigateOptions) => void
   /** Navigate to admin view, optionally selecting a category */
-  navigateToAdmin: (category?: string) => void
+  navigateToAdmin: (category?: string, options?: NavigateOptions) => void
   /** Navigate to settings view, optionally selecting a category */
-  navigateToSettings: (category?: string) => void
-  /** Navigate back to previous view (or messages as default) */
-  goBack: () => void
+  navigateToSettings: (category?: string, options?: NavigateOptions) => void
+  /** Deterministic "go up" within current tab (detail → list, or list → messages) */
+  navigateUp: () => void
 }
 
 /**
@@ -175,67 +187,83 @@ export function useRouteSync(): RouteState & RouteActions {
     [location.pathname]
   )
 
-  // Navigation actions
-  const navigateToMessages = useCallback((jid?: string) => {
+  // Navigation actions - all accept optional { replace: true } for history control
+  const navigateToMessages = useCallback((jid?: string, options?: NavigateOptions) => {
+    const opts = options?.replace ? { replace: true } : undefined
     if (jid) {
-      void navigate(`/messages/${encodeURIComponent(jid)}`)
+      void navigate(`/messages/${encodeURIComponent(jid)}`, opts)
     } else {
-      void navigate('/messages')
+      void navigate('/messages', opts)
     }
   }, [navigate])
 
-  const navigateToRooms = useCallback((jid?: string) => {
+  const navigateToRooms = useCallback((jid?: string, options?: NavigateOptions) => {
+    const opts = options?.replace ? { replace: true } : undefined
     if (jid) {
-      void navigate(`/rooms/${encodeURIComponent(jid)}`)
+      void navigate(`/rooms/${encodeURIComponent(jid)}`, opts)
     } else {
-      void navigate('/rooms')
+      void navigate('/rooms', opts)
     }
   }, [navigate])
 
-  const navigateToContacts = useCallback((jid?: string) => {
+  const navigateToContacts = useCallback((jid?: string, options?: NavigateOptions) => {
+    const opts = options?.replace ? { replace: true } : undefined
     if (jid) {
-      void navigate(`/contacts/${encodeURIComponent(jid)}`)
+      void navigate(`/contacts/${encodeURIComponent(jid)}`, opts)
     } else {
-      void navigate('/contacts')
+      void navigate('/contacts', opts)
     }
   }, [navigate])
 
-  const navigateToArchive = useCallback((jid?: string) => {
+  const navigateToArchive = useCallback((jid?: string, options?: NavigateOptions) => {
+    const opts = options?.replace ? { replace: true } : undefined
     if (jid) {
-      void navigate(`/archive/${encodeURIComponent(jid)}`)
+      void navigate(`/archive/${encodeURIComponent(jid)}`, opts)
     } else {
-      void navigate('/archive')
+      void navigate('/archive', opts)
     }
   }, [navigate])
 
-  const navigateToEvents = useCallback(() => {
-    void navigate('/events')
+  const navigateToEvents = useCallback((options?: NavigateOptions) => {
+    const opts = options?.replace ? { replace: true } : undefined
+    void navigate('/events', opts)
   }, [navigate])
 
-  const navigateToAdmin = useCallback((category?: string) => {
+  const navigateToAdmin = useCallback((category?: string, options?: NavigateOptions) => {
+    const opts = options?.replace ? { replace: true } : undefined
     if (category) {
-      void navigate(`/admin/${encodeURIComponent(category)}`)
+      void navigate(`/admin/${encodeURIComponent(category)}`, opts)
     } else {
-      void navigate('/admin')
+      void navigate('/admin', opts)
     }
   }, [navigate])
 
-  const navigateToSettings = useCallback((category?: string) => {
+  const navigateToSettings = useCallback((category?: string, options?: NavigateOptions) => {
+    const opts = options?.replace ? { replace: true } : undefined
     if (category) {
-      void navigate(`/settings/${encodeURIComponent(category)}`)
+      void navigate(`/settings/${encodeURIComponent(category)}`, opts)
     } else {
-      void navigate('/settings')
+      void navigate('/settings', opts)
     }
   }, [navigate])
 
-  const goBack = useCallback(() => {
-    // Use browser history if available, otherwise go to messages
-    if (window.history.length > 1) {
-      void navigate(-1)
+  // Deterministic "go up" - navigates from detail to list within current tab.
+  // Uses replace to keep the history stack clean.
+  const navigateUp = useCallback(() => {
+    const view = parseRoute(location.pathname)
+    const hasDetail = extractJidFromPath(location.pathname) !== null
+      || extractAdminCategory(location.pathname) !== null
+      || extractSettingsCategory(location.pathname) !== null
+
+    if (hasDetail) {
+      // Detail -> list: replace to keep stack clean
+      const base = view === 'directory' ? '/contacts' : `/${view}`
+      void navigate(base, { replace: true })
     } else {
-      void navigate('/messages')
+      // Already at list level, go to messages as fallback
+      void navigate('/messages', { replace: true })
     }
-  }, [navigate])
+  }, [navigate, location.pathname])
 
   // Memoize the entire return value to prevent unnecessary re-renders
   // in consumers that might use the whole object in dependency arrays
@@ -253,7 +281,7 @@ export function useRouteSync(): RouteState & RouteActions {
     navigateToEvents,
     navigateToAdmin,
     navigateToSettings,
-    goBack,
+    navigateUp,
   }), [
     sidebarView,
     activeJid,
@@ -266,7 +294,7 @@ export function useRouteSync(): RouteState & RouteActions {
     navigateToEvents,
     navigateToAdmin,
     navigateToSettings,
-    goBack,
+    navigateUp,
   ])
 }
 

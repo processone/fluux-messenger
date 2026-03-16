@@ -59,6 +59,9 @@ export const NS_CORRECTION = 'urn:xmpp:message-correct:0'
 // XEP-0424: Message Retraction
 export const NS_RETRACT = 'urn:xmpp:message-retract:1'
 
+// XEP-0425: Message Moderation
+export const NS_MESSAGE_MODERATE = 'urn:xmpp:message-moderate:1'
+
 // XEP-0319: Last User Interaction in Presence
 export const NS_IDLE = 'urn:xmpp:idle:1'
 
@@ -105,6 +108,12 @@ export const NS_FLUUX = 'urn:xmpp:fluux:0'
 // Custom: Fluux appearance settings (XEP-0223 private storage)
 export const NS_APPEARANCE = 'urn:xmpp:fluux:appearance:0'
 
+// Custom: Fluux ignored users per-room (XEP-0223 private storage)
+export const NS_IGNORED_USERS = 'urn:xmpp:fluux:ignored-users:0'
+
+// Custom: Fluux conversation list sync (XEP-0223 private storage)
+export const NS_CONVERSATIONS = 'urn:xmpp:fluux:conversations:0'
+
 // XEP-0334: Message Processing Hints
 export const NS_HINTS = 'urn:xmpp:hints'
 
@@ -141,8 +150,14 @@ export const NS_HATS = 'urn:xmpp:hats:0'
 // XEP-0199: XMPP Ping
 export const NS_PING = 'urn:xmpp:ping'
 
+// XEP-0202: Entity Time
+export const NS_TIME = 'urn:xmpp:time'
+
 // XEP-0191: Blocking Command
 export const NS_BLOCKING = 'urn:xmpp:blocking'
+
+// XEP-0421: Anonymous Unique Occupant Identifiers for MUCs
+export const NS_OCCUPANT_ID = 'urn:xmpp:occupant-id:0'
 
 // RFC 6120: XMPP Stanza Error Conditions
 export const NS_XMPP_STANZAS = 'urn:ietf:params:xml:ns:xmpp-stanzas'

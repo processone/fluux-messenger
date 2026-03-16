@@ -5,9 +5,10 @@
  * the common bubble structure.
  */
 import { useState, memo, type ReactNode } from 'react'
-import { CornerUpLeft } from 'lucide-react'
+import { CornerUpRight } from 'lucide-react'
 import { formatMessagePreview, type BaseMessage, type MentionReference, type Contact, type ContactIdentity, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
 import { Avatar } from '../Avatar'
+import { AvatarLightbox } from '../AvatarLightbox'
 import { MessageToolbar } from './MessageToolbar'
 import { MessageBody } from './MessageBody'
 import { MessageReactions } from './MessageReactions'
@@ -51,13 +52,16 @@ export interface MessageBubbleProps {
   senderRole?: RoomRole
   /** Room affiliation for MUC occupants */
   senderAffiliation?: RoomAffiliation
+  /** Occupant JID for vCard fetch in anonymous rooms (e.g. room@conf/nick) */
+  senderOccupantJid?: string
 
   // Nick header extras (for room moderator badge, hats)
   nickExtras?: ReactNode
 
   // Reactions
   myReactions: string[]
-  onReaction: (emoji: string) => void
+  /** Handler for reaction clicks. When undefined, reaction UI is hidden (room lacks stable identity). */
+  onReaction?: (emoji: string) => void
   getReactorName: (reactor: string) => string
 
   // Actions
@@ -78,6 +82,14 @@ export interface MessageBubbleProps {
 
   // Room-specific: mentions for highlighting
   mentions?: MentionReference[]
+
+  // XEP-0425: Whether the current user can moderate (retract) this message
+  canModerate?: boolean
+
+  // Right-click / long-press context menu on nick/avatar (for room occupant actions)
+  onNickContextMenu?: (e: React.MouseEvent) => void
+  onNickTouchStart?: (e: React.TouchEvent) => void
+  onNickTouchEnd?: () => void
 
   // Callback when reaction picker opens/closes (for hiding other toolbars)
   onReactionPickerChange?: (isOpen: boolean) => void
@@ -147,6 +159,9 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps): bool
     if (prev.replyContext.avatarIdentifier !== next.replyContext.avatarIdentifier) return false
   }
 
+  // Moderation permission
+  if (prev.canModerate !== next.canModerate) return false
+
   // Mentions - compare by reference (parent should memoize)
   if (prev.mentions !== next.mentions) return false
 
@@ -184,6 +199,7 @@ export const MessageBubble = memo(function MessageBubble({
   senderContact,
   senderRole,
   senderAffiliation,
+  senderOccupantJid,
   nickExtras,
   myReactions,
   onReaction,
@@ -194,12 +210,20 @@ export const MessageBubble = memo(function MessageBubble({
   onMediaLoad,
   replyContext,
   mentions,
+  canModerate,
+  onNickContextMenu,
+  onNickTouchStart,
+  onNickTouchEnd,
   onReactionPickerChange,
   formatTime,
   timeFormat,
 }: MessageBubbleProps) {
   const [showReactionPicker, setShowReactionPickerState] = useState(false)
   const [showMoreMenu, setShowMoreMenu] = useState(false)
+  const [showAvatarLightbox, setShowAvatarLightbox] = useState(false)
+
+  // Whether reactions are enabled for this message (room has stable occupant identity)
+  const reactionsEnabled = onReaction !== undefined
 
   // Wrap setShowReactionPicker to notify parent
   const setShowReactionPicker = (isOpen: boolean) => {
@@ -207,10 +231,10 @@ export const MessageBubble = memo(function MessageBubble({
     onReactionPickerChange?.(isOpen)
   }
 
-  const handleReaction = (emoji: string) => {
+  const handleReaction = reactionsEnabled ? (emoji: string) => {
     onReaction(emoji)
     setShowReactionPicker(false)
-  }
+  } : undefined
 
   // Determine hover state: use controlled isHovered if provided, otherwise fall back to CSS hover
   const useControlledHover = isHovered !== undefined
@@ -229,26 +253,30 @@ export const MessageBubble = memo(function MessageBubble({
       onMouseLeave={onMouseLeave}
     >
       {/* Avatar, timestamp (when selected), or spacer - width adapts to time format */}
-      <div className={`${timeFormat === '12h' ? 'w-12' : 'w-10'} flex-shrink-0`}>
+      <div className={`${timeFormat === '12h' ? 'w-12' : 'w-10'} flex-shrink-0 flex flex-col`}>
         {/* /me action messages always show timestamp instead of avatar */}
         {isActionMessage(message.body) ? (
           <span className={`block text-center text-[10px] text-fluux-muted font-mono pt-0.5 ${isSelected ? 'opacity-100' : hasKeyboardSelection ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
             {formatTime(message.timestamp)}
           </span>
         ) : showAvatar ? (
-          <UserInfoPopover contact={senderContact} jid={senderJid} role={senderRole} affiliation={senderAffiliation}>
-            <div className="select-none">
-              <Avatar
-                identifier={avatarIdentifier}
-                name={senderName}
-                avatarUrl={avatarUrl}
-                fallbackColor={avatarFallbackColor}
-                size="md"
-                presence={avatarPresence}
-                presenceBorderColor="border-fluux-chat"
-              />
-            </div>
-          </UserInfoPopover>
+          <div
+            className="select-none cursor-pointer"
+            onClick={(e) => { e.stopPropagation(); setShowAvatarLightbox(true) }}
+            onContextMenu={onNickContextMenu}
+            onTouchStart={onNickTouchStart}
+            onTouchEnd={onNickTouchEnd}
+          >
+            <Avatar
+              identifier={avatarIdentifier}
+              name={senderName}
+              avatarUrl={avatarUrl}
+              fallbackColor={avatarFallbackColor}
+              size="md"
+              presence={avatarPresence}
+              presenceBorderColor="border-fluux-chat"
+            />
+          </div>
         ) : (
           <span className={`block text-center text-[10px] text-fluux-muted font-mono pt-0.5 ${isSelected ? 'opacity-100' : hasKeyboardSelection ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
             {formatTime(message.timestamp)}
@@ -265,10 +293,10 @@ export const MessageBubble = memo(function MessageBubble({
             onReply={onReply}
             onEdit={onEdit}
             onDelete={onDelete}
-            myReactions={myReactions}
+            myReactions={reactionsEnabled ? myReactions : []}
             canReply={!isLastMessage}
             canEdit={message.isOutgoing && isLastOutgoing}
-            canDelete={message.isOutgoing}
+            canDelete={message.isOutgoing || canModerate === true}
             isHidden={hideToolbar || false}
             isSelected={isSelected || false}
             hasKeyboardSelection={hasKeyboardSelection || false}
@@ -286,10 +314,13 @@ export const MessageBubble = memo(function MessageBubble({
         {/* Nick header - hidden for /me action messages (nick is shown inline) */}
         {showAvatar && !isActionMessage(message.body) && (
           <div className="flex items-baseline gap-2 pb-1 flex-wrap">
-            <UserInfoPopover contact={senderContact} jid={senderJid} role={senderRole} affiliation={senderAffiliation}>
+            <UserInfoPopover contact={senderContact} jid={senderJid} occupantJid={senderOccupantJid} role={senderRole} affiliation={senderAffiliation}>
               <span
                 className="font-medium"
                 style={{ color: senderColor }}
+                onContextMenu={onNickContextMenu}
+                onTouchStart={onNickTouchStart}
+                onTouchEnd={onNickTouchEnd}
               >
                 {senderName}
               </span>
@@ -305,17 +336,18 @@ export const MessageBubble = memo(function MessageBubble({
         {!message.isRetracted && replyContext && (
           <button
             onClick={() => scrollToMessage(replyContext.messageId)}
-            className="flex items-start gap-1.5 pb-1 pl-2 border-l-2 text-left w-full hover:bg-fluux-hover/50 rounded-r transition-colors cursor-pointer select-none"
+            className="flex items-start gap-1.5 pb-1 pl-2 border-l-2 text-left min-w-0 hover:bg-fluux-hover/50 rounded-r transition-colors cursor-pointer select-none"
             style={{ borderColor: replyContext.senderColor }}
           >
-            <CornerUpLeft className="w-3.5 h-3.5 text-fluux-muted flex-shrink-0 mt-0.5" />
-            <Avatar
-              identifier={replyContext.avatarIdentifier}
-              name={replyContext.senderName}
-              avatarUrl={replyContext.avatarUrl}
-              size="xs"
-              className="flex-shrink-0"
-            />
+            <div className="flex flex-col items-center flex-shrink-0 gap-0.5">
+              <Avatar
+                identifier={replyContext.avatarIdentifier}
+                name={replyContext.senderName}
+                avatarUrl={replyContext.avatarUrl}
+                size="xs"
+              />
+              <CornerUpRight className="w-3 h-3 text-fluux-muted" />
+            </div>
             <div className="text-sm text-fluux-muted min-w-0 flex-1">
               <span
                 className="font-medium"
@@ -334,6 +366,9 @@ export const MessageBubble = memo(function MessageBubble({
             isEdited={message.isEdited}
             originalBody={message.originalBody}
             isRetracted={message.isRetracted}
+            isModerated={message.isModerated}
+            moderatedBy={message.moderatedBy}
+            moderationReason={message.moderationReason}
             noStyling={message.noStyling}
             senderName={senderName}
             senderColor={senderColor}
@@ -356,6 +391,17 @@ export const MessageBubble = memo(function MessageBubble({
           isRetracted={message.isRetracted}
         />
       </div>
+
+      {/* Avatar lightbox overlay */}
+      {showAvatarLightbox && (
+        <AvatarLightbox
+          avatarUrl={avatarUrl}
+          identifier={avatarIdentifier}
+          name={senderName}
+          fallbackColor={avatarFallbackColor}
+          onClose={() => setShowAvatarLightbox(false)}
+        />
+      )}
     </div>
   )
 }, arePropsEqual)

@@ -67,11 +67,11 @@ describe('onMessageReceived', () => {
       expect(result.firstNewMessageId).toBeUndefined()
     })
 
-    it('preserves lastSeenMessageId', () => {
+    it('advances lastSeenMessageId to outgoing message', () => {
       const state = makeState({ lastSeenMessageId: 'seen-1' })
       const msg = makeMsg({ isOutgoing: true })
       const result = onMessageReceived(state, msg, ACTIVE_VISIBLE)
-      expect(result.lastSeenMessageId).toBe('seen-1')
+      expect(result.lastSeenMessageId).toBe(msg.id)
     })
   })
 
@@ -92,6 +92,13 @@ describe('onMessageReceived', () => {
       expect(result.unreadCount).toBe(0)
       expect(result.mentionsCount).toBe(0)
       expect(result.lastReadAt).toEqual(msg.timestamp)
+    })
+
+    it('advances lastSeenMessageId to the new message', () => {
+      const state = makeState({ lastSeenMessageId: 'old-msg' })
+      const msg = makeMsg({ id: 'new-msg' })
+      const result = onMessageReceived(state, msg, ACTIVE_VISIBLE)
+      expect(result.lastSeenMessageId).toBe('new-msg')
     })
 
     it('preserves existing marker', () => {
@@ -698,7 +705,41 @@ describe('lifecycle sequences', () => {
     expect(state.unreadCount).toBe(0)
     expect(state.mentionsCount).toBe(0)
     expect(state.firstNewMessageId).toBeUndefined()
-    expect(state.lastSeenMessageId).toBe('seen-1') // preserved
+    expect(state.lastSeenMessageId).toBe('out-1') // advanced to outgoing
+  })
+
+  it('no spurious marker after user replies to a conversation', () => {
+    // Regression: user reads messages, replies, then re-opens the conversation.
+    // The "new messages" divider must NOT appear above messages the user already saw.
+    const msgs: NotificationMessage[] = [
+      makeMsg({ id: 'msg-1', timestamp: new Date() }),
+      makeMsg({ id: 'msg-2', timestamp: new Date() }),
+      makeMsg({ id: 'reply-1', isOutgoing: true, timestamp: new Date() }),
+      makeMsg({ id: 'msg-3', timestamp: new Date() }),
+      makeMsg({ id: 'reply-2', isOutgoing: true, timestamp: new Date() }),
+    ]
+
+    // User has seen everything up to msg-2
+    let state = makeState({ lastSeenMessageId: 'msg-2' })
+
+    // User sends reply-1 → lastSeenMessageId must advance
+    state = onMessageReceived(state, msgs[2], ACTIVE_VISIBLE)
+    expect(state.lastSeenMessageId).toBe('reply-1')
+
+    // Incoming msg-3 arrives while user is viewing
+    state = onMessageReceived(state, msgs[3], ACTIVE_VISIBLE)
+    expect(state.lastSeenMessageId).toBe('msg-3')
+
+    // User sends reply-2
+    state = onMessageReceived(state, msgs[4], ACTIVE_VISIBLE)
+    expect(state.lastSeenMessageId).toBe('reply-2')
+
+    // User switches away and back
+    state = onDeactivate(state)
+    state = onActivate(state, msgs)
+
+    // No new messages after reply-2 → no marker
+    expect(state.firstNewMessageId).toBeUndefined()
   })
 
   it('switching away and back does not regress marker (stale lastSeenMessageId)', () => {
@@ -817,5 +858,52 @@ describe('lifecycle sequences', () => {
     state = onMessageReceived(state, makeMsg({ id: 'm3', isOutgoing: true }), ACTIVE_VISIBLE)
     expect(state.unreadCount).toBe(0)
     expect(state.mentionsCount).toBe(0)
+  })
+
+  it('messages arriving while viewing → leave → come back shows no stale marker', () => {
+    // Scenario: user opens conversation, reads everything, new messages arrive
+    // while viewing, user leaves and comes back → should see no old marker.
+    const initialMessages: NotificationMessage[] = [
+      makeMsg({ id: 'm1', timestamp: new Date('2025-01-15T09:00:00Z') }),
+      makeMsg({ id: 'm2', timestamp: new Date('2025-01-15T09:30:00Z') }),
+      makeMsg({ id: 'm3', timestamp: new Date('2025-01-15T10:00:00Z') }),
+    ]
+
+    // User had seen m1, m2 and m3 are unread
+    let state = makeState({ lastSeenMessageId: 'm1', unreadCount: 2 })
+
+    // User opens conversation → marker at m2
+    state = onActivate(state, initialMessages)
+    expect(state.firstNewMessageId).toBe('m2')
+    expect(state.lastSeenMessageId).toBe('m1')
+
+    // User scrolls and sees all messages via IntersectionObserver
+    state = onMessageSeen(state, 'm3', initialMessages)
+    expect(state.lastSeenMessageId).toBe('m3')
+
+    // New messages arrive while user is actively viewing
+    const m4 = makeMsg({ id: 'm4', timestamp: new Date('2025-01-15T10:30:00Z') })
+    const m5 = makeMsg({ id: 'm5', timestamp: new Date('2025-01-15T11:00:00Z') })
+    state = onMessageReceived(state, m4, ACTIVE_VISIBLE)
+    state = onMessageReceived(state, m5, ACTIVE_VISIBLE)
+
+    // lastSeenMessageId should have advanced to m5 (user sees each message)
+    expect(state.lastSeenMessageId).toBe('m5')
+
+    // User switches away
+    state = onDeactivate(state)
+    expect(state.firstNewMessageId).toBeUndefined()
+
+    // User comes back — all messages including m4 and m5 are in the array now
+    const allMessages: NotificationMessage[] = [
+      ...initialMessages,
+      m4,
+      m5,
+    ]
+    state = onActivate(state, allMessages)
+
+    // No new messages after m5 → no marker (not the stale marker at m2!)
+    expect(state.firstNewMessageId).toBeUndefined()
+    expect(state.lastSeenMessageId).toBe('m5')
   })
 })

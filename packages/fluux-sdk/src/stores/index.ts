@@ -65,3 +65,6 @@ export type { AdminState, AdminCommand, AdminSession, DataForm, DataFormField, A
 
 export { blockingStore } from './blockingStore'
 export type { BlockingState } from './blockingStore'
+
+export { ignoreStore, isMessageFromIgnoredUser, isReplyToIgnoredUser } from './ignoreStore'
+export type { IgnoreState, IgnoredUser } from './ignoreStore'

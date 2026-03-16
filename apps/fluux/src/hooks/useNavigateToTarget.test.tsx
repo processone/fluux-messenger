@@ -29,6 +29,7 @@ vi.mock('@fluux/sdk/react', () => ({
   },
   useConnectionStore: (selector: (s: { status: string }) => unknown) =>
     selector({ status: 'online' }),
+  useContactTime: () => null,
 }))
 
 // Mock Tauri notification plugin (avoid import errors)

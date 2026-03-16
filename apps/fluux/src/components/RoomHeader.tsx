@@ -16,6 +16,9 @@ import { useWindowDrag, useClickOutside } from '@/hooks'
 import { renderTextWithLinks } from '@/utils/messageStyles'
 import { AvatarCropModal } from './AvatarCropModal'
 import { InviteToRoomModal } from './InviteToRoomModal'
+import { RoomConfigModal } from './RoomConfigModal'
+import { RoomMembersModal } from './RoomMembersModal'
+import { RoomHatsModal } from './RoomHatsModal'
 import {
   Hash,
   ArrowLeft,
@@ -33,6 +36,7 @@ import {
   UserMinus,
   Image,
   Type,
+  Award,
 } from 'lucide-react'
 
 // Notification mode for rooms
@@ -46,6 +50,9 @@ export interface RoomHeaderProps {
   setRoomNotifyAll: (roomJid: string, notifyAll: boolean, persistent?: boolean) => Promise<void>
   setRoomAvatar: (roomJid: string, imageData: Uint8Array, mimeType: string) => Promise<void>
   clearRoomAvatar: (roomJid: string) => Promise<void>
+  submitRoomConfig: (roomJid: string, values: Record<string, string | string[]>) => Promise<void>
+  setSubject: (roomJid: string, subject: string) => Promise<void>
+  destroyRoom: (roomJid: string, reason?: string) => Promise<void>
 }
 
 export function RoomHeader({
@@ -56,12 +63,18 @@ export function RoomHeader({
   setRoomNotifyAll,
   setRoomAvatar,
   clearRoomAvatar,
+  submitRoomConfig,
+  setSubject,
+  destroyRoom,
 }: RoomHeaderProps) {
   const { t } = useTranslation()
   const [showNotifyMenu, setShowNotifyMenu] = useState(false)
   const [showOwnerMenu, setShowOwnerMenu] = useState(false)
   const [showAvatarModal, setShowAvatarModal] = useState(false)
   const [showInviteModal, setShowInviteModal] = useState(false)
+  const [showConfigModal, setShowConfigModal] = useState(false)
+  const [showMembersModal, setShowMembersModal] = useState(false)
+  const [showHatsModal, setShowHatsModal] = useState(false)
   const [avatarError, setAvatarError] = useState<string | null>(null)
   const notifyMenuRef = useRef<HTMLDivElement>(null)
   const ownerMenuRef = useRef<HTMLDivElement>(null)
@@ -180,7 +193,7 @@ export function RoomHeader({
 
         {/* Dropdown menu */}
         {showNotifyMenu && (
-          <div className="absolute right-0 top-full mt-1 w-56 bg-fluux-bg border border-fluux-hover rounded-lg shadow-lg z-30 py-1">
+          <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-1 w-56 bg-fluux-bg border border-fluux-hover rounded-lg shadow-lg z-30 py-1">
             {/* Mentions only */}
             <button
               onClick={() => handleSelectMode('mentions')}
@@ -262,41 +275,35 @@ export function RoomHeader({
 
           {/* Room management dropdown menu */}
           {showOwnerMenu && (
-            <div className="absolute right-0 top-full mt-1 w-56 bg-fluux-bg border border-fluux-hover rounded-lg shadow-lg z-30 py-1">
-              {/* Room Settings (placeholder) */}
-              <Tooltip content={t('common.comingSoon')} position="left" className='w-full'>
-                <button
-                  onClick={() => {
-                    // TODO: Open room settings modal
-                    setShowOwnerMenu(false)
-                  }}
-                  className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-left transition-colors opacity-60 cursor-not-allowed"
-                  disabled
-                >
-                  <Settings className="w-4 h-4 text-fluux-muted" />
-                  <div className="flex-1">
-                    <div className="text-sm text-fluux-text">{t('rooms.roomSettings')}</div>
-                    <div className="text-xs text-fluux-muted">{t('rooms.configureRoom')}</div>
-                  </div>
-                </button>
-              </Tooltip>
+            <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-1 w-56 bg-fluux-bg border border-fluux-hover rounded-lg shadow-lg z-30 py-1">
+              {/* Room Settings */}
+              <button
+                onClick={() => {
+                  setShowConfigModal(true)
+                  setShowOwnerMenu(false)
+                }}
+                className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-left transition-colors"
+              >
+                <Settings className="w-4 h-4 text-fluux-muted" />
+                <div className="flex-1">
+                  <div className="text-sm text-fluux-text">{t('rooms.roomSettings')}</div>
+                  <div className="text-xs text-fluux-muted">{t('rooms.configureRoom')}</div>
+                </div>
+              </button>
 
-              {/* Change Room Subject (placeholder) */}
-              <Tooltip content={t('common.comingSoon')} position="left" className='w-full'>
-                <button
-                  onClick={() => {
-                    // TODO: Open change subject modal
-                    setShowOwnerMenu(false)
-                  }}
-                  className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-left transition-colors opacity-60 cursor-not-allowed"
-                  disabled
-                >
-                  <Type className="w-4 h-4 text-fluux-muted" />
-                  <div className="flex-1">
-                    <div className="text-sm text-fluux-text">{t('rooms.changeSubject')}</div>
-                  </div>
-                </button>
-              </Tooltip>
+              {/* Change Room Subject - opens config modal */}
+              <button
+                onClick={() => {
+                  setShowConfigModal(true)
+                  setShowOwnerMenu(false)
+                }}
+                className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-left transition-colors"
+              >
+                <Type className="w-4 h-4 text-fluux-muted" />
+                <div className="flex-1">
+                  <div className="text-sm text-fluux-text">{t('rooms.changeSubject')}</div>
+                </div>
+              </button>
 
               {/* Change Room Avatar (owner only) */}
               {isOwner && (
@@ -334,24 +341,47 @@ export function RoomHeader({
                 </button>
               )}
 
-              {/* Kick/Ban Member (placeholder) - owner only */}
+              {/* Manage Membership - owner and admin */}
+              {canManageRoom && (
+                <button
+                  onClick={() => {
+                    setShowMembersModal(true)
+                    setShowOwnerMenu(false)
+                  }}
+                  className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-left transition-colors"
+                >
+                  <UserMinus className="w-4 h-4 text-fluux-muted" />
+                  <div className="flex-1">
+                    <div className="text-sm text-fluux-text">{t('rooms.manageMembership')}</div>
+                    <div className="text-xs text-fluux-muted">{t('rooms.kickBanMembers')}</div>
+                  </div>
+                </button>
+              )}
+
+              {/* Manage Hats - owner only */}
               {isOwner && (
-                <Tooltip content={t('common.comingSoon')} position="left" className='w-full'>
-                  <button
-                    onClick={() => {
-                      // TODO: Open kick/ban member modal
-                      setShowOwnerMenu(false)
-                    }}
-                    className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-left transition-colors opacity-60 cursor-not-allowed"
-                    disabled
-                  >
-                    <UserMinus className="w-4 h-4 text-fluux-muted" />
-                    <div className="flex-1">
-                      <div className="text-sm text-fluux-text">{t('rooms.manageMembership')}</div>
-                      <div className="text-xs text-fluux-muted">{t('rooms.kickBanMembers')}</div>
+                <button
+                  onClick={() => {
+                    if (!room.supportsHats) return
+                    setShowHatsModal(true)
+                    setShowOwnerMenu(false)
+                  }}
+                  disabled={!room.supportsHats}
+                  className={`w-full px-3 py-2 flex items-center gap-3 text-left transition-colors ${
+                    room.supportsHats
+                      ? 'hover:bg-fluux-hover'
+                      : 'opacity-50 cursor-not-allowed'
+                  }`}
+                  title={!room.supportsHats ? t('rooms.hatsNotEnabled') : undefined}
+                >
+                  <Award className="w-4 h-4 text-fluux-muted" />
+                  <div className="flex-1">
+                    <div className="text-sm text-fluux-text">{t('rooms.manageHats')}</div>
+                    <div className="text-xs text-fluux-muted">
+                      {room.supportsHats ? t('rooms.manageHatsDesc') : t('rooms.hatsNotEnabled')}
                     </div>
-                  </button>
-                </Tooltip>
+                  </div>
+                </button>
               )}
             </div>
           )}
@@ -371,7 +401,7 @@ export function RoomHeader({
         >
           <Users className="w-4 h-4" />
           <span className="text-sm font-medium">{uniqueOccupantCount}</span>
-          <ChevronRight className={`w-4 h-4 transition-transform ${showOccupants ? '' : 'rotate-180'}`} />
+          <ChevronRight className={`w-4 h-4 transition-transform ${showOccupants ? 'rotate-180' : ''}`} />
         </button>
       </Tooltip>
 
@@ -409,6 +439,31 @@ export function RoomHeader({
         onClose={() => setShowInviteModal(false)}
         room={room}
       />
+
+      {/* Room configuration modal */}
+      {showConfigModal && (
+        <RoomConfigModal
+          room={room}
+          onClose={() => setShowConfigModal(false)}
+          submitRoomConfig={submitRoomConfig}
+          setSubject={setSubject}
+          destroyRoom={destroyRoom}
+        />
+      )}
+
+      {showMembersModal && (
+        <RoomMembersModal
+          room={room}
+          onClose={() => setShowMembersModal(false)}
+        />
+      )}
+
+      {showHatsModal && (
+        <RoomHatsModal
+          room={room}
+          onClose={() => setShowHatsModal(false)}
+        />
+      )}
     </header>
   )
 }

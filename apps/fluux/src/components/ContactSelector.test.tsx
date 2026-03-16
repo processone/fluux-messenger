@@ -38,6 +38,7 @@ vi.mock('@fluux/sdk', () => ({
 vi.mock('@fluux/sdk/react', () => ({
   useConnectionStore: (selector: (state: { status: string }) => unknown) =>
     selector({ status: 'online' }),
+  useContactTime: () => null,
 }))
 
 // Mock react-i18next
@@ -547,6 +548,120 @@ describe('ContactSelector', () => {
       fireEvent.change(input, { target: { value: 'alice' } })
 
       expect(screen.getByText('Tab/↑↓ to navigate, Enter to select')).toBeInTheDocument()
+    })
+  })
+
+  describe('extraSuggestions', () => {
+    const extraSuggestions = [
+      { jid: 'extra1@example.com', name: 'Extra One' },
+      { jid: 'extra2@example.com' }, // no name, should show JID
+      { jid: 'alice@example.com', name: 'Alice Duplicate' }, // duplicate of roster contact
+    ]
+
+    it('should show extra suggestions in dropdown when typing', () => {
+      render(
+        <ContactSelector
+          selectedContacts={[]}
+          onSelectionChange={mockOnSelectionChange}
+          extraSuggestions={extraSuggestions}
+        />
+      )
+
+      const input = screen.getByPlaceholderText('Search contacts...')
+      fireEvent.focus(input)
+      fireEvent.change(input, { target: { value: 'extra' } })
+
+      expect(screen.getByText('Extra One')).toBeInTheDocument()
+      // extra2 has no name, so it shows JID as both name and JID fields
+      expect(screen.getAllByText('extra2@example.com').length).toBeGreaterThanOrEqual(1)
+    })
+
+    it('should dedupe extra suggestions against roster contacts (roster wins)', () => {
+      render(
+        <ContactSelector
+          selectedContacts={[]}
+          onSelectionChange={mockOnSelectionChange}
+          extraSuggestions={extraSuggestions}
+        />
+      )
+
+      const input = screen.getByPlaceholderText('Search contacts...')
+      fireEvent.focus(input)
+      fireEvent.change(input, { target: { value: 'alice' } })
+
+      // Should show roster Alice, not the extra duplicate
+      expect(screen.getByText('Alice Smith')).toBeInTheDocument()
+      expect(screen.queryByText('Alice Duplicate')).not.toBeInTheDocument()
+    })
+
+    it('should filter extra suggestions by excludeJids', () => {
+      render(
+        <ContactSelector
+          selectedContacts={[]}
+          onSelectionChange={mockOnSelectionChange}
+          extraSuggestions={extraSuggestions}
+          excludeJids={['extra1@example.com']}
+        />
+      )
+
+      const input = screen.getByPlaceholderText('Search contacts...')
+      fireEvent.focus(input)
+      fireEvent.change(input, { target: { value: 'extra' } })
+
+      expect(screen.queryByText('Extra One')).not.toBeInTheDocument()
+      expect(screen.getAllByText('extra2@example.com').length).toBeGreaterThanOrEqual(1)
+    })
+
+    it('should filter extra suggestions by selectedContacts', () => {
+      render(
+        <ContactSelector
+          selectedContacts={['extra1@example.com']}
+          onSelectionChange={mockOnSelectionChange}
+          extraSuggestions={extraSuggestions}
+        />
+      )
+
+      const input = screen.getByPlaceholderText('Add more contacts...')
+      fireEvent.focus(input)
+      fireEvent.change(input, { target: { value: 'extra' } })
+
+      // extra1 is shown in chip (as "Extra One") but should NOT appear in dropdown
+      // The dropdown should only have extra2
+      const chipArea = screen.getByText('Extra One').closest('.flex.flex-wrap')!
+      // Verify Extra One is only in the chip area, not in the dropdown
+      const allExtraOnes = screen.getAllByText('Extra One')
+      expect(allExtraOnes).toHaveLength(1)
+      expect(chipArea.contains(allExtraOnes[0])).toBe(true)
+    })
+
+    it('should show extra suggestion display name in chips', () => {
+      render(
+        <ContactSelector
+          selectedContacts={['extra1@example.com']}
+          onSelectionChange={mockOnSelectionChange}
+          extraSuggestions={extraSuggestions}
+        />
+      )
+
+      // Chip should show the extra suggestion's name, not the raw JID
+      expect(screen.getByText('Extra One')).toBeInTheDocument()
+    })
+
+    it('should search extra suggestions by name and JID', () => {
+      render(
+        <ContactSelector
+          selectedContacts={[]}
+          onSelectionChange={mockOnSelectionChange}
+          extraSuggestions={extraSuggestions}
+        />
+      )
+
+      const input = screen.getByPlaceholderText('Search contacts...')
+      fireEvent.focus(input)
+      fireEvent.change(input, { target: { value: 'one' } })
+
+      expect(screen.getByText('Extra One')).toBeInTheDocument()
+      expect(screen.queryByText('extra2@example.com')).not.toBeInTheDocument()
     })
   })
 

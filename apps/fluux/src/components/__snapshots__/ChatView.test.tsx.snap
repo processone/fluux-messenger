@@ -23,11 +23,15 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
         >
           Alice Smith
         </h2>
-        <p
-          class="text-xs text-fluux-muted truncate"
+        <div
+          class="flex items-center gap-1.5"
         >
-          Online
-        </p>
+          <p
+            class="text-xs text-fluux-muted truncate"
+          >
+            Online
+          </p>
+        </div>
       </div>
     </header>
     <div
@@ -88,19 +92,15 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                   data-message-time="14:30"
                 >
                   <div
-                    class="w-10 flex-shrink-0"
+                    class="w-10 flex-shrink-0 flex flex-col"
                   >
                     <div
-                      class="cursor-pointer "
+                      class="select-none cursor-pointer"
                     >
                       <div
-                        class="select-none"
+                        data-testid="avatar"
                       >
-                        <div
-                          data-testid="avatar"
-                        >
-                          Alice Smith
-                        </div>
+                        Alice Smith
                       </div>
                     </div>
                   </div>
@@ -245,19 +245,15 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                   data-message-time="14:30"
                 >
                   <div
-                    class="w-10 flex-shrink-0"
+                    class="w-10 flex-shrink-0 flex flex-col"
                   >
                     <div
-                      class="cursor-pointer "
+                      class="select-none cursor-pointer"
                     >
                       <div
-                        class="select-none"
+                        data-testid="avatar"
                       >
-                        <div
-                          data-testid="avatar"
-                        >
-                          Me
-                        </div>
+                        Me
                       </div>
                     </div>
                   </div>
@@ -436,11 +432,15 @@ exports[`ChatView > Snapshots > should match snapshot with typing indicator 1`] 
         >
           Alice Smith
         </h2>
-        <p
-          class="text-xs text-fluux-muted truncate"
+        <div
+          class="flex items-center gap-1.5"
         >
-          Online
-        </p>
+          <p
+            class="text-xs text-fluux-muted truncate"
+          >
+            Online
+          </p>
+        </div>
       </div>
     </header>
     <div

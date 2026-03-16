@@ -146,3 +146,22 @@ export interface Contact {
    */
   colorDark?: string
 }
+
+/**
+ * vCard profile information (XEP-0054).
+ *
+ * Contains selected fields from a contact's vCard for display
+ * in user info popovers.
+ *
+ * @category Roster
+ */
+export interface VCardInfo {
+  /** Full name (FN field) */
+  fullName?: string
+  /** Organisation name (ORG/ORGNAME field) */
+  org?: string
+  /** Email address (EMAIL/USERID field) */
+  email?: string
+  /** Country (ADR/CTRY field) */
+  country?: string
+}

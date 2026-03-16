@@ -81,6 +81,11 @@ export interface RoomOccupant {
    * Used to detect avatar changes and for cache lookup.
    */
   avatarHash?: string
+  /**
+   * XEP-0421: Stable anonymous occupant identifier.
+   * Survives nick changes and works in anonymous rooms.
+   */
+  occupantId?: string
 }
 
 /**
@@ -122,6 +127,11 @@ export interface RoomMessage extends Omit<BaseMessage, 'type'> {
   isMentionAll?: boolean
   /** XEP-0372: Parsed mention references */
   mentions?: MentionReference[]
+  /**
+   * XEP-0421: Stable anonymous occupant identifier of the sender.
+   * Survives nick changes and works in anonymous rooms.
+   */
+  occupantId?: string
 }
 
 /**
@@ -168,6 +178,12 @@ export interface RoomEntity {
   // Room capabilities (from disco#info)
   /** True if room supports MAM (XEP-0313) for message archiving */
   supportsMAM?: boolean
+  /** True if room provides stable occupant identity for reliable reactions.
+   *  False for open semi-anonymous rooms without XEP-0421 occupant-id support,
+   *  where nicks can change freely making reaction attribution unreliable. */
+  supportsReactions?: boolean
+  /** True if room supports XEP-0317 Hats management */
+  supportsHats?: boolean
 }
 
 /**

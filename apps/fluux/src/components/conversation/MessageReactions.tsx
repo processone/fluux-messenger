@@ -6,8 +6,8 @@ export interface MessageReactionsProps {
   reactions: Record<string, string[]>
   /** Emojis the current user has reacted with */
   myReactions: string[]
-  /** Handler for toggling a reaction */
-  onReaction: (emoji: string) => void
+  /** Handler for toggling a reaction. When undefined, reactions are read-only. */
+  onReaction?: (emoji: string) => void
   /** Function to get display name for a reactor identifier */
   getReactorName: (reactorId: string) => string
   /** Whether the message is retracted (hides reactions) */
@@ -42,13 +42,13 @@ export const MessageReactions = memo(function MessageReactions({
           delay={300}
         >
           <button
-            onClick={() => onReaction(emoji)}
+            onClick={onReaction ? () => onReaction(emoji) : undefined}
             className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs
                        border transition-colors ${
                          myReactions.includes(emoji)
                            ? 'bg-fluux-brand/20 border-fluux-brand'
                            : 'bg-fluux-surface border-fluux-border hover:bg-fluux-hover'
-                       }`}
+                       } ${!onReaction ? 'cursor-default' : ''}`}
           >
             <span>{emoji}</span>
             <span className="text-fluux-muted">{reactors.length}</span>

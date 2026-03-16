@@ -10,8 +10,8 @@
 
 import type { Element } from '@xmpp/client'
 import type { Message, Conversation } from './chat'
-import type { Contact, PresenceShow } from './roster'
-import type { Room, RoomOccupant, RoomMember, RoomMessage } from './room'
+import type { Contact, PresenceShow, VCardInfo } from './roster'
+import type { Room, RoomOccupant, RoomMember, RoomMessage, RoomAffiliation, RoomRole } from './room'
 import type { ServerInfo } from './discovery'
 import type { HttpUploadService } from './upload'
 import type { WebPushService, WebPushStatus } from './webpush'
@@ -62,6 +62,11 @@ export interface ConnectionEvents {
   /** Own nickname changed */
   'connection:own-nickname': {
     nickname: string | null
+  }
+
+  /** Own vCard changed */
+  'connection:own-vcard': {
+    vcard: VCardInfo | null
   }
 
   /** Own resource presence updated */
@@ -315,6 +320,20 @@ export interface RoomEvents {
   'room:members': {
     roomJid: string
     members: RoomMember[]
+  }
+
+  /** Room affiliation changed for a user (XEP-0045 admin set) */
+  'room:affiliation-changed': {
+    roomJid: string
+    userJid: string
+    affiliation: RoomAffiliation
+  }
+
+  /** Room role changed for an occupant (XEP-0045 admin set) */
+  'room:role-changed': {
+    roomJid: string
+    nick: string
+    role: RoomRole
   }
 }
 

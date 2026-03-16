@@ -33,6 +33,16 @@ export interface ContactSelectorProps {
   disabled?: boolean
   /** JIDs to exclude from the contact list */
   excludeJids?: string[]
+  /** Additional JID suggestions beyond roster contacts (e.g., room occupants, affiliated members) */
+  extraSuggestions?: Array<{ jid: string; name?: string }>
+}
+
+/** Unified contact entry for the dropdown */
+interface UnifiedContact {
+  jid: string
+  name: string
+  isExtra?: boolean
+  presence?: string
 }
 
 /**
@@ -55,6 +65,7 @@ export function ContactSelector({
   addMorePlaceholder,
   disabled = false,
   excludeJids = [],
+  extraSuggestions = [],
 }: ContactSelectorProps) {
   const { t } = useTranslation()
   const { contacts } = useRoster()
@@ -80,32 +91,58 @@ export function ContactSelector({
     return map
   }, [conversations])
 
-  // Filter and sort contacts
+  // Build a set of roster JIDs for fast deduplication
+  const rosterJids = useMemo(() => new Set(contacts.map(c => c.jid)), [contacts])
+
+  // Filter and sort contacts, merging extra suggestions
+  // - Map roster contacts to unified type
+  // - Append extra suggestions not already in roster (dedupe by JID)
   // - Exclude already selected and excluded JIDs
   // - Filter by search if provided (match on name or username, not domain)
-  // - Sort by recent conversation activity
+  // - Sort: roster contacts by recent activity first, then extra suggestions alphabetically
   const filteredContacts = useMemo(() => {
-    const result = contacts.filter(contact => {
-      if (selectedContacts.includes(contact.jid)) return false
-      if (excludeJids.includes(contact.jid)) return false
+    // Map roster contacts to unified type
+    const rosterEntries: UnifiedContact[] = contacts
+      .filter(contact => {
+        if (selectedContacts.includes(contact.jid)) return false
+        if (excludeJids.includes(contact.jid)) return false
+        if (search.trim() && !matchNameOrJid(contact.name, contact.jid, search)) return false
+        return true
+      })
+      .map(contact => ({
+        jid: contact.jid,
+        name: contact.name,
+        presence: contact.presence,
+      }))
 
-      // If search is provided, filter by name or username (not domain)
-      if (search.trim() && !matchNameOrJid(contact.name, contact.jid, search)) {
-        return false
-      }
-      return true
-    })
-
-    // Sort by recent activity (most recent first), then by name
-    result.sort((a, b) => {
+    // Sort roster entries by recent activity
+    rosterEntries.sort((a, b) => {
       const aTime = recentActivityMap.get(a.jid) || 0
       const bTime = recentActivityMap.get(b.jid) || 0
-      if (aTime !== bTime) return bTime - aTime // Most recent first
-      return a.name.localeCompare(b.name) // Alphabetical fallback
+      if (aTime !== bTime) return bTime - aTime
+      return a.name.localeCompare(b.name)
     })
 
-    return result
-  }, [contacts, selectedContacts, excludeJids, search, recentActivityMap])
+    // Map and filter extra suggestions (dedupe against roster)
+    const extraEntries: UnifiedContact[] = extraSuggestions
+      .filter(s => {
+        if (rosterJids.has(s.jid)) return false
+        if (selectedContacts.includes(s.jid)) return false
+        if (excludeJids.includes(s.jid)) return false
+        if (search.trim() && !matchNameOrJid(s.name || s.jid, s.jid, search)) return false
+        return true
+      })
+      .map(s => ({
+        jid: s.jid,
+        name: s.name || s.jid,
+        isExtra: true,
+      }))
+
+    // Sort extra entries alphabetically by name
+    extraEntries.sort((a, b) => a.name.localeCompare(b.name))
+
+    return [...rosterEntries, ...extraEntries]
+  }, [contacts, selectedContacts, excludeJids, search, recentActivityMap, extraSuggestions, rosterJids])
 
   // Reset highlight when filtered list changes
   useEffect(() => {
@@ -245,12 +282,14 @@ export function ContactSelector({
         <div className="flex flex-wrap gap-1 mb-2">
           {selectedContacts.map(jid => {
             const contact = contacts.find(c => c.jid === jid)
+            const extra = !contact ? extraSuggestions.find(s => s.jid === jid) : undefined
+            const displayName = contact?.name || extra?.name || jid
             return (
               <span
                 key={jid}
                 className="inline-flex items-center gap-1 px-2 py-0.5 bg-fluux-brand/20 text-fluux-brand rounded-full text-sm"
               >
-                {contact?.name || jid}
+                {displayName}
                 <button
                   type="button"
                   onClick={() => removeContact(jid)}
@@ -290,9 +329,11 @@ export function ContactSelector({
             flipUp ? 'bottom-full mb-1' : 'top-full mt-1'
           }`}>
             {filteredContacts.map((contact, index) => {
-              const presenceColor = forceOffline
-                ? APP_OFFLINE_PRESENCE_COLOR
-                : PRESENCE_COLORS[contact.presence]
+              const presenceColor = contact.isExtra
+                ? 'bg-fluux-muted/50'
+                : forceOffline
+                  ? APP_OFFLINE_PRESENCE_COLOR
+                  : PRESENCE_COLORS[contact.presence as keyof typeof PRESENCE_COLORS]
               return (
                 <div
                   key={contact.jid}

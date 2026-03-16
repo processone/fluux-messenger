@@ -33,10 +33,11 @@ import {
   roomStore,
   adminStore,
   blockingStore,
+  ignoreStore,
 } from '../stores'
 import { detectPlatform, getCachedPlatform } from './platform'
 import { isDeadSocketError } from './modules/connectionUtils'
-import { getBareJid } from './jid'
+import { getBareJid, getLocalPart } from './jid'
 import { getStorageScopeJid, setStorageScopeJid } from '../utils/storageScope'
 
 /**
@@ -92,7 +93,10 @@ import { Discovery } from './modules/Discovery'
 import { Connection } from './modules/Connection'
 import { PubSub } from './modules/PubSub'
 import { Blocking } from './modules/Blocking'
+import { Ignore } from './modules/Ignore'
+import { ConversationSync, type SyncedConversation } from './modules/ConversationSync'
 import { WebPush } from './modules/WebPush'
+import { EntityTime } from './modules/EntityTime'
 import { MAM } from './modules/MAM'
 import { NS_CARBONS, NS_MAM, NS_P1_PUSH_WEBPUSH } from './namespaces'
 import { createDefaultStoreBindings, type DefaultStoreBindingsOptions } from './defaultStoreBindings'
@@ -224,10 +228,28 @@ export class XMPPClient {
   public blocking!: Blocking
 
   /**
+   * Ignore module.
+   * Manages per-room ignored user lists via PEP (XEP-0223 private storage).
+   */
+  public ignore!: Ignore
+
+  /**
+   * Conversation sync module.
+   * Persists 1:1 conversation lists (active + archived) via PEP (XEP-0223 private storage).
+   */
+  public conversationSync!: ConversationSync
+
+  /**
    * Web Push module (p1:push).
    * Handles VAPID-based push notification registration with ejabberd Business Edition.
    */
   public webPush!: WebPush
+
+  /**
+   * Entity Time module (XEP-0202).
+   * Queries contacts for their local time and caches timezone offsets.
+   */
+  public entityTime!: EntityTime
 
   /**
    * Message Archive Management module (XEP-0313).
@@ -478,6 +500,7 @@ export class XMPPClient {
       admin: adminStore.getState(),
       blocking: blockingStore.getState(),
       console: consoleStore.getState(),
+      ignore: ignoreStore.getState(),
     }))
     this.cleanupFunctions.push(unsubscribeStoreBindings)
 
@@ -541,7 +564,10 @@ export class XMPPClient {
     this.profile = new Profile(moduleDeps)
     this.discovery = new Discovery(moduleDeps)
     this.blocking = new Blocking(moduleDeps)
+    this.ignore = new Ignore(moduleDeps)
+    this.conversationSync = new ConversationSync(moduleDeps)
     this.webPush = new WebPush(moduleDeps)
+    this.entityTime = new EntityTime(moduleDeps)
 
     // Set up post-connection handler
     this.connection.setConnectionSuccessHandler(async (isResumption, previouslyJoinedRooms) => {
@@ -857,6 +883,7 @@ export class XMPPClient {
     this.currentJid = null
     // Clear session-scoped tracking data
     this.xep0084AvatarChecked.clear()
+    this.entityTime?.clearCache()
     return this.connection.disconnect()
   }
 
@@ -1402,6 +1429,20 @@ export class XMPPClient {
       return
     }
 
+    // Fetch and merge server-side conversation list (XEP-0223)
+    try {
+      const serverConversations = await this.conversationSync.fetchConversations()
+      if (this.isSessionStale(gen)) {
+        logInfo('Fresh session aborted after fetchConversations (session superseded)')
+        return
+      }
+      if (serverConversations.length > 0) {
+        this.mergeServerConversations(serverConversations)
+      }
+    } catch {
+      // Best-effort: conversation list sync is not critical
+    }
+
     // Discover MUC service and check service-level MAM support BEFORE joining rooms
     // This allows queryRoomFeatures() to fall back to service-level MAM detection
     // when room-level disco fails (e.g., XSF rooms that don't respond to disco)
@@ -1462,6 +1503,46 @@ export class XMPPClient {
     }).catch(() => {})
     this.discovery.discoverHttpUploadService().catch(() => {})
     this.profile.fetchOwnProfile().catch(() => {})
+  }
+
+  /**
+   * Merge server-side conversation list into the local chatStore.
+   *
+   * - Server conversations not in local store → create locally
+   * - Shared conversations → apply server's archived status
+   * - Local-only conversations → keep as-is (synced back via debounced publish)
+   */
+  private mergeServerConversations(serverConvs: SyncedConversation[]): void {
+    const chat = this.stores?.chat
+    const roster = this.stores?.roster
+    if (!chat) return
+
+    for (const serverConv of serverConvs) {
+      if (chat.hasConversation(serverConv.jid)) {
+        // Existing conversation: sync archived status from server
+        if (serverConv.archived) {
+          chat.archiveConversation?.(serverConv.jid)
+        } else {
+          chat.unarchiveConversation?.(serverConv.jid)
+        }
+      } else {
+        // Server-only conversation: create locally
+        const contact = roster?.getContact(serverConv.jid)
+        const name = contact?.name || getLocalPart(serverConv.jid)
+
+        chat.addConversation({
+          id: serverConv.jid,
+          name,
+          type: 'chat',
+          unreadCount: 0,
+        })
+        if (serverConv.archived) {
+          chat.archiveConversation?.(serverConv.jid)
+        }
+      }
+    }
+
+    logInfo(`Conversation sync: merged ${serverConvs.length} conversations from server`)
   }
 
   private enableCarbons(): void {

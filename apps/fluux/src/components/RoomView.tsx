@@ -1,17 +1,21 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useRoomActive, useRoster, getBareJid, generateConsistentColorHexSync, getPresenceFromShow, createMessageLookup, type RoomMessage, type Room, type MentionReference, type ChatStateNotification, type Contact, type FileAttachment } from '@fluux/sdk'
-import { useConnectionStore } from '@fluux/sdk/react'
-import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat } from '@/hooks'
+import { useRoomActive, useRoster, useRoom, getBareJid, generateConsistentColorHexSync, getPresenceFromShow, createMessageLookup, isMessageFromIgnoredUser, isReplyToIgnoredUser, canKick, canBan, canModerate, getAvailableAffiliations, getAvailableRoles, type RoomMessage, type Room, type MentionReference, type ChatStateNotification, type Contact, type FileAttachment, type RoomAffiliation, type RoomRole } from '@fluux/sdk'
+import { useConnectionStore, useIgnoreStore } from '@fluux/sdk/react'
+import { ignoreStore, type IgnoredUser } from '@fluux/sdk/stores'
+import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat, useContextMenu, isSmallScreen } from '@/hooks'
 import { MessageBubble, MessageList, shouldShowAvatar, buildReplyContext } from './conversation'
 import { Avatar, getConsistentTextColor } from './Avatar'
 import { format } from 'date-fns'
-import { Shield, Upload, Loader2, LogIn, AlertCircle, Users } from 'lucide-react'
+import { Shield, Crown, Upload, Loader2, LogIn, AlertCircle, Users, MessageCircle, EyeOff, User, Settings } from 'lucide-react'
 import { ChristmasAnimation } from './ChristmasAnimation'
 import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment, MESSAGE_INPUT_BASE_CLASSES, MESSAGE_INPUT_OVERLAY_CLASSES } from './MessageComposer'
 import { RoomHeader } from './RoomHeader'
 import { OccupantPanel } from './OccupantPanel'
+import { OccupantModerationModal } from './OccupantModerationModal'
+import { MenuButton, MenuDivider } from './sidebar-components/SidebarListMenu'
+import { useToastStore } from '@/stores/toastStore'
 import { findLastEditableMessage, findLastEditableMessageId } from '@/utils/messageUtils'
 import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
 
@@ -41,15 +45,19 @@ interface RoomViewProps {
   // Occupant panel state (lifted to parent for persistence across view switches)
   showOccupants?: boolean
   onShowOccupantsChange?: (show: boolean) => void
+  // Callback to start a direct chat with a JID (from occupant panel)
+  onStartChat?: (jid: string) => void
+  // Callback to show user profile (from occupant panel)
+  onShowProfile?: (jid: string) => void
 }
 
 // Max room size for sending typing indicators (to avoid noise in large rooms)
 const MAX_ROOM_SIZE_FOR_TYPING = 30
 
-export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange }: RoomViewProps) {
+export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange, onStartChat, onShowProfile }: RoomViewProps) {
   detectRenderLoop('RoomView')
   const { t } = useTranslation()
-  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, sendChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, activeMAMState } = useRoomActive()
+  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, moderateMessage, sendChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, activeMAMState, submitRoomConfig, setSubject, destroyRoom } = useRoomActive()
   const { contacts } = useRoster()
   // NOTE: Use focused selectors instead of useConnection() hook to avoid
   // re-renders when unrelated connection state changes (error, reconnectAttempt, etc.)
@@ -68,6 +76,17 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     }
     return map
   }, [contacts])
+
+  // Filter out messages from ignored users and replies quoting them (client-side ignore)
+  const ignoredForRoom = useIgnoreStore((s) => activeRoom ? (s.ignoredUsers[activeRoom.jid] || []) : [])
+  const displayMessages = useMemo(() => {
+    if (ignoredForRoom.length === 0) return activeMessages
+    const cache = activeRoom?.nickToJidCache
+    return activeMessages.filter(msg =>
+      !isMessageFromIgnoredUser(ignoredForRoom, msg, cache) &&
+      !isReplyToIgnoredUser(ignoredForRoom, msg.replyTo, cache)
+    )
+  }, [activeMessages, ignoredForRoom, activeRoom])
 
   // Reply state
   const [replyingTo, setReplyingTo] = useState<RoomMessage | null>(null)
@@ -114,6 +133,29 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     setActiveReactionPickerMessageId(isOpen ? messageId : null)
   }, [])
   const handleCloseOccupants = useCallback(() => setShowOccupants(false), [setShowOccupants])
+
+  // Nick context menu state (right-click / long-press on nick in messages)
+  const nickMenu = useContextMenu()
+  const [nickMenuTarget, setNickMenuTarget] = useState<string | null>(null) // nick string
+  const [nickModerationTarget, setNickModerationTarget] = useState<string | null>(null)
+  const { setAffiliation, setRole } = useRoom()
+  const addToast = useToastStore((s) => s.addToast)
+
+  const handleNickContextMenu = useCallback((nick: string, e: React.MouseEvent) => {
+    if (!activeRoom || nick === activeRoom.nickname) return
+    setNickMenuTarget(nick)
+    nickMenu.handleContextMenu(e)
+  }, [activeRoom, nickMenu])
+
+  const handleNickTouchStart = useCallback((nick: string, e: React.TouchEvent) => {
+    if (!activeRoom || nick === activeRoom.nickname) return
+    setNickMenuTarget(nick)
+    nickMenu.handleTouchStart(e)
+  }, [activeRoom, nickMenu])
+
+  const handleNickTouchEnd = useCallback(() => {
+    nickMenu.handleTouchEnd()
+  }, [nickMenu])
 
   // Memoized upload state to prevent new object reference on every render
   const uploadStateObj = useMemo(() => ({ isUploading, progress }), [isUploading, progress])
@@ -260,6 +302,9 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
           setRoomNotifyAll={setRoomNotifyAll}
           setRoomAvatar={setRoomAvatar}
           clearRoomAvatar={clearRoomAvatar}
+          submitRoomConfig={submitRoomConfig}
+          setSubject={setSubject}
+          destroyRoom={destroyRoom}
         />
 
         {/* Messages - focusable zone for Tab cycling */}
@@ -277,7 +322,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
           className="focus-zone flex-1 flex flex-col min-h-0 p-1"
         >
           <RoomMessageList
-            messages={activeMessages}
+            messages={displayMessages}
             messagesById={messagesById}
             scrollerRef={scrollRef}
             isAtBottomRef={isAtBottomRef}
@@ -294,6 +339,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             activeReactionPickerMessageId={activeReactionPickerMessageId}
             onReactionPickerChange={handleReactionPickerChange}
             retractMessage={retractMessage}
+            moderateMessage={moderateMessage}
             selectedMessageId={selectedMessageId}
             hasKeyboardSelection={hasKeyboardSelection}
             showToolbarForSelection={showToolbarForSelection}
@@ -306,6 +352,9 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             onScrollToTop={fetchOlderHistory}
             isLoadingOlder={activeMAMState?.isLoading}
             isHistoryComplete={activeRoom.supportsMAM === false || activeMAMState?.isHistoryComplete}
+            onNickContextMenu={handleNickContextMenu}
+            onNickTouchStart={handleNickTouchStart}
+            onNickTouchEnd={handleNickTouchEnd}
           />
         </div>
 
@@ -344,13 +393,15 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
         )}
       </div>
 
-      {/* Occupant panel */}
-      {showOccupants && (
+      {/* Occupant panel (inline sidebar, desktop only — mobile uses full-screen in ChatLayout) */}
+      {showOccupants && !isSmallScreen() && (
         <OccupantPanel
           room={activeRoom}
           contactsByJid={contactsByJid}
           ownAvatar={ownAvatar}
           onClose={handleCloseOccupants}
+          onStartChat={onStartChat}
+          onShowProfile={onShowProfile}
         />
       )}
 
@@ -358,6 +409,140 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
       {activeAnimation?.roomJid === activeRoom.jid && activeAnimation.animation === 'christmas' && (
         <ChristmasAnimation onComplete={clearAnimation} />
       )}
+
+      {/* Nick context menu (right-click / long-press on nick in messages) */}
+      {nickMenu.isOpen && nickMenuTarget && activeRoom && (() => {
+        const occupant = activeRoom.occupants.get(nickMenuTarget)
+        const bareJid = occupant?.jid
+          ? getBareJid(occupant.jid)
+          : activeRoom.nickToJidCache?.get(nickMenuTarget)
+        const selfOccupant = activeRoom.nickname ? activeRoom.occupants.get(activeRoom.nickname) : undefined
+        const selfAff: RoomAffiliation = selfOccupant?.affiliation ?? 'none'
+        const selfRol: RoomRole = selfOccupant?.role ?? 'none'
+        const targetAff = occupant?.affiliation ?? 'none'
+        const targetRole = occupant?.role ?? 'none'
+
+        // Determine ignore state
+        const ignoredUsers = ignoreStore.getState().ignoredUsers[activeRoom.jid] || []
+        const occupantId = occupant?.occupantId
+        const identifier = occupantId || bareJid || nickMenuTarget
+        const isIgnored = ignoredUsers.some(u => u.identifier === identifier)
+
+        // Moderation permissions
+        const availableRoles = getAvailableRoles(selfRol, selfAff, targetRole, targetAff)
+        const availableAffs = bareJid ? getAvailableAffiliations(selfAff, targetAff) : []
+        const showKick = canKick(selfRol, selfAff, targetAff)
+        const showBan = bareJid ? canBan(selfAff, targetAff) : false
+        const hasModActions = showKick || showBan || availableRoles.length > 0 || availableAffs.length > 0
+
+        return (
+          <div
+            ref={nickMenu.menuRef}
+            className="fixed bg-fluux-bg rounded-lg shadow-xl border border-fluux-hover py-1 z-50 min-w-40"
+            style={{ left: nickMenu.position.x, top: nickMenu.position.y }}
+          >
+            {bareJid && onStartChat && (
+              <MenuButton
+                onClick={() => { onStartChat(bareJid); nickMenu.close() }}
+                icon={<MessageCircle className="w-4 h-4" />}
+                label={t('rooms.sendPrivateMessage')}
+              />
+            )}
+            <MenuButton
+              onClick={() => {
+                if (isIgnored) {
+                  ignoreStore.getState().removeIgnored(activeRoom.jid, identifier)
+                } else {
+                  const user: IgnoredUser = {
+                    identifier,
+                    displayName: nickMenuTarget,
+                    jid: bareJid,
+                  }
+                  ignoreStore.getState().addIgnored(activeRoom.jid, user)
+                }
+                nickMenu.close()
+              }}
+              icon={<EyeOff className="w-4 h-4" />}
+              label={isIgnored ? t('rooms.stopIgnoring') : t('rooms.ignoreUser')}
+            />
+            {bareJid && onShowProfile && (
+              <MenuButton
+                onClick={() => { onShowProfile(bareJid); nickMenu.close() }}
+                icon={<User className="w-4 h-4" />}
+                label={t('rooms.userInfo')}
+              />
+            )}
+            {hasModActions && (
+              <>
+                <MenuDivider />
+                <MenuButton
+                  onClick={() => {
+                    setNickModerationTarget(nickMenuTarget)
+                    nickMenu.close()
+                  }}
+                  icon={<Settings className="w-4 h-4" />}
+                  label={t('rooms.manageOccupant')}
+                />
+              </>
+            )}
+          </div>
+        )
+      })()}
+
+      {/* Nick moderation modal (from context menu) */}
+      {nickModerationTarget && activeRoom && (() => {
+        const occupant = activeRoom.occupants.get(nickModerationTarget)
+        if (!occupant) return null
+        const bareJid = occupant.jid ? getBareJid(occupant.jid) : activeRoom.nickToJidCache?.get(nickModerationTarget)
+        const contact = bareJid ? contactsByJid.get(bareJid) : undefined
+        const selfOccupant = activeRoom.nickname ? activeRoom.occupants.get(activeRoom.nickname) : undefined
+        return (
+          <OccupantModerationModal
+            occupant={{
+              nick: nickModerationTarget,
+              bareJid,
+              role: occupant.role,
+              affiliation: occupant.affiliation,
+              avatar: occupant.avatar || contact?.avatar,
+            }}
+            selfRole={selfOccupant?.role ?? 'none'}
+            selfAffiliation={selfOccupant?.affiliation ?? 'none'}
+            onSetRole={async (nick, role) => {
+              try {
+                await setRole(activeRoom.jid, nick, role)
+                addToast('success', t('rooms.roleChanged'))
+              } catch {
+                addToast('error', t('rooms.roleError'))
+              }
+            }}
+            onSetAffiliation={async (jid, aff) => {
+              try {
+                await setAffiliation(activeRoom.jid, jid, aff)
+                addToast('success', t('rooms.affiliationChanged'))
+              } catch {
+                addToast('error', t('rooms.affiliationError'))
+              }
+            }}
+            onKick={async (nick, reason) => {
+              try {
+                await setRole(activeRoom.jid, nick, 'none', reason)
+                addToast('success', t('rooms.roleChanged'))
+              } catch {
+                addToast('error', t('rooms.kickError'))
+              }
+            }}
+            onBan={async (jid, reason) => {
+              try {
+                await setAffiliation(activeRoom.jid, jid, 'outcast', reason)
+                addToast('success', t('rooms.affiliationChanged'))
+              } catch {
+                addToast('error', t('rooms.banError'))
+              }
+            }}
+            onClose={() => setNickModerationTarget(null)}
+          />
+        )
+      })()}
     </div>
   )
 }
@@ -380,6 +565,7 @@ const RoomMessageList = memo(function RoomMessageList({
   activeReactionPickerMessageId,
   onReactionPickerChange,
   retractMessage,
+  moderateMessage,
   selectedMessageId,
   hasKeyboardSelection,
   showToolbarForSelection,
@@ -392,6 +578,9 @@ const RoomMessageList = memo(function RoomMessageList({
   onScrollToTop,
   isLoadingOlder,
   isHistoryComplete,
+  onNickContextMenu,
+  onNickTouchStart,
+  onNickTouchEnd,
 }: {
   messages: RoomMessage[]
   messagesById: Map<string, RoomMessage>
@@ -410,6 +599,7 @@ const RoomMessageList = memo(function RoomMessageList({
   activeReactionPickerMessageId: string | null
   onReactionPickerChange: (messageId: string, isOpen: boolean) => void
   retractMessage: (roomJid: string, messageId: string) => Promise<void>
+  moderateMessage: (roomJid: string, stanzaId: string, reason?: string) => Promise<void>
   selectedMessageId: string | null
   hasKeyboardSelection: boolean
   showToolbarForSelection: boolean
@@ -422,6 +612,9 @@ const RoomMessageList = memo(function RoomMessageList({
   onScrollToTop?: () => void
   isLoadingOlder?: boolean
   isHistoryComplete?: boolean
+  onNickContextMenu?: (nick: string, e: React.MouseEvent) => void
+  onNickTouchStart?: (nick: string, e: React.TouchEvent) => void
+  onNickTouchEnd?: () => void
 }) {
   const { t } = useTranslation()
   const { formatTime, effectiveTimeFormat } = useTimeFormat()
@@ -521,6 +714,7 @@ const RoomMessageList = memo(function RoomMessageList({
       hideToolbar={isComposing || (activeReactionPickerMessageId !== null && activeReactionPickerMessageId !== msg.id)}
       onReactionPickerChange={(isOpen) => onReactionPickerChange(msg.id, isOpen)}
       retractMessage={retractMessage}
+      moderateMessage={moderateMessage}
       isSelected={msg.id === selectedMessageId}
       hasKeyboardSelection={hasKeyboardSelection}
       showToolbarForSelection={showToolbarForSelection}
@@ -531,13 +725,16 @@ const RoomMessageList = memo(function RoomMessageList({
       onMouseLeave={handleMessageLeave}
       formatTime={formatTime}
       timeFormat={effectiveTimeFormat}
+      onNickContextMenu={onNickContextMenu}
+      onNickTouchStart={onNickTouchStart}
+      onNickTouchEnd={onNickTouchEnd}
     />
   ), [
     messagesById, room, contactsByJid, ownAvatar, sendReaction, onReply, onEdit,
     lastOutgoingMessageId, lastMessageId, isComposing, activeReactionPickerMessageId,
-    onReactionPickerChange, retractMessage, selectedMessageId, hasKeyboardSelection,
+    onReactionPickerChange, retractMessage, moderateMessage, selectedMessageId, hasKeyboardSelection,
     showToolbarForSelection, isDarkMode, onMediaLoad, hoveredMessageId, handleMessageHover, handleMessageLeave,
-    formatTime, effectiveTimeFormat
+    formatTime, effectiveTimeFormat, onNickContextMenu, onNickTouchStart, onNickTouchEnd
   ])
 
   return (
@@ -577,6 +774,7 @@ interface RoomMessageBubbleWrapperProps {
   hideToolbar?: boolean
   onReactionPickerChange?: (isOpen: boolean) => void
   retractMessage: (roomJid: string, messageId: string) => Promise<void>
+  moderateMessage: (roomJid: string, stanzaId: string, reason?: string) => Promise<void>
   isSelected?: boolean
   hasKeyboardSelection?: boolean
   showToolbarForSelection?: boolean
@@ -590,6 +788,10 @@ interface RoomMessageBubbleWrapperProps {
   formatTime: (date: Date) => string
   // Effective time format for layout width calculations
   timeFormat: '12h' | '24h'
+  // Nick context menu callbacks (right-click / long-press)
+  onNickContextMenu?: (nick: string, e: React.MouseEvent) => void
+  onNickTouchStart?: (nick: string, e: React.TouchEvent) => void
+  onNickTouchEnd?: () => void
 }
 
 const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
@@ -607,6 +809,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   hideToolbar,
   onReactionPickerChange,
   retractMessage,
+  moderateMessage,
   isSelected,
   hasKeyboardSelection,
   showToolbarForSelection,
@@ -617,12 +820,35 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   onMouseLeave,
   formatTime,
   timeFormat,
+  onNickContextMenu,
+  onNickTouchStart,
+  onNickTouchEnd,
 }: RoomMessageBubbleWrapperProps) {
   const { t } = useTranslation()
+  const { setAffiliation } = useRoom()
+
+  // Moderation confirmation state
+  const [showModerateConfirm, setShowModerateConfirm] = useState(false)
+  const [moderateReason, setModerateReason] = useState('')
+  const [banAfterModerate, setBanAfterModerate] = useState(false)
 
   // Get occupant info if available
   const occupant = room.occupants.get(message.nick)
   const myNick = room.nickname
+
+  // Compute moderation permission for non-outgoing messages
+  const selfOccupant = myNick ? room.occupants.get(myNick) : undefined
+  const canModerateMsg = !message.isOutgoing && selfOccupant
+    ? canModerate(selfOccupant.role, selfOccupant.affiliation, occupant?.affiliation ?? 'none')
+    : false
+
+  // Can we ban this user? Need their real JID and ban permission
+  const senderBareJidForBan = occupant?.jid
+    ? getBareJid(occupant.jid)
+    : room.nickToJidCache?.get(message.nick)
+  const canBanUser = !message.isOutgoing && selfOccupant && senderBareJidForBan
+    ? canBan(selfOccupant.affiliation, occupant?.affiliation ?? 'none')
+    : false
 
   // Get avatar for message sender:
   // 1. XEP-0398 occupant avatar (fetched from MUC presence vcard-temp:x:update)
@@ -712,11 +938,17 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
     return nick
   }, [myNick, t])
 
-  // Build nick extras (moderator badge and XEP-0317 hats)
+  // Build nick extras (affiliation badge and XEP-0317 hats)
   // Note: individual tooltips removed - all info is now in the unified avatar/name tooltip
+  // Show affiliation (owner/admin) rather than role, consistent with the member list
   const nickExtras = useMemo(() => (
     <>
-      {occupant && occupant.role === 'moderator' && (
+      {occupant && occupant.affiliation === 'owner' && (
+        <span className="self-center">
+          <Crown className="w-3.5 h-3.5 text-fluux-muted" />
+        </span>
+      )}
+      {occupant && occupant.affiliation === 'admin' && (
         <span className="self-center">
           <Shield className="w-3.5 h-3.5 text-fluux-muted" />
         </span>
@@ -733,44 +965,147 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
     </>
   ), [occupant])
 
+  // Bind nick to context menu callbacks for this message
+  const handleNickContextMenu = useCallback((e: React.MouseEvent) => {
+    onNickContextMenu?.(message.nick, e)
+  }, [message.nick, onNickContextMenu])
+
+  const handleNickTouchStart = useCallback((e: React.TouchEvent) => {
+    onNickTouchStart?.(message.nick, e)
+  }, [message.nick, onNickTouchStart])
+
   return (
-    <MessageBubble
-      message={message}
-      showAvatar={showAvatar}
-      isSelected={isSelected}
-      hasKeyboardSelection={hasKeyboardSelection}
-      showToolbarForSelection={showToolbarForSelection}
-      hideToolbar={hideToolbar}
-      isLastOutgoing={isLastOutgoing}
-      isLastMessage={isLastMessage}
-      isDarkMode={isDarkMode}
-      isHovered={isHovered}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
-      senderName={message.nick}
-      senderColor={senderColor}
-      avatarUrl={message.isOutgoing ? (ownAvatar || undefined) : (senderAvatar || undefined)}
-      avatarIdentifier={message.nick}
-      avatarFallbackColor={senderColor}
-      avatarPresence={room.joined ? (occupant ? getPresenceFromShow(occupant.show) : 'offline') : undefined}
-      senderJid={senderBareJid}
-      senderContact={contact}
-      senderRole={occupant?.role}
-      senderAffiliation={occupant?.affiliation}
-      nickExtras={nickExtras}
-      myReactions={myReactions}
-      onReaction={handleReaction}
-      getReactorName={getReactorName}
-      onReply={() => onReply(message)}
-      onEdit={() => onEdit(message)}
-      onDelete={async () => retractMessage(room.jid, message.id)}
-      onMediaLoad={onMediaLoad}
-      replyContext={replyContext}
-      mentions={message.mentions}
-      onReactionPickerChange={onReactionPickerChange}
-      formatTime={formatTime}
-      timeFormat={timeFormat}
-    />
+    <>
+      <MessageBubble
+        message={message}
+        showAvatar={showAvatar}
+        isSelected={isSelected}
+        hasKeyboardSelection={hasKeyboardSelection}
+        showToolbarForSelection={showToolbarForSelection}
+        hideToolbar={hideToolbar}
+        isLastOutgoing={isLastOutgoing}
+        isLastMessage={isLastMessage}
+        isDarkMode={isDarkMode}
+        isHovered={isHovered}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
+        senderName={message.nick}
+        senderColor={senderColor}
+        avatarUrl={message.isOutgoing ? (ownAvatar || undefined) : (senderAvatar || undefined)}
+        avatarIdentifier={message.nick}
+        avatarFallbackColor={senderColor}
+        avatarPresence={room.joined ? (occupant ? getPresenceFromShow(occupant.show) : 'offline') : undefined}
+        senderJid={senderBareJid}
+        senderContact={contact}
+        senderRole={occupant?.role}
+        senderAffiliation={occupant?.affiliation}
+        senderOccupantJid={`${room.jid}/${message.nick}`}
+        nickExtras={nickExtras}
+        myReactions={myReactions}
+        onReaction={room.supportsReactions !== false ? handleReaction : undefined}
+        getReactorName={getReactorName}
+        canModerate={canModerateMsg}
+        onReply={() => onReply(message)}
+        onEdit={() => onEdit(message)}
+        onDelete={async () => {
+          if (message.isOutgoing) {
+            await retractMessage(room.jid, message.id)
+          } else {
+            setShowModerateConfirm(true)
+          }
+        }}
+        onMediaLoad={onMediaLoad}
+        replyContext={replyContext}
+        mentions={message.mentions}
+        onNickContextMenu={!message.isOutgoing ? handleNickContextMenu : undefined}
+        onNickTouchStart={!message.isOutgoing ? handleNickTouchStart : undefined}
+        onNickTouchEnd={!message.isOutgoing ? onNickTouchEnd : undefined}
+        onReactionPickerChange={onReactionPickerChange}
+        formatTime={formatTime}
+        timeFormat={timeFormat}
+      />
+
+      {/* Moderation confirmation dialog */}
+      {showModerateConfirm && (
+        <div
+          data-modal="true"
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowModerateConfirm(false)
+              setModerateReason('')
+              setBanAfterModerate(false)
+            }
+          }}
+        >
+          <div className="bg-fluux-sidebar rounded-lg p-4 max-w-sm w-full mx-4 shadow-xl">
+            <h3 className="text-lg font-semibold text-fluux-text mb-2">{t('chat.moderateMessage')}</h3>
+            <p className="text-sm text-fluux-muted mb-3">{t('chat.moderateMessageConfirm')}</p>
+            <div className="mb-3">
+              <label className="block text-xs text-fluux-muted mb-1">{t('chat.moderateReason')}</label>
+              <input
+                type="text"
+                value={moderateReason}
+                onChange={(e) => setModerateReason(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    setShowModerateConfirm(false)
+                    const reason = moderateReason.trim() || undefined
+                    setModerateReason('')
+                    void moderateMessage(room.jid, message.stanzaId ?? message.id, reason)
+                    if (banAfterModerate && senderBareJidForBan) {
+                      void setAffiliation(room.jid, senderBareJidForBan, 'outcast', reason)
+                    }
+                    setBanAfterModerate(false)
+                  }
+                }}
+                placeholder={t('chat.moderateReasonPlaceholder')}
+                className="w-full px-3 py-1.5 text-sm bg-fluux-bg border border-fluux-border rounded-lg text-fluux-text placeholder-fluux-muted focus:outline-none focus:ring-2 focus:ring-fluux-brand/50"
+                autoFocus
+              />
+            </div>
+            {canBanUser && senderBareJidForBan && (
+              <label className="flex items-center gap-2 mb-4 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={banAfterModerate}
+                  onChange={(e) => setBanAfterModerate(e.target.checked)}
+                  className="w-4 h-4 rounded border-fluux-border text-fluux-brand focus:ring-fluux-brand/50"
+                />
+                <span className="text-sm text-fluux-text">{t('chat.moderateAndBan')}</span>
+              </label>
+            )}
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => {
+                  setShowModerateConfirm(false)
+                  setModerateReason('')
+                  setBanAfterModerate(false)
+                }}
+                className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors"
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                onClick={() => {
+                  setShowModerateConfirm(false)
+                  const reason = moderateReason.trim() || undefined
+                  setModerateReason('')
+                  void moderateMessage(room.jid, message.stanzaId ?? message.id, reason)
+                  if (banAfterModerate && senderBareJidForBan) {
+                    void setAffiliation(room.jid, senderBareJidForBan, 'outcast', reason)
+                  }
+                  setBanAfterModerate(false)
+                }}
+                className="px-4 py-2 text-sm text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
+              >
+                {t('chat.moderateMessage')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 })
 

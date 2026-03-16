@@ -3,7 +3,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { roomStore } from '../stores'
 import { useRoomStore, useAdminStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
-import type { MentionReference, ChatStateNotification, FileAttachment, RSMRequest, AdminRoom, RSMResponse, MAMQueryState } from '../core/types'
+import type { MentionReference, ChatStateNotification, FileAttachment, RSMRequest, AdminRoom, RSMResponse, MAMQueryState, RoomAffiliation, RoomRole } from '../core/types'
 import { createFetchOlderHistory } from './shared'
 
 /**
@@ -232,6 +232,13 @@ export function useRoom() {
     [client]
   )
 
+  const moderateMessage = useCallback(
+    async (roomJid: string, stanzaId: string, reason?: string) => {
+      await client.muc.moderateMessage(roomJid, stanzaId, reason)
+    },
+    [client]
+  )
+
   const setBookmark = useCallback(
     async (
       roomJid: string,
@@ -362,6 +369,156 @@ export function useRoom() {
     [client]
   )
 
+  const submitRoomConfig = useCallback(
+    async (roomJid: string, values: Record<string, string | string[]>) => {
+      await client.muc.submitRoomConfig(roomJid, values)
+    },
+    [client]
+  )
+
+  const setSubject = useCallback(
+    async (roomJid: string, subject: string) => {
+      await client.muc.setSubject(roomJid, subject)
+    },
+    [client]
+  )
+
+  const createRoom = useCallback(
+    async (
+      roomJid: string,
+      nickname: string,
+      config: {
+        name: string
+        description?: string
+        isPublic?: boolean
+        membersOnly?: boolean
+        extraFields?: Record<string, string | string[]>
+      },
+      options?: { invitees?: string[] }
+    ) => {
+      await client.muc.createRoom(roomJid, nickname, config, options)
+    },
+    [client]
+  )
+
+  const destroyRoom = useCallback(
+    async (roomJid: string, reason?: string, alternateRoomJid?: string) => {
+      await client.muc.destroyRoom(roomJid, reason, alternateRoomJid)
+    },
+    [client]
+  )
+
+  const roomExists = useCallback(
+    async (roomJid: string): Promise<boolean> => {
+      return client.muc.roomExists(roomJid)
+    },
+    [client]
+  )
+
+  /**
+   * Set a user's affiliation in a room.
+   * @see MUC.setAffiliation
+   */
+  const setAffiliation = useCallback(
+    async (roomJid: string, userJid: string, affiliation: RoomAffiliation, reason?: string) => {
+      await client.muc.setAffiliation(roomJid, userJid, affiliation, reason)
+    },
+    [client]
+  )
+
+  /**
+   * Set an occupant's role in a room.
+   * Setting role to 'none' kicks the occupant.
+   * @see MUC.setRole
+   */
+  const setRole = useCallback(
+    async (roomJid: string, nick: string, role: RoomRole, reason?: string) => {
+      await client.muc.setRole(roomJid, nick, role, reason)
+    },
+    [client]
+  )
+
+  /**
+   * Query the list of users with a specific affiliation.
+   * @see MUC.queryAffiliationList
+   */
+  const queryAffiliationList = useCallback(
+    async (roomJid: string, affiliation: RoomAffiliation) => {
+      return client.muc.queryAffiliationList(roomJid, affiliation)
+    },
+    [client]
+  )
+
+  // -----------------------------------------------------------------------
+  // XEP-0317: Hat Management
+  // -----------------------------------------------------------------------
+
+  /**
+   * List all hat definitions for a room.
+   * @see MUC.listHats
+   */
+  const listHats = useCallback(
+    async (roomJid: string) => {
+      return client.muc.listHats(roomJid)
+    },
+    [client]
+  )
+
+  /**
+   * Create a new hat definition for a room.
+   * @see MUC.createHat
+   */
+  const createHat = useCallback(
+    async (roomJid: string, title: string, uri: string, hue?: number) => {
+      await client.muc.createHat(roomJid, title, uri, hue)
+    },
+    [client]
+  )
+
+  /**
+   * Destroy a hat definition from a room.
+   * @see MUC.destroyHat
+   */
+  const destroyHat = useCallback(
+    async (roomJid: string, uri: string) => {
+      await client.muc.destroyHat(roomJid, uri)
+    },
+    [client]
+  )
+
+  /**
+   * List all hat assignments in a room.
+   * @see MUC.listHatAssignments
+   */
+  const listHatAssignments = useCallback(
+    async (roomJid: string) => {
+      return client.muc.listHatAssignments(roomJid)
+    },
+    [client]
+  )
+
+  /**
+   * Assign a hat to a user in a room.
+   * @see MUC.assignHat
+   */
+  const assignHat = useCallback(
+    async (roomJid: string, userJid: string, hatUri: string) => {
+      await client.muc.assignHat(roomJid, userJid, hatUri)
+    },
+    [client]
+  )
+
+  /**
+   * Remove a hat from a user in a room.
+   * @see MUC.unassignHat
+   */
+  const unassignHat = useCallback(
+    async (roomJid: string, userJid: string, hatUri: string) => {
+      await client.muc.unassignHat(roomJid, userJid, hatUri)
+    },
+    [client]
+  )
+
   /**
    * Fetch older room history (pagination) - for lazy loading on scroll up.
    * First checks IndexedDB cache, then falls back to room MAM if:
@@ -411,6 +568,7 @@ export function useRoom() {
       sendReaction,
       sendCorrection,
       retractMessage,
+      moderateMessage,
       sendChatState,
       setBookmark,
       removeBookmark,
@@ -429,6 +587,20 @@ export function useRoom() {
       inviteToRoom,
       inviteMultipleToRoom,
       fetchOlderHistory,
+      submitRoomConfig,
+      setSubject,
+      createRoom,
+      destroyRoom,
+      roomExists,
+      setAffiliation,
+      setRole,
+      queryAffiliationList,
+      listHats,
+      createHat,
+      destroyHat,
+      listHatAssignments,
+      assignHat,
+      unassignHat,
     }),
     [
       joinRoom,
@@ -441,6 +613,7 @@ export function useRoom() {
       sendReaction,
       sendCorrection,
       retractMessage,
+      moderateMessage,
       sendChatState,
       setBookmark,
       removeBookmark,
@@ -459,6 +632,20 @@ export function useRoom() {
       inviteToRoom,
       inviteMultipleToRoom,
       fetchOlderHistory,
+      submitRoomConfig,
+      setSubject,
+      createRoom,
+      destroyRoom,
+      roomExists,
+      setAffiliation,
+      setRole,
+      queryAffiliationList,
+      listHats,
+      createHat,
+      destroyHat,
+      listHatAssignments,
+      assignHat,
+      unassignHat,
     ]
   )
 

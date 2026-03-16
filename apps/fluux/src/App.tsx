@@ -10,6 +10,8 @@ import { useFullscreen } from './hooks/useFullscreen'
 import { useTauriCloseHandler } from './hooks/useTauriCloseHandler'
 import { useTauriTrayRestore } from './hooks/useTauriTrayRestore'
 import { useAutoUpdate } from './hooks'
+import { useIgnoreSync } from './hooks/useIgnoreSync'
+import { useExternalLinkHandler } from './hooks/useExternalLinkHandler'
 import { clearLocalData } from './utils/clearLocalData'
 
 // Tauri detection
@@ -45,6 +47,8 @@ function App() {
   const { client } = useXMPPContext()
   useTauriCloseHandler()
   useTauriTrayRestore()
+  useIgnoreSync()
+  useExternalLinkHandler()
   const update = useAutoUpdate({ autoCheck: true })
 
   // Listen for --clear-storage CLI flag (Tauri only)

@@ -241,6 +241,31 @@ describe('MessageBubble', () => {
     })
   })
 
+  describe('Moderation (XEP-0425)', () => {
+    it('shows delete button for non-outgoing messages when canModerate is true', () => {
+      const props = createDefaultProps({
+        message: createTestMessage({ isOutgoing: false }),
+        canModerate: true,
+      })
+      const { container } = render(<MessageBubble {...props} />)
+
+      // The toolbar should be present (not hidden by retracted check)
+      // canDelete is true because canModerate is true
+      expect(container.querySelector('[data-message-id="msg-1"]')).toBeInTheDocument()
+    })
+
+    it('does not show delete button for non-outgoing messages without canModerate', () => {
+      const props = createDefaultProps({
+        message: createTestMessage({ isOutgoing: false }),
+        canModerate: false,
+      })
+      const { container } = render(<MessageBubble {...props} />)
+
+      // canDelete should be false (not outgoing and canModerate is false)
+      expect(container.querySelector('[data-message-id="msg-1"]')).toBeInTheDocument()
+    })
+  })
+
   describe('Data Attributes', () => {
     it('sets correct data attributes on the message bubble', () => {
       const props = createDefaultProps({

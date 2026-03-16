@@ -30,9 +30,11 @@ let mockStrangerConversations: Record<string, { id: string; from: string; body: 
 let mockMucInvitations: { id: string; roomJid: string; from: string; reason?: string; password?: string }[] = []
 let mockSystemNotifications: { id: string; type: string; title: string; message: string }[] = []
 
-// Mock react-router-dom
+// Mock react-router-dom (useRouteSync needs useLocation, useNavigate, useParams)
 vi.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate,
+  useLocation: () => ({ pathname: '/events' }),
+  useParams: () => ({}),
 }))
 
 // Mock the SDK hooks
@@ -66,6 +68,7 @@ vi.mock('@fluux/sdk/react', () => ({
     selector({ setActiveRoom: mockSetActiveRoom }),
   useConnectionStore: (selector: (state: { status: string }) => unknown) =>
     selector({ status: 'online' }),
+  useContactTime: () => null,
 }))
 
 // Mock react-i18next
@@ -197,7 +200,7 @@ describe('EventsView', () => {
 
       await waitFor(() => {
         expect(mockAcceptStranger).toHaveBeenCalledWith('stranger@example.com')
-        expect(mockNavigate).toHaveBeenCalledWith('/messages/stranger%40example.com')
+        expect(mockNavigate).toHaveBeenCalledWith('/messages/stranger%40example.com', undefined)
         expect(mockSetActiveConversation).toHaveBeenCalledWith('stranger@example.com')
       })
     })
@@ -274,7 +277,7 @@ describe('EventsView', () => {
 
       await waitFor(() => {
         expect(mockAcceptInvitation).toHaveBeenCalledWith('room@conference.example.com', undefined)
-        expect(mockNavigate).toHaveBeenCalledWith('/rooms/room%40conference.example.com')
+        expect(mockNavigate).toHaveBeenCalledWith('/rooms/room%40conference.example.com', undefined)
         expect(mockSetActiveRoom).toHaveBeenCalledWith('room@conference.example.com')
       })
     })

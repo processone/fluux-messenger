@@ -188,6 +188,35 @@ html, body {
   outline-offset: -2px !important;
 }
 
+/* Font size slider styling */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--fluux-hover);
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--fluux-brand);
+  cursor: pointer;
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--fluux-brand);
+  border: none;
+  cursor: pointer;
+}
+
 /* Message input auto-resize - JS handles height, CSS ensures proper text wrapping */
 .message-input {
   min-height: 44px;

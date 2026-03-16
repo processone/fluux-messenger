@@ -385,6 +385,33 @@ describe('useConnection hook', () => {
 
       expect(mockClient.profile.clearOwnNickname).toHaveBeenCalled()
     })
+
+    it('should call client.profile.fetchOwnVCard when fetchOwnVCard is called', async () => {
+      const { result } = renderHook(() => useConnection(), { wrapper })
+
+      const vcard = { fullName: 'My Name', org: 'My Org' }
+      mockClient.profile.fetchOwnVCard.mockResolvedValue(vcard)
+
+      await act(async () => {
+        const res = await result.current.fetchOwnVCard()
+        expect(res).toEqual(vcard)
+      })
+
+      expect(mockClient.profile.fetchOwnVCard).toHaveBeenCalled()
+    })
+
+    it('should call client.profile.publishOwnVCard when setOwnVCard is called', async () => {
+      const { result } = renderHook(() => useConnection(), { wrapper })
+
+      mockClient.profile.publishOwnVCard.mockResolvedValue(undefined)
+
+      const vcard = { fullName: 'Updated Name', email: 'me@test.com' }
+      await act(async () => {
+        await result.current.setOwnVCard(vcard)
+      })
+
+      expect(mockClient.profile.publishOwnVCard).toHaveBeenCalledWith(vcard)
+    })
   })
 
   describe('stream management', () => {

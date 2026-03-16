@@ -10,9 +10,11 @@ export { useRoom } from './useRoom'
 export { useRoomActive } from './useRoomActive'
 export { useXMPP } from './useXMPP'
 export { useBlocking } from './useBlocking'
+export { useIgnore } from './useIgnore'
 export { usePresence, type UsePresenceReturn } from './usePresence'
 export { useSystemState, type UseSystemStateReturn, type SystemState } from './useSystemState'
 export { useNotificationEvents, type NotificationEventHandlers } from './useNotificationEvents'
+export { useContactTime } from './useContactTime'
 
 // Fine-grained metadata subscription hooks (Phase 6)
 export {

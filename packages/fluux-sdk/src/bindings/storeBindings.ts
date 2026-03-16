@@ -26,7 +26,9 @@ import type {
   adminStore,
   blockingStore,
   consoleStore,
+  ignoreStore,
 } from '../stores'
+import { isMessageFromIgnoredUser, isReplyToIgnoredUser } from '../stores'
 
 /**
  * Store references for binding SDK events.
@@ -41,6 +43,7 @@ export interface StoreRefs {
   admin: ReturnType<typeof adminStore.getState>
   blocking: ReturnType<typeof blockingStore.getState>
   console: ReturnType<typeof consoleStore.getState>
+  ignore: ReturnType<typeof ignoreStore.getState>
 }
 
 /**
@@ -114,6 +117,11 @@ export function createStoreBindings(
   on('connection:own-nickname', ({ nickname }) => {
     const stores = getStores()
     stores.connection.setOwnNickname(nickname)
+  })
+
+  on('connection:own-vcard', ({ vcard }) => {
+    const stores = getStores()
+    stores.connection.setOwnVCard(vcard)
   })
 
   on('connection:own-resource', (payload) => {
@@ -254,7 +262,16 @@ export function createStoreBindings(
 
   on('room:message', ({ roomJid, message, incrementUnread, incrementMentions }) => {
     const stores = getStores()
-    stores.room.addMessage(roomJid, message, { incrementUnread, incrementMentions })
+    const ignoredUsers = stores.ignore.getIgnoredForRoom(roomJid)
+    const nickToJidCache = stores.room.getRoom(roomJid)?.nickToJidCache
+    // Suppress notifications for ignored users and replies quoting them
+    const doNotNotify =
+      isMessageFromIgnoredUser(ignoredUsers, message, nickToJidCache) ||
+      isReplyToIgnoredUser(ignoredUsers, message.replyTo, nickToJidCache)
+    stores.room.addMessage(roomJid, message, {
+      incrementUnread: incrementUnread && !doNotNotify,
+      incrementMentions: incrementMentions && !doNotNotify,
+    })
   })
 
   on('room:message-updated', ({ roomJid, messageId, updates }) => {

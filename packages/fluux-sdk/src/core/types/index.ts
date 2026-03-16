@@ -31,6 +31,7 @@ export type {
   PresenceShow,
   ResourcePresence,
   Contact,
+  VCardInfo,
 } from './roster'
 
 // Room/MUC types

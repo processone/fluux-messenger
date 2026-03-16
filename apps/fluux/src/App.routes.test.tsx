@@ -47,6 +47,11 @@ vi.mock('./hooks/useTauriCloseHandler', () => ({
   useTauriCloseHandler: vi.fn(),
 }))
 
+// Mock ignore sync hook (no-op in tests)
+vi.mock('./hooks/useIgnoreSync', () => ({
+  useIgnoreSync: vi.fn(),
+}))
+
 // Mock ChatLayout to verify it renders
 vi.mock('./components/ChatLayout', () => ({
   ChatLayout: () => <div data-testid="chat-layout">ChatLayout</div>,
