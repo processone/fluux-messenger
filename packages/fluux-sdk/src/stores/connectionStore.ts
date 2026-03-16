@@ -88,6 +88,7 @@ interface ConnectionState {
   // Web Push actions
   setWebPushStatus: (status: WebPushStatus) => void
   setWebPushServices: (services: WebPushService[]) => void
+  setWebPushServicesAndStatus: (services: WebPushService[], status: WebPushStatus) => void
   // Window visibility actions
   setWindowVisible: (visible: boolean) => void
   reset: () => void
@@ -157,6 +158,7 @@ export const connectionStore = createStore<ConnectionState>()(
 
   setWebPushStatus: (status) => set({ webPushStatus: status }),
   setWebPushServices: (services) => set({ webPushServices: services }),
+  setWebPushServicesAndStatus: (services, status) => set({ webPushServices: services, webPushStatus: status }),
 
   setWindowVisible: (visible) => set({ windowVisible: visible }),
 

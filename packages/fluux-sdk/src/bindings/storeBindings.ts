@@ -143,8 +143,14 @@ export function createStoreBindings(
 
   on('connection:webpush-services', ({ services }) => {
     const stores = getStores()
-    stores.connection.setWebPushServices(services)
-    stores.connection.setWebPushStatus(services.length > 0 ? 'available' : 'unavailable')
+    // Set both fields atomically so subscribeWithSelector fires once with
+    // consistent {services, status} — two separate set() calls can cause
+    // the subscription to see services updated but status still stale,
+    // skipping the registration trigger.
+    stores.connection.setWebPushServicesAndStatus(
+      services,
+      services.length > 0 ? 'available' : 'unavailable'
+    )
   })
 
   on('connection:webpush-status', ({ status }) => {
