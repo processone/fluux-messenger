@@ -18,10 +18,16 @@ describe('parseTzo', () => {
     expect(parseTzo('-12:00')).toBe(-720)
   })
 
+  it('parses offsets without sign prefix (treated as positive)', () => {
+    expect(parseTzo('01:00')).toBe(60)
+    expect(parseTzo('05:30')).toBe(330)
+  })
+
   it('parses zero offsets', () => {
     expect(parseTzo('Z')).toBe(0)
     expect(parseTzo('+00:00')).toBe(0)
     expect(parseTzo('-00:00')).toBe(0)
+    expect(parseTzo('00:00')).toBe(0)
   })
 
   it('returns 0 for invalid formats', () => {

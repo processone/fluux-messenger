@@ -16,10 +16,10 @@ export type EntityTimeCacheEntry =
  * Parse a timezone offset string (e.g., "+01:00", "-05:30", "Z") to minutes.
  */
 export function parseTzo(tzo: string): number {
-  if (tzo === 'Z' || tzo === '+00:00' || tzo === '-00:00') return 0
-  const match = tzo.match(/^([+-])(\d{2}):(\d{2})$/)
+  if (tzo === 'Z' || tzo === '+00:00' || tzo === '-00:00' || tzo === '00:00') return 0
+  const match = tzo.match(/^([+-])?(\d{2}):(\d{2})$/)
   if (!match) return 0
-  const sign = match[1] === '+' ? 1 : -1
+  const sign = match[1] === '-' ? -1 : 1
   return sign * (parseInt(match[2]) * 60 + parseInt(match[3]))
 }
 
