@@ -49,6 +49,8 @@ function makeEntry(
 ): IntersectionObserverEntry {
   const target = document.createElement('div')
   target.dataset.messageId = messageId
+  // Mock getBoundingClientRect so live-rect lookups return the expected position
+  target.getBoundingClientRect = () => ({ bottom, top: bottom - 40, left: 0, right: 300, width: 300, height: 40, x: 0, y: bottom - 40, toJSON: () => ({}) }) as DOMRect
 
   return {
     target,
@@ -681,15 +683,19 @@ describe('useViewportObserver', () => {
     const el1 = scrollContainerRef.current.querySelector('[data-message-id="msg-1"]')!
     const el2 = scrollContainerRef.current.querySelector('[data-message-id="msg-2"]')!
 
-    const makeEntryWithTarget = (target: Element, isIntersecting: boolean, bottom: number) => ({
-      target,
-      isIntersecting,
-      boundingClientRect: { bottom } as DOMRectReadOnly,
-      intersectionRatio: isIntersecting ? 0.6 : 0,
-      intersectionRect: {} as DOMRectReadOnly,
-      rootBounds: null,
-      time: performance.now(),
-    }) as IntersectionObserverEntry
+    const makeEntryWithTarget = (target: Element, isIntersecting: boolean, bottom: number) => {
+      // Mock getBoundingClientRect so live-rect lookups return the expected position
+      target.getBoundingClientRect = () => ({ bottom, top: bottom - 40, left: 0, right: 300, width: 300, height: 40, x: 0, y: bottom - 40, toJSON: () => ({}) }) as DOMRect
+      return {
+        target,
+        isIntersecting,
+        boundingClientRect: { bottom } as DOMRectReadOnly,
+        intersectionRatio: isIntersecting ? 0.6 : 0,
+        intersectionRect: {} as DOMRectReadOnly,
+        rootBounds: null,
+        time: performance.now(),
+      } as IntersectionObserverEntry
+    }
 
     // Both visible — msg-2 is bottom-most
     act(() => {

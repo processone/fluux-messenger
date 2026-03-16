@@ -282,10 +282,6 @@ export const MessageBubble = memo(function MessageBubble({
             {formatTime(message.timestamp)}
           </span>
         )}
-        {/* Reply arrow in the gutter, aligned with the quoted block in the content area */}
-        {!message.isRetracted && replyContext && (
-          <CornerUpRight className="w-3.5 h-3.5 text-fluux-muted flex-shrink-0 mt-1 self-start" />
-        )}
       </div>
 
       {/* Content */}
@@ -343,13 +339,15 @@ export const MessageBubble = memo(function MessageBubble({
             className="flex items-start gap-1.5 pb-1 pl-2 border-l-2 text-left min-w-0 hover:bg-fluux-hover/50 rounded-r transition-colors cursor-pointer select-none"
             style={{ borderColor: replyContext.senderColor }}
           >
-            <Avatar
-              identifier={replyContext.avatarIdentifier}
-              name={replyContext.senderName}
-              avatarUrl={replyContext.avatarUrl}
-              size="xs"
-              className="flex-shrink-0"
-            />
+            <div className="flex flex-col items-center flex-shrink-0 gap-0.5">
+              <Avatar
+                identifier={replyContext.avatarIdentifier}
+                name={replyContext.senderName}
+                avatarUrl={replyContext.avatarUrl}
+                size="xs"
+              />
+              <CornerUpRight className="w-3 h-3 text-fluux-muted" />
+            </div>
             <div className="text-sm text-fluux-muted min-w-0 flex-1">
               <span
                 className="font-medium"

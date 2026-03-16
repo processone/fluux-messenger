@@ -40,7 +40,6 @@ const LOAD_COOLDOWN_MS = 500 // minimum time between load triggers
 const SAVE_THROTTLE_MS = 100 // minimum time between position saves
 const PREPEND_COOLDOWN_MS = 500 // time to keep prepend flag after restore (prevents re-trigger)
 const MEDIA_LOAD_DEBOUNCE_MS = 150 // debounce time for batching image load events
-const MEDIA_LOAD_SCROLL_THRESHOLD = 150 // max distance from bottom to still auto-scroll after media load
 
 // ============================================================================
 // TYPES
@@ -132,7 +131,7 @@ export function useMessageListScroll({
   // Media load batching (for images, videos, link previews)
   // When multiple media elements load in quick succession, we batch them and apply
   // a single scroll correction at the end to avoid jitter.
-  const mediaLoadSnapshotRef = useRef<{ wasAtBottom: boolean } | null>(null)
+  const mediaLoadSnapshotRef = useRef<{ wasAtBottom: boolean; userScrolled: boolean } | null>(null)
   const mediaLoadDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Last scroll data (for saving on conversation switch)
@@ -428,7 +427,7 @@ export function useMessageListScroll({
 
     // Capture snapshot on first load in batch (user's intent at start of batch)
     if (!mediaLoadSnapshotRef.current) {
-      mediaLoadSnapshotRef.current = { wasAtBottom: isAtBottomRef.current }
+      mediaLoadSnapshotRef.current = { wasAtBottom: isAtBottomRef.current, userScrolled: false }
       debugLog('MEDIA LOAD: batch started', {
         wasAtBottom: isAtBottomRef.current,
         scrollTop: scroller.scrollTop,
@@ -445,26 +444,22 @@ export function useMessageListScroll({
       const currentScroller = scrollerRef.current
       if (!currentScroller || !mediaLoadSnapshotRef.current) return
 
-      const { wasAtBottom } = mediaLoadSnapshotRef.current
+      const { wasAtBottom, userScrolled } = mediaLoadSnapshotRef.current
 
       if (wasAtBottom) {
-        // User was at bottom when batch started - check if they're still close
-        const distFromBottom = getDistanceFromBottom(currentScroller)
-
-        if (distFromBottom < MEDIA_LOAD_SCROLL_THRESHOLD) {
-          // Still close to bottom - scroll to bottom
+        if (!userScrolled) {
+          // User didn't scroll during the batch - scroll to bottom
           debugLog('MEDIA LOAD: batch complete, scrolling to bottom', {
             wasAtBottom,
-            distFromBottom,
+            userScrolled,
             scrollHeight: currentScroller.scrollHeight,
           })
           currentScroller.scrollTop = currentScroller.scrollHeight
         } else {
-          // User actively scrolled away - respect their position
+          // User actively scrolled during the batch - respect their position
           debugLog('MEDIA LOAD: batch complete, user scrolled away', {
             wasAtBottom,
-            distFromBottom,
-            threshold: MEDIA_LOAD_SCROLL_THRESHOLD,
+            userScrolled,
           })
         }
       } else {
@@ -491,6 +486,11 @@ export function useMessageListScroll({
     // Update refs (NO React state updates here except FAB)
     lastScrollDataRef.current = { top: scrollTop, height: scrollHeight, client: clientHeight }
     isAtBottomRef.current = distFromBottom < AT_BOTTOM_THRESHOLD
+
+    // Track user scroll during media load batch
+    if (mediaLoadSnapshotRef.current) {
+      mediaLoadSnapshotRef.current.userScrolled = true
+    }
 
     // FAB visibility (only React state in scroll handler)
     const shouldShowFab = distFromBottom > FAB_THRESHOLD
