@@ -103,7 +103,7 @@ export function getStatusText(contact: Contact): string {
   }
 
   if (lastSeenInfo.isActive) {
-    return `${presenceLabel} · Active`
+    return presenceLabel
   }
 
   return `${presenceLabel} · ${lastSeenInfo.text}`

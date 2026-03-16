@@ -92,7 +92,7 @@ export function getTranslatedStatusText(contact: Contact, t: TranslateFn): strin
   }
 
   if (lastSeenInfo.isActive) {
-    return `${presenceLabel} · ${t('presence.active')}`
+    return presenceLabel
   }
 
   return `${presenceLabel} · ${lastSeenInfo.text}`
