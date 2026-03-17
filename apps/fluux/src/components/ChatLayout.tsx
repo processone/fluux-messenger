@@ -155,17 +155,25 @@ function ChatLayoutContent() {
   const selectedRosterContact = useRosterStore((s) =>
     selectedContactJid ? s.contacts.get(selectedContactJid) ?? null : null
   )
+
+  // Room occupants panel state (persisted across view switches)
+  const [showRoomOccupants, setShowRoomOccupants] = useState(false)
+
+  // Get URL-derived state for store sync and settings detection
+  const { sidebarView: urlSidebarView, settingsCategory, activeJid } = useRouteSync()
+
+  // Derive selectedContact from React state (selectedContactJid) with URL fallback (activeJid).
+  // On mobile, React state and URL can briefly desync during navigation, causing the layout
+  // to flash between profile and contact list. Using the URL as a fallback prevents this blink.
+  const effectiveContactJid = selectedContactJid ?? (urlSidebarView === 'directory' && activeJid ? activeJid : null)
   // For non-roster users (e.g. room occupants), create a minimal Contact object
-  const selectedContact = selectedRosterContact ?? (selectedContactJid ? {
-    jid: selectedContactJid,
-    name: selectedContactJid.split('@')[0],
+  const selectedContact = selectedRosterContact ?? (effectiveContactJid ? {
+    jid: effectiveContactJid,
+    name: effectiveContactJid.split('@')[0],
     presence: 'offline' as const,
     subscription: 'none' as const,
   } : null)
   const isSelectedContactInRoster = !!selectedRosterContact
-
-  // Room occupants panel state (persisted across view switches)
-  const [showRoomOccupants, setShowRoomOccupants] = useState(false)
 
   // Phase 3: Use consolidated navigation hook for per-tab memory and modal management
   const {
@@ -180,9 +188,6 @@ function ChatLayoutContent() {
     navigateToAdmin,
     navigateToSettings,
   } = useViewNavigation(selectedContact)
-
-  // Get URL-derived state for store sync and settings detection
-  const { settingsCategory, activeJid } = useRouteSync()
 
 
   // Ref for main container to enable focus for keyboard shortcuts
