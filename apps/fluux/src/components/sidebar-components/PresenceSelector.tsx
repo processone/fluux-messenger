@@ -119,7 +119,7 @@ export function PresenceSelector({ isOpen: isOpenProp, onOpenChange }: PresenceS
   }
 
   return (
-    <div className="relative" ref={menuRef}>
+    <div className="relative min-w-0" ref={menuRef}>
       {/* Trigger - styled as a distinct chip */}
       <Tooltip content={t('presence.changeStatus')} position="top" disabled={isOpen}>
         <button
