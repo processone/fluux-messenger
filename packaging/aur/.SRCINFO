@@ -13,9 +13,9 @@ pkgbase = fluux-messenger-bin
 	optdepends = xdg-utils: for opening URLs
 	provides = fluux-messenger
 	conflicts = fluux-messenger
-	source_x86_64 = fluux-messenger-bin-0.14.0-x86_64.tar.gz::https://github.com/processone/fluux-messenger/releases/download/v0.14.0/Fluux-Messenger_0.14.0_Linux_x64.tar.gz
+	source_x86_64 = fluux-messenger-bin-0.14.0_beta.2-x86_64.tar.gz::https://github.com/processone/fluux-messenger/releases/download/v0.14.0-beta.2/Fluux-Messenger_0.14.0-beta.2Linux_x64.tar.gz
 	sha256sums_x86_64 = SKIP
-	source_aarch64 = fluux-messenger-bin-0.14.0-aarch64.tar.gz::https://github.com/processone/fluux-messenger/releases/download/v0.14.0/Fluux-Messenger_0.14.0_Linux_arm64.tar.gz
+	source_aarch64 = fluux-messenger-bin-0.14.0_beta.2-aarch64.tar.gz::https://github.com/processone/fluux-messenger/releases/download/v0.14.0-beta.2/Fluux-Messenger_0.14.0-beta.2Linux_arm64.tar.gz
 	sha256sums_aarch64 = SKIP
 
 pkgname = fluux-messenger-bin

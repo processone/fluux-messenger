@@ -28,7 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Font size setting in appearance preferences
 - PEP-based conversation list synchronisation (ConversationSync module)
 - XEP-0202: Entity Time — display contact local time in chat header and contact popover
-- Display message delivery errors, and offer the options to retry sending the mesage
+- Display message delivery errors, and offer the options to retry sending the message
+- Add modal to join a room using its JID
 
 ### Changed
 
@@ -37,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reply arrow moved to avatar column in reply context for better visual alignment
 - Dropdown menus aligned to the left on small screens
 - Extracted reusable ModalShell, ConfirmDialog, and useNotificationPermission components
+- Switched to HashRouter and relative asset paths for sub-path deployable static builds
 
 ### Fixed
 

@@ -54,7 +54,12 @@ if (!/^\d+\.\d+\.\d+(-[\w.]+)?$/.test(version)) {
   process.exit(1)
 }
 
-console.log(`\nPreparing release v${version}\n`)
+// Base version without prerelease suffix (e.g. 0.14.0-beta.1 → 0.14.0).
+// All version fields in project files use the target final release version;
+// the prerelease suffix is only used for the git tag.
+const baseVersion = version.replace(/-.*$/, '')
+
+console.log(`\nPreparing release v${version}${baseVersion !== version ? ` (base version: ${baseVersion})` : ''}\n`)
 
 // 1. Update version in package.json files
 console.log('Updating package.json files...')
@@ -62,30 +67,26 @@ for (const file of VERSION_FILES) {
   const filePath = path.join(ROOT, file)
   const pkg = JSON.parse(fs.readFileSync(filePath, 'utf-8'))
   const oldVersion = pkg.version
-  pkg.version = version
+  pkg.version = baseVersion
   fs.writeFileSync(filePath, JSON.stringify(pkg, null, 2) + '\n')
-  console.log(`  ${file}: ${oldVersion} -> ${version}`)
+  console.log(`  ${file}: ${oldVersion} -> ${baseVersion}`)
 }
-
-// Tauri v2 requires strict semver (X.Y.Z) — prerelease suffixes are rejected.
-// Strip the prerelease suffix for tauri.conf.json and Cargo.toml.
-const tauriVersion = version.replace(/-.*$/, '')
 
 // 2. Update tauri.conf.json
 console.log('\nUpdating tauri.conf.json...')
 const tauriPath = path.join(ROOT, TAURI_CONF)
 const tauriConf = JSON.parse(fs.readFileSync(tauriPath, 'utf-8'))
 const oldTauriVersion = tauriConf.version
-tauriConf.version = tauriVersion
+tauriConf.version = baseVersion
 
 // Update bundleVersion with short git hash
 try {
   const gitHash = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim()
   tauriConf.bundle.macOS.bundleVersion = gitHash
-  console.log(`  version: ${oldTauriVersion} -> ${tauriVersion}${tauriVersion !== version ? ` (stripped from ${version})` : ''}`)
+  console.log(`  version: ${oldTauriVersion} -> ${baseVersion}`)
   console.log(`  bundleVersion: ${gitHash}`)
 } catch (e) {
-  console.log(`  version: ${oldTauriVersion} -> ${tauriVersion}${tauriVersion !== version ? ` (stripped from ${version})` : ''}`)
+  console.log(`  version: ${oldTauriVersion} -> ${baseVersion}`)
   console.log(`  bundleVersion: (unchanged, git not available)`)
 }
 fs.writeFileSync(tauriPath, JSON.stringify(tauriConf, null, 2) + '\n')
@@ -96,9 +97,9 @@ const cargoPath = path.join(ROOT, TAURI_CARGO)
 let cargoContent = fs.readFileSync(cargoPath, 'utf-8')
 const cargoVersionMatch = cargoContent.match(/^version\s*=\s*"([^"]+)"/m)
 const oldCargoVersion = cargoVersionMatch ? cargoVersionMatch[1] : 'unknown'
-cargoContent = cargoContent.replace(/^version\s*=\s*"[^"]+"/m, `version = "${tauriVersion}"`)
+cargoContent = cargoContent.replace(/^version\s*=\s*"[^"]+"/m, `version = "${baseVersion}"`)
 fs.writeFileSync(cargoPath, cargoContent)
-console.log(`  version: ${oldCargoVersion} -> ${tauriVersion}${tauriVersion !== version ? ` (stripped from ${version})` : ''}`)
+console.log(`  version: ${oldCargoVersion} -> ${baseVersion}`)
 
 // 4. Update packaging version numbers
 console.log('\nUpdating packaging files...')
@@ -107,71 +108,59 @@ console.log('\nUpdating packaging files...')
 const debChangelog = path.join(ROOT, 'packaging/debian/changelog')
 if (fs.existsSync(debChangelog)) {
   const debContent = fs.readFileSync(debChangelog, 'utf-8')
-  // Debian prerelease: 0.14.0-beta.1 → 0.14.0~beta.1 (~ sorts before release in dpkg)
-  const debVersion = version.replace(/-/g, '~')
-  const updated = debContent.replace(/\([^)]*\)/, `(${debVersion}-1)`)
+  const updated = debContent.replace(/\([^)]*\)/, `(${baseVersion}-1)`)
   fs.writeFileSync(debChangelog, updated)
-  console.log(`  debian/changelog: ${debVersion}-1`)
+  console.log(`  debian/changelog: ${baseVersion}-1`)
 }
 
 // RPM spec — update Version field
 const rpmSpec = path.join(ROOT, 'packaging/rpm/fluux-messenger.spec')
 if (fs.existsSync(rpmSpec)) {
   let rpmContent = fs.readFileSync(rpmSpec, 'utf-8')
-  // RPM doesn't allow hyphens in Version: 0.14.0-beta.1 → Version 0.14.0, Release 0.1.beta.1
-  const rpmVersion = version.replace(/-.*$/, '')
-  rpmContent = rpmContent.replace(/^Version:\s*.*/m, `Version:        ${rpmVersion}`)
-  if (version.includes('-')) {
-    const prerelease = version.split('-').slice(1).join('.')
-    rpmContent = rpmContent.replace(/^Release:\s*.*/m, `Release:        0.1.${prerelease}%{?dist}`)
-  } else {
-    rpmContent = rpmContent.replace(/^Release:\s*.*/m, `Release:        1%{?dist}`)
-  }
+  rpmContent = rpmContent.replace(/^Version:\s*.*/m, `Version:        ${baseVersion}`)
+  rpmContent = rpmContent.replace(/^Release:\s*.*/m, `Release:        1%{?dist}`)
   fs.writeFileSync(rpmSpec, rpmContent)
-  console.log(`  rpm/fluux-messenger.spec: ${rpmVersion}`)
+  console.log(`  rpm/fluux-messenger.spec: ${baseVersion}`)
 }
 
 // AUR PKGBUILD and .SRCINFO — update pkgver
 const aurPkgbuild = path.join(ROOT, 'packaging/aur/PKGBUILD')
 if (fs.existsSync(aurPkgbuild)) {
-  // AUR uses underscores instead of hyphens for pre-release: 0.14.0_beta.1
-  const aurVersion = version.replace(/-/g, '_')
   let pkgbuild = fs.readFileSync(aurPkgbuild, 'utf-8')
-  pkgbuild = pkgbuild.replace(/^pkgver=.*/m, `pkgver=${aurVersion}`)
+  pkgbuild = pkgbuild.replace(/^pkgver=.*/m, `pkgver=${baseVersion}`)
   fs.writeFileSync(aurPkgbuild, pkgbuild)
-  console.log(`  aur/PKGBUILD: ${aurVersion}`)
+  console.log(`  aur/PKGBUILD: ${baseVersion}`)
 }
 
 const aurSrcinfo = path.join(ROOT, 'packaging/aur/.SRCINFO')
 if (fs.existsSync(aurSrcinfo)) {
-  const aurVersion = version.replace(/-/g, '_')
   let srcinfo = fs.readFileSync(aurSrcinfo, 'utf-8')
-  srcinfo = srcinfo.replace(/pkgver = .*/g, `pkgver = ${aurVersion}`)
+  srcinfo = srcinfo.replace(/pkgver = .*/g, `pkgver = ${baseVersion}`)
   // Update source URLs with new version
   srcinfo = srcinfo.replace(
     /fluux-messenger-bin-[\d._]+-/g,
-    `fluux-messenger-bin-${aurVersion}-`
+    `fluux-messenger-bin-${baseVersion}-`
   )
   srcinfo = srcinfo.replace(
     /download\/v[\d._-]+\/Fluux-Messenger_[\d._-]+/g,
-    `download/v${version}/Fluux-Messenger_${version}`
+    `download/v${baseVersion}/Fluux-Messenger_${baseVersion}`
   )
   fs.writeFileSync(aurSrcinfo, srcinfo)
-  console.log(`  aur/.SRCINFO: ${aurVersion}`)
+  console.log(`  aur/.SRCINFO: ${baseVersion}`)
 }
 
 // Flatpak metainfo — add new release entry (if not already present)
 const flatpakMetainfo = path.join(ROOT, 'packaging/flatpak/com.processone.fluux.metainfo.xml')
 if (fs.existsSync(flatpakMetainfo)) {
   let metainfo = fs.readFileSync(flatpakMetainfo, 'utf-8')
-  if (!metainfo.includes(`version="${version}"`)) {
+  if (!metainfo.includes(`version="${baseVersion}"`)) {
     const today = new Date().toISOString().split('T')[0]
-    const newRelease = `    <release version="${version}" date="${today}">\n      <description>\n        <p>See release notes for details.</p>\n      </description>\n    </release>\n    `
+    const newRelease = `    <release version="${baseVersion}" date="${today}">\n      <description>\n        <p>See release notes for details.</p>\n      </description>\n    </release>\n    `
     metainfo = metainfo.replace(/(\s*<releases>\n)/, `$1${newRelease}`)
     fs.writeFileSync(flatpakMetainfo, metainfo)
-    console.log(`  flatpak/metainfo: ${version}`)
+    console.log(`  flatpak/metainfo: ${baseVersion}`)
   } else {
-    console.log(`  flatpak/metainfo: already has ${version}`)
+    console.log(`  flatpak/metainfo: already has ${baseVersion}`)
   }
 }
 
@@ -291,10 +280,10 @@ if (entries.length === 0) {
   process.exit(1)
 }
 
-// Check if the new version (or its base version for prereleases) exists in changelog.ts
-const hasNewVersion = entries.some(e => e.version === version || e.version === version.replace(/-.*$/, ''))
+// Check if the target version exists in changelog.ts
+const hasNewVersion = entries.some(e => e.version === baseVersion)
 if (!hasNewVersion) {
-  console.log(`  Warning: Version ${version} not found in changelog.ts`)
+  console.log(`  Warning: Version ${baseVersion} not found in changelog.ts`)
   console.log(`  Add the changelog entry to apps/fluux/src/data/changelog.ts first!`)
 }
 
@@ -333,12 +322,9 @@ console.log(`  Generated ${CHANGELOG_MD} with ${entries.length} releases`)
 
 // 6. Generate RELEASE_NOTES.md (just the current version, for GitHub release body)
 console.log('\nGenerating RELEASE_NOTES.md for auto-updater...')
-// For prerelease versions (e.g. 0.13.2-beta.1), fall back to the base version (0.13.2)
-// since changelog.ts uses the target release version, not the prerelease suffix
-const baseVersion = version.replace(/-.*$/, '')
-const currentEntry = entries.find(e => e.version === version) || entries.find(e => e.version === baseVersion)
+const currentEntry = entries.find(e => e.version === baseVersion)
 if (currentEntry) {
-  let releaseNotes = `## What's New in v${version}\n\n`
+  let releaseNotes = `## What's New in v${baseVersion}\n\n`
 
   for (const section of currentEntry.sections) {
     const title = sectionTitles[section.type] || section.type
@@ -354,7 +340,7 @@ if (currentEntry) {
   fs.writeFileSync(path.join(ROOT, RELEASE_NOTES), releaseNotes)
   console.log(`  Generated ${RELEASE_NOTES}`)
 } else {
-  console.log(`  Skipped (version ${version} not in changelog.ts)`)
+  console.log(`  Skipped (version ${baseVersion} not in changelog.ts)`)
 }
 
 // 7. Create git tag if requested
