@@ -51,6 +51,7 @@ export const changelog: ChangelogEntry[] = [
           'Reply arrow moved to avatar column in reply context for better visual alignment',
           'Dropdown menus aligned to the left on small screens',
           'Extracted reusable ModalShell, ConfirmDialog, and useNotificationPermission components',
+          'Switched to HashRouter and relative asset paths for sub-path deployable static builds',
         ],
       },
       {
