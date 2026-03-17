@@ -121,13 +121,13 @@ export function PresenceSelector({ isOpen: isOpenProp, onOpenChange }: PresenceS
   return (
     <div className="relative min-w-0" ref={menuRef}>
       {/* Trigger - styled as a distinct chip */}
-      <Tooltip content={t('presence.changeStatus')} position="top" disabled={isOpen}>
+      <Tooltip content={t('presence.changeStatus')} position="top" disabled={isOpen} className="min-w-0">
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-full bg-fluux-hover hover:bg-fluux-bg border border-transparent hover:border-fluux-muted/30 transition-colors group min-w-0 max-w-full"
+          className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-full bg-fluux-hover hover:bg-fluux-bg border border-transparent hover:border-fluux-muted/30 transition-colors group min-w-0 max-w-full overflow-hidden"
         >
           <span className={`w-2 h-2 rounded-full flex-shrink-0 ${currentOption.color}`} />
-          <span className="text-fluux-muted group-hover:text-fluux-text truncate">
+          <span className="text-fluux-muted group-hover:text-fluux-text truncate min-w-0">
             {statusMessage || t(currentOption.labelKey)}
           </span>
           <ChevronDown className={`w-3 h-3 text-fluux-muted group-hover:text-fluux-text flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
