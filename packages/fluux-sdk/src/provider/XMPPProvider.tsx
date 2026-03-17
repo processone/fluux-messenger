@@ -62,6 +62,23 @@ export interface XMPPProviderProps {
    * ```
    */
   proxyAdapter?: ProxyAdapter
+  /**
+   * Pre-created XMPPClient instance to use instead of creating a new one.
+   *
+   * Useful for demo mode or testing where a custom client (e.g., DemoClient)
+   * should be injected into the provider.
+   *
+   * @example Demo mode with pre-populated data
+   * ```tsx
+   * const demoClient = new DemoClient()
+   * demoClient.populateDemo()
+   *
+   * <XMPPProvider client={demoClient}>
+   *   <App />
+   * </XMPPProvider>
+   * ```
+   */
+  client?: XMPPClient
 }
 
 /**
@@ -122,6 +139,7 @@ export function XMPPProvider({
   debug = false,
   storageAdapter = sessionStorageAdapter,
   proxyAdapter,
+  client,
 }: XMPPProviderProps) {
   const clientRef = useRef<XMPPClient | null>(null)
 
@@ -131,8 +149,12 @@ export function XMPPProvider({
   // - Presence sync (machine state -> XMPP presence)
   // - Storage adapter (session persistence)
   if (!clientRef.current) {
-    const config: XMPPClientConfig = { debug, storageAdapter, proxyAdapter }
-    clientRef.current = new XMPPClient(config)
+    if (client) {
+      clientRef.current = client
+    } else {
+      const config: XMPPClientConfig = { debug, storageAdapter, proxyAdapter }
+      clientRef.current = new XMPPClient(config)
+    }
   }
 
   // Manage store bindings lifecycle in useEffect for React StrictMode support.

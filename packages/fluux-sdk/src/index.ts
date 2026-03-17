@@ -561,3 +561,9 @@ export {
   clearAllAvatarData,
   revokeAllBlobUrls,
 } from './utils/avatarCache'
+
+// =============================================================================
+// DEMO MODE
+// =============================================================================
+
+export { DemoClient } from './demo/DemoClient'

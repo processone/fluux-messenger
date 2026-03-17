@@ -2,7 +2,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import { execSync } from 'child_process'
-import { readFileSync } from 'fs'
+import { readFileSync, rmSync } from 'fs'
 import { resolve } from 'path'
 
 // Get git commit hash at build time
@@ -31,6 +31,16 @@ export default defineConfig({
   base: './',
   plugins: [
     react(),
+    // Remove demo assets (public/demo/, demo.html) from production builds
+    {
+      name: 'strip-demo',
+      apply: 'build',
+      closeBundle() {
+        const dist = resolve(__dirname, 'dist')
+        rmSync(resolve(dist, 'demo'), { recursive: true, force: true })
+        rmSync(resolve(dist, 'demo.html'), { force: true })
+      },
+    },
     VitePWA({
       registerType: 'autoUpdate',
       // Don't auto-inject registration - we'll do it manually to skip in Tauri
@@ -77,8 +87,9 @@ export default defineConfig({
         ],
       },
       injectManifest: {
-        // Cache app shell and assets
+        // Cache app shell and assets — exclude demo files from SW precache
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+        globIgnores: ['demo/**', 'demo.html'],
       },
     }),
   ],
@@ -119,6 +130,9 @@ export default defineConfig({
   build: {
     modulePreload: false,
     rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+      },
       onwarn(warning, warn) {
         // Suppress warnings about Node.js modules being externalized for browser compatibility
         // These come from @xmpp/resolve (DNS for SRV lookups) and SCRAM-SHA-1 crypto deps

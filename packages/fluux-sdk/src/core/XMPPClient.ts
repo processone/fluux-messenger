@@ -168,7 +168,7 @@ import { SDK_VERSION } from '../version'
  * @category Core
  */
 export class XMPPClient {
-  private currentJid: string | null = null
+  protected currentJid: string | null = null
   private storageAdapter?: StorageAdapter
   private proxyAdapter?: ProxyAdapter
   private privacyOptions?: PrivacyOptions
@@ -1559,7 +1559,7 @@ export class XMPPClient {
     this.stores?.console.addEvent('Message Carbons enabled', 'connection')
   }
 
-  private async sendStanza(stanza: Element): Promise<void> {
+  protected async sendStanza(stanza: Element): Promise<void> {
     const xmpp = this.getXmpp()
     if (!xmpp) {
       // Defensive check: if client is null but status says 'online', fix the inconsistency
@@ -1595,7 +1595,7 @@ export class XMPPClient {
     }
   }
 
-  private async sendIQ(iq: Element): Promise<Element> {
+  protected async sendIQ(iq: Element): Promise<Element> {
     const xmpp = this.getXmpp()
     if (!xmpp) {
       const currentStatus = this.stores?.connection.getStatus?.()
