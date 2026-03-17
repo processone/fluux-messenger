@@ -464,6 +464,11 @@
         "notificationDescription": "Notificările desktop te alertează despre mesaje noi când aplicația este în fundal.",
         "requestPermission": "Activează",
         "openSettings": "Deschide setările",
+        "webPushStatus": "Notificări push web",
+        "webPush_unavailable": "Nu este suportat de server",
+        "webPush_available": "Disponibil — atinge pentru activare",
+        "webPush_registered": "Activat — notificări push active",
+        "webPushEnable": "Activează",
         "updates": "Actualizări"
     },
     "update": {

@@ -464,6 +464,11 @@
         "notificationDescription": "Le notifiche desktop ti avvisano dei nuovi messaggi quando l'app e in background.",
         "requestPermission": "Attiva",
         "openSettings": "Apri impostazioni",
+        "webPushStatus": "Notifiche push web",
+        "webPush_unavailable": "Non supportato dal server",
+        "webPush_available": "Disponibile — tocca per attivare",
+        "webPush_registered": "Attivate — notifiche push attive",
+        "webPushEnable": "Attiva",
         "updates": "Aggiornamenti"
     },
     "update": {

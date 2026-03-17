@@ -464,6 +464,11 @@
         "notificationDescription": "Les notificacions d'escriptori t'avisen de missatges nous quan l'aplicació està en segon pla.",
         "requestPermission": "Activa",
         "openSettings": "Obre configuració",
+        "webPushStatus": "Notificacions push web",
+        "webPush_unavailable": "No compatible amb el servidor",
+        "webPush_available": "Disponible — toca per activar",
+        "webPush_registered": "Activat — notificacions push actives",
+        "webPushEnable": "Activa",
         "updates": "Actualitzacions"
     },
     "update": {

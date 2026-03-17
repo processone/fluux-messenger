@@ -464,6 +464,11 @@
         "notificationDescription": "Известията на работния плот ви уведомяват за нови съобщения, когато приложението е във фонов режим.",
         "requestPermission": "Активирай",
         "openSettings": "Отвори настройки",
+        "webPushStatus": "Уеб push известия",
+        "webPush_unavailable": "Не се поддържа от сървъра",
+        "webPush_available": "Налично — натиснете за активиране",
+        "webPush_registered": "Активирано — push известията са активни",
+        "webPushEnable": "Активирай",
         "updates": "Актуализации"
     },
     "update": {

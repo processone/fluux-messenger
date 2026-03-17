@@ -464,6 +464,11 @@
         "notificationDescription": "Obvestila na namizju vas opozorijo na nova sporočila, ko je aplikacija v ozadju.",
         "requestPermission": "Omogoči",
         "openSettings": "Odpri nastavitve",
+        "webPushStatus": "Spletna push obvestila",
+        "webPush_unavailable": "Strežnik ne podpira",
+        "webPush_available": "Na voljo — tapnite za vklop",
+        "webPush_registered": "Vklopljeno — push obvestila aktivna",
+        "webPushEnable": "Vklopi",
         "updates": "Posodobitve"
     },
     "update": {

@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Bell, BellOff, ExternalLink } from 'lucide-react'
+import { Bell, BellOff, ExternalLink, Send } from 'lucide-react'
+import { useConnection, useXMPPContext } from '@fluux/sdk'
 import { isTauri } from './types'
+import { isWebPushSupported, requestWebPushRegistration } from '@/hooks/useWebPush'
 
 type NotificationStatus = 'checking' | 'granted' | 'denied' | 'default' | 'unavailable'
 
@@ -49,6 +51,8 @@ async function openNotificationSettings(): Promise<void> {
 
 export function NotificationsSettings() {
   const { t } = useTranslation()
+  const { client } = useXMPPContext()
+  const { webPushStatus, isConnected } = useConnection()
   const [notificationStatus, setNotificationStatus] = useState<NotificationStatus>('checking')
 
   useEffect(() => {
@@ -122,6 +126,38 @@ export function NotificationsSettings() {
         <p className="text-xs text-fluux-muted">
           {t('settings.notificationDescription')}
         </p>
+
+        {/* Web Push registration (browser only, when connected) */}
+        {isWebPushSupported && isConnected && (
+          <div className="flex items-center justify-between p-4 rounded-lg border-2 border-fluux-hover bg-fluux-bg">
+            <div className="flex items-center gap-3">
+              <Send className={`w-5 h-5 ${
+                webPushStatus === 'registered' ? 'text-green-500'
+                  : webPushStatus === 'available' ? 'text-yellow-500'
+                  : 'text-fluux-muted'
+              }`} />
+              <div>
+                <p className="text-sm font-medium text-fluux-text">
+                  {t('settings.webPushStatus')}
+                </p>
+                <p className="text-xs text-fluux-muted">
+                  {t(`settings.webPush_${webPushStatus}`)}
+                </p>
+              </div>
+            </div>
+
+            {webPushStatus === 'available' && (
+              <button
+                onClick={() => requestWebPushRegistration(client)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand hover:text-fluux-text
+                           bg-fluux-brand/10 hover:bg-fluux-brand/20 rounded-md transition-colors"
+              >
+                <Bell className="w-4 h-4" />
+                {t('settings.webPushEnable')}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </section>
   )

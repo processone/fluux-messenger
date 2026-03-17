@@ -464,6 +464,11 @@
         "notificationDescription": "Darbalaukio pranešimai įspėja apie naujas žinutes, kai programa veikia fone.",
         "requestPermission": "Įjungti",
         "openSettings": "Atidaryti nustatymus",
+        "webPushStatus": "Žiniatinklio push pranešimai",
+        "webPush_unavailable": "Serveris nepalaiko",
+        "webPush_available": "Galima — bakstelėkite, kad įjungtumėte",
+        "webPush_registered": "Įjungta — push pranešimai aktyvūs",
+        "webPushEnable": "Įjungti",
         "updates": "Atnaujinimai"
     },
     "update": {

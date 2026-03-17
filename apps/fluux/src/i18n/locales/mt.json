@@ -464,6 +464,11 @@
         "notificationDescription": "Notifiki desktop jallertak għal messaġġi ġodda meta l-app tkun fil-background.",
         "requestPermission": "Ixgħel",
         "openSettings": "Iftaħ Settings",
+        "webPushStatus": "Notifiki Web Push",
+        "webPush_unavailable": "Mhux appoġġjat mis-server",
+        "webPush_available": "Disponibbli — miss biex tixgħel",
+        "webPush_registered": "Mixgħul — notifiki push attivi",
+        "webPushEnable": "Ixgħel",
         "updates": "Aġġornamenti"
     },
     "update": {

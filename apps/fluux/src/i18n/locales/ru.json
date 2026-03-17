@@ -464,6 +464,11 @@
         "notificationDescription": "Уведомления на рабочем столе оповещают о новых сообщениях, когда приложение свёрнуто.",
         "requestPermission": "Включить",
         "openSettings": "Открыть настройки",
+        "webPushStatus": "Web push-уведомления",
+        "webPush_unavailable": "Не поддерживается сервером",
+        "webPush_available": "Доступно — нажмите для включения",
+        "webPush_registered": "Включено — push-уведомления активны",
+        "webPushEnable": "Включить",
         "updates": "Обновления"
     },
     "update": {

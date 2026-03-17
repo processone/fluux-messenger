@@ -464,6 +464,11 @@
         "notificationDescription": "Skrivebordsvarsler varsler deg om nye meldinger når appen er i bakgrunnen.",
         "requestPermission": "Aktiver",
         "openSettings": "Åpne innstillinger",
+        "webPushStatus": "Web-pushvarsler",
+        "webPush_unavailable": "Ikke støttet av serveren",
+        "webPush_available": "Tilgjengelig — trykk for å aktivere",
+        "webPush_registered": "Aktivert — pushvarsler aktive",
+        "webPushEnable": "Aktiver",
         "updates": "Oppdateringer"
     },
     "update": {

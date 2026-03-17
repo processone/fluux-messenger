@@ -464,6 +464,11 @@
         "notificationDescription": "Апавяшчэнні на працоўным стале паведамляюць пра новыя паведамленні, калі дадатак у фоне.",
         "requestPermission": "Уключыць",
         "openSettings": "Адкрыць налады",
+        "webPushStatus": "Web push-апавяшчэнні",
+        "webPush_unavailable": "Сервер не падтрымлівае",
+        "webPush_available": "Даступна — націсніце, каб уключыць",
+        "webPush_registered": "Уключана — push-апавяшчэнні актыўныя",
+        "webPushEnable": "Уключыць",
         "updates": "Абнаўленні"
     },
     "update": {

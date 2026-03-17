@@ -464,6 +464,11 @@
         "notificationDescription": "Las notificaciones de escritorio te alertan de nuevos mensajes cuando la aplicacion esta en segundo plano.",
         "requestPermission": "Activar",
         "openSettings": "Abrir Ajustes",
+        "webPushStatus": "Notificaciones push web",
+        "webPush_unavailable": "No compatible con el servidor",
+        "webPush_available": "Disponible — toca para activar",
+        "webPush_registered": "Activadas — notificaciones push activas",
+        "webPushEnable": "Activar",
         "updates": "Actualizaciones"
     },
     "update": {

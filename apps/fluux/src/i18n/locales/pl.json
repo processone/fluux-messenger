@@ -464,6 +464,11 @@
         "notificationDescription": "Powiadomienia pulpitu alertują o nowych wiadomościach, gdy aplikacja jest w tle.",
         "requestPermission": "Włącz",
         "openSettings": "Otwórz ustawienia",
+        "webPushStatus": "Powiadomienia web push",
+        "webPush_unavailable": "Nieobsługiwane przez serwer",
+        "webPush_available": "Dostępne — dotknij, aby włączyć",
+        "webPush_registered": "Włączone — powiadomienia push aktywne",
+        "webPushEnable": "Włącz",
         "updates": "Aktualizacje"
     },
     "update": {

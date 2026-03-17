@@ -464,6 +464,11 @@
         "notificationDescription": "当应用在后台时，桌面通知会提醒您有新消息。",
         "requestPermission": "启用",
         "openSettings": "打开设置",
+        "webPushStatus": "网页推送通知",
+        "webPush_unavailable": "服务器不支持",
+        "webPush_available": "可用 — 点击启用",
+        "webPush_registered": "已启用 — 推送通知已激活",
+        "webPushEnable": "启用",
         "updates": "更新"
     },
     "update": {
