@@ -384,6 +384,7 @@
         "messageDeleted": "Teachtaireacht scriosta",
         "messageModerated": "Teachtaireacht bainte ag {{moderator}}",
         "deleteMessage": "Scrios teachtaireacht",
+        "deleteMessageConfirm": "Scriosfaidh sé seo an teachtaireacht seo. Ní féidir an gníomh seo a chealú.",
         "moderateMessage": "Bain teachtaireacht",
         "moderateMessageConfirm": "Bainfidh sé seo an teachtaireacht do gach rannpháirtí. Ní féidir an gníomh seo a chealú.",
         "moderateReason": "Fáth (roghnach)",

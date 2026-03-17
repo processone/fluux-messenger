@@ -384,6 +384,7 @@
         "messageDeleted": "Messaġġ imħassar",
         "messageModerated": "Messaġġ imneħħi minn {{moderator}}",
         "deleteMessage": "Ħassar messaġġ",
+        "deleteMessageConfirm": "Dan se jħassar dan il-messaġġ. Din l-azzjoni ma tistax tiġi annullata.",
         "moderateMessage": "Neħħi messaġġ",
         "moderateMessageConfirm": "Dan se jneħħi l-messaġġ għall-parteċipanti kollha. Din l-azzjoni ma tistax tiġi rriversjata.",
         "moderateReason": "Raġuni (mhux obbligatorju)",

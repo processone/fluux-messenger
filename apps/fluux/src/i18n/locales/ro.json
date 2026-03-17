@@ -384,6 +384,7 @@
         "messageDeleted": "Mesaj șters",
         "messageModerated": "Mesaj eliminat de {{moderator}}",
         "deleteMessage": "Șterge mesajul",
+        "deleteMessageConfirm": "Acest mesaj va fi șters. Această acțiune nu poate fi anulată.",
         "moderateMessage": "Elimină mesajul",
         "moderateMessageConfirm": "Mesajul va fi eliminat pentru toți participanții. Această acțiune nu poate fi anulată.",
         "moderateReason": "Motiv (opțional)",

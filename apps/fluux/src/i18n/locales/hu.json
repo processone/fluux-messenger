@@ -384,6 +384,7 @@
         "messageDeleted": "Üzenet törölve",
         "messageModerated": "Üzenetet eltávolította: {{moderator}}",
         "deleteMessage": "Üzenet törlése",
+        "deleteMessageConfirm": "Ez törli ezt az üzenetet. Ez a művelet nem vonható vissza.",
         "moderateMessage": "Üzenet eltávolítása",
         "moderateMessageConfirm": "Ez az üzenet minden résztvevő számára eltávolításra kerül. Ez a művelet nem vonható vissza.",
         "moderateReason": "Ok (nem kötelező)",

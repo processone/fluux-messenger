@@ -384,6 +384,7 @@
         "messageDeleted": "Besked slettet",
         "messageModerated": "Besked fjernet af {{moderator}}",
         "deleteMessage": "Slet besked",
+        "deleteMessageConfirm": "Dette vil slette denne besked. Denne handling kan ikke fortrydes.",
         "moderateMessage": "Fjern besked",
         "moderateMessageConfirm": "Dette vil fjerne beskeden for alle deltagere. Denne handling kan ikke fortrydes.",
         "moderateReason": "Årsag (valgfri)",

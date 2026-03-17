@@ -384,6 +384,7 @@
         "messageDeleted": "Сообщение удалено",
         "messageModerated": "Сообщение удалено модератором {{moderator}}",
         "deleteMessage": "Удалить сообщение",
+        "deleteMessageConfirm": "Это удалит это сообщение. Это действие нельзя отменить.",
         "moderateMessage": "Удалить сообщение",
         "moderateMessageConfirm": "Это удалит сообщение для всех участников. Это действие нельзя отменить.",
         "moderateReason": "Причина (необязательно)",

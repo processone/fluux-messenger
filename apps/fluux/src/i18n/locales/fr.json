@@ -384,6 +384,7 @@
         "messageDeleted": "Message supprimé",
         "messageModerated": "Message supprimé par {{moderator}}",
         "deleteMessage": "Supprimer le message",
+        "deleteMessageConfirm": "Ce message sera supprimé. Cette action est irréversible.",
         "moderateMessage": "Supprimer le message",
         "moderateMessageConfirm": "Ce message sera supprimé pour tous les participants. Cette action est irréversible.",
         "moderateReason": "Raison (optionnel)",

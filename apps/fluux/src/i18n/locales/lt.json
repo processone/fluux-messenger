@@ -384,6 +384,7 @@
         "messageDeleted": "Žinutė ištrinta",
         "messageModerated": "Pranešimą pašalino {{moderator}}",
         "deleteMessage": "Ištrinti žinutę",
+        "deleteMessageConfirm": "Tai ištrins šią žinutę. Šio veiksmo negalima atšaukti.",
         "moderateMessage": "Pašalinti žinutę",
         "moderateMessageConfirm": "Ši žinutė bus pašalinta visiems dalyviams. Šio veiksmo negalima atšaukti.",
         "moderateReason": "Priežastis (neprivaloma)",

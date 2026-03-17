@@ -384,6 +384,7 @@
         "messageDeleted": "Mensaje eliminado",
         "messageModerated": "Mensaje eliminado por {{moderator}}",
         "deleteMessage": "Eliminar mensaje",
+        "deleteMessageConfirm": "Esto eliminará este mensaje. Esta acción no se puede deshacer.",
         "moderateMessage": "Eliminar mensaje",
         "moderateMessageConfirm": "Esto eliminará el mensaje para todos los participantes. Esta acción no se puede deshacer.",
         "moderateReason": "Motivo (opcional)",

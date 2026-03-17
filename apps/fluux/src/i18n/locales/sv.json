@@ -384,6 +384,7 @@
         "messageDeleted": "Meddelande borttaget",
         "messageModerated": "Meddelande borttaget av {{moderator}}",
         "deleteMessage": "Ta bort meddelande",
+        "deleteMessageConfirm": "Detta kommer att ta bort detta meddelande. Denna åtgärd kan inte ångras.",
         "moderateMessage": "Ta bort meddelande",
         "moderateMessageConfirm": "Detta tar bort meddelandet för alla deltagare. Denna åtgärd kan inte ångras.",
         "moderateReason": "Anledning (valfritt)",

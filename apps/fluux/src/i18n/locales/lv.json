@@ -384,6 +384,7 @@
         "messageDeleted": "Ziņojums dzēsts",
         "messageModerated": "Ziņojumu noņēma {{moderator}}",
         "deleteMessage": "Dzēst ziņojumu",
+        "deleteMessageConfirm": "Šis ziņojums tiks dzēsts. Šo darbību nevar atsaukt.",
         "moderateMessage": "Noņemt ziņojumu",
         "moderateMessageConfirm": "Tas noņems ziņojumu visiem dalībniekiem. Šo darbību nevar atsaukt.",
         "moderateReason": "Iemesls (neobligāts)",

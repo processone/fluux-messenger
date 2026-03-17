@@ -384,6 +384,7 @@
         "messageDeleted": "Wiadomość usunięta",
         "messageModerated": "Wiadomość usunięta przez {{moderator}}",
         "deleteMessage": "Usuń wiadomość",
+        "deleteMessageConfirm": "To usunie tę wiadomość. Tej czynności nie można cofnąć.",
         "moderateMessage": "Usuń wiadomość",
         "moderateMessageConfirm": "Wiadomość zostanie usunięta dla wszystkich uczestników. Tej czynności nie można cofnąć.",
         "moderateReason": "Powód (opcjonalnie)",

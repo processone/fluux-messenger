@@ -12,6 +12,7 @@ import { ChatHeader } from './ChatHeader'
 import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment } from './MessageComposer'
 import { findLastEditableMessage, findLastEditableMessageId } from '@/utils/messageUtils'
 import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
+import { ConfirmDialog } from './ConfirmDialog'
 
 interface ChatViewProps {
   onBack?: () => void
@@ -669,40 +670,58 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
     return contactsByJid.get(bareJid)?.name || getLocalPart(jid)
   }, [myBareJid, contactsByJid, t])
 
+  // Delete confirmation state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+
   return (
-    <MessageBubble
-      message={message}
-      showAvatar={showAvatar}
-      isSelected={isSelected}
-      hasKeyboardSelection={hasKeyboardSelection}
-      showToolbarForSelection={showToolbarForSelection}
-      hideToolbar={hideToolbar}
-      isLastOutgoing={isLastOutgoing}
-      isLastMessage={isLastMessage}
-      isDarkMode={isDarkMode}
-      isHovered={isHovered}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
-      senderName={senderName}
-      senderColor={senderColor}
-      avatarUrl={avatar}
-      avatarIdentifier={message.from}
-      avatarFallbackColor={senderColor}
-      senderJid={message.isOutgoing ? myBareJid : message.from.split('/')[0]}
-      senderContact={message.isOutgoing ? undefined : senderContact}
-      myReactions={myReactions}
-      onReaction={handleReaction}
-      getReactorName={getReactorName}
-      onReply={() => onReply(message)}
-      onEdit={() => onEdit(message)}
-      onDelete={async () => retractMessage(conversationId, message.id)}
-      onRetry={message.deliveryError ? () => { void retryMessage(conversationId, message.id) } : undefined}
-      onMediaLoad={onMediaLoad}
-      replyContext={replyContext}
-      onReactionPickerChange={onReactionPickerChange}
-      formatTime={formatTime}
-      timeFormat={timeFormat}
-    />
+    <>
+      <MessageBubble
+        message={message}
+        showAvatar={showAvatar}
+        isSelected={isSelected}
+        hasKeyboardSelection={hasKeyboardSelection}
+        showToolbarForSelection={showToolbarForSelection}
+        hideToolbar={hideToolbar}
+        isLastOutgoing={isLastOutgoing}
+        isLastMessage={isLastMessage}
+        isDarkMode={isDarkMode}
+        isHovered={isHovered}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
+        senderName={senderName}
+        senderColor={senderColor}
+        avatarUrl={avatar}
+        avatarIdentifier={message.from}
+        avatarFallbackColor={senderColor}
+        senderJid={message.isOutgoing ? myBareJid : message.from.split('/')[0]}
+        senderContact={message.isOutgoing ? undefined : senderContact}
+        myReactions={myReactions}
+        onReaction={handleReaction}
+        getReactorName={getReactorName}
+        onReply={() => onReply(message)}
+        onEdit={() => onEdit(message)}
+        onDelete={async () => setShowDeleteConfirm(true)}
+        onRetry={message.deliveryError ? () => { void retryMessage(conversationId, message.id) } : undefined}
+        onMediaLoad={onMediaLoad}
+        replyContext={replyContext}
+        onReactionPickerChange={onReactionPickerChange}
+        formatTime={formatTime}
+        timeFormat={timeFormat}
+      />
+      {showDeleteConfirm && (
+        <ConfirmDialog
+          title={t('chat.deleteMessage')}
+          message={t('chat.deleteMessageConfirm')}
+          confirmLabel={t('chat.deleteMessage')}
+          variant="danger"
+          onConfirm={() => {
+            setShowDeleteConfirm(false)
+            void retractMessage(conversationId, message.id)
+          }}
+          onCancel={() => setShowDeleteConfirm(false)}
+        />
+      )}
+    </>
   )
 })
 

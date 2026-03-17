@@ -384,6 +384,7 @@
         "messageDeleted": "Poruka obrisana",
         "messageModerated": "Poruku uklonio/la {{moderator}}",
         "deleteMessage": "Obriši poruku",
+        "deleteMessageConfirm": "Ovo će obrisati ovu poruku. Ova radnja se ne može poništiti.",
         "moderateMessage": "Ukloni poruku",
         "moderateMessageConfirm": "Ovo će ukloniti poruku za sve sudionike. Ova radnja se ne može poništiti.",
         "moderateReason": "Razlog (neobavezno)",

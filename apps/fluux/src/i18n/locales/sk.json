@@ -384,6 +384,7 @@
         "messageDeleted": "Správa vymazaná",
         "messageModerated": "Správa odstránená používateľom {{moderator}}",
         "deleteMessage": "Vymazať správu",
+        "deleteMessageConfirm": "Táto správa bude vymazaná. Túto akciu nemožno vrátiť späť.",
         "moderateMessage": "Odstrániť správu",
         "moderateMessageConfirm": "Táto správa bude odstránená pre všetkých účastníkov. Túto akciu nie je možné vrátiť späť.",
         "moderateReason": "Dôvod (voliteľný)",

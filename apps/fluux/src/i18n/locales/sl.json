@@ -384,6 +384,7 @@
         "messageDeleted": "Sporočilo izbrisano",
         "messageModerated": "Sporočilo odstranil/a {{moderator}}",
         "deleteMessage": "Izbriši sporočilo",
+        "deleteMessageConfirm": "To bo izbrisalo to sporočilo. Tega dejanja ni mogoče razveljaviti.",
         "moderateMessage": "Odstrani sporočilo",
         "moderateMessageConfirm": "To bo odstranilo sporočilo za vse udeležence. Tega dejanja ni mogoče razveljaviti.",
         "moderateReason": "Razlog (neobvezno)",

@@ -384,6 +384,7 @@
         "messageDeleted": "消息已删除",
         "messageModerated": "消息已被 {{moderator}} 移除",
         "deleteMessage": "删除消息",
+        "deleteMessageConfirm": "这将删除此消息。此操作无法撤消。",
         "moderateMessage": "移除消息",
         "moderateMessageConfirm": "这将为所有参与者移除此消息。此操作无法撤销。",
         "moderateReason": "原因（可选）",

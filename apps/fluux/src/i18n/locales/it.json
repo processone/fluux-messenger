@@ -384,6 +384,7 @@
         "messageDeleted": "Messaggio eliminato",
         "messageModerated": "Messaggio rimosso da {{moderator}}",
         "deleteMessage": "Elimina messaggio",
+        "deleteMessageConfirm": "Questo eliminerà questo messaggio. Questa azione non può essere annullata.",
         "moderateMessage": "Rimuovi messaggio",
         "moderateMessageConfirm": "Questo rimuoverà il messaggio per tutti i partecipanti. Questa azione non può essere annullata.",
         "moderateReason": "Motivo (facoltativo)",

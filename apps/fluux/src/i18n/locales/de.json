@@ -384,6 +384,7 @@
         "messageDeleted": "Nachricht gelöscht",
         "messageModerated": "Nachricht entfernt von {{moderator}}",
         "deleteMessage": "Nachricht löschen",
+        "deleteMessageConfirm": "Diese Nachricht wird gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.",
         "moderateMessage": "Nachricht entfernen",
         "moderateMessageConfirm": "Diese Nachricht wird für alle Teilnehmer entfernt. Diese Aktion kann nicht rückgängig gemacht werden.",
         "moderateReason": "Grund (optional)",

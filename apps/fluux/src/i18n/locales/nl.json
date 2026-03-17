@@ -384,6 +384,7 @@
         "messageDeleted": "Bericht verwijderd",
         "messageModerated": "Bericht verwijderd door {{moderator}}",
         "deleteMessage": "Bericht verwijderen",
+        "deleteMessageConfirm": "Dit bericht wordt verwijderd. Deze actie kan niet ongedaan worden gemaakt.",
         "moderateMessage": "Bericht verwijderen",
         "moderateMessageConfirm": "Dit verwijdert het bericht voor alle deelnemers. Deze actie kan niet ongedaan worden gemaakt.",
         "moderateReason": "Reden (optioneel)",

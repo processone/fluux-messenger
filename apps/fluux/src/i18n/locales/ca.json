@@ -384,6 +384,7 @@
         "messageDeleted": "Missatge eliminat",
         "messageModerated": "Missatge eliminat per {{moderator}}",
         "deleteMessage": "Elimina el missatge",
+        "deleteMessageConfirm": "Això eliminarà aquest missatge. Aquesta acció no es pot desfer.",
         "moderateMessage": "Elimina el missatge",
         "moderateMessageConfirm": "Això eliminarà aquest missatge per a tots els participants. Aquesta acció no es pot desfer.",
         "moderateReason": "Motiu (opcional)",

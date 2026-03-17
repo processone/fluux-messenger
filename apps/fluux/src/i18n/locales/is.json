@@ -384,6 +384,7 @@
         "messageDeleted": "Skilaboðum eytt",
         "messageModerated": "Skilaboð fjarlægð af {{moderator}}",
         "deleteMessage": "Eyða skilaboðum",
+        "deleteMessageConfirm": "Þetta mun eyða þessum skilaboðum. Ekki er hægt að afturkalla þessa aðgerð.",
         "moderateMessage": "Fjarlægja skilaboð",
         "moderateMessageConfirm": "Þetta mun fjarlægja skilaboðin fyrir alla þátttakendur. Ekki er hægt að afturkalla þessa aðgerð.",
         "moderateReason": "Ástæða (valfrjálst)",

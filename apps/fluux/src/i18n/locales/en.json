@@ -384,6 +384,7 @@
         "messageDeleted": "Message deleted",
         "messageModerated": "Message removed by {{moderator}}",
         "deleteMessage": "Delete message",
+        "deleteMessageConfirm": "This will delete this message. This action cannot be undone.",
         "moderateMessage": "Remove message",
         "moderateMessageConfirm": "This will remove this message for all participants. This action cannot be undone.",
         "moderateReason": "Reason (optional)",

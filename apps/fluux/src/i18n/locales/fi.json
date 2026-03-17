@@ -384,6 +384,7 @@
         "messageDeleted": "Viesti poistettu",
         "messageModerated": "Viesti poistettu käyttäjän {{moderator}} toimesta",
         "deleteMessage": "Poista viesti",
+        "deleteMessageConfirm": "Tämä poistaa tämän viestin. Tätä toimintoa ei voi kumota.",
         "moderateMessage": "Poista viesti",
         "moderateMessageConfirm": "Tämä poistaa viestin kaikilta osallistujilta. Tätä toimintoa ei voi kumota.",
         "moderateReason": "Syy (valinnainen)",

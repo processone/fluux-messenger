@@ -18,6 +18,7 @@ import { MenuButton, MenuDivider } from './sidebar-components/SidebarListMenu'
 import { useToastStore } from '@/stores/toastStore'
 import { findLastEditableMessage, findLastEditableMessageId } from '@/utils/messageUtils'
 import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
+import { ConfirmDialog } from './ConfirmDialog'
 
 // Generate hat colors from URI using XEP-0392 consistent color
 function getHatColors(hat: { uri: string; hue?: number }) {
@@ -839,6 +840,9 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   const [moderateReason, setModerateReason] = useState('')
   const [banAfterModerate, setBanAfterModerate] = useState(false)
 
+  // Delete own message confirmation state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+
   // Get occupant info if available
   const occupant = room.occupants.get(message.nick)
   const myNick = room.nickname
@@ -1016,7 +1020,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         onEdit={() => onEdit(message)}
         onDelete={async () => {
           if (message.isOutgoing) {
-            await retractMessage(room.jid, message.id)
+            setShowDeleteConfirm(true)
           } else {
             setShowModerateConfirm(true)
           }
@@ -1031,6 +1035,21 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         formatTime={formatTime}
         timeFormat={timeFormat}
       />
+
+      {/* Delete own message confirmation dialog */}
+      {showDeleteConfirm && (
+        <ConfirmDialog
+          title={t('chat.deleteMessage')}
+          message={t('chat.deleteMessageConfirm')}
+          confirmLabel={t('chat.deleteMessage')}
+          variant="danger"
+          onConfirm={() => {
+            setShowDeleteConfirm(false)
+            void retractMessage(room.jid, message.id)
+          }}
+          onCancel={() => setShowDeleteConfirm(false)}
+        />
+      )}
 
       {/* Moderation confirmation dialog */}
       {showModerateConfirm && (

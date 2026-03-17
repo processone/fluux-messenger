@@ -384,6 +384,7 @@
         "messageDeleted": "Sõnum kustutatud",
         "messageModerated": "Sõnumi eemaldas {{moderator}}",
         "deleteMessage": "Kustuta sõnum",
+        "deleteMessageConfirm": "See kustutab selle sõnumi. Seda toimingut ei saa tagasi võtta.",
         "moderateMessage": "Eemalda sõnum",
         "moderateMessageConfirm": "See eemaldab sõnumi kõigi osalejate jaoks. Seda toimingut ei saa tagasi võtta.",
         "moderateReason": "Põhjus (valikuline)",
