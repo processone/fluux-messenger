@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
+import { HashRouter } from 'react-router-dom'
 import { XMPPProvider } from '@fluux/sdk'
 import { ThemeProvider } from './providers/ThemeProvider'
 import { RenderLoopBoundary } from './components/RenderLoopBoundary'
@@ -23,7 +23,7 @@ const proxyAdapter = isTauri && !disableTcpProxy ? tauriProxyAdapter : undefined
 // Tauri uses a custom protocol that doesn't support service workers
 if (!isTauri && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {
       // Service worker registration failed - ignore silently
       // This can happen in development or unsupported environments
     })
@@ -59,9 +59,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <RenderLoopBoundary>
       <XMPPProvider debug={import.meta.env.DEV} proxyAdapter={proxyAdapter}>
         <ThemeProvider>
-          <BrowserRouter>
+          <HashRouter>
             <App />
-          </BrowserRouter>
+          </HashRouter>
         </ThemeProvider>
       </XMPPProvider>
     </RenderLoopBoundary>

@@ -28,6 +28,7 @@ const gitCommit = getGitCommit()
 const appVersion = getVersion()
 
 export default defineConfig({
+  base: './',
   plugins: [
     react(),
     VitePWA({
@@ -46,8 +47,8 @@ export default defineConfig({
         theme_color: '#4a90d9',
         background_color: '#1a1a2e',
         display: 'standalone',
-        scope: '/',
-        start_url: '/',
+        scope: './',
+        start_url: './',
         orientation: 'portrait-primary',
         categories: ['communication', 'social'],
         icons: [

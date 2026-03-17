@@ -34,8 +34,8 @@ self.addEventListener('push', (event) => {
   let title = 'Fluux Messenger'
   let options: NotificationOptions = {
     body: 'New message',
-    icon: '/icon-192.png',
-    badge: '/icon-192.png',
+    icon: './icon-192.png',
+    badge: './icon-192.png',
   }
 
   try {
@@ -74,7 +74,7 @@ self.addEventListener('notificationclick', (event) => {
         }
       }
       // Open new window if none found
-      return self.clients.openWindow('/')
+      return self.clients.openWindow('./')
     })
   )
 })

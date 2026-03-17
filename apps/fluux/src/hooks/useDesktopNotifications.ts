@@ -123,7 +123,7 @@ export function useDesktopNotifications(): void {
 
       const notification = new Notification(title, {
         body,
-        icon: avatarUrl || '/icon-512.png',
+        icon: avatarUrl || './icon-512.png',
         tag: conv.id, // Prevents duplicate notifications for same conversation
       })
 
@@ -179,7 +179,7 @@ export function useDesktopNotifications(): void {
 
       const notification = new Notification(title, {
         body,
-        icon: avatarUrl || '/icon-512.png',
+        icon: avatarUrl || './icon-512.png',
         tag: `room-${room.jid}`,
       })
 
