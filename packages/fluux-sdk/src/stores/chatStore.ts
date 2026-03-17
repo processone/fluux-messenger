@@ -606,16 +606,10 @@ export const chatStore = createStore<ChatState>()(
         set((state) => {
           const convMessages = state.messages.get(msg.conversationId) || []
 
-          // XEP-0359: Deduplicate messages
-          // 1. If stanzaId present: check for existing message with same stanzaId (globally unique)
-          // 2. If no stanzaId: check for existing message with same from + id (unique per sender)
-          const isDuplicate = convMessages.some((existing) => {
-            if (msg.stanzaId && existing.stanzaId) {
-              return existing.stanzaId === msg.stanzaId
-            }
-            // Fallback: dedupe by from + id (message id is only unique per sender)
-            return existing.from === msg.from && existing.id === msg.id
-          })
+          // XEP-0359: Deduplicate using shared utility that checks ANY matching key
+          // (stanzaId OR from+id), avoiding the pitfall of short-circuiting on mismatched stanzaIds
+          const existingKeys = buildMessageKeySet(convMessages, getChatMessageKeys)
+          const isDuplicate = isMessageDuplicate(msg, existingKeys, getChatMessageKeys)
 
           if (isDuplicate) {
             return state // Don't add duplicate message
