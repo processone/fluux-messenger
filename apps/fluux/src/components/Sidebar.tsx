@@ -417,7 +417,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
         </div>
 
         {/* User Panel - avatar spans both rows */}
-        <div className="px-2 py-2 bg-fluux-sidebar border-t border-fluux-bg overflow-x-hidden">
+        <div className="px-2 py-2 bg-fluux-sidebar border-t border-fluux-bg">
           <div className="flex items-center gap-3 min-w-0">
             {/* Large avatar - clickable for profile settings */}
             <Tooltip content={t('sidebar.viewProfile')} position="top">
