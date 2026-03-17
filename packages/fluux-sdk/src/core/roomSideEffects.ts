@@ -122,6 +122,9 @@ export function setupRoomSideEffects(
       }
       logInfo('Room: MAM catch-up complete')
     } catch (error) {
+      // Allow backup handlers (room:joined, supportsMAM watcher) to retry
+      fetchInitiated.delete(roomJid)
+
       // Only log if it's not a disconnection error (those are expected during reconnect)
       const isConnectionError = error instanceof Error &&
         (error.message.includes('disconnected') ||

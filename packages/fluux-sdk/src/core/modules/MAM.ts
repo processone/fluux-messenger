@@ -769,7 +769,15 @@ export class MAM extends BaseModule {
         try {
           if (this.deps.stores?.connection.getStatus() !== 'online') return
 
-          const messages = room.messages || []
+          // Load IndexedDB cache first so we know the newest cached message
+          // and can do a proper forward catch-up instead of fetching only latest 50.
+          // Without this, room.messages is empty after app restart (runtime-only),
+          // causing a backward "before:''" query that creates gaps with old cache.
+          await this.deps.stores?.room.loadMessagesFromCache(room.jid, { limit: 100 })
+
+          // Re-read room after cache load (store was mutated)
+          const updatedRoom = this.deps.stores?.room.getRoom(room.jid)
+          const messages = updatedRoom?.messages || []
           const newestCachedMessage = messages[messages.length - 1]
 
           if (newestCachedMessage?.timestamp) {

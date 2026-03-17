@@ -174,9 +174,12 @@ export interface StoreBindings {
     resetRoomMAMStates: () => void
     // Lazy MAM: mark rooms as needing catch-up after reconnect
     markAllRoomsNeedsCatchUp: () => void
+    markAllRoomsNotJoined: () => void
     clearRoomNeedsCatchUp: (roomJid: string) => void
     // Preview refresh: update lastMessage without affecting message history
     updateLastMessagePreview: (roomJid: string, lastMessage: RoomMessage) => void
+    // Load messages from IndexedDB cache into the room's in-memory message array
+    loadMessagesFromCache: (roomJid: string, options?: { limit?: number; before?: Date; after?: Date }) => Promise<RoomMessage[]>
     // Load preview from cache for non-MAM rooms (only updates lastMessage, not messages array)
     loadPreviewFromCache: (roomJid: string) => Promise<RoomMessage | null>
     // XEP-0045: Merge affiliated members (for offline member display, avatar resolution, mentions)

@@ -162,6 +162,8 @@ export interface RoomState {
   updateRoom: (roomJid: string, update: Partial<Room>) => void
   removeRoom: (roomJid: string) => void
   setRoomJoined: (roomJid: string, joined: boolean) => void
+  /** Reset joined/isJoining for all rooms (called on fresh session after reconnect) */
+  markAllRoomsNotJoined: () => void
   addOccupant: (roomJid: string, occupant: RoomOccupant) => void
   batchAddOccupants: (roomJid: string, occupants: RoomOccupant[]) => void
   removeOccupant: (roomJid: string, nick: string) => void
@@ -480,6 +482,26 @@ export const roomStore = createStore<RoomState>()(
       }
 
       return { rooms: newRooms, roomEntities: newEntities, roomMeta: newMeta }
+    })
+  },
+
+  markAllRoomsNotJoined: () => {
+    set((state) => {
+      const newRooms = new Map(state.rooms)
+      const newEntities = new Map(state.roomEntities)
+
+      for (const [jid, room] of newRooms) {
+        if (room.joined || room.isJoining) {
+          newRooms.set(jid, { ...room, joined: false, isJoining: false })
+        }
+      }
+      for (const [jid, entity] of newEntities) {
+        if (entity.joined || entity.isJoining) {
+          newEntities.set(jid, { ...entity, joined: false, isJoining: false })
+        }
+      }
+
+      return { rooms: newRooms, roomEntities: newEntities }
     })
   },
 

@@ -1402,6 +1402,10 @@ export class XMPPClient {
     this.stores?.chat.resetMAMStates()
     this.stores?.room.resetRoomMAMStates()
 
+    // Reset room joined state so joinRoom() won't skip rooms with stale joined:true
+    // from the previous session (e.g., reconnect after sleep/wake or network drop)
+    this.stores?.room.markAllRoomsNotJoined()
+
     // Reset presence and resources for fresh session
     this.stores?.roster.resetAllPresence()
     this.stores?.connection.clearOwnResources()

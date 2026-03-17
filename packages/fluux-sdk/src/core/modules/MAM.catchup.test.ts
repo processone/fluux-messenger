@@ -423,10 +423,21 @@ describe('MAM Background Catch-Up', () => {
         },
       ] as any)
 
-      // getRoom is needed by queryRoomArchive for nickname
+      // getRoom is needed by queryRoomArchive for nickname AND by catchUpAllRooms
+      // after loadMessagesFromCache (to re-read messages from the store)
       vi.mocked(mockStores.room.getRoom).mockReturnValue({
         jid: 'room1@conference.example.com',
         nickname: 'me',
+        messages: [{
+          type: 'groupchat' as const,
+          id: 'msg-1',
+          roomJid: 'room1@conference.example.com',
+          from: 'room1@conference.example.com/sender',
+          body: 'Hello',
+          timestamp: cachedTimestamp,
+          isOutgoing: false,
+          isDelayed: false,
+        }],
       } as any)
 
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse())
@@ -437,6 +448,9 @@ describe('MAM Background Catch-Up', () => {
 
       // Verify MAM query was made
       expect(mockXmppClientInstance.iqCaller.request).toHaveBeenCalled()
+
+      // Verify loadMessagesFromCache was called before deciding query direction
+      expect(mockStores.room.loadMessagesFromCache).toHaveBeenCalledWith('room1@conference.example.com', { limit: 100 })
 
       // The emitted room:mam-messages event should have direction='forward' (start filter used)
       expect(emitSDKSpy).toHaveBeenCalledWith('room:mam-messages', expect.objectContaining({
