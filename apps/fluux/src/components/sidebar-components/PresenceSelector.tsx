@@ -127,7 +127,7 @@ export function PresenceSelector({ isOpen: isOpenProp, onOpenChange }: PresenceS
           className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-full bg-fluux-hover hover:bg-fluux-bg border border-transparent hover:border-fluux-muted/30 transition-colors group"
         >
           <span className={`w-2 h-2 rounded-full ${currentOption.color}`} />
-          <span className="text-fluux-muted group-hover:text-fluux-text truncate max-w-[80px]">
+          <span className="text-fluux-muted group-hover:text-fluux-text truncate">
             {statusMessage || t(currentOption.labelKey)}
           </span>
           <ChevronDown className={`w-3 h-3 text-fluux-muted group-hover:text-fluux-text flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
