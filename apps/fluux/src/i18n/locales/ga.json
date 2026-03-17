@@ -464,6 +464,11 @@
         "notificationDescription": "Cuireann fógraí deisce ar an eolas thú faoi theachtaireachtaí nua nuair atá an aip sa chúlra.",
         "requestPermission": "Cumasaigh",
         "openSettings": "Oscail Socruithe",
+        "webPushStatus": "Fógraí brú gréasáin",
+        "webPush_unavailable": "Ní thacaíonn an freastalaí leis",
+        "webPush_available": "Ar fáil — tapáil le cumasú",
+        "webPush_registered": "Cumasaithe — fógraí brú gníomhach",
+        "webPushEnable": "Cumasaigh",
         "updates": "Nuashonruithe"
     },
     "update": {

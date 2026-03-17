@@ -464,6 +464,11 @@
         "notificationDescription": "Skjáborðstilkynningar láta þig vita af nýjum skilaboðum þegar forritið er í bakgrunni.",
         "requestPermission": "Virkja",
         "openSettings": "Opna stillingar",
+        "webPushStatus": "Vef push-tilkynningar",
+        "webPush_unavailable": "Ekki stutt af þjóni",
+        "webPush_available": "Tiltækt — ýttu til að virkja",
+        "webPush_registered": "Virkjað — push-tilkynningar virkar",
+        "webPushEnable": "Virkja",
         "updates": "Uppfærslur"
     },
     "update": {

@@ -464,6 +464,11 @@
         "notificationDescription": "Darbvirsmas paziņojumi brīdina par jauniem ziņojumiem, kad lietotne ir fonā.",
         "requestPermission": "Iespējot",
         "openSettings": "Atvērt iestatījumus",
+        "webPushStatus": "Tīmekļa push paziņojumi",
+        "webPush_unavailable": "Serveris neatbalsta",
+        "webPush_available": "Pieejams — pieskarieties, lai iespējotu",
+        "webPush_registered": "Iespējots — push paziņojumi aktīvi",
+        "webPushEnable": "Iespējot",
         "updates": "Atjauninājumi"
     },
     "update": {

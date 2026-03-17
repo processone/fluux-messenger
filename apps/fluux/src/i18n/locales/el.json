@@ -464,6 +464,11 @@
         "notificationDescription": "Οι ειδοποιήσεις επιφάνειας εργασίας σας ειδοποιούν για νέα μηνύματα όταν η εφαρμογή είναι στο παρασκήνιο.",
         "requestPermission": "Ενεργοποίηση",
         "openSettings": "Άνοιγμα ρυθμίσεων",
+        "webPushStatus": "Ειδοποιήσεις web push",
+        "webPush_unavailable": "Δεν υποστηρίζεται από τον διακομιστή",
+        "webPush_available": "Διαθέσιμο — πατήστε για ενεργοποίηση",
+        "webPush_registered": "Ενεργοποιημένο — ειδοποιήσεις push ενεργές",
+        "webPushEnable": "Ενεργοποίηση",
         "updates": "Ενημερώσεις"
     },
     "update": {

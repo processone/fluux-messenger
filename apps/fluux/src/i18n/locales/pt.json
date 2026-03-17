@@ -464,6 +464,11 @@
         "notificationDescription": "As notificações de ambiente de trabalho alertam-no para novas mensagens quando a aplicação está em segundo plano.",
         "requestPermission": "Ativar",
         "openSettings": "Abrir definições",
+        "webPushStatus": "Notificações push web",
+        "webPush_unavailable": "Não suportado pelo servidor",
+        "webPush_available": "Disponível — toque para ativar",
+        "webPush_registered": "Ativadas — notificações push ativas",
+        "webPushEnable": "Ativar",
         "updates": "Atualizações"
     },
     "update": {

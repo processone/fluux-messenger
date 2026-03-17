@@ -464,6 +464,11 @@
         "notificationDescription": "Työpöytäilmoitukset hälyttävät uusista viesteistä, kun sovellus on taustalla.",
         "requestPermission": "Ota käyttöön",
         "openSettings": "Avaa asetukset",
+        "webPushStatus": "Web-push-ilmoitukset",
+        "webPush_unavailable": "Palvelin ei tue tätä",
+        "webPush_available": "Käytettävissä — ota käyttöön napauttamalla",
+        "webPush_registered": "Käytössä — push-ilmoitukset aktiiviset",
+        "webPushEnable": "Ota käyttöön",
         "updates": "Päivitykset"
     },
     "update": {

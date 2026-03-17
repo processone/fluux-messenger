@@ -464,6 +464,11 @@
         "notificationDescription": "Desktop notifications alert you to new messages when the app is in the background.",
         "requestPermission": "Enable",
         "openSettings": "Open Settings",
+        "webPushStatus": "Web Push Notifications",
+        "webPush_unavailable": "Not supported by server",
+        "webPush_available": "Available — tap to enable",
+        "webPush_registered": "Enabled — push notifications active",
+        "webPushEnable": "Enable",
         "updates": "Updates"
     },
     "update": {

@@ -464,6 +464,11 @@
         "notificationDescription": "Obavijesti na radnoj površini upozoravaju vas na nove poruke kada je aplikacija u pozadini.",
         "requestPermission": "Omogući",
         "openSettings": "Otvori postavke",
+        "webPushStatus": "Web push obavijesti",
+        "webPush_unavailable": "Poslužitelj ne podržava",
+        "webPush_available": "Dostupno — dodirnite za omogućavanje",
+        "webPush_registered": "Omogućeno — push obavijesti aktivne",
+        "webPushEnable": "Omogući",
         "updates": "Ažuriranja"
     },
     "update": {

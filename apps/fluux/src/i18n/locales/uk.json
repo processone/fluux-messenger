@@ -464,6 +464,11 @@
         "notificationDescription": "Сповіщення на робочому столі сповіщають про нові повідомлення, коли додаток у фоні.",
         "requestPermission": "Увімкнути",
         "openSettings": "Відкрити налаштування",
+        "webPushStatus": "Web push-сповіщення",
+        "webPush_unavailable": "Сервер не підтримує",
+        "webPush_available": "Доступно — натисніть, щоб увімкнути",
+        "webPush_registered": "Увімкнено — push-сповіщення активні",
+        "webPushEnable": "Увімкнути",
         "updates": "Оновлення"
     },
     "update": {

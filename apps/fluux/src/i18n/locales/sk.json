@@ -464,6 +464,11 @@
         "notificationDescription": "Oznámenia na ploche vás upozornia na nové správy, keď je aplikácia na pozadí.",
         "requestPermission": "Povoliť",
         "openSettings": "Otvoriť nastavenia",
+        "webPushStatus": "Webové push notifikácie",
+        "webPush_unavailable": "Server nepodporuje",
+        "webPush_available": "K dispozícii — ťuknite pre aktiváciu",
+        "webPush_registered": "Aktivované — push notifikácie aktívne",
+        "webPushEnable": "Aktivovať",
         "updates": "Aktualizácie"
     },
     "update": {

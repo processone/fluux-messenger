@@ -464,6 +464,11 @@
         "notificationDescription": "Oznámení na ploše vás upozorní na nové zprávy, když je aplikace na pozadí.",
         "requestPermission": "Povolit",
         "openSettings": "Otevřít nastavení",
+        "webPushStatus": "Webová push oznámení",
+        "webPush_unavailable": "Server nepodporuje",
+        "webPush_available": "K dispozici — klepněte pro aktivaci",
+        "webPush_registered": "Aktivováno — push oznámení aktivní",
+        "webPushEnable": "Aktivovat",
         "updates": "Aktualizace"
     },
     "update": {

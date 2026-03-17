@@ -464,6 +464,11 @@
         "notificationDescription": "Desktop-Benachrichtigungen informieren Sie über neue Nachrichten, wenn die App im Hintergrund ist.",
         "requestPermission": "Aktivieren",
         "openSettings": "Einstellungen öffnen",
+        "webPushStatus": "Web-Push-Benachrichtigungen",
+        "webPush_unavailable": "Vom Server nicht unterstützt",
+        "webPush_available": "Verfügbar — tippen zum Aktivieren",
+        "webPush_registered": "Aktiviert — Push-Benachrichtigungen aktiv",
+        "webPushEnable": "Aktivieren",
         "updates": "Updates"
     },
     "update": {

@@ -464,6 +464,11 @@
         "notificationDescription": "Les notifications bureau vous alertent des nouveaux messages lorsque l'application est en arrière-plan.",
         "requestPermission": "Activer",
         "openSettings": "Ouvrir les paramètres",
+        "webPushStatus": "Notifications Web Push",
+        "webPush_unavailable": "Non supporté par le serveur",
+        "webPush_available": "Disponible — appuyez pour activer",
+        "webPush_registered": "Activé — notifications push actives",
+        "webPushEnable": "Activer",
         "updates": "Mises à jour"
     },
     "update": {

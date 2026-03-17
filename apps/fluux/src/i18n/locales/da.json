@@ -464,6 +464,11 @@
         "notificationDescription": "Skrivebordsnotifikationer advarer dig om nye beskeder, når appen er i baggrunden.",
         "requestPermission": "Aktiver",
         "openSettings": "Åbn indstillinger",
+        "webPushStatus": "Web-pushnotifikationer",
+        "webPush_unavailable": "Ikke understøttet af serveren",
+        "webPush_available": "Tilgængelig — tryk for at aktivere",
+        "webPush_registered": "Aktiveret — pushnotifikationer aktive",
+        "webPushEnable": "Aktiver",
         "updates": "Opdateringer"
     },
     "update": {
