@@ -947,9 +947,174 @@ describe('XMPPClient Message', () => {
     })
   })
 
-  describe('sendReaction (XEP-0444)', () => {
-    it('should send reaction message with correct structure', async () => {
+  describe('incoming reactions (XEP-0444)', () => {
+    it('should handle reaction without body (standard case)', async () => {
       await connectClient()
+
+      const stanza = createMockElement('message', {
+        from: 'contact@example.com/resource',
+        to: 'user@example.com',
+        type: 'chat',
+        id: 'reaction-1',
+      }, [
+        {
+          name: 'reactions',
+          attrs: { xmlns: 'urn:xmpp:reactions:0', id: 'target-msg-1' },
+          children: [
+            { name: 'reaction', text: '👍' },
+          ],
+        },
+      ])
+
+      mockXmppClientInstance._emit('stanza', stanza)
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:reactions', {
+        conversationId: 'contact@example.com',
+        messageId: 'target-msg-1',
+        reactorJid: 'contact@example.com',
+        emojis: ['👍'],
+      })
+      // Should NOT emit a chat:message event
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('chat:message', expect.anything())
+    })
+
+    it('should handle reaction with body and reactions fallback (entire body is fallback)', async () => {
+      await connectClient()
+
+      // Real-world stanza: reaction with body for legacy clients, plus fallback indication
+      const stanza = createMockElement('message', {
+        from: 'contact@example.com/resource',
+        to: 'user@example.com',
+        type: 'chat',
+        id: 'reaction-2',
+      }, [
+        { name: 'body', text: '> Alice: Original message\n\n👍' },
+        {
+          name: 'reactions',
+          attrs: { xmlns: 'urn:xmpp:reactions:0', id: 'target-msg-2' },
+          children: [
+            { name: 'reaction', text: '👍' },
+          ],
+        },
+        { name: 'reply', attrs: { xmlns: 'urn:xmpp:reply:0', id: 'target-msg-2', to: 'alice@example.com' } },
+        {
+          name: 'fallback',
+          attrs: { xmlns: 'urn:xmpp:fallback:0', for: 'urn:xmpp:reply:0' },
+          children: [
+            { name: 'body', attrs: { xmlns: 'urn:xmpp:fallback:0', start: '0', end: '26' } },
+          ],
+        },
+        {
+          name: 'fallback',
+          attrs: { xmlns: 'urn:xmpp:fallback:0', for: 'urn:xmpp:reactions:0' },
+          children: [
+            { name: 'body', attrs: { xmlns: 'urn:xmpp:fallback:0' } },
+          ],
+        },
+      ])
+
+      mockXmppClientInstance._emit('stanza', stanza)
+
+      // Should handle as reaction only
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:reactions', {
+        conversationId: 'contact@example.com',
+        messageId: 'target-msg-2',
+        reactorJid: 'contact@example.com',
+        emojis: ['👍'],
+      })
+      // Should NOT create a message — body is entirely fallback for reactions
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('chat:message', expect.anything())
+    })
+
+    it('should handle reaction with body but no reactions fallback (legacy sender)', async () => {
+      await connectClient()
+
+      // Legacy sender: includes body + reactions element but no fallback indication
+      // The body should be treated as a regular message since we can't tell it's fallback
+      const stanza = createMockElement('message', {
+        from: 'contact@example.com/resource',
+        to: 'user@example.com',
+        type: 'chat',
+        id: 'reaction-3',
+      }, [
+        { name: 'body', text: '👍' },
+        {
+          name: 'reactions',
+          attrs: { xmlns: 'urn:xmpp:reactions:0', id: 'target-msg-3' },
+          children: [
+            { name: 'reaction', text: '👍' },
+          ],
+        },
+      ])
+
+      mockXmppClientInstance._emit('stanza', stanza)
+
+      // Should handle the reaction
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:reactions', expect.anything())
+      // Without fallback indication, body is treated as a regular message too
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', expect.objectContaining({
+        message: expect.objectContaining({ body: '👍' }),
+      }))
+    })
+
+    it('should handle groupchat reaction with body and reactions fallback', async () => {
+      await connectClient()
+
+      const stanza = createMockElement('message', {
+        from: 'room@conference.example.com/Kris',
+        to: 'user@example.com',
+        type: 'groupchat',
+        id: 'reaction-muc-1',
+      }, [
+        { name: 'body', text: '> zeank: Some original text\n\n👍' },
+        {
+          name: 'reactions',
+          attrs: { xmlns: 'urn:xmpp:reactions:0', id: 'target-msg-muc' },
+          children: [
+            { name: 'reaction', text: '👍' },
+          ],
+        },
+        {
+          name: 'fallback',
+          attrs: { xmlns: 'urn:xmpp:fallback:0', for: 'urn:xmpp:reply:0' },
+          children: [
+            { name: 'body', attrs: { xmlns: 'urn:xmpp:fallback:0', start: '0', end: '28' } },
+          ],
+        },
+        {
+          name: 'fallback',
+          attrs: { xmlns: 'urn:xmpp:fallback:0', for: 'urn:xmpp:reactions:0' },
+          children: [
+            { name: 'body', attrs: { xmlns: 'urn:xmpp:fallback:0' } },
+          ],
+        },
+      ])
+
+      mockXmppClientInstance._emit('stanza', stanza)
+
+      // Should handle as groupchat reaction only
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:reactions', {
+        roomJid: 'room@conference.example.com',
+        messageId: 'target-msg-muc',
+        reactorNick: 'Kris',
+        emojis: ['👍'],
+      })
+      // Should NOT create a room message
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('room:message', expect.anything())
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('chat:message', expect.anything())
+    })
+  })
+
+  describe('sendReaction (XEP-0444)', () => {
+    it('should send reaction with fallback body when original message found', async () => {
+      await connectClient()
+
+      mockStores.chat.getMessage = vi.fn().mockReturnValue({
+        type: 'chat',
+        id: 'msg-123',
+        body: 'Hello world',
+        from: 'alice@example.com',
+      })
 
       await xmppClient.chat.sendReaction('alice@example.com', 'msg-123', ['👍', '❤️'], 'chat')
 
@@ -960,34 +1125,98 @@ describe('XMPPClient Message', () => {
       expect(sentStanza.attrs.to).toBe('alice@example.com')
       expect(sentStanza.attrs.type).toBe('chat')
 
-      // Find reactions element
-      const reactionsEl = sentStanza.children.find(
-        (c: any) => c.name === 'reactions'
-      )
+      // Should have body with quoted original + emojis
+      const bodyEl = sentStanza.children.find((c: any) => c.name === 'body')
+      expect(bodyEl).toBeDefined()
+      expect(bodyEl.children[0]).toContain('alice@example.com wrote:')
+      expect(bodyEl.children[0]).toContain('> Hello world')
+      expect(bodyEl.children[0]).toContain('👍❤️')
+
+      // Should have reactions element
+      const reactionsEl = sentStanza.children.find((c: any) => c.name === 'reactions')
       expect(reactionsEl).toBeDefined()
       expect(reactionsEl.attrs.xmlns).toBe('urn:xmpp:reactions:0')
       expect(reactionsEl.attrs.id).toBe('msg-123')
-
-      // Check reaction children
-      const reactionEls = reactionsEl.children.filter(
-        (c: any) => c.name === 'reaction'
-      )
+      const reactionEls = reactionsEl.children.filter((c: any) => c.name === 'reaction')
       expect(reactionEls.length).toBe(2)
       expect(reactionEls[0].children[0]).toBe('👍')
       expect(reactionEls[1].children[0]).toBe('❤️')
+
+      // Should have reply element
+      const replyEl = sentStanza.children.find((c: any) => c.name === 'reply')
+      expect(replyEl).toBeDefined()
+      expect(replyEl.attrs.xmlns).toBe('urn:xmpp:reply:0')
+      expect(replyEl.attrs.id).toBe('msg-123')
+      expect(replyEl.attrs.to).toBe('alice@example.com')
+
+      // Should have reply fallback (with range)
+      const fallbackEls = sentStanza.children.filter((c: any) => c.name === 'fallback')
+      expect(fallbackEls.length).toBe(2)
+      const replyFallback = fallbackEls.find((c: any) => c.attrs.for === 'urn:xmpp:reply:0')
+      expect(replyFallback).toBeDefined()
+      expect(replyFallback.attrs.xmlns).toBe('urn:xmpp:fallback:0')
+      const replyFallbackBody = replyFallback.children[0]
+      expect(replyFallbackBody.attrs.start).toBe('0')
+      expect(parseInt(replyFallbackBody.attrs.end, 10)).toBeGreaterThan(0)
+
+      // Should have reactions fallback (entire body, no range)
+      const reactionsFallback = fallbackEls.find((c: any) => c.attrs.for === 'urn:xmpp:reactions:0')
+      expect(reactionsFallback).toBeDefined()
+      expect(reactionsFallback.attrs.xmlns).toBe('urn:xmpp:fallback:0')
+      const reactionsFallbackBody = reactionsFallback.children[0]
+      expect(reactionsFallbackBody.name).toBe('body')
+      // No start/end means entire body
+      expect(reactionsFallbackBody.attrs.start).toBeUndefined()
+      expect(reactionsFallbackBody.attrs.end).toBeUndefined()
+
+      // Should have store hint
+      const storeEl = sentStanza.children.find((c: any) => c.name === 'store')
+      expect(storeEl).toBeDefined()
+      expect(storeEl.attrs.xmlns).toBe('urn:xmpp:hints')
     })
 
-    it('should send empty reactions to remove all reactions', async () => {
+    it('should send simple reaction when original message not found', async () => {
       await connectClient()
+
+      // getMessage returns undefined (default mock behavior)
+      await xmppClient.chat.sendReaction('alice@example.com', 'msg-123', ['👍'], 'chat')
+
+      const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
+
+      // Should have reactions element but no body/reply/fallback
+      const reactionsEl = sentStanza.children.find((c: any) => c.name === 'reactions')
+      expect(reactionsEl).toBeDefined()
+      expect(reactionsEl.attrs.id).toBe('msg-123')
+
+      const bodyEl = sentStanza.children.find((c: any) => c.name === 'body')
+      expect(bodyEl).toBeUndefined()
+
+      const replyEl = sentStanza.children.find((c: any) => c.name === 'reply')
+      expect(replyEl).toBeUndefined()
+
+      const fallbackEls = sentStanza.children.filter((c: any) => c.name === 'fallback')
+      expect(fallbackEls.length).toBe(0)
+    })
+
+    it('should send simple reaction when removing all reactions (empty emojis)', async () => {
+      await connectClient()
+
+      mockStores.chat.getMessage = vi.fn().mockReturnValue({
+        type: 'chat',
+        id: 'msg-123',
+        body: 'Hello',
+        from: 'alice@example.com',
+      })
 
       await xmppClient.chat.sendReaction('alice@example.com', 'msg-123', [], 'chat')
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
-      const reactionsEl = sentStanza.children.find(
-        (c: any) => c.name === 'reactions'
-      )
-
+      const reactionsEl = sentStanza.children.find((c: any) => c.name === 'reactions')
       expect(reactionsEl.children.length).toBe(0)
+
+      // No body/fallback for empty reactions
+      const bodyEl = sentStanza.children.find((c: any) => c.name === 'body')
+      expect(bodyEl).toBeUndefined()
     })
 
     it('should update local store after sending reaction', async () => {
@@ -1062,6 +1291,38 @@ describe('XMPPClient Message', () => {
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const reactionsEl = sentStanza.children.find((c: any) => c.name === 'reactions')
       expect(reactionsEl.attrs.id).toBe('unknown-msg-id')
+    })
+
+    it('should include fallback for groupchat reactions with original message', async () => {
+      await connectClient()
+
+      mockStores.room.getRoom = vi.fn().mockReturnValue({ jid: 'room@conference.example.com', nickname: 'me' })
+      mockStores.room.getMessage = vi.fn().mockReturnValue({
+        type: 'groupchat',
+        id: 'client-msg-id',
+        stanzaId: 'server-stanza-id',
+        body: 'Hello everyone',
+        from: 'room@conference.example.com/alice',
+      })
+
+      await xmppClient.chat.sendReaction('room@conference.example.com', 'client-msg-id', ['🎉'], 'groupchat')
+
+      const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
+
+      // Should have body, reactions, reply, both fallbacks, and store hint
+      const bodyEl = sentStanza.children.find((c: any) => c.name === 'body')
+      expect(bodyEl).toBeDefined()
+
+      const replyEl = sentStanza.children.find((c: any) => c.name === 'reply')
+      expect(replyEl).toBeDefined()
+      expect(replyEl.attrs.to).toBe('room@conference.example.com/alice')
+
+      const fallbackEls = sentStanza.children.filter((c: any) => c.name === 'fallback')
+      expect(fallbackEls.length).toBe(2)
+
+      // Reactions fallback should indicate entire body is fallback
+      const reactionsFallback = fallbackEls.find((c: any) => c.attrs.for === 'urn:xmpp:reactions:0')
+      expect(reactionsFallback).toBeDefined()
     })
   })
 

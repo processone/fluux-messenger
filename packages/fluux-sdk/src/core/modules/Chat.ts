@@ -3,6 +3,7 @@ import { BaseModule, type ModuleDependencies } from './BaseModule'
 import { getBareJid, getLocalPart, getResource, isQuickChatJid } from '../jid'
 import { isMucJid } from '../../utils/xmppUri'
 import { generateUUID, generateStableMessageId } from '../../utils/uuid'
+import { isEntireBodyFallback } from '../../utils/fallbackUtils'
 import {
   NS_CHATSTATES,
   NS_CARBONS,
@@ -187,7 +188,9 @@ export class Chat extends BaseModule {
     const reactionsEl = stanza.getChild('reactions', NS_REACTIONS)
     if (reactionsEl) {
       this.handleIncomingReaction(reactionsEl, from, bareFrom, bareTo, type, isSentCarbon)
-      if (!body) return { handled: true }
+      // Pure reaction: no body, or body is entirely fallback for reactions
+      // (body exists only for legacy clients that don't support XEP-0444)
+      if (!body || isEntireBodyFallback(stanza, NS_REACTIONS)) return { handled: true }
     }
 
     // Fastenings (Link Previews)
@@ -577,10 +580,44 @@ export class Chat extends BaseModule {
     const referenceId = this.getMessageReferenceId(to, messageId, type)
 
     const reactionElements = emojis.map(emoji => xml('reaction', {}, emoji))
-    const message = xml('message', { to: recipient, type, id: generateUUID() },
-      xml('reactions', { xmlns: NS_REACTIONS, id: referenceId }, ...reactionElements)
-    )
+    const children: Element[] = []
 
+    // Look up original message to build fallback body for legacy clients
+    const originalMsg = type === 'groupchat'
+      ? this.deps.stores?.room.getMessage(to, messageId)
+      : this.deps.stores?.chat.getMessage(to, messageId)
+
+    if (originalMsg?.body && emojis.length > 0) {
+      // Build full stanza with fallback for backward compatibility:
+      // - Reactions-capable clients: handle <reactions>, ignore body (reactions fallback)
+      // - Reply-capable clients (no reactions): show quoted reply with emoji body
+      // - Legacy clients: show full body as-is
+      const emojiStr = emojis.join('')
+      const senderJid = originalMsg.from
+      const quotedLines = originalMsg.body.split('\n').map((line: string) => `> ${line}`).join('\n')
+      const replyFallback = `> ${senderJid} wrote:\n${quotedLines}\n\n`
+      const fullBody = replyFallback + emojiStr
+
+      children.push(xml('body', {}, fullBody))
+      children.push(xml('reactions', { xmlns: NS_REACTIONS, id: referenceId }, ...reactionElements))
+      children.push(xml('reply', { xmlns: NS_REPLY, id: referenceId, to: senderJid }))
+      children.push(
+        xml('fallback', { xmlns: NS_FALLBACK, for: NS_REPLY },
+          xml('body', { start: '0', end: String(replyFallback.length) })
+        )
+      )
+      children.push(
+        xml('fallback', { xmlns: NS_FALLBACK, for: NS_REACTIONS },
+          xml('body', {})
+        )
+      )
+      children.push(xml('store', { xmlns: NS_HINTS }))
+    } else {
+      // No original message or removing reactions — simple stanza without fallback body
+      children.push(xml('reactions', { xmlns: NS_REACTIONS, id: referenceId }, ...reactionElements))
+    }
+
+    const message = xml('message', { to: recipient, type, id: generateUUID() }, ...children)
     await this.deps.sendStanza(message)
 
     // SDK events only - bindings call store methods

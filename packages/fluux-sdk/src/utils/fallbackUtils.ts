@@ -3,6 +3,15 @@
  *
  * Shared utilities for processing fallback text in XMPP messages.
  * Used by both live message handling (MessageHandler) and MAM queries (XMPPClient).
+ *
+ * Supports multiple fallback elements per stanza (e.g., reactions + reply).
+ * When processing, fallbacks are matched by their 'for' attribute against
+ * the caller's validTargets list.
+ *
+ * Priority order for fallback processing:
+ *   1. Entire-body fallbacks (no range) — e.g., reactions fallback
+ *   2. Range-based fallbacks — e.g., reply, OOB, correction
+ * Range-based fallbacks are applied from end-to-start to preserve indices.
  */
 
 import type { Element } from '@xmpp/client'
@@ -21,28 +30,71 @@ export interface FallbackProcessingOptions {
 }
 
 /**
- * Get fallback element, checking both standard and legacy namespaces.
- * XEP-0428 uses urn:xmpp:fallback:0, but some clients use the older urn:xmpp:feature-fallback:0
+ * Get ALL fallback elements from a stanza, checking both standard and legacy namespaces.
+ * Returns elements from the standard namespace (urn:xmpp:fallback:0) first.
+ * Falls back to legacy namespace (urn:xmpp:feature-fallback:0) only if no standard ones found.
  */
-export function getFallbackElement(stanza: Element): { element: Element; namespace: string } | null {
-  // Try standard namespace first
-  let fallbackEl = stanza.getChild('fallback', NS_FALLBACK)
-  if (fallbackEl) {
-    return { element: fallbackEl, namespace: NS_FALLBACK }
+export function getAllFallbackElements(stanza: Element): Array<{ element: Element; namespace: string }> {
+  const results: Array<{ element: Element; namespace: string }> = []
+
+  // Collect standard namespace fallbacks
+  for (const child of stanza.getChildren('fallback')) {
+    if ((child as Element).attrs?.xmlns === NS_FALLBACK) {
+      results.push({ element: child as Element, namespace: NS_FALLBACK })
+    }
   }
-  // Try legacy namespace
-  fallbackEl = stanza.getChild('fallback', NS_FALLBACK_LEGACY)
-  if (fallbackEl) {
-    return { element: fallbackEl, namespace: NS_FALLBACK_LEGACY }
+
+  // Fall back to legacy namespace only if no standard ones found
+  if (results.length === 0) {
+    for (const child of stanza.getChildren('fallback')) {
+      if ((child as Element).attrs?.xmlns === NS_FALLBACK_LEGACY) {
+        results.push({ element: child as Element, namespace: NS_FALLBACK_LEGACY })
+      }
+    }
   }
-  return null
+
+  return results
 }
 
 /**
- * XEP-0428: Process fallback indication and strip fallback text from body.
- * Handles fallbacks for replies (NS_REPLY), attachments (NS_OOB), and corrections (NS_CORRECTION).
+ * Get the first fallback element matching a valid target, checking both namespaces.
+ * Kept for backward compatibility — prefer getAllFallbackElements for multi-fallback support.
+ */
+export function getFallbackElement(stanza: Element): { element: Element; namespace: string } | null {
+  const all = getAllFallbackElements(stanza)
+  return all.length > 0 ? all[0] : null
+}
+
+/**
+ * Check if a stanza has a fallback element for the given namespace that indicates
+ * the entire body is fallback text (i.e., <body/> with no start/end range).
  *
- * @param messageStanza - The message stanza containing the fallback element
+ * This is used by reactions: a <fallback for="urn:xmpp:reactions:0"><body/></fallback>
+ * means the entire body exists only for legacy clients that don't support reactions.
+ */
+export function isEntireBodyFallback(stanza: Element, targetNamespace: string): boolean {
+  const fallbacks = getAllFallbackElements(stanza)
+  for (const { element, namespace } of fallbacks) {
+    if (element.attrs.for !== targetNamespace) continue
+    const bodyRange = element.getChild('body', namespace)
+    if (!bodyRange) continue
+    // <body/> with no start/end means entire body is fallback
+    if (bodyRange.attrs.start === undefined && bodyRange.attrs.end === undefined) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * XEP-0428: Process fallback indications and strip fallback text from body.
+ * Supports multiple fallback elements per stanza.
+ *
+ * Processing order:
+ *   1. Entire-body fallbacks (no range) → returns empty processedBody immediately
+ *   2. Range-based fallbacks → stripped from end-to-start to preserve indices
+ *
+ * @param messageStanza - The message stanza containing fallback elements
  * @param body - The original message body
  * @param options - Processing options (validTargets, trimMode)
  * @param replyTo - Optional ReplyInfo to populate fallbackBody for replies
@@ -56,41 +108,60 @@ export function processFallback(
 ): FallbackProcessingResult {
   const { validTargets, trimMode = 'full' } = options
 
-  const fallbackResult = getFallbackElement(messageStanza)
-  if (!fallbackResult) {
+  const fallbacks = getAllFallbackElements(messageStanza)
+  if (fallbacks.length === 0) {
     return { processedBody: body }
   }
 
-  const fallbackFor = fallbackResult.element.attrs.for
-  if (!validTargets.includes(fallbackFor)) {
-    return { processedBody: body }
-  }
-
-  // Note: <body> inside <fallback> inherits the fallback namespace
-  const bodyRange = fallbackResult.element.getChild('body', fallbackResult.namespace)
-  if (!bodyRange) {
-    return { processedBody: body }
-  }
-
-  const start = parseInt(bodyRange.attrs.start, 10)
-  const end = parseInt(bodyRange.attrs.end, 10)
-
-  if (isNaN(start) || isNaN(end) || start < 0 || end <= start || end > body.length) {
-    return { processedBody: body }
-  }
-
+  // Collect applicable ranges and check for entire-body fallbacks
+  const ranges: Array<{ start: number; end: number; forNs: string }> = []
   let fallbackBody: string | undefined
 
-  // For replies, extract and save the fallback text (for when original not found)
-  if (fallbackFor === NS_REPLY && replyTo) {
-    const fallbackText = body.slice(start, end)
-    // Parse fallback format: "> Author: message\n" - extract just the message
-    const fallbackMatch = fallbackText.match(/^> [^:]+: (.+)$/m)
-    fallbackBody = fallbackMatch ? fallbackMatch[1] : fallbackText.replace(/^> /, '')
+  for (const { element, namespace } of fallbacks) {
+    const fallbackFor = element.attrs.for
+    if (!validTargets.includes(fallbackFor)) continue
+
+    // Note: <body> inside <fallback> inherits the fallback namespace
+    const bodyRange = element.getChild('body', namespace)
+    if (!bodyRange) continue
+
+    const startAttr = bodyRange.attrs.start
+    const endAttr = bodyRange.attrs.end
+
+    // <body/> with no range — entire body is fallback for this feature
+    if (startAttr === undefined && endAttr === undefined) {
+      return { processedBody: '' }
+    }
+
+    const start = parseInt(startAttr, 10)
+    const end = parseInt(endAttr, 10)
+
+    if (isNaN(start) || isNaN(end) || start < 0 || end <= start || end > body.length) {
+      continue
+    }
+
+    // For replies, extract and save the fallback text (for when original not found)
+    if (fallbackFor === NS_REPLY && replyTo) {
+      const fallbackText = body.slice(start, end)
+      // Parse fallback format: "> Author: message\n" - extract just the message
+      const fallbackMatch = fallbackText.match(/^> [^:]+: (.+)$/m)
+      fallbackBody = fallbackMatch ? fallbackMatch[1] : fallbackText.replace(/^> /, '')
+    }
+
+    ranges.push({ start, end, forNs: fallbackFor })
   }
 
-  // Remove the fallback portion from the body
-  let processedBody = body.slice(0, start) + body.slice(end)
+  if (ranges.length === 0) {
+    return { processedBody: body }
+  }
+
+  // Sort ranges from end to start to preserve indices when removing
+  ranges.sort((a, b) => b.start - a.start)
+
+  let processedBody = body
+  for (const { start, end } of ranges) {
+    processedBody = processedBody.slice(0, start) + processedBody.slice(end)
+  }
 
   // Clean up whitespace based on trim mode
   if (trimMode === 'full') {
