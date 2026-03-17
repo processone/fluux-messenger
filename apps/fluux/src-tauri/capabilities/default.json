@@ -40,6 +40,7 @@
       "identifier": "fs:allow-read-file",
       "allow": [{ "path": "**/*" }]
     },
+    "clipboard-manager:allow-read-image",
     "deep-link:default",
     "dialog:allow-save",
     "updater:default",

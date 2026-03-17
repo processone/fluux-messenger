@@ -449,6 +449,8 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
 
   // Handle clipboard paste - stage files as pending attachment
   // Supports: screenshots, "Copy Image" from browsers, pasted files
+  // On Linux/Tauri, WebKitGTK may not expose clipboard images through the web API,
+  // so we fall back to native clipboard reading via tauri-plugin-clipboard-manager.
   const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     if (!onFileSelect) return
 
@@ -469,19 +471,31 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
 
     // Fallback: check clipboardData.items for image data (screenshots, Chrome "Copy Image")
     const items = clipboardData.items
-    if (!items) return
-
-    for (const item of items) {
-      if (item.type.startsWith('image/')) {
-        const file = item.getAsFile()
-        if (file) {
-          e.preventDefault() // Prevent pasting URL as text
-          onFileSelect(file)
-          return
+    if (items) {
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile()
+          if (file) {
+            e.preventDefault() // Prevent pasting URL as text
+            onFileSelect(file)
+            return
+          }
         }
       }
     }
-    // If no file/image found, let the paste proceed normally (text paste)
+
+    // Native fallback: on Tauri (especially Linux/WebKitGTK), the web clipboard API
+    // may not expose image data. Try reading from the native system clipboard.
+    const types = clipboardData.types || []
+    const hasTextContent = types.includes('text/plain') || types.includes('text/html')
+    if (!hasTextContent) {
+      e.preventDefault()
+      import('@/utils/nativeClipboard').then(({ readClipboardImage }) =>
+        readClipboardImage().then((file) => {
+          if (file) onFileSelect(file)
+        })
+      )
+    }
   }, [onFileSelect])
 
   // File upload handlers
