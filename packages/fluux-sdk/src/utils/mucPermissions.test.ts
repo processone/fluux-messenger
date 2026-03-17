@@ -189,12 +189,16 @@ describe('canModerate', () => {
     expect(canModerate('moderator', 'admin', 'none')).toBe(true)
   })
 
-  it('moderator cannot moderate owners', () => {
+  it('admin-moderator cannot moderate owners', () => {
     expect(canModerate('moderator', 'admin', 'owner')).toBe(false)
   })
 
-  it('moderator (non-owner) cannot moderate admins', () => {
-    expect(canModerate('moderator', 'admin', 'admin')).toBe(false)
+  it('owner-moderator can moderate owners', () => {
+    expect(canModerate('moderator', 'owner', 'owner')).toBe(true)
+  })
+
+  it('admin-moderator can moderate other admins', () => {
+    expect(canModerate('moderator', 'admin', 'admin')).toBe(true)
   })
 
   it('owner-moderator can moderate admins', () => {
