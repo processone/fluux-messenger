@@ -124,9 +124,9 @@ export function PresenceSelector({ isOpen: isOpenProp, onOpenChange }: PresenceS
       <Tooltip content={t('presence.changeStatus')} position="top" disabled={isOpen}>
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-full bg-fluux-hover hover:bg-fluux-bg border border-transparent hover:border-fluux-muted/30 transition-colors group"
+          className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-full bg-fluux-hover hover:bg-fluux-bg border border-transparent hover:border-fluux-muted/30 transition-colors group min-w-0 max-w-full"
         >
-          <span className={`w-2 h-2 rounded-full ${currentOption.color}`} />
+          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${currentOption.color}`} />
           <span className="text-fluux-muted group-hover:text-fluux-text truncate">
             {statusMessage || t(currentOption.labelKey)}
           </span>
