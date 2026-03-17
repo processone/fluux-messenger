@@ -1499,8 +1499,8 @@ const RoomMessageInput = React.forwardRef<MessageComposerHandle, RoomMessageInpu
       <>
         {/* Background layer with styled mentions - positioned absolutely within parent wrapper */}
         <div
-          className="absolute inset-0 px-2 py-3 pointer-events-none whitespace-pre-wrap break-words
-                     overflow-hidden leading-6"
+          className="message-input absolute inset-0 px-2 py-3 pointer-events-none whitespace-pre-wrap
+                     overflow-hidden"
           aria-hidden="true"
           ref={(el) => {
             // Sync scroll position with textarea
