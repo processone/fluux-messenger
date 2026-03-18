@@ -1,10 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { AvatarCropModal } from './AvatarCropModal'
 
 // Mock URL API
 const mockCreateObjectURL = vi.fn(() => 'blob:mock-url')
 const mockRevokeObjectURL = vi.fn()
+
+// Store originals for proper cleanup
+const originalCreateObjectURL = URL.createObjectURL
+const originalRevokeObjectURL = URL.revokeObjectURL
+const originalMediaDevices = navigator.mediaDevices
 
 describe('AvatarCropModal', () => {
   const mockOnClose = vi.fn()
@@ -28,7 +33,17 @@ describe('AvatarCropModal', () => {
   })
 
   afterEach(() => {
+    // Ensure all components are unmounted before restoring globals
+    cleanup()
     vi.restoreAllMocks()
+    // Restore globals that vi.restoreAllMocks doesn't handle
+    global.URL.createObjectURL = originalCreateObjectURL
+    global.URL.revokeObjectURL = originalRevokeObjectURL
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: originalMediaDevices,
+      configurable: true,
+      writable: true,
+    })
   })
 
   describe('rendering', () => {
