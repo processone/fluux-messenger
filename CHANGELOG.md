@@ -58,6 +58,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Devices section rendering in UserInfoPopover
 - Fallback to occupant JID username when contact JID is unavailable
 - Owner showing as moderator in chat view
+- Missing room messages after reconnect or app restart
+- Missing "name" attribute on "external" elements (required by spec)
 
 ## [0.13.3] - 2026-03-04
 
