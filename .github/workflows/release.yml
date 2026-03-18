@@ -297,8 +297,7 @@ jobs:
             patchelf \
             libxss-dev \
             devscripts \
-            debhelper \
-            cmake
+            debhelper
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
@@ -404,8 +403,11 @@ jobs:
           DEB_VERSION=$(echo "$VERSION" | sed 's/-/~/g')
           sed -i "1s#([^)]*)#($DEB_VERSION-1)#" debian/changelog
 
-          # Build the .deb package (-d skips build dependency check since we use pre-built binary)
-          dpkg-buildpackage -d -uc -us -b
+          # Build the .deb package
+          # -d: skip build dependency check since we use pre-built binary
+          # -nc: skip clean step to preserve the pre-built binary (cargo clean would delete it,
+          #       triggering a rebuild under dpkg's CFLAGS=-O2 which breaks aws-lc-sys compilation)
+          dpkg-buildpackage -d -uc -us -b -nc
 
           # Move .deb to a known location (dpkg already includes architecture in filename)
           mkdir -p dist
@@ -492,8 +494,7 @@ jobs:
             librsvg2-dev \
             patchelf \
             libxss-dev \
-            rpm \
-            cmake
+            rpm
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
