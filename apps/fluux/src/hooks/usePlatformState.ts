@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { useXMPP, useSystemState, usePresence, consoleStore } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
@@ -67,11 +67,11 @@ export function usePlatformState() {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  const logEvent = (message: string) => {
+  const logEvent = useCallback((message: string) => {
     consoleStore.getState().addEvent(message, 'presence')
-  }
+  }, [])
 
-  const markOsIdleUnavailable = (err: unknown): boolean => {
+  const markOsIdleUnavailable = useCallback((err: unknown): boolean => {
     const message = err instanceof Error ? err.message : String(err)
     const unsupported = message.includes('Linux idle detection unavailable')
       || message.includes('MIT-SCREEN-SAVER')
@@ -80,40 +80,40 @@ export function usePlatformState() {
       osIdleUnavailableRef.current = true
       if (!osIdleUnavailableLoggedRef.current) {
         osIdleUnavailableLoggedRef.current = true
-        logEvent('[idle] OS idle detection unavailable, using DOM fallback')
+        consoleStore.getState().addEvent('[idle] OS idle detection unavailable, using DOM fallback', 'presence')
       }
     }
     return unsupported
-  }
+  }, [])
 
   /**
    * Check if a wake event should be processed (debounce).
    * Returns true and updates lastWakeTime if the event should be handled.
    */
-  const shouldHandleWake = (source: string): boolean => {
+  const shouldHandleWake = useCallback((source: string): boolean => {
     const now = Date.now()
     if (now - lastWakeTimeRef.current < WAKE_DEBOUNCE_MS) {
       return false
     }
     lastWakeTimeRef.current = now
     startWakeGracePeriod()
-    logEvent(`[${source}] Wake event accepted`)
+    consoleStore.getState().addEvent(`[${source}] Wake event accepted`, 'presence')
     return true
-  }
+  }, [])
 
   /**
    * Dispatch CSS resize workaround for WebKit layout corruption after wake.
    */
-  const dispatchResizeWorkaround = () => {
+  const dispatchResizeWorkaround = useCallback(() => {
     requestAnimationFrame(() => {
       window.dispatchEvent(new Event('resize'))
     })
-  }
+  }, [])
 
   /**
    * Handle user activity — signals SDK, throttled to avoid flooding.
    */
-  const handleActivity = async () => {
+  const handleActivity = useCallback(async () => {
     lastActivityRef.current = Date.now()
 
     // Throttle activity events
@@ -139,14 +139,14 @@ export function usePlatformState() {
     }
 
     notifyActive()
-  }
+  }, [notifyActive, markOsIdleUnavailable])
 
   /**
    * Check if user is idle and notify SDK.
    */
-  const checkIdle = async () => {
+  const checkIdle = useCallback(async () => {
     if (!autoAwayConfig.enabled) return
-    if (status !== 'online') return
+    if (statusRef.current !== 'online') return
 
     let idleMs: number
     let idleSource: string
@@ -162,7 +162,7 @@ export function usePlatformState() {
         const unsupported = markOsIdleUnavailable(err)
         idleSource = unsupported ? 'DOM (Tauri fallback cached)' : 'DOM (Tauri fallback)'
         if (!unsupported) {
-          logEvent(`[checkIdle] Tauri get_idle_time failed: ${err}, falling back to DOM`)
+          consoleStore.getState().addEvent(`[checkIdle] Tauri get_idle_time failed: ${err}, falling back to DOM`, 'presence')
         }
       }
     } else if (isTauri()) {
@@ -177,15 +177,15 @@ export function usePlatformState() {
     const idleSeconds = Math.round(idleMs / 1000)
     const thresholdSeconds = autoAwayConfig.idleThresholdMs / 1000
     if (idleSeconds >= thresholdSeconds - 60) {
-      logEvent(`[checkIdle] Idle time: ${idleSeconds}s / ${thresholdSeconds}s threshold (source: ${idleSource})`)
+      consoleStore.getState().addEvent(`[checkIdle] Idle time: ${idleSeconds}s / ${thresholdSeconds}s threshold (source: ${idleSource})`, 'presence')
     }
 
     if (idleMs >= autoAwayConfig.idleThresholdMs) {
-      logEvent(`Idle threshold reached (${idleSeconds}s), signaling SDK`)
+      consoleStore.getState().addEvent(`Idle threshold reached (${idleSeconds}s), signaling SDK`, 'presence')
       const idleSince = new Date(Date.now() - idleMs)
       notifyIdle(idleSince)
     }
-  }
+  }, [autoAwayConfig.enabled, autoAwayConfig.idleThresholdMs, notifyIdle, markOsIdleUnavailable])
 
   // ── Effect 1: Activity tracking + idle checking ───────────────────────────
 

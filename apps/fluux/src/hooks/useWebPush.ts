@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
 import { connectionStore } from '@fluux/sdk'
 import { useXMPPContext } from '@fluux/sdk'
 import type { WebPushService } from '@fluux/sdk'
@@ -23,7 +23,6 @@ export const isWebPushSupported =
  *   (requires user-gesture context on mobile).
  */
 async function registerPush(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   client: any,
   service: WebPushService,
   skipIfNoPermission: boolean
@@ -93,7 +92,7 @@ export function useWebPush(): void {
   const { client } = useXMPPContext()
   const registering = useRef(false)
 
-  const tryRegister = async (service: WebPushService, skipIfNoPermission: boolean) => {
+  const tryRegister = useCallback(async (service: WebPushService, skipIfNoPermission: boolean) => {
     if (registering.current) return
     registering.current = true
     try {
@@ -101,13 +100,10 @@ export function useWebPush(): void {
     } finally {
       registering.current = false
     }
-  }
+  }, [client])
 
   useEffect(() => {
     if (!isWebPushSupported) {
-      console.log('[WebPush] Not supported in this environment',
-        { hasSW: 'serviceWorker' in navigator, hasPM: 'PushManager' in window,
-          isTauri: '__TAURI_INTERNALS__' in window })
       return
     }
     console.log('[WebPush] Hook active, subscribing to store changes')
@@ -142,7 +138,6 @@ export function useWebPush(): void {
  *
  * @param client - The XMPP client instance from useXMPPContext()
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function requestWebPushRegistration(client: any): void {
   if (!isWebPushSupported) return
   const { webPushStatus, webPushServices } = connectionStore.getState()
