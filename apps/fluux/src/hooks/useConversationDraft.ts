@@ -13,7 +13,7 @@ export interface UseConversationDraftOptions {
   /** Draft operations from useChat() or useRoom() */
   draftOperations: DraftOperations
   /** Ref to the MessageComposer for getting current text */
-  composerRef: React.RefObject<MessageComposerHandle>
+  composerRef: React.RefObject<MessageComposerHandle | null>
   /** Optional callback when draft is restored (e.g., to reset mention references) */
   onDraftRestored?: () => void
 }

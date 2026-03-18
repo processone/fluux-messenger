@@ -41,8 +41,8 @@ function getHatColors(hat: { uri: string; hue?: number }) {
 interface RoomViewProps {
   onBack?: () => void
   // Focus zone refs for Tab cycling
-  mainContentRef?: RefObject<HTMLElement>
-  composerRef?: RefObject<HTMLElement>
+  mainContentRef?: RefObject<HTMLElement | null>
+  composerRef?: RefObject<HTMLElement | null>
   // Occupant panel state (lifted to parent for persistence across view switches)
   showOccupants?: boolean
   onShowOccupantsChange?: (show: boolean) => void
@@ -366,7 +366,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
           <RoomMessageInput
             ref={composerHandleRef}
             room={activeRoom}
-            textareaRef={composerRef as React.RefObject<HTMLTextAreaElement>}
+            textareaRef={composerRef as React.RefObject<HTMLTextAreaElement | null>}
             sendMessage={sendMessage}
             sendCorrection={sendCorrection}
             retractMessage={retractMessage}
@@ -588,7 +588,7 @@ const RoomMessageList = memo(function RoomMessageList({
 }: {
   messages: RoomMessage[]
   messagesById: Map<string, RoomMessage>
-  scrollerRef: React.RefObject<HTMLElement>
+  scrollerRef: React.RefObject<HTMLElement | null>
   isAtBottomRef: React.MutableRefObject<boolean>
   room: Room
   contactsByJid: Map<string, Contact>
@@ -1137,7 +1137,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
 
 interface RoomMessageInputProps {
   room: Room
-  textareaRef?: React.RefObject<HTMLTextAreaElement>
+  textareaRef?: React.RefObject<HTMLTextAreaElement | null>
   sendMessage: (roomJid: string, body: string, replyTo?: { id: string; to: string; fallback?: { author: string; body: string } }, references?: MentionReference[], attachment?: FileAttachment) => Promise<string>
   sendCorrection: (roomJid: string, messageId: string, newBody: string, attachment?: FileAttachment) => Promise<void>
   retractMessage: (roomJid: string, messageId: string) => Promise<void>
@@ -1161,7 +1161,7 @@ interface RoomMessageInputProps {
   isConnected: boolean
 }
 
-const RoomMessageInput = React.forwardRef<MessageComposerHandle, RoomMessageInputProps>(function RoomMessageInput({
+function RoomMessageInput({
   room,
   textareaRef,
   sendMessage,
@@ -1185,7 +1185,8 @@ const RoomMessageInput = React.forwardRef<MessageComposerHandle, RoomMessageInpu
   onRemovePendingAttachment,
   processLinkPreview,
   isConnected,
-}, ref) {
+  ref,
+}: RoomMessageInputProps & { ref?: React.Ref<MessageComposerHandle> }) {
   const { t } = useTranslation()
   const { setDraft, getDraft, clearDraft, clearFirstNewMessageId } = useRoomActive()
 
@@ -1407,7 +1408,7 @@ const RoomMessageInput = React.forwardRef<MessageComposerHandle, RoomMessageInpu
 
   // Custom input renderer with mention highlighting
   const renderMentionInput = useCallback(({ inputRef, mergedRef, value, onChange, onKeyDown: baseKeyDown, onSelect, onPaste, placeholder }: {
-    inputRef: React.RefObject<HTMLTextAreaElement>
+    inputRef: React.RefObject<HTMLTextAreaElement | null>
     mergedRef: (node: HTMLTextAreaElement | null) => void
     value: string
     onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
@@ -1569,7 +1570,7 @@ const RoomMessageInput = React.forwardRef<MessageComposerHandle, RoomMessageInpu
       onEditLastMessage={onEditLastMessage}
     />
   )
-})
+}
 
 /**
  * Join prompt shown when viewing a bookmarked room that is not joined.

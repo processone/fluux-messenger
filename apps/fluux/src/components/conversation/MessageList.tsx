@@ -58,7 +58,7 @@ export interface MessageListProps<T extends BaseMessage> {
   /** Content to show while loading */
   loadingState?: ReactNode
   /** Ref to the scroll container element (for keyboard navigation) */
-  scrollerRef?: React.RefObject<HTMLElement>
+  scrollerRef?: React.RefObject<HTMLElement | null>
   /** Ref to track if scroll is at bottom (shared with keyboard navigation) */
   isAtBottomRef?: React.MutableRefObject<boolean>
   /** Callback when user scrolls to top (for lazy loading older messages) */

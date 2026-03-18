@@ -19,7 +19,7 @@ interface MessageData {
  * Bob [14:32]:
  * I'm good, thanks!
  */
-export function useMessageCopy(containerRef: RefObject<HTMLElement>) {
+export function useMessageCopy(containerRef: RefObject<HTMLElement | null>) {
   const handleCopy = useCallback((e: ClipboardEvent) => {
     const selection = window.getSelection()
     if (!selection || selection.isCollapsed) return

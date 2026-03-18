@@ -18,8 +18,8 @@ interface ChatViewProps {
   onBack?: () => void
   onSwitchToMessages?: (conversationId: string) => void
   // Focus zone refs for Tab cycling
-  mainContentRef?: RefObject<HTMLElement>
-  composerRef?: RefObject<HTMLElement>
+  mainContentRef?: RefObject<HTMLElement | null>
+  composerRef?: RefObject<HTMLElement | null>
 }
 
 export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerRef }: ChatViewProps) {
@@ -295,7 +295,7 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
       {/* Input */}
       <MessageInput
         composerRef={composerHandleRef}
-        textareaRef={composerRef as React.RefObject<HTMLTextAreaElement>}
+        textareaRef={composerRef as React.RefObject<HTMLTextAreaElement | null>}
         conversationId={activeConversation.id}
         conversationName={activeConversation.name}
         type={activeConversation.type}
@@ -368,7 +368,7 @@ const ChatMessageList = memo(function ChatMessageList({
   contactsByJid: Map<string, ContactIdentity>
   messagesById: Map<string, Message>
   typingUsers: string[]
-  scrollerRef: React.RefObject<HTMLElement>
+  scrollerRef: React.RefObject<HTMLElement | null>
   isAtBottomRef: React.MutableRefObject<boolean>
   conversationId: string
   conversationType: 'chat' | 'groupchat'
@@ -753,8 +753,8 @@ function MessageInput({
   processLinkPreview,
   onSwitchToMessages,
 }: {
-  composerRef: React.RefObject<MessageComposerHandle>
-  textareaRef?: React.RefObject<HTMLTextAreaElement>
+  composerRef: React.RefObject<MessageComposerHandle | null>
+  textareaRef?: React.RefObject<HTMLTextAreaElement | null>
   conversationId: string
   conversationName: string
   type: 'chat' | 'groupchat'

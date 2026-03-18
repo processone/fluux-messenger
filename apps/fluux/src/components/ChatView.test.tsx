@@ -302,14 +302,13 @@ vi.mock('lucide-react', () => ({
   ChevronDown: () => <span data-testid="icon-chevron-down">Down</span>,
 }))
 
-// Create hoisted mock for MessageComposer that uses forwardRef
+// Create hoisted mock for MessageComposer (React 19: ref is a regular prop)
 const { MockMessageComposer } = vi.hoisted(() => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const React = require('react')
   return {
-    MockMessageComposer: React.forwardRef(function MockMessageComposer(
+    MockMessageComposer: function MockMessageComposer(
       { placeholder, onSend }: { placeholder: string; onSend: (text: string) => void },
-      _ref: React.Ref<unknown>
     ) {
       return React.createElement('div', { 'data-testid': 'message-composer' },
         React.createElement('textarea', {
@@ -322,7 +321,7 @@ const { MockMessageComposer } = vi.hoisted(() => {
           onClick: () => onSend('test message'),
         }, 'Send')
       )
-    }),
+    },
   }
 })
 

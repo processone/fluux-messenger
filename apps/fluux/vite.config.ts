@@ -30,7 +30,11 @@ const appVersion = getVersion()
 export default defineConfig({
   base: './',
   plugins: [
-    react(),
+    react({
+      babel: {
+        plugins: ['babel-plugin-react-compiler'],
+      },
+    }),
     // Remove demo assets (public/demo/, demo.html) from production builds
     {
       name: 'strip-demo',

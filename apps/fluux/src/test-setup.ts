@@ -18,35 +18,6 @@ vi.mock('@/utils/renderLoopDetector', () => ({
   getRenderStats: vi.fn(() => ({})),
 }))
 
-// Mock react-virtuoso for tests (it requires DOM APIs not available in jsdom)
-// Use vi.hoisted() to ensure React is available when the mock factory runs
-const { mockVirtuoso } = vi.hoisted(() => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const React = require('react')
-  return {
-    // Use forwardRef to properly accept refs passed from VirtualizedMessageList
-    mockVirtuoso: React.forwardRef(({ data, itemContent, components }: {
-      data: unknown[]
-      itemContent: (index: number, item: unknown) => React.ReactNode
-      components?: { Footer?: React.ComponentType }
-    }, _ref: React.Ref<unknown>) => {
-      const Footer = components?.Footer
-      return React.createElement(
-        'div',
-        { 'data-testid': 'virtuoso-list' },
-        data.map((item: unknown, index: number) =>
-          React.createElement('div', { key: index }, itemContent(index, item))
-        ),
-        Footer && React.createElement(Footer)
-      )
-    }),
-  }
-})
-
-vi.mock('react-virtuoso', () => ({
-  Virtuoso: mockVirtuoso,
-}))
-
 // Initialize i18n for tests (silences useTranslation warnings)
 void i18n.use(initReactI18next).init({
   lng: 'en',
