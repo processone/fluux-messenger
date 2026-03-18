@@ -2665,4 +2665,140 @@ describe('XMPPClient Connection', () => {
       expect(elapsed).toBeLessThan(1000)
     })
   })
+
+  describe('SM state preservation on dead socket', () => {
+    beforeEach(async () => {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+      mockStores.connection.getStatus.mockReturnValue('online')
+    })
+
+    it('should capture SM state into cache before nulling xmpp on unexpected disconnect', () => {
+      // Simulate SM being enabled with valid state
+      mockXmppClientInstance.streamManagement.id = 'sm-abc123'
+      mockXmppClientInstance.streamManagement.enabled = true
+      mockXmppClientInstance.streamManagement.inbound = 42
+
+      // Trigger unexpected disconnect — the disconnect handler captures SM state
+      // before nulling xmpp and scheduling reconnect
+      mockXmppClientInstance._emit('disconnect', { clean: false })
+
+      // SM state should be preserved via cache and accessible after socket death
+      const smState = xmppClient.getStreamManagementState()
+      expect(smState).not.toBeNull()
+      expect(smState?.id).toBe('sm-abc123')
+      expect(smState?.inbound).toBe(42)
+    })
+
+    it('should return null SM state when SM was never enabled', () => {
+      // SM id stays null (default)
+      mockXmppClientInstance._emit('disconnect', { clean: false })
+
+      const smState = xmppClient.getStreamManagementState()
+      expect(smState).toBeNull()
+    })
+  })
+
+  describe('SM nonza-based cache population', () => {
+    it('should populate SM cache when <enabled/> nonza is received', async () => {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+
+      // Simulate SM being enabled at xmpp.js level (sets sm.id)
+      mockXmppClientInstance.streamManagement.id = 'sm-new-session'
+      mockXmppClientInstance.streamManagement.enabled = true
+      mockXmppClientInstance.streamManagement.inbound = 0
+
+      // Fire <enabled/> nonza (this is what the server sends)
+      const enabledNonza = createMockElement('enabled', {
+        xmlns: 'urn:xmpp:sm:3',
+        id: 'sm-new-session',
+        max: '600',
+      })
+      mockXmppClientInstance._emit('nonza', enabledNonza)
+
+      // Then fire online to complete connection
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      // SM state should be cached now
+      const smState = xmppClient.getStreamManagementState()
+      expect(smState).not.toBeNull()
+      expect(smState?.id).toBe('sm-new-session')
+    })
+
+    it('should populate SM cache when <resumed/> nonza is received', async () => {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+
+      // Simulate SM resume at xmpp.js level
+      mockXmppClientInstance.streamManagement.id = 'sm-resumed-session'
+      mockXmppClientInstance.streamManagement.enabled = true
+      mockXmppClientInstance.streamManagement.inbound = 15
+
+      // Fire <resumed/> nonza
+      const resumedNonza = createMockElement('resumed', {
+        xmlns: 'urn:xmpp:sm:3',
+        previd: 'sm-resumed-session',
+        h: '15',
+      })
+      mockXmppClientInstance._emit('nonza', resumedNonza)
+      await connectPromise
+
+      // SM state should be cached
+      const smState = xmppClient.getStreamManagementState()
+      expect(smState).not.toBeNull()
+      expect(smState?.id).toBe('sm-resumed-session')
+    })
+
+    it('should preserve SM state through dead-socket → reconnect cycle', async () => {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+
+      // Simulate SM enable: xmpp.js sets sm.id, then server sends <enabled/>
+      mockXmppClientInstance.streamManagement.id = 'sm-cycle-test'
+      mockXmppClientInstance.streamManagement.enabled = true
+      mockXmppClientInstance.streamManagement.inbound = 0
+
+      const enabledNonza = createMockElement('enabled', {
+        xmlns: 'urn:xmpp:sm:3',
+        id: 'sm-cycle-test',
+        max: '600',
+      })
+      mockXmppClientInstance._emit('nonza', enabledNonza)
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      // Simulate receiving some stanzas (inbound counter advances)
+      mockXmppClientInstance.streamManagement.inbound = 25
+
+      // Socket dies unexpectedly
+      mockStores.connection.getStatus.mockReturnValue('online')
+      mockXmppClientInstance._emit('disconnect', { clean: false })
+
+      // SM state should survive: captured by handleDeadSocket from live client
+      const smState = xmppClient.getStreamManagementState()
+      expect(smState).not.toBeNull()
+      expect(smState?.id).toBe('sm-cycle-test')
+      expect(smState?.inbound).toBe(25)
+    })
+  })
 })

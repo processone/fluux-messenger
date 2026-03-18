@@ -989,6 +989,11 @@ export class Connection extends BaseModule {
       this.sendMachineEvent({ type: 'SOCKET_DIED' }, `handleDeadSocket:${source}`)
     }
 
+    // Capture SM state into cache BEFORE nulling the client reference.
+    // This ensures the cache has the latest sm.id + inbound counter
+    // for session resumption in attemptReconnect().
+    this.smPersistence.getState(this.xmpp)
+
     // IMPORTANT: Null the client reference SYNCHRONOUSLY before any async operations.
     // This prevents a race condition where the old client's 'online' event fires
     // during cleanup, causing handleConnectionSuccess to run and set status='online'
@@ -1246,46 +1251,9 @@ export class Connection extends BaseModule {
       onConnected(isResumption)
     }
 
-    // Listen for SM events
+    // Listen for SM fail events (stanzas lost during resume or send)
     const sm = this.xmpp.streamManagement as any
     if (sm?.on) {
-      // SM successfully enabled (new session)
-      sm.on('enabled', () => {
-        const smId = sm.id ? sm.id.slice(0, 8) + '...' : 'none'
-        const smMax = sm.max != null ? `${sm.max}s` : 'unknown'
-        this.stores.console.addEvent(`Stream Management enabled (id: ${smId})`, 'sm')
-        logInfo(`SM enabled (id: ${smId}, server max: ${smMax})`)
-        // New session means no pending resume, so any future 'fail' events are real failures
-        this.smResumeCompleted = true
-        // Cache SM state for reconnection (survives socket death)
-        if (sm.id) {
-          this.smPersistence.updateCache(sm.id, sm.inbound || 0)
-          // Persist to storage for session resumption across page reloads
-          if (this.credentials?.jid) {
-            void this.smPersistence.persist(this.credentials.jid, this.credentials.resource || '')
-          }
-        }
-      })
-      // SM session successfully resumed (from xmpp.js plugin)
-      sm.on('resumed', () => {
-        this.stores.console.addEvent('Stream Management session resumed', 'sm')
-        logInfo(`SM session resumed (id: ${sm.id ? sm.id.slice(0, 8) + '...' : 'none'}, h: ${sm.inbound ?? 0})`)
-        // Mark resume as completed - any 'fail' events after this are for new stanzas, not resume failures
-        this.smResumeCompleted = true
-        // Update cached SM state (survives socket death for next reconnection)
-        if (sm.id) {
-          this.smPersistence.updateCache(sm.id, sm.inbound || 0)
-          // Persist to storage for session resumption across page reloads
-          if (this.credentials?.jid) {
-            void this.smPersistence.persist(this.credentials.jid, this.credentials.resource || '')
-          }
-        }
-        handleResult(true)
-      })
-      // Listen for SM resumption failure - called once per unacknowledged stanza
-      // IMPORTANT: This fires for stanzas that were in the queue BEFORE resume,
-      // not for stanzas sent after a successful resume. If smResumeCompleted is true,
-      // these are stanzas that failed to send for other reasons (e.g., socket died).
       sm.on('fail', (stanza: unknown) => {
         const stanzaStr = stanza instanceof Error ? stanza.message : String(stanza)
         if (!this.smResumeCompleted) {
@@ -1299,31 +1267,51 @@ export class Connection extends BaseModule {
       })
     }
 
-    // Also listen for <resumed/> stanza directly, since xmpp.js's SM plugin
-    // may not emit 'resumed' event when we manually hydrate SM state.
-    // We also need to manually update the SM plugin state so getStreamManagementState() works.
-    // NOTE: We use setTimeout to run AFTER xmpp.js's own SM plugin processing,
-    // which otherwise resets the state after our update.
+    // Listen for SM nonzas directly (<enabled/> and <resumed/>).
+    // xmpp.js's SM plugin does NOT emit 'enabled' or 'resumed' events on its
+    // EventEmitter when we manually hydrate SM state, so we intercept the raw
+    // stanzas to reliably update our cache and persistence.
     ;(this.xmpp as any).on('nonza', (nonza: Element) => {
-      if (nonza.is('resumed', 'urn:xmpp:sm:3')) {
+      if (nonza.is('enabled', 'urn:xmpp:sm:3')) {
+        // SM successfully enabled (new session)
+        const smId = nonza.attrs.id ? String(nonza.attrs.id).slice(0, 8) + '...' : 'none'
+        const smMax = nonza.attrs.max != null ? `${nonza.attrs.max}s` : 'unknown'
+        this.stores.console.addEvent(`Stream Management enabled (id: ${smId})`, 'sm')
+        logInfo(`SM enabled (id: ${smId}, server max: ${smMax})`)
+        // New session means no pending resume, so any future 'fail' events are real failures
+        this.smResumeCompleted = true
+        // Cache SM state for reconnection (survives socket death).
+        // Read from the live SM object since xmpp.js has already processed the attrs.
+        const smObj = this.xmpp?.streamManagement as any
+        if (smObj?.id) {
+          this.smPersistence.updateCache(smObj.id, smObj.inbound || 0)
+          if (this.credentials?.jid) {
+            void this.smPersistence.persist(this.credentials.jid, this.credentials.resource || '')
+          }
+        }
+      } else if (nonza.is('resumed', 'urn:xmpp:sm:3')) {
+        // SM session successfully resumed
         const previd = nonza.attrs.previd as string
         const inbound = this.xmpp?.streamManagement ? (this.xmpp.streamManagement as any).inbound : 0
         this.stores.console.addEvent(`Stream Management session resumed (id: ${previd.slice(0, 8)}...)`, 'sm')
+        logInfo(`SM session resumed (id: ${previd.slice(0, 8)}..., h: ${inbound})`)
+        // Mark resume as completed - any 'fail' events after this are for new stanzas, not resume failures
+        this.smResumeCompleted = true
 
         // Update cached SM state (survives socket death for next reconnection)
         this.smPersistence.updateCache(previd, inbound)
-        // Persist to storage for session resumption across page reloads
         if (this.credentials?.jid) {
           void this.smPersistence.persist(this.credentials.jid, this.credentials.resource || '')
         }
 
-        // Delay to run after xmpp.js's SM plugin finishes processing
+        // Delay to run after xmpp.js's SM plugin finishes processing,
+        // which otherwise resets the state after our update.
         setTimeout(() => {
-          const sm = this.xmpp?.streamManagement as any
-          if (sm) {
-            sm.id = previd
-            sm.enabled = true
-            sm.inbound = inbound // Preserve the inbound counter
+          const smObj = this.xmpp?.streamManagement as any
+          if (smObj) {
+            smObj.id = previd
+            smObj.enabled = true
+            smObj.inbound = inbound
           }
         }, 0)
 
@@ -1644,6 +1632,9 @@ export class Connection extends BaseModule {
         this.stores.console.addEvent('Connection lost unexpectedly, will reconnect', 'connection')
         logInfo('Unexpected disconnect, initiating reconnect')
         this.sendMachineEvent({ type: 'SOCKET_DIED' }, 'disconnect:unexpected')
+
+        // Capture SM state into cache BEFORE nulling the client reference.
+        this.smPersistence.getState(this.xmpp)
 
         // Null the client reference synchronously to prevent race conditions:
         // - verifyConnection() may be awaiting and will see xmpp=null, returning false fast

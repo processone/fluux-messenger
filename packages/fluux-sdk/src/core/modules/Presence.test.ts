@@ -1377,8 +1377,13 @@ describe('XMPPClient Presence', () => {
         skipDiscovery: true,
       })
 
-      // Emit 'resumed' event (SM resume successful)
-      mockXmppClientInstance._emitSM('resumed')
+      // Emit <resumed/> nonza (SM resume successful)
+      const resumedNonza = createMockElement('resumed', {
+        xmlns: 'urn:xmpp:sm:3',
+        previd: 'sm-session-123',
+        h: '5',
+      })
+      mockXmppClientInstance._emit('nonza', resumedNonza)
       await connectPromise
       await waitForAsync()
 
@@ -1405,7 +1410,12 @@ describe('XMPPClient Presence', () => {
         skipDiscovery: true,
       })
 
-      mockXmppClientInstance._emitSM('resumed')
+      const resumedNonza2 = createMockElement('resumed', {
+        xmlns: 'urn:xmpp:sm:3',
+        previd: 'sm-session-123',
+        h: '5',
+      })
+      mockXmppClientInstance._emit('nonza', resumedNonza2)
       await connectPromise
       await waitForAsync()
 

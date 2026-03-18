@@ -767,8 +767,13 @@ describe('XMPPClient', () => {
         skipDiscovery: true,
       })
 
-      // SM resume succeeded - trigger 'resumed' event (NOT 'online')
-      mockClientWithSM._emitSM('resumed')
+      // SM resume succeeded - emit <resumed/> nonza (the nonza listener detects resume)
+      const resumedNonza = createMockElement('resumed', {
+        xmlns: 'urn:xmpp:sm:3',
+        previd: 'sm-id-123',
+        h: '5',
+      })
+      mockClientWithSM._emit('nonza', resumedNonza)
 
       await connectPromise
 
@@ -848,8 +853,13 @@ describe('XMPPClient', () => {
         skipDiscovery: true,
       })
 
-      // SM resume succeeded - only 'resumed' fires, NOT 'online'
-      mockClient1._emitSM('resumed')
+      // SM resume succeeded - emit <resumed/> nonza (NOT 'online')
+      const resumedNonza = createMockElement('resumed', {
+        xmlns: 'urn:xmpp:sm:3',
+        previd: 'same-sm-id',
+        h: '5',
+      })
+      mockClient1._emit('nonza', resumedNonza)
       await promise1
 
       expect(stores1.connection.setStatus).toHaveBeenCalledWith('online')
