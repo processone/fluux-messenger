@@ -401,7 +401,7 @@ export function ContactProfileView({
                     {t('common.cancel')}
                   </button>
                   <button
-                    onClick={() => { blockJid(contact.jid); setShowBlockConfirm(false) }}
+                    onClick={() => { void blockJid(contact.jid); setShowBlockConfirm(false) }}
                     className="flex-1 px-3 py-2 bg-fluux-red hover:bg-fluux-red/80 text-white rounded transition-colors"
                   >
                     {t('contacts.block')}

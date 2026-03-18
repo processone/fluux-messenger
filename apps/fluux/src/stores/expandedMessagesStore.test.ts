@@ -1,19 +1,19 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useExpandedMessagesStore } from './expandedMessagesStore'
+import { expandedMessagesStore } from './expandedMessagesStore'
 
 describe('expandedMessagesStore', () => {
   beforeEach(() => {
     // Reset store state before each test
-    useExpandedMessagesStore.getState().clear()
+    expandedMessagesStore.getState().clear()
   })
 
   it('should start with empty expanded set', () => {
-    const { expandedIds } = useExpandedMessagesStore.getState()
+    const { expandedIds } = expandedMessagesStore.getState()
     expect(expandedIds.size).toBe(0)
   })
 
   it('should expand a message', () => {
-    const { expand, isExpanded } = useExpandedMessagesStore.getState()
+    const { expand, isExpanded } = expandedMessagesStore.getState()
 
     expand('msg-1')
 
@@ -22,7 +22,7 @@ describe('expandedMessagesStore', () => {
   })
 
   it('should collapse a message', () => {
-    const { expand, collapse, isExpanded } = useExpandedMessagesStore.getState()
+    const { expand, collapse, isExpanded } = expandedMessagesStore.getState()
 
     expand('msg-1')
     expect(isExpanded('msg-1')).toBe(true)
@@ -32,7 +32,7 @@ describe('expandedMessagesStore', () => {
   })
 
   it('should toggle a message', () => {
-    const { toggle, isExpanded } = useExpandedMessagesStore.getState()
+    const { toggle, isExpanded } = expandedMessagesStore.getState()
 
     // Initially collapsed
     expect(isExpanded('msg-1')).toBe(false)
@@ -47,7 +47,7 @@ describe('expandedMessagesStore', () => {
   })
 
   it('should track multiple messages independently', () => {
-    const { expand, collapse, isExpanded } = useExpandedMessagesStore.getState()
+    const { expand, collapse, isExpanded } = expandedMessagesStore.getState()
 
     expand('msg-1')
     expand('msg-2')
@@ -65,7 +65,7 @@ describe('expandedMessagesStore', () => {
   })
 
   it('should clear all expanded messages', () => {
-    const { expand, clear, isExpanded } = useExpandedMessagesStore.getState()
+    const { expand, clear, isExpanded } = expandedMessagesStore.getState()
 
     expand('msg-1')
     expand('msg-2')
@@ -79,7 +79,7 @@ describe('expandedMessagesStore', () => {
   })
 
   it('should handle collapsing non-expanded message gracefully', () => {
-    const { collapse, isExpanded } = useExpandedMessagesStore.getState()
+    const { collapse, isExpanded } = expandedMessagesStore.getState()
 
     // Should not throw
     collapse('non-existent')

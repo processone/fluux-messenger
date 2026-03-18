@@ -1,16 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, act } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { IconRailNavLink } from './IconRailNavLink'
 import { MessageCircle, Hash } from 'lucide-react'
 
 // Track location to verify active state is derived from URL
-let currentLocation: { pathname: string } = { pathname: '/' }
+const currentLocation = { current: { pathname: '/' } }
 
 function LocationTracker() {
   const location = useLocation()
-  currentLocation = { pathname: location.pathname }
+  useEffect(() => {
+    currentLocation.current = { pathname: location.pathname }
+  })
   return null
 }
 
@@ -29,7 +31,7 @@ function createWrapper(initialPath = '/') {
 describe('IconRailNavLink', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    currentLocation = { pathname: '/' }
+    currentLocation.current = { pathname: '/' }
   })
 
   describe('rendering', () => {
@@ -261,13 +263,13 @@ describe('IconRailNavLink', () => {
       )
 
       // Location before click
-      expect(currentLocation.pathname).toBe('/rooms')
+      expect(currentLocation.current.pathname).toBe('/rooms')
 
       fireEvent.click(screen.getByRole('button'))
 
       // Location should NOT change - we're using onClick, not NavLink
       // The parent component handles actual navigation
-      expect(currentLocation.pathname).toBe('/rooms')
+      expect(currentLocation.current.pathname).toBe('/rooms')
 
       // But onNavigate should have been called
       expect(onNavigate).toHaveBeenCalledWith('messages')

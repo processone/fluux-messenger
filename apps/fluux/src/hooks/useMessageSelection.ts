@@ -13,6 +13,8 @@ interface UseMessageSelectionOptions {
   isHistoryComplete?: boolean
   /** Callback when user presses Enter on a selected message (for toggling expand/collapse) */
   onEnterPressed?: (messageId: string) => void
+  /** Callback when keyboard navigation starts (e.g., to disable auto-scroll) */
+  onKeyboardNavigate?: () => void
 }
 
 /**
@@ -37,7 +39,7 @@ export function useMessageSelection<T extends MessageLike>(
   isAtBottomRef: RefObject<boolean>,
   options?: UseMessageSelectionOptions
 ) {
-  const { onReachedFirstMessage, isLoadingOlder, isHistoryComplete } = options ?? {}
+  const { onReachedFirstMessage, isLoadingOlder, isHistoryComplete, onKeyboardNavigate } = options ?? {}
   // Currently selected message ID
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null)
 
@@ -86,28 +88,13 @@ export function useMessageSelection<T extends MessageLike>(
 
   // Scroll selected message into view when keyboard navigating
   useEffect(() => {
-    if (selectedMessageId && scrollRef.current) {
+    if (selectedMessageId) {
       const element = document.querySelector(`[data-message-id="${selectedMessageId}"]`) as HTMLElement
       if (element) {
-        const container = scrollRef.current
-        const elementRect = element.getBoundingClientRect()
-        const containerRect = container.getBoundingClientRect()
-
-        // Calculate element position relative to container's visible area
-        const elementTopRelative = elementRect.top - containerRect.top
-        const elementBottomRelative = elementRect.bottom - containerRect.top
-
-        // Scroll up if element is above visible area
-        if (elementTopRelative < 0) {
-          container.scrollTop += elementTopRelative - 10
-        }
-        // Scroll down if element is below visible area
-        else if (elementBottomRelative > containerRect.height) {
-          container.scrollTop += elementBottomRelative - containerRect.height + 10
-        }
+        element.scrollIntoView({ block: 'nearest' })
       }
     }
-  }, [selectedMessageId, scrollRef])
+  }, [selectedMessageId])
 
   // Find the index of the last visible message in the scroll container (start from bottom)
   const findLastVisibleMessageIndex = () => {
@@ -151,10 +138,8 @@ export function useMessageSelection<T extends MessageLike>(
     e.preventDefault()
     e.stopPropagation() // Prevent event from bubbling
 
-    // Disable auto-scroll to bottom when keyboard navigating
-    if (isAtBottomRef.current !== undefined) {
-      (isAtBottomRef as { current: boolean }).current = false
-    }
+    // Notify caller that keyboard navigation started (e.g., to disable auto-scroll)
+    onKeyboardNavigate?.()
 
     // Set cooldown to ignore mouse events during/after scroll (300ms)
     keyboardCooldownRef.current = Date.now() + 300

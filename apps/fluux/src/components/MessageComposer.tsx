@@ -495,7 +495,7 @@ export function MessageComposer({
     const hasTextContent = types.includes('text/plain') || types.includes('text/html')
     if (!hasTextContent) {
       e.preventDefault()
-      import('@/utils/nativeClipboard').then(({ readClipboardImage }) =>
+      void import('@/utils/nativeClipboard').then(({ readClipboardImage }) =>
         readClipboardImage().then((file) => {
           if (file) onFileSelect(file)
         })

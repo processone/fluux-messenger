@@ -16,8 +16,6 @@ interface PendingNavigation {
   target: string
   timestamp: number
 }
-let pendingNavigation: PendingNavigation | null = null
-
 // Time window (ms) to consider a pending navigation valid after app activation
 const NOTIFICATION_CLICK_WINDOW = 3000
 
@@ -33,6 +31,7 @@ export function useDesktopNotifications(): void {
   const { navigateToConversation, navigateToRoom } = useNavigateToTarget()
   const permissionGranted = useNotificationPermission()
   const { presenceStatus } = usePresence()
+  const pendingNavigation = useRef<PendingNavigation | null>(null)
 
   // Refs for stable access in async callbacks (useNavigateToTarget uses refs internally)
   const navigateToConversationRef = useRef(navigateToConversation)
@@ -56,22 +55,22 @@ export function useDesktopNotifications(): void {
 
     const handleVisibilityChange = () => {
       if (document.visibilityState !== 'visible') return
-      if (!pendingNavigation) return
+      if (!pendingNavigation.current) return
 
-      const elapsed = Date.now() - pendingNavigation.timestamp
+      const elapsed = Date.now() - pendingNavigation.current.timestamp
       if (elapsed > NOTIFICATION_CLICK_WINDOW) {
         // Too old, user probably just switched to the app normally
-        pendingNavigation = null
+        pendingNavigation.current = null
         return
       }
 
       // Navigate to the pending target
-      if (pendingNavigation.type === 'conversation') {
-        navigateToConversationRef.current(pendingNavigation.target)
+      if (pendingNavigation.current.type === 'conversation') {
+        navigateToConversationRef.current(pendingNavigation.current.target)
       } else {
-        navigateToRoomRef.current(pendingNavigation.target)
+        navigateToRoomRef.current(pendingNavigation.current.target)
       }
-      pendingNavigation = null
+      pendingNavigation.current = null
     }
 
     document.addEventListener('visibilitychange', handleVisibilityChange)
@@ -108,7 +107,7 @@ export function useDesktopNotifications(): void {
 
     if (isTauri) {
       // Set pending navigation for app activation handler (macOS workaround)
-      pendingNavigation = {
+      pendingNavigation.current = {
         type: 'conversation',
         target: conv.id,
         timestamp: Date.now(),
@@ -164,7 +163,7 @@ export function useDesktopNotifications(): void {
 
     if (isTauri) {
       // Set pending navigation for app activation handler (macOS workaround)
-      pendingNavigation = {
+      pendingNavigation.current = {
         type: 'room',
         target: room.jid,
         timestamp: Date.now(),

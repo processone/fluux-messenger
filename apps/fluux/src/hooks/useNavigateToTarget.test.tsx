@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { useNavigateToTarget } from './useNavigateToTarget'
 
 // Shared mock state that tests can modify
@@ -38,11 +38,13 @@ vi.mock('@tauri-apps/plugin-notification', () => ({
 }))
 
 // Track location changes
-let currentLocation: { pathname: string; search: string } = { pathname: '/', search: '' }
+const currentLocation = { current: { pathname: '/', search: '' } }
 
 function LocationTracker() {
   const location = useLocation()
-  currentLocation = { pathname: location.pathname, search: location.search }
+  useEffect(() => {
+    currentLocation.current = { pathname: location.pathname, search: location.search }
+  })
   return null
 }
 
@@ -61,7 +63,7 @@ function createWrapper(initialPath = '/') {
 describe('useNavigateToTarget', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    currentLocation = { pathname: '/', search: '' }
+    currentLocation.current = { pathname: '/', search: '' }
     mockState.setActiveConversation = vi.fn()
     mockState.setActiveRoom = vi.fn()
   })
@@ -76,7 +78,7 @@ describe('useNavigateToTarget', () => {
         result.current.navigateToConversation('alice@example.com')
       })
 
-      expect(currentLocation.pathname).toBe('/messages/alice%40example.com')
+      expect(currentLocation.current.pathname).toBe('/messages/alice%40example.com')
       expect(mockState.setActiveConversation).toHaveBeenCalledWith('alice@example.com')
     })
 
@@ -89,7 +91,7 @@ describe('useNavigateToTarget', () => {
         result.current.navigateToConversation('bob@example.com')
       })
 
-      expect(currentLocation.pathname).toBe('/messages/bob%40example.com')
+      expect(currentLocation.current.pathname).toBe('/messages/bob%40example.com')
       expect(mockState.setActiveConversation).toHaveBeenCalledWith('bob@example.com')
     })
 
@@ -103,7 +105,7 @@ describe('useNavigateToTarget', () => {
       })
 
       // URL should be properly encoded
-      expect(currentLocation.pathname).toContain('/messages/')
+      expect(currentLocation.current.pathname).toContain('/messages/')
       expect(mockState.setActiveConversation).toHaveBeenCalledWith('user+tag@example.com/resource')
     })
   })
@@ -118,7 +120,7 @@ describe('useNavigateToTarget', () => {
         result.current.navigateToRoom('general@conference.example.com')
       })
 
-      expect(currentLocation.pathname).toBe('/rooms/general%40conference.example.com')
+      expect(currentLocation.current.pathname).toBe('/rooms/general%40conference.example.com')
       expect(mockState.setActiveRoom).toHaveBeenCalledWith('general@conference.example.com')
     })
 
@@ -131,7 +133,7 @@ describe('useNavigateToTarget', () => {
         result.current.navigateToRoom('dev@conference.example.com')
       })
 
-      expect(currentLocation.pathname).toBe('/rooms/dev%40conference.example.com')
+      expect(currentLocation.current.pathname).toBe('/rooms/dev%40conference.example.com')
       expect(mockState.setActiveRoom).toHaveBeenCalledWith('dev@conference.example.com')
     })
   })

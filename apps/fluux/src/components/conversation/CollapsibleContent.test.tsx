@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { CollapsibleContent } from './CollapsibleContent'
-import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
+import { expandedMessagesStore } from '@/stores/expandedMessagesStore'
 
 // Mock i18n
 vi.mock('react-i18next', () => ({
@@ -35,7 +35,7 @@ vi.stubGlobal('ResizeObserver', MockResizeObserver)
 describe('CollapsibleContent', () => {
   beforeEach(() => {
     // Reset store state before each test
-    useExpandedMessagesStore.getState().clear()
+    expandedMessagesStore.getState().clear()
   })
 
   it('should render children normally when content is short', () => {
@@ -121,13 +121,13 @@ describe('CollapsibleContent', () => {
     )
 
     // Initially not expanded
-    expect(useExpandedMessagesStore.getState().isExpanded('msg-1')).toBe(false)
+    expect(expandedMessagesStore.getState().isExpanded('msg-1')).toBe(false)
 
     // Click to expand
     fireEvent.click(screen.getByText('Show more'))
 
     // Store should be updated
-    expect(useExpandedMessagesStore.getState().isExpanded('msg-1')).toBe(true)
+    expect(expandedMessagesStore.getState().isExpanded('msg-1')).toBe(true)
   })
 
   it('should read initial expanded state from store', () => {
@@ -139,7 +139,7 @@ describe('CollapsibleContent', () => {
     })
 
     // Pre-expand in store
-    useExpandedMessagesStore.getState().expand('msg-1')
+    expandedMessagesStore.getState().expand('msg-1')
 
     render(
       <CollapsibleContent messageId="msg-1">

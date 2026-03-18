@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { useViewNavigation } from './useViewNavigation'
 
 // Use vi.hoisted() so mock functions are available when vi.mock factory runs
@@ -90,17 +90,19 @@ vi.mock('@fluux/sdk/react', () => ({
 }))
 
 // Track location changes
-let currentLocation: { pathname: string } = { pathname: '/' }
+const currentLocation = { current: { pathname: '/' } }
 
 function LocationTracker() {
   const location = useLocation()
-  currentLocation = { pathname: location.pathname }
+  useEffect(() => {
+    currentLocation.current = { pathname: location.pathname }
+  })
   return null
 }
 
 // Helper to decode URI component for pathname assertions
 function getDecodedPath() {
-  return decodeURIComponent(currentLocation.pathname)
+  return decodeURIComponent(currentLocation.current.pathname)
 }
 
 // Router wrapper for testing
@@ -118,7 +120,7 @@ function createWrapper(initialPath = '/messages') {
 describe('useViewNavigation', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    currentLocation = { pathname: '/' }
+    currentLocation.current = { pathname: '/' }
     // Reset mock state using setter
     setMockState({
       activeConversationId: null,
@@ -162,7 +164,7 @@ describe('useViewNavigation', () => {
         result.current.navigateToView('messages')
       })
 
-      expect(currentLocation.pathname).toBe('/messages')
+      expect(currentLocation.current.pathname).toBe('/messages')
       expect(mockSetActiveRoom).toHaveBeenCalledWith(null)
     })
 
@@ -175,7 +177,7 @@ describe('useViewNavigation', () => {
         result.current.navigateToView('rooms')
       })
 
-      expect(currentLocation.pathname).toBe('/rooms')
+      expect(currentLocation.current.pathname).toBe('/rooms')
       expect(mockSetActiveConversation).toHaveBeenCalledWith(null)
     })
 
@@ -188,7 +190,7 @@ describe('useViewNavigation', () => {
         result.current.navigateToView('directory')
       })
 
-      expect(currentLocation.pathname).toBe('/contacts')
+      expect(currentLocation.current.pathname).toBe('/contacts')
       expect(mockSetActiveConversation).toHaveBeenCalledWith(null)
       expect(mockSetActiveRoom).toHaveBeenCalledWith(null)
     })
@@ -202,7 +204,7 @@ describe('useViewNavigation', () => {
         result.current.navigateToView('archive')
       })
 
-      expect(currentLocation.pathname).toBe('/archive')
+      expect(currentLocation.current.pathname).toBe('/archive')
     })
 
     it('should navigate to events view', () => {
@@ -214,7 +216,7 @@ describe('useViewNavigation', () => {
         result.current.navigateToView('events')
       })
 
-      expect(currentLocation.pathname).toBe('/events')
+      expect(currentLocation.current.pathname).toBe('/events')
     })
 
     it('should navigate to admin view', () => {
@@ -226,7 +228,7 @@ describe('useViewNavigation', () => {
         result.current.navigateToView('admin')
       })
 
-      expect(currentLocation.pathname).toBe('/admin')
+      expect(currentLocation.current.pathname).toBe('/admin')
       expect(mockSetActiveConversation).toHaveBeenCalledWith(null)
       expect(mockSetActiveRoom).toHaveBeenCalledWith(null)
     })
@@ -242,7 +244,7 @@ describe('useViewNavigation', () => {
         result.current.navigateToView('settings')
       })
 
-      expect(currentLocation.pathname).toBe('/settings/profile')
+      expect(currentLocation.current.pathname).toBe('/settings/profile')
       expect(mockSetActiveConversation).toHaveBeenCalledWith(null)
       expect(mockSetActiveRoom).toHaveBeenCalledWith(null)
     })
@@ -350,7 +352,7 @@ describe('useViewNavigation', () => {
       })
 
       // Should navigate to messages without a specific conversation
-      expect(currentLocation.pathname).toBe('/messages')
+      expect(currentLocation.current.pathname).toBe('/messages')
       // setActiveConversation should not be called with a value (only called with null for clearing)
       expect(mockSetActiveConversation).not.toHaveBeenCalledWith(expect.stringContaining('@'))
     })
@@ -366,7 +368,7 @@ describe('useViewNavigation', () => {
         result.current.navigateToView('rooms')
       })
 
-      expect(currentLocation.pathname).toBe('/rooms')
+      expect(currentLocation.current.pathname).toBe('/rooms')
       // setActiveRoom should not be called with a value
       expect(mockSetActiveRoom).not.toHaveBeenCalledWith(expect.stringContaining('@'))
     })
@@ -668,7 +670,7 @@ describe('useViewNavigation', () => {
       })
 
       // Should navigate to /messages without auto-selecting a conversation
-      expect(currentLocation.pathname).toBe('/messages')
+      expect(currentLocation.current.pathname).toBe('/messages')
       // setActiveConversation should NOT be called with a JID
       expect(mockSetActiveConversation).not.toHaveBeenCalledWith('user1@example.com')
     })
@@ -690,7 +692,7 @@ describe('useViewNavigation', () => {
       })
 
       // Should navigate to /rooms without auto-selecting a room
-      expect(currentLocation.pathname).toBe('/rooms')
+      expect(currentLocation.current.pathname).toBe('/rooms')
       // setActiveRoom should NOT be called with a JID
       expect(mockSetActiveRoom).not.toHaveBeenCalledWith('room1@conference.example.com')
     })
@@ -713,7 +715,7 @@ describe('useViewNavigation', () => {
       })
 
       // Should navigate to /archive without auto-selecting
-      expect(currentLocation.pathname).toBe('/archive')
+      expect(currentLocation.current.pathname).toBe('/archive')
       // setActiveConversation should NOT be called with archived JID
       expect(mockSetActiveConversation).not.toHaveBeenCalledWith('archived@example.com')
     })
@@ -746,7 +748,7 @@ describe('useViewNavigation', () => {
       })
 
       // On mobile, should navigate to /contacts without auto-restoring the contact
-      expect(currentLocation.pathname).toBe('/contacts')
+      expect(currentLocation.current.pathname).toBe('/contacts')
     })
 
     it('should still use per-tab memory on small screen if previously selected', () => {

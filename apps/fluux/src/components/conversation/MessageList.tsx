@@ -181,8 +181,7 @@ export function MessageList<T extends BaseMessage>({
   // RENDER: Message list (always render scroll container to preserve position)
   // --------------------------------------------------------------------------
 
-  // Track whether we've shown the new message marker
-  let shownNewMarker = false
+  // No mutable tracking needed — firstNewMessageId uniquely identifies one message
 
   // Detect Mac for keyboard shortcut display
   const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0
@@ -249,8 +248,7 @@ export function MessageList<T extends BaseMessage>({
                 <DateSeparator date={group.date} />
               </div>
               {group.messages.map((msg, idx) => {
-                const showNewMarker = !shownNewMarker && firstNewMessageId === msg.id
-                if (showNewMarker) shownNewMarker = true
+                const showNewMarker = firstNewMessageId === msg.id
 
                 return (
                   <div key={msg.id} data-message-id={msg.id}>

@@ -647,7 +647,6 @@ describe('OccupantPanel', () => {
 
   describe('Ignored Users', () => {
     // Store original mock implementations to restore after each test
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let originalUseIgnoreStore: ((...args: any[]) => any) | undefined
     let originalIgnoreStoreGetState: typeof ignoreStore.getState
 

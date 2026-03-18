@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronDown, ChevronUp } from 'lucide-react'
-import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
+import { expandedMessagesStore } from '@/stores/expandedMessagesStore'
 
 /** Maximum height in pixels before content is collapsed */
 const MAX_COLLAPSED_HEIGHT = 350
@@ -39,8 +39,8 @@ export function CollapsibleContent({
   const { t } = useTranslation()
   const contentRef = useRef<HTMLDivElement>(null)
   const [needsCollapsing, setNeedsCollapsing] = useState(false)
-  const isExpanded = useExpandedMessagesStore((state) => state.isExpanded(messageId))
-  const toggle = useExpandedMessagesStore((state) => state.toggle)
+  const isExpanded = expandedMessagesStore((state) => state.isExpanded(messageId))
+  const toggle = expandedMessagesStore((state) => state.toggle)
 
   // Measure content height to determine if collapsing is needed
   useEffect(() => {

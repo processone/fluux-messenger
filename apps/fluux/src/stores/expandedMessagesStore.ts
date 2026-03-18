@@ -30,7 +30,11 @@ interface ExpandedMessagesState {
   clear: () => void
 }
 
-export const useExpandedMessagesStore = create<ExpandedMessagesState>((set, get) => ({
+// Named without 'use' prefix so it can be referenced as a plain value
+// (e.g., store.getState().toggle) without triggering the React Compiler's
+// "hooks must not be referenced as normal values" rule.
+// Use as a hook: expandedMessagesStore(selector) — Zustand stores are callable.
+export const expandedMessagesStore = create<ExpandedMessagesState>((set, get) => ({
   expandedIds: new Set(),
 
   expand: (messageId: string) => {

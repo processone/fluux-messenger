@@ -600,7 +600,7 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
         isResumptionRef.current = false
       })
     }
-  }, [status, connect, setContacts, i18n.language, addRoom, restoreOwnAvatarFromCache, setHttpUploadService, setOwnNickname, setServerInfo, updateOwnResource])
+  }, [status, connect, setContacts, i18n.language, addRoom, restoreOwnAvatarFromCache, setHttpUploadService, setOwnNickname, setServerInfo, updateOwnResource, claimConnection])
 
   // Note: Presence sync is now handled automatically by XState's native persistence
   // in XMPPProvider. The machine state is restored from sessionStorage on init.

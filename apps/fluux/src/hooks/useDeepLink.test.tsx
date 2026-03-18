@@ -1,7 +1,7 @@
 import { describe, expect, test, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 
 // Mock the SDK hooks
 const mockSetActiveConversation = vi.fn()
@@ -109,11 +109,13 @@ vi.mock('@tauri-apps/plugin-notification', () => ({
 }))
 
 // Track location changes
-let currentLocation: { pathname: string; search: string } = { pathname: '/', search: '' }
+const currentLocation = { current: { pathname: '/', search: '' } }
 
 function LocationTracker() {
   const location = useLocation()
-  currentLocation = { pathname: location.pathname, search: location.search }
+  useEffect(() => {
+    currentLocation.current = { pathname: location.pathname, search: location.search }
+  })
   return null
 }
 
@@ -140,7 +142,7 @@ describe('useDeepLink', () => {
     mockHasConversation.mockReturnValue(false)
     mockGetCurrent.mockResolvedValue([])
     mockJoinRoom.mockResolvedValue(undefined)
-    currentLocation = { pathname: '/', search: '' }
+    currentLocation.current = { pathname: '/', search: '' }
     // Suppress "[Navigation] Failed to clear notifications" warnings in tests
     console.warn = vi.fn()
   })
@@ -216,7 +218,7 @@ describe('useDeepLink', () => {
 
       await waitFor(() => {
         // Should navigate to messages URL
-        expect(currentLocation.pathname).toBe('/messages/alice%40example.org')
+        expect(currentLocation.current.pathname).toBe('/messages/alice%40example.org')
         expect(mockSetActiveConversation).toHaveBeenCalledWith('alice@example.org')
       })
     })
@@ -240,7 +242,7 @@ describe('useDeepLink', () => {
         urlCallback!(['xmpp:bob@example.org'])
       })
 
-      expect(currentLocation.pathname).toBe('/messages/bob%40example.org')
+      expect(currentLocation.current.pathname).toBe('/messages/bob%40example.org')
       expect(mockSetActiveConversation).toHaveBeenCalledWith('bob@example.org')
     })
 
@@ -352,7 +354,7 @@ describe('useDeepLink', () => {
         undefined
       )
       // Should navigate to rooms URL
-      expect(currentLocation.pathname).toBe('/rooms/room%40conference.example.org')
+      expect(currentLocation.current.pathname).toBe('/rooms/room%40conference.example.org')
       expect(mockSetActiveRoom).toHaveBeenCalledWith('room@conference.example.org')
     })
 
@@ -430,7 +432,7 @@ describe('useDeepLink', () => {
 
       expect(mockJoinRoom).toHaveBeenCalled()
       // Should navigate to rooms URL
-      expect(currentLocation.pathname).toBe('/rooms/room%40conference.example.org')
+      expect(currentLocation.current.pathname).toBe('/rooms/room%40conference.example.org')
     })
 
     test('ignores invalid XMPP URIs', async () => {

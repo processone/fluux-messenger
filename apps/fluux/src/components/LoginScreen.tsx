@@ -233,7 +233,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
     }
 
     void autoConnect()
-  }, [isLoadingCredentials, loadedFromKeychain, jid, password, server, status, connect, i18n.language])
+  }, [isLoadingCredentials, loadedFromKeychain, jid, password, server, status, connect, i18n.language, claimConnection])
 
   const isConnecting = status === 'connecting'
   const isLoading = isLoadingCredentials || isConnecting
