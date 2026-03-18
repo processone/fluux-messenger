@@ -1401,6 +1401,120 @@ describe('XMPPClient Message', () => {
       // For chat type, client message id must be used (not stanzaId) per XEP-0461
       expect(replyEl.attrs.id).toBe('client-msg-id')
     })
+
+    it('should use client id for chat reply even when stanzaId differs significantly', async () => {
+      // Regression test for https://github.com/processone/fluux-messenger/issues/212
+      // stanza-id is server-assigned (e.g. MAM archive id) and should never be used
+      // in <reply> for chat-type messages, as other clients won't recognize it
+      await connectClient()
+
+      vi.mocked(mockStores.chat.getMessage).mockReturnValue({
+        type: 'chat',
+        id: 'a1b2c3d4-uuid-style-id',
+        stanzaId: '1766999538188692',  // numeric MAM-style stanza-id
+        conversationId: 'bob@example.com',
+        from: 'bob@example.com',
+        body: 'Check this out',
+        timestamp: new Date(),
+        isOutgoing: false,
+      })
+
+      await xmppClient.chat.sendMessage(
+        'bob@example.com',
+        'Nice!',
+        'chat',
+        { id: 'a1b2c3d4-uuid-style-id', to: 'bob@example.com', fallback: { author: 'bob', body: 'Check this out' } }
+      )
+
+      const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
+      const replyEl = sentStanza.children.find((c: any) => c.name === 'reply')
+      expect(replyEl).toBeDefined()
+      expect(replyEl.attrs.id).toBe('a1b2c3d4-uuid-style-id')
+      expect(replyEl.attrs.id).not.toBe('1766999538188692')
+    })
+  })
+
+  describe('XEP-0461 reply id selection for reactions and corrections', () => {
+    it('should use client id for chat reaction reference (not stanzaId)', async () => {
+      await connectClient()
+
+      mockStores.chat.getMessage = vi.fn().mockReturnValue({
+        type: 'chat',
+        id: 'client-msg-id',
+        stanzaId: 'server-stanza-id',
+        body: 'Hello world',
+        from: 'alice@example.com',
+      })
+
+      await xmppClient.chat.sendReaction('alice@example.com', 'client-msg-id', ['👍'], 'chat')
+
+      const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
+      const reactionsEl = sentStanza.children.find((c: any) => c.name === 'reactions')
+      expect(reactionsEl).toBeDefined()
+      // Reactions id attribute must use client id for chat type
+      expect(reactionsEl.attrs.id).toBe('client-msg-id')
+    })
+
+    it('should prefer stanzaId for groupchat reaction reference', async () => {
+      await connectClient()
+
+      mockStores.room.getMessage = vi.fn().mockReturnValue({
+        type: 'groupchat',
+        id: 'client-msg-id',
+        stanzaId: 'server-stanza-id',
+        body: 'Hello room',
+        from: 'room@conference.example.com/alice',
+      })
+
+      await xmppClient.chat.sendReaction('room@conference.example.com', 'client-msg-id', ['👍'], 'groupchat')
+
+      const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
+      const reactionsEl = sentStanza.children.find((c: any) => c.name === 'reactions')
+      expect(reactionsEl).toBeDefined()
+      expect(reactionsEl.attrs.id).toBe('server-stanza-id')
+    })
+
+    it('should use client id for chat correction reference (not stanzaId)', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.chat.getMessage).mockReturnValue({
+        type: 'chat',
+        id: 'client-msg-id',
+        stanzaId: 'server-stanza-id',
+        conversationId: 'alice@example.com',
+        from: 'me@example.com',
+        body: 'Original with typo',
+        timestamp: new Date(),
+        isOutgoing: true,
+      })
+
+      await xmppClient.chat.sendCorrection('alice@example.com', 'client-msg-id', 'Original without typo', 'chat')
+
+      const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
+      const replaceEl = sentStanza.children.find((c: any) => c.name === 'replace')
+      expect(replaceEl).toBeDefined()
+      // Correction id must use client id for chat type
+      expect(replaceEl.attrs.id).toBe('client-msg-id')
+    })
+
+    it('should prefer stanzaId for groupchat correction reference', async () => {
+      await connectClient()
+
+      mockStores.room.getMessage = vi.fn().mockReturnValue({
+        type: 'groupchat',
+        id: 'client-msg-id',
+        stanzaId: 'server-stanza-id',
+        body: 'Original with typo',
+        from: 'room@conference.example.com/me',
+      })
+
+      await xmppClient.chat.sendCorrection('room@conference.example.com', 'client-msg-id', 'Original without typo', 'groupchat')
+
+      const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
+      const replaceEl = sentStanza.children.find((c: any) => c.name === 'replace')
+      expect(replaceEl).toBeDefined()
+      expect(replaceEl.attrs.id).toBe('server-stanza-id')
+    })
   })
 
   describe('sendMessage with attachments (XEP-0066 + XEP-0428)', () => {
