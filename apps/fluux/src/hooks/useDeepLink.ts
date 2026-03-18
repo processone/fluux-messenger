@@ -6,7 +6,7 @@
  *
  * Phase 2.4: Uses React Router for navigation instead of callback handlers.
  */
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
 import { useChat, useRoom, useRoster, chatStore, type Conversation, parseXmppUri, isMucJid, getBareJid } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { useNavigateToTarget } from './useNavigateToTarget'
@@ -105,11 +105,14 @@ export function useDeepLink() {
     }
   }
 
-  const handleXmppUriSafely = (uri: string) => {
-    void handleXmppUri(uri).catch((error) => {
+  const handleXmppUriRef = useRef(handleXmppUri)
+  handleXmppUriRef.current = handleXmppUri
+
+  const handleXmppUriSafely = useCallback((uri: string) => {
+    void handleXmppUriRef.current(uri).catch((error) => {
       console.error('[DeepLink] Failed to process URI:', uri, error)
     })
-  }
+  }, [])
 
   // Set up deep link listener
   useEffect(() => {

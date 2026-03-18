@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, type ReactNode } from 'react'
+import { useState, useRef, useEffect, useCallback, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useIsMobileWeb } from '../hooks/useIsMobileWeb'
 
@@ -73,13 +73,13 @@ export function Tooltip({
     }, delay)
   }
 
-  const hideTooltip = () => {
+  const hideTooltip = useCallback(() => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current)
       timeoutRef.current = null
     }
     setIsVisible(false)
-  }
+  }, [])
 
   // Hide tooltip on scroll, window blur, or any pointer down — these events
   // can cause the trigger to move or disappear without firing mouseLeave.
@@ -181,7 +181,7 @@ export function Tooltip({
     if (effectiveDisabled && isVisible) {
       hideTooltip()
     }
-  }, [effectiveDisabled, isVisible])
+  }, [effectiveDisabled, isVisible, hideTooltip])
 
   // Cleanup timeout on unmount
   useEffect(() => {

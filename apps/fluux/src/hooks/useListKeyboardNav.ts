@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, RefObject } from 'react'
+import React, { useState, useEffect, useRef, useCallback, RefObject } from 'react'
 
 /**
  * Options for the useListKeyboardNav hook
@@ -152,8 +152,9 @@ export function useListKeyboardNav<T>({
     selectedItemIdRef.current = null
   }, [itemsKey])
 
-  // Keyboard event handler
-  const handleKeyDown = (e: KeyboardEvent) => {
+  // Keyboard event handler — stored in a ref so the effect listener is stable
+  const handleKeyDownRef = useRef<(e: KeyboardEvent) => void>(() => {})
+  handleKeyDownRef.current = (e: KeyboardEvent) => {
       if (!enabled || items.length === 0) return
 
       const activeElement = document.activeElement
@@ -277,6 +278,11 @@ export function useListKeyboardNav<T>({
         onSelect(items[selectedIndex], selectedIndex)
       }
     }
+
+  // Stable handler that delegates to the ref
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    handleKeyDownRef.current(e)
+  }, [])
 
   // Add keyboard listener
   useEffect(() => {

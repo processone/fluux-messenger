@@ -187,20 +187,16 @@ export function LoginScreen() {
   }, [error, loadedFromKeychain, isDesktopApp])
 
   // Keyboard shortcut: Cmd+, (Mac) / Ctrl+, (other) toggles server field
-  const toggleServerField = () => {
-    setShowServerField(prev => !prev)
-  }
-
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === ',' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault()
-        toggleServerField()
+        setShowServerField(prev => !prev)
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [toggleServerField])
+  }, [])
 
 
   // Auto-connect when credentials are loaded from keychain

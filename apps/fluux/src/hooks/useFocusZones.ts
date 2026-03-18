@@ -1,4 +1,4 @@
-import { useEffect, useRef, type RefObject } from 'react'
+import { useEffect, useRef, useCallback, type RefObject } from 'react'
 
 export type FocusZone = 'sidebarList' | 'mainContent' | 'composer'
 
@@ -21,23 +21,26 @@ export interface FocusZoneRefs {
  */
 export function useFocusZones(refs: FocusZoneRefs, enabled: boolean = true) {
   const currentZoneRef = useRef<FocusZone>('sidebarList')
+  const refsRef = useRef(refs)
+  refsRef.current = refs
 
   // Get the current focused zone based on active element
-  const getCurrentZone = (): FocusZone | null => {
+  const getCurrentZone = useCallback((): FocusZone | null => {
     const activeElement = document.activeElement
+    const currentRefs = refsRef.current
 
     for (const zone of ZONE_ORDER) {
-      const zoneRef = refs[zone]
+      const zoneRef = currentRefs[zone]
       if (zoneRef.current?.contains(activeElement)) {
         return zone
       }
     }
     return null
-  }
+  }, [])
 
   // Focus a specific zone
-  const focusZone = (zone: FocusZone) => {
-    const zoneRef = refs[zone]
+  const focusZone = useCallback((zone: FocusZone) => {
+    const zoneRef = refsRef.current[zone]
     if (zoneRef.current) {
       // Try to focus the zone container
       zoneRef.current.focus()
@@ -45,10 +48,10 @@ export function useFocusZones(refs: FocusZoneRefs, enabled: boolean = true) {
       return true
     }
     return false
-  }
+  }, [])
 
   // Move to the next zone
-  const focusNextZone = () => {
+  const focusNextZone = useCallback(() => {
     const currentZone = getCurrentZone() || currentZoneRef.current
     const currentIndex = ZONE_ORDER.indexOf(currentZone)
 
@@ -61,10 +64,10 @@ export function useFocusZones(refs: FocusZoneRefs, enabled: boolean = true) {
       }
     }
     return false
-  }
+  }, [getCurrentZone, focusZone])
 
   // Move to the previous zone
-  const focusPreviousZone = () => {
+  const focusPreviousZone = useCallback(() => {
     const currentZone = getCurrentZone() || currentZoneRef.current
     const currentIndex = ZONE_ORDER.indexOf(currentZone)
 
@@ -77,7 +80,7 @@ export function useFocusZones(refs: FocusZoneRefs, enabled: boolean = true) {
       }
     }
     return false
-  }
+  }, [getCurrentZone, focusZone])
 
   // Handle Tab key to cycle between zones, and Arrow keys outside zones to focus sidebar
   useEffect(() => {

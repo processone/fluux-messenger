@@ -14,7 +14,7 @@ import {
   useContext,
   useState,
   useRef,
-
+  useCallback,
   useEffect,
   type ReactNode,
   type RefObject,
@@ -87,10 +87,10 @@ export function SidebarListMenuProvider<T>({
   const pendingItemRef = useRef<T | null>(null)
 
   // Close menu
-  const close = () => {
+  const close = useCallback(() => {
     setIsOpen(false)
     setTargetItem(null)
-  }
+  }, [])
 
   // Click outside to close
   useClickOutside(menuRef, close, isOpen)

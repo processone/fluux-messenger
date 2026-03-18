@@ -15,7 +15,7 @@
  * - Images load: if at bottom, stay at bottom
  */
 
-import { useRef, useEffect, useLayoutEffect, useState } from 'react'
+import { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react'
 import { scrollStateManager } from '@/utils/scrollStateManager'
 
 // ============================================================================
@@ -257,14 +257,14 @@ export function useMessageListScroll({
   // SCROLL ACTIONS
   // ==========================================================================
 
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     scrollerRef.current?.scrollTo({ top: scrollerRef.current.scrollHeight, behavior: 'smooth' })
-  }
+  }, [])
 
-  const scrollToTop = () => {
+  const scrollToTop = useCallback(() => {
     lastLoadTimeRef.current = Date.now() // prevent auto-load trigger
     scrollerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
-  }
+  }, [])
 
   // ==========================================================================
   // LOAD OLDER MESSAGES

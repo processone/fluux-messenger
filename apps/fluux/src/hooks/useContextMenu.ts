@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useLayoutEffect } from 'react'
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react'
 import { useClickOutside } from './useClickOutside'
 
 export interface ContextMenuState {
@@ -79,7 +79,7 @@ export function useContextMenu(options: UseContextMenuOptions = {}): ContextMenu
   const clickPosition = useRef({ x: 0, y: 0 })
 
   // Close menu
-  const close = () => setIsOpen(false)
+  const close = useCallback(() => setIsOpen(false), [])
 
   // Click outside to close
   useClickOutside(menuRef, close, isOpen)

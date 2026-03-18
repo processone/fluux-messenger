@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { isUpdaterEnabled } from '@/utils/tauri'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -38,7 +38,7 @@ export function useAutoUpdate(options: UseAutoUpdateOptions = {}) {
   const [state, setState] = useState<UpdateState>(initialState)
   const [update, setUpdate] = useState<Awaited<ReturnType<typeof import('@tauri-apps/plugin-updater').check>> | null>(null)
 
-  const checkForUpdate = async () => {
+  const checkForUpdate = useCallback(async () => {
     if (!updaterEnabled) return
 
     setState(prev => ({ ...prev, checking: true, error: null }))
@@ -76,7 +76,7 @@ export function useAutoUpdate(options: UseAutoUpdateOptions = {}) {
         error: errorKey,
       }))
     }
-  }
+  }, [])
 
   const downloadAndInstall = async () => {
     if (!update) return
