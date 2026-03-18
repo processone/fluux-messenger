@@ -775,5 +775,13 @@
         "voice_request_min_interval": "Minimálna čakacia doba (v sekundách) medzi žiadosťami o hlas od toho istého návštevníka.",
         "enable_hats": "Povoliť zobrazenie odznakov vedľa mien účastníkov, zobrazujúcich špeciálne roly alebo príslušnosti.",
         "mam": "Povoliť archív správ (MAM), aby klienti mohli načítať predchádzajúce správy pri pripojení alebo opätovnom pripojení. Toto je história, ktorú účastníci vidia vo svojej chatovacej aplikácii."
+    },
+    "tabCoordination": {
+        "alreadyOpen": "Fluux is already open in another tab",
+        "alreadyOpenDescription": "Only one tab can be connected at a time to prevent message conflicts.",
+        "useHere": "Use here instead",
+        "takenOver": "Session moved to another tab",
+        "takenOverDescription": "This tab was disconnected because Fluux was opened in another tab.",
+        "reconnectHere": "Reconnect here"
     }
 }

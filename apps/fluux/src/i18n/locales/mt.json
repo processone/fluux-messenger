@@ -775,5 +775,13 @@
         "voice_request_min_interval": "Ħin minimu ta' stennija (f'sekondi) bejn talbiet ta' vuċi mill-istess viżitatur.",
         "enable_hats": "Attiva l-wiri ta' badges ħdejn l-ismijiet tal-parteċipanti, li juru rwoli jew affiljazzjonijiet speċjali.",
         "mam": "Attiva l-arkivju tal-messaġġi (MAM) biex il-klijenti jkunu jistgħu jiġbru messaġġi ta' qabel meta jingħaqdu jew jerġgħu jikkonnettjaw. Din hija l-istorja li l-parteċipanti jaraw fl-app taċ-chat tagħhom."
+    },
+    "tabCoordination": {
+        "alreadyOpen": "Fluux is already open in another tab",
+        "alreadyOpenDescription": "Only one tab can be connected at a time to prevent message conflicts.",
+        "useHere": "Use here instead",
+        "takenOver": "Session moved to another tab",
+        "takenOverDescription": "This tab was disconnected because Fluux was opened in another tab.",
+        "reconnectHere": "Reconnect here"
     }
 }

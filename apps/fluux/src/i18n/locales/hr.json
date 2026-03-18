@@ -775,5 +775,13 @@
         "voice_request_min_interval": "Minimalno vrijeme čekanja (u sekundama) između zahtjeva za govor od istog posjetitelja.",
         "enable_hats": "Omogući prikaz znački uz imena sudionika koje pokazuju posebne uloge ili pripadnosti.",
         "mam": "Omogući arhivu poruka (MAM) kako bi klijenti mogli dohvatiti prošle poruke prilikom pridruživanja ili ponovnog povezivanja. To je povijest koju sudionici vide u svojoj aplikaciji za razgovor."
+    },
+    "tabCoordination": {
+        "alreadyOpen": "Fluux is already open in another tab",
+        "alreadyOpenDescription": "Only one tab can be connected at a time to prevent message conflicts.",
+        "useHere": "Use here instead",
+        "takenOver": "Session moved to another tab",
+        "takenOverDescription": "This tab was disconnected because Fluux was opened in another tab.",
+        "reconnectHere": "Reconnect here"
     }
 }

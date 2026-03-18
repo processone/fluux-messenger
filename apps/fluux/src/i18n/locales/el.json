@@ -775,5 +775,13 @@
         "voice_request_min_interval": "Ελάχιστος χρόνος αναμονής (σε δευτερόλεπτα) μεταξύ αιτημάτων λόγου από τον ίδιο επισκέπτη.",
         "enable_hats": "Ενεργοποίηση εμφάνισης σημάτων δίπλα στα ονόματα συμμετεχόντων, που δείχνουν ειδικούς ρόλους ή συνδέσεις.",
         "mam": "Ενεργοποίηση αρχείου μηνυμάτων (MAM) ώστε οι εφαρμογές να μπορούν να ανακτούν παλαιότερα μηνύματα κατά τη σύνδεση ή επανασύνδεση. Αυτό είναι το ιστορικό που βλέπουν οι συμμετέχοντες στην εφαρμογή συνομιλίας τους."
+    },
+    "tabCoordination": {
+        "alreadyOpen": "Fluux is already open in another tab",
+        "alreadyOpenDescription": "Only one tab can be connected at a time to prevent message conflicts.",
+        "useHere": "Use here instead",
+        "takenOver": "Session moved to another tab",
+        "takenOverDescription": "This tab was disconnected because Fluux was opened in another tab.",
+        "reconnectHere": "Reconnect here"
     }
 }

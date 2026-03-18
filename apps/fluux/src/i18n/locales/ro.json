@@ -775,5 +775,13 @@
         "voice_request_min_interval": "Timp minim de așteptare (în secunde) între cererile de voce de la același vizitator.",
         "enable_hats": "Activează afișarea insignelor lângă numele participanților, arătând roluri sau afilieri speciale.",
         "mam": "Activează arhiva de mesaje (MAM) pentru ca clienții să poată obține mesajele anterioare la alăturare sau reconectare. Acesta este istoricul pe care participanții îl văd în aplicația lor de chat."
+    },
+    "tabCoordination": {
+        "alreadyOpen": "Fluux is already open in another tab",
+        "alreadyOpenDescription": "Only one tab can be connected at a time to prevent message conflicts.",
+        "useHere": "Use here instead",
+        "takenOver": "Session moved to another tab",
+        "takenOverDescription": "This tab was disconnected because Fluux was opened in another tab.",
+        "reconnectHere": "Reconnect here"
     }
 }

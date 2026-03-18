@@ -775,5 +775,13 @@
         "voice_request_min_interval": "Íos-am feithimh (i soicindí) idir iarratais chainte ón gcuairteoir céanna.",
         "enable_hats": "Cumasaigh taispeáint suaitheantais in aice le hainmneacha na rannpháirtithe, a léiríonn róil nó cleamhnachtaí speisialta.",
         "mam": "Cumasaigh cartlann teachtaireachtaí (MAM) ionas gur féidir le cliaint teachtaireachtaí roimhe seo a fháil agus iad ag dul isteach nó ag athcheangal. Seo an stair a fheiceann rannpháirtithe ina n-aip chomhrá."
+    },
+    "tabCoordination": {
+        "alreadyOpen": "Fluux is already open in another tab",
+        "alreadyOpenDescription": "Only one tab can be connected at a time to prevent message conflicts.",
+        "useHere": "Use here instead",
+        "takenOver": "Session moved to another tab",
+        "takenOverDescription": "This tab was disconnected because Fluux was opened in another tab.",
+        "reconnectHere": "Reconnect here"
     }
 }

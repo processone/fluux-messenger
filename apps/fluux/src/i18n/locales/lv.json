@@ -775,5 +775,13 @@
         "voice_request_min_interval": "Minimālais gaidīšanas laiks (sekundēs) starp viena un tā paša apmeklētāja balss pieprasījumiem.",
         "enable_hats": "Iespējot nozīmīšu attēlošanu blakus dalībnieku vārdiem, kas norāda īpašas lomas vai piederības.",
         "mam": "Iespējot ziņojumu arhīvu (MAM), lai klienti varētu iegūt iepriekšējos ziņojumus pievienojoties vai atkārtoti pieslēdzoties. Šī ir vēsture, ko dalībnieki redz savā tērzēšanas lietotnē."
+    },
+    "tabCoordination": {
+        "alreadyOpen": "Fluux is already open in another tab",
+        "alreadyOpenDescription": "Only one tab can be connected at a time to prevent message conflicts.",
+        "useHere": "Use here instead",
+        "takenOver": "Session moved to another tab",
+        "takenOverDescription": "This tab was disconnected because Fluux was opened in another tab.",
+        "reconnectHere": "Reconnect here"
     }
 }

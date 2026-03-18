@@ -775,5 +775,13 @@
         "voice_request_min_interval": "同一访客两次发言请求之间的最短等待时间（秒）。",
         "enable_hats": "启用参与者名称旁的徽章显示，展示特殊角色或隶属关系。",
         "mam": "启用消息归档（MAM），以便客户端在加入或重新连接时获取过去的消息。这是参与者在聊天应用中看到的历史记录。"
+    },
+    "tabCoordination": {
+        "alreadyOpen": "Fluux is already open in another tab",
+        "alreadyOpenDescription": "Only one tab can be connected at a time to prevent message conflicts.",
+        "useHere": "Use here instead",
+        "takenOver": "Session moved to another tab",
+        "takenOverDescription": "This tab was disconnected because Fluux was opened in another tab.",
+        "reconnectHere": "Reconnect here"
     }
 }

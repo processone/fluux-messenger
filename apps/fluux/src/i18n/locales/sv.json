@@ -775,5 +775,13 @@
         "voice_request_min_interval": "Minsta väntetid (i sekunder) mellan talerättsbegäranden från samma besökare.",
         "enable_hats": "Aktivera visning av märken bredvid deltagarnamn som visar speciella roller eller tillhörigheter.",
         "mam": "Aktivera meddelandearkiv (MAM) så att klienter kan hämta tidigare meddelanden vid anslutning eller återanslutning. Detta är historiken som deltagare ser i sin chattapp."
+    },
+    "tabCoordination": {
+        "alreadyOpen": "Fluux is already open in another tab",
+        "alreadyOpenDescription": "Only one tab can be connected at a time to prevent message conflicts.",
+        "useHere": "Use here instead",
+        "takenOver": "Session moved to another tab",
+        "takenOverDescription": "This tab was disconnected because Fluux was opened in another tab.",
+        "reconnectHere": "Reconnect here"
     }
 }

@@ -775,5 +775,13 @@
         "voice_request_min_interval": "Минимальное время ожидания (в секундах) между запросами голоса от одного посетителя.",
         "enable_hats": "Включить отображение значков рядом с именами участников, показывающих особые роли или принадлежности.",
         "mam": "Включить архив сообщений (MAM), чтобы клиенты могли получать прошлые сообщения при входе или переподключении. Это история, которую участники видят в своем чат-приложении."
+    },
+    "tabCoordination": {
+        "alreadyOpen": "Fluux is already open in another tab",
+        "alreadyOpenDescription": "Only one tab can be connected at a time to prevent message conflicts.",
+        "useHere": "Use here instead",
+        "takenOver": "Session moved to another tab",
+        "takenOverDescription": "This tab was disconnected because Fluux was opened in another tab.",
+        "reconnectHere": "Reconnect here"
     }
 }

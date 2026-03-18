@@ -775,5 +775,13 @@
         "voice_request_min_interval": "Temps d'espera mínim (en segons) entre sol·licituds de veu del mateix visitant.",
         "enable_hats": "Activa la visualització d'insígnies al costat dels noms dels participants, mostrant rols o afiliacions especials.",
         "mam": "Activa l'arxiu de missatges (MAM) perquè els clients puguin obtenir missatges anteriors en unir-se o reconnectar-se. Aquest és l'historial que els participants veuen a la seva aplicació de xat."
+    },
+    "tabCoordination": {
+        "alreadyOpen": "Fluux is already open in another tab",
+        "alreadyOpenDescription": "Only one tab can be connected at a time to prevent message conflicts.",
+        "useHere": "Use here instead",
+        "takenOver": "Session moved to another tab",
+        "takenOverDescription": "This tab was disconnected because Fluux was opened in another tab.",
+        "reconnectHere": "Reconnect here"
     }
 }

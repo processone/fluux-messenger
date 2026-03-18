@@ -775,5 +775,13 @@
         "voice_request_min_interval": "Minimális várakozási idő (másodpercben) ugyanazon látogató szólásjog-kérelmei között.",
         "enable_hats": "Jelvények megjelenítésének engedélyezése a résztvevők neve mellett, amelyek különleges szerepköröket vagy hovatartozást jeleznek.",
         "mam": "Üzenetarchívum (MAM) engedélyezése, hogy a kliensek korábbi üzeneteket kérhessenek le csatlakozáskor vagy újracsatlakozáskor. Ez az előzmény, amelyet a résztvevők a csevegőalkalmazásukban látnak."
+    },
+    "tabCoordination": {
+        "alreadyOpen": "Fluux is already open in another tab",
+        "alreadyOpenDescription": "Only one tab can be connected at a time to prevent message conflicts.",
+        "useHere": "Use here instead",
+        "takenOver": "Session moved to another tab",
+        "takenOverDescription": "This tab was disconnected because Fluux was opened in another tab.",
+        "reconnectHere": "Reconnect here"
     }
 }

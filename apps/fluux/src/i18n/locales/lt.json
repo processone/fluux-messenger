@@ -775,5 +775,13 @@
         "voice_request_min_interval": "Minimalus laukimo laikas (sekundėmis) tarp to paties lankytojo balso užklausų.",
         "enable_hats": "Įjungti ženklelių rodymą šalia dalyvių vardų, rodančių specialius vaidmenis ar priklausomybes.",
         "mam": "Įjungti žinučių archyvą (MAM), kad klientai galėtų gauti ankstesnes žinutes prisijungiant ar vėl prisijungiant. Tai istorija, kurią dalyviai mato savo pokalbių programėlėje."
+    },
+    "tabCoordination": {
+        "alreadyOpen": "Fluux is already open in another tab",
+        "alreadyOpenDescription": "Only one tab can be connected at a time to prevent message conflicts.",
+        "useHere": "Use here instead",
+        "takenOver": "Session moved to another tab",
+        "takenOverDescription": "This tab was disconnected because Fluux was opened in another tab.",
+        "reconnectHere": "Reconnect here"
     }
 }

@@ -33,7 +33,12 @@ function resolveServerForConnection(jid: string, server: string): string {
   return getWebsocketUrlForDomain(domain) || domain
 }
 
-export function LoginScreen() {
+interface LoginScreenProps {
+  /** Tab coordination: checks if another tab already holds this JID */
+  claimConnection?: (jid: string) => Promise<boolean>
+}
+
+export function LoginScreen({ claimConnection }: LoginScreenProps) {
   detectRenderLoop('LoginScreen')
   const { t, i18n } = useTranslation()
   const { status, error, connect } = useConnection()
@@ -215,6 +220,8 @@ export function LoginScreen() {
     const autoConnect = async () => {
       const actualServer = resolveServerForConnection(jid, server)
       try {
+        // Check if another tab already holds this JID
+        if (claimConnection && !(await claimConnection(jid))) return
         const resource = getResource()
         await connect(jid, password, actualServer, undefined, resource, i18n.language, isTauri())
         // Save session for auto-reconnect on page reload
@@ -260,6 +267,8 @@ export function LoginScreen() {
     }
 
     try {
+      // Check if another tab already holds this JID
+      if (claimConnection && !(await claimConnection(jid))) return
       const resource = getResource()
       await connect(jid, password, actualServer, undefined, resource, i18n.language, isTauri())
       // Save session for auto-reconnect on page reload

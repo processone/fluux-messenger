@@ -775,5 +775,13 @@
         "voice_request_min_interval": "Lágmarks biðtími (í sekúndum) milli talabeiðna frá sama gesti.",
         "enable_hats": "Virkja birtingu merkja við hlið þátttakendanafna sem sýna sérstök hlutverk eða tengsl.",
         "mam": "Virkja skilaboðageymslu (MAM) svo biðlarar geti sótt eldri skilaboð þegar þeir taka þátt eða endurtengjast. Þetta er sagan sem þátttakendur sjá í spjallforritinu sínu."
+    },
+    "tabCoordination": {
+        "alreadyOpen": "Fluux is already open in another tab",
+        "alreadyOpenDescription": "Only one tab can be connected at a time to prevent message conflicts.",
+        "useHere": "Use here instead",
+        "takenOver": "Session moved to another tab",
+        "takenOverDescription": "This tab was disconnected because Fluux was opened in another tab.",
+        "reconnectHere": "Reconnect here"
     }
 }

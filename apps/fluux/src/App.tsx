@@ -4,8 +4,10 @@ import { useConnection, useXMPPContext } from '@fluux/sdk'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { LoginScreen } from './components/LoginScreen'
 import { ChatLayout } from './components/ChatLayout'
+import { TabBlockedScreen } from './components/TabBlockedScreen'
 import { UpdateModal } from './components/UpdateModal'
 import { useSessionPersistence, getSession } from './hooks/useSessionPersistence'
+import { useTabCoordination } from './hooks/useTabCoordination'
 import { useFullscreen } from './hooks/useFullscreen'
 import { useTauriCloseHandler } from './hooks/useTauriCloseHandler'
 import { useTauriTrayRestore } from './hooks/useTauriTrayRestore'
@@ -45,6 +47,10 @@ function App() {
 
   const { status } = useConnection()
   const { client } = useXMPPContext()
+  const tabCoordination = useTabCoordination(() => {
+    // When another tab takes over, disconnect this client
+    void client.disconnect()
+  })
   useTauriCloseHandler()
   useTauriTrayRestore()
   useIgnoreSync()
@@ -126,7 +132,7 @@ function App() {
   const [hasBeenOnline, setHasBeenOnline] = useState(false)
 
   // Auto-reconnect on page reload if session exists
-  useSessionPersistence()
+  useSessionPersistence(tabCoordination.claimConnection)
 
   // Track when we first come online, and clear auto-reconnecting flag
   useEffect(() => {
@@ -169,6 +175,19 @@ function App() {
     )
   }
 
+  // Show tab coordination screen when blocked or taken over (web only)
+  if (!isTauri && (tabCoordination.blocked || tabCoordination.takenOver)) {
+    return (
+      <>
+        <TitleBar />
+        <TabBlockedScreen
+          takenOver={tabCoordination.takenOver}
+          onTakeOver={tabCoordination.takeOver}
+        />
+      </>
+    )
+  }
+
   // Show login if disconnected, connecting, or error — but only when no stored session exists.
   // When a session exists (e.g., during SDK reconnection after sleep), stay on ChatLayout
   // where the inline reconnect indicator shows. Without the !hasSession guard, each reconnect
@@ -178,7 +197,7 @@ function App() {
     return (
       <>
         <TitleBar />
-        <LoginScreen />
+        <LoginScreen claimConnection={tabCoordination.claimConnection} />
       </>
     )
   }

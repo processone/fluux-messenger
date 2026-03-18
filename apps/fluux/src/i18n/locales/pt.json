@@ -775,5 +775,13 @@
         "voice_request_min_interval": "Tempo mínimo de espera (em segundos) entre pedidos de voz do mesmo visitante.",
         "enable_hats": "Ativar a exibição de distintivos junto aos nomes dos participantes, mostrando papéis ou afiliações especiais.",
         "mam": "Ativar o arquivo de mensagens (MAM) para que os clientes possam obter mensagens anteriores ao entrar ou reconectar. Este é o histórico que os participantes veem na sua aplicação de chat."
+    },
+    "tabCoordination": {
+        "alreadyOpen": "Fluux is already open in another tab",
+        "alreadyOpenDescription": "Only one tab can be connected at a time to prevent message conflicts.",
+        "useHere": "Use here instead",
+        "takenOver": "Session moved to another tab",
+        "takenOverDescription": "This tab was disconnected because Fluux was opened in another tab.",
+        "reconnectHere": "Reconnect here"
     }
 }

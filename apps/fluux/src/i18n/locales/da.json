@@ -775,5 +775,13 @@
         "voice_request_min_interval": "Minimum ventetid (i sekunder) mellem taleanmodninger fra den samme besøgende.",
         "enable_hats": "Aktiver visning af badges ved siden af deltagernavne, der viser specielle roller eller tilhørsforhold.",
         "mam": "Aktiver beskedarkiv (MAM), så klienter kan hente tidligere beskeder ved tilslutning eller genforbindelse. Dette er historikken, deltagere ser i deres chatapp."
+    },
+    "tabCoordination": {
+        "alreadyOpen": "Fluux is already open in another tab",
+        "alreadyOpenDescription": "Only one tab can be connected at a time to prevent message conflicts.",
+        "useHere": "Use here instead",
+        "takenOver": "Session moved to another tab",
+        "takenOverDescription": "This tab was disconnected because Fluux was opened in another tab.",
+        "reconnectHere": "Reconnect here"
     }
 }

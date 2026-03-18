@@ -775,5 +775,13 @@
         "voice_request_min_interval": "Minimaalne ooteaeg (sekundites) sama külastaja sõnaõiguse taotluste vahel.",
         "enable_hats": "Luba märkide kuvamine osalejanimede kõrval, mis näitavad erirollidele või kuuluvusi.",
         "mam": "Luba sõnumiarhiiv (MAM), et kliendid saaksid liitumisel või taasühendumisel varasemaid sõnumeid tuua. See on ajalugu, mida osalejad oma vestlusrakenduses näevad."
+    },
+    "tabCoordination": {
+        "alreadyOpen": "Fluux is already open in another tab",
+        "alreadyOpenDescription": "Only one tab can be connected at a time to prevent message conflicts.",
+        "useHere": "Use here instead",
+        "takenOver": "Session moved to another tab",
+        "takenOverDescription": "This tab was disconnected because Fluux was opened in another tab.",
+        "reconnectHere": "Reconnect here"
     }
 }

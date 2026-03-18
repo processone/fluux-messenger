@@ -775,5 +775,13 @@
         "voice_request_min_interval": "Vähimmäisodotusaika (sekunteina) saman vierailijan puheoikeuspyyntöjen välillä.",
         "enable_hats": "Ota käyttöön merkkien näyttö osallistujien nimien vieressä, jotka osoittavat erityisrooleja tai jäsenyyksiä.",
         "mam": "Ota käyttöön viestiarkisto (MAM), jotta sovellukset voivat hakea aiempia viestejä liittyessään tai yhdistäessään uudelleen. Tämä on historia, jonka osallistujat näkevät chat-sovelluksessaan."
+    },
+    "tabCoordination": {
+        "alreadyOpen": "Fluux is already open in another tab",
+        "alreadyOpenDescription": "Only one tab can be connected at a time to prevent message conflicts.",
+        "useHere": "Use here instead",
+        "takenOver": "Session moved to another tab",
+        "takenOverDescription": "This tab was disconnected because Fluux was opened in another tab.",
+        "reconnectHere": "Reconnect here"
     }
 }

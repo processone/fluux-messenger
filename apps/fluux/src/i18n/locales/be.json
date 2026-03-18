@@ -775,5 +775,13 @@
         "voice_request_min_interval": "Мінімальны час чакання (у секундах) паміж запытамі голасу ад аднаго наведвальніка.",
         "enable_hats": "Уключыць адлюстраванне значкоў побач з імёнамі ўдзельнікаў, якія паказваюць асаблівыя ролі або прыналежнасці.",
         "mam": "Уключыць архіў паведамленняў (MAM), каб кліенты маглі атрымліваць мінулыя паведамленні пры далучэнні або пераподключэнні. Гэта гісторыя, якую ўдзельнікі бачаць у сваім чат-дадатку."
+    },
+    "tabCoordination": {
+        "alreadyOpen": "Fluux is already open in another tab",
+        "alreadyOpenDescription": "Only one tab can be connected at a time to prevent message conflicts.",
+        "useHere": "Use here instead",
+        "takenOver": "Session moved to another tab",
+        "takenOverDescription": "This tab was disconnected because Fluux was opened in another tab.",
+        "reconnectHere": "Reconnect here"
     }
 }

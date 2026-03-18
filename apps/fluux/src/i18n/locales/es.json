@@ -775,5 +775,13 @@
         "voice_request_min_interval": "Tiempo mínimo de espera (en segundos) entre solicitudes de voz del mismo visitante.",
         "enable_hats": "Activar la visualización de insignias junto a los nombres de los participantes, mostrando roles o afiliaciones especiales.",
         "mam": "Activar el archivo de mensajes (MAM) para que los clientes puedan obtener mensajes anteriores al unirse o reconectarse. Este es el historial que los participantes ven en su aplicación de chat."
+    },
+    "tabCoordination": {
+        "alreadyOpen": "Fluux is already open in another tab",
+        "alreadyOpenDescription": "Only one tab can be connected at a time to prevent message conflicts.",
+        "useHere": "Use here instead",
+        "takenOver": "Session moved to another tab",
+        "takenOverDescription": "This tab was disconnected because Fluux was opened in another tab.",
+        "reconnectHere": "Reconnect here"
     }
 }

@@ -450,7 +450,7 @@ export function getSession(jid?: string | null): SessionData | null {
  * Uses sessionStorage which persists across reload but clears when tab closes.
  * Supports XEP-0198 Stream Management for faster session resumption.
  */
-export function useSessionPersistence(): void {
+export function useSessionPersistence(claimConnection?: (jid: string) => Promise<boolean>): void {
   const { i18n } = useTranslation()
   const { client } = useXMPPContext()
   // NOTE: Only subscribe to status - we need this to gate effects.
@@ -568,6 +568,31 @@ export function useSessionPersistence(): void {
       const resource = getResource()
       const disableSmKeepalive = isTauri()
       console.log('[SM] Reconnecting on page reload, SDK will handle SM resumption')
+
+      // Check if another tab already holds this JID (web only)
+      if (claimConnection) {
+        claimConnection(session.jid).then((canConnect) => {
+          if (!canConnect) {
+            console.log('[SM] Another tab already connected, skipping auto-reconnect')
+            isResumptionRef.current = false
+            return
+          }
+          connect(session.jid, session.password, session.server, undefined, resource, i18n.language, disableSmKeepalive).catch((err) => {
+            console.log('[SM] Reconnection failed:', err?.message || err)
+            clearSession()
+            isResumptionRef.current = false
+          })
+        }).catch(() => {
+          // Claim check failed, try connecting anyway
+          connect(session.jid, session.password, session.server, undefined, resource, i18n.language, disableSmKeepalive).catch((err) => {
+            console.log('[SM] Reconnection failed:', err?.message || err)
+            clearSession()
+            isResumptionRef.current = false
+          })
+        })
+        return
+      }
+
       connect(session.jid, session.password, session.server, undefined, resource, i18n.language, disableSmKeepalive).catch((err) => {
         console.log('[SM] Reconnection failed:', err?.message || err)
         // If auto-reconnect fails, clear session
