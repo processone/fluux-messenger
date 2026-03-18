@@ -845,7 +845,7 @@ export class Chat extends BaseModule {
 
     const message = xml('message', { to: recipient, type, id: generateUUID() },
       xml('apply-to', { xmlns: NS_FASTEN, id: originalId },
-        xml('external', { xmlns: NS_FASTEN }, ...metaElements)
+        xml('external', { xmlns: NS_FASTEN, name: 'ogp' }, ...metaElements)
       ),
       xml('no-store', { xmlns: NS_HINTS })
     )

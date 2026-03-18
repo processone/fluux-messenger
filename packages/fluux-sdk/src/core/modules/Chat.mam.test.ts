@@ -657,7 +657,7 @@ describe('XMPPClient MAM', () => {
                           children: [
                             {
                               name: 'external',
-                              attrs: { xmlns: 'urn:xmpp:fasten:0' },
+                              attrs: { xmlns: 'urn:xmpp:fasten:0', name: 'ogp' },
                               children: [
                                 { name: 'meta', attrs: { xmlns: 'http://ogp.me/ns#', property: 'og:title', content: 'Example Article' } },
                                 { name: 'meta', attrs: { xmlns: 'http://ogp.me/ns#', property: 'og:description', content: 'This is an example article' } },
