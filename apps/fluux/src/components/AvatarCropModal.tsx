@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X, Upload, ZoomIn, ZoomOut, RotateCcw, Camera, Video, VideoOff } from 'lucide-react'
 import { Tooltip } from './Tooltip'
@@ -47,13 +47,13 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
   }, [imageUrl])
 
   // Stop webcam when modal closes or when switching modes
-  const stopWebcam = useCallback(() => {
+  const stopWebcam = () => {
     if (webcamStream) {
       webcamStream.getTracks().forEach(track => track.stop())
       setWebcamStream(null)
     }
     setWebcamReady(false)
-  }, [webcamStream])
+  }
 
   // Reset state when modal closes
   useEffect(() => {
@@ -75,7 +75,7 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
     typeof navigator.mediaDevices.getUserMedia === 'function'
 
   // Start webcam
-  const startWebcam = useCallback(async () => {
+  const startWebcam = async () => {
     try {
       setError(null)
 
@@ -104,7 +104,7 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
         setError(t('avatar.cameraError'))
       }
     }
-  }, [t])
+  }
 
   // Set up video element when webcam stream is available
   // This runs after the video element is rendered (webcamMode triggers re-render)
@@ -123,7 +123,7 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
   }, [webcamMode, webcamStream])
 
   // Capture photo from webcam
-  const capturePhoto = useCallback(() => {
+  const capturePhoto = () => {
     if (!videoRef.current || !canvasRef.current) return
 
     const video = videoRef.current
@@ -157,16 +157,16 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
         setWebcamMode(false)
       }
     }, 'image/jpeg', 0.9)
-  }, [imageUrl, stopWebcam])
+  }
 
   // Handle exiting webcam mode
-  const exitWebcamMode = useCallback(() => {
+  const exitWebcamMode = () => {
     stopWebcam()
     setWebcamMode(false)
-  }, [stopWebcam])
+  }
 
   // Process a file (shared by file input and drag-drop)
-  const processFile = useCallback((file: File) => {
+  const processFile = (file: File) => {
     // Validate file type
     if (!file.type.startsWith('image/')) {
       setError(t('avatar.invalidFileType'))
@@ -192,85 +192,85 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
     // Reset zoom and offset
     setZoom(1)
     setOffset({ x: 0, y: 0 })
-  }, [imageUrl, t])
+  }
 
-  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) processFile(file)
-  }, [processFile])
+  }
 
   // Drag-and-drop handlers
-  const handleDragEnter = useCallback((e: React.DragEvent) => {
+  const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     if (e.dataTransfer.types.includes('Files')) {
       setIsFileDragOver(true)
     }
-  }, [])
+  }
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
+  const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-  }, [])
+  }
 
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
+  const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     // Only set to false if leaving the drop zone (not entering a child)
     if (e.currentTarget === e.target) {
       setIsFileDragOver(false)
     }
-  }, [])
+  }
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     setIsFileDragOver(false)
 
     const file = e.dataTransfer.files?.[0]
     if (file) processFile(file)
-  }, [processFile])
+  }
 
   // Unified pointer handling for mouse and touch
-  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+  const handlePointerDown = (e: React.PointerEvent) => {
     if (!imageUrl) return
     e.preventDefault()
     // Capture pointer to receive events even when cursor leaves element
     ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
     setIsDragging(true)
     setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y })
-  }, [imageUrl, offset])
+  }
 
-  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+  const handlePointerMove = (e: React.PointerEvent) => {
     if (!isDragging) return
     e.preventDefault()
     setOffset({
       x: e.clientX - dragStart.x,
       y: e.clientY - dragStart.y,
     })
-  }, [isDragging, dragStart])
+  }
 
-  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+  const handlePointerUp = (e: React.PointerEvent) => {
     if (isDragging) {
       ;(e.target as HTMLElement).releasePointerCapture(e.pointerId)
     }
     setIsDragging(false)
-  }, [isDragging])
+  }
 
-  const handleZoomIn = useCallback(() => {
+  const handleZoomIn = () => {
     setZoom(z => Math.min(z + 0.25, MAX_ZOOM))
-  }, [])
+  }
 
-  const handleZoomOut = useCallback(() => {
+  const handleZoomOut = () => {
     setZoom(z => Math.max(z - 0.25, MIN_ZOOM))
-  }, [])
+  }
 
-  const handleReset = useCallback(() => {
+  const handleReset = () => {
     setZoom(1)
     setOffset({ x: 0, y: 0 })
-  }, [])
+  }
 
-  const handleSave = useCallback(async () => {
+  const handleSave = async () => {
     if (!imageUrl || !canvasRef.current) return
 
     setSaving(true)
@@ -348,7 +348,7 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
     } finally {
       setSaving(false)
     }
-  }, [imageUrl, offset, zoom, onSave, onClose])
+  }
 
   if (!isOpen) return null
 

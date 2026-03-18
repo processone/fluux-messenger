@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { DataForm } from '@fluux/sdk'
 import { AlertCircle, Info, AlertTriangle, User, X } from 'lucide-react'
@@ -49,9 +49,9 @@ export function AdminCommandForm({
     return initial
   })
 
-  const handleChange = useCallback((fieldVar: string, value: string | string[]) => {
+  const handleChange = (fieldVar: string, value: string | string[]) => {
     setFormData(prev => ({ ...prev, [fieldVar]: value }))
-  }, [])
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()

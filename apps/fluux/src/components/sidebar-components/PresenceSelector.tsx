@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useClickOutside } from '@/hooks'
 import { usePresence, type PresenceStatus } from '@fluux/sdk'
@@ -48,7 +48,7 @@ export function PresenceSelector({ isOpen: isOpenProp, onOpenChange }: PresenceS
   }, [isOpen, presenceShow])
 
   // Close menu when clicking outside
-  const closeMenu = useCallback(() => setIsOpen(false), [setIsOpen])
+  const closeMenu = () => setIsOpen(false)
   useClickOutside(menuRef, closeMenu, isOpen)
 
   // Handle keyboard navigation - use capture phase to intercept before sidebar list

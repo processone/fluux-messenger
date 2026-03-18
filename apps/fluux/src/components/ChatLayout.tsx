@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { Sidebar, type SidebarView } from './Sidebar'
@@ -119,20 +119,20 @@ function ChatLayoutContent() {
   // NOTE: Don't use useConsole() hook - it subscribes to `entries` which changes with every
   // XMPP packet, causing render loops. We only need isOpen and toggle.
   const consoleOpen = useConsoleStore((s) => s.isOpen)
-  const toggleConsole = useCallback(() => {
+  const toggleConsole = () => {
     consoleStore.getState().toggle()
-  }, [])
+  }
   // NOTE: Don't use useAdmin() hook - it subscribes to many values. Use focused selectors.
   const adminSession = useAdminStore((s) => s.currentSession)
   const adminCategory = useAdminStore((s) => s.activeCategory)
-  const clearAdminSession = useCallback(() => {
+  const clearAdminSession = () => {
     adminStore.getState().setCurrentSession(null)
     adminStore.getState().setTargetJid(null)
-  }, [])
-  const setAdminCategory = useCallback((category: AdminCategory | null) => {
+  }
+  const setAdminCategory = (category: AdminCategory | null) => {
     adminStore.getState().setActiveCategory(category)
-  }, [])
-  const navigateToUserAdmin = useCallback((userJid: string): string | null => {
+  }
+  const navigateToUserAdmin = (userJid: string): string | null => {
     const store = adminStore.getState()
     const domain = userJid.split('@')[1]?.split('/')[0]
     if (!domain) return null
@@ -142,7 +142,7 @@ function ChatLayoutContent() {
     store.setPendingSelectedUserJid(userJid)
     store.setActiveCategory('users')
     return domain
-  }, [])
+  }
   // Modal state from useModals() hook via LayoutContext
   // showShortcutHelp and showCommandPalette are used in this component
   // quickChat, addContact, and presenceMenu are only used by Sidebar (which gets them from context)
@@ -198,13 +198,12 @@ function ChatLayoutContent() {
   const mainContentRef = useRef<HTMLElement>(null)
   const composerRef = useRef<HTMLElement>(null)
 
-  // Memoize the refs object so it's stable across renders
-  // Without this, useFocusZones would recreate callbacks on every render
-  const focusZoneRefs = useMemo<FocusZoneRefs>(() => ({
+  // Refs object - stable across renders since refs don't change
+  const focusZoneRefs: FocusZoneRefs = {
     sidebarList: sidebarListRef,
     mainContent: mainContentRef,
     composer: composerRef,
-  }), [])
+  }
 
   // Enable Tab cycling between focus zones
   useFocusZones(focusZoneRefs)
@@ -387,7 +386,7 @@ function ChatLayoutContent() {
   }, [])
 
   // Handle selecting a contact from the directory
-  const handleSelectContact = useCallback((contact: Contact) => {
+  const handleSelectContact = (contact: Contact) => {
     // Clear active conversation/room to show the contact profile
     setActiveConversation(null)
     setActiveRoom(null)
@@ -395,7 +394,7 @@ function ChatLayoutContent() {
     navigateToContacts(contact.jid, { replace: true })
     clearAdminSession()
     setAdminCategory(null)
-  }, [setActiveConversation, setActiveRoom, navigateToContacts, clearAdminSession, setAdminCategory])
+  }
 
   // On mobile, show main content area only when there's actual content to display
   // For admin: only 'users' and 'rooms' categories have main view content
@@ -406,18 +405,18 @@ function ChatLayoutContent() {
   const hasActiveContent = !!(activeConversationId || activeRoomJid || selectedContact || adminHasMainContent || settingsHasContent)
 
   // Toggle shortcut help overlay
-  const toggleShortcutHelp = useCallback(() => {
+  const toggleShortcutHelp = () => {
     modalActions.toggle('shortcutHelp')
-  }, [modalActions])
+  }
 
   // Toggle command palette (Cmd-K opens and closes)
-  const toggleCommandPalette = useCallback(() => {
+  const toggleCommandPalette = () => {
     modalActions.toggle('commandPalette')
-  }, [modalActions])
+  }
 
   // Handle sidebar view changes - delegates to useViewNavigation hook
   // Phase 3: Per-tab memory and side effects now handled by the hook
-  const handleSidebarViewChange = useCallback((newView: SidebarView) => {
+  const handleSidebarViewChange = (newView: SidebarView) => {
     // Clear selected contact when switching views
     setSelectedContactJid(null)
 
@@ -429,28 +428,28 @@ function ChatLayoutContent() {
       clearAdminSession()
       setAdminCategory(null)
     }
-  }, [navigateToView, clearAdminSession, setAdminCategory])
+  }
 
   // Handle creating quick chat from keyboard shortcut
-  const handleCreateQuickChat = useCallback(() => {
+  const handleCreateQuickChat = () => {
     navigateToRooms()
     modalActions.open('quickChat')
-  }, [navigateToRooms, modalActions])
+  }
 
   // Handle adding contact from command palette
-  const handleAddContact = useCallback(() => {
+  const handleAddContact = () => {
     navigateToContacts()
     modalActions.open('addContact')
-  }, [navigateToContacts, modalActions])
+  }
 
   // Global keyboard shortcuts with escape hierarchy
   // Handle toggling presence menu from keyboard shortcut
-  const handleTogglePresenceMenu = useCallback(() => {
+  const handleTogglePresenceMenu = () => {
     modalActions.toggle('presenceMenu')
-  }, [modalActions])
+  }
 
   // Handle fully quitting desktop app (Linux/Windows)
-  const handleQuitApp = useCallback(() => {
+  const handleQuitApp = () => {
     const platform = navigator.platform.toLowerCase()
     const isWindowsOrLinux = platform.includes('win') || platform.includes('linux')
     if (!isWindowsOrLinux) return
@@ -465,25 +464,25 @@ function ChatLayoutContent() {
     }
 
     void requestQuit()
-  }, [])
+  }
 
   // Handler for closing contact profile (used by keyboard shortcuts and back button)
-  const handleContactBack = useCallback(() => {
+  const handleContactBack = () => {
     setSelectedContactJid(null)
     navigateToContacts(undefined, { replace: true })
-  }, [navigateToContacts])
+  }
 
   // Handle mobile back from admin view - clear category to show sidebar
-  const handleAdminBack = useCallback(() => {
+  const handleAdminBack = () => {
     clearAdminSession()
     setAdminCategory(null)
     navigateToAdmin(undefined, { replace: true })
-  }, [clearAdminSession, setAdminCategory, navigateToAdmin])
+  }
 
   // Handle mobile back from settings view - go back to settings sidebar (no category selected)
-  const handleSettingsBack = useCallback(() => {
+  const handleSettingsBack = () => {
     navigateToSettings(undefined, { replace: true })
-  }, [navigateToSettings])
+  }
 
   const shortcuts = useKeyboardShortcuts({
     onToggleShortcutHelp: toggleShortcutHelp,
@@ -518,18 +517,18 @@ function ChatLayoutContent() {
   // The XMPP connection stays active in the background for notifications.
   // Disconnect only happens via explicit user action (menu) or app quit.
 
-  const handleChatBack = useCallback(() => {
+  const handleChatBack = () => {
     setActiveConversation(null)
     navigateToMessages(undefined, { replace: true })
-  }, [setActiveConversation, navigateToMessages])
+  }
 
-  const handleRoomBack = useCallback(() => {
+  const handleRoomBack = () => {
     setActiveRoom(null)
     navigateToRooms(undefined, { replace: true })
-  }, [setActiveRoom, navigateToRooms])
+  }
 
   // Handle starting a conversation from contact profile or double-click
-  const handleStartConversation = useCallback((contact: Contact) => {
+  const handleStartConversation = (contact: Contact) => {
     const chatState = chatStore.getState()
 
     // Check if conversation is archived - if so, open in archive view
@@ -563,10 +562,10 @@ function ChatLayoutContent() {
     // Update URL to reflect the selected conversation (replace since tab switch already pushed/replaced)
     navigateToMessages(contact.jid, { replace: true })
     // selectedContact will be cleared by useEffect
-  }, [addConversation, setActiveConversation, setActiveRoom, handleSidebarViewChange, navigateToMessages, navigateToArchive])
+  }
 
   // Handle starting a chat from a JID (e.g., from occupant panel context menu)
-  const handleStartChatWithJid = useCallback((jid: string) => {
+  const handleStartChatWithJid = (jid: string) => {
     const chatState = chatStore.getState()
     if (chatState.isArchived(jid)) {
       handleSidebarViewChange('archive')
@@ -588,56 +587,56 @@ function ChatLayoutContent() {
     setActiveConversation(jid)
     setActiveRoom(null)
     navigateToMessages(jid, { replace: true })
-  }, [addConversation, setActiveConversation, setActiveRoom, handleSidebarViewChange, navigateToMessages, navigateToArchive])
+  }
 
   // Handle showing user profile from occupant panel context menu
-  const handleShowProfileFromRoom = useCallback((jid: string) => {
+  const handleShowProfileFromRoom = (jid: string) => {
     setActiveConversation(null)
     setActiveRoom(null)
     // Navigate first (which clears selectedContactJid), then set JID
     handleSidebarViewChange('directory')
     setSelectedContactJid(jid)
     navigateToContacts(jid, { replace: true })
-  }, [setActiveConversation, setActiveRoom, handleSidebarViewChange, navigateToContacts])
+  }
 
   // Handle adding a contact (subscription request)
-  const handleAddContactFromProfile = useCallback(async (jid: string) => {
+  const handleAddContactFromProfile = async (jid: string) => {
     await addContact(jid)
-  }, [addContact])
+  }
 
   // Handle removing a contact
-  const handleRemoveContact = useCallback(async (jid: string) => {
+  const handleRemoveContact = async (jid: string) => {
     await removeContact(jid)
     setSelectedContactJid(null)
-  }, [removeContact])
+  }
 
   // Handle renaming a contact
-  const handleRenameContact = useCallback(async (jid: string, name: string) => {
+  const handleRenameContact = async (jid: string, name: string) => {
     await renameContact(jid, name)
     // selectedContact now derives from store, so it updates automatically
-  }, [renameContact])
+  }
 
   // Handle fetching contact nickname (PEP XEP-0172)
-  const handleFetchContactNickname = useCallback(async (jid: string) => {
+  const handleFetchContactNickname = async (jid: string) => {
     return fetchContactNickname(jid)
-  }, [fetchContactNickname])
+  }
 
   // Handle fetching contact vCard (XEP-0054)
-  const handleFetchVCard = useCallback(async (jid: string) => {
+  const handleFetchVCard = async (jid: string) => {
     return fetchVCard(jid)
-  }, [fetchVCard])
+  }
 
   // Handle admin category change from sidebar
-  const handleAdminCategoryChange = useCallback((category: AdminCategory | null) => {
+  const handleAdminCategoryChange = (category: AdminCategory | null) => {
     // Clear any active admin session when changing category
     if (category) {
       clearAdminSession()
     }
     setAdminCategory(category)
-  }, [clearAdminSession, setAdminCategory])
+  }
 
   // Handle managing a user from roster context menu
-  const handleManageUser = useCallback((jid: string) => {
+  const handleManageUser = (jid: string) => {
     // Set up navigation to admin user management for this user
     const domain = navigateToUserAdmin(jid)
     if (domain) {
@@ -646,7 +645,7 @@ function ChatLayoutContent() {
       // Switch to admin view - navigateToView handles per-tab memory
       navigateToView('admin')
     }
-  }, [navigateToUserAdmin, clearAdminSession, navigateToView])
+  }
 
   return (
     <div
@@ -759,13 +758,13 @@ function FullScreenOccupantPanel({ onClose, onStartChat, onShowProfile }: {
   const contacts = useRosterStore((s) => s.contacts)
   const ownAvatar = useConnectionStore((s) => s.ownAvatar)
 
-  const contactsByJid = useMemo(() => {
+  const contactsByJid = (() => {
     const map = new Map<string, Contact>()
     for (const contact of contacts.values()) {
       map.set(contact.jid, contact)
     }
     return map
-  }, [contacts])
+  })()
 
   if (!activeRoom) return null
 

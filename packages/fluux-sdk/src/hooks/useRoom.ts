@@ -1,4 +1,3 @@
-import { useCallback, useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { roomStore } from '../stores'
 import { useRoomStore, useAdminStore } from '../react/storeHooks'
@@ -111,13 +110,13 @@ export function useRoom() {
   // calculates firstNewMessageId with the full message history (cached + live messages).
   // Without this, rooms that only have live messages (received while viewing another room)
   // would show only new messages without historical context above the marker.
-  const setActiveRoom = useCallback(async (roomJid: string | null) => {
+  const setActiveRoom = async (roomJid: string | null) => {
     if (roomJid) {
       // Always load from cache first - deduplication is handled by loadMessagesFromCache
       await roomStore.getState().loadMessagesFromCache(roomJid, { limit: 100 })
     }
     setActiveRoomRaw(roomJid)
-  }, [setActiveRoomRaw])
+  }
   const markAsRead = useRoomStore((s) => s.markAsRead)
   const clearFirstNewMessageId = useRoomStore((s) => s.clearFirstNewMessageId)
   const updateLastSeenMessageId = useRoomStore((s) => s.updateLastSeenMessageId)
@@ -147,186 +146,129 @@ export function useRoom() {
     return s.mamQueryStates.get(s.activeRoomJid)?.oldestFetchedId
   })
 
-  // Memoize the MAM state object to maintain stable reference
-  const activeMAMState = useMemo((): MAMQueryState | null => {
-    if (!activeRoomJid) return null
-    return {
-      isLoading: mamIsLoading,
-      hasQueried: true, // Rooms always have initial history from join
-      isHistoryComplete: mamIsHistoryComplete,
-      isCaughtUpToLive: mamIsCaughtUpToLive,
-      oldestFetchedId: mamOldestFetchedId,
-      error: null,
-    }
-  }, [activeRoomJid, mamIsLoading, mamIsHistoryComplete, mamIsCaughtUpToLive, mamOldestFetchedId])
+  // Build the MAM state object
+  const activeMAMState: MAMQueryState | null = !activeRoomJid ? null : {
+    isLoading: mamIsLoading,
+    hasQueried: true, // Rooms always have initial history from join
+    isHistoryComplete: mamIsHistoryComplete,
+    isCaughtUpToLive: mamIsCaughtUpToLive,
+    oldestFetchedId: mamOldestFetchedId,
+    error: null,
+  }
 
   // Note: Auto-load logic (cache loading) has been moved to store subscriptions
   // in sideEffects.ts. This eliminates the useEffect → action → state change pattern
   // that could cause render loops. The side effects now run outside React's render cycle.
 
   // Get typing users for the active room as an array
-  const activeTypingUsers = useMemo(() => {
-    if (!activeRoom?.typingUsers || activeRoom.typingUsers.size === 0) {
-      return EMPTY_TYPING_ARRAY
-    }
-    return Array.from(activeRoom.typingUsers)
-  }, [activeRoom?.typingUsers])
+  const activeTypingUsers = (!activeRoom?.typingUsers || activeRoom.typingUsers.size === 0)
+    ? EMPTY_TYPING_ARRAY
+    : Array.from(activeRoom.typingUsers)
 
-  const joinRoom = useCallback(
-    async (roomJid: string, nickname: string, options?: { maxHistory?: number; password?: string }) => {
-      await client.muc.joinRoom(roomJid, nickname, options)
-    },
-    [client]
-  )
+  const joinRoom = async (roomJid: string, nickname: string, options?: { maxHistory?: number; password?: string }) => {
+    await client.muc.joinRoom(roomJid, nickname, options)
+  }
 
-  const createQuickChat = useCallback(
-    async (nickname: string, topic?: string, invitees?: string[]): Promise<string> => {
-      return await client.muc.createQuickChat(nickname, topic, invitees)
-    },
-    [client]
-  )
+  const createQuickChat = async (nickname: string, topic?: string, invitees?: string[]): Promise<string> => {
+    return await client.muc.createQuickChat(nickname, topic, invitees)
+  }
 
-  const leaveRoom = useCallback(
-    async (roomJid: string) => {
-      await client.muc.leaveRoom(roomJid)
-    },
-    [client]
-  )
+  const leaveRoom = async (roomJid: string) => {
+    await client.muc.leaveRoom(roomJid)
+  }
 
-  const getRoom = useCallback(
-    (roomJid: string) => roomStore.getState().rooms.get(roomJid),
-    []
-  )
+  const getRoom = (roomJid: string) => roomStore.getState().rooms.get(roomJid)
 
-  const sendMessage = useCallback(
-    async (
-      roomJid: string,
-      body: string,
-      replyTo?: { id: string; to: string; fallback?: { author: string; body: string } },
-      references?: MentionReference[],
-      attachment?: FileAttachment
-    ): Promise<string> => {
-      return await client.chat.sendMessage(roomJid, body, 'groupchat', replyTo, references, attachment)
-    },
-    [client]
-  )
+  const sendMessage = async (
+    roomJid: string,
+    body: string,
+    replyTo?: { id: string; to: string; fallback?: { author: string; body: string } },
+    references?: MentionReference[],
+    attachment?: FileAttachment
+  ): Promise<string> => {
+    return await client.chat.sendMessage(roomJid, body, 'groupchat', replyTo, references, attachment)
+  }
 
-  const sendReaction = useCallback(
-    async (roomJid: string, messageId: string, emojis: string[]) => {
-      await client.chat.sendReaction(roomJid, messageId, emojis, 'groupchat')
-    },
-    [client]
-  )
+  const sendReaction = async (roomJid: string, messageId: string, emojis: string[]) => {
+    await client.chat.sendReaction(roomJid, messageId, emojis, 'groupchat')
+  }
 
-  const sendCorrection = useCallback(
-    async (roomJid: string, messageId: string, newBody: string, attachment?: FileAttachment) => {
-      await client.chat.sendCorrection(roomJid, messageId, newBody, 'groupchat', attachment)
-    },
-    [client]
-  )
+  const sendCorrection = async (roomJid: string, messageId: string, newBody: string, attachment?: FileAttachment) => {
+    await client.chat.sendCorrection(roomJid, messageId, newBody, 'groupchat', attachment)
+  }
 
-  const retractMessage = useCallback(
-    async (roomJid: string, messageId: string) => {
-      await client.chat.sendRetraction(roomJid, messageId, 'groupchat')
-    },
-    [client]
-  )
+  const retractMessage = async (roomJid: string, messageId: string) => {
+    await client.chat.sendRetraction(roomJid, messageId, 'groupchat')
+  }
 
-  const moderateMessage = useCallback(
-    async (roomJid: string, stanzaId: string, reason?: string) => {
-      await client.muc.moderateMessage(roomJid, stanzaId, reason)
-    },
-    [client]
-  )
+  const moderateMessage = async (roomJid: string, stanzaId: string, reason?: string) => {
+    await client.muc.moderateMessage(roomJid, stanzaId, reason)
+  }
 
-  const setBookmark = useCallback(
-    async (
-      roomJid: string,
-      options: { name: string; nick: string; autojoin?: boolean; password?: string }
-    ) => {
-      await client.muc.setBookmark(roomJid, options)
-    },
-    [client]
-  )
+  const setBookmark = async (
+    roomJid: string,
+    options: { name: string; nick: string; autojoin?: boolean; password?: string }
+  ) => {
+    await client.muc.setBookmark(roomJid, options)
+  }
 
-  const removeBookmark = useCallback(
-    async (roomJid: string) => {
-      await client.muc.removeBookmark(roomJid)
-    },
-    [client]
-  )
+  const removeBookmark = async (roomJid: string) => {
+    await client.muc.removeBookmark(roomJid)
+  }
 
-  const setRoomNotifyAll = useCallback(
-    async (roomJid: string, notifyAll: boolean, persistent: boolean = false) => {
-      await client.muc.setRoomNotifyAll(roomJid, notifyAll, persistent)
-    },
-    [client]
-  )
+  const setRoomNotifyAll = async (roomJid: string, notifyAll: boolean, persistent: boolean = false) => {
+    await client.muc.setRoomNotifyAll(roomJid, notifyAll, persistent)
+  }
 
-  const sendChatState = useCallback(
-    async (roomJid: string, state: ChatStateNotification) => {
-      await client.chat.sendChatState(roomJid, state, 'groupchat')
-    },
-    [client]
-  )
+  const sendChatState = async (roomJid: string, state: ChatStateNotification) => {
+    await client.chat.sendChatState(roomJid, state, 'groupchat')
+  }
 
-  const sendEasterEgg = useCallback(
-    async (roomJid: string, animation: string) => {
-      await client.chat.sendEasterEgg(roomJid, 'groupchat', animation)
-    },
-    [client]
-  )
+  const sendEasterEgg = async (roomJid: string, animation: string) => {
+    await client.chat.sendEasterEgg(roomJid, 'groupchat', animation)
+  }
 
-  const clearAnimation = useCallback(() => {
+  const clearAnimation = () => {
     roomStore.getState().clearAnimation()
-  }, [])
+  }
 
-  const setDraft = useCallback((roomJid: string, text: string) => {
+  const setDraft = (roomJid: string, text: string) => {
     roomStore.getState().setDraft(roomJid, text)
-  }, [])
+  }
 
-  const getDraft = useCallback((roomJid: string) => {
+  const getDraft = (roomJid: string) => {
     return roomStore.getState().getDraft(roomJid)
-  }, [])
+  }
 
-  const clearDraft = useCallback((roomJid: string) => {
+  const clearDraft = (roomJid: string) => {
     roomStore.getState().clearDraft(roomJid)
-  }, [])
+  }
 
   /**
    * Set room avatar (XEP-0054 vCard-temp for MUC rooms).
    * Only room owners can change the room avatar.
    */
-  const setRoomAvatar = useCallback(
-    async (roomJid: string, imageData: Uint8Array, mimeType: string) => {
-      // Convert Uint8Array to base64 data URL
-      const base64 = btoa(String.fromCharCode(...Array.from(imageData)))
-      const dataUrl = `data:${mimeType};base64,${base64}`
-      await client.profile.setRoomAvatar(roomJid, dataUrl, mimeType)
-    },
-    [client]
-  )
+  const setRoomAvatar = async (roomJid: string, imageData: Uint8Array, mimeType: string) => {
+    // Convert Uint8Array to base64 data URL
+    const base64 = btoa(String.fromCharCode(...Array.from(imageData)))
+    const dataUrl = `data:${mimeType};base64,${base64}`
+    await client.profile.setRoomAvatar(roomJid, dataUrl, mimeType)
+  }
 
   /**
    * Clear room avatar (XEP-0054 vCard-temp for MUC rooms).
    * Only room owners can clear the room avatar.
    */
-  const clearRoomAvatar = useCallback(
-    async (roomJid: string) => {
-      await client.profile.clearRoomAvatar(roomJid)
-    },
-    [client]
-  )
+  const clearRoomAvatar = async (roomJid: string) => {
+    await client.profile.clearRoomAvatar(roomJid)
+  }
 
   /**
    * Restore room avatar from cache using stored hash.
    */
-  const restoreRoomAvatarFromCache = useCallback(
-    async (roomJid: string, avatarHash: string) => {
-      return client.profile.restoreRoomAvatarFromCache(roomJid, avatarHash)
-    },
-    [client]
-  )
+  const restoreRoomAvatarFromCache = async (roomJid: string, avatarHash: string) => {
+    return client.profile.restoreRoomAvatarFromCache(roomJid, avatarHash)
+  }
 
   /**
    * Browse public rooms available on a MUC service.
@@ -334,12 +276,9 @@ export function useRoom() {
    * @param mucServiceJid - Optional MUC service JID. If not provided, uses auto-discovered service.
    * @param rsm - Optional RSM pagination parameters.
    */
-  const browsePublicRooms = useCallback(
-    async (mucServiceJid?: string, rsm?: RSMRequest): Promise<{ rooms: AdminRoom[]; pagination: RSMResponse }> => {
-      return client.admin.fetchRoomList(mucServiceJid, rsm)
-    },
-    [client]
-  )
+  const browsePublicRooms = async (mucServiceJid?: string, rsm?: RSMRequest): Promise<{ rooms: AdminRoom[]; pagination: RSMResponse }> => {
+    return client.admin.fetchRoomList(mucServiceJid, rsm)
+  }
 
   /**
    * Invite a user to a MUC room (XEP-0045 mediated invitation).
@@ -349,12 +288,9 @@ export function useRoom() {
    * @param inviteeJid - The JID of the user to invite
    * @param reason - Optional reason/message for the invitation
    */
-  const inviteToRoom = useCallback(
-    async (roomJid: string, inviteeJid: string, reason?: string) => {
-      await client.muc.sendMediatedInvitation(roomJid, inviteeJid, reason)
-    },
-    [client]
-  )
+  const inviteToRoom = async (roomJid: string, inviteeJid: string, reason?: string) => {
+    await client.muc.sendMediatedInvitation(roomJid, inviteeJid, reason)
+  }
 
   /**
    * Invite multiple users to a MUC room (XEP-0045 mediated invitations).
@@ -362,92 +298,65 @@ export function useRoom() {
    * @param inviteeJids - Array of JIDs to invite
    * @param reason - Optional reason/message for the invitations
    */
-  const inviteMultipleToRoom = useCallback(
-    async (roomJid: string, inviteeJids: string[], reason?: string) => {
-      await client.muc.sendMediatedInvitations(roomJid, inviteeJids, reason)
-    },
-    [client]
-  )
+  const inviteMultipleToRoom = async (roomJid: string, inviteeJids: string[], reason?: string) => {
+    await client.muc.sendMediatedInvitations(roomJid, inviteeJids, reason)
+  }
 
-  const submitRoomConfig = useCallback(
-    async (roomJid: string, values: Record<string, string | string[]>) => {
-      await client.muc.submitRoomConfig(roomJid, values)
-    },
-    [client]
-  )
+  const submitRoomConfig = async (roomJid: string, values: Record<string, string | string[]>) => {
+    await client.muc.submitRoomConfig(roomJid, values)
+  }
 
-  const setSubject = useCallback(
-    async (roomJid: string, subject: string) => {
-      await client.muc.setSubject(roomJid, subject)
-    },
-    [client]
-  )
+  const setSubject = async (roomJid: string, subject: string) => {
+    await client.muc.setSubject(roomJid, subject)
+  }
 
-  const createRoom = useCallback(
-    async (
-      roomJid: string,
-      nickname: string,
-      config: {
-        name: string
-        description?: string
-        isPublic?: boolean
-        membersOnly?: boolean
-        extraFields?: Record<string, string | string[]>
-      },
-      options?: { invitees?: string[] }
-    ) => {
-      await client.muc.createRoom(roomJid, nickname, config, options)
+  const createRoom = async (
+    roomJid: string,
+    nickname: string,
+    config: {
+      name: string
+      description?: string
+      isPublic?: boolean
+      membersOnly?: boolean
+      extraFields?: Record<string, string | string[]>
     },
-    [client]
-  )
+    options?: { invitees?: string[] }
+  ) => {
+    await client.muc.createRoom(roomJid, nickname, config, options)
+  }
 
-  const destroyRoom = useCallback(
-    async (roomJid: string, reason?: string, alternateRoomJid?: string) => {
-      await client.muc.destroyRoom(roomJid, reason, alternateRoomJid)
-    },
-    [client]
-  )
+  const destroyRoom = async (roomJid: string, reason?: string, alternateRoomJid?: string) => {
+    await client.muc.destroyRoom(roomJid, reason, alternateRoomJid)
+  }
 
-  const roomExists = useCallback(
-    async (roomJid: string): Promise<boolean> => {
-      return client.muc.roomExists(roomJid)
-    },
-    [client]
-  )
+  const roomExists = async (roomJid: string): Promise<boolean> => {
+    return client.muc.roomExists(roomJid)
+  }
 
   /**
    * Set a user's affiliation in a room.
    * @see MUC.setAffiliation
    */
-  const setAffiliation = useCallback(
-    async (roomJid: string, userJid: string, affiliation: RoomAffiliation, reason?: string) => {
-      await client.muc.setAffiliation(roomJid, userJid, affiliation, reason)
-    },
-    [client]
-  )
+  const setAffiliation = async (roomJid: string, userJid: string, affiliation: RoomAffiliation, reason?: string) => {
+    await client.muc.setAffiliation(roomJid, userJid, affiliation, reason)
+  }
 
   /**
    * Set an occupant's role in a room.
    * Setting role to 'none' kicks the occupant.
    * @see MUC.setRole
    */
-  const setRole = useCallback(
-    async (roomJid: string, nick: string, role: RoomRole, reason?: string) => {
-      await client.muc.setRole(roomJid, nick, role, reason)
-    },
-    [client]
-  )
+  const setRole = async (roomJid: string, nick: string, role: RoomRole, reason?: string) => {
+    await client.muc.setRole(roomJid, nick, role, reason)
+  }
 
   /**
    * Query the list of users with a specific affiliation.
    * @see MUC.queryAffiliationList
    */
-  const queryAffiliationList = useCallback(
-    async (roomJid: string, affiliation: RoomAffiliation) => {
-      return client.muc.queryAffiliationList(roomJid, affiliation)
-    },
-    [client]
-  )
+  const queryAffiliationList = async (roomJid: string, affiliation: RoomAffiliation) => {
+    return client.muc.queryAffiliationList(roomJid, affiliation)
+  }
 
   // -----------------------------------------------------------------------
   // XEP-0317: Hat Management
@@ -457,67 +366,49 @@ export function useRoom() {
    * List all hat definitions for a room.
    * @see MUC.listHats
    */
-  const listHats = useCallback(
-    async (roomJid: string) => {
-      return client.muc.listHats(roomJid)
-    },
-    [client]
-  )
+  const listHats = async (roomJid: string) => {
+    return client.muc.listHats(roomJid)
+  }
 
   /**
    * Create a new hat definition for a room.
    * @see MUC.createHat
    */
-  const createHat = useCallback(
-    async (roomJid: string, title: string, uri: string, hue?: number) => {
-      await client.muc.createHat(roomJid, title, uri, hue)
-    },
-    [client]
-  )
+  const createHat = async (roomJid: string, title: string, uri: string, hue?: number) => {
+    await client.muc.createHat(roomJid, title, uri, hue)
+  }
 
   /**
    * Destroy a hat definition from a room.
    * @see MUC.destroyHat
    */
-  const destroyHat = useCallback(
-    async (roomJid: string, uri: string) => {
-      await client.muc.destroyHat(roomJid, uri)
-    },
-    [client]
-  )
+  const destroyHat = async (roomJid: string, uri: string) => {
+    await client.muc.destroyHat(roomJid, uri)
+  }
 
   /**
    * List all hat assignments in a room.
    * @see MUC.listHatAssignments
    */
-  const listHatAssignments = useCallback(
-    async (roomJid: string) => {
-      return client.muc.listHatAssignments(roomJid)
-    },
-    [client]
-  )
+  const listHatAssignments = async (roomJid: string) => {
+    return client.muc.listHatAssignments(roomJid)
+  }
 
   /**
    * Assign a hat to a user in a room.
    * @see MUC.assignHat
    */
-  const assignHat = useCallback(
-    async (roomJid: string, userJid: string, hatUri: string) => {
-      await client.muc.assignHat(roomJid, userJid, hatUri)
-    },
-    [client]
-  )
+  const assignHat = async (roomJid: string, userJid: string, hatUri: string) => {
+    await client.muc.assignHat(roomJid, userJid, hatUri)
+  }
 
   /**
    * Remove a hat from a user in a room.
    * @see MUC.unassignHat
    */
-  const unassignHat = useCallback(
-    async (roomJid: string, userJid: string, hatUri: string) => {
-      await client.muc.unassignHat(roomJid, userJid, hatUri)
-    },
-    [client]
-  )
+  const unassignHat = async (roomJid: string, userJid: string, hatUri: string) => {
+    await client.muc.unassignHat(roomJid, userJid, hatUri)
+  }
 
   /**
    * Fetch older room history (pagination) - for lazy loading on scroll up.
@@ -527,174 +418,96 @@ export function useRoom() {
    * - MAM query is not already complete
    * @param roomJid - Optional room JID. If not provided, uses active room.
    */
-  const fetchOlderHistory = useMemo(
-    () =>
-      createFetchOlderHistory({
-        getActiveId: () => roomStore.getState().activeRoomJid,
-        isValidTarget: (id) => {
-          // Room just needs to exist - MAM queries don't require being joined
-          // Quick Chat rooms don't persist history, so skip MAM for them
-          const room = roomStore.getState().rooms.get(id)
-          return !!room && !room.isQuickChat
-        },
-        getMAMState: (id) => roomStore.getState().getRoomMAMQueryState(id),
-        setMAMLoading: (id, loading) => roomStore.getState().setRoomMAMLoading(id, loading),
-        loadFromCache: (id, limit) => roomStore.getState().loadOlderMessagesFromCache(id, limit),
-        getOldestMessageId: (id) => {
-          const room = roomStore.getState().rooms.get(id)
-          const messages = room?.messages
-          if (!messages || messages.length === 0) return undefined
-          // Use stanzaId (MAM archive ID) for pagination cursor, fall back to message id
-          return messages[0].stanzaId || messages[0].id
-        },
-        queryMAM: async (id, beforeId) => {
-          await client.chat.queryRoomMAM({ roomJid: id, before: beforeId })
-        },
-        errorLogPrefix: 'Failed to fetch older room history',
-      }),
-    [client]
-  )
+  const fetchOlderHistory = createFetchOlderHistory({
+    getActiveId: () => roomStore.getState().activeRoomJid,
+    isValidTarget: (id) => {
+      // Room just needs to exist - MAM queries don't require being joined
+      // Quick Chat rooms don't persist history, so skip MAM for them
+      const room = roomStore.getState().rooms.get(id)
+      return !!room && !room.isQuickChat
+    },
+    getMAMState: (id) => roomStore.getState().getRoomMAMQueryState(id),
+    setMAMLoading: (id, loading) => roomStore.getState().setRoomMAMLoading(id, loading),
+    loadFromCache: (id, limit) => roomStore.getState().loadOlderMessagesFromCache(id, limit),
+    getOldestMessageId: (id) => {
+      const room = roomStore.getState().rooms.get(id)
+      const messages = room?.messages
+      if (!messages || messages.length === 0) return undefined
+      // Use stanzaId (MAM archive ID) for pagination cursor, fall back to message id
+      return messages[0].stanzaId || messages[0].id
+    },
+    queryMAM: async (id, beforeId) => {
+      await client.chat.queryRoomMAM({ roomJid: id, before: beforeId })
+    },
+    errorLogPrefix: 'Failed to fetch older room history',
+  })
 
-  // Memoize actions object to prevent re-renders when only state changes
-  const actions = useMemo(
-    () => ({
-      joinRoom,
-      createQuickChat,
-      leaveRoom,
-      getRoom,
-      setActiveRoom,
-      markAsRead,
-      sendMessage,
-      sendReaction,
-      sendCorrection,
-      retractMessage,
-      moderateMessage,
-      sendChatState,
-      setBookmark,
-      removeBookmark,
-      setRoomNotifyAll,
-      sendEasterEgg,
-      clearAnimation,
-      restoreRoomAvatarFromCache,
-      browsePublicRooms,
-      setRoomAvatar,
-      clearRoomAvatar,
-      setDraft,
-      getDraft,
-      clearDraft,
-      clearFirstNewMessageId,
-      updateLastSeenMessageId,
-      inviteToRoom,
-      inviteMultipleToRoom,
-      fetchOlderHistory,
-      submitRoomConfig,
-      setSubject,
-      createRoom,
-      destroyRoom,
-      roomExists,
-      setAffiliation,
-      setRole,
-      queryAffiliationList,
-      listHats,
-      createHat,
-      destroyHat,
-      listHatAssignments,
-      assignHat,
-      unassignHat,
-    }),
-    [
-      joinRoom,
-      createQuickChat,
-      leaveRoom,
-      getRoom,
-      setActiveRoom,
-      markAsRead,
-      sendMessage,
-      sendReaction,
-      sendCorrection,
-      retractMessage,
-      moderateMessage,
-      sendChatState,
-      setBookmark,
-      removeBookmark,
-      setRoomNotifyAll,
-      sendEasterEgg,
-      clearAnimation,
-      restoreRoomAvatarFromCache,
-      browsePublicRooms,
-      setRoomAvatar,
-      clearRoomAvatar,
-      setDraft,
-      getDraft,
-      clearDraft,
-      clearFirstNewMessageId,
-      updateLastSeenMessageId,
-      inviteToRoom,
-      inviteMultipleToRoom,
-      fetchOlderHistory,
-      submitRoomConfig,
-      setSubject,
-      createRoom,
-      destroyRoom,
-      roomExists,
-      setAffiliation,
-      setRole,
-      queryAffiliationList,
-      listHats,
-      createHat,
-      destroyHat,
-      listHatAssignments,
-      assignHat,
-      unassignHat,
-    ]
-  )
+  return {
+    // State
+    // NOTE: `rooms` Map is intentionally NOT exposed here to prevent render loops.
+    // Use the derived selectors (joinedRooms, bookmarkedRooms, allRooms) for lists,
+    // or getRoom() for single room access. For direct Map access in rare cases,
+    // use roomStore.getState().rooms
+    joinedRooms,
+    bookmarkedRooms,
+    allRooms,
+    quickChatRooms,
+    activeRoomJid,
+    activeRoom,
+    activeMessages,
+    activeTypingUsers,
+    totalMentionsCount,
+    totalUnreadCount,
+    totalNotifiableUnreadCount,
+    roomsWithUnreadCount,
+    activeAnimation,
+    drafts,
+    mucServiceJid,
+    activeMAMState,
 
-  // Memoize the entire return value to prevent render loops
-  return useMemo(
-    () => ({
-      // State
-      // NOTE: `rooms` Map is intentionally NOT exposed here to prevent render loops.
-      // Use the derived selectors (joinedRooms, bookmarkedRooms, allRooms) for lists,
-      // or getRoom() for single room access. For direct Map access in rare cases,
-      // use roomStore.getState().rooms
-      joinedRooms,
-      bookmarkedRooms,
-      allRooms,
-      quickChatRooms,
-      activeRoomJid,
-      activeRoom,
-      activeMessages,
-      activeTypingUsers,
-      totalMentionsCount,
-      totalUnreadCount,
-      totalNotifiableUnreadCount,
-      roomsWithUnreadCount,
-      activeAnimation,
-      drafts,
-      mucServiceJid,
-      activeMAMState,
-
-      // Actions (spread memoized actions)
-      ...actions,
-    }),
-    [
-      joinedRooms,
-      bookmarkedRooms,
-      allRooms,
-      quickChatRooms,
-      activeRoomJid,
-      activeRoom,
-      activeMessages,
-      activeTypingUsers,
-      totalMentionsCount,
-      totalUnreadCount,
-      totalNotifiableUnreadCount,
-      roomsWithUnreadCount,
-      activeAnimation,
-      drafts,
-      mucServiceJid,
-      activeMAMState,
-      actions,
-    ]
-  )
+    // Actions
+    joinRoom,
+    createQuickChat,
+    leaveRoom,
+    getRoom,
+    setActiveRoom,
+    markAsRead,
+    sendMessage,
+    sendReaction,
+    sendCorrection,
+    retractMessage,
+    moderateMessage,
+    sendChatState,
+    setBookmark,
+    removeBookmark,
+    setRoomNotifyAll,
+    sendEasterEgg,
+    clearAnimation,
+    restoreRoomAvatarFromCache,
+    browsePublicRooms,
+    setRoomAvatar,
+    clearRoomAvatar,
+    setDraft,
+    getDraft,
+    clearDraft,
+    clearFirstNewMessageId,
+    updateLastSeenMessageId,
+    inviteToRoom,
+    inviteMultipleToRoom,
+    fetchOlderHistory,
+    submitRoomConfig,
+    setSubject,
+    createRoom,
+    destroyRoom,
+    roomExists,
+    setAffiliation,
+    setRole,
+    queryAffiliationList,
+    listHats,
+    createHat,
+    destroyHat,
+    listHatAssignments,
+    assignHat,
+    unassignHat,
+  }
 }

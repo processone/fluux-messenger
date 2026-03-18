@@ -1,4 +1,3 @@
-import { useCallback } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { ignoreStore, type IgnoredUser } from '../stores/ignoreStore'
 import { useIgnoreStore } from '../react/storeHooks'
@@ -36,33 +35,21 @@ import { useIgnoreStore } from '../react/storeHooks'
 export function useIgnore() {
   const ignoredUsers = useIgnoreStore(useShallow((s) => s.ignoredUsers))
 
-  const addIgnored = useCallback(
-    (roomJid: string, user: IgnoredUser) => {
-      ignoreStore.getState().addIgnored(roomJid, user)
-    },
-    []
-  )
+  const addIgnored = (roomJid: string, user: IgnoredUser) => {
+    ignoreStore.getState().addIgnored(roomJid, user)
+  }
 
-  const removeIgnored = useCallback(
-    (roomJid: string, identifier: string) => {
-      ignoreStore.getState().removeIgnored(roomJid, identifier)
-    },
-    []
-  )
+  const removeIgnored = (roomJid: string, identifier: string) => {
+    ignoreStore.getState().removeIgnored(roomJid, identifier)
+  }
 
-  const isIgnored = useCallback(
-    (roomJid: string, identifier: string): boolean => {
-      return ignoreStore.getState().isIgnored(roomJid, identifier)
-    },
-    []
-  )
+  const isIgnored = (roomJid: string, identifier: string): boolean => {
+    return ignoreStore.getState().isIgnored(roomJid, identifier)
+  }
 
-  const getIgnoredForRoom = useCallback(
-    (roomJid: string): IgnoredUser[] => {
-      return ignoreStore.getState().getIgnoredForRoom(roomJid)
-    },
-    []
-  )
+  const getIgnoredForRoom = (roomJid: string): IgnoredUser[] => {
+    return ignoreStore.getState().getIgnoredForRoom(roomJid)
+  }
 
   return {
     ignoredUsers,

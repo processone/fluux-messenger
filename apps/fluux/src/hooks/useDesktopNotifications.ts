@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef } from 'react'
 import { rosterStore, usePresence } from '@fluux/sdk'
 import type { Conversation, Message, Room, RoomMessage } from '@fluux/sdk'
 import { sendNotification } from '@tauri-apps/plugin-notification'
@@ -81,7 +81,7 @@ export function useDesktopNotifications(): void {
   }, [])
 
   // Show conversation notification
-  const showConversationNotification = useCallback(async (conv: Conversation, message: Message) => {
+  const showConversationNotification = async (conv: Conversation, message: Message) => {
     if (presenceStatusRef.current === 'dnd') return
     if (!permissionGranted.current) {
       notificationDebug.desktopNotification({
@@ -135,10 +135,10 @@ export function useDesktopNotifications(): void {
 
       setTimeout(() => notification.close(), 5000)
     }
-  }, [navigateToConversation, permissionGranted])
+  }
 
   // Show room notification
-  const showRoomNotification = useCallback(async (room: Room, message: RoomMessage) => {
+  const showRoomNotification = async (room: Room, message: RoomMessage) => {
     if (presenceStatusRef.current === 'dnd') return
     if (!permissionGranted.current) {
       notificationDebug.desktopNotification({
@@ -191,7 +191,7 @@ export function useDesktopNotifications(): void {
 
       setTimeout(() => notification.close(), 5000)
     }
-  }, [navigateToRoom, permissionGranted])
+  }
 
   // Subscribe to notification events
   useNotificationEvents({

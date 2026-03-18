@@ -6,7 +6,7 @@
  * - Room management (owners/admins): settings, subject, avatar, members
  * - Occupant panel toggle
  */
-import { useState, useRef, useCallback, useMemo } from 'react'
+import { useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Room } from '@fluux/sdk'
 import { generateConsistentColorHexSync, getUniqueOccupantCount } from '@fluux/sdk'
@@ -87,10 +87,10 @@ export function RoomHeader({
   const canManageRoom = isOwner || isAdmin
 
   // Close menus when clicking outside
-  const closeNotifyMenu = useCallback(() => setShowNotifyMenu(false), [])
+  const closeNotifyMenu = () => setShowNotifyMenu(false)
   useClickOutside(notifyMenuRef, closeNotifyMenu, showNotifyMenu)
 
-  const closeOwnerMenu = useCallback(() => setShowOwnerMenu(false), [])
+  const closeOwnerMenu = () => setShowOwnerMenu(false)
   useClickOutside(ownerMenuRef, closeOwnerMenu, showOwnerMenu)
 
   // Determine current notification mode
@@ -102,10 +102,7 @@ export function RoomHeader({
   const notifyMode = getNotifyMode()
 
   // Count unique users by bare JID (multiple connections from same user count as one)
-  const uniqueOccupantCount = useMemo(
-    () => getUniqueOccupantCount(room.occupants.values()),
-    [room.occupants]
-  )
+  const uniqueOccupantCount = getUniqueOccupantCount(room.occupants.values())
 
   // Get icon based on mode
   const NotifyIcon = notifyMode === 'mentions' ? BellOff

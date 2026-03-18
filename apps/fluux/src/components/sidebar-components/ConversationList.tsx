@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, memo } from 'react'
+import React, { useState, useRef, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useListKeyboardNav, useRouteSync } from '@/hooks'
 import {
@@ -55,13 +55,13 @@ export function ConversationList() {
   // Create maps for quick lookup
   const contactMap = new Map(contacts.map(c => [c.jid, c]))
 
-  const handleConversationClick = useCallback((convId: string) => {
+  const handleConversationClick = (convId: string) => {
     // Push if going from list to first item, replace if switching between items
     const hasActive = !!chatStore.getState().activeConversationId
     void setActiveRoom(null)
     void setActiveConversation(convId)
     navigateToMessages(convId, { replace: hasActive })
-  }, [setActiveRoom, setActiveConversation, navigateToMessages])
+  }
 
   // Keyboard navigation
   const { selectedIndex, isKeyboardNav, getItemProps, getItemAttribute, getContainerProps } = useListKeyboardNav({
@@ -139,12 +139,12 @@ export function ArchiveList() {
 
   const contactMap = new Map(contacts.map(c => [c.jid, c]))
 
-  const handleConversationClick = useCallback((convId: string) => {
+  const handleConversationClick = (convId: string) => {
     const hasActive = !!chatStore.getState().activeConversationId
     void setActiveRoom(null)
     void setActiveConversation(convId)
     navigateToArchive(convId, { replace: hasActive })
-  }, [setActiveRoom, setActiveConversation, navigateToArchive])
+  }
 
   const { selectedIndex, isKeyboardNav, getItemProps, getItemAttribute, getContainerProps } = useListKeyboardNav({
     items: archivedConversations,

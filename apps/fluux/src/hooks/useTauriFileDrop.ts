@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import {
   subscribeToDragState,
   subscribeToFileDrop,
@@ -46,9 +46,9 @@ export function useTauriFileDrop(
     }
   }, [isTauri, enabled])
 
-  const resetDragging = useCallback(() => {
+  const resetDragging = () => {
     setIsDragging(false)
-  }, [])
+  }
 
   return {
     isDragging: isTauri ? isDragging : false,

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, type RefObject } from 'react'
+import { useState, useRef, useEffect, type RefObject } from 'react'
 
 interface MessageLike {
   id: string
@@ -110,7 +110,7 @@ export function useMessageSelection<T extends MessageLike>(
   }, [selectedMessageId, scrollRef])
 
   // Find the index of the last visible message in the scroll container (start from bottom)
-  const findLastVisibleMessageIndex = useCallback(() => {
+  const findLastVisibleMessageIndex = () => {
     // Fallback to last message if no DOM available
     if (!scrollRef.current) return messages.length - 1
 
@@ -129,10 +129,10 @@ export function useMessageSelection<T extends MessageLike>(
       }
     }
     return messages.length - 1 // Default to last message
-  }, [messages, scrollRef])
+  }
 
   // Keyboard navigation for message list (plain arrow keys when message view is focused)
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     const { onEnterPressed } = options ?? {}
 
     // Handle Enter key for toggling expand/collapse
@@ -203,20 +203,20 @@ export function useMessageSelection<T extends MessageLike>(
 
       return messages[newIndex]?.id ?? null
     })
-  }, [messages, findLastVisibleMessageIndex, scrollRef, isAtBottomRef, onReachedFirstMessage, isLoadingOlder, isHistoryComplete, options, selectedMessageId])
+  }
 
   /**
    * Clear selection (call when conversation changes)
    */
-  const clearSelection = useCallback(() => {
+  const clearSelection = () => {
     setSelectedMessageId(null)
     setShowToolbarForSelection(false)
-  }, [])
+  }
 
   /**
    * Handle mouse movement over messages - tracks hovered message and clears keyboard selection
    */
-  const handleMouseMove = useCallback((e: React.MouseEvent, messageId?: string) => {
+  const handleMouseMove = (e: React.MouseEvent, messageId?: string) => {
     // Ignore if within keyboard cooldown
     if (Date.now() < keyboardCooldownRef.current) {
       lastMousePosRef.current = { x: e.clientX, y: e.clientY }
@@ -237,14 +237,14 @@ export function useMessageSelection<T extends MessageLike>(
     if (selectedMessageId) {
       clearSelection()
     }
-  }, [selectedMessageId, clearSelection])
+  }
 
   /**
    * Handle mouse leave - clears hovered message tracking
    */
-  const handleMouseLeave = useCallback(() => {
+  const handleMouseLeave = () => {
     hoveredMessageIdRef.current = null
-  }, [])
+  }
 
   return {
     /** Currently selected message ID */

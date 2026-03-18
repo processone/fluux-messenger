@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo, type ReactNode, type RefObject, type Ref, useImperativeHandle } from 'react'
+import React, { useState, useRef, useEffect, type ReactNode, type RefObject, type Ref, useImperativeHandle } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { Send, Smile, Paperclip, Reply, X, Pencil, Loader2, Image, FileText, Trash2 } from 'lucide-react'
@@ -162,13 +162,13 @@ export function MessageComposer({
   // Internal state for uncontrolled mode
   const [internalText, setInternalText] = useState('')
   const text = controlledValue !== undefined ? controlledValue : internalText
-  const setText = useCallback((t: string) => {
+  const setText = (t: string) => {
     if (controlledValue !== undefined) {
       onValueChange?.(t)
     } else {
       setInternalText(t)
     }
-  }, [controlledValue, onValueChange])
+  }
 
   const [sending, setSending] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
@@ -176,22 +176,22 @@ export function MessageComposer({
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
   // Merged ref callback to assign to both internal and external refs
-  const mergedInputRef = useCallback((node: HTMLTextAreaElement | null) => {
+  const mergedInputRef = (node: HTMLTextAreaElement | null) => {
     // Assign to internal ref
     (inputRef as React.MutableRefObject<HTMLTextAreaElement | null>).current = node
     // Assign to external ref if provided
     if (textareaRef) {
       (textareaRef as React.MutableRefObject<HTMLTextAreaElement | null>).current = node
     }
-  }, [textareaRef])
+  }
 
   // Compute if current edit state would result in message deletion
-  const willDeleteMessage = useMemo(() => {
+  const willDeleteMessage = (() => {
     if (!editingMessage) return false
     const hasText = text.trim().length > 0
     const hasAttachment = editingMessage.attachment && !editAttachmentRemoved
     return !hasText && !hasAttachment
-  }, [editingMessage, text, editAttachmentRemoved])
+  })()
   const emojiPickerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -211,7 +211,7 @@ export function MessageComposer({
   }), [text, setText])
 
   // Close emoji picker when clicking outside
-  const closeEmojiPicker = useCallback(() => setShowEmojiPicker(false), [])
+  const closeEmojiPicker = () => setShowEmojiPicker(false)
   useClickOutside(emojiPickerRef, closeEmojiPicker, showEmojiPicker)
 
   // Slash command handler
@@ -452,7 +452,7 @@ export function MessageComposer({
   // Supports: screenshots, "Copy Image" from browsers, pasted files
   // On Linux/Tauri, WebKitGTK may not expose clipboard images through the web API,
   // so we fall back to native clipboard reading via tauri-plugin-clipboard-manager.
-  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     if (!onFileSelect) return
 
     const clipboardData = e.clipboardData
@@ -497,7 +497,7 @@ export function MessageComposer({
         })
       )
     }
-  }, [onFileSelect])
+  }
 
   // File upload handlers
   const handleFileClick = () => {
@@ -551,10 +551,10 @@ export function MessageComposer({
   )
 
   // Wrapped cancel handler that clears text before calling onCancelEdit
-  const handleCancelEdit = useCallback(() => {
+  const handleCancelEdit = () => {
     setText('')
     onCancelEdit?.()
-  }, [setText, onCancelEdit])
+  }
 
   return (
     <form onSubmit={handleSubmit} className="px-4 pt-2 pb-4 relative">

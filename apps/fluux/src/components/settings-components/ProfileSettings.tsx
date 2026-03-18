@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Monitor, Smartphone, Globe, Pencil, Camera, Trash2, Key, Network, Bell, Plus, Building2, Mail, MapPin, User } from 'lucide-react'
 import { type ResourcePresence, type VCardInfo, getClientType, getLocalPart, useConnection, usePresence } from '@fluux/sdk'
@@ -150,19 +150,19 @@ export function ProfileSettings() {
     }
   }, [editingVCardField])
 
-  const handleStartVCardEdit = useCallback((key: string) => {
+  const handleStartVCardEdit = (key: string) => {
     setVcardEditValue(ownVCard?.[key as keyof VCardInfo] || '')
     setEditingVCardField(key)
     setError(null)
-  }, [ownVCard])
+  }
 
-  const handleCancelVCardEdit = useCallback(() => {
+  const handleCancelVCardEdit = () => {
     setEditingVCardField(null)
     setVcardEditValue('')
     setError(null)
-  }, [])
+  }
 
-  const handleSaveVCardField = useCallback(async (key: string, value: string) => {
+  const handleSaveVCardField = async (key: string, value: string) => {
     const trimmed = value.trim()
     const newVCard: VCardInfo = { ...ownVCard }
 
@@ -183,22 +183,22 @@ export function ProfileSettings() {
     } finally {
       setVcardSaving(false)
     }
-  }, [ownVCard, setOwnVCard, t])
+  }
 
-  const handleAddVCardField = useCallback((key: string) => {
+  const handleAddVCardField = (key: string) => {
     setShowAddField(false)
     setVcardEditValue('')
     setEditingVCardField(key)
-  }, [])
+  }
 
-  const handleVCardKeyDown = useCallback((e: React.KeyboardEvent, key: string) => {
+  const handleVCardKeyDown = (e: React.KeyboardEvent, key: string) => {
     if (e.key === 'Enter') {
       e.preventDefault()
       void handleSaveVCardField(key, vcardEditValue)
     } else if (e.key === 'Escape') {
       handleCancelVCardEdit()
     }
-  }, [handleSaveVCardField, vcardEditValue, handleCancelVCardEdit])
+  }
 
   // Map presenceShow to color
   const presenceColor = isConnected ? PRESENCE_COLORS[presenceShow] : APP_OFFLINE_PRESENCE_COLOR

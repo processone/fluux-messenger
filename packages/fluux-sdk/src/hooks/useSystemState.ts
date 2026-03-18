@@ -27,7 +27,6 @@
  * @module Hooks/useSystemState
  * @category Hooks
  */
-import { useCallback, useMemo } from 'react'
 import { usePresenceContext } from '../provider/PresenceContext'
 import type { AutoAwayConfig } from '../core/presenceMachine'
 
@@ -136,7 +135,7 @@ export function useSystemState(): UseSystemStateReturn {
    * concerns (verification, reconnection), use `client.notifySystemState()`
    * directly — it orchestrates both presence and connection in one call.
    */
-  const notifySystemState = useCallback((state: SystemState, idleSince?: Date) => {
+  const notifySystemState = (state: SystemState, idleSince?: Date) => {
     switch (state) {
       case 'idle':
         // Signal idle to presence machine - it will transition to auto-away
@@ -169,30 +168,30 @@ export function useSystemState(): UseSystemStateReturn {
         // with appropriate time thresholds.
         break
     }
-  }, [presenceActor])
+  }
 
   // Convenience methods
-  const notifyIdle = useCallback((since: Date) => {
+  const notifyIdle = (since: Date) => {
     notifySystemState('idle', since)
-  }, [notifySystemState])
+  }
 
-  const notifyActive = useCallback(() => {
+  const notifyActive = () => {
     notifySystemState('active')
-  }, [notifySystemState])
+  }
 
-  const notifySleep = useCallback(() => {
+  const notifySleep = () => {
     notifySystemState('asleep')
-  }, [notifySystemState])
+  }
 
-  const notifyWake = useCallback(() => {
+  const notifyWake = () => {
     notifySystemState('awake')
-  }, [notifySystemState])
+  }
 
-  const setAutoAwayConfig = useCallback((config: Partial<AutoAwayConfig>) => {
+  const setAutoAwayConfig = (config: Partial<AutoAwayConfig>) => {
     presenceActor.send({ type: 'SET_AUTO_AWAY_CONFIG', config })
-  }, [presenceActor])
+  }
 
-  return useMemo(() => ({
+  return {
     notifySystemState,
     notifyIdle,
     notifyActive,
@@ -200,5 +199,5 @@ export function useSystemState(): UseSystemStateReturn {
     notifyWake,
     setAutoAwayConfig,
     autoAwayConfig,
-  }), [notifySystemState, notifyIdle, notifyActive, notifySleep, notifyWake, setAutoAwayConfig, autoAwayConfig])
+  }
 }

@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react'
+import { type ReactNode } from 'react'
 import { generateConsistentColorHexSync, type PresenceStatus, type PresenceShow } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS } from '@/constants/ui'
@@ -197,14 +197,9 @@ export function Avatar({
 
   // Generate consistent background color from identifier, or use custom fallbackColor
   // Own avatars also use consistent color (green is only used for own nickname text)
-  const backgroundColor = useMemo(() => {
-    if (fallbackColor) {
-      // Ensure the fallback color has enough contrast with white text
-      // by darkening it if too light (applied at the end of color generation)
-      return ensureContrastWithWhite(fallbackColor)
-    }
-    return generateConsistentColorHexSync(identifier, { saturation: 60, lightness: 45 })
-  }, [identifier, fallbackColor])
+  const backgroundColor = fallbackColor
+    ? ensureContrastWithWhite(fallbackColor)
+    : generateConsistentColorHexSync(identifier, { saturation: 60, lightness: 45 })
 
   // Get the display name and first letter
   const displayName = name || identifier

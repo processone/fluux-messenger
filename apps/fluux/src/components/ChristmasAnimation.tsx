@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState } from 'react'
 
 interface ChristmasAnimationProps {
   onComplete: () => void
@@ -74,10 +74,10 @@ export function ChristmasAnimation({ onComplete, duration = 6000 }: ChristmasAni
   }, [duration, onComplete])
 
   // Click to dismiss early
-  const handleClick = useCallback(() => {
+  const handleClick = () => {
     setIsVisible(false)
     setTimeout(onComplete, 500)
-  }, [onComplete])
+  }
 
   return (
     <div

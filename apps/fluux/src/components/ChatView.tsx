@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo, useCallback, memo, type RefObject } from 'react'
+import React, { useState, useRef, useEffect, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { useChatActive, useContactIdentities, createMessageLookup, getBareJid, getLocalPart, type Message, type ContactIdentity } from '@fluux/sdk'
@@ -54,21 +54,18 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
 
 
   // Find the last outgoing message ID for edit button visibility (skip retracted)
-  const lastOutgoingMessageId = useMemo(
-    () => findLastEditableMessageId(activeMessages),
-    [activeMessages]
-  )
+  const lastOutgoingMessageId = findLastEditableMessageId(activeMessages)
 
   // Last message ID - reply button is disabled for last message (context is already clear)
   const lastMessageId = activeMessages.length > 0 ? activeMessages[activeMessages.length - 1].id : null
 
   // Handler to edit the last outgoing message (triggered by Up arrow in empty composer)
-  const handleEditLastMessage = useCallback(() => {
+  const handleEditLastMessage = () => {
     const msg = findLastEditableMessage(activeMessages)
     if (msg) {
       setEditingMessage(msg)
     }
-  }, [activeMessages])
+  }
 
   // Composing state - hides message toolbars when user is typing
   const [isComposing, setIsComposing] = useState(false)
@@ -76,15 +73,15 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
   // Track which message has reaction picker open (hides other toolbars)
   const [activeReactionPickerMessageId, setActiveReactionPickerMessageId] = useState<string | null>(null)
 
-  // Memoized callbacks to prevent render loops (new function refs cause child re-renders)
-  const handleCancelReply = useCallback(() => setReplyingTo(null), [])
-  const handleCancelEdit = useCallback(() => setEditingMessage(null), [])
-  const handleReactionPickerChange = useCallback((messageId: string, isOpen: boolean) => {
+  // Callbacks for child components
+  const handleCancelReply = () => setReplyingTo(null)
+  const handleCancelEdit = () => setEditingMessage(null)
+  const handleReactionPickerChange = (messageId: string, isOpen: boolean) => {
     setActiveReactionPickerMessageId(isOpen ? messageId : null)
-  }, [])
+  }
 
-  // Memoized upload state to prevent new object reference on every render
-  const uploadStateObj = useMemo(() => ({ isUploading, progress }), [isUploading, progress])
+  // Upload state object
+  const uploadStateObj = { isUploading, progress }
 
   // Composer handle ref for type-to-focus (separate from focus zone ref)
   const composerHandleRef = useRef<MessageComposerHandle>(null)
@@ -97,14 +94,14 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
   const isAtBottomRef = useRef(true)
 
   // Scroll to bottom (used after sending a message)
-  const scrollToBottom = useCallback(() => {
+  const scrollToBottom = () => {
     if (scrollRef.current) {
       scrollRef.current.scrollTo({
         top: scrollRef.current.scrollHeight,
         behavior: 'smooth',
       })
     }
-  }, [])
+  }
 
   // Note: Media load scroll handling is now managed by useMessageListScroll hook
   // via the handleMediaLoad callback passed through renderMessage. This provides
@@ -112,11 +109,11 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
 
   // Scroll to bottom when composer resizes (typing long message)
   // Only scrolls if user was already at bottom to avoid disrupting scroll position
-  const handleInputResize = useCallback(() => {
+  const handleInputResize = () => {
     if (scrollRef.current && isAtBottomRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [])
+  }
 
   // Keyboard navigation for message selection
   const {
@@ -139,7 +136,7 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
 
   // Create a lookup map for messages by ID (for reply context)
   // Index by both client id and stanza-id since replies may reference either
-  const messagesById = useMemo(() => createMessageLookup(activeMessages), [activeMessages])
+  const messagesById = createMessageLookup(activeMessages)
 
   // Clear reply/edit/pending attachment state when conversation changes
   // Note: scroll position is managed by MessageList component
@@ -162,7 +159,7 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
 
   // File drop handler - stages file for preview only (no upload yet - privacy protection)
   // Upload happens when user clicks Send, not on drop (prevents accidental data leaks)
-  const handleFileDrop = useCallback((file: File) => {
+  const handleFileDrop = (file: File) => {
     if (!activeConversation || !isSupported) return
     // Create preview URL for images/videos
     const previewUrl = file.type.startsWith('image/') || file.type.startsWith('video/')
@@ -171,15 +168,15 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
     setPendingAttachment({ file, previewUrl })
     // Focus composer so user can add a message
     setTimeout(() => composerHandleRef.current?.focus(), 0)
-  }, [activeConversation, isSupported])
+  }
 
   // Clear pending attachment and revoke preview URL
-  const handleRemovePendingAttachment = useCallback(() => {
+  const handleRemovePendingAttachment = () => {
     if (pendingAttachment?.previewUrl) {
       URL.revokeObjectURL(pendingAttachment.previewUrl)
     }
     setPendingAttachment(null)
-  }, [pendingAttachment])
+  }
 
   // Drag-and-drop for file upload (handles both HTML5 and Tauri native)
   const { isDragging, dragHandlers } = useDragAndDrop({
@@ -188,27 +185,25 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
   })
 
   // Handle reply button click - set reply state and focus composer
-  const handleReply = useCallback((message: Message) => {
+  const handleReply = (message: Message) => {
     setReplyingTo(message)
     // Focus composer so user can start typing immediately
     setTimeout(() => composerHandleRef.current?.focus(), 0)
-  }, [])
+  }
 
-  // Memoize the clearFirstNewMessageId callback to avoid render loops
-  // (inline arrow functions create new references on every render)
   const conversationId = activeConversation?.id
-  const handleClearFirstNewMessageId = useCallback(() => {
+  const handleClearFirstNewMessageId = () => {
     if (conversationId) {
       clearFirstNewMessageId(conversationId)
     }
-  }, [conversationId, clearFirstNewMessageId])
+  }
 
   // Viewport observer callback: update lastSeenMessageId as user scrolls
-  const handleMessageSeen = useCallback((messageId: string) => {
+  const handleMessageSeen = (messageId: string) => {
     if (conversationId) {
       updateLastSeenMessageId(conversationId, messageId)
     }
-  }, [conversationId, updateLastSeenMessageId])
+  }
 
   if (!activeConversation) return null
 
@@ -406,17 +401,17 @@ const ChatMessageList = memo(function ChatMessageList({
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Handle mouse enter on a message - set it as hovered immediately
-  const handleMessageHover = useCallback((messageId: string) => {
+  const handleMessageHover = (messageId: string) => {
     // Clear any pending timeout to clear hover
     if (hoverTimeoutRef.current) {
       clearTimeout(hoverTimeoutRef.current)
       hoverTimeoutRef.current = null
     }
     setHoveredMessageId(messageId)
-  }, [])
+  }
 
   // Handle mouse leave from a message - delay clearing to allow moving to toolbar
-  const handleMessageLeave = useCallback(() => {
+  const handleMessageLeave = () => {
     // Clear any existing timeout
     if (hoverTimeoutRef.current) {
       clearTimeout(hoverTimeoutRef.current)
@@ -426,7 +421,7 @@ const ChatMessageList = memo(function ChatMessageList({
       setHoveredMessageId(null)
       hoverTimeoutRef.current = null
     }, 100) // Small delay to allow mouse to reach toolbar
-  }, [])
+  }
 
   // Clear hover when conversation changes
   useEffect(() => {
@@ -442,16 +437,14 @@ const ChatMessageList = memo(function ChatMessageList({
     }
   }, [])
 
-  // Memoize formatTypingUser to prevent render loops
-  const formatTypingUser = useCallback((jid: string) => {
+  const formatTypingUser = (jid: string) => {
     const bareJid = jid.split('/')[0]
     return contactsByJid.get(bareJid)?.name || bareJid.split('@')[0]
-  }, [contactsByJid])
+  }
 
-  // Memoize renderMessage to prevent render loops
-  // Note: This callback captures many values, but they all affect how messages render
+  // Render function for messages
   // The onMediaLoad parameter is provided by MessageList from useMessageListScroll hook
-  const renderMessage = useCallback((msg: Message, idx: number, groupMessages: Message[], _showNewMarker: boolean, onMediaLoad: () => void) => (
+  const renderMessage = (msg: Message, idx: number, groupMessages: Message[], _showNewMarker: boolean, onMediaLoad: () => void) => (
     <ChatMessageBubble
       message={msg}
       showAvatar={shouldShowAvatar(groupMessages, idx)}
@@ -483,13 +476,7 @@ const ChatMessageList = memo(function ChatMessageList({
       formatTime={formatTime}
       timeFormat={effectiveTimeFormat}
     />
-  ), [
-    ownAvatar, contactsByJid, ownNickname, conversationId, conversationType,
-    sendReaction, myBareJid, messagesById, onReply, onEdit, lastOutgoingMessageId, lastMessageId,
-    isComposing, activeReactionPickerMessageId, onReactionPickerChange, retractMessage, retryMessage,
-    selectedMessageId, hasKeyboardSelection, showToolbarForSelection, isDarkMode,
-    hoveredMessageId, handleMessageHover, handleMessageLeave, formatTime, effectiveTimeFormat
-  ])
+  )
 
   return (
     <MessageListComponent
@@ -602,15 +589,15 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
       : getConsistentTextColor(message.from.split('/')[0], isDarkMode)
 
   // Get my current reactions to this message
-  const myReactions = useMemo(() => {
+  const myReactions = (() => {
     if (!message.reactions || !myBareJid) return []
     return Object.entries(message.reactions)
       .filter(([, reactors]) => reactors.includes(myBareJid))
       .map(([emoji]) => emoji)
-  }, [message.reactions, myBareJid])
+  })()
 
   // Handle reaction toggle
-  const handleReaction = useCallback((emoji: string) => {
+  const handleReaction = (emoji: string) => {
     if (!myBareJid) return
 
     const newReactions = myReactions.includes(emoji)
@@ -618,10 +605,10 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
       : [...myReactions, emoji]
 
     void sendReaction(conversationId, message.id, newReactions, conversationType)
-  }, [myBareJid, myReactions, sendReaction, conversationId, message.id, conversationType])
+  }
 
   // Build reply context using shared helper
-  const replyContext = useMemo(() => buildReplyContext(
+  const replyContext = buildReplyContext(
     message,
     messagesById,
     (originalMsg, fallbackId) => {
@@ -661,14 +648,14 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
       }
     },
     isDarkMode
-  ), [message, messagesById, contactsByJid, isDarkMode, myBareJid, ownAvatar, ownNickname])
+  )
 
   // Get reactor display name (contact name, or username if not in roster)
-  const getReactorName = useCallback((jid: string) => {
+  const getReactorName = (jid: string) => {
     const bareJid = getBareJid(jid)
     if (bareJid === myBareJid) return t('chat.you')
     return contactsByJid.get(bareJid)?.name || getLocalPart(jid)
-  }, [myBareJid, contactsByJid, t])
+  }
 
   // Delete confirmation state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)

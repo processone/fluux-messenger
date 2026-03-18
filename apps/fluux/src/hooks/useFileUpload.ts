@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useXMPP, type FileAttachment, type ThumbnailInfo } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
@@ -44,21 +44,18 @@ export function useFileUpload() {
   // Use focused selector for httpUploadService (only re-render when it changes)
   const httpUploadService = useConnectionStore((s) => s.httpUploadService)
   // Get requestUploadSlot from client
-  const requestUploadSlot = useCallback(
-    (filename: string, size: number, contentType: string) => {
-      return client.discovery.requestUploadSlot(filename, size, contentType)
-    },
-    [client]
-  )
+  const requestUploadSlot = (filename: string, size: number, contentType: string) => {
+    return client.discovery.requestUploadSlot(filename, size, contentType)
+  }
   const [state, setState] = useState<UploadState>({
     isUploading: false,
     progress: 0,
     error: null,
   })
 
-  const clearError = useCallback(() => {
+  const clearError = () => {
     setState(s => ({ ...s, error: null }))
-  }, [])
+  }
 
   /**
    * Upload a file with optional thumbnail and duration extraction.
@@ -67,7 +64,7 @@ export function useFileUpload() {
    * - Audio: extracts duration
    * Returns FileAttachment with URL, thumbnail info, and duration, or null on failure.
    */
-  const uploadFile = useCallback(async (file: File): Promise<FileAttachment | null> => {
+  const uploadFile = async (file: File): Promise<FileAttachment | null> => {
     if (!httpUploadService) {
       setState(s => ({ ...s, error: t('upload.notSupported') }))
       return null
@@ -198,7 +195,7 @@ export function useFileUpload() {
       setState({ isUploading: false, progress: 0, error: message })
       return null
     }
-  }, [httpUploadService, requestUploadSlot, t])
+  }
 
   return {
     ...state,

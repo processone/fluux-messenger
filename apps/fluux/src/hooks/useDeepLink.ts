@@ -6,7 +6,7 @@
  *
  * Phase 2.4: Uses React Router for navigation instead of callback handlers.
  */
-import { useEffect, useCallback, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { useChat, useRoom, useRoster, chatStore, type Conversation, parseXmppUri, isMucJid, getBareJid } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { useNavigateToTarget } from './useNavigateToTarget'
@@ -37,7 +37,7 @@ export function useDeepLink() {
   }, [contacts, jid])
 
   // Handle an XMPP URI
-  const handleXmppUri = useCallback(async (uri: string) => {
+  const handleXmppUri = async (uri: string) => {
     console.log('[DeepLink] Received URI:', uri)
 
     const parsed = parseXmppUri(uri)
@@ -103,13 +103,13 @@ export function useDeepLink() {
         console.log('[DeepLink] Message body provided (not implemented):', messageBody)
       }
     }
-  }, [navigateToConversation, navigateToRoom, addConversation, joinRoom])
+  }
 
-  const handleXmppUriSafely = useCallback((uri: string) => {
+  const handleXmppUriSafely = (uri: string) => {
     void handleXmppUri(uri).catch((error) => {
       console.error('[DeepLink] Failed to process URI:', uri, error)
     })
-  }, [handleXmppUri])
+  }
 
   // Set up deep link listener
   useEffect(() => {

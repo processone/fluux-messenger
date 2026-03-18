@@ -11,7 +11,7 @@
  *
  * Scroll behavior is handled by useMessageListScroll hook.
  */
-import { useMemo, useRef, type ReactNode } from 'react'
+import { useRef, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { BaseMessage } from '@fluux/sdk'
 import { useMessageCopyFormatter } from '@/hooks'
@@ -103,7 +103,7 @@ export function MessageList<T extends BaseMessage>({
   // --------------------------------------------------------------------------
 
   // Deduplicate messages by ID (safety net for any race conditions in store)
-  const deduplicatedMessages = useMemo(() => {
+  const deduplicatedMessages = (() => {
     const seen = new Set<string>()
     return messages.filter((msg) => {
       if (seen.has(msg.id)) {
@@ -112,13 +112,10 @@ export function MessageList<T extends BaseMessage>({
       seen.add(msg.id)
       return true
     })
-  }, [messages])
+  })()
 
   // Group messages by date for rendering with separators
-  const groupedMessages = useMemo(
-    () => groupMessagesByDate(deduplicatedMessages),
-    [deduplicatedMessages]
-  )
+  const groupedMessages = groupMessagesByDate(deduplicatedMessages)
 
   // Compute derived values for scroll hook
   const firstMessageId = deduplicatedMessages[0]?.id

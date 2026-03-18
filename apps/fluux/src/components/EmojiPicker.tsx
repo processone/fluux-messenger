@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useClickOutside } from '@/hooks'
 import { Tooltip } from './Tooltip'
@@ -116,7 +116,7 @@ export function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
   const pickerRef = useRef<HTMLDivElement>(null)
 
   // Close picker when clicking outside
-  const handleClose = useCallback(() => onClose(), [onClose])
+  const handleClose = () => onClose()
   useClickOutside(pickerRef, handleClose, true)
 
   const handleEmojiClick = (emoji: string) => {

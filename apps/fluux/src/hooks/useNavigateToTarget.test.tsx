@@ -136,21 +136,4 @@ describe('useNavigateToTarget', () => {
     })
   })
 
-  describe('function stability', () => {
-    it('should return stable function references', () => {
-      const { result, rerender } = renderHook(() => useNavigateToTarget(), {
-        wrapper: createWrapper('/messages'),
-      })
-
-      const firstNavigateToConversation = result.current.navigateToConversation
-      const firstNavigateToRoom = result.current.navigateToRoom
-
-      rerender()
-
-      // Functions should be referentially stable (memoized)
-      expect(result.current.navigateToConversation).toBe(firstNavigateToConversation)
-      expect(result.current.navigateToRoom).toBe(firstNavigateToRoom)
-    })
-  })
-
 })

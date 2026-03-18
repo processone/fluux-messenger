@@ -146,18 +146,4 @@ describe('useSlashCommands', () => {
     })
   })
 
-  describe('handleCommand stability', () => {
-    it('should return a stable handleCommand reference when actions are unchanged', () => {
-      const sendEasterEgg = vi.fn().mockResolvedValue(undefined)
-      const { result, rerender } = renderHook(() =>
-        useSlashCommands({ sendEasterEgg })
-      )
-
-      const firstHandleCommand = result.current.handleCommand
-      rerender()
-      const secondHandleCommand = result.current.handleCommand
-
-      expect(firstHandleCommand).toBe(secondHandleCommand)
-    })
-  })
 })

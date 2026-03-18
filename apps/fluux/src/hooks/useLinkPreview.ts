@@ -5,7 +5,7 @@
  * using the Tauri backend, then sends a fastening with the preview.
  */
 
-import { useCallback, useState } from 'react'
+import { useState } from 'react'
 import { useXMPP } from '@fluux/sdk'
 import { fetchUrlMetadata, extractFirstUrl, isImageUrl } from '@/utils/linkPreview'
 import type { LinkPreview } from '@fluux/sdk'
@@ -18,12 +18,9 @@ interface LinkPreviewState {
 export function useLinkPreview() {
   // Get client from context for methods (avoiding useConnection's 12+ subscriptions)
   const { client } = useXMPP()
-  const sendLinkPreview = useCallback(
-    async (to: string, messageId: string, preview: LinkPreview, type: 'chat' | 'groupchat') => {
-      await client.chat.sendLinkPreview(to, messageId, preview, type)
-    },
-    [client]
-  )
+  const sendLinkPreview = async (to: string, messageId: string, preview: LinkPreview, type: 'chat' | 'groupchat') => {
+    await client.chat.sendLinkPreview(to, messageId, preview, type)
+  }
   const [state, setState] = useState<LinkPreviewState>({
     isFetching: false,
     error: null,
@@ -38,13 +35,12 @@ export function useLinkPreview() {
    * @param to - The conversation JID
    * @param type - Message type ('chat' or 'groupchat')
    */
-  const processMessageForLinkPreview = useCallback(
-    async (
-      messageId: string,
-      body: string,
-      to: string,
-      type: 'chat' | 'groupchat'
-    ): Promise<void> => {
+  const processMessageForLinkPreview = async (
+    messageId: string,
+    body: string,
+    to: string,
+    type: 'chat' | 'groupchat'
+  ): Promise<void> => {
       // Extract first URL from message
       const url = extractFirstUrl(body)
       if (!url) return
@@ -82,9 +78,7 @@ export function useLinkPreview() {
           error: err instanceof Error ? err.message : 'Failed to fetch preview',
         })
       }
-    },
-    [sendLinkPreview]
-  )
+    }
 
   return {
     ...state,

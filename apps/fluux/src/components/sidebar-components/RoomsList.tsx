@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useMemo, memo } from 'react'
+import React, { useState, useRef, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useContextMenu, useListKeyboardNav, useRouteSync } from '@/hooks'
 import {
@@ -40,26 +40,23 @@ export function RoomsList() {
   const zoneRef = useSidebarZone()
 
   // Separate quick chats, joined/joining rooms, and bookmarked-only rooms
-  const quickChats = useMemo(() => rooms.filter(r => r.isQuickChat), [rooms])
+  const quickChats = rooms.filter(r => r.isQuickChat)
   // Include rooms that are joined OR currently joining (so they move to Joined section immediately)
-  const joinedRooms = useMemo(() => rooms.filter(r => (r.joined || r.isJoining) && !r.isQuickChat), [rooms])
-  const bookmarkedNotJoined = useMemo(() =>
-    rooms
-      .filter(r => !r.joined && !r.isJoining && r.isBookmarked && !r.isQuickChat)
-      .sort((a, b) => (a.name || a.jid).toLowerCase().localeCompare((b.name || b.jid).toLowerCase())),
-    [rooms]
-  )
+  const joinedRooms = rooms.filter(r => (r.joined || r.isJoining) && !r.isQuickChat)
+  const bookmarkedNotJoined = rooms
+    .filter(r => !r.joined && !r.isJoining && r.isBookmarked && !r.isQuickChat)
+    .sort((a, b) => (a.name || a.jid).toLowerCase().localeCompare((b.name || b.jid).toLowerCase()))
 
   // Full list of rooms for plain arrow navigation (all rooms)
-  const flatRooms = useMemo(() => [...quickChats, ...joinedRooms, ...bookmarkedNotJoined], [quickChats, joinedRooms, bookmarkedNotJoined])
+  const flatRooms = [...quickChats, ...joinedRooms, ...bookmarkedNotJoined]
 
   // Active rooms only for Alt+arrow navigation (quick chats + joined, excludes bookmarked-not-joined)
-  const activeRooms = useMemo(() => [...quickChats, ...joinedRooms], [quickChats, joinedRooms])
+  const activeRooms = [...quickChats, ...joinedRooms]
 
   // Map from jid to flat index for quick lookup
-  const jidToIndex = useMemo(() => new Map(flatRooms.map((r, i) => [r.jid, i])), [flatRooms])
+  const jidToIndex = new Map(flatRooms.map((r, i) => [r.jid, i]))
 
-  const handleRoomClick = useCallback((roomJid: string, isJoined: boolean) => {
+  const handleRoomClick = (roomJid: string, isJoined: boolean) => {
     // Allow single-click to select any room (joined or bookmarked)
     // Non-joined rooms will show cached history with a "join to participate" prompt
     void isJoined // Unused now, but kept for API consistency
@@ -70,9 +67,9 @@ export function RoomsList() {
     // Set this room as active
     void setActiveRoom(roomJid)
     navigateToRooms(roomJid, { replace: hasActive })
-  }, [setActiveConversation, setActiveRoom, navigateToRooms])
+  }
 
-  const handleRoomDoubleClick = useCallback(async (roomJid: string, isJoined: boolean, nickname: string) => {
+  const handleRoomDoubleClick = async (roomJid: string, isJoined: boolean, nickname: string) => {
     const hasActive = !!roomStore.getState().activeRoomJid
     if (isJoined) {
       // If already joined, just select it
@@ -85,17 +82,17 @@ export function RoomsList() {
       void setActiveRoom(roomJid)
     }
     navigateToRooms(roomJid, { replace: hasActive })
-  }, [setActiveConversation, setActiveRoom, joinRoom, navigateToRooms])
+  }
 
   // Keyboard navigation - select room on Enter (same as single-click)
-  const handleRoomSelect = useCallback((room: Room) => {
+  const handleRoomSelect = (room: Room) => {
     // Select the room (joined or bookmarked) to show its content
     // Non-joined rooms will show cached history with join prompt
     const hasActive = !!roomStore.getState().activeRoomJid
     void setActiveConversation(null)
     void setActiveRoom(room.jid)
     navigateToRooms(room.jid, { replace: hasActive })
-  }, [setActiveConversation, setActiveRoom, navigateToRooms])
+  }
 
   // Keyboard navigation:
   // - Plain arrows: highlight rooms (all rooms including bookmarked)

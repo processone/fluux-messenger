@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { useConnection } from '@fluux/sdk'
@@ -187,9 +187,9 @@ export function LoginScreen() {
   }, [error, loadedFromKeychain, isDesktopApp])
 
   // Keyboard shortcut: Cmd+, (Mac) / Ctrl+, (other) toggles server field
-  const toggleServerField = useCallback(() => {
+  const toggleServerField = () => {
     setShowServerField(prev => !prev)
-  }, [])
+  }
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

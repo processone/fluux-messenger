@@ -5,7 +5,7 @@
  * with a subject field on top, and provides a danger zone for room
  * destruction (owner only).
  */
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Room, DataForm } from '@fluux/sdk'
 import { useAdmin } from '@fluux/sdk'
@@ -65,7 +65,7 @@ export function RoomConfigModal({
     return () => { cancelled = true }
   }, [room.jid, getRoomOptions, t])
 
-  const handleSave = useCallback(async (formValues: Record<string, string | string[]>) => {
+  const handleSave = async (formValues: Record<string, string | string[]>) => {
     setSaving(true)
     setSaveError(null)
     try {
@@ -83,16 +83,16 @@ export function RoomConfigModal({
     } finally {
       setSaving(false)
     }
-  }, [room.jid, room.subject, subject, setSubject, submitRoomConfig, onClose, t])
+  }
 
-  const handleDestroy = useCallback(async () => {
+  const handleDestroy = async () => {
     try {
       await destroyRoom(room.jid)
       onClose()
     } catch {
       setSaveError(t('rooms.destroyRoomError'))
     }
-  }, [room.jid, destroyRoom, onClose, t])
+  }
 
   return (
     <ModalShell

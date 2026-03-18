@@ -9,7 +9,7 @@
  * - Clearing conflicting state on view switch
  * - Auto-select first item when switching to content views
  */
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { chatStore, roomStore, type Contact } from '@fluux/sdk'
 import { useChatStore, useRoomStore } from '@fluux/sdk/react'
 import { useRouteSync, type NavigateOptions } from './useRouteSync'
@@ -127,7 +127,7 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
    * Navigate to a view with per-tab memory and side effects.
    * Auto-selects the first item if no previous selection exists.
    */
-  const navigateToView = useCallback((newView: SidebarView) => {
+  const navigateToView = (newView: SidebarView) => {
     // Skip if we're already on this view (prevents duplicate navigation)
     if (sidebarView === newView) return
 
@@ -247,22 +247,15 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
         navigateToSettings(skipAutoSelect ? undefined : 'profile', { replace: true })
         break
     }
-  }, [
-    sidebarView, selectedContact,
-    lastMessagesConversation, lastRoomsRoom, lastDirectoryContact,
-    setActiveConversation, setActiveRoom,
-    navigateToMessages, navigateToRooms, navigateToContacts, navigateToArchive, navigateToEvents, navigateToAdmin, navigateToSettings
-  ])
+  }
 
-  // Memoize perTabMemory to prevent unnecessary re-renders
-  const perTabMemory = useMemo<PerTabMemory>(() => ({
+  const perTabMemory: PerTabMemory = {
     lastMessagesConversation,
     lastRoomsRoom,
     lastDirectoryContact,
-  }), [lastMessagesConversation, lastRoomsRoom, lastDirectoryContact])
+  }
 
-  // Memoize the entire return value to prevent render loops in consumers
-  return useMemo<ViewNavigationResult>(() => ({
+  return {
     // Current state
     sidebarView,
     perTabMemory,
@@ -278,9 +271,5 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
     navigateToEvents,
     navigateToAdmin,
     navigateToSettings,
-  }), [
-    sidebarView, perTabMemory,
-    navigateToView,
-    navigateToMessages, navigateToRooms, navigateToContacts, navigateToArchive, navigateToEvents, navigateToAdmin, navigateToSettings,
-  ])
+  }
 }

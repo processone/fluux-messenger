@@ -1,4 +1,3 @@
-import { useCallback, useMemo } from 'react'
 
 /**
  * Actions that slash commands can trigger.
@@ -26,31 +25,25 @@ export interface SlashCommandActions {
  * }
  */
 export function useSlashCommands(actions: SlashCommandActions) {
-  // Memoize actions to ensure stable callback reference
-  const memoizedActions = useMemo(() => actions, [actions.sendEasterEgg])
-
   /**
    * Check if text is a slash command and execute it.
    * @returns true if a command was handled, false otherwise
    */
-  const handleCommand = useCallback(
-    async (text: string): Promise<boolean> => {
-      const command = text.trim().toLowerCase()
+  const handleCommand = async (text: string): Promise<boolean> => {
+    const command = text.trim().toLowerCase()
 
-      // Easter egg commands
-      if (command === '/christmas') {
-        await memoizedActions.sendEasterEgg('christmas')
-        return true
-      }
+    // Easter egg commands
+    if (command === '/christmas') {
+      await actions.sendEasterEgg('christmas')
+      return true
+    }
 
-      // Future commands can be added here:
-      // if (command === '/newyear') { ... }
-      // if (command === '/confetti') { ... }
+    // Future commands can be added here:
+    // if (command === '/newyear') { ... }
+    // if (command === '/confetti') { ... }
 
-      return false
-    },
-    [memoizedActions]
-  )
+    return false
+  }
 
   return { handleCommand }
 }

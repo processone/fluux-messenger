@@ -1,4 +1,3 @@
-import { useCallback, useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { chatStore, connectionStore } from '../stores'
 import { useChatStore, useConnectionStore } from '../react/storeHooks'
@@ -99,21 +98,18 @@ export function useChat() {
   // NOTE: lastMessage is stored in the conversation object and updated by the store
   // when messages are added/merged/loaded. This avoids subscribing to the entire
   // messagesMap which would cause render loops during message loading.
-  const { conversations, archivedConversations } = useMemo(() => {
-    const archivedSet = new Set(archivedConversationIds)
-    const sorted = [...conversationsRaw].sort((a, b) => {
-      // Handle cases where timestamp might be a string (from localStorage) or Date
-      const aTimestamp = a.lastMessage?.timestamp
-      const bTimestamp = b.lastMessage?.timestamp
-      const aTime = aTimestamp instanceof Date ? aTimestamp.getTime() : (aTimestamp ? new Date(aTimestamp).getTime() : 0)
-      const bTime = bTimestamp instanceof Date ? bTimestamp.getTime() : (bTimestamp ? new Date(bTimestamp).getTime() : 0)
-      return bTime - aTime // Descending (most recent first)
-    })
-    return {
-      conversations: sorted.filter(c => !archivedSet.has(c.id)),
-      archivedConversations: sorted.filter(c => archivedSet.has(c.id)),
-    }
-  }, [conversationsRaw, archivedConversationIds])
+  const archivedSet = new Set(archivedConversationIds)
+  const sorted = [...conversationsRaw].sort((a, b) => {
+    // Handle cases where timestamp might be a string (from localStorage) or Date
+    const aTimestamp = a.lastMessage?.timestamp
+    const bTimestamp = b.lastMessage?.timestamp
+    const aTime = aTimestamp instanceof Date ? aTimestamp.getTime() : (aTimestamp ? new Date(aTimestamp).getTime() : 0)
+    const bTime = bTimestamp instanceof Date ? bTimestamp.getTime() : (bTimestamp ? new Date(bTimestamp).getTime() : 0)
+    return bTime - aTime // Descending (most recent first)
+  })
+  const conversations = sorted.filter(c => !archivedSet.has(c.id))
+  const archivedConversations = sorted.filter(c => archivedSet.has(c.id))
+
   const activeConversationId = useChatStore((s) => s.activeConversationId)
   // Get activeConversation directly from store (lastMessage is stored in the conversation)
   const activeConversation = useChatStore((s) => {
@@ -172,302 +168,226 @@ export function useChat() {
     return s.mamQueryStates.get(s.activeConversationId)?.oldestFetchedId
   })
 
-  // Memoize the MAM state object to maintain stable reference
-  const activeMAMState = useMemo((): MAMQueryState | null => {
-    if (!activeConversationId) return null
-    return {
-      isLoading: mamIsLoading,
-      hasQueried: mamHasQueried,
-      isHistoryComplete: mamIsHistoryComplete,
-      isCaughtUpToLive: mamIsCaughtUpToLive,
-      oldestFetchedId: mamOldestFetchedId,
-      error: null,
-    }
-  }, [activeConversationId, mamIsLoading, mamHasQueried, mamIsHistoryComplete, mamIsCaughtUpToLive, mamOldestFetchedId])
+  // Build the MAM state object
+  const activeMAMState: MAMQueryState | null = !activeConversationId ? null : {
+    isLoading: mamIsLoading,
+    hasQueried: mamHasQueried,
+    isHistoryComplete: mamIsHistoryComplete,
+    isCaughtUpToLive: mamIsCaughtUpToLive,
+    oldestFetchedId: mamOldestFetchedId,
+    error: null,
+  }
 
   // Note: Auto-fetch logic (load cache + MAM query) has been moved to store subscriptions
   // in sideEffects.ts. This eliminates the useEffect → action → state change pattern
   // that could cause render loops. The side effects now run outside React's render cycle.
 
-  const sendMessage = useCallback(
-    async (
-      to: string,
-      body: string,
-      type: 'chat' | 'groupchat' = 'chat',
-      replyTo?: { id: string; to?: string; fallback?: { author: string; body: string } },
-      attachment?: FileAttachment
-    ): Promise<string> => {
-      return await client.chat.sendMessage(to, body, type, replyTo, undefined, attachment)
-    },
-    [client]
-  )
+  const sendMessage = async (
+    to: string,
+    body: string,
+    type: 'chat' | 'groupchat' = 'chat',
+    replyTo?: { id: string; to?: string; fallback?: { author: string; body: string } },
+    attachment?: FileAttachment
+  ): Promise<string> => {
+    return await client.chat.sendMessage(to, body, type, replyTo, undefined, attachment)
+  }
 
   // Load cache BEFORE setting active conversation so that setActiveConversation() in the
   // store calculates firstNewMessageId with the full message history (cached + live messages).
   // Without this, conversations that only have live messages (received while viewing another
   // conversation) would show only new messages without historical context above the marker.
-  const setActiveConversation = useCallback(async (id: string | null) => {
+  const setActiveConversation = async (id: string | null) => {
     if (id) {
       // Always load from cache first - deduplication is handled by loadMessagesFromCache
       await chatStore.getState().loadMessagesFromCache(id, { limit: 100 })
     }
     chatStore.getState().setActiveConversation(id)
-  }, [])
+  }
 
-  const addConversation = useCallback((conv: Conversation) => {
+  const addConversation = (conv: Conversation) => {
     chatStore.getState().addConversation(conv)
-  }, [])
+  }
 
-  const deleteConversation = useCallback((id: string) => {
+  const deleteConversation = (id: string) => {
     chatStore.getState().deleteConversation(id)
-  }, [])
+  }
 
-  const markAsRead = useCallback((conversationId: string) => {
+  const markAsRead = (conversationId: string) => {
     chatStore.getState().markAsRead(conversationId)
-  }, [])
+  }
 
-  const sendChatState = useCallback(
-    async (to: string, state: ChatStateNotification, type: 'chat' | 'groupchat' = 'chat') => {
-      await client.chat.sendChatState(to, state, type)
-    },
-    [client]
-  )
+  const sendChatState = async (to: string, state: ChatStateNotification, type: 'chat' | 'groupchat' = 'chat') => {
+    await client.chat.sendChatState(to, state, type)
+  }
 
-  const sendReaction = useCallback(
-    async (to: string, messageId: string, emojis: string[], type: 'chat' | 'groupchat' = 'chat') => {
-      await client.chat.sendReaction(to, messageId, emojis, type)
-    },
-    [client]
-  )
+  const sendReaction = async (to: string, messageId: string, emojis: string[], type: 'chat' | 'groupchat' = 'chat') => {
+    await client.chat.sendReaction(to, messageId, emojis, type)
+  }
 
-  const sendCorrection = useCallback(
-    async (conversationId: string, messageId: string, newBody: string, attachment?: FileAttachment) => {
-      await client.chat.sendCorrection(conversationId, messageId, newBody, 'chat', attachment)
-    },
-    [client]
-  )
+  const sendCorrection = async (conversationId: string, messageId: string, newBody: string, attachment?: FileAttachment) => {
+    await client.chat.sendCorrection(conversationId, messageId, newBody, 'chat', attachment)
+  }
 
-  const retractMessage = useCallback(
-    async (conversationId: string, messageId: string) => {
-      await client.chat.sendRetraction(conversationId, messageId, 'chat')
-    },
-    [client]
-  )
+  const retractMessage = async (conversationId: string, messageId: string) => {
+    await client.chat.sendRetraction(conversationId, messageId, 'chat')
+  }
 
-  const sendEasterEgg = useCallback(
-    async (to: string, type: 'chat' | 'groupchat', animation: string) => {
-      await client.chat.sendEasterEgg(to, type, animation)
-    },
-    [client]
-  )
+  const sendEasterEgg = async (to: string, type: 'chat' | 'groupchat', animation: string) => {
+    await client.chat.sendEasterEgg(to, type, animation)
+  }
 
-  const clearAnimation = useCallback(() => {
+  const clearAnimation = () => {
     chatStore.getState().clearAnimation()
-  }, [])
+  }
 
-  const archiveConversation = useCallback((id: string) => {
+  const archiveConversation = (id: string) => {
     chatStore.getState().archiveConversation(id)
-  }, [])
+  }
 
-  const unarchiveConversation = useCallback((id: string) => {
+  const unarchiveConversation = (id: string) => {
     chatStore.getState().unarchiveConversation(id)
-  }, [])
+  }
 
-  const isArchived = useCallback((id: string) => {
+  const isArchived = (id: string) => {
     return chatStore.getState().isArchived(id)
-  }, [])
+  }
 
-  const setDraft = useCallback((conversationId: string, text: string) => {
+  const setDraft = (conversationId: string, text: string) => {
     chatStore.getState().setDraft(conversationId, text)
-  }, [])
+  }
 
-  const getDraft = useCallback((conversationId: string) => {
+  const getDraft = (conversationId: string) => {
     return chatStore.getState().getDraft(conversationId)
-  }, [])
+  }
 
-  const clearDraft = useCallback((conversationId: string) => {
+  const clearDraft = (conversationId: string) => {
     chatStore.getState().clearDraft(conversationId)
-  }, [])
+  }
 
-  const clearFirstNewMessageId = useCallback((conversationId: string) => {
+  const clearFirstNewMessageId = (conversationId: string) => {
     chatStore.getState().clearFirstNewMessageId(conversationId)
-  }, [])
+  }
 
-  const updateLastSeenMessageId = useCallback((conversationId: string, messageId: string) => {
+  const updateLastSeenMessageId = (conversationId: string, messageId: string) => {
     chatStore.getState().updateLastSeenMessageId(conversationId, messageId)
-  }, [])
+  }
 
   // XEP-0313: Fetch message history from server archive
   // If we have cached messages, fetch NEW messages after the newest cached.
   // If no cache, fetch latest messages.
   // NOTE: hasQueried guard is intentionally removed to allow re-fetching when
   // returning to a conversation (to catch messages from other devices).
-  const fetchHistory = useCallback(
-    async (conversationId?: string): Promise<void> => {
-      // Guard: Don't attempt MAM query if not connected
-      // This prevents infinite retry loops when socket is dead (e.g., after sleep)
-      const connectionStatus = connectionStore.getState().status
-      if (connectionStatus !== 'online') return
+  const fetchHistory = async (conversationId?: string): Promise<void> => {
+    // Guard: Don't attempt MAM query if not connected
+    // This prevents infinite retry loops when socket is dead (e.g., after sleep)
+    const connectionStatus = connectionStore.getState().status
+    if (connectionStatus !== 'online') return
 
-      const targetId = conversationId ?? chatStore.getState().activeConversationId
-      if (!targetId) return
+    const targetId = conversationId ?? chatStore.getState().activeConversationId
+    if (!targetId) return
 
-      // Get the conversation to find the partner JID
-      const conversation = chatStore.getState().conversations.get(targetId)
-      if (!conversation || conversation.type !== 'chat') return
+    // Get the conversation to find the partner JID
+    const conversation = chatStore.getState().conversations.get(targetId)
+    if (!conversation || conversation.type !== 'chat') return
 
-      // Guard: only prevent concurrent queries
-      const mamState = chatStore.getState().getMAMQueryState(targetId)
-      if (mamState.isLoading) return
+    // Guard: only prevent concurrent queries
+    const mamState = chatStore.getState().getMAMQueryState(targetId)
+    if (mamState.isLoading) return
 
-      // Set loading IMMEDIATELY to prevent race conditions with concurrent calls
-      chatStore.getState().setMAMLoading(targetId, true)
+    // Set loading IMMEDIATELY to prevent race conditions with concurrent calls
+    chatStore.getState().setMAMLoading(targetId, true)
 
-      try {
-        // First ensure messages are loaded from IndexedDB cache
-        let cachedMessages = chatStore.getState().messages.get(targetId)
-        if (!cachedMessages || cachedMessages.length === 0) {
-          await chatStore.getState().loadMessagesFromCache(targetId, { limit: 100 })
-          cachedMessages = chatStore.getState().messages.get(targetId)
-        }
-
-        const newestCachedMessage = cachedMessages?.[cachedMessages.length - 1]
-
-        // Build query options
-        const queryOptions: { with: string; start?: string } = { with: conversation.id }
-
-        // If we have cached messages, use 'start' to only fetch messages AFTER the newest
-        // Add 1ms to avoid re-fetching the exact same message
-        if (newestCachedMessage?.timestamp) {
-          const startTime = new Date(newestCachedMessage.timestamp.getTime() + 1)
-          queryOptions.start = startTime.toISOString()
-        }
-
-        await client.chat.queryMAM(queryOptions)
-      } catch (error) {
-        console.error('Failed to fetch history:', error)
-      } finally {
-        chatStore.getState().setMAMLoading(targetId, false)
+    try {
+      // First ensure messages are loaded from IndexedDB cache
+      let cachedMessages = chatStore.getState().messages.get(targetId)
+      if (!cachedMessages || cachedMessages.length === 0) {
+        await chatStore.getState().loadMessagesFromCache(targetId, { limit: 100 })
+        cachedMessages = chatStore.getState().messages.get(targetId)
       }
-    },
-    [client]
-  )
+
+      const newestCachedMessage = cachedMessages?.[cachedMessages.length - 1]
+
+      // Build query options
+      const queryOptions: { with: string; start?: string } = { with: conversation.id }
+
+      // If we have cached messages, use 'start' to only fetch messages AFTER the newest
+      // Add 1ms to avoid re-fetching the exact same message
+      if (newestCachedMessage?.timestamp) {
+        const startTime = new Date(newestCachedMessage.timestamp.getTime() + 1)
+        queryOptions.start = startTime.toISOString()
+      }
+
+      await client.chat.queryMAM(queryOptions)
+    } catch (error) {
+      console.error('Failed to fetch history:', error)
+    } finally {
+      chatStore.getState().setMAMLoading(targetId, false)
+    }
+  }
 
   // XEP-0313: Fetch older messages (pagination) - for lazy loading on scroll up
   // First checks IndexedDB cache, then falls back to MAM if needed
-  const fetchOlderHistory = useMemo(
-    () =>
-      createFetchOlderHistory({
-        getActiveId: () => chatStore.getState().activeConversationId,
-        isValidTarget: (id) => {
-          const conversation = chatStore.getState().conversations.get(id)
-          return !!conversation && conversation.type === 'chat'
-        },
-        getMAMState: (id) => chatStore.getState().getMAMQueryState(id),
-        setMAMLoading: (id, loading) => chatStore.getState().setMAMLoading(id, loading),
-        loadFromCache: (id, limit) => chatStore.getState().loadOlderMessagesFromCache(id, limit),
-        getOldestMessageId: (id) => {
-          const messages = chatStore.getState().messages.get(id)
-          if (!messages || messages.length === 0) return undefined
-          // Use stanzaId (MAM archive ID) for pagination cursor, fall back to message id
-          return messages[0].stanzaId || messages[0].id
-        },
-        queryMAM: async (id, beforeId) => {
-          const conversation = chatStore.getState().conversations.get(id)
-          if (conversation) {
-            await client.chat.queryMAM({ with: conversation.id, before: beforeId })
-          }
-        },
-        errorLogPrefix: 'Failed to fetch older chat history',
-      }),
-    [client]
-  )
+  const fetchOlderHistory = createFetchOlderHistory({
+    getActiveId: () => chatStore.getState().activeConversationId,
+    isValidTarget: (id) => {
+      const conversation = chatStore.getState().conversations.get(id)
+      return !!conversation && conversation.type === 'chat'
+    },
+    getMAMState: (id) => chatStore.getState().getMAMQueryState(id),
+    setMAMLoading: (id, loading) => chatStore.getState().setMAMLoading(id, loading),
+    loadFromCache: (id, limit) => chatStore.getState().loadOlderMessagesFromCache(id, limit),
+    getOldestMessageId: (id) => {
+      const messages = chatStore.getState().messages.get(id)
+      if (!messages || messages.length === 0) return undefined
+      // Use stanzaId (MAM archive ID) for pagination cursor, fall back to message id
+      return messages[0].stanzaId || messages[0].id
+    },
+    queryMAM: async (id, beforeId) => {
+      const conversation = chatStore.getState().conversations.get(id)
+      if (conversation) {
+        await client.chat.queryMAM({ with: conversation.id, before: beforeId })
+      }
+    },
+    errorLogPrefix: 'Failed to fetch older chat history',
+  })
 
-  // Memoize actions object to prevent re-renders when only state changes
-  const actions = useMemo(
-    () => ({
-      sendMessage,
-      setActiveConversation,
-      addConversation,
-      deleteConversation,
-      markAsRead,
-      archiveConversation,
-      unarchiveConversation,
-      isArchived,
-      sendChatState,
-      sendReaction,
-      sendCorrection,
-      retractMessage,
-      sendEasterEgg,
-      clearAnimation,
-      setDraft,
-      getDraft,
-      clearDraft,
-      clearFirstNewMessageId,
-      updateLastSeenMessageId,
-      fetchHistory,
-      fetchOlderHistory,
-    }),
-    [
-      sendMessage,
-      setActiveConversation,
-      addConversation,
-      deleteConversation,
-      markAsRead,
-      archiveConversation,
-      unarchiveConversation,
-      isArchived,
-      sendChatState,
-      sendReaction,
-      sendCorrection,
-      retractMessage,
-      sendEasterEgg,
-      clearAnimation,
-      setDraft,
-      getDraft,
-      clearDraft,
-      clearFirstNewMessageId,
-      updateLastSeenMessageId,
-      fetchHistory,
-      fetchOlderHistory,
-    ]
-  )
+  return {
+    // State
+    conversations,
+    archivedConversations,
+    archivedConversationIds,
+    activeConversationId,
+    activeConversation,
+    activeMessages,
+    activeTypingUsers,
+    typingStates,
+    drafts,
+    activeAnimation,
+    // XEP-0313: MAM state
+    supportsMAM,
+    activeMAMState,
 
-  // Memoize the entire return value to prevent render loops
-  return useMemo(
-    () => ({
-      // State
-      conversations,
-      archivedConversations,
-      archivedConversationIds,
-      activeConversationId,
-      activeConversation,
-      activeMessages,
-      activeTypingUsers,
-      typingStates,
-      drafts,
-      activeAnimation,
-      // XEP-0313: MAM state
-      supportsMAM,
-      activeMAMState,
-
-      // Actions (spread memoized actions)
-      ...actions,
-    }),
-    [
-      conversations,
-      archivedConversations,
-      archivedConversationIds,
-      activeConversationId,
-      activeConversation,
-      activeMessages,
-      activeTypingUsers,
-      typingStates,
-      drafts,
-      activeAnimation,
-      supportsMAM,
-      activeMAMState,
-      actions,
-    ]
-  )
+    // Actions
+    sendMessage,
+    setActiveConversation,
+    addConversation,
+    deleteConversation,
+    markAsRead,
+    archiveConversation,
+    unarchiveConversation,
+    isArchived,
+    sendChatState,
+    sendReaction,
+    sendCorrection,
+    retractMessage,
+    sendEasterEgg,
+    clearAnimation,
+    setDraft,
+    getDraft,
+    clearDraft,
+    clearFirstNewMessageId,
+    updateLastSeenMessageId,
+    fetchHistory,
+    fetchOlderHistory,
+  }
 }

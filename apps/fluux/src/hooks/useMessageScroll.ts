@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect } from 'react'
+import { useRef, useEffect } from 'react'
 
 interface UseMessageScrollOptions {
   /** Callback when user scrolls to top (for lazy loading older messages) */
@@ -33,28 +33,28 @@ export function useMessageScroll(dependencies: unknown[] = [], options: UseMessa
    * Scroll to bottom only if user was already at bottom.
    * Preserves scroll position when user has scrolled up to read history.
    */
-  const scrollToBottomIfNeeded = useCallback(() => {
+  const scrollToBottomIfNeeded = () => {
     if (scrollRef.current && isAtBottomRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [])
+  }
 
   /**
    * Unconditionally scroll to bottom.
    * Used after sending a message or switching conversations.
    */
-  const scrollToBottom = useCallback(() => {
+  const scrollToBottom = () => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [])
+  }
 
   /**
    * Handler for scroll events. Updates isAtBottom and isAtTop state.
    * Considers "at bottom" if within 50px of the bottom.
    * Triggers onScrollToTop callback when user scrolls to top.
    */
-  const handleScroll = useCallback(() => {
+  const handleScroll = () => {
     if (!scrollRef.current) return
     const { scrollTop, scrollHeight, clientHeight } = scrollRef.current
 
@@ -73,12 +73,12 @@ export function useMessageScroll(dependencies: unknown[] = [], options: UseMessa
     }
 
     lastScrollTopRef.current = scrollTop
-  }, [onScrollToTop, topThreshold])
+  }
 
   /**
    * Reset scroll state to bottom. Call when changing conversations/rooms.
    */
-  const resetScrollState = useCallback(() => {
+  const resetScrollState = () => {
     isAtBottomRef.current = true
     // Use requestAnimationFrame to ensure DOM has updated before scrolling
     requestAnimationFrame(() => {
@@ -86,13 +86,13 @@ export function useMessageScroll(dependencies: unknown[] = [], options: UseMessa
         scrollRef.current.scrollTop = scrollRef.current.scrollHeight
       }
     })
-  }, [])
+  }
 
   /**
    * Callback ref that sets up ResizeObserver when element is attached.
    * Use this as the ref prop on the scroll container instead of scrollRef.
    */
-  const setScrollRef = useCallback((node: HTMLDivElement | null) => {
+  const setScrollRef = (node: HTMLDivElement | null) => {
     // Clean up previous observer
     if (resizeObserverRef.current) {
       resizeObserverRef.current.disconnect()
@@ -114,7 +114,7 @@ export function useMessageScroll(dependencies: unknown[] = [], options: UseMessa
       })
       resizeObserverRef.current.observe(node)
     }
-  }, [])
+  }
 
   // Auto-scroll to bottom when dependencies change (only if at bottom)
   useEffect(() => {

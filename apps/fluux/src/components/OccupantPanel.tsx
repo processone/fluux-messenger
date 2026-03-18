@@ -9,7 +9,7 @@
  * - Shows contact avatars for known roster contacts
  * - Right-click context menu: private message, copy JID, ignore, user info
  */
-import { useMemo, useState, useCallback } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Room, RoomOccupant, Contact, PresenceShow, RoomAffiliation, RoomRole } from '@fluux/sdk'
 import { getPresenceFromShow, getBareJid, getBestPresenceShow, generateConsistentColorHexSync, canKick, canBan, getAvailableAffiliations, getAvailableRoles } from '@fluux/sdk'
@@ -63,35 +63,35 @@ export function OccupantPanel({
   const menu = useContextMenu()
   const [menuTarget, setMenuTarget] = useState<GroupedOccupant | null>(null)
 
-  const handleOccupantContextMenu = useCallback((e: React.MouseEvent, group: GroupedOccupant) => {
+  const handleOccupantContextMenu = (e: React.MouseEvent, group: GroupedOccupant) => {
     // Don't show menu for self
     if (group.connections.some(conn => conn.nick === room.nickname)) return
     setMenuTarget(group)
     menu.handleContextMenu(e)
-  }, [room.nickname, menu])
+  }
 
-  const handleOccupantTouchStart = useCallback((e: React.TouchEvent, group: GroupedOccupant) => {
+  const handleOccupantTouchStart = (e: React.TouchEvent, group: GroupedOccupant) => {
     if (group.connections.some(conn => conn.nick === room.nickname)) return
     setMenuTarget(group)
     menu.handleTouchStart(e)
-  }, [room.nickname, menu])
+  }
 
   /** Get the best stable identifier for an occupant group */
-  const getOccupantIdentifier = useCallback((group: GroupedOccupant): string => {
+  const getOccupantIdentifier = (group: GroupedOccupant): string => {
     // Priority: occupantId (XEP-0421) > bareJid > nick
     const occupantId = group.connections.find(c => c.occupantId)?.occupantId
     if (occupantId) return occupantId
     if (group.bareJid) return group.bareJid
     return group.primaryNick
-  }, [])
+  }
 
   /** Check if a grouped occupant is ignored */
-  const isOccupantIgnored = useCallback((group: GroupedOccupant): boolean => {
+  const isOccupantIgnored = (group: GroupedOccupant): boolean => {
     const identifier = getOccupantIdentifier(group)
     return ignoredForRoom.some(u => u.identifier === identifier)
-  }, [ignoredForRoom, getOccupantIdentifier])
+  }
 
-  const handleToggleIgnore = useCallback((group: GroupedOccupant) => {
+  const handleToggleIgnore = (group: GroupedOccupant) => {
     const identifier = getOccupantIdentifier(group)
     if (ignoreStore.getState().isIgnored(room.jid, identifier)) {
       ignoreStore.getState().removeIgnored(room.jid, identifier)
@@ -104,17 +104,17 @@ export function OccupantPanel({
       ignoreStore.getState().addIgnored(room.jid, user)
     }
     menu.close()
-  }, [room.jid, getOccupantIdentifier, menu])
+  }
 
-  const handleStartChat = useCallback((jid: string) => {
+  const handleStartChat = (jid: string) => {
     onStartChat?.(jid)
     menu.close()
-  }, [onStartChat, menu])
+  }
 
-  const handleShowProfile = useCallback((jid: string) => {
+  const handleShowProfile = (jid: string) => {
     onShowProfile?.(jid)
     menu.close()
-  }, [onShowProfile, menu])
+  }
 
   // Moderation actions
   const { setAffiliation, setRole } = useRoom()
@@ -125,44 +125,44 @@ export function OccupantPanel({
   const selfAffiliation: RoomAffiliation = selfOccupant?.affiliation ?? 'none'
   const selfRole: RoomRole = selfOccupant?.role ?? 'none'
 
-  const handleSetRole = useCallback(async (nick: string, role: RoomRole) => {
+  const handleSetRole = async (nick: string, role: RoomRole) => {
     try {
       await setRole(room.jid, nick, role)
       addToast('success', t('rooms.roleChanged'))
     } catch {
       addToast('error', t('rooms.roleError'))
     }
-  }, [room.jid, setRole, addToast, t])
+  }
 
-  const handleSetAffiliation = useCallback(async (jid: string, aff: RoomAffiliation) => {
+  const handleSetAffiliation = async (jid: string, aff: RoomAffiliation) => {
     try {
       await setAffiliation(room.jid, jid, aff)
       addToast('success', t('rooms.affiliationChanged'))
     } catch {
       addToast('error', t('rooms.affiliationError'))
     }
-  }, [room.jid, setAffiliation, addToast, t])
+  }
 
-  const handleKick = useCallback(async (nick: string, reason?: string) => {
+  const handleKick = async (nick: string, reason?: string) => {
     try {
       await setRole(room.jid, nick, 'none', reason)
       addToast('success', t('rooms.roleChanged'))
     } catch {
       addToast('error', t('rooms.kickError'))
     }
-  }, [room.jid, setRole, addToast, t])
+  }
 
-  const handleBan = useCallback(async (jid: string, reason?: string) => {
+  const handleBan = async (jid: string, reason?: string) => {
     try {
       await setAffiliation(room.jid, jid, 'outcast', reason)
       addToast('success', t('rooms.affiliationChanged'))
     } catch {
       addToast('error', t('rooms.banError'))
     }
-  }, [room.jid, setAffiliation, addToast, t])
+  }
 
   // Sort occupants by role priority: moderator > participant > visitor
-  const sortedOccupants = useMemo(() => {
+  const sortedOccupants = (() => {
     const occupants = Array.from(room.occupants.values())
 
     const rolePriority: Record<string, number> = {
@@ -179,10 +179,10 @@ export function OccupantPanel({
       // Then alphabetically by nick
       return a.nick.localeCompare(b.nick)
     })
-  }, [room.occupants])
+  })()
 
   // Group occupants by role, then by bare JID within each role
-  const groupedOccupants = useMemo(() => {
+  const groupedOccupants = (() => {
     const groups: { role: string; occupants: GroupedOccupant[] }[] = []
     let currentRole: string | null = null
     let currentRoleOccupants: RoomOccupant[] = []
@@ -209,10 +209,10 @@ export function OccupantPanel({
     }
 
     return groups
-  }, [sortedOccupants])
+  })()
 
   // Compute offline members: affiliated members not currently online as occupants
-  const offlineMembers = useMemo(() => {
+  const offlineMembers = (() => {
     if (!room.affiliatedMembers || room.affiliatedMembers.length === 0) return []
 
     // Collect all online JIDs and nicks from occupants
@@ -233,7 +233,7 @@ export function OccupantPanel({
       const nameB = b.nick || b.jid
       return nameA.localeCompare(nameB)
     })
-  }, [room.affiliatedMembers, room.occupants])
+  })()
 
   const getRoleLabel = (role: string) => {
     switch (role) {

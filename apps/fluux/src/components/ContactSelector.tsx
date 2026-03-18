@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react'
+import { useState, useRef, useEffect, useLayoutEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useRoster, useChat, matchNameOrJid } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
@@ -80,7 +80,7 @@ export function ContactSelector({
   const containerRef = useRef<HTMLDivElement>(null)
 
   // Build a map of JID -> last activity timestamp for sorting
-  const recentActivityMap = useMemo(() => {
+  const recentActivityMap = (() => {
     const map = new Map<string, number>()
     conversations.forEach(conv => {
       if (conv.lastMessage?.timestamp) {
@@ -89,10 +89,10 @@ export function ContactSelector({
       }
     })
     return map
-  }, [conversations])
+  })()
 
   // Build a set of roster JIDs for fast deduplication
-  const rosterJids = useMemo(() => new Set(contacts.map(c => c.jid)), [contacts])
+  const rosterJids = new Set(contacts.map(c => c.jid))
 
   // Filter and sort contacts, merging extra suggestions
   // - Map roster contacts to unified type
@@ -100,7 +100,7 @@ export function ContactSelector({
   // - Exclude already selected and excluded JIDs
   // - Filter by search if provided (match on name or username, not domain)
   // - Sort: roster contacts by recent activity first, then extra suggestions alphabetically
-  const filteredContacts = useMemo(() => {
+  const filteredContacts = (() => {
     // Map roster contacts to unified type
     const rosterEntries: UnifiedContact[] = contacts
       .filter(contact => {
@@ -142,7 +142,7 @@ export function ContactSelector({
     extraEntries.sort((a, b) => a.name.localeCompare(b.name))
 
     return [...rosterEntries, ...extraEntries]
-  }, [contacts, selectedContacts, excludeJids, search, recentActivityMap, extraSuggestions, rosterJids])
+  })()
 
   // Reset highlight when filtered list changes
   useEffect(() => {

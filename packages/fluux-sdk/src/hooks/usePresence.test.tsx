@@ -349,36 +349,7 @@ describe('usePresence hook', () => {
     })
   })
 
-  describe('action stability', () => {
-    it('should return stable function references', () => {
-      const { result, rerender } = renderHook(() => usePresence(), { wrapper })
-
-      const firstRender = {
-        setOnline: result.current.setOnline,
-        setAway: result.current.setAway,
-        setDnd: result.current.setDnd,
-        setPresence: result.current.setPresence,
-        connect: result.current.connect,
-        disconnect: result.current.disconnect,
-        idleDetected: result.current.idleDetected,
-        activityDetected: result.current.activityDetected,
-        sleepDetected: result.current.sleepDetected,
-        wakeDetected: result.current.wakeDetected,
-      }
-
-      rerender()
-
-      // All functions should be the same reference (memoized)
-      expect(result.current.setOnline).toBe(firstRender.setOnline)
-      expect(result.current.setAway).toBe(firstRender.setAway)
-      expect(result.current.setDnd).toBe(firstRender.setDnd)
-      expect(result.current.setPresence).toBe(firstRender.setPresence)
-      expect(result.current.connect).toBe(firstRender.connect)
-      expect(result.current.disconnect).toBe(firstRender.disconnect)
-      expect(result.current.idleDetected).toBe(firstRender.idleDetected)
-      expect(result.current.activityDetected).toBe(firstRender.activityDetected)
-      expect(result.current.sleepDetected).toBe(firstRender.sleepDetected)
-      expect(result.current.wakeDetected).toBe(firstRender.wakeDetected)
-    })
-  })
+  // Action stability (referential identity of functions) is now handled by the
+  // React Compiler at build time. Tests run without the compiler, so we skip
+  // Object.is checks for inline function definitions.
 })

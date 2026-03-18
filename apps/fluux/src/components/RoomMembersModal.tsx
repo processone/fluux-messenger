@@ -9,7 +9,7 @@
  * - Change or remove affiliation per row
  * - Permission-aware: only shows actions the current user can perform
  */
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Room, RoomAffiliation } from '@fluux/sdk'
 import { useRoom, getAvailableAffiliations } from '@fluux/sdk'
@@ -62,7 +62,7 @@ export function RoomMembersModal({ room, onClose }: RoomMembersModalProps) {
     return () => { mountedRef.current = false }
   }, [])
 
-  const loadTab = useCallback(async (tab: AffiliationTab) => {
+  const loadTab = async (tab: AffiliationTab) => {
     if (loadingTabs.has(tab)) return
     setLoadingTabs(prev => new Set(prev).add(tab))
     try {
@@ -82,7 +82,7 @@ export function RoomMembersModal({ room, onClose }: RoomMembersModalProps) {
         })
       }
     }
-  }, [room.jid, queryAffiliationList, addToast, t, loadingTabs])
+  }
 
   // Load initial tab on mount
   useEffect(() => {
@@ -90,14 +90,14 @@ export function RoomMembersModal({ room, onClose }: RoomMembersModalProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const handleTabChange = useCallback((tab: AffiliationTab) => {
+  const handleTabChange = (tab: AffiliationTab) => {
     setActiveTab(tab)
     if (!loadedTabs.has(tab)) {
       void loadTab(tab)
     }
-  }, [loadedTabs, loadTab])
+  }
 
-  const handleChangeAffiliation = useCallback(async (jid: string, currentAff: RoomAffiliation, newAff: RoomAffiliation) => {
+  const handleChangeAffiliation = async (jid: string, currentAff: RoomAffiliation, newAff: RoomAffiliation) => {
     setActionInProgress(jid)
     try {
       await setAffiliation(room.jid, jid, newAff)
@@ -127,9 +127,9 @@ export function RoomMembersModal({ room, onClose }: RoomMembersModalProps) {
     } finally {
       if (mountedRef.current) setActionInProgress(null)
     }
-  }, [room.jid, setAffiliation, queryAffiliationList, addToast, t])
+  }
 
-  const handleAddMember = useCallback(async () => {
+  const handleAddMember = async () => {
     const jid = jidSelection[0]
     if (!jid || !jid.includes('@')) return
     setIsAdding(true)
@@ -151,9 +151,9 @@ export function RoomMembersModal({ room, onClose }: RoomMembersModalProps) {
     } finally {
       if (mountedRef.current) setIsAdding(false)
     }
-  }, [jidSelection, addingAffiliation, room.jid, setAffiliation, queryAffiliationList, addToast, t])
+  }
 
-  const filteredMembers = useMemo(() => {
+  const filteredMembers = (() => {
     const list = members[activeTab] || []
     if (!search) return list
     const q = search.toLowerCase()
@@ -161,7 +161,7 @@ export function RoomMembersModal({ room, onClose }: RoomMembersModalProps) {
       m.jid.toLowerCase().includes(q) ||
       (m.nick && m.nick.toLowerCase().includes(q))
     )
-  }, [members, activeTab, search])
+  })()
 
   const getTabIcon = (tab: AffiliationTab) => {
     switch (tab) {
@@ -186,7 +186,7 @@ export function RoomMembersModal({ room, onClose }: RoomMembersModalProps) {
   }
 
   // Determine which affiliations the current user can add
-  const canAddAffiliations = useMemo(() => {
+  const canAddAffiliations = (() => {
     const result: RoomAffiliation[] = []
     // For adding, we treat the "target" as having no current affiliation
     for (const aff of ['owner', 'admin', 'member', 'outcast'] as RoomAffiliation[]) {
@@ -195,17 +195,14 @@ export function RoomMembersModal({ room, onClose }: RoomMembersModalProps) {
       }
     }
     return result
-  }, [selfAffiliation])
+  })()
 
   const canManage = selfAffiliation === 'owner' || selfAffiliation === 'admin'
 
-  const extraSuggestions = useMemo(
-    () => buildRoomContactSuggestions(room),
-    [room.occupants, room.affiliatedMembers],
-  )
+  const extraSuggestions = buildRoomContactSuggestions(room)
 
   // Build excludeJids from all loaded affiliation members
-  const selectorExcludeJids = useMemo(() => {
+  const selectorExcludeJids = (() => {
     const jids = new Set<string>()
     for (const tab of TABS) {
       for (const member of members[tab]) {
@@ -213,7 +210,7 @@ export function RoomMembersModal({ room, onClose }: RoomMembersModalProps) {
       }
     }
     return Array.from(jids)
-  }, [members])
+  })()
 
   return (
     <ModalShell

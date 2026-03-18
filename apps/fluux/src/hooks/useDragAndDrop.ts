@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef } from 'react'
 import { useTauriFileDrop } from './useTauriFileDrop'
 import { getMimeType, getFilename } from '@/utils/fileUtils'
 
@@ -59,7 +59,7 @@ export function useDragAndDrop({
   const dragCounterRef = useRef(0)
 
   // Tauri file drop handler (converts file paths to File objects)
-  const handleTauriFileDrop = useCallback(async (paths: string[]) => {
+  const handleTauriFileDrop = async (paths: string[]) => {
     if (!isUploadSupported || paths.length === 0) return
 
     try {
@@ -76,7 +76,7 @@ export function useDragAndDrop({
     } catch (err) {
       console.error('[useDragAndDrop] Failed to read dropped file:', err)
     }
-  }, [isUploadSupported, onFileDrop])
+  }
 
   // Tauri native file drop (for desktop app)
   const { isDragging: isTauriDragging, isTauri } = useTauriFileDrop(handleTauriFileDrop, isUploadSupported)
@@ -85,7 +85,7 @@ export function useDragAndDrop({
   const isDragging = isTauri ? isTauriDragging : isHtmlDragging
 
   // HTML5 Drag-and-drop handlers (for web browser only - Tauri intercepts these)
-  const handleDragEnter = useCallback((e: React.DragEvent) => {
+  const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     dragCounterRef.current++
@@ -101,23 +101,23 @@ export function useDragAndDrop({
     if (hasFiles && !isInternalDrag && isUploadSupported && !isTauri) {
       setIsHtmlDragging(true)
     }
-  }, [isUploadSupported, isTauri])
+  }
 
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
+  const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     dragCounterRef.current--
     if (dragCounterRef.current === 0) {
       setIsHtmlDragging(false)
     }
-  }, [])
+  }
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
+  const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-  }, [])
+  }
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     dragCounterRef.current = 0
@@ -136,7 +136,7 @@ export function useDragAndDrop({
         void onFileDrop(files[0])
       }
     }
-  }, [isUploadSupported, isTauri, onFileDrop])
+  }
 
   return {
     isDragging,

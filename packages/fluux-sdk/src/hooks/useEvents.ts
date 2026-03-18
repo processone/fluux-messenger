@@ -1,4 +1,3 @@
-import { useCallback, useMemo } from 'react'
 import { connectionStore, chatStore } from '../stores'
 import { useEventsStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
@@ -95,145 +94,106 @@ export function useEvents() {
   const removeMucInvitation = useEventsStore((s) => s.removeMucInvitation)
   const removeSystemNotification = useEventsStore((s) => s.removeSystemNotification)
 
-  const acceptSubscription = useCallback(
-    async (jid: string) => {
-      await client.roster.acceptSubscription(jid)
-    },
-    [client]
-  )
+  const acceptSubscription = async (jid: string) => {
+    await client.roster.acceptSubscription(jid)
+  }
 
-  const rejectSubscription = useCallback(
-    async (jid: string) => {
-      await client.roster.rejectSubscription(jid)
-    },
-    [client]
-  )
+  const rejectSubscription = async (jid: string) => {
+    await client.roster.rejectSubscription(jid)
+  }
 
   // Accept stranger: add to roster and create conversation
-  const acceptStranger = useCallback(
-    async (jid: string) => {
-      // Add to roster (sends subscription request)
-      await client.roster.addContact(jid, getLocalPart(jid))
+  const acceptStranger = async (jid: string) => {
+    // Add to roster (sends subscription request)
+    await client.roster.addContact(jid, getLocalPart(jid))
 
-      // Create conversation
-      const conversation: Conversation = {
-        id: jid,
-        name: getLocalPart(jid),
+    // Create conversation
+    const conversation: Conversation = {
+      id: jid,
+      name: getLocalPart(jid),
+      type: 'chat',
+      unreadCount: 0,
+    }
+    chatStore.getState().addConversation(conversation)
+
+    // Move stranger messages to the conversation
+    const messages = strangerMessages.filter((m) => m.from === jid)
+    for (const msg of messages) {
+      chatStore.getState().addMessage({
         type: 'chat',
-        unreadCount: 0,
-      }
-      chatStore.getState().addConversation(conversation)
+        id: msg.id,
+        conversationId: jid,
+        from: jid,
+        body: msg.body,
+        timestamp: msg.timestamp,
+        isOutgoing: false,
+      })
+    }
 
-      // Move stranger messages to the conversation
-      const messages = strangerMessages.filter((m) => m.from === jid)
-      for (const msg of messages) {
-        chatStore.getState().addMessage({
-          type: 'chat',
-          id: msg.id,
-          conversationId: jid,
-          from: jid,
-          body: msg.body,
-          timestamp: msg.timestamp,
-          isOutgoing: false,
-        })
-      }
-
-      // Remove from stranger messages
-      removeStrangerMessages(jid)
-    },
-    [client, strangerMessages, removeStrangerMessages]
-  )
+    // Remove from stranger messages
+    removeStrangerMessages(jid)
+  }
 
   // Ignore stranger: just remove their messages from events
-  const ignoreStranger = useCallback(
-    (jid: string) => {
-      removeStrangerMessages(jid)
-    },
-    [removeStrangerMessages]
-  )
+  const ignoreStranger = (jid: string) => {
+    removeStrangerMessages(jid)
+  }
 
-  // Group stranger messages by sender for display (memoized to prevent re-computation)
-  const strangerConversations = useMemo(() => {
-    return strangerMessages.reduce((acc, msg) => {
-      if (!acc[msg.from]) {
-        acc[msg.from] = []
-      }
-      acc[msg.from].push(msg)
-      return acc
-    }, {} as Record<string, typeof strangerMessages>)
-  }, [strangerMessages])
+  // Group stranger messages by sender for display
+  const strangerConversations = strangerMessages.reduce((acc, msg) => {
+    if (!acc[msg.from]) {
+      acc[msg.from] = []
+    }
+    acc[msg.from].push(msg)
+    return acc
+  }, {} as Record<string, typeof strangerMessages>)
 
   // Dismiss a system notification
-  const dismissNotification = useCallback(
-    (id: string) => {
-      removeSystemNotification(id)
-    },
-    [removeSystemNotification]
-  )
+  const dismissNotification = (id: string) => {
+    removeSystemNotification(id)
+  }
 
   // Accept MUC invitation: join the room with optional password
-  const acceptInvitation = useCallback(
-    async (roomJid: string, password?: string) => {
-      // Find the invitation to get the password and isQuickChat flag
-      const invitation = mucInvitations.find((i) => i.roomJid === roomJid)
-      const currentJid = connectionStore.getState().jid
-      const defaultNick = getLocalPart(currentJid ?? 'user')
-      const roomPassword = invitation?.password || password
+  const acceptInvitation = async (roomJid: string, password?: string) => {
+    // Find the invitation to get the password and isQuickChat flag
+    const invitation = mucInvitations.find((i) => i.roomJid === roomJid)
+    const currentJid = connectionStore.getState().jid
+    const defaultNick = getLocalPart(currentJid ?? 'user')
+    const roomPassword = invitation?.password || password
 
-      // Join the room with isQuickChat flag from invitation
-      await client.muc.joinRoom(roomJid, defaultNick, {
-        password: roomPassword,
-        isQuickChat: invitation?.isQuickChat,
-      })
+    // Join the room with isQuickChat flag from invitation
+    await client.muc.joinRoom(roomJid, defaultNick, {
+      password: roomPassword,
+      isQuickChat: invitation?.isQuickChat,
+    })
 
-      // Remove from invitations
-      removeMucInvitation(roomJid)
-    },
-    [client, mucInvitations, removeMucInvitation]
-  )
+    // Remove from invitations
+    removeMucInvitation(roomJid)
+  }
 
   // Decline MUC invitation: just remove it
-  const declineInvitation = useCallback(
-    (roomJid: string) => {
-      removeMucInvitation(roomJid)
-    },
-    [removeMucInvitation]
-  )
+  const declineInvitation = (roomJid: string) => {
+    removeMucInvitation(roomJid)
+  }
 
-  // Memoize actions object to prevent re-renders when only state changes
-  const actions = useMemo(
-    () => ({
-      acceptSubscription,
-      rejectSubscription,
-      acceptStranger,
-      ignoreStranger,
-      acceptInvitation,
-      declineInvitation,
-      dismissNotification,
-    }),
-    [acceptSubscription, rejectSubscription, acceptStranger, ignoreStranger, acceptInvitation, declineInvitation, dismissNotification]
-  )
+  const pendingCount = subscriptionRequests.length + Object.keys(strangerConversations).length + mucInvitations.length + systemNotifications.length
 
-  // Memoize pending count to prevent re-computation
-  const pendingCount = useMemo(
-    () => subscriptionRequests.length + Object.keys(strangerConversations).length + mucInvitations.length + systemNotifications.length,
-    [subscriptionRequests.length, strangerConversations, mucInvitations.length, systemNotifications.length]
-  )
+  return {
+    // State
+    subscriptionRequests,
+    strangerMessages,
+    strangerConversations,
+    mucInvitations,
+    systemNotifications,
+    pendingCount,
 
-  // Memoize the entire return value to prevent render loops
-  return useMemo(
-    () => ({
-      // State
-      subscriptionRequests,
-      strangerMessages,
-      strangerConversations,
-      mucInvitations,
-      systemNotifications,
-      pendingCount,
-
-      // Actions (spread memoized actions)
-      ...actions,
-    }),
-    [subscriptionRequests, strangerMessages, strangerConversations, mucInvitations, systemNotifications, pendingCount, actions]
-  )
+    // Actions
+    acceptSubscription,
+    rejectSubscription,
+    acceptStranger,
+    ignoreStranger,
+    acceptInvitation,
+    declineInvitation,
+    dismissNotification,
+  }
 }

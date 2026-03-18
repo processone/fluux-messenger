@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Search, Ban, Loader2, Plus, X } from 'lucide-react'
 import { useBlocking, getLocalPart } from '@fluux/sdk'
@@ -22,11 +22,11 @@ export function BlockedUsersSettings() {
   }, [fetchBlocklist])
 
   // Filter blocked JIDs by search query
-  const filteredJids = useMemo(() => {
+  const filteredJids = (() => {
     if (!searchQuery.trim()) return blockedJids
     const query = searchQuery.toLowerCase()
     return blockedJids.filter(jid => jid.toLowerCase().includes(query))
-  }, [blockedJids, searchQuery])
+  })()
 
   const handleUnblock = async (jid: string) => {
     setUnblockingJid(jid)

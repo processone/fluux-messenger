@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, type RefObject } from 'react'
+import { useEffect, useRef, type RefObject } from 'react'
 
 export type FocusZone = 'sidebarList' | 'mainContent' | 'composer'
 
@@ -23,7 +23,7 @@ export function useFocusZones(refs: FocusZoneRefs, enabled: boolean = true) {
   const currentZoneRef = useRef<FocusZone>('sidebarList')
 
   // Get the current focused zone based on active element
-  const getCurrentZone = useCallback((): FocusZone | null => {
+  const getCurrentZone = (): FocusZone | null => {
     const activeElement = document.activeElement
 
     for (const zone of ZONE_ORDER) {
@@ -33,10 +33,10 @@ export function useFocusZones(refs: FocusZoneRefs, enabled: boolean = true) {
       }
     }
     return null
-  }, [refs])
+  }
 
   // Focus a specific zone
-  const focusZone = useCallback((zone: FocusZone) => {
+  const focusZone = (zone: FocusZone) => {
     const zoneRef = refs[zone]
     if (zoneRef.current) {
       // Try to focus the zone container
@@ -45,10 +45,10 @@ export function useFocusZones(refs: FocusZoneRefs, enabled: boolean = true) {
       return true
     }
     return false
-  }, [refs])
+  }
 
   // Move to the next zone
-  const focusNextZone = useCallback(() => {
+  const focusNextZone = () => {
     const currentZone = getCurrentZone() || currentZoneRef.current
     const currentIndex = ZONE_ORDER.indexOf(currentZone)
 
@@ -61,10 +61,10 @@ export function useFocusZones(refs: FocusZoneRefs, enabled: boolean = true) {
       }
     }
     return false
-  }, [getCurrentZone, focusZone])
+  }
 
   // Move to the previous zone
-  const focusPreviousZone = useCallback(() => {
+  const focusPreviousZone = () => {
     const currentZone = getCurrentZone() || currentZoneRef.current
     const currentIndex = ZONE_ORDER.indexOf(currentZone)
 
@@ -77,7 +77,7 @@ export function useFocusZones(refs: FocusZoneRefs, enabled: boolean = true) {
       }
     }
     return false
-  }, [getCurrentZone, focusZone])
+  }
 
   // Handle Tab key to cycle between zones, and Arrow keys outside zones to focus sidebar
   useEffect(() => {

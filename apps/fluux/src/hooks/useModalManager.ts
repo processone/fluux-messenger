@@ -7,7 +7,7 @@
  * - Helper to close the topmost open modal
  */
 
-import { useState, useCallback, useMemo, useRef } from 'react'
+import { useState, useRef } from 'react'
 
 /**
  * Modal names in escape priority order (highest priority first).
@@ -86,24 +86,24 @@ export function useModalManager(): UseModalManagerReturn {
   const stateRef = useRef<ModalState>(state)
   stateRef.current = state
 
-  const open = useCallback((modal: ModalName) => {
+  const open = (modal: ModalName) => {
     setState(prev => ({ ...prev, [modal]: true }))
-  }, [])
+  }
 
-  const close = useCallback((modal: ModalName) => {
+  const close = (modal: ModalName) => {
     setState(prev => ({ ...prev, [modal]: false }))
-  }, [])
+  }
 
-  const toggle = useCallback((modal: ModalName) => {
+  const toggle = (modal: ModalName) => {
     setState(prev => ({ ...prev, [modal]: !prev[modal] }))
-  }, [])
+  }
 
-  const closeAll = useCallback(() => {
+  const closeAll = () => {
     setState(initialState)
-  }, [])
+  }
 
   // Read from ref to avoid depending on state (which changes on every modal change)
-  const closeTopmost = useCallback(() => {
+  const closeTopmost = () => {
     const currentState = stateRef.current
     for (const modal of ESCAPE_PRIORITY) {
       if (currentState[modal]) {
@@ -112,15 +112,12 @@ export function useModalManager(): UseModalManagerReturn {
       }
     }
     return false
-  }, [close])
+  }
 
-  const isAnyOpen = useMemo(
-    () => Object.values(state).some(Boolean),
-    [state]
-  )
+  const isAnyOpen = Object.values(state).some(Boolean)
 
   // Read from ref to avoid depending on state
-  const getEscapeHandler = useCallback(() => {
+  const getEscapeHandler = () => {
     const currentState = stateRef.current
     for (const modal of ESCAPE_PRIORITY) {
       if (currentState[modal]) {
@@ -128,18 +125,14 @@ export function useModalManager(): UseModalManagerReturn {
       }
     }
     return null
-  }, [close])
+  }
 
-  const actions = useMemo<ModalActions>(
-    () => ({ open, close, toggle, closeAll, closeTopmost }),
-    [open, close, toggle, closeAll, closeTopmost]
-  )
+  const actions: ModalActions = { open, close, toggle, closeAll, closeTopmost }
 
-  // Memoize return value to prevent infinite render loops in context consumers
-  return useMemo(() => ({
+  return {
     state,
     actions,
     isAnyOpen,
     getEscapeHandler,
-  }), [state, actions, isAnyOpen, getEscapeHandler])
+  }
 }

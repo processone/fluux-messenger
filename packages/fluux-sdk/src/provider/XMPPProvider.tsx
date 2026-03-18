@@ -1,4 +1,4 @@
-import { createContext, useContext, useRef, useEffect, useMemo, type ReactNode } from 'react'
+import { createContext, useContext, useRef, useEffect, type ReactNode } from 'react'
 import { XMPPClient } from '../core/XMPPClient'
 import type { XMPPClientConfig } from '../core/types/client'
 import type { StorageAdapter } from '../core/types/storage'
@@ -207,18 +207,11 @@ export function XMPPProvider({
     return setupDebugUtils(client)
   }, [])
 
-  // Memoize context value to prevent unnecessary re-renders of all consumers
-  // when parent re-renders. The client instance is stable (stored in ref).
-  const xmppContextValue = useMemo(
-    () => ({ client: clientRef.current! }),
-    [] // Empty deps - client is created once and never changes
-  )
+  // Context values are stable - client is created once and never changes (stored in ref).
+  const xmppContextValue = { client: clientRef.current! }
 
   // Presence actor is now owned by XMPPClient
-  const presenceContextValue = useMemo(
-    () => ({ presenceActor: clientRef.current!.presenceActor }),
-    [] // Empty deps - client and its actor are created once and never change
-  )
+  const presenceContextValue = { presenceActor: clientRef.current!.presenceActor }
 
   return (
     <XMPPContext.Provider value={xmppContextValue}>

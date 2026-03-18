@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef } from 'react'
+import { useState, useRef } from 'react'
 import type { RoomOccupant, RoomRole, MentionReference } from '@fluux/sdk'
 
 /**
@@ -60,7 +60,7 @@ export function useMentionAutocomplete(
   const currentTriggerRef = useRef<number>(-1)
 
   // Detect @ trigger and extract query
-  const { isActive, query, triggerIndex } = useMemo(() => {
+  const detectTrigger = (): { isActive: boolean; query: string; triggerIndex: number } => {
     if (dismissed) {
       return { isActive: false, query: '', triggerIndex: currentTriggerRef.current }
     }
@@ -101,10 +101,11 @@ export function useMentionAutocomplete(
     currentTriggerRef.current = atIndex
     // Normalize to NFC so that composed (ë) and decomposed (e + ̈) forms match consistently
     return { isActive: true, query: queryText.normalize('NFC').toLowerCase(), triggerIndex: atIndex }
-  }, [text, cursorPosition, dismissed])
+  }
+  const { isActive, query, triggerIndex } = detectTrigger()
 
   // Build matches list
-  const matches = useMemo(() => {
+  const buildMatches = (): MentionMatch[] => {
     if (!isActive) return []
 
     const result: MentionMatch[] = []
@@ -136,74 +137,65 @@ export function useMentionAutocomplete(
     }
 
     return [...result, ...occupantMatches, ...historyMatches]
-  }, [isActive, query, occupants, ownNickname, messageNicks])
+  }
+  const matches = buildMatches()
 
-  // Reset selection when matches change
-  useMemo(() => {
-    if (selectedIndex >= matches.length) {
-      setSelectedIndex(0)
-    }
-  }, [matches.length, selectedIndex])
+  // Reset selection when matches change (guard: only call setState when value actually changes)
+  if (selectedIndex >= matches.length && selectedIndex !== 0) {
+    setSelectedIndex(0)
+  }
 
   // Reset dismissed state when a NEW @ trigger appears (different position)
-  useMemo(() => {
-    // Only reset if we have a valid new trigger at a different position than where we dismissed
-    if (triggerIndex >= 0 && triggerIndex !== dismissedAtTriggerRef.current) {
-      setDismissed(false)
-      dismissedAtTriggerRef.current = -1
+  // Only reset if currently dismissed and we have a valid new trigger at a different position
+  if (dismissed && triggerIndex >= 0 && triggerIndex !== dismissedAtTriggerRef.current) {
+    setDismissed(false)
+    dismissedAtTriggerRef.current = -1
+  }
+
+  const selectMatch = (index: number): { newText: string; newCursorPosition: number; reference: MentionReference } => {
+    const match = matches[index]
+    if (!match) {
+      throw new Error('Invalid match index')
     }
-  }, [triggerIndex])
 
-  const selectMatch = useCallback(
-    (index: number): { newText: string; newCursorPosition: number; reference: MentionReference } => {
-      const match = matches[index]
-      if (!match) {
-        throw new Error('Invalid match index')
+    // Replace @query with @nick (add space after)
+    const beforeTrigger = text.slice(0, triggerIndex)
+    const afterCursor = text.slice(cursorPosition)
+    const replacement = `@${match.nick} `
+    const newText = beforeTrigger + replacement + afterCursor
+    const newCursorPosition = triggerIndex + replacement.length
+
+    // Build reference
+    // URI is xmpp:room@conf/nick for users, xmpp:room@conf for @all
+    const uri = match.isAll ? `xmpp:${roomJid}` : `xmpp:${roomJid}/${match.nick}`
+    const reference: MentionReference = {
+      begin: triggerIndex,
+      end: triggerIndex + 1 + match.nick.length, // @nick (without trailing space)
+      type: 'mention',
+      uri,
+    }
+
+    return { newText, newCursorPosition, reference }
+  }
+
+  const moveSelection = (direction: 'up' | 'down') => {
+    if (matches.length === 0) return
+
+    setSelectedIndex((prev) => {
+      if (direction === 'up') {
+        return prev <= 0 ? matches.length - 1 : prev - 1
+      } else {
+        return prev >= matches.length - 1 ? 0 : prev + 1
       }
+    })
+  }
 
-      // Replace @query with @nick (add space after)
-      const beforeTrigger = text.slice(0, triggerIndex)
-      const afterCursor = text.slice(cursorPosition)
-      const replacement = `@${match.nick} `
-      const newText = beforeTrigger + replacement + afterCursor
-      const newCursorPosition = triggerIndex + replacement.length
-
-      // Build reference
-      // URI is xmpp:room@conf/nick for users, xmpp:room@conf for @all
-      const uri = match.isAll ? `xmpp:${roomJid}` : `xmpp:${roomJid}/${match.nick}`
-      const reference: MentionReference = {
-        begin: triggerIndex,
-        end: triggerIndex + 1 + match.nick.length, // @nick (without trailing space)
-        type: 'mention',
-        uri,
-      }
-
-      return { newText, newCursorPosition, reference }
-    },
-    [matches, text, triggerIndex, cursorPosition, roomJid]
-  )
-
-  const moveSelection = useCallback(
-    (direction: 'up' | 'down') => {
-      if (matches.length === 0) return
-
-      setSelectedIndex((prev) => {
-        if (direction === 'up') {
-          return prev <= 0 ? matches.length - 1 : prev - 1
-        } else {
-          return prev >= matches.length - 1 ? 0 : prev + 1
-        }
-      })
-    },
-    [matches.length]
-  )
-
-  const dismiss = useCallback(() => {
+  const dismiss = () => {
     // Record where we dismissed so we don't immediately reactivate
     dismissedAtTriggerRef.current = currentTriggerRef.current
     setDismissed(true)
     setSelectedIndex(0)
-  }, [])
+  }
 
   return {
     state: {

@@ -1,4 +1,3 @@
-import { useCallback, useMemo } from 'react'
 import { consoleStore } from '../stores'
 import { useConsoleStore } from '../react/storeHooks'
 
@@ -72,44 +71,32 @@ export function useConsole() {
   const height = useConsoleStore((s) => s.height)
   const entries = useConsoleStore((s) => s.entries)
 
-  const toggle = useCallback(() => {
+  const toggle = () => {
     consoleStore.getState().toggle()
-  }, [])
+  }
 
-  const setOpen = useCallback((open: boolean) => {
+  const setOpen = (open: boolean) => {
     consoleStore.getState().setOpen(open)
-  }, [])
+  }
 
-  const setHeight = useCallback((height: number) => {
+  const setHeight = (height: number) => {
     consoleStore.getState().setHeight(height)
-  }, [])
+  }
 
-  const clearEntries = useCallback(() => {
+  const clearEntries = () => {
     consoleStore.getState().clearEntries()
-  }, [])
+  }
 
-  // Memoize actions object to prevent re-renders when only state changes
-  const actions = useMemo(
-    () => ({
-      toggle,
-      setOpen,
-      setHeight,
-      clearEntries,
-    }),
-    [toggle, setOpen, setHeight, clearEntries]
-  )
+  return {
+    // State
+    isOpen,
+    height,
+    entries,
 
-  // Memoize the entire return value to prevent render loops
-  return useMemo(
-    () => ({
-      // State
-      isOpen,
-      height,
-      entries,
-
-      // Actions (spread memoized actions)
-      ...actions,
-    }),
-    [isOpen, height, entries, actions]
-  )
+    // Actions
+    toggle,
+    setOpen,
+    setHeight,
+    clearEntries,
+  }
 }

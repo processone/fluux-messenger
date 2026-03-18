@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo, useCallback, memo, type RefObject } from 'react'
+import React, { useState, useRef, useEffect, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { useRoomActive, useRoster, getBareJid, generateConsistentColorHexSync, getPresenceFromShow, createMessageLookup, isMessageFromIgnoredUser, isReplyToIgnoredUser, canKick, canBan, canModerate, getAvailableAffiliations, getAvailableRoles, type RoomMessage, type Room, type MentionReference, type ChatStateNotification, type Contact, type FileAttachment, type RoomAffiliation, type RoomRole } from '@fluux/sdk'
@@ -70,24 +70,24 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   const { resolvedMode } = useMode()
 
   // Create a map of contacts by JID for quick lookup (used to show avatars for known contacts)
-  const contactsByJid = useMemo(() => {
+  const contactsByJid = (() => {
     const map = new Map<string, Contact>()
     for (const contact of contacts) {
       map.set(contact.jid, contact)
     }
     return map
-  }, [contacts])
+  })()
 
   // Filter out messages from ignored users and replies quoting them (client-side ignore)
   const ignoredForRoom = useIgnoreStore((s) => activeRoom ? (s.ignoredUsers[activeRoom.jid] || []) : [])
-  const displayMessages = useMemo(() => {
+  const displayMessages = (() => {
     if (ignoredForRoom.length === 0) return activeMessages
     const cache = activeRoom?.nickToJidCache
     return activeMessages.filter(msg =>
       !isMessageFromIgnoredUser(ignoredForRoom, msg, cache) &&
       !isReplyToIgnoredUser(ignoredForRoom, msg.replyTo, cache)
     )
-  }, [activeMessages, ignoredForRoom, activeRoom])
+  })()
 
   // Reply state
   const [replyingTo, setReplyingTo] = useState<RoomMessage | null>(null)
@@ -100,21 +100,18 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
 
 
   // Find the last outgoing message ID for edit button visibility (skip retracted)
-  const lastOutgoingMessageId = useMemo(
-    () => findLastEditableMessageId(activeMessages),
-    [activeMessages]
-  )
+  const lastOutgoingMessageId = findLastEditableMessageId(activeMessages)
 
   // Last message ID - reply button is disabled for last message (context is already clear)
   const lastMessageId = activeMessages.length > 0 ? activeMessages[activeMessages.length - 1].id : null
 
   // Handler to edit the last outgoing message (triggered by Up arrow in empty composer)
-  const handleEditLastMessage = useCallback(() => {
+  const handleEditLastMessage = () => {
     const msg = findLastEditableMessage(activeMessages)
     if (msg) {
       setEditingMessage(msg)
     }
-  }, [activeMessages])
+  }
 
   // Composing state - hides message toolbars when user is typing
   const [isComposing, setIsComposing] = useState(false)
@@ -123,17 +120,16 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   const [activeReactionPickerMessageId, setActiveReactionPickerMessageId] = useState<string | null>(null)
 
   // Occupant panel state setter (calls parent callback if provided)
-  const setShowOccupants = useCallback((show: boolean) => {
+  const setShowOccupants = (show: boolean) => {
     onShowOccupantsChange?.(show)
-  }, [onShowOccupantsChange])
+  }
 
-  // Memoized callbacks to prevent render loops (new function refs cause child re-renders)
-  const handleCancelReply = useCallback(() => setReplyingTo(null), [])
-  const handleCancelEdit = useCallback(() => setEditingMessage(null), [])
-  const handleReactionPickerChange = useCallback((messageId: string, isOpen: boolean) => {
+  const handleCancelReply = () => setReplyingTo(null)
+  const handleCancelEdit = () => setEditingMessage(null)
+  const handleReactionPickerChange = (messageId: string, isOpen: boolean) => {
     setActiveReactionPickerMessageId(isOpen ? messageId : null)
-  }, [])
-  const handleCloseOccupants = useCallback(() => setShowOccupants(false), [setShowOccupants])
+  }
+  const handleCloseOccupants = () => setShowOccupants(false)
 
   // Nick context menu state (right-click / long-press on nick in messages)
   const nickMenu = useContextMenu()
@@ -143,24 +139,23 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // to list-level selectors that cause render loops when other rooms update
   const addToast = useToastStore((s) => s.addToast)
 
-  const handleNickContextMenu = useCallback((nick: string, e: React.MouseEvent) => {
+  const handleNickContextMenu = (nick: string, e: React.MouseEvent) => {
     if (!activeRoom || nick === activeRoom.nickname) return
     setNickMenuTarget(nick)
     nickMenu.handleContextMenu(e)
-  }, [activeRoom, nickMenu])
+  }
 
-  const handleNickTouchStart = useCallback((nick: string, e: React.TouchEvent) => {
+  const handleNickTouchStart = (nick: string, e: React.TouchEvent) => {
     if (!activeRoom || nick === activeRoom.nickname) return
     setNickMenuTarget(nick)
     nickMenu.handleTouchStart(e)
-  }, [activeRoom, nickMenu])
+  }
 
-  const handleNickTouchEnd = useCallback(() => {
+  const handleNickTouchEnd = () => {
     nickMenu.handleTouchEnd()
-  }, [nickMenu])
+  }
 
-  // Memoized upload state to prevent new object reference on every render
-  const uploadStateObj = useMemo(() => ({ isUploading, progress }), [isUploading, progress])
+  const uploadStateObj = { isUploading, progress }
 
   // Scroll ref for programmatic scrolling and keyboard navigation
   const scrollRef = useRef<HTMLElement>(null)
@@ -170,31 +165,31 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   const composerHandleRef = useRef<MessageComposerHandle>(null)
 
   // Scroll to bottom (used after sending a message)
-  const scrollToBottom = useCallback(() => {
+  const scrollToBottom = () => {
     if (scrollRef.current) {
       scrollRef.current.scrollTo({
         top: scrollRef.current.scrollHeight,
         behavior: 'smooth',
       })
     }
-  }, [])
+  }
 
   // Scroll to bottom when media loads (images, videos, link previews)
   // Only scrolls if user was already at bottom to avoid disrupting scroll position
-  const handleMediaLoad = useCallback(() => {
+  const handleMediaLoad = () => {
     if (scrollRef.current && isAtBottomRef.current) {
       // Use instant scroll to avoid jarring animation when content expands
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [])
+  }
 
   // Scroll to bottom when composer resizes (typing long message)
   // Only scrolls if user was already at bottom to avoid disrupting scroll position
-  const handleInputResize = useCallback(() => {
+  const handleInputResize = () => {
     if (scrollRef.current && isAtBottomRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [])
+  }
 
   // Keyboard navigation for message selection
   const {
@@ -217,7 +212,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
 
   // Create a lookup map for messages by ID (for reply context)
   // Index by both client id and stanza-id since replies may reference either
-  const messagesById = useMemo(() => createMessageLookup(activeMessages), [activeMessages])
+  const messagesById = createMessageLookup(activeMessages)
 
   // Clear reply/edit/pending attachment state when room changes
   // Note: scroll position is managed by MessageList component
@@ -235,7 +230,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
 
   // File drop handler - stages file for preview only (no upload yet - privacy protection)
   // Upload happens when user clicks Send, not on drop (prevents accidental data leaks)
-  const handleFileDrop = useCallback((file: File) => {
+  const handleFileDrop = (file: File) => {
     if (!activeRoom || !isSupported) return
     // Create preview URL for images/videos
     const previewUrl = file.type.startsWith('image/') || file.type.startsWith('video/')
@@ -244,15 +239,15 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     setPendingAttachment({ file, previewUrl })
     // Focus composer so user can add a message
     setTimeout(() => composerHandleRef.current?.focus(), 0)
-  }, [activeRoom, isSupported])
+  }
 
   // Clear pending attachment and revoke preview URL
-  const handleRemovePendingAttachment = useCallback(() => {
+  const handleRemovePendingAttachment = () => {
     if (pendingAttachment?.previewUrl) {
       URL.revokeObjectURL(pendingAttachment.previewUrl)
     }
     setPendingAttachment(null)
-  }, [pendingAttachment])
+  }
 
   // Drag-and-drop for file upload (handles both HTML5 and Tauri native)
   const { isDragging, dragHandlers } = useDragAndDrop({
@@ -263,18 +258,18 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // Memoize the clearFirstNewMessageId callback to avoid render loops
   // (inline arrow functions create new references on every render)
   const roomJid = activeRoom?.jid
-  const handleClearFirstNewMessageId = useCallback(() => {
+  const handleClearFirstNewMessageId = () => {
     if (roomJid) {
       clearFirstNewMessageId(roomJid)
     }
-  }, [roomJid, clearFirstNewMessageId])
+  }
 
   // Viewport observer callback: update lastSeenMessageId as user scrolls
-  const handleMessageSeen = useCallback((messageId: string) => {
+  const handleMessageSeen = (messageId: string) => {
     if (roomJid) {
       updateLastSeenMessageId(roomJid, messageId)
     }
-  }, [roomJid, updateLastSeenMessageId])
+  }
 
   if (!activeRoom) return null
 
@@ -630,17 +625,17 @@ const RoomMessageList = memo(function RoomMessageList({
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Handle mouse enter on a message - set it as hovered immediately
-  const handleMessageHover = useCallback((messageId: string) => {
+  const handleMessageHover = (messageId: string) => {
     // Clear any pending timeout to clear hover
     if (hoverTimeoutRef.current) {
       clearTimeout(hoverTimeoutRef.current)
       hoverTimeoutRef.current = null
     }
     setHoveredMessageId(messageId)
-  }, [])
+  }
 
   // Handle mouse leave from a message - delay clearing to allow moving to toolbar
-  const handleMessageLeave = useCallback(() => {
+  const handleMessageLeave = () => {
     // Clear any existing timeout
     if (hoverTimeoutRef.current) {
       clearTimeout(hoverTimeoutRef.current)
@@ -650,7 +645,7 @@ const RoomMessageList = memo(function RoomMessageList({
       setHoveredMessageId(null)
       hoverTimeoutRef.current = null
     }, 100) // Small delay to allow mouse to reach toolbar
-  }, [])
+  }
 
   // Clear hover when room changes
   useEffect(() => {
@@ -703,7 +698,7 @@ const RoomMessageList = memo(function RoomMessageList({
 
   // Memoize renderMessage to prevent render loops
   // Note: This callback captures many values, but they all affect how messages render
-  const renderMessage = useCallback((msg: RoomMessage, idx: number, groupMessages: RoomMessage[]) => (
+  const renderMessage = (msg: RoomMessage, idx: number, groupMessages: RoomMessage[]) => (
     <RoomMessageBubbleWrapper
       message={msg}
       showAvatar={shouldShowAvatar(groupMessages, idx)}
@@ -735,13 +730,7 @@ const RoomMessageList = memo(function RoomMessageList({
       onNickTouchEnd={onNickTouchEnd}
       setAffiliation={setAffiliation}
     />
-  ), [
-    messagesById, room, contactsByJid, ownAvatar, sendReaction, onReply, onEdit,
-    lastOutgoingMessageId, lastMessageId, isComposing, activeReactionPickerMessageId,
-    onReactionPickerChange, retractMessage, moderateMessage, selectedMessageId, hasKeyboardSelection,
-    showToolbarForSelection, isDarkMode, onMediaLoad, hoveredMessageId, handleMessageHover, handleMessageLeave,
-    formatTime, effectiveTimeFormat, onNickContextMenu, onNickTouchStart, onNickTouchEnd, setAffiliation
-  ])
+  )
 
   return (
     <MessageList
@@ -882,15 +871,15 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
       : getConsistentTextColor(message.nick, isDarkMode)
 
   // Get my current reactions to this message
-  const myReactions = useMemo(() => {
+  const myReactions = (() => {
     if (!message.reactions || !myNick) return []
     return Object.entries(message.reactions)
       .filter(([, reactors]) => reactors.includes(myNick))
       .map(([emoji]) => emoji)
-  }, [message.reactions, myNick])
+  })()
 
   // Handle reaction toggle
-  const handleReaction = useCallback((emoji: string) => {
+  const handleReaction = (emoji: string) => {
     if (!myNick) return
 
     const newReactions = myReactions.includes(emoji)
@@ -898,10 +887,10 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
       : [...myReactions, emoji]
 
     void sendReaction(room.jid, message.id, newReactions)
-  }, [myNick, myReactions, sendReaction, room.jid, message.id])
+  }
 
   // Build reply context using shared helper
-  const replyContext = useMemo(() => buildReplyContext(
+  const replyContext = buildReplyContext(
     message,
     messagesById,
     (originalMsg, fallbackId) => {
@@ -938,21 +927,21 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
       }
     },
     isDarkMode
-  ), [message, messagesById, isDarkMode, room.occupants, room.nickToJidCache, contactsByJid, myNick, ownAvatar])
+  )
 
   // Get reactor display name (for rooms, nicks are shown as-is)
   // Note: MAM-loaded reactions may use full MUC JID (room@server/nick), so extract nick
-  const getReactorName = useCallback((reactorId: string) => {
+  const getReactorName = (reactorId: string) => {
     // Extract nick from full MUC JID (room@server/nick) or use as-is if already a nick
     const nick = reactorId.includes('/') ? reactorId.split('/').pop() || reactorId : reactorId
     if (nick === myNick) return t('chat.you')
     return nick
-  }, [myNick, t])
+  }
 
   // Build nick extras (affiliation badge and XEP-0317 hats)
   // Note: individual tooltips removed - all info is now in the unified avatar/name tooltip
   // Show affiliation (owner/admin) rather than role, consistent with the member list
-  const nickExtras = useMemo(() => (
+  const nickExtras = (
     <>
       {occupant && occupant.affiliation === 'owner' && (
         <span className="self-center">
@@ -974,16 +963,16 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         </span>
       ))}
     </>
-  ), [occupant])
+  )
 
   // Bind nick to context menu callbacks for this message
-  const handleNickContextMenu = useCallback((e: React.MouseEvent) => {
+  const handleNickContextMenu = (e: React.MouseEvent) => {
     onNickContextMenu?.(message.nick, e)
-  }, [message.nick, onNickContextMenu])
+  }
 
-  const handleNickTouchStart = useCallback((e: React.TouchEvent) => {
+  const handleNickTouchStart = (e: React.TouchEvent) => {
     onNickTouchStart?.(message.nick, e)
-  }, [message.nick, onNickTouchStart])
+  }
 
   return (
     <>
@@ -1207,7 +1196,7 @@ function RoomMessageInput({
     conversationId: room.jid,
     draftOperations: { getDraft, setDraft, clearDraft },
     composerRef,
-    onDraftRestored: useCallback(() => setReferences([]), []),
+    onDraftRestored: () => setReferences([]),
   })
 
   // Type-to-focus: auto-focus composer when user starts typing anywhere
@@ -1217,7 +1206,7 @@ function RoomMessageInput({
   const shouldSendTypingNotifications = room.occupants.size < MAX_ROOM_SIZE_FOR_TYPING
 
   // Collect unique nicks from message history and affiliated members for mention suggestions
-  const messageNicks = useMemo(() => {
+  const messageNicks = (() => {
     const nicks = new Set<string>()
     for (const msg of room.messages) {
       nicks.add(msg.nick)
@@ -1231,7 +1220,7 @@ function RoomMessageInput({
       }
     }
     return nicks
-  }, [room.messages, room.affiliatedMembers])
+  })()
 
   // Mention autocomplete hook
   const { state: mentionState, selectMatch, moveSelection, dismiss } = useMentionAutocomplete(
@@ -1244,7 +1233,7 @@ function RoomMessageInput({
   )
 
   // Handle mention selection
-  const handleMentionSelect = useCallback((index: number) => {
+  const handleMentionSelect = (index: number) => {
     const { newText, newCursorPosition, reference } = selectMatch(index)
     setText(newText)
     setReferences(prev => [...prev, reference])
@@ -1253,7 +1242,7 @@ function RoomMessageInput({
       composerRef.current?.focus()
     }, 0)
     setCursorPosition(newCursorPosition)
-  }, [selectMatch, setText])
+  }
 
   // Auto-focus composer when starting a reply
   useEffect(() => {
@@ -1407,7 +1396,7 @@ function RoomMessageInput({
   ) : null
 
   // Custom input renderer with mention highlighting
-  const renderMentionInput = useCallback(({ inputRef, mergedRef, value, onChange, onKeyDown: baseKeyDown, onSelect, onPaste, placeholder }: {
+  const renderMentionInput = ({ inputRef, mergedRef, value, onChange, onKeyDown: baseKeyDown, onSelect, onPaste, placeholder }: {
     inputRef: React.RefObject<HTMLTextAreaElement | null>
     mergedRef: (node: HTMLTextAreaElement | null) => void
     value: string
@@ -1537,7 +1526,7 @@ function RoomMessageInput({
         />
       </>
     )
-  }, [references, text, mentionState, moveSelection, dismiss, handleMentionSelect, setText])
+  }
 
   return (
     <MessageComposer

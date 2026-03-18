@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { connectionStore } from '@fluux/sdk'
 import { useXMPPContext } from '@fluux/sdk'
 import type { WebPushService } from '@fluux/sdk'
@@ -93,7 +93,7 @@ export function useWebPush(): void {
   const { client } = useXMPPContext()
   const registering = useRef(false)
 
-  const tryRegister = useCallback(async (service: WebPushService, skipIfNoPermission: boolean) => {
+  const tryRegister = async (service: WebPushService, skipIfNoPermission: boolean) => {
     if (registering.current) return
     registering.current = true
     try {
@@ -101,7 +101,7 @@ export function useWebPush(): void {
     } finally {
       registering.current = false
     }
-  }, [client])
+  }
 
   useEffect(() => {
     if (!isWebPushSupported) {

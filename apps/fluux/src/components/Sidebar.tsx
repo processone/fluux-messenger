@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, type RefObject } from 'react'
+import React, { useState, useRef, useEffect, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { useClickOutside, useWindowDrag, useRouteSync } from '@/hooks'
@@ -105,8 +105,8 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
   const ownNickname = useConnectionStore((s) => s.ownNickname)
   // Get methods from client (not from store)
   const { client } = useXMPP()
-  const disconnect = useCallback(() => client.disconnect(), [client])
-  const cancelReconnect = useCallback(() => client.cancelReconnect(), [client])
+  const disconnect = () => client.disconnect()
+  const cancelReconnect = () => client.cancelReconnect()
   const isAdmin = useAdminStore((s) => s.isAdmin)
   // Use targeted store selectors instead of useChat()/useRoom() to avoid render loops.
   // Those hooks subscribe to many store properties (conversations array, messages, etc.)
@@ -160,10 +160,10 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
   }, [])
 
   // Handle resize drag
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+  const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault()
     setIsResizing(true)
-  }, [])
+  }
 
   useEffect(() => {
     if (!isResizing) return
@@ -201,15 +201,15 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
   }, [sidebarWidth, isResizing])
 
   // Double-click to reset to default width
-  const handleDoubleClick = useCallback(() => {
+  const handleDoubleClick = () => {
     setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)
     localStorage.setItem(SIDEBAR_WIDTH_KEY, SIDEBAR_DEFAULT_WIDTH.toString())
-  }, [])
+  }
 
   // Close dropdowns when clicking outside
-  const closeRoomDropdown = useCallback(() => setShowRoomDropdown(false), [])
+  const closeRoomDropdown = () => setShowRoomDropdown(false)
   useClickOutside(roomDropdownRef, closeRoomDropdown, showRoomDropdown)
-  const closeContactDropdown = useCallback(() => setShowContactDropdown(false), [])
+  const closeContactDropdown = () => setShowContactDropdown(false)
   useClickOutside(contactDropdownRef, closeContactDropdown, showContactDropdown)
 
   // totalUnread is computed directly via useChatStore selector above

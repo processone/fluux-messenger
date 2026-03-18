@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef, RefObject } from 'react'
+import React, { useState, useEffect, useRef, RefObject } from 'react'
 
 /**
  * Options for the useListKeyboardNav hook
@@ -118,28 +118,19 @@ export function useListKeyboardNav<T>({
   const lastMousePosRef = useRef<{ x: number; y: number } | null>(null)
 
   // Trigger bounce animation at list boundaries
-  const triggerBounce = useCallback(
-    (direction: 'top' | 'bottom') => {
-      if (!enableBounce || !listRef.current) return
-      const className = direction === 'top' ? 'bounce-top' : 'bounce-bottom'
-      listRef.current.classList.add(className)
-      setTimeout(() => listRef.current?.classList.remove(className), 300)
-    },
-    [enableBounce, listRef]
-  )
+  const triggerBounce = (direction: 'top' | 'bottom') => {
+    if (!enableBounce || !listRef.current) return
+    const className = direction === 'top' ? 'bounce-top' : 'bounce-bottom'
+    listRef.current.classList.add(className)
+    setTimeout(() => listRef.current?.classList.remove(className), 300)
+  }
 
   // Create a stable string of item IDs for comparison (avoids reset on same-content array)
-  const itemsKey = useMemo(() => items.map(getItemId).join('\0'), [items, getItemId])
+  const itemsKey = items.map(getItemId).join('\0')
 
   // Create maps for efficient ID-to-index lookups
-  const itemIdToIndex = useMemo(
-    () => new Map(items.map((item, i) => [getItemId(item), i])),
-    [items, getItemId]
-  )
-  const altKeyItemIdToIndex = useMemo(
-    () => altKeyItems ? new Map(altKeyItems.map((item, i) => [getItemId(item), i])) : null,
-    [altKeyItems, getItemId]
-  )
+  const itemIdToIndex = new Map(items.map((item, i) => [getItemId(item), i]))
+  const altKeyItemIdToIndex = altKeyItems ? new Map(altKeyItems.map((item, i) => [getItemId(item), i])) : null
 
   // Keep a ref to the latest itemIdToIndex map so the reset effect can use it
   // without depending on its identity (which changes when getItemId is recreated).
@@ -162,8 +153,7 @@ export function useListKeyboardNav<T>({
   }, [itemsKey])
 
   // Keyboard event handler
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
+  const handleKeyDown = (e: KeyboardEvent) => {
       if (!enabled || items.length === 0) return
 
       const activeElement = document.activeElement
@@ -286,9 +276,7 @@ export function useListKeyboardNav<T>({
         e.preventDefault()
         onSelect(items[selectedIndex], selectedIndex)
       }
-    },
-    [enabled, items, altKeyItems, selectedIndex, onSelect, searchInputRef, zoneRef, listRef, triggerBounce, getItemId, itemIdToIndex, altKeyItemIdToIndex, activateOnAltNav]
-  )
+    }
 
   // Add keyboard listener
   useEffect(() => {
@@ -309,8 +297,7 @@ export function useListKeyboardNav<T>({
   }, [selectedIndex, items, listRef, getItemId, itemAttribute])
 
   // Helper to get props for each item
-  const getItemProps = useCallback(
-    (index: number) => ({
+  const getItemProps = (index: number) => ({
       'data-selected': index === selectedIndex,
       onMouseEnter: (e: React.MouseEvent) => {
         if (isKeyboardNav) return
@@ -337,31 +324,23 @@ export function useListKeyboardNav<T>({
           setIsKeyboardNav(false)
         }
       },
-    }),
-    [selectedIndex, isKeyboardNav]
-  )
+    })
 
   // Helper to get the data attribute for scroll targeting
-  const getItemAttribute = useCallback(
-    (index: number): Record<string, string> => {
-      if (!items[index]) return {}
-      return { [itemAttribute]: getItemId(items[index]) }
-    },
-    [items, getItemId, itemAttribute]
-  )
+  const getItemAttribute = (index: number): Record<string, string> => {
+    if (!items[index]) return {}
+    return { [itemAttribute]: getItemId(items[index]) }
+  }
 
   // Helper to get props for the list container (clears hover on mouse leave)
-  const getContainerProps = useCallback(
-    () => ({
-      onMouseLeave: () => {
-        // Clear hover highlight when mouse leaves the list (unless in keyboard nav mode)
-        if (!isKeyboardNav) {
-          setSelectedIndex(-1)
-        }
-      },
-    }),
-    [isKeyboardNav]
-  )
+  const getContainerProps = () => ({
+    onMouseLeave: () => {
+      // Clear hover highlight when mouse leaves the list (unless in keyboard nav mode)
+      if (!isKeyboardNav) {
+        setSelectedIndex(-1)
+      }
+    },
+  })
 
   return {
     selectedIndex,

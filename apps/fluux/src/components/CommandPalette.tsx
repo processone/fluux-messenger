@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   MessageSquare,
@@ -159,13 +159,13 @@ export function CommandPalette({
   const lastMousePosRef = useRef<{ x: number; y: number } | null>(null) // Track mouse position to detect real movement
 
   // Wrapper to update both state and ref together
-  const updateSelectedIndex = useCallback((indexOrFn: number | ((prev: number) => number)) => {
+  const updateSelectedIndex = (indexOrFn: number | ((prev: number) => number)) => {
     setSelectedIndex((prev) => {
       const newIndex = typeof indexOrFn === 'function' ? indexOrFn(prev) : indexOrFn
       selectedIndexRef.current = newIndex
       return newIndex
     })
-  }, [])
+  }
 
   // Data from stores
   const { conversations, archivedConversations, isArchived } = useChat()
@@ -175,44 +175,35 @@ export function CommandPalette({
   const forceOffline = connectionStatus !== 'online'
   const { setActiveConversation } = useChatStore()
 
-  // Stable callbacks that don't change between renders
-  const closeAndNavigate = useCallback(
-    (view: SidebarView) => {
-      onSidebarViewChange(view)
-      onClose()
-    },
-    [onSidebarViewChange, onClose]
-  )
+  // Navigation callbacks
+  const closeAndNavigate = (view: SidebarView) => {
+    onSidebarViewChange(view)
+    onClose()
+  }
 
-  const selectConversation = useCallback(
-    (jid: string) => {
-      // Navigate first, THEN set conversation - otherwise handleSidebarViewChange
-      // will overwrite our selection with the "last conversation" restore logic
-      // Archived conversations open in the archive tab
-      const targetView = isArchived(jid) ? 'archive' : 'messages'
-      closeAndNavigate(targetView)
-      void setActiveConversation(jid)
-      void setActiveRoom(null)
-    },
-    [setActiveConversation, setActiveRoom, closeAndNavigate, isArchived]
-  )
+  const selectConversation = (jid: string) => {
+    // Navigate first, THEN set conversation - otherwise handleSidebarViewChange
+    // will overwrite our selection with the "last conversation" restore logic
+    // Archived conversations open in the archive tab
+    const targetView = isArchived(jid) ? 'archive' : 'messages'
+    closeAndNavigate(targetView)
+    void setActiveConversation(jid)
+    void setActiveRoom(null)
+  }
 
-  const selectRoom = useCallback(
-    (jid: string) => {
-      // Navigate first, THEN set room - otherwise handleSidebarViewChange
-      // will overwrite our selection with the "last room" restore logic
-      closeAndNavigate('rooms')
-      void setActiveRoom(jid)
-      void setActiveConversation(null)
-    },
-    [setActiveRoom, setActiveConversation, closeAndNavigate]
-  )
+  const selectRoom = (jid: string) => {
+    // Navigate first, THEN set room - otherwise handleSidebarViewChange
+    // will overwrite our selection with the "last room" restore logic
+    closeAndNavigate('rooms')
+    void setActiveRoom(jid)
+    void setActiveConversation(null)
+  }
 
   // =============================================================================
   // Build all command items
   // =============================================================================
 
-  const allItems = useMemo((): CommandItem[] => {
+  const allItems = ((): CommandItem[] => {
     const items: CommandItem[] = []
     const conversationJids = new Set(conversations.map((c) => c.id))
 
@@ -330,30 +321,13 @@ export function CommandPalette({
     }
 
     return items
-  }, [
-    conversations,
-    contacts,
-    joinedRooms,
-    bookmarkedRooms,
-    t,
-    selectConversation,
-    selectRoom,
-    closeAndNavigate,
-    onStartConversation,
-    onClose,
-    onCreateQuickChat,
-    onAddContact,
-    onOpenSettings,
-    onToggleConsole,
-    onToggleShortcutHelp,
-    archivedConversations,
-  ])
+  })()
 
   // =============================================================================
   // Filter and group items (combined into single memo for simplicity)
   // =============================================================================
 
-  const { flatItems, groupedItems, filterMode } = useMemo(() => {
+  const { flatItems, groupedItems, filterMode } = (() => {
     const { filterMode, searchQuery } = parseQuery(query)
     const allowedTypes = getTypesForMode(filterMode)
 
@@ -381,7 +355,7 @@ export function CommandPalette({
     const flat = grouped.flatMap((g) => g.items)
 
     return { flatItems: flat, groupedItems: grouped, filterMode }
-  }, [allItems, query, t])
+  })()
 
   // Clamp selected index to valid range
   const effectiveIndex = Math.min(Math.max(0, selectedIndex), Math.max(0, flatItems.length - 1))

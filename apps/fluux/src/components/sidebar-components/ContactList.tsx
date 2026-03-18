@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useMemo, memo } from 'react'
+import React, { useState, useRef, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useContextMenu, useTypeToFocus, useListKeyboardNav } from '@/hooks'
 import { useRoster, useAdmin, type Contact } from '@fluux/sdk'
@@ -31,7 +31,7 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
   useTypeToFocus(searchInputRef)
 
   // Filter contacts based on search query
-  const filteredContacts = useMemo(() => {
+  const filteredContacts = (() => {
     if (!searchQuery.trim()) {
       return sortedContacts
     }
@@ -40,33 +40,28 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
       const username = contact.jid.split('@')[0].toLowerCase()
       return contact.name.toLowerCase().includes(query) || username.includes(query)
     })
-  }, [sortedContacts, searchQuery])
+  })()
 
-  const getDisplayPresence = useCallback(
-    (contact: Contact) => (forceOffline ? 'offline' : contact.presence),
-    [forceOffline]
-  )
+  const getDisplayPresence = (contact: Contact) => (forceOffline ? 'offline' : contact.presence)
 
   // Flat list of contacts in display order (online, offline, errored)
-  const flatContactList = useMemo(() => {
-    const errored = filteredContacts.filter(c => c.presenceError)
-    const online = filteredContacts.filter(c => !c.presenceError && getDisplayPresence(c) !== 'offline')
-    const offline = filteredContacts.filter(c => !c.presenceError && getDisplayPresence(c) === 'offline')
-    return [...online, ...offline, ...errored]
-  }, [filteredContacts, getDisplayPresence])
+  const errored = filteredContacts.filter(c => c.presenceError)
+  const online = filteredContacts.filter(c => !c.presenceError && getDisplayPresence(c) !== 'offline')
+  const offline = filteredContacts.filter(c => !c.presenceError && getDisplayPresence(c) === 'offline')
+  const flatContactList = [...online, ...offline, ...errored]
 
   // Map from jid to flat index for quick lookup
-  const jidToIndex = useMemo(() => new Map(flatContactList.map((c, i) => [c.jid, i])), [flatContactList])
+  const jidToIndex = new Map(flatContactList.map((c, i) => [c.jid, i]))
 
   // Handle contact selection - single click opens profile and updates highlight
-  const handleSelectContact = useCallback((contact: Contact) => {
+  const handleSelectContact = (contact: Contact) => {
     onSelectContact?.(contact)
-  }, [onSelectContact])
+  }
 
   // Handle starting a chat - double click
-  const handleStartChat = useCallback((contact: Contact) => {
+  const handleStartChat = (contact: Contact) => {
     onStartChat?.(contact)
-  }, [onStartChat])
+  }
 
   // Keyboard navigation using the hook
   // Plain arrows: just highlight, Alt+arrows: navigate AND open contact profile
@@ -81,11 +76,6 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
     enableBounce: true,
     activateOnAltNav: true, // Alt+arrow opens the contact profile
   })
-
-  // Group filtered contacts
-  const errored = filteredContacts.filter(c => c.presenceError)
-  const online = filteredContacts.filter(c => !c.presenceError && getDisplayPresence(c) !== 'offline')
-  const offline = filteredContacts.filter(c => !c.presenceError && getDisplayPresence(c) === 'offline')
 
   // Get selected contact JID for highlighting (keyboard selection takes precedence for navigation)
   const selectedJid = selectedIndex >= 0 ? (flatContactList[selectedIndex]?.jid ?? null) : (activeContactJid ?? null)

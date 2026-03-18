@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { connectionStore, rosterStore, roomStore, useXMPPContext, getBareJid } from '@fluux/sdk'
 import { useRosterStore, useConnectionStore, useRoomStore } from '@fluux/sdk/react'
@@ -470,41 +470,34 @@ export function useSessionPersistence(): void {
   const autoReconnectCheckedRef = useRef(false)
   const isResumptionRef = useRef(false)
 
-  // Wrap connect in useCallback for stability
-  const connect = useCallback(
-    async (
-      jid: string,
-      password: string,
-      server: string,
-      smState?: { id: string; inbound: number },
-      resource?: string,
-      lang?: string,
-      disableSmKeepalive?: boolean
-    ) => {
-      connectionStore.getState().setStatus('connecting')
-      connectionStore.getState().setError(null)
-      try {
-        await client.connect({ jid, password, server, resource, smState, lang, disableSmKeepalive })
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Connection failed'
-        connectionStore.getState().setStatus('error')
-        connectionStore.getState().setError(message)
-        throw err
-      }
-    },
-    [client]
-  )
+  const connect = async (
+    jid: string,
+    password: string,
+    server: string,
+    smState?: { id: string; inbound: number },
+    resource?: string,
+    lang?: string,
+    disableSmKeepalive?: boolean
+  ) => {
+    connectionStore.getState().setStatus('connecting')
+    connectionStore.getState().setError(null)
+    try {
+      await client.connect({ jid, password, server, resource, smState, lang, disableSmKeepalive })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Connection failed'
+      connectionStore.getState().setStatus('error')
+      connectionStore.getState().setError(message)
+      throw err
+    }
+  }
 
   // Note: SM state is now managed by SDK's storage adapter.
   // The SDK automatically loads SM state on connect and persists it on enable/resume.
 
   // Restore avatar from cache without subscribing to store
-  const restoreOwnAvatarFromCache = useCallback(
-    async (avatarHash: string) => {
-      return client.profile.restoreOwnAvatarFromCache(avatarHash)
-    },
-    [client]
-  )
+  const restoreOwnAvatarFromCache = async (avatarHash: string) => {
+    return client.profile.restoreOwnAvatarFromCache(avatarHash)
+  }
 
   // Auto-reconnect on page reload
   useEffect(() => {

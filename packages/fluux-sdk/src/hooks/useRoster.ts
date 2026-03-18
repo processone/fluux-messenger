@@ -1,4 +1,3 @@
-import { useCallback, useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { rosterStore } from '../stores'
 import { useRosterStore } from '../react/storeHooks'
@@ -81,77 +80,47 @@ export function useRoster() {
   const sortedContacts = useRosterStore(useShallow((s) => s.sortedContacts()))
   const onlineContacts = useRosterStore(useShallow((s) => s.onlineContacts()))
 
-  const removeContact = useCallback(
-    async (jid: string) => {
-      await client.roster.removeContact(jid)
-    },
-    [client]
-  )
+  const removeContact = async (jid: string) => {
+    await client.roster.removeContact(jid)
+  }
 
-  const addContact = useCallback(
-    async (jid: string, nick?: string) => {
-      await client.roster.addContact(jid, nick)
-    },
-    [client]
-  )
+  const addContact = async (jid: string, nick?: string) => {
+    await client.roster.addContact(jid, nick)
+  }
 
-  const renameContact = useCallback(
-    async (jid: string, name: string) => {
-      await client.roster.renameContact(jid, name)
-    },
-    [client]
-  )
+  const renameContact = async (jid: string, name: string) => {
+    await client.roster.renameContact(jid, name)
+  }
 
-  const getContact = useCallback((jid: string): Contact | undefined => {
+  const getContact = (jid: string): Contact | undefined => {
     return rosterStore.getState().getContact(jid)
-  }, [])
+  }
 
-  const fetchContactNickname = useCallback(
-    async (jid: string) => {
-      return client.profile.fetchContactNickname(jid)
-    },
-    [client]
-  )
+  const fetchContactNickname = async (jid: string) => {
+    return client.profile.fetchContactNickname(jid)
+  }
 
-  const fetchVCard = useCallback(
-    async (jid: string) => {
-      return client.profile.fetchVCard(jid)
-    },
-    [client]
-  )
+  const fetchVCard = async (jid: string) => {
+    return client.profile.fetchVCard(jid)
+  }
 
-  const restoreContactAvatarFromCache = useCallback(
-    async (jid: string, avatarHash: string) => {
-      return client.profile.restoreContactAvatarFromCache(jid, avatarHash)
-    },
-    [client]
-  )
+  const restoreContactAvatarFromCache = async (jid: string, avatarHash: string) => {
+    return client.profile.restoreContactAvatarFromCache(jid, avatarHash)
+  }
 
-  // Memoize actions object to prevent re-renders when only state changes
-  const actions = useMemo(
-    () => ({
-      addContact,
-      removeContact,
-      renameContact,
-      getContact,
-      restoreContactAvatarFromCache,
-      fetchContactNickname,
-      fetchVCard,
-    }),
-    [addContact, removeContact, renameContact, getContact, restoreContactAvatarFromCache, fetchContactNickname, fetchVCard]
-  )
+  return {
+    // State
+    contacts,
+    sortedContacts,
+    onlineContacts,
 
-  // Memoize the entire return value to prevent render loops
-  return useMemo(
-    () => ({
-      // State
-      contacts,
-      sortedContacts,
-      onlineContacts,
-
-      // Actions (spread memoized actions)
-      ...actions,
-    }),
-    [contacts, sortedContacts, onlineContacts, actions]
-  )
+    // Actions
+    addContact,
+    removeContact,
+    renameContact,
+    getContact,
+    restoreContactAvatarFromCache,
+    fetchContactNickname,
+    fetchVCard,
+  }
 }

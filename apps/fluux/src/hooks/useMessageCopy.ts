@@ -1,4 +1,4 @@
-import { useCallback, useEffect, type RefObject } from 'react'
+import { useEffect, type RefObject } from 'react'
 
 interface MessageData {
   id: string
@@ -20,7 +20,7 @@ interface MessageData {
  * I'm good, thanks!
  */
 export function useMessageCopy(containerRef: RefObject<HTMLElement | null>) {
-  const handleCopy = useCallback((e: ClipboardEvent) => {
+  const handleCopy = (e: ClipboardEvent) => {
     const selection = window.getSelection()
     if (!selection || selection.isCollapsed) return
 
@@ -82,7 +82,7 @@ export function useMessageCopy(containerRef: RefObject<HTMLElement | null>) {
     // Set clipboard data
     e.preventDefault()
     e.clipboardData?.setData('text/plain', formattedText)
-  }, [containerRef])
+  }
 
   useEffect(() => {
     const container = containerRef.current

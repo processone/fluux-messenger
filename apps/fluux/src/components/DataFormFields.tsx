@@ -4,7 +4,7 @@
  * Extracted from AdminCommandForm for reuse in room configuration
  * and other data form contexts.
  */
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { DataForm, DataFormField } from '@fluux/sdk'
 import { HelpCircle } from 'lucide-react'
@@ -29,11 +29,11 @@ export function useDataFormState(form: DataForm) {
     return initial
   })
 
-  const handleChange = useCallback((fieldVar: string, value: string | string[]) => {
+  const handleChange = (fieldVar: string, value: string | string[]) => {
     setFormData(prev => ({ ...prev, [fieldVar]: value }))
-  }, [])
+  }
 
-  const getSubmitValues = useCallback((): Record<string, string | string[]> => {
+  const getSubmitValues = (): Record<string, string | string[]> => {
     const submitData: Record<string, string | string[]> = { ...formData }
     for (const field of form.fields) {
       if (field.type === 'hidden' && field.value) {
@@ -41,7 +41,7 @@ export function useDataFormState(form: DataForm) {
       }
     }
     return submitData
-  }, [formData, form.fields])
+  }
 
   return { formData, handleChange, getSubmitValues }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef } from 'react'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { useXMPP, useSystemState, usePresence, consoleStore } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
@@ -67,11 +67,11 @@ export function usePlatformState() {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  const logEvent = useCallback((message: string) => {
+  const logEvent = (message: string) => {
     consoleStore.getState().addEvent(message, 'presence')
-  }, [])
+  }
 
-  const markOsIdleUnavailable = useCallback((err: unknown): boolean => {
+  const markOsIdleUnavailable = (err: unknown): boolean => {
     const message = err instanceof Error ? err.message : String(err)
     const unsupported = message.includes('Linux idle detection unavailable')
       || message.includes('MIT-SCREEN-SAVER')
@@ -84,13 +84,13 @@ export function usePlatformState() {
       }
     }
     return unsupported
-  }, [logEvent])
+  }
 
   /**
    * Check if a wake event should be processed (debounce).
    * Returns true and updates lastWakeTime if the event should be handled.
    */
-  const shouldHandleWake = useCallback((source: string): boolean => {
+  const shouldHandleWake = (source: string): boolean => {
     const now = Date.now()
     if (now - lastWakeTimeRef.current < WAKE_DEBOUNCE_MS) {
       return false
@@ -99,21 +99,21 @@ export function usePlatformState() {
     startWakeGracePeriod()
     logEvent(`[${source}] Wake event accepted`)
     return true
-  }, [logEvent])
+  }
 
   /**
    * Dispatch CSS resize workaround for WebKit layout corruption after wake.
    */
-  const dispatchResizeWorkaround = useCallback(() => {
+  const dispatchResizeWorkaround = () => {
     requestAnimationFrame(() => {
       window.dispatchEvent(new Event('resize'))
     })
-  }, [])
+  }
 
   /**
    * Handle user activity — signals SDK, throttled to avoid flooding.
    */
-  const handleActivity = useCallback(async () => {
+  const handleActivity = async () => {
     lastActivityRef.current = Date.now()
 
     // Throttle activity events
@@ -139,12 +139,12 @@ export function usePlatformState() {
     }
 
     notifyActive()
-  }, [notifyActive, markOsIdleUnavailable])
+  }
 
   /**
    * Check if user is idle and notify SDK.
    */
-  const checkIdle = useCallback(async () => {
+  const checkIdle = async () => {
     if (!autoAwayConfig.enabled) return
     if (status !== 'online') return
 
@@ -185,7 +185,7 @@ export function usePlatformState() {
       const idleSince = new Date(Date.now() - idleMs)
       notifyIdle(idleSince)
     }
-  }, [status, notifyIdle, logEvent, autoAwayConfig, markOsIdleUnavailable])
+  }
 
   // ── Effect 1: Activity tracking + idle checking ───────────────────────────
 

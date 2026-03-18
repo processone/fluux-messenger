@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Bell, BellOff, ExternalLink, Send } from 'lucide-react'
 import { useConnection, useXMPPContext } from '@fluux/sdk'
@@ -61,10 +61,10 @@ export function NotificationsSettings() {
       .catch(() => setNotificationStatus('unavailable'))
   }, [])
 
-  const handleRequestPermission = useCallback(async () => {
+  const handleRequestPermission = async () => {
     const status = await requestWebNotificationPermission()
     setNotificationStatus(status)
-  }, [])
+  }
 
   return (
     <section className="max-w-md">

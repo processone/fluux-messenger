@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft, Trash2, Power, Key } from 'lucide-react'
 import type { AdminUser } from '@fluux/sdk'
@@ -26,15 +26,15 @@ export function AdminUserView({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showEndSessionsConfirm, setShowEndSessionsConfirm] = useState(false)
 
-  const handleDelete = useCallback(() => {
+  const handleDelete = () => {
     onDeleteUser(user.jid)
     setShowDeleteConfirm(false)
-  }, [user.jid, onDeleteUser])
+  }
 
-  const handleEndSessions = useCallback(() => {
+  const handleEndSessions = () => {
     onEndSessions(user.jid)
     setShowEndSessionsConfirm(false)
-  }, [user.jid, onEndSessions])
+  }
 
   return (
     <div className="flex-1 flex flex-col min-h-0">

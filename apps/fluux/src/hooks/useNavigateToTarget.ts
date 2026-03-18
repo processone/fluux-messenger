@@ -7,7 +7,7 @@
  *
  * Phase 2.4: Uses React Router for navigation instead of callback handlers.
  */
-import { useCallback, useRef, useEffect } from 'react'
+import { useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useChatStore, useRoomStore } from '@fluux/sdk/react'
 
@@ -60,26 +60,26 @@ export function useNavigateToTarget() {
    * Uses URL-based navigation (/messages/:jid) and sets active conversation.
    * Clears all active notifications.
    */
-  const navigateToConversation = useCallback((conversationId: string) => {
+  const navigateToConversation = (conversationId: string) => {
     // Navigate via URL (this updates sidebarView via useRouteSync)
     void navigateRef.current(`/messages/${encodeURIComponent(conversationId)}`)
     // Also set active conversation in state
     void setActiveConversationRef.current(conversationId)
     void clearAllNotifications()
-  }, [])
+  }
 
   /**
    * Navigate to a MUC room.
    * Uses URL-based navigation (/rooms/:jid) and sets active room.
    * Clears all active notifications.
    */
-  const navigateToRoom = useCallback((roomJid: string) => {
+  const navigateToRoom = (roomJid: string) => {
     // Navigate via URL (this updates sidebarView via useRouteSync)
     void navigateRef.current(`/rooms/${encodeURIComponent(roomJid)}`)
     // Also set active room in state
     void setActiveRoomRef.current(roomJid)
     void clearAllNotifications()
-  }, [])
+  }
 
   return { navigateToConversation, navigateToRoom }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Wrench, Users, Hash, User, Plus, ArrowLeft } from 'lucide-react'
 import { useAdmin, type AdminCategory, type AdminUser, type AdminRoom } from '@fluux/sdk'
@@ -102,12 +102,12 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
   }, [pendingSelectedUserJid, activeCategory, userList.hasFetched, userList.items, clearPendingSelectedUserJid])
 
   // Handle vhost change - reset user list and refetch
-  const handleVhostChange = useCallback((vhost: string) => {
+  const handleVhostChange = (vhost: string) => {
     setSelectedVhost(vhost)
     resetUserList()
     setUserSearchQuery('')
     setSelectedUser(null)
-  }, [setSelectedVhost, resetUserList])
+  }
 
   // Fetch rooms when rooms category becomes active (always refresh on enter)
   useEffect(() => {
@@ -162,42 +162,42 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
   }
 
   // User selection handler
-  const handleSelectUser = useCallback((user: AdminUser) => {
+  const handleSelectUser = (user: AdminUser) => {
     setSelectedUser(user)
-  }, [])
+  }
 
   // User action handlers
-  const handleDeleteUser = useCallback((jid: string) => {
+  const handleDeleteUser = (jid: string) => {
     void executeCommandForUser('http://jabber.org/protocol/admin#delete-user', jid)
-  }, [executeCommandForUser])
+  }
 
   // TODO: Fall back to 'api-commands/change_password' if standard command unavailable
   // Priority: XEP-0133 admin#change-user-password > ejabberd api-commands/change_password
-  const handleChangePassword = useCallback((jid: string) => {
+  const handleChangePassword = (jid: string) => {
     void executeCommandForUser('http://jabber.org/protocol/admin#change-user-password', jid)
-  }, [executeCommandForUser])
+  }
 
-  const handleEndSessions = useCallback((jid: string) => {
+  const handleEndSessions = (jid: string) => {
     void executeCommandForUser('http://jabber.org/protocol/admin#end-user-session', jid)
-  }, [executeCommandForUser])
+  }
 
-  const handleAddUser = useCallback(() => {
+  const handleAddUser = () => {
     setShowAddUserModal(true)
-  }, [])
+  }
 
-  const handleAddUserSubmit = useCallback(async (username: string, password: string) => {
+  const handleAddUserSubmit = async (username: string, password: string) => {
     await addUser(username, password)
     setShowAddUserModal(false)
     // Refresh user list
     resetUserList()
     void fetchUsers()
-  }, [addUser, resetUserList, fetchUsers])
+  }
 
   // Room action handlers (these would need MUC admin commands)
-  const handleDestroyRoom = useCallback((_jid: string) => {
+  const handleDestroyRoom = (_jid: string) => {
     // TODO: Implement room destruction via MUC admin
     console.log('Destroy room:', _jid)
-  }, [])
+  }
 
 
   // Filter users by search query (client-side for now)

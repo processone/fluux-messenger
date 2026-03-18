@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useModalInput, useListKeyboardNav } from '@/hooks'
 import {
@@ -53,20 +53,18 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
   const [showCustomInput, setShowCustomInput] = useState(false)
 
   // Build list of available MUC services (auto-discovered + well-known)
-  const availableServices = useMemo(() => {
-    const services: string[] = []
-    // Add auto-discovered service first if available
-    if (mucServiceJid) {
-      services.push(mucServiceJid)
+  const services: string[] = []
+  // Add auto-discovered service first if available
+  if (mucServiceJid) {
+    services.push(mucServiceJid)
+  }
+  // Add well-known servers that aren't already in the list
+  for (const server of WELL_KNOWN_MUC_SERVERS) {
+    if (!services.includes(server)) {
+      services.push(server)
     }
-    // Add well-known servers that aren't already in the list
-    for (const server of WELL_KNOWN_MUC_SERVERS) {
-      if (!services.includes(server)) {
-        services.push(server)
-      }
-    }
-    return services
-  }, [mucServiceJid])
+  }
+  const availableServices = services
 
   // Initialize selected service when mucServiceJid becomes available
   useEffect(() => {
@@ -169,7 +167,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
   }
 
   // Callback ref for sentinel element - creates observer once, stable across re-renders
-  const sentinelRef = useCallback((node: HTMLDivElement | null) => {
+  const sentinelRef = (node: HTMLDivElement | null) => {
     if (observerRef.current) {
       observerRef.current.disconnect()
       observerRef.current = null
@@ -185,7 +183,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
       )
       observerRef.current.observe(node)
     }
-  }, [])
+  }
 
   // Handle service selection from dropdown
   const handleServiceChange = (value: string) => {
@@ -213,7 +211,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
   }
 
   // Filter rooms by search query (match name and room local part, not domain)
-  const filteredRooms = useMemo(() => {
+  const filteredRooms = (() => {
     if (!searchQuery.trim()) return rooms
     const query = searchQuery.toLowerCase()
     return rooms.filter(
@@ -221,15 +219,15 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
         (room.name ?? '').toLowerCase().includes(query) ||
         getLocalPart(room.jid).toLowerCase().includes(query)
     )
-  }, [rooms, searchQuery])
+  })()
 
-  const isRoomJoined = useCallback((roomJid: string) => {
+  const isRoomJoined = (roomJid: string) => {
     const room = getRoom(roomJid)
     return room?.joined === true
-  }, [getRoom])
+  }
 
   // Join a room
-  const handleJoinRoom = useCallback(async (roomJid: string) => {
+  const handleJoinRoom = async (roomJid: string) => {
     if (!nickname.trim()) {
       setError(t('rooms.pleaseEnterNickname'))
       return
@@ -247,10 +245,10 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
     } finally {
       setJoiningRoom(null)
     }
-  }, [nickname, t, joinRoom, setActiveConversation, setActiveRoom, onClose])
+  }
 
   // Handle room selection (Enter key or click)
-  const handleSelectRoom = useCallback((room: { jid: string; name: string; occupants?: number }) => {
+  const handleSelectRoom = (room: { jid: string; name: string; occupants?: number }) => {
     if (isRoomJoined(room.jid)) {
       // Already joined - just open it
       void setActiveConversation(null)
@@ -260,7 +258,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
       // Need to join
       void handleJoinRoom(room.jid)
     }
-  }, [isRoomJoined, setActiveConversation, setActiveRoom, onClose, handleJoinRoom])
+  }
 
   // Keyboard navigation for room list
   const { selectedIndex, getItemProps, getItemAttribute } = useListKeyboardNav({

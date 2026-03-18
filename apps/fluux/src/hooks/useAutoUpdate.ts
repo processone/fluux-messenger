@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { isUpdaterEnabled } from '@/utils/tauri'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -38,7 +38,7 @@ export function useAutoUpdate(options: UseAutoUpdateOptions = {}) {
   const [state, setState] = useState<UpdateState>(initialState)
   const [update, setUpdate] = useState<Awaited<ReturnType<typeof import('@tauri-apps/plugin-updater').check>> | null>(null)
 
-  const checkForUpdate = useCallback(async () => {
+  const checkForUpdate = async () => {
     if (!updaterEnabled) return
 
     setState(prev => ({ ...prev, checking: true, error: null }))
@@ -76,9 +76,9 @@ export function useAutoUpdate(options: UseAutoUpdateOptions = {}) {
         error: errorKey,
       }))
     }
-  }, [])
+  }
 
-  const downloadAndInstall = useCallback(async () => {
+  const downloadAndInstall = async () => {
     if (!update) return
 
     setState(prev => ({ ...prev, downloading: true, progress: 0, error: null }))
@@ -118,9 +118,9 @@ export function useAutoUpdate(options: UseAutoUpdateOptions = {}) {
         error: err instanceof Error ? err.message : 'Failed to download update',
       }))
     }
-  }, [update])
+  }
 
-  const relaunchApp = useCallback(async () => {
+  const relaunchApp = async () => {
     if (!updaterEnabled) return
 
     try {
@@ -132,12 +132,12 @@ export function useAutoUpdate(options: UseAutoUpdateOptions = {}) {
         error: err instanceof Error ? err.message : 'Failed to relaunch app',
       }))
     }
-  }, [])
+  }
 
-  const dismissUpdate = useCallback(() => {
+  const dismissUpdate = () => {
     setState(initialState)
     setUpdate(null)
-  }, [])
+  }
 
   // Check for updates on mount (only when autoCheck is enabled, typically at app launch)
   // Disabled on Linux - users update through their distro package manager

@@ -15,7 +15,7 @@
  * - Images load: if at bottom, stay at bottom
  */
 
-import { useRef, useEffect, useLayoutEffect, useCallback, useState } from 'react'
+import { useRef, useEffect, useLayoutEffect, useState } from 'react'
 import { scrollStateManager } from '@/utils/scrollStateManager'
 
 // ============================================================================
@@ -156,12 +156,12 @@ export function useMessageListScroll({
   // REF SETTER (connects external ref if provided)
   // ==========================================================================
 
-  const setScrollContainerRef = useCallback((el: HTMLDivElement | null) => {
+  const setScrollContainerRef = (el: HTMLDivElement | null) => {
     scrollerRef.current = el
     if (externalScrollerRef) {
       (externalScrollerRef as React.MutableRefObject<HTMLElement | null>).current = el
     }
-  }, [externalScrollerRef])
+  }
 
   // ==========================================================================
   // CALLBACK REF: Content wrapper (replaces useEffect + useRef pattern)
@@ -171,7 +171,7 @@ export function useMessageListScroll({
   // the content wrapper mounts, even if it mounts after initial render
   // (e.g., MUC rooms that show a loading state before revealing messages).
 
-  const setContentRef = useCallback((element: HTMLDivElement | null) => {
+  const setContentRef = (element: HTMLDivElement | null) => {
     // Cleanup previous observer
     if (contentObserverRef.current) {
       contentObserverRef.current.disconnect()
@@ -251,27 +251,27 @@ export function useMessageListScroll({
       observer.observe(element)
       contentObserverRef.current = observer
     }
-  }, [isAtBottomRef])
+  }
 
   // ==========================================================================
   // SCROLL ACTIONS
   // ==========================================================================
 
-  const scrollToBottom = useCallback(() => {
+  const scrollToBottom = () => {
     scrollerRef.current?.scrollTo({ top: scrollerRef.current.scrollHeight, behavior: 'smooth' })
-  }, [])
+  }
 
-  const scrollToTop = useCallback(() => {
+  const scrollToTop = () => {
     lastLoadTimeRef.current = Date.now() // prevent auto-load trigger
     scrollerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
-  }, [])
+  }
 
   // ==========================================================================
   // LOAD OLDER MESSAGES
   // ==========================================================================
 
   // Find the first visible message element and its offset from the viewport top
-  const findAnchorElement = useCallback(() => {
+  const findAnchorElement = () => {
     const scroller = scrollerRef.current
     if (!scroller) return null
 
@@ -327,9 +327,9 @@ export function useMessageListScroll({
 
     debugLog('FIND ANCHOR: no anchor found')
     return null
-  }, [])
+  }
 
-  const triggerLoadOlder = useCallback(() => {
+  const triggerLoadOlder = () => {
     if (!canLoadMore) return
     const scroller = scrollerRef.current
     if (!scroller) return
@@ -374,9 +374,9 @@ export function useMessageListScroll({
 
       onScrollToTop?.()
     }
-  }, [canLoadMore, findAnchorElement, firstMessageId, messageCount, onScrollToTop])
+  }
 
-  const handleLoadEarlier = useCallback(() => {
+  const handleLoadEarlier = () => {
     if (!canLoadMore) return
     const scroller = scrollerRef.current
     if (!scroller) return
@@ -406,7 +406,7 @@ export function useMessageListScroll({
     })
 
     onScrollToTop?.()
-  }, [canLoadMore, findAnchorElement, firstMessageId, messageCount, onScrollToTop])
+  }
 
   // ==========================================================================
   // MEDIA LOAD HANDLER (images, videos, link previews)
@@ -421,7 +421,7 @@ export function useMessageListScroll({
   //
   // This prevents jitter from multiple images loading in sequence.
 
-  const handleMediaLoad = useCallback(() => {
+  const handleMediaLoad = () => {
     const scroller = scrollerRef.current
     if (!scroller) return
 
@@ -472,13 +472,13 @@ export function useMessageListScroll({
       mediaLoadSnapshotRef.current = null
       mediaLoadDebounceRef.current = null
     }, MEDIA_LOAD_DEBOUNCE_MS)
-  }, [isAtBottomRef])
+  }
 
   // ==========================================================================
   // SCROLL EVENT HANDLER
   // ==========================================================================
 
-  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget
     const { scrollTop, scrollHeight, clientHeight } = el
     const distFromBottom = scrollHeight - scrollTop - clientHeight
@@ -508,13 +508,13 @@ export function useMessageListScroll({
 
     // Auto-trigger load when at top
     if (scrollTop === 0) triggerLoadOlder()
-  }, [conversationId, triggerLoadOlder, isAtBottomRef])
+  }
 
-  const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     const { scrollTop } = e.currentTarget
     if (scrollTop === 0 && e.deltaY < 0) triggerLoadOlder()
     if (scrollTop === 0 && e.deltaY > 0) scrolledAwayFromTopRef.current = true
-  }, [triggerLoadOlder])
+  }
 
   // ==========================================================================
   // EFFECT: Conversation switch

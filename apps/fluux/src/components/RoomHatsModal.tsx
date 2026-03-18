@@ -7,7 +7,7 @@
  *
  * Owner-only: visibility is enforced by the caller (RoomHeader).
  */
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Room, Hat } from '@fluux/sdk'
 import { useRoom, generateConsistentColorHexSync } from '@fluux/sdk'
@@ -96,24 +96,21 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
   const mountedRef = useRef(true)
   useEffect(() => () => { mountedRef.current = false }, [])
 
-  const extraSuggestions = useMemo(
-    () => buildRoomContactSuggestions(room),
-    [room.occupants, room.affiliatedMembers],
-  )
+  const extraSuggestions = buildRoomContactSuggestions(room)
 
   // Exclude JIDs that already have the selected hat assigned
-  const selectorExcludeJids = useMemo(() => {
+  const selectorExcludeJids = (() => {
     if (!assignUri) return []
     return assignments
       .filter(a => a.uri === assignUri)
       .map(a => a.jid)
-  }, [assignments, assignUri])
+  })()
 
   // ---------------------------------------------------------------------------
   // Data loading
   // ---------------------------------------------------------------------------
 
-  const loadDefinitions = useCallback(async () => {
+  const loadDefinitions = async () => {
     if (hatsLoading) return
     setHatsLoading(true)
     try {
@@ -127,9 +124,9 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
     } finally {
       if (mountedRef.current) setHatsLoading(false)
     }
-  }, [room.jid, listHats, addToast, t, hatsLoading])
+  }
 
-  const loadAssignments = useCallback(async () => {
+  const loadAssignments = async () => {
     if (assignmentsLoading) return
     setAssignmentsLoading(true)
     try {
@@ -143,7 +140,7 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
     } finally {
       if (mountedRef.current) setAssignmentsLoading(false)
     }
-  }, [room.jid, listHatAssignments, addToast, t, assignmentsLoading])
+  }
 
   // Load definitions on mount
   useEffect(() => {
@@ -151,12 +148,12 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const handleTabChange = useCallback((tab: Tab) => {
+  const handleTabChange = (tab: Tab) => {
     setActiveTab(tab)
     setSearch('')
     if (tab === 'definitions' && !hatsLoaded) void loadDefinitions()
     if (tab === 'assignments' && !assignmentsLoaded) void loadAssignments()
-  }, [hatsLoaded, assignmentsLoaded, loadDefinitions, loadAssignments])
+  }
 
   // Also auto-load definitions for the assignments tab (needed for hat dropdown)
   useEffect(() => {
@@ -170,7 +167,7 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
   // Actions — Definitions
   // ---------------------------------------------------------------------------
 
-  const handleCreate = useCallback(async () => {
+  const handleCreate = async () => {
     const title = newTitle.trim()
     const uri = newUri.trim()
     if (!title || !uri) return
@@ -190,9 +187,9 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
     } finally {
       if (mountedRef.current) setIsCreating(false)
     }
-  }, [newTitle, newUri, newHue, room.jid, createHat, listHats, addToast, t])
+  }
 
-  const handleDestroy = useCallback(async (hat: Hat) => {
+  const handleDestroy = async (hat: Hat) => {
     setActionKey(hat.uri)
     try {
       await destroyHat(room.jid, hat.uri)
@@ -212,13 +209,13 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
         setConfirmDelete(null)
       }
     }
-  }, [room.jid, destroyHat, listHats, listHatAssignments, assignmentsLoaded, addToast, t])
+  }
 
   // ---------------------------------------------------------------------------
   // Actions — Assignments
   // ---------------------------------------------------------------------------
 
-  const handleAssign = useCallback(async () => {
+  const handleAssign = async () => {
     if (jidSelection.length === 0 || !assignUri) return
     setIsAssigning(true)
     try {
@@ -235,9 +232,9 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
     } finally {
       if (mountedRef.current) setIsAssigning(false)
     }
-  }, [jidSelection, assignUri, room.jid, assignHat, listHatAssignments, addToast, t])
+  }
 
-  const handleUnassign = useCallback(async (a: HatAssignment) => {
+  const handleUnassign = async (a: HatAssignment) => {
     const key = `${a.jid}:${a.uri}`
     setActionKey(key)
     try {
@@ -250,19 +247,19 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
     } finally {
       if (mountedRef.current) setActionKey(null)
     }
-  }, [room.jid, unassignHat, listHatAssignments, addToast, t])
+  }
 
   // ---------------------------------------------------------------------------
   // Filtering
   // ---------------------------------------------------------------------------
 
-  const filteredHats = useMemo(() => {
+  const filteredHats = (() => {
     if (!search) return hats
     const q = search.toLowerCase()
     return hats.filter(h => h.title.toLowerCase().includes(q) || h.uri.toLowerCase().includes(q))
-  }, [hats, search])
+  })()
 
-  const filteredAssignments = useMemo(() => {
+  const filteredAssignments = (() => {
     if (!search) return assignments
     const q = search.toLowerCase()
     return assignments.filter(a =>
@@ -270,7 +267,7 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
       a.title.toLowerCase().includes(q) ||
       a.uri.toLowerCase().includes(q)
     )
-  }, [assignments, search])
+  })()
 
   // Pre-select first hat in dropdown if none selected
   useEffect(() => {

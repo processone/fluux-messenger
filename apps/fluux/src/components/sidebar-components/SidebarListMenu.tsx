@@ -14,7 +14,7 @@ import {
   useContext,
   useState,
   useRef,
-  useCallback,
+
   useEffect,
   type ReactNode,
   type RefObject,
@@ -87,10 +87,10 @@ export function SidebarListMenuProvider<T>({
   const pendingItemRef = useRef<T | null>(null)
 
   // Close menu
-  const close = useCallback(() => {
+  const close = () => {
     setIsOpen(false)
     setTargetItem(null)
-  }, [])
+  }
 
   // Click outside to close
   useClickOutside(menuRef, close, isOpen)
@@ -104,14 +104,14 @@ export function SidebarListMenuProvider<T>({
   }, [isOpen, close])
 
   // Open menu for an item
-  const openMenu = useCallback((item: T, pos: MenuPosition) => {
+  const openMenu = (item: T, pos: MenuPosition) => {
     setTargetItem(item)
     setPosition(pos)
     setIsOpen(true)
-  }, [])
+  }
 
   // Create handlers for an item
-  const getItemMenuProps = useCallback((item: T): ItemMenuProps => {
+  const getItemMenuProps = (item: T): ItemMenuProps => {
     // Right-click handler (desktop)
     const handleContextMenu = (e: React.MouseEvent) => {
       e.preventDefault()
@@ -148,7 +148,7 @@ export function SidebarListMenuProvider<T>({
       onTouchEnd: handleTouchEnd,
       onTouchMove: handleTouchEnd,
     }
-  }, [openMenu, longPressDuration])
+  }
 
   const value: SidebarListMenuState<T> = {
     isOpen,

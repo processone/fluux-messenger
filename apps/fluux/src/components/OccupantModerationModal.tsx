@@ -2,7 +2,7 @@
  * Modal for managing a room occupant's role, affiliation, kick, and ban.
  * Opened from the occupant context menu's "Manage" item.
  */
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { RoomAffiliation, RoomRole } from '@fluux/sdk'
 import { canKick, canBan, getAvailableAffiliations, getAvailableRoles } from '@fluux/sdk'
@@ -56,16 +56,16 @@ export function OccupantModerationModal({
   const showKick = canKick(selfRole, selfAffiliation, occupant.affiliation)
   const showBan = !!occupant.bareJid && canBan(selfAffiliation, occupant.affiliation)
 
-  const handleRoleAction = useCallback(async (role: RoomRole) => {
+  const handleRoleAction = async (role: RoomRole) => {
     setLoading(true)
     try {
       await onSetRole(occupant.nick, role)
     } finally {
       setLoading(false)
     }
-  }, [onSetRole, occupant.nick])
+  }
 
-  const handleAffAction = useCallback(async (aff: RoomAffiliation) => {
+  const handleAffAction = async (aff: RoomAffiliation) => {
     if (!occupant.bareJid) return
     setLoading(true)
     try {
@@ -73,9 +73,9 @@ export function OccupantModerationModal({
     } finally {
       setLoading(false)
     }
-  }, [onSetAffiliation, occupant.bareJid])
+  }
 
-  const handleConfirmedKick = useCallback(async () => {
+  const handleConfirmedKick = async () => {
     setLoading(true)
     try {
       await onKick(occupant.nick, reason || undefined)
@@ -83,9 +83,9 @@ export function OccupantModerationModal({
     } finally {
       setLoading(false)
     }
-  }, [onKick, occupant.nick, reason, onClose])
+  }
 
-  const handleConfirmedBan = useCallback(async () => {
+  const handleConfirmedBan = async () => {
     if (!occupant.bareJid) return
     setLoading(true)
     try {
@@ -94,7 +94,7 @@ export function OccupantModerationModal({
     } finally {
       setLoading(false)
     }
-  }, [onBan, occupant.bareJid, reason, onClose])
+  }
 
   const roleLabel = (role: RoomRole): string | null => {
     switch (role) {

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useClickOutside, useIsMobileWeb } from '@/hooks'
 import { useModals } from '@/contexts'
@@ -39,7 +39,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
   const isMobile = useIsMobileWeb()
 
   // Close menu when clicking outside
-  const closeMenu = useCallback(() => setIsOpen(false), [])
+  const closeMenu = () => setIsOpen(false)
   useClickOutside(menuRef, closeMenu, isOpen)
 
   // Close menu on escape key

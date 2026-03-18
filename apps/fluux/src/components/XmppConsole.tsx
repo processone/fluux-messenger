@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { format } from 'date-fns'
 import { X, Trash2, Send, ChevronDown, ChevronUp, Search, Download, Server, ArrowDownToLine } from 'lucide-react'
@@ -188,7 +188,7 @@ export function XmppConsole() {
   const selectedEntryRef = useRef<HTMLDivElement>(null)
 
   // Filter entries by type, direction, and search query
-  const filteredEntries = useMemo(() => {
+  const filteredEntries = (() => {
     return entries.filter((entry) => {
       // Filter by direction (events pass through all direction filters)
       if (entry.type !== 'event' && directionFilter !== 'all') {
@@ -207,7 +207,7 @@ export function XmppConsole() {
 
       return true
     })
-  }, [entries, searchQuery, enabledTypes, directionFilter])
+  })()
 
   const toggleType = (type: FilterType) => {
     setEnabledTypes((prev) => {
@@ -221,7 +221,7 @@ export function XmppConsole() {
     })
   }
 
-  const toggleEntryExpanded = useCallback((entryId: string) => {
+  const toggleEntryExpanded = (entryId: string) => {
     setExpandedEntries((prev) => {
       const next = new Set(prev)
       if (next.has(entryId)) {
@@ -236,7 +236,7 @@ export function XmppConsole() {
       }
       return next
     })
-  }, [])
+  }
 
   // Keyboard navigation for log entries
   const handleLogKeyDown = (e: React.KeyboardEvent) => {
@@ -398,7 +398,7 @@ export function XmppConsole() {
     }
   }
 
-  const handleExport = useCallback(async () => {
+  const handleExport = async () => {
     // Snapshot current entries at export time to avoid stale closure issues
     const currentEntries = entries
     const currentConnectionMethod = connectionMethod
@@ -469,7 +469,7 @@ export function XmppConsole() {
     } else {
       downloadAsBlob(content, defaultFilename)
     }
-  }, [entries, connectionMethod, serverInfo])
+  }
 
   if (!isOpen) return null
 

@@ -8,7 +8,7 @@
  * - useModals() - access modal state and actions
  */
 
-import { createContext, useContext, useMemo, type ReactNode } from 'react'
+import { createContext, useContext, type ReactNode } from 'react'
 import { useModalManager, type UseModalManagerReturn } from '@/hooks/useModalManager'
 
 /**
@@ -27,11 +27,7 @@ const LayoutContext = createContext<LayoutContextValue | null>(null)
 export function LayoutProvider({ children }: { children: ReactNode }) {
   const modals = useModalManager()
 
-  // Memoize context value to prevent unnecessary re-renders
-  const value = useMemo<LayoutContextValue>(
-    () => ({ modals }),
-    [modals]
-  )
+  const value: LayoutContextValue = { modals }
 
   return (
     <LayoutContext.Provider value={value}>

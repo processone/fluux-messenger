@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ChevronRight,
@@ -45,9 +45,7 @@ export function AdminDashboard({ activeCategory, onCategoryChange }: AdminDashbo
   }, [commands.length, fetchEntityCounts, discoverMucService])
 
   // Check if we have announcement commands
-  const hasAnnouncements = useMemo(() => {
-    return commandsByCategory.announcement.length > 0
-  }, [commandsByCategory.announcement])
+  const hasAnnouncements = commandsByCategory.announcement.length > 0
 
   // Handle command execution (for stats and announcement commands)
   const handleExecuteCommand = async (node: string) => {
@@ -59,14 +57,10 @@ export function AdminDashboard({ activeCategory, onCategoryChange }: AdminDashbo
   }
 
   // Check if we have stats commands
-  const hasStats = useMemo(() => {
-    return commandsByCategory.stats.length > 0
-  }, [commandsByCategory.stats])
+  const hasStats = commandsByCategory.stats.length > 0
 
   // Check if we have other/uncategorized commands
-  const hasOther = useMemo(() => {
-    return commandsByCategory.other.length > 0
-  }, [commandsByCategory.other])
+  const hasOther = commandsByCategory.other.length > 0
 
   // Show access denied message if user is not an admin
   if (!isAdmin) {

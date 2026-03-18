@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react'
+import { useState, useRef, useEffect, useLayoutEffect } from 'react'
 import { useClickOutside } from './useClickOutside'
 
 export interface ContextMenuState {
@@ -79,7 +79,7 @@ export function useContextMenu(options: UseContextMenuOptions = {}): ContextMenu
   const clickPosition = useRef({ x: 0, y: 0 })
 
   // Close menu
-  const close = useCallback(() => setIsOpen(false), [])
+  const close = () => setIsOpen(false)
 
   // Click outside to close
   useClickOutside(menuRef, close, isOpen)
@@ -128,15 +128,15 @@ export function useContextMenu(options: UseContextMenuOptions = {}): ContextMenu
   }, [isOpen, position.x, position.y])
 
   // Right-click handler (desktop)
-  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+  const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault()
     clickPosition.current = { x: e.clientX, y: e.clientY }
     setPosition({ x: e.clientX, y: e.clientY })
     setIsOpen(true)
-  }, [])
+  }
 
   // Long-press start (mobile)
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+  const handleTouchStart = (e: React.TouchEvent) => {
     longPressTriggered.current = false
     const touch = e.touches[0]
     longPressTimeout.current = setTimeout(() => {
@@ -145,15 +145,15 @@ export function useContextMenu(options: UseContextMenuOptions = {}): ContextMenu
       setPosition({ x: touch.clientX, y: touch.clientY })
       setIsOpen(true)
     }, longPressDuration)
-  }, [longPressDuration])
+  }
 
   // Cancel long-press on move or end
-  const handleTouchEnd = useCallback(() => {
+  const handleTouchEnd = () => {
     if (longPressTimeout.current) {
       clearTimeout(longPressTimeout.current)
       longPressTimeout.current = null
     }
-  }, [])
+  }
 
   return {
     isOpen,

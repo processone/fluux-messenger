@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useMemo, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { chatStore, roomStore } from '@fluux/sdk'
 import { useChatStore, useRoomStore } from '@fluux/sdk/react'
 
@@ -124,17 +124,15 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
 
   const platform = getPlatform()
   const supportsQuitShortcut = platform === 'windows' || platform === 'linux'
-  const quitShortcut = useMemo<ShortcutDefinition | null>(() => (
-    supportsQuitShortcut && onQuitApp
-      ? {
-        key: 'q',
-        modifiers: ['meta'],
-        description: 'Quit app',
-        category: 'general',
-        action: onQuitApp,
-      }
-      : null
-  ), [supportsQuitShortcut, onQuitApp])
+  const quitShortcut: ShortcutDefinition | null = supportsQuitShortcut && onQuitApp
+    ? {
+      key: 'q',
+      modifiers: ['meta'],
+      description: 'Quit app',
+      category: 'general',
+      action: onQuitApp,
+    }
+    : null
 
   // NOTE: Use direct store subscriptions instead of useChat()/useRoom() hooks.
   // Those hooks subscribe to conversations/rooms which change during MAM loading,
@@ -145,7 +143,7 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
   // Navigate to next conversation/room with unread messages
   // Conversations are checked first (priority for direct messages), then rooms sorted by recent activity
   // NOTE: Uses getState() to read current data without creating subscriptions
-  const goToNextUnread = useCallback(() => {
+  const goToNextUnread = () => {
     // Read current state without subscribing
     const conversations = Array.from(chatStore.getState().conversations.values())
       .filter(c => !chatStore.getState().archivedConversations.has(c.id))
@@ -188,11 +186,11 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
       setActiveRoom(unreadRooms[0].room.jid)
       navigateToRooms(unreadRooms[0].room.jid)
     }
-  }, [setActiveConversation, setActiveRoom, navigateToMessages, navigateToRooms])
+  }
 
   // Navigate to previous item in current sidebar view (stops at top, no wrap)
   // NOTE: Uses getState() to read current data without creating subscriptions
-  const goToPreviousItem = useCallback(() => {
+  const goToPreviousItem = () => {
     if (sidebarView === 'messages' || sidebarView === 'archive') {
       // Read current state without subscribing
       const conversations = Array.from(chatStore.getState().conversations.values())
@@ -222,11 +220,11 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
       setActiveConversation(null)
       setActiveRoom(joinedRooms[currentIndex - 1].jid)
     }
-  }, [sidebarView, setActiveConversation, setActiveRoom])
+  }
 
   // Navigate to next item in current sidebar view (stops at bottom, no wrap)
   // NOTE: Uses getState() to read current data without creating subscriptions
-  const goToNextItem = useCallback(() => {
+  const goToNextItem = () => {
     if (sidebarView === 'messages' || sidebarView === 'archive') {
       // Read current state without subscribing
       const conversations = Array.from(chatStore.getState().conversations.values())
@@ -268,10 +266,10 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
       }
       // At bottom: do nothing
     }
-  }, [sidebarView, setActiveConversation, setActiveRoom])
+  }
 
   // Handle escape key with hierarchy (closes innermost context first)
-  const handleEscape = useCallback(() => {
+  const handleEscape = () => {
     const esc = escapeHierarchy
     if (!esc) return false
 
@@ -324,10 +322,10 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
     }
 
     return false
-  }, [escapeHierarchy])
+  }
 
   // Define all shortcuts
-  const shortcuts = useMemo<ShortcutDefinition[]>(() => [
+  const shortcuts: ShortcutDefinition[] = [
     {
       key: '?',
       modifiers: ['ctrl'],
@@ -470,22 +468,7 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
       category: 'general',
       action: handleEscape,
     },
-  ], [
-    onToggleShortcutHelp,
-    onToggleConsole,
-    goToNextUnread,
-    onSidebarViewChange,
-    goToPreviousItem,
-    goToNextItem,
-    sidebarView,
-    onOpenSettings,
-    escapeHierarchy,
-    onOpenPresenceMenu,
-    onCreateQuickChat,
-    onOpenCommandPalette,
-    quitShortcut,
-    handleEscape,
-  ])
+  ]
 
   const shortcutsRef = useRef<ShortcutDefinition[]>(shortcuts)
   const isCommandPaletteOpenRef = useRef(escapeHierarchy?.isCommandPaletteOpen ?? false)

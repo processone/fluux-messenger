@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef } from 'react'
 import { usePresence } from '@fluux/sdk'
 import { useNotificationEvents } from './useNotificationEvents'
 
@@ -83,10 +83,10 @@ export function useSoundNotification(): void {
     }
   }, [])
 
-  const playSound = useCallback(() => {
+  const playSound = () => {
     if (presenceStatusRef.current === 'dnd') return
     playSoundRef.current?.()
-  }, [])
+  }
 
   // Subscribe to notification events
   useNotificationEvents({
