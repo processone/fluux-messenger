@@ -17,7 +17,7 @@ import { OccupantModerationModal } from './OccupantModerationModal'
 import { MenuButton, MenuDivider } from './sidebar-components/SidebarListMenu'
 import { useToastStore } from '@/stores/toastStore'
 import { findLastEditableMessage, findLastEditableMessageId } from '@/utils/messageUtils'
-import { expandedMessagesStore } from '@/stores/expandedMessagesStore'
+import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
 import { ConfirmDialog } from './ConfirmDialog'
 
 // Generate hat colors from URI using XEP-0392 consistent color
@@ -204,7 +204,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     onReachedFirstMessage: fetchOlderHistory,
     isLoadingOlder: activeMAMState?.isLoading,
     isHistoryComplete: activeRoom?.supportsMAM === false || activeMAMState?.isHistoryComplete,
-    onEnterPressed: (id: string) => expandedMessagesStore.getState().toggle(id),
+    onEnterPressed: (id: string) => useExpandedMessagesStore.getState().toggle(id),
     onKeyboardNavigate: () => { isAtBottomRef.current = false },
   })
 

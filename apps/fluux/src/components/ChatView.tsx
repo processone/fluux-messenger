@@ -11,7 +11,7 @@ import { ChristmasAnimation } from './ChristmasAnimation'
 import { ChatHeader } from './ChatHeader'
 import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment } from './MessageComposer'
 import { findLastEditableMessage, findLastEditableMessageId } from '@/utils/messageUtils'
-import { expandedMessagesStore } from '@/stores/expandedMessagesStore'
+import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
 import { ConfirmDialog } from './ConfirmDialog'
 
 interface ChatViewProps {
@@ -128,7 +128,7 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
     onReachedFirstMessage: fetchOlderHistory,
     isLoadingOlder: activeMAMState?.isLoading,
     isHistoryComplete: activeMAMState?.isHistoryComplete,
-    onEnterPressed: (id: string) => expandedMessagesStore.getState().toggle(id),
+    onEnterPressed: (id: string) => useExpandedMessagesStore.getState().toggle(id),
     onKeyboardNavigate: () => { isAtBottomRef.current = false },
   })
 
