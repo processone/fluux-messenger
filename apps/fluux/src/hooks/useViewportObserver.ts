@@ -11,7 +11,7 @@
  * - Re-observes when messages change (new messages added, conversation switch)
  * - Cleanup on unmount or conversation switch
  */
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 
 /** Minimum interval (ms) between onMessageSeen calls. */
 const THROTTLE_MS = 300
@@ -42,7 +42,9 @@ export function useViewportObserver({
   const onMessageSeenRef = useRef(onMessageSeen)
   onMessageSeenRef.current = onMessageSeen
 
-  const reportMessageSeen = (messageId: string) => {
+  // Wrapped in useCallback so it can be listed in useEffect deps.
+  // Only reads refs — no state dependencies, so the empty dep array is correct.
+  const reportMessageSeen = useCallback((messageId: string) => {
     if (!onMessageSeenRef.current) return
     if (messageId === lastReportedRef.current) return
 
@@ -69,7 +71,7 @@ export function useViewportObserver({
         }, THROTTLE_MS - elapsed)
       }
     }
-  }
+  }, [])
 
   useEffect(() => {
     // Capture the callback at setup time.  When this effect is cleaned up
@@ -216,8 +218,5 @@ export function useViewportObserver({
         throttleTimerRef.current = null
       }
     }
-    // reportMessageSeen is intentionally excluded from deps — it only accesses refs
-    // and is stable in behavior. The React Compiler handles memoization at build time.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversationId, enabled, scrollContainerRef])
+  }, [conversationId, enabled, scrollContainerRef, reportMessageSeen])
 }

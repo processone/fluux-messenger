@@ -138,18 +138,21 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
   // Index by both client id and stanza-id since replies may reference either
   const messagesById = createMessageLookup(activeMessages)
 
+  // Track pendingAttachment in a ref for cleanup (not a trigger)
+  const pendingAttachmentRef = useRef(pendingAttachment)
+  pendingAttachmentRef.current = pendingAttachment
+
   // Clear reply/edit/pending attachment state when conversation changes
   // Note: scroll position is managed by MessageList component
   useEffect(() => {
     setReplyingTo(null)
     setEditingMessage(null)
     // Revoke old preview URL to avoid memory leaks
-    if (pendingAttachment?.previewUrl) {
-      URL.revokeObjectURL(pendingAttachment.previewUrl)
+    if (pendingAttachmentRef.current?.previewUrl) {
+      URL.revokeObjectURL(pendingAttachmentRef.current.previewUrl)
     }
     setPendingAttachment(null)
     clearSelection()
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- pendingAttachment cleanup is intentional, not a trigger
   }, [activeConversation?.id, clearSelection])
 
   // XEP-0313: Message history is now auto-fetched by the SDK (useChat hook)

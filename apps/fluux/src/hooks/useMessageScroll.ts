@@ -116,11 +116,15 @@ export function useMessageScroll(dependencies: unknown[] = [], options: UseMessa
     }
   }
 
+  // Serialize caller-provided dependencies into a stable trigger string.
+  // This avoids passing a dynamic array to useEffect deps, which the
+  // React Compiler and exhaustive-deps rule cannot statically verify.
+  const depsKey = JSON.stringify(dependencies)
+
   // Auto-scroll to bottom when dependencies change (only if at bottom)
   useEffect(() => {
     scrollToBottomIfNeeded()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, dependencies)
+  }, [depsKey])
 
   return {
     /** Ref to read the scroll container (use setScrollRef as the ref prop) */

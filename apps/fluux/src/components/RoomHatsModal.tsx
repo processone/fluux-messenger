@@ -7,7 +7,7 @@
  *
  * Owner-only: visibility is enforced by the caller (RoomHeader).
  */
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Room, Hat } from '@fluux/sdk'
 import { useRoom, generateConsistentColorHexSync } from '@fluux/sdk'
@@ -110,8 +110,13 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
   // Data loading
   // ---------------------------------------------------------------------------
 
-  const loadDefinitions = async () => {
-    if (hatsLoading) return
+  // Use refs for loading guards so useCallback doesn't re-create on every load cycle
+  const hatsLoadingRef = useRef(false)
+  const assignmentsLoadingRef = useRef(false)
+
+  const loadDefinitions = useCallback(async () => {
+    if (hatsLoadingRef.current) return
+    hatsLoadingRef.current = true
     setHatsLoading(true)
     try {
       const result = await listHats(room.jid)
@@ -122,12 +127,14 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
     } catch {
       if (mountedRef.current) addToast('error', t('rooms.hatCreateError'))
     } finally {
+      hatsLoadingRef.current = false
       if (mountedRef.current) setHatsLoading(false)
     }
-  }
+  }, [listHats, room.jid, addToast, t])
 
-  const loadAssignments = async () => {
-    if (assignmentsLoading) return
+  const loadAssignments = useCallback(async () => {
+    if (assignmentsLoadingRef.current) return
+    assignmentsLoadingRef.current = true
     setAssignmentsLoading(true)
     try {
       const result = await listHatAssignments(room.jid)
@@ -138,15 +145,15 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
     } catch {
       if (mountedRef.current) addToast('error', t('rooms.hatAssignError'))
     } finally {
+      assignmentsLoadingRef.current = false
       if (mountedRef.current) setAssignmentsLoading(false)
     }
-  }
+  }, [listHatAssignments, room.jid, addToast, t])
 
   // Load definitions on mount
   useEffect(() => {
     void loadDefinitions()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [loadDefinitions])
 
   const handleTabChange = (tab: Tab) => {
     setActiveTab(tab)
@@ -160,8 +167,7 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
     if (activeTab === 'assignments' && !hatsLoaded) {
       void loadDefinitions()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab])
+  }, [activeTab, hatsLoaded, loadDefinitions])
 
   // ---------------------------------------------------------------------------
   // Actions — Definitions

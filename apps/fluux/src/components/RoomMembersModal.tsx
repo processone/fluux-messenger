@@ -9,7 +9,7 @@
  * - Change or remove affiliation per row
  * - Permission-aware: only shows actions the current user can perform
  */
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Room, RoomAffiliation } from '@fluux/sdk'
 import { useRoom, getAvailableAffiliations } from '@fluux/sdk'
@@ -62,8 +62,12 @@ export function RoomMembersModal({ room, onClose }: RoomMembersModalProps) {
     return () => { mountedRef.current = false }
   }, [])
 
-  const loadTab = async (tab: AffiliationTab) => {
-    if (loadingTabs.has(tab)) return
+  // Use a ref for the loading guard so useCallback doesn't re-create on every load cycle
+  const loadingTabsRef = useRef(new Set<AffiliationTab>())
+
+  const loadTab = useCallback(async (tab: AffiliationTab) => {
+    if (loadingTabsRef.current.has(tab)) return
+    loadingTabsRef.current.add(tab)
     setLoadingTabs(prev => new Set(prev).add(tab))
     try {
       const result = await queryAffiliationList(room.jid, tab)
@@ -74,6 +78,7 @@ export function RoomMembersModal({ room, onClose }: RoomMembersModalProps) {
       if (!mountedRef.current) return
       addToast('error', t('rooms.affiliationError'))
     } finally {
+      loadingTabsRef.current.delete(tab)
       if (mountedRef.current) {
         setLoadingTabs(prev => {
           const next = new Set(prev)
@@ -82,13 +87,12 @@ export function RoomMembersModal({ room, onClose }: RoomMembersModalProps) {
         })
       }
     }
-  }
+  }, [queryAffiliationList, room.jid, addToast, t])
 
   // Load initial tab on mount
   useEffect(() => {
     void loadTab(activeTab)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [loadTab, activeTab])
 
   const handleTabChange = (tab: AffiliationTab) => {
     setActiveTab(tab)
