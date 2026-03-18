@@ -35,24 +35,9 @@ export interface TabCoordinationResult {
   releaseConnection: () => void
 }
 
-const NOOP_RESULT: TabCoordinationResult = {
-  blocked: false,
-  takenOver: false,
-  claimConnection: async () => true,
-  takeOver: () => {},
-  releaseConnection: () => {},
-}
+const skipCoordination = isTauri() || typeof BroadcastChannel === 'undefined'
 
 export function useTabCoordination(onTakenOver?: () => void): TabCoordinationResult {
-  // Skip entirely on Tauri or if BroadcastChannel is unavailable
-  if (isTauri() || typeof BroadcastChannel === 'undefined') {
-    return NOOP_RESULT
-  }
-
-  return useTabCoordinationWeb(onTakenOver)
-}
-
-function useTabCoordinationWeb(onTakenOver?: () => void): TabCoordinationResult {
   const [blocked, setBlocked] = useState(false)
   const [takenOver, setTakenOver] = useState(false)
 
@@ -65,6 +50,9 @@ function useTabCoordinationWeb(onTakenOver?: () => void): TabCoordinationResult 
   onTakenOverRef.current = onTakenOver
 
   useEffect(() => {
+    // Skip entirely on Tauri or if BroadcastChannel is unavailable
+    if (skipCoordination) return
+
     const channel = new BroadcastChannel(CHANNEL_NAME)
     channelRef.current = channel
 
