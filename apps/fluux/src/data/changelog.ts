@@ -73,6 +73,8 @@ export const changelog: ChangelogEntry[] = [
           'Devices section rendering in UserInfoPopover',
           'Fallback to occupant JID username when contact JID is unavailable',
           'Owner showing as moderator in chat view',
+          'Missing room messages after reconnect or app restart',
+          'Missing "name" attribute on "external" elements (required by spec)',
         ],
       },
     ],
