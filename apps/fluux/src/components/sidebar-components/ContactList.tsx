@@ -6,7 +6,7 @@ import { useConnectionStore } from '@fluux/sdk/react'
 import { Avatar } from '../Avatar'
 import { RenameContactModal } from '../RenameContactModal'
 import { Tooltip } from '../Tooltip'
-import { useSidebarZone, ContactDevicesTooltip } from './types'
+import { useSidebarZone, ContactTooltipContent } from './types'
 import { getTranslatedStatusText } from '@/utils/statusText'
 import { MessageCircle, Trash2, Pencil, Wrench } from 'lucide-react'
 
@@ -296,7 +296,7 @@ const ContactItem = memo(function ContactItem({
   return (
     <>
       <Tooltip
-        content={<ContactDevicesTooltip contact={contact} t={t} forceOffline={forceOffline} />}
+        content={<ContactTooltipContent contact={contact} t={t} forceOffline={forceOffline} />}
         position="right"
         delay={600}
         maxWidth={280}

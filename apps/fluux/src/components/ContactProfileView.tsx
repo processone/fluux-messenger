@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { MessageCircle, Trash2, Pencil, Monitor, Smartphone, Globe, ArrowLeft, Ban, UserPlus, Building2, Mail, MapPin, User } from 'lucide-react'
 import { Tooltip } from './Tooltip'
 import { type Contact, type VCardInfo, getClientType, useBlocking } from '@fluux/sdk'
-import { useConnectionStore, useBlockingStore } from '@fluux/sdk/react'
+import { useConnectionStore, useBlockingStore, useLastActivity } from '@fluux/sdk/react'
 import { Avatar } from './Avatar'
 import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS } from '@/constants/ui'
 import { getShowColor, getTranslatedShowText } from '@/utils/presence'
@@ -49,6 +49,11 @@ export function ContactProfileView({
   const inputRef = useRef<HTMLInputElement>(null)
   const { blockJid, unblockJid } = useBlocking()
   const isBlocked = useBlockingStore((s) => s.blockedJids.has(contact.jid))
+
+  // Lazily query last activity for offline roster contacts
+  useLastActivity(
+    isInRoster && !forceOffline && contact.presence === 'offline' ? contact.jid : null
+  )
 
   const presenceColor = forceOffline ? APP_OFFLINE_PRESENCE_COLOR : PRESENCE_COLORS[contact.presence]
   const statusText = forceOffline ? t('presence.offline') : getTranslatedStatusText(contact, t)

@@ -1,5 +1,6 @@
 import { createContext, useContext, type RefObject, type ReactNode } from 'react'
 import type { Contact } from '@fluux/sdk'
+import { useLastActivity } from '@fluux/sdk/react'
 import { getTranslatedStatusText } from '@/utils/statusText'
 import { getTranslatedShowText } from '@/utils/presence'
 
@@ -52,6 +53,28 @@ export function ContactDevicesTooltip({
       )}
     </div>
   )
+}
+
+/**
+ * Tooltip content wrapper that lazily queries Last Activity (XEP-0012)
+ * for offline roster contacts. Only mounts when the tooltip becomes visible
+ * (Tooltip renders content in a conditional portal), so the query is
+ * naturally deferred until hover.
+ */
+export function ContactTooltipContent({
+  contact,
+  t,
+  forceOffline = false,
+}: {
+  contact: Contact
+  t: (key: string) => string
+  forceOffline?: boolean
+}): ReactNode {
+  useLastActivity(
+    !forceOffline && contact.presence === 'offline' ? contact.jid : null
+  )
+
+  return <ContactDevicesTooltip contact={contact} t={t} forceOffline={forceOffline} />
 }
 
 // Sidebar sizing constants

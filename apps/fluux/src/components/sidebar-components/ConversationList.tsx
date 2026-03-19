@@ -15,7 +15,7 @@ import {
 import { useConnectionStore } from '@fluux/sdk/react'
 import { Avatar, TypingIndicator } from '../Avatar'
 import { Tooltip } from '../Tooltip'
-import { useSidebarZone, ContactDevicesTooltip } from './types'
+import { useSidebarZone, ContactTooltipContent } from './types'
 import { formatConversationTime } from '@/utils/dateFormat'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { Hash, Trash2, Archive, ArchiveRestore } from 'lucide-react'
@@ -253,7 +253,7 @@ export const ConversationItem = memo(function ConversationItem({
 
   return (
     <Tooltip
-      content={contact ? <ContactDevicesTooltip contact={contact} t={t} forceOffline={forceOffline} /> : null}
+      content={contact ? <ContactTooltipContent contact={contact} t={t} forceOffline={forceOffline} /> : null}
       position="right"
       delay={600}
       maxWidth={280}
