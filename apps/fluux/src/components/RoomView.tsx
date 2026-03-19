@@ -1,11 +1,11 @@
-import React, { useState, useRef, useEffect, memo, type RefObject } from 'react'
+import React, { useState, useRef, useEffect, useCallback, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { useRoomActive, useRoster, getBareJid, generateConsistentColorHexSync, getPresenceFromShow, createMessageLookup, isMessageFromIgnoredUser, isReplyToIgnoredUser, canKick, canBan, canModerate, getAvailableAffiliations, getAvailableRoles, type RoomMessage, type Room, type MentionReference, type ChatStateNotification, type Contact, type FileAttachment, type RoomAffiliation, type RoomRole } from '@fluux/sdk'
 import { useConnectionStore, useIgnoreStore } from '@fluux/sdk/react'
 import { ignoreStore, type IgnoredUser } from '@fluux/sdk/stores'
 import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat, useContextMenu, isSmallScreen } from '@/hooks'
-import { MessageBubble, MessageList, shouldShowAvatar, buildReplyContext } from './conversation'
+import { MessageBubble, MessageList, shouldShowAvatar, buildReplyContext, PollBanner } from './conversation'
 import { Avatar, getConsistentTextColor } from './Avatar'
 import { format } from 'date-fns'
 import { Shield, Crown, Upload, Loader2, LogIn, AlertCircle, Users, MessageCircle, EyeOff, User, Settings } from 'lucide-react'
@@ -98,6 +98,12 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
 
   // Pending attachment state - staged file ready to send with next message
   const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null)
+
+  // Dismissed poll IDs — session-scoped, resets on room switch or reconnect
+  const [dismissedPollIds, setDismissedPollIds] = useState<Set<string>>(new Set())
+  const handleDismissPoll = useCallback((messageId: string) => {
+    setDismissedPollIds((prev) => new Set([...prev, messageId]))
+  }, [])
 
 
   // Find the last outgoing message ID for edit button visibility (skip retracted)
@@ -230,6 +236,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
       URL.revokeObjectURL(pendingAttachmentRef.current.previewUrl)
     }
     setPendingAttachment(null)
+    setDismissedPollIds(new Set())
     clearSelection()
   }, [activeRoom?.jid, clearSelection])
 
@@ -307,6 +314,14 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
           submitRoomConfig={submitRoomConfig}
           setSubject={setSubject}
           destroyRoom={destroyRoom}
+        />
+
+        {/* Unanswered poll banner */}
+        <PollBanner
+          messages={displayMessages}
+          myNick={activeRoom.nickname}
+          dismissedPollIds={dismissedPollIds}
+          onDismiss={handleDismissPoll}
         />
 
         {/* Messages - focusable zone for Tab cycling */}

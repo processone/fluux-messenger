@@ -30,3 +30,6 @@ export { useMessageListScroll } from './useMessageListScroll'
 
 export { UserInfoPopover } from './UserInfoPopover'
 export type { UserInfoPopoverProps } from './UserInfoPopover'
+
+export { PollBanner } from './PollBanner'
+export type { PollBannerProps } from './PollBanner'
