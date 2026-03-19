@@ -12,7 +12,7 @@ import type { StoreBindings, XMPPClientEvents, SDKEvents, StorageAdapter, ProxyA
 export interface ModuleDependencies {
   stores: StoreBindings | null
   sendStanza: (stanza: Element) => Promise<void>
-  sendIQ: (iq: Element) => Promise<Element>
+  sendIQ: (iq: Element, timeoutMs?: number) => Promise<Element>
   getCurrentJid: () => string | null
   emit: <K extends keyof XMPPClientEvents>(
     event: K,

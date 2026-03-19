@@ -34,7 +34,7 @@ export class ConversationSync {
    * Returns the list of conversations with their archived status,
    * or an empty array if the node does not exist.
    */
-  async fetchConversations(): Promise<SyncedConversation[]> {
+  async fetchConversations(timeoutMs?: number): Promise<SyncedConversation[]> {
     const currentJid = this.deps.getCurrentJid()
     if (!currentJid) return []
 
@@ -48,7 +48,7 @@ export class ConversationSync {
     )
 
     try {
-      const result = await this.deps.sendIQ(iq)
+      const result = await this.deps.sendIQ(iq, timeoutMs)
       const item = result.getChild('pubsub', NS_PUBSUB)?.getChild('items')?.getChild('item')
       const container = item?.getChild('conversations', NS_CONVERSATIONS)
       if (!container) return []

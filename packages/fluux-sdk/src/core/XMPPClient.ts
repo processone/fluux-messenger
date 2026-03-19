@@ -37,6 +37,10 @@ import {
 } from '../stores'
 import { detectPlatform, getCachedPlatform } from './platform'
 import { isDeadSocketError } from './modules/connectionUtils'
+import {
+  FRESH_SESSION_IQ_TIMEOUT_MS,
+  FRESH_SESSION_SETUP_TIMEOUT_MS,
+} from './modules/connectionTimeouts'
 import { getBareJid, getLocalPart } from './jid'
 import { getStorageScopeJid, setStorageScopeJid } from '../utils/storageScope'
 
@@ -542,7 +546,7 @@ export class XMPPClient {
     const moduleDeps = {
       stores: this.stores,
       sendStanza: (stanza: Element) => this.sendStanza(stanza),
-      sendIQ: (iq: Element) => this.sendIQ(iq),
+      sendIQ: (iq: Element, timeoutMs?: number) => this.sendIQ(iq, timeoutMs),
       getCurrentJid: () => this.currentJid,
       emit: <K extends keyof XMPPClientEvents>(event: K, ...args: Parameters<XMPPClientEvents[K]>) => this.emit(event, ...args),
       emitSDK: <K extends keyof SDKEvents>(event: K, payload: SDKEvents[K]) => this.emitSDK(event, payload),
@@ -1397,7 +1401,35 @@ export class XMPPClient {
     generation?: number
   ): Promise<void> {
     const gen = generation ?? this.sessionGeneration
+    const iqTimeout = FRESH_SESSION_IQ_TIMEOUT_MS
 
+    // Race the entire setup against a safety timeout to prevent hanging
+    // after sleep/wake when the connection is unstable.
+    const setupWork = this.runFreshSessionSetup(previouslyJoinedRooms, gen, iqTimeout)
+    const timeoutPromise = new Promise<'timeout'>((resolve) =>
+      setTimeout(() => resolve('timeout'), FRESH_SESSION_SETUP_TIMEOUT_MS)
+    )
+
+    const result = await Promise.race([setupWork.then(() => 'done' as const), timeoutPromise])
+    if (result === 'timeout') {
+      logInfo(`Fresh session setup timed out after ${FRESH_SESSION_SETUP_TIMEOUT_MS / 1000}s`)
+      this.stores?.console.addEvent(
+        `Fresh session setup timed out after ${FRESH_SESSION_SETUP_TIMEOUT_MS / 1000}s — will retry on next reconnect`,
+        'error'
+      )
+      throw new Error(`Fresh session setup timed out after ${FRESH_SESSION_SETUP_TIMEOUT_MS / 1000}s`)
+    }
+  }
+
+  /**
+   * Core fresh session setup logic, extracted so handleFreshSession can race it
+   * against a safety timeout.
+   */
+  private async runFreshSessionSetup(
+    previouslyJoinedRooms: Array<{ jid: string; nickname: string; password?: string; autojoin?: boolean }> | undefined,
+    gen: number,
+    iqTimeout: number
+  ): Promise<void> {
     // Reset MAM states so background sync will re-fetch message history
     this.stores?.chat.resetMAMStates()
     this.stores?.room.resetRoomMAMStates()
@@ -1411,7 +1443,7 @@ export class XMPPClient {
     this.stores?.connection.clearOwnResources()
 
     // Fetch roster before sending presence
-    await this.roster.fetchRoster()
+    await this.roster.fetchRoster(iqTimeout)
     if (this.isSessionStale(gen)) {
       logInfo('Fresh session aborted after fetchRoster (session superseded)')
       return
@@ -1427,7 +1459,7 @@ export class XMPPClient {
     }
 
     // Bookmarks and room joins
-    const { roomsToAutojoin } = await this.muc.fetchBookmarks()
+    const { roomsToAutojoin } = await this.muc.fetchBookmarks(iqTimeout)
     if (this.isSessionStale(gen)) {
       logInfo('Fresh session aborted after fetchBookmarks (session superseded)')
       return
@@ -1435,7 +1467,7 @@ export class XMPPClient {
 
     // Fetch and merge server-side conversation list (XEP-0223)
     try {
-      const serverConversations = await this.conversationSync.fetchConversations()
+      const serverConversations = await this.conversationSync.fetchConversations(iqTimeout)
       if (this.isSessionStale(gen)) {
         logInfo('Fresh session aborted after fetchConversations (session superseded)')
         return
@@ -1599,7 +1631,7 @@ export class XMPPClient {
     }
   }
 
-  protected async sendIQ(iq: Element): Promise<Element> {
+  protected async sendIQ(iq: Element, timeoutMs?: number): Promise<Element> {
     const xmpp = this.getXmpp()
     if (!xmpp) {
       const currentStatus = this.stores?.connection.getStatus?.()
@@ -1621,7 +1653,16 @@ export class XMPPClient {
     }
 
     try {
-      return await (xmpp as any).iqCaller.request(iq)
+      const request = (xmpp as any).iqCaller.request(iq)
+      if (timeoutMs != null) {
+        return await Promise.race([
+          request,
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`IQ timeout after ${timeoutMs}ms`)), timeoutMs)
+          ),
+        ])
+      }
+      return await request
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err)
       if (isDeadSocketError(errorMessage)) {

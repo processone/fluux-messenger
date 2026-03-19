@@ -475,8 +475,12 @@ export class Connection extends BaseModule {
           async (isResumption) => {
             // Signal machine: initial connection succeeded
             this.sendMachineEvent({ type: 'CONNECTION_SUCCESS' }, 'connect:connection-success')
-            await this.handleConnectionSuccess(isResumption, `Connected as ${jid}`, effectiveJoinedRooms)
-            resolve()
+            try {
+              await this.handleConnectionSuccess(isResumption, `Connected as ${jid}`, effectiveJoinedRooms)
+              resolve()
+            } catch (err) {
+              reject(err instanceof Error ? err : new Error(String(err)))
+            }
           },
           (err) => reject(err)
         )
@@ -1785,12 +1789,16 @@ export class Connection extends BaseModule {
               clearTimeout(timeout)
               // Signal machine: reconnect succeeded → connected.healthy
               this.sendMachineEvent({ type: 'CONNECTION_SUCCESS' }, 'attemptReconnect:success')
-              await this.handleConnectionSuccess(
-                isResumption,
-                'Reconnected',
-                previouslyJoinedRooms
-              )
-              resolve()
+              try {
+                await this.handleConnectionSuccess(
+                  isResumption,
+                  'Reconnected',
+                  previouslyJoinedRooms
+                )
+                resolve()
+              } catch (err) {
+                reject(err instanceof Error ? err : new Error(String(err)))
+              }
             },
             (err) => {
               clearTimeout(timeout)

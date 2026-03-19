@@ -42,3 +42,15 @@ export const PROXY_START_TIMEOUT_MS = 10_000
  * Upper bound for proxy stop IPC call.
  */
 export const PROXY_STOP_TIMEOUT_MS = 5_000
+
+/**
+ * Per-IQ timeout during fresh session setup (roster, bookmarks, conversation sync).
+ * Shorter than xmpp.js's 30s default to fail fast during reconnection after sleep.
+ */
+export const FRESH_SESSION_IQ_TIMEOUT_MS = 15_000
+
+/**
+ * Overall timeout for the entire fresh session setup phase (all IQs + room joins).
+ * Safety net: if the combined setup takes longer, abort and let the reconnect loop retry.
+ */
+export const FRESH_SESSION_SETUP_TIMEOUT_MS = 30_000

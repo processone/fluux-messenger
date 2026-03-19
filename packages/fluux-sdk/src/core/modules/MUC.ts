@@ -1277,7 +1277,7 @@ export class MUC extends BaseModule {
    * - Rooms with autojoin=true are returned in roomsToAutojoin
    * - Supports custom notify-all extension in bookmark extensions
    */
-  async fetchBookmarks(): Promise<{ roomsToAutojoin: Array<{ jid: string; nick: string; password?: string }>; allRoomJids: string[] }> {
+  async fetchBookmarks(timeoutMs?: number): Promise<{ roomsToAutojoin: Array<{ jid: string; nick: string; password?: string }>; allRoomJids: string[] }> {
     const roomsToAutojoin: Array<{ jid: string; nick: string; password?: string }> = []
     const allRoomJids: string[] = []
 
@@ -1288,7 +1288,7 @@ export class MUC extends BaseModule {
         )
       )
 
-      const response = await this.deps.sendIQ(iq)
+      const response = await this.deps.sendIQ(iq, timeoutMs)
       const items = response.getChild('pubsub', NS_PUBSUB)?.getChild('items')
       if (!items) return { roomsToAutojoin, allRoomJids }
 
