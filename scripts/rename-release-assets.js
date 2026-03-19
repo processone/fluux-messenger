@@ -167,9 +167,18 @@ async function main() {
     return;
   }
 
+  // Build a set of all existing asset names for conflict detection
+  const existingByName = new Map(release.assets.map(a => [a.name, a]));
+
   // Rename assets via GitHub API
   console.log('\nRenaming assets...');
   for (const { asset, newName } of renames) {
+    // If an asset with the target name already exists (e.g. from a previous run), delete it first
+    const conflicting = existingByName.get(newName);
+    if (conflicting && conflicting.id !== asset.id) {
+      await makeRequest('DELETE', `/repos/${OWNER}/${REPO}/releases/assets/${conflicting.id}`);
+      console.log(`  Deleted stale asset: ${newName}`);
+    }
     await makeRequest('PATCH', `/repos/${OWNER}/${REPO}/releases/assets/${asset.id}`, {
       name: newName,
     });
