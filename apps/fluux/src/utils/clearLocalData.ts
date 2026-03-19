@@ -13,6 +13,7 @@ import {
 } from '@fluux/sdk'
 import { clearSession, getSession } from '@/hooks/useSessionPersistence'
 import { deleteCredentials } from '@/utils/keychain'
+import { clearMediaCache } from '@/utils/mediaCache'
 
 /** localStorage keys containing user data (not app preferences) */
 const USER_DATA_KEYS = [
@@ -93,6 +94,7 @@ export async function clearLocalData(options: ClearLocalDataOptions = {}): Promi
     //    Note: chatStore.reset() already handles clearing the message cache.
     if (allAccounts) {
       await clearAllAvatarData()
+      await clearMediaCache()
     }
     console.log('[Fluux] clearLocalData: complete')
   } finally {

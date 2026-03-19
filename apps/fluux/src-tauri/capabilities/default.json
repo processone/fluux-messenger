@@ -36,6 +36,9 @@
     "notification:allow-remove-active",
     "window-state:default",
     "fs:allow-temp-write-recursive",
+    "fs:allow-appcache-write-recursive",
+    "fs:allow-appcache-read-recursive",
+    "fs:allow-appcache-meta-recursive",
     {
       "identifier": "fs:allow-read-file",
       "allow": [{ "path": "**/*" }]

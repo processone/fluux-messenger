@@ -1,5 +1,21 @@
-import { describe, it, expect } from 'vitest'
-import { sanitizeMediaUrl } from './useProxiedUrl'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { renderHook, act, waitFor } from '@testing-library/react'
+
+// Mock tauri detection — default to non-Tauri (web)
+const mockIsTauri = vi.fn(() => false)
+vi.mock('@/utils/tauri', () => ({
+  isTauri: () => mockIsTauri(),
+}))
+
+// Mock mediaCache
+const mockResolveMediaUrl = vi.fn()
+const mockResetMediaUrlCache = vi.fn()
+vi.mock('@/utils/mediaCache', () => ({
+  resolveMediaUrl: (url: string) => mockResolveMediaUrl(url),
+  resetMediaUrlCache: () => mockResetMediaUrlCache(),
+}))
+
+import { sanitizeMediaUrl, useProxiedUrl, clearProxiedUrlCache } from './useProxiedUrl'
 
 describe('sanitizeMediaUrl', () => {
   it('should encode & and = in URL path segments', () => {
@@ -53,5 +69,128 @@ describe('sanitizeMediaUrl', () => {
     const once = sanitizeMediaUrl(url)
     const twice = sanitizeMediaUrl(once)
     expect(twice).toBe(once)
+  })
+})
+
+describe('useProxiedUrl', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockIsTauri.mockReturnValue(false)
+  })
+
+  // --- Web mode tests ---
+
+  it('should return sanitized URL immediately on web', () => {
+    const { result } = renderHook(() =>
+      useProxiedUrl('https://example.com/photo.jpg')
+    )
+
+    expect(result.current.url).toBe('https://example.com/photo.jpg')
+    expect(result.current.isLoading).toBe(false)
+    expect(result.current.error).toBeNull()
+    // Should never call resolveMediaUrl in web mode
+    expect(mockResolveMediaUrl).not.toHaveBeenCalled()
+  })
+
+  it('should return null when disabled', () => {
+    const { result } = renderHook(() =>
+      useProxiedUrl('https://example.com/photo.jpg', false)
+    )
+
+    expect(result.current.url).toBeNull()
+    expect(result.current.isLoading).toBe(false)
+  })
+
+  it('should return null when URL is undefined', () => {
+    const { result } = renderHook(() =>
+      useProxiedUrl(undefined)
+    )
+
+    expect(result.current.url).toBeNull()
+    expect(result.current.isLoading).toBe(false)
+  })
+
+  it('should sanitize URL on web (encode special path chars)', () => {
+    const { result } = renderHook(() =>
+      useProxiedUrl('https://upload.example.com/file_share/uuid=A&code=1.mov')
+    )
+
+    expect(result.current.url).toBe(
+      'https://upload.example.com/file_share/uuid%3DA%26code%3D1.mov'
+    )
+  })
+
+  // --- Tauri mode tests ---
+
+  it('should resolve via media cache in Tauri mode', async () => {
+    mockIsTauri.mockReturnValue(true)
+    mockResolveMediaUrl.mockResolvedValue('https://asset.localhost/cached/abc.jpg')
+
+    const { result } = renderHook(() =>
+      useProxiedUrl('https://upload.example.com/photo.jpg')
+    )
+
+    // Initially loading
+    expect(result.current.isLoading).toBe(true)
+
+    await waitFor(() => {
+      expect(result.current.url).toBe('https://asset.localhost/cached/abc.jpg')
+    })
+
+    expect(result.current.isLoading).toBe(false)
+    expect(result.current.error).toBeNull()
+    expect(mockResolveMediaUrl).toHaveBeenCalledWith('https://upload.example.com/photo.jpg')
+  })
+
+  it('should fall back to sanitized URL when media cache fails in Tauri', async () => {
+    mockIsTauri.mockReturnValue(true)
+    mockResolveMediaUrl.mockRejectedValue(new Error('Fetch failed: 404'))
+
+    const { result } = renderHook(() =>
+      useProxiedUrl('https://upload.example.com/photo.jpg')
+    )
+
+    // Initially loading
+    expect(result.current.isLoading).toBe(true)
+
+    await waitFor(() => {
+      expect(result.current.url).toBe('https://upload.example.com/photo.jpg')
+    })
+
+    // Falls back gracefully — no error exposed, just direct URL
+    expect(result.current.isLoading).toBe(false)
+    expect(result.current.error).toBeNull()
+  })
+
+  it('should not update state after unmount (cancelled)', async () => {
+    mockIsTauri.mockReturnValue(true)
+    // Slow resolve that will complete after unmount
+    let resolvePromise: (value: string) => void
+    mockResolveMediaUrl.mockReturnValue(new Promise(resolve => {
+      resolvePromise = resolve
+    }))
+
+    const { result, unmount } = renderHook(() =>
+      useProxiedUrl('https://upload.example.com/photo.jpg')
+    )
+
+    expect(result.current.isLoading).toBe(true)
+
+    // Unmount before the promise resolves
+    unmount()
+
+    // Resolve the promise after unmount — should not throw or update
+    await act(async () => {
+      resolvePromise!('https://asset.localhost/cached.jpg')
+    })
+
+    // No error thrown means cancellation works
+  })
+})
+
+describe('clearProxiedUrlCache', () => {
+  it('should call resetMediaUrlCache', () => {
+    clearProxiedUrlCache()
+    expect(mockResetMediaUrlCache).toHaveBeenCalledTimes(1)
   })
 })

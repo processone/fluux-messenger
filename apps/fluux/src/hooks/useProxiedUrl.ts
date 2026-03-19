@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
+import { isTauri } from '@/utils/tauri'
+import { resolveMediaUrl, resetMediaUrlCache } from '@/utils/mediaCache'
 
 interface ProxiedUrlState {
   /** The URL to use for the media element */
   url: string | null
-  /** True while loading (always false now since we use direct URLs) */
+  /** True while loading (fetching/caching in Tauri) */
   isLoading: boolean
   /** Error message if something went wrong */
   error: string | null
@@ -44,12 +46,13 @@ export function sanitizeMediaUrl(url: string): string {
 /**
  * Hook that returns a URL suitable for use in img/video/audio elements.
  *
- * Applies path-segment sanitization so that special characters (& = etc.)
- * in filenames are percent-encoded before reaching the media loader.
+ * - **Web:** Applies path-segment sanitization and returns the direct URL.
+ * - **Tauri:** Checks the local filesystem cache, fetches and caches on miss,
+ *   and returns an `asset.localhost` URL via `convertFileSrc()`.
+ *   Falls back to the direct sanitized URL on any error.
  *
  * @param originalUrl - The URL to use
  * @param enabled - Whether to return the URL (useful for conditional loading)
- * @returns Object with url, loading state (always false), and error (always null)
  */
 export function useProxiedUrl(originalUrl: string | undefined, enabled: boolean = true): ProxiedUrlState {
   const [state, setState] = useState<ProxiedUrlState>({
@@ -64,8 +67,32 @@ export function useProxiedUrl(originalUrl: string | undefined, enabled: boolean 
       return
     }
 
-    // Sanitize path segments and return the URL for WebView media loading
-    setState({ url: sanitizeMediaUrl(originalUrl), isLoading: false, error: null })
+    const sanitized = sanitizeMediaUrl(originalUrl)
+
+    // Web: direct sanitized URL (no caching)
+    if (!isTauri()) {
+      setState({ url: sanitized, isLoading: false, error: null })
+      return
+    }
+
+    // Tauri: resolve through filesystem cache
+    let cancelled = false
+    setState({ url: null, isLoading: true, error: null })
+
+    resolveMediaUrl(originalUrl)
+      .then(assetUrl => {
+        if (!cancelled) {
+          setState({ url: assetUrl, isLoading: false, error: null })
+        }
+      })
+      .catch(() => {
+        // Fall back to direct sanitized URL on any cache/fetch error
+        if (!cancelled) {
+          setState({ url: sanitized, isLoading: false, error: null })
+        }
+      })
+
+    return () => { cancelled = true }
   }, [originalUrl, enabled])
 
   return state
@@ -80,9 +107,9 @@ export async function preloadUrl(url: string): Promise<string | null> {
 }
 
 /**
- * No-op for backwards compatibility.
- * Previously cleared the blob URL cache, but we no longer use blob URLs.
+ * Clear the in-memory media URL cache.
+ * Call on disconnect/logout.
  */
 export function clearProxiedUrlCache(): void {
-  // No-op - we no longer cache blob URLs
+  resetMediaUrlCache()
 }
