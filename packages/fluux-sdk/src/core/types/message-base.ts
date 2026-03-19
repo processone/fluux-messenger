@@ -28,6 +28,8 @@ export interface PollOption {
 export interface PollSettings {
   /** Whether voters can select multiple options (default: false = single vote) */
   allowMultiple: boolean
+  /** Whether results are hidden until the user has voted (default: false) */
+  hideResultsBeforeVote: boolean
 }
 
 /**
@@ -39,12 +41,16 @@ export interface PollSettings {
  * @category Poll
  */
 export interface PollData {
-  /** The poll question */
-  question: string
+  /** The poll title (typically a question) */
+  title: string
+  /** Optional longer description providing context for the poll */
+  description?: string
   /** 2-4 options, each mapped to a numbered emoji */
   options: PollOption[]
   /** Voting settings */
   settings: PollSettings
+  /** Optional deadline as ISO 8601 string — voting is blocked after this time */
+  deadline?: string
   /** Occupant ID or nick of the poll creator (for MUC rooms) */
   creatorId?: string
 }
@@ -56,8 +62,10 @@ export interface PollData {
  * @category Poll
  */
 export interface PollClosedData {
-  /** The poll question (for display without needing the original message) */
-  question: string
+  /** The poll title (for display without needing the original message) */
+  title: string
+  /** Optional description (for display without needing the original message) */
+  description?: string
   /** The original poll message ID */
   pollMessageId: string
   /** Frozen results: emoji → vote count */

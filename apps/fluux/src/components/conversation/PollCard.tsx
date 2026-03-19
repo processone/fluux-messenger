@@ -1,24 +1,29 @@
 /**
  * PollCard — Renders a poll within a message bubble.
  *
- * Shows the question, options with progress bars and vote counts,
+ * Shows the title, options with progress bars and vote counts,
  * and allows voting by clicking options.
+ *
+ * When `hideResultsBeforeVote` is enabled, results (progress bars,
+ * percentages, counts) are hidden until the user has cast a vote.
  */
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Check, BarChart3 } from 'lucide-react'
-import { tallyPollResults, getTotalVoters, type PollData, type PollTally } from '@fluux/sdk'
+import { Check, BarChart3, Clock, Square } from 'lucide-react'
+import { tallyPollResults, getTotalVoters, isPollExpired, type PollData, type PollTally } from '@fluux/sdk'
 
 export interface PollCardProps {
   poll: PollData
   reactions: Record<string, string[]>
   myReactions: string[]
   onVote?: (emoji: string) => void
+  onClosePoll?: () => Promise<string | null>
   getReactorName: (reactor: string) => string
 }
 
-export function PollCard({ poll, reactions, myReactions, onVote, getReactorName }: PollCardProps) {
+export function PollCard({ poll, reactions, myReactions, onVote, onClosePoll, getReactorName }: PollCardProps) {
   const { t } = useTranslation()
+  const [closing, setClosing] = useState(false)
 
   const tally = useMemo(() => tallyPollResults(poll, reactions), [poll, reactions])
   const totalVoters = useMemo(() => getTotalVoters(poll, reactions), [poll, reactions])
@@ -29,14 +34,27 @@ export function PollCard({ poll, reactions, myReactions, onVote, getReactorName 
   }, [poll.options, myReactions])
 
   const hasVoted = myVotedEmojis.size > 0
+  const expired = useMemo(() => isPollExpired(poll), [poll])
+
+  // When hideResultsBeforeVote is enabled and the user hasn't voted yet,
+  // suppress all result indicators (progress bars, percentages, counts)
+  const showResults = !poll.settings.hideResultsBeforeVote || hasVoted
+
+  // Disable voting when expired (onVote becomes undefined)
+  const effectiveOnVote = expired ? undefined : onVote
 
   return (
     <div className="mt-1 rounded-lg border border-fluux-border bg-fluux-surface p-3 flex flex-col gap-2">
-      {/* Question header */}
+      {/* Title header */}
       <div className="flex items-center gap-2">
         <BarChart3 className="w-4 h-4 text-fluux-brand flex-shrink-0" />
-        <span className="font-medium text-fluux-text text-sm">{poll.question}</span>
+        <span className="font-medium text-fluux-text text-sm">{poll.title}</span>
       </div>
+
+      {/* Optional description */}
+      {poll.description && (
+        <span className="text-xs text-fluux-muted">{poll.description}</span>
+      )}
 
       {/* Voting mode indicator */}
       {poll.settings.allowMultiple && (
@@ -52,17 +70,59 @@ export function PollCard({ poll, reactions, myReactions, onVote, getReactorName 
             totalVoters={totalVoters}
             isMyVote={myVotedEmojis.has(option.emoji)}
             hasVoted={hasVoted}
-            onVote={onVote}
+            showResults={showResults}
+            allowMultiple={poll.settings.allowMultiple}
+            onVote={effectiveOnVote}
             getReactorName={getReactorName}
           />
         ))}
       </div>
 
-      {/* Total votes */}
-      <div className="text-xs text-fluux-muted pt-0.5">
-        {totalVoters === 0
-          ? t('poll.noVotes', 'No votes yet')
-          : t('poll.totalVotes', '{{count}} vote(s)', { count: totalVoters })}
+      {/* Footer: total votes + deadline + hints + close */}
+      <div className="flex items-center justify-between pt-0.5">
+        <span className="text-xs text-fluux-muted">
+          {expired
+            ? t('poll.expired', 'Poll ended')
+            : !showResults
+              ? t('poll.voteToSeeResults', 'Vote to see results')
+              : totalVoters === 0
+                ? t('poll.noVotes', 'No votes yet')
+                : t('poll.totalVotes', '{{count}} vote(s)', { count: totalVoters })}
+        </span>
+        <div className="flex items-center gap-2">
+          {poll.deadline && !expired && (
+            <span className="flex items-center gap-1 text-xs text-fluux-muted">
+              <Clock className="w-3 h-3" />
+              {t('poll.deadlineDisplay', 'Ends {{date}}', {
+                date: new Date(poll.deadline).toLocaleString(undefined, {
+                  month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+                }),
+              })}
+            </span>
+          )}
+          {hasVoted && !poll.settings.allowMultiple && effectiveOnVote && (
+            <span className="text-xs text-fluux-muted italic">
+              {t('poll.tapToChange', 'Tap to change vote')}
+            </span>
+          )}
+          {onClosePoll && !expired && (
+            <button
+              onClick={async () => {
+                setClosing(true)
+                try {
+                  await onClosePoll()
+                } finally {
+                  setClosing(false)
+                }
+              }}
+              disabled={closing}
+              className="flex items-center gap-1 text-xs text-fluux-muted hover:text-fluux-text transition-colors disabled:opacity-50"
+            >
+              <Square className="w-3 h-3" />
+              {t('poll.close', 'Close poll')}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -73,17 +133,23 @@ interface PollOptionProps {
   totalVoters: number
   isMyVote: boolean
   hasVoted: boolean
+  showResults: boolean
+  allowMultiple: boolean
   onVote?: (emoji: string) => void
   getReactorName: (reactor: string) => string
 }
 
-function PollOption({ option, totalVoters, isMyVote, hasVoted, onVote, getReactorName }: PollOptionProps) {
+function PollOption({ option, totalVoters, isMyVote, hasVoted, showResults, allowMultiple, onVote, getReactorName }: PollOptionProps) {
   const percentage = totalVoters > 0 ? Math.round((option.count / totalVoters) * 100) : 0
 
   const voterNames = useMemo(() => {
     if (option.voters.length === 0) return ''
     return option.voters.map(getReactorName).join(', ')
   }, [option.voters, getReactorName])
+
+  // In single-vote mode after voting: show results but still allow changing vote
+  // Visual cue: non-voted options are subtler to indicate "results mode"
+  const isSingleVoteResultMode = hasVoted && !allowMultiple
 
   return (
     <button
@@ -93,14 +159,16 @@ function PollOption({ option, totalVoters, isMyVote, hasVoted, onVote, getReacto
         relative flex items-center gap-2 px-3 py-2 rounded-md border text-left transition-colors
         ${isMyVote
           ? 'border-fluux-brand bg-fluux-brand/10'
-          : 'border-fluux-border bg-fluux-bg hover:bg-fluux-hover'
+          : isSingleVoteResultMode
+            ? 'border-fluux-border bg-fluux-bg hover:border-fluux-muted'
+            : 'border-fluux-border bg-fluux-bg hover:bg-fluux-hover'
         }
         ${onVote ? 'cursor-pointer' : 'cursor-default'}
       `}
-      title={voterNames || undefined}
+      title={showResults ? (voterNames || undefined) : undefined}
     >
-      {/* Progress bar background */}
-      {hasVoted && totalVoters > 0 && (
+      {/* Progress bar background — only when results are visible */}
+      {showResults && hasVoted && totalVoters > 0 && (
         <div
           className={`absolute inset-0 rounded-md transition-all ${
             isMyVote ? 'bg-fluux-brand/15' : 'bg-fluux-hover/50'
@@ -115,16 +183,18 @@ function PollOption({ option, totalVoters, isMyVote, hasVoted, onVote, getReacto
         <span className="text-sm flex-shrink-0">{option.emoji}</span>
 
         {/* Label */}
-        <span className="text-sm text-fluux-text flex-1 truncate">{option.label}</span>
+        <span className={`text-sm flex-1 truncate ${
+          isSingleVoteResultMode && !isMyVote ? 'text-fluux-muted' : 'text-fluux-text'
+        }`}>{option.label}</span>
 
-        {/* Vote count + check */}
+        {/* Vote count + check — only when results are visible */}
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          {hasVoted && (
+          {showResults && hasVoted && (
             <span className="text-xs font-medium text-fluux-muted">
               {percentage}%
             </span>
           )}
-          {option.count > 0 && (
+          {showResults && option.count > 0 && (
             <span className="text-xs text-fluux-muted">
               ({option.count})
             </span>

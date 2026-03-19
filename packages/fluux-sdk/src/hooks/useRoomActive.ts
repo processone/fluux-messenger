@@ -153,8 +153,8 @@ export function useRoomActive() {
   )
 
   const sendPoll = useCallback(
-    async (roomJid: string, question: string, options: string[], settings?: Partial<PollSettings>) => {
-      return await client.poll.sendPoll(roomJid, question, options, settings)
+    async (roomJid: string, title: string, options: string[], settings?: Partial<PollSettings>, description?: string, deadline?: string, customEmojis?: string[]) => {
+      return await client.poll.sendPoll(roomJid, title, options, settings, description, deadline, customEmojis)
     },
     [client]
   )

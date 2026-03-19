@@ -4,7 +4,7 @@
  * Uses composition to handle view-specific rendering while sharing
  * the common bubble structure.
  */
-import { useState, memo, type ReactNode } from 'react'
+import { useState, useMemo, memo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CornerUpRight, AlertCircle, RefreshCw } from 'lucide-react'
 import { formatMessagePreview, formatXMPPError, type BaseMessage, type MentionReference, type Contact, type ContactIdentity, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
@@ -94,6 +94,9 @@ export interface MessageBubbleProps {
   onNickContextMenu?: (e: React.MouseEvent) => void
   onNickTouchStart?: (e: React.TouchEvent) => void
   onNickTouchEnd?: () => void
+
+  // Poll close action (only for poll creator)
+  onClosePoll?: () => Promise<string | null>
 
   // Callback when reaction picker opens/closes (for hiding other toolbars)
   onReactionPickerChange?: (isOpen: boolean) => void
@@ -217,6 +220,7 @@ export const MessageBubble = memo(function MessageBubble({
   replyContext,
   mentions,
   canModerate,
+  onClosePoll,
   onNickContextMenu,
   onNickTouchStart,
   onNickTouchEnd,
@@ -243,6 +247,26 @@ export const MessageBubble = memo(function MessageBubble({
     onReaction(emoji)
     setShowReactionPicker(false)
   } : undefined
+
+  // Filter poll-vote emojis from the reactions display so votes don't appear as reaction pills.
+  // Non-poll emojis (e.g. 👍) on poll messages still show normally.
+  const pollEmojiSet = useMemo(() => {
+    if (!message.poll) return null
+    return new Set(message.poll.options.map((o) => o.emoji))
+  }, [message.poll])
+
+  const filteredReactions = useMemo(() => {
+    const reactions = message.reactions ?? {}
+    if (!pollEmojiSet) return reactions
+    return Object.fromEntries(
+      Object.entries(reactions).filter(([emoji]) => !pollEmojiSet.has(emoji))
+    )
+  }, [message.reactions, pollEmojiSet])
+
+  const filteredMyReactions = useMemo(() => {
+    if (!pollEmojiSet) return myReactions
+    return myReactions.filter((emoji) => !pollEmojiSet.has(emoji))
+  }, [myReactions, pollEmojiSet])
 
   // Determine hover state: use controlled isHovered if provided, otherwise fall back to CSS hover
   const useControlledHover = isHovered !== undefined
@@ -396,6 +420,7 @@ export const MessageBubble = memo(function MessageBubble({
               reactions={message.reactions ?? {}}
               myReactions={myReactions}
               onVote={handleReaction}
+              onClosePoll={onClosePoll}
               getReactorName={getReactorName}
             />
           )}
@@ -406,10 +431,10 @@ export const MessageBubble = memo(function MessageBubble({
           )}
         </CollapsibleContent>
 
-        {/* Reactions display */}
+        {/* Reactions display — filter out poll-vote emojis so votes don't double-show as reaction pills */}
         <MessageReactions
-          reactions={message.reactions ?? {}}
-          myReactions={myReactions}
+          reactions={filteredReactions}
+          myReactions={filteredMyReactions}
           onReaction={handleReaction}
           getReactorName={getReactorName}
           isRetracted={message.isRetracted}

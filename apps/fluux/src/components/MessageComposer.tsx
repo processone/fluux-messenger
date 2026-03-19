@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, Suspense, lazy, type ReactNode, type RefObject, type Ref, useImperativeHandle } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { Send, Smile, Paperclip, Reply, X, Pencil, Loader2, Image, FileText, Trash2, BarChart3 } from 'lucide-react'
+import { Send, Smile, Paperclip, Reply, X, Pencil, Loader2, Image, FileText, Trash2, BarChart3, Plus } from 'lucide-react'
 import { useClickOutside, useSlashCommands } from '@/hooks'
 import { Tooltip } from './Tooltip'
 
@@ -202,6 +202,8 @@ export function MessageComposer({
     const hasAttachment = editingMessage.attachment && !editAttachmentRemoved
     return !hasText && !hasAttachment
   })()
+  const [showAttachMenu, setShowAttachMenu] = useState(false)
+  const attachMenuRef = useRef<HTMLDivElement>(null)
   const emojiPickerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -220,7 +222,9 @@ export function MessageComposer({
     setText: (t: string) => setText(t),
   }), [text, setText])
 
-  // Close emoji picker when clicking outside
+  // Close menus when clicking outside
+  const closeAttachMenu = () => setShowAttachMenu(false)
+  useClickOutside(attachMenuRef, closeAttachMenu, showAttachMenu)
   const closeEmojiPicker = () => setShowEmojiPicker(false)
   useClickOutside(emojiPickerRef, closeEmojiPicker, showEmojiPicker)
 
@@ -704,46 +708,62 @@ export function MessageComposer({
           onChange={handleFileChange}
         />
 
-        {/* Attachment button */}
-        <Tooltip
-          content={isUploadSupported ? t('upload.attachFile') : t('upload.notSupported')}
-          position="top"
-        >
-          <button
-            type="button"
-            onClick={handleFileClick}
-            disabled={!isUploadSupported || uploadState?.isUploading}
-            className={`p-3 transition-colors ${
-              isUploadSupported
-                ? 'text-fluux-muted hover:text-fluux-text'
-                : 'text-fluux-muted/50 cursor-not-allowed'
-            }`}
-          >
-            {uploadState?.isUploading ? (
+        {/* Attach menu — combines attachment + poll into a single "+" button */}
+        <div className="relative" ref={attachMenuRef}>
+          {uploadState?.isUploading ? (
+            /* During upload, show spinner directly instead of the menu toggle */
+            <button type="button" disabled className="p-3 text-fluux-brand">
               <div className="relative w-5 h-5 flex items-center justify-center">
-                <Loader2 className="w-5 h-5 animate-spin text-fluux-brand" />
-                <span className="absolute text-[8px] font-bold text-fluux-brand">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span className="absolute text-[8px] font-bold">
                   {uploadState.progress}
                 </span>
               </div>
-            ) : (
-              <Paperclip className="w-5 h-5" />
-            )}
-          </button>
-        </Tooltip>
-
-        {/* Poll button (only shown for rooms) */}
-        {onCreatePoll && (
-          <Tooltip content={t('poll.create', 'Create Poll')} position="top">
+            </button>
+          ) : (
             <button
               type="button"
-              onClick={onCreatePoll}
-              className="p-3 transition-colors text-fluux-muted hover:text-fluux-text"
+              onClick={() => setShowAttachMenu(!showAttachMenu)}
+              className={`p-3 transition-colors ${showAttachMenu ? 'text-fluux-brand' : 'text-fluux-muted hover:text-fluux-text'}`}
             >
-              <BarChart3 className="w-5 h-5" />
+              <Plus className={`w-5 h-5 transition-transform ${showAttachMenu ? 'rotate-45' : ''}`} />
             </button>
-          </Tooltip>
-        )}
+          )}
+
+          {showAttachMenu && (
+            <div className="absolute bottom-full left-0 mb-2 z-50 bg-fluux-surface border border-fluux-border rounded-lg shadow-lg py-1 min-w-[180px]">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAttachMenu(false)
+                  handleFileClick()
+                }}
+                disabled={!isUploadSupported}
+                className={`w-full flex items-center gap-3 px-3 py-2 text-sm text-left transition-colors ${
+                  isUploadSupported
+                    ? 'text-fluux-text hover:bg-fluux-hover'
+                    : 'text-fluux-muted/50 cursor-not-allowed'
+                }`}
+              >
+                <Paperclip className="w-4 h-4 flex-shrink-0" />
+                {t('upload.attachFile')}
+              </button>
+              {onCreatePoll && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAttachMenu(false)
+                    onCreatePoll()
+                  }}
+                  className="w-full flex items-center gap-3 px-3 py-2 text-sm text-left text-fluux-text hover:bg-fluux-hover transition-colors"
+                >
+                  <BarChart3 className="w-4 h-4 flex-shrink-0" />
+                  {t('poll.create', 'Create Poll')}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Text input - either custom or default */}
         {renderInput ? (

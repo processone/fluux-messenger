@@ -1245,7 +1245,7 @@ export class MAM extends BaseModule {
     const nick = getResource(from) || ''
     // Case-insensitive nickname comparison - some servers may change case
     const isOutgoing = nick.toLowerCase() === myNickname.toLowerCase()
-    const parsed = parseMessageContent({ messageEl, body: body || '', delayEl, forceDelayed: true, preserveFullReplyToJid: true })
+    const parsed = parseMessageContent({ messageEl, body: body || '', delayEl, forceDelayed: true, preserveFullReplyToJid: true, messageContext: 'room' })
 
     // Use stanza-id from message element, or fall back to MAM archive ID (they're equivalent)
     const stanzaId = parsed.stanzaId || archiveId

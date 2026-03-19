@@ -24,6 +24,7 @@ import {
 } from '../namespaces'
 import type { FileAttachment, ThumbnailInfo, LinkPreview, ReplyInfo } from '../types'
 import { processFallback } from '../../utils/fallbackUtils'
+import { CHAT_FALLBACK_TARGETS, ROOM_FALLBACK_TARGETS } from '../../utils/fallbackRegistry'
 
 /**
  * Parse XEP-0422 apply-to fastening with OGP metadata for link previews.
@@ -218,8 +219,8 @@ export interface ParseMessageContentOptions {
   delayEl?: Element
   /** Force isDelayed=true (for MAM messages which are always historical) */
   forceDelayed?: boolean
-  /** Valid fallback 'for' targets to strip (default: [NS_REPLY, NS_OOB, NS_CORRECTION]) */
-  fallbackTargets?: string[]
+  /** Message context — determines which fallback targets are stripped (default: 'chat') */
+  messageContext?: 'chat' | 'room'
   /** Keep full JID in replyTo.to (for room messages) instead of converting to bare JID */
   preserveFullReplyToJid?: boolean
 }
@@ -247,9 +248,11 @@ export function parseMessageContent(options: ParseMessageContentOptions): Parsed
     body,
     delayEl,
     forceDelayed = false,
-    fallbackTargets = [NS_REPLY, NS_OOB, NS_CORRECTION],
+    messageContext = 'chat',
     preserveFullReplyToJid = false,
   } = options
+
+  const fallbackTargets = messageContext === 'room' ? ROOM_FALLBACK_TARGETS : CHAT_FALLBACK_TARGETS
 
   // XEP-0203: Parse timestamp from delay element
   let timestamp = new Date()

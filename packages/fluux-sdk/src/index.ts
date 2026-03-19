@@ -349,6 +349,7 @@ export {
   getTotalVoters,
   hasVotedOnPoll,
   getPollOptionEmojis,
+  isPollExpired,
 } from './core/poll'
 export type { PollTally } from './core/poll'
 

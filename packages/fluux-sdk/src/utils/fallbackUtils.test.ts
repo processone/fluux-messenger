@@ -584,5 +584,8 @@ describe('fallbackUtils', () => {
       // Range is invalid (end > body.length), so body is returned unchanged
       expect(result.processedBody).toBe('')
     })
+
+    // Poll-specific fallback tests are in fallbackRegistry.test.ts,
+    // where they test the registry's target sets end-to-end.
   })
 })

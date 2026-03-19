@@ -59,7 +59,7 @@ const MAX_ROOM_SIZE_FOR_TYPING = 30
 export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange, onStartChat, onShowProfile }: RoomViewProps) {
   detectRenderLoop('RoomView')
   const { t } = useTranslation()
-  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendPoll, sendCorrection, retractMessage, moderateMessage, sendChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, activeMAMState, submitRoomConfig, setSubject, destroyRoom, setAffiliation, setRole } = useRoomActive()
+  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendPoll, closePoll, sendCorrection, retractMessage, moderateMessage, sendChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, activeMAMState, submitRoomConfig, setSubject, destroyRoom, setAffiliation, setRole } = useRoomActive()
   const { contacts } = useRoster()
   // NOTE: Use focused selectors instead of useConnection() hook to avoid
   // re-renders when unrelated connection state changes (error, reconnectAttempt, etc.)
@@ -332,6 +332,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             contactsByJid={contactsByJid}
             ownAvatar={ownAvatar}
             sendReaction={sendReaction}
+            closePoll={closePoll}
             onReply={setReplyingTo}
             onEdit={setEditingMessage}
             lastOutgoingMessageId={lastOutgoingMessageId}
@@ -560,6 +561,7 @@ const RoomMessageList = memo(function RoomMessageList({
   contactsByJid,
   ownAvatar,
   sendReaction,
+  closePoll,
   onReply,
   onEdit,
   lastOutgoingMessageId,
@@ -595,6 +597,7 @@ const RoomMessageList = memo(function RoomMessageList({
   contactsByJid: Map<string, Contact>
   ownAvatar?: string | null
   sendReaction: (roomJid: string, messageId: string, emojis: string[]) => Promise<void>
+  closePoll: (roomJid: string, messageId: string) => Promise<string | null>
   onReply: (message: RoomMessage) => void
   onEdit: (message: RoomMessage) => void
   lastOutgoingMessageId: string | null
@@ -713,6 +716,7 @@ const RoomMessageList = memo(function RoomMessageList({
       contactsByJid={contactsByJid}
       ownAvatar={ownAvatar}
       sendReaction={sendReaction}
+      closePoll={closePoll}
       onReply={onReply}
       onEdit={onEdit}
       isLastOutgoing={msg.id === lastOutgoingMessageId}
@@ -768,6 +772,7 @@ interface RoomMessageBubbleWrapperProps {
   contactsByJid: Map<string, Contact>
   ownAvatar?: string | null
   sendReaction: (roomJid: string, messageId: string, emojis: string[]) => Promise<void>
+  closePoll: (roomJid: string, messageId: string) => Promise<string | null>
   onReply: (message: RoomMessage) => void
   onEdit: (message: RoomMessage) => void
   isLastOutgoing: boolean
@@ -805,6 +810,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   contactsByJid,
   ownAvatar,
   sendReaction,
+  closePoll,
   onReply,
   onEdit,
   isLastOutgoing,
@@ -1027,6 +1033,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         onNickTouchStart={!message.isOutgoing ? handleNickTouchStart : undefined}
         onNickTouchEnd={!message.isOutgoing ? onNickTouchEnd : undefined}
         onReactionPickerChange={onReactionPickerChange}
+        onClosePoll={message.isOutgoing && message.poll ? () => closePoll(room.jid, message.id) : undefined}
         formatTime={formatTime}
         timeFormat={timeFormat}
       />
@@ -1138,7 +1145,7 @@ interface RoomMessageInputProps {
   retractMessage: (roomJid: string, messageId: string) => Promise<void>
   sendChatState: (roomJid: string, state: ChatStateNotification) => Promise<void>
   sendEasterEgg: (roomJid: string, animation: string) => Promise<void>
-  sendPoll: (roomJid: string, question: string, options: string[], settings?: Partial<import('@fluux/sdk').PollSettings>) => Promise<string>
+  sendPoll: (roomJid: string, title: string, options: string[], settings?: Partial<import('@fluux/sdk').PollSettings>, description?: string, deadline?: string, customEmojis?: string[]) => Promise<string>
   onMessageSent?: () => void
   onInputResize?: () => void
   replyingTo: RoomMessage | null
@@ -1542,8 +1549,8 @@ function RoomMessageInput({
     {showPollCreator && (
       <PollCreator
         onClose={() => setShowPollCreator(false)}
-        onCreatePoll={async (question, options, allowMultiple) => {
-          await sendPoll(room.jid, question, options, { allowMultiple })
+        onCreatePoll={async (title, options, settings, description, deadline, customEmojis) => {
+          await sendPoll(room.jid, title, options, settings, description, deadline, customEmojis)
         }}
       />
     )}

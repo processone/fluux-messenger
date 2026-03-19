@@ -1303,7 +1303,7 @@ export class Chat extends BaseModule {
 
     // Case-insensitive nickname comparison - some servers may change case
     const isOutgoing = isSentCarbon || (room.nickname.toLowerCase() === nick.toLowerCase())
-    const parsed = parseMessageContent({ messageEl: stanza, body, preserveFullReplyToJid: true })
+    const parsed = parseMessageContent({ messageEl: stanza, body, preserveFullReplyToJid: true, messageContext: 'room' })
     const isCorrection = !!stanza.getChild('replace', NS_CORRECTION)
 
     // Use stable ID for messages without ID (e.g., from IRC bridges) to enable deduplication

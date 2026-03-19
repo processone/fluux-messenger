@@ -27,6 +27,7 @@ import {
   enforceSingleVote,
   enforceMultiVote,
   getPollOptionEmojis,
+  isPollExpired,
 } from '../poll'
 
 /**
@@ -84,20 +85,26 @@ export class Poll extends BaseModule {
    * Send a poll message to a MUC room.
    *
    * @param roomJid - The room JID to send the poll to
-   * @param question - The poll question
+   * @param title - The poll title (typically a question)
    * @param optionLabels - 2-4 option labels
    * @param settings - Optional voting settings
+   * @param description - Optional description providing context
+   * @param deadline - Optional ISO 8601 deadline after which voting is blocked
+   * @param customEmojis - Optional custom emojis for each option (must match optionLabels length)
    * @returns The message ID of the poll message
    */
   async sendPoll(
     roomJid: string,
-    question: string,
+    title: string,
     optionLabels: string[],
     settings: Partial<PollSettings> = {},
+    description?: string,
+    deadline?: string,
+    customEmojis?: string[],
   ): Promise<string> {
     const id = generateUUID()
-    const pollData = buildPollData(question, optionLabels, settings)
-    const fallbackBody = buildPollFallbackBody(question, optionLabels)
+    const pollData = buildPollData(title, optionLabels, settings, description, deadline, customEmojis)
+    const fallbackBody = buildPollFallbackBody(title, optionLabels, description, customEmojis)
 
     const optionElements = pollData.options.map((opt) =>
       xml('option', { emoji: opt.emoji }, opt.label)
@@ -107,13 +114,22 @@ export class Poll extends BaseModule {
     if (pollData.settings.allowMultiple) {
       pollAttrs['allow-multiple'] = 'true'
     }
+    if (pollData.settings.hideResultsBeforeVote) {
+      pollAttrs['hide-results'] = 'true'
+    }
+    if (pollData.deadline) {
+      pollAttrs.deadline = pollData.deadline
+    }
+
+    const pollChildren = [
+      xml('title', {}, title),
+      ...(description ? [xml('description', {}, description)] : []),
+      ...optionElements,
+    ]
 
     const message = xml('message', { to: roomJid, type: 'groupchat', id },
       xml('body', {}, fallbackBody),
-      xml('poll', pollAttrs,
-        xml('question', {}, question),
-        ...optionElements,
-      ),
+      xml('poll', pollAttrs, ...pollChildren),
       xml('fallback', { xmlns: NS_FALLBACK, for: NS_POLL },
         xml('body', {}),
       ),
@@ -152,7 +168,15 @@ export class Poll extends BaseModule {
     currentMyReactions: string[],
     poll: PollData,
   ): Promise<void> {
+    if (isPollExpired(poll)) {
+      throw new Error('Poll has expired — voting is no longer allowed')
+    }
+
     const pollEmojis = getPollOptionEmojis(poll)
+
+    if (!pollEmojis.includes(optionEmoji)) {
+      throw new Error(`"${optionEmoji}" is not a valid poll option`)
+    }
     let newReactions: string[]
 
     if (poll.settings.allowMultiple) {
@@ -179,6 +203,9 @@ export class Poll extends BaseModule {
     const localPoll = this.localPolls.get(messageId)
     if (!localPoll || localPoll.roomJid !== roomJid) return null
 
+    // Guard: already closed — don't send duplicate close messages
+    if (localPoll.closed) return null
+
     // Mark as closed locally
     localPoll.closed = true
 
@@ -189,18 +216,23 @@ export class Poll extends BaseModule {
 
     // Build a result summary for the body fallback
     const resultLines = tally.map((t) => `${t.emoji} ${t.label}: ${t.count}`)
-    const fallbackBody = `📊 Poll closed: ${localPoll.poll.question}\n${resultLines.join('\n')}`
+    const fallbackBody = `📊 Poll closed: ${localPoll.poll.title}\n${resultLines.join('\n')}`
 
     const tallyElements = tally.map((t) =>
       xml('tally', { emoji: t.emoji, count: String(t.count) })
     )
 
+    const pollClosedChildren = [
+      xml('title', {}, localPoll.poll.title),
+      ...(localPoll.poll.description ? [xml('description', {}, localPoll.poll.description)] : []),
+      ...tallyElements,
+    ]
+
     const resultId = generateUUID()
     const message = xml('message', { to: roomJid, type: 'groupchat', id: resultId },
       xml('body', {}, fallbackBody),
       xml('poll-closed', { xmlns: NS_POLL, 'message-id': messageId },
-        xml('question', {}, localPoll.poll.question),
-        ...tallyElements,
+        ...pollClosedChildren,
       ),
       xml('fallback', { xmlns: NS_FALLBACK, for: NS_POLL },
         xml('body', {}),

@@ -20,29 +20,47 @@ export const MAX_POLL_OPTIONS = POLL_OPTION_EMOJIS.length
 /** Default poll settings */
 export const DEFAULT_POLL_SETTINGS: PollSettings = {
   allowMultiple: false,
+  hideResultsBeforeVote: false,
 }
 
 /**
- * Build PollData from a question and option labels.
+ * Build PollData from a title, optional description, and option labels.
+ *
+ * @param customEmojis - Optional array of emojis to use instead of the default numbered set.
+ *   Must match the length of `optionLabels`. When omitted, numbered emojis (1️⃣, 2️⃣, …) are used
+ *   and `optionLabels` is capped at {@link MAX_POLL_OPTIONS}.
  */
 export function buildPollData(
-  question: string,
+  title: string,
   optionLabels: string[],
   settings: Partial<PollSettings> = {},
+  description?: string,
+  deadline?: string,
+  customEmojis?: string[],
 ): PollData {
-  if (optionLabels.length < 2 || optionLabels.length > MAX_POLL_OPTIONS) {
-    throw new Error(`Poll must have 2-${MAX_POLL_OPTIONS} options, got ${optionLabels.length}`)
+  if (optionLabels.length < 2) {
+    throw new Error(`Poll must have at least 2 options, got ${optionLabels.length}`)
+  }
+
+  if (customEmojis) {
+    if (customEmojis.length !== optionLabels.length) {
+      throw new Error(`customEmojis length (${customEmojis.length}) must match optionLabels length (${optionLabels.length})`)
+    }
+  } else if (optionLabels.length > MAX_POLL_OPTIONS) {
+    throw new Error(`Poll must have at most ${MAX_POLL_OPTIONS} options when using default emojis, got ${optionLabels.length}`)
   }
 
   const options: PollOption[] = optionLabels.map((label, i) => ({
-    emoji: POLL_OPTION_EMOJIS[i],
+    emoji: customEmojis ? customEmojis[i] : POLL_OPTION_EMOJIS[i],
     label,
   }))
 
   return {
-    question,
+    title,
+    ...(description ? { description } : {}),
     options,
     settings: { ...DEFAULT_POLL_SETTINGS, ...settings },
+    ...(deadline ? { deadline } : {}),
   }
 }
 
@@ -52,23 +70,28 @@ export function buildPollData(
  * @example
  * ```
  * 📊 Poll: What for lunch?
+ * Pick your favorite option
  * 1️⃣ Pizza
  * 2️⃣ Sushi
  * 3️⃣ Tacos
  * ```
  */
-export function buildPollFallbackBody(question: string, optionLabels: string[]): string {
-  const header = `📊 Poll: ${question}`
-  const lines = optionLabels.map((label, i) => `${POLL_OPTION_EMOJIS[i]} ${label}`)
-  return [header, ...lines].join('\n')
+export function buildPollFallbackBody(title: string, optionLabels: string[], description?: string, customEmojis?: string[]): string {
+  const header = `📊 Poll: ${title}`
+  const descLine = description ? [description] : []
+  const lines = optionLabels.map((label, i) => {
+    const emoji = customEmojis ? customEmojis[i] : POLL_OPTION_EMOJIS[i]
+    return `${emoji} ${label}`
+  })
+  return [header, ...descLine, ...lines].join('\n')
 }
 
 /**
  * Parse a `<poll xmlns="urn:fluux:poll:0">` element into PollData.
  */
 export function parsePollElement(pollEl: Element): PollData | null {
-  const questionText = pollEl.getChildText('question')
-  if (!questionText) return null
+  const title = pollEl.getChildText('title')
+  if (!title) return null
 
   const optionEls = pollEl.getChildren('option')
   if (optionEls.length < 2) return null
@@ -83,11 +106,16 @@ export function parsePollElement(pollEl: Element): PollData | null {
   if (options.length < 2) return null
 
   const allowMultiple = pollEl.attrs['allow-multiple'] === 'true'
+  const hideResultsBeforeVote = pollEl.attrs['hide-results'] === 'true'
+  const description = pollEl.getChildText('description') || undefined
+  const deadline = pollEl.attrs.deadline as string | undefined
 
   return {
-    question: questionText,
+    title,
+    ...(description ? { description } : {}),
     options,
-    settings: { allowMultiple },
+    settings: { allowMultiple, hideResultsBeforeVote },
+    ...(deadline ? { deadline } : {}),
   }
 }
 
@@ -217,6 +245,19 @@ export function getPollOptionEmojis(poll: PollData): string[] {
 }
 
 /**
+ * Check whether a poll's deadline has passed.
+ *
+ * @param poll - The poll data
+ * @param now - Current time (defaults to `new Date()`, injectable for tests)
+ * @returns True if the poll has a deadline and it has passed
+ */
+export function isPollExpired(poll: PollData, now: Date = new Date()): boolean {
+  if (!poll.deadline) return false
+  const deadlineDate = new Date(poll.deadline)
+  return now >= deadlineDate
+}
+
+/**
  * Parse a `<poll-closed xmlns="urn:fluux:poll:0">` element into PollClosedData.
  *
  * Sent by the poll creator to freeze and broadcast the final result.
@@ -225,16 +266,18 @@ export function parsePollClosedElement(el: Element): PollClosedData | null {
   const pollMessageId = el.attrs['message-id']
   if (!pollMessageId) return null
 
-  const question = el.getChildText('question')
-  if (!question) return null
+  const title = el.getChildText('title')
+  if (!title) return null
+
+  const description = el.getChildText('description') || undefined
 
   const tallyEls = el.getChildren('tally')
   const results = tallyEls
     .map((t) => ({
       emoji: t.attrs.emoji as string,
-      count: parseInt(t.attrs.count as string, 10) || 0,
+      count: Math.max(0, parseInt(t.attrs.count as string, 10) || 0),
     }))
     .filter((r) => r.emoji)
 
-  return { question, pollMessageId, results }
+  return { title, ...(description ? { description } : {}), pollMessageId, results }
 }

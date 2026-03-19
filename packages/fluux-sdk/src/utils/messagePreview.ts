@@ -210,12 +210,12 @@ export function stripReplyQuote(body: string): string {
  * ```
  */
 export function formatMessagePreview(message: Pick<BaseMessage, 'body' | 'attachment' | 'replyTo' | 'poll' | 'pollClosed'>): string {
-  // Poll messages: show question with poll emoji
+  // Poll messages: show title with poll emoji
   if (message.poll) {
-    return `📊 ${message.poll.question}`
+    return `📊 ${message.poll.title}`
   }
   if (message.pollClosed) {
-    return `📊 Poll closed: ${message.pollClosed.question}`
+    return `📊 Poll closed: ${message.pollClosed.title}`
   }
 
   const { body, attachment, replyTo } = message as { body: string; attachment?: FileAttachment; replyTo?: ReplyInfo }

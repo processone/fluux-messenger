@@ -23,9 +23,14 @@ export function PollClosedCard({ pollClosed }: PollClosedCardProps) {
       {/* Header */}
       <div className="flex items-center gap-2">
         <BarChart3 className="w-4 h-4 text-fluux-muted flex-shrink-0" />
-        <span className="font-medium text-fluux-text text-sm">{pollClosed.question}</span>
+        <span className="font-medium text-fluux-text text-sm">{pollClosed.title}</span>
         <Lock className="w-3.5 h-3.5 text-fluux-muted flex-shrink-0" />
       </div>
+
+      {/* Optional description */}
+      {pollClosed.description && (
+        <span className="text-xs text-fluux-muted">{pollClosed.description}</span>
+      )}
 
       <span className="text-xs text-fluux-muted">{t('poll.closed', 'Poll closed')}</span>
 

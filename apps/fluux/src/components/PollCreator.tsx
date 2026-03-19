@@ -4,40 +4,50 @@
 import { useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Plus, Minus, Loader2 } from 'lucide-react'
-import { MAX_POLL_OPTIONS, POLL_OPTION_EMOJIS } from '@fluux/sdk'
+import { MAX_POLL_OPTIONS, POLL_OPTION_EMOJIS, type PollSettings } from '@fluux/sdk'
 import { ModalShell } from './ModalShell'
 
 interface PollCreatorProps {
   onClose: () => void
-  onCreatePoll: (question: string, options: string[], allowMultiple: boolean) => Promise<void>
+  onCreatePoll: (title: string, options: string[], settings: Partial<PollSettings>, description?: string, deadline?: string, customEmojis?: string[]) => Promise<void>
 }
 
 export function PollCreator({ onClose, onCreatePoll }: PollCreatorProps) {
   const { t } = useTranslation()
 
-  const [question, setQuestion] = useState('')
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
   const [options, setOptions] = useState(['', ''])
+  const [emojis, setEmojis] = useState<string[]>([POLL_OPTION_EMOJIS[0], POLL_OPTION_EMOJIS[1]])
   const [allowMultiple, setAllowMultiple] = useState(false)
+  const [hideResultsBeforeVote, setHideResultsBeforeVote] = useState(false)
+  const [deadline, setDeadline] = useState('')
   const [sending, setSending] = useState(false)
 
   const canAddOption = options.length < MAX_POLL_OPTIONS
   const canRemoveOption = options.length > 2
-  const isValid = question.trim().length > 0 && options.filter((o) => o.trim().length > 0).length >= 2
+  const isValid = title.trim().length > 0 && options.filter((o) => o.trim().length > 0).length >= 2
 
   const addOption = useCallback(() => {
     if (canAddOption) {
       setOptions((prev) => [...prev, ''])
+      setEmojis((prev) => [...prev, POLL_OPTION_EMOJIS[prev.length] ?? '🔘'])
     }
   }, [canAddOption])
 
   const removeOption = useCallback((index: number) => {
     if (canRemoveOption) {
       setOptions((prev) => prev.filter((_, i) => i !== index))
+      setEmojis((prev) => prev.filter((_, i) => i !== index))
     }
   }, [canRemoveOption])
 
   const updateOption = useCallback((index: number, value: string) => {
     setOptions((prev) => prev.map((o, i) => (i === index ? value : o)))
+  }, [])
+
+  const updateEmoji = useCallback((index: number, value: string) => {
+    setEmojis((prev) => prev.map((e, i) => (i === index ? value : e)))
   }, [])
 
   const handleSubmit = async () => {
@@ -47,7 +57,13 @@ export function PollCreator({ onClose, onCreatePoll }: PollCreatorProps) {
 
     setSending(true)
     try {
-      await onCreatePoll(question.trim(), trimmedOptions, allowMultiple)
+      const trimmedDesc = description.trim() || undefined
+      const deadlineIso = deadline ? new Date(deadline).toISOString() : undefined
+      // Only pass customEmojis if any differ from the default numbered set
+      const trimmedEmojis = emojis.slice(0, trimmedOptions.length)
+      const hasCustomEmojis = trimmedEmojis.some((e, i) => e !== POLL_OPTION_EMOJIS[i])
+      const customEmojis = hasCustomEmojis ? trimmedEmojis : undefined
+      await onCreatePoll(title.trim(), trimmedOptions, { allowMultiple, hideResultsBeforeVote }, trimmedDesc, deadlineIso, customEmojis)
       onClose()
     } catch {
       setSending(false)
@@ -57,19 +73,37 @@ export function PollCreator({ onClose, onCreatePoll }: PollCreatorProps) {
   return (
     <ModalShell title={t('poll.create', 'Create Poll')} onClose={onClose} width="max-w-sm">
       <div className="p-4 flex flex-col gap-4">
-        {/* Question */}
+        {/* Title */}
         <div className="flex flex-col gap-1.5">
           <label className="text-sm font-medium text-fluux-text">
-            {t('poll.question', 'Question')}
+            {t('poll.title', 'Title')}
           </label>
           <input
             type="text"
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            placeholder={t('poll.questionPlaceholder', 'Ask a question...')}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder={t('poll.titlePlaceholder', 'Ask a question...')}
             className="px-3 py-2 rounded-md border border-fluux-border bg-fluux-bg text-fluux-text text-sm placeholder:text-fluux-muted focus:outline-none focus:border-fluux-brand"
             autoFocus
             maxLength={200}
+          />
+        </div>
+
+        {/* Description (optional) */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-fluux-text">
+            {t('poll.description', 'Description')}
+            <span className="text-fluux-muted font-normal ml-1">
+              {t('common.optional', '(optional)')}
+            </span>
+          </label>
+          <input
+            type="text"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder={t('poll.descriptionPlaceholder', 'Add context or details...')}
+            className="px-3 py-2 rounded-md border border-fluux-border bg-fluux-bg text-fluux-text text-sm placeholder:text-fluux-muted focus:outline-none focus:border-fluux-brand"
+            maxLength={300}
           />
         </div>
 
@@ -80,7 +114,14 @@ export function PollCreator({ onClose, onCreatePoll }: PollCreatorProps) {
           </label>
           {options.map((option, index) => (
             <div key={index} className="flex items-center gap-2">
-              <span className="text-sm flex-shrink-0 w-6 text-center">{POLL_OPTION_EMOJIS[index]}</span>
+              <input
+                type="text"
+                value={emojis[index] ?? POLL_OPTION_EMOJIS[index]}
+                onChange={(e) => updateEmoji(index, e.target.value)}
+                className="text-sm flex-shrink-0 w-8 text-center px-0 py-2 rounded-md border border-transparent bg-transparent hover:border-fluux-border focus:border-fluux-brand focus:outline-none cursor-pointer"
+                maxLength={2}
+                title={t('poll.changeEmoji', 'Click to change emoji')}
+              />
               <input
                 type="text"
                 value={option}
@@ -113,17 +154,47 @@ export function PollCreator({ onClose, onCreatePoll }: PollCreatorProps) {
         </div>
 
         {/* Settings */}
-        <label className="flex items-center gap-2 cursor-pointer">
+        <div className="flex flex-col gap-2">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={allowMultiple}
+              onChange={(e) => setAllowMultiple(e.target.checked)}
+              className="rounded border-fluux-border"
+            />
+            <span className="text-sm text-fluux-text">
+              {t('poll.allowMultiple', 'Allow multiple votes')}
+            </span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={hideResultsBeforeVote}
+              onChange={(e) => setHideResultsBeforeVote(e.target.checked)}
+              className="rounded border-fluux-border"
+            />
+            <span className="text-sm text-fluux-text">
+              {t('poll.hideResultsBeforeVote', 'Hide results until voted')}
+            </span>
+          </label>
+        </div>
+
+        {/* Deadline (optional) */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-fluux-text">
+            {t('poll.deadline', 'Deadline')}
+            <span className="text-fluux-muted font-normal ml-1">
+              {t('common.optional', '(optional)')}
+            </span>
+          </label>
           <input
-            type="checkbox"
-            checked={allowMultiple}
-            onChange={(e) => setAllowMultiple(e.target.checked)}
-            className="rounded border-fluux-border"
+            type="datetime-local"
+            value={deadline}
+            onChange={(e) => setDeadline(e.target.value)}
+            min={new Date().toISOString().slice(0, 16)}
+            className="px-3 py-2 rounded-md border border-fluux-border bg-fluux-bg text-fluux-text text-sm focus:outline-none focus:border-fluux-brand"
           />
-          <span className="text-sm text-fluux-text">
-            {t('poll.allowMultiple', 'Allow multiple votes')}
-          </span>
-        </label>
+        </div>
 
         {/* Actions */}
         <div className="flex justify-end gap-2 pt-2 border-t border-fluux-border">
