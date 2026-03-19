@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { connectionStore, rosterStore, roomStore, useXMPPContext, getBareJid } from '@fluux/sdk'
+import { connectionStore, rosterStore, roomStore, useXMPPContext, getBareJid, hasFastToken, deleteFastToken } from '@fluux/sdk'
 import { useRosterStore, useConnectionStore, useRoomStore } from '@fluux/sdk/react'
 import type { Contact, Room, RoomOccupant, ServerInfo, HttpUploadService, RoomMessage, ResourcePresence } from '@fluux/sdk'
 import { getResource } from '@/utils/xmppResource'
@@ -472,7 +472,7 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
 
   const connect = useCallback(async (
     jid: string,
-    password: string,
+    password: string | undefined,
     server: string,
     smState?: { id: string; inbound: number },
     resource?: string,
@@ -509,11 +509,10 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
 
     const session = getSession()
     if (session) {
+      // ── Path A: sessionStorage has credentials (page reload within same tab) ──
+      // SM resumption is attempted first by the SDK. We restore cached state
+      // in case SM succeeds (server only sends deltas).
       isResumptionRef.current = true
-
-      // Note: SM state is now managed by SDK's storage adapter.
-      // The SDK will automatically load SM state and attempt resumption.
-      // We restore cached state here in case SM resumption succeeds (server sends deltas only).
 
       // Restore roster (for SM resumption case where server sends deltas)
       const savedRoster = getSavedRoster(session.jid)
@@ -563,29 +562,29 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
         })
       }
 
-      // Auto-reconnect with stored credentials
+      // Auto-reconnect with stored credentials (password from sessionStorage)
       // Note: SDK automatically loads SM state from storage and attempts resumption
       const resource = getResource()
       const disableSmKeepalive = isTauri()
-      console.log('[SM] Reconnecting on page reload, SDK will handle SM resumption')
+      console.log('[Auth] Reconnecting on page reload with password (SDK will attempt SM resumption first)')
 
       // Check if another tab already holds this JID (web only)
       if (claimConnection) {
         claimConnection(session.jid).then((canConnect) => {
           if (!canConnect) {
-            console.log('[SM] Another tab already connected, skipping auto-reconnect')
+            console.log('[Auth] Another tab already connected, skipping auto-reconnect')
             isResumptionRef.current = false
             return
           }
           connect(session.jid, session.password, session.server, undefined, resource, i18n.language, disableSmKeepalive).catch((err) => {
-            console.log('[SM] Reconnection failed:', err?.message || err)
+            console.log('[Auth] Reconnection failed:', err?.message || err)
             clearSession()
             isResumptionRef.current = false
           })
         }).catch(() => {
           // Claim check failed, try connecting anyway
           connect(session.jid, session.password, session.server, undefined, resource, i18n.language, disableSmKeepalive).catch((err) => {
-            console.log('[SM] Reconnection failed:', err?.message || err)
+            console.log('[Auth] Reconnection failed:', err?.message || err)
             clearSession()
             isResumptionRef.current = false
           })
@@ -594,11 +593,54 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
       }
 
       connect(session.jid, session.password, session.server, undefined, resource, i18n.language, disableSmKeepalive).catch((err) => {
-        console.log('[SM] Reconnection failed:', err?.message || err)
+        console.log('[Auth] Reconnection failed:', err?.message || err)
         // If auto-reconnect fails, clear session
         clearSession()
         isResumptionRef.current = false
       })
+      return
+    }
+
+    // ── Path B: FAST token auto-connect (new tab, no sessionStorage) ──
+    // When the user closed the tab, sessionStorage is lost but a FAST token
+    // may persist in localStorage (valid for up to 14 days).
+    // hasFastToken() only checks client-side token existence + expiry.
+    // Server-side FAST/SASL2 support is verified during negotiation by xmpp.js —
+    // if the server doesn't support SASL2/FAST, the token auth path is skipped,
+    // no password fallback is available, and we show the login screen.
+    const savedJid = localStorage.getItem('xmpp-last-jid')
+    const savedServer = localStorage.getItem('xmpp-last-server')
+    if (savedJid && savedServer && hasFastToken(savedJid)) {
+      const resource = getResource()
+      console.log('[Auth] Attempting FAST token auto-connect (no password)')
+
+      const attemptFastConnect = () => {
+        connect(savedJid, undefined, savedServer, undefined, resource, i18n.language, false).then(() => {
+          // Save session for subsequent in-tab reconnects (no password needed —
+          // FAST token in localStorage handles auth on future reconnects too)
+          saveSession(savedJid, '', savedServer)
+        }).catch((err) => {
+          console.log('[Auth] FAST token connect failed:', err?.message || err)
+          deleteFastToken(savedJid)
+          // Login screen shows (status reverts to error/disconnected)
+        })
+      }
+
+      // Check if another tab already holds this JID (web only)
+      if (claimConnection) {
+        claimConnection(savedJid).then((canConnect) => {
+          if (!canConnect) {
+            console.log('[Auth] Another tab already connected, skipping FAST auto-connect')
+            return
+          }
+          attemptFastConnect()
+        }).catch(() => {
+          attemptFastConnect()
+        })
+        return
+      }
+
+      attemptFastConnect()
     }
   }, [status, connect, setContacts, i18n.language, addRoom, restoreOwnAvatarFromCache, setHttpUploadService, setOwnNickname, setServerInfo, updateOwnResource, claimConnection])
 

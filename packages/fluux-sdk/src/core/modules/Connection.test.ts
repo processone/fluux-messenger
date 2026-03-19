@@ -69,6 +69,20 @@ vi.mock('../../utils/messageCache', async () => {
   }
 })
 
+// Mock fastTokenStorage for FAST tests
+const { mockFetchFastToken, mockSaveFastToken, mockDeleteFastToken } = vi.hoisted(() => ({
+  mockFetchFastToken: vi.fn().mockReturnValue(null),
+  mockSaveFastToken: vi.fn(),
+  mockDeleteFastToken: vi.fn(),
+}))
+
+vi.mock('../fastTokenStorage', () => ({
+  fetchFastToken: mockFetchFastToken,
+  saveFastToken: mockSaveFastToken,
+  deleteFastToken: mockDeleteFastToken,
+  hasFastToken: vi.fn(),
+}))
+
 describe('XMPPClient Connection', () => {
   let xmppClient: XMPPClient
   let mockStores: MockStoreBindings
@@ -2799,6 +2813,214 @@ describe('XMPPClient Connection', () => {
       expect(smState).not.toBeNull()
       expect(smState?.id).toBe('sm-cycle-test')
       expect(smState?.inbound).toBe(25)
+    })
+  })
+
+  describe('FAST token authentication (XEP-0484)', () => {
+    /**
+     * Helper to extract the credentials callback passed to the xmpp.js client factory.
+     * The callback is the core of FAST token integration — it decides which auth
+     * method to use (token vs password) and reports the method to the store.
+     */
+    function getCredentialsCallback(): Function {
+      const call = mockClientFactory.mock.calls[mockClientFactory.mock.calls.length - 1]
+      return call[0].credentials
+    }
+
+    it('should wire FAST storage methods on the mock client fast module', async () => {
+      // Add a fast module to the mock client
+      ;(mockXmppClientInstance as any).fast = {
+        fetchToken: vi.fn(),
+        saveToken: vi.fn(),
+        deleteToken: vi.fn(),
+      }
+
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      // Verify FAST storage methods were overridden
+      const fast = (mockXmppClientInstance as any).fast
+      expect(fast.fetchToken).not.toBe(vi.fn()) // Should be replaced
+      // Call the wired methods to verify they delegate to our mock
+      fast.fetchToken()
+      expect(mockFetchFastToken).toHaveBeenCalledWith('user@example.com')
+    })
+
+    it('should use password auth when no FAST token available', async () => {
+      mockFetchFastToken.mockReturnValue(null)
+
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      // Extract and invoke the credentials callback
+      const credentialsFn = getCredentialsCallback()
+      const mockAuthenticate = vi.fn()
+      const mockFast = { fetch: vi.fn().mockResolvedValue(null) }
+
+      await credentialsFn(
+        mockAuthenticate,
+        ['SCRAM-SHA-256', 'PLAIN'],
+        mockFast,
+        { isSecure: () => true }
+      )
+
+      // Should authenticate with password, no token
+      expect(mockAuthenticate).toHaveBeenCalledWith(
+        expect.objectContaining({ username: 'user', password: 'secret' }),
+        expect.any(String)
+      )
+      // Auth method should be 'password'
+      expect(mockStores.connection.setAuthMethod).toHaveBeenCalledWith('password')
+    })
+
+    it('should use FAST token when available', async () => {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      const credentialsFn = getCredentialsCallback()
+      const mockAuthenticate = vi.fn()
+      const mockToken = { mechanism: 'HT-SHA-256-NONE', token: 'fast-tok', expiry: '2099-01-01T00:00:00Z' }
+      const mockFast = { fetch: vi.fn().mockResolvedValue(mockToken) }
+
+      await credentialsFn(
+        mockAuthenticate,
+        ['HT-SHA-256-NONE', 'SCRAM-SHA-256'],
+        mockFast,
+        { isSecure: () => true }
+      )
+
+      // Should have token in credentials
+      expect(mockAuthenticate).toHaveBeenCalledWith(
+        expect.objectContaining({ token: mockToken }),
+        expect.any(String)
+      )
+      // Auth method should be 'fast-token'
+      expect(mockStores.connection.setAuthMethod).toHaveBeenCalledWith('fast-token')
+    })
+
+    it('should throw when no password and no FAST token', async () => {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: undefined,
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      const credentialsFn = getCredentialsCallback()
+      const mockAuthenticate = vi.fn()
+      const mockFast = { fetch: vi.fn().mockResolvedValue(null) }
+
+      await expect(
+        credentialsFn(
+          mockAuthenticate,
+          ['SCRAM-SHA-256'],
+          mockFast,
+          { isSecure: () => true }
+        )
+      ).rejects.toThrow('No credentials available')
+
+      expect(mockAuthenticate).not.toHaveBeenCalled()
+    })
+
+    it('should use FAST token when password is undefined', async () => {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: undefined,
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      const credentialsFn = getCredentialsCallback()
+      const mockAuthenticate = vi.fn()
+      const mockToken = { mechanism: 'HT-SHA-256-NONE', token: 'fast-tok', expiry: '2099-01-01T00:00:00Z' }
+      const mockFast = { fetch: vi.fn().mockResolvedValue(mockToken) }
+
+      await credentialsFn(
+        mockAuthenticate,
+        ['HT-SHA-256-NONE', 'SCRAM-SHA-256'],
+        mockFast,
+        { isSecure: () => true }
+      )
+
+      // Should succeed with token, no password
+      expect(mockAuthenticate).toHaveBeenCalledWith(
+        expect.objectContaining({ token: mockToken }),
+        expect.any(String)
+      )
+      expect(mockStores.connection.setAuthMethod).toHaveBeenCalledWith('fast-token')
+    })
+
+    it('should log auth method to console store', async () => {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      const credentialsFn = getCredentialsCallback()
+      await credentialsFn(
+        vi.fn(), // authenticate
+        ['SCRAM-SHA-256'],
+        { fetch: vi.fn().mockResolvedValue(null) },
+        { isSecure: () => true }
+      )
+
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        expect.stringContaining('Auth: password'),
+        'connection'
+      )
+    })
+
+    it('should not include password in credentials when password is undefined', async () => {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: undefined,
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      const credentialsFn = getCredentialsCallback()
+      const mockAuthenticate = vi.fn()
+      const mockToken = { mechanism: 'HT-SHA-256-NONE', token: 'fast-tok', expiry: '2099-01-01T00:00:00Z' }
+
+      await credentialsFn(
+        mockAuthenticate,
+        ['HT-SHA-256-NONE'],
+        { fetch: vi.fn().mockResolvedValue(mockToken) },
+        { isSecure: () => true }
+      )
+
+      // Password should NOT be in the credentials object
+      const passedCreds = mockAuthenticate.mock.calls[0][0]
+      expect(passedCreds).not.toHaveProperty('password')
+      expect(passedCreds.token).toBe(mockToken)
     })
   })
 })

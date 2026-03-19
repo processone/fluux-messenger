@@ -11,8 +11,11 @@ const mockUseConnection = vi.fn(() => ({
     connect: mockConnect,
 }))
 
+const mockDeleteFastToken = vi.fn()
+
 vi.mock('@fluux/sdk', () => ({
     useConnection: () => mockUseConnection(),
+    deleteFastToken: (...args: unknown[]) => mockDeleteFastToken(...args),
 }))
 
 // Mock react-i18next
@@ -264,6 +267,47 @@ describe('LoginScreen', () => {
                     false
                 )
             })
+        })
+    })
+
+    describe('FAST token cleanup on auth error', () => {
+        it('should delete FAST token on authentication error', () => {
+            localStorage.setItem('xmpp-last-jid', 'user@example.com')
+
+            mockUseConnection.mockReturnValue({
+                status: 'error',
+                error: 'not-authorized: invalid credentials',
+                connect: mockConnect,
+            })
+
+            render(<LoginScreen />)
+
+            expect(mockDeleteFastToken).toHaveBeenCalledWith('user@example.com')
+        })
+
+        it('should NOT delete FAST token on non-auth connection errors', () => {
+            localStorage.setItem('xmpp-last-jid', 'user@example.com')
+
+            mockUseConnection.mockReturnValue({
+                status: 'error',
+                error: 'Connection refused',
+                connect: mockConnect,
+            })
+
+            render(<LoginScreen />)
+
+            expect(mockDeleteFastToken).not.toHaveBeenCalled()
+        })
+
+        it('should not crash when no saved JID exists', () => {
+            mockUseConnection.mockReturnValue({
+                status: 'error',
+                error: 'not-authorized: bad password',
+                connect: mockConnect,
+            })
+
+            // No xmpp-last-jid in localStorage
+            expect(() => render(<LoginScreen />)).not.toThrow()
         })
     })
 })

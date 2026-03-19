@@ -78,8 +78,8 @@ export type SystemState = 'awake' | 'sleeping' | 'visible' | 'hidden'
 export interface ConnectOptions {
   /** Full JID including domain (e.g., 'user@example.com') */
   jid: string
-  /** Account password */
-  password: string
+  /** Account password (optional when FAST token is available for auth) */
+  password?: string
   /** WebSocket server URL (e.g., 'wss://example.com:5443/ws') */
   server: string
   /** XMPP resource identifier (e.g., 'desktop', 'web', 'mobile') */

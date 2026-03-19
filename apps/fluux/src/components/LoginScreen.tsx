@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useConnection } from '@fluux/sdk'
+import { useConnection, deleteFastToken } from '@fluux/sdk'
 import { Loader2, KeyRound, Eye, EyeOff, ChevronDown, ChevronRight } from 'lucide-react'
 import { saveSession } from '@/hooks/useSessionPersistence'
 import { getResource } from '@/utils/xmppResource'
@@ -182,6 +182,15 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
         console.error('[LoginScreen] Failed to delete keychain credentials:', err)
       })
       setLoadedFromKeychain(false)
+    }
+
+    // Clear FAST token on auth failure (web) — prevents stale token from
+    // triggering auto-connect loops on next tab open
+    if (isAuthError(error)) {
+      const savedJid = localStorage.getItem(STORAGE_KEY_JID)
+      if (savedJid) {
+        deleteFastToken(savedJid)
+      }
     }
 
     // Reveal server field on connection errors that aren't auth failures,

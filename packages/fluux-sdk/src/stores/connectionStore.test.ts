@@ -238,4 +238,41 @@ describe('connectionStore', () => {
     })
   })
 
+  describe('authMethod (FAST token vs password)', () => {
+    it('should have null authMethod initially', () => {
+      expect(connectionStore.getState().authMethod).toBeNull()
+    })
+
+    it('should set authMethod to fast-token', () => {
+      connectionStore.getState().setAuthMethod('fast-token')
+      expect(connectionStore.getState().authMethod).toBe('fast-token')
+    })
+
+    it('should set authMethod to password', () => {
+      connectionStore.getState().setAuthMethod('password')
+      expect(connectionStore.getState().authMethod).toBe('password')
+    })
+
+    it('should allow clearing authMethod', () => {
+      connectionStore.getState().setAuthMethod('fast-token')
+      connectionStore.getState().setAuthMethod(null)
+      expect(connectionStore.getState().authMethod).toBeNull()
+    })
+
+    it('should reset authMethod on store reset', () => {
+      connectionStore.getState().setAuthMethod('fast-token')
+      connectionStore.getState().reset()
+      expect(connectionStore.getState().authMethod).toBeNull()
+    })
+
+    it('should track authMethod independently of authMechanism', () => {
+      connectionStore.getState().setAuthMechanism('HT-SHA-256-NONE')
+      connectionStore.getState().setAuthMethod('fast-token')
+
+      const state = connectionStore.getState()
+      expect(state.authMechanism).toBe('HT-SHA-256-NONE')
+      expect(state.authMethod).toBe('fast-token')
+    })
+  })
+
 })

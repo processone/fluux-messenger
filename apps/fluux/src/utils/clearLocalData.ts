@@ -9,6 +9,7 @@ import {
   blockingStore,
   clearAllAvatarData,
   getBareJid,
+  deleteFastToken,
 } from '@fluux/sdk'
 import { clearSession, getSession } from '@/hooks/useSessionPersistence'
 import { deleteCredentials } from '@/utils/keychain'
@@ -65,15 +66,29 @@ export async function clearLocalData(options: ClearLocalDataOptions = {}): Promi
     blockingStore.getState().reset()
     console.log('[Fluux] clearLocalData: stores reset')
 
-    // 3. Clear app-specific localStorage user data keys
+    // 3. Clear FAST tokens (XEP-0484) from localStorage
+    if (allAccounts) {
+      const fastTokenKeys: string[] = []
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (key?.startsWith('fluux:fast-token:')) {
+          fastTokenKeys.push(key)
+        }
+      }
+      fastTokenKeys.forEach((key) => localStorage.removeItem(key))
+    } else if (scopedJid) {
+      deleteFastToken(scopedJid)
+    }
+
+    // 4. Clear app-specific localStorage user data keys
     USER_DATA_KEYS.forEach((key) => localStorage.removeItem(key))
 
-    // 4. Delete OS keychain credentials (desktop only, no-op on web)
+    // 5. Delete OS keychain credentials (desktop only, no-op on web)
     // Force deletion even if localStorage flags were already cleared above.
     await deleteCredentials({ force: true })
     console.log('[Fluux] clearLocalData: keychain done')
 
-    // 5. Clear avatar cache only for explicit full wipe.
+    // 6. Clear avatar cache only for explicit full wipe.
     //    Avatar cache is currently global; account-scoped deletion is not supported yet.
     //    Note: chatStore.reset() already handles clearing the message cache.
     if (allAccounts) {

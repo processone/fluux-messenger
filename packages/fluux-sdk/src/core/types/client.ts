@@ -45,6 +45,7 @@ export interface StoreBindings {
     setServerInfo: (info: ServerInfo | null) => void
     setConnectionMethod: (method: ConnectionMethod | null) => void
     setAuthMechanism: (mechanism: string | null) => void
+    setAuthMethod: (method: 'fast-token' | 'password' | null) => void
     // Getters for presence preservation on reconnect
     getPresenceShow: () => PresenceStatus
     getStatusMessage: () => string | null

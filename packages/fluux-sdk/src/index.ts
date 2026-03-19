@@ -512,6 +512,9 @@ export type { DiscoveryResult } from './utils/websocketDiscovery'
 // PLATFORM UTILITIES
 // =============================================================================
 
+// FAST token utilities (XEP-0484)
+export { hasFastToken, deleteFastToken } from './core/fastTokenStorage'
+
 // Storage adapters for session persistence
 export { sessionStorageAdapter } from './utils/sessionStorageAdapter'
 export type { StorageAdapter, SessionState, StoredCredentials, JoinedRoomInfo } from './core/types'

@@ -3,7 +3,7 @@ import { getMechanism } from '@xmpp/client/lib/createOnAuthenticate.js'
 import { createActor } from 'xstate'
 import { BaseModule, type ModuleDependencies } from './BaseModule'
 import type { ConnectOptions, ConnectionMethod } from '../types'
-import { getDomain, getLocalPart, getResource } from '../jid'
+import { getBareJid, getDomain, getLocalPart, getResource } from '../jid'
 import { getClientIdentity, CLIENT_FEATURES } from '../caps'
 import { NS_DISCO_INFO, NS_PING, NS_TIME } from '../namespaces'
 import { flushPendingRoomMessages } from '../../utils/messageCache'
@@ -45,6 +45,7 @@ import {
   resolveWebSocketUrl,
 } from './serverResolution'
 import { SmPersistence } from './smPersistence'
+import { fetchFastToken, saveFastToken, deleteFastToken } from '../fastTokenStorage'
 import { ProxyManager } from './proxyManager'
 import { isConnectionTraceEnabled } from './connectionDiagnostics'
 
@@ -1157,17 +1158,43 @@ export class Connection extends BaseModule {
         fast: { fetch: () => Promise<string | null> } | null,
         entity: { isSecure: () => boolean }
       ) => {
-        const creds: Record<string, unknown> = { username, password }
+        const creds: Record<string, unknown> = { username }
+        if (password) creds.password = password
         if (fast) {
           creds.token ??= await fast.fetch()
         }
+
+        // Detect auth method explicitly
+        const hasToken = !!creds.token
+        const hasPassword = !!password
+        if (!hasPassword && !hasToken) {
+          throw new Error('No credentials available (no password and no FAST token)')
+        }
+
         const mechanism: string = getMechanism({ mechanisms, entity, credentials: creds })
+        const authMethod = hasToken ? 'fast-token' : 'password'
+
         this.stores.connection.setAuthMechanism(mechanism)
-        this.stores.console.addEvent(`SASL mechanism: ${mechanism}`, 'connection')
-        logInfo(`SASL mechanism: ${mechanism} (offered: ${mechanisms.join(', ')})`)
+        this.stores.connection.setAuthMethod(authMethod)
+        this.stores.console.addEvent(
+          `Auth: ${authMethod === 'fast-token' ? 'FAST token' : 'password'} (SASL: ${mechanism})`,
+          'connection'
+        )
+        logInfo(`Auth: ${authMethod} (SASL: ${mechanism}, offered: ${mechanisms.join(', ')})`)
         await authenticate(creds, mechanism)
       },
     })
+
+    // Wire FAST token persistence to localStorage (XEP-0484)
+    // xmpp.js default storage is in-memory only — tokens would be lost on page reload.
+    // This enables password-less reconnection for up to 14 days on web.
+    const fastModule = (xmppClient as any).fast
+    if (fastModule) {
+      const bareJid = getBareJid(jid)
+      fastModule.fetchToken = () => fetchFastToken(bareJid)
+      fastModule.saveToken = (t: { mechanism: string; token: string; expiry?: string }) => { saveFastToken(bareJid, t) }
+      fastModule.deleteToken = () => { deleteFastToken(bareJid) }
+    }
 
     this.disableBuiltInReconnect(xmppClient)
 

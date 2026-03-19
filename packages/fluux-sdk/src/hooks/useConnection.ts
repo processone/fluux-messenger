@@ -114,7 +114,7 @@ export function useConnection() {
   const connect = useCallback(
     async (
       jid: string,
-      password: string,
+      password: string | undefined,
       server: string,
       smState?: { id: string; inbound: number },
       resource?: string,
