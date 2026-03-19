@@ -72,7 +72,7 @@ interface SidebarProps {
   adminCategory?: AdminCategory | null
   onAdminCategoryChange?: (category: AdminCategory | null) => void
   // Focus zone ref for Tab cycling
-  sidebarListRef?: RefObject<HTMLDivElement>
+  sidebarListRef?: RefObject<HTMLDivElement | null>
   // Active contact JID for highlighting in directory view
   activeContactJid?: string | null
   // Handler for view changes - ensures all state cleanup happens in one place

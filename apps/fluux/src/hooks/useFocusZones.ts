@@ -5,9 +5,9 @@ export type FocusZone = 'sidebarList' | 'mainContent' | 'composer'
 const ZONE_ORDER: FocusZone[] = ['sidebarList', 'mainContent', 'composer']
 
 export interface FocusZoneRefs {
-  sidebarList: RefObject<HTMLDivElement>
-  mainContent: RefObject<HTMLElement>
-  composer: RefObject<HTMLElement>
+  sidebarList: RefObject<HTMLDivElement | null>
+  mainContent: RefObject<HTMLElement | null>
+  composer: RefObject<HTMLElement | null>
 }
 
 /**

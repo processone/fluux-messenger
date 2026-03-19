@@ -7,9 +7,9 @@ export interface ContextMenuState {
   /** Position where the menu should be rendered */
   position: { x: number; y: number }
   /** Ref to attach to the menu element (for click-outside detection and positioning) */
-  menuRef: React.RefObject<HTMLDivElement>
+  menuRef: React.RefObject<HTMLDivElement | null>
   /** Whether a long press was triggered (use to prevent click after long press) */
-  longPressTriggered: React.RefObject<boolean>
+  longPressTriggered: React.RefObject<boolean | null>
   /** Close the menu */
   close: () => void
   /** Handler for right-click on desktop */

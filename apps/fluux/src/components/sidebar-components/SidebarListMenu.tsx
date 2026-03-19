@@ -38,9 +38,9 @@ export interface SidebarListMenuState<T> {
   /** The item that was right-clicked/long-pressed */
   targetItem: T | null
   /** Ref to attach to the menu element (for click-outside detection) */
-  menuRef: RefObject<HTMLDivElement>
+  menuRef: RefObject<HTMLDivElement | null>
   /** Whether a long press was triggered (use to prevent click after long press) */
-  longPressTriggered: RefObject<boolean>
+  longPressTriggered: RefObject<boolean | null>
   /** Close the menu */
   close: () => void
   /** Open menu for an item */

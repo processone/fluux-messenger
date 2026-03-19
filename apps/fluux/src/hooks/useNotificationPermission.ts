@@ -18,7 +18,7 @@ let cachedPermission = false
  * Both useDesktopNotifications and useEventsDesktopNotifications share this
  * so the permission prompt only fires once regardless of which hook mounts first.
  */
-export function useNotificationPermission(): React.RefObject<boolean> {
+export function useNotificationPermission(): React.RefObject<boolean | null> {
   const status = useConnectionStore((s) => s.status)
   const permissionGranted = useRef(cachedPermission)
 

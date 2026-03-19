@@ -6,7 +6,7 @@ import { getTranslatedShowText } from '@/utils/presence'
 export type SidebarView = 'messages' | 'rooms' | 'directory' | 'archive' | 'events' | 'admin' | 'settings'
 
 // Context to share sidebarListRef with child components for focus zone scoping
-export const SidebarZoneContext = createContext<RefObject<HTMLDivElement> | undefined>(undefined)
+export const SidebarZoneContext = createContext<RefObject<HTMLDivElement | null> | undefined>(undefined)
 
 export function useSidebarZone() {
   return useContext(SidebarZoneContext)

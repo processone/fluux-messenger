@@ -5,7 +5,7 @@ import type { MessageComposerHandle } from '@/components/MessageComposer'
 
 describe('useConversationDraft', () => {
   let mockDraftOperations: DraftOperations
-  let mockComposerRef: React.RefObject<MessageComposerHandle>
+  let mockComposerRef: React.RefObject<MessageComposerHandle | null>
   let drafts: Map<string, string>
 
   beforeEach(() => {

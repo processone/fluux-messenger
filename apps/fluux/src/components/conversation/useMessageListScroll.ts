@@ -50,7 +50,7 @@ export interface UseMessageListScrollOptions {
   messageCount: number
   firstMessageId: string | undefined
   firstNewMessageId?: string  // ID of the first unread message (for new message marker)
-  externalScrollerRef?: React.RefObject<HTMLElement>
+  externalScrollerRef?: React.RefObject<HTMLElement | null>
   externalIsAtBottomRef?: React.MutableRefObject<boolean>
   onScrollToTop?: () => void
   isLoadingOlder?: boolean

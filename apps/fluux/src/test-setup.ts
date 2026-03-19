@@ -24,12 +24,11 @@ const { mockVirtuoso } = vi.hoisted(() => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const React = require('react')
   return {
-    // Use forwardRef to properly accept refs passed from VirtualizedMessageList
-    mockVirtuoso: React.forwardRef(({ data, itemContent, components }: {
+    mockVirtuoso: ({ data, itemContent, components }: {
       data: unknown[]
       itemContent: (index: number, item: unknown) => React.ReactNode
       components?: { Footer?: React.ComponentType }
-    }, _ref: React.Ref<unknown>) => {
+    }) => {
       const Footer = components?.Footer
       return React.createElement(
         'div',
@@ -39,7 +38,7 @@ const { mockVirtuoso } = vi.hoisted(() => {
         ),
         Footer && React.createElement(Footer)
       )
-    }),
+    },
   }
 })
 

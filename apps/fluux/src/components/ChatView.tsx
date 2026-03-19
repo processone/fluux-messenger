@@ -18,8 +18,8 @@ interface ChatViewProps {
   onBack?: () => void
   onSwitchToMessages?: (conversationId: string) => void
   // Focus zone refs for Tab cycling
-  mainContentRef?: RefObject<HTMLElement>
-  composerRef?: RefObject<HTMLElement>
+  mainContentRef?: RefObject<HTMLElement | null>
+  composerRef?: RefObject<HTMLElement | null>
 }
 
 export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerRef }: ChatViewProps) {
@@ -231,7 +231,6 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
           </div>
         </div>
       )}
-
       {/* Header */}
       <ChatHeader
         name={activeConversation.name}
@@ -240,10 +239,9 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
         jid={activeConversation.id}
         onBack={onBack}
       />
-
       {/* Messages - focusable zone for Tab cycling */}
       <div
-        ref={mainContentRef as React.RefObject<HTMLDivElement>}
+        ref={mainContentRef as React.RefObject<HTMLDivElement | null>}
         tabIndex={0}
         className="focus-zone flex-1 flex flex-col min-h-0 p-1"
         onKeyDown={handleMessageListKeyDown}
@@ -291,11 +289,10 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
           isInitialLoading={false}
         />
       </div>
-
       {/* Input */}
       <MessageInput
         composerRef={composerHandleRef}
-        textareaRef={composerRef as React.RefObject<HTMLTextAreaElement>}
+        textareaRef={composerRef as React.RefObject<HTMLTextAreaElement | null>}
         conversationId={activeConversation.id}
         conversationName={activeConversation.name}
         type={activeConversation.type}
@@ -321,13 +318,12 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
         isConnected={isConnected}
         onSwitchToMessages={onSwitchToMessages}
       />
-
       {/* Easter egg animation */}
       {activeAnimation?.conversationId === activeConversation.id && activeAnimation.animation === 'christmas' && (
         <ChristmasAnimation onComplete={clearAnimation} />
       )}
     </div>
-  )
+  );
 }
 
 const ChatMessageList = memo(function ChatMessageList({
@@ -368,7 +364,7 @@ const ChatMessageList = memo(function ChatMessageList({
   contactsByJid: Map<string, ContactIdentity>
   messagesById: Map<string, Message>
   typingUsers: string[]
-  scrollerRef: React.RefObject<HTMLElement>
+  scrollerRef: React.RefObject<HTMLElement | null>
   isAtBottomRef: React.MutableRefObject<boolean>
   conversationId: string
   conversationType: 'chat' | 'groupchat'
@@ -753,8 +749,8 @@ function MessageInput({
   processLinkPreview,
   onSwitchToMessages,
 }: {
-  composerRef: React.RefObject<MessageComposerHandle>
-  textareaRef?: React.RefObject<HTMLTextAreaElement>
+  composerRef: React.RefObject<MessageComposerHandle | null>
+  textareaRef?: React.RefObject<HTMLTextAreaElement | null>
   conversationId: string
   conversationName: string
   type: 'chat' | 'groupchat'

@@ -269,7 +269,7 @@ function renderSegment(segment: StyledSegment, index: number): React.ReactNode {
 /**
  * Code block component with copy button
  */
-function CodeBlock({ code, keyProp }: { code: string; keyProp: string }): React.ReactElement {
+function CodeBlock({ code, keyProp }: { code: string; keyProp: string }): React.ReactElement<any> {
   const [copied, setCopied] = useState(false)
 
   const handleCopy = async () => {

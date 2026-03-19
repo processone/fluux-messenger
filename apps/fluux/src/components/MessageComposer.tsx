@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo, type ReactNode, type RefObject, forwardRef, useImperativeHandle } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useMemo, type ReactNode, type RefObject, useImperativeHandle } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { Send, Smile, Paperclip, Reply, X, Pencil, Loader2, Image, FileText, Trash2 } from 'lucide-react'
@@ -66,7 +66,7 @@ export interface PendingAttachment {
 
 interface MessageComposerProps {
   /** Ref for the textarea element (for focus zones) */
-  textareaRef?: React.RefObject<HTMLTextAreaElement>
+  textareaRef?: React.RefObject<HTMLTextAreaElement | null>
   /** Placeholder text for the input */
   placeholder: string
   /** Reply info if replying to a message */
@@ -95,7 +95,7 @@ interface MessageComposerProps {
   typingNotificationsEnabled?: boolean
   /** Custom input renderer for mention overlay support */
   renderInput?: (props: {
-    inputRef: RefObject<HTMLTextAreaElement>
+    inputRef: RefObject<HTMLTextAreaElement | null>
     mergedRef: (node: HTMLTextAreaElement | null) => void
     value: string
     onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
@@ -128,7 +128,7 @@ interface MessageComposerProps {
   onEditLastMessage?: () => void
 }
 
-export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposerProps>(function MessageComposer({
+export function MessageComposer({
   textareaRef,
   placeholder,
   replyingTo,
@@ -155,7 +155,8 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
   onRemovePendingAttachment,
   disabled = false,
   onEditLastMessage,
-}, ref) {
+  ref,
+}: MessageComposerProps & { ref?: React.Ref<MessageComposerHandle> }) {
   detectRenderLoop('MessageComposer')
   const { t } = useTranslation()
   // Internal state for uncontrolled mode
@@ -370,7 +371,7 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
     if (sending) return
 
     // Handle slash commands (but not when editing)
-    if (!editingMessage && trimmed && await handleCommand(trimmed)) {
+    if (!editingMessage && trimmed && (await handleCommand(trimmed))) {
       setText('')
       inputRef.current?.focus()
       return
@@ -772,4 +773,4 @@ export const MessageComposer = forwardRef<MessageComposerHandle, MessageComposer
       </div>
     </form>
   )
-})
+}

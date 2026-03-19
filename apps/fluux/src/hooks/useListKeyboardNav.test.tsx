@@ -585,7 +585,7 @@ describe('useListKeyboardNav', () => {
 
       // Custom wrapper that uses the modal's list container
       const useModalWrapper = () => {
-        const listRef = { current: listContainer } as React.RefObject<HTMLDivElement>
+        const listRef = { current: listContainer } as React.RefObject<HTMLDivElement | null>
 
         return useListKeyboardNav({
           items: mockItems,
