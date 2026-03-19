@@ -39,37 +39,38 @@ export async function executeWithConcurrency<T>(
   if (items.length === 0) return
 
   let activeCount = 0
-  let index = 0
+  const waitQueue: Array<() => void> = []
 
-  const processNext = async (): Promise<void> => {
-    while (index < items.length) {
-      if (activeCount >= concurrency) {
-        // Wait a bit before checking again
-        await new Promise((resolve) => setTimeout(resolve, 50))
-        continue
-      }
-
-      const item = items[index++]
+  function acquire(): Promise<void> {
+    if (activeCount < concurrency) {
       activeCount++
-
-      // Don't await - let it run in parallel
-      // Catch errors to prevent unhandled rejections (errors are silently ignored)
-      operation(item)
-        .catch(() => {
-          // Errors are intentionally swallowed here
-          // Individual operations should handle their own error logging
-        })
-        .finally(() => {
-          activeCount--
-        })
+      return Promise.resolve()
     }
+    return new Promise<void>((resolve) => {
+      waitQueue.push(() => {
+        activeCount++
+        resolve()
+      })
+    })
   }
 
-  // Start the processing
-  await processNext()
-
-  // Wait for all in-flight requests to complete
-  while (activeCount > 0) {
-    await new Promise((resolve) => setTimeout(resolve, 50))
+  function release(): void {
+    activeCount--
+    const next = waitQueue.shift()
+    if (next) next()
   }
+
+  const promises = items.map(async (item) => {
+    await acquire()
+    try {
+      await operation(item)
+    } catch {
+      // Errors are intentionally swallowed here
+      // Individual operations should handle their own error logging
+    } finally {
+      release()
+    }
+  })
+
+  await Promise.allSettled(promises)
 }
