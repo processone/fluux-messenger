@@ -6,7 +6,8 @@ import { useClickOutside, useSlashCommands } from '@/hooks'
 import { Tooltip } from './Tooltip'
 
 // Lazy-load emoji picker — keeps ~150KB of emoji data out of the main bundle
-const EmojiPicker = lazy(() => import('./EmojiPicker').then(m => ({ default: m.EmojiPicker })))
+const emojiPickerImport = () => import('./EmojiPicker').then(m => ({ default: m.EmojiPicker }))
+const EmojiPicker = lazy(emojiPickerImport)
 import type { FileAttachment } from '@fluux/sdk'
 
 // Format file size for display
@@ -751,6 +752,7 @@ export function MessageComposer({
           <button
             type="button"
             onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            onMouseEnter={() => { void emojiPickerImport() }}
             className={`p-3 transition-colors ${showEmojiPicker ? 'text-fluux-brand' : 'text-fluux-muted hover:text-fluux-text'}`}
           >
             <Smile className="w-5 h-5" />

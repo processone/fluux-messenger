@@ -1,4 +1,4 @@
-import { useRef, useState, memo, Suspense, lazy, useEffect } from 'react'
+import { useRef, memo, Suspense, lazy } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SmilePlus, Pencil, Forward, MoreHorizontal, Reply, Trash2 } from 'lucide-react'
 import { useClickOutside } from '@/hooks'
@@ -8,7 +8,8 @@ import { Tooltip } from '../Tooltip'
 const TOOLBAR_REACTIONS = ['👍', '❤️', '😂']
 
 // Lazy-load emoji picker — only fetched when user opens reaction picker
-const EmojiPicker = lazy(() => import('../EmojiPicker').then(m => ({ default: m.EmojiPicker })))
+const emojiPickerImport = () => import('../EmojiPicker').then(m => ({ default: m.EmojiPicker }))
+const EmojiPicker = lazy(emojiPickerImport)
 
 export interface MessageToolbarProps {
   /** Handler for reaction button clicks. When undefined, reaction UI is hidden. */
@@ -81,18 +82,7 @@ export const MessageToolbar = memo(function MessageToolbar({
   const toolbarRef = useRef<HTMLDivElement>(null)
   const moreMenuRef = useRef<HTMLDivElement>(null)
   const reactionButtonRef = useRef<HTMLButtonElement>(null)
-  const [pickerDropUp, setPickerDropUp] = useState(false)
-
-  // When the reaction picker opens, decide if it should drop up or down
-  // based on available viewport space below the button
-  useEffect(() => {
-    if (showReactionPicker && reactionButtonRef.current) {
-      const rect = reactionButtonRef.current.getBoundingClientRect()
-      const spaceBelow = window.innerHeight - rect.bottom
-      // emoji-mart picker is ~435px tall
-      setPickerDropUp(spaceBelow < 450)
-    }
-  }, [showReactionPicker])
+  const pickerDropUpRef = useRef(false)
 
   // Close reaction picker
   const closeReactionPicker = () => setShowReactionPicker(false)
@@ -162,7 +152,16 @@ export const MessageToolbar = memo(function MessageToolbar({
       <div className="relative">
         <button
           ref={reactionButtonRef}
-          onClick={() => setShowReactionPicker(!showReactionPicker)}
+          onClick={() => {
+            if (!showReactionPicker && reactionButtonRef.current) {
+              // Compute direction synchronously before opening to avoid position jump
+              const rect = reactionButtonRef.current.getBoundingClientRect()
+              const spaceBelow = window.innerHeight - rect.bottom
+              pickerDropUpRef.current = spaceBelow < 450
+            }
+            setShowReactionPicker(!showReactionPicker)
+          }}
+          onMouseEnter={() => { void emojiPickerImport() }}
           className={`p-1.5 transition-colors ${showReactionPicker || showMoreMenu ? '' : 'hover:bg-fluux-hover'}`}
           aria-label={t('chat.moreReactions')}
         >
@@ -171,7 +170,7 @@ export const MessageToolbar = memo(function MessageToolbar({
 
         {/* Full emoji picker for reactions */}
         {showReactionPicker && (
-          <div className={`absolute right-0 z-30 ${pickerDropUp ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
+          <div className={`absolute right-0 z-30 ${pickerDropUpRef.current ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
             <Suspense fallback={null}>
               <EmojiPicker
                 onSelect={(emoji) => handleReaction(emoji)}
