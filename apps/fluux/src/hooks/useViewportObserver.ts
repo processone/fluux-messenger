@@ -40,7 +40,7 @@ export function useViewportObserver({
 
   // Stable callback ref to avoid re-creating the observer when onMessageSeen changes
   const onMessageSeenRef = useRef(onMessageSeen)
-  onMessageSeenRef.current = onMessageSeen
+  useEffect(() => { onMessageSeenRef.current = onMessageSeen }, [onMessageSeen])
 
   const reportMessageSeen = useCallback((messageId: string) => {
     if (!onMessageSeenRef.current) return

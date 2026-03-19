@@ -11,6 +11,7 @@ type ParticleType = 'snowflake' | 'star' | 'ornament' | 'candy'
 interface Particle {
   id: number
   type: ParticleType
+  symbol: string
   x: number // Starting X position (%)
   delay: number // Animation delay (s)
   duration: number // Fall duration (s)
@@ -44,9 +45,11 @@ function generateParticles(count: number): Particle[] {
       type = 'candy'
     }
 
+    const symbols = PARTICLES[type]
     particles.push({
       id: i,
       type,
+      symbol: symbols[Math.floor(Math.random() * symbols.length)],
       x: Math.random() * 100,
       delay: Math.random() * 3, // Staggered start over 3 seconds
       duration: 3 + Math.random() * 4, // 3-7 seconds to fall
@@ -88,11 +91,7 @@ export function ChristmasAnimation({ onComplete, duration = 6000 }: ChristmasAni
       style={{ pointerEvents: 'auto' }}
     >
       {/* Particles */}
-      {particles.map((particle) => {
-        const symbols = PARTICLES[particle.type]
-        const symbol = symbols[Math.floor(Math.random() * symbols.length)]
-
-        return (
+      {particles.map((particle) => (
           <div
             key={particle.id}
             className="absolute animate-fall"
@@ -117,11 +116,10 @@ export function ChristmasAnimation({ onComplete, duration = 6000 }: ChristmasAni
                       : 'drop-shadow-md'
               }
             >
-              {symbol}
+              {particle.symbol}
             </span>
           </div>
-        )
-      })}
+      ))}
 
       {/* Festive message - briefly shown */}
       <div className="absolute inset-0 flex items-center justify-center">

@@ -1,6 +1,7 @@
 import eslint from '@eslint/js'
 import tseslint from 'typescript-eslint'
 import reactHooks from 'eslint-plugin-react-hooks'
+import reactCompiler from 'eslint-plugin-react-compiler'
 
 export default tseslint.config(
   eslint.configs.recommended,
@@ -8,6 +9,7 @@ export default tseslint.config(
   {
     plugins: {
       'react-hooks': reactHooks,
+      'react-compiler': reactCompiler,
     },
     languageOptions: {
       parserOptions: {
@@ -19,6 +21,7 @@ export default tseslint.config(
       // React hooks rules
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
+      'react-compiler/react-compiler': 'warn',
 
       // Allow unused vars prefixed with underscore
       '@typescript-eslint/no-unused-vars': [

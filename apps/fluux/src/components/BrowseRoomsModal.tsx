@@ -131,42 +131,44 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
     void fetchRooms()
   }, [effectiveService, showCustomInput, committedCustomService, browsePublicRooms, t])
 
-  // Load more handler - always reads latest state via closure (updated every render)
-  onLoadMoreRef.current = () => {
-    if (isLoadingMoreRef.current || !hasMore || !paginationCursor || loading) return
-    isLoadingMoreRef.current = true
-    setLoadingMore(true)
+  // Load more handler - always reads latest state via closure
+  useEffect(() => {
+    onLoadMoreRef.current = () => {
+      if (isLoadingMoreRef.current || !hasMore || !paginationCursor || loading) return
+      isLoadingMoreRef.current = true
+      setLoadingMore(true)
 
-    browsePublicRooms(effectiveService || undefined, {
-      max: PAGE_SIZE,
-      after: paginationCursor,
-    })
-      .then((result) => {
-        if (result.rooms.length === 0) {
-          setHasMore(false)
-        } else {
-          setRooms((prev) => {
-            const updated = [...prev, ...result.rooms]
-            // Compute hasMore from the actual new total (avoids stale closure)
-            if (result.pagination.count !== undefined) {
-              setHasMore(updated.length < result.pagination.count)
-              setTotalCount(result.pagination.count)
-            } else {
-              setHasMore(result.rooms.length >= PAGE_SIZE && !!result.pagination.last)
-            }
-            return updated
-          })
-          setPaginationCursor(result.pagination.last)
-        }
+      browsePublicRooms(effectiveService || undefined, {
+        max: PAGE_SIZE,
+        after: paginationCursor,
       })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : t('rooms.failedToLoadRooms'))
-      })
-      .finally(() => {
-        isLoadingMoreRef.current = false
-        setLoadingMore(false)
-      })
-  }
+        .then((result) => {
+          if (result.rooms.length === 0) {
+            setHasMore(false)
+          } else {
+            setRooms((prev) => {
+              const updated = [...prev, ...result.rooms]
+              // Compute hasMore from the actual new total (avoids stale closure)
+              if (result.pagination.count !== undefined) {
+                setHasMore(updated.length < result.pagination.count)
+                setTotalCount(result.pagination.count)
+              } else {
+                setHasMore(result.rooms.length >= PAGE_SIZE && !!result.pagination.last)
+              }
+              return updated
+            })
+            setPaginationCursor(result.pagination.last)
+          }
+        })
+        .catch((err: unknown) => {
+          setError(err instanceof Error ? err.message : t('rooms.failedToLoadRooms'))
+        })
+        .finally(() => {
+          isLoadingMoreRef.current = false
+          setLoadingMore(false)
+        })
+    }
+  }, [hasMore, paginationCursor, loading, effectiveService, browsePublicRooms, t])
 
   // Callback ref for sentinel element - creates observer once, stable across re-renders
   const sentinelRef = useCallback((node: HTMLDivElement | null) => {

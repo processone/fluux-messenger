@@ -30,7 +30,13 @@ const appVersion = getVersion()
 export default defineConfig({
   base: './',
   plugins: [
-    react(),
+    react({
+      babel: {
+        plugins: [
+          ['babel-plugin-react-compiler', { target: '18' }],
+        ],
+      },
+    }),
     VitePWA({
       registerType: 'autoUpdate',
       // Don't auto-inject registration - we'll do it manually to skip in Tauri
