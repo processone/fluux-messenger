@@ -422,7 +422,8 @@
             "language": "Idioma y región",
             "notifications": "Notificaciones",
             "updates": "Actualizaciones",
-            "blocked": "Usuarios Bloqueados"
+            "blocked": "Usuarios Bloqueados",
+            "storage": "Almacenamiento"
         },
         "blocked": {
             "title": "Usuarios Bloqueados",
@@ -473,7 +474,16 @@
         "webPush_available": "Disponible — toca para activar",
         "webPush_registered": "Activadas — notificaciones push activas",
         "webPushEnable": "Activar",
-        "updates": "Actualizaciones"
+        "updates": "Actualizaciones",
+        "storage": {
+            "title": "Almacenamiento",
+            "mediaCache": "Caché de medios",
+            "mediaCacheDescription": "Las imágenes y medios descargados se almacenan localmente para evitar volver a descargarlos.",
+            "cacheSize": "Tamaño de caché",
+            "clearCache": "Limpiar caché",
+            "cacheCleared": "Caché limpiada",
+            "calculating": "Calculando..."
+        }
     },
     "update": {
         "title": "Actualizacion Disponible",

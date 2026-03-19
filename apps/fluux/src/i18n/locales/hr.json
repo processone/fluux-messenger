@@ -420,7 +420,8 @@
             "language": "Jezik i regija",
             "notifications": "Obavijesti",
             "updates": "Ažuriranja",
-            "blocked": "Blokirani korisnici"
+            "blocked": "Blokirani korisnici",
+            "storage": "Pohrana"
         },
         "blocked": {
             "title": "Blokirani korisnici",
@@ -471,7 +472,16 @@
         "webPush_available": "Dostupno — dodirnite za omogućavanje",
         "webPush_registered": "Omogućeno — push obavijesti aktivne",
         "webPushEnable": "Omogući",
-        "updates": "Ažuriranja"
+        "updates": "Ažuriranja",
+        "storage": {
+            "title": "Pohrana",
+            "mediaCache": "Predmemorija medija",
+            "mediaCacheDescription": "Preuzete slike i mediji pohranjuju se lokalno kako bi se izbjeglo ponovno preuzimanje.",
+            "cacheSize": "Veličina predmemorije",
+            "clearCache": "Očisti predmemoriju",
+            "cacheCleared": "Predmemorija očišćena",
+            "calculating": "Računam..."
+        }
     },
     "update": {
         "title": "Dostupno ažuriranje",

@@ -422,7 +422,8 @@
             "language": "Lingwa u Reġjun",
             "notifications": "Notifiki",
             "updates": "Aġġornamenti",
-            "blocked": "Utenti Imblokkati"
+            "blocked": "Utenti Imblokkati",
+            "storage": "Ħażna"
         },
         "blocked": {
             "title": "Utenti Imblokkati",
@@ -473,7 +474,16 @@
         "webPush_available": "Disponibbli — miss biex tixgħel",
         "webPush_registered": "Mixgħul — notifiki push attivi",
         "webPushEnable": "Ixgħel",
-        "updates": "Aġġornamenti"
+        "updates": "Aġġornamenti",
+        "storage": {
+            "title": "Ħażna",
+            "mediaCache": "Cache tal-midja",
+            "mediaCacheDescription": "Stampi u midja mniżżla huma maħżuna lokalment biex jiġi evitat li jerġgħu jitniżżlu.",
+            "cacheSize": "Daqs tal-cache",
+            "clearCache": "Naddaf il-cache",
+            "cacheCleared": "Il-cache tnaddaf",
+            "calculating": "Qed nikkalkula..."
+        }
     },
     "update": {
         "title": "Aġġornament Disponibbli",

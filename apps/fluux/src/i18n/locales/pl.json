@@ -422,7 +422,8 @@
             "language": "Język i region",
             "notifications": "Powiadomienia",
             "updates": "Aktualizacje",
-            "blocked": "Zablokowani użytkownicy"
+            "blocked": "Zablokowani użytkownicy",
+            "storage": "Pamięć"
         },
         "blocked": {
             "title": "Zablokowani użytkownicy",
@@ -473,7 +474,16 @@
         "webPush_available": "Dostępne — dotknij, aby włączyć",
         "webPush_registered": "Włączone — powiadomienia push aktywne",
         "webPushEnable": "Włącz",
-        "updates": "Aktualizacje"
+        "updates": "Aktualizacje",
+        "storage": {
+            "title": "Pamięć",
+            "mediaCache": "Pamięć podręczna mediów",
+            "mediaCacheDescription": "Pobrane obrazy i media są przechowywane lokalnie, aby uniknąć ponownego pobierania.",
+            "cacheSize": "Rozmiar pamięci podręcznej",
+            "clearCache": "Wyczyść pamięć podręczną",
+            "cacheCleared": "Pamięć podręczna wyczyszczona",
+            "calculating": "Obliczanie..."
+        }
     },
     "update": {
         "title": "Dostępna aktualizacja",

@@ -420,7 +420,8 @@
             "language": "Tungumál og svæði",
             "notifications": "Tilkynningar",
             "updates": "Uppfærslur",
-            "blocked": "Útilokaðir notendur"
+            "blocked": "Útilokaðir notendur",
+            "storage": "Geymsla"
         },
         "blocked": {
             "title": "Útilokaðir notendur",
@@ -471,7 +472,16 @@
         "webPush_available": "Tiltækt — ýttu til að virkja",
         "webPush_registered": "Virkjað — push-tilkynningar virkar",
         "webPushEnable": "Virkja",
-        "updates": "Uppfærslur"
+        "updates": "Uppfærslur",
+        "storage": {
+            "title": "Geymsla",
+            "mediaCache": "Skyndiminni miðla",
+            "mediaCacheDescription": "Niðurhalaðar myndir og miðlar eru vistaðar staðbundið til að forðast endurtekinn niðurhal.",
+            "cacheSize": "Stærð skyndiminnis",
+            "clearCache": "Hreinsa skyndiminni",
+            "cacheCleared": "Skyndiminni hreinsað",
+            "calculating": "Reikna..."
+        }
     },
     "update": {
         "title": "Uppfærsla tiltæk",

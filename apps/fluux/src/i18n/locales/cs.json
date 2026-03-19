@@ -422,7 +422,8 @@
             "language": "Jazyk a region",
             "notifications": "Oznámení",
             "updates": "Aktualizace",
-            "blocked": "Zablokovaní uživatelé"
+            "blocked": "Zablokovaní uživatelé",
+            "storage": "Úložiště"
         },
         "blocked": {
             "title": "Zablokovaní uživatelé",
@@ -473,7 +474,16 @@
         "webPush_available": "K dispozici — klepněte pro aktivaci",
         "webPush_registered": "Aktivováno — push oznámení aktivní",
         "webPushEnable": "Aktivovat",
-        "updates": "Aktualizace"
+        "updates": "Aktualizace",
+        "storage": {
+            "title": "Úložiště",
+            "mediaCache": "Mezipaměť médií",
+            "mediaCacheDescription": "Stažené obrázky a média jsou ukládány lokálně, aby se zabránilo opětovnému stahování.",
+            "cacheSize": "Velikost mezipaměti",
+            "clearCache": "Vymazat mezipaměť",
+            "cacheCleared": "Mezipaměť vymazána",
+            "calculating": "Počítám..."
+        }
     },
     "update": {
         "title": "Dostupná aktualizace",

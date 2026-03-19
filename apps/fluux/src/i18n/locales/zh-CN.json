@@ -420,7 +420,8 @@
             "language": "语言与地区",
             "notifications": "通知",
             "updates": "更新",
-            "blocked": "已屏蔽的用户"
+            "blocked": "已屏蔽的用户",
+            "storage": "存储"
         },
         "blocked": {
             "title": "已屏蔽的用户",
@@ -471,7 +472,16 @@
         "webPush_available": "可用 — 点击启用",
         "webPush_registered": "已启用 — 推送通知已激活",
         "webPushEnable": "启用",
-        "updates": "更新"
+        "updates": "更新",
+        "storage": {
+            "title": "存储",
+            "mediaCache": "媒体缓存",
+            "mediaCacheDescription": "下载的图片和媒体文件会缓存在本地，以避免重复下载。",
+            "cacheSize": "缓存大小",
+            "clearCache": "清除缓存",
+            "cacheCleared": "缓存已清除",
+            "calculating": "正在计算..."
+        }
     },
     "update": {
         "title": "有可用的更新",

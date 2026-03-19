@@ -420,7 +420,8 @@
             "language": "Kalba ir regionas",
             "notifications": "Pranešimai",
             "updates": "Atnaujinimai",
-            "blocked": "Užblokuoti vartotojai"
+            "blocked": "Užblokuoti vartotojai",
+            "storage": "Saugykla"
         },
         "blocked": {
             "title": "Užblokuoti vartotojai",
@@ -471,7 +472,16 @@
         "webPush_available": "Galima — bakstelėkite, kad įjungtumėte",
         "webPush_registered": "Įjungta — push pranešimai aktyvūs",
         "webPushEnable": "Įjungti",
-        "updates": "Atnaujinimai"
+        "updates": "Atnaujinimai",
+        "storage": {
+            "title": "Saugykla",
+            "mediaCache": "Medijos talpykla",
+            "mediaCacheDescription": "Atsisiųsti vaizdai ir medija saugomi vietoje, kad nereikėtų jų parsisiųsti iš naujo.",
+            "cacheSize": "Talpyklos dydis",
+            "clearCache": "Išvalyti talpyklą",
+            "cacheCleared": "Talpykla išvalyta",
+            "calculating": "Skaičiuojama..."
+        }
     },
     "update": {
         "title": "Pasiekiamas atnaujinimas",

@@ -422,7 +422,8 @@
             "language": "Sprache & Region",
             "notifications": "Benachrichtigungen",
             "updates": "Updates",
-            "blocked": "Blockierte Benutzer"
+            "blocked": "Blockierte Benutzer",
+            "storage": "Speicher"
         },
         "blocked": {
             "title": "Blockierte Benutzer",
@@ -473,7 +474,16 @@
         "webPush_available": "Verfügbar — tippen zum Aktivieren",
         "webPush_registered": "Aktiviert — Push-Benachrichtigungen aktiv",
         "webPushEnable": "Aktivieren",
-        "updates": "Updates"
+        "updates": "Updates",
+        "storage": {
+            "title": "Speicher",
+            "mediaCache": "Medien-Cache",
+            "mediaCacheDescription": "Heruntergeladene Bilder und Medien werden lokal zwischengespeichert, um erneutes Herunterladen zu vermeiden.",
+            "cacheSize": "Cache-Größe",
+            "clearCache": "Cache leeren",
+            "cacheCleared": "Cache geleert",
+            "calculating": "Berechne..."
+        }
     },
     "update": {
         "title": "Update verfügbar",

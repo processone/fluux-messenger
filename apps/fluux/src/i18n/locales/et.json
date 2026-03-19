@@ -422,7 +422,8 @@
             "language": "Keel ja piirkond",
             "notifications": "Teavitused",
             "updates": "Värskendused",
-            "blocked": "Blokeeritud kasutajad"
+            "blocked": "Blokeeritud kasutajad",
+            "storage": "Salvestusruum"
         },
         "blocked": {
             "title": "Blokeeritud kasutajad",
@@ -473,7 +474,16 @@
         "webPush_available": "Saadaval — puuduta lubamiseks",
         "webPush_registered": "Lubatud — push-teavitused aktiivsed",
         "webPushEnable": "Luba",
-        "updates": "Värskendused"
+        "updates": "Värskendused",
+        "storage": {
+            "title": "Salvestusruum",
+            "mediaCache": "Meedia vahemälu",
+            "mediaCacheDescription": "Allalaaditud pildid ja meedia salvestatakse kohapeal, et vältida nende uuesti allalaadimist.",
+            "cacheSize": "Vahemälu suurus",
+            "clearCache": "Tühjenda vahemälu",
+            "cacheCleared": "Vahemälu tühjendatud",
+            "calculating": "Arvutan..."
+        }
     },
     "update": {
         "title": "Värskendus saadaval",

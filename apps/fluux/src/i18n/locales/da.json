@@ -420,7 +420,8 @@
             "language": "Sprog og region",
             "notifications": "Notifikationer",
             "updates": "Opdateringer",
-            "blocked": "Blokerede brugere"
+            "blocked": "Blokerede brugere",
+            "storage": "Lagring"
         },
         "blocked": {
             "title": "Blokerede brugere",
@@ -471,7 +472,16 @@
         "webPush_available": "Tilgængelig — tryk for at aktivere",
         "webPush_registered": "Aktiveret — pushnotifikationer aktive",
         "webPushEnable": "Aktiver",
-        "updates": "Opdateringer"
+        "updates": "Opdateringer",
+        "storage": {
+            "title": "Lagring",
+            "mediaCache": "Mediecache",
+            "mediaCacheDescription": "Downloadede billeder og medier gemmes lokalt for at undgå at downloade dem igen.",
+            "cacheSize": "Cachestørrelse",
+            "clearCache": "Ryd cache",
+            "cacheCleared": "Cache ryddet",
+            "calculating": "Beregner..."
+        }
     },
     "update": {
         "title": "Opdatering tilgængelig",

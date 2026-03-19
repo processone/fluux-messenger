@@ -422,7 +422,8 @@
             "language": "Limbă și regiune",
             "notifications": "Notificări",
             "updates": "Actualizări",
-            "blocked": "Utilizatori blocați"
+            "blocked": "Utilizatori blocați",
+            "storage": "Stocare"
         },
         "blocked": {
             "title": "Utilizatori blocați",
@@ -473,7 +474,16 @@
         "webPush_available": "Disponibil — atinge pentru activare",
         "webPush_registered": "Activat — notificări push active",
         "webPushEnable": "Activează",
-        "updates": "Actualizări"
+        "updates": "Actualizări",
+        "storage": {
+            "title": "Stocare",
+            "mediaCache": "Cache media",
+            "mediaCacheDescription": "Imaginile și fișierele media descărcate sunt stocate local pentru a evita re-descărcarea lor.",
+            "cacheSize": "Dimensiune cache",
+            "clearCache": "Golește cache-ul",
+            "cacheCleared": "Cache golit",
+            "calculating": "Se calculează..."
+        }
     },
     "update": {
         "title": "Actualizare disponibilă",

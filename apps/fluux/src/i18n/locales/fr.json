@@ -421,7 +421,8 @@
             "language": "Langue et région",
             "notifications": "Notifications",
             "updates": "Mises à jour",
-            "blocked": "Utilisateurs bloqués"
+            "blocked": "Utilisateurs bloqués",
+            "storage": "Stockage"
         },
         "blocked": {
             "title": "Utilisateurs bloqués",
@@ -472,7 +473,16 @@
         "webPush_available": "Disponible — appuyez pour activer",
         "webPush_registered": "Activé — notifications push actives",
         "webPushEnable": "Activer",
-        "updates": "Mises à jour"
+        "updates": "Mises à jour",
+        "storage": {
+            "title": "Stockage",
+            "mediaCache": "Cache des médias",
+            "mediaCacheDescription": "Les images et médias téléchargés sont mis en cache localement pour éviter de les retélécharger.",
+            "cacheSize": "Taille du cache",
+            "clearCache": "Vider le cache",
+            "cacheCleared": "Cache vidé",
+            "calculating": "Calcul en cours..."
+        }
     },
     "update": {
         "title": "Mise à jour disponible",

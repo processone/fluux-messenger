@@ -420,7 +420,8 @@
             "language": "Teanga & Réigiún",
             "notifications": "Fógraí",
             "updates": "Nuashonruithe",
-            "blocked": "Úsáideoirí Coiscthe"
+            "blocked": "Úsáideoirí Coiscthe",
+            "storage": "Stóráil"
         },
         "blocked": {
             "title": "Úsáideoirí Coiscthe",
@@ -471,7 +472,16 @@
         "webPush_available": "Ar fáil — tapáil le cumasú",
         "webPush_registered": "Cumasaithe — fógraí brú gníomhach",
         "webPushEnable": "Cumasaigh",
-        "updates": "Nuashonruithe"
+        "updates": "Nuashonruithe",
+        "storage": {
+            "title": "Stóráil",
+            "mediaCache": "Taisce meán",
+            "mediaCacheDescription": "Déantar íomhánna agus meáin íoslódáilte a stóráil go háitiúil chun a n-íoslódáil arís a sheachaint.",
+            "cacheSize": "Méid taisce",
+            "clearCache": "Glan taisce",
+            "cacheCleared": "Taisce glanta",
+            "calculating": "Ag ríomh..."
+        }
     },
     "update": {
         "title": "Nuashonrú ar Fáil",

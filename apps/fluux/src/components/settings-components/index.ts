@@ -4,6 +4,7 @@ export { LanguageSettings } from './LanguageSettings'
 export { NotificationsSettings } from './NotificationsSettings'
 export { UpdatesSettings } from './UpdatesSettings'
 export { BlockedUsersSettings } from './BlockedUsersSettings'
+export { StorageSettings } from './StorageSettings'
 export { SettingsSidebar } from './SettingsSidebar'
 export {
   type SettingsCategory,

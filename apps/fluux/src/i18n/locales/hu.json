@@ -420,7 +420,8 @@
             "language": "Nyelv és régió",
             "notifications": "Értesítések",
             "updates": "Frissítések",
-            "blocked": "Letiltott felhasználók"
+            "blocked": "Letiltott felhasználók",
+            "storage": "Tárhely"
         },
         "blocked": {
             "title": "Letiltott felhasználók",
@@ -471,7 +472,16 @@
         "webPush_available": "Elérhető — érintse meg az aktiváláshoz",
         "webPush_registered": "Bekapcsolva — push értesítések aktívak",
         "webPushEnable": "Bekapcsolás",
-        "updates": "Frissítések"
+        "updates": "Frissítések",
+        "storage": {
+            "title": "Tárhely",
+            "mediaCache": "Média gyorsítótár",
+            "mediaCacheDescription": "A letöltött képek és médiafájlok helyben tárolódnak, hogy ne kelljen újra letölteni őket.",
+            "cacheSize": "Gyorsítótár mérete",
+            "clearCache": "Gyorsítótár törlése",
+            "cacheCleared": "Gyorsítótár törölve",
+            "calculating": "Számítás..."
+        }
     },
     "update": {
         "title": "Frissítés elérhető",

@@ -421,7 +421,8 @@
             "language": "Valoda un reģions",
             "notifications": "Paziņojumi",
             "updates": "Atjauninājumi",
-            "blocked": "Bloķētie lietotāji"
+            "blocked": "Bloķētie lietotāji",
+            "storage": "Krātuve"
         },
         "blocked": {
             "title": "Bloķētie lietotāji",
@@ -472,7 +473,16 @@
         "webPush_available": "Pieejams — pieskarieties, lai iespējotu",
         "webPush_registered": "Iespējots — push paziņojumi aktīvi",
         "webPushEnable": "Iespējot",
-        "updates": "Atjauninājumi"
+        "updates": "Atjauninājumi",
+        "storage": {
+            "title": "Krātuve",
+            "mediaCache": "Multivides kešatmiņa",
+            "mediaCacheDescription": "Lejupielādētie attēli un multivide tiek saglabāti lokāli, lai izvairītos no atkārtotas lejupielādes.",
+            "cacheSize": "Kešatmiņas lielums",
+            "clearCache": "Iztīrīt kešatmiņu",
+            "cacheCleared": "Kešatmiņa iztīrīta",
+            "calculating": "Aprēķinu..."
+        }
     },
     "update": {
         "title": "Pieejams atjauninājums",

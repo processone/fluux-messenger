@@ -9,6 +9,7 @@ import {
   NotificationsSettings,
   UpdatesSettings,
   BlockedUsersSettings,
+  StorageSettings,
   type SettingsCategory,
   SETTINGS_CATEGORIES,
   DEFAULT_SETTINGS_CATEGORY,
@@ -54,6 +55,8 @@ export function SettingsView({ onBack }: SettingsViewProps) {
         return isUpdaterEnabled() ? <UpdatesSettings /> : <ProfileSettings />
       case 'blocked':
         return <BlockedUsersSettings />
+      case 'storage':
+        return <StorageSettings />
       default:
         return <ProfileSettings />
     }

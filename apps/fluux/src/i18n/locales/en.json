@@ -420,7 +420,8 @@
             "language": "Language & Region",
             "notifications": "Notifications",
             "updates": "Updates",
-            "blocked": "Blocked Users"
+            "blocked": "Blocked Users",
+            "storage": "Storage"
         },
         "blocked": {
             "title": "Blocked Users",
@@ -471,7 +472,16 @@
         "webPush_available": "Available — tap to enable",
         "webPush_registered": "Enabled — push notifications active",
         "webPushEnable": "Enable",
-        "updates": "Updates"
+        "updates": "Updates",
+        "storage": {
+            "title": "Storage",
+            "mediaCache": "Media Cache",
+            "mediaCacheDescription": "Downloaded images and media are cached locally to avoid re-downloading them.",
+            "cacheSize": "Cache size",
+            "clearCache": "Clear Cache",
+            "cacheCleared": "Cache cleared",
+            "calculating": "Calculating..."
+        }
     },
     "update": {
         "title": "Update Available",

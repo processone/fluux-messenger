@@ -420,7 +420,8 @@
             "language": "Språk & region",
             "notifications": "Aviseringar",
             "updates": "Uppdateringar",
-            "blocked": "Blockerade användare"
+            "blocked": "Blockerade användare",
+            "storage": "Lagring"
         },
         "blocked": {
             "title": "Blockerade användare",
@@ -471,7 +472,16 @@
         "webPush_available": "Tillgängligt — tryck för att aktivera",
         "webPush_registered": "Aktiverat — pushnotiser aktiva",
         "webPushEnable": "Aktivera",
-        "updates": "Uppdateringar"
+        "updates": "Uppdateringar",
+        "storage": {
+            "title": "Lagring",
+            "mediaCache": "Mediacache",
+            "mediaCacheDescription": "Nedladdade bilder och media sparas lokalt för att undvika att ladda ner dem igen.",
+            "cacheSize": "Cachestorlek",
+            "clearCache": "Rensa cache",
+            "cacheCleared": "Cache rensad",
+            "calculating": "Beräknar..."
+        }
     },
     "update": {
         "title": "Uppdatering tillgänglig",

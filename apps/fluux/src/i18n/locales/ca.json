@@ -422,7 +422,8 @@
             "language": "Idioma i regió",
             "notifications": "Notificacions",
             "updates": "Actualitzacions",
-            "blocked": "Usuaris blocats"
+            "blocked": "Usuaris blocats",
+            "storage": "Emmagatzematge"
         },
         "blocked": {
             "title": "Usuaris blocats",
@@ -473,7 +474,16 @@
         "webPush_available": "Disponible — toca per activar",
         "webPush_registered": "Activat — notificacions push actives",
         "webPushEnable": "Activa",
-        "updates": "Actualitzacions"
+        "updates": "Actualitzacions",
+        "storage": {
+            "title": "Emmagatzematge",
+            "mediaCache": "Memòria cau de mitjans",
+            "mediaCacheDescription": "Les imatges i mitjans descarregats es guarden localment per evitar tornar-los a descarregar.",
+            "cacheSize": "Mida de la memòria cau",
+            "clearCache": "Buidar la memòria cau",
+            "cacheCleared": "Memòria cau buidada",
+            "calculating": "Calculant..."
+        }
     },
     "update": {
         "title": "Actualització disponible",

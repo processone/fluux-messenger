@@ -420,7 +420,8 @@
             "language": "Kieli ja alue",
             "notifications": "Ilmoitukset",
             "updates": "Päivitykset",
-            "blocked": "Estetyt käyttäjät"
+            "blocked": "Estetyt käyttäjät",
+            "storage": "Tallennustila"
         },
         "blocked": {
             "title": "Estetyt käyttäjät",
@@ -471,7 +472,16 @@
         "webPush_available": "Käytettävissä — ota käyttöön napauttamalla",
         "webPush_registered": "Käytössä — push-ilmoitukset aktiiviset",
         "webPushEnable": "Ota käyttöön",
-        "updates": "Päivitykset"
+        "updates": "Päivitykset",
+        "storage": {
+            "title": "Tallennustila",
+            "mediaCache": "Mediavälimuisti",
+            "mediaCacheDescription": "Ladatut kuvat ja media tallennetaan paikallisesti, jotta niitä ei tarvitse ladata uudelleen.",
+            "cacheSize": "Välimuistin koko",
+            "clearCache": "Tyhjennä välimuisti",
+            "cacheCleared": "Välimuisti tyhjennetty",
+            "calculating": "Lasketaan..."
+        }
     },
     "update": {
         "title": "Päivitys saatavilla",

@@ -422,7 +422,8 @@
             "language": "Jezik in regija",
             "notifications": "Obvestila",
             "updates": "Posodobitve",
-            "blocked": "Blokirani uporabniki"
+            "blocked": "Blokirani uporabniki",
+            "storage": "Shramba"
         },
         "blocked": {
             "title": "Blokirani uporabniki",
@@ -473,7 +474,16 @@
         "webPush_available": "Na voljo — tapnite za vklop",
         "webPush_registered": "Vklopljeno — push obvestila aktivna",
         "webPushEnable": "Vklopi",
-        "updates": "Posodobitve"
+        "updates": "Posodobitve",
+        "storage": {
+            "title": "Shramba",
+            "mediaCache": "Predpomnilnik medijev",
+            "mediaCacheDescription": "Prenesene slike in mediji se shranjujejo lokalno, da se izognemo ponovnemu prenašanju.",
+            "cacheSize": "Velikost predpomnilnika",
+            "clearCache": "Počisti predpomnilnik",
+            "cacheCleared": "Predpomnilnik počiščen",
+            "calculating": "Računam..."
+        }
     },
     "update": {
         "title": "Na voljo posodobitev",

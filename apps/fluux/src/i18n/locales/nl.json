@@ -420,7 +420,8 @@
             "language": "Taal & Regio",
             "notifications": "Meldingen",
             "updates": "Updates",
-            "blocked": "Geblokkeerde gebruikers"
+            "blocked": "Geblokkeerde gebruikers",
+            "storage": "Opslag"
         },
         "blocked": {
             "title": "Geblokkeerde gebruikers",
@@ -471,7 +472,16 @@
         "webPush_available": "Beschikbaar — tik om in te schakelen",
         "webPush_registered": "Ingeschakeld — pushmeldingen actief",
         "webPushEnable": "Inschakelen",
-        "updates": "Updates"
+        "updates": "Updates",
+        "storage": {
+            "title": "Opslag",
+            "mediaCache": "Mediacache",
+            "mediaCacheDescription": "Gedownloade afbeeldingen en media worden lokaal opgeslagen om opnieuw downloaden te voorkomen.",
+            "cacheSize": "Cachegrootte",
+            "clearCache": "Cache wissen",
+            "cacheCleared": "Cache gewist",
+            "calculating": "Berekenen..."
+        }
     },
     "update": {
         "title": "Update beschikbaar",
