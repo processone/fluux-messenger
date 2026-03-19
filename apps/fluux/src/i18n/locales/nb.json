@@ -582,18 +582,6 @@
         "invalidXml": "Ugyldig XML-stanza",
         "failedToSend": "Kunne ikke sende"
     },
-    "emoji": {
-        "categories": {
-            "smileys": "Smilefjes",
-            "people": "Folk",
-            "animals": "Dyr",
-            "food": "Mat",
-            "activities": "Aktiviteter",
-            "travel": "Reise",
-            "objects": "Objekter",
-            "symbols": "Symboler"
-        }
-    },
     "emptyState": {
         "messages": {
             "title": "Private samtaler",

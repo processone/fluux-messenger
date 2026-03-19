@@ -582,18 +582,6 @@
         "invalidXml": "Stanza XML neamhbhailí",
         "failedToSend": "Theip ar sheoladh"
     },
-    "emoji": {
-        "categories": {
-            "smileys": "Straoiseoga",
-            "people": "Daoine",
-            "animals": "Ainmhithe",
-            "food": "Bia",
-            "activities": "Gníomhaíochtaí",
-            "travel": "Taisteal",
-            "objects": "Rudaí",
-            "symbols": "Siombailí"
-        }
-    },
     "emptyState": {
         "messages": {
             "title": "Comhráite Príobháideacha",

@@ -582,18 +582,6 @@
         "invalidXml": "Neplatná XML stanza",
         "failedToSend": "Nepodarilo sa odoslať"
     },
-    "emoji": {
-        "categories": {
-            "smileys": "Smajlíky",
-            "people": "Ľudia",
-            "animals": "Zvieratá",
-            "food": "Jedlo",
-            "activities": "Aktivity",
-            "travel": "Cestovanie",
-            "objects": "Objekty",
-            "symbols": "Symboly"
-        }
-    },
     "emptyState": {
         "messages": {
             "title": "Súkromné konverzácie",

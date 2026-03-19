@@ -582,18 +582,6 @@
         "invalidXml": "Невалидна XML станза",
         "failedToSend": "Неуспешно изпращане"
     },
-    "emoji": {
-        "categories": {
-            "smileys": "Емотикони",
-            "people": "Хора",
-            "animals": "Животни",
-            "food": "Храна",
-            "activities": "Дейности",
-            "travel": "Пътуване",
-            "objects": "Обекти",
-            "symbols": "Символи"
-        }
-    },
     "emptyState": {
         "messages": {
             "title": "Лични разговори",

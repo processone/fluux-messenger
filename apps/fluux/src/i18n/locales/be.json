@@ -582,18 +582,6 @@
         "invalidXml": "Няправільны XML-строфа",
         "failedToSend": "Не атрымалася адправіць"
     },
-    "emoji": {
-        "categories": {
-            "smileys": "Смайлікі",
-            "people": "Людзі",
-            "animals": "Жывёлы",
-            "food": "Ежа",
-            "activities": "Актыўнасці",
-            "travel": "Падарожжы",
-            "objects": "Аб'екты",
-            "symbols": "Сімвалы"
-        }
-    },
     "emptyState": {
         "messages": {
             "title": "Прыватныя размовы",

@@ -582,18 +582,6 @@
         "invalidXml": "Virheellinen XML-stanza",
         "failedToSend": "Lähetys epäonnistui"
     },
-    "emoji": {
-        "categories": {
-            "smileys": "Hymiöt",
-            "people": "Ihmiset",
-            "animals": "Eläimet",
-            "food": "Ruoka",
-            "activities": "Aktiviteetit",
-            "travel": "Matkailu",
-            "objects": "Esineet",
-            "symbols": "Symbolit"
-        }
-    },
     "emptyState": {
         "messages": {
             "title": "Yksityiset keskustelut",

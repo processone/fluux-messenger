@@ -582,18 +582,6 @@
         "invalidXml": "Недопустимая XML-строка",
         "failedToSend": "Не удалось отправить"
     },
-    "emoji": {
-        "categories": {
-            "smileys": "Смайлики",
-            "people": "Люди",
-            "animals": "Животные",
-            "food": "Еда",
-            "activities": "Активности",
-            "travel": "Путешествия",
-            "objects": "Объекты",
-            "symbols": "Символы"
-        }
-    },
     "emptyState": {
         "messages": {
             "title": "Приватные беседы",

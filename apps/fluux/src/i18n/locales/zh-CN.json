@@ -582,18 +582,6 @@
         "invalidXml": "无效的 XML 节",
         "failedToSend": "发送失败"
     },
-    "emoji": {
-        "categories": {
-            "smileys": "Smileys",
-            "people": "人物",
-            "animals": "动物",
-            "food": "美食",
-            "activities": "活动",
-            "travel": "旅行",
-            "objects": "物件",
-            "symbols": "符号"
-        }
-    },
     "emptyState": {
         "messages": {
             "title": "私人对话",

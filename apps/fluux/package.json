@@ -20,6 +20,7 @@
     "tauri:build": "./scripts/tauri-build.sh"
   },
   "dependencies": {
+    "@emoji-mart/data": "^1.2.1",
     "@fluux/sdk": "*",
     "@tauri-apps/plugin-clipboard-manager": "^2.0.0",
     "@tauri-apps/plugin-dialog": "^2.6.0",
@@ -32,6 +33,7 @@
     "@tauri-apps/plugin-updater": "^2.9.0",
     "@xstate/react": "^6.0.0",
     "date-fns": "^3.0.6",
+    "emoji-mart": "^5.6.0",
     "i18next": "^25.7.3",
     "i18next-browser-languagedetector": "^8.2.0",
     "i18next-resources-to-backend": "^1.2.1",
@@ -45,13 +47,13 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
+    "@rolldown/plugin-babel": "^0.2.2",
     "@tauri-apps/api": "^2.9.1",
     "@tauri-apps/cli": "^2.9.6",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@rolldown/plugin-babel": "^0.2.2",
     "@vitejs/plugin-react": "^6.0.0",
     "@vitest/coverage-v8": "^4.1.0",
     "autoprefixer": "^10.4.16",

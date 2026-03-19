@@ -1,4 +1,4 @@
-import { useRef, memo } from 'react'
+import { useRef, memo, Suspense, lazy } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SmilePlus, Pencil, Forward, MoreHorizontal, Reply, Trash2 } from 'lucide-react'
 import { useClickOutside } from '@/hooks'
@@ -7,8 +7,8 @@ import { Tooltip } from '../Tooltip'
 // Quick reaction emojis shown directly in toolbar
 const TOOLBAR_REACTIONS = ['👍', '❤️', '😂']
 
-// Extended emoji picker (excludes TOOLBAR_REACTIONS to avoid duplicates)
-const EXTENDED_REACTIONS = ['😮', '😢', '🎉', '👏', '🔥', '🙏', '👆', '👀']
+// Lazy-load emoji picker — only fetched when user opens reaction picker
+const EmojiPicker = lazy(() => import('../EmojiPicker').then(m => ({ default: m.EmojiPicker })))
 
 export interface MessageToolbarProps {
   /** Handler for reaction button clicks. When undefined, reaction UI is hidden. */
@@ -155,20 +155,15 @@ export const MessageToolbar = memo(function MessageToolbar({
           <SmilePlus className="w-4 h-4 text-fluux-muted" />
         </button>
 
-        {/* Extended reaction picker */}
+        {/* Full emoji picker for reactions */}
         {showReactionPicker && (
-          <div className="absolute top-full right-0 mt-1 flex gap-1 p-1.5 bg-fluux-bg rounded-lg shadow-lg border border-fluux-hover z-30">
-            {EXTENDED_REACTIONS.map(emoji => (
-              <button
-                key={emoji}
-                onClick={() => handleReaction(emoji)}
-                className={`p-1.5 rounded hover:bg-fluux-hover text-lg transition-colors ${
-                  myReactions.includes(emoji) ? 'bg-fluux-brand/20' : ''
-                }`}
-              >
-                {emoji}
-              </button>
-            ))}
+          <div className="absolute top-full right-0 mt-1 z-30">
+            <Suspense fallback={null}>
+              <EmojiPicker
+                onSelect={(emoji) => handleReaction(emoji)}
+                onClose={() => setShowReactionPicker(false)}
+              />
+            </Suspense>
           </div>
         )}
       </div>

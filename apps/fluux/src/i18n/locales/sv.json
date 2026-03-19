@@ -582,18 +582,6 @@
         "invalidXml": "Ogiltig XML-stanza",
         "failedToSend": "Kunde inte skicka"
     },
-    "emoji": {
-        "categories": {
-            "smileys": "Smileys",
-            "people": "Personer",
-            "animals": "Djur",
-            "food": "Mat",
-            "activities": "Aktiviteter",
-            "travel": "Resor",
-            "objects": "Objekt",
-            "symbols": "Symboler"
-        }
-    },
     "emptyState": {
         "messages": {
             "title": "Privata konversationer",

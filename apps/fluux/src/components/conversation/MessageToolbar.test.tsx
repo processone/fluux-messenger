@@ -29,6 +29,22 @@ vi.mock('@/hooks', () => ({
   useClickOutside: vi.fn(),
 }))
 
+// Mock lazy-loaded EmojiPicker — must export as default for React.lazy()
+vi.mock('../EmojiPicker', () => ({
+  default: ({ onSelect, onClose }: { onSelect: (emoji: string) => void; onClose: () => void }) => (
+    <div data-testid="emoji-picker">
+      <button onClick={() => onSelect('🎉')} data-testid="emoji-picker-select">Select emoji</button>
+      <button onClick={onClose} data-testid="emoji-picker-close">Close</button>
+    </div>
+  ),
+  EmojiPicker: ({ onSelect, onClose }: { onSelect: (emoji: string) => void; onClose: () => void }) => (
+    <div data-testid="emoji-picker">
+      <button onClick={() => onSelect('🎉')} data-testid="emoji-picker-select">Select emoji</button>
+      <button onClick={onClose} data-testid="emoji-picker-close">Close</button>
+    </div>
+  ),
+}))
+
 describe('MessageToolbar', () => {
   const defaultProps = {
     onReaction: vi.fn(),
@@ -130,20 +146,17 @@ describe('MessageToolbar', () => {
     })
   })
 
-  describe('Extended Reaction Picker', () => {
-    it('should show extended picker when showReactionPicker is true', () => {
+  describe('Emoji Reaction Picker', () => {
+    it('should show emoji picker when showReactionPicker is true', async () => {
       render(<MessageToolbar {...defaultProps} showReactionPicker={true} />)
 
-      // Extended picker has more emojis like 😮, 😢, 🎉
-      expect(screen.getByText('😮')).toBeInTheDocument()
-      expect(screen.getByText('😢')).toBeInTheDocument()
-      expect(screen.getByText('🎉')).toBeInTheDocument()
+      expect(await screen.findByTestId('emoji-picker')).toBeInTheDocument()
     })
 
-    it('should not show extended picker when showReactionPicker is false', () => {
+    it('should not show emoji picker when showReactionPicker is false', () => {
       render(<MessageToolbar {...defaultProps} showReactionPicker={false} />)
 
-      expect(screen.queryByText('😮')).not.toBeInTheDocument()
+      expect(screen.queryByTestId('emoji-picker')).not.toBeInTheDocument()
     })
 
     it('should toggle picker when more reactions button clicked', () => {
@@ -162,7 +175,7 @@ describe('MessageToolbar', () => {
       expect(setShowReactionPicker).toHaveBeenCalledWith(true)
     })
 
-    it('should call onReaction and close picker when extended reaction clicked', () => {
+    it('should call onReaction and close picker when emoji selected', async () => {
       const onReaction = vi.fn()
       const setShowReactionPicker = vi.fn()
       render(
@@ -174,28 +187,11 @@ describe('MessageToolbar', () => {
         />
       )
 
-      fireEvent.click(screen.getByText('🎉'))
+      const selectButton = await screen.findByTestId('emoji-picker-select')
+      fireEvent.click(selectButton)
 
       expect(onReaction).toHaveBeenCalledWith('🎉')
       expect(setShowReactionPicker).toHaveBeenCalledWith(false)
-    })
-
-    it('should highlight extended reactions user has already used', () => {
-      render(
-        <MessageToolbar
-          {...defaultProps}
-          myReactions={['🎉', '🔥']}
-          showReactionPicker={true}
-        />
-      )
-
-      const partyButton = screen.getByText('🎉').closest('button')
-      const fireButton = screen.getByText('🔥').closest('button')
-      const cryButton = screen.getByText('😢').closest('button')
-
-      expect(partyButton).toHaveClass('bg-fluux-brand/20')
-      expect(fireButton).toHaveClass('bg-fluux-brand/20')
-      expect(cryButton).not.toHaveClass('bg-fluux-brand/20')
     })
   })
 

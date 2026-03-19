@@ -582,18 +582,6 @@
         "invalidXml": "Ógild XML stanza",
         "failedToSend": "Ekki tókst að senda"
     },
-    "emoji": {
-        "categories": {
-            "smileys": "Broskallar",
-            "people": "Fólk",
-            "animals": "Dýr",
-            "food": "Matur",
-            "activities": "Athafnir",
-            "travel": "Ferðalög",
-            "objects": "Hlutir",
-            "symbols": "Tákn"
-        }
-    },
     "emptyState": {
         "messages": {
             "title": "Einkaspjöll",

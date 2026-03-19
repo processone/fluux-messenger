@@ -66,6 +66,13 @@
   --fluux-border: rgba(0, 0, 0, 0.1);
   --scrollbar-thumb: #1a1b1e;
   --scrollbar-thumb-hover: #2b2d31;
+
+  /* emoji-mart theming */
+  --em-rgb-background: 30, 31, 34;
+  --em-rgb-input: 53, 55, 60;
+  --em-rgb-color: 219, 222, 225;
+  --em-color-border: var(--fluux-hover);
+  --em-color-border-over: var(--fluux-active);
 }
 
 /* Light mode (Discord-inspired) */
@@ -85,6 +92,13 @@
   --fluux-border: rgba(0, 0, 0, 0.15);
   --scrollbar-thumb: #c4c9ce;
   --scrollbar-thumb-hover: #a8adb3;
+
+  /* emoji-mart theming */
+  --em-rgb-background: 227, 229, 232;
+  --em-rgb-input: 220, 222, 227;
+  --em-rgb-color: 46, 51, 56;
+  --em-color-border: var(--fluux-hover);
+  --em-color-border-over: var(--fluux-active);
 }
 
 /* Text selection styling - uses brand color for consistent look */

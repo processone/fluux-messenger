@@ -582,18 +582,6 @@
         "invalidXml": "Stanza XML invalidă",
         "failedToSend": "Trimiterea a eșuat"
     },
-    "emoji": {
-        "categories": {
-            "smileys": "Fețe zâmbitoare",
-            "people": "Oameni",
-            "animals": "Animale",
-            "food": "Mâncare",
-            "activities": "Activități",
-            "travel": "Călătorii",
-            "objects": "Obiecte",
-            "symbols": "Simboluri"
-        }
-    },
     "emptyState": {
         "messages": {
             "title": "Conversații private",

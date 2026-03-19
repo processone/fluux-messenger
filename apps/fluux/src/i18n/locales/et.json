@@ -582,18 +582,6 @@
         "invalidXml": "Vigane XML stanza",
         "failedToSend": "Saatmine ebaõnnestus"
     },
-    "emoji": {
-        "categories": {
-            "smileys": "Naerunäod",
-            "people": "Inimesed",
-            "animals": "Loomad",
-            "food": "Toit",
-            "activities": "Tegevused",
-            "travel": "Reisimine",
-            "objects": "Objektid",
-            "symbols": "Sümbolid"
-        }
-    },
     "emptyState": {
         "messages": {
             "title": "Privaatsed vestlused",

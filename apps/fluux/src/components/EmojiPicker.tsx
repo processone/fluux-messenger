@@ -1,166 +1,69 @@
-import { useState, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useClickOutside } from '@/hooks'
-import { Tooltip } from './Tooltip'
+import { useSettingsStore, type ThemeMode } from '@/stores/settingsStore'
+import data from '@emoji-mart/data'
+import { Picker } from 'emoji-mart'
 
 interface EmojiPickerProps {
   onSelect: (emoji: string) => void
   onClose: () => void
 }
 
-// Category icons (using emojis as icons)
-const CATEGORY_ICONS: Record<string, string> = {
-  smileys: '😀',
-  people: '👋',
-  animals: '🐶',
-  food: '🍎',
-  activities: '⚽',
-  travel: '🚗',
-  objects: '💡',
-  symbols: '❤️',
+function resolveTheme(mode: ThemeMode): 'light' | 'dark' {
+  if (mode === 'system') {
+    return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+  }
+  return mode
 }
-
-// Comprehensive emoji data by category
-const EMOJI_CATEGORIES: Record<string, string[]> = {
-  smileys: [
-    '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '😊',
-    '😇', '🥰', '😍', '🤩', '😘', '😗', '😚', '😙', '🥲', '😋',
-    '😛', '😜', '🤪', '😝', '🤑', '🤗', '🤭', '🤫', '🤔', '🤐',
-    '🤨', '😐', '😑', '😶', '😏', '😒', '🙄', '😬', '🤥', '😌',
-    '😔', '😪', '🤤', '😴', '😷', '🤒', '🤕', '🤢', '🤮', '🤧',
-    '🥵', '🥶', '🥴', '😵', '🤯', '🤠', '🥳', '🥸', '😎', '🤓',
-    '🧐', '😕', '😟', '🙁', '😮', '😯', '😲', '😳', '🥺', '😦',
-    '😧', '😨', '😰', '😥', '😢', '😭', '😱', '😖', '😣', '😞',
-    '😓', '😩', '😫', '🥱', '😤', '😡', '😠', '🤬', '😈', '👿',
-  ],
-  people: [
-    '👋', '🤚', '🖐️', '✋', '🖖', '👌', '🤌', '🤏', '✌️', '🤞',
-    '🤟', '🤘', '🤙', '👈', '👉', '👆', '🖕', '👇', '👍', '👎',
-    '✊', '👊', '🤛', '🤜', '👏', '🙌', '👐', '🤲', '🤝', '🙏',
-    '✍️', '💅', '🤳', '💪', '🦾', '🦿', '🦵', '🦶', '👂', '🦻',
-    '👃', '🧠', '👀', '👁️', '👅', '👄', '👶', '🧒', '👦', '👧',
-    '🧑', '👱', '👨', '🧔', '👩', '🧓', '👴', '👵', '🙍', '🙎',
-    '🙅', '🙆', '💁', '🙋', '🧏', '🙇', '🤦', '🤷', '👮', '🕵️',
-    '💂', '🥷', '👷', '🤴', '👸', '👳', '👲', '🧕', '🤵', '👰',
-  ],
-  animals: [
-    '🐶', '🐕', '🦮', '🐩', '🐺', '🦊', '🦝', '🐱', '🐈', '🦁',
-    '🐯', '🐅', '🐆', '🐴', '🐎', '🦄', '🦓', '🦌', '🦬', '🐮',
-    '🐂', '🐃', '🐄', '🐷', '🐖', '🐗', '🐽', '🐏', '🐑', '🐐',
-    '🐪', '🐫', '🦙', '🦒', '🐘', '🦣', '🦏', '🦛', '🐭', '🐁',
-    '🐀', '🐹', '🐰', '🐇', '🐿️', '🦫', '🦔', '🦇', '🐻', '🐨',
-    '🐼', '🦥', '🦦', '🦨', '🦘', '🦡', '🐾', '🦃', '🐔', '🐓',
-    '🐣', '🐤', '🐥', '🐦', '🐧', '🕊️', '🦅', '🦆', '🦢', '🦉',
-    '🦤', '🪶', '🦩', '🦚', '🦜', '🐸', '🐊', '🐢', '🦎', '🐍',
-  ],
-  food: [
-    '🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🫐', '🍈',
-    '🍒', '🍑', '🥭', '🍍', '🥥', '🥝', '🍅', '🍆', '🥑', '🥦',
-    '🥬', '🥒', '🌶️', '🫑', '🌽', '🥕', '🫒', '🧄', '🧅', '🥔',
-    '🍠', '🥐', '🥯', '🍞', '🥖', '🥨', '🧀', '🥚', '🍳', '🧈',
-    '🥞', '🧇', '🥓', '🥩', '🍗', '🍖', '🌭', '🍔', '🍟', '🍕',
-    '🫓', '🥪', '🥙', '🧆', '🌮', '🌯', '🫔', '🥗', '🥘', '🫕',
-    '🥫', '🍝', '🍜', '🍲', '🍛', '🍣', '🍱', '🥟', '🦪', '🍤',
-    '🍙', '🍚', '🍘', '🍥', '🥠', '🥮', '🍢', '🍡', '🍧', '🍨',
-    '🍦', '🥧', '🧁', '🍰', '🎂', '🍮', '🍭', '🍬', '🍫', '🍿',
-  ],
-  activities: [
-    '⚽', '🏀', '🏈', '⚾', '🥎', '🎾', '🏐', '🏉', '🥏', '🎱',
-    '🪀', '🏓', '🏸', '🏒', '🏑', '🥍', '🏏', '🪃', '🥅', '⛳',
-    '🪁', '🏹', '🎣', '🤿', '🥊', '🥋', '🎽', '🛹', '🛼', '🛷',
-    '⛸️', '🥌', '🎿', '⛷️', '🏂', '🪂', '🏋️', '🤼', '🤸', '⛹️',
-    '🤺', '🤾', '🏌️', '🏇', '⛑️', '🎮', '🕹️', '🎲', '🧩', '♟️',
-    '🎰', '🎳', '🎯', '🎭', '🎨', '🎬', '🎤', '🎧', '🎼', '🎹',
-    '🥁', '🪘', '🎷', '🎺', '🪗', '🎸', '🪕', '🎻', '🎪', '🎟️',
-  ],
-  travel: [
-    '🚗', '🚕', '🚙', '🚌', '🚎', '🏎️', '🚓', '🚑', '🚒', '🚐',
-    '🛻', '🚚', '🚛', '🚜', '🏍️', '🛵', '🚲', '🛴', '🛺', '🚨',
-    '🚔', '🚍', '🚘', '🚖', '🚡', '🚠', '🚟', '🚃', '🚋', '🚞',
-    '🚝', '🚄', '🚅', '🚈', '🚂', '🚆', '🚇', '🚊', '🚉', '✈️',
-    '🛫', '🛬', '🛩️', '💺', '🛰️', '🚀', '🛸', '🚁', '🛶', '⛵',
-    '🚤', '🛥️', '🛳️', '⛴️', '🚢', '⚓', '🪝', '⛽', '🚧', '🚦',
-    '🚥', '🗺️', '🗿', '🗽', '🗼', '🏰', '🏯', '🏟️', '🎡', '🎢',
-    '🎠', '⛲', '⛱️', '🏖️', '🏝️', '🏜️', '🌋', '⛰️', '🏔️', '🗻',
-    '🏕️', '🛖', '🏠', '🏡', '🏘️', '🏚️', '🏗️', '🏢', '🏬', '🏣',
-  ],
-  objects: [
-    '⌚', '📱', '📲', '💻', '⌨️', '🖥️', '🖨️', '🖱️', '🖲️', '💽',
-    '💾', '💿', '📀', '📼', '📷', '📸', '📹', '🎥', '📽️', '🎞️',
-    '📞', '☎️', '📟', '📠', '📺', '📻', '🎙️', '🎚️', '🎛️', '🧭',
-    '⏱️', '⏲️', '⏰', '🕰️', '⌛', '⏳', '📡', '🔋', '🔌', '💡',
-    '🔦', '🕯️', '🪔', '🧯', '🛢️', '💸', '💵', '💴', '💶', '💷',
-    '🪙', '💰', '💳', '💎', '⚖️', '🪜', '🧰', '🪛', '🔧', '🔨',
-    '⚒️', '🛠️', '⛏️', '🪚', '🔩', '⚙️', '🪤', '🧱', '⛓️', '🧲',
-    '🔫', '💣', '🧨', '🪓', '🔪', '🗡️', '⚔️', '🛡️', '🚬', '⚰️',
-  ],
-  symbols: [
-    '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔',
-    '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '💟', '☮️',
-    '✝️', '☪️', '🕉️', '☸️', '✡️', '🔯', '🕎', '☯️', '☦️', '🛐',
-    '⛎', '♈', '♉', '♊', '♋', '♌', '♍', '♎', '♏', '♐',
-    '♑', '♒', '♓', '🆔', '⚛️', '🉑', '☢️', '☣️', '📴', '📳',
-    '🈶', '🈚', '🈸', '🈺', '🈷️', '✴️', '🆚', '💮', '🉐', '㊙️',
-    '㊗️', '🈴', '🈵', '🈹', '🈲', '🅰️', '🅱️', '🆎', '🆑', '🅾️',
-    '🆘', '❌', '⭕', '🛑', '⛔', '📛', '🚫', '💯', '💢', '♨️',
-    '🚷', '🚯', '🚳', '🚱', '🔞', '📵', '🚭', '❗', '❕', '❓',
-    '❔', '‼️', '⁉️', '🔅', '🔆', '⚜️', '🔱', '✨', '⭐', '🌟',
-  ],
-}
-
-type CategoryKey = keyof typeof EMOJI_CATEGORIES
 
 export function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
-  const { t } = useTranslation()
-  const [activeCategory, setActiveCategory] = useState<CategoryKey>('smileys')
-  const pickerRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const pickerRef = useRef<InstanceType<typeof Picker> | null>(null)
+  const { i18n } = useTranslation()
+  const themeMode = useSettingsStore((s) => s.themeMode)
+  const theme = resolveTheme(themeMode)
 
-  // Close picker when clicking outside
-  const handleClose = () => onClose()
-  useClickOutside(pickerRef, handleClose, true)
+  useEffect(() => {
+    if (!containerRef.current) return
 
-  const handleEmojiClick = (emoji: string) => {
-    onSelect(emoji)
-  }
+    // emoji-mart Picker is a web component — mount it imperatively
+    const picker = new Picker({
+      data,
+      theme,
+      onEmojiSelect: (emoji: { native: string }) => onSelect(emoji.native),
+      searchPosition: 'sticky',
+      previewPosition: 'none',
+      skinTonePosition: 'search',
+      perLine: 8,
+      maxFrequentRows: 1,
+      locale: i18n.language.split('-')[0], // e.g. 'en' from 'en-US'
+      autoFocus: true,
+    })
 
-  const categories = Object.keys(EMOJI_CATEGORIES) as CategoryKey[]
+    pickerRef.current = picker
+    containerRef.current.appendChild(picker as unknown as Node)
 
-  return (
-    <div
-      ref={pickerRef}
-      className="w-80 bg-fluux-bg border border-fluux-hover rounded-lg shadow-xl overflow-hidden"
-    >
-      {/* Category tabs */}
-      <div className="flex border-b border-fluux-hover bg-fluux-sidebar">
-        {categories.map((category) => (
-          <Tooltip key={category} content={t(`emoji.categories.${category}`)}>
-            <button
-              type="button"
-              onClick={() => setActiveCategory(category)}
-              className={`flex-1 p-2 text-lg transition-colors hover:bg-fluux-hover
-                         ${activeCategory === category ? 'bg-fluux-hover border-b-2 border-fluux-brand' : ''}`}
-            >
-              {CATEGORY_ICONS[category]}
-            </button>
-          </Tooltip>
-        ))}
-      </div>
+    return () => {
+      pickerRef.current = null
+      // Clean up: remove the picker element
+      if (containerRef.current) {
+        containerRef.current.replaceChildren()
+      }
+    }
+    // Re-create picker when theme or locale changes
+  }, [theme, i18n.language, onSelect])
 
-      {/* Emoji grid */}
-      <div className="h-64 overflow-y-auto p-2">
-        <div className="grid grid-cols-8 gap-1">
-          {EMOJI_CATEGORIES[activeCategory].map((emoji, index) => (
-            <button
-              type="button"
-              key={`${emoji}-${index}`}
-              onClick={() => handleEmojiClick(emoji)}
-              className="p-1.5 text-xl rounded hover:bg-fluux-hover transition-colors"
-            >
-              {emoji}
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
+  // Close on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        onClose()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
+
+  return <div ref={containerRef} />
 }

@@ -582,18 +582,6 @@
         "invalidXml": "Invalid XML stanza",
         "failedToSend": "Failed to send"
     },
-    "emoji": {
-        "categories": {
-            "smileys": "Smileys",
-            "people": "People",
-            "animals": "Animals",
-            "food": "Food",
-            "activities": "Activities",
-            "travel": "Travel",
-            "objects": "Objects",
-            "symbols": "Symbols"
-        }
-    },
     "emptyState": {
         "messages": {
             "title": "Private Conversations",

@@ -1,10 +1,12 @@
-import React, { useState, useRef, useEffect, useCallback, type ReactNode, type RefObject, type Ref, useImperativeHandle } from 'react'
+import React, { useState, useRef, useEffect, useCallback, Suspense, lazy, type ReactNode, type RefObject, type Ref, useImperativeHandle } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { Send, Smile, Paperclip, Reply, X, Pencil, Loader2, Image, FileText, Trash2 } from 'lucide-react'
 import { useClickOutside, useSlashCommands } from '@/hooks'
-import { EmojiPicker } from './EmojiPicker'
 import { Tooltip } from './Tooltip'
+
+// Lazy-load emoji picker — keeps ~150KB of emoji data out of the main bundle
+const EmojiPicker = lazy(() => import('./EmojiPicker').then(m => ({ default: m.EmojiPicker })))
 import type { FileAttachment } from '@fluux/sdk'
 
 // Format file size for display
@@ -754,13 +756,15 @@ export function MessageComposer({
             <Smile className="w-5 h-5" />
           </button>
 
-          {/* Emoji picker popup */}
+          {/* Emoji picker popup (lazy-loaded) */}
           {showEmojiPicker && (
             <div className="absolute bottom-full right-0 mb-2 z-50">
-              <EmojiPicker
-                onSelect={handleEmojiSelect}
-                onClose={() => setShowEmojiPicker(false)}
-              />
+              <Suspense fallback={null}>
+                <EmojiPicker
+                  onSelect={handleEmojiSelect}
+                  onClose={() => setShowEmojiPicker(false)}
+                />
+              </Suspense>
             </div>
           )}
         </div>

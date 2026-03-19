@@ -582,18 +582,6 @@
         "invalidXml": "Nederīga XML stanza",
         "failedToSend": "Neizdevās nosūtīt"
     },
-    "emoji": {
-        "categories": {
-            "smileys": "Smaidiņi",
-            "people": "Cilvēki",
-            "animals": "Dzīvnieki",
-            "food": "Ēdiens",
-            "activities": "Aktivitātes",
-            "travel": "Ceļojumi",
-            "objects": "Objekti",
-            "symbols": "Simboli"
-        }
-    },
     "emptyState": {
         "messages": {
             "title": "Privātas sarunas",

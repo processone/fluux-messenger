@@ -582,18 +582,6 @@
         "invalidXml": "Nevažeća XML stanza",
         "failedToSend": "Slanje nije uspjelo"
     },
-    "emoji": {
-        "categories": {
-            "smileys": "Smajlići",
-            "people": "Ljudi",
-            "animals": "Životinje",
-            "food": "Hrana",
-            "activities": "Aktivnosti",
-            "travel": "Putovanja",
-            "objects": "Objekti",
-            "symbols": "Simboli"
-        }
-    },
     "emptyState": {
         "messages": {
             "title": "Privatni razgovori",

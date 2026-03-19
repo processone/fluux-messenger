@@ -582,18 +582,6 @@
         "invalidXml": "Μη έγκυρο XML stanza",
         "failedToSend": "Αποτυχία αποστολής"
     },
-    "emoji": {
-        "categories": {
-            "smileys": "Φατσούλες",
-            "people": "Άνθρωποι",
-            "animals": "Ζώα",
-            "food": "Φαγητό",
-            "activities": "Δραστηριότητες",
-            "travel": "Ταξίδια",
-            "objects": "Αντικείμενα",
-            "symbols": "Σύμβολα"
-        }
-    },
     "emptyState": {
         "messages": {
             "title": "Ιδιωτικές συνομιλίες",

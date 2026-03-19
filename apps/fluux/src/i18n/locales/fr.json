@@ -582,18 +582,6 @@
         "invalidXml": "Stanza XML invalide",
         "failedToSend": "Échec de l'envoi"
     },
-    "emoji": {
-        "categories": {
-            "smileys": "Smileys",
-            "people": "Personnes",
-            "animals": "Animaux",
-            "food": "Nourriture",
-            "activities": "Activités",
-            "travel": "Voyages",
-            "objects": "Objets",
-            "symbols": "Symboles"
-        }
-    },
     "emptyState": {
         "messages": {
             "title": "Conversations privées",

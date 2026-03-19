@@ -582,18 +582,6 @@
         "invalidXml": "Érvénytelen XML stanza",
         "failedToSend": "Nem sikerült elküldeni"
     },
-    "emoji": {
-        "categories": {
-            "smileys": "Hangulatjelek",
-            "people": "Emberek",
-            "animals": "Állatok",
-            "food": "Ételek",
-            "activities": "Tevékenységek",
-            "travel": "Utazás",
-            "objects": "Tárgyak",
-            "symbols": "Szimbólumok"
-        }
-    },
     "emptyState": {
         "messages": {
             "title": "Privát beszélgetések",

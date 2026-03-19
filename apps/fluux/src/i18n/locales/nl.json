@@ -582,18 +582,6 @@
         "invalidXml": "Ongeldige XML-stanza",
         "failedToSend": "Verzenden mislukt"
     },
-    "emoji": {
-        "categories": {
-            "smileys": "Smileys",
-            "people": "Mensen",
-            "animals": "Dieren",
-            "food": "Eten",
-            "activities": "Activiteiten",
-            "travel": "Reizen",
-            "objects": "Voorwerpen",
-            "symbols": "Symbolen"
-        }
-    },
     "emptyState": {
         "messages": {
             "title": "Prive-gesprekken",

@@ -582,18 +582,6 @@
         "invalidXml": "Nieprawidłowa stanza XML",
         "failedToSend": "Nie udało się wysłać"
     },
-    "emoji": {
-        "categories": {
-            "smileys": "Emotikony",
-            "people": "Ludzie",
-            "animals": "Zwierzęta",
-            "food": "Jedzenie",
-            "activities": "Aktywności",
-            "travel": "Podróże",
-            "objects": "Przedmioty",
-            "symbols": "Symbole"
-        }
-    },
     "emptyState": {
         "messages": {
             "title": "Prywatne rozmowy",

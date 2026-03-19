@@ -582,18 +582,6 @@
         "invalidXml": "XML stanza invalida",
         "failedToSend": "Ma rnexxiex tintbagħat"
     },
-    "emoji": {
-        "categories": {
-            "smileys": "Smileys",
-            "people": "Nies",
-            "animals": "Annimali",
-            "food": "Ikel",
-            "activities": "Attivitajiet",
-            "travel": "Vjaġġar",
-            "objects": "Oġġetti",
-            "symbols": "Simboli"
-        }
-    },
     "emptyState": {
         "messages": {
             "title": "Konversazzjonijiet Privati",

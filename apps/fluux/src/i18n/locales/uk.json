@@ -582,18 +582,6 @@
         "invalidXml": "Недійсний XML-строфа",
         "failedToSend": "Не вдалося надіслати"
     },
-    "emoji": {
-        "categories": {
-            "smileys": "Смайли",
-            "people": "Люди",
-            "animals": "Тварини",
-            "food": "Їжа",
-            "activities": "Активності",
-            "travel": "Подорожі",
-            "objects": "Об'єкти",
-            "symbols": "Символи"
-        }
-    },
     "emptyState": {
         "messages": {
             "title": "Приватні розмови",

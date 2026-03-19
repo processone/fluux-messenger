@@ -582,18 +582,6 @@
         "invalidXml": "Neteisinga XML stanza",
         "failedToSend": "Nepavyko išsiųsti"
     },
-    "emoji": {
-        "categories": {
-            "smileys": "Šypsenėlės",
-            "people": "Žmonės",
-            "animals": "Gyvūnai",
-            "food": "Maistas",
-            "activities": "Veikla",
-            "travel": "Kelionės",
-            "objects": "Objektai",
-            "symbols": "Simboliai"
-        }
-    },
     "emptyState": {
         "messages": {
             "title": "Privatūs pokalbiai",
