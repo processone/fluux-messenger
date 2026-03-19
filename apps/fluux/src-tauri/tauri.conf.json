@@ -51,7 +51,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "createUpdaterArtifacts": false,
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -62,7 +62,7 @@
     ],
     "macOS": {
       "minimumSystemVersion": "10.13",
-      "bundleVersion": "4c9f79a",
+      "bundleVersion": "b6b1fe7",
       "entitlements": "Entitlements.plist",
       "signingIdentity": null
     },

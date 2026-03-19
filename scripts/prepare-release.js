@@ -79,6 +79,12 @@ const tauriConf = JSON.parse(fs.readFileSync(tauriPath, 'utf-8'))
 const oldTauriVersion = tauriConf.version
 tauriConf.version = baseVersion
 
+// Ensure updater artifacts are always enabled (Tauri dev/build may reset this to false)
+if (tauriConf.bundle && tauriConf.bundle.createUpdaterArtifacts !== true) {
+  tauriConf.bundle.createUpdaterArtifacts = true
+  console.log('  createUpdaterArtifacts: false -> true (fixed)')
+}
+
 // Update bundleVersion with short git hash
 try {
   const gitHash = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim()
