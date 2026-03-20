@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useRoomActive, useRoster, getBareJid, generateConsistentColorHexSync, getPresenceFromShow, createMessageLookup, isMessageFromIgnoredUser, isReplyToIgnoredUser, canKick, canBan, canModerate, getAvailableAffiliations, getAvailableRoles, type RoomMessage, type Room, type MentionReference, type ChatStateNotification, type Contact, type FileAttachment, type RoomAffiliation, type RoomRole } from '@fluux/sdk'
+import { useRoomActive, useRoster, getBareJid, generateConsistentColorHexSync, getPresenceFromShow, createMessageLookup, isMessageFromIgnoredUser, isReplyToIgnoredUser, canKick, canBan, canModerate, getAvailableAffiliations, getAvailableRoles, type RoomMessage, type Room, type MentionReference, type ChatStateNotification, type Contact, type FileAttachment, type RoomAffiliation, type RoomRole, type PollData } from '@fluux/sdk'
 import { useConnectionStore, useIgnoreStore } from '@fluux/sdk/react'
 import { ignoreStore, type IgnoredUser } from '@fluux/sdk/stores'
 import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat, useContextMenu, isSmallScreen } from '@/hooks'
@@ -59,7 +59,7 @@ const MAX_ROOM_SIZE_FOR_TYPING = 30
 export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange, onStartChat, onShowProfile }: RoomViewProps) {
   detectRenderLoop('RoomView')
   const { t } = useTranslation()
-  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendPoll, closePoll, sendCorrection, retractMessage, moderateMessage, sendChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, activeMAMState, submitRoomConfig, setSubject, destroyRoom, setAffiliation, setRole } = useRoomActive()
+  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendPoll, votePoll, closePoll, sendCorrection, retractMessage, moderateMessage, sendChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, activeMAMState, submitRoomConfig, setSubject, destroyRoom, setAffiliation, setRole } = useRoomActive()
   const { contacts } = useRoster()
   // NOTE: Use focused selectors instead of useConnection() hook to avoid
   // re-renders when unrelated connection state changes (error, reconnectAttempt, etc.)
@@ -347,6 +347,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             contactsByJid={contactsByJid}
             ownAvatar={ownAvatar}
             sendReaction={sendReaction}
+            votePoll={votePoll}
             closePoll={closePoll}
             onReply={setReplyingTo}
             onEdit={setEditingMessage}
@@ -576,6 +577,7 @@ const RoomMessageList = memo(function RoomMessageList({
   contactsByJid,
   ownAvatar,
   sendReaction,
+  votePoll,
   closePoll,
   onReply,
   onEdit,
@@ -612,6 +614,7 @@ const RoomMessageList = memo(function RoomMessageList({
   contactsByJid: Map<string, Contact>
   ownAvatar?: string | null
   sendReaction: (roomJid: string, messageId: string, emojis: string[]) => Promise<void>
+  votePoll: (roomJid: string, messageId: string, optionEmoji: string, currentMyReactions: string[], poll: PollData) => Promise<void>
   closePoll: (roomJid: string, messageId: string) => Promise<string | null>
   onReply: (message: RoomMessage) => void
   onEdit: (message: RoomMessage) => void
@@ -731,6 +734,7 @@ const RoomMessageList = memo(function RoomMessageList({
       contactsByJid={contactsByJid}
       ownAvatar={ownAvatar}
       sendReaction={sendReaction}
+      votePoll={votePoll}
       closePoll={closePoll}
       onReply={onReply}
       onEdit={onEdit}
@@ -787,6 +791,7 @@ interface RoomMessageBubbleWrapperProps {
   contactsByJid: Map<string, Contact>
   ownAvatar?: string | null
   sendReaction: (roomJid: string, messageId: string, emojis: string[]) => Promise<void>
+  votePoll: (roomJid: string, messageId: string, optionEmoji: string, currentMyReactions: string[], poll: PollData) => Promise<void>
   closePoll: (roomJid: string, messageId: string) => Promise<string | null>
   onReply: (message: RoomMessage) => void
   onEdit: (message: RoomMessage) => void
@@ -825,6 +830,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   contactsByJid,
   ownAvatar,
   sendReaction,
+  votePoll,
   closePoll,
   onReply,
   onEdit,
@@ -915,6 +921,11 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
 
     void sendReaction(room.jid, message.id, newReactions)
   }
+
+  // Handle poll vote — uses SDK vote() which enforces single/multi-vote rules
+  const handlePollVote = message.poll ? (emoji: string) => {
+    void votePoll(room.jid, message.id, emoji, myReactions, message.poll!)
+  } : undefined
 
   // Build reply context using shared helper
   const replyContext = buildReplyContext(
@@ -1048,6 +1059,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         onNickTouchStart={!message.isOutgoing ? handleNickTouchStart : undefined}
         onNickTouchEnd={!message.isOutgoing ? onNickTouchEnd : undefined}
         onReactionPickerChange={onReactionPickerChange}
+        onPollVote={handlePollVote}
         onClosePoll={message.isOutgoing && message.poll ? () => closePoll(room.jid, message.id) : undefined}
         formatTime={formatTime}
         timeFormat={timeFormat}

@@ -95,6 +95,8 @@ export interface MessageBubbleProps {
   onNickTouchStart?: (e: React.TouchEvent) => void
   onNickTouchEnd?: () => void
 
+  // Poll vote action (enforces single/multi-vote rules via SDK)
+  onPollVote?: (emoji: string) => void
   // Poll close action (only for poll creator)
   onClosePoll?: () => Promise<string | null>
 
@@ -220,6 +222,7 @@ export const MessageBubble = memo(function MessageBubble({
   replyContext,
   mentions,
   canModerate,
+  onPollVote,
   onClosePoll,
   onNickContextMenu,
   onNickTouchStart,
@@ -419,7 +422,7 @@ export const MessageBubble = memo(function MessageBubble({
               poll={message.poll}
               reactions={message.reactions ?? {}}
               myReactions={myReactions}
-              onVote={handleReaction}
+              onVote={onPollVote ?? handleReaction}
               onClosePoll={onClosePoll}
               getReactorName={getReactorName}
             />

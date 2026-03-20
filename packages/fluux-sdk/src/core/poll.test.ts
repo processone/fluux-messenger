@@ -794,6 +794,38 @@ describe('poll utilities', () => {
     })
   })
 
+  describe('regression: single-vote must remove previous vote', () => {
+    // Regression test for bug where the app used a naive toggle (add/remove the clicked emoji)
+    // instead of enforceSingleVote, leaving the old vote in place alongside the new one.
+    const pollEmojis = ['1️⃣', '2️⃣', '3️⃣']
+
+    it('naive toggle would leave two votes — enforceSingleVote removes the old one', () => {
+      const currentReactions = ['1️⃣'] // Already voted for option 1
+      const newVote = '2️⃣'            // Now voting for option 2
+
+      // BUG: naive toggle just adds the new emoji (old behavior)
+      const naiveResult = [...currentReactions, newVote]
+      expect(naiveResult).toEqual(['1️⃣', '2️⃣']) // WRONG: two poll votes!
+
+      // FIX: enforceSingleVote removes old poll emojis first
+      const correctResult = enforceSingleVote(currentReactions, newVote, pollEmojis)
+      expect(correctResult).toEqual(['2️⃣']) // CORRECT: only the new vote
+    })
+
+    it('naive toggle would leave two votes with non-poll emojis — enforceSingleVote preserves only non-poll', () => {
+      const currentReactions = ['👍', '1️⃣'] // Thumbs-up + vote for option 1
+      const newVote = '3️⃣'                  // Now voting for option 3
+
+      // BUG: naive toggle
+      const naiveResult = [...currentReactions, newVote]
+      expect(naiveResult).toEqual(['👍', '1️⃣', '3️⃣']) // WRONG: old poll vote lingers
+
+      // FIX
+      const correctResult = enforceSingleVote(currentReactions, newVote, pollEmojis)
+      expect(correctResult).toEqual(['👍', '3️⃣']) // CORRECT: only non-poll emoji + new vote
+    })
+  })
+
   describe('round-trip: buildPollData → XML → parsePollElement asymmetry', () => {
     it('should lose empty-label options on parse (build/parse asymmetry)', () => {
       // buildPollData allows empty labels...
