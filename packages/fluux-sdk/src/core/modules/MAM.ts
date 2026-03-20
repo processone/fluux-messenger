@@ -45,7 +45,9 @@ import {
   NS_REACTIONS,
   NS_OOB,
   NS_OCCUPANT_ID,
+  NS_POLL,
 } from '../namespaces'
+import { parsePollElement, parsePollClosedElement } from '../poll'
 import type {
   Message,
   RoomMessage,
@@ -1238,9 +1240,11 @@ export class MAM extends BaseModule {
     if (messageEl.getChild('replace', NS_CORRECTION)) return null
     if (messageEl.getChild('reactions', NS_REACTIONS)) return null
 
-    // Accept messages with body OR OOB attachment (file-only messages have no body)
+    // Accept messages with body, OOB attachment, or poll elements
     if (!from) return null
-    if (!body && !messageEl.getChild('x', NS_OOB)) return null
+    const hasPoll = !!messageEl.getChild('poll', NS_POLL)
+    const hasPollClosed = !!messageEl.getChild('poll-closed', NS_POLL)
+    if (!body && !messageEl.getChild('x', NS_OOB) && !hasPoll && !hasPollClosed) return null
 
     const nick = getResource(from) || ''
     // Case-insensitive nickname comparison - some servers may change case
@@ -1256,7 +1260,7 @@ export class MAM extends BaseModule {
     // XEP-0421: Anonymous Unique Occupant Identifiers
     const occupantId = messageEl.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id
 
-    return {
+    const message: RoomMessage = {
       type: 'groupchat',
       id: messageId,
       ...(stanzaId && { stanzaId }),
@@ -1272,5 +1276,85 @@ export class MAM extends BaseModule {
       ...(parsed.attachment && { attachment: parsed.attachment }),
       ...(occupantId && { occupantId }),
     }
+
+    // Poll detection: parse <poll> or <poll-closed> elements from archived messages
+    if (hasPoll) {
+      const pollData = parsePollElement(messageEl.getChild('poll', NS_POLL)!)
+      if (pollData) {
+        message.poll = pollData
+        if (occupantId) message.poll.creatorId = occupantId
+      }
+    }
+    if (hasPollClosed) {
+      const pollClosedData = parsePollClosedElement(messageEl.getChild('poll-closed', NS_POLL)!)
+      if (pollClosedData) {
+        message.pollClosed = pollClosedData
+      }
+    }
+
+    return message
+  }
+
+  /**
+   * Fetch a single room message by its ID using MAM.
+   *
+   * Checks the store first (by both client ID and stanza-id).
+   * If not found, queries MAM using the `{urn:xmpp:mam:2}ids` form field.
+   *
+   * @param roomJid - The room JID
+   * @param messageId - The message ID (client ID or stanza-id / archive ID)
+   * @returns The message if found, or null
+   */
+  async fetchRoomMessageById(roomJid: string, messageId: string): Promise<RoomMessage | null> {
+    // Check store first — getMessage checks both id and stanzaId
+    const existing = this.deps.stores?.room.getMessage(roomJid, messageId)
+    if (existing) return existing
+
+    const room = this.deps.stores?.room.getRoom(roomJid)
+    const myNickname = room?.nickname || ''
+    const queryId = `mam_${generateUUID()}`
+
+    const formFields: Element[] = [
+      xml('field', { var: 'FORM_TYPE', type: 'hidden' }, xml('value', {}, NS_MAM)),
+      xml('field', { var: '{urn:xmpp:mam:2}ids' }, xml('value', {}, messageId)),
+    ]
+
+    const iq = this.buildMAMQuery(queryId, formFields, 1, undefined, roomJid)
+
+    let result: RoomMessage | null = null
+    const collectMessage = this.createMessageCollector(queryId, (forwarded, _messageEl, archiveId) => {
+      const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
+      if (msg) result = msg
+    })
+
+    let unregister: () => void
+    if (this.deps.registerMAMCollector) {
+      unregister = this.deps.registerMAMCollector(queryId, collectMessage)
+    } else {
+      const xmpp = this.deps.getXmpp()
+      xmpp?.on('stanza', collectMessage)
+      unregister = () => xmpp?.removeListener('stanza', collectMessage)
+    }
+
+    try {
+      await this.deps.sendIQ(iq)
+    } catch {
+      // MAM query failed — server may not support {ids} filter
+      return null
+    } finally {
+      unregister!()
+    }
+
+    // If found, add to the store so subsequent lookups don't need MAM
+    if (result) {
+      this.deps.emitSDK('room:message', {
+        roomJid,
+        message: result,
+        incrementUnread: false,
+        incrementMentions: false,
+      })
+    }
+
+    return result
   }
 }

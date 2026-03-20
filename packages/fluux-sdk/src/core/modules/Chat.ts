@@ -37,6 +37,7 @@ import type {
   RoomMessage,
   RoomMAMQueryOptions,
   RoomMAMResult,
+  PollClosedData,
 } from '../types'
 import { parseMessageContent, parseOgpFastening, applyRetraction, applyCorrection } from './messagingUtils'
 import { parsePollElement, parsePollClosedElement } from '../poll'
@@ -1350,22 +1351,13 @@ export class Chat extends BaseModule {
         // Verify against the original poll message (if available in store)
         const originalMsg = this.deps.stores?.room.getMessage(roomJid, pollClosedData.pollMessageId)
         if (originalMsg?.poll) {
-          // Verify the sender is the original poll creator
-          const senderIsCreator = (occupantId && originalMsg.occupantId)
-            ? occupantId === originalMsg.occupantId        // Prefer stable occupant-id (XEP-0421)
-            : nick === originalMsg.nick                     // Fall back to nick comparison
-          // Verify the title matches the original poll
-          const titleMatches = pollClosedData.title === originalMsg.poll.title
-          // Verify result emojis are a subset of the original poll options
-          const originalEmojis = new Set(originalMsg.poll.options.map(o => o.emoji))
-          const emojisMatch = pollClosedData.results.every(r => originalEmojis.has(r.emoji))
-
-          if (senderIsCreator && titleMatches && emojisMatch) {
+          if (this.verifyPollClosed(pollClosedData, originalMsg, nick, occupantId)) {
             message.pollClosed = pollClosedData
           }
         } else {
-          // Original poll not in store (e.g., joined late) — accept on trust
+          // Original poll not in store — accept on trust, then verify asynchronously via MAM
           message.pollClosed = pollClosedData
+          this.deferredPollClosedVerification(roomJid, messageId, pollClosedData, nick, occupantId)
         }
       }
     }
@@ -1391,6 +1383,55 @@ export class Chat extends BaseModule {
       incrementMentions: message.isMention,
     })
     return message
+  }
+
+  /**
+   * Verify a poll-closed message against the original poll data.
+   * Checks creator identity, title match, and emoji validity.
+   */
+  private verifyPollClosed(
+    pollClosed: PollClosedData,
+    originalMsg: RoomMessage,
+    senderNick: string,
+    senderOccupantId?: string,
+  ): boolean {
+    if (!originalMsg.poll) return false
+    // Verify the sender is the original poll creator
+    const senderIsCreator = (senderOccupantId && originalMsg.occupantId)
+      ? senderOccupantId === originalMsg.occupantId
+      : senderNick === originalMsg.nick
+    // Verify the title matches
+    const titleMatches = pollClosed.title === originalMsg.poll.title
+    // Verify result emojis are a subset of the original poll options
+    const originalEmojis = new Set(originalMsg.poll.options.map(o => o.emoji))
+    const emojisMatch = pollClosed.results.every(r => originalEmojis.has(r.emoji))
+    return senderIsCreator && titleMatches && emojisMatch
+  }
+
+  /**
+   * Asynchronously fetch the original poll via MAM and verify the poll-closed message.
+   * If verification fails, remove pollClosed from the message via an update.
+   */
+  private deferredPollClosedVerification(
+    roomJid: string,
+    closeMsgId: string,
+    pollClosed: PollClosedData,
+    senderNick: string,
+    senderOccupantId?: string,
+  ): void {
+    this.mamModule.fetchRoomMessageById(roomJid, pollClosed.pollMessageId).then((originalMsg) => {
+      if (!originalMsg?.poll) return // MAM fetch failed or message has no poll — keep trust-based acceptance
+      if (!this.verifyPollClosed(pollClosed, originalMsg, senderNick, senderOccupantId)) {
+        // Verification failed — remove pollClosed from the message
+        this.deps.emitSDK('room:message-updated', {
+          roomJid,
+          messageId: closeMsgId,
+          updates: { pollClosed: undefined },
+        })
+      }
+    }).catch(() => {
+      // MAM query failed — keep trust-based acceptance
+    })
   }
 
   private parseMentions(stanza: Element): MentionReference[] {

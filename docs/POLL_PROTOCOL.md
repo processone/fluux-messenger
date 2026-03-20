@@ -1,7 +1,7 @@
 # Proto-XEP: Client-Side Polls via Reactions
 
 **Namespace:** `urn:fluux:poll:0`
-**Dependencies:** XEP-0444 (Message Reactions), XEP-0045 (MUC), XEP-0428 (Fallback Indication), XEP-0334 (Message Processing Hints)
+**Dependencies:** XEP-0444 (Message Reactions), XEP-0045 (MUC), XEP-0428 (Fallback Indication), XEP-0334 (Message Processing Hints), XEP-0313 (MAM), XEP-0421 (Occupant Id)
 **Status:** Experimental (client-side implementation)
 
 ---
@@ -80,7 +80,7 @@ A poll is sent as a `<message type="groupchat">` containing a `<poll>` element i
 
 | Attribute | Type   | Required | Description                                                                                                                                |
 |-----------|--------|----------|--------------------------------------------------------------------------------------------------------------------------------------------|
-| `emoji`   | string | Yes      | The emoji that represents this option. When using the default numbered set, this is `1️⃣`, `2️⃣`, `3️⃣`, `4️⃣`. Custom emojis are allowed. |
+| `emoji`   | string | Yes      | The emoji that represents this option. When using the default numbered set, this is `1️⃣`–`9️⃣`. Custom emojis are allowed. |
 
 The text content of `<option>` is the human-readable label for the option.
 
@@ -230,7 +230,27 @@ The poll creator can close a poll at any time by sending a `<poll-closed>` messa
 
 ### 5.5 Creator-Only Action
 
-Only the poll creator's client should send `<poll-closed>` messages. Other clients should ignore or reject attempts to close polls they did not create. Future server enforcement could verify the sender's occupant-id matches the original poll creator.
+Only the poll creator's client should send `<poll-closed>` messages.
+
+### 5.6 Receiving Client Verification
+
+When a client receives a `<poll-closed>` message, it SHOULD verify the message against the original poll before accepting it. If the original poll message is available in the local store, the following checks MUST all pass:
+
+1. **Creator identity:** The sender of the `<poll-closed>` message must match the creator of the original poll. Comparison uses XEP-0421 occupant-id when both messages carry one (stable across nick changes); otherwise falls back to MUC nickname comparison.
+2. **Title match:** The `<title>` in `<poll-closed>` must exactly match the original poll's `<title>`.
+3. **Emoji validity:** Every `emoji` attribute in the `<tally>` elements must correspond to an `<option>` emoji in the original poll. A subset is acceptable (options with zero votes may be omitted), but unknown emojis cause rejection.
+
+If any check fails, the `pollClosed` data is discarded and the message is treated as a regular groupchat message.
+
+### 5.7 Deferred Verification via MAM
+
+If the original poll message is not available in the local store (e.g., the client joined the room after the poll was created), the client SHOULD:
+
+1. **Accept on trust** — display the `<poll-closed>` results immediately to avoid blocking the UI.
+2. **Fetch the original** — query the room's message archive (XEP-0313) for the original poll message using the `{urn:xmpp:mam:2}ids` form field with the `message-id` value.
+3. **Verify retroactively** — once the original poll is retrieved, apply the same verification checks from section 5.6. If verification fails, strip the `pollClosed` data from the message.
+
+This ensures that late-joining clients still benefit from creator verification without blocking on a network round-trip.
 
 ---
 
@@ -330,7 +350,41 @@ When `hide-results="true"`, clients SHOULD NOT display vote counts or progress b
 
 ---
 
-## 8. Legacy Client Compatibility
+## 8. MAM Integration
+
+Poll messages are archived by the MUC service like any other groupchat message (the `<store/>` hint in sections 3.1 and 5.1 ensures this). Clients retrieving archived messages via XEP-0313 SHOULD parse `<poll>` and `<poll-closed>` elements from MAM results, identically to live message processing.
+
+### 8.1 Fetching a Single Poll Message
+
+A client can retrieve a specific poll message by its archive ID using the `{urn:xmpp:mam:2}ids` form field:
+
+```xml
+<iq type="set" to="room@conference.example.com" id="mam-fetch-1">
+  <query xmlns="urn:xmpp:mam:2" queryid="mam-fetch-1">
+    <x xmlns="jabber:x:data" type="submit">
+      <field var="FORM_TYPE" type="hidden">
+        <value>urn:xmpp:mam:2</value>
+      </field>
+      <field var="{urn:xmpp:mam:2}ids">
+        <value>poll-msg-archive-id</value>
+      </field>
+    </x>
+    <set xmlns="http://jabber.org/protocol/rsm">
+      <max>1</max>
+    </set>
+  </query>
+</iq>
+```
+
+This is used for deferred poll-closed verification (section 5.7): when a client receives a `<poll-closed>` message but does not have the original poll in its local store, it fetches the original via this targeted MAM query.
+
+### 8.2 Store-First Lookup
+
+Before making a MAM query, clients SHOULD check their local message store. The store lookup should match against both the client-generated message ID (`id` attribute) and the server-assigned archive ID (`stanza-id`), since the `message-id` in `<poll-closed>` carries the original client ID.
+
+---
+
+## 9. Legacy Client Compatibility
 
 The protocol is designed so that clients unaware of `urn:fluux:poll:0` can still participate:
 
@@ -355,12 +409,19 @@ In the current client-side implementation, voting rules (single-vote, deadline) 
 - Spoof vote counts in `<poll-closed>` messages.
 
 These attacks are mitigated by:
+- **Single-vote deduplication:** The tallying algorithm (section 7.2) assigns each voter to at most one option, so multiple reactions from a single voter are gracefully handled rather than double-counted.
 - **Tally verification:** Clients can independently tally results from the reactions map and compare against `<poll-closed>` data.
 - **Server enforcement (future):** A MUC component could enforce single-vote rules by rejecting invalid reaction stanzas, and verify `<poll-closed>` sender identity.
 
 ### 9.2 Creator Identity
 
-The `<poll-closed>` message should only be accepted from the original poll creator. In MUC, this can be verified by comparing occupant-id (XEP-0421) or occupant JID. Without server enforcement, clients rely on the MUC service's existing identity guarantees.
+Receiving clients verify `<poll-closed>` messages against the original poll (see section 5.6). The verification checks:
+
+1. **Sender identity** — via XEP-0421 occupant-id (preferred, stable across nick changes) or MUC nickname (fallback).
+2. **Content integrity** — title and result emojis must match the original poll.
+3. **Deferred verification** — when the original poll is not locally available, clients accept on trust and verify asynchronously via MAM (section 5.7).
+
+Without server enforcement, these client-side checks rely on the MUC service's existing identity guarantees (occupant-id or full JID binding).
 
 ### 9.3 Denial of Service
 
