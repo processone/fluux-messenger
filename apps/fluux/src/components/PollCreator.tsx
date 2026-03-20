@@ -1,11 +1,14 @@
 /**
  * PollCreator — Modal for creating a new poll in a MUC room.
  */
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, Suspense, lazy } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Plus, Trash2, Loader2 } from 'lucide-react'
 import { MAX_POLL_OPTIONS, POLL_OPTION_EMOJIS, type PollSettings } from '@fluux/sdk'
+import { useClickOutside } from '@/hooks'
 import { ModalShell } from './ModalShell'
+
+const EmojiPicker = lazy(() => import('./EmojiPicker').then(m => ({ default: m.EmojiPicker })))
 
 interface PollCreatorProps {
   onClose: () => void
@@ -23,6 +26,11 @@ export function PollCreator({ onClose, onCreatePoll }: PollCreatorProps) {
   const [hideResultsBeforeVote, setHideResultsBeforeVote] = useState(false)
   const [deadline, setDeadline] = useState('')
   const [sending, setSending] = useState(false)
+  // Index of the option whose emoji picker is open, or null
+  const [emojiPickerIndex, setEmojiPickerIndex] = useState<number | null>(null)
+  const emojiPickerRef = useRef<HTMLDivElement>(null)
+
+  useClickOutside(emojiPickerRef, () => setEmojiPickerIndex(null), emojiPickerIndex !== null)
 
   const canAddOption = options.length < MAX_POLL_OPTIONS
   const canRemoveOption = options.length > 2
@@ -39,6 +47,12 @@ export function PollCreator({ onClose, onCreatePoll }: PollCreatorProps) {
     if (canRemoveOption) {
       setOptions((prev) => prev.filter((_, i) => i !== index))
       setEmojis((prev) => prev.filter((_, i) => i !== index))
+      // Close picker if the removed option had it open
+      setEmojiPickerIndex((prev) => {
+        if (prev === index) return null
+        if (prev !== null && prev > index) return prev - 1
+        return prev
+      })
     }
   }, [canRemoveOption])
 
@@ -46,8 +60,9 @@ export function PollCreator({ onClose, onCreatePoll }: PollCreatorProps) {
     setOptions((prev) => prev.map((o, i) => (i === index ? value : o)))
   }, [])
 
-  const updateEmoji = useCallback((index: number, value: string) => {
-    setEmojis((prev) => prev.map((e, i) => (i === index ? value : e)))
+  const handleEmojiSelect = useCallback((index: number, emoji: string) => {
+    setEmojis((prev) => prev.map((e, i) => (i === index ? emoji : e)))
+    setEmojiPickerIndex(null)
   }, [])
 
   const handleSubmit = async () => {
@@ -114,14 +129,30 @@ export function PollCreator({ onClose, onCreatePoll }: PollCreatorProps) {
           </label>
           {options.map((option, index) => (
             <div key={index} className="flex items-center gap-2">
-              <input
-                type="text"
-                value={emojis[index] ?? POLL_OPTION_EMOJIS[index]}
-                onChange={(e) => updateEmoji(index, e.target.value)}
-                className="text-sm flex-shrink-0 w-8 text-center px-0 py-2 rounded-md border border-transparent bg-transparent hover:border-fluux-border focus:border-fluux-brand focus:outline-none cursor-pointer"
-                maxLength={2}
-                title={t('poll.changeEmoji', 'Click to change emoji')}
-              />
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setEmojiPickerIndex(emojiPickerIndex === index ? null : index)}
+                  className={`text-base flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-md border transition-colors
+                    ${emojiPickerIndex === index
+                      ? 'border-fluux-brand bg-fluux-brand/10'
+                      : 'border-transparent hover:border-fluux-border hover:bg-fluux-hover'
+                    }`}
+                  title={t('poll.changeEmoji', 'Click to change emoji')}
+                >
+                  {emojis[index] ?? POLL_OPTION_EMOJIS[index]}
+                </button>
+                {emojiPickerIndex === index && (
+                  <div ref={emojiPickerRef} className="absolute left-0 top-full mt-1 z-50">
+                    <Suspense fallback={null}>
+                      <EmojiPicker
+                        onSelect={(emoji) => handleEmojiSelect(index, emoji)}
+                        onClose={() => setEmojiPickerIndex(null)}
+                      />
+                    </Suspense>
+                  </div>
+                )}
+              </div>
               <input
                 type="text"
                 value={option}
