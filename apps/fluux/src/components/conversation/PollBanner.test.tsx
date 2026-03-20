@@ -168,6 +168,20 @@ describe('PollBanner', () => {
     expect(container.firstChild).toBeNull()
   })
 
+  it('should not render retracted (deleted) polls', () => {
+    const msg = makePollMessage({ isRetracted: true })
+
+    const { container } = render(
+      <PollBanner
+        messages={[msg]}
+        myNick="bob"
+        dismissedPollIds={new Set()}
+        onDismiss={vi.fn()}
+      />
+    )
+    expect(container.firstChild).toBeNull()
+  })
+
   it('should show the latest unanswered poll when one is dismissed', () => {
     const msg1 = makePollMessage({ id: 'poll-1' })
     const msg2 = makePollMessage({

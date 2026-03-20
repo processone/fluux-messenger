@@ -33,6 +33,7 @@ export function PollBanner({ messages, myNick, dismissedPollIds, onDismiss }: Po
       const msg = messages[i]
       if (
         msg.poll &&
+        !msg.isRetracted &&
         !isPollExpired(msg.poll) &&
         !hasVotedOnPoll(msg.poll, msg.reactions, myNick) &&
         !dismissedPollIds.has(msg.id)
