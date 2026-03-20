@@ -3,7 +3,7 @@
  */
 import { useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Plus, Minus, Loader2 } from 'lucide-react'
+import { Plus, Trash2, Loader2 } from 'lucide-react'
 import { MAX_POLL_OPTIONS, POLL_OPTION_EMOJIS, type PollSettings } from '@fluux/sdk'
 import { ModalShell } from './ModalShell'
 
@@ -136,7 +136,7 @@ export function PollCreator({ onClose, onCreatePoll }: PollCreatorProps) {
                   className="p-1 text-fluux-muted hover:text-red-500 transition-colors"
                   aria-label={t('poll.removeOption', 'Remove option')}
                 >
-                  <Minus className="w-4 h-4" />
+                  <Trash2 className="w-4 h-4" />
                 </button>
               )}
             </div>
