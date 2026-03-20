@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, memo, type RefObject } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useMemo, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { useRoomActive, useRoster, getBareJid, generateConsistentColorHexSync, getPresenceFromShow, createMessageLookup, isMessageFromIgnoredUser, isReplyToIgnoredUser, canKick, canBan, canModerate, getAvailableAffiliations, getAvailableRoles, type RoomMessage, type Room, type MentionReference, type ChatStateNotification, type Contact, type FileAttachment, type RoomAffiliation, type RoomRole, type PollData } from '@fluux/sdk'
@@ -688,6 +688,18 @@ const RoomMessageList = memo(function RoomMessageList({
     }
   }, [])
 
+  // Set of original poll message IDs that have been closed (a poll-closed message references them).
+  // Used to disable the "Close poll" button on already-closed polls.
+  const closedPollIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const msg of messages) {
+      if (msg.pollClosed?.pollMessageId) {
+        ids.add(msg.pollClosed.pollMessageId)
+      }
+    }
+    return ids
+  }, [messages])
+
   // Loading state: only show when joining room (SDK auto-loads cache in background)
   // No "loading messages" spinner - cache loads instantly, messages appear immediately
   const isInitialLoading = room.isJoining && !room.joined
@@ -736,6 +748,7 @@ const RoomMessageList = memo(function RoomMessageList({
       sendReaction={sendReaction}
       votePoll={votePoll}
       closePoll={closePoll}
+      closedPollIds={closedPollIds}
       onReply={onReply}
       onEdit={onEdit}
       isLastOutgoing={msg.id === lastOutgoingMessageId}
@@ -820,6 +833,8 @@ interface RoomMessageBubbleWrapperProps {
   onNickTouchEnd?: () => void
   // Affiliation action (passed from parent to avoid useRoom() subscription)
   setAffiliation: (roomJid: string, userJid: string, affiliation: RoomAffiliation, reason?: string) => Promise<void>
+  // Set of poll message IDs that have been closed (to disable close button)
+  closedPollIds: Set<string>
 }
 
 const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
@@ -854,6 +869,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   onNickTouchStart,
   onNickTouchEnd,
   setAffiliation,
+  closedPollIds,
 }: RoomMessageBubbleWrapperProps) {
   const { t } = useTranslation()
 
@@ -1060,7 +1076,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         onNickTouchEnd={!message.isOutgoing ? onNickTouchEnd : undefined}
         onReactionPickerChange={onReactionPickerChange}
         onPollVote={handlePollVote}
-        onClosePoll={message.isOutgoing && message.poll ? () => closePoll(room.jid, message.id) : undefined}
+        onClosePoll={message.isOutgoing && message.poll && !closedPollIds.has(message.id) ? () => closePoll(room.jid, message.id) : undefined}
         formatTime={formatTime}
         timeFormat={timeFormat}
       />
