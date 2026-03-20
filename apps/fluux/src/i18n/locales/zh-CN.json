@@ -810,6 +810,7 @@
         "closed": "投票已关闭",
         "bannerSingle": "📊 {{title}} — 点击投票",
         "bannerMultiple": "📊 {{count}} 个未回答的投票 — 点击查看最新",
-        "dismissBanner": "忽略"
+        "dismissBanner": "忽略",
+        "scrollToOriginal": "滚动到原始投票"
     }
 }

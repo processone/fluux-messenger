@@ -810,6 +810,7 @@
         "closed": "Szavazás lezárva",
         "bannerSingle": "📊 {{title}} — koppints a szavazáshoz",
         "bannerMultiple": "📊 {{count}} megválaszolatlan szavazás — koppints a legutóbbi megtekintéséhez",
-        "dismissBanner": "Elvetés"
+        "dismissBanner": "Elvetés",
+        "scrollToOriginal": "Ugrás az eredeti szavazáshoz"
     }
 }

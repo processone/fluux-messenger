@@ -812,6 +812,7 @@
         "closed": "Küsitlus suletud",
         "bannerSingle": "📊 {{title}} — puuduta hääletamiseks",
         "bannerMultiple": "📊 {{count}} vastamata küsitlust — puuduta viimase nägemiseks",
-        "dismissBanner": "Sulge"
+        "dismissBanner": "Sulge",
+        "scrollToOriginal": "Keri algse küsitluseni"
     }
 }

@@ -812,6 +812,7 @@
         "closed": "L-istħarriġ magħluq",
         "bannerSingle": "📊 {{title}} — tektek biex tivvota",
         "bannerMultiple": "📊 {{count}} stħarriġiet mhux imwieġba — tektek biex tara l-aħħar wieħed",
-        "dismissBanner": "Warrab"
+        "dismissBanner": "Warrab",
+        "scrollToOriginal": "Mur għall-istħarriġ oriġinali"
     }
 }

@@ -810,6 +810,7 @@
         "closed": "Anketa zatvorena",
         "bannerSingle": "📊 {{title}} — dodirni za glasanje",
         "bannerMultiple": "📊 {{count}} neodgovorenih anketa — dodirni za najnoviju",
-        "dismissBanner": "Odbaci"
+        "dismissBanner": "Odbaci",
+        "scrollToOriginal": "Idi na izvornu anketu"
     }
 }

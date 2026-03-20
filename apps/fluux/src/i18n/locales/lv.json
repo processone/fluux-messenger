@@ -811,6 +811,7 @@
         "closed": "Aptauja aizvērta",
         "bannerSingle": "📊 {{title}} — pieskarieties, lai balsotu",
         "bannerMultiple": "📊 {{count}} neatbildētas aptaujas — pieskarieties, lai redzētu jaunāko",
-        "dismissBanner": "Noraidīt"
+        "dismissBanner": "Noraidīt",
+        "scrollToOriginal": "Ritināt uz sākotnējo aptauju"
     }
 }

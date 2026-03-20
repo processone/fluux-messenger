@@ -811,6 +811,7 @@
         "closed": "Sondage clôturé",
         "bannerSingle": "📊 {{title}} — appuyez pour voter",
         "bannerMultiple": "📊 {{count}} sondages sans réponse — appuyez pour voir le dernier",
-        "dismissBanner": "Ignorer"
+        "dismissBanner": "Ignorer",
+        "scrollToOriginal": "Aller au sondage original"
     }
 }

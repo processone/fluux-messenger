@@ -1,13 +1,22 @@
 /**
  * PollClosedCard — Displays frozen poll results when a poll is closed by its creator.
+ *
+ * Each option gets a consistent color derived from its emoji (since closed polls
+ * don't carry option labels, the emoji is used as the color seed).
+ * The title links to the original poll message for context.
  */
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { BarChart3, Lock } from 'lucide-react'
-import type { PollClosedData } from '@fluux/sdk'
+import { generateConsistentColorHexSync, type PollClosedData } from '@fluux/sdk'
+import { scrollToMessage } from './messageGrouping'
 
 export interface PollClosedCardProps {
   pollClosed: PollClosedData
+}
+
+function getResultColor(emoji: string): string {
+  return generateConsistentColorHexSync(emoji, { saturation: 80, lightness: 50 })
 }
 
 export function PollClosedCard({ pollClosed }: PollClosedCardProps) {
@@ -18,12 +27,29 @@ export function PollClosedCard({ pollClosed }: PollClosedCardProps) {
     [pollClosed.results]
   )
 
+  const resultColors = useMemo(
+    () => pollClosed.results.map((r) => getResultColor(r.emoji)),
+    [pollClosed.results],
+  )
+
+  // Find the winning option(s) — highest count
+  const maxCount = useMemo(
+    () => Math.max(0, ...pollClosed.results.map((r) => r.count)),
+    [pollClosed.results],
+  )
+
   return (
     <div className="mt-1 rounded-lg border border-fluux-border bg-fluux-surface p-3 flex flex-col gap-2">
-      {/* Header */}
+      {/* Header — title links to the original poll message */}
       <div className="flex items-center gap-2">
         <BarChart3 className="w-4 h-4 text-fluux-muted flex-shrink-0" />
-        <span className="font-medium text-fluux-text text-sm">{pollClosed.title}</span>
+        <button
+          onClick={() => scrollToMessage(pollClosed.pollMessageId)}
+          className="font-medium text-fluux-text text-sm hover:text-fluux-brand transition-colors text-left truncate"
+          title={t('poll.scrollToOriginal', 'Scroll to original poll')}
+        >
+          {pollClosed.title}
+        </button>
         <Lock className="w-3.5 h-3.5 text-fluux-muted flex-shrink-0" />
       </div>
 
@@ -34,25 +60,32 @@ export function PollClosedCard({ pollClosed }: PollClosedCardProps) {
 
       <span className="text-xs text-fluux-muted">{t('poll.closed', 'Poll closed')}</span>
 
-      {/* Frozen results */}
+      {/* Frozen results with colored bars */}
       <div className="flex flex-col gap-1.5">
-        {pollClosed.results.map((result) => {
+        {pollClosed.results.map((result, index) => {
           const percentage = totalVotes > 0 ? Math.round((result.count / totalVotes) * 100) : 0
+          const isWinner = result.count === maxCount && maxCount > 0
           return (
             <div
               key={result.emoji}
-              className="relative flex items-center gap-2 px-3 py-2 rounded-md border border-fluux-border bg-fluux-bg"
+              className="relative flex items-center gap-2 px-3 py-2 rounded-md border border-fluux-border"
             >
-              {/* Progress bar */}
+              {/* Colored progress bar */}
               {totalVotes > 0 && (
                 <div
-                  className="absolute inset-0 rounded-md bg-fluux-hover/50"
-                  style={{ width: `${percentage}%` }}
+                  className="absolute inset-0 rounded-md transition-all"
+                  style={{
+                    width: `${percentage}%`,
+                    backgroundColor: resultColors[index],
+                    opacity: isWinner ? 0.25 : 0.15,
+                  }}
                 />
               )}
               <div className="relative flex items-center gap-2 w-full">
                 <span className="text-sm flex-shrink-0">{result.emoji}</span>
-                <span className="text-sm text-fluux-text flex-1">{percentage}%</span>
+                <span className={`text-sm flex-1 ${isWinner ? 'font-medium text-fluux-text' : 'text-fluux-muted'}`}>
+                  {percentage}%
+                </span>
                 <span className="text-xs text-fluux-muted">({result.count})</span>
               </div>
             </div>

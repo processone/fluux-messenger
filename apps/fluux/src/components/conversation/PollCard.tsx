@@ -1,8 +1,12 @@
 /**
  * PollCard — Renders a poll within a message bubble.
  *
- * Shows the title, options with progress bars and vote counts,
+ * Shows the title, options with colored progress bars and vote counts,
  * and allows voting by clicking options.
+ *
+ * Each option gets a consistent color derived from its label text
+ * (using XEP-0392 consistent color generation), making polls visually
+ * distinctive and easy to read at a glance.
  *
  * When `hideResultsBeforeVote` is enabled, results (progress bars,
  * percentages, counts) are hidden until the user has cast a vote.
@@ -10,7 +14,7 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Check, BarChart3, Clock, Square } from 'lucide-react'
-import { tallyPollResults, getTotalVoters, isPollExpired, type PollData, type PollTally } from '@fluux/sdk'
+import { tallyPollResults, getTotalVoters, isPollExpired, generateConsistentColorHexSync, type PollData, type PollTally } from '@fluux/sdk'
 
 export interface PollCardProps {
   poll: PollData
@@ -21,12 +25,26 @@ export interface PollCardProps {
   getReactorName: (reactor: string) => string
 }
 
+/**
+ * Generate a consistent bar color from an option label.
+ * Uses XEP-0392 with moderate saturation for a pleasant, distinct look.
+ */
+function getOptionColor(label: string): string {
+  return generateConsistentColorHexSync(label, { saturation: 80, lightness: 50 })
+}
+
 export function PollCard({ poll, reactions, myReactions, onVote, onClosePoll, getReactorName }: PollCardProps) {
   const { t } = useTranslation()
   const [closing, setClosing] = useState(false)
 
   const tally = useMemo(() => tallyPollResults(poll, reactions), [poll, reactions])
   const totalVoters = useMemo(() => getTotalVoters(poll, reactions), [poll, reactions])
+
+  // Pre-compute consistent colors for each option
+  const optionColors = useMemo(
+    () => poll.options.map((opt) => getOptionColor(opt.label)),
+    [poll.options],
+  )
 
   const myVotedEmojis = useMemo(() => {
     const pollEmojis = new Set(poll.options.map((o) => o.emoji))
@@ -63,10 +81,11 @@ export function PollCard({ poll, reactions, myReactions, onVote, onClosePoll, ge
 
       {/* Options */}
       <div className="flex flex-col gap-1.5">
-        {tally.map((option) => (
+        {tally.map((option, index) => (
           <PollOption
             key={option.emoji}
             option={option}
+            color={optionColors[index]}
             totalVoters={totalVoters}
             isMyVote={myVotedEmojis.has(option.emoji)}
             hasVoted={hasVoted}
@@ -130,6 +149,7 @@ export function PollCard({ poll, reactions, myReactions, onVote, onClosePoll, ge
 
 interface PollOptionProps {
   option: PollTally
+  color: string
   totalVoters: number
   isMyVote: boolean
   hasVoted: boolean
@@ -139,7 +159,7 @@ interface PollOptionProps {
   getReactorName: (reactor: string) => string
 }
 
-function PollOption({ option, totalVoters, isMyVote, hasVoted, showResults, allowMultiple, onVote, getReactorName }: PollOptionProps) {
+function PollOption({ option, color, totalVoters, isMyVote, hasVoted, showResults, allowMultiple, onVote, getReactorName }: PollOptionProps) {
   const percentage = totalVoters > 0 ? Math.round((option.count / totalVoters) * 100) : 0
 
   const voterNames = useMemo(() => {
@@ -151,6 +171,9 @@ function PollOption({ option, totalVoters, isMyVote, hasVoted, showResults, allo
   // Visual cue: non-voted options are subtler to indicate "results mode"
   const isSingleVoteResultMode = hasVoted && !allowMultiple
 
+  // Bar opacity: stronger for user's vote, softer for others
+  const barOpacity = isMyVote ? 0.25 : 0.15
+
   return (
     <button
       onClick={onVote ? () => onVote(option.emoji) : undefined}
@@ -158,22 +181,24 @@ function PollOption({ option, totalVoters, isMyVote, hasVoted, showResults, allo
       className={`
         relative flex items-center gap-2 px-3 py-2 rounded-md border text-left transition-colors
         ${isMyVote
-          ? 'border-fluux-brand bg-fluux-brand/10'
+          ? 'border-fluux-brand'
           : isSingleVoteResultMode
-            ? 'border-fluux-border bg-fluux-bg hover:border-fluux-muted'
-            : 'border-fluux-border bg-fluux-bg hover:bg-fluux-hover'
+            ? 'border-fluux-border hover:border-fluux-muted'
+            : 'border-fluux-border hover:bg-fluux-hover'
         }
         ${onVote ? 'cursor-pointer' : 'cursor-default'}
       `}
       title={showResults ? (voterNames || undefined) : undefined}
     >
-      {/* Progress bar background — only when results are visible */}
+      {/* Colored progress bar — only when results are visible */}
       {showResults && hasVoted && totalVoters > 0 && (
         <div
-          className={`absolute inset-0 rounded-md transition-all ${
-            isMyVote ? 'bg-fluux-brand/15' : 'bg-fluux-hover/50'
-          }`}
-          style={{ width: `${percentage}%` }}
+          className="absolute inset-0 rounded-md transition-all"
+          style={{
+            width: `${percentage}%`,
+            backgroundColor: color,
+            opacity: barOpacity,
+          }}
         />
       )}
 

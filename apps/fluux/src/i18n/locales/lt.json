@@ -810,6 +810,7 @@
         "closed": "Apklausa uždaryta",
         "bannerSingle": "📊 {{title}} — palieskite, kad balsuotumėte",
         "bannerMultiple": "📊 {{count}} neatsakytų apklausų — palieskite, kad matytumėte naujausią",
-        "dismissBanner": "Atmesti"
+        "dismissBanner": "Atmesti",
+        "scrollToOriginal": "Slinkti iki originalios apklausos"
     }
 }

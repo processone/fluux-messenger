@@ -810,6 +810,7 @@
         "closed": "Äänestys suljettu",
         "bannerSingle": "📊 {{title}} — napauta äänestääksesi",
         "bannerMultiple": "📊 {{count}} vastaamatonta äänestystä — napauta nähdäksesi viimeisin",
-        "dismissBanner": "Sulje"
+        "dismissBanner": "Sulje",
+        "scrollToOriginal": "Vieritä alkuperäiseen äänestykseen"
     }
 }

@@ -812,6 +812,7 @@
         "closed": "Umfrage geschlossen",
         "bannerSingle": "📊 {{title}} — tippen zum Abstimmen",
         "bannerMultiple": "📊 {{count}} unbeantwortete Umfragen — tippen für die neueste",
-        "dismissBanner": "Verwerfen"
+        "dismissBanner": "Verwerfen",
+        "scrollToOriginal": "Zur ursprünglichen Umfrage scrollen"
     }
 }

@@ -810,6 +810,7 @@
         "closed": "Avstemningen er lukket",
         "bannerSingle": "📊 {{title}} — trykk for å stemme",
         "bannerMultiple": "📊 {{count}} ubesvarte avstemninger — trykk for å se siste",
-        "dismissBanner": "Avvis"
+        "dismissBanner": "Avvis",
+        "scrollToOriginal": "Bla til den opprinnelige avstemningen"
     }
 }

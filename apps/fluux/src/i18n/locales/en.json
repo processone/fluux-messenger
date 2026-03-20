@@ -810,6 +810,7 @@
         "closed": "Poll closed",
         "bannerSingle": "📊 {{title}} — tap to vote",
         "bannerMultiple": "📊 {{count}} unanswered polls — tap to see latest",
-        "dismissBanner": "Dismiss"
+        "dismissBanner": "Dismiss",
+        "scrollToOriginal": "Scroll to original poll"
     }
 }

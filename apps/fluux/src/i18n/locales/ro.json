@@ -812,6 +812,7 @@
         "closed": "Sondaj închis",
         "bannerSingle": "📊 {{title}} — apasă pentru a vota",
         "bannerMultiple": "📊 {{count}} sondaje fără răspuns — apasă pentru a vedea ultimul",
-        "dismissBanner": "Respinge"
+        "dismissBanner": "Respinge",
+        "scrollToOriginal": "Derulează la sondajul original"
     }
 }

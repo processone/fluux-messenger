@@ -810,6 +810,7 @@
         "closed": "Vótáil dúnta",
         "bannerSingle": "📊 {{title}} — tapáil chun vótáil",
         "bannerMultiple": "📊 {{count}} vótálacha gan freagra — tapáil chun an ceann is déanaí a fheiceáil",
-        "dismissBanner": "Díbir"
+        "dismissBanner": "Díbir",
+        "scrollToOriginal": "Scrollaigh go dtí an vótáil bhunaidh"
     }
 }

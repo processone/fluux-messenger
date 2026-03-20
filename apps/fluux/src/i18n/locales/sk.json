@@ -811,6 +811,7 @@
         "closed": "Anketa uzavretá",
         "bannerSingle": "📊 {{title}} — ťuknite pre hlasovanie",
         "bannerMultiple": "📊 {{count}} nezodpovedaných ankiet — ťuknite pre zobrazenie poslednej",
-        "dismissBanner": "Zavrieť"
+        "dismissBanner": "Zavrieť",
+        "scrollToOriginal": "Prejsť na pôvodnú anketu"
     }
 }

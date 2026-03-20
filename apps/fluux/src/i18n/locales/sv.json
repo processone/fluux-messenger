@@ -810,6 +810,7 @@
         "closed": "Omröstningen stängd",
         "bannerSingle": "📊 {{title}} — tryck för att rösta",
         "bannerMultiple": "📊 {{count}} obesvarade omröstningar — tryck för att se senaste",
-        "dismissBanner": "Avfärda"
+        "dismissBanner": "Avfärda",
+        "scrollToOriginal": "Scrolla till den ursprungliga omröstningen"
     }
 }

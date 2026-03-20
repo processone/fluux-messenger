@@ -810,6 +810,7 @@
         "closed": "Peiling gesloten",
         "bannerSingle": "📊 {{title}} — tik om te stemmen",
         "bannerMultiple": "📊 {{count}} onbeantwoorde peilingen — tik om de laatste te zien",
-        "dismissBanner": "Sluiten"
+        "dismissBanner": "Sluiten",
+        "scrollToOriginal": "Scroll naar de originele peiling"
     }
 }

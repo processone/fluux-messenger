@@ -810,6 +810,7 @@
         "closed": "Опрос закрыт",
         "bannerSingle": "📊 {{title}} — нажмите, чтобы проголосовать",
         "bannerMultiple": "📊 {{count}} неотвеченных опросов — нажмите, чтобы увидеть последний",
-        "dismissBanner": "Скрыть"
+        "dismissBanner": "Скрыть",
+        "scrollToOriginal": "Перейти к исходному опросу"
     }
 }

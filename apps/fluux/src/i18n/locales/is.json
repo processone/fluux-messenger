@@ -810,6 +810,7 @@
         "closed": "Könnun lokað",
         "bannerSingle": "📊 {{title}} — ýttu til að kjósa",
         "bannerMultiple": "📊 {{count}} ósvaraðar kannanir — ýttu til að sjá nýjustu",
-        "dismissBanner": "Hunsa"
+        "dismissBanner": "Hunsa",
+        "scrollToOriginal": "Fletta að upprunalegri könnun"
     }
 }

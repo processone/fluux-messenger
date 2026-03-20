@@ -812,6 +812,7 @@
         "closed": "Enquesta tancada",
         "bannerSingle": "📊 {{title}} — toca per votar",
         "bannerMultiple": "📊 {{count}} enquestes sense resposta — toca per veure l'última",
-        "dismissBanner": "Descarta"
+        "dismissBanner": "Descarta",
+        "scrollToOriginal": "Desplaça fins a l'enquesta original"
     }
 }
