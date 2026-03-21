@@ -282,6 +282,7 @@ export const roomStore = createStore<RoomState>()(
         supportsMAM: room.supportsMAM,
         supportsReactions: room.supportsReactions,
         supportsHats: room.supportsHats,
+        muted: room.muted,
       }
       const meta: RoomMetadata = {
         unreadCount: room.unreadCount,
@@ -335,7 +336,7 @@ export const roomStore = createStore<RoomState>()(
       // Update entity fields if any changed
       const entityFields = ['name', 'nickname', 'joined', 'isJoining', 'subject', 'avatar',
         'avatarHash', 'avatarFromPresence', 'isBookmarked', 'autojoin', 'password', 'isQuickChat',
-        'supportsMAM', 'supportsReactions', 'supportsHats'] as const
+        'supportsMAM', 'supportsReactions', 'supportsHats', 'muted'] as const
       const hasEntityUpdate = entityFields.some((f) => f in update)
 
       // Update metadata fields if any changed
@@ -370,6 +371,7 @@ export const roomStore = createStore<RoomState>()(
             supportsMAM: updatedRoom.supportsMAM,
             supportsReactions: updatedRoom.supportsReactions,
             supportsHats: updatedRoom.supportsHats,
+            muted: updatedRoom.muted,
           })
         }
         result.roomEntities = newEntities
@@ -814,9 +816,13 @@ export const roomStore = createStore<RoomState>()(
       // Get the last message for both the combined room and metadata
       const lastMessage = newMessages[newMessages.length - 1]
 
-      // Update lastInteractedAt when the active room receives a message,
-      // so it moves to the top of the sidebar list
-      const newLastInteractedAt = isActive
+      // Update lastInteractedAt so the room bubbles up in the sidebar:
+      // - Active room: always update (user is viewing it)
+      // - Non-active, non-muted: update so room bubbles to top on new messages
+      // - Non-active, muted: keep current value (only updates when user opens room)
+      const entity = state.roomEntities.get(roomJid)
+      const isMuted = entity?.muted ?? existing.muted ?? false
+      const newLastInteractedAt = isActive || !isMuted
         ? (lastMessage.timestamp ?? existing.lastInteractedAt)
         : existing.lastInteractedAt
 
@@ -1716,9 +1722,9 @@ export const roomStore = createStore<RoomState>()(
       return EMPTY_ROOM_ARRAY
     }
 
-    // Sort by lastInteractedAt (when user opened the room) descending
-    // This prevents high-traffic rooms from constantly jumping to the top
-    // Rooms only move up when the user explicitly opens them
+    // Sort by lastInteractedAt descending (most recent first)
+    // For non-muted rooms, this updates on every new message (like 1:1 conversations)
+    // For muted rooms, this only updates when the user explicitly opens the room
     result.sort((a, b) => {
       // Use lastInteractedAt if available, fall back to lastMessage timestamp, then creation/join time
       const aTime = a.lastInteractedAt?.getTime() ?? a.lastMessage?.timestamp?.getTime() ?? 0

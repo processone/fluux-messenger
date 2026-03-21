@@ -184,6 +184,11 @@ export interface RoomEntity {
   supportsReactions?: boolean
   /** True if room supports XEP-0317 Hats management */
   supportsHats?: boolean
+
+  // Mute control
+  /** When true, the room won't bubble up in the sidebar on new messages.
+   *  Only updates its position when the user explicitly opens it. */
+  muted?: boolean
 }
 
 /**
@@ -215,10 +220,9 @@ export interface RoomMetadata {
   /** Most recent message for sidebar preview */
   lastMessage?: RoomMessage
   /**
-   * When user last interacted with this room (opened it).
-   * Used for sorting rooms in sidebar - rooms sort by this timestamp
-   * so high-traffic rooms don't constantly jump to the top.
-   * Only updates when user explicitly opens the room, not when messages arrive.
+   * Timestamp used for sorting rooms in the sidebar.
+   * For non-muted rooms, updates on every new message so the room bubbles up.
+   * For muted rooms, only updates when the user explicitly opens the room.
    */
   lastInteractedAt?: Date
 }
