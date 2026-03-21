@@ -14,6 +14,50 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '0.15.0',
+    date: '2026-03-21',
+    sections: [
+      {
+        type: 'added',
+        items: [
+          'Reaction-based polls for MUC rooms with deadlines, custom emojis, close/reopen, unanswered banner, and result visualization',
+          'EventHook API and activity log for modular event processing with persistent history, mute controls, and resolution tracking',
+          'XEP-0388: SASL2 and XEP-0484: FAST token authentication for faster reconnection',
+          'XEP-0012: Last Activity — display how long ago offline contacts were last seen',
+          'Full emoji picker (emoji-mart) with dynamic viewport positioning',
+          'Media cache: downloaded images cached to filesystem to avoid re-downloading, with storage management screen',
+          'Per-tab XMPP resources and BroadcastChannel tab coordination for multi-tab support',
+          'Proto-XEP drafts for appearance sync, conversation sync, ignored users, and @all mentions',
+        ],
+      },
+      {
+        type: 'changed',
+        items: [
+          'Upgraded to React 19 with React Compiler for automatic memoization',
+          'Upgraded to Vite 8 with lazy-loaded infrequent views',
+          'Inline reactions limited to 9 with overflow indicator, sorted by count',
+          'Inline hat badges limited to 3 with overflow tooltip',
+          'Reaction tooltips limited to 9 names in large rooms',
+          'Plural-aware "months ago" and "years ago" duration formatting across all locales',
+        ],
+      },
+      {
+        type: 'fixed',
+        items: [
+          'SM session resumption now properly attempts <resume/> on reconnect',
+          'Autojoin rooms re-joined after SM resumption',
+          'Stale keepalive no longer kills new connections; room list preserved across reconnect cycles',
+          'App freeze on reconnect after sleep prevented with setup timeouts',
+          'Draft text no longer leaks to active room on conversation switch',
+          'Message retraction and moderation in MUC rooms',
+          'Directed presence no longer sent to MUC rooms on status change',
+          'Avatar falls back to letter display when image fails to load',
+          'Emoji picker preloaded on hover to prevent position jump on first open',
+        ],
+      },
+    ],
+  },
+  {
     version: '0.14.0',
     date: '2026-03-16',
     sections: [
