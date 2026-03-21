@@ -232,8 +232,21 @@ Per-widget overrides for surgical changes. These default to semantic values.
 | `description` | Yes | Short description |
 | `variables.dark` | No | CSS variable overrides for dark mode |
 | `variables.light` | No | CSS variable overrides for light mode |
-| `swatches.dark` | No | 3-5 hex colors shown as a preview strip in the picker |
+| `swatches.dark` | No | 3-5 hex colors for the preview strip in the theme picker |
 | `swatches.light` | No | Same for light mode |
+
+### Swatches
+
+Swatches are a small row of colored rectangles displayed on each theme card in the Settings UI. They give users a quick visual preview of the theme's palette without activating it:
+
+```
+┌────────────┐
+│ ██ ██ ██ █ │  ← swatch strip
+│   Nord     │
+└────────────┘
+```
+
+Pick 3-5 representative colors from your palette — typically two surface colors and two or three accent/status colors. The field is optional and purely cosmetic; it has no effect on the actual theme rendering.
 
 A theme can provide `dark` only, `light` only, or both. Users independently choose the mode (dark/light/system) — the theme provides the palette for each mode.
 
