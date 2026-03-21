@@ -7,6 +7,9 @@ import { gruvboxTheme } from './gruvbox'
 import { oneDarkTheme } from './one-dark'
 import { tokyoNightTheme } from './tokyo-night'
 import { monokaiTheme } from './monokai'
+import { rosePineTheme } from './rose-pine'
+import { kanagawaTheme } from './kanagawa'
+import { githubTheme } from './github'
 
 /**
  * The default Fluux theme — its variables are defined in index.css (:root / .light).
@@ -40,6 +43,9 @@ export const builtinThemes: ThemeDefinition[] = [
   oneDarkTheme,
   tokyoNightTheme,
   monokaiTheme,
+  rosePineTheme,
+  kanagawaTheme,
+  githubTheme,
 ]
 
 /** Look up a built-in theme by ID */

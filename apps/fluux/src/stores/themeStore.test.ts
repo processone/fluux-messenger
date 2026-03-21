@@ -197,6 +197,9 @@ describe('themeStore', () => {
       expect(ids).toContain('one-dark')
       expect(ids).toContain('tokyo-night')
       expect(ids).toContain('monokai')
+      expect(ids).toContain('rose-pine')
+      expect(ids).toContain('kanagawa')
+      expect(ids).toContain('github')
     })
 
     it('should include custom themes after built-ins', () => {
