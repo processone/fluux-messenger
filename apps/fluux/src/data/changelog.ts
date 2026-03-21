@@ -28,6 +28,7 @@ export const changelog: ChangelogEntry[] = [
           'Media cache: downloaded images cached to filesystem to avoid re-downloading, with storage management screen',
           'Per-tab XMPP resources and BroadcastChannel tab coordination for multi-tab support',
           'Proto-XEP drafts for appearance sync, conversation sync, ignored users, and @all mentions',
+          'Obsidian-inspired theme system with 3-tier CSS design tokens (Foundation, Semantic, Component), theme picker, CSS snippets, and 4 built-in themes (Fluux, Nord, Catppuccin Mocha, Solarized)',
         ],
       },
       {
