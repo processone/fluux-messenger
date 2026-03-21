@@ -4,8 +4,11 @@ import { MessageReactions } from './MessageReactions'
 
 // Mock the Tooltip component to make content testable
 vi.mock('../Tooltip', () => ({
-  Tooltip: ({ content, children }: { content: string; children: React.ReactNode }) => (
-    <div data-tooltip={content}>{children}</div>
+  Tooltip: ({ content, children }: { content: React.ReactNode; children: React.ReactNode }) => (
+    <div data-tooltip={typeof content === 'string' ? content : undefined}>
+      {typeof content !== 'string' && <div data-testid="tooltip-content">{content}</div>}
+      {children}
+    </div>
   ),
 }))
 
@@ -185,6 +188,94 @@ describe('MessageReactions', () => {
       )
 
       expect(screen.getByText('5')).toBeInTheDocument()
+    })
+  })
+
+  describe('Sorting by count', () => {
+    it('should sort reactions by decreasing count', () => {
+      render(
+        <MessageReactions
+          {...defaultProps}
+          reactions={{
+            '😂': ['a'],
+            '👍': ['a', 'b', 'c'],
+            '❤️': ['a', 'b'],
+          }}
+        />
+      )
+
+      const buttons = screen.getAllByRole('button')
+      expect(buttons[0]).toHaveTextContent('👍')
+      expect(buttons[1]).toHaveTextContent('❤️')
+      expect(buttons[2]).toHaveTextContent('😂')
+    })
+  })
+
+  describe('Overflow limiting', () => {
+    const manyReactions: Record<string, string[]> = {
+      '1️⃣': ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'], // 10
+      '2️⃣': ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'],       // 9
+      '3️⃣': ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'],             // 8
+      '4️⃣': ['a', 'b', 'c', 'd', 'e', 'f', 'g'],                   // 7
+      '5️⃣': ['a', 'b', 'c', 'd', 'e', 'f'],                        // 6
+      '6️⃣': ['a', 'b', 'c', 'd', 'e'],                              // 5
+      '7️⃣': ['a', 'b', 'c', 'd'],                                    // 4
+      '8️⃣': ['a', 'b', 'c'],                                         // 3
+      '9️⃣': ['a', 'b'],                                               // 2
+      '🔟': ['a'],                                                     // 1 — overflow
+      '🅰️': ['a'],                                                     // 1 — overflow
+      '🅱️': ['a'],                                                     // 1 — overflow
+    }
+
+    it('should show only top 9 reactions inline', () => {
+      render(<MessageReactions {...defaultProps} reactions={manyReactions} />)
+
+      // First 9 should be visible as buttons
+      const buttons = screen.getAllByRole('button')
+      expect(buttons).toHaveLength(9)
+    })
+
+    it('should show overflow indicator with correct count', () => {
+      render(<MessageReactions {...defaultProps} reactions={manyReactions} />)
+
+      expect(screen.getByText('+3')).toBeInTheDocument()
+    })
+
+    it('should show overflow reactions in tooltip', () => {
+      render(<MessageReactions {...defaultProps} reactions={manyReactions} />)
+
+      const tooltipContents = screen.getAllByTestId('tooltip-content')
+      // The overflow tooltip is the last one
+      const overflowTooltip = tooltipContents[tooltipContents.length - 1]
+      expect(overflowTooltip).toBeInTheDocument()
+      // Each overflow emoji should be listed in the tooltip
+      expect(overflowTooltip).toHaveTextContent('🔟')
+      expect(overflowTooltip).toHaveTextContent('🅰️')
+      expect(overflowTooltip).toHaveTextContent('🅱️')
+    })
+
+    it('should not show overflow when 9 or fewer reactions', () => {
+      const nineReactions: Record<string, string[]> = {}
+      const emojis = ['👍', '❤️', '😂', '🎉', '🔥', '👏', '😎', '🙌', '💯']
+      emojis.forEach((e) => { nineReactions[e] = ['a'] })
+
+      render(<MessageReactions {...defaultProps} reactions={nineReactions} />)
+
+      const buttons = screen.getAllByRole('button')
+      expect(buttons).toHaveLength(9)
+      expect(screen.queryByText(/^\+\d+$/)).not.toBeInTheDocument()
+    })
+
+    it('should cap overflow at 9 more reactions', () => {
+      // 20 reactions total: 9 visible + 9 overflow (2 hidden beyond cap)
+      const twentyReactions: Record<string, string[]> = {}
+      const emojis = ['👍','❤️','😂','🎉','🔥','👏','😎','🙌','💯','🤔','🥳','🤩','😊','🥰','😇','🤗','🫡','🫶','🙏','✌️']
+      emojis.forEach((e, i) => { twentyReactions[e] = Array.from({ length: 20 - i }, (_, j) => `user${j}`) })
+
+      render(<MessageReactions {...defaultProps} reactions={twentyReactions} />)
+
+      // Overflow should show +9 (capped), not +11
+      expect(screen.getByText('+9')).toBeInTheDocument()
     })
   })
 })

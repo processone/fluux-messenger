@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Tooltip } from '../Tooltip'
 
@@ -34,17 +34,30 @@ export const MessageReactions = memo(function MessageReactions({
     return null
   }
 
+  const MAX_INLINE = 9
+  const MAX_OVERFLOW = 9
+
+  // Sort reactions by count (descending), then split into visible and overflow
+  const sorted = useMemo(() =>
+    Object.entries(reactions).sort((a, b) => b[1].length - a[1].length),
+    [reactions]
+  )
+  const visible = sorted.slice(0, MAX_INLINE)
+  const overflow = sorted.slice(MAX_INLINE, MAX_INLINE + MAX_OVERFLOW)
+
+  const formatTooltip = (reactors: string[]) => {
+    const MAX_SHOWN = 9
+    const names = reactors.map(getReactorName)
+    if (names.length <= MAX_SHOWN) return names.join(', ')
+    return names.slice(0, MAX_SHOWN).join(', ') + ' + ' + t('chat.reactionOthers', { count: names.length - MAX_SHOWN })
+  }
+
   return (
     <div className="flex items-center gap-1 pt-1 flex-wrap select-none">
-      {Object.entries(reactions).map(([emoji, reactors]) => (
+      {visible.map(([emoji, reactors]) => (
         <Tooltip
           key={emoji}
-          content={(() => {
-            const MAX_SHOWN = 9
-            const names = reactors.map(getReactorName)
-            if (names.length <= MAX_SHOWN) return names.join(', ')
-            return names.slice(0, MAX_SHOWN).join(', ') + ' + ' + t('chat.reactionOthers', { count: names.length - MAX_SHOWN })
-          })()}
+          content={formatTooltip(reactors)}
           position="top"
           delay={300}
         >
@@ -62,6 +75,25 @@ export const MessageReactions = memo(function MessageReactions({
           </button>
         </Tooltip>
       ))}
+      {overflow.length > 0 && (
+        <Tooltip
+          content={
+            <div className="flex flex-col gap-1">
+              {overflow.map(([emoji, reactors]) => (
+                <span key={emoji} className="text-xs">
+                  {emoji} {reactors.length}
+                </span>
+              ))}
+            </div>
+          }
+          position="top"
+          delay={300}
+        >
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs bg-fluux-muted/20 text-fluux-muted cursor-default">
+            +{overflow.length}
+          </span>
+        </Tooltip>
+      )}
     </div>
   )
 })
