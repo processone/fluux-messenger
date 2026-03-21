@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   useActivityLog,
+  useEvents,
   type ActivityEvent,
   type ActivityEventType,
   type ReactionReceivedPayload,
@@ -85,15 +86,20 @@ function getResolutionColor(resolution: string) {
 export function ActivityLogView() {
   const { t } = useTranslation()
   const { events, unreadCount, markAllRead, muteType, unmuteType, mutedTypes, markRead } = useActivityLog()
+  const { pendingCount } = useEvents()
 
   const groupedEvents = useMemo(() => groupEventsByDate(events), [events])
 
+  // Show combined empty state only when both pending events and activity log are empty
   if (events.length === 0) {
-    return (
-      <div className="px-3 py-4 text-fluux-muted text-sm text-center">
-        {t('activityLog.noActivity')}
-      </div>
-    )
+    if (pendingCount === 0) {
+      return (
+        <div className="px-3 py-4 text-fluux-muted text-sm text-center">
+          {t('events.noPendingEvents')}
+        </div>
+      )
+    }
+    return null
   }
 
   return (

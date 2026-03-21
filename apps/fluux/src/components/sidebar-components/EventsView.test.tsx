@@ -89,9 +89,9 @@ describe('EventsView', () => {
   })
 
   describe('empty state', () => {
-    it('should show no pending events message when there are no events', () => {
-      render(<EventsView />)
-      expect(screen.getByText('events.noPendingEvents')).toBeInTheDocument()
+    it('should render nothing when there are no events', () => {
+      const { container } = render(<EventsView />)
+      expect(container.innerHTML).toBe('')
     })
   })
 

@@ -25,6 +25,7 @@ import { XMPPClient } from '../core/XMPPClient'
 import { connectionStore } from '../stores/connectionStore'
 import { chatStore } from '../stores/chatStore'
 import { roomStore } from '../stores/roomStore'
+import { activityLogStore } from '../stores/activityLogStore'
 import {
   DEMO_CONTACTS,
   DEMO_PRESENCES,
@@ -35,6 +36,7 @@ import {
   getDemoRoomOccupants,
   getDemoRoomMessages,
   getDemoAnimation,
+  getDemoActivityEvents,
 } from './demoData'
 
 /**
@@ -127,6 +129,12 @@ export class DemoClient extends XMPPClient {
     const roomMAM = new Map<string, typeof completedState>()
     roomMAM.set(room.jid, completedState)
     roomStore.setState({ mamQueryStates: roomMAM })
+
+    // Activity log: seed with demo events (direct store access since
+    // ActivityLogHook may not be registered yet at this point)
+    for (const event of getDemoActivityEvents()) {
+      activityLogStore.getState().addEvent(event)
+    }
   }
 
   /**

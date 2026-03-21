@@ -71,11 +71,7 @@ export function EventsView() {
   const hasContent = subscriptionRequests.length > 0 || strangerJids.length > 0 || mucInvitations.length > 0 || systemNotifications.length > 0
 
   if (!hasContent) {
-    return (
-      <div className="px-3 py-4 text-fluux-muted text-sm text-center">
-        {t('events.noPendingEvents')}
-      </div>
-    )
+    return null
   }
 
   return (
