@@ -189,9 +189,14 @@ describe('themeStore', () => {
       const themes = useThemeStore.getState().getAllThemes()
       const ids = themes.map(t => t.id)
       expect(ids).toContain('fluux')
+      expect(ids).toContain('dracula')
       expect(ids).toContain('nord')
+      expect(ids).toContain('gruvbox')
       expect(ids).toContain('catppuccin-mocha')
       expect(ids).toContain('solarized')
+      expect(ids).toContain('one-dark')
+      expect(ids).toContain('tokyo-night')
+      expect(ids).toContain('monokai')
     })
 
     it('should include custom themes after built-ins', () => {

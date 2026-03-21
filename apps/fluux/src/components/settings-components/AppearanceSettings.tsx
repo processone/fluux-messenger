@@ -4,6 +4,7 @@ import { Sun, Moon, Monitor, Upload, Trash2, FolderOpen } from 'lucide-react'
 import { useSettingsStore, type ThemeMode } from '@/stores/settingsStore'
 import { useThemeStore } from '@/stores/themeStore'
 import type { ThemeDefinition } from '@/themes/types'
+import { getBuiltinTheme } from '@/themes/builtins'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
@@ -166,7 +167,7 @@ export function AppearanceSettings() {
                 isDark={isDark}
                 onSelect={() => setActiveTheme(theme.id)}
                 onRemove={() => removeTheme(theme.id)}
-                isBuiltIn={['fluux', 'nord', 'catppuccin-mocha', 'solarized'].includes(theme.id)}
+                isBuiltIn={!!getBuiltinTheme(theme.id)}
               />
             ))}
           </div>

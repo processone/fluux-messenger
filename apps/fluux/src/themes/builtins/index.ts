@@ -2,6 +2,11 @@ import type { ThemeDefinition } from '../types'
 import { nordTheme } from './nord'
 import { catppuccinMochaTheme } from './catppuccin-mocha'
 import { solarizedTheme } from './solarized'
+import { draculaTheme } from './dracula'
+import { gruvboxTheme } from './gruvbox'
+import { oneDarkTheme } from './one-dark'
+import { tokyoNightTheme } from './tokyo-night'
+import { monokaiTheme } from './monokai'
 
 /**
  * The default Fluux theme — its variables are defined in index.css (:root / .light).
@@ -27,9 +32,14 @@ export const fluuxTheme: ThemeDefinition = {
 /** All built-in themes, ordered for the theme picker */
 export const builtinThemes: ThemeDefinition[] = [
   fluuxTheme,
+  draculaTheme,
   nordTheme,
+  gruvboxTheme,
   catppuccinMochaTheme,
   solarizedTheme,
+  oneDarkTheme,
+  tokyoNightTheme,
+  monokaiTheme,
 ]
 
 /** Look up a built-in theme by ID */
