@@ -1250,12 +1250,15 @@ function RoomMessageInput({
     setText: (t: string) => composerRef.current?.setText(t),
   }), [])
 
+  // Stable callback for draft restoration (resets mention references)
+  const handleDraftRestored = useCallback(() => setReferences([]), [])
+
   // Draft persistence - saves on room change, restores on load, clears references
   const [text, setText] = useConversationDraft({
     conversationId: room.jid,
     draftOperations: { getDraft, setDraft, clearDraft },
     composerRef,
-    onDraftRestored: () => setReferences([]),
+    onDraftRestored: handleDraftRestored,
   })
 
   // Type-to-focus: auto-focus composer when user starts typing anywhere

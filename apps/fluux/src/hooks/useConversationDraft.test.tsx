@@ -268,6 +268,7 @@ describe('useConversationDraft', () => {
    * - REGRESSION-001: Draft not immediately cleared when text emptied
    * - REGRESSION-002: Draft not saved while typing (only on conversation switch)
    * - REGRESSION-003: Restored draft immediately re-saved to wrong conversation
+   * - REGRESSION-005: Draft from Room A leaked to Room B on conversation switch
    */
   describe('real-time draft persistence (regression tests)', () => {
     beforeEach(() => {
@@ -294,11 +295,6 @@ describe('useConversationDraft', () => {
           })
         )
 
-        // Wait for requestAnimationFrame to reset isRestoringRef
-        act(() => {
-          vi.advanceTimersByTime(16)
-        })
-
         // Clear the mock calls from initial setup
         vi.mocked(mockDraftOperations.clearDraft).mockClear()
 
@@ -321,11 +317,6 @@ describe('useConversationDraft', () => {
             composerRef: mockComposerRef,
           })
         )
-
-        // Wait for requestAnimationFrame to reset isRestoringRef
-        act(() => {
-          vi.advanceTimersByTime(16)
-        })
 
         vi.mocked(mockDraftOperations.clearDraft).mockClear()
 
@@ -353,11 +344,6 @@ describe('useConversationDraft', () => {
             composerRef: mockComposerRef,
           })
         )
-
-        // Wait for requestAnimationFrame to reset isRestoringRef
-        act(() => {
-          vi.advanceTimersByTime(16)
-        })
 
         vi.mocked(mockDraftOperations.setDraft).mockClear()
 
@@ -473,7 +459,8 @@ describe('useConversationDraft', () => {
        *      saved back to the store (triggering debounce), which could cause
        *      the draft to be associated with the wrong conversation if user
        *      switched conversations quickly.
-       * Fix: Use isRestoringRef to skip the save effect when restoring
+       * Fix: Track which conversation the text was typed in via textConversationIdRef.
+       *      Restored drafts have null ownership so the save effect skips them.
        */
       it('should not trigger setDraft when restoring a draft', () => {
         drafts.set('conv-1', 'Saved draft')
@@ -496,11 +483,11 @@ describe('useConversationDraft', () => {
           vi.advanceTimersByTime(500)
         })
 
-        // setDraft should NOT have been called (restoring flag prevents it)
+        // setDraft should NOT have been called (restored text has no conversation ownership)
         expect(mockDraftOperations.setDraft).not.toHaveBeenCalled()
       })
 
-      it('should allow saving after user modifies the restored draft', async () => {
+      it('should allow saving after user modifies the restored draft', () => {
         drafts.set('conv-1', 'Original')
 
         const { result } = renderHook(() =>
@@ -511,16 +498,9 @@ describe('useConversationDraft', () => {
           })
         )
 
-        // Wait for requestAnimationFrame to reset isRestoringRef
-        // In fake timers, we need to flush the microtask queue
-        await act(async () => {
-          vi.advanceTimersByTime(16) // ~1 frame
-          await Promise.resolve() // Flush microtasks
-        })
-
         vi.mocked(mockDraftOperations.setDraft).mockClear()
 
-        // User modifies the draft
+        // User modifies the draft (userSetText stamps textConversationIdRef)
         act(() => {
           const [, setText] = result.current
           setText('Original modified')
@@ -572,6 +552,105 @@ describe('useConversationDraft', () => {
         // The debounced setDraft should NOT have been called after unmount
         // (cleanup effect saves draft via composerRef, not via debounce)
         // We're checking that no errors occur and timer was cleaned up
+      })
+    })
+
+    describe('REGRESSION-005: Draft from Room A must not leak to Room B on switch', () => {
+      /**
+       * Bug: When typing a draft in Room A then switching to Room B, the draft
+       *      text appeared in the sidebar on BOTH rooms. The text-save effect
+       *      ran with Room A's text but Room B's conversationId.
+       * Fix: textConversationIdRef tracks which conversation text was typed in.
+       *      On conversation switch, textConversationIdRef is set to null,
+       *      preventing the save effect from writing stale text to the new room.
+       */
+      it('should not save Room A draft to Room B when switching rooms', () => {
+        const { result, rerender } = renderHook(
+          ({ conversationId }) =>
+            useConversationDraft({
+              conversationId,
+              draftOperations: mockDraftOperations,
+              composerRef: mockComposerRef,
+            }),
+          { initialProps: { conversationId: 'conv-1' } }
+        )
+
+        // User types in conv-1
+        act(() => {
+          const [, setText] = result.current
+          setText('Draft for conv-1')
+        })
+
+        // Let debounce fire for conv-1
+        act(() => {
+          vi.advanceTimersByTime(300)
+        })
+
+        vi.mocked(mockDraftOperations.setDraft).mockClear()
+
+        // Mock composer to return current text (for the save-on-switch logic)
+        mockComposerRef.current!.getText = vi.fn(() => 'Draft for conv-1')
+
+        // Switch to conv-2
+        rerender({ conversationId: 'conv-2' })
+
+        // conv-1's draft should have been saved (via the switch logic)
+        expect(mockDraftOperations.setDraft).toHaveBeenCalledWith('conv-1', 'Draft for conv-1')
+
+        // conv-2 should NOT have received conv-1's draft text
+        expect(mockDraftOperations.setDraft).not.toHaveBeenCalledWith(
+          'conv-2',
+          expect.anything()
+        )
+
+        // Wait for any debounce timers
+        act(() => {
+          vi.advanceTimersByTime(500)
+        })
+
+        // Still no draft saved to conv-2
+        expect(mockDraftOperations.setDraft).not.toHaveBeenCalledWith(
+          'conv-2',
+          expect.anything()
+        )
+      })
+
+      it('should allow typing in Room B after switching from Room A', () => {
+        const { result, rerender } = renderHook(
+          ({ conversationId }) =>
+            useConversationDraft({
+              conversationId,
+              draftOperations: mockDraftOperations,
+              composerRef: mockComposerRef,
+            }),
+          { initialProps: { conversationId: 'conv-1' } }
+        )
+
+        // Type in conv-1
+        act(() => {
+          const [, setText] = result.current
+          setText('Draft for conv-1')
+        })
+
+        // Switch to conv-2
+        mockComposerRef.current!.getText = vi.fn(() => 'Draft for conv-1')
+        rerender({ conversationId: 'conv-2' })
+
+        vi.mocked(mockDraftOperations.setDraft).mockClear()
+
+        // Type in conv-2
+        act(() => {
+          const [, setText] = result.current
+          setText('Draft for conv-2')
+        })
+
+        // Wait for debounce
+        act(() => {
+          vi.advanceTimersByTime(300)
+        })
+
+        // Draft should be saved to conv-2
+        expect(mockDraftOperations.setDraft).toHaveBeenCalledWith('conv-2', 'Draft for conv-2')
       })
     })
   })

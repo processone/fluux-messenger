@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import type { MessageComposerHandle } from '@/components/MessageComposer'
 
 export interface DraftOperations {
@@ -44,11 +44,31 @@ export function useConversationDraft({
   // Track previous conversationId to detect changes
   const prevConversationIdRef = useRef<string | null>(null)
 
-  // Track if we're restoring a draft (to avoid immediate save)
-  const isRestoringRef = useRef(false)
+  // Track which conversation the current text was typed in.
+  // Set to conversationId when the user types (via userSetText),
+  // set to null when text is restored programmatically.
+  // This prevents saving restored/stale text to the wrong conversation.
+  const textConversationIdRef = useRef<string | null>(null)
+
+  // Current conversationId ref (for userSetText closure)
+  const conversationIdRef = useRef(conversationId)
+  conversationIdRef.current = conversationId
+
+  // Stable ref for onDraftRestored callback (avoids effect re-runs)
+  const onDraftRestoredRef = useRef(onDraftRestored)
+  onDraftRestoredRef.current = onDraftRestored
 
   // Debounce timer ref
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Wrapper around setText that tags the text as belonging to the current conversation
+  const userSetText: React.Dispatch<React.SetStateAction<string>> = useCallback(
+    (action) => {
+      textConversationIdRef.current = conversationIdRef.current
+      setText(action)
+    },
+    []
+  )
 
   // Save draft on conversation change or unmount, restore draft on conversation change
   useEffect(() => {
@@ -67,17 +87,14 @@ export function useConversationDraft({
     // Restore draft for new conversation (only when conversation actually changed)
     // This prevents re-restoring the draft when the effect runs due to function reference changes
     if (isConversationChange) {
-      isRestoringRef.current = true
+      // Mark text as not from user typing — prevents the save effect from
+      // writing stale text to the new conversation
+      textConversationIdRef.current = null
       const draft = getDraft(conversationId)
       setText(draft)
 
-      // Reset restoring flag after state update
-      requestAnimationFrame(() => {
-        isRestoringRef.current = false
-      })
-
       // Notify caller that draft was restored (e.g., to reset mention references)
-      onDraftRestored?.()
+      onDraftRestoredRef.current?.()
 
       // Update prev ref
       prevConversationIdRef.current = conversationId
@@ -96,12 +113,13 @@ export function useConversationDraft({
         setDraft(conversationId, currentText)
       }
     }
-  }, [conversationId, getDraft, setDraft, clearDraft, composerRef, onDraftRestored])
+  }, [conversationId, getDraft, setDraft, clearDraft, composerRef])
 
   // Update store when text changes (debounced for non-empty, immediate for empty)
   useEffect(() => {
-    // Skip if we're restoring a draft (avoid saving what we just restored)
-    if (isRestoringRef.current) return
+    // Skip if text doesn't belong to the current conversation
+    // (e.g., it was restored programmatically during a conversation switch)
+    if (textConversationIdRef.current !== conversationId) return
 
     // Clear any pending debounce
     if (debounceTimerRef.current) {
@@ -126,5 +144,5 @@ export function useConversationDraft({
     }
   }, [text, conversationId, setDraft, clearDraft])
 
-  return [text, setText]
+  return [text, userSetText]
 }
