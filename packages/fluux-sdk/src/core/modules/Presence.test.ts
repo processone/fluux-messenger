@@ -1717,7 +1717,7 @@ describe('XMPPClient Presence', () => {
       expect(showChild).toBeUndefined()
     })
 
-    it('should only send broadcast presence when changing presence (server propagates to rooms)', async () => {
+    it('should send directed presence to joined rooms when changing presence', async () => {
       await connectClient()
 
       // Set up joined rooms
@@ -1730,22 +1730,72 @@ describe('XMPPClient Presence', () => {
       // Clear previous send calls
       mockXmppClientInstance.send.mockClear()
 
-      // Change presence to DND
-      await xmppClient.roster.setPresence('dnd', 'In a meeting')
+      // Send presence update to rooms
+      await xmppClient.muc.sendPresenceToRooms('dnd', 'In a meeting')
 
       const sendCalls = mockXmppClientInstance.send.mock.calls
 
-      // Should have sent only the broadcast presence (no 'to' attribute)
-      expect(sendCalls).toHaveLength(1)
-      const stanza = sendCalls[0][0]
-      expect(stanza?.name).toBe('presence')
-      expect(stanza?.attrs?.to).toBeUndefined()
+      // Should have sent directed presence to each room
+      expect(sendCalls).toHaveLength(2)
 
-      // Should NOT have sent directed presence to any room
-      const roomPresences = sendCalls.filter((call: any) => {
-        return call[0]?.attrs?.to
-      })
-      expect(roomPresences).toHaveLength(0)
+      const room1Presence = sendCalls.find((call: any) =>
+        call[0]?.attrs?.to === 'room1@conference.example.com/user'
+      )
+      const room2Presence = sendCalls.find((call: any) =>
+        call[0]?.attrs?.to === 'room2@conference.example.com/user'
+      )
+
+      expect(room1Presence).toBeDefined()
+      expect(room2Presence).toBeDefined()
+
+      // Verify show and status elements
+      const stanza = room1Presence![0]
+      const showChild = stanza.children?.find((c: any) => c.name === 'show')
+      expect(showChild).toBeDefined()
+      expect(showChild.children[0]).toBe('dnd')
+      const statusChild = stanza.children?.find((c: any) => c.name === 'status')
+      expect(statusChild).toBeDefined()
+      expect(statusChild.children[0]).toBe('In a meeting')
+    })
+
+    it('should not include show element when sending online presence to rooms', async () => {
+      await connectClient()
+
+      const joinedRooms = [
+        createMockRoom('room1@conference.example.com', { name: 'Room 1', nickname: 'user', joined: true }),
+      ]
+      mockStores.room.joinedRooms.mockReturnValue(joinedRooms)
+
+      mockXmppClientInstance.send.mockClear()
+
+      await xmppClient.muc.sendPresenceToRooms('online')
+
+      const sendCalls = mockXmppClientInstance.send.mock.calls
+      expect(sendCalls).toHaveLength(1)
+
+      const stanza = sendCalls[0][0]
+      expect(stanza?.attrs?.to).toBe('room1@conference.example.com/user')
+      const showChild = stanza.children?.find((c: any) => c.name === 'show')
+      expect(showChild).toBeUndefined()
+    })
+
+    it('should skip rooms that are still joining', async () => {
+      await connectClient()
+
+      const joinedRooms = [
+        createMockRoom('room1@conference.example.com', { name: 'Room 1', nickname: 'user', joined: true }),
+        createMockRoom('room2@conference.example.com', { name: 'Room 2', nickname: 'user', joined: true, isJoining: true }),
+      ]
+      mockStores.room.joinedRooms.mockReturnValue(joinedRooms)
+
+      mockXmppClientInstance.send.mockClear()
+
+      await xmppClient.muc.sendPresenceToRooms('away')
+
+      const sendCalls = mockXmppClientInstance.send.mock.calls
+      // Should only send to room1 (room2 is still joining)
+      expect(sendCalls).toHaveLength(1)
+      expect(sendCalls[0][0]?.attrs?.to).toBe('room1@conference.example.com/user')
     })
   })
 

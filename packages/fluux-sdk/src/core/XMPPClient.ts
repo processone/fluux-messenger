@@ -1195,9 +1195,14 @@ export class XMPPClient {
       previousShow = currentShow
       previousStatus = currentStatus
 
-      // Send XMPP presence to server (including MUC rooms)
+      // Send broadcast presence to server + directed presence to MUC rooms
       // currentShow is already in XMPP format (undefined = online, 'away', 'dnd', 'xa')
-      this.roster.setPresence(currentShow || 'online', currentStatus ?? undefined)
+      const showValue = currentShow || 'online'
+      const statusValue = currentStatus ?? undefined
+      Promise.all([
+        this.roster.setPresence(showValue, statusValue),
+        this.muc.sendPresenceToRooms(showValue, statusValue),
+      ])
         .then(() => {
           // Reset error count on success
           consecutiveErrors = 0

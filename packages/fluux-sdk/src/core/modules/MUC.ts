@@ -550,6 +550,46 @@ export class MUC extends BaseModule {
   }
 
   /**
+   * Send directed presence to all joined MUC rooms.
+   *
+   * Called when the user's presence status changes (e.g., online → away → dnd)
+   * to update their presence in all currently joined rooms. XMPP servers do
+   * not forward broadcast presence to MUC rooms — directed presence must be
+   * sent to each room individually.
+   *
+   * @param show - The presence show value ('online', 'away', 'dnd', 'xa')
+   * @param status - Optional status message
+   */
+  async sendPresenceToRooms(show: PresenceShow | 'online', status?: string): Promise<void> {
+    const joinedRooms = this.deps.stores?.room.joinedRooms() ?? []
+
+    for (const room of joinedRooms) {
+      // Skip rooms still in the process of joining
+      if (room.isJoining || !room.nickname) continue
+
+      const children: Element[] = []
+      if (show !== 'online') {
+        children.push(xml('show', {}, show))
+      }
+      if (status) {
+        children.push(xml('status', {}, status))
+      }
+
+      const presence = xml(
+        'presence',
+        { to: `${room.jid}/${room.nickname}` },
+        ...children
+      )
+
+      await this.deps.sendStanza(presence)
+    }
+
+    if (joinedRooms.length > 0) {
+      logInfo(`Sent presence update to ${joinedRooms.filter(r => !r.isJoining && r.nickname).length} joined room(s)`)
+    }
+  }
+
+  /**
    * Send a mediated invitation to a MUC room (XEP-0045).
    *
    * The invitation is sent through the room server, which forwards it
