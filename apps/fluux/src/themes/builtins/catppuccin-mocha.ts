@@ -40,11 +40,11 @@ export const catppuccinMochaTheme: ThemeDefinition = {
     },
     light: {
       // Foundation — neutral ramp (Latte base)
-      '--fluux-base-00': '#ffffff',
+      '--fluux-base-00': '#eff1f5', // base
       '--fluux-base-05': '#e6e9ef', // mantle
-      '--fluux-base-10': '#eff1f5', // base
-      '--fluux-base-20': '#dce0e8', // crust
-      '--fluux-base-30': '#ffffff',
+      '--fluux-base-10': '#dce0e8', // crust
+      '--fluux-base-20': '#d4d7e2',
+      '--fluux-base-30': '#eff1f5', // base (content surface)
       '--fluux-base-40': '#ccd0da', // surface0
       '--fluux-base-50': '#bcc0cc', // surface1
       '--fluux-base-60': '#acb0be', // surface2
@@ -78,6 +78,6 @@ export const catppuccinMochaTheme: ThemeDefinition = {
   },
   swatches: {
     dark: ['#1e1e2e', '#313244', '#cba6f7', '#89b4fa', '#a6e3a1'],
-    light: ['#eff1f5', '#dce0e8', '#8839ef', '#1e66f5', '#40a02b'],
+    light: ['#dce0e8', '#eff1f5', '#8839ef', '#1e66f5', '#40a02b'],
   },
 }

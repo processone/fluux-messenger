@@ -40,11 +40,11 @@ export const nordTheme: ThemeDefinition = {
     },
     light: {
       // Foundation — neutral ramp (inverted for light)
-      '--fluux-base-00': '#ffffff',
-      '--fluux-base-05': '#f5f7fa',
-      '--fluux-base-10': '#eceff4',
-      '--fluux-base-20': '#e5e9f0',
-      '--fluux-base-30': '#ffffff',
+      '--fluux-base-00': '#eceff4',
+      '--fluux-base-05': '#e8ecf2',
+      '--fluux-base-10': '#e5e9f0',
+      '--fluux-base-20': '#dde2ea',
+      '--fluux-base-30': '#eceff4', // snow storm (content surface)
       '--fluux-base-40': '#d8dee9',
       '--fluux-base-50': '#c8d0e0',
       '--fluux-base-60': '#a5b1c7',
@@ -78,6 +78,6 @@ export const nordTheme: ThemeDefinition = {
   },
   swatches: {
     dark: ['#2e3440', '#3b4252', '#81a1c1', '#88c0d0', '#a3be8c'],
-    light: ['#eceff4', '#e5e9f0', '#5e81ac', '#81a1c1', '#7b9e60'],
+    light: ['#e5e9f0', '#eceff4', '#5e81ac', '#81a1c1', '#7b9e60'],
   },
 }

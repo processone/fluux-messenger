@@ -40,11 +40,11 @@ export const solarizedTheme: ThemeDefinition = {
     },
     light: {
       // Foundation — neutral ramp (Solarized light — flipped)
-      '--fluux-base-00': '#ffffff',
+      '--fluux-base-00': '#fdf6e3',
       '--fluux-base-05': '#f5efdc',
-      '--fluux-base-10': '#fdf6e3', // base3
-      '--fluux-base-20': '#eee8d5', // base2
-      '--fluux-base-30': '#ffffff',
+      '--fluux-base-10': '#eee8d5', // base2
+      '--fluux-base-20': '#e6dfcc', // base2 darkened
+      '--fluux-base-30': '#fdf6e3', // base3 (content surface)
       '--fluux-base-40': '#d6cdb7',
       '--fluux-base-50': '#c5bca6',
       '--fluux-base-60': '#93a1a1', // base1
@@ -78,6 +78,6 @@ export const solarizedTheme: ThemeDefinition = {
   },
   swatches: {
     dark: ['#002b36', '#073642', '#268bd2', '#2aa198', '#859900'],
-    light: ['#fdf6e3', '#eee8d5', '#268bd2', '#2aa198', '#718c00'],
+    light: ['#eee8d5', '#fdf6e3', '#268bd2', '#2aa198', '#718c00'],
   },
 }
