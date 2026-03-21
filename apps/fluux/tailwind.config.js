@@ -7,29 +7,31 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Fluux color palette - uses CSS variables for theme switching
+        // Fluux color palette — 3-tier design tokens (Foundation → Semantic → Component)
+        // Tailwind aliases point to the most specific tier available.
         fluux: {
           // Backgrounds
-          'bg': 'var(--fluux-bg)',
+          'bg': 'var(--fluux-bg-primary)',
           'bg-secondary': 'var(--fluux-bg-secondary)',
-          'sidebar': 'var(--fluux-sidebar)',
-          'chat': 'var(--fluux-chat)',
-          'surface': 'var(--fluux-surface)',
-          'hover': 'var(--fluux-hover)',
-          'active': 'var(--fluux-active)',
-          'selection': 'var(--fluux-selection)',
+          'sidebar': 'var(--fluux-sidebar-bg)',
+          'chat': 'var(--fluux-chat-bg)',
+          'surface': 'var(--fluux-bg-tertiary)',
+          'hover': 'var(--fluux-bg-hover)',
+          'active': 'var(--fluux-bg-active)',
+          'selection': 'var(--fluux-selection-bg)',
           // Text
-          'text': 'var(--fluux-text)',
-          'muted': 'var(--fluux-muted)',
-          'link': 'var(--fluux-link)',
+          'text': 'var(--fluux-text-normal)',
+          'muted': 'var(--fluux-text-muted)',
+          'link': 'var(--fluux-text-link)',
           // Accents
-          'brand': 'var(--fluux-brand)',
-          'brand-hover': 'var(--fluux-brand-hover)',
-          'green': 'var(--fluux-green)',
-          'yellow': 'var(--fluux-yellow)',
-          'red': 'var(--fluux-red)',
-          'gray': 'var(--fluux-gray)',
-          'border': 'var(--fluux-border)',
+          'brand': 'var(--fluux-bg-accent)',
+          'brand-hover': 'var(--fluux-bg-accent-hover)',
+          // Status (semantic purpose, not color)
+          'green': 'var(--fluux-status-success)',
+          'yellow': 'var(--fluux-status-warning)',
+          'red': 'var(--fluux-status-error)',
+          'gray': 'var(--fluux-color-gray)',
+          'border': 'var(--fluux-border-color)',
         }
       },
       fontFamily: {

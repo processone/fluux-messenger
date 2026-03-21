@@ -3,6 +3,7 @@ export { useModalManager, type ModalName, type ModalState, type ModalActions, ty
 export { useRouteSync, getViewPath, type RouteState, type RouteActions, type NavigateOptions } from './useRouteSync'
 export { useConversationDraft, type DraftOperations, type UseConversationDraftOptions } from './useConversationDraft'
 export { useMode } from './useMode'
+export { useTheme } from './useTheme'
 export { useClickOutside } from './useClickOutside'
 export { useContextMenu, type ContextMenuState } from './useContextMenu'
 export { useDragAndDrop } from './useDragAndDrop'

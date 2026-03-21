@@ -43,64 +43,252 @@
   src: url('/fonts/Inter-Bold.woff2') format('woff2');
 }
 
-/* Theme CSS Variables */
+/* ============================================================
+   THEME DESIGN TOKENS — 3-Tier Architecture
+   ============================================================
+   Tier 1: Foundation  — raw palette values, no semantic meaning
+   Tier 2: Semantic    — purpose-named, reference foundation vars
+   Tier 3: Component   — per-widget overrides, reference semantic vars
+
+   Theme authors can override at any level:
+   - Change a foundation var → everything downstream shifts
+   - Change a semantic var → targeted functional change
+   - Change a component var → surgical single-widget override
+   ============================================================ */
+
 :root {
-  /* Dark mode (default) */
   color-scheme: dark;
-  --fluux-bg: #1e1f22;
-  --fluux-bg-secondary: #1a1b1e;
-  --fluux-sidebar: #2b2d31;
-  --fluux-chat: #313338;
-  --fluux-hover: #35373c;
-  --fluux-active: #404249;
-  --fluux-selection: rgba(88, 101, 242, 0.25);
-  --fluux-text: #dbdee1;
-  --fluux-muted: #949ba4;
-  --fluux-link: #00a8fc;
-  --fluux-brand: #5865f2;
-  --fluux-brand-hover: #4752c4;
-  --fluux-green: #23a559;
-  --fluux-yellow: #f0b232;
-  --fluux-red: #da373c;
-  --fluux-gray: #80848e;
-  --fluux-surface: #2b2d31;
-  --fluux-border: rgba(0, 0, 0, 0.1);
-  --scrollbar-thumb: #1a1b1e;
-  --scrollbar-thumb-hover: #2b2d31;
+
+  /* ── Tier 1: Foundation ── */
+
+  /* Neutral ramp (00 = darkest, 100 = lightest) */
+  --fluux-base-00: #111214;
+  --fluux-base-05: #1a1b1e;
+  --fluux-base-10: #1e1f22;
+  --fluux-base-20: #2b2d31;
+  --fluux-base-30: #313338;
+  --fluux-base-40: #35373c;
+  --fluux-base-50: #404249;
+  --fluux-base-60: #4e5058;
+  --fluux-base-70: #6d6f78;
+  --fluux-base-80: #949ba4;
+  --fluux-base-90: #dbdee1;
+  --fluux-base-100: #f2f3f5;
+
+  /* Accent (HSL components for composability) */
+  --fluux-accent-h: 235;
+  --fluux-accent-s: 86%;
+  --fluux-accent-l: 65%;
+
+  /* Named palette colors */
+  --fluux-color-red: #da373c;
+  --fluux-color-green: #23a559;
+  --fluux-color-yellow: #f0b232;
+  --fluux-color-blue: #00a8fc;
+  --fluux-color-purple: #5865f2;
+  --fluux-color-gray: #80848e;
+
+  /* RGB variants for rgba() composability */
+  --fluux-color-red-rgb: 218, 55, 60;
+  --fluux-color-green-rgb: 35, 165, 89;
+  --fluux-color-yellow-rgb: 240, 178, 50;
+  --fluux-color-blue-rgb: 0, 168, 252;
+  --fluux-color-purple-rgb: 88, 101, 242;
+
+  /* Typography primitives */
+  --fluux-font-ui: 'Inter', system-ui, sans-serif;
+  --fluux-font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+
+  /* Radius */
+  --fluux-radius-s: 4px;
+  --fluux-radius-m: 8px;
+  --fluux-radius-l: 12px;
+  --fluux-radius-xl: 16px;
+
+  /* ── Tier 2: Semantic ── */
+
+  /* Backgrounds */
+  --fluux-bg-primary: var(--fluux-base-10);
+  --fluux-bg-secondary: var(--fluux-base-05);
+  --fluux-bg-tertiary: var(--fluux-base-20);
+  --fluux-bg-hover: var(--fluux-base-40);
+  --fluux-bg-active: var(--fluux-base-50);
+  --fluux-bg-accent: hsl(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l));
+  --fluux-bg-accent-hover: hsl(var(--fluux-accent-h), var(--fluux-accent-s), calc(var(--fluux-accent-l) - 8%));
+
+  /* Text */
+  --fluux-text-normal: var(--fluux-base-90);
+  --fluux-text-muted: var(--fluux-base-80);
+  --fluux-text-faint: var(--fluux-base-70);
+  --fluux-text-on-accent: #ffffff;
+  --fluux-text-accent: var(--fluux-bg-accent);
+  --fluux-text-link: var(--fluux-color-blue);
+
+  /* Status (named by purpose, not color) */
+  --fluux-status-success: var(--fluux-color-green);
+  --fluux-status-warning: var(--fluux-color-yellow);
+  --fluux-status-error: var(--fluux-color-red);
+  --fluux-status-info: var(--fluux-color-blue);
+
+  /* Interactive elements */
+  --fluux-interactive-normal: var(--fluux-base-10);
+  --fluux-interactive-hover: var(--fluux-base-40);
+  --fluux-interactive-accent: var(--fluux-bg-accent);
+  --fluux-interactive-accent-hover: var(--fluux-bg-accent-hover);
+
+  /* Borders & dividers */
+  --fluux-border-color: rgba(0, 0, 0, 0.1);
+  --fluux-border-color-strong: var(--fluux-base-40);
+  --fluux-divider-color: var(--fluux-base-05);
+
+  /* Selection */
+  --fluux-selection-bg: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.25);
+
+  /* Scrollbar */
+  --fluux-scrollbar-thumb: var(--fluux-base-05);
+  --fluux-scrollbar-thumb-hover: var(--fluux-base-20);
+
+  /* Focus ring */
+  --fluux-focus-ring: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.5);
+
+  /* Shadows */
+  --fluux-shadow-color: rgba(0, 0, 0, 0.3);
+
+  /* ── Tier 3: Component ── */
+
+  /* Sidebar */
+  --fluux-sidebar-bg: var(--fluux-bg-tertiary);
+  --fluux-sidebar-text: var(--fluux-text-normal);
+  --fluux-sidebar-text-muted: var(--fluux-text-muted);
+  --fluux-sidebar-item-hover: var(--fluux-bg-hover);
+  --fluux-sidebar-item-active: var(--fluux-bg-active);
+  --fluux-sidebar-border: var(--fluux-divider-color);
+
+  /* Icon rail */
+  --fluux-rail-bg: var(--fluux-bg-primary);
+  --fluux-rail-icon: var(--fluux-text-muted);
+  --fluux-rail-icon-active: var(--fluux-bg-accent);
+
+  /* Chat area */
+  --fluux-chat-bg: var(--fluux-base-30);
+  --fluux-chat-header-bg: var(--fluux-chat-bg);
+  --fluux-chat-header-border: var(--fluux-divider-color);
+
+  /* Messages */
+  --fluux-message-hover: var(--fluux-bg-hover);
+  --fluux-message-selection: var(--fluux-selection-bg);
+  --fluux-message-timestamp: var(--fluux-text-faint);
+
+  /* Composer / input */
+  --fluux-input-bg: var(--fluux-interactive-normal);
+  --fluux-input-text: var(--fluux-text-normal);
+  --fluux-input-placeholder: var(--fluux-text-muted);
+  --fluux-input-border: var(--fluux-border-color);
+
+  /* Modal */
+  --fluux-modal-bg: var(--fluux-sidebar-bg);
+  --fluux-modal-border: var(--fluux-border-color-strong);
+  --fluux-modal-backdrop: rgba(0, 0, 0, 0.5);
+
+  /* Toast */
+  --fluux-toast-bg: var(--fluux-sidebar-bg);
+  --fluux-toast-border: var(--fluux-border-color);
+  --fluux-toast-success-border: var(--fluux-status-success);
+  --fluux-toast-error-border: var(--fluux-status-error);
+  --fluux-toast-info-border: var(--fluux-status-info);
+
+  /* Tooltip */
+  --fluux-tooltip-bg: var(--fluux-bg-primary);
+  --fluux-tooltip-text: var(--fluux-text-normal);
+
+  /* Badge (unread count) */
+  --fluux-badge-bg: var(--fluux-status-error);
+  --fluux-badge-text: #ffffff;
+
+  /* Avatar presence */
+  --fluux-presence-online: var(--fluux-status-success);
+  --fluux-presence-away: var(--fluux-status-warning);
+  --fluux-presence-dnd: var(--fluux-status-error);
+  --fluux-presence-offline: var(--fluux-base-60);
+
+  /* Buttons */
+  --fluux-button-primary-bg: var(--fluux-interactive-accent);
+  --fluux-button-primary-hover: var(--fluux-interactive-accent-hover);
+  --fluux-button-primary-text: var(--fluux-text-on-accent);
+  --fluux-button-secondary-bg: var(--fluux-interactive-normal);
+  --fluux-button-secondary-hover: var(--fluux-interactive-hover);
+  --fluux-button-secondary-text: var(--fluux-text-normal);
+  --fluux-button-danger-bg: var(--fluux-status-error);
+  --fluux-button-danger-text: #ffffff;
+
+  /* ── Backward-compatible aliases ── */
+  /* These map old flat names to the new tiered variables.
+     Existing component code using var(--fluux-bg) etc. keeps working.
+     New code should prefer the tiered names. */
+  --fluux-bg: var(--fluux-bg-primary);
+  --fluux-sidebar: var(--fluux-sidebar-bg);
+  --fluux-chat: var(--fluux-chat-bg);
+  --fluux-hover: var(--fluux-bg-hover);
+  --fluux-active: var(--fluux-bg-active);
+  --fluux-selection: var(--fluux-selection-bg);
+  --fluux-text: var(--fluux-text-normal);
+  --fluux-muted: var(--fluux-text-muted);
+  --fluux-link: var(--fluux-text-link);
+  --fluux-brand: var(--fluux-bg-accent);
+  --fluux-brand-hover: var(--fluux-bg-accent-hover);
+  --fluux-green: var(--fluux-status-success);
+  --fluux-yellow: var(--fluux-status-warning);
+  --fluux-red: var(--fluux-status-error);
+  --fluux-gray: var(--fluux-color-gray);
+  --fluux-surface: var(--fluux-bg-tertiary);
+  --fluux-border: var(--fluux-border-color);
+  --scrollbar-thumb: var(--fluux-scrollbar-thumb);
+  --scrollbar-thumb-hover: var(--fluux-scrollbar-thumb-hover);
 
   /* emoji-mart theming */
   --em-rgb-background: 30, 31, 34;
   --em-rgb-input: 53, 55, 60;
   --em-rgb-color: 219, 222, 225;
-  --em-color-border: var(--fluux-hover);
-  --em-color-border-over: var(--fluux-active);
+  --em-color-border: var(--fluux-bg-hover);
+  --em-color-border-over: var(--fluux-bg-active);
 }
 
-/* Light mode (Discord-inspired) */
+/* Light mode — overrides foundation + select semantic vars */
 .light {
   color-scheme: light;
-  --fluux-bg: #e3e5e8;
+
+  /* Foundation overrides (light ramp — 00 = lightest, 100 = darkest) */
+  --fluux-base-00: #ffffff;
+  --fluux-base-05: #f2f3f5;
+  --fluux-base-10: #e3e5e8;
+  --fluux-base-20: #ebedef;
+  --fluux-base-30: #ffffff;
+  --fluux-base-40: #dcdee3;
+  --fluux-base-50: #d0d3d8;
+  --fluux-base-60: #b5bac1;
+  --fluux-base-70: #80848e;
+  --fluux-base-80: #4a4d54;
+  --fluux-base-90: #2e3338;
+  --fluux-base-100: #1e1f22;
+
+  /* Palette overrides for light context */
+  --fluux-color-blue: #0969da;
+  --fluux-color-blue-rgb: 9, 105, 218;
+  --fluux-color-gray: #9ca3af;
+
+  /* Semantic overrides where cascade from foundation isn't sufficient */
   --fluux-bg-secondary: #d8dadf;
-  --fluux-sidebar: #ebedef;
-  --fluux-chat: #ffffff;
-  --fluux-hover: #dcdee3;
-  --fluux-active: #d0d3d8;
-  --fluux-selection: rgba(88, 101, 242, 0.15);
-  --fluux-text: #2e3338;
-  --fluux-muted: #4a4d54;
-  --fluux-link: #0969da;
-  --fluux-gray: #9ca3af;
-  --fluux-surface: #f2f3f5;
-  --fluux-border: rgba(0, 0, 0, 0.15);
-  --scrollbar-thumb: #c4c9ce;
-  --scrollbar-thumb-hover: #a8adb3;
+  --fluux-border-color: rgba(0, 0, 0, 0.15);
+  --fluux-selection-bg: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.15);
+  --fluux-scrollbar-thumb: #c4c9ce;
+  --fluux-scrollbar-thumb-hover: #a8adb3;
 
   /* emoji-mart theming */
   --em-rgb-background: 227, 229, 232;
   --em-rgb-input: 220, 222, 227;
   --em-rgb-color: 46, 51, 56;
-  --em-color-border: var(--fluux-hover);
-  --em-color-border-over: var(--fluux-active);
+  --em-color-border: var(--fluux-bg-hover);
+  --em-color-border-over: var(--fluux-bg-active);
 }
 
 /* Text selection styling - uses brand color for consistent look */
@@ -194,13 +382,13 @@ html, body {
 /* The 'user-interacted' class is added to html on first mouse/keyboard input */
 /* Exclude .no-focus-ring elements (large containers that shouldn't show focus) */
 .user-interacted *:focus:not(html):not(body):not(#root):not(.no-focus-ring) {
-  outline: 2px solid rgba(88, 101, 242, 0.5);
+  outline: 2px solid var(--fluux-focus-ring);
   outline-offset: -2px;
 }
 
 /* Focus zone styling - only show after user interaction */
 .user-interacted .focus-zone:focus {
-  outline: 2px solid rgba(88, 101, 242, 0.5) !important;
+  outline: 2px solid var(--fluux-focus-ring) !important;
   outline-offset: -2px !important;
 }
 
@@ -210,7 +398,7 @@ input[type="range"] {
   appearance: none;
   height: 4px;
   border-radius: 2px;
-  background: var(--fluux-hover);
+  background: var(--fluux-bg-hover);
   outline: none;
 }
 
@@ -220,7 +408,7 @@ input[type="range"]::-webkit-slider-thumb {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: var(--fluux-brand);
+  background: var(--fluux-bg-accent);
   cursor: pointer;
 }
 
@@ -228,7 +416,7 @@ input[type="range"]::-moz-range-thumb {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: var(--fluux-brand);
+  background: var(--fluux-bg-accent);
   border: none;
   cursor: pointer;
 }
@@ -252,7 +440,7 @@ input[type="range"]::-moz-range-thumb {
 /* Message highlight animation for reply navigation */
 @keyframes message-highlight {
   0% {
-    background-color: var(--fluux-brand);
+    background-color: var(--fluux-bg-accent);
   }
   100% {
     background-color: transparent;

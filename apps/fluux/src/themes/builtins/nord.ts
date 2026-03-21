@@ -1,0 +1,83 @@
+import type { ThemeDefinition } from '../types'
+
+export const nordTheme: ThemeDefinition = {
+  id: 'nord',
+  name: 'Nord',
+  author: 'Fluux',
+  version: '1.0.0',
+  description: 'Arctic, north-bluish color palette inspired by the Nord theme',
+  variables: {
+    dark: {
+      // Foundation — neutral ramp
+      '--fluux-base-00': '#242933',
+      '--fluux-base-05': '#272c36',
+      '--fluux-base-10': '#2e3440',
+      '--fluux-base-20': '#3b4252',
+      '--fluux-base-30': '#434c5e',
+      '--fluux-base-40': '#4c566a',
+      '--fluux-base-50': '#59657d',
+      '--fluux-base-60': '#6b7b99',
+      '--fluux-base-70': '#7b88a1',
+      '--fluux-base-80': '#a5b1c7',
+      '--fluux-base-90': '#d8dee9',
+      '--fluux-base-100': '#eceff4',
+      // Foundation — accent (frost blue)
+      '--fluux-accent-h': '213',
+      '--fluux-accent-s': '32%',
+      '--fluux-accent-l': '52%',
+      // Foundation — palette
+      '--fluux-color-red': '#bf616a',
+      '--fluux-color-green': '#a3be8c',
+      '--fluux-color-yellow': '#ebcb8b',
+      '--fluux-color-blue': '#81a1c1',
+      '--fluux-color-purple': '#b48ead',
+      '--fluux-color-gray': '#7b88a1',
+      '--fluux-color-red-rgb': '191, 97, 106',
+      '--fluux-color-green-rgb': '163, 190, 140',
+      '--fluux-color-yellow-rgb': '235, 203, 139',
+      '--fluux-color-blue-rgb': '129, 161, 193',
+      '--fluux-color-purple-rgb': '180, 142, 173',
+    },
+    light: {
+      // Foundation — neutral ramp (inverted for light)
+      '--fluux-base-00': '#ffffff',
+      '--fluux-base-05': '#f5f7fa',
+      '--fluux-base-10': '#eceff4',
+      '--fluux-base-20': '#e5e9f0',
+      '--fluux-base-30': '#ffffff',
+      '--fluux-base-40': '#d8dee9',
+      '--fluux-base-50': '#c8d0e0',
+      '--fluux-base-60': '#a5b1c7',
+      '--fluux-base-70': '#7b88a1',
+      '--fluux-base-80': '#4c566a',
+      '--fluux-base-90': '#3b4252',
+      '--fluux-base-100': '#2e3440',
+      // Foundation — accent (frost blue, slightly adjusted for light)
+      '--fluux-accent-h': '213',
+      '--fluux-accent-s': '32%',
+      '--fluux-accent-l': '42%',
+      // Foundation — palette
+      '--fluux-color-red': '#bf616a',
+      '--fluux-color-green': '#7b9e60',
+      '--fluux-color-yellow': '#c7973a',
+      '--fluux-color-blue': '#5e81ac',
+      '--fluux-color-purple': '#9e6e93',
+      '--fluux-color-gray': '#8892a8',
+      '--fluux-color-red-rgb': '191, 97, 106',
+      '--fluux-color-green-rgb': '123, 158, 96',
+      '--fluux-color-yellow-rgb': '199, 151, 58',
+      '--fluux-color-blue-rgb': '94, 129, 172',
+      '--fluux-color-purple-rgb': '158, 110, 147',
+      // Semantic overrides
+      '--fluux-bg-secondary': '#dde2ea',
+      '--fluux-border-color': 'rgba(59, 66, 82, 0.12)',
+      '--fluux-selection-bg': 'hsla(213, 32%, 42%, 0.15)',
+      '--fluux-scrollbar-thumb': '#c8d0e0',
+      '--fluux-scrollbar-thumb-hover': '#a5b1c7',
+    },
+  },
+  swatches: {
+    dark: ['#2e3440', '#3b4252', '#81a1c1', '#88c0d0', '#a3be8c'],
+    light: ['#eceff4', '#e5e9f0', '#5e81ac', '#81a1c1', '#7b9e60'],
+  },
+}
