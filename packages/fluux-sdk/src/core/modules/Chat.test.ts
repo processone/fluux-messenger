@@ -2084,6 +2084,146 @@ describe('XMPPClient Message', () => {
     })
   })
 
+  describe('incoming corrections for missing original (XEP-0308)', () => {
+    it('should use replace target ID when original message is not in store for groupchat', async () => {
+      await connectClient()
+
+      mockStores.room.getRoom.mockReturnValue({
+        jid: 'room@conference.example.com',
+        name: 'room',
+        nickname: 'me',
+        joined: true,
+        isBookmarked: false,
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
+        occupants: new Map(),
+        messages: [],
+      })
+      // Original message not in store
+      mockStores.room.getMessage = vi.fn().mockReturnValue(undefined)
+
+      // First correction arrives — original was never received
+      const correction1 = createMockElement('message', {
+        from: 'room@conference.example.com/Alice',
+        to: 'user@example.com',
+        type: 'groupchat',
+        id: 'correction-stanza-1',
+      }, [
+        { name: 'body', text: 'Corrected text v1' },
+        { name: 'replace', attrs: { xmlns: 'urn:xmpp:message-correct:0', id: 'original-msg-id' } },
+        { name: 'occupant-id', attrs: { xmlns: 'urn:xmpp:occupant-id:0', id: 'occupant-123' } },
+      ])
+
+      mockXmppClientInstance._emit('stanza', correction1)
+
+      // Should create a new message using the replace target ID, not the correction stanza ID
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:message', expect.objectContaining({
+        roomJid: 'room@conference.example.com',
+        message: expect.objectContaining({
+          id: 'original-msg-id',
+          body: 'Corrected text v1',
+          isEdited: true,
+        })
+      }))
+    })
+
+    it('should deduplicate multiple corrections for same missing original in groupchat', async () => {
+      await connectClient()
+
+      mockStores.room.getRoom.mockReturnValue({
+        jid: 'room@conference.example.com',
+        name: 'room',
+        nickname: 'me',
+        joined: true,
+        isBookmarked: false,
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
+        occupants: new Map(),
+        messages: [],
+      })
+
+      // First call: original not in store. Second call: message now exists (from first correction)
+      let callCount = 0
+      mockStores.room.getMessage = vi.fn().mockImplementation(() => {
+        callCount++
+        if (callCount === 1) return undefined // First correction: original not found
+        return { // Second correction: first correction's message is now in store
+          type: 'groupchat',
+          id: 'original-msg-id',
+          body: 'Corrected text v1',
+          from: 'room@conference.example.com/Alice',
+        }
+      })
+
+      // First correction
+      const correction1 = createMockElement('message', {
+        from: 'room@conference.example.com/Alice',
+        to: 'user@example.com',
+        type: 'groupchat',
+        id: 'correction-stanza-1',
+      }, [
+        { name: 'body', text: 'Corrected text v1' },
+        { name: 'replace', attrs: { xmlns: 'urn:xmpp:message-correct:0', id: 'original-msg-id' } },
+        { name: 'occupant-id', attrs: { xmlns: 'urn:xmpp:occupant-id:0', id: 'occupant-123' } },
+      ])
+
+      mockXmppClientInstance._emit('stanza', correction1)
+
+      // Second correction for same original
+      const correction2 = createMockElement('message', {
+        from: 'room@conference.example.com/Alice',
+        to: 'user@example.com',
+        type: 'groupchat',
+        id: 'correction-stanza-2',
+      }, [
+        { name: 'body', text: 'Corrected text v2' },
+        { name: 'replace', attrs: { xmlns: 'urn:xmpp:message-correct:0', id: 'original-msg-id' } },
+        { name: 'occupant-id', attrs: { xmlns: 'urn:xmpp:occupant-id:0', id: 'occupant-123' } },
+      ])
+
+      mockXmppClientInstance._emit('stanza', correction2)
+
+      // Second correction should update via room:message-updated (not create a new message)
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:message-updated', {
+        roomJid: 'room@conference.example.com',
+        messageId: 'original-msg-id',
+        updates: expect.objectContaining({
+          body: 'Corrected text v2',
+          isEdited: true,
+        })
+      })
+    })
+
+    it('should use replace target ID when original message is not in store for chat', async () => {
+      await connectClient()
+
+      // Original message not in store
+      mockStores.chat.getMessage = vi.fn().mockReturnValue(undefined)
+
+      const correction = createMockElement('message', {
+        from: 'contact@example.com/resource',
+        to: 'user@example.com',
+        type: 'chat',
+        id: 'correction-stanza-1',
+      }, [
+        { name: 'body', text: 'Corrected text' },
+        { name: 'replace', attrs: { xmlns: 'urn:xmpp:message-correct:0', id: 'original-msg-id' } },
+      ])
+
+      mockXmppClientInstance._emit('stanza', correction)
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        message: expect.objectContaining({
+          id: 'original-msg-id',
+          body: 'Corrected text',
+          isEdited: true,
+        })
+      })
+    })
+  })
+
   describe('sendRetraction (XEP-0424)', () => {
     it('should throw error if not connected', async () => {
       await expect(

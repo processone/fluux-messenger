@@ -1274,8 +1274,11 @@ export class Chat extends BaseModule {
     const parsed = parseMessageContent({ messageEl: stanza, body })
     const isCorrection = !!stanza.getChild('replace', NS_CORRECTION)
 
+    // For corrections whose target isn't in store: use the replace target ID
+    // so subsequent corrections for the same original can find and update this message
+    const replaceTargetId = isCorrection ? stanza.getChild('replace', NS_CORRECTION)?.attrs.id : undefined
     // Use stable ID for messages without ID (e.g., from IRC bridges) to enable deduplication
-    const messageId = stanza.attrs.id || generateStableMessageId(bareFrom, parsed.timestamp, body)
+    const messageId = replaceTargetId || stanza.attrs.id || generateStableMessageId(bareFrom, parsed.timestamp, body)
 
     const message: Message = {
       type: 'chat',
@@ -1324,8 +1327,11 @@ export class Chat extends BaseModule {
     const parsed = parseMessageContent({ messageEl: stanza, body, preserveFullReplyToJid: true, messageContext: 'room' })
     const isCorrection = !!stanza.getChild('replace', NS_CORRECTION)
 
+    // For corrections whose target isn't in store: use the replace target ID
+    // so subsequent corrections for the same original can find and update this message
+    const replaceTargetId = isCorrection ? stanza.getChild('replace', NS_CORRECTION)?.attrs.id : undefined
     // Use stable ID for messages without ID (e.g., from IRC bridges) to enable deduplication
-    const messageId = stanza.attrs.id || generateStableMessageId(from, parsed.timestamp, body)
+    const messageId = replaceTargetId || stanza.attrs.id || generateStableMessageId(from, parsed.timestamp, body)
 
     // XEP-0421: Anonymous Unique Occupant Identifiers
     const occupantId = stanza.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id
