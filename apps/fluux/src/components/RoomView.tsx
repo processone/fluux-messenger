@@ -843,8 +843,18 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   // Delete own message confirmation state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
-  // Get occupant info if available
-  const occupant = room.occupants.get(message.nick)
+  // Get occupant info if available (by nick, then by occupant-id for nick changes)
+  let occupant = room.occupants.get(message.nick)
+  let occupantIdMatchNick: string | undefined
+  if (!occupant && message.occupantId) {
+    for (const occ of room.occupants.values()) {
+      if (occ.occupantId === message.occupantId) {
+        occupant = occ
+        occupantIdMatchNick = occ.nick
+        break
+      }
+    }
+  }
   const myNick = room.nickname
 
   // Compute moderation permission for non-outgoing messages
@@ -869,17 +879,28 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   const senderBareJid = occupant?.jid
     ? getBareJid(occupant.jid)
     : room.nickToJidCache?.get(message.nick)
+      || room.nickToJidCache?.get(occupantIdMatchNick ?? '')
   const contact = senderBareJid ? contactsByJid.get(senderBareJid) : undefined
   const contactAvatar = contact?.avatar
   const cachedAvatar = room.nickToAvatarCache?.get(message.nick)
+    || room.nickToAvatarCache?.get(occupantIdMatchNick ?? '')
   const senderAvatar = occupant?.avatar || cachedAvatar || contactAvatar
+
+  // Resolve display name when message.nick doesn't match any current occupant.
+  // This handles cases where the message nick differs from the current occupant nick
+  // (e.g., server reflects JID local part instead of MUC nickname, or nick changed between sessions)
+  // Priority: 1) direct nick match → use as-is  2) occupant-id match → current nick
+  //           3) roster contact name  4) raw message.nick fallback
+  const resolvedSenderName = occupantIdMatchNick
+    ? (contact?.name || occupantIdMatchNick)
+    : message.nick
 
   // Get sender color: green for own messages, contact's pre-calculated color, or fallback to nick-based generation
   const senderColor = message.isOutgoing
     ? 'var(--fluux-green)'
     : contact
-      ? (isDarkMode ? contact.colorDark : contact.colorLight) || getConsistentTextColor(message.nick, isDarkMode)
-      : getConsistentTextColor(message.nick, isDarkMode)
+      ? (isDarkMode ? contact.colorDark : contact.colorLight) || getConsistentTextColor(resolvedSenderName, isDarkMode)
+      : getConsistentTextColor(resolvedSenderName, isDarkMode)
 
   // Get my current reactions to this message
   const myReactions = useMemo(() => {
@@ -1000,10 +1021,10 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         isHovered={isHovered}
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
-        senderName={message.nick}
+        senderName={resolvedSenderName}
         senderColor={senderColor}
         avatarUrl={message.isOutgoing ? (ownAvatar || undefined) : (senderAvatar || undefined)}
-        avatarIdentifier={message.nick}
+        avatarIdentifier={resolvedSenderName}
         avatarFallbackColor={senderColor}
         avatarPresence={room.joined ? (occupant ? getPresenceFromShow(occupant.show) : 'offline') : undefined}
         senderJid={senderBareJid}

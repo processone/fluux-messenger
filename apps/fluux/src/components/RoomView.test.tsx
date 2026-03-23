@@ -1019,4 +1019,146 @@ describe('RoomView', () => {
       expect(screen.getByText('Visible message')).toBeInTheDocument()
     })
   })
+
+  describe('Display name resolution', () => {
+    beforeEach(() => {
+      mockIgnoredUsers = {}
+    })
+
+    it('should show contact name when message nick differs from occupant nick', () => {
+      // Scenario: message has nick "jsautret" but occupant is "Jérôme"
+      // and the sender is a known roster contact with name "Jérôme"
+      mockActiveRoom = createRoom({
+        occupantsList: [
+          createOccupant({ nick: 'Me', jid: 'me@example.com', role: 'participant' }),
+          createOccupant({ nick: 'Jérôme', jid: 'jsautret@process-one.net', occupantId: 'occ-jerome', affiliation: 'admin', role: 'moderator' }),
+        ],
+        // nickToJidCache maps the MUC nick "jsautret" to the real bare JID
+        nickToJidCache: new Map([['jsautret', 'jsautret@process-one.net']]),
+      })
+      mockContacts = [
+        { jid: 'jsautret@process-one.net', name: 'Jérôme', presence: 'online' } as Contact,
+      ]
+      mockActiveMessages = [
+        createRoomMessage({
+          id: 'msg-1',
+          nick: 'jsautret', // JID local part instead of MUC nick
+          from: 'room@conference.example.com/jsautret',
+          body: 'Hello',
+          occupantId: 'occ-jerome',
+        }),
+      ]
+
+      render(<RoomView />)
+
+      // Should display "Jérôme" (contact name), not "jsautret"
+      // Multiple elements expected (sender name + avatar identifier), so use getAllByText
+      expect(screen.getAllByText('Jérôme').length).toBeGreaterThan(0)
+      expect(screen.queryByText('jsautret')).not.toBeInTheDocument()
+    })
+
+    it('should resolve sender name via occupant-id when nick has changed', () => {
+      // Scenario: message has old nick but occupant-id matches a current occupant
+      mockActiveRoom = createRoom({
+        occupantsList: [
+          createOccupant({ nick: 'Me', jid: 'me@example.com', role: 'participant' }),
+          createOccupant({ nick: 'NewNick', jid: 'user@example.com', occupantId: 'occ-123', role: 'participant' }),
+        ],
+      })
+      mockContacts = []
+      mockActiveMessages = [
+        createRoomMessage({
+          id: 'msg-1',
+          nick: 'OldNick', // Nick was different when message was sent
+          from: 'room@conference.example.com/OldNick',
+          body: 'Message with old nick',
+          occupantId: 'occ-123', // Same occupant-id as current "NewNick"
+        }),
+      ]
+
+      render(<RoomView />)
+
+      // Should display "NewNick" (resolved via occupant-id), not "OldNick"
+      expect(screen.getAllByText('NewNick').length).toBeGreaterThan(0)
+      expect(screen.queryByText('OldNick')).not.toBeInTheDocument()
+    })
+
+    it('should fall back to message nick when no resolution is available', () => {
+      // Scenario: unknown sender, no occupant match, no contact
+      mockActiveRoom = createRoom({
+        occupantsList: [
+          createOccupant({ nick: 'Me', jid: 'me@example.com', role: 'participant' }),
+        ],
+      })
+      mockContacts = []
+      mockActiveMessages = [
+        createRoomMessage({
+          id: 'msg-1',
+          nick: 'UnknownSender',
+          from: 'room@conference.example.com/UnknownSender',
+          body: 'Message from unknown',
+        }),
+      ]
+
+      render(<RoomView />)
+
+      // Should fall back to message nick
+      expect(screen.getAllByText('UnknownSender').length).toBeGreaterThan(0)
+    })
+
+    it('should prefer contact name over occupant-id match', () => {
+      // When both contact name and occupant-id match are available, prefer contact name
+      mockActiveRoom = createRoom({
+        occupantsList: [
+          createOccupant({ nick: 'Me', jid: 'me@example.com', role: 'participant' }),
+          createOccupant({ nick: 'RoomNick', jid: 'user@example.com', occupantId: 'occ-456', role: 'participant' }),
+        ],
+        nickToJidCache: new Map([['oldnick', 'user@example.com']]),
+      })
+      mockContacts = [
+        { jid: 'user@example.com', name: 'Full Name', presence: 'online' } as Contact,
+      ]
+      mockActiveMessages = [
+        createRoomMessage({
+          id: 'msg-1',
+          nick: 'oldnick',
+          from: 'room@conference.example.com/oldnick',
+          body: 'Hello from old nick',
+          occupantId: 'occ-456',
+        }),
+      ]
+
+      render(<RoomView />)
+
+      // Should display contact name "Full Name", not occupant-id match "RoomNick"
+      expect(screen.getAllByText('Full Name').length).toBeGreaterThan(0)
+    })
+
+    it('should NOT override MUC nick with contact name when nick matches occupant', () => {
+      // Normal case: nick matches an occupant — should show the MUC nick, not the roster name
+      mockActiveRoom = createRoom({
+        occupantsList: [
+          createOccupant({ nick: 'Me', jid: 'me@example.com', role: 'participant' }),
+          createOccupant({ nick: 'alice', jid: 'alice@example.com', role: 'participant' }),
+        ],
+      })
+      mockContacts = [
+        { jid: 'alice@example.com', name: 'Alice Smith', presence: 'online' } as Contact,
+      ]
+      mockActiveMessages = [
+        createRoomMessage({
+          id: 'msg-1',
+          nick: 'alice', // Matches occupant nick exactly
+          from: 'room@conference.example.com/alice',
+          body: 'Normal message',
+        }),
+      ]
+
+      render(<RoomView />)
+
+      // Should display MUC nick "alice", NOT roster name "Alice Smith"
+      expect(screen.getAllByText('alice').length).toBeGreaterThan(0)
+      expect(screen.queryByText('Alice Smith')).not.toBeInTheDocument()
+    })
+  })
 })
