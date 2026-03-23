@@ -294,85 +294,87 @@ export function AppearanceSettings() {
               />
             ))}
           </div>
-          <div className="flex gap-3">
-            <button
-              onClick={() => themeInputRef.current?.click()}
-              className="flex items-center gap-1.5 text-xs text-fluux-muted hover:text-fluux-text transition-colors"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              {t('settings.importTheme')}
-            </button>
-            {isTauri && (
-              <button
-                onClick={() => openConfigFolder('themes')}
-                className="flex items-center gap-1.5 text-xs text-fluux-muted hover:text-fluux-text transition-colors"
-              >
-                <FolderOpen className="w-3.5 h-3.5" />
-                {t('settings.openThemesFolder')}
-              </button>
-            )}
-          </div>
-          <input
-            ref={themeInputRef}
-            type="file"
-            accept=".json"
-            className="hidden"
-            onChange={handleThemeImport}
-          />
+          {isTauri && (
+            <>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => themeInputRef.current?.click()}
+                  className="flex items-center gap-1.5 text-xs text-fluux-muted hover:text-fluux-text transition-colors"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  {t('settings.importTheme')}
+                </button>
+                <button
+                  onClick={() => openConfigFolder('themes')}
+                  className="flex items-center gap-1.5 text-xs text-fluux-muted hover:text-fluux-text transition-colors"
+                >
+                  <FolderOpen className="w-3.5 h-3.5" />
+                  {t('settings.openThemesFolder')}
+                </button>
+              </div>
+              <input
+                ref={themeInputRef}
+                type="file"
+                accept=".json"
+                className="hidden"
+                onChange={handleThemeImport}
+              />
+            </>
+          )}
         </div>
 
-        {/* 4. CSS Snippets (advanced) */}
-        <div className="space-y-3">
-          <label className="text-sm font-medium text-fluux-text">{t('settings.cssSnippets')}</label>
-          {snippets.length > 0 && (
-            <div className="space-y-1">
-              {snippets.map((snippet) => (
-                <div
-                  key={snippet.id}
-                  className="flex items-center justify-between px-3 py-2 rounded-lg bg-fluux-bg"
-                >
-                  <span className="text-sm text-fluux-text truncate flex-1">{snippet.filename}</span>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => setEditingSnippet(snippet)}
-                      className="p-1 text-fluux-muted hover:text-fluux-text transition-colors"
-                      title={t('settings.editSnippet')}
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => removeSnippet(snippet.id)}
-                      className="p-1 text-fluux-muted hover:text-fluux-red transition-colors"
-                      title={t('settings.removeTheme')}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => toggleSnippet(snippet.id)}
-                      className={`relative w-9 h-5 rounded-full transition-colors ${
-                        snippet.enabled ? 'bg-fluux-brand' : 'bg-fluux-hover'
-                      }`}
-                    >
-                      <span
-                        className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
-                          snippet.enabled ? 'translate-x-4' : ''
+        {/* 4. CSS Snippets (advanced) — desktop only */}
+        {isTauri && (
+          <div className="space-y-3">
+            <label className="text-sm font-medium text-fluux-text">{t('settings.cssSnippets')}</label>
+            {snippets.length > 0 && (
+              <div className="space-y-1">
+                {snippets.map((snippet) => (
+                  <div
+                    key={snippet.id}
+                    className="flex items-center justify-between px-3 py-2 rounded-lg bg-fluux-bg"
+                  >
+                    <span className="text-sm text-fluux-text truncate flex-1">{snippet.filename}</span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => setEditingSnippet(snippet)}
+                        className="p-1 text-fluux-muted hover:text-fluux-text transition-colors"
+                        title={t('settings.editSnippet')}
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => removeSnippet(snippet.id)}
+                        className="p-1 text-fluux-muted hover:text-fluux-red transition-colors"
+                        title={t('settings.removeTheme')}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => toggleSnippet(snippet.id)}
+                        className={`relative w-9 h-5 rounded-full transition-colors ${
+                          snippet.enabled ? 'bg-fluux-brand' : 'bg-fluux-hover'
                         }`}
-                      />
-                    </button>
+                      >
+                        <span
+                          className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                            snippet.enabled ? 'translate-x-4' : ''
+                          }`}
+                        />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-          <div className="flex gap-3">
-            <button
-              onClick={() => setShowNewSnippet(true)}
-              className="flex items-center gap-1.5 text-xs text-fluux-muted hover:text-fluux-text transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              {t('settings.addCustomCss')}
-            </button>
-            {isTauri && (
+                ))}
+              </div>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowNewSnippet(true)}
+                className="flex items-center gap-1.5 text-xs text-fluux-muted hover:text-fluux-text transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                {t('settings.addCustomCss')}
+              </button>
               <button
                 onClick={() => openConfigFolder('snippets')}
                 className="flex items-center gap-1.5 text-xs text-fluux-muted hover:text-fluux-text transition-colors"
@@ -380,13 +382,13 @@ export function AppearanceSettings() {
                 <FolderOpen className="w-3.5 h-3.5" />
                 {t('settings.openSnippetsFolder')}
               </button>
-            )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Snippet editor modal */}
-      {(showNewSnippet || editingSnippet) && (
+      {/* Snippet editor modal — desktop only */}
+      {isTauri && (showNewSnippet || editingSnippet) && (
         <SnippetEditorModal
           snippet={editingSnippet}
           onClose={() => {
