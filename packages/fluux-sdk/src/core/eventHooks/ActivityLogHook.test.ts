@@ -166,6 +166,7 @@ describe('ActivityLogHook', () => {
             { emoji: '1️⃣', label: 'Pizza' },
             { emoji: '2️⃣', label: 'Sushi' },
           ],
+          settings: { allowMultiple: false, hideResultsBeforeVote: false },
         },
       })
       chatStore.getState().messages.set('alice@example.com', [message])
@@ -228,7 +229,7 @@ describe('ActivityLogHook', () => {
       const message = makeMessage({
         id: 'poll-msg-1',
         isOutgoing: true,
-        poll: { title: 'Team outing', options: [{ emoji: '1️⃣', label: 'Park' }, { emoji: '2️⃣', label: 'Beach' }] },
+        poll: { title: 'Team outing', options: [{ emoji: '1️⃣', label: 'Park' }, { emoji: '2️⃣', label: 'Beach' }], settings: { allowMultiple: false, hideResultsBeforeVote: false } },
       })
       chatStore.getState().messages.set('alice@example.com', [message])
 
@@ -258,7 +259,12 @@ describe('ActivityLogHook', () => {
         jid: 'room@conference.example.com',
         name: 'Dev Room',
         nickname: 'me',
-        isJoined: true,
+        joined: true,
+        isBookmarked: false,
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+        occupants: new Map(),
         messages: [],
       })
     })
@@ -317,6 +323,7 @@ describe('ActivityLogHook', () => {
         poll: {
           title: 'Meeting time',
           options: [{ emoji: '1️⃣', label: '10am' }, { emoji: '2️⃣', label: '2pm' }],
+          settings: { allowMultiple: false, hideResultsBeforeVote: false },
         },
       })
       roomStore.getState().addMessage('room@conference.example.com', message)
