@@ -1143,6 +1143,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         onMediaLoad={onMediaLoad}
         replyContext={replyContext}
         mentions={message.mentions}
+        nickname={myNick}
         onNickContextMenu={!message.isOutgoing ? handleNickContextMenu : undefined}
         onNickTouchStart={!message.isOutgoing ? handleNickTouchStart : undefined}
         onNickTouchEnd={!message.isOutgoing ? onNickTouchEnd : undefined}

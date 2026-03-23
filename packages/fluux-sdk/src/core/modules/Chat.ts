@@ -40,6 +40,7 @@ import type {
   PollClosedData,
 } from '../types'
 import { parseMessageContent, parseOgpFastening, applyRetraction, applyCorrection } from './messagingUtils'
+import { checkForMention } from '../mentionDetection'
 import { parsePollElement, parsePollClosedElement } from '../poll'
 import { parseXMPPError, formatXMPPError } from '../../utils/xmppError'
 import type { MAM } from './MAM'
@@ -1387,7 +1388,7 @@ export class Chat extends BaseModule {
     // Mentions logic
     if (!isOutgoing) {
       const mentions = this.parseMentions(stanza)
-      const isMention = this.checkForMention(parsed.processedBody, room.nickname)
+      const isMention = checkForMention(parsed.processedBody, room.nickname)
       const isMentionAll = this.checkForMentionAll(parsed.processedBody, !!stanza.getChild('mention-all', NS_MENTION_ALL))
       
       if (isMention || isMentionAll) {
@@ -1464,12 +1465,6 @@ export class Chat extends BaseModule {
       type: ref.attrs.type as 'mention',
       uri: ref.attrs.uri,
     })).filter(ref => ref.type === 'mention')
-  }
-
-  private checkForMention(body: string, nickname: string): boolean {
-    if (!nickname || !body) return false
-    const escaped = nickname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    return new RegExp(`@${escaped}(?:\\b|$)`, 'i').test(body)
   }
 
   private checkForMentionAll(body: string, hasMentionAllElement: boolean): boolean {

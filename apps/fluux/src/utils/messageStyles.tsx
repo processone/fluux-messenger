@@ -16,7 +16,7 @@
  */
 
 import React, { useState } from 'react'
-import type { MentionReference } from '@fluux/sdk'
+import { findMentionRanges, type MentionReference } from '@fluux/sdk'
 
 // URL regex pattern - excludes < and > to handle angle-bracketed URLs like <https://example.com>
 const URL_REGEX = /(https?:\/\/[^\s<>]+[^\s<>.,;:!?)"'\]])/g
@@ -406,16 +406,22 @@ export function renderTextWithLinks(text: string): React.ReactNode {
  * Parse and render a complete message with all styling
  * @param text - The message body
  * @param mentions - Optional XEP-0372 mention references for precise highlighting
+ * @param nickname - Optional user nickname for IRC-style mention detection fallback
  */
-export function renderStyledMessage(text: string, mentions?: MentionReference[]): React.ReactNode {
+export function renderStyledMessage(text: string, mentions?: MentionReference[], nickname?: string): React.ReactNode {
   // Normalize line endings: CRLF -> LF, CR -> LF
   const normalizedText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
 
-  // If we have XEP-0372 mentions, use them for precise highlighting
-  // Otherwise, the regex fallback in parseInlineStyles will be used
-  const mentionRanges = mentions && mentions.length > 0
-    ? mentions.map(m => ({ begin: m.begin, end: m.end })).sort((a, b) => a.begin - b.begin)
-    : null
+  // If we have XEP-0372 mentions, use them for precise highlighting.
+  // Otherwise, try IRC-style mention detection if a nickname is provided.
+  // Final fallback: the regex in parseInlineStyles detects @mention patterns.
+  let mentionRanges: { begin: number; end: number }[] | null = null
+  if (mentions && mentions.length > 0) {
+    mentionRanges = mentions.map(m => ({ begin: m.begin, end: m.end })).sort((a, b) => a.begin - b.begin)
+  } else if (nickname) {
+    const detected = findMentionRanges(normalizedText, nickname)
+    mentionRanges = detected.length > 0 ? detected : null
+  }
 
   // Check for code blocks first (``` ... ```)
   const codeBlockRegex = /```([\s\S]*?)```/g

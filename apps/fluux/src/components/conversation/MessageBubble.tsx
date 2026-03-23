@@ -87,6 +87,9 @@ export interface MessageBubbleProps {
   // Room-specific: mentions for highlighting
   mentions?: MentionReference[]
 
+  // Room-specific: user's nickname for IRC-style mention detection fallback
+  nickname?: string
+
   // XEP-0425: Whether the current user can moderate (retract) this message
   canModerate?: boolean
 
@@ -174,6 +177,7 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps): bool
 
   // Mentions - compare by reference (parent should memoize)
   if (prev.mentions !== next.mentions) return false
+  if (prev.nickname !== next.nickname) return false
 
   // nickExtras - ReactNode, compare by reference (accept some re-renders)
   if (prev.nickExtras !== next.nickExtras) return false
@@ -221,6 +225,7 @@ export const MessageBubble = memo(function MessageBubble({
   onMediaLoad,
   replyContext,
   mentions,
+  nickname,
   canModerate,
   onPollVote,
   onClosePoll,
@@ -408,6 +413,7 @@ export const MessageBubble = memo(function MessageBubble({
             senderName={senderName}
             senderColor={senderColor}
             mentions={mentions}
+            nickname={nickname}
           />
 
           {/* File attachments (image, video, audio, text preview, document card) - hidden for retracted */}
