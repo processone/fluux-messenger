@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Monitor, Smartphone, Globe, Pencil, Camera, Trash2, Key, Network, Bell, Plus, Building2, Mail, MapPin, User } from 'lucide-react'
 import { type ResourcePresence, type VCardInfo, getClientType, getLocalPart, useConnection, usePresence } from '@fluux/sdk'
+import { useClickOutside } from '@/hooks/useClickOutside'
 import { Avatar } from '../Avatar'
 import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS } from '@/constants/ui'
 import { getShowColor } from '@/utils/presence'
@@ -32,6 +33,9 @@ export function ProfileSettings() {
   const [vcardSaving, setVcardSaving] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const vcardInputRef = useRef<HTMLInputElement>(null)
+  const addFieldRef = useRef<HTMLDivElement>(null)
+
+  useClickOutside(addFieldRef, () => setShowAddField(false), showAddField)
 
   // Extract bare JID and local part for display
   const bareJid = jid ? jid.split('/')[0] : ''
@@ -407,7 +411,7 @@ export function ProfileSettings() {
 
         {/* Add vCard field button */}
         {isConnected && availableVCardFields.length > 0 && !editingVCardField && (
-          <div className="relative mb-3">
+          <div ref={addFieldRef} className="relative mb-3">
             <button
               onClick={() => setShowAddField(!showAddField)}
               className="flex items-center gap-1 text-xs text-fluux-muted hover:text-fluux-text transition-colors"
