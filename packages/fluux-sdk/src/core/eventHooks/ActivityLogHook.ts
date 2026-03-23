@@ -134,19 +134,23 @@ export class ActivityLogHook extends EventHook {
 
     if (existing) {
       const payload = existing.payload as ReactionReceivedPayload
-      // Update existing reactor or add new one
       const reactors = [...payload.reactors]
       const existingIdx = reactors.findIndex((r) => r.reactorJid === reactorJid)
+
       if (existingIdx >= 0) {
+        // Same reactor — check if emojis actually changed (skip replayed reactions)
+        const prev = reactors[existingIdx].emojis
+        const sameEmojis = prev.length === emojis.length && prev.every((e, i) => e === emojis[i])
+        if (sameEmojis) return
         reactors[existingIdx] = { reactorJid, emojis }
       } else {
         reactors.push({ reactorJid, emojis })
       }
 
-      // Update the event in-place (mark as unread again with fresh timestamp)
-      store.resolveEvent(existing.id, 'dismissed') // remove old
+      // Replace event: preserve read state so replays don't reset the blue dot
+      const wasRead = existing.read
       store.removeEvent(existing.id)
-      store.addEvent({
+      const newEvent = store.addEvent({
         type: 'reaction-received',
         kind: 'informational',
         timestamp: new Date(),
@@ -159,6 +163,9 @@ export class ActivityLogHook extends EventHook {
           pollTitle: pollTitle ?? payload.pollTitle,
         },
       })
+      if (wasRead) {
+        store.markRead(newEvent.id)
+      }
     } else {
       store.addEvent({
         type: 'reaction-received',
