@@ -1082,6 +1082,64 @@ describe('RoomView', () => {
 
       expect(screen.getByText('Visible message')).toBeInTheDocument()
     })
+
+    it('should hide typing indicator for user ignored by nick', () => {
+      mockActiveMessages = [
+        createRoomMessage({ id: 'msg-1', nick: 'Bob', body: 'Bob text' }),
+      ]
+      mockTypingUsers = ['Alice', 'Bob']
+      mockIgnoredUsers = {
+        [ROOM_JID]: [{ identifier: 'Alice', displayName: 'Alice' }],
+      }
+
+      render(<RoomView />)
+
+      // Alice is ignored — only Bob should appear in typing indicator
+      expect(screen.queryByText(/Alice/)).not.toBeInTheDocument()
+    })
+
+    it('should hide typing indicator for user ignored by JID via nickToJidCache', () => {
+      const nickToJidCache = new Map([['Alice', 'alice@example.com']])
+      mockActiveRoom = createRoom({
+        jid: ROOM_JID,
+        isJoining: false,
+        joined: true,
+        nickToJidCache,
+        occupantsList: [
+          createOccupant({ nick: 'Alice' }),
+          createOccupant({ nick: 'Bob' }),
+        ],
+      })
+      mockActiveMessages = [
+        createRoomMessage({ id: 'msg-1', nick: 'Bob', body: 'Bob text' }),
+      ]
+      mockTypingUsers = ['Alice']
+      mockIgnoredUsers = {
+        [ROOM_JID]: [{ identifier: 'alice@example.com', displayName: 'Alice', jid: 'alice@example.com' }],
+      }
+
+      render(<RoomView />)
+
+      // Alice is ignored via JID — typing indicator should not appear
+      expect(screen.queryByText(/is typing/)).not.toBeInTheDocument()
+    })
+
+    it('should show typing indicator for non-ignored users when some are ignored', () => {
+      mockActiveMessages = [
+        createRoomMessage({ id: 'msg-1', nick: 'Bob', body: 'Bob text' }),
+      ]
+      mockTypingUsers = ['Alice', 'Bob']
+      mockIgnoredUsers = {
+        [ROOM_JID]: [{ identifier: 'Alice', displayName: 'Alice' }],
+      }
+
+      render(<RoomView />)
+
+      // Bob should still show as typing (Alice is filtered out)
+      expect(screen.getByText(/is typing/)).toBeInTheDocument()
+      // The typing text should mention Bob, not Alice
+      expect(screen.getByText(/Bob.*is typing/)).toBeInTheDocument()
+    })
   })
 
   describe('Display name resolution', () => {

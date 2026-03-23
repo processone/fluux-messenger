@@ -91,6 +91,15 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     )
   })()
 
+  // Filter typing indicators from ignored users
+  const filteredTypingUsers = useMemo(() => {
+    if (ignoredForRoom.length === 0) return activeTypingUsers
+    const cache = activeRoom?.nickToJidCache
+    return activeTypingUsers.filter(
+      nick => !isMessageFromIgnoredUser(ignoredForRoom, { nick }, cache)
+    )
+  }, [activeTypingUsers, ignoredForRoom, activeRoom?.nickToJidCache])
+
   // Reply state
   const [replyingTo, setReplyingTo] = useState<RoomMessage | null>(null)
 
@@ -354,7 +363,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             onEdit={setEditingMessage}
             lastOutgoingMessageId={lastOutgoingMessageId}
             lastMessageId={lastMessageId}
-            typingUsers={activeTypingUsers}
+            typingUsers={filteredTypingUsers}
             isComposing={isComposing}
             activeReactionPickerMessageId={activeReactionPickerMessageId}
             onReactionPickerChange={handleReactionPickerChange}
