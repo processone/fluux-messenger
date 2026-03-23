@@ -892,7 +892,7 @@ export class XMPPClient {
       roomStore.getState().switchAccount(scopedJid)
     }
 
-    // Initialize search index for this account (triggers one-time backfill)
+    // Open the search index DB for this account (no backfill yet — that runs lazily)
     void import('../utils/searchIndex').then((m) => m.initSearchIndex(scopedJid)).catch(() => {})
 
     this.currentJid = options.jid

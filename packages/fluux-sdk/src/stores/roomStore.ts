@@ -776,7 +776,7 @@ export const roomStore = createStore<RoomState>()(
     // Save to IndexedDB only if message doesn't have noStore hint
     if (!messageToAdd.noStore) {
       void messageCache.saveRoomMessage(messageToAdd)
-      void searchIndex.indexMessage(messageToAdd)
+      searchIndex.indexMessage(messageToAdd).catch((e) => console.warn('[searchIndex] indexMessage failed:', e))
     }
 
     set((state) => {
@@ -1636,7 +1636,7 @@ export const roomStore = createStore<RoomState>()(
       const persistableMessages = newFromMAM.filter(msg => !msg.noStore)
       if (persistableMessages.length > 0) {
         void messageCache.saveRoomMessages(persistableMessages)
-        void searchIndex.indexMessages(persistableMessages)
+        searchIndex.indexMessages(persistableMessages).catch((e) => console.warn('[searchIndex] indexMessages failed:', e))
       }
 
       // Get the last message from merged messages for sidebar preview

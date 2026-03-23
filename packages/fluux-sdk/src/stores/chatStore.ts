@@ -623,7 +623,7 @@ export const chatStore = createStore<ChatState>()(
           // XEP-0334: Save to IndexedDB only if message doesn't have noStore hint
           if (!msg.noStore) {
             void messageCache.saveMessage(msg)
-            void searchIndex.indexMessage(msg)
+            searchIndex.indexMessage(msg).catch((e) => console.warn('[searchIndex] indexMessage failed:', e))
           }
 
           const newMessages = new Map(state.messages)
@@ -1051,7 +1051,7 @@ export const chatStore = createStore<ChatState>()(
           const persistableMessages = newMessages.filter(msg => !msg.noStore)
           if (persistableMessages.length > 0) {
             void messageCache.saveMessages(persistableMessages)
-            void searchIndex.indexMessages(persistableMessages)
+            searchIndex.indexMessages(persistableMessages).catch((e) => console.warn('[searchIndex] indexMessages failed:', e))
           }
 
           // Update messages map (only when we have new messages)

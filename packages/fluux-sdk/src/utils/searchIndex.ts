@@ -194,13 +194,10 @@ function getIndexId(message: Message | RoomMessage): string {
 
 /**
  * Initialize the search index for the given account scope.
- * Opens (or creates) the IndexedDB database and triggers a one-time
- * backfill of existing messages from messageCache (if not already done).
+ * Opens (or creates) the IndexedDB database.
  */
 export async function initSearchIndex(scopeJid: string): Promise<void> {
   await getDB(scopeJid)
-  // Fire-and-forget backfill — runs once per account, no-op thereafter
-  void backfillFromMessageCache()
 }
 
 /**
@@ -259,26 +256,44 @@ export async function indexMessage(message: Message | RoomMessage): Promise<void
 }
 
 /**
- * Index multiple messages in a single transaction (efficient for MAM batch sync).
+ * Maximum messages per IDB transaction to avoid transaction lifetime issues.
+ * IDB transactions auto-commit when the event loop goes idle; large batches
+ * with many awaits can exceed this window and silently fail.
+ */
+const INDEX_BATCH_SIZE = 50
+
+/**
+ * Index multiple messages, splitting into small transactions to avoid
+ * IDB transaction lifetime issues.
  * Silently returns if IndexedDB is not available.
  */
 export async function indexMessages(messages: (Message | RoomMessage)[]): Promise<void> {
   if (!isIndexedDBAvailable()) return
-  // Filter to indexable messages
   const indexable = messages.filter((m) => m.body && !m.isRetracted && !m.noStore)
   if (indexable.length === 0) return
 
+  // Process in small batches to keep each IDB transaction short-lived
+  for (let i = 0; i < indexable.length; i += INDEX_BATCH_SIZE) {
+    const batch = indexable.slice(i, i + INDEX_BATCH_SIZE)
+    await indexBatch(batch)
+  }
+}
+
+/**
+ * Index a small batch of messages in a single transaction.
+ * Kept small enough that the IDB transaction won't auto-commit.
+ */
+async function indexBatch(messages: (Message | RoomMessage)[]): Promise<void> {
   const db = await getDB()
   const tx = db.transaction([TOKENS_STORE, DOCS_STORE], 'readwrite')
   const tokensStore = tx.objectStore(TOKENS_STORE)
   const docsStore = tx.objectStore(DOCS_STORE)
 
-  // Cache token entries read during this batch to reduce IDB reads
   const tokenCache = new Map<string, TokenEntry>()
 
-  for (const message of indexable) {
+  for (const message of messages) {
     const indexId = getIndexId(message)
-    const tokens = uniqueTokens(message.body)
+    const tokens = uniqueTokens(message.body!)
     if (tokens.length === 0) continue
 
     const conversationId =
@@ -288,7 +303,6 @@ export async function indexMessages(messages: (Message | RoomMessage)[]): Promis
     const existing = await docsStore.get(indexId)
     if (existing) continue
 
-    // Write document entry
     await docsStore.put({
       indexId,
       messageId: message.id,
@@ -297,10 +311,9 @@ export async function indexMessages(messages: (Message | RoomMessage)[]): Promis
       from: message.from,
       timestamp: message.timestamp.getTime(),
       isRoom: message.type === 'groupchat',
-      body: message.body,
+      body: message.body!,
     })
 
-    // Update posting lists
     for (const token of tokens) {
       let entry = tokenCache.get(token)
       if (!entry) {

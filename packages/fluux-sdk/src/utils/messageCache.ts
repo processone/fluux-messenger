@@ -876,6 +876,8 @@ export async function iterateAllRoomMessages(
   batchSize: number,
   onBatch: (messages: RoomMessage[]) => Promise<void>
 ): Promise<void> {
+  // Flush any buffered room messages to IDB before iterating
+  await flushPendingRoomMessages()
   const db = await getDB(getStorageScopeJid())
   const tx = db.transaction(ROOM_MESSAGES_STORE, 'readonly')
   let cursor = await tx.store.openCursor()
