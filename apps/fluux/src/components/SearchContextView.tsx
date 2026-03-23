@@ -26,7 +26,6 @@ import {
 } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { MessageBubble, MessageList, shouldShowAvatar, buildReplyContext } from './conversation'
-import { scrollToMessage } from './conversation/messageGrouping'
 import { useNavigateToTarget } from '@/hooks/useNavigateToTarget'
 import { useWindowDrag, useTimeFormat, useMode } from '@/hooks'
 import { getConsistentTextColor } from './Avatar'
@@ -37,11 +36,16 @@ const CONTEXT_BATCH_SIZE = 50
 
 export function SearchContextView({ onBack }: { onBack?: () => void }) {
   const { t } = useTranslation()
-  const { previewResult, setPreviewResult } = useSearch()
+  const { query, previewResult, setPreviewResult } = useSearch()
   const { navigateToConversation, navigateToRoom } = useNavigateToTarget()
   const { titleBarClass, dragRegionProps } = useWindowDrag()
   const { resolvedMode } = useMode()
   const isDarkMode = resolvedMode === 'dark'
+
+  // Extract search terms for highlighting in message bodies
+  const highlightTerms = query
+    ? query.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((t) => t.length >= 2)
+    : []
 
   // Connection state for own messages
   const jid = useConnectionStore((s) => s.jid)
@@ -133,24 +137,20 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
     void loadMessages()
   }, [previewResult])
 
-  // Scroll to the target message after messages are loaded
+  // Apply persistent highlight after the MessageList's targetMessageId scroll completes
   useEffect(() => {
     if (!previewResult || isLoading || messages.length === 0) return
 
-    // Small delay to let the DOM render
+    // Wait for useMessageListScroll's target scroll (rAF + 150ms) to finish,
+    // then replace the fading highlight with a persistent one
     const timer = setTimeout(() => {
-      scrollToMessage(previewResult.messageId)
-
-      // Apply persistent highlight (replace the fading one)
-      requestAnimationFrame(() => {
-        const escapedId = CSS.escape(previewResult.messageId)
-        const el = document.querySelector(`[data-message-id="${escapedId}"]`)
-        if (el) {
-          el.classList.remove('message-highlight')
-          el.classList.add('message-highlight-persistent')
-        }
-      })
-    }, 100)
+      const escapedId = CSS.escape(previewResult.messageId)
+      const el = document.querySelector(`[data-message-id="${escapedId}"]`)
+      if (el) {
+        el.classList.remove('message-highlight')
+        el.classList.add('message-highlight-persistent')
+      }
+    }, 300)
 
     return () => clearTimeout(timer)
   }, [previewResult, isLoading, messages.length])
@@ -271,6 +271,7 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
           ownAvatar={ownAvatar}
           ownNickname={ownNickname}
           isDarkMode={isDarkMode}
+          highlightTerms={highlightTerms}
           scrollerRef={scrollRef}
           isAtBottomRef={isAtBottomRef}
           targetMessageId={previewResult.messageId}
@@ -299,6 +300,7 @@ const SearchContextMessageList = memo(function SearchContextMessageList({
   ownAvatar,
   ownNickname,
   isDarkMode,
+  highlightTerms,
   scrollerRef,
   isAtBottomRef,
   targetMessageId,
@@ -317,6 +319,7 @@ const SearchContextMessageList = memo(function SearchContextMessageList({
   ownAvatar?: string | null
   ownNickname?: string | null
   isDarkMode?: boolean
+  highlightTerms?: string[]
   scrollerRef: React.RefObject<HTMLElement | null>
   isAtBottomRef: React.MutableRefObject<boolean>
   targetMessageId?: string | null
@@ -443,6 +446,7 @@ const SearchContextMessageList = memo(function SearchContextMessageList({
           replyContext={replyContext}
           formatTime={formatTime}
           timeFormat={effectiveTimeFormat}
+          highlightTerms={highlightTerms}
         />
       </div>
     )

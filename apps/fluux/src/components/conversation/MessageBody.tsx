@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { renderStyledMessage } from '@/utils/messageStyles'
 import type { MentionReference } from '@fluux/sdk'
@@ -38,6 +38,8 @@ export interface MessageBodyProps {
   mentions?: MentionReference[]
   /** User's nickname in the room (for IRC-style mention detection fallback) */
   nickname?: string
+  /** Search terms to highlight in the message body (from search query) */
+  highlightTerms?: string[]
 }
 
 /**
@@ -60,6 +62,7 @@ export const MessageBody = memo(function MessageBody({
   senderColor,
   mentions,
   nickname,
+  highlightTerms,
 }: MessageBodyProps) {
   const { t } = useTranslation()
 
@@ -80,6 +83,11 @@ export const MessageBody = memo(function MessageBody({
     return null
   }
 
+  const wrap = (node: ReactNode) =>
+    highlightTerms && highlightTerms.length > 0
+      ? <SearchHighlight terms={highlightTerms}>{node}</SearchHighlight>
+      : node
+
   // /me action message
   if (isActionMessage(body)) {
     return (
@@ -89,7 +97,7 @@ export const MessageBody = memo(function MessageBody({
           {senderName}
         </span>
         {' '}
-        {noStyling ? getActionText(body) : renderStyledMessage(getActionText(body), mentions, nickname)}
+        {wrap(noStyling ? getActionText(body) : renderStyledMessage(getActionText(body), mentions, nickname))}
         {isEdited && (
           <EditedIndicator
             originalBody={originalBody}
@@ -103,7 +111,7 @@ export const MessageBody = memo(function MessageBody({
   // Regular message
   return (
     <div className="text-fluux-text break-words whitespace-pre-wrap leading-[1.375]">
-      {noStyling ? body : renderStyledMessage(body, mentions, nickname)}
+      {wrap(noStyling ? body : renderStyledMessage(body, mentions, nickname))}
       {isEdited && <EditedIndicator originalBody={originalBody} />}
     </div>
   )
@@ -125,4 +133,71 @@ function EditedIndicator({ originalBody, className = '' }: EditedIndicatorProps)
       {t('chat.edited')}
     </span>
   )
+}
+
+// ============================================================================
+// Search term highlighting
+// ============================================================================
+
+/**
+ * Recursively walks React children and wraps text substrings matching any of
+ * the given terms with a <mark> tag.  Leaves non-text nodes (elements)
+ * untouched so styled segments, links, code blocks etc. are preserved.
+ */
+function SearchHighlight({ terms, children }: { terms: string[]; children: ReactNode }) {
+  // Build a single regex that matches any term (case-insensitive, Unicode-aware)
+  // Each term is escaped and we use word-like boundaries via \b where possible
+  const escaped = terms
+    .filter(Boolean)
+    .map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  if (escaped.length === 0) return <>{children}</>
+
+  const pattern = new RegExp(`(${escaped.join('|')})`, 'gi')
+  return <>{highlightChildren(children, pattern)}</>
+}
+
+function highlightChildren(node: ReactNode, pattern: RegExp): ReactNode {
+  if (typeof node === 'string') {
+    return highlightText(node, pattern)
+  }
+  if (Array.isArray(node)) {
+    return node.map((child, i) => (
+      <HighlightFragment key={i} node={child} pattern={pattern} />
+    ))
+  }
+  if (node && typeof node === 'object' && 'props' in node) {
+    // React element — clone and recurse into children
+    const element = node as React.ReactElement<{ children?: ReactNode }>
+    if (element.props.children != null) {
+      return { ...element, props: { ...element.props, children: highlightChildren(element.props.children, pattern) } }
+    }
+  }
+  return node
+}
+
+function HighlightFragment({ node, pattern }: { node: ReactNode; pattern: RegExp }) {
+  return <>{highlightChildren(node, pattern)}</>
+}
+
+function highlightText(text: string, pattern: RegExp): ReactNode {
+  const parts: ReactNode[] = []
+  let lastIndex = 0
+  // Reset regex state
+  pattern.lastIndex = 0
+  let match: RegExpExecArray | null
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index))
+    }
+    parts.push(
+      <mark key={match.index} className="bg-yellow-300/50 dark:bg-yellow-500/30 text-inherit rounded-sm">
+        {match[0]}
+      </mark>
+    )
+    lastIndex = match.index + match[0].length
+  }
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex))
+  }
+  return parts.length > 0 ? parts : text
 }

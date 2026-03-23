@@ -636,6 +636,10 @@ export function useMessageListScroll({
       requestAnimationFrame(scrollToMarker)
       setTimeout(scrollToMarker, 50)
       setTimeout(scrollToMarker, 150)
+    } else if (targetMessageId) {
+      // Has a target message to scroll to — skip scroll-to-bottom.
+      // The targetMessageId effect will handle scrolling.
+      debugLog('CONVERSATION SWITCH: has targetMessageId, deferring to target scroll', { targetMessageId })
     } else {
       // No unread messages - scroll to bottom
       // We use both immediate and deferred scroll because:

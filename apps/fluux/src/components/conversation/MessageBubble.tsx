@@ -111,6 +111,9 @@ export interface MessageBubbleProps {
 
   // Effective time format for layout width calculations ('12h' needs wider column)
   timeFormat: '12h' | '24h'
+
+  // Search term highlighting in message body
+  highlightTerms?: string[]
 }
 
 /**
@@ -235,6 +238,7 @@ export const MessageBubble = memo(function MessageBubble({
   onReactionPickerChange,
   formatTime,
   timeFormat,
+  highlightTerms,
 }: MessageBubbleProps) {
   const { t } = useTranslation()
   const [showReactionPicker, setShowReactionPickerState] = useState(false)
@@ -414,6 +418,7 @@ export const MessageBubble = memo(function MessageBubble({
             senderColor={senderColor}
             mentions={mentions}
             nickname={nickname}
+            highlightTerms={highlightTerms}
           />
 
           {/* File attachments (image, video, audio, text preview, document card) - hidden for retracted */}

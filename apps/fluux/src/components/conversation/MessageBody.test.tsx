@@ -186,6 +186,106 @@ describe('MessageBody', () => {
     })
   })
 
+  describe('Search term highlighting', () => {
+    it('should highlight matching terms in the message body', () => {
+      const { container } = render(
+        <MessageBody {...defaultProps} body="Hello world" highlightTerms={['hello']} />
+      )
+
+      const marks = container.querySelectorAll('mark')
+      expect(marks).toHaveLength(1)
+      expect(marks[0].textContent).toBe('Hello')
+    })
+
+    it('should highlight multiple different terms', () => {
+      const { container } = render(
+        <MessageBody {...defaultProps} body="Hello beautiful world" highlightTerms={['hello', 'world']} />
+      )
+
+      const marks = container.querySelectorAll('mark')
+      expect(marks).toHaveLength(2)
+      expect(marks[0].textContent).toBe('Hello')
+      expect(marks[1].textContent).toBe('world')
+    })
+
+    it('should highlight multiple occurrences of the same term', () => {
+      const { container } = render(
+        <MessageBody {...defaultProps} body="test this test again" highlightTerms={['test']} />
+      )
+
+      const marks = container.querySelectorAll('mark')
+      expect(marks).toHaveLength(2)
+    })
+
+    it('should be case-insensitive', () => {
+      const { container } = render(
+        <MessageBody {...defaultProps} body="Hello HELLO hello" highlightTerms={['hello']} />
+      )
+
+      const marks = container.querySelectorAll('mark')
+      expect(marks).toHaveLength(3)
+    })
+
+    it('should not highlight when highlightTerms is empty', () => {
+      const { container } = render(
+        <MessageBody {...defaultProps} body="Hello world" highlightTerms={[]} />
+      )
+
+      const marks = container.querySelectorAll('mark')
+      expect(marks).toHaveLength(0)
+    })
+
+    it('should not highlight when highlightTerms is undefined', () => {
+      const { container } = render(
+        <MessageBody {...defaultProps} body="Hello world" />
+      )
+
+      const marks = container.querySelectorAll('mark')
+      expect(marks).toHaveLength(0)
+    })
+
+    it('should preserve non-matching text around highlights', () => {
+      const { container } = render(
+        <MessageBody {...defaultProps} body="Say hello to everyone" highlightTerms={['hello']} />
+      )
+
+      // Full text should still be present
+      expect(container.textContent).toBe('Say hello to everyone')
+      const marks = container.querySelectorAll('mark')
+      expect(marks).toHaveLength(1)
+      expect(marks[0].textContent).toBe('hello')
+    })
+
+    it('should highlight terms in /me action messages', () => {
+      const { container } = render(
+        <MessageBody {...defaultProps} body="/me waves hello" highlightTerms={['hello']} />
+      )
+
+      const marks = container.querySelectorAll('mark')
+      expect(marks).toHaveLength(1)
+      expect(marks[0].textContent).toBe('hello')
+    })
+
+    it('should escape regex special characters in terms', () => {
+      const { container } = render(
+        <MessageBody {...defaultProps} body="Price is $100 (approx)" highlightTerms={['$100']} />
+      )
+
+      const marks = container.querySelectorAll('mark')
+      expect(marks).toHaveLength(1)
+      expect(marks[0].textContent).toBe('$100')
+    })
+
+    it('should apply yellow highlight styling to marks', () => {
+      const { container } = render(
+        <MessageBody {...defaultProps} body="Hello world" highlightTerms={['hello']} />
+      )
+
+      const mark = container.querySelector('mark')
+      expect(mark).toHaveClass('bg-yellow-300/50')
+    })
+  })
+
   describe('Edge cases', () => {
     it('should return null for empty body', () => {
       const { container } = render(<MessageBody {...defaultProps} body="" />)
