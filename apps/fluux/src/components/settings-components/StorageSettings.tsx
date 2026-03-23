@@ -37,10 +37,15 @@ export function StorageSettings() {
   const handleRebuildIndex = async () => {
     setIsRebuilding(true)
     setRebuilt(false)
-    const count = await rebuildSearchIndex()
-    setIsRebuilding(false)
-    setRebuilt(count)
-    setTimeout(() => setRebuilt(false), 5000)
+    try {
+      const count = await rebuildSearchIndex()
+      setRebuilt(count)
+      setTimeout(() => setRebuilt(false), 5000)
+    } catch (error) {
+      console.error('[StorageSettings] Search index rebuild failed:', error)
+    } finally {
+      setIsRebuilding(false)
+    }
   }
 
   return (

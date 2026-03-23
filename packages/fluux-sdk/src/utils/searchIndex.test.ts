@@ -690,6 +690,47 @@ describe('searchIndex', () => {
       expect(count).toBe(0)
       expect(await search('cleared')).toHaveLength(0)
     })
+
+    it('should complete when message count exceeds batch size', async () => {
+      // Populate messageCache with more messages than BACKFILL_BATCH_SIZE (500).
+      // This exercises the batch-flush path in iterateAllMessages: the IDB
+      // read transaction must not expire while onBatch writes to the search
+      // index database.
+      const totalMessages = 520
+      for (let i = 0; i < totalMessages; i++) {
+        await messageCache.saveMessage(createChatMessage('alice@example.com', {
+          id: `bulk-${i}`,
+          body: `Searchable bulk message number ${i}`,
+          timestamp: new Date(Date.now() - i * 1000),
+        }))
+      }
+
+      const count = await rebuildSearchIndex()
+
+      expect(count).toBe(totalMessages)
+      // Verify messages are actually searchable
+      const results = await search('searchable bulk', { limit: totalMessages })
+      expect(results.length).toBeGreaterThan(0)
+    })
+
+    it('should complete when room message count exceeds batch size', async () => {
+      const totalMessages = 520
+      for (let i = 0; i < totalMessages; i++) {
+        await messageCache.saveRoomMessage(createRoomMessage('dev@conference.example.com', {
+          id: `bulk-room-${i}`,
+          stanzaId: `stanza-bulk-${i}`,
+          body: `Searchable bulk room message ${i}`,
+          timestamp: new Date(Date.now() - i * 1000),
+        }))
+      }
+      await flushPendingRoomMessages()
+
+      const count = await rebuildSearchIndex()
+
+      expect(count).toBe(totalMessages)
+      const results = await search('searchable bulk room', { limit: totalMessages })
+      expect(results.length).toBeGreaterThan(0)
+    })
   })
 
   // ===========================================================================

@@ -836,8 +836,14 @@ export async function getOldestRoomMessageTimestamp(
 
 /**
  * Iterate all stored chat messages in batches.
- * Used for search index backfill. Processes messages in chunks to avoid
- * holding all messages in memory at once.
+ * Used for search index backfill. Reads all messages from the store first,
+ * then processes them in batches via the callback.
+ *
+ * Reading is done upfront (via getAll) so the IDB readonly transaction
+ * completes before `onBatch` runs. This avoids TransactionInactiveError
+ * when the callback performs async writes to a different database (e.g.
+ * the search index), which would otherwise cause the cursor's transaction
+ * to auto-commit while the event loop is idle.
  *
  * @param batchSize - Number of messages per batch (default: 500)
  * @param onBatch - Callback invoked with each batch of deserialized messages
@@ -847,27 +853,18 @@ export async function iterateAllMessages(
   onBatch: (messages: Message[]) => Promise<void>
 ): Promise<void> {
   const db = await getDB(getStorageScopeJid())
-  const tx = db.transaction(MESSAGES_STORE, 'readonly')
-  let cursor = await tx.store.openCursor()
-  let batch: Message[] = []
+  const allRaw = await db.getAll(MESSAGES_STORE)
 
-  while (cursor) {
-    batch.push(deserializeMessage(cursor.value))
-    if (batch.length >= batchSize) {
-      await onBatch(batch)
-      batch = []
-    }
-    cursor = await cursor.continue()
-  }
-
-  if (batch.length > 0) {
+  for (let i = 0; i < allRaw.length; i += batchSize) {
+    const batch = allRaw.slice(i, i + batchSize).map(deserializeMessage)
     await onBatch(batch)
   }
 }
 
 /**
  * Iterate all stored room messages in batches.
- * Used for search index backfill.
+ * Used for search index backfill. Same upfront-read strategy as
+ * `iterateAllMessages` to avoid IDB transaction lifetime issues.
  *
  * @param batchSize - Number of messages per batch (default: 500)
  * @param onBatch - Callback invoked with each batch of deserialized messages
@@ -876,23 +873,13 @@ export async function iterateAllRoomMessages(
   batchSize: number,
   onBatch: (messages: RoomMessage[]) => Promise<void>
 ): Promise<void> {
-  // Flush any buffered room messages to IDB before iterating
+  // Flush any buffered room messages to IDB before reading
   await flushPendingRoomMessages()
   const db = await getDB(getStorageScopeJid())
-  const tx = db.transaction(ROOM_MESSAGES_STORE, 'readonly')
-  let cursor = await tx.store.openCursor()
-  let batch: RoomMessage[] = []
+  const allRaw = await db.getAll(ROOM_MESSAGES_STORE)
 
-  while (cursor) {
-    batch.push(deserializeRoomMessage(cursor.value))
-    if (batch.length >= batchSize) {
-      await onBatch(batch)
-      batch = []
-    }
-    cursor = await cursor.continue()
-  }
-
-  if (batch.length > 0) {
+  for (let i = 0; i < allRaw.length; i += batchSize) {
+    const batch = allRaw.slice(i, i + batchSize).map(deserializeRoomMessage)
     await onBatch(batch)
   }
 }
