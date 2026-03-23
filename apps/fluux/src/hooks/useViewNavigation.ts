@@ -72,6 +72,7 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
     navigateToEvents,
     navigateToAdmin,
     navigateToSettings,
+    navigateToSearch,
   } = useRouteSync()
 
   // Per-tab memory state
@@ -116,6 +117,7 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
         if (currentRoomJid) setActiveRoom(null)
         break
       case 'settings':
+      case 'search':
         if (currentConversationId) setActiveConversation(null)
         if (currentRoomJid) setActiveRoom(null)
         break
@@ -245,6 +247,11 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
         setActiveRoom(null)
         // On small screens, don't auto-select a category - let user choose from sidebar
         navigateToSettings(skipAutoSelect ? undefined : 'profile', { replace: true })
+        break
+      case 'search':
+        setActiveConversation(null)
+        setActiveRoom(null)
+        navigateToSearch({ replace: true })
         break
     }
   }

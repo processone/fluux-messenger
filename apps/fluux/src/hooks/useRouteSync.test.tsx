@@ -436,6 +436,35 @@ describe('useRouteSync', () => {
     })
   })
 
+  describe('URL parsing - search', () => {
+    it('returns "search" sidebarView for /search', () => {
+      const { result } = renderHook(() => useRouteSync(), {
+        wrapper: createWrapper(['/search']),
+      })
+      expect(result.current.sidebarView).toBe('search')
+    })
+  })
+
+  describe('navigateToSearch', () => {
+    it('navigateToSearch navigates to /search', () => {
+      let currentPath = '/messages'
+      const wrapper = ({ children }: { children: ReactNode }) => (
+        <MemoryRouter initialEntries={['/messages']}>
+          {children}
+          <LocationCapture onPathChange={(p) => (currentPath = p)} />
+        </MemoryRouter>
+      )
+
+      const { result } = renderHook(() => useRouteSync(), { wrapper })
+
+      act(() => {
+        result.current.navigateToSearch()
+      })
+
+      expect(currentPath).toBe('/search')
+    })
+  })
+
   describe('getViewPath helper', () => {
     it('returns /messages for messages view', () => {
       expect(getViewPath('messages')).toBe('/messages')
@@ -463,6 +492,10 @@ describe('useRouteSync', () => {
 
     it('returns /admin for admin view', () => {
       expect(getViewPath('admin')).toBe('/admin')
+    })
+
+    it('returns /search for search view', () => {
+      expect(getViewPath('search')).toBe('/search')
     })
   })
 })

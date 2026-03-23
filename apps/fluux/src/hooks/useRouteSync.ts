@@ -60,6 +60,8 @@ export interface RouteActions {
   navigateToAdmin: (category?: string, options?: NavigateOptions) => void
   /** Navigate to settings view, optionally selecting a category */
   navigateToSettings: (category?: string, options?: NavigateOptions) => void
+  /** Navigate to search view */
+  navigateToSearch: (options?: NavigateOptions) => void
   /** Deterministic "go up" within current tab (detail → list, or list → messages) */
   navigateUp: () => void
 }
@@ -240,6 +242,11 @@ export function useRouteSync(): RouteState & RouteActions {
     }
   }
 
+  const navigateToSearch = (options?: NavigateOptions) => {
+    const opts = options?.replace ? { replace: true } : undefined
+    void navigate('/search', opts)
+  }
+
   // Deterministic "go up" - navigates from detail to list within current tab.
   // Uses replace to keep the history stack clean.
   const navigateUp = () => {
@@ -272,6 +279,7 @@ export function useRouteSync(): RouteState & RouteActions {
     navigateToEvents,
     navigateToAdmin,
     navigateToSettings,
+    navigateToSearch,
     navigateUp,
   }
 }
