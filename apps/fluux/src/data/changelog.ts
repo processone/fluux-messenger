@@ -14,6 +14,18 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '0.14.1',
+    date: '2026-03-23',
+    sections: [
+      {
+        type: 'fixed',
+        items: [
+          'Room messages showing JID local part instead of display name when message nick differs from occupant nick (resolved via XEP-0421 occupant-id and roster contact name)',
+        ],
+      },
+    ],
+  },
+  {
     version: '0.14.0',
     date: '2026-03-16',
     sections: [
