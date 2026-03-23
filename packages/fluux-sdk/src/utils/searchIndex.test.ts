@@ -731,6 +731,43 @@ describe('searchIndex', () => {
       const results = await search('searchable bulk room', { limit: totalMessages })
       expect(results.length).toBeGreaterThan(0)
     })
+
+    it('should invoke onProgress callback with indexed count and total', async () => {
+      await messageCache.saveMessage(createChatMessage('alice@example.com', {
+        id: 'prog-1', body: 'First progress message',
+      }))
+      await messageCache.saveMessage(createChatMessage('bob@example.com', {
+        id: 'prog-2', body: 'Second progress message',
+      }))
+      await messageCache.saveRoomMessage(createRoomMessage('room@conference.example.com', {
+        id: 'prog-3', stanzaId: 'stanza-prog-3', body: 'Third progress message',
+      }))
+      await flushPendingRoomMessages()
+
+      const progressUpdates: Array<{ indexed: number; total: number }> = []
+      await rebuildSearchIndex((p) => progressUpdates.push({ ...p }))
+
+      // Should have received at least one progress update per batch (chat + room)
+      expect(progressUpdates.length).toBeGreaterThanOrEqual(2)
+      // All updates should report the same total
+      expect(progressUpdates.every((p) => p.total === 3)).toBe(true)
+      // Last update should have indexed all messages
+      expect(progressUpdates[progressUpdates.length - 1].indexed).toBe(3)
+      // Indexed should be monotonically increasing
+      for (let i = 1; i < progressUpdates.length; i++) {
+        expect(progressUpdates[i].indexed).toBeGreaterThanOrEqual(progressUpdates[i - 1].indexed)
+      }
+    })
+
+    it('should not fail when onProgress is not provided', async () => {
+      await messageCache.saveMessage(createChatMessage('alice@example.com', {
+        id: 'no-prog', body: 'No progress callback',
+      }))
+
+      // Should work without onProgress (backward compat)
+      const count = await rebuildSearchIndex()
+      expect(count).toBe(1)
+    })
   })
 
   // ===========================================================================

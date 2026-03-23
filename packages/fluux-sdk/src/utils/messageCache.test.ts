@@ -511,6 +511,69 @@ describe('messageCache', () => {
     })
   })
 
+  describe('getTotalMessageCount', () => {
+    it('should count all chat messages across conversations', async () => {
+      await messageCache.saveMessage(createMockMessage('alice@example.com', { id: 'total-1' }))
+      await messageCache.saveMessage(createMockMessage('alice@example.com', { id: 'total-2' }))
+      await messageCache.saveMessage(createMockMessage('bob@example.com', { id: 'total-3' }))
+
+      const count = await messageCache.getTotalMessageCount()
+      expect(count).toBe(3)
+    })
+
+    it('should return 0 when no messages exist', async () => {
+      const count = await messageCache.getTotalMessageCount()
+      expect(count).toBe(0)
+    })
+  })
+
+  describe('getTotalRoomMessageCount', () => {
+    it('should count all room messages across rooms', async () => {
+      await messageCache.saveRoomMessage(
+        createMockRoomMessage('room1@conference.example.com', { id: 'rtotal-1' })
+      )
+      await messageCache.saveRoomMessage(
+        createMockRoomMessage('room2@conference.example.com', { id: 'rtotal-2' })
+      )
+      await messageCache.flushPendingRoomMessages()
+
+      const count = await messageCache.getTotalRoomMessageCount()
+      expect(count).toBe(2)
+    })
+
+    it('should return 0 when no room messages exist', async () => {
+      const count = await messageCache.getTotalRoomMessageCount()
+      expect(count).toBe(0)
+    })
+
+    it('should flush buffered room messages before counting', async () => {
+      // Save without explicit flush — getTotalRoomMessageCount should flush internally
+      await messageCache.saveRoomMessage(
+        createMockRoomMessage('room@conference.example.com', { id: 'buffered-1' })
+      )
+
+      const count = await messageCache.getTotalRoomMessageCount()
+      expect(count).toBe(1)
+    })
+  })
+
+  describe('iterateAllRoomMessages', () => {
+    it('should flush buffered room messages before iterating', async () => {
+      // Save room messages without explicit flush
+      await messageCache.saveRoomMessage(
+        createMockRoomMessage('room@conference.example.com', { id: 'iter-buf-1', body: 'Buffered message' })
+      )
+
+      const collected: RoomMessage[] = []
+      await messageCache.iterateAllRoomMessages(100, async (batch) => {
+        collected.push(...batch)
+      })
+
+      expect(collected.length).toBe(1)
+      expect(collected[0].body).toBe('Buffered message')
+    })
+  })
+
   describe('clearAllMessages', () => {
     it('should clear all messages from both stores', async () => {
       const conversationId = 'alice@example.com'
