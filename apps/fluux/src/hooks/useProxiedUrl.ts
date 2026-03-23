@@ -55,10 +55,16 @@ export function sanitizeMediaUrl(url: string): string {
  * @param enabled - Whether to return the URL (useful for conditional loading)
  */
 export function useProxiedUrl(originalUrl: string | undefined, enabled: boolean = true): ProxiedUrlState {
-  const [state, setState] = useState<ProxiedUrlState>({
-    url: null,
-    isLoading: false,
-    error: null,
+  // Synchronous initialization: compute web URLs immediately to avoid a
+  // null→URL two-frame flash. Tauri starts as loading (resolved in effect).
+  const [state, setState] = useState<ProxiedUrlState>(() => {
+    if (!originalUrl || !enabled) {
+      return { url: null, isLoading: false, error: null }
+    }
+    if (!isTauri()) {
+      return { url: sanitizeMediaUrl(originalUrl), isLoading: false, error: null }
+    }
+    return { url: null, isLoading: true, error: null }
   })
 
   useEffect(() => {
@@ -69,7 +75,7 @@ export function useProxiedUrl(originalUrl: string | undefined, enabled: boolean 
 
     const sanitized = sanitizeMediaUrl(originalUrl)
 
-    // Web: direct sanitized URL (no caching)
+    // Web: update state when URL/enabled changes after initial render
     if (!isTauri()) {
       setState({ url: sanitized, isLoading: false, error: null })
       return

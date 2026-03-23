@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Music, Film, FileText, Archive, File, Download, BookOpen, Loader2, ImageOff, FileX } from 'lucide-react'
 import { Tooltip } from './Tooltip'
@@ -28,7 +28,7 @@ interface AttachmentProps {
  * Falls back to main URL when no thumbnail is provided (e.g., from other XMPP clients)
  * Uses direct media URLs for browser/WebView loading.
  */
-export function ImageAttachment({ attachment, onLoad }: AttachmentProps) {
+export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoad }: AttachmentProps) {
   const { t } = useTranslation()
   const isImage = attachment.mediaType?.startsWith('image/') ?? false
 
@@ -122,13 +122,13 @@ export function ImageAttachment({ attachment, onLoad }: AttachmentProps) {
       />
     </a>
   )
-}
+})
 
 /**
  * Video attachment with inline player and info bar
  * Uses direct media URLs for browser/WebView loading.
  */
-export function VideoAttachment({ attachment, onLoad }: AttachmentProps) {
+export const VideoAttachment = memo(function VideoAttachment({ attachment, onLoad }: AttachmentProps) {
   const { t } = useTranslation()
   const isVideo = attachment.mediaType?.startsWith('video/') ?? false
 
@@ -145,10 +145,23 @@ export function VideoAttachment({ attachment, onLoad }: AttachmentProps) {
     return null
   }
 
+  // Compute stable aspect ratio from XEP-0446 dimensions or thumbnail dimensions.
+  // Fall back to 16:9 (most common video ratio) when dimensions are unknown.
+  // Applied to all render paths (loading, error, video) to prevent layout shifts
+  // that trigger ResizeObserver → scroll correction feedback loops (especially on
+  // Linux/KDE with WebKitGTK where video controls cause continuous height changes).
+  const width = attachment.width ?? attachment.thumbnail?.width
+  const height = attachment.height ?? attachment.thumbnail?.height
+  const aspectRatio = (width && height) ? width / height : 16 / 9
+
+  // Shared container style: stable dimensions + layout containment to isolate
+  // video control visibility changes from affecting parent layout measurements
+  const containerStyle = { aspectRatio, contain: 'layout' as const }
+
   // Show loading state
   if (isLoading) {
     return (
-      <div className="pt-2 max-w-md rounded-lg overflow-hidden bg-black flex items-center justify-center" style={{ minHeight: '200px' }}>
+      <div className="pt-2 max-w-md rounded-lg overflow-hidden bg-black flex items-center justify-center" style={containerStyle}>
         <Loader2 className="w-8 h-8 text-fluux-muted animate-spin" />
       </div>
     )
@@ -157,7 +170,7 @@ export function VideoAttachment({ attachment, onLoad }: AttachmentProps) {
   // Show error/fallback if fetch failed or video failed to load (404, etc.)
   if (error || !proxiedVideoUrl || loadError) {
     return (
-      <div className="pt-2 max-w-md rounded-lg overflow-hidden bg-fluux-hover/60 border border-fluux-border">
+      <div className="pt-2 max-w-md rounded-lg overflow-hidden bg-fluux-hover/60 border border-fluux-border" style={containerStyle}>
         <div className="flex flex-col items-center justify-center text-fluux-muted text-sm py-8 gap-2">
           <FileX className="w-8 h-8" />
           <span>{t('chat.videoUnavailable')}</span>
@@ -186,13 +199,13 @@ export function VideoAttachment({ attachment, onLoad }: AttachmentProps) {
   }
 
   return (
-    <div className="pt-2 max-w-md rounded-lg overflow-hidden bg-black">
+    <div className="pt-2 max-w-md rounded-lg overflow-hidden bg-black" style={containerStyle}>
       <video
         src={proxiedVideoUrl}
         controls
         preload="metadata"
         poster={proxiedPosterUrl || undefined}
-        className="w-full max-h-80"
+        className="w-full h-full"
         tabIndex={-1}
         onLoadedMetadata={onLoad}
         onError={() => {
@@ -225,7 +238,7 @@ export function VideoAttachment({ attachment, onLoad }: AttachmentProps) {
       )}
     </div>
   )
-}
+})
 
 /**
  * Audio attachment with inline player
