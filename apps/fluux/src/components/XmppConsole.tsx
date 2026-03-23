@@ -234,15 +234,15 @@ export function XmppConsole() {
         next.delete(entryId)
       } else {
         next.add(entryId)
-        // Scroll the expanded entry into view after DOM update
-        requestAnimationFrame(() => {
-          const entryElement = document.querySelector(`[data-entry-id="${entryId}"]`)
-          entryElement?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-        })
       }
       return next
     })
   }, [])
+
+  // Re-measure virtualized items when entries are expanded/collapsed
+  useEffect(() => {
+    virtualizer.measure()
+  }, [expandedEntries, virtualizer])
 
   // Keyboard navigation for log entries
   const handleLogKeyDown = (e: React.KeyboardEvent) => {
