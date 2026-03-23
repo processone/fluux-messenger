@@ -889,11 +889,11 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   // Resolve display name when message.nick doesn't match any current occupant.
   // This handles cases where the message nick differs from the current occupant nick
   // (e.g., server reflects JID local part instead of MUC nickname, or nick changed between sessions)
-  // Priority: 1) direct nick match → use as-is  2) occupant-id match → current nick
+  // Priority: 1) direct nick match → use as-is  2) occupant-id match → current occupant nick
   //           3) roster contact name  4) raw message.nick fallback
   const resolvedSenderName = occupantIdMatchNick
-    ? (contact?.name || occupantIdMatchNick)
-    : message.nick
+    || (contact?.name && !occupant ? contact.name : null)
+    || message.nick
 
   // Get sender color: green for own messages, contact's pre-calculated color, or fallback to nick-based generation
   const senderColor = message.isOutgoing
