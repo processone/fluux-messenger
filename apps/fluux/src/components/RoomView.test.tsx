@@ -1147,9 +1147,8 @@ describe('RoomView', () => {
       mockIgnoredUsers = {}
     })
 
-    it('should show contact name when message nick differs from occupant nick', () => {
-      // Scenario: message has nick "jsautret" but occupant is "Jérôme"
-      // and the sender is a known roster contact with name "Jérôme"
+    it('should resolve to occupant nick via occupant-id when message nick differs', () => {
+      // Scenario: message has nick "jsautret" but occupant-id matches occupant "Jérôme"
       mockActiveRoom = createRoom({
         occupantsList: [
           createOccupant({ nick: 'Me', jid: 'me@example.com', role: 'participant' }),
@@ -1173,7 +1172,7 @@ describe('RoomView', () => {
 
       render(<RoomView />)
 
-      // Should display "Jérôme" (contact name), not "jsautret"
+      // Should display "Jérôme" (occupant nick via occupant-id), not "jsautret"
       // Multiple elements expected (sender name + avatar identifier), so use getAllByText
       expect(screen.getAllByText('Jérôme').length).toBeGreaterThan(0)
       expect(screen.queryByText('jsautret')).not.toBeInTheDocument()
@@ -1228,8 +1227,8 @@ describe('RoomView', () => {
       expect(screen.getAllByText('UnknownSender').length).toBeGreaterThan(0)
     })
 
-    it('should prefer contact name over occupant-id match', () => {
-      // When both contact name and occupant-id match are available, prefer contact name
+    it('should prefer occupant-id matched nick over contact name', () => {
+      // When both occupant-id match and contact name are available, prefer the MUC nick
       mockActiveRoom = createRoom({
         occupantsList: [
           createOccupant({ nick: 'Me', jid: 'me@example.com', role: 'participant' }),
@@ -1252,8 +1251,9 @@ describe('RoomView', () => {
 
       render(<RoomView />)
 
-      // Should display contact name "Full Name", not occupant-id match "RoomNick"
-      expect(screen.getAllByText('Full Name').length).toBeGreaterThan(0)
+      // Should display occupant nick "RoomNick", not roster name "Full Name"
+      expect(screen.getAllByText('RoomNick').length).toBeGreaterThan(0)
+      expect(screen.queryByText('Full Name')).not.toBeInTheDocument()
     })
 
     it('should NOT override MUC nick with contact name when nick matches occupant', () => {
