@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { localStorageMock } from '../sideEffects.testHelpers'
 
 // Mock localStorage before importing stores (roomStore.reset() calls localStorage.removeItem)

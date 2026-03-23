@@ -29,10 +29,10 @@ export function SearchView({ onNavigate }: SearchViewProps) {
   const handleResultClick = useCallback(
     (result: SearchResult) => {
       if (result.isRoom) {
-        setActiveRoom(result.conversationId)
+        void setActiveRoom(result.conversationId)
         onNavigate('rooms')
       } else {
-        setActiveConversation(result.conversationId)
+        void setActiveConversation(result.conversationId)
         onNavigate('messages')
       }
 
