@@ -89,7 +89,7 @@ async function executeSearch(query: string): Promise<void> {
       conversationName: getConversationName(r.conversationId, r.isRoom),
       isRoom: r.isRoom,
       from: r.from,
-      ...(r.nick ? { nick: r.nick } : {}),
+      nick: r.nick,
       timestamp: r.timestamp,
       body: r.body,
       matchSnippet: generateMatchSnippet(r.body, query),

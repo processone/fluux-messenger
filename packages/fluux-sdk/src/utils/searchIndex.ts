@@ -469,16 +469,20 @@ export async function search(
   // Limit results
   const limited = docs.slice(0, limit)
 
-  return limited.map((doc) => ({
-    indexId: doc.indexId,
-    messageId: doc.messageId ?? doc.indexId.replace(/^(chat:|room:)/, ''),
-    conversationId: doc.conversationId,
-    from: doc.from,
-    ...(doc.nick ? { nick: doc.nick } : {}),
-    timestamp: doc.timestamp,
-    isRoom: doc.isRoom,
-    body: doc.body,
-  }))
+  return limited.map((doc) => {
+    // Derive nick: prefer stored nick, fall back to resource part of occupant JID
+    const nick = doc.nick ?? (doc.isRoom ? doc.from.split('/')[1] : undefined)
+    return {
+      indexId: doc.indexId,
+      messageId: doc.messageId ?? doc.indexId.replace(/^(chat:|room:)/, ''),
+      conversationId: doc.conversationId,
+      from: doc.from,
+      ...(nick ? { nick } : {}),
+      timestamp: doc.timestamp,
+      isRoom: doc.isRoom,
+      body: doc.body,
+    }
+  })
 }
 
 // =============================================================================

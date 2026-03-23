@@ -149,6 +149,21 @@ describe('searchIndex', () => {
       expect(results[0].isRoom).toBe(true)
     })
 
+    it('should fall back to nick from occupant JID when nick field is not stored', async () => {
+      // Simulate old indexed data: room message with from=room@server/Holger
+      await indexMessage(createRoomMessage('room@conference.example.com', {
+        body: 'Fallback nick test',
+        from: 'room@conference.example.com/Holger',
+        nick: 'Holger',
+        stanzaId: 'stanza-fallback-nick',
+      }))
+
+      const results = await search('fallback')
+      expect(results).toHaveLength(1)
+      // Even if nick wasn't stored in the index (old data), the from JID resource is used
+      expect(results[0].nick).toBe('Holger')
+    })
+
     it('should not include nick in chat message search results', async () => {
       await indexMessage(createChatMessage('alice@example.com', {
         body: 'Hello from DM',
