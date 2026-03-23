@@ -4,8 +4,10 @@ import { useSearch, generateConsistentColorHexSync } from '@fluux/sdk'
 import type { SearchResult } from '@fluux/sdk'
 import { Avatar } from '../Avatar'
 import { useNavigateToTarget } from '@/hooks/useNavigateToTarget'
+import { useListKeyboardNav } from '@/hooks'
 import { formatConversationTime } from '@/utils/dateFormat'
 import { useSettingsStore, type TimeFormat } from '@/stores/settingsStore'
+import { useSidebarZone } from './types'
 import { Search, X, Loader2, Hash, ExternalLink } from 'lucide-react'
 
 export function SearchView() {
@@ -13,20 +15,32 @@ export function SearchView() {
   const { query, results, isSearching, error, search, clearSearch, previewResult, setPreviewResult } = useSearch()
   const { navigateToConversation, navigateToRoom } = useNavigateToTarget()
   const inputRef = useRef<HTMLInputElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
   const currentLang = i18n.language.split('-')[0]
   const timeFormat = useSettingsStore((s) => s.timeFormat)
+  const zoneRef = useSidebarZone()
 
   // Auto-focus search input on mount
   useEffect(() => {
     inputRef.current?.focus()
   }, [])
 
-  const handleResultClick = useCallback(
+  const handleSelect = useCallback(
     (result: SearchResult) => {
       setPreviewResult(result)
     },
     [setPreviewResult]
   )
+
+  const { selectedIndex, isKeyboardNav, getItemProps, getItemAttribute, getContainerProps } = useListKeyboardNav({
+    items: results,
+    onSelect: handleSelect,
+    listRef,
+    searchInputRef: inputRef,
+    getItemId: (result) => result.indexId,
+    itemAttribute: 'data-search-result-id',
+    zoneRef,
+  })
 
   const handleGoToMessage = useCallback(
     (e: React.MouseEvent, result: SearchResult) => {
@@ -69,7 +83,7 @@ export function SearchView() {
       </div>
 
       {/* Results area */}
-      <div className="flex-1 overflow-y-auto px-1">
+      <div ref={listRef} className="flex-1 overflow-y-auto px-1" {...getContainerProps()}>
         {isSearching && (
           <div className="flex items-center justify-center gap-2 py-8 text-fluux-muted text-sm">
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -89,13 +103,17 @@ export function SearchView() {
 
         {!isSearching && results.length > 0 && (
           <div className="space-y-0.5">
-            {results.map((result) => (
+            {results.map((result, index) => (
               <SearchResultItem
                 key={result.indexId}
                 result={result}
                 isActive={previewResult?.indexId === result.indexId}
-                onClick={() => handleResultClick(result)}
+                isSelected={selectedIndex === index}
+                isKeyboardNav={isKeyboardNav}
+                onClick={() => handleSelect(result)}
                 onGoToMessage={(e) => handleGoToMessage(e, result)}
+                itemProps={getItemProps(index)}
+                itemAttribute={getItemAttribute(index)}
                 currentLang={currentLang}
                 timeFormat={timeFormat}
                 t={t}
@@ -117,21 +135,35 @@ export function SearchView() {
 interface SearchResultItemProps {
   result: SearchResult
   isActive: boolean
+  isSelected: boolean
+  isKeyboardNav: boolean
   onClick: () => void
   onGoToMessage: (e: React.MouseEvent) => void
+  itemProps: ReturnType<ReturnType<typeof useListKeyboardNav>['getItemProps']>
+  itemAttribute: Record<string, string>
   currentLang: string
   timeFormat: TimeFormat
   t: (key: string) => string
 }
 
-function SearchResultItem({ result, isActive, onClick, onGoToMessage, currentLang, timeFormat, t }: SearchResultItemProps) {
+function SearchResultItem({ result, isActive, isSelected, isKeyboardNav, onClick, onGoToMessage, itemProps, itemAttribute, currentLang, timeFormat, t }: SearchResultItemProps) {
   const timestamp = new Date(result.timestamp)
+
+  const highlighted = isActive || isSelected
 
   return (
     <button
+      {...itemAttribute}
+      {...itemProps}
       onClick={onClick}
       className={`w-full px-2 py-1.5 rounded flex items-start gap-2.5 text-left cursor-pointer
-                 transition-colors group/result ${isActive ? 'bg-fluux-hover text-fluux-text' : 'text-fluux-muted hover:bg-fluux-hover hover:text-fluux-text'}`}
+                 transition-colors group/result ${
+                   highlighted
+                     ? 'bg-fluux-hover text-fluux-text'
+                     : isKeyboardNav
+                       ? 'text-fluux-muted'
+                       : 'text-fluux-muted hover:bg-fluux-hover hover:text-fluux-text'
+                 }`}
     >
       {/* Avatar / icon */}
       <div className="flex-shrink-0 mt-0.5">
