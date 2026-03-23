@@ -97,16 +97,15 @@ const EMPTY_MESSAGE_ARRAY: RoomMessage[] = []
 
 /**
  * Extract deduplication keys from a room message.
- * Room messages use:
- * - stanzaId if present (globally unique, from MAM)
- * - from + id otherwise (message id is only unique per sender)
+ * Room messages use three tiers of identity (XEP-0359):
+ * - stanzaId: server/MUC-assigned canonical ID (most reliable, from MAM)
+ * - originId: sender-assigned stable ID (survives archiving, for echo dedup)
+ * - from+id: stanza attribute combo (fallback for legacy/bridge messages)
  */
 function getRoomMessageKeys(m: RoomMessage): string[] {
   const keys: string[] = []
-  if (m.stanzaId) {
-    keys.push(`stanzaId:${m.stanzaId}`)
-  }
-  // Always include from+id as a key for messages without stanzaId
+  if (m.stanzaId) keys.push(`stanzaId:${m.stanzaId}`)
+  if (m.originId) keys.push(`originId:${m.originId}`)
   keys.push(`from:${m.from}:id:${m.id}`)
   return keys
 }

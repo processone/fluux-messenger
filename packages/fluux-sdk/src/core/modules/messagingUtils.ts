@@ -9,7 +9,7 @@
  * @internal
  */
 
-import { Element } from '@xmpp/client'
+import { Element, xml } from '@xmpp/client'
 import { getBareJid } from '../jid'
 import {
   NS_DELAY,
@@ -207,6 +207,24 @@ export function parseStanzaId(messageEl: Element): string | undefined {
 }
 
 /**
+ * Parse XEP-0359 origin-id from a message element.
+ * Returns the sender-assigned stable ID (if the sender supports XEP-0359).
+ */
+export function parseOriginId(messageEl: Element): string | undefined {
+  const originIdEl = messageEl.getChild('origin-id', NS_STANZA_ID)
+  return originIdEl?.attrs.id
+}
+
+/**
+ * Create an XEP-0359 origin-id element for outgoing stanzas.
+ * The origin-id is a sender-assigned stable ID that survives archiving,
+ * enabling echo deduplication before the server assigns a stanza-id.
+ */
+export function createOriginIdElement(id: string): Element {
+  return xml('origin-id', { xmlns: NS_STANZA_ID, id })
+}
+
+/**
  * Options for parseMessageContent
  */
 export interface ParseMessageContentOptions {
@@ -231,6 +249,7 @@ export interface ParsedMessageContent {
   timestamp: Date
   isDelayed: boolean
   stanzaId?: string
+  originId?: string
   noStyling: boolean
   replyTo?: ReplyInfo
   attachment?: FileAttachment
@@ -265,8 +284,9 @@ export function parseMessageContent(options: ParseMessageContentOptions): Parsed
     }
   }
 
-  // XEP-0359: Unique stanza ID
+  // XEP-0359: Unique stanza ID (server-assigned) and origin ID (sender-assigned)
   const stanzaId = parseStanzaId(messageEl)
+  const originId = parseOriginId(messageEl)
 
   // XEP-0393: Message styling hints
   const noStyling = !!messageEl.getChild('no-styling', 'urn:xmpp:styling:0')
@@ -310,6 +330,7 @@ export function parseMessageContent(options: ParseMessageContentOptions): Parsed
     timestamp,
     isDelayed,
     stanzaId,
+    originId,
     noStyling,
     replyTo,
     attachment,

@@ -39,7 +39,7 @@ import type {
   RoomMAMResult,
   PollClosedData,
 } from '../types'
-import { parseMessageContent, parseOgpFastening, applyRetraction, applyCorrection } from './messagingUtils'
+import { parseMessageContent, parseOgpFastening, applyRetraction, applyCorrection, createOriginIdElement } from './messagingUtils'
 import { checkForMention } from '../mentionDetection'
 import { parsePollElement, parsePollClosedElement } from '../poll'
 import { parseXMPPError, formatXMPPError } from '../../utils/xmppError'
@@ -440,6 +440,9 @@ export class Chat extends BaseModule {
       }
     }
 
+    // XEP-0359: Include origin-id for echo deduplication
+    children.push(createOriginIdElement(id))
+
     const message = xml('message', { to: recipient, type, id }, ...children)
     await this.deps.sendStanza(message)
 
@@ -449,6 +452,7 @@ export class Chat extends BaseModule {
       const message: Message = {
         type: 'chat',
         id,
+        originId: id,
         conversationId: to,
         from: this.deps.getCurrentJid()!,
         // Store user's original text (empty if they only sent a file with no caption)
@@ -522,6 +526,8 @@ export class Chat extends BaseModule {
         xml('body', { start: String(oobFallbackStart), end: String(oobFallbackEnd) })
       ))
     }
+
+    children.push(createOriginIdElement(messageId))
 
     const message = xml('message', { to: recipient, type: 'chat', id: messageId }, ...children)
     await this.deps.sendStanza(message)
@@ -635,7 +641,10 @@ export class Chat extends BaseModule {
       children.push(xml('reactions', { xmlns: NS_REACTIONS, id: referenceId }, ...reactionElements))
     }
 
-    const message = xml('message', { to: recipient, type, id: generateUUID() }, ...children)
+    const reactionStanzaId = generateUUID()
+    children.push(createOriginIdElement(reactionStanzaId))
+
+    const message = xml('message', { to: recipient, type, id: reactionStanzaId }, ...children)
     await this.deps.sendStanza(message)
 
     // SDK events only - bindings call store methods
@@ -738,7 +747,10 @@ export class Chat extends BaseModule {
       }
     }
 
-    await this.deps.sendStanza(xml('message', { to: recipient, type, id: generateUUID() }, ...children))
+    const correctionStanzaId = generateUUID()
+    children.push(createOriginIdElement(correctionStanzaId))
+
+    await this.deps.sendStanza(xml('message', { to: recipient, type, id: correctionStanzaId }, ...children))
 
     // SDK events only - bindings call store methods
     if (type === 'groupchat') {
@@ -790,13 +802,15 @@ export class Chat extends BaseModule {
     // XEP-0424: Message Retraction with fallback for non-supporting clients
     const fallbackBody = 'This person attempted to retract a previous message, but it\'s unsupported by your client.'
 
+    const retractionStanzaId = generateUUID()
     const message = xml(
       'message',
-      { to: recipient, type, id: generateUUID() },
+      { to: recipient, type, id: retractionStanzaId },
       xml('body', {}, fallbackBody),
       xml('retract', { xmlns: NS_RETRACT, id: referenceId }),
       // XEP-0428: Mark the entire body as fallback
-      xml('fallback', { xmlns: NS_FALLBACK, for: NS_RETRACT })
+      xml('fallback', { xmlns: NS_FALLBACK, for: NS_RETRACT }),
+      createOriginIdElement(retractionStanzaId)
     )
 
     await this.deps.sendStanza(message)
@@ -1285,6 +1299,7 @@ export class Chat extends BaseModule {
       type: 'chat',
       id: messageId,
       ...(parsed.stanzaId && { stanzaId: parsed.stanzaId }),
+      ...(parsed.originId && { originId: parsed.originId }),
       conversationId,
       from: bareFrom,
       body: parsed.processedBody,
@@ -1341,6 +1356,7 @@ export class Chat extends BaseModule {
       type: 'groupchat',
       id: messageId,
       ...(parsed.stanzaId && { stanzaId: parsed.stanzaId }),
+      ...(parsed.originId && { originId: parsed.originId }),
       roomJid,
       from,
       nick,

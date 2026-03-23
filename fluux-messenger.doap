@@ -377,7 +377,7 @@
       <xmpp:SupportedXep>
         <xmpp:xep rdf:resource="https://xmpp.org/extensions/xep-0359.html"/>
         <xmpp:status>complete</xmpp:status>
-        <xmpp:note>Message deduplication using stanza-id</xmpp:note>
+        <xmpp:note>Message deduplication using stanza-id and origin-id</xmpp:note>
       </xmpp:SupportedXep>
     </implements>
 

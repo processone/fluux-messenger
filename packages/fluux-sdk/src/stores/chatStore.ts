@@ -38,12 +38,15 @@ function getLegacyStorageKey(): string {
 
 /**
  * Extract deduplication keys for a chat message.
- * Chat messages use two keys: stanzaId (if present) and from+id combo.
- * This handles both client-generated IDs and server-assigned stanza IDs from MAM.
+ * Uses three tiers of identity (XEP-0359):
+ * - stanzaId: server-assigned canonical ID (most reliable, from MAM/server)
+ * - originId: sender-assigned stable ID (survives archiving, for echo dedup)
+ * - from+id: stanza attribute combo (fallback for legacy/bridge messages)
  */
 function getChatMessageKeys(m: Message): string[] {
   const keys: string[] = []
   if (m.stanzaId) keys.push(`stanzaId:${m.stanzaId}`)
+  if (m.originId) keys.push(`originId:${m.originId}`)
   keys.push(`from:${m.from}:id:${m.id}`)
   return keys
 }
