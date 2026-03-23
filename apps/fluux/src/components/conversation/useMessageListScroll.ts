@@ -724,7 +724,9 @@ export function useMessageListScroll({
     requestAnimationFrame(scrollToTarget)
     setTimeout(scrollToTarget, 50)
     setTimeout(scrollToTarget, 150)
-  }, [targetMessageId, isAtBottomRef, onTargetMessageConsumed])
+    // messageCount is in deps so this re-fires when messages load from async sources
+    // (e.g., IndexedDB in search context view)
+  }, [targetMessageId, messageCount, isAtBottomRef, onTargetMessageConsumed])
 
   // ==========================================================================
   // EFFECT: Cleanup on unmount
