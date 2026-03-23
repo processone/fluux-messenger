@@ -40,6 +40,7 @@ interface TokenEntry {
 
 interface DocEntry {
   indexId: string
+  messageId: string // client-generated message.id (matches data-message-id in DOM)
   tokens: string[]
   conversationId: string
   from: string
@@ -78,6 +79,7 @@ interface SearchIndexSchema extends DBSchema {
  */
 export interface SearchIndexResult {
   indexId: string
+  messageId: string
   conversationId: string
   from: string
   timestamp: number
@@ -231,6 +233,7 @@ export async function indexMessage(message: Message | RoomMessage): Promise<void
   // Write document entry
   await docsStore.put({
     indexId,
+    messageId: message.id,
     tokens,
     conversationId,
     from: message.from,
@@ -288,6 +291,7 @@ export async function indexMessages(messages: (Message | RoomMessage)[]): Promis
     // Write document entry
     await docsStore.put({
       indexId,
+      messageId: message.id,
       tokens,
       conversationId,
       from: message.from,
@@ -448,6 +452,7 @@ export async function search(
 
   return limited.map((doc) => ({
     indexId: doc.indexId,
+    messageId: doc.messageId ?? doc.indexId.replace(/^(chat:|room:)/, ''),
     conversationId: doc.conversationId,
     from: doc.from,
     timestamp: doc.timestamp,

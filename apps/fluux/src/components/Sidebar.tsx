@@ -417,7 +417,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
                 onCategoryChange={onAdminCategoryChange ?? (() => {})}
               />
             ) : sidebarView === 'search' ? (
-              <SearchView onNavigate={(view) => onViewChange(view)} />
+              <SearchView />
             ) : sidebarView === 'settings' ? (
               <SettingsSidebar
                 activeCategory={(settingsCategory as SettingsCategory) || DEFAULT_SETTINGS_CATEGORY}

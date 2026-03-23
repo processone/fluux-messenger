@@ -104,7 +104,7 @@ describe('searchStore', () => {
       // Set some existing state
       searchStore.setState({
         query: 'old',
-        results: [{ indexId: 'test', conversationId: 'x', conversationName: 'X', isRoom: false, from: 'y', timestamp: 0, body: 'z', matchSnippet: null }],
+        results: [{ indexId: 'test', messageId: 'test', conversationId: 'x', conversationName: 'X', isRoom: false, from: 'y', timestamp: 0, body: 'z', matchSnippet: null }],
         isSearching: true,
       })
 
@@ -120,6 +120,7 @@ describe('searchStore', () => {
       const mockResults: SearchIndexResult[] = [
         {
           indexId: 'chat:msg-1',
+          messageId: 'msg-1',
           conversationId: 'alice@example.com',
           from: 'alice@example.com',
           timestamp: Date.now(),
@@ -145,6 +146,7 @@ describe('searchStore', () => {
       const mockResults: SearchIndexResult[] = [
         {
           indexId: 'chat:msg-1',
+          messageId: 'msg-1',
           conversationId: 'unknown@example.com',
           from: 'unknown@example.com',
           timestamp: Date.now(),
@@ -166,6 +168,7 @@ describe('searchStore', () => {
       const mockResults: SearchIndexResult[] = [
         {
           indexId: 'chat:msg-1',
+          messageId: 'msg-1',
           conversationId: 'alice@example.com',
           from: 'alice@example.com',
           timestamp: Date.now(),
@@ -202,6 +205,7 @@ describe('searchStore', () => {
       const staleResults: SearchIndexResult[] = [
         {
           indexId: 'chat:msg-1',
+          messageId: 'msg-1',
           conversationId: 'alice@example.com',
           from: 'alice@example.com',
           timestamp: Date.now(),
@@ -239,7 +243,7 @@ describe('searchStore', () => {
       searchStore.setState({
         query: 'test',
         isSearching: true,
-        results: [{ indexId: 'x', conversationId: 'y', conversationName: 'Y', isRoom: false, from: 'z', timestamp: 0, body: 'w', matchSnippet: null }],
+        results: [{ indexId: 'x', messageId: 'x', conversationId: 'y', conversationName: 'Y', isRoom: false, from: 'z', timestamp: 0, body: 'w', matchSnippet: null }],
         error: 'some error',
       })
 

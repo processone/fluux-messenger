@@ -19,6 +19,8 @@ import { roomStore } from './roomStore'
 export interface SearchResult {
   /** The index ID (used for deduplication) */
   indexId: string
+  /** Client-generated message ID (matches data-message-id in DOM) */
+  messageId: string
   /** The conversation or room JID */
   conversationId: string
   /** Display name of the conversation or room */
@@ -76,6 +78,7 @@ async function executeSearch(query: string): Promise<void> {
 
     const results: SearchResult[] = indexResults.map((r) => ({
       indexId: r.indexId,
+      messageId: r.messageId,
       conversationId: r.conversationId,
       conversationName: getConversationName(r.conversationId, r.isRoom),
       isRoom: r.isRoom,

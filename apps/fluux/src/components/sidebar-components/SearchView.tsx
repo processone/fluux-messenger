@@ -1,22 +1,17 @@
 import { useRef, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useSearch, useChat, useRoom, generateConsistentColorHexSync } from '@fluux/sdk'
+import { useSearch, generateConsistentColorHexSync } from '@fluux/sdk'
 import type { SearchResult } from '@fluux/sdk'
 import { Avatar } from '../Avatar'
-import { scrollToMessage } from '../conversation/messageGrouping'
+import { useNavigateToTarget } from '@/hooks/useNavigateToTarget'
 import { formatConversationTime } from '@/utils/dateFormat'
 import { useSettingsStore, type TimeFormat } from '@/stores/settingsStore'
 import { Search, X, Loader2, Hash } from 'lucide-react'
 
-interface SearchViewProps {
-  onNavigate: (view: 'messages' | 'rooms') => void
-}
-
-export function SearchView({ onNavigate }: SearchViewProps) {
+export function SearchView() {
   const { t, i18n } = useTranslation()
   const { query, results, isSearching, error, search, clearSearch } = useSearch()
-  const { setActiveConversation } = useChat()
-  const { setActiveRoom } = useRoom()
+  const { navigateToConversation, navigateToRoom } = useNavigateToTarget()
   const inputRef = useRef<HTMLInputElement>(null)
   const currentLang = i18n.language.split('-')[0]
   const timeFormat = useSettingsStore((s) => s.timeFormat)
@@ -29,20 +24,12 @@ export function SearchView({ onNavigate }: SearchViewProps) {
   const handleResultClick = useCallback(
     (result: SearchResult) => {
       if (result.isRoom) {
-        void setActiveRoom(result.conversationId)
-        onNavigate('rooms')
+        navigateToRoom(result.conversationId, result.messageId)
       } else {
-        void setActiveConversation(result.conversationId)
-        onNavigate('messages')
+        navigateToConversation(result.conversationId, result.messageId)
       }
-
-      // Attempt to scroll to the message after a short delay for rendering
-      const messageId = result.indexId.replace(/^(chat:|room:)/, '')
-      requestAnimationFrame(() => {
-        setTimeout(() => scrollToMessage(messageId), 100)
-      })
     },
-    [setActiveConversation, setActiveRoom, onNavigate]
+    [navigateToConversation, navigateToRoom]
   )
 
   return (
