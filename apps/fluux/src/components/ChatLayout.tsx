@@ -233,6 +233,9 @@ function ChatLayoutContent() {
   // Enable Tab cycling between focus zones
   useFocusZones(focusZoneRefs)
 
+  // Ref for triggering find-on-page in the active ChatView/RoomView
+  const findOnPageRef = useRef<(() => void) | null>(null)
+
   // Track if view state was restored from session storage
   const viewRestoredRef = useRef(false)
 
@@ -521,6 +524,7 @@ function ChatLayoutContent() {
     onSidebarViewChange: handleSidebarViewChange,
     navigateToMessages,
     navigateToRooms,
+    onFindOnPage: () => findOnPageRef.current?.(),
     escapeHierarchy: {
       isCommandPaletteOpen: showCommandPalette,
       onCloseCommandPalette: () => modalActions.close('commandPalette'),
@@ -708,9 +712,9 @@ function ChatLayoutContent() {
           ) : activeRoomJid && showRoomOccupants && isSmallScreen() ? (
             <FullScreenOccupantPanel onClose={() => setShowRoomOccupants(false)} onStartChat={handleStartChatWithJid} onShowProfile={handleShowProfileFromRoom} />
           ) : activeRoomJid ? (
-            <RoomView onBack={handleRoomBack} mainContentRef={focusZoneRefs.mainContent} composerRef={focusZoneRefs.composer} showOccupants={showRoomOccupants} onShowOccupantsChange={setShowRoomOccupants} onStartChat={handleStartChatWithJid} onShowProfile={handleShowProfileFromRoom} />
+            <RoomView onBack={handleRoomBack} mainContentRef={focusZoneRefs.mainContent} composerRef={focusZoneRefs.composer} showOccupants={showRoomOccupants} onShowOccupantsChange={setShowRoomOccupants} onStartChat={handleStartChatWithJid} onShowProfile={handleShowProfileFromRoom} findOnPageRef={findOnPageRef} />
           ) : activeConversationId ? (
-            <ChatView onBack={handleChatBack} onSwitchToMessages={(conversationId) => navigateToMessages(conversationId)} mainContentRef={focusZoneRefs.mainContent} composerRef={focusZoneRefs.composer} />
+            <ChatView onBack={handleChatBack} onSwitchToMessages={(conversationId) => navigateToMessages(conversationId)} mainContentRef={focusZoneRefs.mainContent} composerRef={focusZoneRefs.composer} findOnPageRef={findOnPageRef} />
           ) : selectedContact ? (
             <Suspense fallback={<ViewLoadingFallback />}>
               <ContactProfileView

@@ -26,6 +26,8 @@ interface UseKeyboardShortcutsOptions {
   onSidebarViewChange: (view: SidebarView) => void
   navigateToMessages: (jid?: string) => void
   navigateToRooms: (jid?: string) => void
+  /** Trigger find-on-page in the active conversation/room view */
+  onFindOnPage?: () => void
   // Escape hierarchy state and handlers
   escapeHierarchy?: {
     isCommandPaletteOpen: boolean
@@ -119,6 +121,7 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
     onSidebarViewChange,
     navigateToMessages,
     navigateToRooms,
+    onFindOnPage,
     escapeHierarchy,
   } = options
 
@@ -400,7 +403,14 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
     {
       key: 'f',
       modifiers: ['meta'],
-      description: 'Search messages',
+      description: 'Find in conversation',
+      category: 'navigation',
+      action: () => { onFindOnPage?.() },
+    },
+    {
+      key: '6',
+      modifiers: ['alt'],
+      description: 'Search view',
       category: 'navigation',
       action: () => onSidebarViewChange('search'),
     },

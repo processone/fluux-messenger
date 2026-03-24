@@ -6,6 +6,8 @@ import { useConnectionStore, useIgnoreStore } from '@fluux/sdk/react'
 import { ignoreStore, type IgnoredUser } from '@fluux/sdk/stores'
 import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat, useContextMenu, isSmallScreen } from '@/hooks'
 import { MessageBubble, MessageList, shouldShowAvatar, buildReplyContext, PollBanner } from './conversation'
+import { FindOnPageBar } from './conversation/FindOnPageBar'
+import { useFindOnPage } from '@/hooks/useFindOnPage'
 import { Avatar, getConsistentTextColor } from './Avatar'
 import { format } from 'date-fns'
 import { Shield, Crown, Upload, Loader2, LogIn, AlertCircle, Users, MessageCircle, EyeOff, User, Settings } from 'lucide-react'
@@ -52,12 +54,14 @@ interface RoomViewProps {
   onStartChat?: (jid: string) => void
   // Callback to show user profile (from occupant panel)
   onShowProfile?: (jid: string) => void
+  /** Ref callback to trigger find-on-page from parent (e.g. Cmd+F) */
+  findOnPageRef?: RefObject<(() => void) | null>
 }
 
 // Max room size for sending typing indicators (to avoid noise in large rooms)
 const MAX_ROOM_SIZE_FOR_TYPING = 30
 
-export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange, onStartChat, onShowProfile }: RoomViewProps) {
+export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange, onStartChat, onShowProfile, findOnPageRef }: RoomViewProps) {
   detectRenderLoop('RoomView')
   const { t } = useTranslation()
   const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendPoll, votePoll, closePoll, sendCorrection, retractMessage, moderateMessage, sendChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, activeMAMState, submitRoomConfig, setSubject, destroyRoom, setAffiliation, setRole, targetMessageId, clearTargetMessageId } = useRoomActive()
@@ -293,6 +297,21 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     }
   }
 
+  // Find on page: browser-style search within this room
+  const find = useFindOnPage(activeMessages)
+
+  // Expose open function to parent via ref
+  useEffect(() => {
+    if (findOnPageRef) {
+      (findOnPageRef as React.MutableRefObject<(() => void) | null>).current = find.open
+    }
+    return () => {
+      if (findOnPageRef) {
+        (findOnPageRef as React.MutableRefObject<(() => void) | null>).current = null
+      }
+    }
+  }, [findOnPageRef, find.open])
+
   if (!activeRoom) return null
 
   return (
@@ -346,8 +365,19 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             handleMouseMove(e, messageId)
           }}
           onMouseLeave={handleMouseLeave}
-          className="focus-zone flex-1 flex flex-col min-h-0 p-1"
+          className="focus-zone flex-1 flex flex-col min-h-0 p-1 relative"
         >
+          {find.isOpen && (
+            <FindOnPageBar
+              searchText={find.searchText}
+              onSearchTextChange={find.setSearchText}
+              currentMatchIndex={find.currentMatchIndex}
+              totalMatches={find.matchIds.length}
+              onNext={find.goToNext}
+              onPrev={find.goToPrev}
+              onClose={find.close}
+            />
+          )}
           <RoomMessageList
             messages={displayMessages}
             messagesById={messagesById}
@@ -388,6 +418,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             onNickTouchStart={handleNickTouchStart}
             onNickTouchEnd={handleNickTouchEnd}
             setAffiliation={setAffiliation}
+            highlightTerms={find.highlightTerms}
           />
         </div>
 
@@ -621,6 +652,7 @@ const RoomMessageList = memo(function RoomMessageList({
   onNickTouchStart,
   onNickTouchEnd,
   setAffiliation,
+  highlightTerms,
 }: {
   messages: RoomMessage[]
   messagesById: Map<string, RoomMessage>
@@ -661,6 +693,7 @@ const RoomMessageList = memo(function RoomMessageList({
   onNickTouchStart?: (nick: string, e: React.TouchEvent) => void
   onNickTouchEnd?: () => void
   setAffiliation: (roomJid: string, userJid: string, affiliation: RoomAffiliation, reason?: string) => Promise<void>
+  highlightTerms?: string[]
 }) {
   const { t } = useTranslation()
   const { formatTime, effectiveTimeFormat } = useTimeFormat()
@@ -790,6 +823,7 @@ const RoomMessageList = memo(function RoomMessageList({
       onNickTouchStart={onNickTouchStart}
       onNickTouchEnd={onNickTouchEnd}
       setAffiliation={setAffiliation}
+      highlightTerms={highlightTerms}
     />
   )
 
@@ -857,6 +891,8 @@ interface RoomMessageBubbleWrapperProps {
   setAffiliation: (roomJid: string, userJid: string, affiliation: RoomAffiliation, reason?: string) => Promise<void>
   // Set of poll message IDs that have been closed (to disable close button)
   closedPollIds: Set<string>
+  // Highlight terms for find-on-page
+  highlightTerms?: string[]
 }
 
 const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
@@ -892,6 +928,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   onNickTouchEnd,
   setAffiliation,
   closedPollIds,
+  highlightTerms,
 }: RoomMessageBubbleWrapperProps) {
   const { t } = useTranslation()
 
@@ -1156,6 +1193,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         onClosePoll={message.isOutgoing && message.poll && !closedPollIds.has(message.id) ? () => closePoll(room.jid, message.id) : undefined}
         formatTime={formatTime}
         timeFormat={timeFormat}
+        highlightTerms={highlightTerms}
       />
 
       {/* Delete own message confirmation dialog */}

@@ -785,4 +785,53 @@ describe('useKeyboardShortcuts', () => {
       document.body.removeChild(textarea)
     })
   })
+
+  describe('Find on Page (Cmd+F)', () => {
+    it('should include Cmd+F shortcut for find in conversation', () => {
+      const options = createDefaultOptions()
+      const { result } = renderHook(() => useKeyboardShortcuts(options))
+
+      const cmdF = result.current.find(
+        s => s.key === 'f' && s.modifiers?.includes('meta')
+      )
+      expect(cmdF).toBeDefined()
+      expect(cmdF!.description).toMatch(/find in conversation/i)
+    })
+
+    it('should call onFindOnPage when Cmd+F is triggered', () => {
+      const onFindOnPage = vi.fn()
+      const options = { ...createDefaultOptions(), onFindOnPage }
+      const { result } = renderHook(() => useKeyboardShortcuts(options))
+
+      const cmdF = result.current.find(
+        s => s.key === 'f' && s.modifiers?.includes('meta')
+      )
+      cmdF!.action()
+      expect(onFindOnPage).toHaveBeenCalled()
+    })
+  })
+
+  describe('Search View (Alt+6)', () => {
+    it('should include Alt+6 shortcut for search view', () => {
+      const options = createDefaultOptions()
+      const { result } = renderHook(() => useKeyboardShortcuts(options))
+
+      const alt6 = result.current.find(
+        s => s.key === '6' && s.modifiers?.includes('alt')
+      )
+      expect(alt6).toBeDefined()
+      expect(alt6!.description).toMatch(/search/i)
+    })
+
+    it('should switch to search sidebar view', () => {
+      const options = createDefaultOptions()
+      const { result } = renderHook(() => useKeyboardShortcuts(options))
+
+      const alt6 = result.current.find(
+        s => s.key === '6' && s.modifiers?.includes('alt')
+      )
+      alt6!.action()
+      expect(options.onSidebarViewChange).toHaveBeenCalledWith('search')
+    })
+  })
 })

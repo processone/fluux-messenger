@@ -7,6 +7,8 @@ import { getConsistentTextColor } from './Avatar'
 import { useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat } from '@/hooks'
 import { Upload, Loader2 } from 'lucide-react'
 import { MessageBubble, MessageList as MessageListComponent, shouldShowAvatar, buildReplyContext } from './conversation'
+import { FindOnPageBar } from './conversation/FindOnPageBar'
+import { useFindOnPage } from '@/hooks/useFindOnPage'
 import { ChristmasAnimation } from './ChristmasAnimation'
 import { ChatHeader } from './ChatHeader'
 import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment } from './MessageComposer'
@@ -20,9 +22,11 @@ interface ChatViewProps {
   // Focus zone refs for Tab cycling
   mainContentRef?: RefObject<HTMLElement | null>
   composerRef?: RefObject<HTMLElement | null>
+  /** Ref callback to trigger find-on-page from parent (e.g. Cmd+F) */
+  findOnPageRef?: RefObject<(() => void) | null>
 }
 
-export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerRef }: ChatViewProps) {
+export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerRef, findOnPageRef }: ChatViewProps) {
   detectRenderLoop('ChatView')
   const { t } = useTranslation()
   // Use useChatActive instead of useChat to avoid subscribing to the conversation list.
@@ -88,6 +92,21 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
 
   // Type-to-focus: auto-focus composer when user starts typing anywhere
   useTypeToFocus(composerHandleRef)
+
+  // Find on page: browser-style search within this conversation
+  const find = useFindOnPage(activeMessages)
+
+  // Expose open function to parent via ref
+  useEffect(() => {
+    if (findOnPageRef) {
+      (findOnPageRef as React.MutableRefObject<(() => void) | null>).current = find.open
+    }
+    return () => {
+      if (findOnPageRef) {
+        (findOnPageRef as React.MutableRefObject<(() => void) | null>).current = null
+      }
+    }
+  }, [findOnPageRef, find.open])
 
   // Scroll ref for programmatic scrolling and keyboard navigation
   const scrollRef = useRef<HTMLElement>(null)
@@ -244,7 +263,7 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
       <div
         ref={mainContentRef as React.RefObject<HTMLDivElement>}
         tabIndex={0}
-        className="focus-zone flex-1 flex flex-col min-h-0 p-1"
+        className="focus-zone flex-1 flex flex-col min-h-0 p-1 relative"
         onKeyDown={handleMessageListKeyDown}
         onMouseMove={(e) => {
           // Find which message is being hovered (for keyboard nav starting point)
@@ -254,6 +273,17 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
         }}
         onMouseLeave={handleMouseLeave}
       >
+        {find.isOpen && (
+          <FindOnPageBar
+            searchText={find.searchText}
+            onSearchTextChange={find.setSearchText}
+            currentMatchIndex={find.currentMatchIndex}
+            totalMatches={find.matchIds.length}
+            onNext={find.goToNext}
+            onPrev={find.goToPrev}
+            onClose={find.close}
+          />
+        )}
         <ChatMessageList
           messages={activeMessages}
           contactsByJid={contactsByJid}
@@ -291,6 +321,7 @@ export function ChatView({ onBack, onSwitchToMessages, mainContentRef, composerR
           isHistoryComplete={activeMAMState?.isHistoryComplete ?? false}
           // SDK auto-fetches cache + MAM in background, no blocking spinner needed
           isInitialLoading={false}
+          highlightTerms={find.highlightTerms}
         />
       </div>
 
@@ -368,6 +399,7 @@ const ChatMessageList = memo(function ChatMessageList({
   isLoadingOlder,
   isHistoryComplete,
   isInitialLoading,
+  highlightTerms,
 }: {
   messages: Message[]
   contactsByJid: Map<string, ContactIdentity>
@@ -404,6 +436,7 @@ const ChatMessageList = memo(function ChatMessageList({
   isLoadingOlder?: boolean
   isHistoryComplete?: boolean
   isInitialLoading?: boolean
+  highlightTerms?: string[]
 }) {
   const { t } = useTranslation()
   const { formatTime, effectiveTimeFormat } = useTimeFormat()
@@ -488,6 +521,7 @@ const ChatMessageList = memo(function ChatMessageList({
       onMouseLeave={handleMessageLeave}
       formatTime={formatTime}
       timeFormat={effectiveTimeFormat}
+      highlightTerms={highlightTerms}
     />
   )
 
@@ -555,6 +589,8 @@ interface ChatMessageBubbleProps {
   formatTime: (date: Date) => string
   // Effective time format for layout width calculations
   timeFormat: '12h' | '24h'
+  // Highlight terms for find-on-page
+  highlightTerms?: string[]
 }
 
 const ChatMessageBubble = memo(function ChatMessageBubble({
@@ -587,6 +623,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
   onMouseLeave,
   formatTime,
   timeFormat,
+  highlightTerms,
 }: ChatMessageBubbleProps) {
   const { t } = useTranslation()
 
@@ -710,6 +747,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
         onReactionPickerChange={onReactionPickerChange}
         formatTime={formatTime}
         timeFormat={timeFormat}
+        highlightTerms={highlightTerms}
       />
       {showDeleteConfirm && (
         <ConfirmDialog
