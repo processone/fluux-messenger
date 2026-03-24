@@ -39,6 +39,16 @@ export const draculaTheme: ThemeDefinition = {
       '--fluux-color-purple-rgb': '189, 147, 249',
       // Semantic — link color uses pink instead of blue/cyan
       '--fluux-text-link': '#ff79c6',
+      // Syntax highlighting
+      '--shiki-token-keyword': '#ff79c6',
+      '--shiki-token-string': '#f1fa8c',
+      '--shiki-token-string-expression': '#f1fa8c',
+      '--shiki-token-comment': '#6272a4',
+      '--shiki-token-function': '#50fa7b',
+      '--shiki-token-constant': '#bd93f9',
+      '--shiki-token-parameter': '#ffb86c',
+      '--shiki-token-punctuation': '#f8f8f2',
+      '--shiki-token-link': '#ff79c6',
     },
     // Dracula has no official light variant — derive a soft light from the palette
     light: {
@@ -74,6 +84,16 @@ export const draculaTheme: ThemeDefinition = {
       '--fluux-scrollbar-thumb': '#c8c8c2',
       '--fluux-scrollbar-thumb-hover': '#b0b0aa',
       '--fluux-text-link': '#a8308c',
+      // Syntax highlighting
+      '--shiki-token-keyword': '#a8308c',
+      '--shiki-token-string': '#b8960f',
+      '--shiki-token-string-expression': '#b8960f',
+      '--shiki-token-comment': '#9da5c7',
+      '--shiki-token-function': '#2b9e4a',
+      '--shiki-token-constant': '#7c50c7',
+      '--shiki-token-parameter': '#c07020',
+      '--shiki-token-punctuation': '#282a36',
+      '--shiki-token-link': '#a8308c',
     },
   },
   swatches: {

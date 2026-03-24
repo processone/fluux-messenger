@@ -39,6 +39,16 @@ export const rosePineTheme: ThemeDefinition = {
       '--fluux-color-purple-rgb': '196, 167, 231',
       // Semantic — rose pink for links
       '--fluux-text-link': '#ebbcba',
+      // Syntax highlighting
+      '--shiki-token-keyword': '#31748f',
+      '--shiki-token-string': '#f6c177',
+      '--shiki-token-string-expression': '#f6c177',
+      '--shiki-token-comment': '#6e6a86',
+      '--shiki-token-function': '#eb6f92',
+      '--shiki-token-constant': '#c4a7e7',
+      '--shiki-token-parameter': '#9ccfd8',
+      '--shiki-token-punctuation': '#908caa',
+      '--shiki-token-link': '#ebbcba',
     },
     light: {
       // Foundation — neutral ramp (Dawn variant)
@@ -77,6 +87,16 @@ export const rosePineTheme: ThemeDefinition = {
       '--fluux-scrollbar-thumb': '#dfdad9',
       '--fluux-scrollbar-thumb-hover': '#cecacd',
       '--fluux-text-link': '#d7827e',
+      // Syntax highlighting
+      '--shiki-token-keyword': '#286983',
+      '--shiki-token-string': '#ea9d34',
+      '--shiki-token-string-expression': '#ea9d34',
+      '--shiki-token-comment': '#9893a5',
+      '--shiki-token-function': '#b4637a',
+      '--shiki-token-constant': '#907aa9',
+      '--shiki-token-parameter': '#56949f',
+      '--shiki-token-punctuation': '#797593',
+      '--shiki-token-link': '#d7827e',
     },
   },
   swatches: {

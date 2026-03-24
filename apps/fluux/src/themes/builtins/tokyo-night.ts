@@ -37,6 +37,16 @@ export const tokyoNightTheme: ThemeDefinition = {
       '--fluux-color-yellow-rgb': '224, 175, 104',
       '--fluux-color-blue-rgb': '122, 162, 247',
       '--fluux-color-purple-rgb': '187, 154, 247',
+      // Syntax highlighting
+      '--shiki-token-keyword': '#bb9af7',
+      '--shiki-token-string': '#9ece6a',
+      '--shiki-token-string-expression': '#9ece6a',
+      '--shiki-token-comment': '#565f89',
+      '--shiki-token-function': '#7aa2f7',
+      '--shiki-token-constant': '#ff9e64',
+      '--shiki-token-parameter': '#c0caf5',
+      '--shiki-token-punctuation': '#89ddff',
+      '--shiki-token-link': '#7aa2f7',
     },
     light: {
       // Foundation — neutral ramp (Day variant)
@@ -74,6 +84,16 @@ export const tokyoNightTheme: ThemeDefinition = {
       '--fluux-selection-bg': 'hsla(220, 72%, 52%, 0.15)',
       '--fluux-scrollbar-thumb': '#b4b5b9',
       '--fluux-scrollbar-thumb-hover': '#a0a1a5',
+      // Syntax highlighting
+      '--shiki-token-keyword': '#7847bd',
+      '--shiki-token-string': '#587539',
+      '--shiki-token-string-expression': '#587539',
+      '--shiki-token-comment': '#848cb5',
+      '--shiki-token-function': '#2e7de9',
+      '--shiki-token-constant': '#965027',
+      '--shiki-token-parameter': '#3760bf',
+      '--shiki-token-punctuation': '#2e7de9',
+      '--shiki-token-link': '#2e7de9',
     },
   },
   swatches: {

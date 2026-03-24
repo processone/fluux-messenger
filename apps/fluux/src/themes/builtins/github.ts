@@ -37,6 +37,16 @@ export const githubTheme: ThemeDefinition = {
       '--fluux-color-yellow-rgb': '158, 106, 3',
       '--fluux-color-blue-rgb': '47, 129, 247',
       '--fluux-color-purple-rgb': '137, 87, 229',
+      // Syntax highlighting
+      '--shiki-token-keyword': '#ff7b72',
+      '--shiki-token-string': '#a5d6ff',
+      '--shiki-token-string-expression': '#a5d6ff',
+      '--shiki-token-comment': '#8b949e',
+      '--shiki-token-function': '#d2a8ff',
+      '--shiki-token-constant': '#79c0ff',
+      '--shiki-token-parameter': '#ffa657',
+      '--shiki-token-punctuation': '#e6edf3',
+      '--shiki-token-link': '#2f81f7',
     },
     light: {
       // Foundation — neutral ramp (GitHub Light Default)
@@ -74,6 +84,16 @@ export const githubTheme: ThemeDefinition = {
       '--fluux-selection-bg': 'hsla(212, 92%, 45%, 0.15)',
       '--fluux-scrollbar-thumb': '#dae0e7',
       '--fluux-scrollbar-thumb-hover': '#c8ced5',
+      // Syntax highlighting
+      '--shiki-token-keyword': '#cf222e',
+      '--shiki-token-string': '#0a3069',
+      '--shiki-token-string-expression': '#0a3069',
+      '--shiki-token-comment': '#6e7781',
+      '--shiki-token-function': '#8250df',
+      '--shiki-token-constant': '#0550ae',
+      '--shiki-token-parameter': '#953800',
+      '--shiki-token-punctuation': '#1f2328',
+      '--shiki-token-link': '#0969da',
     },
   },
   swatches: {

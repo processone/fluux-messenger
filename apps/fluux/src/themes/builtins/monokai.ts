@@ -39,6 +39,16 @@ export const monokaiTheme: ThemeDefinition = {
       '--fluux-color-purple-rgb': '174, 129, 255',
       // Semantic — orange for links (distinctive Monokai choice)
       '--fluux-text-link': '#fd971f',
+      // Syntax highlighting
+      '--shiki-token-keyword': '#f92672',
+      '--shiki-token-string': '#e6db74',
+      '--shiki-token-string-expression': '#e6db74',
+      '--shiki-token-comment': '#75715e',
+      '--shiki-token-function': '#a6e22e',
+      '--shiki-token-constant': '#ae81ff',
+      '--shiki-token-parameter': '#fd971f',
+      '--shiki-token-punctuation': '#f8f8f2',
+      '--shiki-token-link': '#fd971f',
     },
     // Monokai has no official light variant — derive a warm light from the palette
     light: {
@@ -75,6 +85,16 @@ export const monokaiTheme: ThemeDefinition = {
       '--fluux-scrollbar-thumb': '#c8c4b8',
       '--fluux-scrollbar-thumb-hover': '#b0aca0',
       '--fluux-text-link': '#b86e0a',
+      // Syntax highlighting
+      '--shiki-token-keyword': '#c41854',
+      '--shiki-token-string': '#9e8e10',
+      '--shiki-token-string-expression': '#9e8e10',
+      '--shiki-token-comment': '#a8a497',
+      '--shiki-token-function': '#5f8c0c',
+      '--shiki-token-constant': '#7540c9',
+      '--shiki-token-parameter': '#b86e0a',
+      '--shiki-token-punctuation': '#272822',
+      '--shiki-token-link': '#b86e0a',
     },
   },
   swatches: {

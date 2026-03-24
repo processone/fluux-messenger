@@ -17,6 +17,7 @@
 
 import React, { useState } from 'react'
 import { findMentionRanges, findIrcPrefixRange, type MentionReference } from '@fluux/sdk'
+import { useHighlighter } from './codeHighlight'
 
 // URL regex pattern - excludes < and > to handle angle-bracketed URLs like <https://example.com>
 const URL_REGEX = /(https?:\/\/[^\s<>]+[^\s<>.,;:!?)"'\]])/g
@@ -269,8 +270,9 @@ function renderSegment(segment: StyledSegment, index: number): React.ReactNode {
 /**
  * Code block component with copy button
  */
-function CodeBlock({ code, keyProp }: { code: string; keyProp: string }): React.ReactElement {
+function CodeBlock({ code, language, keyProp }: { code: string; language?: string; keyProp: string }): React.ReactElement {
   const [copied, setCopied] = useState(false)
+  const { ready, highlight } = useHighlighter(language)
 
   const handleCopy = async () => {
     try {
@@ -290,10 +292,17 @@ function CodeBlock({ code, keyProp }: { code: string; keyProp: string }): React.
     }
   }
 
+  const highlightedHtml = ready && language ? highlight(code, language) : null
+
   return (
     <div key={keyProp} className="my-1 rounded-lg overflow-hidden border border-fluux-border">
-      {/* Header bar with copy button */}
-      <div className="flex justify-end px-1 bg-fluux-sidebar border-b border-fluux-border">
+      {/* Header bar with language label and copy button */}
+      <div className="flex items-center justify-between px-2 bg-fluux-sidebar border-b border-fluux-border">
+        {language ? (
+          <span className="text-xs text-fluux-muted select-none py-1">{language}</span>
+        ) : (
+          <span />
+        )}
         <button
           onClick={handleCopy}
           className="p-1 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors"
@@ -312,7 +321,13 @@ function CodeBlock({ code, keyProp }: { code: string; keyProp: string }): React.
       </div>
       {/* Code content */}
       <pre className="bg-fluux-bg/50 text-fluux-text px-3 py-2 overflow-x-auto font-mono text-sm">
-        <code>{code}</code>
+        {highlightedHtml ? (
+          // Shiki output is safe — it only produces <span> elements with
+          // inline style attributes referencing CSS variables
+          <code dangerouslySetInnerHTML={{ __html: highlightedHtml }} />
+        ) : (
+          <code>{code}</code>
+        )}
       </pre>
     </div>
   )
@@ -439,8 +454,8 @@ export function renderStyledMessage(text: string, mentions?: MentionReference[],
     }
   }
 
-  // Check for code blocks first (``` ... ```)
-  const codeBlockRegex = /```([\s\S]*?)```/g
+  // Check for code blocks first (```lang\n ... ```)
+  const codeBlockRegex = /```(\w*)\n?([\s\S]*?)```/g
   const parts: React.ReactNode[] = []
   let lastIndex = 0
   let match
@@ -454,10 +469,11 @@ export function renderStyledMessage(text: string, mentions?: MentionReference[],
       partIndex += 100 // Leave room for sub-indices
     }
 
-    // Render code block with copy button
-    const codeContent = match[1].trim()
+    // Render code block with copy button and optional syntax highlighting
+    const lang = match[1] || undefined
+    const codeContent = match[2].trim()
     parts.push(
-      <CodeBlock key={`code-${partIndex++}`} code={codeContent} keyProp={`code-${partIndex}`} />
+      <CodeBlock key={`code-${partIndex++}`} code={codeContent} language={lang} keyProp={`code-${partIndex}`} />
     )
 
     lastIndex = match.index + match[0].length

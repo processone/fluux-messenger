@@ -179,6 +179,24 @@ describe('renderStyledMessage', () => {
       const code = container.querySelector('pre code')
       expect(code?.textContent).toContain('function test()')
     })
+
+    it('renders code block with language hint', () => {
+      const container = renderText('```javascript\nconsole.log("hello")\n```')
+      expect(container.querySelector('pre code')).toBeTruthy()
+      expect(container.querySelector('pre code')?.textContent).toContain('console.log')
+    })
+
+    it('shows language label when language is specified', () => {
+      const container = renderText('```python\nprint("hi")\n```')
+      expect(container.textContent).toContain('python')
+      expect(container.querySelector('pre code')?.textContent).toContain('print("hi")')
+    })
+
+    it('renders code block without language hint as before', () => {
+      const container = renderText('```\nplain code\n```')
+      const code = container.querySelector('pre code')
+      expect(code?.textContent).toBe('plain code')
+    })
   })
 
   describe('blockquotes (> text)', () => {
