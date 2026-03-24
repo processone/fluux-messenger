@@ -179,7 +179,7 @@ export const connectionStore = createStore<ConnectionState>()(
   setWebPushServices: (services) => set({ webPushServices: services }),
   setWebPushServicesAndStatus: (services, status) => set({ webPushServices: services, webPushStatus: status }),
   setWebPushEnabled: (enabled) => {
-    try { localStorage.setItem('fluux-webpush-enabled', String(enabled)) } catch {}
+    try { localStorage.setItem('fluux-webpush-enabled', String(enabled)) } catch { /* ignore storage errors */ }
     set({ webPushEnabled: enabled })
   },
 

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, memo, type RefObject } from 'react'
+import React, { useState, useRef, useEffect, useImperativeHandle, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { useChatActive, useContactIdentities, createMessageLookup, getBareJid, getLocalPart, type Message, type ContactIdentity } from '@fluux/sdk'
@@ -103,16 +103,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, m
   const find = useFindOnPage(activeMessages)
 
   // Expose open function to parent via ref
-  useEffect(() => {
-    if (findOnPageRef) {
-      (findOnPageRef as React.MutableRefObject<(() => void) | null>).current = find.open
-    }
-    return () => {
-      if (findOnPageRef) {
-        (findOnPageRef as React.MutableRefObject<(() => void) | null>).current = null
-      }
-    }
-  }, [findOnPageRef, find.open])
+  useImperativeHandle(findOnPageRef, () => find.open, [find.open])
 
   // Scroll ref for programmatic scrolling and keyboard navigation
   const scrollRef = useRef<HTMLElement>(null)

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { searchStore, setSearchClient, deduplicateMAMResults, type SearchResult } from './searchStore'
 import { chatStore } from './chatStore'
-import { roomStore } from './roomStore'
+// roomStore import not needed — localStorage mock covers its persist middleware
 import { connectionStore } from './connectionStore'
 import * as searchIndex from '../utils/searchIndex'
 import type { SearchIndexResult } from '../utils/searchIndex'

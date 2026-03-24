@@ -87,7 +87,7 @@ export function useHighlighter(language?: string): {
     if (!language || ready) return
 
     let cancelled = false
-    ensureHighlighter().then(() => {
+    void ensureHighlighter().then(() => {
       if (!cancelled) setReady(true)
     })
     return () => { cancelled = true }

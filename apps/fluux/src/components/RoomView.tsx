@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo, memo, type RefObject } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useImperativeHandle, useMemo, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { useRoomActive, useRoster, getBareJid, generateConsistentColorHexSync, getPresenceFromShow, createMessageLookup, isMessageFromIgnoredUser, isReplyToIgnoredUser, canKick, canBan, canModerate, getAvailableAffiliations, getAvailableRoles, type RoomMessage, type Room, type MentionReference, type ChatStateNotification, type Contact, type FileAttachment, type RoomAffiliation, type RoomRole, type PollData } from '@fluux/sdk'
@@ -308,16 +308,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   const find = useFindOnPage(activeMessages)
 
   // Expose open function to parent via ref
-  useEffect(() => {
-    if (findOnPageRef) {
-      (findOnPageRef as React.MutableRefObject<(() => void) | null>).current = find.open
-    }
-    return () => {
-      if (findOnPageRef) {
-        (findOnPageRef as React.MutableRefObject<(() => void) | null>).current = null
-      }
-    }
-  }, [findOnPageRef, find.open])
+  useImperativeHandle(findOnPageRef, () => find.open, [find.open])
 
   if (!activeRoom) return null
 
