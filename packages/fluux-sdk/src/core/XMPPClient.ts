@@ -35,6 +35,7 @@ import {
   adminStore,
   blockingStore,
   ignoreStore,
+  activityLogStore,
 } from '../stores'
 import { detectPlatform, getCachedPlatform } from './platform'
 import { isDeadSocketError } from './modules/connectionUtils'
@@ -892,6 +893,7 @@ export class XMPPClient {
       setStorageScopeJid(scopedJid)
       chatStore.getState().switchAccount(scopedJid)
       roomStore.getState().switchAccount(scopedJid)
+      activityLogStore.getState().rehydrate()
     }
 
     // Open the search index DB and backfill from message cache if needed (one-time migration)

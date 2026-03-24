@@ -94,6 +94,9 @@ interface ActivityLogState {
   /** Set or clear the preview event */
   setPreviewEvent: (event: ActivityEvent | null) => void
 
+  /** Re-read persisted state from localStorage using the current scoped key.
+   *  Called after setStorageScopeJid() makes the correct key available. */
+  rehydrate: () => void
   /** Reset the store */
   reset: () => void
 }
@@ -222,6 +225,34 @@ export const activityLogStore = createStore<ActivityLogState>()(
 
         previewEvent: null,
         setPreviewEvent: (event) => set({ previewEvent: event }),
+
+        rehydrate: () => {
+          try {
+            const str = localStorage.getItem(getScopedStorageKey())
+            if (!str) return
+            const parsed = JSON.parse(str)
+            if (!parsed.state?.events) return
+            const events = parsed.state.events.map(
+              (e: ActivityEvent) => ({
+                ...e,
+                timestamp: new Date(e.timestamp),
+              })
+            )
+            const mutedConversations = new Set<string>(
+              parsed.state?.mutedReactionConversations ?? []
+            )
+            const mutedMessages = new Set<string>(
+              parsed.state?.mutedReactionMessages ?? []
+            )
+            set({
+              events,
+              mutedReactionConversations: mutedConversations,
+              mutedReactionMessages: mutedMessages,
+            })
+          } catch {
+            // Ignore storage errors
+          }
+        },
 
         reset: () => {
           try {
