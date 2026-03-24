@@ -115,7 +115,7 @@ export function StorageSettings() {
           <div className="space-y-1">
             <div className="h-2 rounded-full bg-fluux-hover overflow-hidden">
               <div
-                className="h-full rounded-full bg-fluux-accent transition-all duration-300"
+                className="h-full rounded-full bg-fluux-brand transition-all duration-300"
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
