@@ -7,13 +7,18 @@ import * as searchIndex from '../utils/searchIndex'
 import type { SearchIndexResult } from '../utils/searchIndex'
 
 // Mock the search index to avoid IDB dependency in store tests
-vi.mock('../utils/searchIndex', () => ({
-  search: vi.fn().mockResolvedValue([]),
-  indexMessage: vi.fn().mockResolvedValue(undefined),
-  indexMessages: vi.fn().mockResolvedValue(undefined),
-  removeMessage: vi.fn().mockResolvedValue(undefined),
-  updateMessage: vi.fn().mockResolvedValue(undefined),
-}))
+vi.mock('../utils/searchIndex', async () => {
+  const actual = await vi.importActual('../utils/searchIndex')
+  return {
+    search: vi.fn().mockResolvedValue([]),
+    indexMessage: vi.fn().mockResolvedValue(undefined),
+    indexMessages: vi.fn().mockResolvedValue(undefined),
+    removeMessage: vi.fn().mockResolvedValue(undefined),
+    updateMessage: vi.fn().mockResolvedValue(undefined),
+    parseSearchQuery: (actual as Record<string, unknown>).parseSearchQuery,
+    tokenize: (actual as Record<string, unknown>).tokenize,
+  }
+})
 
 // Mock localStorage for chatStore/roomStore (they use persist middleware)
 const localStorageMock = (() => {

@@ -13,6 +13,7 @@
 
 import { createStore } from 'zustand/vanilla'
 import * as searchIndex from '../utils/searchIndex'
+import { parseSearchQuery } from '../utils/searchIndex'
 import { generateMatchSnippet, type MatchSnippet } from '../utils/searchUtils'
 import { chatStore } from './chatStore'
 import { roomStore } from './roomStore'
@@ -135,7 +136,7 @@ function getConversationName(conversationId: string, isRoom: boolean): string {
 /**
  * Convert a Message to a SearchResult.
  */
-function messageToSearchResult(msg: Message, query: string): SearchResult {
+function messageToSearchResult(msg: Message, query: string, phrases?: string[]): SearchResult {
   return {
     indexId: `mam:chat:${msg.id}`,
     messageId: msg.id,
@@ -145,7 +146,7 @@ function messageToSearchResult(msg: Message, query: string): SearchResult {
     from: msg.from,
     timestamp: msg.timestamp.getTime(),
     body: msg.body || '',
-    matchSnippet: generateMatchSnippet(msg.body || '', query),
+    matchSnippet: generateMatchSnippet(msg.body || '', query, 60, phrases),
     source: 'mam',
   }
 }
@@ -153,7 +154,7 @@ function messageToSearchResult(msg: Message, query: string): SearchResult {
 /**
  * Convert a RoomMessage to a SearchResult.
  */
-function roomMessageToSearchResult(msg: RoomMessage, roomJid: string, query: string): SearchResult {
+function roomMessageToSearchResult(msg: RoomMessage, roomJid: string, query: string, phrases?: string[]): SearchResult {
   return {
     indexId: `mam:room:${msg.id}`,
     messageId: msg.id,
@@ -164,7 +165,7 @@ function roomMessageToSearchResult(msg: RoomMessage, roomJid: string, query: str
     nick: msg.nick,
     timestamp: msg.timestamp.getTime(),
     body: msg.body || '',
-    matchSnippet: generateMatchSnippet(msg.body || '', query),
+    matchSnippet: generateMatchSnippet(msg.body || '', query, 60, phrases),
     source: 'mam',
   }
 }
@@ -186,6 +187,8 @@ export function deduplicateMAMResults(
  */
 async function executeSearch(query: string): Promise<void> {
   const scope = searchStore.getState().searchScope
+  const parsed = parseSearchQuery(query)
+  const phrases = parsed.phrases.length > 0 ? parsed.phrases : undefined
   try {
     const indexResults = await searchIndex.search(query, {
       limit: 50,
@@ -202,7 +205,7 @@ async function executeSearch(query: string): Promise<void> {
       nick: r.nick,
       timestamp: r.timestamp,
       body: r.body,
-      matchSnippet: generateMatchSnippet(r.body, query),
+      matchSnippet: generateMatchSnippet(r.body, query, 60, phrases),
       source: 'local' as const,
     }))
 
@@ -231,6 +234,8 @@ async function executeMAMSearch(append: boolean): Promise<void> {
   const generation = ++mamSearchGeneration
   const scope = state.searchScope
   const supportsFulltext = connectionStore.getState().mamFulltextSearch
+  const parsed = parseSearchQuery(query)
+  const phrases = parsed.phrases.length > 0 ? parsed.phrases : undefined
 
   // Cancel any ongoing paging search
   if (pagingAbortController) {
@@ -261,7 +266,7 @@ async function executeMAMSearch(append: boolean): Promise<void> {
             max: 20,
             before: append ? mamRsmCursor : undefined,
           })
-          newResults = result.messages.map(m => roomMessageToSearchResult(m, scope, query))
+          newResults = result.messages.map(m => roomMessageToSearchResult(m, scope, query, phrases))
           hasMore = !result.complete
           mamRsmCursor = result.rsm.first
         } else {
@@ -271,7 +276,7 @@ async function executeMAMSearch(append: boolean): Promise<void> {
             max: 20,
             before: append ? mamRsmCursor : undefined,
           })
-          newResults = result.messages.map(m => messageToSearchResult(m, query))
+          newResults = result.messages.map(m => messageToSearchResult(m, query, phrases))
           hasMore = !result.complete
           mamRsmCursor = result.rsm.first
         }
@@ -283,7 +288,7 @@ async function executeMAMSearch(append: boolean): Promise<void> {
           pagingAbortController.signal
         )
         pagingAbortController = null
-        newResults = result.messages.map(m => messageToSearchResult(m, query))
+        newResults = result.messages.map(m => messageToSearchResult(m, query, phrases))
         hasMore = !result.complete
       } else {
         // Room paging search not supported — too complex without fulltext
@@ -308,7 +313,7 @@ async function executeMAMSearch(append: boolean): Promise<void> {
         max: 20,
         before: append ? mamRsmCursor : undefined,
       })
-      newResults = result.messages.map(m => messageToSearchResult(m, query))
+      newResults = result.messages.map(m => messageToSearchResult(m, query, phrases))
       hasMore = !result.complete
       mamRsmCursor = result.rsm.first
     }

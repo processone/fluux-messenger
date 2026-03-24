@@ -103,4 +103,38 @@ describe('generateMatchSnippet', () => {
     // Should find the exact phrase 'quarterly report'
     expect(result!.text.slice(result!.matchStart, result!.matchEnd)).toBe('quarterly report')
   })
+
+  // Phrase-aware snippet generation
+  describe('with phrases parameter', () => {
+    it('should prioritize phrase match over full query match', () => {
+      const body = 'The quarterly report and annual review are ready'
+      const result = generateMatchSnippet(body, '"quarterly report"', 60, ['quarterly report'])
+
+      expect(result).not.toBeNull()
+      expect(result!.text.slice(result!.matchStart, result!.matchEnd)).toBe('quarterly report')
+    })
+
+    it('should highlight the first matching phrase', () => {
+      const body = 'The annual review and quarterly report are ready'
+      const result = generateMatchSnippet(body, 'query text', 60, ['quarterly report'])
+
+      expect(result).not.toBeNull()
+      expect(result!.text.slice(result!.matchStart, result!.matchEnd)).toBe('quarterly report')
+    })
+
+    it('should fall back to word matching when phrase not found', () => {
+      const body = 'The report for quarterly earnings is ready'
+      const result = generateMatchSnippet(body, 'quarterly report', 60, ['quarterly report'])
+
+      // Phrase "quarterly report" not contiguous in body, falls back to word match
+      expect(result).not.toBeNull()
+      expect(result!.text).toContain('report')
+    })
+
+    it('should work without phrases param (backward compat)', () => {
+      const result = generateMatchSnippet('Hello world', 'world')
+      expect(result).not.toBeNull()
+      expect(result!.text.slice(result!.matchStart, result!.matchEnd)).toBe('world')
+    })
+  })
 })

@@ -63,6 +63,7 @@ import type {
 import { parseMessageContent, parseOgpFastening, applyRetraction, applyCorrection } from './messagingUtils'
 import { getDomain } from '../jid'
 import { logInfo, logError as logErr } from '../logger'
+import { parseSearchQuery, tokenize } from '../../utils/searchIndex'
 
 /**
  * Internal type for collected modifications during MAM query
@@ -543,8 +544,10 @@ export class MAM extends BaseModule {
     signal?: AbortSignal
   ): Promise<MAMResult> {
     const { query, with: withJid, end, maxPages = 20, maxResults = 50 } = options
-    const queryTokens = this.tokenizeQuery(query)
-    if (queryTokens.length === 0) {
+    const parsed = parseSearchQuery(query)
+    const phraseTokens = parsed.phrases.flatMap((p) => tokenize(p))
+    const allTokens = [...new Set([...parsed.terms, ...phraseTokens])]
+    if (allTokens.length === 0 && parsed.phrases.length === 0) {
       return { messages: [], complete: true, rsm: {} }
     }
 
@@ -572,7 +575,7 @@ export class MAM extends BaseModule {
       // Match messages client-side
       for (const msg of result.messages) {
         if (matches.length >= maxResults) break
-        if (msg.body && this.matchesQuery(msg.body, queryTokens)) {
+        if (msg.body && this.matchesQuery(msg.body, allTokens, parsed.phrases)) {
           matches.push(msg)
         }
       }
@@ -589,20 +592,13 @@ export class MAM extends BaseModule {
   }
 
   /**
-   * Tokenize a query string into lowercase tokens for matching.
+   * Check if a message body matches all query tokens and exact phrases.
    */
-  private tokenizeQuery(query: string): string[] {
-    return query.toLowerCase()
-      .split(/[^\p{L}\p{N}]+/u)
-      .filter(t => t.length >= 2)
-  }
-
-  /**
-   * Check if a message body matches all query tokens.
-   */
-  private matchesQuery(body: string, queryTokens: string[]): boolean {
+  private matchesQuery(body: string, queryTokens: string[], phrases: string[] = []): boolean {
     const bodyLower = body.toLowerCase()
-    return queryTokens.every(token => bodyLower.includes(token))
+    const tokensMatch = queryTokens.every(token => bodyLower.includes(token))
+    if (!tokensMatch) return false
+    return phrases.every(phrase => bodyLower.includes(phrase))
   }
 
   /**

@@ -108,8 +108,8 @@ export { useContactTime } from './hooks/useContactTime'
 export { useLastActivity } from './hooks/useLastActivity'
 export { useSearch } from './hooks/useSearch'
 export type { SearchResult } from './hooks/useSearch'
-export { rebuildSearchIndex, clearSearchIndex } from './utils/searchIndex'
-export type { RebuildProgress } from './utils/searchIndex'
+export { rebuildSearchIndex, clearSearchIndex, parseSearchQuery } from './utils/searchIndex'
+export type { RebuildProgress, ParsedQuery } from './utils/searchIndex'
 
 // Fine-grained metadata subscription hooks (Phase 6)
 export {

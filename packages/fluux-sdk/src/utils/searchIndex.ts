@@ -150,7 +150,7 @@ function getDB(
 }
 
 // =============================================================================
-// Tokenization
+// Tokenization & Query Parsing
 // =============================================================================
 
 /**
@@ -164,6 +164,72 @@ export function tokenize(text: string): string[] {
     .toLowerCase()
     .split(/[^\p{L}\p{N}]+/u)
     .filter((t) => t.length >= MIN_TOKEN_LENGTH)
+}
+
+/**
+ * Parsed search query with quoted phrases and unquoted terms.
+ */
+export interface ParsedQuery {
+  /** Exact phrases extracted from quoted segments (lowercased) */
+  phrases: string[]
+  /** Individual tokens from unquoted segments */
+  terms: string[]
+  /** Whether the last unquoted term should get prefix matching */
+  lastTermPrefix: boolean
+}
+
+/**
+ * Parse a search query into quoted phrases and unquoted terms.
+ *
+ * Quoted segments (`"exact phrase"`) are extracted as phrases for contiguous
+ * substring matching. Everything outside quotes is tokenized normally.
+ * The last unquoted token gets prefix matching for search-as-you-type,
+ * unless the query ends with a closing quote.
+ *
+ * @example
+ * parseSearchQuery('meeting "quarterly report"')
+ * // { phrases: ["quarterly report"], terms: ["meeting"], lastTermPrefix: false }
+ *
+ * parseSearchQuery('"hello world" foo')
+ * // { phrases: ["hello world"], terms: ["foo"], lastTermPrefix: true }
+ */
+export function parseSearchQuery(query: string): ParsedQuery {
+  const phrases: string[] = []
+  const termParts: string[] = []
+
+  // Match quoted segments and capture everything outside them
+  const quoteRegex = /"([^"]*?)"/g
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  while ((match = quoteRegex.exec(query)) !== null) {
+    // Collect text before this quoted segment
+    if (match.index > lastIndex) {
+      termParts.push(query.slice(lastIndex, match.index))
+    }
+    // Add the quoted content as a phrase (if non-empty after trimming)
+    const phrase = match[1].trim().toLowerCase()
+    if (phrase.length > 0) {
+      phrases.push(phrase)
+    }
+    lastIndex = quoteRegex.lastIndex
+  }
+
+  // Collect remaining text after the last quote
+  if (lastIndex < query.length) {
+    termParts.push(query.slice(lastIndex))
+  }
+
+  // Tokenize all unquoted segments
+  const terms = tokenize(termParts.join(' '))
+
+  // Prefix matching: enabled if there are unquoted terms and the raw query
+  // ends with an unquoted segment (not a closing quote)
+  const trimmed = query.trimEnd()
+  const endsWithQuote = trimmed.endsWith('"') && phrases.length > 0
+  const lastTermPrefix = terms.length > 0 && !endsWithQuote
+
+  return { phrases, terms, lastTermPrefix }
 }
 
 /**
@@ -393,7 +459,9 @@ export async function updateMessage(message: Message | RoomMessage): Promise<voi
  * Tokenizes the query, looks up posting lists for each term, intersects them,
  * and returns matching documents sorted by timestamp (newest first).
  *
- * The last query term supports prefix matching for search-as-you-type.
+ * Supports quoted phrases: `"exact phrase"` requires the phrase to appear
+ * contiguously in the message body. Unquoted terms use AND matching with
+ * prefix matching on the last term for search-as-you-type.
  */
 export async function search(
   query: string,
@@ -401,23 +469,37 @@ export async function search(
 ): Promise<SearchIndexResult[]> {
   if (!isIndexedDBAvailable()) return []
   const limit = options?.limit ?? DEFAULT_SEARCH_LIMIT
-  const tokens = tokenize(query)
-  if (tokens.length === 0) return []
+  const parsed = parseSearchQuery(query)
+
+  // Collect all tokens needed for index lookup:
+  // unquoted terms + tokens from each phrase
+  const phraseTokens = parsed.phrases.flatMap((p) => tokenize(p))
+  const allTokens = [...parsed.terms, ...phraseTokens]
+
+  // Deduplicate tokens for index lookup
+  const uniqueAllTokens = [...new Set(allTokens)]
+  if (uniqueAllTokens.length === 0) return []
 
   const db = await getDB()
-
-  // Split: exact match for all terms except last, prefix for last term
-  const exactTerms = tokens.slice(0, -1)
-  const prefixTerm = tokens[tokens.length - 1]
-
   const tx = db.transaction([TOKENS_STORE, DOCS_STORE], 'readonly')
   const tokensStore = tx.objectStore(TOKENS_STORE)
   const docsStore = tx.objectStore(DOCS_STORE)
 
+  // Determine which token gets prefix matching
+  // Only the last unquoted term, and only if lastTermPrefix is set
+  const prefixToken = parsed.lastTermPrefix
+    ? parsed.terms[parsed.terms.length - 1]
+    : null
+
+  // Tokens that need exact matching (all except the prefix token)
+  const exactTokens = prefixToken
+    ? uniqueAllTokens.filter((t) => t !== prefixToken)
+    : uniqueAllTokens
+
   // Gather posting lists for exact terms
   const postingLists: Set<string>[] = []
 
-  for (const term of exactTerms) {
+  for (const term of exactTokens) {
     const entry = await tokensStore.get(term)
     if (!entry || entry.postings.length === 0) {
       // A required term has no matches — empty result
@@ -426,19 +508,22 @@ export async function search(
     postingLists.push(new Set(entry.postings))
   }
 
-  // Prefix match for the last term using IDB key range
-  const prefixPostings = new Set<string>()
-  const range = IDBKeyRange.bound(prefixTerm, prefixTerm + '\uffff')
-  let cursor = await tokensStore.openCursor(range)
-  while (cursor) {
-    for (const id of cursor.value.postings) {
-      prefixPostings.add(id)
+  // Prefix match for the prefix token using IDB key range
+  if (prefixToken) {
+    const prefixPostings = new Set<string>()
+    const range = IDBKeyRange.bound(prefixToken, prefixToken + '\uffff')
+    let cursor = await tokensStore.openCursor(range)
+    while (cursor) {
+      for (const id of cursor.value.postings) {
+        prefixPostings.add(id)
+      }
+      cursor = await cursor.continue()
     }
-    cursor = await cursor.continue()
+    if (prefixPostings.size === 0) return []
+    postingLists.push(prefixPostings)
   }
 
-  if (prefixPostings.size === 0) return []
-  postingLists.push(prefixPostings)
+  if (postingLists.length === 0) return []
 
   // Intersect all posting lists
   // Start with the smallest set for efficiency
@@ -458,6 +543,14 @@ export async function search(
       // Apply conversation filter if specified
       if (options?.conversationId && doc.conversationId !== options.conversationId) {
         continue
+      }
+      // Post-filter: verify exact phrases appear contiguously in the body
+      if (parsed.phrases.length > 0) {
+        const bodyLower = doc.body.toLowerCase()
+        const allPhrasesMatch = parsed.phrases.every((phrase) =>
+          bodyLower.includes(phrase)
+        )
+        if (!allPhrasesMatch) continue
       }
       docs.push(doc)
     }

@@ -30,19 +30,38 @@ export interface MatchSnippet {
 export function generateMatchSnippet(
   body: string,
   query: string,
-  contextChars = 60
+  contextChars = 60,
+  phrases?: string[]
 ): MatchSnippet | null {
   if (!body || !query) return null
 
   const lowerBody = body.toLowerCase()
-  const lowerQuery = query.toLowerCase()
 
-  // Find first occurrence of the query (or any query word)
-  let matchIndex = lowerBody.indexOf(lowerQuery)
-  let matchLength = query.length
+  let matchIndex = -1
+  let matchLength = 0
 
-  // If exact phrase not found, try matching the first query word
+  // Priority 1: Try to match a quoted phrase first
+  if (phrases && phrases.length > 0) {
+    for (const phrase of phrases) {
+      const idx = lowerBody.indexOf(phrase.toLowerCase())
+      if (idx !== -1) {
+        matchIndex = idx
+        matchLength = phrase.length
+        break
+      }
+    }
+  }
+
+  // Priority 2: Try full query string match
   if (matchIndex === -1) {
+    const lowerQuery = query.toLowerCase()
+    matchIndex = lowerBody.indexOf(lowerQuery)
+    matchLength = query.length
+  }
+
+  // Priority 3: Try matching the first query word
+  if (matchIndex === -1) {
+    const lowerQuery = query.toLowerCase()
     const words = lowerQuery.split(/\s+/).filter((w) => w.length >= 2)
     for (const word of words) {
       matchIndex = lowerBody.indexOf(word)

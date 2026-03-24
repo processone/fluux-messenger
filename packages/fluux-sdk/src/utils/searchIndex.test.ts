@@ -17,6 +17,7 @@ import {
   clearSearchIndex,
   closeSearchIndex,
   tokenize,
+  parseSearchQuery,
   _resetDBForTesting,
 } from './searchIndex'
 import { _resetDBForTesting as _resetMessageCacheDB, flushPendingRoomMessages } from './messageCache'
@@ -871,6 +872,169 @@ describe('searchIndex', () => {
     it('should not throw on empty index', async () => {
       await clearSearchIndex()
       // Should not throw
+    })
+  })
+
+  // ===========================================================================
+  // parseSearchQuery
+  // ===========================================================================
+
+  describe('parseSearchQuery', () => {
+    it('should parse a simple unquoted query', () => {
+      const result = parseSearchQuery('hello world')
+      expect(result.phrases).toEqual([])
+      expect(result.terms).toEqual(['hello', 'world'])
+      expect(result.lastTermPrefix).toBe(true)
+    })
+
+    it('should extract a single quoted phrase', () => {
+      const result = parseSearchQuery('"quarterly report"')
+      expect(result.phrases).toEqual(['quarterly report'])
+      expect(result.terms).toEqual([])
+      expect(result.lastTermPrefix).toBe(false)
+    })
+
+    it('should handle mixed quoted and unquoted terms', () => {
+      const result = parseSearchQuery('meeting "quarterly report"')
+      expect(result.phrases).toEqual(['quarterly report'])
+      expect(result.terms).toEqual(['meeting'])
+      expect(result.lastTermPrefix).toBe(false)
+    })
+
+    it('should enable prefix matching when query ends with unquoted term', () => {
+      const result = parseSearchQuery('"hello world" foo')
+      expect(result.phrases).toEqual(['hello world'])
+      expect(result.terms).toEqual(['foo'])
+      expect(result.lastTermPrefix).toBe(true)
+    })
+
+    it('should handle multiple phrases', () => {
+      const result = parseSearchQuery('"foo bar" "baz qux"')
+      expect(result.phrases).toEqual(['foo bar', 'baz qux'])
+      expect(result.terms).toEqual([])
+      expect(result.lastTermPrefix).toBe(false)
+    })
+
+    it('should ignore empty quotes', () => {
+      const result = parseSearchQuery('"" hello')
+      expect(result.phrases).toEqual([])
+      expect(result.terms).toEqual(['hello'])
+      expect(result.lastTermPrefix).toBe(true)
+    })
+
+    it('should treat unmatched quote as regular text', () => {
+      const result = parseSearchQuery('"hello world')
+      // No matched pair, so everything is unquoted terms
+      expect(result.phrases).toEqual([])
+      expect(result.terms).toEqual(['hello', 'world'])
+      expect(result.lastTermPrefix).toBe(true)
+    })
+
+    it('should handle phrase with surrounding unquoted terms', () => {
+      const result = parseSearchQuery('before "exact phrase" after')
+      expect(result.phrases).toEqual(['exact phrase'])
+      expect(result.terms).toEqual(['before', 'after'])
+      expect(result.lastTermPrefix).toBe(true)
+    })
+
+    it('should lowercase phrases', () => {
+      const result = parseSearchQuery('"Hello World"')
+      expect(result.phrases).toEqual(['hello world'])
+    })
+  })
+
+  // ===========================================================================
+  // Phrase search (search with quoted phrases)
+  // ===========================================================================
+
+  describe('phrase search', () => {
+    beforeEach(async () => {
+      await initSearchIndex('alice@example.com')
+    })
+
+    afterEach(async () => {
+      await closeSearchIndex()
+      _resetDBForTesting()
+    })
+
+    it('should match exact phrase in message body', async () => {
+      const msg = createChatMessage('bob@example.com', {
+        body: 'The quarterly report is ready for review',
+      })
+      await indexMessage(msg)
+
+      const results = await search('"quarterly report"')
+      expect(results).toHaveLength(1)
+      expect(results[0].body).toBe('The quarterly report is ready for review')
+    })
+
+    it('should NOT match when words appear but not as a contiguous phrase', async () => {
+      const msg = createChatMessage('bob@example.com', {
+        body: 'The report for Q3 quarterly earnings is ready',
+      })
+      await indexMessage(msg)
+
+      const results = await search('"quarterly report"')
+      expect(results).toHaveLength(0)
+    })
+
+    it('should match mixed phrase and unquoted terms', async () => {
+      const msgMatch = createChatMessage('bob@example.com', {
+        body: 'The meeting about quarterly report was productive',
+      })
+      const msgNoPhrase = createChatMessage('bob@example.com', {
+        body: 'The meeting about quarterly earnings was productive',
+      })
+      await indexMessages([msgMatch, msgNoPhrase])
+
+      const results = await search('meeting "quarterly report"')
+      expect(results).toHaveLength(1)
+      expect(results[0].body).toBe('The meeting about quarterly report was productive')
+    })
+
+    it('should still support prefix matching for unquoted trailing terms', async () => {
+      const msg = createChatMessage('bob@example.com', {
+        body: 'The quarterly report and coffee break',
+      })
+      await indexMessage(msg)
+
+      // "quarterly report" as phrase, "coff" as prefix
+      const results = await search('"quarterly report" coff')
+      expect(results).toHaveLength(1)
+    })
+
+    it('should handle single-word phrase like unquoted word', async () => {
+      const msg = createChatMessage('bob@example.com', {
+        body: 'Hello world',
+      })
+      await indexMessage(msg)
+
+      const results = await search('"hello"')
+      expect(results).toHaveLength(1)
+    })
+
+    it('should handle case-insensitive phrase matching', async () => {
+      const msg = createChatMessage('bob@example.com', {
+        body: 'The Quarterly Report is ready',
+      })
+      await indexMessage(msg)
+
+      const results = await search('"quarterly report"')
+      expect(results).toHaveLength(1)
+    })
+
+    it('should handle multiple phrases', async () => {
+      const msg = createChatMessage('bob@example.com', {
+        body: 'The quarterly report and annual review are ready',
+      })
+      const msgPartial = createChatMessage('bob@example.com', {
+        body: 'The quarterly report is ready but annual summary pending',
+      })
+      await indexMessages([msg, msgPartial])
+
+      const results = await search('"quarterly report" "annual review"')
+      expect(results).toHaveLength(1)
+      expect(results[0].body).toBe('The quarterly report and annual review are ready')
     })
   })
 })
