@@ -585,8 +585,19 @@ export function useMessageListScroll({
     debugLog('CONVERSATION ACTION', { action, savedPos, scrollHeight: scroller.scrollHeight })
 
     if (action === 'restore-position' && savedPos !== null) {
-      scroller.scrollTop = savedPos
-      isAtBottomRef.current = false
+      const maxScrollTop = scroller.scrollHeight - scroller.clientHeight
+      if (savedPos <= maxScrollTop && maxScrollTop > 0) {
+        // Position is valid — restore it
+        scroller.scrollTop = savedPos
+        isAtBottomRef.current = false
+      } else {
+        // Position is out of bounds (content not loaded yet) — scroll to bottom instead
+        debugLog('RESTORE POSITION OUT OF BOUNDS, scrolling to bottom', {
+          savedPos, maxScrollTop, scrollHeight: scroller.scrollHeight,
+        })
+        scroller.scrollTop = scroller.scrollHeight
+        isAtBottomRef.current = true
+      }
       scrollStateManager.clearSavedScrollState(conversationId)
     } else if (firstNewMessageId) {
       // Has unread messages - scroll to show the new message marker with context
@@ -672,7 +683,20 @@ export function useMessageListScroll({
     hasInitializedRef.current = true
     prevConversationRef.current = conversationId
     prevMessageCountRef.current = messageCount
-  }, [conversationId, messageCount, firstNewMessageId, isAtBottomRef])
+
+    // Cleanup: properly leave conversation in scrollStateManager when unmounting
+    // This prevents stale currentConversationId from causing 'no-action' on remount
+    return () => {
+      if (prevConversationRef.current) {
+        if (lastScrollDataRef.current) {
+          const { top, height, client } = lastScrollDataRef.current
+          scrollStateManager.leaveConversation(prevConversationRef.current, top, height, client)
+        } else {
+          scrollStateManager.markAsLeft(prevConversationRef.current)
+        }
+      }
+    }
+  }, [conversationId, messageCount, firstNewMessageId, targetMessageId, isAtBottomRef])
 
   // ==========================================================================
   // EFFECT: Scroll to target message (from activity log click, etc.)
@@ -727,6 +751,22 @@ export function useMessageListScroll({
     requestAnimationFrame(scrollToTarget)
     setTimeout(scrollToTarget, 50)
     setTimeout(scrollToTarget, 150)
+
+    // Safety fallback: if target message is never found after all attempts,
+    // scroll to bottom and clear the target to avoid being stuck
+    setTimeout(() => {
+      const currentScroller = scrollerRef.current
+      if (!currentScroller || !targetMessageId) return
+      const escapedId = CSS.escape(targetMessageId)
+      const el = currentScroller.querySelector(`[data-message-id="${escapedId}"]`)
+      if (!el) {
+        debugLog('TARGET MESSAGE: not found after all attempts, scrolling to bottom', { targetMessageId })
+        currentScroller.scrollTop = currentScroller.scrollHeight
+        isAtBottomRef.current = true
+        onTargetMessageConsumed?.()
+      }
+    }, 500)
+
     // messageCount is in deps so this re-fires when messages load from async sources
     // (e.g., IndexedDB in search context view)
   }, [targetMessageId, messageCount, isAtBottomRef, onTargetMessageConsumed])

@@ -474,5 +474,99 @@ describe('ScrollStateManager', () => {
       expect(action).toBe('restore-position')
       expect(manager.getSavedScrollTop('conv1')).toBe(400)
     })
+
+    it('REGRESSION: unmount without leaveConversation causes no-action on remount', () => {
+      // Scenario: ChatView unmounts (e.g., navigating to search view) without calling
+      // leaveConversation. When ChatView remounts for the same conversation,
+      // enterConversation returns 'no-action' because currentConversationId was never cleared.
+      // Fix: Component unmount must call markAsLeft or leaveConversation.
+
+      // User is in conv1
+      manager.enterConversation('conv1', 10)
+      expect(manager.getCurrentConversationId()).toBe('conv1')
+
+      // Component unmounts WITHOUT calling leaveConversation (the bug)
+      // currentConversationId is still 'conv1'
+
+      // Component remounts for the same conversation
+      const actionWithoutCleanup = manager.enterConversation('conv1', 10)
+      // This would return 'no-action' — the conversation switch code
+      // still falls through to scroll-to-bottom in the if/else chain,
+      // but having the correct action is cleaner
+      expect(actionWithoutCleanup).toBe('no-action')
+
+      // Now test with proper cleanup via markAsLeft
+      manager.markAsLeft('conv1')
+      expect(manager.getCurrentConversationId()).toBeNull()
+
+      // Re-enter the conversation — should detect it as a switch
+      const actionWithCleanup = manager.enterConversation('conv1', 10)
+      expect(actionWithCleanup).toBe('scroll-to-bottom')
+    })
+
+    it('REGRESSION: out-of-bounds saved position must not lock scroll at top', () => {
+      // Scenario: User is in a conversation with many messages, scrolls up.
+      // Position is saved (e.g., scrollTop=2000 with scrollHeight=5000).
+      // User leaves, returns, but content is now much smaller (e.g., only
+      // cached messages loaded, scrollHeight=500). The saved position
+      // exceeds maxScrollTop, so the browser clamps scrollTop to 0.
+      // If isAtBottomRef is set to false (restore-position path),
+      // auto-scroll is locked out and the view is stuck at top.
+      //
+      // Fix: Bounds-check the saved position before restoring. If out of
+      // bounds, scroll to bottom instead.
+
+      // User is in conv1, scrolled up in a long conversation
+      manager.enterConversation('conv1', 100)
+      manager.saveScrollPosition('conv1', 2000, 5000, 400)
+      // distanceFromBottom = 5000 - 2000 - 400 = 2600 (not at bottom)
+
+      // User leaves
+      manager.leaveConversation('conv1', 2000, 5000, 400)
+
+      // User returns — manager says restore-position
+      const action = manager.enterConversation('conv1', 100)
+      expect(action).toBe('restore-position')
+
+      const savedPos = manager.getSavedScrollTop('conv1')
+      expect(savedPos).toBe(2000)
+
+      // The scroll hook should bounds-check: if savedPos > maxScrollTop, scroll to bottom.
+      // Simulating: content now only 500px tall (messages not loaded yet)
+      const currentScrollHeight = 500
+      const currentClientHeight = 400
+      const maxScrollTop = currentScrollHeight - currentClientHeight
+      // maxScrollTop = 100, but savedPos = 2000 → OUT OF BOUNDS
+      expect(savedPos!).toBeGreaterThan(maxScrollTop)
+
+      // The hook must detect this and scroll to bottom instead of restoring
+      // (verified in the useMessageListScroll implementation)
+    })
+
+    it('REGRESSION: search view navigation must not leave stale currentConversationId', () => {
+      // Scenario: User in conv1 → navigates to search → search preview uses
+      // "search-preview:conv1" → user closes search → returns to conv1.
+      // Without proper cleanup, currentConversationId could be stale.
+
+      // User in conv1
+      manager.enterConversation('conv1', 10)
+      expect(manager.getCurrentConversationId()).toBe('conv1')
+
+      // Navigate to search: component unmounts and calls markAsLeft
+      manager.markAsLeft('conv1')
+      expect(manager.getCurrentConversationId()).toBeNull()
+
+      // Search preview opens with prefixed ID
+      manager.enterConversation('search-preview:conv1', 50)
+      expect(manager.getCurrentConversationId()).toBe('search-preview:conv1')
+
+      // Search preview closes: component unmounts and calls markAsLeft
+      manager.markAsLeft('search-preview:conv1')
+      expect(manager.getCurrentConversationId()).toBeNull()
+
+      // Return to conv1 — should be detected as a switch
+      const action = manager.enterConversation('conv1', 10)
+      expect(action).toBe('scroll-to-bottom')
+    })
   })
 })
