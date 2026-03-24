@@ -218,7 +218,7 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
   const conversationName = previewResult.conversationName
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-fluux-surface/50">
       {/* Header */}
       <header className={`h-14 ${titleBarClass} px-4 flex items-center border-b border-fluux-bg shadow-sm gap-3`} {...dragRegionProps}>
         {/* Back button - mobile */}
@@ -247,15 +247,6 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
           </div>
         </div>
 
-        {/* Go to message button */}
-        <button
-          onClick={handleGoToMessage}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md
-                     bg-fluux-brand/10 text-fluux-brand hover:bg-fluux-brand/20 transition-colors"
-        >
-          <ExternalLink className="w-3.5 h-3.5" />
-          {t('search.goToMessage', 'Go to message')}
-        </button>
       </header>
 
       {/* Message list (read-only) */}
@@ -280,6 +271,22 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
           isHistoryComplete={isHistoryComplete}
           isLoading={isLoading}
         />
+      </div>
+
+      {/* Bottom banner — search preview indicator with Go to message action */}
+      <div className="p-3 border-t border-fluux-hover flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-fluux-muted">
+          <Search className="w-4 h-4" />
+          <span className="text-sm">{t('search.previewBanner', 'You are viewing a search result preview')}</span>
+        </div>
+        <button
+          onClick={handleGoToMessage}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md
+                     bg-fluux-brand/10 text-fluux-brand hover:bg-fluux-brand/20 transition-colors flex-shrink-0"
+        >
+          <ExternalLink className="w-3.5 h-3.5" />
+          {t('search.goToMessage', 'Go to message')}
+        </button>
       </div>
     </div>
   )
