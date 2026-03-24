@@ -83,6 +83,8 @@ export const MessageToolbar = memo(function MessageToolbar({
   const moreMenuRef = useRef<HTMLDivElement>(null)
   const reactionButtonRef = useRef<HTMLButtonElement>(null)
   const pickerDropUpRef = useRef(false)
+  const moreMenuDropUpRef = useRef(false)
+  const moreButtonRef = useRef<HTMLButtonElement>(null)
 
   // Close reaction picker
   const closeReactionPicker = () => setShowReactionPicker(false)
@@ -223,7 +225,15 @@ export const MessageToolbar = memo(function MessageToolbar({
       <div className="relative" ref={moreMenuRef}>
         <Tooltip content={t('chat.moreOptions')} position="top" disabled={showReactionPicker || showMoreMenu}>
           <button
-            onClick={() => setShowMoreMenu(!showMoreMenu)}
+            ref={moreButtonRef}
+            onClick={() => {
+              if (!showMoreMenu && moreButtonRef.current) {
+                const rect = moreButtonRef.current.getBoundingClientRect()
+                const spaceBelow = window.innerHeight - rect.bottom
+                moreMenuDropUpRef.current = spaceBelow < 100
+              }
+              setShowMoreMenu(!showMoreMenu)
+            }}
             className={`p-1.5 transition-colors ${showReactionPicker || showMoreMenu ? '' : 'hover:bg-fluux-hover'} ${!canDelete ? 'opacity-50 cursor-not-allowed' : ''}`}
             aria-label={t('chat.moreOptions')}
             disabled={!canDelete}
@@ -234,7 +244,7 @@ export const MessageToolbar = memo(function MessageToolbar({
 
         {/* More options dropdown menu */}
         {showMoreMenu && canDelete && (
-          <div className="absolute top-full right-0 mt-1 min-w-[160px] bg-fluux-bg rounded-lg shadow-lg border border-fluux-hover z-30 overflow-hidden">
+          <div className={`absolute right-0 min-w-[160px] bg-fluux-bg rounded-lg shadow-lg border border-fluux-hover z-30 overflow-hidden ${moreMenuDropUpRef.current ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
             <button
               onClick={handleDelete}
               className="w-full px-3 py-2 text-sm text-left text-red-500 hover:bg-fluux-hover transition-colors flex items-center gap-2"
