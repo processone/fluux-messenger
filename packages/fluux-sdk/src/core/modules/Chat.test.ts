@@ -2651,6 +2651,173 @@ describe('XMPPClient Message', () => {
     })
   })
 
+  describe('XEP-0359 origin-id', () => {
+    it('should include origin-id element in outgoing sendMessage stanza', async () => {
+      await connectClient()
+
+      const msgId = await xmppClient.chat.sendMessage('alice@example.com', 'Hello', 'chat')
+
+      const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
+      const originIdEl = sentStanza.children.find(
+        (c: any) => c.name === 'origin-id' && c.attrs.xmlns === 'urn:xmpp:sid:0'
+      )
+
+      expect(originIdEl).toBeDefined()
+      expect(originIdEl.attrs.id).toBe(msgId)
+    })
+
+    it('should set originId on local message object for outgoing sendMessage', async () => {
+      await connectClient()
+
+      const msgId = await xmppClient.chat.sendMessage('alice@example.com', 'Hello', 'chat')
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        message: expect.objectContaining({
+          id: msgId,
+          originId: msgId,
+          body: 'Hello',
+          isOutgoing: true,
+        })
+      })
+    })
+
+    it('should include origin-id element in outgoing resendMessage stanza', async () => {
+      await connectClient()
+
+      await xmppClient.chat.resendMessage('contact@example.com', 'Hello again', 'original-msg-id')
+
+      const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
+      const originIdEl = sentStanza.children.find(
+        (c: any) => c.name === 'origin-id' && c.attrs.xmlns === 'urn:xmpp:sid:0'
+      )
+
+      expect(originIdEl).toBeDefined()
+      expect(originIdEl.attrs.id).toBe('original-msg-id')
+    })
+
+    it('should include origin-id element in outgoing reaction stanza', async () => {
+      await connectClient()
+
+      await xmppClient.chat.sendReaction('contact@example.com', 'msg-123', ['👍'])
+
+      const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
+      const originIdEl = sentStanza.children.find(
+        (c: any) => c.name === 'origin-id' && c.attrs.xmlns === 'urn:xmpp:sid:0'
+      )
+
+      expect(originIdEl).toBeDefined()
+      expect(originIdEl.attrs.id).toBe(sentStanza.attrs.id)
+    })
+
+    it('should include origin-id element in outgoing correction stanza', async () => {
+      await connectClient()
+
+      mockStores.chat.getMessage = vi.fn().mockReturnValue({
+        id: 'original-msg-123',
+        body: 'Original text',
+      })
+
+      await xmppClient.chat.sendCorrection('contact@example.com', 'original-msg-123', 'Fixed text')
+
+      const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
+      const originIdEl = sentStanza.children.find(
+        (c: any) => c.name === 'origin-id' && c.attrs.xmlns === 'urn:xmpp:sid:0'
+      )
+
+      expect(originIdEl).toBeDefined()
+      expect(originIdEl.attrs.id).toBe(sentStanza.attrs.id)
+    })
+
+    it('should include origin-id element in outgoing retraction stanza', async () => {
+      await connectClient()
+
+      mockStores.chat.getMessage = vi.fn().mockReturnValue({
+        id: 'original-msg-123',
+        body: 'To be retracted',
+      })
+
+      await xmppClient.chat.sendRetraction('contact@example.com', 'original-msg-123')
+
+      const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
+      const originIdEl = sentStanza.children.find(
+        (c: any) => c.name === 'origin-id' && c.attrs.xmlns === 'urn:xmpp:sid:0'
+      )
+
+      expect(originIdEl).toBeDefined()
+      expect(originIdEl.attrs.id).toBe(sentStanza.attrs.id)
+    })
+
+    it('should parse origin-id from incoming chat message', async () => {
+      await connectClient()
+
+      const messageStanza = createMockElement('message', {
+        from: 'contact@example.com/resource',
+        to: 'user@example.com',
+        type: 'chat',
+        id: 'msg-456',
+      }, [
+        { name: 'body', text: 'Hello!' },
+        { name: 'origin-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'origin-uuid-789' } },
+      ])
+
+      mockXmppClientInstance._emit('stanza', messageStanza)
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        message: expect.objectContaining({
+          id: 'msg-456',
+          originId: 'origin-uuid-789',
+          body: 'Hello!',
+        })
+      })
+    })
+
+    it('should not include originId when incoming message has no origin-id element', async () => {
+      await connectClient()
+
+      const messageStanza = createMockElement('message', {
+        from: 'contact@example.com/resource',
+        to: 'user@example.com',
+        type: 'chat',
+        id: 'msg-no-origin',
+      }, [
+        { name: 'body', text: 'Hello!' },
+      ])
+
+      mockXmppClientInstance._emit('stanza', messageStanza)
+
+      const chatCall = emitSDKSpy.mock.calls.find((call: unknown[]) => call[0] === 'chat:message')
+      expect(chatCall).toBeDefined()
+      const message = (chatCall![1] as { message: Record<string, unknown> }).message
+      expect(message).not.toHaveProperty('originId')
+    })
+
+    it('should parse origin-id from incoming room message', async () => {
+      await connectClient()
+      mockStores.room.getRoom = vi.fn().mockReturnValue({ jid: 'room@conference.example.com', nickname: 'testuser', joined: true })
+
+      const messageStanza = createMockElement('message', {
+        from: 'room@conference.example.com/alice',
+        to: 'user@example.com',
+        type: 'groupchat',
+        id: 'room-msg-1',
+      }, [
+        { name: 'body', text: 'Hi room!' },
+        { name: 'origin-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'room-origin-abc' } },
+      ])
+
+      mockXmppClientInstance._emit('stanza', messageStanza)
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:message', expect.objectContaining({
+        roomJid: 'room@conference.example.com',
+        message: expect.objectContaining({
+          id: 'room-msg-1',
+          originId: 'room-origin-abc',
+          body: 'Hi room!',
+        })
+      }))
+    })
+  })
+
   describe('resendMessage', () => {
     it('should send stanza with same message ID and not emit chat:message event', async () => {
       await connectClient()

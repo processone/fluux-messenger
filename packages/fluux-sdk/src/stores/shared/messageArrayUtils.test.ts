@@ -13,6 +13,7 @@ import {
 interface TestMessage {
   id: string
   stanzaId?: string
+  originId?: string
   from: string
   body: string
   timestamp: Date
@@ -23,7 +24,7 @@ function createMessage(
   id: string,
   body: string,
   timestamp: Date,
-  options?: { stanzaId?: string; from?: string }
+  options?: { stanzaId?: string; originId?: string; from?: string }
 ): TestMessage {
   return {
     id,
@@ -31,6 +32,7 @@ function createMessage(
     timestamp,
     from: options?.from ?? 'user@example.com',
     stanzaId: options?.stanzaId,
+    originId: options?.originId,
   }
 }
 
@@ -423,6 +425,101 @@ describe('messageArrayUtils', () => {
 
       expect(newMessages).toHaveLength(1)
       expect(newMessages[0].id).toBe('msg-3')
+    })
+  })
+
+  describe('origin-id deduplication (XEP-0359)', () => {
+    it('should deduplicate using originId in chat-style key function', () => {
+      // Outgoing message stored locally with originId
+      const existing = [
+        createMessage('client-uuid-1', 'Hello', new Date('2024-01-15T10:00:00Z'), {
+          originId: 'client-uuid-1',
+          from: 'me@example.com',
+        }),
+      ]
+
+      // Echo comes back from server with stanzaId + matching originId
+      const incoming = [
+        createMessage('client-uuid-1', 'Hello', new Date('2024-01-15T10:00:00Z'), {
+          stanzaId: 'server-stanza-999',
+          originId: 'client-uuid-1',
+          from: 'me@example.com',
+        }),
+      ]
+
+      // Chat-style key function with originId support
+      const getChatKeys = (m: TestMessage): string[] => {
+        const keys: string[] = []
+        if (m.stanzaId) keys.push(`stanzaId:${m.stanzaId}`)
+        if (m.originId) keys.push(`originId:${m.originId}`)
+        keys.push(`from:${m.from}:id:${m.id}`)
+        return keys
+      }
+
+      const { newMessages } = mergeAndProcessMessages(existing, incoming, getChatKeys)
+
+      // Echo should be deduplicated via originId match
+      expect(newMessages).toHaveLength(0)
+    })
+
+    it('should deduplicate echo when stanzaId differs but originId matches', () => {
+      // Message stored without stanzaId (optimistic local)
+      const existing = [
+        createMessage('uuid-abc', 'Test', new Date('2024-01-15T10:00:00Z'), {
+          originId: 'uuid-abc',
+          from: 'me@example.com',
+        }),
+      ]
+
+      // MAM returns same message with server-assigned stanzaId and different client id
+      const incoming = [
+        createMessage('different-id', 'Test', new Date('2024-01-15T10:00:00Z'), {
+          stanzaId: 'mam-id-123',
+          originId: 'uuid-abc',
+          from: 'me@example.com',
+        }),
+      ]
+
+      const getChatKeys = (m: TestMessage): string[] => {
+        const keys: string[] = []
+        if (m.stanzaId) keys.push(`stanzaId:${m.stanzaId}`)
+        if (m.originId) keys.push(`originId:${m.originId}`)
+        keys.push(`from:${m.from}:id:${m.id}`)
+        return keys
+      }
+
+      const { newMessages } = mergeAndProcessMessages(existing, incoming, getChatKeys)
+
+      expect(newMessages).toHaveLength(0)
+    })
+
+    it('should not deduplicate when originIds differ', () => {
+      const existing = [
+        createMessage('msg-1', 'Hello', new Date('2024-01-15T10:00:00Z'), {
+          originId: 'origin-aaa',
+          from: 'alice@example.com',
+        }),
+      ]
+
+      const incoming = [
+        createMessage('msg-2', 'World', new Date('2024-01-15T11:00:00Z'), {
+          originId: 'origin-bbb',
+          from: 'bob@example.com',
+        }),
+      ]
+
+      const getChatKeys = (m: TestMessage): string[] => {
+        const keys: string[] = []
+        if (m.stanzaId) keys.push(`stanzaId:${m.stanzaId}`)
+        if (m.originId) keys.push(`originId:${m.originId}`)
+        keys.push(`from:${m.from}:id:${m.id}`)
+        return keys
+      }
+
+      const { newMessages } = mergeAndProcessMessages(existing, incoming, getChatKeys)
+
+      expect(newMessages).toHaveLength(1)
+      expect(newMessages[0].id).toBe('msg-2')
     })
   })
 

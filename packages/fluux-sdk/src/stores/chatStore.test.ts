@@ -401,6 +401,42 @@ describe('chatStore', () => {
       expect(messages?.length).toBe(2)
     })
 
+    it('should deduplicate messages by originId (XEP-0359)', () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+
+      // Outgoing message stored locally with originId
+      const msg1: Message = {
+        type: 'chat',
+        id: 'client-uuid-1',
+        originId: 'client-uuid-1',
+        conversationId: 'alice@example.com',
+        from: 'me@example.com',
+        body: 'Hello!',
+        timestamp: new Date(),
+        isOutgoing: true,
+      }
+
+      // Echo from server with different id but same originId
+      const msg2: Message = {
+        type: 'chat',
+        id: 'different-id',
+        originId: 'client-uuid-1',
+        stanzaId: 'server-assigned-123',
+        conversationId: 'alice@example.com',
+        from: 'me@example.com',
+        body: 'Hello!',
+        timestamp: new Date(),
+        isOutgoing: true,
+      }
+
+      chatStore.getState().addMessage(msg1)
+      chatStore.getState().addMessage(msg2)
+
+      const messages = chatStore.getState().messages.get('alice@example.com')
+      expect(messages?.length).toBe(1)
+      expect(messages?.[0].id).toBe('client-uuid-1')
+    })
+
     it('should not increment unreadCount for duplicate messages', () => {
       chatStore.getState().addConversation(createConversation('alice@example.com'))
 

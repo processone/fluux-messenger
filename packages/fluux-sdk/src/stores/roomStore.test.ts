@@ -1121,6 +1121,44 @@ describe('roomStore', () => {
       expect(room?.messages.length).toBe(1)
     })
 
+    it('should deduplicate messages by originId (XEP-0359)', () => {
+      roomStore.getState().addRoom(createRoom('test@conference.example.com'))
+
+      // Outgoing message stored locally with originId
+      const msg1: RoomMessage = {
+        type: 'groupchat',
+        id: 'client-uuid-1',
+        originId: 'client-uuid-1',
+        roomJid: 'test@conference.example.com',
+        from: 'test@conference.example.com/me',
+        nick: 'me',
+        body: 'Hello room!',
+        timestamp: new Date(),
+        isOutgoing: true,
+      }
+
+      // MUC echo with stanzaId + matching originId but different id
+      const msg2: RoomMessage = {
+        type: 'groupchat',
+        id: 'different-id',
+        originId: 'client-uuid-1',
+        stanzaId: 'muc-stanza-456',
+        roomJid: 'test@conference.example.com',
+        from: 'test@conference.example.com/me',
+        nick: 'me',
+        body: 'Hello room!',
+        timestamp: new Date(),
+        isOutgoing: true,
+      }
+
+      roomStore.getState().addMessage('test@conference.example.com', msg1)
+      roomStore.getState().addMessage('test@conference.example.com', msg2)
+
+      const room = roomStore.getState().rooms.get('test@conference.example.com')
+      expect(room?.messages.length).toBe(1)
+      expect(room?.messages[0].id).toBe('client-uuid-1')
+    })
+
     it('should allow same message id from different senders', () => {
       roomStore.getState().addRoom(createRoom('test@conference.example.com'))
 

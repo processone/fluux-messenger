@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applyRetraction, applyCorrection, parseOobData, parseMessageContent } from './messagingUtils'
+import { applyRetraction, applyCorrection, parseOobData, parseMessageContent, parseOriginId, createOriginIdElement } from './messagingUtils'
 import { createMockElement } from '../test-utils'
 
 describe('messagingUtils', () => {
@@ -411,6 +411,87 @@ describe('messagingUtils', () => {
       expect(result?.name).toBe(
         'uuid=51B2BBEE-EAA7-4738-BEB6-F32AC33B16A2&code=001&library=1&type=3&mode=2&loc=true&cap=true.mov'
       )
+    })
+  })
+
+  describe('parseOriginId (XEP-0359)', () => {
+    it('should parse origin-id from message element', () => {
+      const stanza = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'body', text: 'Hello' },
+        { name: 'origin-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'origin-abc-123' } },
+      ])
+
+      expect(parseOriginId(stanza)).toBe('origin-abc-123')
+    })
+
+    it('should return undefined when no origin-id element', () => {
+      const stanza = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'body', text: 'Hello' },
+      ])
+
+      expect(parseOriginId(stanza)).toBeUndefined()
+    })
+
+    it('should return undefined when origin-id has wrong namespace', () => {
+      const stanza = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'origin-id', attrs: { xmlns: 'wrong:namespace', id: 'some-id' } },
+      ])
+
+      expect(parseOriginId(stanza)).toBeUndefined()
+    })
+
+    it('should return undefined when origin-id has no id attribute', () => {
+      const stanza = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'origin-id', attrs: { xmlns: 'urn:xmpp:sid:0' } },
+      ])
+
+      expect(parseOriginId(stanza)).toBeUndefined()
+    })
+  })
+
+  describe('createOriginIdElement (XEP-0359)', () => {
+    it('should create origin-id element with correct namespace and id', () => {
+      const el = createOriginIdElement('test-uuid-123')
+
+      expect(el.name).toBe('origin-id')
+      expect(el.attrs.xmlns).toBe('urn:xmpp:sid:0')
+      expect(el.attrs.id).toBe('test-uuid-123')
+    })
+  })
+
+  describe('parseMessageContent - XEP-0359 origin-id', () => {
+    it('should parse origin-id from message content', () => {
+      const messageEl = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'body', text: 'Hello' },
+        { name: 'origin-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'origin-456' } },
+      ])
+
+      const result = parseMessageContent({ messageEl, body: 'Hello' })
+
+      expect(result.originId).toBe('origin-456')
+    })
+
+    it('should parse both stanza-id and origin-id from same message', () => {
+      const messageEl = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'body', text: 'Hello' },
+        { name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'server-789', by: 'example.com' } },
+        { name: 'origin-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'origin-456' } },
+      ])
+
+      const result = parseMessageContent({ messageEl, body: 'Hello' })
+
+      expect(result.stanzaId).toBe('server-789')
+      expect(result.originId).toBe('origin-456')
+    })
+
+    it('should return undefined originId when no origin-id element', () => {
+      const messageEl = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'body', text: 'Hello' },
+      ])
+
+      const result = parseMessageContent({ messageEl, body: 'Hello' })
+
+      expect(result.originId).toBeUndefined()
     })
   })
 
