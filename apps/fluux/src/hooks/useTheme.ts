@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useSettingsStore, type ThemeMode } from '@/stores/settingsStore'
 import { useThemeStore } from '@/stores/themeStore'
+import type { AccentPreset } from '@/themes/types'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
@@ -52,6 +53,33 @@ function applyThemeVariables(variables: Record<string, string> | undefined, prev
   }
 }
 
+/**
+ * Apply accent color override to document.documentElement.
+ * Uses the dark or light HSL values depending on the resolved mode.
+ */
+function applyAccentOverride(accent: AccentPreset | null, resolved: 'light' | 'dark', previousAccentVarsRef: React.MutableRefObject<string[]>) {
+  const root = document.documentElement
+
+  // Clear previously applied accent overrides
+  for (const name of previousAccentVarsRef.current) {
+    root.style.removeProperty(name)
+  }
+  previousAccentVarsRef.current = []
+
+  if (!accent) return
+
+  const hsl = resolved === 'light' ? accent.light : accent.dark
+  const vars: [string, string][] = [
+    ['--fluux-accent-h', `${hsl.h}`],
+    ['--fluux-accent-s', `${hsl.s}%`],
+    ['--fluux-accent-l', `${hsl.l}%`],
+  ]
+  for (const [name, value] of vars) {
+    root.style.setProperty(name, value)
+    previousAccentVarsRef.current.push(name)
+  }
+}
+
 /** Snippet <style> element data attribute */
 const SNIPPET_ATTR = 'data-fluux-snippet'
 
@@ -94,10 +122,12 @@ export function useTheme() {
 
   const activeThemeId = useThemeStore((s) => s.activeThemeId)
   const getActiveTheme = useThemeStore((s) => s.getActiveTheme)
+  const accentPreset = useThemeStore((s) => s.accentPreset)
   const snippets = useThemeStore((s) => s.snippets)
 
   // Track which CSS variables we've set inline so we can clean them up on theme change
   const previousVarsRef = useRef<string[]>([])
+  const previousAccentVarsRef = useRef<string[]>([])
 
   // Apply mode class + theme variables
   useEffect(() => {
@@ -115,10 +145,13 @@ export function useTheme() {
     const modeVars = theme?.variables?.[resolved]
     applyThemeVariables(modeVars, previousVarsRef)
 
-    // 3. Sync status bar color
+    // 3. Apply accent color override (after theme variables)
+    applyAccentOverride(accentPreset, resolved, previousAccentVarsRef)
+
+    // 4. Sync status bar color
     updateThemeColorMeta(resolved)
 
-    // 4. Sync Tauri native title bar
+    // 5. Sync Tauri native title bar
     if (isTauri) {
       void import('@tauri-apps/api/window')
         .then(({ getCurrentWindow }) => {
@@ -127,7 +160,7 @@ export function useTheme() {
         })
         .catch(() => {})
     }
-  }, [mode, activeThemeId, getActiveTheme])
+  }, [mode, activeThemeId, getActiveTheme, accentPreset])
 
   // Listen for system preference changes when in 'system' mode
   useEffect(() => {
@@ -145,12 +178,15 @@ export function useTheme() {
       const modeVars = theme?.variables?.[resolved]
       applyThemeVariables(modeVars, previousVarsRef)
 
+      // Re-apply accent override for the new mode
+      applyAccentOverride(accentPreset, resolved, previousAccentVarsRef)
+
       updateThemeColorMeta(resolved)
     }
 
     mediaQuery.addEventListener('change', handler)
     return () => mediaQuery.removeEventListener('change', handler)
-  }, [mode, activeThemeId, getActiveTheme])
+  }, [mode, activeThemeId, getActiveTheme, accentPreset])
 
   // Apply font size
   useEffect(() => {

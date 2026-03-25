@@ -492,6 +492,8 @@
         "darkDescription": "Temno ozadje s svetlim besedilom",
         "lightDescription": "Svetlo ozadje s temnim besedilom",
         "systemDescription": "Sledi sistemskim nastavitvam",
+        "accentColor": "Barva poudarka",
+        "accentThemeDefault": "Privzeto teme",
         "fontSize": "Velikost pisave",
         "fontSizeDescription": "Prilagodite velikost besedila v aplikaciji",
         "language": "Jezik",

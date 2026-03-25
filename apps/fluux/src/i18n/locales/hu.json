@@ -490,6 +490,8 @@
         "darkDescription": "Sötét háttér világos szöveggel",
         "lightDescription": "Világos háttér sötét szöveggel",
         "systemDescription": "A rendszer beállításainak követése",
+        "accentColor": "Kiemelőszín",
+        "accentThemeDefault": "Téma alapértelmezett",
         "fontSize": "Betűméret",
         "fontSizeDescription": "Szövegméret módosítása az alkalmazásban",
         "language": "Nyelv",

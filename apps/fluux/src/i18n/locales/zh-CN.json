@@ -490,6 +490,8 @@
         "darkDescription": "深色背景，浅色文字",
         "lightDescription": "浅色背景，深色文字",
         "systemDescription": "遵循您的系统首选项",
+        "accentColor": "强调色",
+        "accentThemeDefault": "主题默认",
         "fontSize": "字体大小",
         "fontSizeDescription": "调整应用中的文字大小",
         "language": "语言",

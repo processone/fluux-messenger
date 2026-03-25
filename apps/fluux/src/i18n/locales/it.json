@@ -492,6 +492,8 @@
         "darkDescription": "Sfondo scuro con testo chiaro",
         "lightDescription": "Sfondo chiaro con testo scuro",
         "systemDescription": "Segui le preferenze di sistema",
+        "accentColor": "Colore di accento",
+        "accentThemeDefault": "Predefinito del tema",
         "fontSize": "Dimensione carattere",
         "fontSizeDescription": "Regola la dimensione del testo nell'app",
         "language": "Lingua",

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
-import type { ThemeDefinition, SnippetState } from '@/themes/types'
+import type { ThemeDefinition, SnippetState, AccentPreset } from '@/themes/types'
 import { builtinThemes, getBuiltinTheme } from '@/themes/builtins'
+import { DEFAULT_ACCENT_PRESETS } from '@/themes/defaultAccents'
 
 const THEME_STORE_KEY = 'fluux-theme-store'
 
@@ -8,6 +9,8 @@ interface PersistedThemeState {
   activeThemeId: string
   customThemes: ThemeDefinition[]
   snippets: SnippetState[]
+  /** User-selected accent override, or null for the theme's default accent */
+  accentPreset: AccentPreset | null
 }
 
 interface ThemeState extends PersistedThemeState {
@@ -23,10 +26,16 @@ interface ThemeState extends PersistedThemeState {
   addSnippet: (filename: string, css: string) => void
   /** Remove a snippet by ID */
   removeSnippet: (id: string) => void
+  /** Set a user accent override (persisted across sessions) */
+  setAccentPreset: (accent: AccentPreset) => void
+  /** Clear the accent override, reverting to the theme's default */
+  clearAccentPreset: () => void
   /** Get the active theme definition (built-in or custom) */
   getActiveTheme: () => ThemeDefinition | undefined
   /** Get all available themes (built-in + custom) */
   getAllThemes: () => ThemeDefinition[]
+  /** Get accent presets for the active theme (theme-specific or default) */
+  getAccentPresets: () => AccentPreset[]
 }
 
 function loadPersistedState(): PersistedThemeState {
@@ -38,12 +47,13 @@ function loadPersistedState(): PersistedThemeState {
         activeThemeId: parsed.activeThemeId || 'fluux',
         customThemes: Array.isArray(parsed.customThemes) ? parsed.customThemes : [],
         snippets: Array.isArray(parsed.snippets) ? parsed.snippets : [],
+        accentPreset: parsed.accentPreset ?? null,
       }
     }
   } catch {
     // localStorage not available or corrupted
   }
-  return { activeThemeId: 'fluux', customThemes: [], snippets: [] }
+  return { activeThemeId: 'fluux', customThemes: [], snippets: [], accentPreset: null }
 }
 
 function persistState(state: PersistedThemeState) {
@@ -52,6 +62,7 @@ function persistState(state: PersistedThemeState) {
       activeThemeId: state.activeThemeId,
       customThemes: state.customThemes,
       snippets: state.snippets,
+      accentPreset: state.accentPreset,
     }))
   } catch {
     // localStorage not available
@@ -113,6 +124,16 @@ export const useThemeStore = create<ThemeState>((set, get) => {
       persistState({ ...get(), snippets })
     },
 
+    setAccentPreset: (accent) => {
+      set({ accentPreset: accent })
+      persistState({ ...get(), accentPreset: accent })
+    },
+
+    clearAccentPreset: () => {
+      set({ accentPreset: null })
+      persistState({ ...get(), accentPreset: null })
+    },
+
     getActiveTheme: () => {
       const { activeThemeId, customThemes } = get()
       return getBuiltinTheme(activeThemeId) ?? customThemes.find((t) => t.id === activeThemeId)
@@ -120,6 +141,11 @@ export const useThemeStore = create<ThemeState>((set, get) => {
 
     getAllThemes: () => {
       return [...builtinThemes, ...get().customThemes]
+    },
+
+    getAccentPresets: () => {
+      const theme = get().getActiveTheme()
+      return theme?.accentPresets ?? DEFAULT_ACCENT_PRESETS
     },
   }
 })

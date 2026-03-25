@@ -490,6 +490,8 @@
         "darkDescription": "Cúlra dorcha le téacs geal",
         "lightDescription": "Cúlra geal le téacs dorcha",
         "systemDescription": "Lean rogha an chórais",
+        "accentColor": "Dath béime",
+        "accentThemeDefault": "Réamhshocrú an téama",
         "fontSize": "Méid cló",
         "fontSizeDescription": "Athraigh méid an téacs san aip",
         "language": "Teanga",

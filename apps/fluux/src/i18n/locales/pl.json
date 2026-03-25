@@ -492,6 +492,8 @@
         "darkDescription": "Ciemne tło z jasnym tekstem",
         "lightDescription": "Jasne tło z ciemnym tekstem",
         "systemDescription": "Zgodnie z ustawieniami systemowymi",
+        "accentColor": "Kolor akcentu",
+        "accentThemeDefault": "Domyślny motywu",
         "fontSize": "Rozmiar czcionki",
         "fontSizeDescription": "Dostosuj rozmiar tekstu w aplikacji",
         "language": "Język",

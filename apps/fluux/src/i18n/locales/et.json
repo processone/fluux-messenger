@@ -492,6 +492,8 @@
         "darkDescription": "Tume taust heleda tekstiga",
         "lightDescription": "Hele taust tumeda tekstiga",
         "systemDescription": "Järgi süsteemi eelistust",
+        "accentColor": "Rõhuvärv",
+        "accentThemeDefault": "Teema vaikeväärtus",
         "fontSize": "Kirjasuurus",
         "fontSizeDescription": "Kohanda teksti suurust rakenduses",
         "language": "Keel",

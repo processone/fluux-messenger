@@ -624,8 +624,9 @@ export class Profile extends BaseModule {
 
   /**
    * Fetch appearance settings from private PEP storage (XEP-0223).
+   * Returns mode (required) plus optional themeId, fontSize, and accentPreset.
    */
-  async fetchAppearance(): Promise<{ mode: string } | null> {
+  async fetchAppearance(): Promise<{ mode: string; themeId?: string; fontSize?: number; accentPreset?: string } | null> {
     const currentJid = this.deps.getCurrentJid()
     if (!currentJid) return null
 
@@ -645,7 +646,14 @@ export class Profile extends BaseModule {
         // TODO: Remove 'theme' fallback before 1.0 release
         const mode = appearance.getChildText('mode') || appearance.getChildText('theme')
         if (mode) {
-          return { mode }
+          const result: { mode: string; themeId?: string; fontSize?: number; accentPreset?: string } = { mode }
+          const themeId = appearance.getChildText('themeId')
+          if (themeId) result.themeId = themeId
+          const fontSize = appearance.getChildText('fontSize')
+          if (fontSize) result.fontSize = Number(fontSize)
+          const accentPreset = appearance.getChildText('accentPreset')
+          if (accentPreset) result.accentPreset = accentPreset
+          return result
         }
       }
     } catch {
@@ -657,16 +665,19 @@ export class Profile extends BaseModule {
   /**
    * Save appearance settings to private PEP storage (XEP-0223).
    */
-  async setAppearance(settings: { mode: string }): Promise<void> {
+  async setAppearance(settings: { mode: string; themeId?: string; fontSize?: number; accentPreset?: string }): Promise<void> {
     if (!this.deps.getCurrentJid()) throw new Error('Not connected')
+
+    const children = [xml('mode', {}, settings.mode)]
+    if (settings.themeId) children.push(xml('themeId', {}, settings.themeId))
+    if (settings.fontSize != null) children.push(xml('fontSize', {}, String(settings.fontSize)))
+    if (settings.accentPreset) children.push(xml('accentPreset', {}, settings.accentPreset))
 
     const iq = xml('iq', { type: 'set', id: `appearance_${generateUUID()}` },
       xml('pubsub', { xmlns: NS_PUBSUB },
         xml('publish', { node: NS_APPEARANCE },
           xml('item', { id: 'current' },
-            xml('appearance', { xmlns: NS_APPEARANCE },
-              xml('mode', {}, settings.mode)
-            )
+            xml('appearance', { xmlns: NS_APPEARANCE }, ...children)
           )
         ),
         // XEP-0223: Publish options for private storage

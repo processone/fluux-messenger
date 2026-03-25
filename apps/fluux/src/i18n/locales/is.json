@@ -490,6 +490,8 @@
         "darkDescription": "Dökkur bakgrunnur með ljósum texta",
         "lightDescription": "Ljós bakgrunnur með dökkum texta",
         "systemDescription": "Fylgja kerfisval",
+        "accentColor": "Áherslulitur",
+        "accentThemeDefault": "Sjálfgefið þema",
         "fontSize": "Leturstærð",
         "fontSizeDescription": "Stilla texastærð í appinu",
         "language": "Tungumál",

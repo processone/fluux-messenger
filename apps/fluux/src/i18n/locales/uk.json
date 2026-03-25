@@ -490,6 +490,8 @@
         "darkDescription": "Темний фон зі світлим текстом",
         "lightDescription": "Світлий фон з темним текстом",
         "systemDescription": "Слідувати системним налаштуванням",
+        "accentColor": "Колір акценту",
+        "accentThemeDefault": "За замовчуванням теми",
         "fontSize": "Розмір шрифту",
         "fontSizeDescription": "Налаштувати розмір тексту в додатку",
         "language": "Мова",

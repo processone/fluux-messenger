@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useThemeStore } from './themeStore'
-import type { ThemeDefinition } from '@/themes/types'
+import type { ThemeDefinition, AccentPreset } from '@/themes/types'
+import { DEFAULT_ACCENT_PRESETS } from '@/themes/defaultAccents'
 
 const customTheme: ThemeDefinition = {
   id: 'test-custom',
@@ -30,6 +31,7 @@ function resetStore() {
     activeThemeId: 'fluux',
     customThemes: [],
     snippets: [],
+    accentPreset: null,
   })
 }
 
@@ -206,6 +208,60 @@ describe('themeStore', () => {
       useThemeStore.getState().installTheme(customTheme)
       const themes = useThemeStore.getState().getAllThemes()
       expect(themes.at(-1)!.id).toBe('test-custom')
+    })
+  })
+
+  describe('accentPreset', () => {
+    const testAccent: AccentPreset = {
+      name: 'Purple',
+      dark: { h: 267, s: 84, l: 81 },
+      light: { h: 267, s: 83, l: 58 },
+    }
+
+    it('should default to null (theme default)', () => {
+      expect(useThemeStore.getState().accentPreset).toBeNull()
+    })
+
+    it('should set an accent preset', () => {
+      useThemeStore.getState().setAccentPreset(testAccent)
+      expect(useThemeStore.getState().accentPreset).toEqual(testAccent)
+    })
+
+    it('should persist accent preset to localStorage', () => {
+      useThemeStore.getState().setAccentPreset(testAccent)
+      expect(localStorage.setItem).toHaveBeenCalled()
+      const stored = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
+      expect(stored.accentPreset).toEqual(testAccent)
+    })
+
+    it('should clear the accent preset', () => {
+      useThemeStore.getState().setAccentPreset(testAccent)
+      useThemeStore.getState().clearAccentPreset()
+      expect(useThemeStore.getState().accentPreset).toBeNull()
+    })
+
+    it('should persist cleared accent to localStorage', () => {
+      useThemeStore.getState().setAccentPreset(testAccent)
+      useThemeStore.getState().clearAccentPreset()
+      const stored = JSON.parse(vi.mocked(localStorage.setItem).mock.calls.at(-1)![1])
+      expect(stored.accentPreset).toBeNull()
+    })
+  })
+
+  describe('getAccentPresets', () => {
+    it('should return default presets for themes without custom presets', () => {
+      // fluux has no accentPresets defined
+      const presets = useThemeStore.getState().getAccentPresets()
+      expect(presets).toBe(DEFAULT_ACCENT_PRESETS)
+    })
+
+    it('should return theme-specific presets when available', () => {
+      useThemeStore.getState().setActiveTheme('catppuccin-mocha')
+      const presets = useThemeStore.getState().getAccentPresets()
+      expect(presets).not.toBe(DEFAULT_ACCENT_PRESETS)
+      expect(presets.length).toBe(14)
+      expect(presets[0].name).toBe('Rosewater')
+      expect(presets[3].name).toBe('Mauve')
     })
   })
 

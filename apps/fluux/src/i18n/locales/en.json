@@ -490,6 +490,8 @@
         "darkDescription": "Dark background with light text",
         "lightDescription": "Light background with dark text",
         "systemDescription": "Follow your system preference",
+        "accentColor": "Accent Color",
+        "accentThemeDefault": "Theme Default",
         "fontSize": "Font Size",
         "fontSizeDescription": "Adjust the size of text across the app",
         "language": "Language",

@@ -492,6 +492,8 @@
         "darkDescription": "Fundal întunecat cu text luminos",
         "lightDescription": "Fundal luminos cu text întunecat",
         "systemDescription": "Urmează preferința sistemului",
+        "accentColor": "Culoare de accent",
+        "accentThemeDefault": "Implicit temă",
         "fontSize": "Dimensiune font",
         "fontSizeDescription": "Ajustați dimensiunea textului în aplicație",
         "language": "Limbă",

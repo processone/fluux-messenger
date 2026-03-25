@@ -491,6 +491,8 @@
         "darkDescription": "Tumšs fons ar gaišu tekstu",
         "lightDescription": "Gaišs fons ar tumšu tekstu",
         "systemDescription": "Sekot sistēmas iestatījumiem",
+        "accentColor": "Akcenta krāsa",
+        "accentThemeDefault": "Tēmas noklusējums",
         "fontSize": "Fonta lielums",
         "fontSizeDescription": "Pielāgojiet teksta lielumu lietotnē",
         "language": "Valoda",

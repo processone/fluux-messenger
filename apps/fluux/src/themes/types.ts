@@ -11,6 +11,22 @@
  * to achieve a complete visual overhaul. Semantic and component variables
  * cascade automatically from foundation values.
  */
+/**
+ * Accent color preset — provides HSL values for both dark and light modes.
+ *
+ * Themes can optionally define a curated list of accent presets that pair
+ * well with their palette (e.g. Catppuccin's 14 canonical accents).
+ * When a theme doesn't provide presets, a built-in default list is used.
+ */
+export interface AccentPreset {
+  /** Display name (e.g. "Mauve", "Sapphire") */
+  name: string
+  /** HSL values for dark mode */
+  dark: { h: number; s: number; l: number }
+  /** HSL values for light mode */
+  light: { h: number; s: number; l: number }
+}
+
 export interface ThemeDefinition {
   /** Unique identifier (kebab-case, e.g. 'nord', 'catppuccin-mocha') */
   id: string
@@ -32,6 +48,9 @@ export interface ThemeDefinition {
     dark?: string[]
     light?: string[]
   }
+  /** Curated accent presets that pair well with this theme's palette.
+   *  When absent, a built-in default list is shown in the accent picker. */
+  accentPresets?: AccentPreset[]
 }
 
 /**

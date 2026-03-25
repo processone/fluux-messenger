@@ -1,4 +1,26 @@
-import type { ThemeDefinition } from '../types'
+import type { ThemeDefinition, AccentPreset } from '../types'
+
+/**
+ * Catppuccin canonical accent presets.
+ * Dark values: Mocha palette.  Light values: Latte palette.
+ * HSL values sourced from the official Catppuccin style guide.
+ */
+const catppuccinAccents: AccentPreset[] = [
+  { name: 'Rosewater',  dark: { h: 10,  s: 56, l: 91 }, light: { h: 11,  s: 59, l: 67 } },
+  { name: 'Flamingo',   dark: { h: 0,   s: 59, l: 88 }, light: { h: 0,   s: 60, l: 67 } },
+  { name: 'Pink',       dark: { h: 316, s: 72, l: 86 }, light: { h: 316, s: 73, l: 69 } },
+  { name: 'Mauve',      dark: { h: 267, s: 84, l: 81 }, light: { h: 266, s: 85, l: 58 } },
+  { name: 'Red',        dark: { h: 343, s: 81, l: 75 }, light: { h: 347, s: 87, l: 44 } },
+  { name: 'Maroon',     dark: { h: 350, s: 65, l: 77 }, light: { h: 355, s: 76, l: 59 } },
+  { name: 'Peach',      dark: { h: 23,  s: 92, l: 75 }, light: { h: 22,  s: 99, l: 52 } },
+  { name: 'Yellow',     dark: { h: 41,  s: 86, l: 83 }, light: { h: 35,  s: 77, l: 49 } },
+  { name: 'Green',      dark: { h: 115, s: 54, l: 76 }, light: { h: 109, s: 58, l: 40 } },
+  { name: 'Teal',       dark: { h: 170, s: 57, l: 73 }, light: { h: 183, s: 74, l: 35 } },
+  { name: 'Sky',        dark: { h: 189, s: 71, l: 73 }, light: { h: 197, s: 97, l: 46 } },
+  { name: 'Sapphire',   dark: { h: 199, s: 76, l: 69 }, light: { h: 189, s: 70, l: 42 } },
+  { name: 'Blue',       dark: { h: 217, s: 92, l: 76 }, light: { h: 220, s: 91, l: 54 } },
+  { name: 'Lavender',   dark: { h: 232, s: 97, l: 85 }, light: { h: 231, s: 97, l: 72 } },
+]
 
 export const catppuccinMochaTheme: ThemeDefinition = {
   id: 'catppuccin-mocha',
@@ -100,4 +122,5 @@ export const catppuccinMochaTheme: ThemeDefinition = {
     dark: ['#1e1e2e', '#313244', '#cba6f7', '#89b4fa', '#a6e3a1'],
     light: ['#dce0e8', '#eff1f5', '#8839ef', '#1e66f5', '#40a02b'],
   },
+  accentPresets: catppuccinAccents,
 }

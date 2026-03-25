@@ -490,6 +490,8 @@
         "darkDescription": "Mörk bakgrund med ljus text",
         "lightDescription": "Ljus bakgrund med mörk text",
         "systemDescription": "Följ systeminställning",
+        "accentColor": "Accentfärg",
+        "accentThemeDefault": "Temastandard",
         "fontSize": "Teckenstorlek",
         "fontSizeDescription": "Justera textstorleken i appen",
         "language": "Språk",

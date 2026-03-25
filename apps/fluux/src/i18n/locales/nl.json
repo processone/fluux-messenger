@@ -490,6 +490,8 @@
         "darkDescription": "Donkere achtergrond met lichte tekst",
         "lightDescription": "Lichte achtergrond met donkere tekst",
         "systemDescription": "Volg je systeemvoorkeur",
+        "accentColor": "Accentkleur",
+        "accentThemeDefault": "Themastandaard",
         "fontSize": "Lettergrootte",
         "fontSizeDescription": "Pas de tekstgrootte in de app aan",
         "language": "Taal",

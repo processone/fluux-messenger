@@ -490,6 +490,8 @@
         "darkDescription": "Tamna pozadina sa svijetlim tekstom",
         "lightDescription": "Svijetla pozadina s tamnim tekstom",
         "systemDescription": "Prati postavke sustava",
+        "accentColor": "Boja naglaska",
+        "accentThemeDefault": "Zadano teme",
         "fontSize": "Veličina fonta",
         "fontSizeDescription": "Prilagodite veličinu teksta u aplikaciji",
         "language": "Jezik",

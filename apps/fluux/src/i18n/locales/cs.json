@@ -492,6 +492,8 @@
         "darkDescription": "Tmavé pozadí se světlým textem",
         "lightDescription": "Světlé pozadí s tmavým textem",
         "systemDescription": "Podle nastavení vašeho systému",
+        "accentColor": "Barva zvýraznění",
+        "accentThemeDefault": "Výchozí motiv",
         "fontSize": "Velikost písma",
         "fontSizeDescription": "Upravit velikost textu v aplikaci",
         "language": "Jazyk",

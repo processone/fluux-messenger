@@ -490,6 +490,8 @@
         "darkDescription": "Тёмный фон со светлым текстом",
         "lightDescription": "Светлый фон с тёмным текстом",
         "systemDescription": "Следовать системным настройкам",
+        "accentColor": "Цвет акцента",
+        "accentThemeDefault": "По умолчанию темы",
         "fontSize": "Размер шрифта",
         "fontSizeDescription": "Настроить размер текста в приложении",
         "language": "Язык",

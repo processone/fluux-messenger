@@ -492,6 +492,8 @@
         "darkDescription": "Fons fosc amb text clar",
         "lightDescription": "Fons clar amb text fosc",
         "systemDescription": "Segueix la preferència del sistema",
+        "accentColor": "Color d'accent",
+        "accentThemeDefault": "Per defecte del tema",
         "fontSize": "Mida de la lletra",
         "fontSizeDescription": "Ajusta la mida del text a l'aplicació",
         "language": "Idioma",

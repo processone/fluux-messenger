@@ -492,6 +492,8 @@
         "darkDescription": "Sfond skur b'test ċar",
         "lightDescription": "Sfond ċar b'test skur",
         "systemDescription": "Segwi l-preferenza tas-sistema",
+        "accentColor": "Kulur tal-aċċent",
+        "accentThemeDefault": "Predefinit tat-tema",
         "fontSize": "Daqs tal-font",
         "fontSizeDescription": "Aġġusta d-daqs tat-test fl-app",
         "language": "Lingwa",

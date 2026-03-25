@@ -492,6 +492,8 @@
         "darkDescription": "Dunkler Hintergrund mit hellem Text",
         "lightDescription": "Heller Hintergrund mit dunklem Text",
         "systemDescription": "Systemeinstellung verwenden",
+        "accentColor": "Akzentfarbe",
+        "accentThemeDefault": "Theme-Standard",
         "fontSize": "Schriftgröße",
         "fontSizeDescription": "Textgröße in der App anpassen",
         "language": "Sprache",

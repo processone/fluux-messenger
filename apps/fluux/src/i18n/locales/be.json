@@ -490,6 +490,8 @@
         "darkDescription": "Цёмны фон са светлым тэкстам",
         "lightDescription": "Светлы фон з цёмным тэкстам",
         "systemDescription": "Выконваць сістэмныя налады",
+        "accentColor": "Колер акцэнту",
+        "accentThemeDefault": "Стандартны тэмы",
         "fontSize": "Памер шрыфту",
         "fontSizeDescription": "Наладзіць памер тэксту ў праграме",
         "language": "Мова",

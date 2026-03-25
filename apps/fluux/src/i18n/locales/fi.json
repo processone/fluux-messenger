@@ -490,6 +490,8 @@
         "darkDescription": "Tumma tausta vaalealla tekstillä",
         "lightDescription": "Vaalea tausta tummalla tekstillä",
         "systemDescription": "Seuraa järjestelmäasetusta",
+        "accentColor": "Korostusväri",
+        "accentThemeDefault": "Teeman oletus",
         "fontSize": "Fonttikoko",
         "fontSizeDescription": "Säädä tekstin kokoa sovelluksessa",
         "language": "Kieli",

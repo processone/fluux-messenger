@@ -1,9 +1,9 @@
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Sun, Moon, Monitor, Upload, Trash2, Pencil, Plus } from 'lucide-react'
+import { Sun, Moon, Monitor, Upload, Trash2, Pencil, Plus, RotateCcw } from 'lucide-react'
 import { useSettingsStore, type ThemeMode } from '@/stores/settingsStore'
 import { useThemeStore } from '@/stores/themeStore'
-import type { ThemeDefinition } from '@/themes/types'
+import type { ThemeDefinition, AccentPreset } from '@/themes/types'
 import { getBuiltinTheme } from '@/themes/builtins'
 import { ModalShell } from '@/components/ModalShell'
 
@@ -73,6 +73,31 @@ function ThemeCard({
         </button>
       )}
     </button>
+  )
+}
+
+/** Accent color dot for the accent picker */
+function AccentDot({
+  preset,
+  isSelected,
+  isDark,
+  onSelect,
+}: {
+  preset: AccentPreset
+  isSelected: boolean
+  isDark: boolean
+  onSelect: () => void
+}) {
+  const hsl = isDark ? preset.dark : preset.light
+  const color = `hsl(${hsl.h}, ${hsl.s}%, ${hsl.l}%)`
+  return (
+    <button
+      onClick={onSelect}
+      title={preset.name}
+      className={`w-7 h-7 rounded-full shrink-0 transition-all ring-offset-2 ring-offset-fluux-bg
+        ${isSelected ? 'ring-2 ring-fluux-brand scale-110' : 'hover:scale-110'}`}
+      style={{ backgroundColor: color }}
+    />
   )
 }
 
@@ -161,6 +186,10 @@ export function AppearanceSettings() {
   const getAllThemes = useThemeStore((s) => s.getAllThemes)
   const installTheme = useThemeStore((s) => s.installTheme)
   const removeTheme = useThemeStore((s) => s.removeTheme)
+  const accentPreset = useThemeStore((s) => s.accentPreset)
+  const setAccentPreset = useThemeStore((s) => s.setAccentPreset)
+  const clearAccentPreset = useThemeStore((s) => s.clearAccentPreset)
+  const getAccentPresets = useThemeStore((s) => s.getAccentPresets)
   const snippets = useThemeStore((s) => s.snippets)
   const toggleSnippet = useThemeStore((s) => s.toggleSnippet)
   const addSnippet = useThemeStore((s) => s.addSnippet)
@@ -288,7 +317,37 @@ export function AppearanceSettings() {
           />
         </div>
 
-        {/* 4. CSS Snippets (advanced) */}
+        {/* 4. Accent color picker */}
+        <div className="space-y-3">
+          <label className="text-sm font-medium text-fluux-text">{t('settings.accentColor')}</label>
+          <div className="flex flex-wrap gap-2 items-center">
+            {/* Theme Default reset button */}
+            <button
+              onClick={() => clearAccentPreset()}
+              title={t('settings.accentThemeDefault')}
+              className={`w-7 h-7 rounded-full shrink-0 transition-all ring-offset-2 ring-offset-fluux-bg
+                flex items-center justify-center border-2 border-dashed
+                ${!accentPreset
+                  ? 'ring-2 ring-fluux-brand scale-110 border-fluux-brand'
+                  : 'border-fluux-muted hover:scale-110 hover:border-fluux-text'
+                }`}
+            >
+              <RotateCcw className="w-3 h-3 text-fluux-muted" />
+            </button>
+            {/* Accent presets */}
+            {getAccentPresets().map((preset) => (
+              <AccentDot
+                key={preset.name}
+                preset={preset}
+                isSelected={accentPreset?.name === preset.name}
+                isDark={isDark}
+                onSelect={() => setAccentPreset(preset)}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* 5. CSS Snippets (advanced) */}
         <div className="space-y-3">
           <label className="text-sm font-medium text-fluux-text">{t('settings.cssSnippets')}</label>
           {snippets.length > 0 && (

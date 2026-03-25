@@ -490,6 +490,8 @@
         "darkDescription": "Tamsus fonas su šviesia tekstu",
         "lightDescription": "Šviesus fonas su tamsiu tekstu",
         "systemDescription": "Sekti sistemos nustatymus",
+        "accentColor": "Akcento spalva",
+        "accentThemeDefault": "Temos numatytoji",
         "fontSize": "Šrifto dydis",
         "fontSizeDescription": "Koreguoti teksto dydį programėlėje",
         "language": "Kalba",
