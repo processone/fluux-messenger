@@ -54,19 +54,53 @@
 
 ## Features
 
-- **Modern XMPP Client** - React-based UI with TypeScript
-- **Cross-platform** - Available on web and desktop (Tauri-based)
-- **Extensive XMPP Protocol Support** - 50+ XEPs implemented, including MAM, MUC, HTTP File Upload, message carbons, reactions, and FAST authentication (and more to come)
-- **Built-in XMPP Console** - Debug interface for developers and power users
-- **Multi-user Chat** - Complete MUC support with roles, affiliations, hats, @mentions, and bookmarks
-- **File Sharing** - HTTP uploads with thumbnails, progress indicators, and previews
-- **Real-time Messaging** - Typing indicators, message corrections, and delivery features
-- **Web Push Notifications** - Receive notifications even when the browser tab is closed (via Service Worker and VAPID)
-- **Full-text Search** - Instant search across all message history with an offline inverted index
-- **Offline Support** - IndexedDB storage with automatic sync on reconnect
-- **Theme System** - Light/dark themes synchronized across devices
-- **Internationalization** - 31 languages including complete EU coverage (Belarusian, Bulgarian, Catalan, Chinese (Simplified), Croatian, Czech, Danish, Dutch, English, Estonian, Finnish, French, German, Greek, Hungarian, Icelandic, Irish, Italian, Latvian, Lithuanian, Maltese, Norwegian, Polish, Portuguese, Romanian, Russian, Slovak, Slovenian, Spanish, Swedish, Ukrainian)
-- **Self-hostable** - Connect to any XMPP server, no vendor lock-in
+### Rich Messaging
+- **Reactions, Replies & Styling** - Emoji reactions with quick toolbar, threaded replies, and rich text formatting (bold, italic, code blocks with syntax highlighting)
+- **Message Retraction & Moderation** - Delete your own messages or moderate room messages with full audit trail
+- **Link Previews** - Automatic Open Graph previews for shared URLs
+- **File Sharing** - HTTP uploads with drag-and-drop, thumbnails, progress indicators, image lightbox, and text file preview
+- **Polls** - Create polls in rooms with emoji voting, deadlines, single or multi-vote modes, and live result tallies
+
+### Group Chat & Collaboration
+- **Multi-user Chat** - Complete MUC support with roles, affiliations, custom hats (role badges), @mentions, and bookmarks
+- **Quick Chat** - Instantly create ad-hoc group conversations and invite contacts by name
+- **Per-User Ignore** - Mute specific users per room, synced across devices
+- **Activity Log** - Persistent feed of events: invitations, subscription requests, reactions, poll votes, joins and leaves
+
+### Powerful Search
+- **Full-text Search** - Instant offline search powered by an IndexedDB inverted index, supplemented by live server archive queries
+- **Find on Page** - Cmd/Ctrl+F to search within the current conversation with highlight and scroll
+- **Smart Filters** - Type filter pills, `in:` prefix autocomplete, quoted exact-phrase matching, and keyboard-navigable results with context preview
+
+### Theming & Personalization
+- **14 Built-in Themes** - Catppuccin, Nord, Dracula, Gruvbox, Tokyo Night, Rosé Pine, Solarized, and more — plus light/dark mode
+- **Custom Themes** - Import/export themes as JSON, pick a custom accent color, or write CSS overrides in the built-in editor
+- **Synced Across Devices** - Theme, accent, and font size preferences are stored server-side and follow you everywhere
+- **Internationalization** - 31 languages including complete EU coverage
+
+### Privacy & Security
+- **Self-hostable** - Connect to any XMPP server, no vendor lock-in, no third-party dependency
+- **FAST Authentication** - Modern SASL2 with token-based reconnection for instant, password-less session resumption
+- **Contact Blocking** - Full block/unblock support with a dedicated management screen
+- **In-Band Password Change** - Change your account password without leaving the app
+
+### Desktop & Cross-Platform
+- **Cross-platform** - Available on the web, macOS (Intel & Apple Silicon), Windows, and Linux (deb, rpm, flatpak, AUR)
+- **Auto Updates** - Built-in update checker with release notes and one-click install (desktop)
+- **Native Notifications** - Desktop notifications with click-to-focus; web push notifications even when the tab is closed
+- **Auto-Away** - Automatically sets your status to away on system idle and restores it on activity
+- **Offline Support** - IndexedDB storage with automatic sync and stream management session resumption on reconnect
+
+### Power User Tools
+- **Command Palette** - Keyboard-accessible launcher for conversations, contacts, rooms, and actions
+- **Keyboard Shortcuts** - Comprehensive shortcut system with a categorized help overlay and AZERTY support
+- **Built-in XMPP Console** - Live stanza inspector and debug interface
+- **Server Administration** - Manage users, rooms, and server commands right from the client (for admins)
+- **User Profiles** - Rich user info popovers with vCard details, connected devices, timezone, and last seen status
+
+### Developer-Friendly
+- **Headless SDK** - Reusable `@fluux/sdk` package for building custom XMPP clients or bots
+- **50+ XEPs Implemented** - MAM, MUC, Stream Management, Message Carbons, HTTP File Upload, Reactions, FAST, and many more
 - **Open Source** - AGPL-3.0 licensed
 
 ## Quick Start
