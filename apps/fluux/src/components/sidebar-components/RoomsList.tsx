@@ -143,33 +143,35 @@ export function RoomsList() {
             <Zap className="w-3 h-3 text-amber-500" />
             {t('rooms.quickChatSection')} — {quickChats.length}
           </h3>
-          {quickChats.map((room) => {
-            const flatIndex = jidToIndex.get(room.jid) ?? -1
-            const draft = drafts.get(room.jid)
-            return (
-              <RoomItem
-                key={room.jid}
-                room={room}
-                isActive={room.jid === activeRoomJid}
-                isSelected={flatIndex === selectedIndex}
-                isKeyboardNav={isKeyboardNav}
-                draft={draft}
-                onClick={() => handleRoomClick(room.jid, true)}
-                onDoubleClick={() => handleRoomDoubleClick(room.jid, true, room.nickname)}
-                onJoin={() => joinRoom(room.jid, room.nickname)}
-                onLeave={() => {
-                  if (activeRoomJid === room.jid) void setActiveRoom(null)
-                  void leaveRoom(room.jid)
-                }}
-                onEditBookmark={() => {}} // Quick chats don't have bookmark editing
-                onRemoveBookmark={() => {}} // Quick chats aren't bookmarked
-                onToggleAutojoin={() => {}} // Quick chats don't have autojoin
-                isQuickChat
-                {...getItemAttribute(flatIndex)}
-                {...getItemProps(flatIndex)}
-              />
-            )
-          })}
+          <div className="space-y-0.5">
+            {quickChats.map((room) => {
+              const flatIndex = jidToIndex.get(room.jid) ?? -1
+              const draft = drafts.get(room.jid)
+              return (
+                <RoomItem
+                  key={room.jid}
+                  room={room}
+                  isActive={room.jid === activeRoomJid}
+                  isSelected={flatIndex === selectedIndex}
+                  isKeyboardNav={isKeyboardNav}
+                  draft={draft}
+                  onClick={() => handleRoomClick(room.jid, true)}
+                  onDoubleClick={() => handleRoomDoubleClick(room.jid, true, room.nickname)}
+                  onJoin={() => joinRoom(room.jid, room.nickname)}
+                  onLeave={() => {
+                    if (activeRoomJid === room.jid) void setActiveRoom(null)
+                    void leaveRoom(room.jid)
+                  }}
+                  onEditBookmark={() => {}} // Quick chats don't have bookmark editing
+                  onRemoveBookmark={() => {}} // Quick chats aren't bookmarked
+                  onToggleAutojoin={() => {}} // Quick chats don't have autojoin
+                  isQuickChat
+                  {...getItemAttribute(flatIndex)}
+                  {...getItemProps(flatIndex)}
+                />
+              )
+            })}
+          </div>
         </div>
       )}
 
@@ -179,36 +181,38 @@ export function RoomsList() {
           <h3 className="text-xs font-semibold text-fluux-muted uppercase px-2 mb-2">
               {t('rooms.joined')} — {joinedRooms.length}
           </h3>
-          {joinedRooms.map((room) => {
-            const flatIndex = jidToIndex.get(room.jid) ?? -1
-            const draft = drafts.get(room.jid)
-            return (
-              <RoomItem
-                key={room.jid}
-                room={room}
-                isActive={room.jid === activeRoomJid}
-                isSelected={flatIndex === selectedIndex}
-                isKeyboardNav={isKeyboardNav}
-                draft={draft}
-                onClick={() => handleRoomClick(room.jid, true)}
-                onDoubleClick={() => handleRoomDoubleClick(room.jid, true, room.nickname)}
-                onJoin={() => joinRoom(room.jid, room.nickname)}
-                onLeave={() => {
-                  if (activeRoomJid === room.jid) void setActiveRoom(null)
-                  void leaveRoom(room.jid)
-                }}
-                onEditBookmark={() => setEditingRoom(room)}
-                onRemoveBookmark={() => removeBookmark(room.jid)}
-                onToggleAutojoin={() => setBookmark(room.jid, {
-                  name: room.name,
-                  nick: room.nickname,
-                  autojoin: !room.autojoin,
-                })}
-                {...getItemAttribute(flatIndex)}
-                {...getItemProps(flatIndex)}
-              />
-            )
-          })}
+          <div className="space-y-0.5">
+            {joinedRooms.map((room) => {
+              const flatIndex = jidToIndex.get(room.jid) ?? -1
+              const draft = drafts.get(room.jid)
+              return (
+                <RoomItem
+                  key={room.jid}
+                  room={room}
+                  isActive={room.jid === activeRoomJid}
+                  isSelected={flatIndex === selectedIndex}
+                  isKeyboardNav={isKeyboardNav}
+                  draft={draft}
+                  onClick={() => handleRoomClick(room.jid, true)}
+                  onDoubleClick={() => handleRoomDoubleClick(room.jid, true, room.nickname)}
+                  onJoin={() => joinRoom(room.jid, room.nickname)}
+                  onLeave={() => {
+                    if (activeRoomJid === room.jid) void setActiveRoom(null)
+                    void leaveRoom(room.jid)
+                  }}
+                  onEditBookmark={() => setEditingRoom(room)}
+                  onRemoveBookmark={() => removeBookmark(room.jid)}
+                  onToggleAutojoin={() => setBookmark(room.jid, {
+                    name: room.name,
+                    nick: room.nickname,
+                    autojoin: !room.autojoin,
+                  })}
+                  {...getItemAttribute(flatIndex)}
+                  {...getItemProps(flatIndex)}
+                />
+              )
+            })}
+          </div>
         </>
       )}
 
@@ -218,6 +222,7 @@ export function RoomsList() {
           <h3 className="text-xs font-semibold text-fluux-muted uppercase px-2 mb-2 mt-4">
             {t('rooms.bookmarked')} — {bookmarkedNotJoined.length}
           </h3>
+          <div className="space-y-0.5">
           {bookmarkedNotJoined.map((room) => {
             const flatIndex = jidToIndex.get(room.jid) ?? -1
             const draft = drafts.get(room.jid)
@@ -245,6 +250,7 @@ export function RoomsList() {
               />
             )
           })}
+          </div>
         </>
       )}
 
