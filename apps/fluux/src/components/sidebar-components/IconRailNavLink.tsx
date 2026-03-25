@@ -35,6 +35,8 @@ export function IconRailNavLink({
     <Tooltip content={label} position="right" delay={500}>
       <button
         onClick={() => onNavigate(view)}
+        aria-label={label}
+        data-nav={view}
         className={`
           relative w-10 h-10 rounded-xl flex items-center justify-center transition-colors
           focus-visible:ring-2 focus-visible:ring-fluux-brand focus-visible:ring-offset-2 focus-visible:ring-offset-fluux-sidebar

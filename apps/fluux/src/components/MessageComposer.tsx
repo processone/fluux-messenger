@@ -698,6 +698,7 @@ export function MessageComposer({
             <button
               type="button"
               onClick={() => setShowAttachMenu(!showAttachMenu)}
+              aria-label={t('upload.attachFile')}
               className={`p-3 transition-colors ${showAttachMenu ? 'text-fluux-brand' : 'text-fluux-muted hover:text-fluux-text'}`}
             >
               <Plus className={`w-5 h-5 transition-transform ${showAttachMenu ? 'rotate-45' : ''}`} />

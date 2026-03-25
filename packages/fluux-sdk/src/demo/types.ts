@@ -42,7 +42,20 @@ export interface DemoRoomData {
 /** A timed event in the demo animation sequence. */
 export interface DemoAnimationStep {
   delayMs: number
-  action: 'typing' | 'message' | 'presence' | 'stop-typing' | 'room-message' | 'reaction'
+  action:
+    | 'typing'
+    | 'stop-typing'
+    | 'message'
+    | 'room-message'
+    | 'chat-reaction'
+    | 'reaction'
+    | 'room-reaction'
+    | 'presence'
+    | 'room-typing'
+    | 'message-updated'
+    | 'room-message-updated'
+    | 'activity-event'
+    | 'custom'
   data: Record<string, unknown>
 }
 

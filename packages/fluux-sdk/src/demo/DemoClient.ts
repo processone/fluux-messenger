@@ -28,7 +28,10 @@ import { connectionStore } from '../stores/connectionStore'
 import { chatStore } from '../stores/chatStore'
 import { roomStore } from '../stores/roomStore'
 import { activityLogStore } from '../stores/activityLogStore'
+import type { ActivityEventInput } from '../core/types/activity'
 import type { DemoData, DemoAnimationStep } from './types'
+
+type AnimationState = 'idle' | 'playing' | 'paused' | 'stopped'
 
 /**
  * A demo XMPPClient that populates stores with app-provided data.
@@ -36,9 +39,21 @@ import type { DemoData, DemoAnimationStep } from './types'
  * Call {@link populateDemo} after construction to seed all stores.
  * Optionally call {@link startAnimation} to schedule live events
  * (typing indicators, incoming messages) on timers.
+ *
+ * Supports pause/resume for interactive tutorial walkthroughs.
  */
 export class DemoClient extends XMPPClient {
   private animationTimers: ReturnType<typeof setTimeout>[] = []
+  private allSteps: DemoAnimationStep[] = []
+  private firedStepCount = 0
+  private animationStartTime = 0
+  private elapsedAtPause = 0
+  private _animationState: AnimationState = 'idle'
+
+  /** Current animation state. */
+  get animationState(): AnimationState {
+    return this._animationState
+  }
 
   // No-op stanza sending — no real XMPP connection exists.
   // Modules call sendStanza/sendIQ via the deps closure, which dispatches
@@ -46,7 +61,17 @@ export class DemoClient extends XMPPClient {
   // the stanza is silently dropped but the SDK events still fire.
   protected override async sendStanza(): Promise<void> {}
   protected override async sendIQ(): Promise<any> {
-    return null as any
+    // Return a stub Element-like object so callers using .getChild()
+    // etc. get null/empty results instead of crashing on null.
+    return {
+      attrs: {},
+      name: 'iq',
+      getChild: () => undefined,
+      getChildren: () => [],
+      getChildText: () => null,
+      getText: () => '',
+      toString: () => '<iq type="result"/>',
+    }
   }
 
   /**
@@ -138,43 +163,113 @@ export class DemoClient extends XMPPClient {
    * @returns A cleanup function that cancels all pending timers.
    */
   startAnimation(steps: DemoAnimationStep[]): () => void {
-    for (const step of steps) {
-      const timer = setTimeout(() => {
-        switch (step.action) {
-          case 'typing':
-          case 'stop-typing':
-            this.emitSDK('chat:typing', step.data as Parameters<typeof this.emitSDK<'chat:typing'>>[1])
-            break
-          case 'message':
-            this.emitSDK('chat:message', step.data as Parameters<typeof this.emitSDK<'chat:message'>>[1])
-            break
-          case 'room-message':
-            this.emitSDK('room:message', step.data as Parameters<typeof this.emitSDK<'room:message'>>[1])
-            break
-          case 'reaction':
-            this.emitSDK('room:reactions', step.data as Parameters<typeof this.emitSDK<'room:reactions'>>[1])
-            break
-          case 'presence':
-            this.emitSDK('roster:presence', step.data as Parameters<typeof this.emitSDK<'roster:presence'>>[1])
-            break
-        }
-      }, step.delayMs)
-      this.animationTimers.push(timer)
-    }
-
+    this.allSteps = steps
+    this.firedStepCount = 0
+    this.elapsedAtPause = 0
+    this._animationState = 'playing'
+    this.animationStartTime = Date.now()
+    this.scheduleSteps(steps, 0)
     return () => this.stopAnimation()
   }
 
-  /** Cancel all pending animation timers. */
+  /**
+   * Pause the animation timeline. Pending steps are cancelled and
+   * can be resumed later with {@link resumeAnimation}.
+   */
+  pauseAnimation(): void {
+    if (this._animationState !== 'playing') return
+    this.elapsedAtPause += Date.now() - this.animationStartTime
+    this.clearTimers()
+    this._animationState = 'paused'
+  }
+
+  /**
+   * Resume a paused animation. Remaining steps are rescheduled
+   * with adjusted delays.
+   */
+  resumeAnimation(): void {
+    if (this._animationState !== 'paused') return
+    this._animationState = 'playing'
+    this.animationStartTime = Date.now()
+    const remaining = this.allSteps.slice(this.firedStepCount)
+    this.scheduleSteps(remaining, this.elapsedAtPause)
+  }
+
+  /** Cancel all pending animation timers and mark as stopped. */
   stopAnimation(): void {
+    this.clearTimers()
+    this._animationState = 'stopped'
+  }
+
+  override destroy(): void {
+    this.stopAnimation()
+    super.destroy()
+  }
+
+  // -------------------------------------------------------------------------
+  // Private helpers
+  // -------------------------------------------------------------------------
+
+  private clearTimers(): void {
     for (const timer of this.animationTimers) {
       clearTimeout(timer)
     }
     this.animationTimers = []
   }
 
-  override destroy(): void {
-    this.stopAnimation()
-    super.destroy()
+  /**
+   * Schedule a list of steps, subtracting `elapsedOffset` from each delay
+   * so that pause/resume preserves the timeline's relative timing.
+   */
+  private scheduleSteps(steps: DemoAnimationStep[], elapsedOffset: number): void {
+    for (const step of steps) {
+      const adjustedDelay = Math.max(0, step.delayMs - elapsedOffset)
+      const timer = setTimeout(() => {
+        this.firedStepCount++
+        this.dispatchStep(step)
+      }, adjustedDelay)
+      this.animationTimers.push(timer)
+    }
+  }
+
+  /** Dispatch a single animation step by emitting the appropriate SDK event. */
+  private dispatchStep(step: DemoAnimationStep): void {
+    switch (step.action) {
+      case 'typing':
+      case 'stop-typing':
+        this.emitSDK('chat:typing', step.data as Parameters<typeof this.emitSDK<'chat:typing'>>[1])
+        break
+      case 'message':
+        this.emitSDK('chat:message', step.data as Parameters<typeof this.emitSDK<'chat:message'>>[1])
+        break
+      case 'room-message':
+        this.emitSDK('room:message', step.data as Parameters<typeof this.emitSDK<'room:message'>>[1])
+        break
+      case 'reaction':
+      case 'room-reaction':
+        this.emitSDK('room:reactions', step.data as Parameters<typeof this.emitSDK<'room:reactions'>>[1])
+        break
+      case 'chat-reaction':
+        this.emitSDK('chat:reactions', step.data as Parameters<typeof this.emitSDK<'chat:reactions'>>[1])
+        break
+      case 'presence':
+        this.emitSDK('roster:presence', step.data as Parameters<typeof this.emitSDK<'roster:presence'>>[1])
+        break
+      case 'room-typing':
+        this.emitSDK('room:typing', step.data as Parameters<typeof this.emitSDK<'room:typing'>>[1])
+        break
+      case 'message-updated':
+        this.emitSDK('chat:message-updated', step.data as Parameters<typeof this.emitSDK<'chat:message-updated'>>[1])
+        break
+      case 'room-message-updated':
+        this.emitSDK('room:message-updated', step.data as Parameters<typeof this.emitSDK<'room:message-updated'>>[1])
+        break
+      case 'activity-event':
+        activityLogStore.getState().addEvent(step.data as ActivityEventInput)
+        break
+      case 'custom':
+        this.emitSDK('demo:custom', step.data as Parameters<typeof this.emitSDK<'demo:custom'>>[1])
+        break
+    }
   }
 }

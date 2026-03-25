@@ -606,6 +606,16 @@ export interface StanzaEvents {
  * })
  * ```
  */
+/** Events emitted by {@link DemoClient} for app-level extensibility. */
+export interface DemoEvents {
+  /**
+   * Generic custom event for demo-mode features like tutorial tooltips
+   * and upload progress simulation. Apps subscribe to this event and
+   * dispatch based on the `type` discriminator.
+   */
+  'demo:custom': { type: string; [key: string]: unknown }
+}
+
 export interface SDKEvents
   extends ConnectionEvents,
     ChatEvents,
@@ -616,7 +626,8 @@ export interface SDKEvents
     AdminEvents,
     ConsoleEvents,
     ActivityEvents,
-    StanzaEvents {}
+    StanzaEvents,
+    DemoEvents {}
 
 /**
  * Helper type to get event payload by event name.
