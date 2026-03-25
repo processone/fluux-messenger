@@ -208,10 +208,22 @@ export function Avatar({
   const sizeClasses = SIZES[size]
 
   // Determine presence color
+  // Uses CSS custom properties for smooth color transitions between states
   const isOffline = connectionStatus !== 'online'
   const resolvedPresence = presenceShow ? getPresenceStatusFromShow(presenceShow) : presence
   const presenceColor = resolvedPresence
     ? (isOffline ? APP_OFFLINE_PRESENCE_COLOR : PRESENCE_COLORS[resolvedPresence])
+    : undefined
+
+  // Map presence to CSS variable for smooth transition
+  const PRESENCE_CSS_VARS: Record<PresenceStatus, string> = {
+    online: 'var(--fluux-presence-online)',
+    away: 'var(--fluux-presence-away)',
+    dnd: 'var(--fluux-presence-dnd)',
+    offline: 'var(--fluux-presence-offline)',
+  }
+  const presenceBgStyle = resolvedPresence
+    ? { backgroundColor: isOffline ? undefined : PRESENCE_CSS_VARS[resolvedPresence] }
     : undefined
 
   // Track image load errors to fall back to letter display
@@ -257,7 +269,8 @@ export function Avatar({
         overlay
       ) : presenceColor && (
         <div
-          className={`absolute ${sizeClasses.presence} rounded-full border-2 ${presenceBorderColor} ${presenceColor}`}
+          className={`absolute ${sizeClasses.presence} rounded-full border-2 ${presenceBorderColor} ${presenceBgStyle ? '' : presenceColor} transition-colors duration-500 ease-in-out`}
+          style={presenceBgStyle}
         />
       )}
     </div>
