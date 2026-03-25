@@ -113,29 +113,32 @@ export const MessageToolbar = memo(function MessageToolbar({
 
   // Calculate visibility class
   // When isHovered is provided (controlled mode), use it instead of CSS hover
+  // Uses translate + opacity for a slide-in-from-right effect
   const useControlledHover = isHovered !== undefined
+  const visibleClass = 'opacity-100 translate-x-0'
+  const hiddenClass = 'opacity-0 translate-x-2 pointer-events-none'
   const visibilityClass = isHidden
-    ? 'opacity-0 pointer-events-none'
+    ? hiddenClass
     : showReactionPicker || showMoreMenu || (isSelected && showToolbarForSelection)
-      ? 'opacity-100'
+      ? visibleClass
       : hasKeyboardSelection
-        ? 'opacity-0'
+        ? 'opacity-0 translate-x-2'
         : useControlledHover
-          ? (isHovered ? 'opacity-100' : 'opacity-0 pointer-events-none')
-          : 'opacity-0 group-hover:opacity-100'
+          ? (isHovered ? visibleClass : hiddenClass)
+          : 'opacity-0 translate-x-2 group-hover:opacity-100 group-hover:translate-x-0'
 
   return (
     // Outer wrapper provides an extended hover zone (padding) around the visible toolbar
     // This makes it easier to move the mouse to the toolbar without losing hover state
     // select-none prevents toolbar from being included in text selection
     <div
-      className={`absolute ${showAvatar ? '-top-7' : '-top-12'} -right-2 p-4 z-20 select-none ${visibilityClass}`}
+      className={`absolute ${showAvatar ? '-top-7' : '-top-12'} -right-2 p-4 z-20 select-none transition-all duration-200 ease-out ${visibilityClass}`}
       onMouseEnter={onToolbarMouseEnter}
     >
       {/* Visible toolbar */}
       <div
         ref={toolbarRef}
-        className="flex items-center bg-fluux-bg rounded-md shadow-lg border border-fluux-hover transition-opacity"
+        className="flex items-center bg-fluux-bg rounded-md shadow-lg border border-fluux-hover"
       >
       {/* Quick reaction emojis (hidden when reactions are disabled) */}
       {handleReaction && TOOLBAR_REACTIONS.map(emoji => (
