@@ -20,7 +20,6 @@ const langLoadPromises = new Map<string, Promise<void>>()
  * Each entry is a lazy loader — Vite can statically analyze these literal
  * import paths, enabling proper code-splitting per language.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const LANG_IMPORTS: Record<string, () => Promise<any>> = {
   javascript:  () => import('shiki/langs/javascript.mjs'),
   typescript:  () => import('shiki/langs/typescript.mjs'),
