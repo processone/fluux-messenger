@@ -214,7 +214,7 @@ describe('onActivate', () => {
     expect(result.firstNewMessageId).toBe('msg-4') // skips msg-3 (outgoing)
   })
 
-  it('skips delayed messages when finding marker position', () => {
+  it('includes delayed messages when finding marker position (offline delivery)', () => {
     const msgs: NotificationMessage[] = [
       makeMsg({ id: 'a', timestamp: new Date('2025-01-15T09:00:00Z') }),
       makeMsg({ id: 'b', timestamp: new Date('2025-01-15T09:30:00Z'), isDelayed: true }),
@@ -222,7 +222,8 @@ describe('onActivate', () => {
     ]
     const state = makeState({ lastSeenMessageId: 'a' })
     const result = onActivate(state, msgs)
-    expect(result.firstNewMessageId).toBe('c')
+    // Delayed messages are valid new messages (offline delivery in 1:1 chats)
+    expect(result.firstNewMessageId).toBe('b')
   })
 
   it('sets no marker when lastSeenMessageId is the last message', () => {
@@ -309,7 +310,7 @@ describe('onActivate', () => {
     it('places marker at first incoming when unreadCount exceeds available messages', () => {
       const state = makeState({ lastSeenMessageId: 'very-old-msg', unreadCount: 50 })
       const result = onActivate(state, messages)
-      expect(result.firstNewMessageId).toBe('msg-1') // first non-outgoing, non-delayed
+      expect(result.firstNewMessageId).toBe('msg-1') // first non-outgoing
     })
 
     it('sets no marker when no lastReadAt and no unread', () => {
@@ -323,6 +324,21 @@ describe('onActivate', () => {
       const result = onActivate(state, messages)
       expect(result.lastSeenMessageId).toBe('msg-5')
     })
+
+    it('lastReadAt fallback includes delayed messages (offline/MAM delivery)', () => {
+      const msgs: NotificationMessage[] = [
+        makeMsg({ id: 'old-1', timestamp: new Date('2025-01-15T09:00:00Z') }),
+        makeMsg({ id: 'delayed-1', timestamp: new Date('2025-01-15T10:00:00Z'), isDelayed: true }),
+        makeMsg({ id: 'delayed-2', timestamp: new Date('2025-01-15T10:30:00Z'), isDelayed: true }),
+      ]
+      const state = makeState({
+        lastSeenMessageId: 'very-old-msg',
+        unreadCount: 2,
+        lastReadAt: new Date('2025-01-15T09:30:00Z'),
+      })
+      const result = onActivate(state, msgs)
+      expect(result.firstNewMessageId).toBe('delayed-1')
+    })
   })
 
   describe('migration path (no lastSeenMessageId, fall back to lastReadAt)', () => {
@@ -333,9 +349,52 @@ describe('onActivate', () => {
       expect(result.firstNewMessageId).toBe('msg-2')
     })
 
-    it('handles no lastReadAt and no lastSeenMessageId', () => {
+    it('handles no lastReadAt and no lastSeenMessageId with no unread', () => {
       const state = makeState()
       const result = onActivate(state, messages)
+      expect(result.firstNewMessageId).toBeUndefined()
+    })
+  })
+
+  describe('brand-new conversation (no lastSeenMessageId, no lastReadAt, has unread)', () => {
+    it('places marker using unreadCount', () => {
+      // 5 messages: msg-1, msg-2, msg-3(outgoing), msg-4, msg-5
+      // unreadCount=2: count back 2 incoming from end → msg-5, msg-4 → marker at msg-4
+      const state = makeState({ unreadCount: 2 })
+      const result = onActivate(state, messages)
+      expect(result.firstNewMessageId).toBe('msg-4')
+    })
+
+    it('places marker at first incoming when unreadCount exceeds messages', () => {
+      const state = makeState({ unreadCount: 50 })
+      const result = onActivate(state, messages)
+      expect(result.firstNewMessageId).toBe('msg-1')
+    })
+
+    it('places marker on delayed messages (offline delivery)', () => {
+      const msgs: NotificationMessage[] = [
+        makeMsg({ id: 'old-1', timestamp: new Date('2025-01-15T09:00:00Z') }),
+        makeMsg({ id: 'new-1', timestamp: new Date('2025-01-15T10:00:00Z'), isDelayed: true }),
+        makeMsg({ id: 'new-2', timestamp: new Date('2025-01-15T10:30:00Z'), isDelayed: true }),
+      ]
+      const state = makeState({ unreadCount: 2 })
+      const result = onActivate(state, msgs)
+      expect(result.firstNewMessageId).toBe('new-1')
+    })
+
+    it('handles empty messages', () => {
+      const state = makeState({ unreadCount: 3 })
+      const result = onActivate(state, [])
+      expect(result.firstNewMessageId).toBeUndefined()
+    })
+
+    it('sets no marker when all messages are outgoing', () => {
+      const msgs: NotificationMessage[] = [
+        makeMsg({ id: 'out-1', timestamp: new Date('2025-01-15T09:00:00Z'), isOutgoing: true }),
+        makeMsg({ id: 'out-2', timestamp: new Date('2025-01-15T09:30:00Z'), isOutgoing: true }),
+      ]
+      const state = makeState({ unreadCount: 1 })
+      const result = onActivate(state, msgs)
       expect(result.firstNewMessageId).toBeUndefined()
     })
   })

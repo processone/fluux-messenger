@@ -181,7 +181,7 @@ export function onActivate(
       // Scan forward from lastSeenMessageId to find first unseen incoming message
       for (let i = lastSeenIdx + 1; i < messages.length; i++) {
         const msg = messages[i]
-        if (!msg.isOutgoing && !msg.isDelayed) {
+        if (!msg.isOutgoing) {
           firstNewMessageId = msg.id
           break
         }
@@ -203,7 +203,7 @@ export function onActivate(
 
       if (hasUsableLastReadAt) {
         const firstNew = messages.find(
-          (msg) => msg.timestamp > fallbackReadAt && !msg.isOutgoing && !msg.isDelayed
+          (msg) => msg.timestamp > fallbackReadAt && !msg.isOutgoing
         )
         if (firstNew) {
           firstNewMessageId = firstNew.id
@@ -214,7 +214,7 @@ export function onActivate(
         let remaining = state.unreadCount
         for (let i = messages.length - 1; i >= 0; i--) {
           const m = messages[i]
-          if (!m.isOutgoing && !m.isDelayed) {
+          if (!m.isOutgoing) {
             remaining--
             if (remaining === 0) {
               firstNewMessageId = m.id
@@ -225,7 +225,7 @@ export function onActivate(
         // If we ran out of messages before exhausting unreadCount,
         // place marker at the first incoming message.
         if (remaining > 0) {
-          const firstIncoming = messages.find((m) => !m.isOutgoing && !m.isDelayed)
+          const firstIncoming = messages.find((m) => !m.isOutgoing)
           if (firstIncoming) {
             firstNewMessageId = firstIncoming.id
           }
@@ -245,10 +245,30 @@ export function onActivate(
       ? state.lastReadAt
       : new Date(state.lastReadAt as unknown as string)
     const firstNew = messages.find(
-      (msg) => msg.timestamp > lastReadAt && !msg.isOutgoing && !msg.isDelayed
+      (msg) => msg.timestamp > lastReadAt && !msg.isOutgoing
     )
     if (firstNew) {
       firstNewMessageId = firstNew.id
+    }
+  } else if (!state.lastSeenMessageId && !state.lastReadAt && state.unreadCount > 0 && messages.length > 0) {
+    // Brand-new conversation: no prior lastSeenMessageId or lastReadAt.
+    // Use unreadCount to place marker N incoming messages from the end.
+    let remaining = state.unreadCount
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i]
+      if (!m.isOutgoing) {
+        remaining--
+        if (remaining === 0) {
+          firstNewMessageId = m.id
+          break
+        }
+      }
+    }
+    if (remaining > 0) {
+      const firstIncoming = messages.find((m) => !m.isOutgoing)
+      if (firstIncoming) {
+        firstNewMessageId = firstIncoming.id
+      }
     }
   }
 
