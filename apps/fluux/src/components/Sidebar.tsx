@@ -403,6 +403,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
           className="focus-zone flex-1 overflow-y-auto p-1"
         >
           <SidebarZoneContext.Provider value={sidebarListRef}>
+            <div key={sidebarView} style={{ animation: 'sidebar-view-enter 150ms ease-out' }}>
             {sidebarView === 'messages' ? (
               <ConversationList />
             ) : sidebarView === 'directory' ? (
@@ -429,6 +430,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
                 <ActivityLogView />
               </>
             )}
+            </div>
           </SidebarZoneContext.Provider>
         </div>
 

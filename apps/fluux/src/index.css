@@ -563,6 +563,12 @@ input[type="range"]::-moz-range-thumb {
   animation-delay: 0.4s;
 }
 
+/* Sidebar view enter animation - gentle fade in on view switch */
+@keyframes sidebar-view-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 /* Message send animation - slide up and fade in */
 @keyframes message-send {
   from {
