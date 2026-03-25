@@ -33,7 +33,7 @@
 
 import { useStore } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
-import { searchStore, type SearchResult, type SearchResultContext } from '../stores/searchStore'
+import { searchStore, type SearchResult, type SearchResultContext, type SearchFilterType, type InPrefixSuggestion } from '../stores/searchStore'
 
 /**
  * Hook for searching messages across all conversations and rooms.
@@ -54,6 +54,9 @@ export function useSearch() {
     mamError,
     searchScope,
     resultContext,
+    searchFilter,
+    inPrefixSuggestions,
+    isInPrefixActive,
   } = useStore(
     searchStore,
     useShallow((state) => ({
@@ -68,6 +71,9 @@ export function useSearch() {
       mamError: state.mamError,
       searchScope: state.searchScope,
       resultContext: state.resultContext,
+      searchFilter: state.searchFilter,
+      inPrefixSuggestions: state.inPrefixSuggestions,
+      isInPrefixActive: state.isInPrefixActive,
     }))
   )
 
@@ -94,6 +100,12 @@ export function useSearch() {
     searchScope,
     /** Context messages around search results (keyed by indexId) */
     resultContext,
+    /** Filter by conversation type */
+    searchFilter,
+    /** Autocomplete suggestions for `in:` prefix */
+    inPrefixSuggestions,
+    /** Whether the `in:` autocomplete is active */
+    isInPrefixActive,
     /** Execute a local search (debounced 300ms) */
     search: searchStore.getState().search,
     /** Clear all search state and results */
@@ -106,7 +118,11 @@ export function useSearch() {
     loadMoreMAMResults: searchStore.getState().loadMoreMAMResults,
     /** Set conversation scope for search */
     setSearchScope: searchStore.getState().setSearchScope,
+    /** Set search filter type */
+    setSearchFilter: searchStore.getState().setSearchFilter,
+    /** Select an `in:` prefix suggestion */
+    selectInPrefixSuggestion: searchStore.getState().selectInPrefixSuggestion,
   }
 }
 
-export type { SearchResult, SearchResultContext }
+export type { SearchResult, SearchResultContext, SearchFilterType, InPrefixSuggestion }

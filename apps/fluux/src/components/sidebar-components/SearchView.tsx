@@ -1,14 +1,14 @@
-import { useRef, useEffect, useCallback } from 'react'
+import { useRef, useEffect, useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearch, chatStore, roomStore, rosterStore, getLocalPart } from '@fluux/sdk'
-import type { SearchResult, SearchResultContext } from '@fluux/sdk'
+import type { SearchResult, SearchResultContext, SearchFilterType } from '@fluux/sdk'
 import { Avatar } from '../Avatar'
 import { useNavigateToTarget } from '@/hooks/useNavigateToTarget'
 import { useListKeyboardNav } from '@/hooks'
 import { formatConversationTime } from '@/utils/dateFormat'
 import { useSettingsStore, type TimeFormat } from '@/stores/settingsStore'
 import { useSidebarZone } from './types'
-import { Search, X, Loader2, ExternalLink, Cloud } from 'lucide-react'
+import { Search, X, Loader2, ExternalLink, Cloud, Users, MessageSquare, Hash } from 'lucide-react'
 import { TextInput } from '../ui/TextInput'
 
 function getConversationName(conversationId: string): string {
@@ -24,10 +24,13 @@ export function SearchView() {
     query, results, isSearching, error, search, clearSearch, previewResult, setPreviewResult,
     isSearchingMAM, mamResults, hasMoreMAMResults, mamError, searchScope,
     searchMAM, loadMoreMAMResults, setSearchScope, resultContext,
+    searchFilter, setSearchFilter,
+    inPrefixSuggestions, isInPrefixActive, selectInPrefixSuggestion,
   } = useSearch()
   const { navigateToConversation, navigateToRoom } = useNavigateToTarget()
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  const [inPrefixHighlight, setInPrefixHighlight] = useState(-1)
   const currentLang = i18n.language.split('-')[0]
   const timeFormat = useSettingsStore((s) => s.timeFormat)
   const zoneRef = useSidebarZone()
@@ -70,6 +73,37 @@ export function SearchView() {
     [navigateToConversation, navigateToRoom, setPreviewResult]
   )
 
+  // Reset highlight when suggestions change
+  useEffect(() => {
+    setInPrefixHighlight(-1)
+  }, [inPrefixSuggestions])
+
+  const handleInPrefixKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (!isInPrefixActive || inPrefixSuggestions.length === 0) return
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setInPrefixHighlight((prev) => Math.min(prev + 1, inPrefixSuggestions.length - 1))
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setInPrefixHighlight((prev) => Math.max(prev - 1, -1))
+      } else if (e.key === 'Enter' && inPrefixHighlight >= 0) {
+        e.preventDefault()
+        selectInPrefixSuggestion(inPrefixSuggestions[inPrefixHighlight])
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        clearSearch()
+      }
+    },
+    [isInPrefixActive, inPrefixSuggestions, inPrefixHighlight, selectInPrefixSuggestion, clearSearch]
+  )
+
+  const filterOptions: { key: SearchFilterType; label: string; icon: typeof Users }[] = [
+    { key: 'all', label: t('search.filter.all', 'All'), icon: Search },
+    { key: 'conversations', label: t('search.filter.conversations', 'Chats'), icon: MessageSquare },
+    { key: 'rooms', label: t('search.filter.rooms', 'Rooms'), icon: Hash },
+  ]
+
   return (
     <div className="flex flex-col h-full">
       {/* Search input */}
@@ -81,6 +115,7 @@ export function SearchView() {
             type="text"
             value={query}
             onChange={(e) => search(e.target.value)}
+            onKeyDown={handleInPrefixKeyDown}
             placeholder={t('search.placeholder', 'Search messages…')}
             className="w-full pl-8 pr-8 py-1.5 text-sm bg-fluux-input border border-fluux-border rounded-md
                        text-fluux-text placeholder-fluux-muted
@@ -93,6 +128,28 @@ export function SearchView() {
             >
               <X className="w-3.5 h-3.5" />
             </button>
+          )}
+
+          {/* in: prefix autocomplete dropdown */}
+          {isInPrefixActive && inPrefixSuggestions.length > 0 && (
+            <div className="absolute left-0 right-0 top-full mt-1 bg-fluux-surface border border-fluux-border rounded-md shadow-lg z-50 max-h-48 overflow-y-auto">
+              {inPrefixSuggestions.map((s, i) => (
+                <button
+                  key={s.id}
+                  onClick={() => selectInPrefixSuggestion(s)}
+                  className={`w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 transition-colors
+                    ${i === inPrefixHighlight ? 'bg-fluux-hover text-fluux-text' : 'text-fluux-muted hover:bg-fluux-hover hover:text-fluux-text'}`}
+                >
+                  <Avatar identifier={s.id} name={s.name} size="xs" />
+                  <span className="truncate flex-1">{s.name}</span>
+                  {s.isRoom ? (
+                    <Hash className="w-3 h-3 text-fluux-muted flex-shrink-0" />
+                  ) : (
+                    <MessageSquare className="w-3 h-3 text-fluux-muted flex-shrink-0" />
+                  )}
+                </button>
+              ))}
+            </div>
           )}
         </div>
       </div>
@@ -113,6 +170,26 @@ export function SearchView() {
         </div>
       )}
 
+      {/* Type filter pills */}
+      {query && !isInPrefixActive && (
+        <div className="flex items-center gap-1 px-3 pb-1">
+          {filterOptions.map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => setSearchFilter(key)}
+              className={`text-xs rounded-full px-2.5 py-0.5 transition-colors flex items-center gap-1 ${
+                searchFilter === key
+                  ? 'bg-fluux-brand text-white'
+                  : 'bg-fluux-hover text-fluux-muted hover:text-fluux-text'
+              }`}
+            >
+              <Icon className="w-3 h-3" />
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Results area */}
       <div ref={listRef} className="flex-1 overflow-y-auto px-1" {...getContainerProps()}>
         {isSearching && (
@@ -122,7 +199,7 @@ export function SearchView() {
           </div>
         )}
 
-        {!isSearching && query && results.length === 0 && mamResults.length === 0 && !isSearchingMAM && (
+        {!isSearching && !isInPrefixActive && query && results.length === 0 && mamResults.length === 0 && !isSearchingMAM && (
           <div className="text-center py-8 text-fluux-muted text-sm">
             {t('search.noResults', 'No messages found')}
           </div>
@@ -156,7 +233,7 @@ export function SearchView() {
         )}
 
         {/* MAM search button */}
-        {!isSearching && query && !isSearchingMAM && mamResults.length === 0 && (
+        {!isSearching && !isInPrefixActive && query && !isSearchingMAM && mamResults.length === 0 && (
           <div className="px-2 py-3">
             <button
               onClick={searchMAM}

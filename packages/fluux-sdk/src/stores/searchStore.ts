@@ -23,6 +23,23 @@ import type { XMPPClient } from '../core/XMPPClient'
 import type { Message, RoomMessage } from '../core/types'
 
 /**
+ * Filter type for narrowing search results by conversation type.
+ */
+export type SearchFilterType = 'all' | 'conversations' | 'rooms'
+
+/**
+ * Autocomplete suggestion for the `in:` prefix.
+ */
+export interface InPrefixSuggestion {
+  /** Conversation or room JID */
+  id: string
+  /** Display name */
+  name: string
+  /** Whether this is a room (groupchat) */
+  isRoom: boolean
+}
+
+/**
  * A search result enriched with conversation context and match snippet.
  */
 export interface SearchResult {
@@ -95,6 +112,14 @@ export interface SearchState {
   /** Conversation scope: null = global, JID = conversation-scoped */
   searchScope: string | null
 
+  /** Filter by conversation type */
+  searchFilter: SearchFilterType
+
+  /** Autocomplete suggestions for `in:` prefix */
+  inPrefixSuggestions: InPrefixSuggestion[]
+  /** Whether the `in:` autocomplete is active */
+  isInPrefixActive: boolean
+
   /** Execute a local search (debounced internally) */
   search: (query: string) => void
   /** Clear all search state */
@@ -107,6 +132,10 @@ export interface SearchState {
   loadMoreMAMResults: () => void
   /** Set conversation scope for search */
   setSearchScope: (conversationId: string | null) => void
+  /** Set search filter type */
+  setSearchFilter: (filter: SearchFilterType) => void
+  /** Select an `in:` prefix suggestion to scope the search */
+  selectInPrefixSuggestion: (suggestion: InPrefixSuggestion) => void
 }
 
 // --- Module-level state ---
@@ -264,16 +293,64 @@ async function fetchResultContexts(results: SearchResult[], query: string): Prom
 }
 
 /**
+ * Parse a query for an `in:` prefix used to scope search to a conversation.
+ *
+ * @example
+ * parseInPrefix('in:alice')       // { inTerm: 'alice', rest: '' }
+ * parseInPrefix('in:Alice hello') // { inTerm: 'Alice', rest: 'hello' }
+ * parseInPrefix('hello')          // null
+ */
+export function parseInPrefix(query: string): { inTerm: string; rest: string } | null {
+  const match = query.match(/^in:(\S*)(?:\s(.*))?$/)
+  if (!match) return null
+  return {
+    inTerm: match[1] || '',
+    rest: (match[2] || '').trim(),
+  }
+}
+
+/**
+ * Generate autocomplete suggestions for the `in:` prefix by searching
+ * conversation entities and rooms by name or JID.
+ */
+export function getInPrefixSuggestions(term: string): InPrefixSuggestion[] {
+  if (!term) return []
+  const lowerTerm = term.toLowerCase()
+  const results: InPrefixSuggestion[] = []
+
+  // Search 1:1 conversations
+  for (const [jid, entity] of chatStore.getState().conversationEntities) {
+    if (entity.name.toLowerCase().includes(lowerTerm) || jid.toLowerCase().includes(lowerTerm)) {
+      results.push({ id: jid, name: entity.name, isRoom: false })
+    }
+  }
+
+  // Search rooms
+  for (const [jid, room] of roomStore.getState().rooms) {
+    const roomName = room.name || jid
+    if (roomName.toLowerCase().includes(lowerTerm) || jid.toLowerCase().includes(lowerTerm)) {
+      results.push({ id: jid, name: roomName, isRoom: true })
+    }
+  }
+
+  return results.slice(0, 10)
+}
+
+/**
  * Perform the actual local search and update the store.
  */
 async function executeSearch(query: string): Promise<void> {
-  const scope = searchStore.getState().searchScope
+  const state = searchStore.getState()
+  const scope = state.searchScope
+  const filter = state.searchFilter
   const parsed = parseSearchQuery(query)
   const phrases = parsed.phrases.length > 0 ? parsed.phrases : undefined
   try {
     const indexResults = await searchIndex.search(query, {
       limit: 50,
       ...(scope ? { conversationId: scope } : {}),
+      ...(filter === 'conversations' ? { isRoom: false } : {}),
+      ...(filter === 'rooms' ? { isRoom: true } : {}),
     })
 
     const results: SearchResult[] = indexResults.map((r) => ({
@@ -406,7 +483,15 @@ async function executeMAMSearch(append: boolean): Promise<void> {
 
     // Deduplicate against local results
     const localResults = searchStore.getState().results
-    const deduplicated = deduplicateMAMResults(localResults, newResults)
+    let deduplicated = deduplicateMAMResults(localResults, newResults)
+
+    // Apply type filter to MAM results
+    const currentFilter = searchStore.getState().searchFilter
+    if (currentFilter === 'conversations') {
+      deduplicated = deduplicated.filter(r => !r.isRoom)
+    } else if (currentFilter === 'rooms') {
+      deduplicated = deduplicated.filter(r => r.isRoom)
+    }
 
     // Index fetched messages locally for future searches
     void indexMAMResults(newResults)
@@ -483,6 +568,9 @@ export const searchStore = createStore<SearchState>((set) => ({
   mamError: null,
   resultContext: new Map(),
   searchScope: null,
+  searchFilter: 'all',
+  inPrefixSuggestions: [],
+  isInPrefixActive: false,
 
   search: (query: string) => {
     if (debounceTimer) {
@@ -492,10 +580,28 @@ export const searchStore = createStore<SearchState>((set) => ({
 
     const trimmed = query.trim()
     if (!trimmed) {
-      set({ query: '', isSearching: false, results: [], error: null, mamResults: [], mamError: null, hasMoreMAMResults: false })
+      set({ query: '', isSearching: false, results: [], error: null, mamResults: [], mamError: null, hasMoreMAMResults: false, searchFilter: 'all', inPrefixSuggestions: [], isInPrefixActive: false })
       mamSearchGeneration++  // Cancel any in-flight MAM search
       return
     }
+
+    // Check for in: prefix
+    const inParsed = parseInPrefix(trimmed)
+    if (inParsed && !inParsed.rest) {
+      // User is still typing the in: scope — show suggestions, don't search
+      const suggestions = getInPrefixSuggestions(inParsed.inTerm)
+      set({
+        query,
+        isSearching: false,
+        results: [],
+        inPrefixSuggestions: suggestions,
+        isInPrefixActive: true,
+      })
+      return
+    }
+
+    // Clear in: state when not in prefix mode
+    set({ inPrefixSuggestions: [], isInPrefixActive: false })
 
     // Reset MAM results and context on new query
     set({ query, isSearching: true, error: null, mamResults: [], mamError: null, hasMoreMAMResults: false, resultContext: new Map() })
@@ -530,6 +636,9 @@ export const searchStore = createStore<SearchState>((set) => ({
       hasMoreMAMResults: false,
       mamError: null,
       resultContext: new Map(),
+      searchFilter: 'all',
+      inPrefixSuggestions: [],
+      isInPrefixActive: false,
     })
   },
 
@@ -560,6 +669,50 @@ export const searchStore = createStore<SearchState>((set) => ({
     if (state.query) {
       set({ isSearching: true })
       void executeSearch(state.query)
+    }
+  },
+
+  setSearchFilter: (filter: SearchFilterType) => {
+    const state = searchStore.getState()
+    set({
+      searchFilter: filter,
+      results: [],
+      mamResults: [],
+      mamError: null,
+      hasMoreMAMResults: false,
+    })
+    mamSearchGeneration++
+    mamRsmCursor = undefined
+    // Re-run local search with new filter if there's an active query
+    if (state.query.trim()) {
+      set({ isSearching: true })
+      void executeSearch(state.query.trim())
+    }
+  },
+
+  selectInPrefixSuggestion: (suggestion: InPrefixSuggestion) => {
+    const state = searchStore.getState()
+    const inParsed = parseInPrefix(state.query.trim())
+    const restQuery = inParsed?.rest || ''
+
+    // Set scope via existing mechanism
+    set({
+      searchScope: suggestion.id,
+      query: restQuery,
+      inPrefixSuggestions: [],
+      isInPrefixActive: false,
+      results: [],
+      mamResults: [],
+      mamError: null,
+      hasMoreMAMResults: false,
+    })
+    mamSearchGeneration++
+    mamRsmCursor = undefined
+
+    // If there's remaining query text, trigger search
+    if (restQuery.trim()) {
+      set({ isSearching: true })
+      void executeSearch(restQuery.trim())
     }
   },
 }))

@@ -465,7 +465,7 @@ export async function updateMessage(message: Message | RoomMessage): Promise<voi
  */
 export async function search(
   query: string,
-  options?: { limit?: number; conversationId?: string }
+  options?: { limit?: number; conversationId?: string; isRoom?: boolean }
 ): Promise<SearchIndexResult[]> {
   if (!isIndexedDBAvailable()) return []
   const limit = options?.limit ?? DEFAULT_SEARCH_LIMIT
@@ -542,6 +542,10 @@ export async function search(
     if (doc) {
       // Apply conversation filter if specified
       if (options?.conversationId && doc.conversationId !== options.conversationId) {
+        continue
+      }
+      // Apply isRoom filter if specified
+      if (options?.isRoom !== undefined && doc.isRoom !== options.isRoom) {
         continue
       }
       // Post-filter: verify exact phrases appear contiguously in the body

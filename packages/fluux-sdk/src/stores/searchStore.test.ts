@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { searchStore, setSearchClient, deduplicateMAMResults, type SearchResult } from './searchStore'
+import { searchStore, setSearchClient, deduplicateMAMResults, parseInPrefix, getInPrefixSuggestions, type SearchResult } from './searchStore'
 import { chatStore } from './chatStore'
-// roomStore import not needed — localStorage mock covers its persist middleware
+import { roomStore } from './roomStore'
 import { connectionStore } from './connectionStore'
 import * as searchIndex from '../utils/searchIndex'
 import type { SearchIndexResult } from '../utils/searchIndex'
@@ -57,6 +57,9 @@ describe('searchStore', () => {
       mamError: null,
       searchScope: null,
       resultContext: new Map(),
+      searchFilter: 'all',
+      inPrefixSuggestions: [],
+      isInPrefixActive: false,
     })
 
     // Set up chatStore with test data for conversation name resolution
@@ -702,6 +705,251 @@ describe('searchStore', () => {
 
       const state = searchStore.getState()
       expect(state.results[0].source).toBe('local')
+    })
+  })
+
+  // ===========================================================================
+  // searchFilter
+  // ===========================================================================
+
+  describe('searchFilter', () => {
+    it('should default to all', () => {
+      expect(searchStore.getState().searchFilter).toBe('all')
+    })
+
+    it('should update searchFilter when setSearchFilter is called', () => {
+      searchStore.getState().setSearchFilter('conversations')
+      expect(searchStore.getState().searchFilter).toBe('conversations')
+    })
+
+    it('should pass isRoom:false to searchIndex when filter is conversations', async () => {
+      searchStore.setState({ query: 'hello' })
+      searchStore.getState().setSearchFilter('conversations')
+      await vi.runAllTimersAsync()
+
+      expect(searchIndex.search).toHaveBeenCalledWith('hello', expect.objectContaining({
+        isRoom: false,
+      }))
+    })
+
+    it('should pass isRoom:true to searchIndex when filter is rooms', async () => {
+      searchStore.setState({ query: 'hello' })
+      searchStore.getState().setSearchFilter('rooms')
+      await vi.runAllTimersAsync()
+
+      expect(searchIndex.search).toHaveBeenCalledWith('hello', expect.objectContaining({
+        isRoom: true,
+      }))
+    })
+
+    it('should not pass isRoom to searchIndex when filter is all', async () => {
+      searchStore.setState({ query: 'hello' })
+      searchStore.getState().setSearchFilter('all')
+      await vi.runAllTimersAsync()
+
+      expect(searchIndex.search).toHaveBeenCalledWith('hello', expect.not.objectContaining({
+        isRoom: expect.anything(),
+      }))
+    })
+
+    it('should re-run search when filter changes with active query', () => {
+      searchStore.setState({ query: 'hello' })
+
+      searchStore.getState().setSearchFilter('rooms')
+
+      expect(searchStore.getState().isSearching).toBe(true)
+    })
+
+    it('should not re-run search when filter changes without a query', () => {
+      searchStore.setState({ query: '' })
+
+      searchStore.getState().setSearchFilter('rooms')
+
+      expect(searchStore.getState().isSearching).toBe(false)
+    })
+
+    it('should reset filter to all on clearSearch', () => {
+      searchStore.setState({ searchFilter: 'rooms' })
+
+      searchStore.getState().clearSearch()
+
+      expect(searchStore.getState().searchFilter).toBe('all')
+    })
+
+    it('should reset filter to all when query is cleared', () => {
+      searchStore.setState({ searchFilter: 'rooms', query: 'hello' })
+
+      searchStore.getState().search('')
+
+      expect(searchStore.getState().searchFilter).toBe('all')
+    })
+
+    it('should clear results when filter changes', () => {
+      searchStore.setState({
+        results: [{ indexId: 'x', messageId: 'x', conversationId: 'y', conversationName: 'Y', isRoom: false, from: 'z', timestamp: 0, body: 'w', matchSnippet: null, source: 'local' as const }],
+        mamResults: [{ indexId: 'mam:x', messageId: 'x2', conversationId: 'y', conversationName: 'Y', isRoom: true, from: 'z', timestamp: 0, body: 'w', matchSnippet: null, source: 'mam' as const }],
+      })
+
+      searchStore.getState().setSearchFilter('conversations')
+
+      const state = searchStore.getState()
+      expect(state.results).toEqual([])
+      expect(state.mamResults).toEqual([])
+    })
+  })
+
+  // ===========================================================================
+  // in: prefix
+  // ===========================================================================
+
+  describe('in: prefix', () => {
+    describe('parseInPrefix', () => {
+      it('should return null for non-prefixed query', () => {
+        expect(parseInPrefix('hello')).toBeNull()
+      })
+
+      it('should parse in: with term', () => {
+        expect(parseInPrefix('in:alice')).toEqual({ inTerm: 'alice', rest: '' })
+      })
+
+      it('should parse in: with term and rest', () => {
+        expect(parseInPrefix('in:Alice hello world')).toEqual({ inTerm: 'Alice', rest: 'hello world' })
+      })
+
+      it('should handle empty in:', () => {
+        expect(parseInPrefix('in:')).toEqual({ inTerm: '', rest: '' })
+      })
+
+      it('should not match in: in the middle of query', () => {
+        expect(parseInPrefix('hello in:alice')).toBeNull()
+      })
+    })
+
+    describe('getInPrefixSuggestions', () => {
+      beforeEach(() => {
+        // roomStore needs rooms set up for suggestions
+        roomStore.setState({
+          rooms: new Map([
+            ['dev@conference.example.com', { jid: 'dev@conference.example.com', name: 'Dev Team', joined: true } as any],
+            ['general@conference.example.com', { jid: 'general@conference.example.com', name: 'General', joined: true } as any],
+          ]),
+        })
+      })
+
+      it('should return empty for empty term', () => {
+        expect(getInPrefixSuggestions('')).toEqual([])
+      })
+
+      it('should match conversations by name', () => {
+        const results = getInPrefixSuggestions('ali')
+        expect(results).toHaveLength(1)
+        expect(results[0]).toEqual({ id: 'alice@example.com', name: 'Alice', isRoom: false })
+      })
+
+      it('should match rooms by name', () => {
+        const results = getInPrefixSuggestions('dev')
+        expect(results).toHaveLength(1)
+        expect(results[0]).toEqual({ id: 'dev@conference.example.com', name: 'Dev Team', isRoom: true })
+      })
+
+      it('should match by JID', () => {
+        const results = getInPrefixSuggestions('bob@')
+        expect(results).toHaveLength(1)
+        expect(results[0].id).toBe('bob@example.com')
+      })
+
+      it('should return both conversations and rooms', () => {
+        // 'al' matches Alice, 'general' matches General room — test case-insensitive
+        const results = getInPrefixSuggestions('e') // matches alice, bob, dev, general (all contain 'e')
+        expect(results.length).toBeGreaterThan(1)
+        const hasChat = results.some(r => !r.isRoom)
+        const hasRoom = results.some(r => r.isRoom)
+        expect(hasChat).toBe(true)
+        expect(hasRoom).toBe(true)
+      })
+    })
+
+    describe('search with in: prefix', () => {
+      beforeEach(() => {
+        roomStore.setState({
+          rooms: new Map([
+            ['dev@conference.example.com', { jid: 'dev@conference.example.com', name: 'Dev Team', joined: true } as any],
+          ]),
+        })
+      })
+
+      it('should activate in-prefix mode when query starts with in:', () => {
+        searchStore.getState().search('in:ali')
+
+        const state = searchStore.getState()
+        expect(state.isInPrefixActive).toBe(true)
+        expect(state.inPrefixSuggestions).toHaveLength(1)
+        expect(state.inPrefixSuggestions[0].name).toBe('Alice')
+      })
+
+      it('should not trigger search index when in-prefix mode is active without rest', () => {
+        searchStore.getState().search('in:ali')
+        vi.advanceTimersByTime(300)
+
+        expect(searchIndex.search).not.toHaveBeenCalled()
+      })
+
+      it('should clear in-prefix state for normal queries', () => {
+        searchStore.setState({ isInPrefixActive: true, inPrefixSuggestions: [{ id: 'x', name: 'X', isRoom: false }] })
+
+        searchStore.getState().search('hello')
+
+        const state = searchStore.getState()
+        expect(state.isInPrefixActive).toBe(false)
+        expect(state.inPrefixSuggestions).toEqual([])
+      })
+    })
+
+    describe('selectInPrefixSuggestion', () => {
+      it('should set scope and clear in-prefix state', () => {
+        searchStore.setState({ query: 'in:alice', isInPrefixActive: true })
+
+        searchStore.getState().selectInPrefixSuggestion({ id: 'alice@example.com', name: 'Alice', isRoom: false })
+
+        const state = searchStore.getState()
+        expect(state.searchScope).toBe('alice@example.com')
+        expect(state.isInPrefixActive).toBe(false)
+        expect(state.inPrefixSuggestions).toEqual([])
+      })
+
+      it('should update query to rest and trigger search', () => {
+        searchStore.setState({ query: 'in:alice hello world', isInPrefixActive: true })
+
+        searchStore.getState().selectInPrefixSuggestion({ id: 'alice@example.com', name: 'Alice', isRoom: false })
+
+        const state = searchStore.getState()
+        expect(state.query).toBe('hello world')
+        expect(state.searchScope).toBe('alice@example.com')
+        expect(state.isSearching).toBe(true)
+      })
+
+      it('should not trigger search when no rest query', () => {
+        searchStore.setState({ query: 'in:alice', isInPrefixActive: true })
+
+        searchStore.getState().selectInPrefixSuggestion({ id: 'alice@example.com', name: 'Alice', isRoom: false })
+
+        const state = searchStore.getState()
+        expect(state.query).toBe('')
+        expect(state.isSearching).toBe(false)
+      })
+    })
+
+    it('should reset in-prefix state on clearSearch', () => {
+      searchStore.setState({
+        isInPrefixActive: true,
+        inPrefixSuggestions: [{ id: 'x', name: 'X', isRoom: false }],
+      })
+
+      searchStore.getState().clearSearch()
+
+      const state = searchStore.getState()
+      expect(state.isInPrefixActive).toBe(false)
+      expect(state.inPrefixSuggestions).toEqual([])
     })
   })
 })

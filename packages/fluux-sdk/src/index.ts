@@ -107,7 +107,7 @@ export type { NotificationEventHandlers } from './hooks/useNotificationEvents'
 export { useContactTime } from './hooks/useContactTime'
 export { useLastActivity } from './hooks/useLastActivity'
 export { useSearch } from './hooks/useSearch'
-export type { SearchResult, SearchResultContext } from './hooks/useSearch'
+export type { SearchResult, SearchResultContext, SearchFilterType, InPrefixSuggestion } from './hooks/useSearch'
 export { rebuildSearchIndex, clearSearchIndex, parseSearchQuery } from './utils/searchIndex'
 export type { RebuildProgress, ParsedQuery } from './utils/searchIndex'
 
