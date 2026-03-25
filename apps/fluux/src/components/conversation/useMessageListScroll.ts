@@ -54,6 +54,7 @@ export interface UseMessageListScrollOptions {
   onTargetMessageConsumed?: () => void  // Called after scrolling to target message
   externalScrollerRef?: React.RefObject<HTMLElement | null>
   externalIsAtBottomRef?: React.MutableRefObject<boolean>
+  clearFirstNewMessageId?: () => void  // Called when user scrolls past the new message marker
   onScrollToTop?: () => void
   isLoadingOlder?: boolean
   isHistoryComplete?: boolean
@@ -87,6 +88,7 @@ export function useMessageListScroll({
   messageCount,
   firstMessageId,
   firstNewMessageId,
+  clearFirstNewMessageId,
   targetMessageId,
   onTargetMessageConsumed,
   externalScrollerRef,
@@ -149,6 +151,10 @@ export function useMessageListScroll({
 
   // Track whether we've already scrolled to the new message marker (for two-step FAB behavior)
   const hasScrolledToMarkerRef = useRef(false)
+
+  // Track whether user has scrolled at least once since the marker was set.
+  // Prevents the marker from being cleared immediately on initial load/scroll-to-marker.
+  const userHasScrolledSinceMarkerRef = useRef(false)
 
   // ==========================================================================
   // REACT STATE - Only for things that need to trigger UI updates
@@ -528,6 +534,33 @@ export function useMessageListScroll({
     const shouldShowFab = distFromBottom > FAB_THRESHOLD
     setShowScrollToBottom(prev => prev !== shouldShowFab ? shouldShowFab : prev)
 
+    // Clear new message marker when user scrolls past it or reaches the bottom.
+    // Skip on the very first scroll events after marker setup to avoid clearing
+    // the marker before the user has a chance to see it.
+    if (firstNewMessageId && clearFirstNewMessageId) {
+      if (!userHasScrolledSinceMarkerRef.current) {
+        // First scroll after marker was set — arm the flag for next time
+        userHasScrolledSinceMarkerRef.current = true
+      } else if (distFromBottom < AT_BOTTOM_THRESHOLD) {
+        // User reached the bottom — all new messages are visible
+        clearFirstNewMessageId()
+      } else {
+        const escapedId = CSS.escape(firstNewMessageId)
+        const markerEl = el.querySelector(`[data-message-id="${escapedId}"]`) as HTMLElement | null
+        if (markerEl) {
+          const scrollerRect = el.getBoundingClientRect()
+          const markerRect = markerEl.getBoundingClientRect()
+          // Marker is "scrolled past" when its bottom edge is above the viewport
+          if (markerRect.bottom < scrollerRect.top) {
+            clearFirstNewMessageId()
+          }
+        } else {
+          // Marker element not in DOM (trimmed) — clear it
+          clearFirstNewMessageId()
+        }
+      }
+    }
+
     // Save position for cross-conversation persistence (throttled)
     const now = Date.now()
     if (now - lastSaveTimeRef.current > SAVE_THROTTLE_MS) {
@@ -571,6 +604,7 @@ export function useMessageListScroll({
 
     // ENTERING new conversation - reset state
     hasInitializedRef.current = false
+    userHasScrolledSinceMarkerRef.current = false
     scrolledAwayFromTopRef.current = false
     lastScrollDataRef.current = null
     prependRef.current = null
@@ -1049,6 +1083,7 @@ export function useMessageListScroll({
   useEffect(() => {
     if (firstNewMessageId !== prevFirstNewMessageIdRef.current) {
       hasScrolledToMarkerRef.current = false
+      userHasScrolledSinceMarkerRef.current = false
       prevFirstNewMessageIdRef.current = firstNewMessageId
     }
   }, [firstNewMessageId])
