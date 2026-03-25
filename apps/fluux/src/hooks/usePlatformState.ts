@@ -13,8 +13,12 @@ const ACTIVITY_THROTTLE_MS = 5000
 /** Heartbeat interval for time-gap sleep detection (ms). */
 const HEARTBEAT_INTERVAL_MS = 10_000
 
-/** Minimum time gap to consider as system sleep (ms). */
-const SLEEP_THRESHOLD_MS = 30_000
+/** Minimum time gap to consider as system sleep (ms).
+ * Set to 60s so that minor event-loop delays (React renders, IQ processing)
+ * don't trigger false wake detections.  The Tauri system-did-wake event
+ * handles real OS-level sleep/wake with zero delay; this heartbeat-based
+ * detection is only a fallback for web mode. */
+const SLEEP_THRESHOLD_MS = 60_000
 
 /** Minimum time the page must be hidden before signaling SDK (ms). */
 const MIN_HIDDEN_TIME_MS = 60_000

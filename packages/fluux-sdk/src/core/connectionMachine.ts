@@ -428,6 +428,8 @@ export const connectionMachine = setup({
             WAKE: {
               actions: 'resetAttemptCounter',
             },
+            // Already attempting — ignore to prevent parallel attempts
+            TRIGGER_RECONNECT: {},
           },
         },
       },

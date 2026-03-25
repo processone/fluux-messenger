@@ -780,78 +780,29 @@ export class Connection extends BaseModule {
    */
   async verifyConnection(timeoutMs = VERIFY_CONNECTION_TIMEOUT_MS): Promise<boolean> {
     if (!this.xmpp) return false
-    const clientAtStart = this.xmpp
     const verifyStart = Date.now()
 
     // Transition the machine to connected.verifying if currently healthy.
-    // When called from notifySystemState, WAKE is already sent. When called
+    // When called from handleAwake, WAKE is already sent. When called
     // directly (e.g., client.verifyConnection()), we send WAKE here so the
     // machine state and store stay consistent.
     if (this.isInConnectedState()) {
       this.sendMachineEvent({ type: 'WAKE' }, 'verifyConnection:wake')
     }
 
-    try {
-      // Send a Stream Management request (<r/>) if available, otherwise a ping
-      const sm = this.xmpp.streamManagement as any
-      if (sm?.enabled) {
-        // SM request - wait for <a/> acknowledgment with timeout
-        const ackReceived = await this.waitForSmAck(timeoutMs)
-        // If a NEW xmpp client was established during the await (reconnect completed),
-        // this verification is stale — the new connection is already established.
-        // Note: null means connection was torn down (not replaced), so still report failure.
-        if (this.xmpp && this.xmpp !== clientAtStart) {
-          logInfo('verifyConnection: client replaced during await, ignoring stale result')
-          return true
-        }
-        if (!ackReceived) {
-          // Timeout waiting for ack - connection is dead
-          this.stores.console.addEvent('Verification timed out waiting for SM ack', 'connection')
-          this.sendMachineEvent({ type: 'VERIFY_FAILED' }, 'verifyConnection:sm-timeout')
-          this.handleDeadSocket({ source: 'verify-timeout' })
-          return false
-        }
-      } else {
-        // Fallback: send a ping IQ and wait for response
-        const iqCaller = (clientAtStart as any).iqCaller
-        if (iqCaller) {
-          const ping = xml(
-            'iq',
-            { type: 'get', id: `ping_${Date.now()}`, to: getDomain(this.credentials?.jid || '') },
-            xml('ping', { xmlns: NS_PING })
-          )
-          await Promise.race([
-            iqCaller.request(ping),
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('Ping timeout')), timeoutMs)
-            ),
-          ])
-        } else {
-          // No iqCaller available - just send and hope for the best
-          const ping = xml(
-            'iq',
-            { type: 'get', id: `ping_${Date.now()}` },
-            xml('ping', { xmlns: NS_PING })
-          )
-          await clientAtStart.send(ping)
-        }
-      }
+    const result = await this.probeConnection(timeoutMs, 'verify')
 
-      // Connection verified — signal machine: verifying → healthy
-      if (this.xmpp && this.xmpp !== clientAtStart) return true
+    if (result === 'healthy') {
       this.sendMachineEvent({ type: 'VERIFY_SUCCESS' }, 'verifyConnection:success')
       logInfo(`Connection verified (${Date.now() - verifyStart}ms)`)
       return true
-    } catch (err) {
-      // If a new client was established during the await, this error is stale
-      if (this.xmpp && this.xmpp !== clientAtStart) return true
-      const errorMessage = err instanceof Error ? err.message : String(err)
-      if (isDeadSocketError(errorMessage) || errorMessage.includes('timeout')) {
-        this.sendMachineEvent({ type: 'VERIFY_FAILED' }, 'verifyConnection:error')
-        this.handleDeadSocket({ source: 'verify-error' })
-      }
-      return false
     }
+    if (result === 'stale') return true // client replaced — new connection is fine
+
+    this.stores.console.addEvent('Verification failed, reconnecting', 'connection')
+    this.sendMachineEvent({ type: 'VERIFY_FAILED' }, 'verifyConnection:failed')
+    this.handleDeadSocket({ source: 'verify-failed' })
+    return false
   }
 
   /**
@@ -867,54 +818,78 @@ export class Connection extends BaseModule {
    * connection is expected to be healthy.
    */
   async verifyConnectionHealth(timeoutMs = VERIFY_CONNECTION_TIMEOUT_MS): Promise<boolean> {
+    if (!this.xmpp || !this.isInConnectedState()) return false
+
+    const result = await this.probeConnection(timeoutMs, 'keepalive')
+
+    if (result === 'healthy') return true
+    if (result === 'stale') return true
+
+    if (!this.isInConnectedState()) return false
+    this.stores.console.addEvent('Keepalive health check failed, reconnecting', 'connection')
+    this.handleDeadSocket({ source: 'keepalive-failed' })
+    return false
+  }
+
+  /**
+   * Probe connection health via SM ack or ping fallback.
+   *
+   * Shared implementation for {@link verifyConnection} and
+   * {@link verifyConnectionHealth}. Returns a discriminated result so the
+   * caller can decide how to handle each outcome (machine transitions, logging).
+   */
+  private async probeConnection(
+    timeoutMs: number,
+    label: string
+  ): Promise<'healthy' | 'dead' | 'stale'> {
     const clientAtStart = this.xmpp
-    if (!clientAtStart || !this.isInConnectedState()) return false
+    if (!clientAtStart) return 'dead'
 
     try {
       const sm = clientAtStart.streamManagement as any
       if (sm?.enabled) {
         const ackReceived = await this.waitForSmAck(timeoutMs)
-        // If a NEW xmpp client was established during the await (reconnect completed),
-        // this health check is stale — don't kill the new connection.
-        // Note: null means connection was torn down (not replaced), so still report failure.
         if (this.xmpp && this.xmpp !== clientAtStart) {
-          logInfo('verifyConnectionHealth: client replaced during await, ignoring stale result')
-          return true
+          logInfo(`${label}: client replaced during await, ignoring stale result`)
+          return 'stale'
         }
-        if (!ackReceived) {
-          // Double-check we're still in a state where acting makes sense
-          if (!this.isInConnectedState()) return false
-          this.stores.console.addEvent('Keepalive health check failed (SM ack timeout)', 'connection')
-          this.handleDeadSocket({ source: 'keepalive-timeout' })
-          return false
-        }
+        if (!ackReceived) return 'dead'
       } else {
+        // Fallback: send a ping IQ and wait for response
         const iqCaller = (clientAtStart as any).iqCaller
         if (iqCaller) {
           const ping = xml(
             'iq',
-            { type: 'get', id: `keepalive_${Date.now()}`, to: getDomain(this.credentials?.jid || '') },
+            { type: 'get', id: `${label}_${Date.now()}`, to: getDomain(this.credentials?.jid || '') },
             xml('ping', { xmlns: NS_PING })
           )
           await Promise.race([
             iqCaller.request(ping),
             new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('Keepalive ping timeout')), timeoutMs)
+              setTimeout(() => reject(new Error('Ping timeout')), timeoutMs)
             ),
           ])
+        } else {
+          // No iqCaller available — fire-and-forget ping
+          const ping = xml(
+            'iq',
+            { type: 'get', id: `${label}_${Date.now()}` },
+            xml('ping', { xmlns: NS_PING })
+          )
+          await clientAtStart.send(ping)
         }
       }
-      return true
+
+      // If client was replaced during the await, treat as stale
+      if (this.xmpp && this.xmpp !== clientAtStart) return 'stale'
+      return 'healthy'
     } catch (err) {
-      // If client was replaced during the await, this error is stale
-      if (this.xmpp !== clientAtStart) return true
+      if (this.xmpp && this.xmpp !== clientAtStart) return 'stale'
       const errorMessage = err instanceof Error ? err.message : String(err)
       if (isDeadSocketError(errorMessage) || errorMessage.includes('timeout')) {
-        if (!this.isInConnectedState()) return false
-        this.stores.console.addEvent('Keepalive health check failed, reconnecting', 'connection')
-        this.handleDeadSocket({ source: 'keepalive-error' })
+        return 'dead'
       }
-      return false
+      return 'dead'
     }
   }
 
@@ -1023,25 +998,11 @@ export class Connection extends BaseModule {
       this.sendMachineEvent({ type: 'SOCKET_DIED' }, `handleDeadSocket:${source}`)
     }
 
-    // Capture SM state into cache BEFORE nulling the client reference.
+    // Capture SM state into cache BEFORE cleaning up the client.
     // This ensures the cache has the latest sm.id + inbound counter
     // for session resumption in attemptReconnect().
     this.smPersistence.getState(this.xmpp)
-
-    // IMPORTANT: Null the client reference SYNCHRONOUSLY before any async operations.
-    // This prevents a race condition where the old client's 'online' event fires
-    // during cleanup, causing handleConnectionSuccess to run and set status='online'
-    // while xmpp is about to become null.
-    // This matches the pattern used in disconnect().
-    const clientToClean = this.xmpp
-    this.xmpp = null
-
-    // Clear any pending SM ack debounce (socket is dead, don't try to send)
-    clearSmAckDebounce(this.smPatchState)
-    // Forcefully destroy old client (socket is already dead, graceful stop() can hang)
-    if (clientToClean) {
-      forceDestroyClient(clientToClean)
-    }
+    this.cleanupClient()
 
     if (immediateReconnect) {
       this.stores.console.addEvent(
@@ -1088,55 +1049,11 @@ export class Connection extends BaseModule {
     sleepDurationMs?: number
   ): Promise<void> {
     switch (state) {
-      case 'awake': {
-        const sleepSec = sleepDurationMs != null ? Math.round(sleepDurationMs / 1000) : null
-        logInfo(`System state: awake${sleepSec != null ? ` (sleep: ${sleepSec}s)` : ''}`)
-        // Verify connection health after wake from sleep (time-gap detected)
-        // This is the reliable indicator of potential socket death
-        if (this.isInConnectedState()) {
-          // Send WAKE to the machine — if sleep exceeds SM timeout, the guard
-          // transitions directly to reconnecting (skipping verification).
-          // Otherwise, transitions to connected.verifying.
-          this.sendMachineEvent({ type: 'WAKE', sleepDurationMs }, 'notifySystemState:awake')
-          
-
-          // After the machine transition, check if we went to reconnecting
-          // (long sleep) or verifying (short sleep)
-          if (this.isInReconnectingState()) {
-            const sleepSecs = Math.round((sleepDurationMs ?? 0) / 1000)
-            this.stores.console.addEvent(
-              `System state: ${state}, sleep duration ${sleepSecs}s exceeds SM timeout - reconnecting immediately`,
-              'connection'
-            )
-            // Machine already transitioned to reconnecting — clean up dead client.
-            const clientToClean = this.xmpp
-            this.xmpp = null
-            clearSmAckDebounce(this.smPatchState)
-            if (clientToClean) {
-              forceDestroyClient(clientToClean)
-            }
-          } else {
-            // Short sleep — verify connection health
-            this.stores.console.addEvent(`System state: ${state}, verifying connection`, 'connection')
-            const isHealthy = await this.verifyConnection()
-            if (!isHealthy && !this.isInReconnectingState()) {
-              // Only trigger reconnection if the disconnect handler hasn't already done so
-              // during the async verifyConnection() await
-              this.stores.console.addEvent('Connection dead after wake, reconnecting...', 'connection')
-              this.handleDeadSocket()
-            }
-          }
-        } else if (this.isInReconnectingState()) {
-          // Trigger immediate reconnect if we were already reconnecting
-          this.stores.console.addEvent(`System state: ${state}, triggering immediate reconnect`, 'connection')
-          this.triggerReconnect()
-        }
+      case 'awake':
+        await this.handleAwake(sleepDurationMs)
         break
-      }
 
       case 'visible':
-        // App became visible - don't verify connection (no indication of socket death)
-        // Only trigger reconnect if we were already in reconnecting state
         if (this.isInReconnectingState()) {
           logInfo('System state: visible, triggering immediate reconnect')
           this.stores.console.addEvent('System state: visible, triggering immediate reconnect', 'connection')
@@ -1145,21 +1062,56 @@ export class Connection extends BaseModule {
         break
 
       case 'sleeping':
-        // System is going to sleep - we could optionally set XA presence
-        // For now, just log it. The WebSocket will likely die during sleep
-        // and we'll handle reconnection when we wake.
         this.stores.console.addEvent('System state: sleeping', 'connection')
         break
 
       case 'hidden':
-        // App went to background - could reduce keepalive frequency
-        // For now, just log it
         this.stores.console.addEvent('System state: hidden', 'connection')
         break
     }
   }
 
   // ==================== Private Methods ====================
+
+  /**
+   * Handle wake-from-sleep: verify or reconnect depending on sleep duration.
+   *
+   * - Connected + long sleep (> SM timeout): transition to reconnecting, clean up dead client.
+   * - Connected + short sleep: verify connection health (SM ack or ping).
+   * - Already reconnecting: send WAKE to reset backoff and retry immediately.
+   */
+  private async handleAwake(sleepDurationMs?: number): Promise<void> {
+    const sleepSec = sleepDurationMs != null ? Math.round(sleepDurationMs / 1000) : null
+    logInfo(`System state: awake${sleepSec != null ? ` (sleep: ${sleepSec}s)` : ''}`)
+
+    if (this.isInConnectedState()) {
+      // Send WAKE to the machine — if sleep exceeds SM timeout, the guard
+      // transitions directly to reconnecting.  Otherwise → connected.verifying.
+      this.sendMachineEvent({ type: 'WAKE', sleepDurationMs }, 'handleAwake')
+
+      if (this.isInReconnectingState()) {
+        // Long sleep exceeded SM timeout — clean up the dead client.
+        this.stores.console.addEvent(
+          `System state: awake, sleep duration ${sleepSec}s exceeds SM timeout - reconnecting immediately`,
+          'connection'
+        )
+        this.cleanupClient()
+      } else {
+        // Short sleep — verify connection health
+        this.stores.console.addEvent('System state: awake, verifying connection', 'connection')
+        const isHealthy = await this.verifyConnection()
+        if (!isHealthy && !this.isInReconnectingState()) {
+          this.stores.console.addEvent('Connection dead after wake, reconnecting...', 'connection')
+          this.handleDeadSocket()
+        }
+      }
+    } else if (this.isInReconnectingState()) {
+      // Send WAKE (not TRIGGER_RECONNECT) so the state machine resets
+      // the backoff counter — sleep/wake failures shouldn't accumulate.
+      this.stores.console.addEvent('System state: awake, triggering immediate reconnect (backoff reset)', 'connection')
+      this.sendMachineEvent({ type: 'WAKE', sleepDurationMs }, 'handleAwake:reconnecting')
+    }
+  }
 
   /**
    * Create an xmpp.js client instance with the given options.
@@ -1851,7 +1803,16 @@ export class Connection extends BaseModule {
         logInfo(`attemptReconnect: new client created, calling start() (${options.server})`)
 
         await new Promise<void>((resolve, reject) => {
+          const attemptStart = Date.now()
           const timeout = setTimeout(() => {
+            const elapsed = Date.now() - attemptStart
+            // If elapsed time far exceeds the requested delay, the system
+            // slept through it.  Ignore this stale timeout — the wake
+            // handler will trigger a fresh reconnect attempt.
+            if (elapsed > RECONNECT_ATTEMPT_TIMEOUT_MS * 1.5) {
+              logInfo(`Reconnect timeout fired stale (${Math.round(elapsed / 1000)}s elapsed, expected ${RECONNECT_ATTEMPT_TIMEOUT_MS / 1000}s) — ignoring`)
+              return
+            }
             reject(new Error(`Reconnect attempt timed out after ${RECONNECT_ATTEMPT_TIMEOUT_MS / 1000}s`))
           }, RECONNECT_ATTEMPT_TIMEOUT_MS)
 

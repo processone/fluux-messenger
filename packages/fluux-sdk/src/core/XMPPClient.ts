@@ -1441,6 +1441,16 @@ export class XMPPClient {
   }
 
   /**
+   * Guard: check if session generation is still current and log + return true if stale.
+   * Centralizes the repeated pattern of checking + logging at async checkpoints.
+   */
+  private isSessionSuperseded(gen: number, checkpoint: string): boolean {
+    if (this.sessionGeneration === gen) return false
+    logInfo(`${checkpoint} (session superseded)`)
+    return true
+  }
+
+  /**
    * SM Resumption path (XEP-0198).
    *
    * When SM resumes successfully, the server replays all undelivered stanzas.
@@ -1477,10 +1487,7 @@ export class XMPPClient {
     } catch { /* ignore storage errors (e.g., SSR environments) */ }
 
     await this.roster.sendInitialPresence()
-    if (this.isSessionStale(gen)) {
-      logInfo('SM resumption aborted after sendInitialPresence (session superseded)')
-      return
-    }
+    if (this.isSessionSuperseded(gen, 'SM resumption aborted after sendInitialPresence')) return
 
     this.stores?.console.addEvent('Sending presence probes to refresh contact status', 'sm')
     this.roster.sendPresenceProbes().catch(() => {})
@@ -1496,10 +1503,7 @@ export class XMPPClient {
         'sm'
       )
       await this.muc.refreshPresenceInRooms(previouslyJoinedRooms)
-      if (this.isSessionStale(gen)) {
-        logInfo('SM resumption aborted after room presence refresh (session superseded)')
-        return
-      }
+      if (this.isSessionSuperseded(gen, 'SM resumption aborted after room presence refresh')) return
 
       // Verify we haven't missed any room messages during the disconnect.
       // SM replay covers stanzas the server queued, but if the disconnect was
@@ -1535,12 +1539,21 @@ export class XMPPClient {
     // Race the entire setup against a safety timeout to prevent hanging
     // after sleep/wake when the connection is unstable.
     const setupWork = this.runFreshSessionSetup(previouslyJoinedRooms, gen, iqTimeout)
+    const setupStart = Date.now()
     const timeoutPromise = new Promise<'timeout'>((resolve) =>
       setTimeout(() => resolve('timeout'), FRESH_SESSION_SETUP_TIMEOUT_MS)
     )
 
     const result = await Promise.race([setupWork.then(() => 'done' as const), timeoutPromise])
     if (result === 'timeout') {
+      const elapsed = Date.now() - setupStart
+      // If elapsed time far exceeds the requested delay, the system slept
+      // through it.  Ignore this stale timeout — the wake handler will
+      // trigger a fresh reconnect attempt.
+      if (elapsed > FRESH_SESSION_SETUP_TIMEOUT_MS * 1.5) {
+        logInfo(`Fresh session setup timeout fired stale (${Math.round(elapsed / 1000)}s elapsed) — ignoring`)
+        return
+      }
       logInfo(`Fresh session setup timed out after ${FRESH_SESSION_SETUP_TIMEOUT_MS / 1000}s`)
       this.stores?.console.addEvent(
         `Fresh session setup timed out after ${FRESH_SESSION_SETUP_TIMEOUT_MS / 1000}s — will retry on next reconnect`,
@@ -1573,34 +1586,22 @@ export class XMPPClient {
 
     // Fetch roster before sending presence
     await this.roster.fetchRoster(iqTimeout)
-    if (this.isSessionStale(gen)) {
-      logInfo('Fresh session aborted after fetchRoster (session superseded)')
-      return
-    }
+    if (this.isSessionSuperseded(gen, 'Fresh session aborted after fetchRoster')) return
     this.enableCarbons()
     logInfo('Fresh session: roster fetched, enabling carbons')
 
     // Send initial presence
     await this.roster.sendInitialPresence()
-    if (this.isSessionStale(gen)) {
-      logInfo('Fresh session aborted after sendInitialPresence (session superseded)')
-      return
-    }
+    if (this.isSessionSuperseded(gen, 'Fresh session aborted after sendInitialPresence')) return
 
     // Bookmarks and room joins
     const { roomsToAutojoin } = await this.muc.fetchBookmarks(iqTimeout)
-    if (this.isSessionStale(gen)) {
-      logInfo('Fresh session aborted after fetchBookmarks (session superseded)')
-      return
-    }
+    if (this.isSessionSuperseded(gen, 'Fresh session aborted after fetchBookmarks')) return
 
     // Fetch and merge server-side conversation list (XEP-0223)
     try {
       const serverConversations = await this.conversationSync.fetchConversations(iqTimeout)
-      if (this.isSessionStale(gen)) {
-        logInfo('Fresh session aborted after fetchConversations (session superseded)')
-        return
-      }
+      if (this.isSessionSuperseded(gen, 'Fresh session aborted after fetchConversations')) return
       if (serverConversations.length > 0) {
         this.mergeServerConversations(serverConversations)
       }
@@ -1636,10 +1637,7 @@ export class XMPPClient {
       const nonAutojoinRooms = previouslyJoinedRooms.filter(r => !autojoinJids.has(r.jid))
       if (nonAutojoinRooms.length > 0) {
         await this.muc.rejoinActiveRooms(nonAutojoinRooms)
-        if (this.isSessionStale(gen)) {
-          logInfo('Fresh session aborted after rejoinActiveRooms (session superseded)')
-          return
-        }
+        if (this.isSessionSuperseded(gen, 'Fresh session aborted after rejoinActiveRooms')) return
       }
     }
 

@@ -310,6 +310,62 @@ describe('connectionMachine', () => {
       actor.stop()
     })
 
+    it('should reset backoff counter on WAKE while waiting', () => {
+      // Build up backoff: attempt 1 → fail → attempt 2 → fail → attempt 3
+      actor.send({ type: 'TRIGGER_RECONNECT' })
+      actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(2)
+
+      actor.send({ type: 'TRIGGER_RECONNECT' })
+      actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(3)
+      expect(actor.getSnapshot().context.nextRetryDelayMs).toBe(4000)
+
+      // WAKE should reset backoff so next failure starts at attempt 1
+      actor.send({ type: 'WAKE', sleepDurationMs: 5000 })
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(0)
+
+      // Failure after WAKE-reset should use attempt 1 delay (1s)
+      actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(1)
+      expect(actor.getSnapshot().context.nextRetryDelayMs).toBe(INITIAL_RECONNECT_DELAY)
+      actor.stop()
+    })
+
+    it('should reset backoff counter on WAKE during active attempt', () => {
+      actor.send({ type: 'TRIGGER_RECONNECT' })
+      actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
+      actor.send({ type: 'TRIGGER_RECONNECT' })
+      actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(3)
+
+      // Start an attempt and send WAKE during it
+      actor.send({ type: 'TRIGGER_RECONNECT' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
+      actor.send({ type: 'WAKE', sleepDurationMs: 5000 })
+      // Still in attempting, but counter is reset
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(0)
+
+      // Next failure should use attempt 1 backoff
+      actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(1)
+      expect(actor.getSnapshot().context.nextRetryDelayMs).toBe(INITIAL_RECONNECT_DELAY)
+      actor.stop()
+    })
+
+    it('should ignore TRIGGER_RECONNECT during active attempt', () => {
+      actor.send({ type: 'TRIGGER_RECONNECT' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
+      const attemptBefore = actor.getSnapshot().context.reconnectAttempt
+
+      // Sending TRIGGER_RECONNECT while already attempting should be a no-op
+      actor.send({ type: 'TRIGGER_RECONNECT' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(attemptBefore)
+      actor.stop()
+    })
+
     it('should handle VISIBLE while waiting by skipping to attempting', () => {
       actor.send({ type: 'VISIBLE' })
       expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })

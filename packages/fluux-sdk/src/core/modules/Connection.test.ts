@@ -2520,7 +2520,7 @@ describe('XMPPClient Connection', () => {
 
       // Timeout should transition to reconnecting and arm backoff timer
       expect(mockStores.console.addEvent).toHaveBeenCalledWith(
-        'Verification timed out waiting for SM ack',
+        'Verification failed, reconnecting',
         'connection'
       )
       expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
