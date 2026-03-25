@@ -154,6 +154,15 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
     }
   }
 
+  const handleCloseSession = () => {
+    clearSession()
+    // Refresh user list after user-mutating commands (delete, password change, etc.)
+    if (activeCategory === 'users') {
+      resetUserList()
+      void fetchUsers()
+    }
+  }
+
   const handlePrev = async () => {
     try {
       await previousStep()
@@ -277,7 +286,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
         <AdminCommandResult
           form={currentSession.form}
           note={currentSession.note}
-          onClose={clearSession}
+          onClose={handleCloseSession}
         />
       )
     }
