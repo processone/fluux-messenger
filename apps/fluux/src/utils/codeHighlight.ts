@@ -15,13 +15,43 @@ let highlighterInstance: HighlighterCore | null = null
 /** Tracks in-flight language loads to avoid duplicate imports */
 const langLoadPromises = new Map<string, Promise<void>>()
 
-/** Allowlist of supported languages — prevents arbitrary dynamic imports */
-const SUPPORTED_LANGS = new Set([
-  'javascript', 'typescript', 'python', 'html', 'css', 'json',
-  'bash', 'shell', 'xml', 'rust', 'go', 'java', 'c', 'cpp',
-  'sql', 'yaml', 'toml', 'markdown', 'swift', 'kotlin', 'lua',
-  'ruby', 'php', 'elixir', 'erlang', 'zig', 'haskell', 'jsx', 'tsx',
-])
+/**
+ * Static import map for language grammars.
+ * Each entry is a lazy loader — Vite can statically analyze these literal
+ * import paths, enabling proper code-splitting per language.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const LANG_IMPORTS: Record<string, () => Promise<any>> = {
+  javascript:  () => import('shiki/langs/javascript.mjs'),
+  typescript:  () => import('shiki/langs/typescript.mjs'),
+  python:      () => import('shiki/langs/python.mjs'),
+  html:        () => import('shiki/langs/html.mjs'),
+  css:         () => import('shiki/langs/css.mjs'),
+  json:        () => import('shiki/langs/json.mjs'),
+  bash:        () => import('shiki/langs/bash.mjs'),
+  shell:       () => import('shiki/langs/shell.mjs'),
+  xml:         () => import('shiki/langs/xml.mjs'),
+  rust:        () => import('shiki/langs/rust.mjs'),
+  go:          () => import('shiki/langs/go.mjs'),
+  java:        () => import('shiki/langs/java.mjs'),
+  c:           () => import('shiki/langs/c.mjs'),
+  cpp:         () => import('shiki/langs/cpp.mjs'),
+  sql:         () => import('shiki/langs/sql.mjs'),
+  yaml:        () => import('shiki/langs/yaml.mjs'),
+  toml:        () => import('shiki/langs/toml.mjs'),
+  markdown:    () => import('shiki/langs/markdown.mjs'),
+  swift:       () => import('shiki/langs/swift.mjs'),
+  kotlin:      () => import('shiki/langs/kotlin.mjs'),
+  lua:         () => import('shiki/langs/lua.mjs'),
+  ruby:        () => import('shiki/langs/ruby.mjs'),
+  php:         () => import('shiki/langs/php.mjs'),
+  elixir:      () => import('shiki/langs/elixir.mjs'),
+  erlang:      () => import('shiki/langs/erlang.mjs'),
+  zig:         () => import('shiki/langs/zig.mjs'),
+  haskell:     () => import('shiki/langs/haskell.mjs'),
+  jsx:         () => import('shiki/langs/jsx.mjs'),
+  tsx:         () => import('shiki/langs/tsx.mjs'),
+}
 
 const THEME_NAME = 'fluux-css-vars'
 
@@ -34,7 +64,7 @@ function ensureHighlighter(): Promise<HighlighterCore> {
     highlighterPromise = import('shiki/core').then(async ({ createHighlighterCore, createCssVariablesTheme }) => {
       const cssVarsTheme = createCssVariablesTheme({
         name: THEME_NAME,
-        variablePrefix: '--shiki-',
+        variablePrefix: '--syntax-',
         variableDefaults: {},
         fontStyle: true,
       })
@@ -55,13 +85,14 @@ function ensureHighlighter(): Promise<HighlighterCore> {
  * if already loaded; deduplicates concurrent requests for the same language.
  */
 async function ensureLanguage(lang: string): Promise<void> {
-  if (!SUPPORTED_LANGS.has(lang)) return
+  const loader = LANG_IMPORTS[lang]
+  if (!loader) return
 
   const hl = await ensureHighlighter()
   if (hl.getLoadedLanguages().includes(lang as never)) return
 
   if (!langLoadPromises.has(lang)) {
-    const promise = import(`shiki/langs/${lang}.mjs`)
+    const promise = loader()
       .then(mod => hl.loadLanguage(mod.default ?? mod))
       .finally(() => langLoadPromises.delete(lang))
     langLoadPromises.set(lang, promise)
@@ -71,7 +102,7 @@ async function ensureLanguage(lang: string): Promise<void> {
 
 /**
  * Synchronously highlight code if the highlighter is ready.
- * Returns an HTML string with `<span style="color: var(--shiki-*)">` tokens,
+ * Returns an HTML string with `<span style="color: var(--syntax-*)">` tokens,
  * or null if the highlighter hasn't loaded yet.
  *
  * Shiki escapes all input before wrapping in <span> tags — output is safe

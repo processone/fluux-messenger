@@ -195,6 +195,16 @@ const JAMES_MESSAGES: Message[] = (() => {
       timestamp: hoursAgo(4), isOutgoing: true, conversationId: conv,
       reactions: { '💪': [conv] },
     },
+    {
+      type: 'chat', id: 'demo-james-6', from: conv,
+      body: 'Here\'s how I wired up the reconnect handler:\n\n```typescript\nclient.on(\'disconnect\', async (reason) => {\n  if (reason === \'stream-error\') {\n    await client.resume({ prevId: session.id })\n  }\n})\n```\n\nPretty clean with the new SDK hooks!',
+      timestamp: hoursAgo(3.5), isOutgoing: false, conversationId: conv,
+    },
+    {
+      type: 'chat', id: 'demo-james-7', from: SELF_JID,
+      body: 'Nice! You can simplify it even further:\n\n```typescript\nconst { status } = useConnection({\n  autoResume: true,\n  onReconnect: () => console.log(\'Back online\'),\n})\n```',
+      timestamp: hoursAgo(3), isOutgoing: true, conversationId: conv,
+    },
   ]
 })()
 

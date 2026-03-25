@@ -158,18 +158,18 @@
   /* Shadows */
   --fluux-shadow-color: rgba(0, 0, 0, 0.3);
 
-  /* Syntax highlighting (consumed by Shiki css-variables theme) */
-  --shiki-foreground: var(--fluux-text-normal);
-  --shiki-background: transparent;
-  --shiki-token-constant: var(--fluux-color-blue);
-  --shiki-token-string: var(--fluux-color-green);
-  --shiki-token-comment: var(--fluux-base-60);
-  --shiki-token-keyword: var(--fluux-color-purple);
-  --shiki-token-parameter: var(--fluux-base-90);
-  --shiki-token-function: var(--fluux-color-blue);
-  --shiki-token-string-expression: var(--fluux-color-green);
-  --shiki-token-punctuation: var(--fluux-base-80);
-  --shiki-token-link: var(--fluux-text-link);
+  /* Syntax highlighting (consumed by css-variables theme) */
+  --syntax-foreground: var(--fluux-text-normal);
+  --syntax-background: transparent;
+  --syntax-token-constant: var(--fluux-color-blue);
+  --syntax-token-string: var(--fluux-color-green);
+  --syntax-token-comment: var(--fluux-base-60);
+  --syntax-token-keyword: var(--fluux-color-purple);
+  --syntax-token-parameter: var(--fluux-base-90);
+  --syntax-token-function: var(--fluux-color-blue);
+  --syntax-token-string-expression: var(--fluux-color-green);
+  --syntax-token-punctuation: var(--fluux-base-80);
+  --syntax-token-link: var(--fluux-text-link);
 
   /* ── Tier 3: Component ── */
 
