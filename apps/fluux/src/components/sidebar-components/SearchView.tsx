@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useSearch, generateConsistentColorHexSync, chatStore, roomStore, getLocalPart } from '@fluux/sdk'
+import { useSearch, chatStore, roomStore, rosterStore, getLocalPart } from '@fluux/sdk'
 import type { SearchResult, SearchResultContext } from '@fluux/sdk'
 import { Avatar } from '../Avatar'
 import { useNavigateToTarget } from '@/hooks/useNavigateToTarget'
@@ -8,7 +8,7 @@ import { useListKeyboardNav } from '@/hooks'
 import { formatConversationTime } from '@/utils/dateFormat'
 import { useSettingsStore, type TimeFormat } from '@/stores/settingsStore'
 import { useSidebarZone } from './types'
-import { Search, X, Loader2, Hash, ExternalLink, Cloud } from 'lucide-react'
+import { Search, X, Loader2, ExternalLink, Cloud } from 'lucide-react'
 
 function getConversationName(conversationId: string): string {
   const room = roomStore.getState().rooms.get(conversationId)
@@ -272,19 +272,28 @@ function SearchResultItem({ result, context, isActive, isSelected, isKeyboardNav
       {/* Avatar / icon */}
       <div className="flex-shrink-0 mt-0.5">
         {result.isRoom ? (
-          <Hash
-            className="w-7 h-7 p-1 rounded-full text-white"
-            style={{
-              backgroundColor: generateConsistentColorHexSync(result.conversationId, {
-                saturation: 60,
-                lightness: 45,
-              }),
-            }}
-          />
+          (() => {
+            const roomAvatar = roomStore.getState().rooms.get(result.conversationId)?.avatar
+            return roomAvatar ? (
+              <img
+                src={roomAvatar}
+                alt={result.conversationName}
+                className="w-6 h-6 rounded-full object-cover"
+                draggable={false}
+              />
+            ) : (
+              <Avatar
+                identifier={result.conversationId}
+                name={result.conversationName}
+                size="xs"
+              />
+            )
+          })()
         ) : (
           <Avatar
             identifier={result.conversationId}
             name={result.conversationName}
+            avatarUrl={rosterStore.getState().contacts.get(result.conversationId)?.avatar}
             size="xs"
           />
         )}
