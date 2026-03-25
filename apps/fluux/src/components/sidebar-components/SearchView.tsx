@@ -53,6 +53,7 @@ export function SearchView() {
     getItemId: (result) => result.indexId,
     itemAttribute: 'data-search-result-id',
     zoneRef,
+    activateOnAltNav: true,
   })
 
   const handleGoToMessage = useCallback(
