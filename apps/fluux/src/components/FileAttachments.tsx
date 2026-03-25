@@ -2,6 +2,7 @@ import { useState, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Music, Film, FileText, Archive, File, Download, BookOpen, Loader2, ImageOff, FileX } from 'lucide-react'
 import { Tooltip } from './Tooltip'
+import { ImageLightbox } from './ImageLightbox'
 import { formatBytes, useProxiedUrl } from '@/hooks'
 import { isPdfMimeType, isDocumentMimeType, isArchiveMimeType, isEbookMimeType, getFileTypeLabel } from '@/utils/thumbnail'
 import type { FileAttachment } from '@fluux/sdk'
@@ -31,6 +32,7 @@ interface AttachmentProps {
 export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoad }: AttachmentProps) {
   const { t } = useTranslation()
   const isImage = attachment.mediaType?.startsWith('image/') ?? false
+  const [lightboxOpen, setLightboxOpen] = useState(false)
 
   // Use thumbnail if available, otherwise fall back to main URL
   const originalImageSrc = attachment.thumbnail?.uri || attachment.url
@@ -109,34 +111,44 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
   }
 
   return (
-    <a
-      href={attachment.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="block pt-2 rounded-lg overflow-hidden hover:opacity-90 transition-opacity"
-      style={{ maxWidth: `${maxWidthPx}px` }}
-      tabIndex={-1}
-    >
-      <img
-        src={proxiedImageSrc}
-        alt={attachment.name || 'Image attachment'}
-        width={width}
-        height={height}
-        className="max-w-full rounded-lg object-contain"
-        style={{
-          // Always reserve space using aspect ratio to prevent layout shift
-          aspectRatio: aspectRatio,
-          // Max height for reasonable sizing
-          maxHeight: '300px',
-        }}
-        loading="lazy"
-        onLoad={onLoad}
-        onError={() => {
-          failedUrlCache.add(originalImageSrc)
-          setLoadError(true)
-        }}
-      />
-    </a>
+    <>
+      <button
+        type="button"
+        onClick={() => setLightboxOpen(true)}
+        className="block pt-2 rounded-lg overflow-hidden hover:opacity-90 transition-opacity cursor-pointer text-left"
+        style={{ maxWidth: `${maxWidthPx}px` }}
+        tabIndex={-1}
+      >
+        <img
+          src={proxiedImageSrc}
+          alt={attachment.name || 'Image attachment'}
+          width={width}
+          height={height}
+          className="max-w-full rounded-lg object-contain"
+          style={{
+            // Always reserve space using aspect ratio to prevent layout shift
+            aspectRatio: aspectRatio,
+            // Max height for reasonable sizing
+            maxHeight: '300px',
+          }}
+          loading="lazy"
+          onLoad={onLoad}
+          onError={() => {
+            failedUrlCache.add(originalImageSrc)
+            setLoadError(true)
+          }}
+        />
+      </button>
+      {lightboxOpen && (
+        <ImageLightbox
+          src={proxiedImageSrc}
+          alt={attachment.name || 'Image attachment'}
+          downloadUrl={attachment.url}
+          filename={attachment.name}
+          onClose={() => setLightboxOpen(false)}
+        />
+      )}
+    </>
   )
 })
 
