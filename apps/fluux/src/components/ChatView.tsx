@@ -312,7 +312,6 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, m
           hasKeyboardSelection={hasKeyboardSelection}
           showToolbarForSelection={showToolbarForSelection}
           firstNewMessageId={activeConversation.firstNewMessageId}
-          unreadCount={activeConversation.unreadCount}
           targetMessageId={targetMessageId}
           clearTargetMessageId={clearTargetMessageId}
           clearFirstNewMessageId={handleClearFirstNewMessageId}
@@ -397,7 +396,6 @@ const ChatMessageList = memo(function ChatMessageList({
   hasKeyboardSelection,
   showToolbarForSelection,
   firstNewMessageId,
-  unreadCount,
   targetMessageId,
   clearTargetMessageId,
   clearFirstNewMessageId,
@@ -435,7 +433,6 @@ const ChatMessageList = memo(function ChatMessageList({
   hasKeyboardSelection: boolean
   showToolbarForSelection: boolean
   firstNewMessageId?: string
-  unreadCount?: number
   targetMessageId?: string | null
   clearTargetMessageId?: () => void
   clearFirstNewMessageId: () => void
@@ -540,7 +537,6 @@ const ChatMessageList = memo(function ChatMessageList({
       messages={messages}
       conversationId={conversationId}
       firstNewMessageId={firstNewMessageId}
-      unreadCount={unreadCount}
       targetMessageId={targetMessageId}
       onTargetMessageConsumed={clearTargetMessageId}
       clearFirstNewMessageId={clearFirstNewMessageId}

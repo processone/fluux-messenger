@@ -11,7 +11,7 @@
  *
  * Scroll behavior is handled by useMessageListScroll hook.
  */
-import { useRef, type ReactNode } from 'react'
+import { useMemo, useRef, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { BaseMessage } from '@fluux/sdk'
 import { useMessageCopyFormatter } from '@/hooks'
@@ -73,8 +73,6 @@ export interface MessageListProps<T extends BaseMessage> {
   isHistoryComplete?: boolean
   /** Callback when the bottom-most visible message changes (viewport tracking) */
   onMessageSeen?: (messageId: string) => void
-  /** Number of unread messages (displayed as badge on scroll-to-bottom FAB) */
-  unreadCount?: number
   /** Disables all auto-scroll behaviors. Used by read-only preview views
    *  (search context, activity context) that manage their own scroll positioning. */
   staticMode?: boolean
@@ -105,7 +103,6 @@ export function MessageList<T extends BaseMessage>({
   isLoadingOlder,
   isHistoryComplete,
   onMessageSeen,
-  unreadCount = 0,
   staticMode,
   lastSentMessageId,
 }: MessageListProps<T>) {
@@ -129,6 +126,15 @@ export function MessageList<T extends BaseMessage>({
       return true
     })
   })()
+
+  // Derive badge count from the marker position so FAB badge and marker are
+  // always consistent. The store's unreadCount is 0 for active conversations.
+  const markerUnreadCount = useMemo(() => {
+    if (!firstNewMessageId) return 0
+    const idx = deduplicatedMessages.findIndex((m) => m.id === firstNewMessageId)
+    if (idx === -1) return 0
+    return deduplicatedMessages.length - idx
+  }, [firstNewMessageId, deduplicatedMessages])
 
   // Group messages by date for rendering with separators
   const groupedMessages = groupMessagesByDate(deduplicatedMessages)
@@ -304,9 +310,9 @@ export function MessageList<T extends BaseMessage>({
             className="absolute bottom-4 right-4 z-40 w-10 h-10 rounded-full bg-fluux-bg border border-fluux-border shadow-lg flex items-center justify-center text-fluux-muted hover:text-fluux-text hover:bg-fluux-hover transition-all duration-200 hover:scale-105 active:scale-95"
             aria-label={t('chat.scrollToBottom')}
           >
-            {unreadCount > 0 && (
+            {markerUnreadCount > 0 && (
               <span className="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-fluux-red text-white text-xs font-semibold flex items-center justify-center">
-                {unreadCount > 99 ? '99+' : unreadCount}
+                {markerUnreadCount > 99 ? '99+' : markerUnreadCount}
               </span>
             )}
             <ChevronDown className="w-5 h-5" />

@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  *
  * Tests for the scroll-to-bottom FAB (floating action button):
- * - Unread badge visibility and count display
+ * - Badge count derived from firstNewMessageId marker position
  * - Two-step scroll behavior (marker first, then bottom)
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -133,8 +133,8 @@ describe('MessageList FAB badge and scroll behavior', () => {
     })
   }
 
-  describe('unread badge', () => {
-    it('should not show badge when unreadCount is 0', () => {
+  describe('unread badge derived from marker', () => {
+    it('should not show badge when no firstNewMessageId is set', () => {
       const messages = createTestMessages(10)
 
       render(
@@ -142,7 +142,6 @@ describe('MessageList FAB badge and scroll behavior', () => {
           messages={messages}
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
-          unreadCount={0}
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
       )
@@ -162,15 +161,17 @@ describe('MessageList FAB badge and scroll behavior', () => {
       expect(badge).toBeNull()
     })
 
-    it('should show badge with unread count when unreadCount > 0', () => {
-      const messages = createTestMessages(10)
+    it('should show badge count matching messages from marker to end', () => {
+      const messages = createTestMessages(10) // msg-0 through msg-9
+      // Place marker at msg-7 → 3 messages (msg-7, msg-8, msg-9)
+      const firstNewMessageId = 'msg-7'
 
       render(
         <MessageList
           messages={messages}
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
-          unreadCount={5}
+          firstNewMessageId={firstNewMessageId}
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
       )
@@ -183,13 +184,13 @@ describe('MessageList FAB badge and scroll behavior', () => {
       const fab = scrollCtx.container.parentElement?.querySelector('button[aria-label="chat.scrollToBottom"]')
       expect(fab).toBeTruthy()
 
-      // Badge should show count
+      // Badge should show 3 (messages from marker to end)
       const badge = fab?.querySelector('span')
       expect(badge).toBeTruthy()
-      expect(badge?.textContent).toBe('5')
+      expect(badge?.textContent).toBe('3')
     })
 
-    it('should cap badge at 99+ for large counts', () => {
+    it('should not show badge when firstNewMessageId is not found in messages', () => {
       const messages = createTestMessages(10)
 
       render(
@@ -197,7 +198,32 @@ describe('MessageList FAB badge and scroll behavior', () => {
           messages={messages}
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
-          unreadCount={150}
+          firstNewMessageId="nonexistent-id"
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />
+      )
+
+      const scrollCtx = setupScrollContainer()
+      if (!scrollCtx) return
+
+      simulateScrollUp(scrollCtx.container)
+
+      const fab = scrollCtx.container.parentElement?.querySelector('button[aria-label="chat.scrollToBottom"]')
+      const badge = fab?.querySelector('span')
+      expect(badge).toBeNull()
+    })
+
+    it('should cap badge at 99+ for large counts', () => {
+      const messages = createTestMessages(150)
+      // Place marker at msg-0 → 150 messages
+      const firstNewMessageId = 'msg-0'
+
+      render(
+        <MessageList
+          messages={messages}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          firstNewMessageId={firstNewMessageId}
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
       )
@@ -212,7 +238,7 @@ describe('MessageList FAB badge and scroll behavior', () => {
       expect(badge?.textContent).toBe('99+')
     })
 
-    it('should update badge when unreadCount changes', () => {
+    it('should update badge when firstNewMessageId changes', () => {
       const messages = createTestMessages(10)
 
       const { rerender } = render(
@@ -220,7 +246,7 @@ describe('MessageList FAB badge and scroll behavior', () => {
           messages={messages}
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
-          unreadCount={3}
+          firstNewMessageId="msg-7"
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
       )
@@ -230,25 +256,25 @@ describe('MessageList FAB badge and scroll behavior', () => {
 
       simulateScrollUp(scrollCtx.container)
 
-      // Verify initial badge
+      // Verify initial badge: msg-7 through msg-9 = 3
       let fab = scrollCtx.container.parentElement?.querySelector('button[aria-label="chat.scrollToBottom"]')
       let badge = fab?.querySelector('span')
       expect(badge?.textContent).toBe('3')
 
-      // Update count
+      // Move marker earlier: msg-5 through msg-9 = 5
       rerender(
         <MessageList
           messages={messages}
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
-          unreadCount={7}
+          firstNewMessageId="msg-5"
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
       )
 
       fab = scrollCtx.container.parentElement?.querySelector('button[aria-label="chat.scrollToBottom"]')
       badge = fab?.querySelector('span')
-      expect(badge?.textContent).toBe('7')
+      expect(badge?.textContent).toBe('5')
     })
   })
 
@@ -261,7 +287,6 @@ describe('MessageList FAB badge and scroll behavior', () => {
           messages={messages}
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
-          unreadCount={0}
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
       )
@@ -294,7 +319,6 @@ describe('MessageList FAB badge and scroll behavior', () => {
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
           firstNewMessageId={firstNewMessageId}
-          unreadCount={5}
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
       )
@@ -339,7 +363,6 @@ describe('MessageList FAB badge and scroll behavior', () => {
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
           firstNewMessageId={firstNewMessageId}
-          unreadCount={5}
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
       )
@@ -380,7 +403,6 @@ describe('MessageList FAB badge and scroll behavior', () => {
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
           firstNewMessageId={firstNewMessageId}
-          unreadCount={3}
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
       )
