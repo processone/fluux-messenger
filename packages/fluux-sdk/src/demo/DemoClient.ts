@@ -32,9 +32,7 @@ import {
   SELF,
   getDemoConversations,
   getDemoMessages,
-  getDemoRoom,
-  getDemoRoomOccupants,
-  getDemoRoomMessages,
+  getDemoRooms,
   getDemoAnimation,
   getDemoActivityEvents,
 } from './demoData'
@@ -93,22 +91,21 @@ export class DemoClient extends XMPPClient {
       }
     }
 
-    // Room: add, mark joined, populate occupants and messages
-    const room = getDemoRoom()
-    this.emitSDK('room:added', { room })
-    this.emitSDK('room:joined', { roomJid: room.jid, joined: true })
+    // Rooms: add, mark joined, populate occupants and messages
+    const rooms = getDemoRooms()
+    for (const { room, occupants, messages } of rooms) {
+      this.emitSDK('room:added', { room })
+      this.emitSDK('room:joined', { roomJid: room.jid, joined: true })
 
-    const occupants = getDemoRoomOccupants()
-    // Set self occupant
-    const selfOccupant = occupants.find(o => o.jid === SELF.jid)
-    if (selfOccupant) {
-      this.emitSDK('room:self-occupant', { roomJid: room.jid, occupant: selfOccupant })
-    }
-    this.emitSDK('room:occupants-batch', { roomJid: room.jid, occupants })
+      const selfOccupant = occupants.find(o => o.jid === SELF.jid)
+      if (selfOccupant) {
+        this.emitSDK('room:self-occupant', { roomJid: room.jid, occupant: selfOccupant })
+      }
+      this.emitSDK('room:occupants-batch', { roomJid: room.jid, occupants })
 
-    const roomMessages = getDemoRoomMessages()
-    for (const message of roomMessages) {
-      this.emitSDK('room:message', { roomJid: room.jid, message })
+      for (const message of messages) {
+        this.emitSDK('room:message', { roomJid: room.jid, message })
+      }
     }
 
     // Mark all history as complete so the "load earlier messages" spinner
@@ -127,7 +124,9 @@ export class DemoClient extends XMPPClient {
     chatStore.setState({ mamQueryStates: chatMAM })
 
     const roomMAM = new Map<string, typeof completedState>()
-    roomMAM.set(room.jid, completedState)
+    for (const { room } of rooms) {
+      roomMAM.set(room.jid, completedState)
+    }
     roomStore.setState({ mamQueryStates: roomMAM })
 
     // Activity log: seed with demo events (direct store access since

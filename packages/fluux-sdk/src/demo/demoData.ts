@@ -27,6 +27,11 @@ function hoursAgo(hours: number): Date {
   return new Date(Date.now() - hours * 3_600_000)
 }
 
+/** Days ago from now */
+function daysAgo(days: number): Date {
+  return new Date(Date.now() - days * 86_400_000)
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -36,6 +41,7 @@ const CONFERENCE = `conference.${DOMAIN}`
 const SELF_JID = `you@${DOMAIN}`
 const SELF_NICK = 'You'
 const ROOM_JID = `team@${CONFERENCE}`
+const DESIGN_ROOM_JID = `design@${CONFERENCE}`
 
 // ---------------------------------------------------------------------------
 // Contacts
@@ -116,6 +122,29 @@ export const DEMO_PRESENCES: DemoPresence[] = [
 const EMMA_MESSAGES: Message[] = (() => {
   const conv = `emma@${DOMAIN}`
   return [
+    // Earlier conversation about animations (yesterday)
+    {
+      type: 'chat', id: 'demo-emma-0a', from: conv, body: 'I\'ve been experimenting with the transition animations for the sidebar',
+      timestamp: daysAgo(1), isOutgoing: false, conversationId: conv,
+    },
+    {
+      type: 'chat', id: 'demo-emma-0b', from: SELF_JID, body: 'How\'s the performance? We need to keep it under 16ms per frame',
+      timestamp: daysAgo(1), isOutgoing: true, conversationId: conv,
+    },
+    {
+      type: 'chat', id: 'demo-emma-0c', from: conv, body: 'Running smooth — I used CSS transforms instead of layout properties so the GPU handles it',
+      timestamp: daysAgo(1), isOutgoing: false, conversationId: conv,
+      reactions: { '👏': [SELF_JID] } as Record<string, string[]>,
+    },
+    {
+      type: 'chat', id: 'demo-emma-0d', from: SELF_JID, body: 'Smart. We should also add a reduced-motion media query fallback for accessibility',
+      timestamp: daysAgo(1), isOutgoing: true, conversationId: conv,
+    },
+    {
+      type: 'chat', id: 'demo-emma-0e', from: conv, body: 'Already done! I tested it with VoiceOver too — screen readers skip the animation entirely',
+      timestamp: daysAgo(1), isOutgoing: false, conversationId: conv,
+    },
+    // Today's conversation
     {
       type: 'chat', id: 'demo-emma-1', from: SELF_JID, body: 'Hey Emma, did you see the latest mockups?',
       timestamp: minutesAgo(45), isOutgoing: true, conversationId: conv,
@@ -165,6 +194,29 @@ const EMMA_MESSAGES: Message[] = (() => {
 const JAMES_MESSAGES: Message[] = (() => {
   const conv = `james@${DOMAIN}`
   return [
+    // Earlier conversation about testing (2 days ago)
+    {
+      type: 'chat', id: 'demo-james-0a', from: conv, body: 'I set up the end-to-end test suite for the chat module',
+      timestamp: daysAgo(2), isOutgoing: false, conversationId: conv,
+    },
+    {
+      type: 'chat', id: 'demo-james-0b', from: SELF_JID, body: 'What framework did you go with? Playwright or Cypress?',
+      timestamp: daysAgo(2), isOutgoing: true, conversationId: conv,
+    },
+    {
+      type: 'chat', id: 'demo-james-0c', from: conv, body: 'Playwright — better for testing WebSocket connections and it runs headless in CI',
+      timestamp: daysAgo(2), isOutgoing: false, conversationId: conv,
+    },
+    {
+      type: 'chat', id: 'demo-james-0d', from: SELF_JID, body: 'Good call. Can you add a test for the reconnection flow? That\'s been flaky',
+      timestamp: daysAgo(2), isOutgoing: true, conversationId: conv,
+    },
+    {
+      type: 'chat', id: 'demo-james-0e', from: conv, body: 'On it. I\'ll simulate a network drop and verify the message queue is flushed after reconnect',
+      timestamp: daysAgo(2), isOutgoing: false, conversationId: conv,
+      reactions: { '🙌': [SELF_JID] } as Record<string, string[]>,
+    },
+    // Today's conversation
     {
       type: 'chat', id: 'demo-james-1', from: conv, body: 'Have you seen the blog post about the latest release?',
       timestamp: hoursAgo(6), isOutgoing: false, conversationId: conv,
@@ -205,12 +257,43 @@ const JAMES_MESSAGES: Message[] = (() => {
       body: 'Nice! You can simplify it even further:\n\n```typescript\nconst { status } = useConnection({\n  autoResume: true,\n  onReconnect: () => console.log(\'Back online\'),\n})\n```',
       timestamp: hoursAgo(3), isOutgoing: true, conversationId: conv,
     },
+    {
+      type: 'chat', id: 'demo-james-8', from: conv, body: 'By the way, I found a bug in the error handling — when the server returns a 503, we retry immediately instead of backing off',
+      timestamp: hoursAgo(2), isOutgoing: false, conversationId: conv,
+    },
+    {
+      type: 'chat', id: 'demo-james-9', from: SELF_JID, body: 'Good catch. Let\'s add exponential backoff with jitter to avoid thundering herd',
+      timestamp: hoursAgo(1.8), isOutgoing: true, conversationId: conv,
+    },
   ]
 })()
 
 const SOPHIA_MESSAGES: Message[] = (() => {
   const conv = `sophia@${DOMAIN}`
   return [
+    // Earlier conversation about migration guide (2 days ago)
+    {
+      type: 'chat', id: 'demo-sophia-0a', from: conv, body: 'Started working on the migration guide for SDK v2',
+      timestamp: daysAgo(2), isOutgoing: false, conversationId: conv,
+    },
+    {
+      type: 'chat', id: 'demo-sophia-0b', from: SELF_JID, body: 'Make sure to cover the breaking changes in the store API',
+      timestamp: daysAgo(2), isOutgoing: true, conversationId: conv,
+    },
+    {
+      type: 'chat', id: 'demo-sophia-0c', from: conv, body: 'Yes — I\'m documenting each deprecated method with its replacement and a code example',
+      timestamp: daysAgo(2), isOutgoing: false, conversationId: conv,
+    },
+    {
+      type: 'chat', id: 'demo-sophia-0d', from: SELF_JID, body: 'We should also add a section about the new versioning strategy and the changelog format',
+      timestamp: daysAgo(2), isOutgoing: true, conversationId: conv,
+    },
+    {
+      type: 'chat', id: 'demo-sophia-0e', from: conv, body: 'Good idea. I\'ll follow the Keep a Changelog convention so it\'s easy to parse',
+      timestamp: daysAgo(2), isOutgoing: false, conversationId: conv,
+      reactions: { '👍': [SELF_JID] } as Record<string, string[]>,
+    },
+    // Today's conversation
     {
       type: 'chat', id: 'demo-sophia-1', from: conv, body: 'I\'ve finished the API docs for the SDK',
       timestamp: hoursAgo(2), isOutgoing: false, conversationId: conv,
@@ -256,6 +339,95 @@ const SOPHIA_MESSAGES: Message[] = (() => {
   ]
 })()
 
+const OLIVER_MESSAGES: Message[] = (() => {
+  const conv = `oliver@${DOMAIN}`
+  return [
+    {
+      type: 'chat', id: 'demo-oliver-1', from: conv, body: 'Hey! I\'ve been putting together the component library for the design system',
+      timestamp: daysAgo(1), isOutgoing: false, conversationId: conv,
+    },
+    {
+      type: 'chat', id: 'demo-oliver-2', from: SELF_JID, body: 'Awesome — are you using Figma tokens for the color palette?',
+      timestamp: daysAgo(1), isOutgoing: true, conversationId: conv,
+    },
+    {
+      type: 'chat', id: 'demo-oliver-3', from: conv, body: 'Yes! I exported the design tokens as JSON so we can import them directly into our theme config',
+      timestamp: daysAgo(1), isOutgoing: false, conversationId: conv,
+      reactions: { '🎯': [SELF_JID] } as Record<string, string[]>,
+    },
+    {
+      type: 'chat', id: 'demo-oliver-4', from: SELF_JID, body: 'That\'s exactly what we need. How\'s the dark mode variant looking?',
+      timestamp: daysAgo(1), isOutgoing: true, conversationId: conv,
+    },
+    {
+      type: 'chat', id: 'demo-oliver-5', from: conv, body: 'Dark mode is working well — I adjusted the contrast ratios to meet WCAG AA for accessibility',
+      timestamp: daysAgo(1), isOutgoing: false, conversationId: conv,
+    },
+    {
+      type: 'chat', id: 'demo-oliver-6', from: SELF_JID, body: 'Can you share the Figma link? I want to review the button variants',
+      timestamp: hoursAgo(8), isOutgoing: true, conversationId: conv,
+    },
+    {
+      type: 'chat', id: 'demo-oliver-7', from: conv, body: 'Sure thing — I also added hover states and focus ring styles for keyboard navigation',
+      timestamp: hoursAgo(7.5), isOutgoing: false, conversationId: conv,
+    },
+    {
+      type: 'chat', id: 'demo-oliver-8', from: conv, body: 'The spacing system uses an 8px grid — keeps everything aligned and consistent across breakpoints',
+      timestamp: hoursAgo(7), isOutgoing: false, conversationId: conv,
+      replyTo: { id: 'demo-oliver-6', fallbackBody: 'Can you share the Figma link? I want to review the button variants' },
+    },
+    {
+      type: 'chat', id: 'demo-oliver-9', from: SELF_JID, body: 'This is really solid work. Let\'s present it at the design review tomorrow',
+      timestamp: hoursAgo(6.5), isOutgoing: true, conversationId: conv,
+      reactions: { '🙌': [conv] } as Record<string, string[]>,
+    },
+  ]
+})()
+
+const MIA_MESSAGES: Message[] = (() => {
+  const conv = `mia@${DOMAIN}`
+  return [
+    {
+      type: 'chat', id: 'demo-mia-1', from: conv, body: 'Sprint planning is done — I\'ve assigned the tickets for this week',
+      timestamp: daysAgo(2), isOutgoing: false, conversationId: conv,
+    },
+    {
+      type: 'chat', id: 'demo-mia-2', from: SELF_JID, body: 'Thanks! What\'s the priority order? I want to tackle the critical bugs first',
+      timestamp: daysAgo(2), isOutgoing: true, conversationId: conv,
+    },
+    {
+      type: 'chat', id: 'demo-mia-3', from: conv, body: 'Top priority is the notification bug on Android — users are missing messages when the app is backgrounded',
+      timestamp: daysAgo(2), isOutgoing: false, conversationId: conv,
+    },
+    {
+      type: 'chat', id: 'demo-mia-4', from: SELF_JID, body: 'Got it. I\'ll look at the push notification service config — might be a Firebase issue',
+      timestamp: daysAgo(2), isOutgoing: true, conversationId: conv,
+    },
+    {
+      type: 'chat', id: 'demo-mia-5', from: conv, body: 'Second priority is the deployment pipeline — staging deploys have been failing intermittently',
+      timestamp: daysAgo(1), isOutgoing: false, conversationId: conv,
+    },
+    {
+      type: 'chat', id: 'demo-mia-6', from: SELF_JID, body: 'I saw that too. The Docker build cache seems to be invalidating on every push',
+      timestamp: daysAgo(1), isOutgoing: true, conversationId: conv,
+      reactions: { '🔍': [conv] } as Record<string, string[]>,
+    },
+    {
+      type: 'chat', id: 'demo-mia-7', from: conv, body: 'Also — release notes for v0.14 are due Friday. Can you draft the technical changes section?',
+      timestamp: hoursAgo(4), isOutgoing: false, conversationId: conv,
+    },
+    {
+      type: 'chat', id: 'demo-mia-8', from: SELF_JID, body: 'Sure, I\'ll have it ready by Thursday. Anything else for the release checklist?',
+      timestamp: hoursAgo(3.5), isOutgoing: true, conversationId: conv,
+    },
+    {
+      type: 'chat', id: 'demo-mia-9', from: conv, body: 'Just the regression test pass — James is running it now. We should be good to ship on schedule',
+      timestamp: hoursAgo(3), isOutgoing: false, conversationId: conv,
+      reactions: { '✅': [SELF_JID] } as Record<string, string[]>,
+    },
+  ]
+})()
+
 // ---------------------------------------------------------------------------
 // Conversations
 // ---------------------------------------------------------------------------
@@ -283,6 +455,20 @@ export function getDemoConversations(): Conversation[] {
       unreadCount: 0,
       lastMessage: SOPHIA_MESSAGES.at(-1),
     },
+    {
+      id: `oliver@${DOMAIN}`,
+      name: 'Oliver Park',
+      type: 'chat',
+      unreadCount: 0,
+      lastMessage: OLIVER_MESSAGES.at(-1),
+    },
+    {
+      id: `mia@${DOMAIN}`,
+      name: 'Mia Thompson',
+      type: 'chat',
+      unreadCount: 1,
+      lastMessage: MIA_MESSAGES.at(-1),
+    },
   ]
 }
 
@@ -291,6 +477,8 @@ export function getDemoMessages(): Map<string, Message[]> {
   map.set(`emma@${DOMAIN}`, EMMA_MESSAGES)
   map.set(`james@${DOMAIN}`, JAMES_MESSAGES)
   map.set(`sophia@${DOMAIN}`, SOPHIA_MESSAGES)
+  map.set(`oliver@${DOMAIN}`, OLIVER_MESSAGES)
+  map.set(`mia@${DOMAIN}`, MIA_MESSAGES)
   return map
 }
 
@@ -298,35 +486,13 @@ export function getDemoMessages(): Map<string, Message[]> {
 // Room data
 // ---------------------------------------------------------------------------
 
-export function getDemoRoom(): Room {
-  return {
-    jid: ROOM_JID,
-    name: 'Team Chat',
-    nickname: SELF_NICK,
-    joined: true,
-    isBookmarked: true,
-    autojoin: true,
-    supportsMAM: true,
-    supportsReactions: true,
-    unreadCount: 0,
-    mentionsCount: 0,
-    typingUsers: new Set(),
-    occupants: new Map(),
-    messages: [],
-    lastMessage: ROOM_MESSAGES.at(-1),
-  }
+export interface DemoRoomData {
+  room: Room
+  occupants: RoomOccupant[]
+  messages: RoomMessage[]
 }
 
-export function getDemoRoomOccupants(): RoomOccupant[] {
-  return [
-    { nick: SELF_NICK, jid: SELF_JID, affiliation: 'owner', role: 'moderator' },
-    { nick: 'Emma', jid: `emma@${DOMAIN}`, affiliation: 'member', role: 'participant' },
-    { nick: 'Oliver', jid: `oliver@${DOMAIN}`, affiliation: 'member', role: 'participant' },
-    { nick: 'James', jid: `james@${DOMAIN}`, affiliation: 'member', role: 'participant', show: 'away' },
-  ]
-}
-
-const ROOM_MESSAGES: RoomMessage[] = [
+const TEAM_ROOM_MESSAGES: RoomMessage[] = [
   {
     type: 'groupchat', id: 'demo-room-1', from: `${ROOM_JID}/Emma`, nick: 'Emma',
     body: 'Good morning everyone! 🌅', timestamp: hoursAgo(3), isOutgoing: false, roomJid: ROOM_JID,
@@ -352,6 +518,16 @@ const ROOM_MESSAGES: RoomMessage[] = [
     reactions: { '🎉': [SELF_NICK, 'Oliver', 'James'] },
   },
   {
+    type: 'groupchat', id: 'demo-room-5b', from: `${ROOM_JID}/James`, nick: 'James',
+    body: 'The regression tests are passing. I\'m running the full performance benchmark now',
+    timestamp: hoursAgo(1.3), isOutgoing: false, roomJid: ROOM_JID,
+  },
+  {
+    type: 'groupchat', id: 'demo-room-5c', from: `${ROOM_JID}/${SELF_NICK}`, nick: SELF_NICK,
+    body: 'Quick reminder: the security audit report is due next Monday. Sophia and I will handle the documentation side',
+    timestamp: hoursAgo(1.2), isOutgoing: true, roomJid: ROOM_JID,
+  },
+  {
     type: 'groupchat', id: 'demo-room-6', from: `${ROOM_JID}/${SELF_NICK}`, nick: SELF_NICK,
     body: 'Great work everyone. Let\'s aim to wrap up the remaining tasks by end of week',
     timestamp: hoursAgo(1), isOutgoing: true, roomJid: ROOM_JID,
@@ -364,14 +540,145 @@ const ROOM_MESSAGES: RoomMessage[] = [
     replyTo: { id: 'demo-room-6', to: `${ROOM_JID}/${SELF_NICK}`, fallbackBody: 'Great work everyone. Let\'s aim to wrap up the remaining tasks by end of week' },
   },
   {
+    type: 'groupchat', id: 'demo-room-7b', from: `${ROOM_JID}/James`, nick: 'James',
+    body: 'Found a memory leak in the notification handler — working on a fix now',
+    timestamp: minutesAgo(40), isOutgoing: false, roomJid: ROOM_JID,
+  },
+  {
+    type: 'groupchat', id: 'demo-room-7c', from: `${ROOM_JID}/Emma`, nick: 'Emma',
+    body: 'Feature request from the beta testers: they want message search to support date filters',
+    timestamp: minutesAgo(35), isOutgoing: false, roomJid: ROOM_JID,
+    reactions: { '👀': [SELF_NICK, 'Oliver'] },
+  },
+  {
     type: 'groupchat', id: 'demo-room-8', from: `${ROOM_JID}/Emma`, nick: 'Emma',
     body: 'I\'ll sync with Sophia on the API docs — we should align the examples with the new SDK hooks',
     timestamp: minutesAgo(30), isOutgoing: false, roomJid: ROOM_JID,
   },
 ]
 
+const DESIGN_ROOM_MESSAGES: RoomMessage[] = [
+  {
+    type: 'groupchat', id: 'demo-design-1', from: `${DESIGN_ROOM_JID}/Oliver`, nick: 'Oliver',
+    body: 'Let\'s review the component library before the sprint ends', timestamp: hoursAgo(5), isOutgoing: false, roomJid: DESIGN_ROOM_JID,
+  },
+  {
+    type: 'groupchat', id: 'demo-design-2', from: `${DESIGN_ROOM_JID}/Emma`, nick: 'Emma',
+    body: 'I updated the color tokens — the primary palette now has better contrast in dark mode',
+    timestamp: hoursAgo(4.8), isOutgoing: false, roomJid: DESIGN_ROOM_JID,
+  },
+  {
+    type: 'groupchat', id: 'demo-design-3', from: `${DESIGN_ROOM_JID}/${SELF_NICK}`, nick: SELF_NICK,
+    body: 'Looks great. Did you test the colors against WCAG AAA?', timestamp: hoursAgo(4.5), isOutgoing: true, roomJid: DESIGN_ROOM_JID,
+    replyTo: { id: 'demo-design-2', to: `${DESIGN_ROOM_JID}/Emma`, fallbackBody: 'I updated the color tokens — the primary palette now has better contrast in dark mode' },
+  },
+  {
+    type: 'groupchat', id: 'demo-design-4', from: `${DESIGN_ROOM_JID}/Emma`, nick: 'Emma',
+    body: 'AA for body text, AAA for headings and buttons — all passing',
+    timestamp: hoursAgo(4.3), isOutgoing: false, roomJid: DESIGN_ROOM_JID,
+    reactions: { '✨': [SELF_NICK, 'Oliver'] },
+  },
+  {
+    type: 'groupchat', id: 'demo-design-5', from: `${DESIGN_ROOM_JID}/Oliver`, nick: 'Oliver',
+    body: 'The typography scale is using a 1.25 ratio — works well for both mobile and desktop',
+    timestamp: hoursAgo(4), isOutgoing: false, roomJid: DESIGN_ROOM_JID,
+  },
+  {
+    type: 'groupchat', id: 'demo-design-6', from: `${DESIGN_ROOM_JID}/Mia`, nick: 'Mia',
+    body: 'Love the progress! Can we add a section on icon guidelines to the style guide?',
+    timestamp: hoursAgo(3.5), isOutgoing: false, roomJid: DESIGN_ROOM_JID,
+  },
+  {
+    type: 'groupchat', id: 'demo-design-7', from: `${DESIGN_ROOM_JID}/Oliver`, nick: 'Oliver',
+    body: 'Already drafted — icons use a 24px grid with 2px stroke weight for consistency',
+    timestamp: hoursAgo(3.2), isOutgoing: false, roomJid: DESIGN_ROOM_JID,
+    replyTo: { id: 'demo-design-6', to: `${DESIGN_ROOM_JID}/Mia`, fallbackBody: 'Love the progress! Can we add a section on icon guidelines to the style guide?' },
+  },
+  {
+    type: 'groupchat', id: 'demo-design-8', from: `${DESIGN_ROOM_JID}/${SELF_NICK}`, nick: SELF_NICK,
+    body: 'The spacing system looks clean. Let\'s make sure the border radius tokens match across all components',
+    timestamp: hoursAgo(3), isOutgoing: true, roomJid: DESIGN_ROOM_JID,
+    reactions: { '👍': ['Oliver', 'Emma'] },
+  },
+  {
+    type: 'groupchat', id: 'demo-design-9', from: `${DESIGN_ROOM_JID}/Emma`, nick: 'Emma',
+    body: 'I\'ll export the final Figma file tonight so we can integrate the tokens into the build',
+    timestamp: hoursAgo(2.5), isOutgoing: false, roomJid: DESIGN_ROOM_JID,
+  },
+  {
+    type: 'groupchat', id: 'demo-design-10', from: `${DESIGN_ROOM_JID}/Mia`, nick: 'Mia',
+    body: 'Perfect — I\'ll add the design review to the release checklist for v0.14',
+    timestamp: hoursAgo(2), isOutgoing: false, roomJid: DESIGN_ROOM_JID,
+    reactions: { '📋': [SELF_NICK] },
+  },
+]
+
+export function getDemoRooms(): DemoRoomData[] {
+  return [
+    {
+      room: {
+        jid: ROOM_JID,
+        name: 'Team Chat',
+        nickname: SELF_NICK,
+        joined: true,
+        isBookmarked: true,
+        autojoin: true,
+        supportsMAM: true,
+        supportsReactions: true,
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+        occupants: new Map(),
+        messages: [],
+        lastMessage: TEAM_ROOM_MESSAGES.at(-1),
+      },
+      occupants: [
+        { nick: SELF_NICK, jid: SELF_JID, affiliation: 'owner', role: 'moderator' },
+        { nick: 'Emma', jid: `emma@${DOMAIN}`, affiliation: 'member', role: 'participant' },
+        { nick: 'Oliver', jid: `oliver@${DOMAIN}`, affiliation: 'member', role: 'participant' },
+        { nick: 'James', jid: `james@${DOMAIN}`, affiliation: 'member', role: 'participant', show: 'away' },
+      ],
+      messages: TEAM_ROOM_MESSAGES,
+    },
+    {
+      room: {
+        jid: DESIGN_ROOM_JID,
+        name: 'Design Review',
+        nickname: SELF_NICK,
+        joined: true,
+        isBookmarked: true,
+        autojoin: true,
+        supportsMAM: true,
+        supportsReactions: true,
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+        occupants: new Map(),
+        messages: [],
+        lastMessage: DESIGN_ROOM_MESSAGES.at(-1),
+      },
+      occupants: [
+        { nick: SELF_NICK, jid: SELF_JID, affiliation: 'owner', role: 'moderator' },
+        { nick: 'Emma', jid: `emma@${DOMAIN}`, affiliation: 'member', role: 'participant' },
+        { nick: 'Oliver', jid: `oliver@${DOMAIN}`, affiliation: 'member', role: 'participant' },
+        { nick: 'Mia', jid: `mia@${DOMAIN}`, affiliation: 'member', role: 'participant' },
+      ],
+      messages: DESIGN_ROOM_MESSAGES,
+    },
+  ]
+}
+
+// Keep backward-compatible exports for any code still using the old API
+export function getDemoRoom(): Room {
+  return getDemoRooms()[0].room
+}
+
+export function getDemoRoomOccupants(): RoomOccupant[] {
+  return getDemoRooms()[0].occupants
+}
+
 export function getDemoRoomMessages(): RoomMessage[] {
-  return ROOM_MESSAGES
+  return getDemoRooms()[0].messages
 }
 
 // ---------------------------------------------------------------------------
