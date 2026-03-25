@@ -9,9 +9,11 @@ vi.mock('@/utils/tauri', () => ({
 
 // Mock mediaCache
 const mockResolveMediaUrl = vi.fn()
+const mockResolveWebMediaUrl = vi.fn()
 const mockResetMediaUrlCache = vi.fn()
 vi.mock('@/utils/mediaCache', () => ({
   resolveMediaUrl: (url: string) => mockResolveMediaUrl(url),
+  resolveWebMediaUrl: (url: string) => mockResolveWebMediaUrl(url),
   resetMediaUrlCache: () => mockResetMediaUrlCache(),
 }))
 

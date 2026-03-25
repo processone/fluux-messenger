@@ -82,12 +82,28 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
   // Show error state if fetch failed or image failed to load (404, etc.)
   if (error || !proxiedImageSrc || loadError) {
     return (
-      <div
-        className="pt-2 rounded-lg bg-fluux-hover/60 flex flex-col items-center justify-center text-fluux-muted text-sm gap-2"
-        style={{ aspectRatio, maxWidth: `${maxWidthPx}px`, maxHeight: '300px', minHeight: '100px' }}
-      >
-        <ImageOff className="w-8 h-8" />
-        <span>{t('chat.imageUnavailable')}</span>
+      <div className="pt-2 max-w-sm">
+        <a
+          href={attachment.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-3 p-3 rounded-lg bg-fluux-bg/60 border border-fluux-border hover:bg-fluux-hover/60 transition-colors group/file"
+          tabIndex={-1}
+        >
+          <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 bg-fluux-muted/20 text-fluux-muted">
+            <ImageOff className="w-5 h-5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-fluux-muted truncate">
+              {attachment.name || t('chat.imageUnavailable')}
+            </p>
+            <p className="text-xs text-fluux-muted">
+              {t('chat.imageUnavailable')}
+              {attachment.size ? ` • ${formatBytes(attachment.size)}` : ''}
+            </p>
+          </div>
+          <Download className="w-4 h-4 text-fluux-muted opacity-0 group-hover/file:opacity-100 transition-opacity flex-shrink-0" />
+        </a>
       </div>
     )
   }

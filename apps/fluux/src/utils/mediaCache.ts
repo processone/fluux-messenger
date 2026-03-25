@@ -1,17 +1,15 @@
 /**
- * Filesystem-based media cache for Tauri desktop app.
+ * Media cache with platform-specific backends:
  *
- * Caches downloaded images to the app cache directory so they're served
- * instantly via convertFileSrc() on subsequent views, avoiding re-downloads
- * from the XMPP HTTP Upload server.
- *
- * Storage: {appCacheDir}/media/{sha256(url)}.{ext}
- * Served as: https://asset.localhost/... URLs via convertFileSrc()
+ * - **Tauri (desktop):** Filesystem-based cache at {appCacheDir}/media/{sha256(url)}.{ext},
+ *   served as https://asset.localhost/... URLs via convertFileSrc().
+ * - **Web:** Cache API-based persistent cache ('fluux-media'), served as blob: URLs.
+ *   Previously-viewed media survives page reloads without re-fetching from the server.
  */
 
 import { isTauri } from './tauri'
 
-/** In-memory index: original URL → asset.localhost URL */
+/** In-memory index: original URL → local URL (asset.localhost or blob:) */
 const urlCache = new Map<string, string>()
 
 /** In-flight fetch deduplication: URL → pending promise */
@@ -157,11 +155,98 @@ async function doResolve(originalUrl: string): Promise<string> {
   return assetUrl
 }
 
+// ---------------------------------------------------------------------------
+// Web Cache API backend
+// ---------------------------------------------------------------------------
+
+const WEB_CACHE_NAME = 'fluux-media'
+
+/** Blob URLs created from web cache — tracked for revocation on cleanup */
+const webBlobUrls = new Map<string, string>()
+
+/**
+ * Resolve a media URL through the browser Cache API (web mode only).
+ *
+ * 1. Check in-memory map (instant)
+ * 2. Check Cache API for a stored response → create blob URL
+ * 3. Fetch, store in Cache API, return blob URL
+ *
+ * @returns blob: URL for use in <img>/<video>/<audio> tags
+ * @throws on fetch failure (caller should show error UI)
+ */
+export async function resolveWebMediaUrl(originalUrl: string): Promise<string> {
+  // 1. In-memory hit
+  const cached = urlCache.get(originalUrl)
+  if (cached) return cached
+
+  // Deduplicate concurrent requests
+  const existing = inflight.get(originalUrl)
+  if (existing) return existing
+
+  const promise = doResolveWeb(originalUrl)
+  inflight.set(originalUrl, promise)
+
+  try {
+    return await promise
+  } finally {
+    inflight.delete(originalUrl)
+  }
+}
+
+async function doResolveWeb(originalUrl: string): Promise<string> {
+  const cache = await caches.open(WEB_CACHE_NAME)
+
+  // 2. Check Cache API
+  const cachedResponse = await cache.match(originalUrl)
+  if (cachedResponse) {
+    const blob = await cachedResponse.blob()
+    const blobUrl = URL.createObjectURL(blob)
+    urlCache.set(originalUrl, blobUrl)
+    webBlobUrls.set(originalUrl, blobUrl)
+    return blobUrl
+  }
+
+  // 3. Fetch and cache
+  const response = await fetch(originalUrl)
+  if (!response.ok) {
+    throw new Error(`Fetch failed: ${response.status} ${response.statusText}`)
+  }
+
+  // Clone before consuming — one copy for Cache API, one for blob URL
+  const responseClone = response.clone()
+  await cache.put(originalUrl, responseClone)
+
+  const blob = await response.blob()
+  const blobUrl = URL.createObjectURL(blob)
+  urlCache.set(originalUrl, blobUrl)
+  webBlobUrls.set(originalUrl, blobUrl)
+  return blobUrl
+}
+
+// ---------------------------------------------------------------------------
+// Shared cleanup
+// ---------------------------------------------------------------------------
+
 /**
  * Clear the entire media cache (files and in-memory index).
  */
 export async function clearMediaCache(): Promise<void> {
   urlCache.clear()
+
+  // Revoke web blob URLs
+  for (const blobUrl of webBlobUrls.values()) {
+    URL.revokeObjectURL(blobUrl)
+  }
+  webBlobUrls.clear()
+
+  // Clear web Cache API
+  if (typeof caches !== 'undefined') {
+    try {
+      await caches.delete(WEB_CACHE_NAME)
+    } catch (error) {
+      console.warn('[MediaCache] Failed to clear web cache:', error)
+    }
+  }
 
   if (!isTauri()) return
 
@@ -173,7 +258,7 @@ export async function clearMediaCache(): Promise<void> {
     await remove(mediaDir, { recursive: true })
     await mkdir(mediaDir, { recursive: true })
   } catch (error) {
-    console.warn('[MediaCache] Failed to clear cache:', error)
+    console.warn('[MediaCache] Failed to clear Tauri cache:', error)
   }
 }
 
@@ -181,6 +266,26 @@ export async function clearMediaCache(): Promise<void> {
  * Get the total size of the media cache in bytes.
  */
 export async function getMediaCacheSize(): Promise<number> {
+  let totalSize = 0
+
+  // Web Cache API size estimation
+  if (!isTauri() && typeof caches !== 'undefined') {
+    try {
+      const cache = await caches.open(WEB_CACHE_NAME)
+      const keys = await cache.keys()
+      for (const request of keys) {
+        const response = await cache.match(request)
+        if (response) {
+          const blob = await response.clone().blob()
+          totalSize += blob.size
+        }
+      }
+    } catch (error) {
+      console.warn('[MediaCache] Failed to get web cache size:', error)
+    }
+    return totalSize
+  }
+
   if (!isTauri()) return 0
 
   try {
@@ -189,7 +294,6 @@ export async function getMediaCacheSize(): Promise<number> {
     const mediaDir = await getMediaDir()
 
     const entries = await readDir(mediaDir)
-    let totalSize = 0
 
     for (const entry of entries) {
       if (entry.isFile) {
@@ -212,5 +316,10 @@ export async function getMediaCacheSize(): Promise<number> {
  */
 export function resetMediaUrlCache(): void {
   urlCache.clear()
+  // Revoke web blob URLs
+  for (const blobUrl of webBlobUrls.values()) {
+    URL.revokeObjectURL(blobUrl)
+  }
+  webBlobUrls.clear()
   mediaDirPath = null
 }

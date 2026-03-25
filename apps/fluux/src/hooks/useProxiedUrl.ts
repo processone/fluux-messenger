@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { isTauri } from '@/utils/tauri'
-import { resolveMediaUrl, resetMediaUrlCache } from '@/utils/mediaCache'
+import { resolveMediaUrl, resolveWebMediaUrl, resetMediaUrlCache } from '@/utils/mediaCache'
 
 interface ProxiedUrlState {
   /** The URL to use for the media element */
@@ -55,15 +55,20 @@ export function sanitizeMediaUrl(url: string): string {
  * @param enabled - Whether to return the URL (useful for conditional loading)
  */
 export function useProxiedUrl(originalUrl: string | undefined, enabled: boolean = true): ProxiedUrlState {
-  // Synchronous initialization: compute web URLs immediately to avoid a
-  // null→URL two-frame flash. Tauri starts as loading (resolved in effect).
+  // Check if web Cache API is available (not in all test environments)
+  const hasWebCache = !isTauri() && typeof caches !== 'undefined'
+
+  // Synchronous initialization: use sanitized URL immediately when no async
+  // cache is involved (web without Cache API). Otherwise start as loading.
   const [state, setState] = useState<ProxiedUrlState>(() => {
     if (!originalUrl || !enabled) {
       return { url: null, isLoading: false, error: null }
     }
-    if (!isTauri()) {
+    if (!isTauri() && !hasWebCache) {
+      // No async cache available — use direct URL
       return { url: sanitizeMediaUrl(originalUrl), isLoading: false, error: null }
     }
+    // Tauri or web with Cache API — resolve asynchronously
     return { url: null, isLoading: true, error: null }
   })
 
@@ -75,31 +80,38 @@ export function useProxiedUrl(originalUrl: string | undefined, enabled: boolean 
 
     const sanitized = sanitizeMediaUrl(originalUrl)
 
-    // Web: update state when URL/enabled changes after initial render
-    if (!isTauri()) {
+    // Web without Cache API: direct URL passthrough
+    if (!isTauri() && !hasWebCache) {
       setState({ url: sanitized, isLoading: false, error: null })
       return
     }
 
-    // Tauri: resolve through filesystem cache
+    // Resolve through platform-specific cache
     let cancelled = false
     setState({ url: null, isLoading: true, error: null })
 
-    resolveMediaUrl(originalUrl)
-      .then(assetUrl => {
+    const resolve = isTauri() ? resolveMediaUrl : resolveWebMediaUrl
+
+    resolve(originalUrl)
+      .then(cachedUrl => {
         if (!cancelled) {
-          setState({ url: assetUrl, isLoading: false, error: null })
+          setState({ url: cachedUrl, isLoading: false, error: null })
         }
       })
       .catch(() => {
-        // Fall back to direct sanitized URL on any cache/fetch error
         if (!cancelled) {
-          setState({ url: sanitized, isLoading: false, error: null })
+          if (isTauri()) {
+            // Tauri: fall back to direct sanitized URL on cache/fetch error
+            setState({ url: sanitized, isLoading: false, error: null })
+          } else {
+            // Web: report error so the error UI shows (the fetch already failed)
+            setState({ url: null, isLoading: false, error: 'Fetch failed' })
+          }
         }
       })
 
     return () => { cancelled = true }
-  }, [originalUrl, enabled])
+  }, [originalUrl, enabled, hasWebCache])
 
   return state
 }
