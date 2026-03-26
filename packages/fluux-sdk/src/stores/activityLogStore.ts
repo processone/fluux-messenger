@@ -65,10 +65,6 @@ interface ActivityLogState {
   // Actions
   /** Add an event to the activity log. Returns the created event with generated ID. */
   addEvent: (input: ActivityEventInput) => ActivityEvent
-  /** Mark a single event as read */
-  markRead: (eventId: string) => void
-  /** Mark all events as read */
-  markAllRead: () => void
   /** Resolve an actionable event (accepted/rejected/dismissed) */
   resolveEvent: (eventId: string, resolution: ActivityResolution) => void
   /** Find an event by matching a predicate */
@@ -85,8 +81,8 @@ interface ActivityLogState {
   unmuteReactionsForMessage: (messageId: string) => void
   /** Check if reactions for a given conversation/message are muted */
   isReactionMuted: (conversationId: string, messageId: string) => boolean
-  /** Count of unread, non-muted events */
-  unreadCount: () => number
+  /** Count of pending actionable events */
+  pendingActionableCount: () => number
 
   // Preview state (ephemeral, not persisted)
   /** The event currently being previewed in the main content area */
@@ -127,8 +123,8 @@ export const activityLogStore = createStore<ActivityLogState>()(
           const event: ActivityEvent = {
             ...input,
             id: generateUUID(),
-            read: false,
             muted,
+            resolution: input.resolution ?? (input.kind === 'actionable' ? 'pending' : undefined),
           }
           set({
             events: [event, ...state.events].slice(0, MAX_EVENTS),
@@ -136,26 +132,10 @@ export const activityLogStore = createStore<ActivityLogState>()(
           return event
         },
 
-        markRead: (eventId) => {
-          set((state) => ({
-            events: state.events.map((e) =>
-              e.id === eventId ? { ...e, read: true } : e
-            ),
-          }))
-        },
-
-        markAllRead: () => {
-          set((state) => ({
-            events: state.events.map((e) =>
-              e.read ? e : { ...e, read: true }
-            ),
-          }))
-        },
-
         resolveEvent: (eventId, resolution) => {
           set((state) => ({
             events: state.events.map((e) =>
-              e.id === eventId ? { ...e, resolution, read: true } : e
+              e.id === eventId ? { ...e, resolution } : e
             ),
           }))
         },
@@ -219,8 +199,8 @@ export const activityLogStore = createStore<ActivityLogState>()(
           return checkReactionMuted(state.mutedReactionConversations, state.mutedReactionMessages, conversationId, messageId)
         },
 
-        unreadCount: () => {
-          return get().events.filter((e) => !e.read && !e.muted).length
+        pendingActionableCount: () => {
+          return get().events.filter((e) => e.kind === 'actionable' && e.resolution === 'pending').length
         },
 
         previewEvent: null,

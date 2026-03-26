@@ -12,7 +12,6 @@ import { useRoomStore } from '@fluux/sdk/react'
 import { useNavigateToTarget } from '@/hooks/useNavigateToTarget'
 import { getNavigationTarget } from './activityNavigation'
 import { Avatar } from '../Avatar'
-import { Tooltip } from '../Tooltip'
 import {
   UserPlus,
   UserCheck,
@@ -26,7 +25,6 @@ import {
   MinusCircle,
   BellOff,
   Bell,
-  Eye,
 } from 'lucide-react'
 
 /** Group events by date (Today, Yesterday, or date string) */
@@ -89,7 +87,7 @@ function getResolutionColor(resolution: string) {
 export function ActivityLogView() {
   const { t } = useTranslation()
   const {
-    events, unreadCount, markAllRead, markRead,
+    events,
     mutedReactionConversations, mutedReactionMessages,
     muteReactionsForConversation, unmuteReactionsForConversation,
     muteReactionsForMessage, unmuteReactionsForMessage,
@@ -139,22 +137,11 @@ export function ActivityLogView() {
 
   return (
     <div className="px-2 py-2">
-      {/* Header with mark all read */}
+      {/* Header */}
       <div className="flex items-center justify-between px-2 mb-3">
         <h3 className="text-xs font-semibold text-fluux-muted uppercase">
           {t('activityLog.title')}
         </h3>
-        {unreadCount > 0 && (
-          <Tooltip content={t('activityLog.markAllRead')} position="left">
-            <button
-              onClick={markAllRead}
-              className="text-fluux-muted hover:text-fluux-text transition-colors"
-              aria-label={t('activityLog.markAllRead')}
-            >
-              <Eye className="w-4 h-4" />
-            </button>
-          </Tooltip>
-        )}
       </div>
 
       {/* Grouped event list */}
@@ -192,7 +179,6 @@ export function ActivityLogView() {
               <ActivityEventItem
                 key={event.id}
                 event={event}
-                onMarkRead={() => markRead(event.id)}
                 onNavigate={() => handleNavigate(event)}
                 isNavigable={getNavigationTarget(event) !== null}
                 {...reactionMuteProps}
@@ -207,7 +193,6 @@ export function ActivityLogView() {
 
 interface ActivityEventItemProps {
   event: ActivityEvent
-  onMarkRead: () => void
   onNavigate: () => void
   isNavigable: boolean
   // Reaction muting (only for reaction-received events)
@@ -220,7 +205,7 @@ interface ActivityEventItemProps {
 }
 
 function ActivityEventItem({
-  event, onMarkRead, onNavigate, isNavigable,
+  event, onNavigate, isNavigable,
   isConversationMuted, isMessageMuted,
   onMuteConversation, onUnmuteConversation,
   onMuteMessage, onUnmuteMessage,
@@ -237,15 +222,13 @@ function ActivityEventItem({
   const isReaction = event.type === 'reaction-received'
 
   const handleClick = () => {
-    if (!event.read) onMarkRead()
     if (isNavigable) onNavigate()
   }
 
   return (
     <div
       className={`group flex items-start gap-2 px-2 py-1.5 rounded transition-colors
-        ${isNavigable ? 'cursor-pointer' : 'cursor-default'}
-        ${!event.read ? 'bg-fluux-brand/5' : 'hover:bg-fluux-hover'}
+        ${isNavigable ? 'cursor-pointer hover:bg-fluux-hover' : 'cursor-default'}
         ${event.muted ? 'opacity-50' : ''}`}
       onClick={handleClick}
     >
@@ -262,7 +245,7 @@ function ActivityEventItem({
 
       {/* Content */}
       <div className="flex-1 min-w-0">
-        <p className={`text-xs leading-tight ${!event.read ? 'text-fluux-text font-medium' : 'text-fluux-muted'}`}>
+        <p className="text-xs leading-tight text-fluux-muted">
           {description}
         </p>
         <div className="flex items-center gap-1.5 mt-0.5">
@@ -272,9 +255,6 @@ function ActivityEventItem({
               <ResolutionIcon className="w-3 h-3" />
               {t(`activityLog.${event.resolution}`)}
             </span>
-          )}
-          {!event.read && (
-            <span className="w-1.5 h-1.5 rounded-full bg-fluux-brand flex-shrink-0" />
           )}
         </div>
       </div>

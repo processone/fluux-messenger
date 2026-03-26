@@ -8,7 +8,6 @@ function createEvent(payload: ActivityEvent['payload'], overrides: Partial<Activ
     type: payload.type as ActivityEvent['type'],
     kind: 'informational',
     timestamp: new Date(),
-    read: false,
     muted: false,
     payload,
     ...overrides,

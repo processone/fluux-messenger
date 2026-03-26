@@ -10,28 +10,12 @@ import type { ActivityEvent, ActivityEventType, ActivityResolution } from '../co
  *
  * @returns Activity log state and actions
  *
- * @example Displaying unread activity count
+ * @example Displaying pending actionable count
  * ```tsx
  * function ActivityBadge() {
- *   const { unreadCount } = useActivityLog()
- *   if (unreadCount === 0) return null
- *   return <span className="badge">{unreadCount}</span>
- * }
- * ```
- *
- * @example Listing recent events
- * ```tsx
- * function ActivityFeed() {
- *   const { events, markRead } = useActivityLog()
- *   return (
- *     <ul>
- *       {events.map(event => (
- *         <li key={event.id} onClick={() => markRead(event.id)}>
- *           {event.type}: {JSON.stringify(event.payload)}
- *         </li>
- *       ))}
- *     </ul>
- *   )
+ *   const { pendingActionableCount } = useActivityLog()
+ *   if (pendingActionableCount === 0) return null
+ *   return <span className="badge">{pendingActionableCount}</span>
  * }
  * ```
  *
@@ -42,23 +26,12 @@ export function useActivityLog() {
   const mutedReactionConversations = useActivityLogStore((s) => s.mutedReactionConversations)
   const mutedReactionMessages = useActivityLogStore((s) => s.mutedReactionMessages)
 
-  const unreadCount = useMemo(
-    () => events.filter((e) => !e.read && !e.muted).length,
-    [events]
-  )
-
   const actionableEvents = useMemo(
     () => events.filter((e) => e.kind === 'actionable' && e.resolution === 'pending'),
     [events]
   )
 
-  const markRead = useCallback((eventId: string) => {
-    activityLogStore.getState().markRead(eventId)
-  }, [])
-
-  const markAllRead = useCallback(() => {
-    activityLogStore.getState().markAllRead()
-  }, [])
+  const pendingActionableCount = actionableEvents.length
 
   const resolveEvent = useCallback((eventId: string, resolution: ActivityResolution) => {
     activityLogStore.getState().resolveEvent(eventId, resolution)
@@ -89,12 +62,10 @@ export function useActivityLog() {
   return useMemo(
     () => ({
       events,
-      unreadCount,
+      pendingActionableCount,
       actionableEvents,
       mutedReactionConversations,
       mutedReactionMessages,
-      markRead,
-      markAllRead,
       resolveEvent,
       muteReactionsForConversation,
       unmuteReactionsForConversation,
@@ -103,7 +74,7 @@ export function useActivityLog() {
       previewEvent,
       setPreviewEvent,
     }),
-    [events, unreadCount, actionableEvents, mutedReactionConversations, mutedReactionMessages, markRead, markAllRead, resolveEvent, muteReactionsForConversation, unmuteReactionsForConversation, muteReactionsForMessage, unmuteReactionsForMessage, previewEvent, setPreviewEvent]
+    [events, pendingActionableCount, actionableEvents, mutedReactionConversations, mutedReactionMessages, resolveEvent, muteReactionsForConversation, unmuteReactionsForConversation, muteReactionsForMessage, unmuteReactionsForMessage, previewEvent, setPreviewEvent]
   )
 }
 

@@ -153,14 +153,22 @@ describe('activityLogStore — scoped reaction muting', () => {
     })
   })
 
-  describe('unreadCount', () => {
-    it('excludes muted events', () => {
-      activityLogStore.getState().addEvent(makeReactionInput('chat-a@example.com', 'msg-1'))
-      activityLogStore.getState().addEvent(makeReactionInput('chat-b@example.com', 'msg-2'))
-      expect(activityLogStore.getState().unreadCount()).toBe(2)
+  describe('pendingActionableCount', () => {
+    it('counts only pending actionable events', () => {
+      // Add two actionable events (subscription requests)
+      activityLogStore.getState().addEvent(makeNonReactionInput())
+      activityLogStore.getState().addEvent(makeNonReactionInput())
+      expect(activityLogStore.getState().pendingActionableCount()).toBe(2)
 
-      activityLogStore.getState().muteReactionsForConversation('chat-a@example.com')
-      expect(activityLogStore.getState().unreadCount()).toBe(1)
+      // Resolve one — count should drop
+      const eventId = activityLogStore.getState().events[0].id
+      activityLogStore.getState().resolveEvent(eventId, 'accepted')
+      expect(activityLogStore.getState().pendingActionableCount()).toBe(1)
+    })
+
+    it('does not count informational events', () => {
+      activityLogStore.getState().addEvent(makeReactionInput('chat-a@example.com', 'msg-1'))
+      expect(activityLogStore.getState().pendingActionableCount()).toBe(0)
     })
   })
 })

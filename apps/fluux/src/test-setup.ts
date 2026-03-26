@@ -365,8 +365,6 @@ vi.mock('@fluux/sdk/react', () => ({
       mutedReactionMessages: new Set(),
       previewEvent: null,
       addEvent: vi.fn(),
-      markRead: vi.fn(),
-      markAllRead: vi.fn(),
       resolveEvent: vi.fn(),
       findEvent: vi.fn(),
       removeEvent: vi.fn(),
@@ -375,7 +373,7 @@ vi.mock('@fluux/sdk/react', () => ({
       muteReactionsForMessage: vi.fn(),
       unmuteReactionsForMessage: vi.fn(),
       isReactionMuted: () => false,
-      unreadCount: () => 0,
+      pendingActionableCount: () => 0,
       setPreviewEvent: vi.fn(),
       reset: vi.fn(),
     }

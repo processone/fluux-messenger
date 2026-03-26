@@ -147,10 +147,9 @@ export class ActivityLogHook extends EventHook {
         reactors.push({ reactorJid, emojis })
       }
 
-      // Replace event: preserve read state so replays don't reset the blue dot
-      const wasRead = existing.read
+      // Replace event with updated reactors
       store.removeEvent(existing.id)
-      const newEvent = store.addEvent({
+      store.addEvent({
         type: 'reaction-received',
         kind: 'informational',
         timestamp: new Date(),
@@ -163,9 +162,6 @@ export class ActivityLogHook extends EventHook {
           pollTitle: pollTitle ?? payload.pollTitle,
         },
       })
-      if (wasRead) {
-        store.markRead(newEvent.id)
-      }
     } else {
       store.addEvent({
         type: 'reaction-received',

@@ -134,8 +134,6 @@ export interface ActivityEvent {
   kind: ActivityEventKind
   /** When the event occurred */
   timestamp: Date
-  /** Has the user seen/acknowledged this event */
-  read: boolean
   /** Whether notifications are suppressed for this event's type */
   muted: boolean
   /** Resolution status for actionable events */
@@ -149,4 +147,4 @@ export interface ActivityEvent {
  *
  * @category Activity
  */
-export type ActivityEventInput = Omit<ActivityEvent, 'id' | 'read' | 'muted'>
+export type ActivityEventInput = Omit<ActivityEvent, 'id' | 'muted'>
