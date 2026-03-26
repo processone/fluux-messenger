@@ -4,7 +4,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react'
 import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
 
 /** Maximum height in pixels before content is collapsed */
-const MAX_COLLAPSED_HEIGHT = 350
+const MAX_COLLAPSED_HEIGHT = 500
 
 interface CollapsibleContentProps {
   /** Unique message ID for tracking expanded state */
@@ -79,7 +79,7 @@ export function CollapsibleContent({
       <div
         ref={contentRef}
         className={`relative overflow-hidden transition-[max-height] duration-200 ${
-          !isExpanded ? 'max-h-[350px]' : ''
+          !isExpanded ? 'max-h-[500px]' : ''
         }`}
       >
         {children}

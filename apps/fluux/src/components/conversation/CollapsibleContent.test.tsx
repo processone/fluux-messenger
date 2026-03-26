@@ -60,7 +60,7 @@ describe('CollapsibleContent', () => {
     Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
       configurable: true,
       get() {
-        return 500 // Exceeds 350px threshold
+        return 600 // Exceeds 500px threshold
       },
     })
 
@@ -83,7 +83,7 @@ describe('CollapsibleContent', () => {
     Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
       configurable: true,
       get() {
-        return 500
+        return 600
       },
     })
 
@@ -110,7 +110,7 @@ describe('CollapsibleContent', () => {
     Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
       configurable: true,
       get() {
-        return 500
+        return 600
       },
     })
 
@@ -134,7 +134,7 @@ describe('CollapsibleContent', () => {
     Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
       configurable: true,
       get() {
-        return 500
+        return 600
       },
     })
 
@@ -155,7 +155,7 @@ describe('CollapsibleContent', () => {
     Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
       configurable: true,
       get() {
-        return 500
+        return 600
       },
     })
 
@@ -167,14 +167,14 @@ describe('CollapsibleContent', () => {
 
     // Find the content container (has overflow-hidden class)
     const contentDiv = container.querySelector('.overflow-hidden')
-    expect(contentDiv).toHaveClass('max-h-[350px]')
+    expect(contentDiv).toHaveClass('max-h-[500px]')
   })
 
   it('should remove max-height when expanded', () => {
     Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
       configurable: true,
       get() {
-        return 500
+        return 600
       },
     })
 
@@ -189,14 +189,14 @@ describe('CollapsibleContent', () => {
 
     // max-h class should be removed
     const contentDiv = container.querySelector('.overflow-hidden')
-    expect(contentDiv).not.toHaveClass('max-h-[350px]')
+    expect(contentDiv).not.toHaveClass('max-h-[500px]')
   })
 
   it('should use selection gradient color when isSelected is true', () => {
     Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
       configurable: true,
       get() {
-        return 500
+        return 600
       },
     })
 
@@ -218,7 +218,7 @@ describe('CollapsibleContent', () => {
     Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
       configurable: true,
       get() {
-        return 500
+        return 600
       },
     })
 
@@ -240,7 +240,7 @@ describe('CollapsibleContent', () => {
     Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
       configurable: true,
       get() {
-        return 500
+        return 600
       },
     })
 
@@ -262,7 +262,7 @@ describe('CollapsibleContent', () => {
     Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
       configurable: true,
       get() {
-        return 500
+        return 600
       },
     })
 
