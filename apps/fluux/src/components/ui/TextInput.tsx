@@ -3,12 +3,12 @@
  * characters Tauri's unstable feature incorrectly inserts when arrow keys
  * are pressed at text boundaries on macOS.
  * See: https://github.com/tauri-apps/tauri/issues/10194
+ *
+ * Primary protection is the global `beforeinput` guard installed in main.tsx.
+ * This onChange filter is a reactive safety net in case anything slips through.
  */
 import { forwardRef, useCallback, type ChangeEvent } from 'react'
-
-// Keep newlines (\n = 0x0A) and tabs (\t = 0x09), filter other C0 control chars and DEL
-// eslint-disable-next-line no-control-regex
-const CONTROL_CHAR_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g
+import { CONTROL_CHAR_RE } from '@/utils/tauriInputFix'
 
 function filterControlChars<T extends HTMLInputElement | HTMLTextAreaElement>(
   e: ChangeEvent<T>,

@@ -11,6 +11,7 @@ import './index.css'
 // Initialize global Tauri file drop listener immediately (before React renders)
 import './utils/tauriFileDrop'
 import { tauriProxyAdapter } from './utils/tauriProxyAdapter'
+import { installBeforeInputGuard } from './utils/tauriInputFix'
 
 // Check if running in Tauri
 const isTauri = '__TAURI_INTERNALS__' in window
@@ -53,6 +54,9 @@ document.addEventListener('keydown', (e) => {
     window.location.reload()
   }
 })
+
+// Block control characters Tauri's macOS webview inserts on arrow-key boundary hits
+installBeforeInputGuard()
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
