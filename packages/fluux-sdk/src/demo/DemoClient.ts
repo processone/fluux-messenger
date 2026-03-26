@@ -29,7 +29,8 @@ import { chatStore } from '../stores/chatStore'
 import { roomStore } from '../stores/roomStore'
 import { activityLogStore } from '../stores/activityLogStore'
 import type { ActivityEventInput } from '../core/types/activity'
-import type { RoomMessage, RoomOccupant } from '../core/types/room'
+import type { Contact } from '../core/types/roster'
+import type { Room, RoomMessage, RoomOccupant } from '../core/types/room'
 import type { DemoData, DemoAnimationStep } from './types'
 
 type AnimationState = 'idle' | 'playing' | 'paused' | 'stopped'
@@ -39,6 +40,14 @@ const NS_DISCO_INFO = 'http://jabber.org/protocol/disco#info'
 const NS_DISCO_ITEMS = 'http://jabber.org/protocol/disco#items'
 const NS_RSM = 'http://jabber.org/protocol/rsm'
 const NS_MUC = 'http://jabber.org/protocol/muc'
+const NS_MUC_OWNER = 'http://jabber.org/protocol/muc#owner'
+const NS_MUC_ADMIN = 'http://jabber.org/protocol/muc#admin'
+const NS_VCARD_TEMP = 'vcard-temp'
+const NS_PUBSUB = 'http://jabber.org/protocol/pubsub'
+const NS_BLOCKING = 'urn:xmpp:blocking'
+const NS_MAM = 'urn:xmpp:mam:2'
+const NS_COMMANDS = 'http://jabber.org/protocol/commands'
+const NS_DATA_FORMS = 'jabber:x:data'
 
 /** Minimal Element-like object returned by mock IQ responses. */
 interface MockElement {
@@ -76,11 +85,13 @@ export class DemoClient extends XMPPClient {
   private elapsedAtPause = 0
   private _animationState: AnimationState = 'idle'
 
-  // Room registry for simulating IQ responses
+  // Registries for simulating IQ responses (populated by populateDemo)
   private conferenceService = ''
   private selfJid = ''
   private knownRooms = new Map<string, KnownRoom>()
   private seededRoomOccupants = new Map<string, RoomOccupant[]>()
+  private seededContacts = new Map<string, Contact>()
+  private seededRooms = new Map<string, Room>()
 
   /** Current animation state. */
   get animationState(): AnimationState {
@@ -135,12 +146,15 @@ export class DemoClient extends XMPPClient {
   }
 
   protected override async sendIQ(stanza: any): Promise<any> {
-    // Inspect the query child to route demo IQ responses
+    const to = stanza?.attrs?.to as string | undefined
+
+    // Inspect children to route IQ responses by namespace
     const queryChild = stanza?.children?.find?.(
       (c: any) => c.name === 'query'
     )
     const xmlns = queryChild?.attrs?.xmlns as string | undefined
-    const to = stanza?.attrs?.to as string | undefined
+
+    // --- Service Discovery ---
 
     // disco#info to a known room → return room features for queryRoomFeatures()
     if (xmlns === NS_DISCO_INFO && to && this.knownRooms.has(to)) {
@@ -150,6 +164,63 @@ export class DemoClient extends XMPPClient {
     // disco#items to the conference service → return room list for fetchRoomList()
     if (xmlns === NS_DISCO_ITEMS && to === this.conferenceService) {
       return this.buildDiscoItemsResponse()
+    }
+
+    // --- vCard-temp (XEP-0054) ---
+
+    const vcardChild = stanza?.children?.find?.(
+      (c: any) => c.name === 'vCard' && c.attrs?.xmlns === NS_VCARD_TEMP
+    )
+    if (vcardChild) {
+      return this.buildVCardResponse(to)
+    }
+
+    // --- PubSub items (avatars, nicknames) ---
+
+    const pubsubChild = stanza?.children?.find?.(
+      (c: any) => c.name === 'pubsub' && c.attrs?.xmlns === NS_PUBSUB
+    )
+    if (pubsubChild) {
+      return this.buildPubSubResponse(pubsubChild)
+    }
+
+    // --- Blocklist (XEP-0191) ---
+
+    const blocklistChild = stanza?.children?.find?.(
+      (c: any) => c.name === 'blocklist' && c.attrs?.xmlns === NS_BLOCKING
+    )
+    if (blocklistChild) {
+      return this.buildBlocklistResponse()
+    }
+
+    // --- MAM queries (XEP-0313) ---
+
+    const mamChild = stanza?.children?.find?.(
+      (c: any) => c.name === 'query' && c.attrs?.xmlns === NS_MAM
+    )
+    if (mamChild) {
+      return this.buildMAMResponse()
+    }
+
+    // --- MUC owner: room config (XEP-0045) ---
+
+    if (xmlns === NS_MUC_OWNER) {
+      return this.buildRoomConfigResponse(to)
+    }
+
+    // --- MUC admin: affiliation lists (XEP-0045) ---
+
+    if (xmlns === NS_MUC_ADMIN) {
+      return this.buildRoomAffiliationResponse(to, queryChild)
+    }
+
+    // --- Ad-hoc commands (XEP-0050) ---
+
+    const commandChild = stanza?.children?.find?.(
+      (c: any) => c.name === 'command' && c.attrs?.xmlns === NS_COMMANDS
+    )
+    if (commandChild) {
+      return this.buildCommandResponse()
     }
 
     // Fallback: return empty stub so callers using .getChild() etc.
@@ -179,6 +250,11 @@ export class DemoClient extends XMPPClient {
     connectionStore.getState().setJid(data.self.jid)
     if (data.self.avatar) {
       connectionStore.getState().setOwnAvatar(data.self.avatar)
+    }
+
+    // Store contacts for IQ response generation (vCard, PubSub)
+    for (const contact of data.contacts) {
+      this.seededContacts.set(contact.jid, contact)
     }
 
     // Roster: load contacts then set presence per-resource
@@ -216,6 +292,7 @@ export class DemoClient extends XMPPClient {
       // Register seeded rooms in the internal registry
       this.knownRooms.set(room.jid, { name: room.name, occupantCount: occupants.length })
       this.seededRoomOccupants.set(room.jid, occupants)
+      this.seededRooms.set(room.jid, room)
     }
 
     // Set MUC service JID so BrowseRoomsModal can discover it
@@ -586,6 +663,154 @@ export class DemoClient extends XMPPClient {
 
     return this.mockElement('iq', { type: 'result' }, [
       this.mockElement('query', { xmlns: NS_DISCO_ITEMS }, [...items, rsmSet]),
+    ])
+  }
+
+  /**
+   * Build a vCard-temp response from seeded contact data.
+   * Returns the contact's display name; for room occupant JIDs (with /)
+   * derives the name from the nick portion.
+   */
+  private buildVCardResponse(to: string | undefined): MockElement {
+    let displayName: string | undefined
+
+    if (to) {
+      // Room occupant JID: room@conf/nick → use nick as display name
+      const slashIdx = to.indexOf('/')
+      if (slashIdx !== -1) {
+        displayName = to.slice(slashIdx + 1)
+      } else {
+        // Look up contact by bare JID
+        const contact = this.seededContacts.get(to)
+        displayName = contact?.name
+      }
+    }
+
+    const vcardChildren: MockElement[] = []
+    if (displayName) {
+      vcardChildren.push(this.mockElement('FN', {}, [], displayName))
+    }
+
+    return this.mockElement('iq', { type: 'result' }, [
+      this.mockElement('vCard', { xmlns: NS_VCARD_TEMP }, vcardChildren),
+    ])
+  }
+
+  /**
+   * Build a PubSub items response. Returns an empty items node so callers
+   * (avatar fetch, nickname fetch) gracefully fall back without errors.
+   */
+  private buildPubSubResponse(pubsubChild: any): MockElement {
+    // Extract the requested node from the items child
+    const itemsChild = pubsubChild?.children?.find?.(
+      (c: any) => c.name === 'items'
+    )
+    const node = itemsChild?.attrs?.node as string | undefined
+
+    return this.mockElement('iq', { type: 'result' }, [
+      this.mockElement('pubsub', { xmlns: NS_PUBSUB }, [
+        this.mockElement('items', { ...(node ? { node } : {}) }),
+      ]),
+    ])
+  }
+
+  /** Build an empty blocklist response (XEP-0191). */
+  private buildBlocklistResponse(): MockElement {
+    return this.mockElement('iq', { type: 'result' }, [
+      this.mockElement('blocklist', { xmlns: NS_BLOCKING }),
+    ])
+  }
+
+  /**
+   * Build a MAM response signaling an empty, complete archive.
+   * Callers like catchUpAllConversations() will see "no more history".
+   */
+  private buildMAMResponse(): MockElement {
+    return this.mockElement('iq', { type: 'result' }, [
+      this.mockElement('fin', { xmlns: NS_MAM, complete: 'true' }, [
+        this.mockElement('set', { xmlns: NS_RSM }, [
+          this.mockElement('count', {}, [], '0'),
+        ]),
+      ]),
+    ])
+  }
+
+  /**
+   * Build a MUC owner room config form response from seeded room data.
+   * Returns a data form with common room configuration fields.
+   */
+  private buildRoomConfigResponse(roomJid: string | undefined): MockElement {
+    const room = roomJid ? this.seededRooms.get(roomJid) : undefined
+    const roomName = room?.name ?? roomJid?.split('@')[0] ?? ''
+
+    // Build x:data form fields from room data
+    const fields: MockElement[] = [
+      this.buildFormField('FORM_TYPE', 'http://jabber.org/protocol/muc#roomconfig', 'hidden'),
+      this.buildFormField('muc#roomconfig_roomname', roomName),
+      this.buildFormField('muc#roomconfig_roomdesc', room?.subject ?? ''),
+      this.buildFormField('muc#roomconfig_persistentroom', '1'),
+      this.buildFormField('muc#roomconfig_publicroom', '1'),
+      this.buildFormField('muc#roomconfig_membersonly', '0'),
+    ]
+
+    return this.mockElement('iq', { type: 'result' }, [
+      this.mockElement('query', { xmlns: NS_MUC_OWNER }, [
+        this.mockElement('x', { xmlns: NS_DATA_FORMS, type: 'form' }, fields),
+      ]),
+    ])
+  }
+
+  /** Build a data form field element for room config responses. */
+  private buildFormField(varName: string, value: string, type?: string): MockElement {
+    const attrs: Record<string, string> = { var: varName }
+    if (type) attrs.type = type
+    return this.mockElement('field', attrs, [
+      this.mockElement('value', {}, [], value),
+    ])
+  }
+
+  /**
+   * Build a MUC admin affiliation list response from seeded occupant data.
+   * Filters occupants by the requested affiliation.
+   */
+  private buildRoomAffiliationResponse(
+    roomJid: string | undefined,
+    queryChild: any
+  ): MockElement {
+    const items: MockElement[] = []
+
+    if (roomJid) {
+      // Extract requested affiliation from the query's <item affiliation="...">
+      const requestedAffiliation = queryChild?.children?.find?.(
+        (c: any) => c.name === 'item'
+      )?.attrs?.affiliation as string | undefined
+
+      const occupants = this.seededRoomOccupants.get(roomJid) ?? []
+      for (const occupant of occupants) {
+        if (requestedAffiliation && occupant.affiliation !== requestedAffiliation) continue
+        if (!occupant.jid) continue
+        items.push(this.mockElement('item', {
+          jid: occupant.jid,
+          affiliation: occupant.affiliation,
+          ...(occupant.nick ? { nick: occupant.nick } : {}),
+        }))
+      }
+    }
+
+    return this.mockElement('iq', { type: 'result' }, [
+      this.mockElement('query', { xmlns: NS_MUC_ADMIN }, items),
+    ])
+  }
+
+  /** Build an ad-hoc command completed response (XEP-0050). */
+  private buildCommandResponse(): MockElement {
+    return this.mockElement('iq', { type: 'result' }, [
+      this.mockElement('command', {
+        xmlns: NS_COMMANDS,
+        status: 'completed',
+      }, [
+        this.mockElement('note', { type: 'info' }, [], 'Demo mode — command simulated'),
+      ]),
     ])
   }
 }
