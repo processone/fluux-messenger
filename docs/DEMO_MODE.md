@@ -12,9 +12,9 @@ Then open **http://localhost:5173/demo.html**
 
 ### URL Parameters
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `tutorial` | `true` | Set to `false` to disable tutorial tooltips (useful for video recording and screenshots) |
+| Parameter  | Default | Description                                                                              |
+|------------|---------|------------------------------------------------------------------------------------------|
+| `tutorial` | `true`  | Set to `false` to disable tutorial tooltips (useful for video recording and screenshots) |
 
 Example: **http://localhost:5173/demo.html?tutorial=false**
 
@@ -69,18 +69,18 @@ The SDK also exports the `DemoData`, `DemoAnimationStep`, and related type inter
 
 `apps/fluux/public/demo/` contains:
 
-| File | Description |
-|------|-------------|
-| `avatar-emma.webp` | Contact avatar (256x256 WebP) |
-| `avatar-james.webp` | Contact avatar |
-| `avatar-sophia.webp` | Contact avatar |
-| `avatar-oliver.webp` | Contact avatar |
-| `avatar-mia.webp` | Contact avatar |
-| `avatar-self.webp` | Own user avatar |
-| `screenshot-fluux-contacts.png` | Image attachment in Emma's conversation |
-| `fluux-sdk-api-reference.pdf` | PDF attachment in Sophia's conversation |
-| `sdk-walkthrough.mp4` | Video attachment in Sophia's conversation |
-| `link-preview-fluux-013.png` | OG image for link preview in James's conversation |
+| File                            | Description                                       |
+|---------------------------------|---------------------------------------------------|
+| `avatar-emma.webp`              | Contact avatar (256x256 WebP)                     |
+| `avatar-james.webp`             | Contact avatar                                    |
+| `avatar-sophia.webp`            | Contact avatar                                    |
+| `avatar-oliver.webp`            | Contact avatar                                    |
+| `avatar-mia.webp`               | Contact avatar                                    |
+| `avatar-self.webp`              | Own user avatar                                   |
+| `screenshot-fluux-contacts.png` | Image attachment in Emma's conversation           |
+| `fluux-sdk-api-reference.pdf`   | PDF attachment in Sophia's conversation           |
+| `sdk-walkthrough.mp4`           | Video attachment in Sophia's conversation         |
+| `link-preview-fluux-013.png`    | OG image for link preview in James's conversation |
 
 ## Production Build Isolation
 
