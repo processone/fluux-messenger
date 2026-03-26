@@ -1813,6 +1813,11 @@ export class Connection extends BaseModule {
               logInfo(`Reconnect timeout fired stale (${Math.round(elapsed / 1000)}s elapsed, expected ${RECONNECT_ATTEMPT_TIMEOUT_MS / 1000}s) — ignoring`)
               return
             }
+            // Clean up the client BEFORE rejecting to prevent stale events
+            // (e.g., delayed 'online' from resource binding completing after timeout)
+            // from interfering with the next reconnect attempt.
+            logWarn(`Reconnect attempt timed out after ${RECONNECT_ATTEMPT_TIMEOUT_MS / 1000}s, cleaning up stale client`)
+            this.cleanupClient()
             reject(new Error(`Reconnect attempt timed out after ${RECONNECT_ATTEMPT_TIMEOUT_MS / 1000}s`))
           }, RECONNECT_ATTEMPT_TIMEOUT_MS)
 
@@ -1885,6 +1890,11 @@ export class Connection extends BaseModule {
         await connectWithOptions(reconnectOptions)
       }
     } catch (err) {
+      // Ensure the failed attempt's client is destroyed to prevent stale events
+      // (e.g., delayed 'online' from resource binding) from interfering with
+      // subsequent reconnect attempts.
+      this.cleanupClient()
+
       logError('Reconnect failed:', err)
       const errorMsg = err instanceof Error ? err.message : 'Unknown error'
       this.stores.console.addEvent(`Reconnect attempt failed: ${errorMsg}`, 'error')

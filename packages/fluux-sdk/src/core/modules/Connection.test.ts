@@ -5,7 +5,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { XMPPClient } from '../XMPPClient'
-import { DIRECT_WEBSOCKET_PRECHECK_TIMEOUT_MS } from './connectionTimeouts'
+import { DIRECT_WEBSOCKET_PRECHECK_TIMEOUT_MS, RECONNECT_ATTEMPT_TIMEOUT_MS } from './connectionTimeouts'
 import {
   createMockXmppClient,
   createMockStores,
@@ -2432,6 +2432,85 @@ describe('XMPPClient Connection', () => {
 
       // Should schedule another reconnect attempt (not stuck forever)
       expect(mockStores.connection.setReconnectState).toHaveBeenCalledWith(2, expect.any(Number))
+    })
+
+    it('should clean up client and retry when reconnect attempt times out', async () => {
+      // Simulate unexpected disconnect to enter reconnecting state
+      mockXmppClientInstance._emit('disconnect', { clean: false })
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
+
+      // Prepare new mock client for reconnect attempt
+      const reconnectClient = createMockXmppClient()
+      mockClientFactory._setInstance(reconnectClient)
+
+      // Advance timer to trigger reconnect attempt
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockClientFactory).toHaveBeenCalledTimes(1)
+
+      // Simulate: SASL auth succeeds but resource binding hangs.
+      // Neither 'online' nor 'error' nor 'disconnect' fires.
+      // The RECONNECT_ATTEMPT_TIMEOUT_MS should catch this.
+
+      // Verify the client is still referenced before timeout
+      expect((xmppClient.connection as any).xmpp).toBe(reconnectClient)
+
+      // Advance past the reconnect attempt timeout
+      mockClientFactory.mockClear()
+      mockStores.connection.setReconnectState.mockClear()
+      await vi.advanceTimersByTimeAsync(RECONNECT_ATTEMPT_TIMEOUT_MS)
+
+      // Client should have been cleaned up (nulled) by the timeout handler
+      expect((xmppClient.connection as any).xmpp).toBeNull()
+
+      // Should have logged the timeout
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        expect.stringContaining('timed out'),
+        'error'
+      )
+
+      // Should schedule another reconnect attempt (machine → waiting → attempting)
+      expect(mockStores.connection.setReconnectState).toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.any(Number)
+      )
+
+      // Prepare another client for the retry
+      const retryClient = createMockXmppClient()
+      mockClientFactory._setInstance(retryClient)
+      mockClientFactory.mockClear()
+
+      // Advance timer to trigger the retry attempt
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(mockClientFactory).toHaveBeenCalledTimes(1)
+    })
+
+    it('should not fire stale events from timed-out client after cleanup', async () => {
+      // Simulate disconnect to enter reconnecting state
+      mockXmppClientInstance._emit('disconnect', { clean: false })
+
+      // Prepare client for reconnect attempt
+      const reconnectClient = createMockXmppClient()
+      mockClientFactory._setInstance(reconnectClient)
+
+      // Trigger reconnect attempt
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockClientFactory).toHaveBeenCalledTimes(1)
+
+      // Advance past timeout — client is cleaned up
+      await vi.advanceTimersByTimeAsync(RECONNECT_ATTEMPT_TIMEOUT_MS)
+      expect((xmppClient.connection as any).xmpp).toBeNull()
+
+      // Now simulate the stale client belatedly firing 'online'
+      // (e.g., resource binding finally completed after timeout).
+      // Since listeners were stripped by cleanupClient/forceDestroyClient,
+      // this should NOT cause a CONNECTION_SUCCESS on the state machine.
+      mockStores.connection.setStatus.mockClear()
+      reconnectClient._emit('online')
+
+      // The machine should still be in reconnecting (not connected)
+      // because the stale 'online' event was stripped by cleanup
+      const statusCalls = vi.mocked(mockStores.connection.setStatus).mock.calls
+      expect(statusCalls.some(c => c[0] === 'online')).toBe(false)
     })
 
     it('should null xmpp reference on unexpected disconnect to prevent stale operations', async () => {
