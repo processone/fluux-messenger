@@ -9,7 +9,7 @@
  */
 
 import type { Element } from '@xmpp/client'
-import type { PollData, PollOption, PollSettings, PollClosedData } from './types/message-base'
+import type { PollData, PollOption, PollSettings, PollClosedData, PollCheckpointData } from './types/message-base'
 
 /** The numbered emoji set used for poll options (index 0 = 1️⃣, etc.) */
 export const POLL_OPTION_EMOJIS = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'] as const
@@ -307,6 +307,33 @@ export function isPollExpired(poll: PollData, now: Date = new Date()): boolean {
  * Sent by the poll creator to freeze and broadcast the final result.
  */
 export function parsePollClosedElement(el: Element): PollClosedData | null {
+  const pollMessageId = el.attrs['message-id']
+  if (!pollMessageId) return null
+
+  const title = el.getChildText('title')
+  if (!title) return null
+
+  const description = el.getChildText('description') || undefined
+
+  const tallyEls = el.getChildren('tally')
+  const results = tallyEls
+    .map((t) => ({
+      emoji: t.attrs.emoji as string,
+      label: (t.attrs.label as string) ?? '',
+      count: Math.max(0, parseInt(t.attrs.count as string, 10) || 0),
+    }))
+    .filter((r) => r.emoji)
+
+  return { title, ...(description ? { description } : {}), pollMessageId, results }
+}
+
+/**
+ * Parse a `<poll-checkpoint xmlns="urn:fluux:poll:0">` element into PollCheckpointData.
+ *
+ * Sent by the poll creator to broadcast a snapshot of the current tally.
+ * Same structure as poll-closed — only the element name differs.
+ */
+export function parsePollCheckpointElement(el: Element): PollCheckpointData | null {
   const pollMessageId = el.attrs['message-id']
   if (!pollMessageId) return null
 

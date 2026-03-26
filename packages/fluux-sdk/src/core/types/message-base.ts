@@ -73,6 +73,26 @@ export interface PollClosedData {
 }
 
 /**
+ * Snapshot of a poll's current results, sent by the poll creator
+ * without closing the poll. Voting continues after a checkpoint.
+ *
+ * Structurally identical to {@link PollClosedData} — they share
+ * the same result format so UI components can reuse rendering logic.
+ *
+ * @category Poll
+ */
+export interface PollCheckpointData {
+  /** The poll title (for display without needing the original message) */
+  title: string
+  /** Optional description */
+  description?: string
+  /** The original poll message ID */
+  pollMessageId: string
+  /** Snapshot results: emoji + label → vote count at checkpoint time */
+  results: { emoji: string; label: string; count: number }[]
+}
+
+/**
  * Base interface for all message types.
  *
  * Contains fields shared between 1:1 chat messages ({@link Message}) and
@@ -158,4 +178,15 @@ export interface BaseMessage {
    * Sent by the poll creator when they close the poll.
    */
   pollClosed?: PollClosedData
+  /**
+   * Timestamp when this poll was closed. Set on the original poll message
+   * when a poll-closed announcement referencing it is received.
+   * When set, voting is disabled on this poll.
+   */
+  pollClosedAt?: Date
+  /**
+   * Poll checkpoint data — when present, this message is a snapshot of poll results
+   * sent by the poll creator without closing the poll. Voting continues.
+   */
+  pollCheckpoint?: PollCheckpointData
 }

@@ -226,8 +226,8 @@ export function useRoom() {
   )
 
   const votePoll = useCallback(
-    async (roomJid: string, messageId: string, optionEmoji: string, currentMyReactions: string[], poll: PollData) => {
-      await client.poll.vote(roomJid, messageId, optionEmoji, currentMyReactions, poll)
+    async (roomJid: string, messageId: string, optionEmoji: string, currentMyReactions: string[], poll: PollData, isClosed?: boolean) => {
+      await client.poll.vote(roomJid, messageId, optionEmoji, currentMyReactions, poll, isClosed)
     },
     [client]
   )
@@ -235,6 +235,13 @@ export function useRoom() {
   const closePoll = useCallback(
     async (roomJid: string, messageId: string) => {
       return await client.poll.closePoll(roomJid, messageId)
+    },
+    [client]
+  )
+
+  const sendCheckpoint = useCallback(
+    async (roomJid: string, messageId: string) => {
+      return await client.poll.sendCheckpoint(roomJid, messageId)
     },
     [client]
   )
@@ -590,6 +597,7 @@ export function useRoom() {
       sendPoll,
       votePoll,
       closePoll,
+      sendCheckpoint,
       sendCorrection,
       retractMessage,
       moderateMessage,
@@ -638,6 +646,7 @@ export function useRoom() {
       sendPoll,
       votePoll,
       closePoll,
+      sendCheckpoint,
       sendCorrection,
       retractMessage,
       moderateMessage,

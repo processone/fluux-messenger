@@ -273,6 +273,7 @@ export type {
   PollOption,
   PollSettings,
   PollClosedData,
+  PollCheckpointData,
 
   // Client types
   XMPPClientConfig,

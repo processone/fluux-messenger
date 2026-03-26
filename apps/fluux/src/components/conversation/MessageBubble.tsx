@@ -20,6 +20,7 @@ import { UserInfoPopover } from './UserInfoPopover'
 import { CollapsibleContent } from './CollapsibleContent'
 import { PollCard } from './PollCard'
 import { PollClosedCard } from './PollClosedCard'
+import { PollCheckpointCard } from './PollCheckpointCard'
 
 export interface MessageBubbleProps {
   // Core message data (using BaseMessage interface)
@@ -105,6 +106,8 @@ export interface MessageBubbleProps {
   onPollVote?: (emoji: string) => void
   // Poll close action (only for poll creator)
   onClosePoll?: () => Promise<string | null>
+  // Poll checkpoint action (only for poll creator)
+  onCheckpoint?: () => void
 
   // Callback when reaction picker opens/closes (for hiding other toolbars)
   onReactionPickerChange?: (isOpen: boolean) => void
@@ -237,6 +240,7 @@ export const MessageBubble = memo(function MessageBubble({
   canModerate,
   onPollVote,
   onClosePoll,
+  onCheckpoint,
   onNickContextMenu,
   onNickTouchStart,
   onNickTouchEnd,
@@ -441,13 +445,20 @@ export const MessageBubble = memo(function MessageBubble({
               myReactions={myReactions}
               onVote={onPollVote ?? handleReaction}
               onClosePoll={onClosePoll}
+              onCheckpoint={onCheckpoint}
+              isClosed={!!message.pollClosedAt}
               getReactorName={getReactorName}
             />
           )}
 
           {/* Poll closed result display */}
           {!message.isRetracted && message.pollClosed && (
-            <PollClosedCard pollClosed={message.pollClosed} />
+            <PollClosedCard pollClosed={message.pollClosed} closedAt={message.timestamp} />
+          )}
+
+          {/* Poll checkpoint result display */}
+          {!message.isRetracted && message.pollCheckpoint && (
+            <PollCheckpointCard pollCheckpoint={message.pollCheckpoint} />
           )}
         </CollapsibleContent>
 

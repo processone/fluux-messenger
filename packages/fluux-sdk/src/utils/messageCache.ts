@@ -54,13 +54,15 @@ interface StoredMessage extends Omit<Message, 'timestamp' | 'retractedAt' | 'rep
  * Stored room message format with timestamps as numbers for efficient indexing.
  */
 interface StoredRoomMessage
-  extends Omit<RoomMessage, 'timestamp' | 'retractedAt' | 'replyTo'> {
+  extends Omit<RoomMessage, 'timestamp' | 'retractedAt' | 'pollClosedAt' | 'replyTo'> {
   /** Cache key used as the primary key in IndexedDB */
   cacheKey: string
   /** Timestamp as milliseconds since epoch for indexing */
   timestamp: number
   /** Retracted timestamp as milliseconds if message was retracted */
   retractedAt?: number
+  /** Poll closed timestamp as milliseconds */
+  pollClosedAt?: number
   /** Reply info with nested dates serialized */
   replyTo?: RoomMessage['replyTo']
 }
@@ -204,6 +206,7 @@ function serializeRoomMessage(message: RoomMessage): StoredRoomMessage {
     cacheKey: getRoomMessageCacheKey(message),
     timestamp: message.timestamp.getTime(),
     retractedAt: message.retractedAt?.getTime(),
+    pollClosedAt: message.pollClosedAt?.getTime(),
   }
 }
 
@@ -215,6 +218,7 @@ function deserializeRoomMessage(stored: StoredRoomMessage): RoomMessage {
     ...stored,
     timestamp: new Date(stored.timestamp),
     retractedAt: stored.retractedAt ? new Date(stored.retractedAt) : undefined,
+    pollClosedAt: stored.pollClosedAt ? new Date(stored.pollClosedAt) : undefined,
   }
 }
 
@@ -733,6 +737,10 @@ export async function updateRoomMessage(
         updates.retractedAt instanceof Date
           ? updates.retractedAt.getTime()
           : updates.retractedAt ?? existing.retractedAt,
+      pollClosedAt:
+        updates.pollClosedAt instanceof Date
+          ? updates.pollClosedAt.getTime()
+          : updates.pollClosedAt ?? existing.pollClosedAt,
     }
 
     await db.put(ROOM_MESSAGES_STORE, updated)
@@ -740,6 +748,60 @@ export async function updateRoomMessage(
     if (isIndexedDBAvailable()) {
       console.warn('Failed to update room message:', error)
     }
+  }
+}
+
+/**
+ * Update reactions for a room message in IndexedDB.
+ * Used as a fallback when the message is not currently loaded in memory.
+ * Looks up by client ID or stanza-id (reactions may reference either).
+ *
+ * @returns true if the message was found and updated, false otherwise.
+ */
+export async function updateRoomMessageReactions(
+  messageId: string,
+  reactorNick: string,
+  emojis: string[],
+): Promise<boolean> {
+  try {
+    const db = await getDB(getStorageScopeJid())
+
+    // Try by id index first, then by stanzaId index
+    let existing = await db.getFromIndex(ROOM_MESSAGES_STORE, 'id', messageId)
+    if (!existing) {
+      existing = await db.getFromIndex(ROOM_MESSAGES_STORE, 'stanzaId', messageId)
+    }
+    if (!existing) return false
+
+    // Build new reactions map: remove reactor from all, then add to new emojis
+    const newReactions: Record<string, string[]> = {}
+    if (existing.reactions) {
+      for (const [emoji, reactors] of Object.entries(existing.reactions)) {
+        const filtered = (reactors as string[]).filter((nick: string) => nick !== reactorNick)
+        if (filtered.length > 0) {
+          newReactions[emoji] = filtered
+        }
+      }
+    }
+    for (const emoji of emojis) {
+      if (!newReactions[emoji]) {
+        newReactions[emoji] = []
+      }
+      newReactions[emoji].push(reactorNick)
+    }
+
+    const updated = {
+      ...existing,
+      reactions: Object.keys(newReactions).length > 0 ? newReactions : undefined,
+    }
+
+    await db.put(ROOM_MESSAGES_STORE, updated)
+    return true
+  } catch (error) {
+    if (isIndexedDBAvailable()) {
+      console.warn('Failed to update room message reactions in cache:', error)
+    }
+    return false
   }
 }
 

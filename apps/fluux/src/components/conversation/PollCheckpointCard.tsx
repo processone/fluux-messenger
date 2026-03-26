@@ -1,42 +1,37 @@
 /**
- * PollClosedCard — Displays frozen poll results when a poll is closed by its creator.
- *
- * Each option gets a consistent color derived from its emoji (since closed polls
- * don't carry option labels, the emoji is used as the color seed).
- * The title links to the original poll message for context.
+ * PollCheckpointCard — Displays a snapshot of poll results sent by the poll creator
+ * without closing the poll. Compact version of PollClosedCard.
  */
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { BarChart3, Lock } from 'lucide-react'
-import { generateConsistentColorHexSync, type PollClosedData } from '@fluux/sdk'
+import { BarChart3, Flag } from 'lucide-react'
+import { generateConsistentColorHexSync, type PollCheckpointData } from '@fluux/sdk'
 import { scrollToMessage } from './messageGrouping'
 
-export interface PollClosedCardProps {
-  pollClosed: PollClosedData
-  closedAt?: Date
+export interface PollCheckpointCardProps {
+  pollCheckpoint: PollCheckpointData
 }
 
 function getResultColor(label: string, emoji: string): string {
   return generateConsistentColorHexSync(label || emoji, { saturation: 80, lightness: 50 })
 }
 
-export function PollClosedCard({ pollClosed, closedAt }: PollClosedCardProps) {
+export function PollCheckpointCard({ pollCheckpoint }: PollCheckpointCardProps) {
   const { t } = useTranslation()
 
   const totalVotes = useMemo(
-    () => pollClosed.results.reduce((sum, r) => sum + r.count, 0),
-    [pollClosed.results]
+    () => pollCheckpoint.results.reduce((sum, r) => sum + r.count, 0),
+    [pollCheckpoint.results]
   )
 
   const resultColors = useMemo(
-    () => pollClosed.results.map((r) => getResultColor(r.label, r.emoji)),
-    [pollClosed.results],
+    () => pollCheckpoint.results.map((r) => getResultColor(r.label, r.emoji)),
+    [pollCheckpoint.results],
   )
 
-  // Find the winning option(s) — highest count
   const maxCount = useMemo(
-    () => Math.max(0, ...pollClosed.results.map((r) => r.count)),
-    [pollClosed.results],
+    () => Math.max(0, ...pollCheckpoint.results.map((r) => r.count)),
+    [pollCheckpoint.results],
   )
 
   return (
@@ -45,38 +40,27 @@ export function PollClosedCard({ pollClosed, closedAt }: PollClosedCardProps) {
       <div className="flex items-center gap-2">
         <BarChart3 className="w-4 h-4 text-fluux-muted flex-shrink-0" />
         <button
-          onClick={() => scrollToMessage(pollClosed.pollMessageId)}
+          onClick={() => scrollToMessage(pollCheckpoint.pollMessageId)}
           className="font-medium text-fluux-text text-sm hover:text-fluux-brand transition-colors text-left truncate"
           title={t('poll.scrollToOriginal', 'Scroll to original poll')}
         >
-          {pollClosed.title}
+          {pollCheckpoint.title}
         </button>
-        <Lock className="w-3.5 h-3.5 text-fluux-muted flex-shrink-0" />
+        <Flag className="w-3.5 h-3.5 text-fluux-muted flex-shrink-0" />
       </div>
 
-      {/* Optional description */}
-      {pollClosed.description && (
-        <span className="text-xs text-fluux-muted">{pollClosed.description}</span>
-      )}
+      <span className="text-xs text-fluux-muted">{t('poll.checkpoint', 'Checkpoint')}</span>
 
-      <span className="text-xs text-fluux-muted">
-        {t('poll.closed', 'Poll closed')}
-        {closedAt && (
-          <> — {closedAt.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</>
-        )}
-      </span>
-
-      {/* Frozen results with colored bars */}
+      {/* Snapshot results with colored bars */}
       <div className="flex flex-col gap-1.5">
-        {pollClosed.results.map((result, index) => {
+        {pollCheckpoint.results.map((result, index) => {
           const percentage = totalVotes > 0 ? Math.round((result.count / totalVotes) * 100) : 0
           const isWinner = result.count === maxCount && maxCount > 0
           return (
             <div
               key={result.emoji}
-              className="relative flex items-center gap-2 px-3 py-2 rounded-md border border-fluux-border"
+              className="relative flex items-center gap-2 px-3 py-1.5 rounded-md border border-fluux-border"
             >
-              {/* Colored progress bar */}
               {totalVotes > 0 && (
                 <div
                   className="absolute inset-0 rounded-md transition-all"

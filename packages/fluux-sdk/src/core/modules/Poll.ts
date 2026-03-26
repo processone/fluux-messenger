@@ -162,6 +162,7 @@ export class Poll extends BaseModule {
    * @param optionEmoji - The emoji of the option being voted for
    * @param currentMyReactions - The user's current reaction emojis on this message
    * @param poll - The poll data (for settings and option emojis)
+   * @param isClosed - Whether the poll has been closed by its creator
    */
   async vote(
     roomJid: string,
@@ -169,7 +170,11 @@ export class Poll extends BaseModule {
     optionEmoji: string,
     currentMyReactions: string[],
     poll: PollData,
+    isClosed?: boolean,
   ): Promise<void> {
+    if (isClosed) {
+      throw new Error('Poll is closed — voting is no longer allowed')
+    }
     if (isPollExpired(poll)) {
       throw new Error('Poll has expired — voting is no longer allowed')
     }
@@ -248,7 +253,67 @@ export class Poll extends BaseModule {
     )
 
     await this.deps.sendStanza(message)
+
+    // Mark the original poll message as closed immediately on the sender side
+    this.deps.emitSDK('room:message-updated', {
+      roomJid,
+      messageId,
+      updates: { pollClosedAt: new Date() },
+    })
+
     return resultId
+  }
+
+  /**
+   * Send a checkpoint — a snapshot of the current poll results
+   * without closing the poll. Voting continues after a checkpoint.
+   *
+   * Only the poll creator can send checkpoints.
+   *
+   * @param roomJid - The room JID
+   * @param messageId - The poll message ID to checkpoint
+   * @returns The message ID of the checkpoint message, or null if poll not found
+   */
+  async sendCheckpoint(roomJid: string, messageId: string): Promise<string | null> {
+    // Get poll data from store (works for MAM-loaded polls) or fall back to localPolls
+    const localPoll = this.localPolls.get(messageId)
+    const roomMessage = this.deps.stores?.room.getMessage(roomJid, messageId)
+    const localPollData = localPoll?.roomJid === roomJid ? localPoll.poll : undefined
+    const pollData = roomMessage?.poll ?? localPollData
+    if (!pollData) return null
+
+    // Get current tally from store
+    const reactions = roomMessage?.reactions ?? {}
+    const tally = tallyPollResults(pollData, reactions)
+
+    // Build a result summary for the body fallback
+    const resultLines = tally.map((t) => `${t.emoji} ${t.label}: ${t.count}`)
+    const fallbackBody = `📊 Poll checkpoint: ${pollData.title}\n${resultLines.join('\n')}`
+
+    const tallyElements = tally.map((t) =>
+      xml('tally', { emoji: t.emoji, label: t.label, count: String(t.count) })
+    )
+
+    const checkpointChildren = [
+      xml('title', {}, pollData.title),
+      ...(pollData.description ? [xml('description', {}, pollData.description)] : []),
+      ...tallyElements,
+    ]
+
+    const checkpointId = generateUUID()
+    const message = xml('message', { to: roomJid, type: 'groupchat', id: checkpointId },
+      xml('body', {}, fallbackBody),
+      xml('poll-checkpoint', { xmlns: NS_POLL, 'message-id': messageId },
+        ...checkpointChildren,
+      ),
+      xml('fallback', { xmlns: NS_FALLBACK, for: NS_POLL },
+        xml('body', {}),
+      ),
+      xml('store', { xmlns: NS_HINTS }),
+    )
+
+    await this.deps.sendStanza(message)
+    return checkpointId
   }
 
   /**

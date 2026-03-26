@@ -41,7 +41,8 @@ import type {
 } from '../types'
 import { parseMessageContent, parseOgpFastening, applyRetraction, applyCorrection, createOriginIdElement } from './messagingUtils'
 import { checkForMention } from '../mentionDetection'
-import { parsePollElement, parsePollClosedElement } from '../poll'
+import { parsePollElement, parsePollClosedElement, parsePollCheckpointElement } from '../poll'
+import { logWarn } from '../logger'
 import { parseXMPPError, formatXMPPError } from '../../utils/xmppError'
 import type { MAM } from './MAM'
 
@@ -1392,11 +1393,39 @@ export class Chat extends BaseModule {
         if (originalMsg?.poll) {
           if (this.verifyPollClosed(pollClosedData, originalMsg, nick, occupantId)) {
             message.pollClosed = pollClosedData
+            // Mark the original poll message as closed
+            this.deps.emitSDK('room:message-updated', {
+              roomJid,
+              messageId: pollClosedData.pollMessageId,
+              updates: { pollClosedAt: message.timestamp },
+            })
+          } else {
+            logWarn(`Poll-closed rejected: verification failed for poll ${pollClosedData.pollMessageId} in ${roomJid}`)
           }
         } else {
           // Original poll not in store — accept on trust, then verify asynchronously via MAM
           message.pollClosed = pollClosedData
-          this.deferredPollClosedVerification(roomJid, messageId, pollClosedData, nick, occupantId)
+          this.deferredPollClosedVerification(roomJid, messageId, pollClosedData, nick, occupantId, message.timestamp)
+        }
+      }
+    }
+
+    // Poll checkpoint detection
+    const pollCheckpointEl = stanza.getChild('poll-checkpoint', NS_POLL)
+    if (pollCheckpointEl) {
+      const checkpointData = parsePollCheckpointElement(pollCheckpointEl)
+      if (checkpointData) {
+        // Verify against the original poll message (if available in store)
+        const originalMsg = this.deps.stores?.room.getMessage(roomJid, checkpointData.pollMessageId)
+        if (originalMsg?.poll) {
+          if (this.verifyPollCheckpoint(checkpointData, originalMsg, nick, occupantId)) {
+            message.pollCheckpoint = checkpointData
+          } else {
+            logWarn(`Poll-checkpoint rejected: verification failed for poll ${checkpointData.pollMessageId} in ${roomJid}`)
+          }
+        } else {
+          // Original poll not in store — accept on trust
+          message.pollCheckpoint = checkpointData
         }
       }
     }
@@ -1457,20 +1486,49 @@ export class Chat extends BaseModule {
     pollClosed: PollClosedData,
     senderNick: string,
     senderOccupantId?: string,
+    closedTimestamp?: Date,
   ): void {
     this.mamModule.fetchRoomMessageById(roomJid, pollClosed.pollMessageId).then((originalMsg) => {
       if (!originalMsg?.poll) return // MAM fetch failed or message has no poll — keep trust-based acceptance
       if (!this.verifyPollClosed(pollClosed, originalMsg, senderNick, senderOccupantId)) {
+        logWarn(`Poll-closed rejected (deferred): verification failed for poll ${pollClosed.pollMessageId} in ${roomJid}`)
         // Verification failed — remove pollClosed from the message
         this.deps.emitSDK('room:message-updated', {
           roomJid,
           messageId: closeMsgId,
           updates: { pollClosed: undefined },
         })
+      } else {
+        // Verification passed — mark the original poll message as closed
+        this.deps.emitSDK('room:message-updated', {
+          roomJid,
+          messageId: pollClosed.pollMessageId,
+          updates: { pollClosedAt: closedTimestamp ?? new Date() },
+        })
       }
     }).catch(() => {
       // MAM query failed — keep trust-based acceptance
     })
+  }
+
+  /**
+   * Verify a poll-checkpoint message against the original poll data.
+   * Same checks as poll-closed: creator identity and title match.
+   */
+  private verifyPollCheckpoint(
+    checkpoint: { title: string; pollMessageId: string; results: { emoji: string }[] },
+    originalMsg: RoomMessage,
+    senderNick: string,
+    senderOccupantId?: string,
+  ): boolean {
+    if (!originalMsg.poll) return false
+    const senderIsCreator = (senderOccupantId && originalMsg.occupantId)
+      ? senderOccupantId === originalMsg.occupantId
+      : senderNick === originalMsg.nick
+    const titleMatches = checkpoint.title === originalMsg.poll.title
+    const originalEmojis = new Set(originalMsg.poll.options.map(o => o.emoji))
+    const emojisMatch = checkpoint.results.every(r => originalEmojis.has(r.emoji))
+    return senderIsCreator && titleMatches && emojisMatch
   }
 
   private parseMentions(stanza: Element): MentionReference[] {

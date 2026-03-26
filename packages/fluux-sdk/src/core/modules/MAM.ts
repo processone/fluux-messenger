@@ -47,7 +47,7 @@ import {
   NS_OCCUPANT_ID,
   NS_POLL,
 } from '../namespaces'
-import { parsePollElement, parsePollClosedElement } from '../poll'
+import { parsePollElement, parsePollClosedElement, parsePollCheckpointElement } from '../poll'
 import type {
   Message,
   RoomMessage,
@@ -1571,7 +1571,8 @@ export class MAM extends BaseModule {
     if (!from) return null
     const hasPoll = !!messageEl.getChild('poll', NS_POLL)
     const hasPollClosed = !!messageEl.getChild('poll-closed', NS_POLL)
-    if (!body && !messageEl.getChild('x', NS_OOB) && !hasPoll && !hasPollClosed) return null
+    const hasPollCheckpoint = !!messageEl.getChild('poll-checkpoint', NS_POLL)
+    if (!body && !messageEl.getChild('x', NS_OOB) && !hasPoll && !hasPollClosed && !hasPollCheckpoint) return null
 
     const nick = getResource(from) || ''
     // Case-insensitive nickname comparison - some servers may change case
@@ -1617,6 +1618,12 @@ export class MAM extends BaseModule {
       const pollClosedData = parsePollClosedElement(messageEl.getChild('poll-closed', NS_POLL)!)
       if (pollClosedData) {
         message.pollClosed = pollClosedData
+      }
+    }
+    if (hasPollCheckpoint) {
+      const checkpointData = parsePollCheckpointElement(messageEl.getChild('poll-checkpoint', NS_POLL)!)
+      if (checkpointData) {
+        message.pollCheckpoint = checkpointData
       }
     }
 

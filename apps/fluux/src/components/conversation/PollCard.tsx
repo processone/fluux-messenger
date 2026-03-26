@@ -22,6 +22,8 @@ export interface PollCardProps {
   myReactions: string[]
   onVote?: (emoji: string) => void
   onClosePoll?: () => Promise<string | null>
+  onCheckpoint?: () => void
+  isClosed?: boolean
   getReactorName: (reactor: string) => string
 }
 
@@ -33,7 +35,7 @@ function getOptionColor(label: string): string {
   return generateConsistentColorHexSync(label, { saturation: 80, lightness: 50 })
 }
 
-export function PollCard({ poll, reactions, myReactions, onVote, onClosePoll, getReactorName }: PollCardProps) {
+export function PollCard({ poll, reactions, myReactions, onVote, onClosePoll, onCheckpoint, isClosed, getReactorName }: PollCardProps) {
   const { t } = useTranslation()
   const [closing, setClosing] = useState(false)
 
@@ -58,8 +60,8 @@ export function PollCard({ poll, reactions, myReactions, onVote, onClosePoll, ge
   // suppress all result indicators (progress bars, percentages, counts)
   const showResults = !poll.settings.hideResultsBeforeVote || hasVoted
 
-  // Disable voting when expired (onVote becomes undefined)
-  const effectiveOnVote = expired ? undefined : onVote
+  // Disable voting when expired or closed (onVote becomes undefined)
+  const effectiveOnVote = (expired || isClosed) ? undefined : onVote
 
   return (
     <div className="mt-1 rounded-lg border border-fluux-border bg-fluux-surface p-3 flex flex-col gap-2">
@@ -100,16 +102,18 @@ export function PollCard({ poll, reactions, myReactions, onVote, onClosePoll, ge
       {/* Footer: total votes + deadline + hints + close */}
       <div className="flex items-center justify-between pt-0.5">
         <span className="text-xs text-fluux-muted">
-          {expired
-            ? t('poll.expired', 'Poll ended')
-            : !showResults
-              ? t('poll.voteToSeeResults', 'Vote to see results')
-              : totalVoters === 0
-                ? t('poll.noVotes', 'No votes yet')
-                : t('poll.totalVotes', '{{count}} vote(s)', { count: totalVoters })}
+          {isClosed
+            ? t('poll.closed', 'Poll closed')
+            : expired
+              ? t('poll.expired', 'Poll ended')
+              : !showResults
+                ? t('poll.voteToSeeResults', 'Vote to see results')
+                : totalVoters === 0
+                  ? t('poll.noVotes', 'No votes yet')
+                  : t('poll.totalVotes', '{{count}} vote(s)', { count: totalVoters })}
         </span>
         <div className="flex items-center gap-2">
-          {poll.deadline && !expired && (
+          {poll.deadline && !expired && !isClosed && (
             <span className="flex items-center gap-1 text-xs text-fluux-muted">
               <Clock className="w-3 h-3" />
               {t('poll.deadlineDisplay', 'Ends {{date}}', {
@@ -124,7 +128,15 @@ export function PollCard({ poll, reactions, myReactions, onVote, onClosePoll, ge
               {t('poll.tapToChange', 'Tap to change vote')}
             </span>
           )}
-          {onClosePoll && !expired && (
+          {onCheckpoint && !expired && !isClosed && (
+            <button
+              onClick={onCheckpoint}
+              className="flex items-center gap-1 text-xs text-fluux-muted hover:text-fluux-text transition-colors"
+            >
+              {t('poll.checkpoint', 'Checkpoint')}
+            </button>
+          )}
+          {onClosePoll && !expired && !isClosed && (
             <button
               onClick={async () => {
                 setClosing(true)

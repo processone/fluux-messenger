@@ -7,6 +7,7 @@ import {
   buildPollFallbackBody,
   parsePollElement,
   parsePollClosedElement,
+  parsePollCheckpointElement,
   tallyPollResults,
   getTotalVoters,
   enforceSingleVote,
@@ -1283,6 +1284,141 @@ describe('poll utilities', () => {
       const parsed = parsePollElement(pollEl)
       // Parsed poll has only 2 options (the empty label was dropped)
       expect(parsed!.options).toHaveLength(2)
+    })
+  })
+
+  describe('parsePollCheckpointElement', () => {
+    it('parses valid checkpoint element', () => {
+      const el = createMockElement('poll-checkpoint', {
+        xmlns: 'urn:fluux:poll:0',
+        'message-id': 'poll-msg-1',
+      }, [
+        { name: 'title', text: 'Favourite color?' },
+        { name: 'tally', attrs: { emoji: '1️⃣', label: 'Red', count: '3' } },
+        { name: 'tally', attrs: { emoji: '2️⃣', label: 'Blue', count: '5' } },
+      ])
+
+      const result = parsePollCheckpointElement(el)
+      expect(result).not.toBeNull()
+      expect(result!.title).toBe('Favourite color?')
+      expect(result!.pollMessageId).toBe('poll-msg-1')
+      expect(result!.results).toHaveLength(2)
+      expect(result!.results[0]).toEqual({ emoji: '1️⃣', label: 'Red', count: 3 })
+      expect(result!.results[1]).toEqual({ emoji: '2️⃣', label: 'Blue', count: 5 })
+    })
+
+    it('includes optional description', () => {
+      const el = createMockElement('poll-checkpoint', {
+        xmlns: 'urn:fluux:poll:0',
+        'message-id': 'poll-msg-2',
+      }, [
+        { name: 'title', text: 'When?' },
+        { name: 'description', text: 'Please vote by Friday' },
+        { name: 'tally', attrs: { emoji: '1️⃣', label: 'Monday', count: '1' } },
+      ])
+
+      const result = parsePollCheckpointElement(el)
+      expect(result!.description).toBe('Please vote by Friday')
+    })
+
+    it('returns null for missing message-id', () => {
+      const el = createMockElement('poll-checkpoint', {
+        xmlns: 'urn:fluux:poll:0',
+      }, [
+        { name: 'title', text: 'Q?' },
+      ])
+
+      expect(parsePollCheckpointElement(el)).toBeNull()
+    })
+
+    it('returns null for missing title', () => {
+      const el = createMockElement('poll-checkpoint', {
+        xmlns: 'urn:fluux:poll:0',
+        'message-id': 'poll-msg-3',
+      }, [
+        { name: 'tally', attrs: { emoji: '1️⃣', label: 'A', count: '1' } },
+      ])
+
+      expect(parsePollCheckpointElement(el)).toBeNull()
+    })
+
+    it('handles empty tally list', () => {
+      const el = createMockElement('poll-checkpoint', {
+        xmlns: 'urn:fluux:poll:0',
+        'message-id': 'poll-msg-4',
+      }, [
+        { name: 'title', text: 'Empty poll' },
+      ])
+
+      const result = parsePollCheckpointElement(el)
+      expect(result).not.toBeNull()
+      expect(result!.results).toHaveLength(0)
+    })
+
+    it('handles negative and invalid counts gracefully', () => {
+      const el = createMockElement('poll-checkpoint', {
+        xmlns: 'urn:fluux:poll:0',
+        'message-id': 'poll-msg-5',
+      }, [
+        { name: 'title', text: 'Test' },
+        { name: 'tally', attrs: { emoji: '1️⃣', label: 'A', count: '-3' } },
+        { name: 'tally', attrs: { emoji: '2️⃣', label: 'B', count: 'abc' } },
+      ])
+
+      const result = parsePollCheckpointElement(el)
+      expect(result!.results[0].count).toBe(0) // clamped to 0
+      expect(result!.results[1].count).toBe(0) // NaN → 0
+    })
+
+    it('filters out tally entries without emoji', () => {
+      const el = createMockElement('poll-checkpoint', {
+        xmlns: 'urn:fluux:poll:0',
+        'message-id': 'poll-msg-6',
+      }, [
+        { name: 'title', text: 'Test' },
+        { name: 'tally', attrs: { label: 'NoEmoji', count: '1' } },
+        { name: 'tally', attrs: { emoji: '1️⃣', label: 'HasEmoji', count: '2' } },
+      ])
+
+      const result = parsePollCheckpointElement(el)
+      expect(result!.results).toHaveLength(1)
+      expect(result!.results[0].emoji).toBe('1️⃣')
+    })
+  })
+
+  describe('enforceSingleVote edge cases (poll reaction routing)', () => {
+    const pollEmojis = ['1️⃣', '2️⃣', '3️⃣']
+
+    it('toggles off when clicking the same emoji already voted', () => {
+      const result = enforceSingleVote(['1️⃣'], '1️⃣', pollEmojis)
+      expect(result).toEqual([])
+    })
+
+    it('replaces vote when clicking a different poll emoji', () => {
+      const result = enforceSingleVote(['1️⃣'], '2️⃣', pollEmojis)
+      expect(result).toEqual(['2️⃣'])
+    })
+
+    it('preserves non-poll emojis alongside vote', () => {
+      const result = enforceSingleVote(['👍', '1️⃣'], '2️⃣', pollEmojis)
+      expect(result).toEqual(['👍', '2️⃣'])
+    })
+
+    it('adds vote from empty currentReactions', () => {
+      const result = enforceSingleVote([], '1️⃣', pollEmojis)
+      expect(result).toEqual(['1️⃣'])
+    })
+
+    it('recovers from malformed state with multiple poll emojis', () => {
+      // Somehow ended up with two poll emojis — enforceSingleVote strips all and adds new
+      const result = enforceSingleVote(['1️⃣', '2️⃣'], '3️⃣', pollEmojis)
+      expect(result).toEqual(['3️⃣'])
+    })
+
+    it('recovers from malformed state by toggling off when clicking one of multiple votes', () => {
+      // Has two poll emojis, clicks one of them — strips all poll emojis (toggle off)
+      const result = enforceSingleVote(['1️⃣', '2️⃣'], '1️⃣', pollEmojis)
+      expect(result).toEqual([])
     })
   })
 })
