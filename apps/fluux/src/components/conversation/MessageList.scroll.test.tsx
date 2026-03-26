@@ -1130,10 +1130,9 @@ describe('MessageList scroll behavior', () => {
           container.dispatchEvent(new Event('scroll'))
         })
 
-        // FAB should NOT be visible - look for the ChevronDown icon button
-        // The FAB uses ChevronDown icon and has specific styling
-        const fabButton = document.querySelector('button.absolute.bottom-4')
-        expect(fabButton).not.toBeInTheDocument()
+        // FAB should NOT be visible - wrapper div should have aria-hidden="true"
+        const fabWrapper = document.querySelector('[aria-hidden]')
+        expect(fabWrapper?.getAttribute('aria-hidden')).toBe('true')
       }
     })
 
@@ -1166,8 +1165,8 @@ describe('MessageList scroll behavior', () => {
           container.dispatchEvent(new Event('scroll'))
         })
 
-        let fabButton = document.querySelector('button.absolute.bottom-4')
-        expect(fabButton).not.toBeInTheDocument()
+        let fabWrapper = document.querySelector('[aria-hidden]')
+        expect(fabWrapper?.getAttribute('aria-hidden')).toBe('true')
 
         // Scroll up far from bottom
         scrollTopValue = 200 // distance from bottom = 2000-200-500 = 1300px
@@ -1177,13 +1176,14 @@ describe('MessageList scroll behavior', () => {
         })
 
         // Now FAB should be visible
-        fabButton = document.querySelector('button.absolute.bottom-4')
-        expect(fabButton).toBeInTheDocument()
+        fabWrapper = document.querySelector('[aria-hidden]')
+        expect(fabWrapper?.getAttribute('aria-hidden')).toBe('false')
       }
     })
 
-    it('should show FAB during prepending state when scrolled up', () => {
-      // This tests that FAB works even when state machine is in non-idle state
+    it('should keep FAB hidden during active prepend (scroll events suppressed)', () => {
+      // During prepending (isLoadingOlder=true), scroll events are suppressed
+      // to avoid interfering with scroll position restoration, so FAB stays hidden
       const messages = createTestMessages(20)
       const onScrollToTop = vi.fn()
 
@@ -1215,9 +1215,9 @@ describe('MessageList scroll behavior', () => {
           container.dispatchEvent(new Event('scroll'))
         })
 
-        // FAB should still be visible even during prepending
-        const fabButton = document.querySelector('button.absolute.bottom-4')
-        expect(fabButton).toBeInTheDocument()
+        // FAB should remain hidden — scroll processing is suppressed during prepend
+        const fabWrapper = document.querySelector('[aria-hidden]')
+        expect(fabWrapper?.getAttribute('aria-hidden')).toBe('true')
       }
     })
 
@@ -1252,7 +1252,7 @@ describe('MessageList scroll behavior', () => {
         })
 
         // Find and click FAB
-        const fabButton = document.querySelector('button.absolute.bottom-4') as HTMLButtonElement
+        const fabButton = document.querySelector('button[aria-label="chat.scrollToBottom"]') as HTMLButtonElement
         if (fabButton) {
           act(() => {
             fabButton.click()
