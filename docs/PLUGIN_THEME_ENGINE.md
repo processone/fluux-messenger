@@ -317,12 +317,12 @@ The strongest layer — cannot be bypassed from JavaScript. Tauri already has a 
 
 Plugin manifest permissions map directly to Tauri scopes:
 
-| Manifest permission             | Tauri enforcement                                         |
-|---------------------------------|-----------------------------------------------------------|
-| `network:https://api.deepl.com/*` | HTTP plugin scoped to matching URLs only                  |
-| `storage`                       | Filesystem scoped to `~/.fluux/plugins/<id>/data/`        |
-| `notifications`                 | Notification IPC command allowed                          |
-| `clipboard`                     | Clipboard IPC command allowed                             |
+| Manifest permission               | Tauri enforcement                                  |
+|-----------------------------------|----------------------------------------------------|
+| `network:https://api.deepl.com/*` | HTTP plugin scoped to matching URLs only           |
+| `storage`                         | Filesystem scoped to `~/.fluux/plugins/<id>/data/` |
+| `notifications`                   | Notification IPC command allowed                   |
+| `clipboard`                       | Clipboard IPC command allowed                      |
 
 A plugin declaring `network:https://api.deepl.com/*` literally cannot reach any other domain — Tauri's Rust layer rejects the request. Plugins don't call `fetch()` directly; they call `context.http.fetch()` which routes through a Tauri IPC command that checks the manifest scope.
 
@@ -383,7 +383,7 @@ If the ecosystem grows to include untrusted third-party plugins, we can add true
 
 ```
 ┌─────────────────────┐    postMessage     ┌──────────────┐
-│  Main thread        │ ◄───────────────► │  Worker      │
+│  Main thread        │ ◄────────────────► │  Worker      │
 │                     │                    │              │
 │  Slot proxy:        │  { type: 'action', │  Plugin code │
 │  renders descriptors│    slot: '...',    │  (no DOM)    │

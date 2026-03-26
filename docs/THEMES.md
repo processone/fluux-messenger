@@ -90,20 +90,20 @@ These are the raw design tokens. Override these for a complete palette change.
 
 The base ramp provides all surface and text colors. In dark mode, `00` is the darkest and `100` is the lightest. In light mode, the relationship inverts — `00` becomes the lightest background and `90`/`100` become dark text.
 
-| Variable | Dark mode role | Light mode role |
-|----------|---------------|-----------------|
-| `--fluux-base-00` | Deepest background | Lightest background |
-| `--fluux-base-05` | Secondary background (icon rail) | Near-white surface |
-| `--fluux-base-10` | Main app surface | Main app surface |
-| `--fluux-base-20` | Sidebar / elevated surface | Sidebar / elevated surface |
-| `--fluux-base-30` | Chat content area | Chat content area |
-| `--fluux-base-40` | Hover state | Hover state |
-| `--fluux-base-50` | Active / selected state | Active / selected state |
-| `--fluux-base-60` | Faint UI elements | Faint UI elements |
-| `--fluux-base-70` | Tertiary text | Tertiary text |
-| `--fluux-base-80` | Secondary text (muted) | Secondary text (muted) |
-| `--fluux-base-90` | Primary text | Primary text |
-| `--fluux-base-100` | Brightest (rarely used) | Darkest (rarely used) |
+| Variable           | Dark mode role                   | Light mode role            |
+|--------------------|----------------------------------|----------------------------|
+| `--fluux-base-00`  | Deepest background               | Lightest background        |
+| `--fluux-base-05`  | Secondary background (icon rail) | Near-white surface         |
+| `--fluux-base-10`  | Main app surface                 | Main app surface           |
+| `--fluux-base-20`  | Sidebar / elevated surface       | Sidebar / elevated surface |
+| `--fluux-base-30`  | Chat content area                | Chat content area          |
+| `--fluux-base-40`  | Hover state                      | Hover state                |
+| `--fluux-base-50`  | Active / selected state          | Active / selected state    |
+| `--fluux-base-60`  | Faint UI elements                | Faint UI elements          |
+| `--fluux-base-70`  | Tertiary text                    | Tertiary text              |
+| `--fluux-base-80`  | Secondary text (muted)           | Secondary text (muted)     |
+| `--fluux-base-90`  | Primary text                     | Primary text               |
+| `--fluux-base-100` | Brightest (rarely used)          | Darkest (rarely used)      |
 
 **Tip for light themes:** Don't use pure `#ffffff` for `base-00` or `base-30` unless you want a stark white look. Tinted whites (e.g. Solarized's `#fdf6e3` cream or Nord's `#eceff4` blue-white) give the theme its character.
 
@@ -131,10 +131,10 @@ From these, the app computes:
 
 Themes can optionally override the UI and monospace font families. Font overrides reference system-installed or user-provided fonts — themes never bundle font files. Always include a fallback stack ending with the default:
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `--fluux-font-ui` | `'Inter', sans-serif` | UI typeface for all text |
-| `--fluux-font-mono` | `monospace` | Code blocks, console, fixed-width text |
+| Variable            | Default               | Purpose                                |
+|---------------------|-----------------------|----------------------------------------|
+| `--fluux-font-ui`   | `'Inter', sans-serif` | UI typeface for all text               |
+| `--fluux-font-mono` | `monospace`           | Code blocks, console, fixed-width text |
 
 ```json
 "--fluux-font-ui": "\"SF Pro Display\", \"Segoe UI\", system-ui, sans-serif",
@@ -147,14 +147,14 @@ If the specified fonts aren't installed on the user's system, the browser falls 
 
 Named colors for status indicators and semantic meaning:
 
-| Variable | Used for |
-|----------|----------|
-| `--fluux-color-red` | Errors, unread badges, DND presence |
-| `--fluux-color-green` | Success, online presence |
-| `--fluux-color-yellow` | Warnings, away presence |
-| `--fluux-color-blue` | Links, info toasts |
-| `--fluux-color-purple` | Accent fallback |
-| `--fluux-color-gray` | Neutral / offline presence |
+| Variable               | Used for                            |
+|------------------------|-------------------------------------|
+| `--fluux-color-red`    | Errors, unread badges, DND presence |
+| `--fluux-color-green`  | Success, online presence            |
+| `--fluux-color-yellow` | Warnings, away presence             |
+| `--fluux-color-blue`   | Links, info toasts                  |
+| `--fluux-color-purple` | Accent fallback                     |
+| `--fluux-color-gray`   | Neutral / offline presence          |
 
 Each color also needs an `-rgb` variant for transparency effects:
 
@@ -167,26 +167,26 @@ Each color also needs an `-rgb` variant for transparency effects:
 
 These map foundation tokens to purposes. They cascade from Tier 1, so you rarely need to override them — but you can for fine-tuning.
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `--fluux-bg-primary` | `base-10` | Main app background |
-| `--fluux-bg-secondary` | `base-05` | Darker secondary background |
-| `--fluux-bg-tertiary` | `base-20` | Sidebar, elevated surfaces |
-| `--fluux-bg-hover` | `base-40` | Hover state for all elements |
-| `--fluux-bg-active` | `base-50` | Active / selected state |
-| `--fluux-text-normal` | `base-90` | Primary text |
-| `--fluux-text-muted` | `base-80` | Secondary text |
-| `--fluux-text-faint` | `base-70` | Timestamps, disabled text |
-| `--fluux-text-link` | `color-blue` | Hyperlinks |
-| `--fluux-status-success` | `color-green` | Success indicators |
-| `--fluux-status-warning` | `color-yellow` | Warning indicators |
-| `--fluux-status-error` | `color-red` | Error indicators, unread badges |
-| `--fluux-status-info` | `color-blue` | Informational indicators |
-| `--fluux-border-color` | `rgba(0,0,0,0.1)` | Subtle dividers |
-| `--fluux-scrollbar-thumb` | `base-05` | Scrollbar color |
-| `--fluux-selection-bg` | Accent at 25% opacity | Text selection highlight |
-| `--fluux-search-highlight-bg` | Accent at 35% opacity | Search match background |
-| `--fluux-search-highlight-text` | `text-normal` | Search match text color |
+| Variable                        | Default               | Purpose                         |
+|---------------------------------|-----------------------|---------------------------------|
+| `--fluux-bg-primary`            | `base-10`             | Main app background             |
+| `--fluux-bg-secondary`          | `base-05`             | Darker secondary background     |
+| `--fluux-bg-tertiary`           | `base-20`             | Sidebar, elevated surfaces      |
+| `--fluux-bg-hover`              | `base-40`             | Hover state for all elements    |
+| `--fluux-bg-active`             | `base-50`             | Active / selected state         |
+| `--fluux-text-normal`           | `base-90`             | Primary text                    |
+| `--fluux-text-muted`            | `base-80`             | Secondary text                  |
+| `--fluux-text-faint`            | `base-70`             | Timestamps, disabled text       |
+| `--fluux-text-link`             | `color-blue`          | Hyperlinks                      |
+| `--fluux-status-success`        | `color-green`         | Success indicators              |
+| `--fluux-status-warning`        | `color-yellow`        | Warning indicators              |
+| `--fluux-status-error`          | `color-red`           | Error indicators, unread badges |
+| `--fluux-status-info`           | `color-blue`          | Informational indicators        |
+| `--fluux-border-color`          | `rgba(0,0,0,0.1)`     | Subtle dividers                 |
+| `--fluux-scrollbar-thumb`       | `base-05`             | Scrollbar color                 |
+| `--fluux-selection-bg`          | Accent at 25% opacity | Text selection highlight        |
+| `--fluux-search-highlight-bg`   | Accent at 35% opacity | Search match background         |
+| `--fluux-search-highlight-text` | `text-normal`         | Search match text color         |
 
 **When to override semantic variables:** When the automatic cascade from your base ramp doesn't produce the right result. Common cases:
 - `--fluux-bg-secondary` — if your ramp spacing makes `base-05` too similar to `base-10`
@@ -197,27 +197,27 @@ These map foundation tokens to purposes. They cascade from Tier 1, so you rarely
 
 Per-widget overrides for surgical changes. These default to semantic values.
 
-| Variable | Default | Widget |
-|----------|---------|--------|
-| `--fluux-sidebar-bg` | `bg-tertiary` | Sidebar background |
-| `--fluux-rail-bg` | `bg-primary` | Icon rail background |
-| `--fluux-rail-icon-active` | `bg-accent` | Active icon rail color |
-| `--fluux-chat-bg` | `base-30` | Chat area background |
-| `--fluux-chat-header-border` | `divider-color` | Chat header divider |
-| `--fluux-message-hover` | `bg-hover` | Message hover highlight |
-| `--fluux-message-timestamp` | `text-faint` | Timestamp text |
-| `--fluux-input-bg` | `interactive-normal` | Composer input background |
-| `--fluux-modal-bg` | `sidebar-bg` | Modal background |
-| `--fluux-modal-backdrop` | `rgba(0,0,0,0.5)` | Modal overlay |
-| `--fluux-toast-bg` | `sidebar-bg` | Toast notification background |
-| `--fluux-tooltip-bg` | `bg-primary` | Tooltip background |
-| `--fluux-badge-bg` | `status-error` | Unread count badge |
-| `--fluux-presence-online` | `status-success` | Online indicator |
-| `--fluux-presence-away` | `status-warning` | Away indicator |
-| `--fluux-presence-dnd` | `status-error` | Do not disturb indicator |
-| `--fluux-presence-offline` | `base-60` | Offline indicator |
-| `--fluux-button-primary-bg` | `interactive-accent` | Primary button |
-| `--fluux-button-danger-bg` | `status-error` | Danger button |
+| Variable                     | Default              | Widget                        |
+|------------------------------|----------------------|-------------------------------|
+| `--fluux-sidebar-bg`         | `bg-tertiary`        | Sidebar background            |
+| `--fluux-rail-bg`            | `bg-primary`         | Icon rail background          |
+| `--fluux-rail-icon-active`   | `bg-accent`          | Active icon rail color        |
+| `--fluux-chat-bg`            | `base-30`            | Chat area background          |
+| `--fluux-chat-header-border` | `divider-color`      | Chat header divider           |
+| `--fluux-message-hover`      | `bg-hover`           | Message hover highlight       |
+| `--fluux-message-timestamp`  | `text-faint`         | Timestamp text                |
+| `--fluux-input-bg`           | `interactive-normal` | Composer input background     |
+| `--fluux-modal-bg`           | `sidebar-bg`         | Modal background              |
+| `--fluux-modal-backdrop`     | `rgba(0,0,0,0.5)`    | Modal overlay                 |
+| `--fluux-toast-bg`           | `sidebar-bg`         | Toast notification background |
+| `--fluux-tooltip-bg`         | `bg-primary`         | Tooltip background            |
+| `--fluux-badge-bg`           | `status-error`       | Unread count badge            |
+| `--fluux-presence-online`    | `status-success`     | Online indicator              |
+| `--fluux-presence-away`      | `status-warning`     | Away indicator                |
+| `--fluux-presence-dnd`       | `status-error`       | Do not disturb indicator      |
+| `--fluux-presence-offline`   | `base-60`            | Offline indicator             |
+| `--fluux-button-primary-bg`  | `interactive-accent` | Primary button                |
+| `--fluux-button-danger-bg`   | `status-error`       | Danger button                 |
 
 **When to override component variables:** When you want one specific widget to look different from the rest. For example, giving the sidebar a distinct tint while keeping other surfaces neutral.
 
@@ -243,17 +243,17 @@ Per-widget overrides for surgical changes. These default to semantic values.
 
 ### Fields
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `id` | Yes | Unique identifier, kebab-case (e.g. `my-dark-theme`) |
-| `name` | Yes | Display name in the theme picker |
-| `author` | Yes | Author name |
-| `version` | Yes | Semver version string |
-| `description` | Yes | Short description |
-| `variables.dark` | No | CSS variable overrides for dark mode |
-| `variables.light` | No | CSS variable overrides for light mode |
-| `swatches.dark` | No | 3-5 hex colors for the preview strip in the theme picker |
-| `swatches.light` | No | Same for light mode |
+| Field             | Required | Description                                              |
+|-------------------|----------|----------------------------------------------------------|
+| `id`              | Yes      | Unique identifier, kebab-case (e.g. `my-dark-theme`)     |
+| `name`            | Yes      | Display name in the theme picker                         |
+| `author`          | Yes      | Author name                                              |
+| `version`         | Yes      | Semver version string                                    |
+| `description`     | Yes      | Short description                                        |
+| `variables.dark`  | No       | CSS variable overrides for dark mode                     |
+| `variables.light` | No       | CSS variable overrides for light mode                    |
+| `swatches.dark`   | No       | 3-5 hex colors for the preview strip in the theme picker |
+| `swatches.light`  | No       | Same for light mode                                      |
 
 ### Swatches
 
