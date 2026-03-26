@@ -728,7 +728,7 @@ function renderTextBlock(
         'text-sm font-semibold'
 
       result.push(
-        <div key={`heading-${index++}`} className={`${headingClasses} my-1`}>
+        <div key={`heading-${index++}`} className={`${headingClasses} mt-1`}>
           {renderInline(headingCheck.content, index, mentionRanges, lineOffset + prefixLength)}
         </div>
       )
