@@ -3298,4 +3298,225 @@ describe('XMPPClient Message', () => {
       expect(emitSDKSpy).not.toHaveBeenCalledWith('room:message-updated', expect.anything())
     })
   })
+
+  describe('poll checkpoint consistency', () => {
+    const roomJid = 'room@conference.example.com'
+    const pollMsgId = 'poll-msg-1'
+
+    function setupRoomWithPoll(opts: {
+      reactions?: Record<string, string[]>
+      lastCheckpointTs?: string
+      creatorNick?: string
+      occupantId?: string
+    } = {}) {
+      const { reactions, lastCheckpointTs, creatorNick = 'Creator', occupantId = 'occ-1' } = opts
+      mockStores.room.getRoom = vi.fn().mockReturnValue({
+        jid: roomJid,
+        nickname: 'me',
+      })
+      mockStores.room.getMessage = vi.fn().mockReturnValue({
+        type: 'groupchat',
+        id: pollMsgId,
+        from: `${roomJid}/${creatorNick}`,
+        nick: creatorNick,
+        occupantId,
+        poll: {
+          title: 'Lunch?',
+          options: [
+            { emoji: '1️⃣', label: 'Pizza' },
+            { emoji: '2️⃣', label: 'Sushi' },
+          ],
+          settings: { allowMultiple: false, hideResultsBeforeVote: false },
+        },
+        reactions,
+        lastCheckpointTs,
+      })
+    }
+
+    function makeCheckpointStanza(opts: {
+      ts?: string
+      nick?: string
+      occupantId?: string
+      voters1?: string
+      voters2?: string
+      title?: string
+    } = {}) {
+      const { ts, nick = 'Creator', occupantId = 'occ-1', voters1 = 'alice,bob', voters2 = 'charlie', title = 'Lunch?' } = opts
+      const checkpointAttrs: Record<string, string> = {
+        xmlns: 'urn:fluux:poll:0',
+        'message-id': pollMsgId,
+      }
+      if (ts) checkpointAttrs.ts = ts
+
+      return createMockElement('message', {
+        from: `${roomJid}/${nick}`,
+        to: 'user@example.com',
+        type: 'groupchat',
+        id: 'checkpoint-msg-1',
+      }, [
+        { name: 'body', text: 'checkpoint fallback' },
+        {
+          name: 'poll-checkpoint',
+          attrs: checkpointAttrs,
+          children: [
+            { name: 'title', text: title },
+            { name: 'tally', attrs: { emoji: '1️⃣', label: 'Pizza', count: '2', voters: voters1 } },
+            { name: 'tally', attrs: { emoji: '2️⃣', label: 'Sushi', count: '1', voters: voters2 } },
+          ],
+        },
+        ...(occupantId ? [{ name: 'occupant-id', attrs: { xmlns: 'urn:xmpp:occupant-id:0', id: occupantId } }] : []),
+      ])
+    }
+
+    describe('union-merge reconciliation', () => {
+      it('should merge checkpoint voters with local voters (union)', async () => {
+        await connectClient()
+        // Local has alice+bob on 1️⃣, nobody on 2️⃣
+        setupRoomWithPoll({ reactions: { '1️⃣': ['alice', 'bob'] } })
+
+        // Checkpoint has alice+charlie on 1️⃣, dave on 2️⃣
+        const stanza = makeCheckpointStanza({ voters1: 'alice,charlie', voters2: 'dave' })
+        mockXmppClientInstance._emit('stanza', stanza)
+
+        // Expect union-merge: 1️⃣ = alice,bob,charlie; 2️⃣ = dave
+        const updateCall = emitSDKSpy.mock.calls.find(
+          (c: unknown[]) => c[0] === 'room:message-updated' && (c[1] as { messageId: string }).messageId === pollMsgId && (c[1] as { updates: { reactions?: unknown } }).updates.reactions
+        )
+        expect(updateCall).toBeDefined()
+        const reactions = (updateCall![1] as { updates: { reactions: Record<string, string[]> } }).updates.reactions
+        expect(new Set(reactions['1️⃣'])).toEqual(new Set(['alice', 'bob', 'charlie']))
+        expect(reactions['2️⃣']).toEqual(['dave'])
+      })
+
+      it('should add new emoji from checkpoint not present locally', async () => {
+        await connectClient()
+        // Local has only 1️⃣
+        setupRoomWithPoll({ reactions: { '1️⃣': ['alice'] } })
+
+        const stanza = makeCheckpointStanza({ voters1: 'alice', voters2: 'bob' })
+        mockXmppClientInstance._emit('stanza', stanza)
+
+        const updateCall = emitSDKSpy.mock.calls.find(
+          (c: unknown[]) => c[0] === 'room:message-updated' && (c[1] as { messageId: string }).messageId === pollMsgId && (c[1] as { updates: { reactions?: unknown } }).updates.reactions
+        )
+        expect(updateCall).toBeDefined()
+        const reactions = (updateCall![1] as { updates: { reactions: Record<string, string[]> } }).updates.reactions
+        expect(reactions['2️⃣']).toEqual(['bob'])
+      })
+    })
+
+    describe('timestamp ordering', () => {
+      it('should skip stale checkpoint when lastCheckpointTs is newer', async () => {
+        await connectClient()
+        setupRoomWithPoll({
+          reactions: { '1️⃣': ['alice'] },
+          lastCheckpointTs: '2026-03-26T12:00:01.000Z',
+        })
+
+        // Checkpoint has older ts
+        const stanza = makeCheckpointStanza({ ts: '2026-03-26T12:00:00.000Z' })
+        mockXmppClientInstance._emit('stanza', stanza)
+
+        // Should NOT reconcile reactions on the poll message
+        const updateCall = emitSDKSpy.mock.calls.find(
+          (c: unknown[]) => c[0] === 'room:message-updated' && (c[1] as { messageId: string }).messageId === pollMsgId && (c[1] as { updates: { reactions?: unknown } }).updates.reactions
+        )
+        expect(updateCall).toBeUndefined()
+      })
+
+      it('should accept newer checkpoint and update lastCheckpointTs', async () => {
+        await connectClient()
+        setupRoomWithPoll({
+          reactions: { '1️⃣': ['alice'] },
+          lastCheckpointTs: '2026-03-26T12:00:00.000Z',
+        })
+
+        const stanza = makeCheckpointStanza({ ts: '2026-03-26T12:00:01.000Z' })
+        mockXmppClientInstance._emit('stanza', stanza)
+
+        // Should reconcile reactions
+        const reactionsUpdate = emitSDKSpy.mock.calls.find(
+          (c: unknown[]) => c[0] === 'room:message-updated' && (c[1] as { messageId: string }).messageId === pollMsgId && (c[1] as { updates: { reactions?: unknown } }).updates.reactions
+        )
+        expect(reactionsUpdate).toBeDefined()
+
+        // Should also update lastCheckpointTs
+        const tsUpdate = emitSDKSpy.mock.calls.find(
+          (c: unknown[]) => c[0] === 'room:message-updated' && (c[1] as { messageId: string }).messageId === pollMsgId && (c[1] as { updates: { lastCheckpointTs?: unknown } }).updates.lastCheckpointTs
+        )
+        expect(tsUpdate).toBeDefined()
+        expect((tsUpdate![1] as { updates: { lastCheckpointTs: string } }).updates.lastCheckpointTs).toBe('2026-03-26T12:00:01.000Z')
+      })
+
+      it('should accept checkpoint without ts even when lastCheckpointTs exists', async () => {
+        await connectClient()
+        setupRoomWithPoll({
+          reactions: { '1️⃣': ['alice'] },
+          lastCheckpointTs: '2026-03-26T12:00:00.000Z',
+        })
+
+        // No ts attribute — should not be rejected by timestamp guard
+        const stanza = makeCheckpointStanza({})
+        mockXmppClientInstance._emit('stanza', stanza)
+
+        const updateCall = emitSDKSpy.mock.calls.find(
+          (c: unknown[]) => c[0] === 'room:message-updated' && (c[1] as { messageId: string }).messageId === pollMsgId && (c[1] as { updates: { reactions?: unknown } }).updates.reactions
+        )
+        expect(updateCall).toBeDefined()
+      })
+    })
+
+    describe('verification', () => {
+      it('should reject checkpoint from non-creator', async () => {
+        await connectClient()
+        setupRoomWithPoll({ creatorNick: 'Creator', occupantId: 'occ-1' })
+
+        // Checkpoint sent by a different occupant
+        const stanza = makeCheckpointStanza({ nick: 'Impostor', occupantId: 'occ-999' })
+        mockXmppClientInstance._emit('stanza', stanza)
+
+        // Should NOT reconcile reactions
+        const updateCall = emitSDKSpy.mock.calls.find(
+          (c: unknown[]) => c[0] === 'room:message-updated' && (c[1] as { messageId: string }).messageId === pollMsgId && (c[1] as { updates: { reactions?: unknown } }).updates.reactions
+        )
+        expect(updateCall).toBeUndefined()
+      })
+
+      it('should reject checkpoint with mismatched title', async () => {
+        await connectClient()
+        setupRoomWithPoll()
+
+        const stanza = makeCheckpointStanza({ title: 'Wrong Title' })
+        mockXmppClientInstance._emit('stanza', stanza)
+
+        const updateCall = emitSDKSpy.mock.calls.find(
+          (c: unknown[]) => c[0] === 'room:message-updated' && (c[1] as { messageId: string }).messageId === pollMsgId && (c[1] as { updates: { reactions?: unknown } }).updates.reactions
+        )
+        expect(updateCall).toBeUndefined()
+      })
+    })
+
+    describe('deferred verification', () => {
+      it('should accept checkpoint on trust when original not in store and trigger deferred verification', async () => {
+        await connectClient()
+        mockStores.room.getRoom = vi.fn().mockReturnValue({
+          jid: roomJid,
+          nickname: 'me',
+        })
+        // Original poll NOT in store
+        mockStores.room.getMessage = vi.fn().mockReturnValue(undefined)
+
+        const stanza = makeCheckpointStanza({ ts: '2026-03-26T12:00:00.000Z' })
+        mockXmppClientInstance._emit('stanza', stanza)
+
+        // Should still emit the room:message with pollCheckpoint (trust-based acceptance)
+        const roomMsgCall = emitSDKSpy.mock.calls.find(
+          (c: unknown[]) => c[0] === 'room:message'
+        )
+        expect(roomMsgCall).toBeDefined()
+        const message = (roomMsgCall![1] as { message: { pollCheckpoint?: unknown } }).message
+        expect(message.pollCheckpoint).toBeDefined()
+      })
+    })
+  })
 })

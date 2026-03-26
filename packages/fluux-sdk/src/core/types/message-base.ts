@@ -90,6 +90,8 @@ export interface PollCheckpointData {
   pollMessageId: string
   /** Snapshot results: emoji + label → vote count + voter nicks at checkpoint time */
   results: { emoji: string; label: string; count: number; voters: string[] }[]
+  /** ISO 8601 timestamp of when this checkpoint was computed (for ordering) */
+  checkpointTs?: string
 }
 
 /**
@@ -189,4 +191,9 @@ export interface BaseMessage {
    * sent by the poll creator without closing the poll. Voting continues.
    */
   pollCheckpoint?: PollCheckpointData
+  /**
+   * Timestamp of the most recent checkpoint applied to this poll message.
+   * Used to reject stale checkpoints arriving out of order.
+   */
+  lastCheckpointTs?: string
 }

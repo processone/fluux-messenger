@@ -1400,6 +1400,35 @@ describe('poll utilities', () => {
       expect(result!.results).toHaveLength(1)
       expect(result!.results[0].emoji).toBe('1️⃣')
     })
+
+    it('extracts ts attribute as checkpointTs', () => {
+      const el = createMockElement('poll-checkpoint', {
+        xmlns: 'urn:fluux:poll:0',
+        'message-id': 'poll-msg-ts',
+        ts: '2026-03-26T12:00:00.000Z',
+      }, [
+        { name: 'title', text: 'Timestamped' },
+        { name: 'tally', attrs: { emoji: '1️⃣', label: 'A', count: '1' } },
+      ])
+
+      const result = parsePollCheckpointElement(el)
+      expect(result).not.toBeNull()
+      expect(result!.checkpointTs).toBe('2026-03-26T12:00:00.000Z')
+    })
+
+    it('returns undefined checkpointTs when ts attribute is absent', () => {
+      const el = createMockElement('poll-checkpoint', {
+        xmlns: 'urn:fluux:poll:0',
+        'message-id': 'poll-msg-no-ts',
+      }, [
+        { name: 'title', text: 'No timestamp' },
+        { name: 'tally', attrs: { emoji: '1️⃣', label: 'A', count: '1' } },
+      ])
+
+      const result = parsePollCheckpointElement(el)
+      expect(result).not.toBeNull()
+      expect(result!.checkpointTs).toBeUndefined()
+    })
   })
 
   describe('enforceSingleVote edge cases (poll reaction routing)', () => {

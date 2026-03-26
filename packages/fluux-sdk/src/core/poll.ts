@@ -346,6 +346,7 @@ export function parsePollCheckpointElement(el: Element): PollCheckpointData | nu
   if (!title) return null
 
   const description = el.getChildText('description') || undefined
+  const checkpointTs = (el.attrs.ts as string) || undefined
 
   const tallyEls = el.getChildren('tally')
   const results = tallyEls
@@ -357,5 +358,5 @@ export function parsePollCheckpointElement(el: Element): PollCheckpointData | nu
     }))
     .filter((r) => r.emoji)
 
-  return { title, ...(description ? { description } : {}), pollMessageId, results }
+  return { title, ...(description ? { description } : {}), pollMessageId, results, ...(checkpointTs ? { checkpointTs } : {}) }
 }

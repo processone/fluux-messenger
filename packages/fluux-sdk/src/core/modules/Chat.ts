@@ -38,6 +38,7 @@ import type {
   RoomMAMQueryOptions,
   RoomMAMResult,
   PollClosedData,
+  PollCheckpointData,
 } from '../types'
 import { parseMessageContent, parseOgpFastening, applyRetraction, applyCorrection, createOriginIdElement } from './messagingUtils'
 import { checkForMention } from '../mentionDetection'
@@ -1421,17 +1422,38 @@ export class Chat extends BaseModule {
         // Verify against the original poll message (if available in store)
         const originalMsg = this.deps.stores?.room.getMessage(roomJid, checkpointData.pollMessageId)
         if (originalMsg?.poll) {
-          if (this.verifyPollCheckpoint(checkpointData, originalMsg, nick, occupantId)) {
+          // Timestamp ordering: skip stale checkpoints
+          if (checkpointData.checkpointTs && originalMsg.lastCheckpointTs
+            && checkpointData.checkpointTs <= originalMsg.lastCheckpointTs) {
+            logWarn(`Poll-checkpoint skipped: stale checkpoint for poll ${checkpointData.pollMessageId} in ${roomJid}`)
+          } else if (this.verifyPollCheckpoint(checkpointData, originalMsg, nick, occupantId)) {
             message.pollCheckpoint = checkpointData
             // Reconcile: update the original poll's reactions from the checkpoint's voter lists
             this.reconcileReactionsFromCheckpoint(roomJid, checkpointData)
+            // Update lastCheckpointTs on the original poll message
+            if (checkpointData.checkpointTs) {
+              this.deps.emitSDK('room:message-updated', {
+                roomJid,
+                messageId: checkpointData.pollMessageId,
+                updates: { lastCheckpointTs: checkpointData.checkpointTs },
+              })
+            }
           } else {
             logWarn(`Poll-checkpoint rejected: verification failed for poll ${checkpointData.pollMessageId} in ${roomJid}`)
           }
         } else {
-          // Original poll not in store — accept on trust, reconcile when possible
+          // Original poll not in store — accept on trust, reconcile, then verify asynchronously
           message.pollCheckpoint = checkpointData
           this.reconcileReactionsFromCheckpoint(roomJid, checkpointData)
+          // Update lastCheckpointTs even without the original (for future ordering)
+          if (checkpointData.checkpointTs) {
+            this.deps.emitSDK('room:message-updated', {
+              roomJid,
+              messageId: checkpointData.pollMessageId,
+              updates: { lastCheckpointTs: checkpointData.checkpointTs },
+            })
+          }
+          this.deferredPollCheckpointVerification(roomJid, messageId, checkpointData, nick, occupantId)
         }
       }
     }
@@ -1518,6 +1540,34 @@ export class Chat extends BaseModule {
   }
 
   /**
+   * Asynchronously fetch the original poll via MAM and verify the poll-checkpoint message.
+   * If verification fails, remove pollCheckpoint from the message via an update.
+   */
+  private deferredPollCheckpointVerification(
+    roomJid: string,
+    checkpointMsgId: string,
+    checkpointData: PollCheckpointData,
+    senderNick: string,
+    senderOccupantId?: string,
+  ): void {
+    this.mamModule.fetchRoomMessageById(roomJid, checkpointData.pollMessageId).then((originalMsg) => {
+      if (!originalMsg?.poll) return // MAM fetch failed or no poll — keep trust-based acceptance
+      if (!this.verifyPollCheckpoint(checkpointData, originalMsg, senderNick, senderOccupantId)) {
+        logWarn(`Poll-checkpoint rejected (deferred): verification failed for poll ${checkpointData.pollMessageId} in ${roomJid}`)
+        // Verification failed — remove pollCheckpoint from the checkpoint message
+        this.deps.emitSDK('room:message-updated', {
+          roomJid,
+          messageId: checkpointMsgId,
+          updates: { pollCheckpoint: undefined },
+        })
+      }
+      // If verification passes, the already-applied reconciliation stands
+    }).catch(() => {
+      // MAM query failed — keep trust-based acceptance
+    })
+  }
+
+  /**
    * Verify a poll-checkpoint message against the original poll data.
    * Same checks as poll-closed: creator identity and title match.
    */
@@ -1557,19 +1607,38 @@ export class Chat extends BaseModule {
 
   /**
    * Reconcile the original poll message's reactions from a checkpoint's voter lists.
+   * Uses union-merge: for each emoji, merges checkpoint voters with local voters
+   * to preserve votes that arrived after the checkpoint was computed.
    */
   private reconcileReactionsFromCheckpoint(
     roomJid: string,
     checkpoint: { pollMessageId: string; results: { emoji: string; voters: string[] }[] }
   ): void {
-    const newReactions = this.buildReactionsFromResults(checkpoint.results)
-    if (newReactions) {
-      this.deps.emitSDK('room:message-updated', {
-        roomJid,
-        messageId: checkpoint.pollMessageId,
-        updates: { reactions: newReactions },
-      })
+    const checkpointReactions = this.buildReactionsFromResults(checkpoint.results)
+    if (!checkpointReactions) return
+
+    // Read current local reactions for the original poll message
+    const originalMsg = this.deps.stores?.room.getMessage(roomJid, checkpoint.pollMessageId)
+    const currentReactions = originalMsg?.reactions ?? {}
+
+    // Union-merge: for each emoji, combine voters from checkpoint and local
+    const mergedReactions: Record<string, string[]> = {}
+    const allEmojis = new Set([...Object.keys(checkpointReactions), ...Object.keys(currentReactions)])
+    for (const emoji of allEmojis) {
+      const merged = new Set([
+        ...(checkpointReactions[emoji] ?? []),
+        ...(currentReactions[emoji] ?? []),
+      ])
+      if (merged.size > 0) {
+        mergedReactions[emoji] = [...merged]
+      }
     }
+
+    this.deps.emitSDK('room:message-updated', {
+      roomJid,
+      messageId: checkpoint.pollMessageId,
+      updates: { reactions: mergedReactions },
+    })
   }
 
   private parseMentions(stanza: Element): MentionReference[] {

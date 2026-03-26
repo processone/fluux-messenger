@@ -388,7 +388,7 @@ export class Poll extends BaseModule {
     const checkpointId = generateUUID()
     const stanza = xml('message', { to: roomJid, type: 'groupchat', id: checkpointId },
       xml('body', {}, fallbackBody),
-      xml('poll-checkpoint', { xmlns: NS_POLL, 'message-id': messageId },
+      xml('poll-checkpoint', { xmlns: NS_POLL, 'message-id': messageId, ts: new Date().toISOString() },
         ...checkpointChildren,
       ),
       xml('fallback', { xmlns: NS_FALLBACK, for: NS_POLL },
