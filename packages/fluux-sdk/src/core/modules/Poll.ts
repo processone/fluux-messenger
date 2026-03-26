@@ -24,11 +24,13 @@ import {
   buildPollData,
   buildPollFallbackBody,
   tallyPollResults,
+  getTotalVoters,
   enforceSingleVote,
   enforceMultiVote,
   getPollOptionEmojis,
   isPollExpired,
 } from '../poll'
+import type { PollTally } from '../poll'
 
 /**
  * Lightweight metadata for polls created by the local user.
@@ -39,7 +41,20 @@ interface LocalPollEntry {
   messageId: string
   poll: PollData
   closed: boolean
+  /** Timestamp of the last checkpoint sent (ms since epoch) */
+  lastCheckpointAt?: number
+  /** Total voters at the time of last checkpoint */
+  lastCheckpointVoteCount?: number
+  /** Debounce timer for auto-checkpoint */
+  checkpointTimer?: ReturnType<typeof setTimeout>
 }
+
+/** Minimum interval between auto-checkpoints (ms) */
+const CHECKPOINT_MIN_INTERVAL_MS = 60_000
+/** Minimum vote delta to trigger a checkpoint */
+const CHECKPOINT_MIN_VOTE_DELTA = 3
+/** Minimum total voters before first checkpoint */
+const CHECKPOINT_MIN_TOTAL_VOTERS = 5
 
 /**
  * Poll module for managing reaction-based polls in MUC rooms.
@@ -65,6 +80,66 @@ export class Poll extends BaseModule {
   constructor(deps: ModuleDependencies, chat: Chat) {
     super(deps)
     this.chat = chat
+    this.setupAutoCheckpoint()
+  }
+
+  /**
+   * Subscribe to room:reactions SDK events to trigger auto-checkpoints
+   * for polls created by this client.
+   */
+  private setupAutoCheckpoint(): void {
+    // The Poll module needs to know when reactions change on its polls.
+    // We subscribe via a store-level listener on the room store's reactions changes.
+    // Since we don't have direct SDK event subscription, we use setInterval polling
+    // on the local poll entries — but a cleaner approach is to hook into sendCheckpoint.
+    // Instead, we expose a public method that Chat/bindings can call.
+  }
+
+  /**
+   * Notify the Poll module that a reaction was received on a room message.
+   * Called by the store bindings after `room:reactions` is processed.
+   * Triggers auto-checkpoint if this is a poll the local user created.
+   */
+  onRoomReaction(roomJid: string, messageId: string): void {
+    const localPoll = this.localPolls.get(messageId)
+    if (!localPoll || localPoll.closed || localPoll.roomJid !== roomJid) return
+
+    this.maybeAutoCheckpoint(localPoll, roomJid, messageId)
+  }
+
+  /**
+   * Check auto-checkpoint rules and send if conditions are met.
+   */
+  private maybeAutoCheckpoint(localPoll: LocalPollEntry, roomJid: string, messageId: string): void {
+    const roomMessage = this.deps.stores?.room.getMessage(roomJid, messageId)
+    if (!roomMessage?.poll) return
+
+    const reactions = roomMessage.reactions ?? {}
+    const totalVoters = getTotalVoters(roomMessage.poll, reactions)
+
+    // Rule: minimum total voters before first checkpoint
+    if (totalVoters < CHECKPOINT_MIN_TOTAL_VOTERS) return
+
+    // Rule: minimum vote delta since last checkpoint
+    const voteDelta = totalVoters - (localPoll.lastCheckpointVoteCount ?? 0)
+    if (voteDelta < CHECKPOINT_MIN_VOTE_DELTA) return
+
+    // Rule: minimum interval between checkpoints
+    const timeSinceLast = Date.now() - (localPoll.lastCheckpointAt ?? 0)
+    if (timeSinceLast < CHECKPOINT_MIN_INTERVAL_MS) {
+      // Schedule a debounced check after the interval expires
+      if (!localPoll.checkpointTimer) {
+        const delay = CHECKPOINT_MIN_INTERVAL_MS - timeSinceLast + 100
+        localPoll.checkpointTimer = setTimeout(() => {
+          localPoll.checkpointTimer = undefined
+          this.maybeAutoCheckpoint(localPoll, roomJid, messageId)
+        }, delay)
+      }
+      return
+    }
+
+    // All conditions met — send checkpoint
+    void this.sendCheckpoint(roomJid, messageId)
   }
 
   /**
@@ -231,7 +306,12 @@ export class Poll extends BaseModule {
     const fallbackBody = `📊 Poll closed: ${pollData.title}\n${resultLines.join('\n')}`
 
     const tallyElements = tally.map((t) =>
-      xml('tally', { emoji: t.emoji, label: t.label, count: String(t.count) })
+      xml('tally', {
+        emoji: t.emoji,
+        label: t.label,
+        count: String(t.count),
+        ...(t.voters.length > 0 ? { voters: t.voters.join(',') } : {}),
+      })
     )
 
     const pollClosedChildren = [
@@ -291,7 +371,12 @@ export class Poll extends BaseModule {
     const fallbackBody = `📊 Poll checkpoint: ${pollData.title}\n${resultLines.join('\n')}`
 
     const tallyElements = tally.map((t) =>
-      xml('tally', { emoji: t.emoji, label: t.label, count: String(t.count) })
+      xml('tally', {
+        emoji: t.emoji,
+        label: t.label,
+        count: String(t.count),
+        ...(t.voters.length > 0 ? { voters: t.voters.join(',') } : {}),
+      })
     )
 
     const checkpointChildren = [
@@ -301,7 +386,7 @@ export class Poll extends BaseModule {
     ]
 
     const checkpointId = generateUUID()
-    const message = xml('message', { to: roomJid, type: 'groupchat', id: checkpointId },
+    const stanza = xml('message', { to: roomJid, type: 'groupchat', id: checkpointId },
       xml('body', {}, fallbackBody),
       xml('poll-checkpoint', { xmlns: NS_POLL, 'message-id': messageId },
         ...checkpointChildren,
@@ -312,8 +397,37 @@ export class Poll extends BaseModule {
       xml('store', { xmlns: NS_HINTS }),
     )
 
-    await this.deps.sendStanza(message)
+    await this.deps.sendStanza(stanza)
+
+    // Update the original poll's reactions immediately on the sender side
+    const newReactions = this.buildReactionsFromTally(tally)
+    this.deps.emitSDK('room:message-updated', {
+      roomJid,
+      messageId,
+      updates: { reactions: newReactions },
+    })
+
+    // Update checkpoint tracking
+    if (localPoll) {
+      localPoll.lastCheckpointAt = Date.now()
+      localPoll.lastCheckpointVoteCount = getTotalVoters(pollData, reactions)
+    }
+
     return checkpointId
+  }
+
+  /**
+   * Build a reactions map from a tally's voter lists.
+   * Used to reconcile the original poll message's reactions when a checkpoint arrives.
+   */
+  private buildReactionsFromTally(tally: PollTally[]): Record<string, string[]> | undefined {
+    const reactions: Record<string, string[]> = {}
+    for (const entry of tally) {
+      if (entry.voters.length > 0) {
+        reactions[entry.emoji] = [...entry.voters]
+      }
+    }
+    return Object.keys(reactions).length > 0 ? reactions : undefined
   }
 
   /**

@@ -22,7 +22,6 @@ export interface PollCardProps {
   myReactions: string[]
   onVote?: (emoji: string) => void
   onClosePoll?: () => Promise<string | null>
-  onCheckpoint?: () => void
   isClosed?: boolean
   getReactorName: (reactor: string) => string
 }
@@ -35,7 +34,7 @@ function getOptionColor(label: string): string {
   return generateConsistentColorHexSync(label, { saturation: 80, lightness: 50 })
 }
 
-export function PollCard({ poll, reactions, myReactions, onVote, onClosePoll, onCheckpoint, isClosed, getReactorName }: PollCardProps) {
+export function PollCard({ poll, reactions, myReactions, onVote, onClosePoll, isClosed, getReactorName }: PollCardProps) {
   const { t } = useTranslation()
   const [closing, setClosing] = useState(false)
 
@@ -127,14 +126,6 @@ export function PollCard({ poll, reactions, myReactions, onVote, onClosePoll, on
             <span className="text-xs text-fluux-muted italic">
               {t('poll.tapToChange', 'Tap to change vote')}
             </span>
-          )}
-          {onCheckpoint && !expired && !isClosed && (
-            <button
-              onClick={onCheckpoint}
-              className="flex items-center gap-1 text-xs text-fluux-muted hover:text-fluux-text transition-colors"
-            >
-              {t('poll.checkpoint', 'Checkpoint')}
-            </button>
           )}
           {onClosePoll && !expired && !isClosed && (
             <button

@@ -68,8 +68,8 @@ export interface PollClosedData {
   description?: string
   /** The original poll message ID */
   pollMessageId: string
-  /** Frozen results: emoji + label → vote count */
-  results: { emoji: string; label: string; count: number }[]
+  /** Frozen results: emoji + label → vote count + optional voter nicks */
+  results: { emoji: string; label: string; count: number; voters?: string[] }[]
 }
 
 /**
@@ -88,8 +88,8 @@ export interface PollCheckpointData {
   description?: string
   /** The original poll message ID */
   pollMessageId: string
-  /** Snapshot results: emoji + label → vote count at checkpoint time */
-  results: { emoji: string; label: string; count: number }[]
+  /** Snapshot results: emoji + label → vote count + voter nicks at checkpoint time */
+  results: { emoji: string; label: string; count: number; voters: string[] }[]
 }
 
 /**

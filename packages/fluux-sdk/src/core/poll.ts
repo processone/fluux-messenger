@@ -317,11 +317,16 @@ export function parsePollClosedElement(el: Element): PollClosedData | null {
 
   const tallyEls = el.getChildren('tally')
   const results = tallyEls
-    .map((t) => ({
-      emoji: t.attrs.emoji as string,
-      label: (t.attrs.label as string) ?? '',
-      count: Math.max(0, parseInt(t.attrs.count as string, 10) || 0),
-    }))
+    .map((t) => {
+      const votersStr = (t.attrs.voters as string) || ''
+      const voters = votersStr.split(',').filter(Boolean)
+      return {
+        emoji: t.attrs.emoji as string,
+        label: (t.attrs.label as string) ?? '',
+        count: Math.max(0, parseInt(t.attrs.count as string, 10) || 0),
+        ...(voters.length > 0 ? { voters } : {}),
+      }
+    })
     .filter((r) => r.emoji)
 
   return { title, ...(description ? { description } : {}), pollMessageId, results }
@@ -348,6 +353,7 @@ export function parsePollCheckpointElement(el: Element): PollCheckpointData | nu
       emoji: t.attrs.emoji as string,
       label: (t.attrs.label as string) ?? '',
       count: Math.max(0, parseInt(t.attrs.count as string, 10) || 0),
+      voters: ((t.attrs.voters as string) || '').split(',').filter(Boolean),
     }))
     .filter((r) => r.emoji)
 

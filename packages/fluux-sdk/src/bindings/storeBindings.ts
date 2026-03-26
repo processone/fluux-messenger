@@ -298,6 +298,8 @@ export function createStoreBindings(
   on('room:reactions', ({ roomJid, messageId, reactorNick, emojis }) => {
     const stores = getStores()
     stores.room.updateReactions(roomJid, messageId, reactorNick, emojis)
+    // Notify Poll module for auto-checkpoint on creator's polls
+    client.poll?.onRoomReaction(roomJid, messageId)
   })
 
   on('room:subject', ({ roomJid, subject }) => {

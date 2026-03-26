@@ -1288,7 +1288,7 @@ describe('poll utilities', () => {
   })
 
   describe('parsePollCheckpointElement', () => {
-    it('parses valid checkpoint element', () => {
+    it('parses valid checkpoint element without voters', () => {
       const el = createMockElement('poll-checkpoint', {
         xmlns: 'urn:fluux:poll:0',
         'message-id': 'poll-msg-1',
@@ -1303,8 +1303,24 @@ describe('poll utilities', () => {
       expect(result!.title).toBe('Favourite color?')
       expect(result!.pollMessageId).toBe('poll-msg-1')
       expect(result!.results).toHaveLength(2)
-      expect(result!.results[0]).toEqual({ emoji: '1️⃣', label: 'Red', count: 3 })
-      expect(result!.results[1]).toEqual({ emoji: '2️⃣', label: 'Blue', count: 5 })
+      expect(result!.results[0]).toEqual({ emoji: '1️⃣', label: 'Red', count: 3, voters: [] })
+      expect(result!.results[1]).toEqual({ emoji: '2️⃣', label: 'Blue', count: 5, voters: [] })
+    })
+
+    it('parses checkpoint element with voter lists', () => {
+      const el = createMockElement('poll-checkpoint', {
+        xmlns: 'urn:fluux:poll:0',
+        'message-id': 'poll-msg-v',
+      }, [
+        { name: 'title', text: 'Lunch?' },
+        { name: 'tally', attrs: { emoji: '1️⃣', label: 'Pizza', count: '2', voters: 'alice,bob' } },
+        { name: 'tally', attrs: { emoji: '2️⃣', label: 'Sushi', count: '1', voters: 'charlie' } },
+      ])
+
+      const result = parsePollCheckpointElement(el)
+      expect(result).not.toBeNull()
+      expect(result!.results[0].voters).toEqual(['alice', 'bob'])
+      expect(result!.results[1].voters).toEqual(['charlie'])
     })
 
     it('includes optional description', () => {

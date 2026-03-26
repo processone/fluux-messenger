@@ -1393,11 +1393,14 @@ export class Chat extends BaseModule {
         if (originalMsg?.poll) {
           if (this.verifyPollClosed(pollClosedData, originalMsg, nick, occupantId)) {
             message.pollClosed = pollClosedData
-            // Mark the original poll message as closed
+            // Mark the original poll message as closed + reconcile reactions if voters present
+            const closedUpdates: Partial<RoomMessage> = { pollClosedAt: message.timestamp }
+            const closedReactions = this.buildReactionsFromResults(pollClosedData.results)
+            if (closedReactions) closedUpdates.reactions = closedReactions
             this.deps.emitSDK('room:message-updated', {
               roomJid,
               messageId: pollClosedData.pollMessageId,
-              updates: { pollClosedAt: message.timestamp },
+              updates: closedUpdates,
             })
           } else {
             logWarn(`Poll-closed rejected: verification failed for poll ${pollClosedData.pollMessageId} in ${roomJid}`)
@@ -1420,12 +1423,15 @@ export class Chat extends BaseModule {
         if (originalMsg?.poll) {
           if (this.verifyPollCheckpoint(checkpointData, originalMsg, nick, occupantId)) {
             message.pollCheckpoint = checkpointData
+            // Reconcile: update the original poll's reactions from the checkpoint's voter lists
+            this.reconcileReactionsFromCheckpoint(roomJid, checkpointData)
           } else {
             logWarn(`Poll-checkpoint rejected: verification failed for poll ${checkpointData.pollMessageId} in ${roomJid}`)
           }
         } else {
-          // Original poll not in store — accept on trust
+          // Original poll not in store — accept on trust, reconcile when possible
           message.pollCheckpoint = checkpointData
+          this.reconcileReactionsFromCheckpoint(roomJid, checkpointData)
         }
       }
     }
@@ -1529,6 +1535,41 @@ export class Chat extends BaseModule {
     const originalEmojis = new Set(originalMsg.poll.options.map(o => o.emoji))
     const emojisMatch = checkpoint.results.every(r => originalEmojis.has(r.emoji))
     return senderIsCreator && titleMatches && emojisMatch
+  }
+
+  /**
+   * Build a reactions map from results that include voter lists.
+   * Returns undefined if no voters are present in any result.
+   */
+  private buildReactionsFromResults(
+    results: { emoji: string; voters?: string[] }[]
+  ): Record<string, string[]> | undefined {
+    const reactions: Record<string, string[]> = {}
+    let hasVoters = false
+    for (const r of results) {
+      if (r.voters && r.voters.length > 0) {
+        reactions[r.emoji] = [...r.voters]
+        hasVoters = true
+      }
+    }
+    return hasVoters ? reactions : undefined
+  }
+
+  /**
+   * Reconcile the original poll message's reactions from a checkpoint's voter lists.
+   */
+  private reconcileReactionsFromCheckpoint(
+    roomJid: string,
+    checkpoint: { pollMessageId: string; results: { emoji: string; voters: string[] }[] }
+  ): void {
+    const newReactions = this.buildReactionsFromResults(checkpoint.results)
+    if (newReactions) {
+      this.deps.emitSDK('room:message-updated', {
+        roomJid,
+        messageId: checkpoint.pollMessageId,
+        updates: { reactions: newReactions },
+      })
+    }
   }
 
   private parseMentions(stanza: Element): MentionReference[] {

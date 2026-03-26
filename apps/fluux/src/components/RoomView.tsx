@@ -67,7 +67,7 @@ const MAX_ROOM_SIZE_FOR_TYPING = 30
 export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange, onStartChat, onShowProfile, findOnPageRef, onSearchInConversation }: RoomViewProps) {
   detectRenderLoop('RoomView')
   const { t } = useTranslation()
-  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendPoll, votePoll, closePoll, sendCheckpoint, sendCorrection, retractMessage, moderateMessage, sendChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, activeMAMState, submitRoomConfig, setSubject, destroyRoom, setAffiliation, setRole, targetMessageId, clearTargetMessageId } = useRoomActive()
+  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendPoll, votePoll, closePoll, sendCorrection, retractMessage, moderateMessage, sendChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, activeMAMState, submitRoomConfig, setSubject, destroyRoom, setAffiliation, setRole, targetMessageId, clearTargetMessageId } = useRoomActive()
   const { contacts } = useRoster()
   // NOTE: Use focused selectors instead of useConnection() hook to avoid
   // re-renders when unrelated connection state changes (error, reconnectAttempt, etc.)
@@ -393,7 +393,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             sendReaction={sendReaction}
             votePoll={votePoll}
             closePoll={closePoll}
-            sendCheckpoint={sendCheckpoint}
+
             onReply={setReplyingTo}
             onEdit={setEditingMessage}
             lastOutgoingMessageId={lastOutgoingMessageId}
@@ -633,7 +633,6 @@ const RoomMessageList = memo(function RoomMessageList({
   sendReaction,
   votePoll,
   closePoll,
-  sendCheckpoint,
   onReply,
   onEdit,
   lastOutgoingMessageId,
@@ -675,7 +674,6 @@ const RoomMessageList = memo(function RoomMessageList({
   sendReaction: (roomJid: string, messageId: string, emojis: string[]) => Promise<void>
   votePoll: (roomJid: string, messageId: string, optionEmoji: string, currentMyReactions: string[], poll: PollData, isClosed?: boolean) => Promise<void>
   closePoll: (roomJid: string, messageId: string) => Promise<string | null>
-  sendCheckpoint: (roomJid: string, messageId: string) => Promise<string | null>
   onReply: (message: RoomMessage) => void
   onEdit: (message: RoomMessage) => void
   lastOutgoingMessageId: string | null
@@ -822,7 +820,7 @@ const RoomMessageList = memo(function RoomMessageList({
       sendReaction={sendReaction}
       votePoll={votePoll}
       closePoll={closePoll}
-      sendCheckpoint={sendCheckpoint}
+
       closedPollIds={closedPollIds}
       onReply={onReply}
       onEdit={onEdit}
@@ -886,7 +884,6 @@ interface RoomMessageBubbleWrapperProps {
   sendReaction: (roomJid: string, messageId: string, emojis: string[]) => Promise<void>
   votePoll: (roomJid: string, messageId: string, optionEmoji: string, currentMyReactions: string[], poll: PollData, isClosed?: boolean) => Promise<void>
   closePoll: (roomJid: string, messageId: string) => Promise<string | null>
-  sendCheckpoint: (roomJid: string, messageId: string) => Promise<string | null>
   onReply: (message: RoomMessage) => void
   onEdit: (message: RoomMessage) => void
   isLastOutgoing: boolean
@@ -931,7 +928,6 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   sendReaction,
   votePoll,
   closePoll,
-  sendCheckpoint,
   onReply,
   onEdit,
   isLastOutgoing,
@@ -1054,11 +1050,6 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   const handlePollVote = message.poll ? (emoji: string) => {
     void votePoll(room.jid, message.id, emoji, myReactions, message.poll!, !!message.pollClosedAt)
   } : undefined
-
-  // Handle poll checkpoint — only for poll creator
-  const handleCheckpoint = message.isOutgoing && message.poll && !message.pollClosedAt
-    ? () => { void sendCheckpoint(room.jid, message.id) }
-    : undefined
 
   // Build reply context using shared helper
   const replyContext = buildReplyContext(
@@ -1229,7 +1220,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         onReactionPickerChange={onReactionPickerChange}
         onPollVote={handlePollVote}
         onClosePoll={message.isOutgoing && message.poll && !closedPollIds.has(message.id) && !message.pollClosedAt ? () => closePoll(room.jid, message.id) : undefined}
-        onCheckpoint={handleCheckpoint}
+
         formatTime={formatTime}
         timeFormat={timeFormat}
         highlightTerms={highlightTerms}
