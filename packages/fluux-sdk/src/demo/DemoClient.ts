@@ -29,10 +29,35 @@ import { chatStore } from '../stores/chatStore'
 import { roomStore } from '../stores/roomStore'
 import { activityLogStore } from '../stores/activityLogStore'
 import type { ActivityEventInput } from '../core/types/activity'
-import type { RoomMessage } from '../core/types/room'
+import type { RoomMessage, RoomOccupant } from '../core/types/room'
 import type { DemoData, DemoAnimationStep } from './types'
 
 type AnimationState = 'idle' | 'playing' | 'paused' | 'stopped'
+
+// XMPP namespace constants used for IQ routing
+const NS_DISCO_INFO = 'http://jabber.org/protocol/disco#info'
+const NS_DISCO_ITEMS = 'http://jabber.org/protocol/disco#items'
+const NS_RSM = 'http://jabber.org/protocol/rsm'
+const NS_MUC = 'http://jabber.org/protocol/muc'
+
+/** Minimal Element-like object returned by mock IQ responses. */
+interface MockElement {
+  name: string
+  attrs: Record<string, string>
+  text?: string
+  children: MockElement[]
+  getChild: (name: string, xmlns?: string) => MockElement | undefined
+  getChildren: (name: string) => MockElement[]
+  getChildText: (name: string) => string | null
+  getText: () => string
+  toString: () => string
+}
+
+/** Room entry in the internal registry for IQ routing. */
+interface KnownRoom {
+  name: string
+  occupantCount?: number
+}
 
 /**
  * A demo XMPPClient that populates stores with app-provided data.
@@ -51,12 +76,33 @@ export class DemoClient extends XMPPClient {
   private elapsedAtPause = 0
   private _animationState: AnimationState = 'idle'
 
+  // Room registry for simulating IQ responses
+  private conferenceService = ''
+  private selfJid = ''
+  private knownRooms = new Map<string, KnownRoom>()
+  private seededRoomOccupants = new Map<string, RoomOccupant[]>()
+
   /** Current animation state. */
   get animationState(): AnimationState {
     return this._animationState
   }
 
-  // No-op stanza sending — no real XMPP connection exists.
+  /**
+   * Register additional rooms that appear in Browse Rooms results
+   * but are not pre-joined. Call after {@link populateDemo}.
+   */
+  setDiscoverableRooms(rooms: Array<{ jid: string; name: string; occupantCount?: number }>): void {
+    for (const room of rooms) {
+      if (!this.knownRooms.has(room.jid)) {
+        this.knownRooms.set(room.jid, { name: room.name, occupantCount: room.occupantCount })
+      }
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Stanza/IQ overrides — simulate XMPP server responses in demo mode
+  // -------------------------------------------------------------------------
+
   // Modules call sendStanza/sendIQ via the deps closure, which dispatches
   // to these overrides. This allows chat.sendMessage() etc. to work:
   // the stanza is silently dropped but the SDK events still fire.
@@ -64,97 +110,51 @@ export class DemoClient extends XMPPClient {
   // For groupchat messages we simulate the server echo: a real MUC server
   // reflects the message back to the sender, which is what triggers the
   // store update. Without this echo the sent message would vanish.
+  //
+  // For MUC join presence we simulate the server's self-presence response
+  // so that joinRoom() completes successfully.
   protected override async sendStanza(stanza: any): Promise<void> {
-    if (stanza?.attrs?.type !== 'groupchat' || stanza?.name !== 'message') return
+    // Groupchat message echo
+    if (stanza?.name === 'message' && stanza?.attrs?.type === 'groupchat') {
+      this.handleGroupchatEcho(stanza)
+      return
+    }
 
-    const roomJid = stanza.attrs.to as string
-    const room = roomStore.getState().getRoom(roomJid)
-    if (!room) return
-
-    const nick = room.nickname
-    const body = stanza.getChildText('body') ?? ''
-    const id = stanza.attrs.id as string
-
-    // Parse reply info from the stanza (XEP-0461)
-    const replyEl = stanza.getChild('reply')
-    const replyTo = replyEl
-      ? { id: replyEl.attrs.id as string, to: replyEl.attrs.to as string | undefined }
-      : undefined
-
-    // Parse attachment from OOB element (XEP-0066)
-    const oobEl = stanza.getChild('x')
-    const fileEl = stanza.getChild('file')
-    let attachment: RoomMessage['attachment'] | undefined
-    if (oobEl?.getChildText('url')) {
-      const thumbEl = oobEl.getChild('thumbnail')
-      attachment = {
-        url: oobEl.getChildText('url')!,
-        ...(fileEl?.getChildText('media-type') && { mediaType: fileEl.getChildText('media-type')! }),
-        ...(fileEl?.getChildText('name') && { name: fileEl.getChildText('name')! }),
-        ...(fileEl?.getChildText('size') && { size: Number(fileEl.getChildText('size')) }),
-        ...(fileEl?.getChildText('width') && { width: Number(fileEl.getChildText('width')) }),
-        ...(fileEl?.getChildText('height') && { height: Number(fileEl.getChildText('height')) }),
-        ...(thumbEl && {
-          thumbnail: {
-            uri: thumbEl.attrs.uri as string,
-            mediaType: thumbEl.attrs['media-type'] as string,
-            width: Number(thumbEl.attrs.width),
-            height: Number(thumbEl.attrs.height),
-          },
-        }),
+    // MUC join presence: <presence to="room/nick"><x xmlns="...muc"/></presence>
+    if (stanza?.name === 'presence' && !stanza?.attrs?.type) {
+      const hasMucChild = stanza.children?.some?.(
+        (c: any) => c.name === 'x' && c.attrs?.xmlns === NS_MUC
+      )
+      if (hasMucChild) {
+        this.handleDemoJoinPresence(stanza)
+        return
       }
     }
 
-    // Strip reply fallback from body (everything before user's actual text)
-    const fallbackEl = stanza.getChildren('fallback')?.find(
-      (f: any) => f.attrs?.for?.includes('reply')
-    )
-    let processedBody = body
-    if (fallbackEl) {
-      const bodyRange = fallbackEl.getChild('body')
-      if (bodyRange?.attrs?.end) {
-        processedBody = body.slice(Number(bodyRange.attrs.end))
-      }
-    }
-    // Also strip OOB fallback (URL appended at end)
-    const oobFallbackEl = stanza.getChildren('fallback')?.find(
-      (f: any) => f.attrs?.for?.includes('oob')
-    )
-    if (oobFallbackEl) {
-      const bodyRange = oobFallbackEl.getChild('body')
-      if (bodyRange?.attrs?.start) {
-        processedBody = processedBody.slice(0, Number(bodyRange.attrs.start)).trimEnd()
-      }
-    }
-
-    const message: RoomMessage = {
-      type: 'groupchat',
-      id,
-      originId: id,
-      roomJid,
-      from: `${roomJid}/${nick}`,
-      nick,
-      body: processedBody,
-      timestamp: new Date(),
-      isOutgoing: true,
-      ...(replyTo && { replyTo }),
-      ...(attachment && { attachment }),
-    }
-
-    this.emitSDK('room:message', { roomJid, message, incrementUnread: false })
+    // All other stanzas silently dropped (leave presence, etc.)
   }
-  protected override async sendIQ(): Promise<any> {
-    // Return a stub Element-like object so callers using .getChild()
-    // etc. get null/empty results instead of crashing on null.
-    return {
-      attrs: {},
-      name: 'iq',
-      getChild: () => undefined,
-      getChildren: () => [],
-      getChildText: () => null,
-      getText: () => '',
-      toString: () => '<iq type="result"/>',
+
+  protected override async sendIQ(stanza: any): Promise<any> {
+    // Inspect the query child to route demo IQ responses
+    const queryChild = stanza?.children?.find?.(
+      (c: any) => c.name === 'query'
+    )
+    const xmlns = queryChild?.attrs?.xmlns as string | undefined
+    const to = stanza?.attrs?.to as string | undefined
+
+    // disco#info to a known room → return room features for queryRoomFeatures()
+    if (xmlns === NS_DISCO_INFO && to && this.knownRooms.has(to)) {
+      return this.buildDiscoInfoResponse(to)
     }
+
+    // disco#items to the conference service → return room list for fetchRoomList()
+    if (xmlns === NS_DISCO_ITEMS && to === this.conferenceService) {
+      return this.buildDiscoItemsResponse()
+    }
+
+    // Fallback: return empty stub so callers using .getChild() etc.
+    // get null/empty results instead of crashing on null.
+    return this.buildEmptyStub()
   }
 
   /**
@@ -168,6 +168,10 @@ export class DemoClient extends XMPPClient {
   populateDemo(data: DemoData): void {
     // Set the current JID so modules (e.g., chat.sendMessage) can read it
     this.currentJid = data.self.jid
+    this.selfJid = data.self.jid
+
+    // Derive conference service from domain
+    this.conferenceService = `conference.${data.self.domain}`
 
     // Connection store is updated directly (not via SDK events)
     // because Connection.ts handles these outside of store bindings.
@@ -208,7 +212,14 @@ export class DemoClient extends XMPPClient {
       for (const message of messages) {
         this.emitSDK('room:message', { roomJid: room.jid, message })
       }
+
+      // Register seeded rooms in the internal registry
+      this.knownRooms.set(room.jid, { name: room.name, occupantCount: occupants.length })
+      this.seededRoomOccupants.set(room.jid, occupants)
     }
+
+    // Set MUC service JID so BrowseRoomsModal can discover it
+    this.emitSDK('admin:muc-service', { mucServiceJid: this.conferenceService })
 
     // Mark all history as complete so the "load earlier messages" spinner
     // never appears — there is no MAM server to query in demo mode.
@@ -290,7 +301,7 @@ export class DemoClient extends XMPPClient {
   }
 
   // -------------------------------------------------------------------------
-  // Private helpers
+  // Private helpers — animation
   // -------------------------------------------------------------------------
 
   private clearTimers(): void {
@@ -354,5 +365,227 @@ export class DemoClient extends XMPPClient {
         this.emitSDK('demo:custom', step.data as Parameters<typeof this.emitSDK<'demo:custom'>>[1])
         break
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // Private helpers — groupchat echo
+  // -------------------------------------------------------------------------
+
+  private handleGroupchatEcho(stanza: any): void {
+    const roomJid = stanza.attrs.to as string
+    const room = roomStore.getState().getRoom(roomJid)
+    if (!room) return
+
+    const nick = room.nickname
+    const body = stanza.getChildText('body') ?? ''
+    const id = stanza.attrs.id as string
+
+    // Parse reply info from the stanza (XEP-0461)
+    const replyEl = stanza.getChild('reply')
+    const replyTo = replyEl
+      ? { id: replyEl.attrs.id as string, to: replyEl.attrs.to as string | undefined }
+      : undefined
+
+    // Parse attachment from OOB element (XEP-0066)
+    const oobEl = stanza.getChild('x')
+    const fileEl = stanza.getChild('file')
+    let attachment: RoomMessage['attachment'] | undefined
+    if (oobEl?.getChildText('url')) {
+      const thumbEl = oobEl.getChild('thumbnail')
+      attachment = {
+        url: oobEl.getChildText('url')!,
+        ...(fileEl?.getChildText('media-type') && { mediaType: fileEl.getChildText('media-type')! }),
+        ...(fileEl?.getChildText('name') && { name: fileEl.getChildText('name')! }),
+        ...(fileEl?.getChildText('size') && { size: Number(fileEl.getChildText('size')) }),
+        ...(fileEl?.getChildText('width') && { width: Number(fileEl.getChildText('width')) }),
+        ...(fileEl?.getChildText('height') && { height: Number(fileEl.getChildText('height')) }),
+        ...(thumbEl && {
+          thumbnail: {
+            uri: thumbEl.attrs.uri as string,
+            mediaType: thumbEl.attrs['media-type'] as string,
+            width: Number(thumbEl.attrs.width),
+            height: Number(thumbEl.attrs.height),
+          },
+        }),
+      }
+    }
+
+    // Strip reply fallback from body (everything before user's actual text)
+    const fallbackEl = stanza.getChildren('fallback')?.find(
+      (f: any) => f.attrs?.for?.includes('reply')
+    )
+    let processedBody = body
+    if (fallbackEl) {
+      const bodyRange = fallbackEl.getChild('body')
+      if (bodyRange?.attrs?.end) {
+        processedBody = body.slice(Number(bodyRange.attrs.end))
+      }
+    }
+    // Also strip OOB fallback (URL appended at end)
+    const oobFallbackEl = stanza.getChildren('fallback')?.find(
+      (f: any) => f.attrs?.for?.includes('oob')
+    )
+    if (oobFallbackEl) {
+      const bodyRange = oobFallbackEl.getChild('body')
+      if (bodyRange?.attrs?.start) {
+        processedBody = processedBody.slice(0, Number(bodyRange.attrs.start)).trimEnd()
+      }
+    }
+
+    const message: RoomMessage = {
+      type: 'groupchat',
+      id,
+      originId: id,
+      roomJid,
+      from: `${roomJid}/${nick}`,
+      nick,
+      body: processedBody,
+      timestamp: new Date(),
+      isOutgoing: true,
+      ...(replyTo && { replyTo }),
+      ...(attachment && { attachment }),
+    }
+
+    this.emitSDK('room:message', { roomJid, message, incrementUnread: false })
+  }
+
+  // -------------------------------------------------------------------------
+  // Private helpers — MUC join simulation
+  // -------------------------------------------------------------------------
+
+  /** Simulate a MUC server's self-presence response after receiving join presence. */
+  private handleDemoJoinPresence(stanza: any): void {
+    const to = stanza.attrs.to as string
+    const slashIdx = to.indexOf('/')
+    if (slashIdx === -1) return
+
+    const roomJid = to.slice(0, slashIdx)
+    const nick = to.slice(slashIdx + 1)
+
+    // Emit join events asynchronously so MUC.startJoinTimeout() runs first,
+    // then our events clear the pending join (same timing as a real server).
+    queueMicrotask(() => {
+      // Build self occupant
+      const selfOccupant: RoomOccupant = {
+        nick,
+        jid: this.selfJid,
+        affiliation: 'member',
+        role: 'participant',
+      }
+
+      // If this is a seeded room being re-joined, check if we had a specific
+      // self occupant (e.g. owner/admin)
+      const seededOccupants = this.seededRoomOccupants.get(roomJid)
+      if (seededOccupants) {
+        const originalSelf = seededOccupants.find(o => o.jid === this.selfJid)
+        if (originalSelf) {
+          selfOccupant.affiliation = originalSelf.affiliation
+          selfOccupant.role = originalSelf.role
+        }
+      }
+
+      // Emit SDK events in the same order as the real MUC.handlePresence
+      this.emitSDK('room:joined', { roomJid, joined: true })
+      this.emitSDK('room:self-occupant', { roomJid, occupant: selfOccupant })
+
+      // Populate occupants: restore seeded occupants or create minimal list
+      const occupants = seededOccupants ?? [selfOccupant]
+      this.emitSDK('room:occupants-batch', { roomJid, occupants })
+
+      // Mark MAM as complete for this room
+      const mamStates = new Map(roomStore.getState().mamQueryStates)
+      mamStates.set(roomJid, {
+        isLoading: false,
+        error: null,
+        hasQueried: true,
+        isHistoryComplete: true,
+        isCaughtUpToLive: true,
+      })
+      roomStore.setState({ mamQueryStates: mamStates })
+    })
+  }
+
+  // -------------------------------------------------------------------------
+  // Private helpers — mock IQ responses
+  // -------------------------------------------------------------------------
+
+  /** Build a mock Element-like object for IQ response routing. */
+  private mockElement(
+    name: string,
+    attrs: Record<string, string>,
+    children: MockElement[] = [],
+    text?: string
+  ): MockElement {
+    return {
+      name,
+      attrs,
+      text,
+      children,
+      getChild: (childName: string, xmlns?: string) =>
+        children.find(c => c.name === childName && (!xmlns || c.attrs.xmlns === xmlns)),
+      getChildren: (childName: string) =>
+        children.filter(c => c.name === childName),
+      getChildText: (childName: string) => {
+        const child = children.find(c => c.name === childName)
+        return child?.text ?? null
+      },
+      getText: () => text ?? '',
+      toString: () => `<${name}/>`,
+    }
+  }
+
+  /** Return an empty stub IQ result (existing fallback behavior). */
+  private buildEmptyStub(): MockElement {
+    return this.mockElement('iq', { type: 'result' })
+  }
+
+  /**
+   * Build a disco#info response for a known room.
+   * Used by MUC.queryRoomFeatures() during joinRoom().
+   */
+  private buildDiscoInfoResponse(roomJid: string): MockElement {
+    const known = this.knownRooms.get(roomJid)
+    const roomName = known?.name ?? roomJid.split('@')[0]
+
+    const queryChildren: MockElement[] = [
+      // Identity
+      this.mockElement('identity', { category: 'conference', type: 'text', name: roomName }),
+      // Features — MAM, stable occupant ID (needed for reactions), MUC
+      this.mockElement('feature', { var: 'urn:xmpp:mam:2' }),
+      this.mockElement('feature', { var: 'http://jabber.org/protocol/muc#stable_id' }),
+      this.mockElement('feature', { var: 'urn:xmpp:occupant-id:0' }),
+      this.mockElement('feature', { var: NS_MUC }),
+    ]
+
+    return this.mockElement('iq', { type: 'result' }, [
+      this.mockElement('query', { xmlns: NS_DISCO_INFO }, queryChildren),
+    ])
+  }
+
+  /**
+   * Build a disco#items response listing all known rooms.
+   * Used by Admin.fetchRoomList() during browsePublicRooms().
+   */
+  private buildDiscoItemsResponse(): MockElement {
+    const items: MockElement[] = []
+    for (const [jid, room] of this.knownRooms) {
+      items.push(this.mockElement('item', { jid, name: room.name }))
+    }
+
+    const count = items.length.toString()
+    const firstJid = items.length > 0 ? items[0].attrs.jid : ''
+    const lastJid = items.length > 0 ? items[items.length - 1].attrs.jid : ''
+
+    // RSM pagination response
+    const rsmChildren: MockElement[] = [
+      this.mockElement('count', {}, [], count),
+      this.mockElement('first', { index: '0' }, [], firstJid),
+      this.mockElement('last', {}, [], lastJid),
+    ]
+    const rsmSet = this.mockElement('set', { xmlns: NS_RSM }, rsmChildren)
+
+    return this.mockElement('iq', { type: 'result' }, [
+      this.mockElement('query', { xmlns: NS_DISCO_ITEMS }, [...items, rsmSet]),
+    ])
   }
 }

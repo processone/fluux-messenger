@@ -17,6 +17,7 @@ import { ThemeProvider } from './providers/ThemeProvider'
 import { RenderLoopBoundary } from './components/RenderLoopBoundary'
 import { DemoTutorialProvider } from './demo/tutorial/DemoTutorialProvider'
 import { buildDemoData, buildDemoAnimation } from './demo/demoData'
+import { getDiscoverableRooms } from './demo/rooms'
 import App from './App'
 import './i18n'
 import './index.css'
@@ -44,6 +45,7 @@ const demoAnimation = buildDemoAnimation()
 
 const demoClient = new DemoClient()
 demoClient.populateDemo(demoData)
+demoClient.setDiscoverableRooms(getDiscoverableRooms())
 
 // Seed admin store so the Admin panel is accessible in demo
 adminStore.getState().setIsAdmin(true)
