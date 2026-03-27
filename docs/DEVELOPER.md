@@ -30,6 +30,23 @@ Open http://localhost:5173 and connect with your XMPP credentials.
 | `npm run lint`        | Run ESLint on all packages          |
 | `npm run tauri:dev`   | Run desktop app in development mode |
 | `npm run tauri:build` | Build desktop app for distribution  |
+| `npm run screenshots` | Generate demo screenshots (see below)|
+
+## Screenshots
+
+Generate marketing and documentation screenshots from the demo mode using Playwright:
+
+```bash
+# One-time setup: install Chromium for Playwright
+npx playwright install chromium
+
+# Generate all screenshots (starts dev server automatically if needed)
+npm run screenshots
+```
+
+This produces 10 PNG files in the `screenshots/` directory covering major features in both dark and light mode: 1:1 chat, group chat with members panel, conversation list, contacts, polls, code blocks, admin dashboard, and settings.
+
+The script navigates the demo at `/demo.html?tutorial=false`, freezes the animation timeline, and captures each view at 1280×800. To add or modify screenshots, edit `scripts/screenshots.ts`.
 
 ## Troubleshooting
 
