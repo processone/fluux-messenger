@@ -2052,7 +2052,7 @@ describe('XMPPClient Connection', () => {
       await connectPromise
 
       const smState = xmppClient.getStreamManagementState()
-      expect(smState).toEqual({
+      expect(smState).toMatchObject({
         id: 'sm-session-123',
         inbound: 42,
       })
@@ -2080,7 +2080,7 @@ describe('XMPPClient Connection', () => {
 
       // First call populates the cache
       const smState1 = xmppClient.getStreamManagementState()
-      expect(smState1).toEqual({
+      expect(smState1).toMatchObject({
         id: 'sm-session-456',
         inbound: 10,
       })
@@ -2090,7 +2090,7 @@ describe('XMPPClient Connection', () => {
 
       // Should return cached state
       const smState2 = xmppClient.getStreamManagementState()
-      expect(smState2).toEqual({
+      expect(smState2).toMatchObject({
         id: 'sm-session-456',
         inbound: 10,
       })

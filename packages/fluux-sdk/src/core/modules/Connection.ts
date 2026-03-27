@@ -21,6 +21,7 @@ import {
   getConnectionStatusFromState,
   getReconnectInfoFromContext,
   isTerminalState,
+  SM_SESSION_TIMEOUT_MS,
   type ConnectionActor,
   type ConnectionMachineEvent,
   type ConnectionStateValue,
@@ -137,6 +138,11 @@ export class Connection extends BaseModule {
   // Stanzas in queue BEFORE resume should report as lost
   // Stanzas sent AFTER resume are normal sends that failed for other reasons
   private smResumeCompleted = false
+
+  // Track when the system went to sleep (set by notifySystemState('sleeping')).
+  // Used by handleDeadSocket to detect long sleeps and clear stale SM cache
+  // before the wake detection fires (stream errors arrive before wake events).
+  private sleepStartTime: number | null = null
 
   // SM state persistence (cache + storage)
   private smPersistence: SmPersistence
@@ -998,10 +1004,23 @@ export class Connection extends BaseModule {
       this.sendMachineEvent({ type: 'SOCKET_DIED' }, `handleDeadSocket:${source}`)
     }
 
-    // Capture SM state into cache BEFORE cleaning up the client.
-    // This ensures the cache has the latest sm.id + inbound counter
-    // for session resumption in attemptReconnect().
-    this.smPersistence.getState(this.xmpp)
+    // If we went to sleep (system-will-sleep received) but haven't received
+    // the wake notification yet, the stream error is the first sign of wake.
+    // Check if the sleep duration exceeds SM timeout — if so, the server has
+    // expired our session and SM resume will fail. Clear the cache to force a
+    // fresh session instead of a doomed resume attempt.
+    const longSleepDetected = this.sleepStartTime != null
+      && (Date.now() - this.sleepStartTime) > SM_SESSION_TIMEOUT_MS
+
+    if (longSleepDetected) {
+      logInfo(`Long sleep detected in dead-socket recovery (${Math.round((Date.now() - this.sleepStartTime!) / 1000)}s), skipping SM state capture`)
+      this.smPersistence.clearCache()
+    } else {
+      // Capture SM state into cache BEFORE cleaning up the client.
+      // This ensures the cache has the latest sm.id + inbound counter
+      // for session resumption in attemptReconnect().
+      this.smPersistence.getState(this.xmpp)
+    }
     this.cleanupClient()
 
     if (immediateReconnect) {
@@ -1062,6 +1081,7 @@ export class Connection extends BaseModule {
         break
 
       case 'sleeping':
+        this.sleepStartTime = Date.now()
         this.stores.console.addEvent('System state: sleeping', 'connection')
         break
 
@@ -1081,6 +1101,7 @@ export class Connection extends BaseModule {
    * - Already reconnecting: send WAKE to reset backoff and retry immediately.
    */
   private async handleAwake(sleepDurationMs?: number): Promise<void> {
+    this.sleepStartTime = null
     const sleepSec = sleepDurationMs != null ? Math.round(sleepDurationMs / 1000) : null
     logInfo(`System state: awake${sleepSec != null ? ` (sleep: ${sleepSec}s)` : ''}`)
 
@@ -1806,19 +1827,16 @@ export class Connection extends BaseModule {
           const attemptStart = Date.now()
           const timeout = setTimeout(() => {
             const elapsed = Date.now() - attemptStart
-            // If elapsed time far exceeds the requested delay, the system
-            // slept through it.  Ignore this stale timeout — the wake
-            // handler will trigger a fresh reconnect attempt.
             if (elapsed > RECONNECT_ATTEMPT_TIMEOUT_MS * 1.5) {
-              logInfo(`Reconnect timeout fired stale (${Math.round(elapsed / 1000)}s elapsed, expected ${RECONNECT_ATTEMPT_TIMEOUT_MS / 1000}s) — ignoring`)
-              return
+              logInfo(`Reconnect timeout fired late (${Math.round(elapsed / 1000)}s elapsed, expected ${RECONNECT_ATTEMPT_TIMEOUT_MS / 1000}s) — system likely slept through it`)
             }
-            // Clean up the client BEFORE rejecting to prevent stale events
-            // (e.g., delayed 'online' from resource binding completing after timeout)
-            // from interfering with the next reconnect attempt.
-            logWarn(`Reconnect attempt timed out after ${RECONNECT_ATTEMPT_TIMEOUT_MS / 1000}s, cleaning up stale client`)
+            // Always clean up and reject on timeout, even if it fired late.
+            // The wake handler will trigger a fresh reconnect attempt with
+            // correct SM state. Ignoring stale timeouts risks leaving the
+            // promise hanging forever if no subsequent wake event fires.
+            logWarn(`Reconnect attempt timed out after ${Math.round(elapsed / 1000)}s, cleaning up stale client`)
             this.cleanupClient()
-            reject(new Error(`Reconnect attempt timed out after ${RECONNECT_ATTEMPT_TIMEOUT_MS / 1000}s`))
+            reject(new Error(`Reconnect attempt timed out after ${Math.round(elapsed / 1000)}s`))
           }, RECONNECT_ATTEMPT_TIMEOUT_MS)
 
           this.setupConnectionHandlers(

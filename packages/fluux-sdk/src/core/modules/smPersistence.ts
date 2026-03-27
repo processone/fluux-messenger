@@ -16,6 +16,8 @@ const SM_TIMEOUT_MS = 10 * 60 * 1000
 export interface SmStateCache {
   id: string
   inbound: number
+  /** When this cache entry was last updated (ms since epoch). Used for staleness detection. */
+  timestamp: number
 }
 
 /** Dependencies injected by Connection. */
@@ -50,7 +52,7 @@ export class SmPersistence {
 
   /** Update cache when SM is enabled or resumed. */
   updateCache(id: string, inbound: number): void {
-    this.cache = { id, inbound }
+    this.cache = { id, inbound, timestamp: Date.now() }
   }
 
   /** Clear cache (manual disconnect → fresh session next time). */
@@ -58,8 +60,11 @@ export class SmPersistence {
     this.cache = null
   }
 
-  /** Get cached SM state (may be null if no SM session). */
+  /** Get cached SM state (may be null if no SM session or if stale). */
   getCache(): SmStateCache | null {
+    if (this.cache && Date.now() - this.cache.timestamp > SM_TIMEOUT_MS) {
+      return null
+    }
     return this.cache
   }
 
@@ -75,11 +80,16 @@ export class SmPersistence {
       const sm = xmpp.streamManagement as any
       if (sm.id) {
         // Update cache with latest state
-        this.cache = { id: sm.id, inbound: sm.inbound || 0 }
+        this.cache = { id: sm.id, inbound: sm.inbound || 0, timestamp: Date.now() }
         return this.cache
       }
     }
-    // Fall back to cached state (survives socket death)
+    // Fall back to cached state (survives socket death), but reject stale entries.
+    // After a long sleep (> SM timeout), the server has expired the session.
+    // Returning null forces a fresh session instead of a doomed SM resume attempt.
+    if (this.cache && Date.now() - this.cache.timestamp > SM_TIMEOUT_MS) {
+      return null
+    }
     return this.cache
   }
 
@@ -159,6 +169,7 @@ export class SmPersistence {
           smState: {
             id: state.smId,
             inbound: state.smInbound,
+            timestamp: state.timestamp,
           },
           joinedRooms: state.joinedRooms ?? [],
         }

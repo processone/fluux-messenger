@@ -43,7 +43,9 @@ describe('SmPersistence', () => {
     it('should update and read cache', () => {
       const sm = new SmPersistence(createDeps())
       sm.updateCache('sm-123', 42)
-      expect(sm.getCache()).toEqual({ id: 'sm-123', inbound: 42 })
+      const cache = sm.getCache()
+      expect(cache).toMatchObject({ id: 'sm-123', inbound: 42 })
+      expect(cache!.timestamp).toEqual(expect.any(Number))
     })
 
     it('should clear cache', () => {
@@ -51,6 +53,30 @@ describe('SmPersistence', () => {
       sm.updateCache('sm-123', 42)
       sm.clearCache()
       expect(sm.getCache()).toBeNull()
+    })
+
+    it('should return null from getCache when cache is stale (> SM timeout)', () => {
+      const sm = new SmPersistence(createDeps())
+      sm.updateCache('sm-123', 42)
+
+      vi.useFakeTimers()
+      vi.advanceTimersByTime(11 * 60 * 1000)
+
+      expect(sm.getCache()).toBeNull()
+
+      vi.useRealTimers()
+    })
+
+    it('should return cache from getCache when within SM timeout', () => {
+      const sm = new SmPersistence(createDeps())
+      sm.updateCache('sm-123', 42)
+
+      vi.useFakeTimers()
+      vi.advanceTimersByTime(5 * 60 * 1000) // 5 minutes — within timeout
+
+      expect(sm.getCache()).toMatchObject({ id: 'sm-123', inbound: 42 })
+
+      vi.useRealTimers()
     })
   })
 
@@ -60,7 +86,8 @@ describe('SmPersistence', () => {
       const xmpp = { streamManagement: { id: 'live-id', inbound: 10 } }
 
       const result = sm.getState(xmpp)
-      expect(result).toEqual({ id: 'live-id', inbound: 10 })
+      expect(result).toMatchObject({ id: 'live-id', inbound: 10 })
+      expect(result!.timestamp).toEqual(expect.any(Number))
     })
 
     it('should update cache from live state', () => {
@@ -70,14 +97,14 @@ describe('SmPersistence', () => {
       const xmpp = { streamManagement: { id: 'live-id', inbound: 10 } }
       sm.getState(xmpp)
 
-      expect(sm.getCache()).toEqual({ id: 'live-id', inbound: 10 })
+      expect(sm.getCache()).toMatchObject({ id: 'live-id', inbound: 10 })
     })
 
     it('should fall back to cache when xmpp is null', () => {
       const sm = new SmPersistence(createDeps())
       sm.updateCache('cached-id', 7)
 
-      expect(sm.getState(null)).toEqual({ id: 'cached-id', inbound: 7 })
+      expect(sm.getState(null)).toMatchObject({ id: 'cached-id', inbound: 7 })
     })
 
     it('should fall back to cache when SM has no id', () => {
@@ -85,12 +112,41 @@ describe('SmPersistence', () => {
       sm.updateCache('cached-id', 3)
 
       const xmpp = { streamManagement: { id: '', inbound: 0 } }
-      expect(sm.getState(xmpp)).toEqual({ id: 'cached-id', inbound: 3 })
+      expect(sm.getState(xmpp)).toMatchObject({ id: 'cached-id', inbound: 3 })
     })
 
     it('should return null when no cache and no live state', () => {
       const sm = new SmPersistence(createDeps())
       expect(sm.getState(null)).toBeNull()
+    })
+
+    it('should return null when cache is stale (> SM timeout)', () => {
+      const sm = new SmPersistence(createDeps())
+      sm.updateCache('old-id', 5)
+
+      // Simulate time passing beyond SM timeout (10 minutes)
+      vi.useFakeTimers()
+      vi.advanceTimersByTime(11 * 60 * 1000)
+
+      expect(sm.getState(null)).toBeNull()
+
+      vi.useRealTimers()
+    })
+
+    it('should return live state even when cache is stale', () => {
+      const sm = new SmPersistence(createDeps())
+      sm.updateCache('old-id', 5)
+
+      // Advance past SM timeout
+      vi.useFakeTimers()
+      vi.advanceTimersByTime(11 * 60 * 1000)
+
+      // Live client state should always be returned (it refreshes the cache)
+      const xmpp = { streamManagement: { id: 'live-id', inbound: 20 } }
+      const result = sm.getState(xmpp)
+      expect(result).toMatchObject({ id: 'live-id', inbound: 20 })
+
+      vi.useRealTimers()
     })
   })
 
@@ -180,7 +236,7 @@ describe('SmPersistence', () => {
       const sm = new SmPersistence(createDeps({ storageAdapter: mockStorage.adapter }))
       const result = await sm.load('user@example.com')
 
-      expect(result.smState).toEqual({ id: 'stored-id', inbound: 30 })
+      expect(result.smState).toMatchObject({ id: 'stored-id', inbound: 30 })
       expect(result.joinedRooms).toHaveLength(1)
     })
 
