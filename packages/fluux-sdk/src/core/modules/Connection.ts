@@ -21,7 +21,6 @@ import {
   getConnectionStatusFromState,
   getReconnectInfoFromContext,
   isTerminalState,
-  SM_SESSION_TIMEOUT_MS,
   type ConnectionActor,
   type ConnectionMachineEvent,
   type ConnectionStateValue,
@@ -138,11 +137,6 @@ export class Connection extends BaseModule {
   // Stanzas in queue BEFORE resume should report as lost
   // Stanzas sent AFTER resume are normal sends that failed for other reasons
   private smResumeCompleted = false
-
-  // Track when the system went to sleep (set by notifySystemState('sleeping')).
-  // Used by handleDeadSocket to detect long sleeps and clear stale SM cache
-  // before the wake detection fires (stream errors arrive before wake events).
-  private sleepStartTime: number | null = null
 
   // SM state persistence (cache + storage)
   private smPersistence: SmPersistence
@@ -1004,23 +998,12 @@ export class Connection extends BaseModule {
       this.sendMachineEvent({ type: 'SOCKET_DIED' }, `handleDeadSocket:${source}`)
     }
 
-    // If we went to sleep (system-will-sleep received) but haven't received
-    // the wake notification yet, the stream error is the first sign of wake.
-    // Check if the sleep duration exceeds SM timeout — if so, the server has
-    // expired our session and SM resume will fail. Clear the cache to force a
-    // fresh session instead of a doomed resume attempt.
-    const longSleepDetected = this.sleepStartTime != null
-      && (Date.now() - this.sleepStartTime) > SM_SESSION_TIMEOUT_MS
-
-    if (longSleepDetected) {
-      logInfo(`Long sleep detected in dead-socket recovery (${Math.round((Date.now() - this.sleepStartTime!) / 1000)}s), skipping SM state capture`)
-      this.smPersistence.clearCache()
-    } else {
-      // Capture SM state into cache BEFORE cleaning up the client.
-      // This ensures the cache has the latest sm.id + inbound counter
-      // for session resumption in attemptReconnect().
-      this.smPersistence.getState(this.xmpp)
-    }
+    // Capture SM state into cache BEFORE cleaning up the client.
+    // This ensures the cache has the latest sm.id + inbound counter
+    // for session resumption in attemptReconnect().
+    // Note: the state machine tracks smResumeViable — attemptReconnect reads it
+    // from context to decide whether to hydrate SM state or start fresh.
+    this.smPersistence.getState(this.xmpp)
     this.cleanupClient()
 
     if (immediateReconnect) {
@@ -1081,7 +1064,7 @@ export class Connection extends BaseModule {
         break
 
       case 'sleeping':
-        this.sleepStartTime = Date.now()
+        this.sendMachineEvent({ type: 'SLEEP' }, 'notifySystemState:sleeping')
         this.stores.console.addEvent('System state: sleeping', 'connection')
         break
 
@@ -1101,7 +1084,6 @@ export class Connection extends BaseModule {
    * - Already reconnecting: send WAKE to reset backoff and retry immediately.
    */
   private async handleAwake(sleepDurationMs?: number): Promise<void> {
-    this.sleepStartTime = null
     const sleepSec = sleepDurationMs != null ? Math.round(sleepDurationMs / 1000) : null
     logInfo(`System state: awake${sleepSec != null ? ` (sleep: ${sleepSec}s)` : ''}`)
 
@@ -1801,9 +1783,16 @@ export class Connection extends BaseModule {
       // Emit SDK event for connecting status (machine is in reconnecting.attempting)
       this.deps.emitSDK('connection:status', { status: 'connecting' })
 
-      // Save SM state before stopping the old client (for session resumption)
-      const smState = this.getStreamManagementState()
-      if (smState) {
+      // Check whether the state machine considers SM resume viable.
+      // The machine tracks sleep duration via connected.sleeping → SOCKET_DIED/WAKE
+      // and sets smResumeViable accordingly. This is the single source of truth.
+      const { smResumeViable } = this.connectionActor.getSnapshot().context
+      let smState = smResumeViable ? this.getStreamManagementState() : null
+      if (!smResumeViable) {
+        logInfo('SM resume not viable (long sleep or expired), starting fresh session')
+        this.smPersistence.clearCache()
+        this.stores.console.addEvent('SM resume skipped (long sleep detected by state machine)', 'sm')
+      } else if (smState) {
         this.stores.console.addEvent(
           `Saved SM state for resumption (id: ${smState.id.slice(0, 8)}..., h: ${smState.inbound})`,
           'sm'

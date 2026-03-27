@@ -20,15 +20,20 @@
  *        │                          │  │  initialFailure  │         │
  *        │ CONNECTION_SUCCESS       │  ├──────────────────┤         │
  *        ▼                          │  │    conflict      │         │
- * ┌──────────────────────────┐      │  ├──────────────────┤         │
- * │        connected          │─────►│  │   authFailed     │         │
- * │ ┌─────────┐ ┌──────────┐│CONFLICT│  └──────────────────┘         │
- * │ │ healthy │ │verifying ││AUTH_ERR│                               │
- * │ └────┬────┘ └────┬─────┘│      │                                │
- * │      │           │       │      └───────────────────────────────┘
- * │  SOCKET_DIED  VERIFY_FAILED
- * │  WAKE(long)      │
- * └──────┬───────────┘
+ * ┌──────────────────────────────┐  │  ├──────────────────┤         │
+ * │          connected            │──►│  │   authFailed     │         │
+ * │ ┌─────────┐ ┌──────────┐    │CONFLICT └──────────────────┘       │
+ * │ │ healthy │ │verifying │    │AUTH_ERR                             │
+ * │ └────┬────┘ └────┬─────┘    │     └───────────────────────────────┘
+ * │   SLEEP│          │          │
+ * │      ▼           │          │
+ * │ ┌──────────┐     │          │
+ * │ │ sleeping │     │          │
+ * │ └────┬─────┘     │          │
+ * │      │           │          │
+ * │  SOCKET_DIED  VERIFY_FAILED │
+ * │  WAKE(long)      │          │
+ * └──────┬───────────┘──────────┘
  *        ▼
  * ┌──────────────────────────┐
  * │        reconnecting       │
@@ -90,6 +95,7 @@ export type ConnectionMachineEvent =
   | { type: 'CONNECTION_SUCCESS' }
   | { type: 'CONNECTION_ERROR'; error: string }
   | { type: 'SOCKET_DIED' }
+  | { type: 'SLEEP' }
   | { type: 'WAKE'; sleepDurationMs?: number }
   | { type: 'VISIBLE' }
   | { type: 'VERIFY_SUCCESS' }
@@ -113,6 +119,13 @@ export interface ConnectionMachineContext {
   reconnectTargetTime: number | null
   /** Last error message, null when no error */
   lastError: string | null
+  /** Whether SM session resumption is viable for the next reconnect attempt.
+   *  Set to false when a long sleep (> SM timeout) is detected, so attemptReconnect
+   *  starts a fresh session instead of attempting a doomed SM resume. */
+  smResumeViable: boolean
+  /** When the system entered sleep (ms since epoch), null when awake.
+   *  Used to compute sleep duration when SOCKET_DIED arrives before WAKE. */
+  sleepStartTime: number | null
 }
 
 /**
@@ -123,6 +136,7 @@ export type ConnectionStateValue =
   | 'idle'
   | 'connecting'
   | { connected: 'healthy' }
+  | { connected: 'sleeping' }
   | { connected: 'verifying' }
   | { reconnecting: 'waiting' }
   | { reconnecting: 'attempting' }
@@ -172,6 +186,8 @@ export const connectionMachine = setup({
       nextRetryDelayMs: 0,
       reconnectTargetTime: null,
       lastError: null,
+      smResumeViable: true,
+      sleepStartTime: null,
     }),
 
     // Increment attempt counter and compute next backoff delay.
@@ -221,6 +237,26 @@ export const connectionMachine = setup({
     clearError: assign({
       lastError: null,
     }),
+
+    // Record when the system goes to sleep (entering connected.sleeping)
+    recordSleepStart: assign({
+      sleepStartTime: () => Date.now(),
+    }),
+
+    // Clear sleep tracking (wake or successful reconnect)
+    clearSleepStart: assign({
+      sleepStartTime: null,
+    }),
+
+    // Mark SM resume as viable (normal socket death, short sleep)
+    markSmResumeViable: assign({
+      smResumeViable: true,
+    }),
+
+    // Mark SM resume as not viable (long sleep exceeded SM timeout)
+    markSmResumeNotViable: assign({
+      smResumeViable: false,
+    }),
   },
   guards: {
     // Did the sleep duration exceed SM session timeout?
@@ -229,6 +265,13 @@ export const connectionMachine = setup({
         return (event.sleepDurationMs ?? 0) > SM_SESSION_TIMEOUT_MS
       }
       return false
+    },
+
+    // Did the sleep duration (computed from context) exceed SM timeout?
+    // Used when SOCKET_DIED arrives in sleeping state before WAKE.
+    sleepExceedsSMTimeoutFromContext: ({ context }) => {
+      if (context.sleepStartTime == null) return false
+      return (Date.now() - context.sleepStartTime) > SM_SESSION_TIMEOUT_MS
     },
   },
   delays: {
@@ -242,6 +285,8 @@ export const connectionMachine = setup({
     nextRetryDelayMs: 0,
     reconnectTargetTime: null,
     lastError: null,
+    smResumeViable: true,
+    sleepStartTime: null,
   },
   initial: 'idle',
   states: {
@@ -304,24 +349,66 @@ export const connectionMachine = setup({
       states: {
         /**
          * Normal connected operation.
-         * Can transition to verifying (wake check) or reconnecting (socket death).
+         * Can transition to sleeping (pre-sleep), verifying (wake check),
+         * or reconnecting (socket death).
          */
         healthy: {
           on: {
             SOCKET_DIED: {
               target: '#connection.reconnecting',
-              actions: 'incrementAttempt',
+              actions: ['incrementAttempt', 'markSmResumeViable'],
+            },
+            SLEEP: {
+              target: 'sleeping',
+              actions: 'recordSleepStart',
             },
             WAKE: [
               {
                 // Long sleep exceeds SM timeout — skip verification, reconnect immediately
                 guard: 'sleepExceedsSMTimeout',
                 target: '#connection.reconnecting',
-                actions: 'incrementAttempt',
+                actions: ['incrementAttempt', 'markSmResumeNotViable'],
               },
               {
                 // Short sleep — verify connection health first
                 target: 'verifying',
+              },
+            ],
+          },
+        },
+
+        /**
+         * System is asleep (system-will-sleep received).
+         * Tracks sleepStartTime so SOCKET_DIED can compute sleep duration
+         * and decide whether SM resume is viable — regardless of whether
+         * the WAKE event arrives before or after the stream error.
+         */
+        sleeping: {
+          on: {
+            SOCKET_DIED: [
+              {
+                // Long sleep — SM session has expired on the server
+                guard: 'sleepExceedsSMTimeoutFromContext',
+                target: '#connection.reconnecting',
+                actions: ['incrementAttempt', 'markSmResumeNotViable', 'clearSleepStart'],
+              },
+              {
+                // Short sleep — SM resume should work
+                target: '#connection.reconnecting',
+                actions: ['incrementAttempt', 'markSmResumeViable', 'clearSleepStart'],
+              },
+            ],
+            WAKE: [
+              {
+                // Long sleep exceeds SM timeout
+                guard: 'sleepExceedsSMTimeout',
+                target: '#connection.reconnecting',
+                actions: ['incrementAttempt', 'markSmResumeNotViable', 'clearSleepStart'],
+              },
+              {
+                // Short sleep — verify connection health
+                target: 'verifying',
+                actions: 'clearSleepStart',
               },
             ],
           },
@@ -512,6 +599,8 @@ export function getConnectionStatusFromState(stateValue: ConnectionStateValue): 
   if ('connected' in stateValue) {
     switch (stateValue.connected) {
       case 'healthy':
+        return 'online'
+      case 'sleeping':
         return 'online'
       case 'verifying':
         return 'verifying'

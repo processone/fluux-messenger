@@ -1052,6 +1052,8 @@ describe('connectionMachine', () => {
           nextRetryDelayMs: 4000,
           reconnectTargetTime: targetTime,
           lastError: 'some error',
+          smResumeViable: true,
+          sleepStartTime: null,
         }
         const info = getReconnectInfoFromContext(context)
         expect(info.attempt).toBe(3)
@@ -1065,11 +1067,204 @@ describe('connectionMachine', () => {
           nextRetryDelayMs: 0,
           reconnectTargetTime: null,
           lastError: null,
+          smResumeViable: true,
+          sleepStartTime: null,
         }
         const info = getReconnectInfoFromContext(context)
         expect(info.attempt).toBe(0)
         expect(info.reconnectTargetTime).toBeNull()
       })
+    })
+  })
+
+  describe('sleep awareness (connected.sleeping)', () => {
+    let actor: ReturnType<typeof createActor<typeof connectionMachine>>
+
+    beforeEach(() => {
+      actor = createActor(connectionMachine).start()
+      actor.send({ type: 'CONNECT' })
+      actor.send({ type: 'CONNECTION_SUCCESS' })
+      expect(actor.getSnapshot().value).toEqual({ connected: 'healthy' })
+    })
+
+    it('should transition to connected.sleeping on SLEEP', () => {
+      actor.send({ type: 'SLEEP' })
+      expect(actor.getSnapshot().value).toEqual({ connected: 'sleeping' })
+      expect(actor.getSnapshot().context.sleepStartTime).toEqual(expect.any(Number))
+      actor.stop()
+    })
+
+    it('should map connected.sleeping to online status', () => {
+      expect(getConnectionStatusFromState({ connected: 'sleeping' })).toBe('online')
+    })
+
+    it('should transition to verifying on WAKE (short sleep) from sleeping', () => {
+      actor.send({ type: 'SLEEP' })
+      actor.send({ type: 'WAKE', sleepDurationMs: 30_000 })
+      expect(actor.getSnapshot().value).toEqual({ connected: 'verifying' })
+      expect(actor.getSnapshot().context.sleepStartTime).toBeNull()
+      expect(actor.getSnapshot().context.smResumeViable).toBe(true)
+      actor.stop()
+    })
+
+    it('should transition to reconnecting on WAKE (long sleep) from sleeping with smResumeViable false', () => {
+      actor.send({ type: 'SLEEP' })
+      actor.send({ type: 'WAKE', sleepDurationMs: SM_SESSION_TIMEOUT_MS + 1000 })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'waiting' })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(false)
+      expect(actor.getSnapshot().context.sleepStartTime).toBeNull()
+      actor.stop()
+    })
+
+    it('should set smResumeViable true on SOCKET_DIED from sleeping (short sleep)', () => {
+      vi.useFakeTimers()
+      actor.send({ type: 'SLEEP' })
+      // Advance 2 minutes (short, within SM timeout)
+      vi.advanceTimersByTime(2 * 60 * 1000)
+      actor.send({ type: 'SOCKET_DIED' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'waiting' })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(true)
+      expect(actor.getSnapshot().context.sleepStartTime).toBeNull()
+      vi.useRealTimers()
+      actor.stop()
+    })
+
+    it('should set smResumeViable false on SOCKET_DIED from sleeping (long sleep)', () => {
+      vi.useFakeTimers()
+      actor.send({ type: 'SLEEP' })
+      // Advance 17 minutes (exceeds SM timeout)
+      vi.advanceTimersByTime(17 * 60 * 1000)
+      actor.send({ type: 'SOCKET_DIED' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'waiting' })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(false)
+      expect(actor.getSnapshot().context.sleepStartTime).toBeNull()
+      vi.useRealTimers()
+      actor.stop()
+    })
+
+    it('should handle DISCONNECT from sleeping', () => {
+      actor.send({ type: 'SLEEP' })
+      actor.send({ type: 'DISCONNECT' })
+      expect(actor.getSnapshot().value).toBe('disconnected')
+      expect(actor.getSnapshot().context.sleepStartTime).toBeNull()
+      actor.stop()
+    })
+
+    it('should handle CONFLICT from sleeping', () => {
+      actor.send({ type: 'SLEEP' })
+      actor.send({ type: 'CONFLICT' })
+      expect(actor.getSnapshot().value).toEqual({ terminal: 'conflict' })
+      actor.stop()
+    })
+
+    it('should reset smResumeViable on CONNECTION_SUCCESS', () => {
+      // Force smResumeViable to false via long sleep → reconnect
+      actor.send({ type: 'SLEEP' })
+      actor.send({ type: 'WAKE', sleepDurationMs: SM_SESSION_TIMEOUT_MS + 1000 })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(false)
+
+      // Reconnect succeeds
+      actor.send({ type: 'TRIGGER_RECONNECT' })
+      actor.send({ type: 'CONNECTION_SUCCESS' })
+      expect(actor.getSnapshot().value).toEqual({ connected: 'healthy' })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(true)
+      actor.stop()
+    })
+
+    it('should set smResumeViable true on normal SOCKET_DIED from healthy (not sleep-related)', () => {
+      // No SLEEP event — this is a normal socket death
+      actor.send({ type: 'SOCKET_DIED' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'waiting' })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(true)
+      actor.stop()
+    })
+
+    it('should set smResumeViable false on long WAKE from healthy (no prior SLEEP event)', () => {
+      // WAKE without prior SLEEP (e.g., web mode time-gap detection)
+      actor.send({ type: 'WAKE', sleepDurationMs: SM_SESSION_TIMEOUT_MS + 1000 })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'waiting' })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(false)
+      actor.stop()
+    })
+  })
+
+  describe('sleep/wake race conditions', () => {
+    let actor: ReturnType<typeof createActor<typeof connectionMachine>>
+
+    beforeEach(() => {
+      actor = createActor(connectionMachine).start()
+      actor.send({ type: 'CONNECT' })
+      actor.send({ type: 'CONNECTION_SUCCESS' })
+    })
+
+    it('long sleep: stream error before wake → smResumeViable false', () => {
+      vi.useFakeTimers()
+      actor.send({ type: 'SLEEP' })
+      // 17 minutes pass (simulates system sleep)
+      vi.advanceTimersByTime(17 * 60 * 1000)
+      // Stream error fires first (before wake detection)
+      actor.send({ type: 'SOCKET_DIED' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'waiting' })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(false)
+      vi.useRealTimers()
+      actor.stop()
+    })
+
+    it('long sleep: wake arrives before stream error → smResumeViable false', () => {
+      actor.send({ type: 'SLEEP' })
+      // Wake detection fires first with known duration
+      actor.send({ type: 'WAKE', sleepDurationMs: 17 * 60 * 1000 })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'waiting' })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(false)
+      actor.stop()
+    })
+
+    it('short sleep: stream error → smResumeViable true', () => {
+      vi.useFakeTimers()
+      actor.send({ type: 'SLEEP' })
+      // 2 minutes pass (within SM timeout)
+      vi.advanceTimersByTime(2 * 60 * 1000)
+      actor.send({ type: 'SOCKET_DIED' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'waiting' })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(true)
+      vi.useRealTimers()
+      actor.stop()
+    })
+
+    it('SLEEP event is ignored when not in connected state', () => {
+      // Go to reconnecting
+      actor.send({ type: 'SOCKET_DIED' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'waiting' })
+
+      // SLEEP should be ignored (machine is not in connected state)
+      actor.send({ type: 'SLEEP' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'waiting' })
+      expect(actor.getSnapshot().context.sleepStartTime).toBeNull()
+      actor.stop()
+    })
+
+    it('both outcomes converge: regardless of event order, long sleep → smResumeViable false', () => {
+      // Scenario A: SOCKET_DIED first
+      vi.useFakeTimers()
+      actor.send({ type: 'SLEEP' })
+      vi.advanceTimersByTime(15 * 60 * 1000)
+      actor.send({ type: 'SOCKET_DIED' })
+      const resultA = actor.getSnapshot().context.smResumeViable
+      vi.useRealTimers()
+      actor.stop()
+
+      // Scenario B: WAKE first (fresh actor)
+      const actor2 = createActor(connectionMachine).start()
+      actor2.send({ type: 'CONNECT' })
+      actor2.send({ type: 'CONNECTION_SUCCESS' })
+      actor2.send({ type: 'SLEEP' })
+      actor2.send({ type: 'WAKE', sleepDurationMs: 15 * 60 * 1000 })
+      const resultB = actor2.getSnapshot().context.smResumeViable
+      actor2.stop()
+
+      // Both paths should agree
+      expect(resultA).toBe(false)
+      expect(resultB).toBe(false)
     })
   })
 
