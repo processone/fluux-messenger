@@ -41,9 +41,16 @@ jobs:
             echo "Detected stable release tag: ${{ env.RELEASE_TAG }}"
           fi
 
+      - name: Create source tarball
+        run: |
+          VERSION="${RELEASE_TAG#v}"
+          git archive --format=tar.gz --prefix="fluux-messenger-${VERSION}/" \
+            -o "fluux-messenger-${VERSION}-source.tar.gz" HEAD
+
       - name: Create or Update Release
         uses: softprops/action-gh-release@v2.5.0
         with:
+          files: fluux-messenger-*-source.tar.gz
           tag_name: ${{ env.RELEASE_TAG }}
           body_path: RELEASE_NOTES.md
           draft: false

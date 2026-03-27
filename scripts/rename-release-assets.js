@@ -7,6 +7,7 @@
  */
 
 import https from 'https';
+import crypto from 'crypto';
 
 const OWNER = 'processone';
 const REPO = 'fluux-messenger';
@@ -48,6 +49,9 @@ function getNewName(oldName, version) {
     // Linux Flatpak
     { pattern: /^fluux-messenger-[\d.]+-linux-x86_64\.flatpak$/, newName: `Fluux-Messenger_${v}_Linux_x64.flatpak` },
     { pattern: /^fluux-messenger-[\d.]+-linux-aarch64\.flatpak$/, newName: `Fluux-Messenger_${v}_Linux_arm64.flatpak` },
+
+    // Source tarball
+    { pattern: /^fluux-messenger-[\d.]+(?:-[\w.]+)?-source\.tar\.gz$/, newName: `Fluux-Messenger_${v}_source.tar.gz` },
   ];
 
   for (const { pattern, newName } of mappings) {
@@ -125,6 +129,93 @@ async function downloadAsset(url) {
   });
 }
 
+function downloadAssetBinary(url) {
+  return new Promise((resolve, reject) => {
+    const options = {
+      headers: {
+        'User-Agent': 'fluux-release-script',
+        'Authorization': `Bearer ${process.env.GITHUB_TOKEN}`,
+        'Accept': 'application/octet-stream',
+      },
+    };
+
+    const handleResponse = (res) => {
+      if (res.statusCode === 302 || res.statusCode === 301) {
+        https.get(res.headers.location, handleResponse).on('error', reject);
+        return;
+      }
+      const chunks = [];
+      res.on('data', chunk => chunks.push(chunk));
+      res.on('end', () => resolve(Buffer.concat(chunks)));
+    };
+
+    https.get(url, options, handleResponse).on('error', reject);
+  });
+}
+
+async function generateChecksums(tag) {
+  console.log('\nGenerating SHA512SUMS...');
+
+  const release = await makeRequest('GET', `/repos/${OWNER}/${REPO}/releases/tags/${tag}`);
+
+  // Exclude metadata files from checksums
+  const excludeNames = new Set(['latest.json', 'SHA512SUMS']);
+  const assets = release.assets.filter(a => !excludeNames.has(a.name));
+
+  const lines = [];
+  for (const asset of assets) {
+    console.log(`  Hashing: ${asset.name}`);
+    const data = await downloadAssetBinary(asset.url);
+    const hash = crypto.createHash('sha512').update(data).digest('hex');
+    lines.push(`${hash}  ${asset.name}`);
+  }
+
+  const checksumContent = lines.join('\n') + '\n';
+  console.log(`  Generated checksums for ${lines.length} assets`);
+
+  // Delete existing SHA512SUMS if present (idempotency)
+  const existing = release.assets.find(a => a.name === 'SHA512SUMS');
+  if (existing) {
+    await makeRequest('DELETE', `/repos/${OWNER}/${REPO}/releases/assets/${existing.id}`);
+    console.log('  Deleted old SHA512SUMS');
+  }
+
+  // Upload SHA512SUMS
+  const uploadUrl = release.upload_url.replace('{?name,label}', '?name=SHA512SUMS');
+  const uploadOptions = {
+    hostname: 'uploads.github.com',
+    path: uploadUrl.replace('https://uploads.github.com', ''),
+    method: 'POST',
+    headers: {
+      'User-Agent': 'fluux-release-script',
+      'Authorization': `Bearer ${process.env.GITHUB_TOKEN}`,
+      'Accept': 'application/vnd.github+json',
+      'Content-Type': 'text/plain',
+      'Content-Length': Buffer.byteLength(checksumContent),
+      'X-GitHub-Api-Version': '2022-11-28',
+    },
+  };
+
+  await new Promise((resolve, reject) => {
+    const req = https.request(uploadOptions, (res) => {
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve();
+        } else {
+          reject(new Error(`Upload failed: HTTP ${res.statusCode}: ${body}`));
+        }
+      });
+    });
+    req.on('error', reject);
+    req.write(checksumContent);
+    req.end();
+  });
+
+  console.log('  Uploaded SHA512SUMS');
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const tag = args.find(a => !a.startsWith('--'));
@@ -190,6 +281,7 @@ async function main() {
   // Skipped for prereleases to prevent Tauri autoupdater from proposing beta versions
   if (skipUpdater) {
     console.log('\nSkipping latest.json generation (prerelease)');
+    await generateChecksums(tag);
     console.log('\nDone! Assets renamed successfully.');
     return;
   }
@@ -296,6 +388,8 @@ async function main() {
 
     console.log(`  Uploaded latest.json with ${Object.keys(platforms).length} platforms`);
   }
+
+  await generateChecksums(tag);
 
   console.log('\nDone! Assets renamed successfully.');
 }
