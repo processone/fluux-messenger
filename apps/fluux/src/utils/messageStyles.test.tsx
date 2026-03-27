@@ -505,16 +505,22 @@ Steps to follow:
     })
   })
 
-  describe('@mentions', () => {
+  describe('@mentions (room context — regex fallback enabled)', () => {
+    // In room context, a nickname is provided which enables the regex @mention fallback
+    const renderRoomText = (text: string) => {
+      const { container } = render(<div>{renderStyledMessage(text, undefined, 'myNick')}</div>)
+      return container
+    }
+
     it('renders @mention as highlighted span', () => {
-      const container = renderText('Hello @alice!')
+      const container = renderRoomText('Hello @alice!')
       const mention = container.querySelector('[data-mention]')
       expect(mention).toBeTruthy()
       expect(mention?.textContent).toBe('@alice')
     })
 
     it('renders multiple mentions', () => {
-      const container = renderText('@alice and @bob please review')
+      const container = renderRoomText('@alice and @bob please review')
       const mentions = container.querySelectorAll('[data-mention]')
       expect(mentions).toHaveLength(2)
       expect(mentions[0].textContent).toBe('@alice')
@@ -522,40 +528,40 @@ Steps to follow:
     })
 
     it('renders @all mention', () => {
-      const container = renderText('Hey @all, meeting in 5 minutes!')
+      const container = renderRoomText('Hey @all, meeting in 5 minutes!')
       const mention = container.querySelector('[data-mention]')
       expect(mention).toBeTruthy()
       expect(mention?.textContent).toBe('@all')
     })
 
     it('renders mention at start of message', () => {
-      const container = renderText('@alice check this out')
+      const container = renderRoomText('@alice check this out')
       const mention = container.querySelector('[data-mention]')
       expect(mention).toBeTruthy()
       expect(mention?.textContent).toBe('@alice')
     })
 
     it('renders mention at end of message', () => {
-      const container = renderText('Thanks @alice')
+      const container = renderRoomText('Thanks @alice')
       const mention = container.querySelector('[data-mention]')
       expect(mention).toBeTruthy()
       expect(mention?.textContent).toBe('@alice')
     })
 
     it('does not render email addresses as mentions', () => {
-      const container = renderText('Contact me at user@example.com')
+      const container = renderRoomText('Contact me at user@example.com')
       // The @example part should not be styled as a mention when part of email
       expect(container.textContent).toContain('user@example.com')
     })
 
     it('renders mentions with URLs correctly', () => {
-      const container = renderText('@alice check https://example.com')
+      const container = renderRoomText('@alice check https://example.com')
       expect(container.querySelector('[data-mention]')).toBeTruthy()
       expect(container.querySelector('a')).toBeTruthy()
     })
 
     it('renders mentions with styled text', () => {
-      const container = renderText('@alice this is *important*')
+      const container = renderRoomText('@alice this is *important*')
       expect(container.querySelector('[data-mention]')).toBeTruthy()
       expect(container.querySelector('strong')).toBeTruthy()
     })
@@ -584,60 +590,95 @@ Steps to follow:
 
     // Unicode nickname support (regression tests)
     it('renders mention with accented characters', () => {
-      const container = renderText('@Jérôme is here')
+      const container = renderRoomText('@Jérôme is here')
       const mention = container.querySelector('[data-mention]')
       expect(mention).toBeTruthy()
       expect(mention?.textContent).toBe('@Jérôme')
     })
 
     it('renders mention with German umlauts', () => {
-      const container = renderText('Hello @Müller')
+      const container = renderRoomText('Hello @Müller')
       const mention = container.querySelector('[data-mention]')
       expect(mention?.textContent).toBe('@Müller')
     })
 
     it('renders mention with Spanish characters', () => {
-      const container = renderText('Hola @Señorita')
+      const container = renderRoomText('Hola @Señorita')
       const mention = container.querySelector('[data-mention]')
       expect(mention?.textContent).toBe('@Señorita')
     })
 
     it('renders mention with Cyrillic characters', () => {
-      const container = renderText('Привет @Иван')
+      const container = renderRoomText('Привет @Иван')
       const mention = container.querySelector('[data-mention]')
       expect(mention?.textContent).toBe('@Иван')
     })
 
     it('renders mention with Chinese characters', () => {
-      const container = renderText('你好 @小明')
+      const container = renderRoomText('你好 @小明')
       const mention = container.querySelector('[data-mention]')
       expect(mention?.textContent).toBe('@小明')
     })
 
     it('renders mention with Japanese characters', () => {
-      const container = renderText('@田中さん please check')
+      const container = renderRoomText('@田中さん please check')
       const mention = container.querySelector('[data-mention]')
       expect(mention?.textContent).toBe('@田中さん')
     })
 
     it('renders mention with Arabic characters', () => {
-      const container = renderText('مرحبا @محمد')
+      const container = renderRoomText('مرحبا @محمد')
       const mention = container.querySelector('[data-mention]')
       expect(mention?.textContent).toBe('@محمد')
     })
 
     it('renders mention with mixed Unicode and ASCII', () => {
-      const container = renderText('@José123 joined')
+      const container = renderRoomText('@José123 joined')
       const mention = container.querySelector('[data-mention]')
       expect(mention?.textContent).toBe('@José123')
     })
 
     it('renders multiple Unicode mentions', () => {
-      const container = renderText('@Jérôme et @François sont là')
+      const container = renderRoomText('@Jérôme et @François sont là')
       const mentions = container.querySelectorAll('[data-mention]')
       expect(mentions).toHaveLength(2)
       expect(mentions[0].textContent).toBe('@Jérôme')
       expect(mentions[1].textContent).toBe('@François')
+    })
+  })
+
+  describe('@mentions (1:1 chat — no mention highlighting)', () => {
+    // In 1:1 chats, no nickname/knownNicks/mentions are provided,
+    // so @words should NOT be colorized as mentions
+    it('does not colorize @words in 1:1 chat context', () => {
+      const container = renderText('Un pointing @commit marche aussi')
+      const mention = container.querySelector('[data-mention]')
+      expect(mention).toBeFalsy()
+      expect(container.textContent).toContain('@commit')
+    })
+
+    it('does not colorize multiple @words in 1:1 chat', () => {
+      const container = renderText('@alice and @bob are not mentions here')
+      const mentions = container.querySelectorAll('[data-mention]')
+      expect(mentions).toHaveLength(0)
+    })
+
+    it('still renders XEP-0372 mentions even in 1:1 context', () => {
+      // XEP-0372 mentions are always rendered (server explicitly marked them)
+      const mentions = [
+        { begin: 4, end: 10, type: 'mention' as const, uri: 'xmpp:user@server' }
+      ]
+      const { container } = render(<div>{renderStyledMessage('Hey @alice, check this!', mentions)}</div>)
+      const mention = container.querySelector('[data-mention]')
+      expect(mention).toBeTruthy()
+      expect(mention?.textContent).toBe('@alice')
+    })
+
+    it('preserves other styling in 1:1 chat without mention highlighting', () => {
+      const container = renderText('@commit is *important* https://example.com')
+      expect(container.querySelector('[data-mention]')).toBeFalsy()
+      expect(container.querySelector('strong')).toBeTruthy()
+      expect(container.querySelector('a')).toBeTruthy()
     })
   })
 
@@ -689,7 +730,8 @@ Steps to follow:
 
   describe('per-user mention colors', () => {
     it('sets data-mention attribute with nick from regex @mention', () => {
-      const container = renderText('Hello @alice')
+      // Room context: nickname enables regex fallback
+      const { container } = render(<div>{renderStyledMessage('Hello @alice', undefined, 'myNick')}</div>)
       const mention = container.querySelector('[data-mention="alice"]')
       expect(mention).toBeTruthy()
       expect(mention?.textContent).toBe('@alice')
@@ -706,7 +748,8 @@ Steps to follow:
     })
 
     it('uses inline style color for identified mentions', () => {
-      const { container } = render(<div>{renderStyledMessage('Hey @alice', undefined, undefined, undefined, true)}</div>)
+      // Room context: nickname enables regex fallback + dark mode
+      const { container } = render(<div>{renderStyledMessage('Hey @alice', undefined, 'myNick', undefined, true)}</div>)
       const mention = container.querySelector('[data-mention="alice"]') as HTMLElement
       expect(mention).toBeTruthy()
       // Should have inline color style (not brand class)
@@ -716,7 +759,8 @@ Steps to follow:
     })
 
     it('uses consistent color per user (same nick = same color)', () => {
-      const { container } = render(<div>{renderStyledMessage('@alice said hi to @bob then @alice replied')}</div>)
+      // Room context: nickname enables regex fallback
+      const { container } = render(<div>{renderStyledMessage('@alice said hi to @bob then @alice replied', undefined, 'myNick')}</div>)
       const mentions = container.querySelectorAll('[data-mention]') as NodeListOf<HTMLElement>
       expect(mentions).toHaveLength(3)
       // Both @alice mentions should have the same color
@@ -748,8 +792,9 @@ Steps to follow:
     })
 
     it('generates different colors for dark vs light mode', () => {
-      const { container: darkContainer } = render(<div>{renderStyledMessage('Hey @alice', undefined, undefined, undefined, true)}</div>)
-      const { container: lightContainer } = render(<div>{renderStyledMessage('Hey @alice', undefined, undefined, undefined, false)}</div>)
+      // Room context: nickname enables regex fallback
+      const { container: darkContainer } = render(<div>{renderStyledMessage('Hey @alice', undefined, 'myNick', undefined, true)}</div>)
+      const { container: lightContainer } = render(<div>{renderStyledMessage('Hey @alice', undefined, 'myNick', undefined, false)}</div>)
       const darkMention = darkContainer.querySelector('[data-mention="alice"]') as HTMLElement
       const lightMention = lightContainer.querySelector('[data-mention="alice"]') as HTMLElement
       expect(darkMention.style.color).toBeTruthy()

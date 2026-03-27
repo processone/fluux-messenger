@@ -59,7 +59,8 @@ interface MentionRange {
 function parseInlineStyles(
   text: string,
   mentionRanges: MentionRange[] | null = null,
-  textOffset: number = 0
+  textOffset: number = 0,
+  disableMentionFallback: boolean = false
 ): StyledSegment[] {
   const segments: StyledSegment[] = []
 
@@ -88,7 +89,7 @@ function parseInlineStyles(
       currentPos += part.length
     } else if (part) {
       // Parse mentions and styling in non-URL parts
-      parseMentionsAndStyles(part, segments, escapeMap, mentionRanges, currentPos)
+      parseMentionsAndStyles(part, segments, escapeMap, mentionRanges, currentPos, disableMentionFallback)
       currentPos += part.length
     }
   }
@@ -129,7 +130,8 @@ function parseMentionsAndStyles(
   segments: StyledSegment[],
   escapeMap: Map<string, string>,
   mentionRanges: MentionRange[] | null = null,
-  textOffset: number = 0
+  textOffset: number = 0,
+  disableMentionFallback: boolean = false
 ): void {
   // If we have XEP-0372 mention ranges, use them for precise highlighting
   if (mentionRanges && mentionRanges.length > 0) {
@@ -178,7 +180,14 @@ function parseMentionsAndStyles(
     }
   }
 
-  // Fallback: use regex to detect @mentions
+  // Fallback: use regex to detect @mentions (only in room context)
+  // In 1:1 chats, no nickname/knownNicks are provided, so we skip the regex fallback
+  // to avoid colorizing non-mention @words like "@commit"
+  if (disableMentionFallback) {
+    parseStyledText(text, segments, escapeMap)
+    return
+  }
+
   const mentionParts = text.split(MENTION_REGEX)
 
   for (const part of mentionParts) {
@@ -584,6 +593,10 @@ export function renderStyledMessage(text: string, mentions?: MentionReference[],
     }
   }
 
+  // In 1:1 chats (no mentions, no nickname, no knownNicks), disable the regex
+  // fallback that colorizes any @word — only colorize actual user mentions
+  const disableMentionFallback = (!mentions || mentions.length === 0) && !nickname && (!knownNicks || knownNicks.size === 0)
+
   // Check for code blocks first (```lang\n ... ```)
   const codeBlockRegex = /```(\w*)\n?([\s\S]*?)```/g
   const parts: React.ReactNode[] = []
@@ -595,7 +608,7 @@ export function renderStyledMessage(text: string, mentions?: MentionReference[],
     // Render text before code block
     if (match.index > lastIndex) {
       const before = normalizedText.slice(lastIndex, match.index)
-      parts.push(...renderTextBlock(before, partIndex, mentionRanges, lastIndex, isDarkMode))
+      parts.push(...renderTextBlock(before, partIndex, mentionRanges, lastIndex, isDarkMode, disableMentionFallback))
       partIndex += 100 // Leave room for sub-indices
     }
 
@@ -611,12 +624,12 @@ export function renderStyledMessage(text: string, mentions?: MentionReference[],
 
   // Render remaining text
   if (lastIndex < normalizedText.length) {
-    parts.push(...renderTextBlock(normalizedText.slice(lastIndex), partIndex, mentionRanges, lastIndex, isDarkMode))
+    parts.push(...renderTextBlock(normalizedText.slice(lastIndex), partIndex, mentionRanges, lastIndex, isDarkMode, disableMentionFallback))
   }
 
   // If no code blocks, render the whole thing
   if (parts.length === 0) {
-    return renderTextBlock(normalizedText, 0, mentionRanges, 0, isDarkMode)
+    return renderTextBlock(normalizedText, 0, mentionRanges, 0, isDarkMode, disableMentionFallback)
   }
 
   return parts
@@ -630,7 +643,8 @@ function renderTextBlock(
   startIndex: number,
   mentionRanges: MentionRange[] | null = null,
   textOffset: number = 0,
-  isDarkMode?: boolean
+  isDarkMode?: boolean,
+  disableMentionFallback: boolean = false
 ): React.ReactNode[] {
   const lines = text.split('\n')
   const result: React.ReactNode[] = []
@@ -649,7 +663,7 @@ function renderTextBlock(
         >
           {quoteBuffer.lines.map((line, i) => (
             <React.Fragment key={i}>
-              {renderInline(line, index + i, mentionRanges, quoteBuffer!.lineOffsets[i], isDarkMode)}
+              {renderInline(line, index + i, mentionRanges, quoteBuffer!.lineOffsets[i], isDarkMode, disableMentionFallback)}
               {i < quoteBuffer!.lines.length - 1 && <br />}
             </React.Fragment>
           ))}
@@ -669,7 +683,7 @@ function renderTextBlock(
         >
           {ulBuffer.lines.map((line, i) => (
             <li key={i} className="text-fluux-text">
-              {renderInline(line, index + i, mentionRanges, ulBuffer!.lineOffsets[i], isDarkMode)}
+              {renderInline(line, index + i, mentionRanges, ulBuffer!.lineOffsets[i], isDarkMode, disableMentionFallback)}
             </li>
           ))}
         </ul>
@@ -691,7 +705,7 @@ function renderTextBlock(
         >
           {olBuffer.items.map((item, i) => (
             <li key={i} className="text-fluux-text">
-              {renderInline(item.content, index + i, mentionRanges, item.offset, isDarkMode)}
+              {renderInline(item.content, index + i, mentionRanges, item.offset, isDarkMode, disableMentionFallback)}
             </li>
           ))}
         </ol>
@@ -779,7 +793,7 @@ function renderTextBlock(
 
       result.push(
         <div key={`heading-${index++}`} className={`${headingClasses} mt-1`}>
-          {renderInline(headingCheck.content, index, mentionRanges, lineOffset + prefixLength, isDarkMode)}
+          {renderInline(headingCheck.content, index, mentionRanges, lineOffset + prefixLength, isDarkMode, disableMentionFallback)}
         </div>
       )
 
@@ -793,7 +807,7 @@ function renderTextBlock(
     if (line || i < lines.length - 1) {
       result.push(
         <React.Fragment key={`line-${index++}`}>
-          {renderInline(line, index, mentionRanges, lineOffset, isDarkMode)}
+          {renderInline(line, index, mentionRanges, lineOffset, isDarkMode, disableMentionFallback)}
           {i < lines.length - 1 && <br />}
         </React.Fragment>
       )
@@ -815,10 +829,11 @@ function renderInline(
   keyBase: number,
   mentionRanges: MentionRange[] | null = null,
   textOffset: number = 0,
-  isDarkMode?: boolean
+  isDarkMode?: boolean,
+  disableMentionFallback: boolean = false
 ): React.ReactNode {
   if (!text) return null
-  const segments = parseInlineStyles(text, mentionRanges, textOffset)
+  const segments = parseInlineStyles(text, mentionRanges, textOffset, disableMentionFallback)
   if (segments.length === 1 && segments[0].type === 'text') {
     return segments[0].content
   }
