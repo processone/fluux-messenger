@@ -178,6 +178,9 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps): bool
     if (prev.replyContext.avatarIdentifier !== next.replyContext.avatarIdentifier) return false
   }
 
+  // Dark mode (affects mention colors)
+  if (prev.isDarkMode !== next.isDarkMode) return false
+
   // Moderation permission
   if (prev.canModerate !== next.canModerate) return false
 
@@ -206,7 +209,7 @@ export const MessageBubble = memo(function MessageBubble({
   hideToolbar,
   isLastOutgoing,
   isLastMessage,
-  // isDarkMode is kept in interface for parent compatibility but unused in component
+  isDarkMode,
   isHovered,
   onMouseEnter,
   onMouseLeave,
@@ -424,6 +427,7 @@ export const MessageBubble = memo(function MessageBubble({
             mentions={mentions}
             nickname={nickname}
             knownNicks={knownNicks}
+            isDarkMode={isDarkMode}
             highlightTerms={highlightTerms}
           />
 

@@ -106,6 +106,32 @@ export const TEAM_ROOM_MESSAGES: RoomMessage[] = [
     timestamp: minutesAgo(35), isOutgoing: false, roomJid: ROOM_JID,
     reactions: { '👀': [SELF_NICK, 'Oliver'] },
   },
+  // Mention messages — showcases per-user consistent colors on @mentions
+  {
+    type: 'groupchat', id: 'demo-room-mention-1', from: `${ROOM_JID}/Oliver`, nick: 'Oliver',
+    body: '@James can you share the benchmark results when they\'re ready?',
+    timestamp: minutesAgo(33), isOutgoing: false, roomJid: ROOM_JID,
+    mentions: [{ begin: 0, end: 6, type: 'mention', uri: `xmpp:${ROOM_JID}/James` }],
+  },
+  {
+    type: 'groupchat', id: 'demo-room-mention-2', from: `${ROOM_JID}/James`, nick: 'James',
+    body: 'Sure @Oliver — I\'ll post them in an hour. @Emma the date filter idea sounds great, want to spec it together?',
+    timestamp: minutesAgo(32), isOutgoing: false, roomJid: ROOM_JID,
+    mentions: [
+      { begin: 5, end: 12, type: 'mention', uri: `xmpp:${ROOM_JID}/Oliver` },
+      { begin: 42, end: 47, type: 'mention', uri: `xmpp:${ROOM_JID}/Emma` },
+    ],
+  },
+  {
+    type: 'groupchat', id: 'demo-room-mention-3', from: `${ROOM_JID}/Emma`, nick: 'Emma',
+    body: `@all quick heads-up: standup is moved to 3pm today. @Noah welcome aboard!`,
+    timestamp: minutesAgo(31), isOutgoing: false, roomJid: ROOM_JID,
+    isMention: true, isMentionAll: true,
+    mentions: [
+      { begin: 0, end: 4, type: 'mention', uri: `xmpp:${ROOM_JID}` },
+      { begin: 52, end: 57, type: 'mention', uri: `xmpp:${ROOM_JID}/Noah` },
+    ],
+  },
   {
     type: 'groupchat', id: 'demo-room-8', from: `${ROOM_JID}/Emma`, nick: 'Emma',
     body: 'I\'ll sync with Sophia on the API docs — we should align the examples with the new SDK hooks',

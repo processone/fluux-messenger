@@ -40,6 +40,8 @@ export interface MessageBodyProps {
   nickname?: string
   /** Known occupant nicknames in the room (for IRC-style prefix mention highlighting) */
   knownNicks?: ReadonlySet<string>
+  /** Whether the app is in dark mode (for mention color generation) */
+  isDarkMode?: boolean
   /** Search terms to highlight in the message body (from search query) */
   highlightTerms?: string[]
 }
@@ -65,6 +67,7 @@ export const MessageBody = memo(function MessageBody({
   mentions,
   nickname,
   knownNicks,
+  isDarkMode,
   highlightTerms,
 }: MessageBodyProps) {
   const { t } = useTranslation()
@@ -100,7 +103,7 @@ export const MessageBody = memo(function MessageBody({
           {senderName}
         </span>
         {' '}
-        {wrap(noStyling ? getActionText(body) : renderStyledMessage(getActionText(body), mentions, nickname, knownNicks))}
+        {wrap(noStyling ? getActionText(body) : renderStyledMessage(getActionText(body), mentions, nickname, knownNicks, isDarkMode))}
         {isEdited && (
           <EditedIndicator
             originalBody={originalBody}
@@ -114,7 +117,7 @@ export const MessageBody = memo(function MessageBody({
   // Regular message
   return (
     <div className="text-fluux-text break-words whitespace-pre-wrap leading-[1.375]">
-      {wrap(noStyling ? body : renderStyledMessage(body, mentions, nickname, knownNicks))}
+      {wrap(noStyling ? body : renderStyledMessage(body, mentions, nickname, knownNicks, isDarkMode))}
       {isEdited && <EditedIndicator originalBody={originalBody} />}
     </div>
   )

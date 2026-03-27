@@ -508,14 +508,14 @@ Steps to follow:
   describe('@mentions', () => {
     it('renders @mention as highlighted span', () => {
       const container = renderText('Hello @alice!')
-      const mention = container.querySelector('span.text-fluux-brand')
+      const mention = container.querySelector('[data-mention]')
       expect(mention).toBeTruthy()
       expect(mention?.textContent).toBe('@alice')
     })
 
     it('renders multiple mentions', () => {
       const container = renderText('@alice and @bob please review')
-      const mentions = container.querySelectorAll('span.text-fluux-brand')
+      const mentions = container.querySelectorAll('[data-mention]')
       expect(mentions).toHaveLength(2)
       expect(mentions[0].textContent).toBe('@alice')
       expect(mentions[1].textContent).toBe('@bob')
@@ -523,21 +523,21 @@ Steps to follow:
 
     it('renders @all mention', () => {
       const container = renderText('Hey @all, meeting in 5 minutes!')
-      const mention = container.querySelector('span.text-fluux-brand')
+      const mention = container.querySelector('[data-mention]')
       expect(mention).toBeTruthy()
       expect(mention?.textContent).toBe('@all')
     })
 
     it('renders mention at start of message', () => {
       const container = renderText('@alice check this out')
-      const mention = container.querySelector('span.text-fluux-brand')
+      const mention = container.querySelector('[data-mention]')
       expect(mention).toBeTruthy()
       expect(mention?.textContent).toBe('@alice')
     })
 
     it('renders mention at end of message', () => {
       const container = renderText('Thanks @alice')
-      const mention = container.querySelector('span.text-fluux-brand')
+      const mention = container.querySelector('[data-mention]')
       expect(mention).toBeTruthy()
       expect(mention?.textContent).toBe('@alice')
     })
@@ -550,13 +550,13 @@ Steps to follow:
 
     it('renders mentions with URLs correctly', () => {
       const container = renderText('@alice check https://example.com')
-      expect(container.querySelector('span.text-fluux-brand')).toBeTruthy()
+      expect(container.querySelector('[data-mention]')).toBeTruthy()
       expect(container.querySelector('a')).toBeTruthy()
     })
 
     it('renders mentions with styled text', () => {
       const container = renderText('@alice this is *important*')
-      expect(container.querySelector('span.text-fluux-brand')).toBeTruthy()
+      expect(container.querySelector('[data-mention]')).toBeTruthy()
       expect(container.querySelector('strong')).toBeTruthy()
     })
 
@@ -565,7 +565,7 @@ Steps to follow:
         { begin: 4, end: 10, type: 'mention' as const, uri: 'xmpp:room@conf/alice' }
       ]
       const { container } = render(<div>{renderStyledMessage('Hey @alice, check this!', mentions)}</div>)
-      const mention = container.querySelector('span.text-fluux-brand')
+      const mention = container.querySelector('[data-mention]')
       expect(mention).toBeTruthy()
       expect(mention?.textContent).toBe('@alice')
     })
@@ -576,7 +576,7 @@ Steps to follow:
         { begin: 9, end: 15, type: 'mention' as const, uri: 'xmpp:room@conf/carol' }
       ]
       const { container } = render(<div>{renderStyledMessage('@bob and @carol please', mentions)}</div>)
-      const mentionSpans = container.querySelectorAll('span.text-fluux-brand')
+      const mentionSpans = container.querySelectorAll('[data-mention]')
       expect(mentionSpans).toHaveLength(2)
       expect(mentionSpans[0].textContent).toBe('@bob')
       expect(mentionSpans[1].textContent).toBe('@carol')
@@ -585,56 +585,56 @@ Steps to follow:
     // Unicode nickname support (regression tests)
     it('renders mention with accented characters', () => {
       const container = renderText('@Jérôme is here')
-      const mention = container.querySelector('span.text-fluux-brand')
+      const mention = container.querySelector('[data-mention]')
       expect(mention).toBeTruthy()
       expect(mention?.textContent).toBe('@Jérôme')
     })
 
     it('renders mention with German umlauts', () => {
       const container = renderText('Hello @Müller')
-      const mention = container.querySelector('span.text-fluux-brand')
+      const mention = container.querySelector('[data-mention]')
       expect(mention?.textContent).toBe('@Müller')
     })
 
     it('renders mention with Spanish characters', () => {
       const container = renderText('Hola @Señorita')
-      const mention = container.querySelector('span.text-fluux-brand')
+      const mention = container.querySelector('[data-mention]')
       expect(mention?.textContent).toBe('@Señorita')
     })
 
     it('renders mention with Cyrillic characters', () => {
       const container = renderText('Привет @Иван')
-      const mention = container.querySelector('span.text-fluux-brand')
+      const mention = container.querySelector('[data-mention]')
       expect(mention?.textContent).toBe('@Иван')
     })
 
     it('renders mention with Chinese characters', () => {
       const container = renderText('你好 @小明')
-      const mention = container.querySelector('span.text-fluux-brand')
+      const mention = container.querySelector('[data-mention]')
       expect(mention?.textContent).toBe('@小明')
     })
 
     it('renders mention with Japanese characters', () => {
       const container = renderText('@田中さん please check')
-      const mention = container.querySelector('span.text-fluux-brand')
+      const mention = container.querySelector('[data-mention]')
       expect(mention?.textContent).toBe('@田中さん')
     })
 
     it('renders mention with Arabic characters', () => {
       const container = renderText('مرحبا @محمد')
-      const mention = container.querySelector('span.text-fluux-brand')
+      const mention = container.querySelector('[data-mention]')
       expect(mention?.textContent).toBe('@محمد')
     })
 
     it('renders mention with mixed Unicode and ASCII', () => {
       const container = renderText('@José123 joined')
-      const mention = container.querySelector('span.text-fluux-brand')
+      const mention = container.querySelector('[data-mention]')
       expect(mention?.textContent).toBe('@José123')
     })
 
     it('renders multiple Unicode mentions', () => {
       const container = renderText('@Jérôme et @François sont là')
-      const mentions = container.querySelectorAll('span.text-fluux-brand')
+      const mentions = container.querySelectorAll('[data-mention]')
       expect(mentions).toHaveLength(2)
       expect(mentions[0].textContent).toBe('@Jérôme')
       expect(mentions[1].textContent).toBe('@François')
@@ -646,33 +646,33 @@ Steps to follow:
 
     it('highlights known nick with colon at start', () => {
       const { container } = render(<div>{renderStyledMessage('Holger: check this', undefined, undefined, knownNicks)}</div>)
-      const mention = container.querySelector('span.text-fluux-brand')
+      const mention = container.querySelector('[data-mention]')
       expect(mention).toBeTruthy()
       expect(mention?.textContent).toBe('Holger')
     })
 
     it('highlights known nick with comma at start', () => {
       const { container } = render(<div>{renderStyledMessage('raver, look at this', undefined, undefined, knownNicks)}</div>)
-      const mention = container.querySelector('span.text-fluux-brand')
+      const mention = container.querySelector('[data-mention]')
       expect(mention).toBeTruthy()
       expect(mention?.textContent).toBe('raver')
     })
 
     it('does NOT highlight unknown nick', () => {
       const { container } = render(<div>{renderStyledMessage('stranger: hello', undefined, undefined, knownNicks)}</div>)
-      const mention = container.querySelector('span.text-fluux-brand')
+      const mention = container.querySelector('[data-mention]')
       expect(mention).toBeFalsy()
     })
 
     it('does NOT highlight without knownNicks', () => {
       const { container } = render(<div>{renderStyledMessage('Holger: check this')}</div>)
-      const mention = container.querySelector('span.text-fluux-brand')
+      const mention = container.querySelector('[data-mention]')
       expect(mention).toBeFalsy()
     })
 
     it('does NOT interfere with bold formatting', () => {
       const { container } = render(<div>{renderStyledMessage('**Important:** read this', undefined, undefined, knownNicks)}</div>)
-      const mention = container.querySelector('span.text-fluux-brand')
+      const mention = container.querySelector('[data-mention]')
       expect(mention).toBeFalsy()
       expect(container.querySelector('strong')).toBeTruthy()
     })
@@ -680,10 +680,88 @@ Steps to follow:
     it('coexists with self-mention nickname detection', () => {
       // Message starts with "alice:" (IRC prefix) and self-nick is "alice"
       const { container } = render(<div>{renderStyledMessage('alice: hey there', undefined, 'alice', knownNicks)}</div>)
-      const mentions = container.querySelectorAll('span.text-fluux-brand')
+      const mentions = container.querySelectorAll('[data-mention]')
       // Should highlight once (self-mention and IRC prefix overlap)
       expect(mentions).toHaveLength(1)
       expect(mentions[0].textContent).toBe('alice')
+    })
+  })
+
+  describe('per-user mention colors', () => {
+    it('sets data-mention attribute with nick from regex @mention', () => {
+      const container = renderText('Hello @alice')
+      const mention = container.querySelector('[data-mention="alice"]')
+      expect(mention).toBeTruthy()
+      expect(mention?.textContent).toBe('@alice')
+    })
+
+    it('extracts nick from XEP-0372 URI into data-mention', () => {
+      const mentions = [
+        { begin: 0, end: 7, type: 'mention' as const, uri: 'xmpp:room@conf/Oliver' }
+      ]
+      const { container } = render(<div>{renderStyledMessage('@Oliver hey!', mentions)}</div>)
+      const mention = container.querySelector('[data-mention="Oliver"]')
+      expect(mention).toBeTruthy()
+      expect(mention?.textContent).toBe('@Oliver')
+    })
+
+    it('uses inline style color for identified mentions', () => {
+      const { container } = render(<div>{renderStyledMessage('Hey @alice', undefined, undefined, undefined, true)}</div>)
+      const mention = container.querySelector('[data-mention="alice"]') as HTMLElement
+      expect(mention).toBeTruthy()
+      // Should have inline color style (not brand class)
+      expect(mention.style.color).toBeTruthy()
+      expect(mention.style.backgroundColor).toBeTruthy()
+      expect(mention.classList.contains('text-fluux-brand')).toBe(false)
+    })
+
+    it('uses consistent color per user (same nick = same color)', () => {
+      const { container } = render(<div>{renderStyledMessage('@alice said hi to @bob then @alice replied')}</div>)
+      const mentions = container.querySelectorAll('[data-mention]') as NodeListOf<HTMLElement>
+      expect(mentions).toHaveLength(3)
+      // Both @alice mentions should have the same color
+      expect(mentions[0].style.color).toBe(mentions[2].style.color)
+      // @bob should have a different color
+      expect(mentions[0].style.color).not.toBe(mentions[1].style.color)
+    })
+
+    it('different users get different colors', () => {
+      const mentions = [
+        { begin: 0, end: 4, type: 'mention' as const, uri: 'xmpp:room@conf/bob' },
+        { begin: 9, end: 15, type: 'mention' as const, uri: 'xmpp:room@conf/carol' }
+      ]
+      const { container } = render(<div>{renderStyledMessage('@bob and @carol please', mentions)}</div>)
+      const spans = container.querySelectorAll('[data-mention]') as NodeListOf<HTMLElement>
+      expect(spans[0].style.color).not.toBe(spans[1].style.color)
+    })
+
+    it('falls back to brand color for @all (no nick in URI)', () => {
+      const mentions = [
+        { begin: 0, end: 4, type: 'mention' as const, uri: 'xmpp:room@conf' }
+      ]
+      const { container } = render(<div>{renderStyledMessage('@all check this', mentions)}</div>)
+      const mention = container.querySelector('[data-mention]') as HTMLElement
+      expect(mention).toBeTruthy()
+      // @all has no nick → falls back to brand color class
+      expect(mention.classList.contains('text-fluux-brand')).toBe(true)
+      expect(mention.style.color).toBeFalsy()
+    })
+
+    it('generates different colors for dark vs light mode', () => {
+      const { container: darkContainer } = render(<div>{renderStyledMessage('Hey @alice', undefined, undefined, undefined, true)}</div>)
+      const { container: lightContainer } = render(<div>{renderStyledMessage('Hey @alice', undefined, undefined, undefined, false)}</div>)
+      const darkMention = darkContainer.querySelector('[data-mention="alice"]') as HTMLElement
+      const lightMention = lightContainer.querySelector('[data-mention="alice"]') as HTMLElement
+      expect(darkMention.style.color).toBeTruthy()
+      expect(lightMention.style.color).toBeTruthy()
+      expect(darkMention.style.color).not.toBe(lightMention.style.color)
+    })
+
+    it('sets identifier for IRC-style prefix mentions', () => {
+      const knownNicks = new Set(['Holger'])
+      const { container } = render(<div>{renderStyledMessage('Holger: check this', undefined, undefined, knownNicks)}</div>)
+      const mention = container.querySelector('[data-mention="Holger"]')
+      expect(mention).toBeTruthy()
     })
   })
 

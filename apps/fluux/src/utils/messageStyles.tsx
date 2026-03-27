@@ -22,6 +22,7 @@ import { findMentionRanges, findIrcPrefixRange, type MentionReference } from '@f
 import { Maximize2 } from 'lucide-react'
 import { ModalShell } from '../components/ModalShell'
 import { useHighlighter } from './codeHighlight'
+import { getConsistentTextColor } from '../components/Avatar'
 
 // URL regex pattern - excludes < and > to handle angle-bracketed URLs like <https://example.com>
 const URL_REGEX = /(https?:\/\/[^\s<>]+[^\s<>.,;:!?)"'\]])/g
@@ -38,6 +39,15 @@ const ESCAPE_PLACEHOLDER = '\u0000'
 interface StyledSegment {
   type: 'text' | 'bold' | 'italic' | 'strike' | 'code' | 'link' | 'mention'
   content: string
+  /** For mentions: identifier used to generate consistent user color (nick extracted from URI or @text) */
+  identifier?: string
+}
+
+/** Mention range with optional URI for nick extraction */
+interface MentionRange {
+  begin: number
+  end: number
+  uri?: string
 }
 
 /**
@@ -48,7 +58,7 @@ interface StyledSegment {
  */
 function parseInlineStyles(
   text: string,
-  mentionRanges: { begin: number; end: number }[] | null = null,
+  mentionRanges: MentionRange[] | null = null,
   textOffset: number = 0
 ): StyledSegment[] {
   const segments: StyledSegment[] = []
@@ -90,11 +100,35 @@ function parseInlineStyles(
  * Parse mentions and then styled text
  * Uses XEP-0372 mention ranges when available, falls back to regex detection
  */
+/**
+ * Extract nick identifier from a mention URI or mention text.
+ * XEP-0372 URI: 'xmpp:room@conf/nick' → 'nick'
+ * Regex @mention: '@alice' → 'alice'
+ * IRC prefix: 'Holger' → 'Holger'
+ */
+function extractMentionIdentifier(uri?: string, mentionText?: string): string | undefined {
+  // Try URI first (XEP-0372)
+  if (uri) {
+    const slashIndex = uri.indexOf('/')
+    if (slashIndex !== -1) {
+      return uri.slice(slashIndex + 1)
+    }
+    // URI without slash (e.g. @all → 'xmpp:room@conf') — no individual user
+    return undefined
+  }
+  // Regex fallback: strip @ prefix
+  if (mentionText?.startsWith('@')) {
+    return mentionText.slice(1)
+  }
+  // IRC-style: the mention text IS the nick
+  return mentionText || undefined
+}
+
 function parseMentionsAndStyles(
   text: string,
   segments: StyledSegment[],
   escapeMap: Map<string, string>,
-  mentionRanges: { begin: number; end: number }[] | null = null,
+  mentionRanges: MentionRange[] | null = null,
   textOffset: number = 0
 ): void {
   // If we have XEP-0372 mention ranges, use them for precise highlighting
@@ -126,9 +160,10 @@ function parseMentionsAndStyles(
           parseStyledText(before, segments, escapeMap)
         }
 
-        // Add the mention
+        // Add the mention with identifier for consistent coloring
         const mentionText = text.slice(mentionStart, mentionEnd)
-        segments.push({ type: 'mention', content: restoreEscapes(mentionText, escapeMap) })
+        const identifier = extractMentionIdentifier(mention.uri, mentionText)
+        segments.push({ type: 'mention', content: restoreEscapes(mentionText, escapeMap), identifier })
 
         lastEnd = mentionEnd
       }
@@ -149,7 +184,8 @@ function parseMentionsAndStyles(
   for (const part of mentionParts) {
     if (MENTION_REGEX.test(part)) {
       MENTION_REGEX.lastIndex = 0
-      segments.push({ type: 'mention', content: restoreEscapes(part, escapeMap) })
+      const identifier = extractMentionIdentifier(undefined, part)
+      segments.push({ type: 'mention', content: restoreEscapes(part, escapeMap), identifier })
     } else if (part) {
       // Parse styling in non-mention parts
       parseStyledText(part, segments, escapeMap)
@@ -228,7 +264,7 @@ function parseStyledText(
 /**
  * Render a styled segment to React elements
  */
-function renderSegment(segment: StyledSegment, index: number): React.ReactNode {
+function renderSegment(segment: StyledSegment, index: number, isDarkMode?: boolean): React.ReactNode {
   switch (segment.type) {
     case 'bold':
       return <strong key={index} className="font-semibold">{segment.content}</strong>
@@ -257,15 +293,28 @@ function renderSegment(segment: StyledSegment, index: number): React.ReactNode {
           {segment.content}
         </a>
       )
-    case 'mention':
+    case 'mention': {
+      // Use per-user consistent color when identifier is available, otherwise fall back to brand
+      const color = segment.identifier
+        ? getConsistentTextColor(segment.identifier, isDarkMode ?? true)
+        : undefined
+      const style = color
+        ? { color, backgroundColor: `${color}15` }
+        : undefined
+      const className = color
+        ? 'px-1 rounded font-medium'
+        : 'text-fluux-brand bg-fluux-brand/10 px-1 rounded font-medium'
       return (
         <span
           key={index}
-          className="text-fluux-brand bg-fluux-brand/10 px-1 rounded font-medium"
+          className={className}
+          style={style}
+          data-mention={segment.identifier || ''}
         >
           {segment.content}
         </span>
       )
+    }
     default:
       return segment.content
   }
@@ -504,16 +553,16 @@ export function renderTextWithLinks(text: string): React.ReactNode {
  * @param mentions - Optional XEP-0372 mention references for precise highlighting
  * @param nickname - Optional user nickname for IRC-style mention detection fallback
  */
-export function renderStyledMessage(text: string, mentions?: MentionReference[], nickname?: string, knownNicks?: ReadonlySet<string>): React.ReactNode {
+export function renderStyledMessage(text: string, mentions?: MentionReference[], nickname?: string, knownNicks?: ReadonlySet<string>, isDarkMode?: boolean): React.ReactNode {
   // Normalize line endings: CRLF -> LF, CR -> LF
   const normalizedText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
 
   // If we have XEP-0372 mentions, use them for precise highlighting.
   // Otherwise, try IRC-style mention detection if a nickname is provided.
   // Final fallback: the regex in parseInlineStyles detects @mention patterns.
-  let mentionRanges: { begin: number; end: number }[] | null = null
+  let mentionRanges: MentionRange[] | null = null
   if (mentions && mentions.length > 0) {
-    mentionRanges = mentions.map(m => ({ begin: m.begin, end: m.end })).sort((a, b) => a.begin - b.begin)
+    mentionRanges = mentions.map(m => ({ begin: m.begin, end: m.end, uri: m.uri })).sort((a, b) => a.begin - b.begin)
   } else if (nickname) {
     const detected = findMentionRanges(normalizedText, nickname)
     mentionRanges = detected.length > 0 ? detected : null
@@ -546,7 +595,7 @@ export function renderStyledMessage(text: string, mentions?: MentionReference[],
     // Render text before code block
     if (match.index > lastIndex) {
       const before = normalizedText.slice(lastIndex, match.index)
-      parts.push(...renderTextBlock(before, partIndex, mentionRanges, lastIndex))
+      parts.push(...renderTextBlock(before, partIndex, mentionRanges, lastIndex, isDarkMode))
       partIndex += 100 // Leave room for sub-indices
     }
 
@@ -562,12 +611,12 @@ export function renderStyledMessage(text: string, mentions?: MentionReference[],
 
   // Render remaining text
   if (lastIndex < normalizedText.length) {
-    parts.push(...renderTextBlock(normalizedText.slice(lastIndex), partIndex, mentionRanges, lastIndex))
+    parts.push(...renderTextBlock(normalizedText.slice(lastIndex), partIndex, mentionRanges, lastIndex, isDarkMode))
   }
 
   // If no code blocks, render the whole thing
   if (parts.length === 0) {
-    return renderTextBlock(normalizedText, 0, mentionRanges, 0)
+    return renderTextBlock(normalizedText, 0, mentionRanges, 0, isDarkMode)
   }
 
   return parts
@@ -579,8 +628,9 @@ export function renderStyledMessage(text: string, mentions?: MentionReference[],
 function renderTextBlock(
   text: string,
   startIndex: number,
-  mentionRanges: { begin: number; end: number }[] | null = null,
-  textOffset: number = 0
+  mentionRanges: MentionRange[] | null = null,
+  textOffset: number = 0,
+  isDarkMode?: boolean
 ): React.ReactNode[] {
   const lines = text.split('\n')
   const result: React.ReactNode[] = []
@@ -599,7 +649,7 @@ function renderTextBlock(
         >
           {quoteBuffer.lines.map((line, i) => (
             <React.Fragment key={i}>
-              {renderInline(line, index + i, mentionRanges, quoteBuffer!.lineOffsets[i])}
+              {renderInline(line, index + i, mentionRanges, quoteBuffer!.lineOffsets[i], isDarkMode)}
               {i < quoteBuffer!.lines.length - 1 && <br />}
             </React.Fragment>
           ))}
@@ -619,7 +669,7 @@ function renderTextBlock(
         >
           {ulBuffer.lines.map((line, i) => (
             <li key={i} className="text-fluux-text">
-              {renderInline(line, index + i, mentionRanges, ulBuffer!.lineOffsets[i])}
+              {renderInline(line, index + i, mentionRanges, ulBuffer!.lineOffsets[i], isDarkMode)}
             </li>
           ))}
         </ul>
@@ -641,7 +691,7 @@ function renderTextBlock(
         >
           {olBuffer.items.map((item, i) => (
             <li key={i} className="text-fluux-text">
-              {renderInline(item.content, index + i, mentionRanges, item.offset)}
+              {renderInline(item.content, index + i, mentionRanges, item.offset, isDarkMode)}
             </li>
           ))}
         </ol>
@@ -729,7 +779,7 @@ function renderTextBlock(
 
       result.push(
         <div key={`heading-${index++}`} className={`${headingClasses} mt-1`}>
-          {renderInline(headingCheck.content, index, mentionRanges, lineOffset + prefixLength)}
+          {renderInline(headingCheck.content, index, mentionRanges, lineOffset + prefixLength, isDarkMode)}
         </div>
       )
 
@@ -743,7 +793,7 @@ function renderTextBlock(
     if (line || i < lines.length - 1) {
       result.push(
         <React.Fragment key={`line-${index++}`}>
-          {renderInline(line, index, mentionRanges, lineOffset)}
+          {renderInline(line, index, mentionRanges, lineOffset, isDarkMode)}
           {i < lines.length - 1 && <br />}
         </React.Fragment>
       )
@@ -763,13 +813,14 @@ function renderTextBlock(
 function renderInline(
   text: string,
   keyBase: number,
-  mentionRanges: { begin: number; end: number }[] | null = null,
-  textOffset: number = 0
+  mentionRanges: MentionRange[] | null = null,
+  textOffset: number = 0,
+  isDarkMode?: boolean
 ): React.ReactNode {
   if (!text) return null
   const segments = parseInlineStyles(text, mentionRanges, textOffset)
   if (segments.length === 1 && segments[0].type === 'text') {
     return segments[0].content
   }
-  return segments.map((seg, i) => renderSegment(seg, keyBase * 1000 + i))
+  return segments.map((seg, i) => renderSegment(seg, keyBase * 1000 + i, isDarkMode))
 }
