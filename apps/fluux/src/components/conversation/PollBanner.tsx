@@ -3,7 +3,7 @@
  * unanswered polls (polls the user hasn't voted on yet).
  *
  * Clicking the banner scrolls to the most recent unanswered poll.
- * The dismiss button hides the banner for that poll (session-scoped).
+ * The dismiss button hides the banner for that poll (persisted to localStorage).
  */
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -16,13 +16,15 @@ export interface PollBannerProps {
   messages: RoomMessage[]
   /** The user's nickname in the room (used to check reactions) */
   myNick: string | undefined
-  /** Set of poll message IDs the user has dismissed this session */
+  /** Set of poll message IDs the user has locally voted on (persisted safety net) */
+  votedPollIds: Set<string>
+  /** Set of poll message IDs the user has dismissed (persisted) */
   dismissedPollIds: Set<string>
   /** Callback to dismiss a poll from the banner */
   onDismiss: (messageId: string) => void
 }
 
-export function PollBanner({ messages, myNick, dismissedPollIds, onDismiss }: PollBannerProps) {
+export function PollBanner({ messages, myNick, votedPollIds, dismissedPollIds, onDismiss }: PollBannerProps) {
   const { t } = useTranslation()
 
   // Build the set of poll message IDs that have been closed
@@ -48,13 +50,14 @@ export function PollBanner({ messages, myNick, dismissedPollIds, onDismiss }: Po
         !isPollExpired(msg.poll) &&
         !closedPollIds.has(msg.id) &&
         !hasVotedOnPoll(msg.poll, msg.reactions, myNick) &&
+        !votedPollIds.has(msg.id) &&
         !dismissedPollIds.has(msg.id)
       ) {
         polls.push(msg)
       }
     }
     return polls
-  }, [messages, myNick, dismissedPollIds, closedPollIds])
+  }, [messages, myNick, votedPollIds, dismissedPollIds, closedPollIds])
 
   if (unansweredPolls.length === 0) return null
 

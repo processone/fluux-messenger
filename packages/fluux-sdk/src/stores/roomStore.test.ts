@@ -3000,4 +3000,187 @@ describe('roomStore', () => {
       expect(roomStore.getState().targetMessageId).toBeNull()
     })
   })
+
+  describe('poll vote tracking', () => {
+    beforeEach(() => {
+      localStorageMock.clear()
+      vi.clearAllMocks()
+      roomStore.setState({ votedPollIds: new Map() })
+    })
+
+    it('should record a poll vote for a room', () => {
+      roomStore.getState().recordPollVote('room1@conf', 'poll-1')
+
+      const ids = roomStore.getState().getVotedPollIds('room1@conf')
+      expect(ids.has('poll-1')).toBe(true)
+    })
+
+    it('should return empty set for room without votes', () => {
+      const ids = roomStore.getState().getVotedPollIds('nonexistent@conf')
+      expect(ids.size).toBe(0)
+    })
+
+    it('should track multiple votes in the same room', () => {
+      roomStore.getState().recordPollVote('room1@conf', 'poll-1')
+      roomStore.getState().recordPollVote('room1@conf', 'poll-2')
+
+      const ids = roomStore.getState().getVotedPollIds('room1@conf')
+      expect(ids.has('poll-1')).toBe(true)
+      expect(ids.has('poll-2')).toBe(true)
+      expect(ids.size).toBe(2)
+    })
+
+    it('should maintain separate votes for different rooms', () => {
+      roomStore.getState().recordPollVote('room1@conf', 'poll-1')
+      roomStore.getState().recordPollVote('room2@conf', 'poll-2')
+
+      expect(roomStore.getState().getVotedPollIds('room1@conf').has('poll-1')).toBe(true)
+      expect(roomStore.getState().getVotedPollIds('room1@conf').has('poll-2')).toBe(false)
+      expect(roomStore.getState().getVotedPollIds('room2@conf').has('poll-2')).toBe(true)
+    })
+
+    it('should be idempotent when recording the same vote twice', () => {
+      roomStore.getState().recordPollVote('room1@conf', 'poll-1')
+      roomStore.getState().recordPollVote('room1@conf', 'poll-1')
+
+      expect(roomStore.getState().getVotedPollIds('room1@conf').size).toBe(1)
+    })
+
+    it('should remove a poll vote', () => {
+      roomStore.getState().recordPollVote('room1@conf', 'poll-1')
+      roomStore.getState().recordPollVote('room1@conf', 'poll-2')
+      roomStore.getState().removePollVote('room1@conf', 'poll-1')
+
+      const ids = roomStore.getState().getVotedPollIds('room1@conf')
+      expect(ids.has('poll-1')).toBe(false)
+      expect(ids.has('poll-2')).toBe(true)
+    })
+
+    it('should not throw when removing non-existent vote', () => {
+      expect(() => {
+        roomStore.getState().removePollVote('room1@conf', 'nonexistent')
+      }).not.toThrow()
+    })
+
+    it('should clean up room entry when last vote is removed', () => {
+      roomStore.getState().recordPollVote('room1@conf', 'poll-1')
+      roomStore.getState().removePollVote('room1@conf', 'poll-1')
+
+      expect(roomStore.getState().votedPollIds.has('room1@conf')).toBe(false)
+    })
+
+    it('should clear all voted polls on reset', () => {
+      roomStore.getState().recordPollVote('room1@conf', 'poll-1')
+      roomStore.getState().recordPollVote('room2@conf', 'poll-2')
+      vi.clearAllMocks()
+
+      roomStore.getState().reset()
+
+      expect(roomStore.getState().votedPollIds.size).toBe(0)
+      expect(localStorageMock.removeItem).toHaveBeenCalledWith('fluux-room-voted-polls')
+    })
+
+    describe('localStorage persistence', () => {
+      it('should persist vote to localStorage when recording', () => {
+        roomStore.getState().recordPollVote('room1@conf', 'poll-1')
+
+        expect(localStorageMock.setItem).toHaveBeenCalledWith(
+          'fluux-room-voted-polls',
+          JSON.stringify([['room1@conf', ['poll-1']]])
+        )
+      })
+
+      it('should update localStorage when removing a vote', () => {
+        roomStore.getState().recordPollVote('room1@conf', 'poll-1')
+        roomStore.getState().recordPollVote('room1@conf', 'poll-2')
+        vi.clearAllMocks()
+
+        roomStore.getState().removePollVote('room1@conf', 'poll-1')
+
+        expect(localStorageMock.setItem).toHaveBeenCalledWith(
+          'fluux-room-voted-polls',
+          JSON.stringify([['room1@conf', ['poll-2']]])
+        )
+      })
+
+      it('should load voted polls from localStorage on switchAccount', () => {
+        localStorageMock._store['fluux-room-voted-polls:alice@example.com'] = JSON.stringify([
+          ['room1@conf', ['poll-1', 'poll-2']],
+        ])
+
+        roomStore.getState().switchAccount('alice@example.com')
+
+        const ids = roomStore.getState().getVotedPollIds('room1@conf')
+        expect(ids.has('poll-1')).toBe(true)
+        expect(ids.has('poll-2')).toBe(true)
+      })
+    })
+  })
+
+  describe('poll dismissal tracking', () => {
+    beforeEach(() => {
+      localStorageMock.clear()
+      vi.clearAllMocks()
+      roomStore.setState({ dismissedPollIds: new Map() })
+    })
+
+    it('should dismiss a poll for a room', () => {
+      roomStore.getState().dismissPoll('room1@conf', 'poll-1')
+
+      const ids = roomStore.getState().getDismissedPollIds('room1@conf')
+      expect(ids.has('poll-1')).toBe(true)
+    })
+
+    it('should return empty set for room without dismissals', () => {
+      const ids = roomStore.getState().getDismissedPollIds('nonexistent@conf')
+      expect(ids.size).toBe(0)
+    })
+
+    it('should track multiple dismissals in the same room', () => {
+      roomStore.getState().dismissPoll('room1@conf', 'poll-1')
+      roomStore.getState().dismissPoll('room1@conf', 'poll-2')
+
+      const ids = roomStore.getState().getDismissedPollIds('room1@conf')
+      expect(ids.size).toBe(2)
+    })
+
+    it('should maintain separate dismissals for different rooms', () => {
+      roomStore.getState().dismissPoll('room1@conf', 'poll-1')
+      roomStore.getState().dismissPoll('room2@conf', 'poll-2')
+
+      expect(roomStore.getState().getDismissedPollIds('room1@conf').has('poll-1')).toBe(true)
+      expect(roomStore.getState().getDismissedPollIds('room1@conf').has('poll-2')).toBe(false)
+    })
+
+    it('should clear all dismissed polls on reset', () => {
+      roomStore.getState().dismissPoll('room1@conf', 'poll-1')
+      vi.clearAllMocks()
+
+      roomStore.getState().reset()
+
+      expect(roomStore.getState().dismissedPollIds.size).toBe(0)
+      expect(localStorageMock.removeItem).toHaveBeenCalledWith('fluux-room-dismissed-polls')
+    })
+
+    describe('localStorage persistence', () => {
+      it('should persist dismissal to localStorage', () => {
+        roomStore.getState().dismissPoll('room1@conf', 'poll-1')
+
+        expect(localStorageMock.setItem).toHaveBeenCalledWith(
+          'fluux-room-dismissed-polls',
+          JSON.stringify([['room1@conf', ['poll-1']]])
+        )
+      })
+
+      it('should load dismissed polls from localStorage on switchAccount', () => {
+        localStorageMock._store['fluux-room-dismissed-polls:alice@example.com'] = JSON.stringify([
+          ['room1@conf', ['poll-1']],
+        ])
+
+        roomStore.getState().switchAccount('alice@example.com')
+
+        expect(roomStore.getState().getDismissedPollIds('room1@conf').has('poll-1')).toBe(true)
+      })
+    })
+  })
 })

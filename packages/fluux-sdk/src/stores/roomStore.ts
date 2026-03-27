@@ -76,6 +76,66 @@ function saveDraftsToStorage(drafts: Map<string, string>, jid?: string | null): 
 }
 
 /**
+ * localStorage persistence helpers for poll state.
+ *
+ * Two separate maps are persisted:
+ * - votedPollIds: polls the user has voted on (set by SDK after successful vote)
+ * - dismissedPollIds: polls the user dismissed with X (UI preference)
+ *
+ * Both use the same serialization pattern as drafts: [roomJid, messageId[]][].
+ */
+const ROOM_VOTED_POLLS_STORAGE_KEY_BASE = 'fluux-room-voted-polls'
+const ROOM_DISMISSED_POLLS_STORAGE_KEY_BASE = 'fluux-room-dismissed-polls'
+
+function getRoomVotedPollsStorageKey(jid?: string | null): string {
+  return buildScopedStorageKey(ROOM_VOTED_POLLS_STORAGE_KEY_BASE, jid)
+}
+
+function getRoomDismissedPollsStorageKey(jid?: string | null): string {
+  return buildScopedStorageKey(ROOM_DISMISSED_POLLS_STORAGE_KEY_BASE, jid)
+}
+
+function loadPollIdsFromStorage(storageKey: string): Map<string, Set<string>> {
+  try {
+    const stored = localStorage.getItem(storageKey)
+    if (stored) {
+      const entries = JSON.parse(stored) as [string, string[]][]
+      return new Map(entries.map(([k, v]) => [k, new Set(v)]))
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return new Map()
+}
+
+function savePollIdsToStorage(pollIds: Map<string, Set<string>>, storageKey: string): void {
+  try {
+    const entries = Array.from(pollIds.entries()).map(
+      ([k, v]) => [k, Array.from(v)] as [string, string[]]
+    )
+    localStorage.setItem(storageKey, JSON.stringify(entries))
+  } catch {
+    // Ignore storage errors (quota exceeded, etc.)
+  }
+}
+
+function loadVotedPollsFromStorage(jid?: string | null): Map<string, Set<string>> {
+  return loadPollIdsFromStorage(getRoomVotedPollsStorageKey(jid))
+}
+
+function saveVotedPollsToStorage(votedPolls: Map<string, Set<string>>, jid?: string | null): void {
+  savePollIdsToStorage(votedPolls, getRoomVotedPollsStorageKey(jid))
+}
+
+function loadDismissedPollsFromStorage(jid?: string | null): Map<string, Set<string>> {
+  return loadPollIdsFromStorage(getRoomDismissedPollsStorageKey(jid))
+}
+
+function saveDismissedPollsToStorage(dismissedPolls: Map<string, Set<string>>, jid?: string | null): void {
+  savePollIdsToStorage(dismissedPolls, getRoomDismissedPollsStorageKey(jid))
+}
+
+/**
  * Stable empty array references to prevent infinite re-renders.
  * When computed selectors return empty results, they should return these
  * constants instead of creating new [] instances each time.
@@ -155,6 +215,11 @@ export interface RoomState {
   activeAnimation: { roomJid: string; animation: string } | null
   // Message drafts per room (persisted to localStorage separately)
   drafts: Map<string, string>
+  // Poll state per room (persisted to localStorage separately)
+  // votedPollIds: polls the local user has voted on — safety net when reactions are not yet loaded from MAM
+  // dismissedPollIds: polls the user dismissed with X — UI preference
+  votedPollIds: Map<string, Set<string>>
+  dismissedPollIds: Map<string, Set<string>>
   // MAM query states per room (for rooms with MAM enabled)
   mamQueryStates: Map<string, MAMQueryState>
   // Target message to scroll to after navigation (ephemeral)
@@ -208,6 +273,13 @@ export interface RoomState {
   getDraft: (roomJid: string) => string
   clearDraft: (roomJid: string) => void
 
+  // Poll state tracking (persisted to localStorage)
+  recordPollVote: (roomJid: string, messageId: string) => void
+  removePollVote: (roomJid: string, messageId: string) => void
+  getVotedPollIds: (roomJid: string) => Set<string>
+  dismissPoll: (roomJid: string, messageId: string) => void
+  getDismissedPollIds: (roomJid: string) => Set<string>
+
   // IndexedDB cache loading
   loadMessagesFromCache: (roomJid: string, options?: GetMessagesOptions) => Promise<RoomMessage[]>
   loadOlderMessagesFromCache: (roomJid: string, limit?: number) => Promise<RoomMessage[]>
@@ -249,7 +321,11 @@ export interface RoomState {
   roomsWithUnreadCount: () => number // Number of rooms with unread activity (for dock badge)
 }
 
-function createEmptyRoomState(drafts: Map<string, string> = new Map()): Pick<RoomState, 'rooms' | 'roomEntities' | 'roomMeta' | 'roomRuntime' | 'activeRoomJid' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'targetMessageId'> {
+function createEmptyRoomState(
+  drafts: Map<string, string> = new Map(),
+  votedPollIds: Map<string, Set<string>> = new Map(),
+  dismissedPollIds: Map<string, Set<string>> = new Map(),
+): Pick<RoomState, 'rooms' | 'roomEntities' | 'roomMeta' | 'roomRuntime' | 'activeRoomJid' | 'activeAnimation' | 'drafts' | 'votedPollIds' | 'dismissedPollIds' | 'mamQueryStates' | 'targetMessageId'> {
   return {
     rooms: new Map(),
     roomEntities: new Map(),
@@ -258,6 +334,8 @@ function createEmptyRoomState(drafts: Map<string, string> = new Map()): Pick<Roo
     activeRoomJid: null,
     activeAnimation: null,
     drafts,
+    votedPollIds,
+    dismissedPollIds,
     mamQueryStates: new Map(),
     targetMessageId: null,
   }
@@ -265,7 +343,7 @@ function createEmptyRoomState(drafts: Map<string, string> = new Map()): Pick<Roo
 
 export const roomStore = createStore<RoomState>()(
   subscribeWithSelector((set, get) => ({
-  ...createEmptyRoomState(loadDraftsFromStorage()), // Restore drafts from localStorage
+  ...createEmptyRoomState(loadDraftsFromStorage(), loadVotedPollsFromStorage(), loadDismissedPollsFromStorage()), // Restore drafts and poll state from localStorage
 
   addRoom: (room) => {
     set((state) => {
@@ -749,15 +827,17 @@ export const roomStore = createStore<RoomState>()(
   getRoom: (roomJid) => get().rooms.get(roomJid),
 
   switchAccount: (jid) => {
-    set(createEmptyRoomState(loadDraftsFromStorage(jid)))
+    set(createEmptyRoomState(loadDraftsFromStorage(jid), loadVotedPollsFromStorage(jid), loadDismissedPollsFromStorage(jid)))
   },
 
   reset: () => {
     // Note: We don't clear IndexedDB on reset - room messages are valuable cache
     // They will be cleared when rooms are explicitly removed or user logs out
     // (The connection store's reset handles full logout cleanup via clearAllMessages)
-    // Clear persisted room drafts on logout
+    // Clear persisted room drafts and poll state on logout
     localStorage.removeItem(getRoomDraftsStorageKey())
+    localStorage.removeItem(getRoomVotedPollsStorageKey())
+    localStorage.removeItem(getRoomDismissedPollsStorageKey())
     set(createEmptyRoomState())
   },
 
@@ -1402,6 +1482,54 @@ export const roomStore = createStore<RoomState>()(
       saveDraftsToStorage(newDrafts)
       return { drafts: newDrafts }
     })
+  },
+
+  // Poll vote tracking
+  recordPollVote: (roomJid, messageId) => {
+    set((state) => {
+      const newVotedPolls = new Map(state.votedPollIds)
+      const roomSet = new Set(newVotedPolls.get(roomJid) ?? [])
+      roomSet.add(messageId)
+      newVotedPolls.set(roomJid, roomSet)
+      saveVotedPollsToStorage(newVotedPolls)
+      return { votedPollIds: newVotedPolls }
+    })
+  },
+
+  removePollVote: (roomJid, messageId) => {
+    set((state) => {
+      const newVotedPolls = new Map(state.votedPollIds)
+      const existing = newVotedPolls.get(roomJid)
+      if (!existing?.has(messageId)) return state
+      const roomSet = new Set(existing)
+      roomSet.delete(messageId)
+      if (roomSet.size === 0) {
+        newVotedPolls.delete(roomJid)
+      } else {
+        newVotedPolls.set(roomJid, roomSet)
+      }
+      saveVotedPollsToStorage(newVotedPolls)
+      return { votedPollIds: newVotedPolls }
+    })
+  },
+
+  getVotedPollIds: (roomJid) => {
+    return get().votedPollIds.get(roomJid) ?? new Set()
+  },
+
+  dismissPoll: (roomJid, messageId) => {
+    set((state) => {
+      const newDismissed = new Map(state.dismissedPollIds)
+      const roomSet = new Set(newDismissed.get(roomJid) ?? [])
+      roomSet.add(messageId)
+      newDismissed.set(roomJid, roomSet)
+      saveDismissedPollsToStorage(newDismissed)
+      return { dismissedPollIds: newDismissed }
+    })
+  },
+
+  getDismissedPollIds: (roomJid) => {
+    return get().dismissedPollIds.get(roomJid) ?? new Set()
   },
 
   // IndexedDB cache loading

@@ -2,8 +2,8 @@ import React, { useState, useRef, useEffect, useCallback, useImperativeHandle, u
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { useRoomActive, useRoster, getBareJid, generateConsistentColorHexSync, getPresenceFromShow, createMessageLookup, isMessageFromIgnoredUser, isReplyToIgnoredUser, canKick, canBan, canModerate, getAvailableAffiliations, getAvailableRoles, getMyReactions, type RoomMessage, type Room, type MentionReference, type ChatStateNotification, type Contact, type FileAttachment, type RoomAffiliation, type RoomRole, type PollData } from '@fluux/sdk'
-import { useConnectionStore, useIgnoreStore } from '@fluux/sdk/react'
-import { ignoreStore, type IgnoredUser } from '@fluux/sdk/stores'
+import { useConnectionStore, useIgnoreStore, useRoomStore } from '@fluux/sdk/react'
+import { ignoreStore, roomStore, type IgnoredUser } from '@fluux/sdk/stores'
 import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat, useContextMenu, isSmallScreen } from '@/hooks'
 import { MessageBubble, MessageList, shouldShowAvatar, buildReplyContext, PollBanner } from './conversation'
 import { FindOnPageBar } from './conversation/FindOnPageBar'
@@ -125,11 +125,13 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   const [lastSentMessageId, setLastSentMessageId] = useState<string | null>(null)
   const lastSentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Dismissed poll IDs — session-scoped, resets on room switch or reconnect
-  const [dismissedPollIds, setDismissedPollIds] = useState<Set<string>>(new Set())
+  // Poll state — persisted to localStorage via roomStore
+  const activeRoomJid = activeRoom?.jid ?? ''
+  const votedPollIds = useRoomStore((s) => s.getVotedPollIds(activeRoomJid))
+  const dismissedPollIds = useRoomStore((s) => s.getDismissedPollIds(activeRoomJid))
   const handleDismissPoll = useCallback((messageId: string) => {
-    setDismissedPollIds((prev) => new Set([...prev, messageId]))
-  }, [])
+    if (activeRoomJid) roomStore.getState().dismissPoll(activeRoomJid, messageId)
+  }, [activeRoomJid])
 
 
   // Find the last outgoing message ID for edit button visibility (skip retracted)
@@ -262,7 +264,6 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
       URL.revokeObjectURL(pendingAttachmentRef.current.previewUrl)
     }
     setPendingAttachment(null)
-    setDismissedPollIds(new Set())
     clearSelection()
   }, [activeRoom?.jid, clearSelection])
 
@@ -353,6 +354,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
         <PollBanner
           messages={displayMessages}
           myNick={activeRoom.nickname}
+          votedPollIds={votedPollIds}
           dismissedPollIds={dismissedPollIds}
           onDismiss={handleDismissPoll}
         />

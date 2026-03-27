@@ -34,20 +34,23 @@ function makePollMessage(overrides: Partial<RoomMessage> = {}): RoomMessage {
   } as RoomMessage
 }
 
+const emptySet = new Set<string>()
+
 describe('PollBanner', () => {
   it('should render nothing when there are no polls', () => {
     const { container } = render(
       <PollBanner
         messages={[]}
         myNick="bob"
-        dismissedPollIds={new Set()}
+        votedPollIds={emptySet}
+        dismissedPollIds={emptySet}
         onDismiss={vi.fn()}
       />
     )
     expect(container.firstChild).toBeNull()
   })
 
-  it('should render nothing when user has already voted', () => {
+  it('should render nothing when user has already voted (reactions)', () => {
     const msg = makePollMessage({
       reactions: { '1️⃣': ['bob'] },
     })
@@ -56,7 +59,23 @@ describe('PollBanner', () => {
       <PollBanner
         messages={[msg]}
         myNick="bob"
-        dismissedPollIds={new Set()}
+        votedPollIds={emptySet}
+        dismissedPollIds={emptySet}
+        onDismiss={vi.fn()}
+      />
+    )
+    expect(container.firstChild).toBeNull()
+  })
+
+  it('should render nothing when user has voted (persisted votedPollIds)', () => {
+    const msg = makePollMessage()
+
+    const { container } = render(
+      <PollBanner
+        messages={[msg]}
+        myNick="bob"
+        votedPollIds={new Set(['poll-1'])}
+        dismissedPollIds={emptySet}
         onDismiss={vi.fn()}
       />
     )
@@ -70,7 +89,8 @@ describe('PollBanner', () => {
       <PollBanner
         messages={[msg]}
         myNick="bob"
-        dismissedPollIds={new Set()}
+        votedPollIds={emptySet}
+        dismissedPollIds={emptySet}
         onDismiss={vi.fn()}
       />
     )
@@ -84,6 +104,7 @@ describe('PollBanner', () => {
       <PollBanner
         messages={[msg]}
         myNick="bob"
+        votedPollIds={emptySet}
         dismissedPollIds={new Set(['poll-1'])}
         onDismiss={vi.fn()}
       />
@@ -108,7 +129,8 @@ describe('PollBanner', () => {
       <PollBanner
         messages={[msg]}
         myNick="bob"
-        dismissedPollIds={new Set()}
+        votedPollIds={emptySet}
+        dismissedPollIds={emptySet}
         onDismiss={vi.fn()}
       />
     )
@@ -123,7 +145,8 @@ describe('PollBanner', () => {
       <PollBanner
         messages={[msg1, msg2]}
         myNick="bob"
-        dismissedPollIds={new Set()}
+        votedPollIds={emptySet}
+        dismissedPollIds={emptySet}
         onDismiss={vi.fn()}
       />
     )
@@ -144,7 +167,8 @@ describe('PollBanner', () => {
       <PollBanner
         messages={[msg]}
         myNick="bob"
-        dismissedPollIds={new Set()}
+        votedPollIds={emptySet}
+        dismissedPollIds={emptySet}
         onDismiss={onDismiss}
       />
     )
@@ -161,7 +185,8 @@ describe('PollBanner', () => {
       <PollBanner
         messages={[msg]}
         myNick={undefined}
-        dismissedPollIds={new Set()}
+        votedPollIds={emptySet}
+        dismissedPollIds={emptySet}
         onDismiss={vi.fn()}
       />
     )
@@ -175,7 +200,8 @@ describe('PollBanner', () => {
       <PollBanner
         messages={[msg]}
         myNick="bob"
-        dismissedPollIds={new Set()}
+        votedPollIds={emptySet}
+        dismissedPollIds={emptySet}
         onDismiss={vi.fn()}
       />
     )
@@ -202,7 +228,8 @@ describe('PollBanner', () => {
       <PollBanner
         messages={[pollMsg, closeMsg]}
         myNick="bob"
-        dismissedPollIds={new Set()}
+        votedPollIds={emptySet}
+        dismissedPollIds={emptySet}
         onDismiss={vi.fn()}
       />
     )
@@ -227,7 +254,8 @@ describe('PollBanner', () => {
       <PollBanner
         messages={[pollMsg1, pollMsg2, closeMsg]}
         myNick="bob"
-        dismissedPollIds={new Set()}
+        votedPollIds={emptySet}
+        dismissedPollIds={emptySet}
         onDismiss={vi.fn()}
       />
     )
@@ -246,11 +274,28 @@ describe('PollBanner', () => {
       <PollBanner
         messages={[msg1, msg2]}
         myNick="bob"
+        votedPollIds={emptySet}
         dismissedPollIds={new Set(['poll-2'])}
         onDismiss={vi.fn()}
       />
     )
 
     expect(screen.getByText(/What for lunch/)).toBeInTheDocument()
+  })
+
+  it('should hide banner when votedPollIds covers poll even without reactions', () => {
+    // Simulates: user voted in this browser, reactions not yet loaded from MAM
+    const msg = makePollMessage({ reactions: {} })
+
+    const { container } = render(
+      <PollBanner
+        messages={[msg]}
+        myNick="bob"
+        votedPollIds={new Set(['poll-1'])}
+        dismissedPollIds={emptySet}
+        onDismiss={vi.fn()}
+      />
+    )
+    expect(container.firstChild).toBeNull()
   })
 })

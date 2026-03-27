@@ -31,6 +31,7 @@ import {
   isPollExpired,
 } from '../poll'
 import type { PollTally } from '../poll'
+import { roomStore } from '../../stores/roomStore'
 
 /**
  * Lightweight metadata for polls created by the local user.
@@ -268,6 +269,13 @@ export class Poll extends BaseModule {
     }
 
     await this.chat.sendReaction(roomJid, messageId, newReactions, 'groupchat')
+
+    // Persist vote acknowledgement locally for banner dismissal across page reloads
+    if (newReactions.length > 0) {
+      roomStore.getState().recordPollVote(roomJid, messageId)
+    } else {
+      roomStore.getState().removePollVote(roomJid, messageId)
+    }
   }
 
   /**

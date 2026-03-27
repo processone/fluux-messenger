@@ -193,7 +193,13 @@ vi.mock('@fluux/sdk', () => ({
     subscribe: vi.fn(() => vi.fn()),
   },
   roomStore: {
-    getState: () => ({ rooms: new Map(), activeRoomJid: null }),
+    getState: () => ({
+      rooms: new Map(),
+      activeRoomJid: null,
+      dismissPoll: vi.fn(),
+      getVotedPollIds: () => new Set(),
+      getDismissedPollIds: () => new Set(),
+    }),
     subscribe: vi.fn(() => vi.fn()),
   },
   ignoreStore: {
@@ -227,6 +233,13 @@ vi.mock('@fluux/sdk/react', () => ({
     return selector ? selector(state) : state
   },
   useContactTime: () => null, useLastActivity: vi.fn(),
+  useRoomStore: (selector?: (state: Record<string, unknown>) => unknown) => {
+    const state = {
+      getVotedPollIds: () => new Set(),
+      getDismissedPollIds: () => new Set(),
+    }
+    return selector ? selector(state) : state
+  },
 }))
 
 // Mock app hooks
