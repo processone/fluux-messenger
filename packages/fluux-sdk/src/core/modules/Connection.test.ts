@@ -3364,4 +3364,130 @@ describe('XMPPClient Connection', () => {
       reconnectSubstateSpy.mockRestore()
     })
   })
+
+  // =========================================================================
+  // Network readiness gate tests
+  //
+  // After macOS sleep/wake, the OS network stack may need several seconds to
+  // reinitialize. These tests verify the waitForNetworkReady() gate prevents
+  // wasting reconnect attempts on a network that isn't ready yet.
+  // =========================================================================
+  describe('network readiness gate', () => {
+    let originalOnLine: boolean
+
+    beforeEach(() => {
+      originalOnLine = navigator.onLine
+    })
+
+    afterEach(() => {
+      Object.defineProperty(navigator, 'onLine', {
+        value: originalOnLine,
+        writable: true,
+        configurable: true,
+      })
+    })
+
+    it('waitForNetworkReady returns true immediately when navigator.onLine is true', async () => {
+      Object.defineProperty(navigator, 'onLine', { value: true, configurable: true })
+
+      const connectionModule = (xmppClient.connection as any)
+      const result = await connectionModule.waitForNetworkReady(5000)
+      expect(result).toBe(true)
+    })
+
+    it('waitForNetworkReady waits for online event when navigator.onLine is false', async () => {
+      Object.defineProperty(navigator, 'onLine', { value: false, configurable: true })
+
+      const connectionModule = (xmppClient.connection as any)
+      const promise = connectionModule.waitForNetworkReady(5000)
+
+      // Simulate network coming up after 1 second
+      await vi.advanceTimersByTimeAsync(1000)
+      window.dispatchEvent(new Event('online'))
+
+      const result = await promise
+      expect(result).toBe(true)
+    })
+
+    it('waitForNetworkReady times out and returns false when network stays offline', async () => {
+      Object.defineProperty(navigator, 'onLine', { value: false, configurable: true })
+
+      const connectionModule = (xmppClient.connection as any)
+      const promise = connectionModule.waitForNetworkReady(5000)
+
+      // Advance past the timeout without firing online event
+      await vi.advanceTimersByTimeAsync(5000)
+
+      const result = await promise
+      expect(result).toBe(false)
+    })
+
+    it('attemptReconnect skips WebSocket creation when network is not available', async () => {
+      // Connect first
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+      mockStores.connection.getStatus.mockReturnValue('online')
+
+      // Simulate disconnect to enter reconnecting state
+      mockXmppClientInstance._emit('disconnect', { clean: false })
+
+      // Prepare new mock client
+      const reconnectClient = createMockXmppClient()
+      mockClientFactory._setInstance(reconnectClient)
+      mockClientFactory.mockClear()
+
+      // Set network offline BEFORE the reconnect attempt fires
+      Object.defineProperty(navigator, 'onLine', { value: false, configurable: true })
+
+      // Advance past the reconnect delay (1s for attempt 1)
+      await vi.advanceTimersByTimeAsync(1000)
+
+      // The network wait timeout (15s default) needs to expire
+      await vi.advanceTimersByTimeAsync(15_000)
+
+      // No new client should have been created — we skipped the attempt
+      expect(mockClientFactory).not.toHaveBeenCalled()
+
+      // CONNECTION_ERROR should have been sent to the machine (triggers retry)
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        'Reconnect skipped: network not available',
+        'connection'
+      )
+    })
+
+    it('attemptReconnect proceeds normally when network is online', async () => {
+      Object.defineProperty(navigator, 'onLine', { value: true, configurable: true })
+
+      // Connect first
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+      mockStores.connection.getStatus.mockReturnValue('online')
+
+      // Simulate disconnect to enter reconnecting state
+      mockXmppClientInstance._emit('disconnect', { clean: false })
+
+      // Prepare new mock client for reconnect
+      const reconnectClient = createMockXmppClient()
+      mockClientFactory._setInstance(reconnectClient)
+      mockClientFactory.mockClear()
+
+      // Advance past the reconnect delay
+      await vi.advanceTimersByTimeAsync(1000)
+
+      // New client SHOULD have been created (network is online)
+      expect(mockClientFactory).toHaveBeenCalled()
+    })
+  })
 })

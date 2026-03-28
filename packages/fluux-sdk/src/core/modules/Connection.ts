@@ -34,6 +34,7 @@ import {
   DIRECT_WEBSOCKET_PRECHECK_TIMEOUT_MS,
   CLIENT_STOP_TIMEOUT_MS,
   DISCONNECT_CLEANUP_TIMEOUT_MS,
+  NETWORK_READY_TIMEOUT_MS,
   RECONNECT_ATTEMPT_TIMEOUT_MS,
   VERIFY_CONNECTION_TIMEOUT_MS,
 } from './connectionTimeouts'
@@ -1109,11 +1110,70 @@ export class Connection extends BaseModule {
         }
       }
     } else if (this.isInReconnectingState()) {
-      // Send WAKE (not TRIGGER_RECONNECT) so the state machine resets
-      // the backoff counter — sleep/wake failures shouldn't accumulate.
-      this.stores.console.addEvent('System state: awake, triggering immediate reconnect (backoff reset)', 'connection')
-      this.sendMachineEvent({ type: 'WAKE', sleepDurationMs }, 'handleAwake:reconnecting')
+      // Wait for network before sending WAKE — otherwise we race to create
+      // a WebSocket before the OS network stack is ready after sleep.
+      const networkReady = await this.waitForNetworkReady()
+      if (networkReady) {
+        // Send WAKE (not TRIGGER_RECONNECT) so the state machine resets
+        // the backoff counter — sleep/wake failures shouldn't accumulate.
+        this.stores.console.addEvent('System state: awake, triggering immediate reconnect (backoff reset)', 'connection')
+        this.sendMachineEvent({ type: 'WAKE', sleepDurationMs }, 'handleAwake:reconnecting')
+      } else {
+        this.stores.console.addEvent('System state: awake, but network not ready — will retry on next wake or timer', 'connection')
+        logInfo('handleAwake: network not ready after wake, skipping WAKE event')
+      }
     }
+  }
+
+  /**
+   * Wait for the browser to report network availability.
+   * Returns true if online, false if timed out while offline.
+   *
+   * After wake-from-sleep, the OS network stack may need several seconds
+   * to reinitialize. This prevents wasting reconnect attempts on a
+   * network that isn't ready yet.
+   */
+  private waitForNetworkReady(timeoutMs: number = NETWORK_READY_TIMEOUT_MS): Promise<boolean> {
+    // Fast path: already online
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      return Promise.resolve(true)
+    }
+
+    // SSR / non-browser: assume online (navigator not available)
+    if (typeof navigator === 'undefined' || typeof window === 'undefined') {
+      return Promise.resolve(true)
+    }
+
+    logInfo('waitForNetworkReady: browser reports offline, waiting for online event')
+    this.stores.console.addEvent('Waiting for network to become available...', 'connection')
+
+    return new Promise<boolean>((resolve) => {
+      let settled = false
+
+      const onOnline = () => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        window.removeEventListener('online', onOnline)
+        logInfo('waitForNetworkReady: network became available')
+        this.stores.console.addEvent('Network became available', 'connection')
+        resolve(true)
+      }
+
+      const timer = setTimeout(() => {
+        if (settled) return
+        settled = true
+        window.removeEventListener('online', onOnline)
+        logWarn(`waitForNetworkReady: timed out after ${timeoutMs}ms`)
+        this.stores.console.addEvent(
+          `Network wait timed out after ${Math.round(timeoutMs / 1000)}s`,
+          'connection'
+        )
+        resolve(false)
+      }, timeoutMs)
+
+      window.addEventListener('online', onOnline)
+    })
   }
 
   /**
@@ -1748,6 +1808,21 @@ export class Connection extends BaseModule {
     const machineState = this.getMachineState()
     if (!this.credentials || !this.isReconnectingSubstate(machineState, 'attempting')) {
       logInfo('attemptReconnect: guard failed (no credentials or not in reconnecting.attempting)')
+      return
+    }
+
+    // Wait for network availability after wake-from-sleep.
+    // The OS network stack may need several seconds to reinitialize after wake.
+    // Without this gate, WebSocket connect fails immediately with ECONNERROR,
+    // burning through backoff attempts while the network isn't ready.
+    const networkReady = await this.waitForNetworkReady()
+    if (!networkReady) {
+      logInfo('attemptReconnect: network not available, signaling error to retry later')
+      this.stores.console.addEvent('Reconnect skipped: network not available', 'connection')
+      this.sendMachineEvent(
+        { type: 'CONNECTION_ERROR', error: 'Network not available' },
+        'attemptReconnect:network-not-ready'
+      )
       return
     }
 

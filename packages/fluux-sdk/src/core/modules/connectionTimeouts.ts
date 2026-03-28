@@ -54,3 +54,10 @@ export const FRESH_SESSION_IQ_TIMEOUT_MS = 15_000
  * Safety net: if the combined setup takes longer, abort and let the reconnect loop retry.
  */
 export const FRESH_SESSION_SETUP_TIMEOUT_MS = 30_000
+
+/**
+ * Maximum time to wait for network availability after wake-from-sleep.
+ * If navigator.onLine is false, wait up to this duration for the browser
+ * 'online' event before proceeding with (or skipping) the reconnect attempt.
+ */
+export const NETWORK_READY_TIMEOUT_MS = 15_000
