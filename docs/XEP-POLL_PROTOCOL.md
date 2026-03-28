@@ -409,19 +409,20 @@ for each option in poll.options:
 
 ### 8.2 Single-Vote Algorithm
 
-In single-vote mode, a voter who reacted with multiple poll-option emojis (e.g., from a legacy client that does not understand poll semantics) is counted only in their **first option** in option order. This provides graceful best-effort handling without rejecting the vote entirely:
+In single-vote mode, a voter who reacted with multiple poll-option emojis (e.g., from a legacy client that does not understand poll semantics) is counted only in their **last option** in option order. This is consistent with vote-replacement semantics — the latest choice takes precedence — and provides graceful best-effort handling without rejecting the vote entirely:
 
 ```
-assigned = empty set
+last_option = empty map          # voter → option index
 for each option in poll.options (in order):
-  raw_voters = reactions[option.emoji] or []
-  voters = [v for v in raw_voters if v not in assigned]
-  for v in voters:
-    assigned.add(v)
+  for v in (reactions[option.emoji] or []):
+    last_option[v] = current_index   # last write wins
+
+for each option in poll.options (in order):
+  voters = [v for v in (reactions[option.emoji] or []) if last_option[v] == current_index]
   count = len(voters)
 ```
 
-**Example:** Alice reacted with both 1️⃣ and 2️⃣ on a single-vote poll. She is counted only in option 1 (the first option in the poll's option order). Her reaction on option 2 is silently ignored.
+**Example:** Alice reacted with both 1️⃣ and 2️⃣ on a single-vote poll. She is counted only in option 2 (the last option in the poll's option order). Her reaction on option 1 is silently ignored.
 
 ### 8.3 Total Voters
 
@@ -492,7 +493,7 @@ In the current client-side implementation, voting rules (single-vote, deadline) 
 - Spoof vote counts in `<poll-closed>` messages.
 
 These attacks are mitigated by:
-- **Single-vote deduplication:** The tallying algorithm (section 7.2) assigns each voter to at most one option, so multiple reactions from a single voter are gracefully handled rather than double-counted.
+- **Single-vote deduplication:** The tallying algorithm (section 8.2) assigns each voter to at most one option, so multiple reactions from a single voter are gracefully handled rather than double-counted.
 - **Tally verification:** Clients can independently tally results from the reactions map and compare against `<poll-closed>` data.
 - **Server enforcement (future):** A MUC component could enforce single-vote rules by rejecting invalid reaction stanzas, and verify `<poll-closed>` sender identity.
 
