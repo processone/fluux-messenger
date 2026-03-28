@@ -8,7 +8,7 @@ import { useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode,
 import { Upload, Loader2 } from 'lucide-react'
 import { MessageBubble, MessageList as MessageListComponent, shouldShowAvatar, buildReplyContext } from './conversation'
 import { FindOnPageBar } from './conversation/FindOnPageBar'
-import { useFindOnPage } from '@/hooks/useFindOnPage'
+import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
 import { ChristmasAnimation } from './ChristmasAnimation'
 import { ChatHeader } from './ChatHeader'
 import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment } from './MessageComposer'
@@ -23,8 +23,8 @@ interface ChatViewProps {
   // Focus zone refs for Tab cycling
   mainContentRef?: RefObject<HTMLElement | null>
   composerRef?: RefObject<HTMLElement | null>
-  /** Ref callback to trigger find-on-page from parent (e.g. Cmd+F) */
-  findOnPageRef?: RefObject<(() => void) | null>
+  /** Ref for find-on-page handle (toggle, navigate from parent shortcuts) */
+  findOnPageRef?: RefObject<FindOnPageHandle | null>
 }
 
 export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, mainContentRef, composerRef, findOnPageRef }: ChatViewProps) {
@@ -106,8 +106,14 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, m
   // Find on page: browser-style search within this conversation
   const find = useFindOnPage(activeMessages, activeConversation?.id)
 
-  // Expose open function to parent via ref
-  useImperativeHandle(findOnPageRef, () => find.open, [find.open])
+  // Expose find-on-page handle to parent for keyboard shortcuts
+  useImperativeHandle(findOnPageRef, () => ({
+    open: find.open,
+    close: find.close,
+    isOpen: find.isOpen,
+    goToNext: find.goToNext,
+    goToPrev: find.goToPrev,
+  }), [find.open, find.close, find.isOpen, find.goToNext, find.goToPrev])
 
   // Scroll ref for programmatic scrolling and keyboard navigation
   const scrollRef = useRef<HTMLElement>(null)

@@ -6,6 +6,15 @@ interface MessageLike {
   body?: string
 }
 
+/** Handle exposed to parent components via ref for keyboard shortcut integration */
+export interface FindOnPageHandle {
+  open: () => void
+  close: () => void
+  isOpen: boolean
+  goToNext: () => void
+  goToPrev: () => void
+}
+
 export interface FindOnPageState {
   /** Whether the find bar is visible */
   isOpen: boolean

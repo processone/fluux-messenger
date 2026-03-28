@@ -7,7 +7,7 @@ import { ignoreStore, roomStore, type IgnoredUser } from '@fluux/sdk/stores'
 import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat, useContextMenu, isSmallScreen } from '@/hooks'
 import { MessageBubble, MessageList, shouldShowAvatar, buildReplyContext, PollBanner } from './conversation'
 import { FindOnPageBar } from './conversation/FindOnPageBar'
-import { useFindOnPage } from '@/hooks/useFindOnPage'
+import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
 import { Avatar, getConsistentTextColor } from './Avatar'
 import { format } from 'date-fns'
 import { Shield, Crown, Upload, Loader2, LogIn, AlertCircle, Users, MessageCircle, EyeOff, User, Settings } from 'lucide-react'
@@ -55,8 +55,8 @@ interface RoomViewProps {
   onStartChat?: (jid: string) => void
   // Callback to show user profile (from occupant panel)
   onShowProfile?: (jid: string) => void
-  /** Ref callback to trigger find-on-page from parent (e.g. Cmd+F) */
-  findOnPageRef?: RefObject<(() => void) | null>
+  /** Ref for find-on-page handle (toggle, navigate from parent shortcuts) */
+  findOnPageRef?: RefObject<FindOnPageHandle | null>
   /** Callback to open search scoped to a room */
   onSearchInConversation?: (conversationId: string) => void
 }
@@ -313,8 +313,14 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // Find on page: browser-style search within this room
   const find = useFindOnPage(activeMessages, activeRoom?.jid)
 
-  // Expose open function to parent via ref
-  useImperativeHandle(findOnPageRef, () => find.open, [find.open])
+  // Expose find-on-page handle to parent for keyboard shortcuts
+  useImperativeHandle(findOnPageRef, () => ({
+    open: find.open,
+    close: find.close,
+    isOpen: find.isOpen,
+    goToNext: find.goToNext,
+    goToPrev: find.goToPrev,
+  }), [find.open, find.close, find.isOpen, find.goToNext, find.goToPrev])
 
   if (!activeRoom) return null
 

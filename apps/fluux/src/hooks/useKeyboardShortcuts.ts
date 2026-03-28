@@ -26,8 +26,12 @@ interface UseKeyboardShortcutsOptions {
   onSidebarViewChange: (view: SidebarView) => void
   navigateToMessages: (jid?: string) => void
   navigateToRooms: (jid?: string) => void
-  /** Trigger find-on-page in the active conversation/room view */
+  /** Toggle find-on-page in the active conversation/room view */
   onFindOnPage?: () => void
+  /** Navigate to next find-on-page match */
+  onFindNext?: () => void
+  /** Navigate to previous find-on-page match */
+  onFindPrev?: () => void
   // Escape hierarchy state and handlers
   escapeHierarchy?: {
     isCommandPaletteOpen: boolean
@@ -122,6 +126,8 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
     navigateToMessages,
     navigateToRooms,
     onFindOnPage,
+    onFindNext,
+    onFindPrev,
     escapeHierarchy,
   } = options
 
@@ -408,6 +414,27 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
       action: () => { onFindOnPage?.() },
     },
     {
+      key: 'g',
+      modifiers: ['meta'],
+      description: 'Next match',
+      category: 'navigation',
+      action: () => { onFindNext?.() },
+    },
+    {
+      key: 'g',
+      modifiers: ['meta', 'shift'],
+      description: 'Previous match',
+      category: 'navigation',
+      action: () => { onFindPrev?.() },
+    },
+    {
+      key: 'f',
+      modifiers: ['meta', 'shift'],
+      description: 'Search view',
+      category: 'navigation',
+      action: () => onSidebarViewChange('search'),
+    },
+    {
       key: '6',
       modifiers: ['alt'],
       description: 'Search view',
@@ -523,10 +550,12 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
                          (shortcut.modifiers?.includes('meta') || shortcut.modifiers?.includes('ctrl'))
           const isCmdF = shortcut.key.toLowerCase() === 'f' &&
                          (shortcut.modifiers?.includes('meta') || shortcut.modifiers?.includes('ctrl'))
+          const isCmdG = shortcut.key.toLowerCase() === 'g' &&
+                         (shortcut.modifiers?.includes('meta') || shortcut.modifiers?.includes('ctrl'))
           const isCmdQ = shortcut.key.toLowerCase() === 'q' &&
                          (shortcut.modifiers?.includes('meta') || shortcut.modifiers?.includes('ctrl'))
           const isAltNumber = /^[0-9]$/.test(shortcut.key) && shortcut.modifiers?.includes('alt')
-          const allowInInput = shortcut.key === '?' || shortcut.key === 'F12' || shortcut.key === 'Escape' || isAltArrow || isAltNumber || isCmdK || isCmdU || isCmdF || isCmdQ
+          const allowInInput = shortcut.key === '?' || shortcut.key === 'F12' || shortcut.key === 'Escape' || isAltArrow || isAltNumber || isCmdK || isCmdU || isCmdF || isCmdG || isCmdQ
 
           if (!isInputField || allowInInput) {
             e.preventDefault()

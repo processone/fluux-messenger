@@ -811,7 +811,77 @@ describe('useKeyboardShortcuts', () => {
     })
   })
 
-  describe('Search View (Alt+6)', () => {
+  describe('Find Next/Previous (Cmd+G / Cmd+Shift+G)', () => {
+    it('should include Cmd+G shortcut for next match', () => {
+      const options = createDefaultOptions()
+      const { result } = renderHook(() => useKeyboardShortcuts(options))
+
+      const cmdG = result.current.find(
+        s => s.key === 'g' && s.modifiers?.includes('meta') && !s.modifiers?.includes('shift')
+      )
+      expect(cmdG).toBeDefined()
+      expect(cmdG!.description).toMatch(/next match/i)
+    })
+
+    it('should call onFindNext when Cmd+G is triggered', () => {
+      const onFindNext = vi.fn()
+      const options = { ...createDefaultOptions(), onFindNext }
+      const { result } = renderHook(() => useKeyboardShortcuts(options))
+
+      const cmdG = result.current.find(
+        s => s.key === 'g' && s.modifiers?.includes('meta') && !s.modifiers?.includes('shift')
+      )
+      cmdG!.action()
+      expect(onFindNext).toHaveBeenCalled()
+    })
+
+    it('should include Cmd+Shift+G shortcut for previous match', () => {
+      const options = createDefaultOptions()
+      const { result } = renderHook(() => useKeyboardShortcuts(options))
+
+      const cmdShiftG = result.current.find(
+        s => s.key === 'g' && s.modifiers?.includes('meta') && s.modifiers?.includes('shift')
+      )
+      expect(cmdShiftG).toBeDefined()
+      expect(cmdShiftG!.description).toMatch(/previous match/i)
+    })
+
+    it('should call onFindPrev when Cmd+Shift+G is triggered', () => {
+      const onFindPrev = vi.fn()
+      const options = { ...createDefaultOptions(), onFindPrev }
+      const { result } = renderHook(() => useKeyboardShortcuts(options))
+
+      const cmdShiftG = result.current.find(
+        s => s.key === 'g' && s.modifiers?.includes('meta') && s.modifiers?.includes('shift')
+      )
+      cmdShiftG!.action()
+      expect(onFindPrev).toHaveBeenCalled()
+    })
+  })
+
+  describe('Search View (Cmd+Shift+F / Alt+6)', () => {
+    it('should include Cmd+Shift+F shortcut for search view', () => {
+      const options = createDefaultOptions()
+      const { result } = renderHook(() => useKeyboardShortcuts(options))
+
+      const cmdShiftF = result.current.find(
+        s => s.key === 'f' && s.modifiers?.includes('meta') && s.modifiers?.includes('shift')
+      )
+      expect(cmdShiftF).toBeDefined()
+      expect(cmdShiftF!.description).toMatch(/search/i)
+    })
+
+    it('should switch to search sidebar view via Cmd+Shift+F', () => {
+      const options = createDefaultOptions()
+      const { result } = renderHook(() => useKeyboardShortcuts(options))
+
+      const cmdShiftF = result.current.find(
+        s => s.key === 'f' && s.modifiers?.includes('meta') && s.modifiers?.includes('shift')
+      )
+      cmdShiftF!.action()
+      expect(options.onSidebarViewChange).toHaveBeenCalledWith('search')
+    })
+
     it('should include Alt+6 shortcut for search view', () => {
       const options = createDefaultOptions()
       const { result } = renderHook(() => useKeyboardShortcuts(options))
@@ -823,7 +893,7 @@ describe('useKeyboardShortcuts', () => {
       expect(alt6!.description).toMatch(/search/i)
     })
 
-    it('should switch to search sidebar view', () => {
+    it('should switch to search sidebar view via Alt+6', () => {
       const options = createDefaultOptions()
       const { result } = renderHook(() => useKeyboardShortcuts(options))
 

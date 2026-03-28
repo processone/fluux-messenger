@@ -236,8 +236,8 @@ function ChatLayoutContent() {
   // Enable Tab cycling between focus zones
   useFocusZones(focusZoneRefs)
 
-  // Ref for triggering find-on-page in the active ChatView/RoomView
-  const findOnPageRef = useRef<(() => void) | null>(null)
+  // Ref for find-on-page handle in the active ChatView/RoomView
+  const findOnPageRef = useRef<import('@/hooks/useFindOnPage').FindOnPageHandle | null>(null)
 
   // Track if view state was restored from session storage
   const viewRestoredRef = useRef(false)
@@ -527,7 +527,16 @@ function ChatLayoutContent() {
     onSidebarViewChange: handleSidebarViewChange,
     navigateToMessages,
     navigateToRooms,
-    onFindOnPage: () => findOnPageRef.current?.(),
+    onFindOnPage: () => {
+      const handle = findOnPageRef.current
+      if (handle?.isOpen) {
+        handle.close()
+      } else {
+        handle?.open()
+      }
+    },
+    onFindNext: () => findOnPageRef.current?.goToNext(),
+    onFindPrev: () => findOnPageRef.current?.goToPrev(),
     escapeHierarchy: {
       isCommandPaletteOpen: showCommandPalette,
       onCloseCommandPalette: () => modalActions.close('commandPalette'),
