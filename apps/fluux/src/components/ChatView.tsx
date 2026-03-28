@@ -323,6 +323,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, m
           // SDK auto-fetches cache + MAM in background, no blocking spinner needed
           isInitialLoading={false}
           highlightTerms={find.highlightTerms}
+          currentMatchId={find.currentMatchId}
           lastSentMessageId={lastSentMessageId}
         />
       </div>
@@ -406,6 +407,7 @@ const ChatMessageList = memo(function ChatMessageList({
   isHistoryComplete,
   isInitialLoading,
   highlightTerms,
+  currentMatchId,
   lastSentMessageId,
 }: {
   messages: Message[]
@@ -443,6 +445,7 @@ const ChatMessageList = memo(function ChatMessageList({
   isHistoryComplete?: boolean
   isInitialLoading?: boolean
   highlightTerms?: string[]
+  currentMatchId?: string
   lastSentMessageId?: string | null
 }) {
   const { t } = useTranslation()
@@ -529,6 +532,7 @@ const ChatMessageList = memo(function ChatMessageList({
       formatTime={formatTime}
       timeFormat={effectiveTimeFormat}
       highlightTerms={highlightTerms}
+      isCurrentMatch={msg.id === currentMatchId}
     />
   )
 
@@ -598,6 +602,8 @@ interface ChatMessageBubbleProps {
   timeFormat: '12h' | '24h'
   // Highlight terms for find-on-page
   highlightTerms?: string[]
+  // Whether this message is the current find-on-page match
+  isCurrentMatch?: boolean
 }
 
 const ChatMessageBubble = memo(function ChatMessageBubble({
@@ -631,6 +637,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
   formatTime,
   timeFormat,
   highlightTerms,
+  isCurrentMatch,
 }: ChatMessageBubbleProps) {
   const { t } = useTranslation()
 
@@ -750,6 +757,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
         formatTime={formatTime}
         timeFormat={timeFormat}
         highlightTerms={highlightTerms}
+        isCurrentMatch={isCurrentMatch}
       />
       {showDeleteConfirm && (
         <ConfirmDialog

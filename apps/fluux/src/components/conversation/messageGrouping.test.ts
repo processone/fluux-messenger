@@ -242,7 +242,12 @@ describe('scrollToMessage', () => {
 
     expect(querySelectorSpy).toHaveBeenCalledWith('[data-message-id="non-existent-id"]')
     expect(mockElement.scrollIntoView).not.toHaveBeenCalled()
-    // Should log warning for debugging
+
+    // scrollToMessage retries 3 times via requestAnimationFrame before warning
+    // Flush all pending rAF callbacks (jsdom polyfills rAF as setTimeout)
+    vi.advanceTimersByTime(100)
+
+    // Should log warning for debugging after retries exhausted
     expect(consoleWarnSpy).toHaveBeenCalledWith(
       '[scrollToMessage] Message not found in DOM: id="non-existent-id"'
     )

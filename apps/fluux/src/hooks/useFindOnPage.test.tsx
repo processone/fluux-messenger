@@ -69,17 +69,17 @@ describe('useFindOnPage', () => {
 
       act(() => result.current.setSearchText('hello'))
 
-      expect(result.current.matchIds).toEqual(['msg-3', 'msg-1'])
+      expect(result.current.matchIds).toEqual(['msg-1', 'msg-3'])
     })
 
-    it('returns matches newest-first (reversed from message order)', () => {
+    it('returns matches in oldest-first (document) order', () => {
       const messages = makeMessages('apple pie', 'banana split', 'apple sauce')
       const { result } = renderHook(() => useFindOnPage(messages))
 
       act(() => result.current.setSearchText('apple'))
 
-      // msg-3 (newest) before msg-1 (oldest)
-      expect(result.current.matchIds).toEqual(['msg-3', 'msg-1'])
+      // msg-1 (oldest) before msg-3 (newest)
+      expect(result.current.matchIds).toEqual(['msg-1', 'msg-3'])
     })
 
     it('is case-insensitive', () => {
@@ -112,7 +112,7 @@ describe('useFindOnPage', () => {
 
       act(() => result.current.setSearchText('hello'))
 
-      expect(result.current.matchIds).toEqual(['msg-3', 'msg-1'])
+      expect(result.current.matchIds).toEqual(['msg-1', 'msg-3'])
     })
 
     it('returns empty for no matches', () => {
@@ -153,53 +153,60 @@ describe('useFindOnPage', () => {
   })
 
   describe('navigation', () => {
-    it('scrolls to first match on search', () => {
+    it('scrolls to newest match on initial search', () => {
       const messages = makeMessages('hello', 'world', 'hello again')
       const { result } = renderHook(() => useFindOnPage(messages))
 
       act(() => result.current.setSearchText('hello'))
 
-      expect(result.current.currentMatchIndex).toBe(0)
-      expect(mockScrollToMessage).toHaveBeenCalledWith('msg-3') // newest first
+      // Starts at the last (newest) match
+      expect(result.current.currentMatchIndex).toBe(1)
+      expect(mockScrollToMessage).toHaveBeenCalledWith('msg-3') // newest match
     })
 
-    it('goToNext cycles through matches', () => {
+    it('goToNext cycles downward through matches', () => {
       const messages = makeMessages('hello A', 'hello B', 'hello C')
       const { result } = renderHook(() => useFindOnPage(messages))
 
       act(() => result.current.setSearchText('hello'))
+      // Starts at index 2 (msg-3, newest)
+      expect(result.current.currentMatchIndex).toBe(2)
       mockScrollToMessage.mockClear()
 
-      // Start at index 0 (msg-3, newest)
+      // Wraps around to oldest
+      act(() => result.current.goToNext())
+      expect(result.current.currentMatchIndex).toBe(0)
+      expect(mockScrollToMessage).toHaveBeenCalledWith('msg-1')
+
       act(() => result.current.goToNext())
       expect(result.current.currentMatchIndex).toBe(1)
       expect(mockScrollToMessage).toHaveBeenCalledWith('msg-2')
 
       act(() => result.current.goToNext())
       expect(result.current.currentMatchIndex).toBe(2)
-      expect(mockScrollToMessage).toHaveBeenCalledWith('msg-1')
-
-      // Wraps around
-      act(() => result.current.goToNext())
-      expect(result.current.currentMatchIndex).toBe(0)
       expect(mockScrollToMessage).toHaveBeenCalledWith('msg-3')
     })
 
-    it('goToPrev cycles through matches in reverse', () => {
+    it('goToPrev cycles upward through matches', () => {
       const messages = makeMessages('hello A', 'hello B', 'hello C')
       const { result } = renderHook(() => useFindOnPage(messages))
 
       act(() => result.current.setSearchText('hello'))
+      // Starts at index 2 (msg-3, newest)
       mockScrollToMessage.mockClear()
-
-      // Start at index 0, prev wraps to last
-      act(() => result.current.goToPrev())
-      expect(result.current.currentMatchIndex).toBe(2)
-      expect(mockScrollToMessage).toHaveBeenCalledWith('msg-1')
 
       act(() => result.current.goToPrev())
       expect(result.current.currentMatchIndex).toBe(1)
       expect(mockScrollToMessage).toHaveBeenCalledWith('msg-2')
+
+      act(() => result.current.goToPrev())
+      expect(result.current.currentMatchIndex).toBe(0)
+      expect(mockScrollToMessage).toHaveBeenCalledWith('msg-1')
+
+      // Wraps around to newest
+      act(() => result.current.goToPrev())
+      expect(result.current.currentMatchIndex).toBe(2)
+      expect(mockScrollToMessage).toHaveBeenCalledWith('msg-3')
     })
 
     it('goToNext is no-op with no matches', () => {
@@ -222,17 +229,21 @@ describe('useFindOnPage', () => {
       expect(mockScrollToMessage).not.toHaveBeenCalled()
     })
 
-    it('resets index when search text changes', () => {
+    it('resets index to newest match when search text changes', () => {
       const messages = makeMessages('hello world', 'hello there', 'world peace')
       const { result } = renderHook(() => useFindOnPage(messages))
 
       act(() => result.current.setSearchText('hello'))
-      act(() => result.current.goToNext()) // index 1
+      // Starts at last match (index 1 = msg-2)
       expect(result.current.currentMatchIndex).toBe(1)
 
-      // Changing search text resets to 0
-      act(() => result.current.setSearchText('world'))
+      act(() => result.current.goToPrev()) // index 0
       expect(result.current.currentMatchIndex).toBe(0)
+
+      // Changing search text resets to newest match
+      act(() => result.current.setSearchText('world'))
+      // 'world' matches msg-1 and msg-3, newest is index 1 (msg-3)
+      expect(result.current.currentMatchIndex).toBe(1)
     })
   })
 
@@ -251,7 +262,7 @@ describe('useFindOnPage', () => {
       const messages2 = [...messages1, { id: 'msg-2', body: 'hello again' }]
       rerender({ msgs: messages2 })
 
-      expect(result.current.matchIds).toEqual(['msg-2', 'msg-1'])
+      expect(result.current.matchIds).toEqual(['msg-1', 'msg-2'])
     })
   })
 })

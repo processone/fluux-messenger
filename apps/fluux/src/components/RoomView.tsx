@@ -425,6 +425,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             onNickTouchEnd={handleNickTouchEnd}
             setAffiliation={setAffiliation}
             highlightTerms={find.highlightTerms}
+            currentMatchId={find.currentMatchId}
             lastSentMessageId={lastSentMessageId}
           />
         </div>
@@ -664,6 +665,7 @@ const RoomMessageList = memo(function RoomMessageList({
   onNickTouchEnd,
   setAffiliation,
   highlightTerms,
+  currentMatchId,
   lastSentMessageId,
 }: {
   messages: RoomMessage[]
@@ -705,6 +707,7 @@ const RoomMessageList = memo(function RoomMessageList({
   onNickTouchEnd?: () => void
   setAffiliation: (roomJid: string, userJid: string, affiliation: RoomAffiliation, reason?: string) => Promise<void>
   highlightTerms?: string[]
+  currentMatchId?: string
   lastSentMessageId?: string | null
 }) {
   const { t } = useTranslation()
@@ -847,6 +850,7 @@ const RoomMessageList = memo(function RoomMessageList({
       onNickTouchEnd={onNickTouchEnd}
       setAffiliation={setAffiliation}
       highlightTerms={highlightTerms}
+      isCurrentMatch={msg.id === currentMatchId}
     />
   )
 
@@ -917,6 +921,8 @@ interface RoomMessageBubbleWrapperProps {
   closedPollIds: Set<string>
   // Highlight terms for find-on-page
   highlightTerms?: string[]
+  // Whether this message is the current find-on-page match
+  isCurrentMatch?: boolean
 }
 
 const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
@@ -954,6 +960,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   setAffiliation,
   closedPollIds,
   highlightTerms,
+  isCurrentMatch,
 }: RoomMessageBubbleWrapperProps) {
   const { t } = useTranslation()
 
@@ -1226,6 +1233,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         formatTime={formatTime}
         timeFormat={timeFormat}
         highlightTerms={highlightTerms}
+        isCurrentMatch={isCurrentMatch}
       />
 
       {/* Delete own message confirmation dialog */}

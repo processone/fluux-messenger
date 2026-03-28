@@ -483,6 +483,13 @@ input[type="range"]::-moz-range-thumb {
   border-radius: 0.125rem;
 }
 
+/* Stronger highlight for the current find-on-page match */
+.search-match-current {
+  background-color: hsl(30, 100%, 50%);
+  color: white;
+  box-shadow: 0 0 0 1px hsl(30, 100%, 40%);
+}
+
 /* When search match is inside a highlighted message, use contrasting color */
 .message-highlight-persistent .search-match {
   background-color: hsla(0, 0%, 100%, 0.45);

@@ -44,6 +44,8 @@ export interface MessageBodyProps {
   isDarkMode?: boolean
   /** Search terms to highlight in the message body (from search query) */
   highlightTerms?: string[]
+  /** Whether this message is the current find-on-page match */
+  isCurrentMatch?: boolean
 }
 
 /**
@@ -69,6 +71,7 @@ export const MessageBody = memo(function MessageBody({
   knownNicks,
   isDarkMode,
   highlightTerms,
+  isCurrentMatch,
 }: MessageBodyProps) {
   const { t } = useTranslation()
 
@@ -91,7 +94,7 @@ export const MessageBody = memo(function MessageBody({
 
   const wrap = (node: ReactNode) =>
     highlightTerms && highlightTerms.length > 0
-      ? <SearchHighlight terms={highlightTerms}>{node}</SearchHighlight>
+      ? <SearchHighlight terms={highlightTerms} isCurrent={isCurrentMatch}>{node}</SearchHighlight>
       : node
 
   // /me action message
@@ -150,7 +153,7 @@ function EditedIndicator({ originalBody, className = '' }: EditedIndicatorProps)
  * the given terms with a <mark> tag.  Leaves non-text nodes (elements)
  * untouched so styled segments, links, code blocks etc. are preserved.
  */
-function SearchHighlight({ terms, children }: { terms: string[]; children: ReactNode }) {
+function SearchHighlight({ terms, children, isCurrent }: { terms: string[]; children: ReactNode; isCurrent?: boolean }) {
   // Build a single regex that matches any term (case-insensitive, Unicode-aware)
   // Each term is escaped and we use word-like boundaries via \b where possible
   const escaped = terms
@@ -158,34 +161,35 @@ function SearchHighlight({ terms, children }: { terms: string[]; children: React
     .map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
   if (escaped.length === 0) return <>{children}</>
 
+  const markClass = isCurrent ? 'search-match search-match-current' : 'search-match'
   const pattern = new RegExp(`(${escaped.join('|')})`, 'gi')
-  return <>{highlightChildren(children, pattern)}</>
+  return <>{highlightChildren(children, pattern, markClass)}</>
 }
 
-function highlightChildren(node: ReactNode, pattern: RegExp): ReactNode {
+function highlightChildren(node: ReactNode, pattern: RegExp, markClass: string): ReactNode {
   if (typeof node === 'string') {
-    return highlightText(node, pattern)
+    return highlightText(node, pattern, markClass)
   }
   if (Array.isArray(node)) {
     return node.map((child, i) => (
-      <HighlightFragment key={i} node={child} pattern={pattern} />
+      <HighlightFragment key={i} node={child} pattern={pattern} markClass={markClass} />
     ))
   }
   if (node && typeof node === 'object' && 'props' in node) {
     // React element — clone and recurse into children
     const element = node as React.ReactElement<{ children?: ReactNode }>
     if (element.props.children != null) {
-      return { ...element, props: { ...element.props, children: highlightChildren(element.props.children, pattern) } }
+      return { ...element, props: { ...element.props, children: highlightChildren(element.props.children, pattern, markClass) } }
     }
   }
   return node
 }
 
-function HighlightFragment({ node, pattern }: { node: ReactNode; pattern: RegExp }) {
-  return <>{highlightChildren(node, pattern)}</>
+function HighlightFragment({ node, pattern, markClass }: { node: ReactNode; pattern: RegExp; markClass: string }) {
+  return <>{highlightChildren(node, pattern, markClass)}</>
 }
 
-function highlightText(text: string, pattern: RegExp): ReactNode {
+function highlightText(text: string, pattern: RegExp, markClass: string): ReactNode {
   const parts: ReactNode[] = []
   let lastIndex = 0
   // Reset regex state
@@ -196,7 +200,7 @@ function highlightText(text: string, pattern: RegExp): ReactNode {
       parts.push(text.slice(lastIndex, match.index))
     }
     parts.push(
-      <mark key={match.index} className="search-match">
+      <mark key={match.index} className={markClass}>
         {match[0]}
       </mark>
     )

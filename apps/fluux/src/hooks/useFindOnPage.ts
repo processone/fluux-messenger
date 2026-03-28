@@ -11,29 +11,32 @@ export interface FindOnPageState {
   isOpen: boolean
   /** Current search text */
   searchText: string
-  /** IDs of messages that match, ordered newest-first */
+  /** IDs of messages that match, ordered oldest-first (document order) */
   matchIds: string[]
   /** Current match index (0-based into matchIds) */
   currentMatchIndex: number
   /** Terms to highlight in message bodies */
   highlightTerms: string[]
+  /** ID of the message currently focused by find navigation */
+  currentMatchId: string | undefined
   /** Open the find bar */
   open: () => void
   /** Close the find bar and clear state */
   close: () => void
   /** Set the search text */
   setSearchText: (text: string) => void
-  /** Go to the next match (older message) */
+  /** Go to the next match (downward / newer message) */
   goToNext: () => void
-  /** Go to the previous match (newer message) */
+  /** Go to the previous match (upward / older message) */
   goToPrev: () => void
 }
 
 /**
  * Hook for browser-style "find on page" within a conversation's messages.
  *
- * Matches are ordered newest-first (bottom of conversation first).
- * "Next" moves to older messages, "Prev" moves to newer messages.
+ * Matches are ordered oldest-first (document order, top of conversation first).
+ * "Next" moves downward (newer), "Prev" moves upward (older).
+ * Initial match starts at the bottom (newest match).
  */
 export function useFindOnPage<T extends MessageLike>(messages: T[]): FindOnPageState {
   const [isOpen, setIsOpen] = useState(false)
@@ -44,15 +47,13 @@ export function useFindOnPage<T extends MessageLike>(messages: T[]): FindOnPageS
   // Keep ref in sync
   currentMatchIndexRef.current = currentMatchIndex
 
-  // Compute matching message IDs (newest-first = reversed from messages array order)
+  // Compute matching message IDs in oldest-first order (same as messages array)
   const matchIds = useMemo(() => {
     const trimmed = searchText.trim().toLowerCase()
     if (!trimmed || trimmed.length < 2) return []
 
     const ids: string[] = []
-    // Messages array is oldest-first, we want newest-first
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const msg = messages[i]
+    for (const msg of messages) {
       if (msg.body && msg.body.toLowerCase().includes(trimmed)) {
         ids.push(msg.id)
       }
@@ -67,13 +68,20 @@ export function useFindOnPage<T extends MessageLike>(messages: T[]): FindOnPageS
     return [trimmed.toLowerCase()]
   }, [searchText])
 
-  // Reset current match index when matches change, and scroll to first match
+  // Reset current match index and scroll to newest match when search text changes.
+  // We track searchText (not matchIds) to avoid resetting position when new messages arrive.
+  const prevSearchTextRef = useRef('')
   useEffect(() => {
-    setCurrentMatchIndex(0)
+    const trimmed = searchText.trim().toLowerCase()
+    if (trimmed === prevSearchTextRef.current) return
+    prevSearchTextRef.current = trimmed
+
+    const startIndex = matchIds.length > 0 ? matchIds.length - 1 : 0
+    setCurrentMatchIndex(startIndex)
     if (matchIds.length > 0) {
-      scrollToMessage(matchIds[0])
+      scrollToMessage(matchIds[startIndex])
     }
-  }, [matchIds])
+  }, [matchIds, searchText])
 
   const open = useCallback(() => {
     setIsOpen(true)
@@ -104,6 +112,7 @@ export function useFindOnPage<T extends MessageLike>(messages: T[]): FindOnPageS
     searchText,
     matchIds,
     currentMatchIndex,
+    currentMatchId: matchIds[currentMatchIndex],
     highlightTerms,
     open,
     close,

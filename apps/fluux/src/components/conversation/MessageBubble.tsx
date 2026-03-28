@@ -117,6 +117,9 @@ export interface MessageBubbleProps {
 
   // Search term highlighting in message body
   highlightTerms?: string[]
+
+  // Whether this message is the current find-on-page match
+  isCurrentMatch?: boolean
 }
 
 /**
@@ -195,6 +198,9 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps): bool
   // Time format affects column width
   if (prev.timeFormat !== next.timeFormat) return false
 
+  // Find-on-page current match
+  if (prev.isCurrentMatch !== next.isCurrentMatch) return false
+
   // All data props are equal - skip re-render
   // (callback props like onReply, onEdit, etc. are intentionally ignored)
   return true
@@ -247,6 +253,7 @@ export const MessageBubble = memo(function MessageBubble({
   formatTime,
   timeFormat,
   highlightTerms,
+  isCurrentMatch,
 }: MessageBubbleProps) {
   const { t } = useTranslation()
   const [showReactionPicker, setShowReactionPickerState] = useState(false)
@@ -429,6 +436,7 @@ export const MessageBubble = memo(function MessageBubble({
             knownNicks={knownNicks}
             isDarkMode={isDarkMode}
             highlightTerms={highlightTerms}
+            isCurrentMatch={isCurrentMatch}
           />
 
           {/* File attachments (image, video, audio, text preview, document card) - hidden for retracted */}
