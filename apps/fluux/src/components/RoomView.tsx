@@ -311,7 +311,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   }
 
   // Find on page: browser-style search within this room
-  const find = useFindOnPage(activeMessages)
+  const find = useFindOnPage(activeMessages, activeRoom?.jid)
 
   // Expose open function to parent via ref
   useImperativeHandle(findOnPageRef, () => find.open, [find.open])

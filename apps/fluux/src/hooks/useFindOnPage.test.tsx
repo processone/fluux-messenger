@@ -247,6 +247,54 @@ describe('useFindOnPage', () => {
     })
   })
 
+  describe('conversation switch', () => {
+    it('closes find bar when conversationId changes', () => {
+      const messages = makeMessages('hello world', 'hello again')
+      const { result, rerender } = renderHook(
+        ({ msgs, convId }) => useFindOnPage(msgs, convId),
+        { initialProps: { msgs: messages, convId: 'conv-1' } }
+      )
+
+      // Open find bar and search
+      act(() => result.current.open())
+      act(() => result.current.setSearchText('hello'))
+
+      expect(result.current.isOpen).toBe(true)
+      expect(result.current.matchIds).toHaveLength(2)
+
+      // Switch conversation
+      const newMessages = makeMessages('different content')
+      rerender({ msgs: newMessages, convId: 'conv-2' })
+
+      // Find bar should be closed and state cleared
+      expect(result.current.isOpen).toBe(false)
+      expect(result.current.searchText).toBe('')
+      expect(result.current.matchIds).toEqual([])
+      expect(result.current.currentMatchIndex).toBe(0)
+    })
+
+    it('does not close find bar when conversationId stays the same', () => {
+      const messages = makeMessages('hello world')
+      const { result, rerender } = renderHook(
+        ({ msgs, convId }) => useFindOnPage(msgs, convId),
+        { initialProps: { msgs: messages, convId: 'conv-1' } }
+      )
+
+      act(() => result.current.open())
+      act(() => result.current.setSearchText('hello'))
+
+      expect(result.current.isOpen).toBe(true)
+
+      // Re-render with same conversationId but new messages (e.g. new message arrived)
+      const updatedMessages = [...messages, { id: 'msg-2', body: 'hello again' }]
+      rerender({ msgs: updatedMessages, convId: 'conv-1' })
+
+      // Find bar should remain open
+      expect(result.current.isOpen).toBe(true)
+      expect(result.current.searchText).toBe('hello')
+    })
+  })
+
   describe('dynamic message list', () => {
     it('updates matches when messages change', () => {
       const messages1 = makeMessages('hello')

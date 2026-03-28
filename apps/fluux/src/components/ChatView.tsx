@@ -104,7 +104,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, m
   useTypeToFocus(composerHandleRef)
 
   // Find on page: browser-style search within this conversation
-  const find = useFindOnPage(activeMessages)
+  const find = useFindOnPage(activeMessages, activeConversation?.id)
 
   // Expose open function to parent via ref
   useImperativeHandle(findOnPageRef, () => find.open, [find.open])

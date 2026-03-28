@@ -38,7 +38,7 @@ export interface FindOnPageState {
  * "Next" moves downward (newer), "Prev" moves upward (older).
  * Initial match starts at the bottom (newest match).
  */
-export function useFindOnPage<T extends MessageLike>(messages: T[]): FindOnPageState {
+export function useFindOnPage<T extends MessageLike>(messages: T[], conversationId?: string): FindOnPageState {
   const [isOpen, setIsOpen] = useState(false)
   const [searchText, setSearchText] = useState('')
   const currentMatchIndexRef = useRef(0)
@@ -92,6 +92,15 @@ export function useFindOnPage<T extends MessageLike>(messages: T[]): FindOnPageS
     setSearchText('')
     setCurrentMatchIndex(0)
   }, [])
+
+  // Dismiss find bar when the conversation changes
+  const prevConversationIdRef = useRef(conversationId)
+  useEffect(() => {
+    if (prevConversationIdRef.current !== conversationId) {
+      prevConversationIdRef.current = conversationId
+      close()
+    }
+  }, [conversationId, close])
 
   const goToNext = useCallback(() => {
     if (matchIds.length === 0) return
