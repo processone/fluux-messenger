@@ -12,7 +12,7 @@
 export type { ConnectionStatus, ConnectionMethod, ConnectOptions, SystemState } from './connection'
 
 // Base message type (shared between chat and room messages)
-export type { BaseMessage, PollData, PollOption, PollSettings, PollClosedData, PollCheckpointData } from './message-base'
+export type { BaseMessage, PollData, PollOption, PollSettings, PollClosedData } from './message-base'
 
 // Chat types
 export type {

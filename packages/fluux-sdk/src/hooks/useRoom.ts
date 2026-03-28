@@ -239,13 +239,6 @@ export function useRoom() {
     [client]
   )
 
-  const sendCheckpoint = useCallback(
-    async (roomJid: string, messageId: string) => {
-      return await client.poll.sendCheckpoint(roomJid, messageId)
-    },
-    [client]
-  )
-
   const sendCorrection = useCallback(
     async (roomJid: string, messageId: string, newBody: string, attachment?: FileAttachment) => {
       await client.chat.sendCorrection(roomJid, messageId, newBody, 'groupchat', attachment)
@@ -597,7 +590,6 @@ export function useRoom() {
       sendPoll,
       votePoll,
       closePoll,
-      sendCheckpoint,
       sendCorrection,
       retractMessage,
       moderateMessage,
@@ -646,7 +638,6 @@ export function useRoom() {
       sendPoll,
       votePoll,
       closePoll,
-      sendCheckpoint,
       sendCorrection,
       retractMessage,
       moderateMessage,

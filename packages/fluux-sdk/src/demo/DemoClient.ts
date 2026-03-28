@@ -32,8 +32,8 @@ import type { ActivityEventInput } from '../core/types/activity'
 import type { Contact } from '../core/types/roster'
 import type { Room, RoomMessage, RoomOccupant } from '../core/types/room'
 import type { DemoData, DemoAnimationStep } from './types'
-import { parsePollElement, parsePollClosedElement, parsePollCheckpointElement } from '../core/poll'
-import type { PollData, PollClosedData, PollCheckpointData } from '../core/types/message-base'
+import { parsePollElement, parsePollClosedElement } from '../core/poll'
+import type { PollData, PollClosedData } from '../core/types/message-base'
 
 type AnimationState = 'idle' | 'playing' | 'paused' | 'stopped'
 
@@ -523,9 +523,6 @@ export class DemoClient extends XMPPClient {
     const pollClosedEl = stanza.getChild('poll-closed')
     const pollClosed: PollClosedData | null = pollClosedEl ? parsePollClosedElement(pollClosedEl) : null
 
-    const pollCheckpointEl = stanza.getChild('poll-checkpoint')
-    const pollCheckpoint: PollCheckpointData | null = pollCheckpointEl ? parsePollCheckpointElement(pollCheckpointEl) : null
-
     const message: RoomMessage = {
       type: 'groupchat',
       id,
@@ -540,7 +537,6 @@ export class DemoClient extends XMPPClient {
       ...(attachment && { attachment }),
       ...(poll && { poll }),
       ...(pollClosed && { pollClosed }),
-      ...(pollCheckpoint && { pollCheckpoint }),
     }
 
     this.emitSDK('room:message', { roomJid, message, incrementUnread: false })

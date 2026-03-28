@@ -255,93 +255,11 @@ This ensures that late-joining clients still benefit from creator verification w
 
 ---
 
-## 6. Poll Checkpoints
-
-A checkpoint is a snapshot of the current poll results published while the poll remains open. Voting continues after a checkpoint. Checkpoints serve two purposes:
-
-1. **Late-joiner catch-up:** Participants who join after voting has started see an authoritative snapshot without needing to tally reactions themselves.
-2. **Reaction reconciliation:** Checkpoint voter lists allow clients to reconcile their local reaction state with the creator's view, healing inconsistencies caused by missed stanzas.
-
-### 6.1 Who Can Send Checkpoints
-
-Checkpoints MAY be sent by:
-
-- **The poll creator's client** — the client that originally sent the `<poll>` message. In the current implementation, the creator's client sends checkpoints automatically based on heuristic rules (see section 6.5).
-- **The MUC server** — a future server-side component could generate checkpoints authoritatively, since the server has the definitive reaction state. Server-generated checkpoints would carry the room's own JID as sender rather than a participant's JID.
-
-### 6.2 XML Schema
-
-```xml
-<message to="room@conference.example.com" type="groupchat" id="checkpoint-msg-1">
-  <body>📊 Poll checkpoint: What for lunch?
-1️⃣ Pizza: 3
-2️⃣ Sushi: 5
-3️⃣ Tacos: 2</body>
-
-  <poll-checkpoint xmlns="urn:fluux:poll:0"
-    message-id="poll-msg-1"
-    ts="2026-03-26T12:00:00.000Z">
-    <title>What for lunch?</title>
-    <tally emoji="1️⃣" label="Pizza" count="3" voters="alice,bob,carol"/>
-    <tally emoji="2️⃣" label="Sushi" count="5" voters="dave,eve,frank,grace,heidi"/>
-    <tally emoji="3️⃣" label="Tacos" count="2" voters="ivan,judy"/>
-  </poll-checkpoint>
-
-  <fallback xmlns="urn:xmpp:fallback:0" for="urn:fluux:poll:0">
-    <body/>
-  </fallback>
-  <store xmlns="urn:xmpp:hints"/>
-</message>
-```
-
-### 6.3 `<poll-checkpoint>` Element
-
-| Attribute    | Type              | Required | Description                                                                                                 |
-|--------------|-------------------|----------|-------------------------------------------------------------------------------------------------------------|
-| `message-id` | string           | Yes      | The ID of the original poll message this checkpoint refers to.                                              |
-| `ts`         | string (ISO 8601) | No       | Timestamp when the checkpoint was computed. Used for ordering — stale checkpoints are discarded (see 6.6). |
-
-### 6.4 Child Elements
-
-The child elements of `<poll-checkpoint>` are identical to `<poll-closed>` (section 5.3): `<title>`, optional `<description>`, and `<tally>` elements. The `voters` attribute on `<tally>` SHOULD be included in checkpoints to enable reaction reconciliation.
-
-### 6.5 Auto-Checkpoint Rules (Client-Side)
-
-When the poll creator's client detects a new vote (via incoming XEP-0444 reactions on the poll message), it evaluates the following conditions before publishing a checkpoint:
-
-1. **Minimum total voters:** At least 5 unique voters must have voted.
-2. **Minimum vote delta:** At least 3 new votes must have been cast since the last checkpoint.
-3. **Minimum interval:** At least 60 seconds must have elapsed since the last checkpoint.
-
-If all three conditions are met, the client sends a checkpoint. If the interval condition is not yet met but the other conditions are satisfied, the client schedules a debounced re-check after the remaining interval expires.
-
-These thresholds are implementation defaults. A server-side checkpoint generator could use different rules (e.g., checkpoint on every Nth vote, or on a fixed interval).
-
-### 6.6 Receiving and Ordering Checkpoints
-
-When a client receives a `<poll-checkpoint>` message, it processes it as follows:
-
-1. **Timestamp ordering:** If the checkpoint has a `ts` attribute and the original poll message has a `lastCheckpointTs` value, the checkpoint is discarded if `ts <= lastCheckpointTs`. This prevents stale or replayed checkpoints from overwriting newer state.
-2. **Verification:** If the original poll is in the local store, the same verification checks as `<poll-closed>` (section 5.6) are applied: creator identity, title match, and emoji validity. If any check fails, the checkpoint is discarded.
-3. **Deferred verification:** If the original poll is not in the local store, the checkpoint is accepted on trust (like `<poll-closed>`, see section 5.7) and verified asynchronously via MAM.
-4. **Reaction reconciliation:** The voter lists from the checkpoint are merged with the client's local reaction state using a **union-merge** strategy: for each emoji, the set of voters is the union of the checkpoint voters and the locally known voters. This preserves votes that arrived after the checkpoint was computed while incorporating votes the client may have missed.
-
-### 6.7 Server-Side Checkpoints (Future)
-
-A MUC component could generate checkpoints authoritatively:
-
-- The server has the definitive reaction state, eliminating the need for voter lists (though including them aids offline clients).
-- Server checkpoints could be sent on a configurable schedule (e.g., every 10 votes, or every 5 minutes).
-- Server checkpoints would not require creator verification since the MUC service itself is the sender.
-- A server-generated checkpoint could carry an additional `source="server"` attribute to distinguish it from client-generated ones, allowing clients to trust it unconditionally.
-
----
-
-## 7. Result Query (IQ)
+## 6. Result Query (IQ)
 
 Clients that join a room late or need to verify results can query the poll creator for the current tally via an IQ stanza.
 
-### 7.1 Query
+### 6.1 Query
 
 ```xml
 <iq type="get" to="creator@example.com/resource" id="poll-q1">
@@ -356,7 +274,7 @@ Clients that join a room late or need to verify results can query the poll creat
 | `message-id` | string | Yes      | The poll message ID to query.            |
 | `room`       | string | Yes      | The room JID where the poll was created. |
 
-### 7.2 Response
+### 6.2 Response
 
 ```xml
 <iq type="result" to="requester@example.com/resource" id="poll-q1">
@@ -374,7 +292,7 @@ Clients that join a room late or need to verify results can query the poll creat
 |-----------|---------|--------------------------------------------------|
 | `closed`  | boolean | Whether the poll has been closed by its creator. |
 
-### 7.3 Error Response
+### 6.3 Error Response
 
 If the creator's client does not recognize the poll (e.g., it was created in a previous session):
 
@@ -387,17 +305,17 @@ If the creator's client does not recognize the poll (e.g., it was created in a p
 </iq>
 ```
 
-### 7.4 Limitations
+### 6.4 Limitations
 
 The IQ query mechanism requires the poll creator to be online. If the creator is offline, clients fall back to tallying results from the locally observed XEP-0444 reactions (best-effort). A future server-side component could provide authoritative results regardless of creator presence.
 
 ---
 
-## 8. Result Tallying
+## 7. Result Tallying
 
 Poll results are computed from the reactions map on the poll message. The tallying algorithm differs between single-vote and multi-vote modes to handle malformed votes gracefully.
 
-### 8.1 Multi-Vote Algorithm
+### 7.1 Multi-Vote Algorithm
 
 In multi-vote mode (`allow-multiple="true"`), all reactions are counted as-is:
 
@@ -407,7 +325,7 @@ for each option in poll.options:
   count = len(voters)
 ```
 
-### 8.2 Single-Vote Algorithm
+### 7.2 Single-Vote Algorithm
 
 In single-vote mode, a voter who reacted with multiple poll-option emojis (e.g., from a legacy client that does not understand poll semantics) is counted only in their **last option** in option order. This is consistent with vote-replacement semantics — the latest choice takes precedence — and provides graceful best-effort handling without rejecting the vote entirely:
 
@@ -424,21 +342,21 @@ for each option in poll.options (in order):
 
 **Example:** Alice reacted with both 1️⃣ and 2️⃣ on a single-vote poll. She is counted only in option 2 (the last option in the poll's option order). Her reaction on option 1 is silently ignored.
 
-### 8.3 Total Voters
+### 7.3 Total Voters
 
 The total number of unique voters is the union of all voter sets across all options. In multi-vote mode, a single participant who voted for multiple options is counted once.
 
-### 8.4 Hide-Results Mode
+### 7.4 Hide-Results Mode
 
 When `hide-results="true"`, clients SHOULD NOT display vote counts or progress bars to a participant until they have voted on at least one option. After voting, results are shown normally.
 
 ---
 
-## 9. MAM Integration
+## 8. MAM Integration
 
-Poll messages are archived by the MUC service like any other groupchat message (the `<store/>` hint in sections 3.1, 5.1, and 6.2 ensures this). Clients retrieving archived messages via XEP-0313 SHOULD parse `<poll>`, `<poll-closed>`, and `<poll-checkpoint>` elements from MAM results, identically to live message processing.
+Poll messages are archived by the MUC service like any other groupchat message (the `<store/>` hint in sections 3.1 and 5.1 ensures this). Clients retrieving archived messages via XEP-0313 SHOULD parse `<poll>` and `<poll-closed>` elements from MAM results, identically to live message processing.
 
-### 9.1 Fetching a Single Poll Message
+### 8.1 Fetching a Single Poll Message
 
 A client can retrieve a specific poll message by its archive ID using the `{urn:xmpp:mam:2}ids` form field:
 
@@ -460,15 +378,15 @@ A client can retrieve a specific poll message by its archive ID using the `{urn:
 </iq>
 ```
 
-This is used for deferred verification (sections 5.7 and 6.6): when a client receives a `<poll-closed>` or `<poll-checkpoint>` message but does not have the original poll in its local store, it fetches the original via this targeted MAM query.
+This is used for deferred verification (section 5.7): when a client receives a `<poll-closed>` message but does not have the original poll in its local store, it fetches the original via this targeted MAM query.
 
-### 9.2 Store-First Lookup
+### 8.2 Store-First Lookup
 
 Before making a MAM query, clients SHOULD check their local message store. The store lookup should match against both the client-generated message ID (`id` attribute) and the server-assigned archive ID (`stanza-id`), since the `message-id` in `<poll-closed>` carries the original client ID.
 
 ---
 
-## 10. Legacy Client Compatibility
+## 9. Legacy Client Compatibility
 
 The protocol is designed so that clients unaware of `urn:fluux:poll:0` can still participate:
 
@@ -476,15 +394,15 @@ The protocol is designed so that clients unaware of `urn:fluux:poll:0` can still
 
 2. **Voting:** A user on a legacy client can vote by sending a numbered-emoji reaction (1️⃣, 2️⃣, etc.) on the poll message. This is the same XEP-0444 mechanism that poll-aware clients use.
 
-3. **Viewing results:** The `<poll-closed>` and `<poll-checkpoint>` messages include a text body with the tally. Legacy clients see these as normal messages.
+3. **Viewing results:** The `<poll-closed>` message includes a text body with the tally. Legacy clients see it as a normal message.
 
 The `<fallback>` element (XEP-0428) signals to poll-aware clients that the `<body>` is a fallback representation and should be replaced by the structured poll UI.
 
 ---
 
-## 11. Security Considerations
+## 10. Security Considerations
 
-### 11.1 Vote Integrity
+### 10.1 Vote Integrity
 
 In the current client-side implementation, voting rules (single-vote, deadline) are enforced locally. A malicious client could:
 
@@ -493,13 +411,13 @@ In the current client-side implementation, voting rules (single-vote, deadline) 
 - Spoof vote counts in `<poll-closed>` messages.
 
 These attacks are mitigated by:
-- **Single-vote deduplication:** The tallying algorithm (section 8.2) assigns each voter to at most one option, so multiple reactions from a single voter are gracefully handled rather than double-counted.
+- **Single-vote deduplication:** The tallying algorithm (section 7.2) assigns each voter to at most one option, so multiple reactions from a single voter are gracefully handled rather than double-counted.
 - **Tally verification:** Clients can independently tally results from the reactions map and compare against `<poll-closed>` data.
 - **Server enforcement (future):** A MUC component could enforce single-vote rules by rejecting invalid reaction stanzas, and verify `<poll-closed>` sender identity.
 
-### 11.2 Creator Identity
+### 10.2 Creator Identity
 
-Receiving clients verify `<poll-closed>` and `<poll-checkpoint>` messages against the original poll (see sections 5.6 and 6.6). The verification checks:
+Receiving clients verify `<poll-closed>` messages against the original poll (see section 5.6). The verification checks:
 
 1. **Sender identity** — via XEP-0421 occupant-id (preferred, stable across nick changes) or MUC nickname (fallback).
 2. **Content integrity** — title and result emojis must match the original poll.
@@ -507,19 +425,19 @@ Receiving clients verify `<poll-closed>` and `<poll-checkpoint>` messages agains
 
 Without server enforcement, these client-side checks rely on the MUC service's existing identity guarantees (occupant-id or full JID binding).
 
-### 11.3 Denial of Service
+### 10.3 Denial of Service
 
 A participant could create excessive polls to spam a room. This is a general MUC moderation concern and can be addressed by existing room moderation tools (kick, ban, rate limiting).
 
-### 11.4 Privacy
+### 10.4 Privacy
 
 Reaction-based voting is inherently **public** — all participants can see who voted for which option. This is by design for the initial implementation. A future extension could support anonymous voting via server-side aggregation, where the MUC component collects votes and only publishes aggregate counts.
 
 ---
 
-## 12. Future Extensions
+## 11. Future Extensions
 
-### 12.1 Server-Side Enforcement
+### 11.1 Server-Side Enforcement
 
 A MUC component module could:
 - Validate that reactions on poll messages conform to voting rules.
@@ -527,36 +445,35 @@ A MUC component module could:
 - Lock voting after the deadline.
 - Broadcast `<poll-closed>` on behalf of the creator when the deadline expires.
 - Respond to `<poll-results>` IQ queries authoritatively, eliminating the need for the creator to be online.
-- Generate authoritative `<poll-checkpoint>` messages (see section 6.7).
 
-### 12.2 Anonymous Voting
+### 11.2 Anonymous Voting
 
 A server-side component could support anonymous polls by:
 - Accepting votes via a private IQ to the MUC component (not as public reactions).
 - Publishing only aggregate counts to the room, without revealing individual voters.
 - Requiring a `<poll anonymous="true">` attribute to enable this mode.
 
-### 12.3 Extended Option Set
+### 11.3 Extended Option Set
 
 The default numbered emoji set (1️⃣–9️⃣) covers up to 9 options. Custom emojis already allow more, but a standardized extended set (🔟 and beyond, or lettered emojis) could be defined for broader compatibility.
 
-### 12.4 Poll Editing
+### 11.4 Poll Editing
 
 Allow the poll creator to edit the question or options after creation using XEP-0308 (Message Correction). This requires careful handling to avoid invalidating existing votes.
 
-### 12.5 Scheduled Polls
+### 11.5 Scheduled Polls
 
 Support for polls that open at a future time, using a `start` attribute alongside `deadline`.
 
 ---
 
-## 13. Namespace
+## 12. Namespace
 
 The protocol uses the namespace `urn:fluux:poll:0`. The `:0` suffix indicates this is an experimental version. Future standardized versions would use a versioned namespace (e.g., `urn:xmpp:poll:1`) registered with the XMPP Registrar.
 
 ---
 
-## 14. XML Schema
+## 13. XML Schema
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -587,7 +504,7 @@ The protocol uses the namespace `urn:fluux:poll:0`. The `:0` suffix indicates th
     </xs:complexType>
   </xs:element>
 
-  <!-- Shared tally type used by poll-closed, poll-checkpoint, and poll-results -->
+  <!-- Shared tally type used by poll-closed and poll-results -->
   <xs:complexType name="tallyType">
     <xs:attribute name="emoji" type="xs:string" use="required"/>
     <xs:attribute name="label" type="xs:string"/>
@@ -604,19 +521,6 @@ The protocol uses the namespace `urn:fluux:poll:0`. The `:0` suffix indicates th
         <xs:element name="tally" type="tns:tallyType" minOccurs="0" maxOccurs="unbounded"/>
       </xs:sequence>
       <xs:attribute name="message-id" type="xs:string" use="required"/>
-    </xs:complexType>
-  </xs:element>
-
-  <!-- Poll checkpoint element -->
-  <xs:element name="poll-checkpoint">
-    <xs:complexType>
-      <xs:sequence>
-        <xs:element name="title" type="xs:string"/>
-        <xs:element name="description" type="xs:string" minOccurs="0"/>
-        <xs:element name="tally" type="tns:tallyType" minOccurs="0" maxOccurs="unbounded"/>
-      </xs:sequence>
-      <xs:attribute name="message-id" type="xs:string" use="required"/>
-      <xs:attribute name="ts" type="xs:dateTime"/>
     </xs:complexType>
   </xs:element>
 
@@ -637,7 +541,7 @@ The protocol uses the namespace `urn:fluux:poll:0`. The `:0` suffix indicates th
 
 ---
 
-## 15. Acknowledgements
+## 14. Acknowledgements
 
 This protocol builds on the following extensions:
 
