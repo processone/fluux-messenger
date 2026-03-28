@@ -1,0 +1,14 @@
+services:
+  ejabberd:
+    image: ghcr.io/processone/ecs
+    container_name: ejabberd
+    volumes:
+      - ./conf/ejabberd.yml:/opt/ejabberd/conf/ejabberd.yml
+      - ./database:/opt/ejabberd/database
+      - ./logs:/opt/ejabberd/logs
+      - ./upload:/opt/ejabberd/upload
+  fluux-messenger:
+    build: .
+    container_name: fluux-messenger
+    working_dir: /home/app
+    restart: unless-stopped
