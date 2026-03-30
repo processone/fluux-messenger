@@ -43,6 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Web persistent media cache with improved unavailable media UI
 - Inline context preview for reaction and vote events in activity log
 - Interactive demo mode with guided tutorial, room browsing, mock IQ responses, and admin panel
+- Show ignored users section in MUC occupant panel
+- Render markdown headings as rich messages
 
 ### Changed
 
@@ -54,6 +56,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - External links now open in system default browser instead of Tauri webview
 - Upgraded to React 19 with React Compiler for automatic memoization
 - Upgraded to Vite 8 with lazy-loaded infrequent views
+- Color @mentions with per-user consistent colors / XEP-0392
+- Hide reactions UI in chat rooms when disco#info fails
 
 ### Fixed
 
@@ -76,6 +80,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Delayed messages skipped when computing MAM catch-up cursor
 - Admin user list refreshed after closing completed command
 - New messages marker cleared when user scrolls past it
+- Wire destroy room button to SDK MUC implementation
+- Exclude ignored users from MUC room sidebar preview 
 
 ## [0.14.0] - 2026-03-16
 
