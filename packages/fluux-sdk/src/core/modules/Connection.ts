@@ -229,7 +229,17 @@ export class Connection extends BaseModule {
 
       // Entering reconnecting.attempting is the single place we start a reconnect try.
       if (this.didEnterReconnectingSubstate(previousState, stateValue, 'attempting')) {
-        void this.attemptReconnect()
+        this.attemptReconnect().catch((err) => {
+          // Safety net: if attemptReconnect() rejects with an unhandled error
+          // (e.g., exception in cleanup or outside the inner try/catch), ensure
+          // the machine always exits the 'attempting' state.
+          const errorMsg = err instanceof Error ? err.message : String(err)
+          logErr(`attemptReconnect: unhandled rejection: ${errorMsg}`)
+          this.sendMachineEvent(
+            { type: 'CONNECTION_ERROR', error: errorMsg },
+            'attemptReconnect:unhandled-rejection'
+          )
+        })
       }
 
       this.previousMachineState = stateValue
