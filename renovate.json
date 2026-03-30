@@ -11,9 +11,16 @@
   "ignoreDeps": ["@xmpp/client", "@xmpp/debug"],
   "packageRules": [
     {
-      "groupName": "GitHub Actions",
-      "groupSlug": "github-actions",
-      "matchManagers": ["github-actions"]
+      "groupName": "GitHub Actions (CI)",
+      "groupSlug": "github-actions-ci",
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": [
+        "actions/checkout",
+        "actions/setup-node",
+        "actions/deploy-pages",
+        "actions/upload-pages-artifact",
+        "softprops/action-gh-release"
+      ]
     },
     {
       "groupName": "Tauri plugins",
