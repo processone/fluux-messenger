@@ -11,7 +11,7 @@
  */
 
 import { test, type Page } from '@playwright/test'
-import { mkdirSync } from 'fs'
+import { mkdirSync, writeFileSync } from 'fs'
 
 const DEMO_URL = '/demo.html?tutorial=false'
 const OUTPUT_DIR = 'screenshots'
@@ -195,16 +195,42 @@ test('08 — Settings Appearance (dark)', async ({ page }) => {
   await capture(page, '08-settings-dark')
 })
 
+test('09 — Search (dark)', async ({ page }) => {
+  await waitForDemoReady(page)
+  await navigateTo(page, 'search')
+  // Type a search query to show results
+  const input = page.locator('input[type="text"]').first()
+  await input.fill('design')
+  await page.waitForTimeout(1500)
+  // Click the first search result to show the preview panel
+  const firstResult = page.locator('[data-search-result-id]').first()
+  if (await firstResult.isVisible()) {
+    await firstResult.click()
+    await page.waitForTimeout(800)
+  }
+  await capture(page, '09-search-dark')
+})
+
+test('10 — Command Palette (dark)', async ({ page }) => {
+  await waitForDemoReady(page)
+  await navigateTo(page, 'messages')
+  await selectItem(page, 'Emma Wilson')
+  // Open the command palette with Cmd+K
+  await page.keyboard.press('Meta+k')
+  await page.waitForTimeout(800)
+  await capture(page, '10-command-palette-dark')
+})
+
 // ── Light Mode Screenshots ─────────────────────────────────────────
 
-test('09 — 1:1 Chat (light)', async ({ page }) => {
+test('11 — 1:1 Chat (light)', async ({ page }) => {
   await waitForDemoReady(page, 'light')
   await navigateTo(page, 'messages')
   await selectItem(page, 'Emma Wilson')
-  await capture(page, '09-chat-light')
+  await capture(page, '11-chat-light')
 })
 
-test('10 — Group Chat with Members (light)', async ({ page }) => {
+test('12 — Group Chat with Members (light)', async ({ page }) => {
   await waitForDemoReady(page, 'light')
   await navigateTo(page, 'rooms')
   await selectItem(page, 'Team Chat')
@@ -215,5 +241,98 @@ test('10 — Group Chat with Members (light)', async ({ page }) => {
     await page.waitForTimeout(500)
   }
 
-  await capture(page, '10-group-chat-light')
+  await capture(page, '12-group-chat-light')
+})
+
+// ── Theme Showcase Screenshots ────────────────────────────────────
+
+/** Switch the active theme via the exposed themeStore. */
+async function setTheme(page: Page, themeId: string) {
+  await page.evaluate((id) => {
+    const store = (window as any).__themeStore
+    if (store) store.getState().setActiveTheme(id)
+  }, themeId)
+  await page.waitForTimeout(500)
+}
+
+const themeShowcase: { id: string; label: string }[] = [
+  { id: 'nord', label: 'Nord' },
+  { id: 'dracula', label: 'Dracula' },
+  { id: 'gruvbox', label: 'Gruvbox' },
+  { id: 'catppuccin-mocha', label: 'Catppuccin Mocha' },
+  { id: 'rose-pine', label: 'Rosé Pine' },
+]
+
+for (const [i, theme] of themeShowcase.entries()) {
+  const num = 13 + i
+  test(`${num} — Chat ${theme.label} theme`, async ({ page }) => {
+    await waitForDemoReady(page)
+    await setTheme(page, theme.id)
+    await navigateTo(page, 'messages')
+    await selectItem(page, 'Emma Wilson')
+    await capture(page, `${num}-chat-${theme.id}`)
+  })
+}
+
+// ── Composite Screenshots ─────────────────────────────────────────
+
+/** Capture the 1:1 chat view and return a PNG buffer. */
+async function captureChatBuffer(page: Page, colorScheme: 'dark' | 'light'): Promise<Buffer> {
+  await waitForDemoReady(page, colorScheme)
+  await navigateTo(page, 'messages')
+  await selectItem(page, 'Emma Wilson')
+  await clearHover(page)
+  await page.waitForTimeout(300)
+  return Buffer.from(await page.screenshot({ type: 'png' }))
+}
+
+test('18 — Light/Dark Composite', async ({ page }) => {
+  // Capture both themes
+  const lightBuf = await captureChatBuffer(page, 'light')
+  const darkBuf = await captureChatBuffer(page, 'dark')
+
+  // Composite via an in-browser canvas (no extra npm deps)
+  const lightB64 = lightBuf.toString('base64')
+  const darkB64 = darkBuf.toString('base64')
+
+  const compositeB64 = await page.evaluate(
+    async ({ light, dark }) => {
+      const loadImg = (b64: string): Promise<HTMLImageElement> =>
+        new Promise((resolve, reject) => {
+          const img = new Image()
+          img.onload = () => resolve(img)
+          img.onerror = reject
+          img.src = `data:image/png;base64,${b64}`
+        })
+
+      const [lightImg, darkImg] = await Promise.all([loadImg(light), loadImg(dark)])
+      const W = lightImg.width
+      const H = lightImg.height
+
+      const canvas = document.createElement('canvas')
+      canvas.width = W
+      canvas.height = H
+      const ctx = canvas.getContext('2d')!
+
+      // Draw light image as the base (full canvas)
+      ctx.drawImage(lightImg, 0, 0)
+
+      // Clip a diagonal triangle for the bottom-right half, then draw dark
+      ctx.save()
+      ctx.beginPath()
+      ctx.moveTo(W, 0)
+      ctx.lineTo(W, H)
+      ctx.lineTo(0, H)
+      ctx.closePath()
+      ctx.clip()
+      ctx.drawImage(darkImg, 0, 0)
+      ctx.restore()
+
+      // Return the composited image as base64 PNG
+      return canvas.toDataURL('image/png').replace('data:image/png;base64,', '')
+    },
+    { light: lightB64, dark: darkB64 }
+  )
+
+  writeFileSync(`${OUTPUT_DIR}/18-chat-light-dark.png`, Buffer.from(compositeB64, 'base64'))
 })

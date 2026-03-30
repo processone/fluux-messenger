@@ -14,6 +14,7 @@ import { HashRouter } from 'react-router-dom'
 import { XMPPProvider, DemoClient } from '@fluux/sdk'
 import { adminStore } from '@fluux/sdk/stores'
 import { ThemeProvider } from './providers/ThemeProvider'
+import { useThemeStore } from './stores/themeStore'
 import { RenderLoopBoundary } from './components/RenderLoopBoundary'
 import { DemoTutorialProvider } from './demo/tutorial/DemoTutorialProvider'
 import { buildDemoData, buildDemoAnimation } from './demo/demoData'
@@ -50,6 +51,7 @@ demoClient.setDiscoverableRooms(getDiscoverableRooms())
 // Expose demo client and stores for automation (screenshot scripts, testing)
 ;(window as any).__demoClient = demoClient
 ;(window as any).__adminStore = adminStore
+;(window as any).__themeStore = useThemeStore
 
 // Seed admin store so the Admin panel is accessible in demo
 adminStore.getState().setIsAdmin(true)
