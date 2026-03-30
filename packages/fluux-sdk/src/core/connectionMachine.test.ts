@@ -213,6 +213,69 @@ describe('connectionMachine', () => {
       expect(actor.getSnapshot().context.lastError).toBe('Authentication failed')
       actor.stop()
     })
+
+    it('should handle SLEEP while verifying (re-sleep before verification completes)', () => {
+      actor.send({ type: 'WAKE' })
+      expect(actor.getSnapshot().value).toEqual({ connected: 'verifying' })
+
+      actor.send({ type: 'SLEEP' })
+      expect(actor.getSnapshot().value).toEqual({ connected: 'sleeping' })
+      expect(actor.getSnapshot().context.sleepStartTime).not.toBeNull()
+      actor.stop()
+    })
+
+    it('should handle full re-sleep/wake cycle from verifying state', () => {
+      actor.send({ type: 'WAKE' })
+      expect(actor.getSnapshot().value).toEqual({ connected: 'verifying' })
+
+      // Re-sleep while verifying
+      actor.send({ type: 'SLEEP' })
+      expect(actor.getSnapshot().value).toEqual({ connected: 'sleeping' })
+
+      // Wake again with long sleep — should go to reconnecting
+      const longSleep = SM_SESSION_TIMEOUT_MS + 1000
+      actor.send({ type: 'WAKE', sleepDurationMs: longSleep })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'waiting' })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(false)
+      actor.stop()
+    })
+
+    it('should auto-transition to reconnecting after verifyTimeout (safety net)', () => {
+      vi.useFakeTimers()
+      try {
+        actor.send({ type: 'WAKE' })
+        expect(actor.getSnapshot().value).toEqual({ connected: 'verifying' })
+
+        // Advance past the 15s verifyTimeout
+        vi.advanceTimersByTime(15_000)
+
+        expect(actor.getSnapshot().value).toEqual({ reconnecting: 'waiting' })
+        expect(actor.getSnapshot().context.reconnectAttempt).toBe(1)
+      } finally {
+        vi.useRealTimers()
+        actor.stop()
+      }
+    })
+
+    it('should cancel verifyTimeout when VERIFY_SUCCESS arrives before timeout', () => {
+      vi.useFakeTimers()
+      try {
+        actor.send({ type: 'WAKE' })
+        expect(actor.getSnapshot().value).toEqual({ connected: 'verifying' })
+
+        // Verify succeeds before timeout
+        vi.advanceTimersByTime(2_000)
+        actor.send({ type: 'VERIFY_SUCCESS' })
+        expect(actor.getSnapshot().value).toEqual({ connected: 'healthy' })
+
+        // Advance past the original timeout — should NOT transition
+        vi.advanceTimersByTime(20_000)
+        expect(actor.getSnapshot().value).toEqual({ connected: 'healthy' })
+      } finally {
+        vi.useRealTimers()
+        actor.stop()
+      }
+    })
   })
 
   describe('socket death', () => {

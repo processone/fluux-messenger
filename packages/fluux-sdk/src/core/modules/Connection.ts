@@ -37,6 +37,7 @@ import {
   NETWORK_READY_TIMEOUT_MS,
   RECONNECT_ATTEMPT_TIMEOUT_MS,
   VERIFY_CONNECTION_TIMEOUT_MS,
+  WAKE_VERIFY_TIMEOUT_MS,
 } from './connectionTimeouts'
 import {
   shouldSkipDiscovery,
@@ -1101,9 +1102,11 @@ export class Connection extends BaseModule {
         )
         this.cleanupClient()
       } else {
-        // Short sleep — verify connection health
+        // Short sleep — verify connection health with shorter timeout.
+        // After sleep the socket is almost certainly dead; a long timeout
+        // feels like a UI freeze.
         this.stores.console.addEvent('System state: awake, verifying connection', 'connection')
-        const isHealthy = await this.verifyConnection()
+        const isHealthy = await this.verifyConnection(WAKE_VERIFY_TIMEOUT_MS)
         if (!isHealthy && !this.isInReconnectingState()) {
           this.stores.console.addEvent('Connection dead after wake, reconnecting...', 'connection')
           this.handleDeadSocket()

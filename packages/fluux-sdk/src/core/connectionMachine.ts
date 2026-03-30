@@ -276,6 +276,10 @@ export const connectionMachine = setup({
   },
   delays: {
     reconnectDelay: ({ context }) => context.nextRetryDelayMs,
+    /** Safety timeout for connected.verifying — if verifyConnection() never
+     *  sends VERIFY_SUCCESS or VERIFY_FAILED (e.g., uncaught exception), the
+     *  machine auto-transitions to reconnecting instead of getting stuck. */
+    verifyTimeout: 15_000,
   },
 }).createMachine({
   id: 'connection',
@@ -417,8 +421,18 @@ export const connectionMachine = setup({
         /**
          * Checking connection health after wake from sleep.
          * The Connection module sends a ping/SM ack and reports the result.
+         *
+         * Has a machine-level safety timeout: if verifyConnection() never sends
+         * VERIFY_SUCCESS or VERIFY_FAILED (e.g., uncaught exception), the machine
+         * auto-transitions to reconnecting instead of getting permanently stuck.
          */
         verifying: {
+          after: {
+            verifyTimeout: {
+              target: '#connection.reconnecting',
+              actions: 'incrementAttempt',
+            },
+          },
           on: {
             VERIFY_SUCCESS: {
               target: 'healthy',
@@ -431,6 +445,11 @@ export const connectionMachine = setup({
             SOCKET_DIED: {
               target: '#connection.reconnecting',
               actions: 'incrementAttempt',
+            },
+            // System can re-sleep while we're verifying (user closes lid again)
+            SLEEP: {
+              target: 'sleeping',
+              actions: 'recordSleepStart',
             },
           },
         },

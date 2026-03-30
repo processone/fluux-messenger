@@ -28,6 +28,14 @@ export const RECONNECT_ATTEMPT_TIMEOUT_MS = 30_000
 export const VERIFY_CONNECTION_TIMEOUT_MS = 10_000
 
 /**
+ * Shorter timeout for post-sleep verification.
+ * After sleep, the socket is almost certainly dead — waiting 10s for a
+ * response that will never come feels like a freeze. Use a shorter timeout
+ * so we transition to reconnecting quickly.
+ */
+export const WAKE_VERIFY_TIMEOUT_MS = 3_000
+
+/**
  * Timeout for the desktop direct-WebSocket pre-check when proxy is available.
  * If the direct WS handshake stalls, we quickly fall back to TCP/SRV via proxy.
  */
