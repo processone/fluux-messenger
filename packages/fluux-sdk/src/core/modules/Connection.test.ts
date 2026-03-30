@@ -3421,7 +3421,8 @@ describe('XMPPClient Connection', () => {
 
       // Simulate network coming up after 1 second
       await vi.advanceTimersByTimeAsync(1000)
-      windowEventTarget.dispatchEvent(new Event('online'))
+      // Dispatch on the actual window (or the shim, which IS windowEventTarget)
+      window.dispatchEvent(new Event('online'))
 
       const result = await promise
       expect(result).toBe(true)
