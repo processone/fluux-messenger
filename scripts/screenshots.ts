@@ -118,6 +118,8 @@ test('03 — Conversation List (dark)', async ({ page }) => {
 test('04 — Contact Directory (dark)', async ({ page }) => {
   await waitForDemoReady(page)
   await navigateTo(page, 'directory')
+  // Select a contact to show the profile panel
+  await selectItem(page, 'Emma Wilson')
   await capture(page, '04-contacts-dark')
 })
 
@@ -151,15 +153,45 @@ test('06 — Code Block (dark)', async ({ page }) => {
   await capture(page, '06-code-block-dark')
 })
 
-test('07 — Admin Dashboard (dark)', async ({ page }) => {
+test('07 — Admin User List (dark)', async ({ page }) => {
   await waitForDemoReady(page)
   await navigateTo(page, 'admin')
+  // Click the Users category to show the user list
+  await page.getByText('Users').first().click()
+  await page.waitForTimeout(500)
+  // In demo mode fetchUsers() has no real server, so re-seed the user list data
+  await page.evaluate(() => {
+    const adminStore = (window as any).__adminStore
+    if (adminStore) {
+      adminStore.getState().setUserList({
+        items: [
+          { jid: 'emma@fluux.chat', username: 'emma', isOnline: true },
+          { jid: 'james@fluux.chat', username: 'james', isOnline: true },
+          { jid: 'sophia@fluux.chat', username: 'sophia', isOnline: true },
+          { jid: 'oliver@fluux.chat', username: 'oliver', isOnline: true },
+          { jid: 'mia@fluux.chat', username: 'mia', isOnline: false },
+          { jid: 'liam@fluux.chat', username: 'liam', isOnline: true },
+          { jid: 'ava@fluux.chat', username: 'ava', isOnline: true },
+          { jid: 'alex@fluux.chat', username: 'alex', isOnline: false },
+        ],
+        isLoading: false,
+        error: null,
+        searchQuery: '',
+        hasFetched: true,
+        pagination: { count: 8 },
+      })
+    }
+  })
+  await page.waitForTimeout(500)
   await capture(page, '07-admin-dark')
 })
 
-test('08 — Settings (dark)', async ({ page }) => {
+test('08 — Settings Appearance (dark)', async ({ page }) => {
   await waitForDemoReady(page)
   await navigateTo(page, 'settings')
+  // Navigate to the Appearance category
+  await page.getByText('Appearance').first().click()
+  await page.waitForTimeout(800)
   await capture(page, '08-settings-dark')
 })
 
