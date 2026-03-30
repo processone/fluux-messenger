@@ -146,8 +146,7 @@ async function doResolve(originalUrl: string): Promise<string> {
   const finalPath = await getCacheFilePath(originalUrl, mimeType)
 
   const { writeFile } = await import('@tauri-apps/plugin-fs')
-  // Use Response API for broader compatibility (jsdom Blob lacks arrayBuffer)
-  const arrayBuffer = await new Response(blob).arrayBuffer()
+  const arrayBuffer = await blob.arrayBuffer()
   await writeFile(finalPath, new Uint8Array(arrayBuffer))
 
   const assetUrl = convertFileSrc(finalPath)
