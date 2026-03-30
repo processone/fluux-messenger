@@ -5,7 +5,9 @@
     "schedule:daily",
     "group:allNonMajor"
   ],
-  "baseBranches": ["devel"],
+  "baseBranchPatterns": [
+    "devel"
+  ],
   "labels": ["dependencies"],
   "postUpdateOptions": ["npmInstallTwice"],
   "ignoreDeps": ["@xmpp/client", "@xmpp/debug"],
