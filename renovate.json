@@ -9,14 +9,16 @@
     "devel"
   ],
   "labels": ["dependencies"],
-  "postUpdateOptions": ["npmInstallTwice"],
-  "ignoreDeps": ["@xmpp/client", "@xmpp/debug"],
   "packageRules": [
+    {
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true
+    },
     {
       "groupName": "Rust crates",
       "groupSlug": "rust",
       "matchManagers": ["cargo"],
-      "matchUpdateTypes": ["minor", "patch", "major"]
+      "matchUpdateTypes": ["minor", "patch"]
     },
     {
       "groupName": "GitHub Actions (CI)",
@@ -48,12 +50,18 @@
       ]
     },
     {
-      "groupName": "ESLint & TypeScript",
-      "groupSlug": "lint",
+      "groupName": "ESLint",
+      "groupSlug": "eslint",
       "matchPackageNames": [
         "/eslint/",
-        "/typescript-eslint/",
-        "/typescript/"
+        "/typescript-eslint/"
+      ]
+    },
+    {
+      "groupName": "XMPP",
+      "groupSlug": "xmpp",
+      "matchPackageNames": [
+        "/^@xmpp//"
       ]
     },
     {
