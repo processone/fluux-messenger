@@ -5,13 +5,16 @@
     "schedule:daily",
     "group:allNonMajor"
   ],
-  "baseBranchPatterns": [
-    "devel"
-  ],
+  "baseBranches": ["devel"],
   "labels": ["dependencies"],
   "postUpdateOptions": ["npmInstallTwice"],
   "ignoreDeps": ["@xmpp/client", "@xmpp/debug"],
   "packageRules": [
+    {
+      "groupName": "GitHub Actions",
+      "groupSlug": "github-actions",
+      "matchManagers": ["github-actions"]
+    },
     {
       "groupName": "Tauri plugins",
       "groupSlug": "tauri",
