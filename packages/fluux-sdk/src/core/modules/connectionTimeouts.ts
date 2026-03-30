@@ -69,3 +69,11 @@ export const FRESH_SESSION_SETUP_TIMEOUT_MS = 30_000
  * 'online' event before proceeding with (or skipping) the reconnect attempt.
  */
 export const NETWORK_READY_TIMEOUT_MS = 15_000
+
+/**
+ * Timeout for the SASL authentication exchange.
+ * If the server doesn't respond to SASL challenges within this window
+ * (e.g., half-open WebSocket after sleep/wake), abort early instead of
+ * waiting for the full RECONNECT_ATTEMPT_TIMEOUT_MS.
+ */
+export const SASL_AUTH_TIMEOUT_MS = 15_000

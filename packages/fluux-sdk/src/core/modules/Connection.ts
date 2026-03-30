@@ -36,6 +36,7 @@ import {
   DISCONNECT_CLEANUP_TIMEOUT_MS,
   NETWORK_READY_TIMEOUT_MS,
   RECONNECT_ATTEMPT_TIMEOUT_MS,
+  SASL_AUTH_TIMEOUT_MS,
   VERIFY_CONNECTION_TIMEOUT_MS,
   WAKE_VERIFY_TIMEOUT_MS,
 } from './connectionTimeouts'
@@ -146,6 +147,11 @@ export class Connection extends BaseModule {
   // SM patches state (ack debounce timer + original send reference)
   // See smPatches.ts for implementation details
   private smPatchState: SmPatchState = createSmPatchState()
+
+  // Set by handleDeadSocket to signal that error recovery is already in progress.
+  // Prevents setupConnectionHandlers' error handler from rejecting the connection
+  // promise and sending CONNECTION_ERROR that would disrupt the new reconnect.
+  private deadSocketRecoveryInProgress = false
 
   // Callback for post-connection setup (roster, presence, carbons, etc.)
   private onConnectionSuccess?: (isResumption: boolean, previouslyJoinedRooms?: Array<{ jid: string; nickname: string; password?: string; autojoin?: boolean }>) => Promise<void>
@@ -1000,6 +1006,11 @@ export class Connection extends BaseModule {
       return
     }
 
+    // Signal to setupConnectionHandlers' error handler that recovery is already
+    // in progress. Must be set BEFORE cleanupClient/triggerReconnect so the
+    // EventEmitter snapshot handler sees it and skips its own onError/reject.
+    this.deadSocketRecoveryInProgress = true
+
     // If we're not already reconnecting, transition now.
     // When VERIFY_FAILED already moved the machine to reconnecting, we still need
     // the cleanup side effects below.
@@ -1240,7 +1251,12 @@ export class Connection extends BaseModule {
           'connection'
         )
         logInfo(`Auth: ${authMethod} (SASL: ${mechanism}, offered: ${mechanisms.join(', ')})`)
-        await authenticate(creds, mechanism)
+        await Promise.race([
+          authenticate(creds, mechanism),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('SASL authentication timed out')), SASL_AUTH_TIMEOUT_MS)
+          ),
+        ])
       },
     })
 
@@ -1420,6 +1436,13 @@ export class Connection extends BaseModule {
 
     this.xmpp.on('error', (err: Error) => {
       if (resolved) return
+      // If handleDeadSocket already initiated recovery (e.g., econnerror handled
+      // by setupHandlers' error handler first), don't reject the promise — that
+      // would send CONNECTION_ERROR and disrupt the already-in-progress reconnect.
+      if (this.deadSocketRecoveryInProgress) {
+        resolved = true
+        return
+      }
       resolved = true
       onError(err)
     })
@@ -1897,6 +1920,7 @@ export class Connection extends BaseModule {
       logInfo('attemptReconnect: old client cleaned up')
 
       const connectWithOptions = async (options: ConnectOptions): Promise<void> => {
+        this.deadSocketRecoveryInProgress = false
         this.xmpp = this.createXmppClient(options)
         this.hydrateStreamManagement(smState ?? undefined)
         this.setupHandlers()
@@ -2026,6 +2050,7 @@ export class Connection extends BaseModule {
 
     // Null the reference FIRST to prevent race conditions
     this.xmpp = null
+    this.deadSocketRecoveryInProgress = false
 
     // Clear any pending SM ack debounce timer
     clearSmAckDebounce(this.smPatchState)
