@@ -1865,7 +1865,7 @@ export class Connection extends BaseModule {
       // The machine tracks sleep duration via connected.sleeping → SOCKET_DIED/WAKE
       // and sets smResumeViable accordingly. This is the single source of truth.
       const { smResumeViable } = this.connectionActor.getSnapshot().context
-      let smState = smResumeViable ? this.getStreamManagementState() : null
+      const smState = smResumeViable ? this.getStreamManagementState() : null
       if (!smResumeViable) {
         logInfo('SM resume not viable (long sleep or expired), starting fresh session')
         this.smPersistence.clearCache()
