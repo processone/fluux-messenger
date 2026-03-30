@@ -1,6 +1,5 @@
 import { useState, useEffect, type ReactNode } from 'react'
 import { generateConsistentColorHexSync, type PresenceStatus, type PresenceShow } from '@fluux/sdk'
-import { useConnectionStore } from '@fluux/sdk/react'
 import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS } from '@/constants/ui'
 
 /**
@@ -87,6 +86,13 @@ export interface AvatarProps {
    * Useful for matching avatar color to nick text color in chat rooms.
    */
   fallbackColor?: string
+
+  /**
+   * When true, forces the presence indicator to show the offline color
+   * regardless of actual presence. Parent components should pass this
+   * based on connection status to avoid per-Avatar store subscriptions.
+   */
+  forceOffline?: boolean
 }
 
 /**
@@ -192,9 +198,8 @@ export function Avatar({
   presenceBorderColor = 'border-fluux-sidebar',
   overlay,
   fallbackColor,
+  forceOffline = false,
 }: AvatarProps) {
-  const connectionStatus = useConnectionStore((s) => s.status)
-
   // Generate consistent background color from identifier, or use custom fallbackColor
   const backgroundColor = fallbackColor
     || ensureContrastWithWhite(generateConsistentColorHexSync(identifier, { saturation: 60, lightness: 45 }))
@@ -208,7 +213,7 @@ export function Avatar({
 
   // Determine presence color
   // Uses CSS custom properties for smooth color transitions between states
-  const isOffline = connectionStatus !== 'online'
+  const isOffline = forceOffline
   const resolvedPresence = presenceShow ? getPresenceStatusFromShow(presenceShow) : presence
   const presenceColor = resolvedPresence
     ? (isOffline ? APP_OFFLINE_PRESENCE_COLOR : PRESENCE_COLORS[resolvedPresence])

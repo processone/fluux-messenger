@@ -329,6 +329,7 @@ const ContactItem = memo(function ContactItem({
             avatarUrl={contact.avatar}
             size="sm"
             presence={forceOffline ? 'offline' : contact.presence}
+            forceOffline={forceOffline}
           />
 
           <div className="flex-1 min-w-0">

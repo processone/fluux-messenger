@@ -183,6 +183,7 @@ export function ContactProfileView({
               size="xl"
               presence={forceOffline ? 'offline' : contact.presence}
               presenceBorderColor="border-fluux-chat"
+              forceOffline={forceOffline}
             />
           </div>
 
