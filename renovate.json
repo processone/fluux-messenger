@@ -1,0 +1,47 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "schedule:daily",
+    "group:allNonMajor"
+  ],
+  "baseBranches": ["devel"],
+  "labels": ["dependencies"],
+  "postUpdateOptions": ["npmInstallTwice"],
+  "ignoreDeps": ["@xmpp/client", "@xmpp/debug"],
+  "packageRules": [
+    {
+      "groupName": "Tauri plugins",
+      "groupSlug": "tauri",
+      "matchPackageNames": [
+        "/^@tauri-apps//"
+      ]
+    },
+    {
+      "groupName": "Testing tools",
+      "groupSlug": "testing",
+      "matchPackageNames": [
+        "/vitest/",
+        "/@vitest//",
+        "/@testing-library//"
+      ]
+    },
+    {
+      "groupName": "ESLint & TypeScript",
+      "groupSlug": "lint",
+      "matchPackageNames": [
+        "/eslint/",
+        "/typescript-eslint/",
+        "/typescript/"
+      ]
+    },
+    {
+      "groupName": "i18next",
+      "groupSlug": "i18n",
+      "matchPackageNames": [
+        "/i18next/",
+        "/react-i18next/"
+      ]
+    }
+  ]
+}
