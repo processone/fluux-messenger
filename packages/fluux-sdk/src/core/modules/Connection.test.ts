@@ -3374,9 +3374,23 @@ describe('XMPPClient Connection', () => {
   // =========================================================================
   describe('network readiness gate', () => {
     let originalOnLine: boolean
+    let installedWindowShim = false
+    const windowEventTarget = new EventTarget()
 
     beforeEach(() => {
       originalOnLine = navigator.onLine
+      // The production code checks `typeof window === 'undefined'` and uses
+      // window.addEventListener/removeEventListener/dispatchEvent.
+      // In happy-dom vitest, `window` may not be a true global, so we
+      // install a minimal shim backed by an EventTarget.
+      if (typeof globalThis.window === 'undefined') {
+        ;(globalThis as any).window = {
+          addEventListener: windowEventTarget.addEventListener.bind(windowEventTarget),
+          removeEventListener: windowEventTarget.removeEventListener.bind(windowEventTarget),
+          dispatchEvent: windowEventTarget.dispatchEvent.bind(windowEventTarget),
+        }
+        installedWindowShim = true
+      }
     })
 
     afterEach(() => {
@@ -3385,6 +3399,10 @@ describe('XMPPClient Connection', () => {
         writable: true,
         configurable: true,
       })
+      if (installedWindowShim) {
+        delete (globalThis as any).window
+        installedWindowShim = false
+      }
     })
 
     it('waitForNetworkReady returns true immediately when navigator.onLine is true', async () => {
@@ -3403,7 +3421,7 @@ describe('XMPPClient Connection', () => {
 
       // Simulate network coming up after 1 second
       await vi.advanceTimersByTimeAsync(1000)
-      window.dispatchEvent(new Event('online'))
+      windowEventTarget.dispatchEvent(new Event('online'))
 
       const result = await promise
       expect(result).toBe(true)
