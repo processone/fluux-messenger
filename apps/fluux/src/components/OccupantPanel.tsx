@@ -405,6 +405,7 @@ export function OccupantPanel({
                       presence={getPresenceFromShow(group.bestPresence)}
                       presenceBorderColor="border-fluux-sidebar"
                       fallbackColor={isMe ? 'var(--fluux-bg-accent)' : undefined}
+                      forceOffline={forceOffline}
                     />
 
                     {/* Nick and badges */}

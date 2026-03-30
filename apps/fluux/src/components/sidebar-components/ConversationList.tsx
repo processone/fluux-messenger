@@ -296,6 +296,7 @@ export const ConversationItem = memo(function ConversationItem({
             avatarUrl={contact?.avatar}
             size="sm"
             presence={contact?.presence ?? 'offline'}
+            forceOffline={forceOffline}
             overlay={isTyping ? <TypingIndicator /> : undefined}
           />
         )}

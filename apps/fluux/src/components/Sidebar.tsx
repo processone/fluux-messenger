@@ -89,18 +89,18 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
   // Use focused selectors instead of useConnection() to avoid re-renders when unrelated values change
   // (e.g., ownResources updates shouldn't re-render the entire sidebar)
   const jid = useConnectionStore((s) => s.jid)
-  const rawStatus = useConnectionStore((s) => s.status)
+  const status = useConnectionStore((s) => s.status)
+  const isVerifying = useConnectionStore((s) => s.isVerifying)
 
-  // Suppress brief 'verifying' flashes: only show verifying status after a 2s delay.
-  // This avoids distracting orange flickers during routine connection checks.
-  const [status, setStatus] = useState(rawStatus)
+  // Suppress brief 'verifying' flashes: only show verifying after a 2s delay.
+  const [showVerifying, setShowVerifying] = useState(false)
   useEffect(() => {
-    if (rawStatus === 'verifying') {
-      const timer = setTimeout(() => setStatus('verifying'), 2000)
+    if (isVerifying) {
+      const timer = setTimeout(() => setShowVerifying(true), 2000)
       return () => clearTimeout(timer)
     }
-    setStatus(rawStatus)
-  }, [rawStatus])
+    setShowVerifying(false)
+  }, [isVerifying])
   const reconnectAttempt = useConnectionStore((s) => s.reconnectAttempt)
   const reconnectTargetTime = useConnectionStore((s) => s.reconnectTargetTime)
   const ownAvatar = useConnectionStore((s) => s.ownAvatar)
@@ -462,10 +462,10 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
                   {ownNickname || jid?.split('@')[0]}
                 </p>
               </Tooltip>
-              {status === 'online' ? (
+              {status === 'online' && !showVerifying ? (
                 <PresenceSelector isOpen={showPresenceMenu} onOpenChange={(open) => open ? modalActions.open('presenceMenu') : modalActions.close('presenceMenu')} />
               ) : (
-                <StatusDisplay status={status} reconnectTargetTime={reconnectTargetTime} reconnectAttempt={reconnectAttempt} />
+                <StatusDisplay status={showVerifying ? 'verifying' : status} reconnectTargetTime={reconnectTargetTime} reconnectAttempt={reconnectAttempt} />
               )}
             </div>
             {/* Menu button */}

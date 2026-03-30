@@ -2294,8 +2294,8 @@ describe('XMPPClient Connection', () => {
       await vi.runAllTimersAsync()
       await notifyPromise
 
-      // Should have set status to verifying
-      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('verifying')
+      // Should have entered verifying state (status stays 'online', isVerifying flag set)
+      expect(mockStores.connection.setIsVerifying).toHaveBeenCalledWith(true)
       // Should have logged the verification
       expect(mockStores.console.addEvent).toHaveBeenCalledWith(
         expect.stringContaining('awake'),
@@ -2306,8 +2306,8 @@ describe('XMPPClient Connection', () => {
     it('should NOT verify connection on "visible" state when online', async () => {
       await xmppClient.notifySystemState('visible')
 
-      // Should NOT set status to verifying
-      expect(mockStores.connection.setStatus).not.toHaveBeenCalledWith('verifying')
+      // Should NOT enter verifying state
+      expect(mockStores.connection.setIsVerifying).not.toHaveBeenCalledWith(true)
       // Should NOT send any SM request (send was cleared after connection setup)
       expect(mockXmppClientInstance.send).not.toHaveBeenCalled()
     })
@@ -2334,7 +2334,7 @@ describe('XMPPClient Connection', () => {
       await xmppClient.notifySystemState('awake', fifteenMinutesMs)
 
       // Should NOT verify (no SM request sent for verification)
-      expect(mockStores.connection.setStatus).not.toHaveBeenCalledWith('verifying')
+      expect(mockStores.connection.setIsVerifying).not.toHaveBeenCalledWith(true)
       // Should trigger reconnect
       expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
       // Should log that we're reconnecting immediately
@@ -2370,8 +2370,8 @@ describe('XMPPClient Connection', () => {
       await vi.runAllTimersAsync()
       await notifyPromise
 
-      // Should verify (status set to verifying)
-      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('verifying')
+      // Should verify (isVerifying flag set)
+      expect(mockStores.connection.setIsVerifying).toHaveBeenCalledWith(true)
     })
   })
 
@@ -3374,9 +3374,23 @@ describe('XMPPClient Connection', () => {
   // =========================================================================
   describe('network readiness gate', () => {
     let originalOnLine: boolean
+    let installedWindowShim = false
+    const windowEventTarget = new EventTarget()
 
     beforeEach(() => {
       originalOnLine = navigator.onLine
+      // The production code checks `typeof window === 'undefined'` and uses
+      // window.addEventListener/removeEventListener/dispatchEvent.
+      // In happy-dom vitest, `window` may not be a true global, so we
+      // install a minimal shim backed by an EventTarget.
+      if (typeof globalThis.window === 'undefined') {
+        ;(globalThis as any).window = {
+          addEventListener: windowEventTarget.addEventListener.bind(windowEventTarget),
+          removeEventListener: windowEventTarget.removeEventListener.bind(windowEventTarget),
+          dispatchEvent: windowEventTarget.dispatchEvent.bind(windowEventTarget),
+        }
+        installedWindowShim = true
+      }
     })
 
     afterEach(() => {
@@ -3385,6 +3399,10 @@ describe('XMPPClient Connection', () => {
         writable: true,
         configurable: true,
       })
+      if (installedWindowShim) {
+        delete (globalThis as any).window
+        installedWindowShim = false
+      }
     })
 
     it('waitForNetworkReady returns true immediately when navigator.onLine is true', async () => {
@@ -3403,6 +3421,7 @@ describe('XMPPClient Connection', () => {
 
       // Simulate network coming up after 1 second
       await vi.advanceTimersByTimeAsync(1000)
+      // Dispatch on the actual window (or the shim, which IS windowEventTarget)
       window.dispatchEvent(new Event('online'))
 
       const result = await promise

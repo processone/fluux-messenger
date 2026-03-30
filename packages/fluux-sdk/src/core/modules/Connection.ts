@@ -37,6 +37,7 @@ import {
   NETWORK_READY_TIMEOUT_MS,
   RECONNECT_ATTEMPT_TIMEOUT_MS,
   VERIFY_CONNECTION_TIMEOUT_MS,
+  WAKE_VERIFY_TIMEOUT_MS,
 } from './connectionTimeouts'
 import {
   shouldSkipDiscovery,
@@ -204,7 +205,9 @@ export class Connection extends BaseModule {
       }
 
       // Sync status to store
+      const isVerifying = typeof stateValue === 'object' && 'connected' in stateValue && stateValue.connected === 'verifying'
       this.stores.connection.setStatus(status)
+      this.stores.connection.setIsVerifying(isVerifying)
       this.stores.connection.setReconnectState(attempt, reconnectTargetTime)
 
       // Sync error to store
@@ -228,7 +231,17 @@ export class Connection extends BaseModule {
 
       // Entering reconnecting.attempting is the single place we start a reconnect try.
       if (this.didEnterReconnectingSubstate(previousState, stateValue, 'attempting')) {
-        void this.attemptReconnect()
+        this.attemptReconnect().catch((err) => {
+          // Safety net: if attemptReconnect() rejects with an unhandled error
+          // (e.g., exception in cleanup or outside the inner try/catch), ensure
+          // the machine always exits the 'attempting' state.
+          const errorMsg = err instanceof Error ? err.message : String(err)
+          logErr(`attemptReconnect: unhandled rejection: ${errorMsg}`)
+          this.sendMachineEvent(
+            { type: 'CONNECTION_ERROR', error: errorMsg },
+            'attemptReconnect:unhandled-rejection'
+          )
+        })
       }
 
       this.previousMachineState = stateValue
@@ -1101,9 +1114,11 @@ export class Connection extends BaseModule {
         )
         this.cleanupClient()
       } else {
-        // Short sleep — verify connection health
+        // Short sleep — verify connection health with shorter timeout.
+        // After sleep the socket is almost certainly dead; a long timeout
+        // feels like a UI freeze.
         this.stores.console.addEvent('System state: awake, verifying connection', 'connection')
-        const isHealthy = await this.verifyConnection()
+        const isHealthy = await this.verifyConnection(WAKE_VERIFY_TIMEOUT_MS)
         if (!isHealthy && !this.isInReconnectingState()) {
           this.stores.console.addEvent('Connection dead after wake, reconnecting...', 'connection')
           this.handleDeadSocket()
@@ -1862,7 +1877,7 @@ export class Connection extends BaseModule {
       // The machine tracks sleep duration via connected.sleeping → SOCKET_DIED/WAKE
       // and sets smResumeViable accordingly. This is the single source of truth.
       const { smResumeViable } = this.connectionActor.getSnapshot().context
-      let smState = smResumeViable ? this.getStreamManagementState() : null
+      const smState = smResumeViable ? this.getStreamManagementState() : null
       if (!smResumeViable) {
         logInfo('SM resume not viable (long sleep or expired), starting fresh session')
         this.smPersistence.clearCache()

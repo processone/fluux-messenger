@@ -47,6 +47,8 @@ export type { ServerInfo, ServerIdentity, HttpUploadService, WebPushService, Web
  */
 interface ConnectionState {
   status: ConnectionStatus
+  /** True while the machine is in connected.verifying (wake verification in progress) */
+  isVerifying: boolean
   jid: string | null
   error: string | null
   reconnectAttempt: number
@@ -76,6 +78,7 @@ interface ConnectionState {
 
   // Actions - state setters only (connect/disconnect moved to hooks)
   setStatus: (status: ConnectionStatus) => void
+  setIsVerifying: (isVerifying: boolean) => void
   setJid: (jid: string | null) => void
   setError: (error: string | null) => void
   setReconnectState: (attempt: number, reconnectTargetTime: number | null) => void
@@ -106,6 +109,7 @@ interface ConnectionState {
 
 const initialState = {
   status: 'disconnected' as ConnectionStatus,
+  isVerifying: false,
   jid: null,
   error: null,
   reconnectAttempt: 0,
@@ -137,6 +141,7 @@ export const connectionStore = createStore<ConnectionState>()(
   ...initialState,
 
   setStatus: (status) => set({ status }),
+  setIsVerifying: (isVerifying) => set({ isVerifying }),
   setJid: (jid) => set({ jid }),
   setError: (error) => set({ error }),
   setReconnectState: (attempt, reconnectTargetTime) => set({ reconnectAttempt: attempt, reconnectTargetTime }),

@@ -1276,9 +1276,9 @@ describe('XMPPClient', () => {
       await vi.advanceTimersByTimeAsync(100)
       await resultPromise
 
-      // Should set to 'verifying' first, then restore to 'online'
-      expect(mockStores.connection.setStatus).toHaveBeenNthCalledWith(1, 'verifying')
-      expect(mockStores.connection.setStatus).toHaveBeenNthCalledWith(2, 'online')
+      // verifying maps to 'online' status but sets isVerifying flag
+      expect(mockStores.connection.setIsVerifying).toHaveBeenCalledWith(true)
+      expect(mockStores.connection.setIsVerifying).toHaveBeenCalledWith(false)
     })
 
     it('should return false and trigger reconnect on dead socket', async () => {
@@ -1310,8 +1310,8 @@ describe('XMPPClient', () => {
       const result = await xmppClient.verifyConnection()
 
       expect(result).toBe(false)
-      // Should set to 'verifying' first, then to 'reconnecting' on dead socket
-      expect(mockStores.connection.setStatus).toHaveBeenNthCalledWith(1, 'verifying')
+      // verifying maps to 'online' status with isVerifying flag, then reconnecting
+      expect(mockStores.connection.setIsVerifying).toHaveBeenCalledWith(true)
       expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
     })
 
@@ -1348,8 +1348,8 @@ describe('XMPPClient', () => {
       const result = await resultPromise
 
       expect(result).toBe(false)
-      // Should set to 'verifying' first, then to 'reconnecting' on timeout
-      expect(mockStores.connection.setStatus).toHaveBeenNthCalledWith(1, 'verifying')
+      // verifying maps to 'online' status with isVerifying flag, then reconnecting
+      expect(mockStores.connection.setIsVerifying).toHaveBeenCalledWith(true)
       expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
     })
   })
@@ -1428,8 +1428,8 @@ describe('XMPPClient', () => {
       const result = await resultPromise
 
       expect(result).toBe(false)
-      // Should trigger reconnect (via handleDeadSocket) but NOT go through verifying status
-      expect(mockStores.connection.setStatus).not.toHaveBeenCalledWith('verifying')
+      // Should trigger reconnect (via handleDeadSocket) but NOT go through verifying
+      expect(mockStores.connection.setIsVerifying).not.toHaveBeenCalledWith(true)
       expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
     })
 
@@ -1460,7 +1460,7 @@ describe('XMPPClient', () => {
       const result = await xmppClient.verifyConnectionHealth()
 
       expect(result).toBe(false)
-      expect(mockStores.connection.setStatus).not.toHaveBeenCalledWith('verifying')
+      expect(mockStores.connection.setIsVerifying).not.toHaveBeenCalledWith(true)
       expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
     })
   })

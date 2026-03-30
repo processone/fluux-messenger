@@ -44,7 +44,7 @@ export function useDesktopNotifications(): void {
 
     let unlisten: (() => void) | undefined
 
-    onAction((notification: NotificationOptions) => {
+    void onAction((notification: NotificationOptions) => {
       const navType = notification.extra?.navType as string | undefined
       const navTarget = notification.extra?.navTarget as string | undefined
       if (!navTarget) return
