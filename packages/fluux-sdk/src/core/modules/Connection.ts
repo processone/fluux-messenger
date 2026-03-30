@@ -205,7 +205,9 @@ export class Connection extends BaseModule {
       }
 
       // Sync status to store
+      const isVerifying = typeof stateValue === 'object' && 'connected' in stateValue && stateValue.connected === 'verifying'
       this.stores.connection.setStatus(status)
+      this.stores.connection.setIsVerifying(isVerifying)
       this.stores.connection.setReconnectState(attempt, reconnectTargetTime)
 
       // Sync error to store

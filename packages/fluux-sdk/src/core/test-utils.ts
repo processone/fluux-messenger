@@ -590,6 +590,7 @@ export const createIQHandlerTester = (mockClient: ReturnType<typeof createMockXm
 export const createMockStores = (): MockStoreBindings => ({
   connection: {
     setStatus: vi.fn(),
+    setIsVerifying: vi.fn(),
     getStatus: vi.fn().mockReturnValue('disconnected'),
     setJid: vi.fn(),
     setError: vi.fn(),
@@ -935,6 +936,7 @@ export type MockStoreRefs = {
 export const createMockStoreRefs = (): MockStoreRefs => ({
   connection: {
     setStatus: vi.fn(),
+    setIsVerifying: vi.fn(),
     setJid: vi.fn(),
     setError: vi.fn(),
     setServerInfo: vi.fn(),

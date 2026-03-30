@@ -321,9 +321,8 @@ describe('usePlatformState', () => {
   })
 
   describe('proxy-close status guard', () => {
-    it('should handle proxy close when online or verifying', () => {
+    it('should handle proxy close when online', () => {
       expect(shouldHandleProxyClosedStatus('online')).toBe(true)
-      expect(shouldHandleProxyClosedStatus('verifying')).toBe(true)
     })
 
     it('should ignore proxy close for non-connected states', () => {

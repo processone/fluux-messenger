@@ -31,7 +31,7 @@ const WAKE_DEBOUNCE_MS = 2000
  * previously connected. Reconnect loops already manage backoff internally.
  */
 export function shouldHandleProxyClosedStatus(status: string): boolean {
-  return status === 'online' || status === 'verifying'
+  return status === 'online'
 }
 
 // ── Hook ───────────────────────────────────────────────────────────────────────

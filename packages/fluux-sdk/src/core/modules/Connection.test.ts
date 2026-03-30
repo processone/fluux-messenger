@@ -2294,8 +2294,8 @@ describe('XMPPClient Connection', () => {
       await vi.runAllTimersAsync()
       await notifyPromise
 
-      // Should have set status to verifying
-      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('verifying')
+      // Should have entered verifying state (status stays 'online', isVerifying flag set)
+      expect(mockStores.connection.setIsVerifying).toHaveBeenCalledWith(true)
       // Should have logged the verification
       expect(mockStores.console.addEvent).toHaveBeenCalledWith(
         expect.stringContaining('awake'),
@@ -2306,8 +2306,8 @@ describe('XMPPClient Connection', () => {
     it('should NOT verify connection on "visible" state when online', async () => {
       await xmppClient.notifySystemState('visible')
 
-      // Should NOT set status to verifying
-      expect(mockStores.connection.setStatus).not.toHaveBeenCalledWith('verifying')
+      // Should NOT enter verifying state
+      expect(mockStores.connection.setIsVerifying).not.toHaveBeenCalledWith(true)
       // Should NOT send any SM request (send was cleared after connection setup)
       expect(mockXmppClientInstance.send).not.toHaveBeenCalled()
     })
@@ -2334,7 +2334,7 @@ describe('XMPPClient Connection', () => {
       await xmppClient.notifySystemState('awake', fifteenMinutesMs)
 
       // Should NOT verify (no SM request sent for verification)
-      expect(mockStores.connection.setStatus).not.toHaveBeenCalledWith('verifying')
+      expect(mockStores.connection.setIsVerifying).not.toHaveBeenCalledWith(true)
       // Should trigger reconnect
       expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
       // Should log that we're reconnecting immediately
@@ -2370,8 +2370,8 @@ describe('XMPPClient Connection', () => {
       await vi.runAllTimersAsync()
       await notifyPromise
 
-      // Should verify (status set to verifying)
-      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('verifying')
+      // Should verify (isVerifying flag set)
+      expect(mockStores.connection.setIsVerifying).toHaveBeenCalledWith(true)
     })
   })
 

@@ -36,6 +36,7 @@ import type { ProxyAdapter } from './proxy'
 export interface StoreBindings {
   connection: {
     setStatus: (status: ConnectionStatus) => void
+    setIsVerifying: (isVerifying: boolean) => void
     getStatus: () => ConnectionStatus
     setJid: (jid: string | null) => void
     setError: (error: string | null) => void

@@ -68,6 +68,7 @@ export function createDefaultStoreBindings(options: DefaultStoreBindingsOptions 
   return {
     connection: {
       setStatus: connectionStore.getState().setStatus,
+      setIsVerifying: connectionStore.getState().setIsVerifying,
       getStatus: () => connectionStore.getState().status,
       setJid: connectionStore.getState().setJid,
       setError: connectionStore.getState().setError,

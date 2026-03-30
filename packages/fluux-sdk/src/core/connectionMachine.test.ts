@@ -1065,8 +1065,8 @@ describe('connectionMachine', () => {
         expect(getConnectionStatusFromState({ connected: 'healthy' })).toBe('online')
       })
 
-      it('should map connected.verifying to verifying', () => {
-        expect(getConnectionStatusFromState({ connected: 'verifying' })).toBe('verifying')
+      it('should map connected.verifying to online (suppresses UI flicker)', () => {
+        expect(getConnectionStatusFromState({ connected: 'verifying' })).toBe('online')
       })
 
       it('should map reconnecting.waiting to reconnecting', () => {

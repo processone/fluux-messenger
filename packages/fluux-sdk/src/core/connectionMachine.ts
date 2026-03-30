@@ -622,7 +622,7 @@ export function getConnectionStatusFromState(stateValue: ConnectionStateValue): 
       case 'sleeping':
         return 'online'
       case 'verifying':
-        return 'verifying'
+        return 'online'
     }
   }
 
