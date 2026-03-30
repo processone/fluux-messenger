@@ -27,9 +27,9 @@ serde = { version = "1", features = ["derive"] }
 
 # XMPP WebSocket-to-TCP proxy dependencies
 tokio = { version = "1", features = ["full"] }
-tokio-tungstenite = "0.24"
+tokio-tungstenite = "0.29"
 futures-util = "0.3"
-quick-xml = "0.36"
+quick-xml = "0.39"
 tokio-rustls = "0.26"
 rustls = { version = "0.23", features = ["ring"] }
 rustls-native-certs = "0.8"
@@ -44,8 +44,8 @@ dirs = "5"
 tauri-plugin-updater = "2"
 serde_json = "1"
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
-reqwest = { version = "0.12", features = ["blocking"] }
-scraper = "0.22"
+reqwest = { version = "0.13", features = ["blocking"] }
+scraper = "0.26"
 
 # user-idle for Windows (macOS uses ioreg, Linux uses direct X11 calls)
 [target.'cfg(target_os = "windows")'.dependencies]
@@ -53,7 +53,7 @@ user-idle = "0.6"
 
 # ctor for Linux to set env vars before main() - required for WebKitGTK workaround
 [target.'cfg(target_os = "linux")'.dependencies]
-ctor = "0.2"
+ctor = "0.8"
 x11 = { version = "2", features = ["xlib", "xss"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
