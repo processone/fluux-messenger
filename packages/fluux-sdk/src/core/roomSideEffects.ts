@@ -20,12 +20,15 @@ import { roomStore, connectionStore } from '../stores'
 import { logInfo } from './logger'
 
 /**
- * Find the newest message that was NOT delivered with delay (offline).
- * Delayed messages should not advance the MAM catch-up cursor.
+ * Find the newest message in the array (regardless of delay status).
+ *
+ * Used as the catch-up cursor for MAM forward queries. Including delayed
+ * messages ensures the catch-up always uses a forward query, which merges
+ * correctly via full sort.
  */
-function findNewestLiveMessage(messages: Array<{ isDelayed?: boolean; timestamp?: Date }>): { timestamp: Date } | undefined {
+function findNewestMessage(messages: Array<{ timestamp?: Date }>): { timestamp: Date } | undefined {
   for (let i = messages.length - 1; i >= 0; i--) {
-    if (!messages[i].isDelayed && messages[i].timestamp) return messages[i] as { timestamp: Date }
+    if (messages[i].timestamp) return messages[i] as { timestamp: Date }
   }
   return undefined
 }
@@ -113,12 +116,11 @@ export function setupRoomSideEffects(
       // Re-read room after cache load (store was mutated)
       const roomAfterCache = roomStore.getState().rooms.get(roomJid)
       const messages = roomAfterCache?.messages || []
-      // Use the newest non-delayed (live) message as the catch-up cursor.
-      const newestLiveMessage = findNewestLiveMessage(messages)
+      const newestMessage = findNewestMessage(messages)
 
-      if (newestLiveMessage?.timestamp) {
-        // Query for messages AFTER the newest live message (catchup)
-        const startTime = new Date(newestLiveMessage.timestamp.getTime() + 1)
+      if (newestMessage?.timestamp) {
+        // Query for messages AFTER the newest known message (catchup)
+        const startTime = new Date(newestMessage.timestamp.getTime() + 1)
         await client.chat.queryRoomMAM({
           roomJid,
           start: startTime.toISOString(),

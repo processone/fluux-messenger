@@ -87,13 +87,17 @@ interface UnresolvedModifications {
 }
 
 /**
- * Find the newest message in an array that was NOT delivered with delay (offline).
- * Delayed messages should not advance the MAM catch-up cursor, otherwise the
- * forward query skips the gap where originals of corrections may live.
+ * Find the newest message in an array (regardless of delay status).
+ *
+ * Used as the catch-up cursor for MAM forward queries. Including delayed
+ * messages ensures the catch-up always uses a forward query, which merges
+ * correctly via full sort. Previously skipping delayed messages caused
+ * backward queries whose prepend-based merge put newer messages (sent
+ * from another client while offline) at the wrong position.
  */
-function findNewestLiveMessage(messages: Array<{ isDelayed?: boolean; timestamp?: Date }>): { timestamp: Date } | undefined {
+function findNewestMessage(messages: Array<{ timestamp?: Date }>): { timestamp: Date } | undefined {
   for (let i = messages.length - 1; i >= 0; i--) {
-    if (!messages[i].isDelayed && messages[i].timestamp) return messages[i] as { timestamp: Date }
+    if (messages[i].timestamp) return messages[i] as { timestamp: Date }
   }
   return undefined
 }
@@ -819,21 +823,18 @@ export class MAM extends BaseModule {
           if (this.deps.stores?.connection.getStatus() !== 'online') return
 
           const messages = conv.messages || []
-          // Use the newest non-delayed (live) message as the catch-up cursor.
-          // Delayed messages (offline delivery) should not advance the cursor,
-          // otherwise MAM catch-up skips the gap where originals of corrections live.
-          const newestLiveMessage = findNewestLiveMessage(messages)
+          const newestMessage = findNewestMessage(messages)
 
-          if (newestLiveMessage?.timestamp) {
-            // Forward query from the last live message
-            const startTime = new Date(newestLiveMessage.timestamp.getTime() + 1)
+          if (newestMessage?.timestamp) {
+            // Forward query from the last known message
+            const startTime = new Date(newestMessage.timestamp.getTime() + 1)
             await this.queryArchive({
               with: conv.id,
               start: startTime.toISOString(),
               max: 100,
             })
           } else {
-            // No live messages (all delayed or empty) — fetch latest from MAM
+            // No messages (empty) — fetch latest from MAM
             await this.queryArchive({
               with: conv.id,
               before: '',
@@ -947,19 +948,18 @@ export class MAM extends BaseModule {
           // Re-read room after cache load (store was mutated)
           const updatedRoom = this.deps.stores?.room.getRoom(room.jid)
           const messages = updatedRoom?.messages || []
-          // Use the newest non-delayed (live) message as the catch-up cursor.
-          const newestLiveMessage = findNewestLiveMessage(messages)
+          const newestMessage = findNewestMessage(messages)
 
-          if (newestLiveMessage?.timestamp) {
-            // Forward query from the last live message
-            const startTime = new Date(newestLiveMessage.timestamp.getTime() + 1)
+          if (newestMessage?.timestamp) {
+            // Forward query from the last known message
+            const startTime = new Date(newestMessage.timestamp.getTime() + 1)
             await this.queryRoomArchive({
               roomJid: room.jid,
               start: startTime.toISOString(),
               max: 100,
             })
           } else {
-            // No live messages (all delayed or empty) — fetch latest from MAM
+            // No messages (empty) — fetch latest from MAM
             await this.queryRoomArchive({
               roomJid: room.jid,
               before: '',

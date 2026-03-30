@@ -388,7 +388,7 @@ describe('MAM Background Catch-Up', () => {
       expect(mamQuery).toBeDefined()
     })
 
-    it('should fall back to backward query when all cached messages are delayed', async () => {
+    it('should use forward query from newest delayed message as catch-up cursor', async () => {
       await connectClient()
 
       vi.mocked(mockStores.chat.getAllConversations).mockReturnValue([
@@ -415,10 +415,12 @@ describe('MAM Background Catch-Up', () => {
       await waitForAsyncOps(20, 100)
       await catchUpPromise
 
-      // Should fall back to backward query (before="") since no live messages exist
+      // Should use forward query from the newest delayed message timestamp
+      // (not fall back to backward query) so merge uses full sort and
+      // correctly positions messages sent from other clients while offline
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:mam-messages', expect.objectContaining({
         conversationId: 'alice@example.com',
-        direction: 'backward',
+        direction: 'forward',
       }))
     })
   })

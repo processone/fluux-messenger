@@ -687,5 +687,69 @@ describe('messageArrayUtils', () => {
       expect(merged[2].id).toBe('msg-4')
       expect(merged[3].id).toBe('msg-5')
     })
+
+    it('should place newer messages at wrong position (known limitation for backward queries)', () => {
+      // This test documents a known limitation of prependOlderMessages:
+      // If "older" messages are actually NEWER than existing ones, they end up
+      // at the wrong position (prepended before existing instead of appended after).
+      //
+      // This is why catch-up queries must use forward direction (with 'start' filter)
+      // when cached messages exist — mergeAndProcessMessages does a full sort.
+      const existing = [
+        createMessage('msg-1', 'Old cached', new Date('2024-01-15T10:00:00Z')),
+        createMessage('msg-2', 'Old cached', new Date('2024-01-15T11:00:00Z')),
+      ]
+
+      // "Older" messages that are actually newer (e.g., sent from another client while offline)
+      const newer = [
+        createMessage('msg-3', 'Sent from Gajim', new Date('2024-01-15T12:00:00Z')),
+      ]
+
+      const { merged } = prependOlderMessages(existing, newer, (m) => [m.id])
+
+      // BUG: msg-3 (newer) is placed BEFORE msg-1 and msg-2 (older)
+      // This is why the catch-up cursor fix is essential — it prevents this scenario
+      // by always using forward queries (mergeAndProcessMessages) when cached msgs exist
+      expect(merged[0].id).toBe('msg-3') // Wrong: should be at end
+      expect(merged[1].id).toBe('msg-1')
+      expect(merged[2].id).toBe('msg-2')
+    })
+  })
+
+  describe('mergeAndProcessMessages correctly handles catch-up scenario', () => {
+    it('should sort messages sent from another client while offline into correct position', () => {
+      // Simulates the catch-up scenario with forward direction (mergeAndProcessMessages):
+      // - Existing messages loaded from IndexedDB cache (all delayed from previous MAM)
+      // - MAM catch-up returns messages sent from another client while Fluux was offline
+      const existing = [
+        createMessage('msg-1', 'Previous session', new Date('2024-01-15T10:00:00Z')),
+        createMessage('msg-2', 'Previous session', new Date('2024-01-15T11:00:00Z')),
+      ]
+
+      const fromMAM = [
+        // Message sent by user from another client while Fluux was closed
+        createMessage('msg-3', '[OMEMO encrypted]', new Date('2024-01-15T12:00:00Z')),
+        // Reply received while Fluux was closed
+        createMessage('msg-4', '[OMEMO encrypted]', new Date('2024-01-15T13:00:00Z')),
+      ]
+
+      const { merged, newMessages } = mergeAndProcessMessages(
+        existing,
+        fromMAM,
+        (m) => [m.id]
+      )
+
+      // Full sort ensures correct chronological order
+      expect(merged).toHaveLength(4)
+      expect(merged[0].id).toBe('msg-1')
+      expect(merged[1].id).toBe('msg-2')
+      expect(merged[2].id).toBe('msg-3') // Correctly at position 3 (not prepended)
+      expect(merged[3].id).toBe('msg-4') // Correctly at position 4 (newest)
+      expect(newMessages).toHaveLength(2)
+
+      // The last message in the array should be the newest — this is used for
+      // lastMessage sidebar preview in mergeMAMMessages
+      expect(merged[merged.length - 1].id).toBe('msg-4')
+    })
   })
 })

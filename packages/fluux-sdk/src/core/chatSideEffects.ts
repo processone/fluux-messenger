@@ -18,12 +18,19 @@ import { logInfo } from './logger'
 import { getDomain } from './jid'
 
 /**
- * Find the newest message that was NOT delivered with delay (offline).
- * Delayed messages should not advance the MAM catch-up cursor.
+ * Find the newest message in the array (regardless of delay status).
+ *
+ * Used as the catch-up cursor for MAM forward queries. Previously this
+ * skipped delayed messages, but that caused a subtle bug: when ALL cached
+ * messages are delayed (common after previous MAM catch-ups), the cursor
+ * returned undefined, triggering a backward query. The backward query's
+ * merge (`prependOlderMessages`) incorrectly placed newer messages (sent
+ * from another client while offline) at the top of the list, making them
+ * invisible to the user and preventing the sidebar lastMessage update.
  */
-function findNewestLiveMessage(messages: Array<{ isDelayed?: boolean; timestamp?: Date }>): { timestamp: Date } | undefined {
+function findNewestMessage(messages: Array<{ timestamp?: Date }>): { timestamp: Date } | undefined {
   for (let i = messages.length - 1; i >= 0; i--) {
-    if (!messages[i].isDelayed && messages[i].timestamp) return messages[i] as { timestamp: Date }
+    if (messages[i].timestamp) return messages[i] as { timestamp: Date }
   }
   return undefined
 }
@@ -102,14 +109,11 @@ export function setupChatSideEffects(
 
       // Re-read messages after cache load (store was mutated)
       const cachedMessages = chatStore.getState().messages.get(conversationId) || []
-      // Use the newest non-delayed (live) message as the catch-up cursor.
-      // Delayed messages (offline delivery) should not advance the cursor,
-      // otherwise MAM catch-up skips the gap where originals of corrections live.
-      const newestLiveMessage = findNewestLiveMessage(cachedMessages)
+      const newestMessage = findNewestMessage(cachedMessages)
 
       const queryOptions: { with: string; start?: string } = { with: conversation.id }
-      if (newestLiveMessage?.timestamp) {
-        const startTime = new Date(newestLiveMessage.timestamp.getTime() + 1)
+      if (newestMessage?.timestamp) {
+        const startTime = new Date(newestMessage.timestamp.getTime() + 1)
         queryOptions.start = startTime.toISOString()
       }
 

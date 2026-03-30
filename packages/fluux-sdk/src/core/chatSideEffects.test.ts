@@ -235,6 +235,74 @@ describe('setupChatSideEffects', () => {
     })
   })
 
+  describe('catch-up with delayed messages', () => {
+    it('should use forward query from newest delayed message (not fall back to backward)', async () => {
+      // This test validates the fix for GitHub issue #135:
+      // Messages sent from another client while Fluux is closed were not shown
+      // because the catch-up cursor skipped delayed messages, causing a backward
+      // query whose prepend-based merge put newer messages at the wrong position.
+      const delayedTimestamp = new Date('2026-02-15T10:00:00Z')
+
+      connectionStore.getState().setServerInfo({
+        identities: [],
+        domain: 'example.com',
+        features: [NS_MAM],
+      })
+
+      chatStore.getState().addConversation({
+        id: 'contact@example.com',
+        name: 'contact@example.com',
+        type: 'chat',
+        lastMessage: undefined,
+        unreadCount: 0,
+      })
+
+      chatStore.getState().setActiveConversation('contact@example.com')
+
+      // Mock loadMessagesFromCache to populate with ONLY delayed messages
+      // (simulates a conversation populated entirely via previous MAM catch-ups)
+      const delayedMsg = {
+        type: 'chat' as const,
+        id: 'delayed-msg-1',
+        conversationId: 'contact@example.com',
+        from: 'contact@example.com',
+        body: 'Previous MAM message',
+        timestamp: delayedTimestamp,
+        isOutgoing: false,
+        isDelayed: true,
+      }
+      const loadSpy = vi.spyOn(chatStore.getState(), 'loadMessagesFromCache')
+        .mockImplementation(async (conversationId: string) => {
+          chatStore.getState().addMessage({
+            ...delayedMsg,
+            conversationId,
+          })
+          return [delayedMsg]
+        })
+
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupChatSideEffects(mockClient)
+
+      simulateFreshSession(mockClient)
+
+      await vi.waitFor(() => {
+        expect(mockClient.chat.queryMAM).toHaveBeenCalledWith(
+          expect.objectContaining({
+            with: 'contact@example.com',
+            start: expect.any(String),
+          })
+        )
+      })
+
+      // Verify it used a forward query from the delayed message's timestamp
+      // (previously this would have been a backward query without 'start')
+      const call = (mockClient.chat.queryMAM as ReturnType<typeof vi.fn>).mock.calls[0][0]
+      expect(new Date(call.start).getTime()).toBe(delayedTimestamp.getTime() + 1)
+
+      loadSpy.mockRestore()
+    })
+  })
+
   describe('SM resumption', () => {
     it('should NOT trigger MAM catchup on SM resumption for active conversation', async () => {
       connectionStore.getState().setServerInfo({
