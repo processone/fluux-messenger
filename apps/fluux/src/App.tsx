@@ -145,9 +145,9 @@ function App() {
       // Uses '__wry_' prefix so clearLocalData() won't remove it (it only
       // clears 'fluux:' prefixed keys).
       sessionStorage.setItem('__wry_was_online', '1')
-    } else if (status === 'error' || status === 'disconnected') {
-      // If we get an error or stay disconnected, check if session still exists
-      // (it's cleared on connection failure in useSessionPersistence)
+    } else if (status !== 'connecting') {
+      // For any non-online, non-connecting status (error, disconnected, reconnecting),
+      // check if session was cleared — if so, stop showing the reconnecting spinner
       const hasSession = getSession() !== null
       if (!hasSession) {
         setIsAutoReconnecting(false)
@@ -161,7 +161,8 @@ function App() {
   // Show loading state during initial auto-reconnect attempt (prevents login flash on reload)
   // Only show for initial page load reconnect, NOT for wake-from-sleep reconnect.
   // Once we've been online, stay in ChatLayout and show inline reconnect indicator.
-  if (isAutoReconnecting && !hasBeenOnline && (status === 'disconnected' || status === 'connecting')) {
+  // Uses status !== 'online' to cover all intermediate states (reconnecting, error, etc.)
+  if (isAutoReconnecting && !hasBeenOnline && status !== 'online') {
     return (
       <>
         <TitleBar />
@@ -188,12 +189,11 @@ function App() {
     )
   }
 
-  // Show login if disconnected, connecting, or error — but only when no stored session exists.
+  // Show login when not online and no stored session exists.
   // When a session exists (e.g., during SDK reconnection after sleep), stay on ChatLayout
-  // where the inline reconnect indicator shows. Without the !hasSession guard, each reconnect
-  // attempt briefly sets status='connecting', causing LoginScreen to mount/unmount repeatedly
-  // and triggering a keychain read on each mount (flooding the log with keychain access).
-  if ((status === 'disconnected' || status === 'connecting' || status === 'error') && !hasSession) {
+  // where the inline reconnect indicator shows. Uses status !== 'online' to cover all
+  // non-connected states (disconnected, connecting, reconnecting, error).
+  if (status !== 'online' && !hasSession) {
     return (
       <>
         <TitleBar />
