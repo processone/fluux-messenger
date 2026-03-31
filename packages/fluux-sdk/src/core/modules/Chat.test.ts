@@ -2550,6 +2550,29 @@ describe('XMPPClient Message', () => {
       expect(emitSDKSpy).not.toHaveBeenCalledWith('chat:message-error', expect.anything())
     })
 
+    it('should ignore recipient-unavailable errors (resource went offline, message already delivered)', async () => {
+      await connectClient()
+
+      const errorStanza = createMockElement('message', {
+        from: 'contact@example.com',
+        to: 'user@example.com',
+        type: 'error',
+        id: 'msg-789',
+      }, [
+        {
+          name: 'error',
+          attrs: { type: 'cancel' },
+          children: [
+            { name: 'recipient-unavailable', attrs: { xmlns: 'urn:ietf:params:xml:ns:xmpp-stanzas' } },
+          ],
+        },
+      ])
+
+      mockXmppClientInstance._emit('stanza', errorStanza)
+
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('chat:message-error', expect.anything())
+    })
+
     it('should silently handle error messages with no error element', async () => {
       await connectClient()
 

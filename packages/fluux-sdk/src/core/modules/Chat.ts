@@ -1039,9 +1039,12 @@ export class Chat extends BaseModule {
       return
     }
 
-    // Chat message delivery error — correlate via the echoed message ID
+    // Chat message delivery error — correlate via the echoed message ID.
+    // Skip 'recipient-unavailable': this means one resource went offline,
+    // but the server already delivered the message to other available
+    // resources. Marking the message as failed would be a false alarm.
     const messageId = stanza.attrs.id
-    if (messageId) {
+    if (messageId && error.condition !== 'recipient-unavailable') {
       this.deps.emitSDK('chat:message-error', {
         conversationId: bareFrom,
         messageId,
