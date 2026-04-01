@@ -24,16 +24,11 @@ export class RenderLoopBoundary extends Component<Props, State> {
   }
 
   static getDerivedStateFromError(error: Error): Partial<State> {
-    // Check if this is a render loop error
-    if (error.message.includes('Render loop detected')) {
-      return {
-        hasError: true,
-        error,
-        renderStats: getRenderStats(),
-      }
+    return {
+      hasError: true,
+      error,
+      renderStats: error.message.includes('Render loop detected') ? getRenderStats() : null,
     }
-    // Re-throw other errors
-    throw error
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
@@ -52,15 +47,17 @@ export class RenderLoopBoundary extends Component<Props, State> {
 
   render(): ReactNode {
     if (this.state.hasError) {
+      const isRenderLoop = this.state.error?.message.includes('Render loop detected')
       return (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-fluux-bg p-8">
           <div className="max-w-lg rounded-lg border border-red-500/30 bg-red-500/10 p-6 text-center">
             <h2 className="mb-4 text-xl font-semibold text-red-400">
-              Render Loop Detected
+              {isRenderLoop ? 'Render Loop Detected' : 'Something Went Wrong'}
             </h2>
             <p className="mb-4 text-fluux-text-secondary">
-              The application detected an infinite render loop and stopped it to prevent freezing.
-              This is usually caused by a bug in state management.
+              {isRenderLoop
+                ? 'The application detected an infinite render loop and stopped it to prevent freezing. This is usually caused by a bug in state management.'
+                : 'The application encountered an unexpected error. Reloading usually fixes this.'}
             </p>
             {this.state.renderStats && Object.keys(this.state.renderStats).length > 0 && (
               <div className="mb-4 text-sm text-fluux-text-muted">
@@ -84,15 +81,17 @@ export class RenderLoopBoundary extends Component<Props, State> {
               </details>
             )}
             <div className="flex justify-center gap-4">
-              <button
-                onClick={this.handleRetry}
-                className="rounded bg-fluux-brand px-4 py-2 text-white hover:bg-fluux-brand/80"
-              >
-                Try Again
-              </button>
+              {isRenderLoop && (
+                <button
+                  onClick={this.handleRetry}
+                  className="rounded bg-fluux-brand px-4 py-2 text-white hover:bg-fluux-brand/80"
+                >
+                  Try Again
+                </button>
+              )}
               <button
                 onClick={this.handleReload}
-                className="rounded border border-fluux-border px-4 py-2 text-fluux-text hover:bg-fluux-surface"
+                className={`rounded px-4 py-2 ${isRenderLoop ? 'border border-fluux-border text-fluux-text hover:bg-fluux-surface' : 'bg-fluux-brand text-white hover:bg-fluux-brand/80'}`}
               >
                 Reload App
               </button>

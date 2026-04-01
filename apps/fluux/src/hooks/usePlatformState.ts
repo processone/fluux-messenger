@@ -26,6 +26,13 @@ const MIN_HIDDEN_TIME_MS = 60_000
 /** Debounce window to prevent duplicate wake handling (ms). */
 const WAKE_DEBOUNCE_MS = 2000
 
+/** Sleep duration above which we force-reload the webview on wake (ms).
+ * After very long sleep (overnight), the WRY/WKWebView on macOS can lose
+ * its rendering context — the app window shows but the content is blank.
+ * Reloading resets the webview pipeline; useSessionPersistence will
+ * auto-reconnect from the stored session. */
+const LONG_SLEEP_RELOAD_MS = 60 * 60 * 1000 // 1 hour
+
 /**
  * Proxy-close events should only trigger wake/reconnect while the app was
  * previously connected. Reconnect loops already manage backoff internally.
@@ -247,6 +254,11 @@ export function usePlatformState() {
         sleepStartRef.current = null
         console.log(`[PlatformState] System woke from sleep (OS notification${sleepDuration ? `, ~${Math.round(sleepDuration / 1000)}s` : ''})`)
         logEvent(`System woke from sleep (OS notification${sleepDuration ? `, ~${Math.round(sleepDuration / 1000)}s` : ''})`)
+        if (sleepDuration && sleepDuration >= LONG_SLEEP_RELOAD_MS) {
+          console.log(`[PlatformState] Long sleep detected (${Math.round(sleepDuration / 1000)}s), reloading webview to restore rendering`)
+          window.location.reload()
+          return
+        }
         client.notifySystemState('awake', sleepDuration).catch(() => {})
         lastActivityRef.current = Date.now()
         dispatchResizeWorkaround()
@@ -264,6 +276,11 @@ export function usePlatformState() {
         sleepStartRef.current = null
         console.log(`[PlatformState] System woke from sleep (deferred ${delaySecs}s${sleepDuration ? `, ~${Math.round(sleepDuration / 1000)}s sleep` : ''})`)
         logEvent(`System woke from sleep (deferred ${delaySecs}s - app was in background${sleepDuration ? `, ~${Math.round(sleepDuration / 1000)}s sleep` : ''})`)
+        if (sleepDuration && sleepDuration >= LONG_SLEEP_RELOAD_MS) {
+          console.log(`[PlatformState] Long sleep detected (${Math.round(sleepDuration / 1000)}s), reloading webview to restore rendering`)
+          window.location.reload()
+          return
+        }
         client.notifySystemState('awake', sleepDuration).catch(() => {})
         lastActivityRef.current = Date.now()
         dispatchResizeWorkaround()
@@ -310,6 +327,12 @@ export function usePlatformState() {
 
       const gapSeconds = Math.round(gap / 1000)
       console.log(`[PlatformState] Detected wake from sleep (${gapSeconds}s gap)`)
+
+      if (isTauri() && gap >= LONG_SLEEP_RELOAD_MS) {
+        console.log(`[PlatformState] Long sleep detected (${gapSeconds}s), reloading webview to restore rendering`)
+        window.location.reload()
+        return
+      }
 
       try {
         await client.notifySystemState('awake', gap)
