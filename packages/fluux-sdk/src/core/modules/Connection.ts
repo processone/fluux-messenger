@@ -1140,6 +1140,13 @@ export class Connection extends BaseModule {
       // a WebSocket before the OS network stack is ready after sleep.
       const networkReady = await this.waitForNetworkReady()
       if (networkReady) {
+        // Clean up the stale client from any in-flight attempt. After sleep,
+        // its WebSocket and JS timers are unreliable — the 30s reconnect
+        // timeout may have been paused and could fire at the wrong time,
+        // potentially destroying a newer client. Tearing down now ensures
+        // the stale attempt fails fast and the WAKE event triggers a clean
+        // fresh attempt.
+        this.cleanupClient()
         // Send WAKE (not TRIGGER_RECONNECT) so the state machine resets
         // the backoff counter — sleep/wake failures shouldn't accumulate.
         this.stores.console.addEvent('System state: awake, triggering immediate reconnect (backoff reset)', 'connection')
@@ -1346,8 +1353,8 @@ export class Connection extends BaseModule {
   private setupConnectionHandlers(
     onConnected: (isResumption: boolean) => void | Promise<void>,
     onError: (err: Error) => void
-  ): void {
-    if (!this.xmpp) return
+  ): () => void {
+    if (!this.xmpp) return () => {}
 
     let resolved = false
 
@@ -1462,6 +1469,12 @@ export class Connection extends BaseModule {
       resolved = true
       onError(err)
     })
+
+    // Return an abort function that marks this attempt as settled.
+    // The reconnect timeout calls this to prevent stale events (e.g., a
+    // belated 'online' from a destroyed client) from triggering
+    // CONNECTION_SUCCESS after the attempt has been abandoned.
+    return () => { resolved = true }
   }
 
   /**
@@ -1922,6 +1935,10 @@ export class Connection extends BaseModule {
       const connectWithOptions = async (options: ConnectOptions): Promise<void> => {
         this.deadSocketRecoveryInProgress = false
         this.xmpp = this.createXmppClient(options)
+        // Capture the client for this specific attempt so we can detect if a
+        // newer attempt replaced it (e.g., WAKE triggered a fresh attempt while
+        // this timeout was paused during sleep).
+        const clientForThisAttempt = this.xmpp
         this.hydrateStreamManagement(smState ?? undefined)
         this.setupHandlers()
         logInfo(`attemptReconnect: new client created, calling start() (${options.server})`)
@@ -1933,6 +1950,19 @@ export class Connection extends BaseModule {
             if (elapsed > RECONNECT_ATTEMPT_TIMEOUT_MS * 1.5) {
               logInfo(`Reconnect timeout fired late (${Math.round(elapsed / 1000)}s elapsed, expected ${RECONNECT_ATTEMPT_TIMEOUT_MS / 1000}s) — system likely slept through it`)
             }
+
+            // Abort connection handlers to prevent stale events (e.g., a
+            // belated 'online') from triggering CONNECTION_SUCCESS after timeout.
+            abortHandlers()
+
+            // Guard: if a newer attempt replaced this client (e.g., WAKE during
+            // sleep triggered a fresh attempt), don't destroy the new client.
+            if (this.xmpp !== clientForThisAttempt) {
+              logInfo('Stale reconnect timeout fired for superseded client, skipping cleanup')
+              reject(new Error('Reconnect attempt superseded'))
+              return
+            }
+
             // Always clean up and reject on timeout, even if it fired late.
             // The wake handler will trigger a fresh reconnect attempt with
             // correct SM state. Ignoring stale timeouts risks leaving the
@@ -1942,7 +1972,7 @@ export class Connection extends BaseModule {
             reject(new Error(`Reconnect attempt timed out after ${Math.round(elapsed / 1000)}s`))
           }, RECONNECT_ATTEMPT_TIMEOUT_MS)
 
-          this.setupConnectionHandlers(
+          const abortHandlers = this.setupConnectionHandlers(
             async (isResumption) => {
               clearTimeout(timeout)
               // Signal machine: reconnect succeeded → connected.healthy

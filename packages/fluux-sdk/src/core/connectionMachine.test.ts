@@ -395,7 +395,7 @@ describe('connectionMachine', () => {
       actor.stop()
     })
 
-    it('should reset backoff counter on WAKE during active attempt', () => {
+    it('should transition to waiting on WAKE during active attempt (abort stale attempt)', () => {
       actor.send({ type: 'TRIGGER_RECONNECT' })
       actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
       actor.send({ type: 'TRIGGER_RECONNECT' })
@@ -406,14 +406,45 @@ describe('connectionMachine', () => {
       actor.send({ type: 'TRIGGER_RECONNECT' })
       expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
       actor.send({ type: 'WAKE', sleepDurationMs: 5000 })
-      // Still in attempting, but counter is reset
-      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
+      // WAKE transitions to waiting (with nextRetryDelayMs=0, so the after
+      // timer fires immediately back to attempting for a fresh attempt)
+      // Counter is reset so backoff starts fresh
       expect(actor.getSnapshot().context.reconnectAttempt).toBe(0)
+      expect(actor.getSnapshot().context.nextRetryDelayMs).toBe(0)
+      actor.stop()
+    })
 
-      // Next failure should use attempt 1 backoff
-      actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
-      expect(actor.getSnapshot().context.reconnectAttempt).toBe(1)
-      expect(actor.getSnapshot().context.nextRetryDelayMs).toBe(INITIAL_RECONNECT_DELAY)
+    it('should mark SM resume not viable on WAKE with long sleep during active attempt', () => {
+      actor.send({ type: 'TRIGGER_RECONNECT' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(true)
+
+      // WAKE with sleep exceeding SM timeout
+      actor.send({ type: 'WAKE', sleepDurationMs: SM_SESSION_TIMEOUT_MS + 1000 })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(false)
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(0)
+      actor.stop()
+    })
+
+    it('should handle CONNECTION_SUCCESS in waiting state (stale attempt succeeds)', () => {
+      // WAKE during attempting moves to waiting
+      actor.send({ type: 'TRIGGER_RECONNECT' })
+      actor.send({ type: 'WAKE', sleepDurationMs: 5000 })
+
+      // The stale attempt's connection may succeed while in waiting
+      actor.send({ type: 'CONNECTION_SUCCESS' })
+      expect(actor.getSnapshot().value).toEqual({ connected: 'healthy' })
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(0)
+      actor.stop()
+    })
+
+    it('should mark SM resume not viable on WAKE with long sleep while waiting', () => {
+      expect(actor.getSnapshot().context.smResumeViable).toBe(true)
+
+      // WAKE with sleep exceeding SM timeout while waiting
+      actor.send({ type: 'WAKE', sleepDurationMs: SM_SESSION_TIMEOUT_MS + 1000 })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(false)
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(0)
       actor.stop()
     })
 

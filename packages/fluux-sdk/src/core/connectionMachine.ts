@@ -494,16 +494,31 @@ export const connectionMachine = setup({
             },
           },
           on: {
+            // Stale attempt may succeed while machine already moved to waiting
+            // (e.g., WAKE cancelled in-flight attempt but auth completed first).
+            CONNECTION_SUCCESS: {
+              target: '#connection.connected',
+              actions: 'resetReconnectState',
+            },
             TRIGGER_RECONNECT: {
               target: 'attempting',
               actions: 'clearTargetTime',
             },
             // Wake while waiting — skip to immediate attempt and reset backoff.
             // Sleep/wake failures (network not ready) shouldn't accumulate backoff.
-            WAKE: {
-              target: 'attempting',
-              actions: ['clearTargetTime', 'resetAttemptCounter'],
-            },
+            // Check SM timeout so a long sleep during reconnection correctly
+            // marks SM resume as not viable for the next attempt.
+            WAKE: [
+              {
+                guard: 'sleepExceedsSMTimeout',
+                target: 'attempting',
+                actions: ['clearTargetTime', 'resetAttemptCounter', 'markSmResumeNotViable'],
+              },
+              {
+                target: 'attempting',
+                actions: ['clearTargetTime', 'resetAttemptCounter'],
+              },
+            ],
             VISIBLE: {
               target: 'attempting',
               actions: 'clearTargetTime',
@@ -530,10 +545,21 @@ export const connectionMachine = setup({
               target: 'waiting',
               actions: 'incrementAttempt',
             },
-            // Wake during active attempt — reset counter so next failure uses fresh backoff
-            WAKE: {
-              actions: 'resetAttemptCounter',
-            },
+            // Wake during active attempt — abort stale attempt by transitioning
+            // to waiting. After sleep, the in-flight client has a dead socket and
+            // stale JS timers that may not fire reliably. Transitioning to waiting
+            // (with nextRetryDelayMs=0) triggers an immediate fresh attempt.
+            WAKE: [
+              {
+                guard: 'sleepExceedsSMTimeout',
+                target: 'waiting',
+                actions: ['resetAttemptCounter', 'markSmResumeNotViable'],
+              },
+              {
+                target: 'waiting',
+                actions: 'resetAttemptCounter',
+              },
+            ],
             // Already attempting — ignore to prevent parallel attempts
             TRIGGER_RECONNECT: {},
           },
