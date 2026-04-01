@@ -294,11 +294,11 @@ export function AudioAttachment({ attachment }: AttachmentProps) {
       <div className={`flex items-center gap-3 p-3 rounded-t-lg border border-b-0 border-fluux-border ${hasError ? 'bg-fluux-hover/40' : 'bg-fluux-hover/60'}`}>
         <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${hasError ? 'bg-fluux-muted/30' : 'bg-fluux-brand'}`}>
           {isLoading ? (
-            <Loader2 className="w-5 h-5 text-white animate-spin" />
+            <Loader2 className="w-5 h-5 text-fluux-text-on-accent animate-spin" />
           ) : hasError ? (
             <FileX className="w-5 h-5 text-fluux-muted" />
           ) : (
-            <Music className="w-5 h-5 text-white" />
+            <Music className="w-5 h-5 text-fluux-text-on-accent" />
           )}
         </div>
         <div className="flex-1 min-w-0">

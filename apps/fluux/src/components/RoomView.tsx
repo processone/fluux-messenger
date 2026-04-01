@@ -1599,7 +1599,7 @@ function RoomMessageInput({
           {/* Avatar */}
           {match.isAll ? (
             <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 bg-fluux-brand">
-              <Users className="w-3.5 h-3.5 text-white" />
+              <Users className="w-3.5 h-3.5 text-fluux-text-on-accent" />
             </div>
           ) : (
             <Avatar
@@ -1610,12 +1610,12 @@ function RoomMessageInput({
           )}
           <span className="font-medium">@{match.nick}</span>
           {match.isAll && (
-            <span className={`text-xs ${idx === mentionState.selectedIndex ? 'text-white/70' : 'text-fluux-muted'}`}>
+            <span className={`text-xs ${idx === mentionState.selectedIndex ? 'text-fluux-text-on-accent/70' : 'text-fluux-muted'}`}>
               {t('rooms.notifyEveryone')}
             </span>
           )}
           {match.role === 'moderator' && !match.isAll && (
-            <span className={`text-xs ${idx === mentionState.selectedIndex ? 'text-white/70' : 'text-fluux-muted'}`}>
+            <span className={`text-xs ${idx === mentionState.selectedIndex ? 'text-fluux-text-on-accent/70' : 'text-fluux-muted'}`}>
               {t('rooms.mod')}
             </span>
           )}
@@ -1828,7 +1828,7 @@ function RoomJoinPrompt({
         onClick={handleJoin}
         disabled={isJoining}
         className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-fluux-brand hover:bg-fluux-brand/90
-                   disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
+                   disabled:opacity-50 disabled:cursor-not-allowed text-fluux-text-on-accent rounded-lg font-medium transition-colors"
       >
         {isJoining ? (
           <>

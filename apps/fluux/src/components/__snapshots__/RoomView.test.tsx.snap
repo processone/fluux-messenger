@@ -162,7 +162,7 @@ exports[`RoomView > Snapshots > should match snapshot for non-joined room 1`] = 
       >
         <button
           class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-fluux-brand hover:bg-fluux-brand/90
-                   disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
+                   disabled:opacity-50 disabled:cursor-not-allowed text-fluux-text-on-accent rounded-lg font-medium transition-colors"
         >
           <span
             data-testid="icon-login"

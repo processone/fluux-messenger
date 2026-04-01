@@ -472,7 +472,7 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
             <button
               onClick={() => void handleCreate()}
               disabled={!newTitle.trim() || !newUri.trim() || isCreating}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-fluux-text-on-accent
                          bg-fluux-brand hover:bg-fluux-brand/80 disabled:opacity-50
                          rounded-lg transition-colors whitespace-nowrap"
             >
@@ -553,7 +553,7 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
             <button
               onClick={() => void handleAssign()}
               disabled={jidSelection.length === 0 || !assignUri || isAssigning}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-fluux-text-on-accent
                          bg-fluux-brand hover:bg-fluux-brand/80 disabled:opacity-50
                          rounded-lg transition-colors"
             >

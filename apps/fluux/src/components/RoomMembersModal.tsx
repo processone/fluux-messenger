@@ -353,7 +353,7 @@ export function RoomMembersModal({ room, onClose }: RoomMembersModalProps) {
             <button
               onClick={handleAddMember}
               disabled={jidSelection.length === 0 || isAdding}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-fluux-text-on-accent
                          bg-fluux-brand hover:bg-fluux-brand/80 disabled:opacity-50
                          rounded-lg transition-colors"
             >

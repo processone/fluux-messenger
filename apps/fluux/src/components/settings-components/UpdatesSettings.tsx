@@ -47,7 +47,7 @@ export function UpdatesSettings() {
             {update.downloaded ? (
               <button
                 onClick={update.relaunchApp}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-white
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-text-on-accent
                            bg-fluux-brand hover:bg-fluux-brand/90 rounded-md transition-colors"
               >
                 <RefreshCw className="w-4 h-4" />
@@ -56,7 +56,7 @@ export function UpdatesSettings() {
             ) : update.available && !update.downloading ? (
               <button
                 onClick={update.downloadAndInstall}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-white
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-text-on-accent
                            bg-fluux-brand hover:bg-fluux-brand/90 rounded-md transition-colors"
               >
                 <Download className="w-4 h-4" />

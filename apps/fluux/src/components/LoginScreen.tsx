@@ -461,7 +461,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
             type="submit"
             disabled={isLoading || !jid || !password}
             className="w-full py-2.5 bg-fluux-brand hover:bg-fluux-brand-hover
-                       text-white font-medium rounded transition-colors
+                       text-fluux-text-on-accent font-medium rounded transition-colors
                        disabled:opacity-50 disabled:cursor-not-allowed
                        focus-visible:ring-2 focus-visible:ring-fluux-brand focus-visible:ring-offset-2 focus-visible:ring-offset-fluux-sidebar
                        flex items-center justify-center gap-2"
