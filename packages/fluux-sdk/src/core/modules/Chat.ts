@@ -282,12 +282,9 @@ export class Chat extends BaseModule {
     // Process actual message
     // Poll messages have their body stripped by fallback processing, so also check for poll elements
     if (body || stanza.getChild('x', NS_OOB) || stanza.getChild('poll', NS_POLL) || stanza.getChild('poll-closed', NS_POLL)) {
-      let message: Message | RoomMessage | null = null
-      if (type === 'groupchat') {
-        message = this.processRoomMessage(stanza, from, bareFrom, body || '', isCarbonCopy, isSentCarbon)
-      } else {
-        message = this.processChatMessage(stanza, from, bareFrom, bareTo, body || '', isCarbonCopy, isSentCarbon)
-      }
+      const message = type === 'groupchat'
+        ? this.processRoomMessage(stanza, from, bareFrom, body || '', isCarbonCopy, isSentCarbon)
+        : this.processChatMessage(stanza, from, bareFrom, bareTo, body || '', isCarbonCopy, isSentCarbon)
 
       if (message) {
         if (!isSentCarbon) {

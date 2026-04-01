@@ -354,7 +354,7 @@ export class ScenarioBuilder {
       try {
         await step.fn()
       } catch (error) {
-        throw new Error(`Scenario failed at "${step.label}": ${error}`)
+        throw new Error(`Scenario failed at "${step.label}": ${error}`, { cause: error })
       }
     }
   }
