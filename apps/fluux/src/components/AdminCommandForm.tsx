@@ -151,7 +151,7 @@ export function AdminCommandForm({
         <button
           type="submit"
           disabled={isSubmitting}
-          className="px-4 py-2 text-sm text-white bg-fluux-brand hover:bg-fluux-brand/90 rounded-lg transition-colors disabled:opacity-50"
+          className="px-4 py-2 text-sm text-fluux-text-on-accent bg-fluux-brand hover:bg-fluux-brand/90 rounded-lg transition-colors disabled:opacity-50"
         >
           {isSubmitting ? t('admin.executing') : canGoNext ? t('admin.next') : t('admin.execute')}
         </button>
@@ -222,7 +222,7 @@ export function AdminCommandResult({ form, note, onClose }: AdminCommandResultPr
       <div className="flex justify-end pt-4 mt-4 border-t border-fluux-bg">
         <button
           onClick={onClose}
-          className="px-4 py-2 text-sm text-white bg-fluux-brand hover:bg-fluux-brand/90 rounded-lg transition-colors"
+          className="px-4 py-2 text-sm text-fluux-text-on-accent bg-fluux-brand hover:bg-fluux-brand/90 rounded-lg transition-colors"
         >
           {t('common.close')}
         </button>

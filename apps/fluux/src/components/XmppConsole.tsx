@@ -527,7 +527,7 @@ export function XmppConsole() {
                   onClick={() => setDirectionFilter(dir)}
                   className={`px-2 py-0.5 text-xs rounded transition-colors ${
                     directionFilter === dir
-                      ? dir === 'incoming' ? 'bg-blue-600 text-white' : dir === 'outgoing' ? 'bg-green-600 text-white' : 'bg-fluux-brand text-white'
+                      ? dir === 'incoming' ? 'bg-blue-600 text-white' : dir === 'outgoing' ? 'bg-green-600 text-white' : 'bg-fluux-brand text-fluux-text-on-accent'
                       : 'bg-fluux-bg/50 text-fluux-muted hover:text-fluux-text'
                   }`}
                 >
@@ -544,7 +544,7 @@ export function XmppConsole() {
                   onClick={() => toggleType(type)}
                   className={`px-2 py-0.5 text-xs rounded transition-colors ${
                     enabledTypes.has(type)
-                      ? type === 'event' ? 'bg-orange-600 text-white' : 'bg-fluux-brand text-white'
+                      ? type === 'event' ? 'bg-orange-600 text-white' : 'bg-fluux-brand text-fluux-text-on-accent'
                       : 'bg-fluux-bg/50 text-fluux-muted hover:text-fluux-text'
                   }`}
                 >
@@ -681,7 +681,7 @@ export function XmppConsole() {
                 virtualizer.scrollToIndex(filteredEntries.length - 1, { align: 'end', behavior: 'smooth' })
               }
             }}
-            className="absolute bottom-4 right-4 flex items-center gap-2 px-3 py-2 bg-fluux-brand text-white text-sm font-medium rounded-full shadow-lg hover:bg-fluux-brand/90 transition-colors"
+            className="absolute bottom-4 right-4 flex items-center gap-2 px-3 py-2 bg-fluux-brand text-fluux-text-on-accent text-sm font-medium rounded-full shadow-lg hover:bg-fluux-brand/90 transition-colors"
           >
             <ArrowDownToLine className="w-4 h-4" />
             {t('console.goToLive')}
@@ -709,7 +709,7 @@ export function XmppConsole() {
             <button
               onClick={handleSend}
               disabled={!isConnected || !inputXml.trim()}
-              className="px-4 bg-fluux-brand text-white rounded hover:bg-fluux-brand/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="px-4 bg-fluux-brand text-fluux-text-on-accent rounded hover:bg-fluux-brand/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               aria-label={t('console.sendStanza', { modifier: isMac ? '⌘' : 'Ctrl' })}
             >
               <Send className="w-4 h-4" />

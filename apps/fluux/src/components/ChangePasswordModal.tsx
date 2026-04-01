@@ -103,7 +103,7 @@ export function ChangePasswordModal({ onClose }: ChangePasswordModalProps) {
           <button
             type="submit"
             disabled={saving || !newPassword || !confirmPassword}
-            className="flex-1 px-4 py-2 text-white bg-fluux-brand hover:bg-fluux-brand/90 rounded-lg
+            className="flex-1 px-4 py-2 text-fluux-text-on-accent bg-fluux-brand hover:bg-fluux-brand/90 rounded-lg
                        transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {saving ? t('common.saving') : t('common.save')}

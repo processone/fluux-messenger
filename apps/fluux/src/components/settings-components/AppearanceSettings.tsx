@@ -173,7 +173,7 @@ function SnippetEditorModal({
           <button
             onClick={handleSave}
             disabled={!css.trim()}
-            className="px-3 py-1.5 text-sm text-white bg-fluux-brand hover:bg-fluux-brand-hover rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-3 py-1.5 text-sm text-fluux-text-on-accent bg-fluux-brand hover:bg-fluux-brand-hover rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {t('common.save')}
           </button>

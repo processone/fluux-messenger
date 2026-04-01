@@ -345,7 +345,7 @@ function StrangerMessageItem({ jid, messages, onAccept, onIgnore, onBlock }: Str
       <div className="flex gap-2 mt-2 ml-13">
         <button
           onClick={onAccept}
-          className="flex-1 px-3 py-1.5 bg-fluux-brand text-white text-sm font-medium rounded hover:bg-fluux-brand-hover transition-colors flex items-center justify-center gap-1"
+          className="flex-1 px-3 py-1.5 bg-fluux-brand text-fluux-text-on-accent text-sm font-medium rounded hover:bg-fluux-brand-hover transition-colors flex items-center justify-center gap-1"
         >
           <Check className="w-4 h-4" />
           {t('common.accept')}

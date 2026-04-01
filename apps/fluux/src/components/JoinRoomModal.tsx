@@ -128,7 +128,7 @@ export function JoinRoomModal({ onClose }: JoinRoomModalProps) {
           <button
             type="submit"
             disabled={joining || !roomJid.trim() || !nickname.trim()}
-            className="flex-1 px-4 py-2 text-white bg-fluux-brand rounded hover:bg-fluux-brand/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex-1 px-4 py-2 text-fluux-text-on-accent bg-fluux-brand rounded hover:bg-fluux-brand/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {joining ? t('rooms.joining') : t('rooms.joinRoom')}
           </button>

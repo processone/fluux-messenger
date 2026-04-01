@@ -340,7 +340,7 @@ export function ContactProfileView({
           <div className="flex flex-col gap-3 w-full max-w-xs">
             <button
               onClick={onStartConversation}
-              className="flex items-center justify-center gap-2 px-4 py-3 bg-fluux-brand hover:bg-fluux-brand-hover text-white rounded-lg transition-colors"
+              className="flex items-center justify-center gap-2 px-4 py-3 bg-fluux-brand hover:bg-fluux-brand-hover text-fluux-text-on-accent rounded-lg transition-colors"
             >
               <MessageCircle className="w-5 h-5" />
               {t('contacts.startConversation')}

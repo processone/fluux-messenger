@@ -77,7 +77,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
                   toggleConsole()
                   setIsOpen(false)
                 }}
-                className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-white transition-colors"
+                className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
               >
                 <Terminal className="w-4 h-4" />
                 <span>{consoleOpen ? t('menu.hideConsole') : t('menu.showConsole')}</span>
@@ -90,7 +90,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
                 setShowChangelog(true)
                 setIsOpen(false)
               }}
-              className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-white transition-colors"
+              className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
             >
               <Sparkles className="w-4 h-4" />
               <span>{t('menu.whatsNew')}</span>
@@ -103,7 +103,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
                   modalActions.open('shortcutHelp')
                   setIsOpen(false)
                 }}
-                className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-white transition-colors"
+                className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
               >
                 <Keyboard className="w-4 h-4" />
                 <span>{t('menu.keyboardShortcuts')}</span>
@@ -116,7 +116,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => setIsOpen(false)}
-              className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-white transition-colors"
+              className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
             >
               <Bug className="w-4 h-4" />
               <span>{t('menu.reportIssue')}</span>
@@ -128,7 +128,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
                 setShowAbout(true)
                 setIsOpen(false)
               }}
-              className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-white transition-colors"
+              className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
             >
               <Info className="w-4 h-4" />
               <span>{t('menu.about')}</span>

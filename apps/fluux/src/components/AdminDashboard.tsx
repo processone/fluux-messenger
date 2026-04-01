@@ -260,7 +260,7 @@ function CommandButton({
       className={`w-full px-2 py-1.5 rounded flex items-center justify-between text-left
                  transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed group
                  ${highlight
-                   ? 'text-fluux-text hover:bg-fluux-brand hover:text-white'
+                   ? 'text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent'
                    : 'text-fluux-muted hover:bg-fluux-hover hover:text-fluux-text'
                  }`}
     >

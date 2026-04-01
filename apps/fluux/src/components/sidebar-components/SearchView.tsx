@@ -179,7 +179,7 @@ export function SearchView() {
               onClick={() => setSearchFilter(key)}
               className={`text-xs rounded-full px-2.5 py-0.5 transition-colors flex items-center gap-1 ${
                 searchFilter === key
-                  ? 'bg-fluux-brand text-white'
+                  ? 'bg-fluux-brand text-fluux-text-on-accent'
                   : 'bg-fluux-hover text-fluux-muted hover:text-fluux-text'
               }`}
             >

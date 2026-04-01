@@ -216,7 +216,7 @@ export function CreateRoomModal({ onClose }: CreateRoomModalProps) {
           <button
             type="submit"
             disabled={creating || !mucService}
-            className="px-4 py-2 text-sm text-white bg-fluux-brand hover:bg-fluux-brand/90 rounded-lg transition-colors disabled:opacity-50"
+            className="px-4 py-2 text-sm text-fluux-text-on-accent bg-fluux-brand hover:bg-fluux-brand/90 rounded-lg transition-colors disabled:opacity-50"
           >
             {creating ? t('rooms.creating') : t('common.create')}
           </button>

@@ -572,7 +572,7 @@ function AddUserModal({ vhost, onSubmit, onClose }: AddUserModalProps) {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="flex-1 px-4 py-2 text-white bg-fluux-brand rounded
+            className="flex-1 px-4 py-2 text-fluux-text-on-accent bg-fluux-brand rounded
                        hover:bg-fluux-brand/90 disabled:opacity-50 transition-colors"
           >
             {isSubmitting ? t('admin.addUser.adding') : t('common.create')}

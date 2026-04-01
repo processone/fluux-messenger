@@ -356,14 +356,14 @@ const ContactItem = memo(function ContactItem({
         >
           <button
             onClick={handleStartChat}
-            className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-white transition-colors"
+            className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
           >
             <MessageCircle className="w-4 h-4" />
             <span>{t('contacts.startChat')}</span>
           </button>
           <button
             onClick={handleRename}
-            className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-white transition-colors"
+            className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
           >
             <Pencil className="w-4 h-4" />
             <span>{t('contacts.rename')}</span>
@@ -373,7 +373,7 @@ const ContactItem = memo(function ContactItem({
               <div className="my-1 border-t border-fluux-hover" />
               <button
                 onClick={handleManage}
-                className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-white transition-colors"
+                className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
               >
                 <Wrench className="w-4 h-4" />
                 <span>{t('contacts.manage')}</span>

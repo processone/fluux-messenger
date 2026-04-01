@@ -115,7 +115,7 @@ export function UpdateModal({ state, onDownload, onRelaunch, onDismiss }: Update
             {state.downloaded ? (
               <button
                 onClick={onRelaunch}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-fluux-brand text-white rounded-lg hover:bg-fluux-brand/90 transition-colors"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-fluux-brand text-fluux-text-on-accent rounded-lg hover:bg-fluux-brand/90 transition-colors"
               >
                 <RefreshCw className="w-4 h-4" />
                 {t('update.restartNow')}
@@ -138,7 +138,7 @@ export function UpdateModal({ state, onDownload, onRelaunch, onDismiss }: Update
                 </button>
                 <button
                   onClick={onDownload}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-fluux-brand text-white rounded-lg hover:bg-fluux-brand/90 transition-colors"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-fluux-brand text-fluux-text-on-accent rounded-lg hover:bg-fluux-brand/90 transition-colors"
                 >
                   <Download className="w-4 h-4" />
                   {t('update.updateNow')}

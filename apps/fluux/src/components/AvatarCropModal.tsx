@@ -400,7 +400,7 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
                 <button
                   onClick={capturePhoto}
                   disabled={!webcamReady}
-                  className="flex items-center gap-2 px-4 py-2 bg-fluux-brand hover:bg-fluux-brand-hover text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 px-4 py-2 bg-fluux-brand hover:bg-fluux-brand-hover text-fluux-text-on-accent rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Camera className="w-5 h-5" />
                   {t('avatar.takePhoto')}
@@ -564,7 +564,7 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
           <button
             onClick={handleSave}
             disabled={!imageUrl || saving}
-            className="px-4 py-2 bg-fluux-brand hover:bg-fluux-brand-hover text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 bg-fluux-brand hover:bg-fluux-brand-hover text-fluux-text-on-accent rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {saving ? t('common.saving') : t('common.save')}
           </button>

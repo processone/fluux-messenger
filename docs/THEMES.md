@@ -120,10 +120,13 @@ The accent is defined as HSL components so Fluux can derive hover states, select
 From these, the app computes:
 - `--fluux-bg-accent` — primary accent background (buttons, active icons)
 - `--fluux-bg-accent-hover` — darkened accent for hover
+- `--fluux-text-on-accent` — auto-computed text color (`#000000` or `#ffffff`) for readable contrast on the accent background
 - `--fluux-selection-bg` — translucent accent for text selection
 - `--fluux-search-highlight-bg` — translucent accent for search match highlighting
 - `--fluux-search-highlight-text` — text color inside search highlights
 - `--fluux-focus-ring` — translucent accent for focus outlines
+
+The `--fluux-text-on-accent` color is calculated automatically using WCAG relative luminance. Light accents (e.g. Yellow or Pink in dark mode) get black text; dark accents (e.g. Blue in light mode) get white text. This ensures buttons, active icon rail tabs, and other accent-colored elements remain readable with any accent color and mode combination. Theme authors do not need to set this variable — it adapts automatically.
 
 **Tip:** Lower the lightness by ~8-10% for light mode so the accent remains readable on light backgrounds.
 
@@ -177,6 +180,7 @@ These map foundation tokens to purposes. They cascade from Tier 1, so you rarely
 | `--fluux-text-normal`           | `base-90`             | Primary text                    |
 | `--fluux-text-muted`            | `base-80`             | Secondary text                  |
 | `--fluux-text-faint`            | `base-70`             | Timestamps, disabled text       |
+| `--fluux-text-on-accent`        | Auto (`#000`/`#fff`)  | Text on accent backgrounds      |
 | `--fluux-text-link`             | `color-blue`          | Hyperlinks                      |
 | `--fluux-status-success`        | `color-green`         | Success indicators              |
 | `--fluux-status-warning`        | `color-yellow`        | Warning indicators              |

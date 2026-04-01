@@ -475,7 +475,7 @@ const RoomItem = memo(function RoomItem({
           {!room.joined && (
             <button
               onClick={() => { menu.close(); onJoin() }}
-              className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-white transition-colors"
+              className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
             >
               <LogIn className="w-4 h-4" />
               <span>{t('rooms.joinRoom')}</span>
@@ -486,7 +486,7 @@ const RoomItem = memo(function RoomItem({
           {room.isBookmarked && (
             <button
               onClick={() => { menu.close(); onEditBookmark() }}
-              className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-white transition-colors"
+              className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
             >
               <Pencil className="w-4 h-4" />
               <span>{t('rooms.editBookmark')}</span>
@@ -497,7 +497,7 @@ const RoomItem = memo(function RoomItem({
           {room.isBookmarked && (
             <button
               onClick={() => { menu.close(); onToggleAutojoin() }}
-              className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-white transition-colors"
+              className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
             >
               {room.autojoin ? (
                 <>

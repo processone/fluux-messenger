@@ -184,7 +184,7 @@ export function OccupantModerationModal({
                     disabled={loading}
                     onClick={() => void handleRoleAction(role)}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md
-                      bg-fluux-hover/50 text-fluux-text hover:bg-fluux-brand hover:text-white
+                      bg-fluux-hover/50 text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent
                       disabled:opacity-50 transition-colors"
                   >
                     {roleIcon(role)}
@@ -207,7 +207,7 @@ export function OccupantModerationModal({
                   disabled={loading}
                   onClick={() => void handleAffAction(aff)}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md
-                    bg-fluux-hover/50 text-fluux-text hover:bg-fluux-brand hover:text-white
+                    bg-fluux-hover/50 text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent
                     disabled:opacity-50 transition-colors"
                 >
                   {affIcon(aff)}

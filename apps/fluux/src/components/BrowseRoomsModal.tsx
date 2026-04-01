@@ -298,7 +298,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
                   onClick={handleCustomServiceSubmit}
                   disabled={!customService.trim()}
                   aria-label={t('rooms.discover')}
-                  className="px-3 py-2 text-sm text-white bg-fluux-brand rounded
+                  className="px-3 py-2 text-sm text-fluux-text-on-accent bg-fluux-brand rounded
                              hover:bg-fluux-brand/80 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Search className="w-4 h-4" />
@@ -444,7 +444,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
                           void handleJoinRoom(room.jid)
                         }}
                         disabled={isJoining || !nickname.trim()}
-                        className={`px-3 py-1 text-sm text-white bg-fluux-brand rounded hover:bg-fluux-brand/80
+                        className={`px-3 py-1 text-sm text-fluux-text-on-accent bg-fluux-brand rounded hover:bg-fluux-brand/80
                                    disabled:opacity-50 disabled:cursor-not-allowed transition-colors
                                    ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}`}
                       >

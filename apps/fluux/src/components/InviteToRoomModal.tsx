@@ -116,7 +116,7 @@ export function InviteToRoomModal({ isOpen, onClose, room }: InviteToRoomModalPr
         <button
           onClick={handleInvite}
           disabled={selectedContacts.length === 0}
-          className="px-4 py-2 text-sm bg-fluux-brand text-white rounded
+          className="px-4 py-2 text-sm bg-fluux-brand text-fluux-text-on-accent rounded
                      hover:bg-fluux-brand-hover transition-colors
                      disabled:opacity-50 disabled:cursor-not-allowed
                      flex items-center gap-2"

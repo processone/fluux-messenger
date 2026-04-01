@@ -26,6 +26,7 @@ export default {
           // Accents
           'brand': 'var(--fluux-bg-accent)',
           'brand-hover': 'var(--fluux-bg-accent-hover)',
+          'text-on-accent': 'var(--fluux-text-on-accent)',
           // Status (semantic purpose, not color)
           'green': 'var(--fluux-status-success)',
           'yellow': 'var(--fluux-status-warning)',

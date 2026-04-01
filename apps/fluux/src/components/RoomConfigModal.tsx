@@ -253,7 +253,7 @@ function ConfigFormContent({
         <button
           type="submit"
           disabled={saving}
-          className="px-4 py-2 text-sm text-white bg-fluux-brand hover:bg-fluux-brand/90 rounded-lg transition-colors disabled:opacity-50"
+          className="px-4 py-2 text-sm text-fluux-text-on-accent bg-fluux-brand hover:bg-fluux-brand/90 rounded-lg transition-colors disabled:opacity-50"
         >
           {saving ? t('rooms.savingSettings') : t('rooms.saveSettings')}
         </button>

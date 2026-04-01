@@ -84,14 +84,14 @@ export class RenderLoopBoundary extends Component<Props, State> {
               {isRenderLoop && (
                 <button
                   onClick={this.handleRetry}
-                  className="rounded bg-fluux-brand px-4 py-2 text-white hover:bg-fluux-brand/80"
+                  className="rounded bg-fluux-brand px-4 py-2 text-fluux-text-on-accent hover:bg-fluux-brand/80"
                 >
                   Try Again
                 </button>
               )}
               <button
                 onClick={this.handleReload}
-                className={`rounded px-4 py-2 ${isRenderLoop ? 'border border-fluux-border text-fluux-text hover:bg-fluux-surface' : 'bg-fluux-brand text-white hover:bg-fluux-brand/80'}`}
+                className={`rounded px-4 py-2 ${isRenderLoop ? 'border border-fluux-border text-fluux-text hover:bg-fluux-surface' : 'bg-fluux-brand text-fluux-text-on-accent hover:bg-fluux-brand/80'}`}
               >
                 Reload App
               </button>

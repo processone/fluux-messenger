@@ -5,6 +5,45 @@ import type { AccentPreset } from '@/themes/types'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
+/**
+ * Returns '#000000' or '#ffffff' depending on which provides better WCAG contrast
+ * against the given HSL background color.
+ *
+ * Uses the sRGB relative luminance formula. Threshold 0.36 ensures the chosen
+ * text color always achieves at least WCAG AA contrast (4.5:1).
+ */
+function contrastColorForHsl(h: number, s: number, l: number): '#ffffff' | '#000000' {
+  // HSL → linear sRGB → relative luminance
+  const sNorm = s / 100
+  const lNorm = l / 100
+  const a = sNorm * Math.min(lNorm, 1 - lNorm)
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12
+    const c = lNorm - a * Math.max(Math.min(k - 3, 9 - k, 1), -1)
+    // sRGB linearization
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+  }
+  const luminance = 0.2126 * f(0) + 0.7152 * f(8) + 0.0722 * f(4)
+  return luminance > 0.36 ? '#000000' : '#ffffff'
+}
+
+/**
+ * Resolves the effective accent HSL from: accent preset > theme variables > CSS defaults.
+ */
+function getEffectiveAccentHsl(
+  accentPreset: AccentPreset | null,
+  resolved: 'light' | 'dark',
+  themeVars: Record<string, string> | undefined
+): { h: number; s: number; l: number } {
+  if (accentPreset) {
+    return resolved === 'light' ? accentPreset.light : accentPreset.dark
+  }
+  const h = parseFloat(themeVars?.['--fluux-accent-h'] ?? '235')
+  const s = parseFloat(themeVars?.['--fluux-accent-s'] ?? '86')
+  const l = parseFloat(themeVars?.['--fluux-accent-l'] ?? '65')
+  return { h, s, l }
+}
+
 /** Theme colors for status bar — using bg-secondary for visual continuity */
 const FALLBACK_THEME_COLORS = {
   dark: '#1a1b1e',
@@ -73,6 +112,7 @@ function applyAccentOverride(accent: AccentPreset | null, resolved: 'light' | 'd
     ['--fluux-accent-h', `${hsl.h}`],
     ['--fluux-accent-s', `${hsl.s}%`],
     ['--fluux-accent-l', `${hsl.l}%`],
+    ['--fluux-text-on-accent', contrastColorForHsl(hsl.h, hsl.s, hsl.l)],
   ]
   for (const [name, value] of vars) {
     root.style.setProperty(name, value)
@@ -148,6 +188,12 @@ export function useTheme() {
     // 3. Apply accent color override (after theme variables)
     applyAccentOverride(accentPreset, resolved, previousAccentVarsRef)
 
+    // 3b. Ensure --fluux-text-on-accent is set even without a preset
+    if (!accentPreset) {
+      const effectiveHsl = getEffectiveAccentHsl(null, resolved, modeVars)
+      root.style.setProperty('--fluux-text-on-accent', contrastColorForHsl(effectiveHsl.h, effectiveHsl.s, effectiveHsl.l))
+    }
+
     // 4. Sync status bar color
     updateThemeColorMeta(resolved)
 
@@ -180,6 +226,12 @@ export function useTheme() {
 
       // Re-apply accent override for the new mode
       applyAccentOverride(accentPreset, resolved, previousAccentVarsRef)
+
+      // Re-compute text-on-accent for the new mode
+      if (!accentPreset) {
+        const effectiveHsl = getEffectiveAccentHsl(null, resolved, modeVars)
+        document.documentElement.style.setProperty('--fluux-text-on-accent', contrastColorForHsl(effectiveHsl.h, effectiveHsl.s, effectiveHsl.l))
+      }
 
       updateThemeColorMeta(resolved)
     }

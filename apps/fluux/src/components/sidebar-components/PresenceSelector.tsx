@@ -180,7 +180,7 @@ export function PresenceSelector({ isOpen: isOpenProp, onOpenChange }: PresenceS
             <div className="flex gap-2 mt-2">
               <button
                 type="submit"
-                className="flex-1 px-2 py-1 text-xs bg-fluux-brand text-white rounded hover:bg-fluux-brand/80 transition-colors"
+                className="flex-1 px-2 py-1 text-xs bg-fluux-brand text-fluux-text-on-accent rounded hover:bg-fluux-brand/80 transition-colors"
               >
                 {t('common.save')}
               </button>

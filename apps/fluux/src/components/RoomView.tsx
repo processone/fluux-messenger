@@ -1593,7 +1593,7 @@ function RoomMessageInput({
           onClick={() => handleMentionSelect(idx)}
           className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 transition-colors
                      ${idx === mentionState.selectedIndex
-                       ? 'bg-fluux-brand text-white'
+                       ? 'bg-fluux-brand text-fluux-text-on-accent'
                        : 'hover:bg-fluux-hover text-fluux-text'}`}
         >
           {/* Avatar */}

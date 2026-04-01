@@ -89,7 +89,7 @@ export function RenameContactModal({
           <button
             type="submit"
             disabled={saving || !name.trim()}
-            className="flex-1 px-4 py-2 text-white bg-fluux-brand rounded hover:bg-fluux-brand/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex-1 px-4 py-2 text-fluux-text-on-accent bg-fluux-brand rounded hover:bg-fluux-brand/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {saving ? t('common.saving') : t('common.save')}
           </button>
