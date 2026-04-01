@@ -2783,21 +2783,23 @@ describe('XMPPClient Connection', () => {
       expect(mockClientFactory).toHaveBeenCalled()
     })
 
-    it('should force reconnect recovery when stale disconnect arrives while still connected', async () => {
+    it('should ignore stale disconnect without triggering reconnect', async () => {
       // Simulate the race: internal xmpp ref was already replaced/nulled,
       // but the old socket disconnect event arrives while machine is connected.
       ;(xmppClient.connection as any).xmpp = null
+
+      vi.mocked(mockStores.connection.setStatus).mockClear()
 
       mockXmppClientInstance._emit('disconnect', {
         clean: false,
         reason: { code: 1006, reason: 'ECONNERROR' },
       })
 
-      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
-        'Socket closed from stale client while connected, forcing reconnect recovery',
-        'connection'
-      )
-      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
+      // Stale disconnect should be logged and ignored — no reconnect triggered.
+      // In every real code path, the machine has already transitioned out of
+      // `connected` before any stale disconnect arrives (SOCKET_DIED is sent
+      // synchronously before forceDestroyClient strips listeners).
+      expect(mockStores.connection.setStatus).not.toHaveBeenCalledWith('reconnecting')
     })
 
     it('should schedule reconnect after SM verify timeout without disconnect event', async () => {
