@@ -1017,7 +1017,7 @@ async fn bridge_websocket_tls(
                         if let Err(e) = ws_write_for_tls
                             .lock()
                             .await
-                            .send(Message::Text(translated.into_owned()))
+                            .send(Message::Text(translated.into_owned().into()))
                             .await
                         {
                             debug!(error = %e, "TLS->WS write error (WebSocket likely closed)");

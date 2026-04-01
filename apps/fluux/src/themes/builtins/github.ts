@@ -24,20 +24,20 @@ export const githubTheme: ThemeDefinition = {
       '--fluux-base-90': '#e6edf3', // fg.default
       '--fluux-base-100': '#ffffff',
       // Foundation — accent (blue)
-      '--fluux-accent-h': '212',
-      '--fluux-accent-s': '92%',
-      '--fluux-accent-l': '58%',
+      '--fluux-accent-h': '214',
+      '--fluux-accent-s': '93%',
+      '--fluux-accent-l': '62%',
       // Foundation — palette
       '--fluux-color-red': '#da3633',
       '--fluux-color-green': '#238636',
       '--fluux-color-yellow': '#9e6a03',
-      '--fluux-color-blue': '#2f81f7', // accent
+      '--fluux-color-blue': '#4493f8', // accent
       '--fluux-color-purple': '#8957e5',
       '--fluux-color-gray': '#7d8590',
       '--fluux-color-red-rgb': '218, 54, 51',
       '--fluux-color-green-rgb': '35, 134, 54',
       '--fluux-color-yellow-rgb': '158, 106, 3',
-      '--fluux-color-blue-rgb': '47, 129, 247',
+      '--fluux-color-blue-rgb': '68, 147, 248',
       '--fluux-color-purple-rgb': '137, 87, 229',
       // Syntax highlighting
       '--syntax-token-keyword': '#ff7b72',
@@ -48,7 +48,7 @@ export const githubTheme: ThemeDefinition = {
       '--syntax-token-constant': '#79c0ff',
       '--syntax-token-parameter': '#ffa657',
       '--syntax-token-punctuation': '#e6edf3',
-      '--syntax-token-link': '#2f81f7',
+      '--syntax-token-link': '#4493f8',
     },
     light: {
       // Foundation — typography (GitHub system font stack)
@@ -101,7 +101,7 @@ export const githubTheme: ThemeDefinition = {
     },
   },
   swatches: {
-    dark: ['#0d1117', '#151b23', '#2f81f7', '#238636', '#da3633'],
+    dark: ['#0d1117', '#151b23', '#4493f8', '#238636', '#da3633'],
     light: ['#f6f8fa', '#ffffff', '#0969da', '#1a7f37', '#cf222e'],
   },
 }

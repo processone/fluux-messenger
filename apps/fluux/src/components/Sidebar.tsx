@@ -400,7 +400,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
         <div
           ref={sidebarListRef}
           tabIndex={0}
-          className="focus-zone flex-1 overflow-y-auto p-1"
+          className="focus-zone flex-1 overflow-y-auto py-2 pl-1 pr-2"
         >
           <SidebarZoneContext.Provider value={sidebarListRef}>
             <div key={sidebarView} style={{ animation: 'sidebar-view-enter 150ms ease-out' }}>

@@ -286,8 +286,8 @@ pub fn extract_stanza(buffer: &[u8]) -> Option<(String, usize)> {
 
                 // Otherwise it's a self-closing child element, continue
             }
-            Ok(Event::Text(_)) | Ok(Event::CData(_)) => {
-                // Text content — don't change depth
+            Ok(Event::Text(_)) | Ok(Event::CData(_)) | Ok(Event::GeneralRef(_)) => {
+                // Text content / entity references — don't change depth
             }
             Ok(Event::End(e)) => {
                 let local_name = e.name().local_name();
