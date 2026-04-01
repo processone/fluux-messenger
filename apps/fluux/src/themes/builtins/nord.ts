@@ -84,6 +84,8 @@ export const nordTheme: ThemeDefinition = {
       '--fluux-selection-bg': 'hsla(213, 32%, 42%, 0.15)',
       '--fluux-scrollbar-thumb': '#c8d0e0',
       '--fluux-scrollbar-thumb-hover': '#a5b1c7',
+      '--fluux-scrollbar-thumb-sidebar': '#b5bfd2',
+      '--fluux-scrollbar-thumb-sidebar-hover': '#97a4bc',
       // Syntax highlighting
       '--syntax-token-keyword': '#5e81ac',
       '--syntax-token-string': '#7b9e60',

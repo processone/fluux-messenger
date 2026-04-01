@@ -84,6 +84,8 @@ export const monokaiTheme: ThemeDefinition = {
       '--fluux-selection-bg': 'hsla(338, 75%, 42%, 0.15)',
       '--fluux-scrollbar-thumb': '#c8c4b8',
       '--fluux-scrollbar-thumb-hover': '#b0aca0',
+      '--fluux-scrollbar-thumb-sidebar': '#b0aca0',
+      '--fluux-scrollbar-thumb-sidebar-hover': '#989488',
       '--fluux-text-link': '#b86e0a',
       // Syntax highlighting
       '--syntax-token-keyword': '#c41854',

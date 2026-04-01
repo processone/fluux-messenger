@@ -106,6 +106,8 @@ export const catppuccinMochaTheme: ThemeDefinition = {
       '--fluux-selection-bg': 'hsla(267, 83%, 58%, 0.15)',
       '--fluux-scrollbar-thumb': '#bcc0cc',
       '--fluux-scrollbar-thumb-hover': '#acb0be',
+      '--fluux-scrollbar-thumb-sidebar': '#acb0be',
+      '--fluux-scrollbar-thumb-sidebar-hover': '#9ca0ae',
       // Syntax highlighting
       '--syntax-token-keyword': '#8839ef',
       '--syntax-token-string': '#40a02b',

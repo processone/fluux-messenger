@@ -83,6 +83,8 @@ export const draculaTheme: ThemeDefinition = {
       '--fluux-selection-bg': 'hsla(265, 70%, 55%, 0.15)',
       '--fluux-scrollbar-thumb': '#c8c8c2',
       '--fluux-scrollbar-thumb-hover': '#b0b0aa',
+      '--fluux-scrollbar-thumb-sidebar': '#b8b8b2',
+      '--fluux-scrollbar-thumb-sidebar-hover': '#a0a09a',
       '--fluux-text-link': '#a8308c',
       // Syntax highlighting
       '--syntax-token-keyword': '#a8308c',

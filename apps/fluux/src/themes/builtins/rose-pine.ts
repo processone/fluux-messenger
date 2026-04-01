@@ -86,6 +86,8 @@ export const rosePineTheme: ThemeDefinition = {
       '--fluux-selection-bg': 'hsla(267, 22%, 57%, 0.15)',
       '--fluux-scrollbar-thumb': '#dfdad9',
       '--fluux-scrollbar-thumb-hover': '#cecacd',
+      '--fluux-scrollbar-thumb-sidebar': '#cecacd',
+      '--fluux-scrollbar-thumb-sidebar-hover': '#beb9bd',
       '--fluux-text-link': '#d7827e',
       // Syntax highlighting
       '--syntax-token-keyword': '#286983',

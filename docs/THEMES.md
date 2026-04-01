@@ -187,7 +187,9 @@ These map foundation tokens to purposes. They cascade from Tier 1, so you rarely
 | `--fluux-status-error`          | `color-red`           | Error indicators, unread badges |
 | `--fluux-status-info`           | `color-blue`          | Informational indicators        |
 | `--fluux-border-color`          | `rgba(0,0,0,0.1)`     | Subtle dividers                 |
-| `--fluux-scrollbar-thumb`       | `base-05`             | Scrollbar color                 |
+| `--fluux-scrollbar-thumb`       | `base-05`             | Scrollbar thumb color           |
+| `--fluux-scrollbar-thumb-sidebar` | `base-30`           | Sidebar scrollbar thumb color   |
+| `--fluux-scrollbar-thumb-sidebar-hover` | `base-50`     | Sidebar scrollbar thumb hover   |
 | `--fluux-selection-bg`          | Accent at 25% opacity | Text selection highlight        |
 | `--fluux-search-highlight-bg`   | Accent at 35% opacity | Search match background         |
 | `--fluux-search-highlight-text` | `text-normal`         | Search match text color         |
@@ -196,6 +198,7 @@ These map foundation tokens to purposes. They cascade from Tier 1, so you rarely
 - `--fluux-bg-secondary` — if your ramp spacing makes `base-05` too similar to `base-10`
 - `--fluux-border-color` — light themes often need `rgba(0,0,0,0.12-0.15)` instead of `0.1`
 - `--fluux-scrollbar-thumb` — if your ramp makes the default too subtle or too prominent
+- `--fluux-scrollbar-thumb-sidebar` / `--fluux-scrollbar-thumb-sidebar-hover` — the sidebar has a darker background than the main content area, so the default `base-30`/`base-50` may not provide enough contrast. Light themes almost always need explicit overrides here since `base-30` is often near-white
 
 ## Tier 3: Component Variables (Rarely Needed)
 

@@ -86,6 +86,8 @@ export const kanagawaTheme: ThemeDefinition = {
       '--fluux-selection-bg': 'hsla(219, 36%, 45%, 0.15)',
       '--fluux-scrollbar-thumb': '#d5cea3',
       '--fluux-scrollbar-thumb-hover': '#c9c297',
+      '--fluux-scrollbar-thumb-sidebar': '#c0b990',
+      '--fluux-scrollbar-thumb-sidebar-hover': '#b0a980',
       '--fluux-text-link': '#cc6d00', // lotusOrange
       // Syntax highlighting
       '--syntax-token-keyword': '#624c83',

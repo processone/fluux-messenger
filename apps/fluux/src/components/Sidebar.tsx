@@ -400,9 +400,9 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
         <div
           ref={sidebarListRef}
           tabIndex={0}
-          className="focus-zone flex-1 min-h-0"
+          className="focus-zone flex-1 min-h-0 p-0.5"
         >
-          <div className="h-full overflow-y-auto py-1 pl-1 pr-1">
+          <div className="sidebar-scroll h-full overflow-y-auto rounded-sm py-0.5 px-0.5">
             <SidebarZoneContext.Provider value={sidebarListRef}>
               <div key={sidebarView} style={{ animation: 'sidebar-view-enter 150ms ease-out' }}>
               {sidebarView === 'messages' ? (

@@ -43,6 +43,8 @@ export const solarizedTheme: ThemeDefinition = {
       '--fluux-selection-bg': 'hsla(205, 69%, 49%, 0.2)',
       '--fluux-scrollbar-thumb': '#073642',
       '--fluux-scrollbar-thumb-hover': '#0a4050',
+      '--fluux-scrollbar-thumb-sidebar': '#1a5c6e',
+      '--fluux-scrollbar-thumb-sidebar-hover': '#2a7a8e',
       // Syntax highlighting
       '--syntax-token-keyword': '#859900',
       '--syntax-token-string': '#2aa198',
@@ -90,6 +92,8 @@ export const solarizedTheme: ThemeDefinition = {
       '--fluux-selection-bg': 'hsla(205, 69%, 42%, 0.15)',
       '--fluux-scrollbar-thumb': '#c5bca6',
       '--fluux-scrollbar-thumb-hover': '#b3a992',
+      '--fluux-scrollbar-thumb-sidebar': '#b3a992',
+      '--fluux-scrollbar-thumb-sidebar-hover': '#a19780',
       // Syntax highlighting
       '--syntax-token-keyword': '#859900',
       '--syntax-token-string': '#2aa198',

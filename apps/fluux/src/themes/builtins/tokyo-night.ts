@@ -84,6 +84,8 @@ export const tokyoNightTheme: ThemeDefinition = {
       '--fluux-selection-bg': 'hsla(220, 72%, 52%, 0.15)',
       '--fluux-scrollbar-thumb': '#b4b5b9',
       '--fluux-scrollbar-thumb-hover': '#a0a1a5',
+      '--fluux-scrollbar-thumb-sidebar': '#a0a1a5',
+      '--fluux-scrollbar-thumb-sidebar-hover': '#8c8d91',
       // Syntax highlighting
       '--syntax-token-keyword': '#7847bd',
       '--syntax-token-string': '#587539',

@@ -84,6 +84,8 @@ export const gruvboxTheme: ThemeDefinition = {
       '--fluux-selection-bg': 'hsla(24, 88%, 35%, 0.15)',
       '--fluux-scrollbar-thumb': '#bdae93',
       '--fluux-scrollbar-thumb-hover': '#a89984',
+      '--fluux-scrollbar-thumb-sidebar': '#a89984',
+      '--fluux-scrollbar-thumb-sidebar-hover': '#928374',
       // Syntax highlighting
       '--syntax-token-keyword': '#9d0006',
       '--syntax-token-string': '#79740e',

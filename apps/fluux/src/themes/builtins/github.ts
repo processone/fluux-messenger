@@ -88,6 +88,8 @@ export const githubTheme: ThemeDefinition = {
       '--fluux-selection-bg': 'hsla(212, 92%, 45%, 0.15)',
       '--fluux-scrollbar-thumb': '#dae0e7',
       '--fluux-scrollbar-thumb-hover': '#c8ced5',
+      '--fluux-scrollbar-thumb-sidebar': '#c8ced5',
+      '--fluux-scrollbar-thumb-sidebar-hover': '#b0b8c2',
       // Syntax highlighting
       '--syntax-token-keyword': '#cf222e',
       '--syntax-token-string': '#0a3069',

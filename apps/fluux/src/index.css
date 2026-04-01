@@ -151,6 +151,8 @@
   /* Scrollbar */
   --fluux-scrollbar-thumb: var(--fluux-base-05);
   --fluux-scrollbar-thumb-hover: var(--fluux-base-20);
+  --fluux-scrollbar-thumb-sidebar: var(--fluux-base-30);
+  --fluux-scrollbar-thumb-sidebar-hover: var(--fluux-base-50);
 
   /* Focus ring */
   --fluux-focus-ring: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.5);
@@ -339,6 +341,15 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover);
+}
+
+/* Sidebar scrollbar — more visible on dark sidebar background */
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background: var(--fluux-scrollbar-thumb-sidebar);
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--fluux-scrollbar-thumb-sidebar-hover);
 }
 
 /* Smooth scrolling */

@@ -84,6 +84,8 @@ export const oneDarkTheme: ThemeDefinition = {
       '--fluux-selection-bg': 'hsla(224, 100%, 56%, 0.12)',
       '--fluux-scrollbar-thumb': '#c8c8c9',
       '--fluux-scrollbar-thumb-hover': '#b0b0b1',
+      '--fluux-scrollbar-thumb-sidebar': '#b0b0b1',
+      '--fluux-scrollbar-thumb-sidebar-hover': '#989899',
       // Syntax highlighting
       '--syntax-token-keyword': '#a626a4',
       '--syntax-token-string': '#50a14f',
