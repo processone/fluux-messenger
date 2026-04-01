@@ -67,14 +67,14 @@
   },
   "dependencies": {
     "@xmpp/client": "^0.14.0",
-    "@xmpp/debug": "^0.13.0",
-    "idb": "^7.1.1"
+    "@xmpp/debug": "^0.14.0",
+    "idb": "^8.0.0"
   },
   "peerDependencies": {
     "@xstate/react": "^6.0.0",
     "react": ">=19.0.0",
     "xstate": "^5.0.0",
-    "zustand": "^4.0.0"
+    "zustand": "^4.0.0 || ^5.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
@@ -85,7 +85,7 @@
     "eslint": "^9.39.2",
     "fake-indexeddb": "^6.2.5",
     "happy-dom": "^20.0.11",
-    "jsdom": "^26.0.0",
+    "jsdom": "^29.0.0",
     "react": "^19.2.0",
     "tsup": "^8.0.0",
     "typedoc": "^0.28.16",
@@ -93,7 +93,7 @@
     "typescript-eslint": "^8.53.0",
     "vitest": "^4.1.0",
     "xstate": "^5.25.1",
-    "zustand": "^4.4.7"
+    "zustand": "^5.0.0"
   },
   "sideEffects": false,
   "keywords": [

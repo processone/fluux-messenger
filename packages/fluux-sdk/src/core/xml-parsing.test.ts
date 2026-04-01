@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { xml } from '@xmpp/client'
-import ltx from 'ltx'
+import * as ltx from 'ltx'
 
 /**
  * Tests for XML parsing behavior in @xmpp/client.
