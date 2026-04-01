@@ -248,6 +248,15 @@ export const createMockXmppClient = () => {
         }
       }),
     },
+    // Remove all event listeners — called by forceDestroyClient() during cleanup.
+    // Must actually clear handlers so destroyed clients cannot emit stale events
+    // into the Connection module (e.g., a belated 'online' after timeout).
+    removeAllListeners: vi.fn(() => {
+      for (const key of Object.keys(handlers)) delete handlers[key]
+      for (const key of Object.keys(smHandlers)) delete smHandlers[key]
+      for (const key of Object.keys(pendingLifecycleEvents)) delete pendingLifecycleEvents[key]
+      for (const key of Object.keys(pendingSmEvents)) delete pendingSmEvents[key]
+    }),
     // Helper to trigger events in tests
     _emit: (event: string, ...args: unknown[]) => {
       const eventHandlers = handlers[event]
@@ -271,6 +280,8 @@ export const createMockXmppClient = () => {
       if (!pendingSmEvents[event]) pendingSmEvents[event] = []
       pendingSmEvents[event].push(args)
     },
+    // Test helper: check if any handlers are registered for an event
+    _hasHandlers: (event: string) => !!(handlers[event]?.length),
     _handlers: handlers,
     _smHandlers: smHandlers,
   }

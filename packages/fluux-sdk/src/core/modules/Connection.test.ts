@@ -898,6 +898,9 @@ describe('XMPPClient Connection', () => {
       mockClientFactory.mockClear()
 
       // Simulate delayed error from old socket after user-initiated disconnect.
+      // With removeAllListeners working, the event never reaches the handler —
+      // stale events are blocked at the source (listener removal) rather than
+      // at the handler level (state check).
       mockXmppClientInstance._emit('error', new Error('websocket econnerror ws://[::1]:42583'))
 
       await vi.advanceTimersByTimeAsync(0)
@@ -906,10 +909,6 @@ describe('XMPPClient Connection', () => {
       expect(mockProxyAdapter.stopProxy).not.toHaveBeenCalled()
       expect(mockClientFactory).not.toHaveBeenCalled()
       expect(vi.mocked(mockStores.connection.setStatus).mock.calls.some((c) => c[0] === 'reconnecting')).toBe(false)
-      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
-        'Dead-socket recovery skipped: machine state is "disconnected"',
-        'connection'
-      )
 
       proxyClient.cancelReconnect()
     })
@@ -1080,6 +1079,8 @@ describe('XMPPClient Connection', () => {
       mockClientFactory.mockClear()
 
       // Late stale transport error/disconnect from old socket.
+      // With removeAllListeners working, these events never reach the handler —
+      // stale events are blocked at the source (listener removal after disconnect).
       mockXmppClientInstance._emit('error', new Error('websocket econnerror ws://[::1]:42583'))
       mockXmppClientInstance._emit('disconnect', {
         clean: false,
@@ -1092,10 +1093,6 @@ describe('XMPPClient Connection', () => {
       const statusCalls = vi.mocked(mockStores.connection.setStatus).mock.calls
       expect(statusCalls.some((call) => call[0] === 'reconnecting')).toBe(false)
       expect(mockClientFactory).not.toHaveBeenCalled()
-      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
-        'Dead-socket recovery skipped: machine state is "disconnected"',
-        'connection'
-      )
     })
 
     it('should handle disconnect when already disconnected', async () => {

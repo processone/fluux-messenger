@@ -1877,6 +1877,10 @@ export class Connection extends BaseModule {
       return
     }
 
+    // Track which client this attempt creates, so the outer catch block can
+    // detect if a WAKE event replaced it with a newer attempt's client.
+    let clientCreatedByThisAttempt: unknown = null
+
     try {
       // Capture rooms early so reconnect recovery can still rejoin them even if
       // we short-circuit because the transport is already back online.
@@ -1939,6 +1943,7 @@ export class Connection extends BaseModule {
         // newer attempt replaced it (e.g., WAKE triggered a fresh attempt while
         // this timeout was paused during sleep).
         const clientForThisAttempt = this.xmpp
+        clientCreatedByThisAttempt = this.xmpp
         this.hydrateStreamManagement(smState ?? undefined)
         this.setupHandlers()
         logInfo(`attemptReconnect: new client created, calling start() (${options.server})`)
@@ -2041,6 +2046,15 @@ export class Connection extends BaseModule {
         await connectWithOptions(reconnectOptions)
       }
     } catch (err) {
+      // Guard: if a WAKE event already replaced this attempt's client with a
+      // newer one, don't destroy the new client or send CONNECTION_ERROR — the
+      // new attempt is already in progress.
+      if (this.xmpp != null && this.xmpp !== clientCreatedByThisAttempt) {
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error'
+        logInfo(`Stale attemptReconnect catch (client replaced): ${errorMsg}`)
+        return
+      }
+
       // Ensure the failed attempt's client is destroyed to prevent stale events
       // (e.g., delayed 'online' from resource binding) from interfering with
       // subsequent reconnect attempts.
