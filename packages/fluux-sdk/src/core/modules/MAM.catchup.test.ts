@@ -781,5 +781,82 @@ describe('MAM Background Catch-Up', () => {
       await waitForAsyncOps(20, 100)
       await discoverPromise
     })
+
+    it('should emit chat:conversation when messages are discovered', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.roster.sortedContacts).mockReturnValue([
+        { jid: 'bob@example.com', name: 'Bob', presence: 'offline', subscription: 'both' },
+      ] as any)
+
+      vi.mocked(mockStores.chat.hasConversation).mockReturnValue(false)
+
+      // Spy on queryArchive to return messages
+      const fakeMessage = { id: 'msg-1', from: 'bob@example.com', body: 'Hello', timestamp: new Date() }
+      vi.spyOn(xmppClient.mam, 'queryArchive').mockResolvedValue({
+        messages: [fakeMessage] as any,
+        complete: true,
+        rsm: {},
+      })
+
+      await xmppClient.mam.discoverNewConversationsFromRoster()
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:conversation', {
+        conversation: expect.objectContaining({
+          id: 'bob@example.com',
+          name: 'Bob',
+          type: 'chat',
+          unreadCount: 0,
+          lastMessage: fakeMessage,
+        }),
+      })
+    })
+
+    it('should not emit chat:conversation when no messages are found', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.roster.sortedContacts).mockReturnValue([
+        { jid: 'bob@example.com', name: 'Bob', presence: 'offline', subscription: 'both' },
+      ] as any)
+
+      vi.mocked(mockStores.chat.hasConversation).mockReturnValue(false)
+
+      // queryArchive returns no messages
+      vi.spyOn(xmppClient.mam, 'queryArchive').mockResolvedValue({
+        messages: [],
+        complete: true,
+        rsm: {},
+      })
+
+      await xmppClient.mam.discoverNewConversationsFromRoster()
+
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('chat:conversation', expect.anything())
+    })
+
+    it('should use contact name from roster for conversation entity', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.roster.sortedContacts).mockReturnValue([
+        { jid: 'alice@example.com', name: 'Alice Wonder', presence: 'online', subscription: 'both' },
+      ] as any)
+
+      vi.mocked(mockStores.chat.hasConversation).mockReturnValue(false)
+
+      const fakeMessage = { id: 'msg-1', from: 'alice@example.com', body: 'Hi', timestamp: new Date() }
+      vi.spyOn(xmppClient.mam, 'queryArchive').mockResolvedValue({
+        messages: [fakeMessage] as any,
+        complete: true,
+        rsm: {},
+      })
+
+      await xmppClient.mam.discoverNewConversationsFromRoster()
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:conversation', {
+        conversation: expect.objectContaining({
+          id: 'alice@example.com',
+          name: 'Alice Wonder',
+        }),
+      })
+    })
   })
 })

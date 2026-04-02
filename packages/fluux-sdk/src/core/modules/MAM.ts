@@ -29,7 +29,7 @@
 
 import { xml, Element } from '@xmpp/client'
 import { BaseModule } from './BaseModule'
-import { getBareJid, getResource } from '../jid'
+import { getBareJid, getResource, getLocalPart } from '../jid'
 import { generateUUID, generateStableMessageId } from '../../utils/uuid'
 import { executeWithConcurrency } from '../../utils/concurrencyUtils'
 import { parseRSMResponse } from '../../utils/rsm'
@@ -888,11 +888,27 @@ export class MAM extends BaseModule {
         try {
           if (this.deps.stores?.connection.getStatus() !== 'online') return
 
-          await this.queryArchive({
+          const result = await this.queryArchive({
             with: contact.jid,
             before: '',
             max: 5,
           })
+
+          // Create conversation entity so it appears in the sidebar.
+          // mergeMAMMessages (triggered by queryArchive's chat:mam-messages event)
+          // already stored the messages but couldn't set lastMessage without an existing entity.
+          if (result.messages.length > 0 && !this.deps.stores?.chat.hasConversation(contact.jid)) {
+            const lastMsg = result.messages[result.messages.length - 1]
+            this.deps.emitSDK('chat:conversation', {
+              conversation: {
+                id: contact.jid,
+                name: contact.name || getLocalPart(contact.jid),
+                type: 'chat' as const,
+                unreadCount: 0,
+                lastMessage: lastMsg,
+              },
+            })
+          }
         } catch (_error) {
           // Silently ignore — individual failures shouldn't affect others
         }
