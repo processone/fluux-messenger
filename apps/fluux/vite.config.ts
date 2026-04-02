@@ -132,6 +132,7 @@ export default defineConfig({
     exclude: ['@fluux/sdk'], // Don't pre-bundle local SDK so changes are picked up
   },
   build: {
+    sourcemap: true, // TEMPORARY: enable source maps to debug render loop on production
     modulePreload: false,
     rolldownOptions: {
       input: {
