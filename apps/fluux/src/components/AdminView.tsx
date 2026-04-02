@@ -318,10 +318,12 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
           {/* Vhost selector - only show when multiple vhosts available */}
           {vhosts.length > 1 && (
             <div className="mb-3">
-              <label className="block text-sm text-fluux-muted mb-1">
+              <label htmlFor="admin-vhost-select" className="block text-sm text-fluux-muted mb-1">
                 {t('admin.userList.virtualHost')}
               </label>
               <select
+                id="admin-vhost-select"
+                name="vhost"
                 value={selectedVhost || ''}
                 onChange={(e) => handleVhostChange(e.target.value)}
                 className="w-full px-3 py-2 text-sm bg-fluux-bg border border-fluux-hover rounded-lg

@@ -71,12 +71,14 @@ export function LanguageSettings() {
       <div className="space-y-6">
         {/* Language selection */}
         <div className="space-y-3">
-          <div className="flex items-center gap-2">
+          <label htmlFor="language-select" className="flex items-center gap-2">
             <Globe className="w-4 h-4 text-fluux-muted" />
             <span className="text-sm font-medium text-fluux-text">{t('settings.language')}</span>
-          </div>
+          </label>
           <div className="relative">
             <select
+              id="language-select"
+              name="language"
               value={languages.find(l => i18n.language === l.code || i18n.language.startsWith(l.code))?.code || 'en'}
               onChange={(e) => handleLanguageChange(e.target.value)}
               className={selectClassName}
@@ -102,12 +104,14 @@ export function LanguageSettings() {
 
         {/* Time format selection */}
         <div className="space-y-3">
-          <div className="flex items-center gap-2">
+          <label htmlFor="time-format-select" className="flex items-center gap-2">
             <Clock className="w-4 h-4 text-fluux-muted" />
             <span className="text-sm font-medium text-fluux-text">{t('settings.timeFormat')}</span>
-          </div>
+          </label>
           <div className="relative">
             <select
+              id="time-format-select"
+              name="timeFormat"
               value={timeFormat}
               onChange={(e) => setTimeFormat(e.target.value as TimeFormat)}
               className={selectClassName}

@@ -537,6 +537,9 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
               />
             </div>
             <select
+              id="assign-hat-select"
+              name="hat"
+              aria-label={t('rooms.selectHat')}
               value={assignUri}
               onChange={(e) => setAssignUri(e.target.value)}
               className="px-2 py-1.5 text-sm bg-fluux-hover/50 rounded-lg border border-transparent

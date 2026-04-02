@@ -73,12 +73,16 @@ export function FormField({ field, value, onChange, disabled }: FormFieldProps) 
   const isRequired = field.required
   const desc = field.desc || t(`dataFormHints.${field.var}`, { defaultValue: '' }) || undefined
 
+  const fieldId = `dataform-${field.var}`
+
   const renderInput = () => {
     switch (field.type) {
       case 'text-single':
       case 'jid-single':
         return (
           <TextInput
+            id={fieldId}
+            name={field.var}
             type="text"
             value={(value as string) || ''}
             onChange={e => onChange(field.var, e.target.value)}
@@ -92,6 +96,8 @@ export function FormField({ field, value, onChange, disabled }: FormFieldProps) 
       case 'text-private':
         return (
           <input
+            id={fieldId}
+            name={field.var}
             type="password"
             value={(value as string) || ''}
             onChange={e => onChange(field.var, e.target.value)}
@@ -106,6 +112,8 @@ export function FormField({ field, value, onChange, disabled }: FormFieldProps) 
       case 'jid-multi':
         return (
           <TextArea
+            id={fieldId}
+            name={field.var}
             value={Array.isArray(value) ? value.join('\n') : (value as string) || ''}
             onChange={e => onChange(field.var, e.target.value.split('\n'))}
             disabled={disabled}
@@ -119,6 +127,8 @@ export function FormField({ field, value, onChange, disabled }: FormFieldProps) 
       case 'list-single':
         return (
           <select
+            id={fieldId}
+            name={field.var}
             value={(value as string) || ''}
             onChange={e => onChange(field.var, e.target.value)}
             disabled={disabled}
@@ -139,9 +149,12 @@ export function FormField({ field, value, onChange, disabled }: FormFieldProps) 
           <div className="space-y-1 max-h-40 overflow-y-auto p-2 bg-fluux-bg border border-fluux-border rounded-lg">
             {field.options?.map(opt => {
               const selected = Array.isArray(value) && value.includes(opt.value)
+              const optionId = `${fieldId}-${opt.value}`
               return (
-                <label key={opt.value} className="flex items-center gap-2 cursor-pointer hover:bg-fluux-hover px-2 py-1 rounded">
+                <label key={opt.value} htmlFor={optionId} className="flex items-center gap-2 cursor-pointer hover:bg-fluux-hover px-2 py-1 rounded">
                   <input
+                    id={optionId}
+                    name={field.var}
                     type="checkbox"
                     checked={selected}
                     onChange={e => {
@@ -164,8 +177,10 @@ export function FormField({ field, value, onChange, disabled }: FormFieldProps) 
 
       case 'boolean':
         return (
-          <label className="flex items-center gap-2 cursor-pointer">
+          <label htmlFor={fieldId} className="flex items-center gap-2 cursor-pointer">
             <input
+              id={fieldId}
+              name={field.var}
               type="checkbox"
               checked={value === 'true' || value === '1'}
               onChange={e => onChange(field.var, e.target.checked ? '1' : '0')}
@@ -184,6 +199,8 @@ export function FormField({ field, value, onChange, disabled }: FormFieldProps) 
       default:
         return (
           <TextInput
+            id={fieldId}
+            name={field.var}
             type="text"
             value={(value as string) || ''}
             onChange={e => onChange(field.var, e.target.value)}
@@ -197,7 +214,7 @@ export function FormField({ field, value, onChange, disabled }: FormFieldProps) 
   return (
     <div className="space-y-1">
       {field.type !== 'boolean' && (
-        <label className="flex items-center gap-1 text-sm font-medium text-fluux-text">
+        <label htmlFor={fieldId} className="flex items-center gap-1 text-sm font-medium text-fluux-text">
           {label}
           {isRequired && <span className="text-red-400 ml-0.5">*</span>}
           {desc && (

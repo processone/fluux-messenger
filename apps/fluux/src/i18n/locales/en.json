@@ -239,6 +239,7 @@
         "banned": "Banned",
         "addMember": "Add",
         "jidPlaceholder": "user@example.com",
+        "affiliationRole": "Affiliation role",
         "removeAffiliation": "Remove affiliation",
         "kick": "Kick",
         "ban": "Ban",
