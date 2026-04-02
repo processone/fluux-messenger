@@ -1502,6 +1502,31 @@ export class XMPPClient {
         `Refreshing presence in ${previouslyJoinedRooms.length} room(s) after SM resumption`,
         'sm'
       )
+
+      // Ensure room entries exist in the store before refreshing presence.
+      // The room store is ephemeral (not persisted), so after page reload it's empty.
+      // Without entries, self-presence responses (status 110) are silently dropped
+      // by setRoomJoined() which requires the room to already exist.
+      for (const room of previouslyJoinedRooms) {
+        if (!this.stores?.room.getRoom(room.jid)) {
+          this.emitSDK('room:added', {
+            room: {
+              jid: room.jid,
+              name: getLocalPart(room.jid),
+              nickname: room.nickname,
+              joined: false,
+              isJoining: true,
+              isBookmarked: room.autojoin ?? false,
+              occupants: new Map(),
+              messages: [],
+              unreadCount: 0,
+              mentionsCount: 0,
+              typingUsers: new Set(),
+            }
+          })
+        }
+      }
+
       await this.muc.refreshPresenceInRooms(previouslyJoinedRooms)
       if (this.isSessionSuperseded(gen, 'SM resumption aborted after room presence refresh')) return
 
@@ -1512,6 +1537,17 @@ export class XMPPClient {
       this.mam.catchUpAllRooms({ concurrency: 2 }).catch((err) => {
         console.error('[XMPPClient] Room catch-up after SM resumption failed:', err)
       })
+
+      // Fetch bookmarks to restore room names and autojoin state.
+      // Also join any newly bookmarked rooms not in previouslyJoinedRooms.
+      this.muc.fetchBookmarks(FRESH_SESSION_IQ_TIMEOUT_MS).then(({ roomsToAutojoin }) => {
+        if (this.isSessionStale(gen)) return
+        for (const room of roomsToAutojoin) {
+          if (!this.stores?.room.getRoom(room.jid)?.joined) {
+            this.muc.joinRoom(room.jid, room.nick, { password: room.password }).catch(() => {})
+          }
+        }
+      }).catch(() => {})
     }
   }
 
