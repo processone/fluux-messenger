@@ -21,7 +21,6 @@ import {
   type MockXmppClient,
   type MockStoreBindings,
 } from '../test-utils'
-import { timeline } from './reconnectTimeline.testHelpers'
 
 let mockXmppClientInstance: MockXmppClient
 
