@@ -1270,16 +1270,18 @@ export class Connection extends BaseModule {
         )
         logInfo(`Auth: ${authMethod} (SASL: ${mechanism}, offered: ${mechanisms.join(', ')})`)
         const saslStart = Date.now()
+        let saslTimeoutId: ReturnType<typeof setTimeout> | undefined
         await Promise.race([
           Promise.resolve(authenticate(creds, mechanism)).then(() => {
+            clearTimeout(saslTimeoutId)
             logInfo(`SASL complete (${Date.now() - saslStart}ms)`)
           }),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => {
+          new Promise<never>((_, reject) => {
+            saslTimeoutId = setTimeout(() => {
               logErr(`SASL timeout after ${SASL_AUTH_TIMEOUT_MS}ms`)
               reject(new Error('SASL authentication timed out'))
             }, SASL_AUTH_TIMEOUT_MS)
-          ),
+          }),
         ])
       },
     })
