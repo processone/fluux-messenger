@@ -2776,10 +2776,11 @@ describe('XMPPClient Connection', () => {
       await notifyPromise
 
       // The reconnect timer should be running (not stuck in verification loop)
-      // Verify by advancing timer and confirming a reconnect attempt is made
+      // Verify by advancing timer and confirming a reconnect attempt is made.
+      // After wake, attemptReconnect adds a 2s network settle delay (NETWORK_SETTLE_DELAY_MS).
       const reconnectClient = createMockXmppClient()
       mockClientFactory._setInstance(reconnectClient)
-      await vi.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(3000)
       expect(mockClientFactory).toHaveBeenCalled()
     })
 
@@ -2944,8 +2945,9 @@ describe('XMPPClient Connection', () => {
         'connection'
       )
 
-      // Allow the async attemptReconnect to progress (cleanupClient, createXmppClient, start)
-      await vi.advanceTimersByTimeAsync(100)
+      // Allow the async attemptReconnect to progress (cleanupClient, createXmppClient, start).
+      // After wake, attemptReconnect adds a 2s network settle delay (NETWORK_SETTLE_DELAY_MS).
+      await vi.advanceTimersByTimeAsync(3000)
 
       // The triggerReconnect should have started attemptReconnect
       expect(mockClientFactory).toHaveBeenCalledTimes(1)

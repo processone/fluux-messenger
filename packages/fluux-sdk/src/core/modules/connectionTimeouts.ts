@@ -77,3 +77,12 @@ export const NETWORK_READY_TIMEOUT_MS = 15_000
  * waiting for the full RECONNECT_ATTEMPT_TIMEOUT_MS.
  */
 export const SASL_AUTH_TIMEOUT_MS = 15_000
+
+/**
+ * Delay before the first reconnect attempt after wake-from-sleep.
+ * Even when navigator.onLine is true, the OS network stack (DNS, TLS session
+ * cache, Wi-Fi re-association) may need a moment to become fully functional.
+ * Without this, WebSocket TCP connects but SASL exchanges hang on a
+ * half-ready path, burning through backoff attempts with 15s timeouts each.
+ */
+export const NETWORK_SETTLE_DELAY_MS = 2_000

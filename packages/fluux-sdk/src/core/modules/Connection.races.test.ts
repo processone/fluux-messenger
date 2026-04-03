@@ -177,8 +177,8 @@ describe('Connection race conditions', () => {
       await xmppClient.connection.notifySystemState('awake', 30_000)
       // Flush: after:reconnectDelay(0) timer → attempting entry
       await vi.advanceTimersByTimeAsync(0)
-      // Flush: attemptReconnect's waitForNetworkReady + client creation
-      await vi.advanceTimersByTimeAsync(0)
+      // Flush: attemptReconnect's waitForNetworkReady + network settle delay (2s) + client creation
+      await vi.advanceTimersByTimeAsync(3000)
 
       // client_B should be created for the fresh attempt
       expect(mockClientFactory).toHaveBeenCalledTimes(1)
@@ -376,7 +376,8 @@ describe('Connection race conditions', () => {
 
       // WAKE arrives — cleanups client_A, triggers fresh attempt with client_B
       await xmppClient.connection.notifySystemState('awake', 30_000)
-      await vi.advanceTimersByTimeAsync(0)
+      // Flush: network settle delay (2s) + client creation
+      await vi.advanceTimersByTimeAsync(3000)
 
       expect(mockClientFactory).toHaveBeenCalledTimes(1)
 

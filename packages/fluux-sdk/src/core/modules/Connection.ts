@@ -35,6 +35,7 @@ import {
   CLIENT_STOP_TIMEOUT_MS,
   DISCONNECT_CLEANUP_TIMEOUT_MS,
   NETWORK_READY_TIMEOUT_MS,
+  NETWORK_SETTLE_DELAY_MS,
   RECONNECT_ATTEMPT_TIMEOUT_MS,
   SASL_AUTH_TIMEOUT_MS,
   VERIFY_CONNECTION_TIMEOUT_MS,
@@ -152,6 +153,11 @@ export class Connection extends BaseModule {
   // Prevents setupConnectionHandlers' error handler from rejecting the connection
   // promise and sending CONNECTION_ERROR that would disrupt the new reconnect.
   private deadSocketRecoveryInProgress = false
+
+  // Timestamp of last wake-from-sleep event. Used by attemptReconnect to add a
+  // short settle delay — navigator.onLine goes true before the network path is
+  // fully functional (DNS, TLS, Wi-Fi re-association), causing SASL timeouts.
+  private lastWakeTimestamp = 0
 
   // Callback for post-connection setup (roster, presence, carbons, etc.)
   private onConnectionSuccess?: (isResumption: boolean, previouslyJoinedRooms?: Array<{ jid: string; nickname: string; password?: string; autojoin?: boolean }>) => Promise<void>
@@ -1115,6 +1121,8 @@ export class Connection extends BaseModule {
     const sleepSec = sleepDurationMs != null ? Math.round(sleepDurationMs / 1000) : null
     logInfo(`System state: awake${sleepSec != null ? ` (sleep: ${sleepSec}s)` : ''}`)
 
+    this.lastWakeTimestamp = Date.now()
+
     if (this.isInConnectedState()) {
       // Send WAKE to the machine — if sleep exceeds SM timeout, the guard
       // transitions directly to reconnecting.  Otherwise → connected.verifying.
@@ -1135,7 +1143,10 @@ export class Connection extends BaseModule {
         const isHealthy = await this.verifyConnection(WAKE_VERIFY_TIMEOUT_MS)
         if (!isHealthy && !this.isInReconnectingState()) {
           this.stores.console.addEvent('Connection dead after wake, reconnecting...', 'connection')
-          this.handleDeadSocket()
+          // Use immediateReconnect to bypass the XState `after` timer which
+          // fires unreliably after sleep (observed 25s+ delays for a 1s timer).
+          // TRIGGER_RECONNECT skips waiting and goes directly to attempting.
+          this.handleDeadSocket({ immediateReconnect: true, source: 'wake-verify-failed' })
         }
       }
     } else if (this.isInReconnectingState()) {
@@ -1897,6 +1908,21 @@ export class Connection extends BaseModule {
         'attemptReconnect:network-not-ready'
       )
       return
+    }
+
+    // After wake-from-sleep, navigator.onLine goes true before the network path
+    // is fully functional (DNS cache cold, Wi-Fi re-association in progress, TLS
+    // session tickets expired). WebSocket TCP handshake may succeed but SASL
+    // exchanges hang on the half-ready path, causing repeated 15s timeouts.
+    // A short settle delay lets the OS finish re-establishing connectivity.
+    const msSinceWake = Date.now() - this.lastWakeTimestamp
+    if (this.lastWakeTimestamp > 0 && msSinceWake < NETWORK_SETTLE_DELAY_MS + 1_000) {
+      const settleMs = Math.max(0, NETWORK_SETTLE_DELAY_MS - msSinceWake)
+      if (settleMs > 0) {
+        logInfo(`attemptReconnect: waiting ${settleMs}ms for network to settle after wake`)
+        this.stores.console.addEvent(`Waiting ${Math.round(settleMs / 1000)}s for network to settle after wake`, 'connection')
+        await new Promise((resolve) => setTimeout(resolve, settleMs))
+      }
     }
 
     // Track which client this attempt creates, so the outer catch block can
