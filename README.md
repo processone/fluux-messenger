@@ -19,15 +19,15 @@
 
 ## Table of Contents
 
-- [Screenshots](#-screenshots)
-- [Features](#-features)
-- [Quick Start](#-quick-start)
-- [Technology Stack](#-technology-stack)
-- [Support & Community](#-support-and-community)
-- [Frequently Asked Questions](#-frequently-asked-questions)
-- [Contributing](#-contributing)
-- [License](#-license)
-- [Star History](#-star-history)
+- [Screenshots](#screenshots)
+- [Features](#features)
+- [Quick Start](#quick-start)
+- [Technology Stack](#technology-stack)
+- [Support & Community](#support-and-community)
+- [Frequently Asked Questions](#frequently-asked-questions)
+- [Contributing](#contributing)
+- [License](#license)
+- [Star History](#star-history)
 
 ## Screenshots
 
