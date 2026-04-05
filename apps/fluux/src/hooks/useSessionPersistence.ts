@@ -626,7 +626,11 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
       console.log('[Auth] Attempting FAST token auto-connect (no password)')
 
       const attemptFastConnect = () => {
-        connect(savedJid, undefined, savedServer, undefined, resource, i18n.language, false, true).then(() => {
+        // Auto-retry transient transport failures: FAST token auto-connect
+        // after a fresh tab open faces the same wake-from-sleep network
+        // flakiness as page-reload. Auth failures (bad/expired token) still
+        // surface via the machine's AUTH_ERROR path and delete the token.
+        connect(savedJid, undefined, savedServer, undefined, resource, i18n.language, false, true, true).then(() => {
           // Save session for subsequent in-tab reconnects (no password needed —
           // FAST token in localStorage handles auth on future reconnects too)
           saveSession(savedJid, '', savedServer)

@@ -622,20 +622,20 @@ export class Connection extends BaseModule {
       logErr(`Connection error: ${error.message}`)
       // Signal machine: initial connection failed. The machine's `connecting`
       // state routes CONNECTION_ERROR either to terminal.initialFailure
-      // (default) or to reconnecting.waiting (when SET_RETRY_INITIAL was set
-      // to true by the caller). We must capture whether retry is active
-      // BEFORE sending the event, because the event itself may transition
-      // out of `connecting` and reset the flag via other actions.
-      const retryingInBackground = autoRetryOnTransientFailure === true
+      // (default), to reconnecting.waiting (when SET_RETRY_INITIAL was set
+      // to true by the caller), or — if a CONFLICT/AUTH_ERROR fired
+      // synchronously from the stream-error handler — the machine is
+      // already in a terminal state and CONNECTION_ERROR is ignored.
       this.sendMachineEvent({ type: 'CONNECTION_ERROR', error: error.message }, 'connect:connection-error')
       this.stores.console.addEvent(`Connection error: ${error.message}`, 'error')
       // Emit SDK event for connection error
       this.deps.emitSDK('connection:status', { status: 'error', error: error.message })
       this.emit('error', error)
-      if (retryingInBackground) {
-        // The state machine transitioned into reconnecting.waiting; the
-        // reconnect loop owns the outcome. Do not throw — callers should not
-        // clear credentials or treat this as a terminal failure.
+      // Decide whether to throw based on the machine's POST-event state.
+      // If the machine is in reconnecting.* the retry loop owns the outcome
+      // and callers should not clear credentials. For terminal states or
+      // disconnected, throw so callers see the failure.
+      if (this.isInReconnectingState()) {
         return
       }
       throw error

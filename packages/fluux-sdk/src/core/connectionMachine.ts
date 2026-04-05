@@ -364,6 +364,21 @@ export const connectionMachine = setup({
             actions: 'setError',
           },
         ],
+        // CONFLICT / AUTH_ERROR are permanent failures and MUST be terminal
+        // even during the initial `connecting` state. Otherwise the
+        // retryInitialFailure path would loop forever on a conflict/auth
+        // error (the stream-error handler fires these events while the
+        // machine is still in `connecting`, and the subsequent
+        // CONNECTION_ERROR from start()'s rejection would re-enter the
+        // reconnect loop).
+        CONFLICT: {
+          target: 'terminal.conflict',
+          actions: ['resetReconnectState', 'setConflictError'],
+        },
+        AUTH_ERROR: {
+          target: 'terminal.authFailed',
+          actions: ['resetReconnectState', 'setAuthError'],
+        },
         // User can disconnect during initial connection
         DISCONNECT: {
           target: 'disconnected',

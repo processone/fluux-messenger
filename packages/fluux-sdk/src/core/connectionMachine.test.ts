@@ -1574,4 +1574,81 @@ describe('connectionMachine', () => {
       actor.stop()
     })
   })
+
+  describe('CONFLICT / AUTH_ERROR during connecting', () => {
+    it('should go to terminal.conflict on CONFLICT during connecting (even with retry flag)', () => {
+      // Without this transition, the retryInitialFailure path would infinitely
+      // retry on a resource conflict: stream-error handler fires CONFLICT, it
+      // was previously ignored in `connecting`, then start()'s rejection
+      // triggered CONNECTION_ERROR → reconnecting.waiting → same conflict loop.
+      const actor = createActor(connectionMachine).start()
+      actor.send({ type: 'SET_RETRY_INITIAL', retry: true })
+      actor.send({ type: 'CONNECT' })
+      expect(actor.getSnapshot().value).toBe('connecting')
+
+      actor.send({ type: 'CONFLICT' })
+      expect(actor.getSnapshot().value).toEqual({ terminal: 'conflict' })
+      expect(actor.getSnapshot().context.lastError).toBe('Session replaced by another client')
+      expect(actor.getSnapshot().context.retryInitialFailure).toBe(false)
+      actor.stop()
+    })
+
+    it('should go to terminal.authFailed on AUTH_ERROR during connecting (even with retry flag)', () => {
+      const actor = createActor(connectionMachine).start()
+      actor.send({ type: 'SET_RETRY_INITIAL', retry: true })
+      actor.send({ type: 'CONNECT' })
+      expect(actor.getSnapshot().value).toBe('connecting')
+
+      actor.send({ type: 'AUTH_ERROR' })
+      expect(actor.getSnapshot().value).toEqual({ terminal: 'authFailed' })
+      expect(actor.getSnapshot().context.lastError).toBe('Authentication failed')
+      expect(actor.getSnapshot().context.retryInitialFailure).toBe(false)
+      actor.stop()
+    })
+
+    it('should go to terminal.conflict on CONFLICT during connecting without retry flag', () => {
+      // First-time login path: conflict during initial connect should
+      // surface as conflict (not the generic terminal.initialFailure).
+      const actor = createActor(connectionMachine).start()
+      actor.send({ type: 'CONNECT' })
+      actor.send({ type: 'CONFLICT' })
+      expect(actor.getSnapshot().value).toEqual({ terminal: 'conflict' })
+      actor.stop()
+    })
+
+    it('should go to terminal.authFailed on AUTH_ERROR during connecting without retry flag', () => {
+      const actor = createActor(connectionMachine).start()
+      actor.send({ type: 'CONNECT' })
+      actor.send({ type: 'AUTH_ERROR' })
+      expect(actor.getSnapshot().value).toEqual({ terminal: 'authFailed' })
+      actor.stop()
+    })
+
+    it('should ignore CONNECTION_ERROR after CONFLICT already transitioned to terminal', () => {
+      // Simulates the real flow: stream-error handler fires CONFLICT
+      // synchronously, then start()'s rejection triggers CONNECTION_ERROR.
+      // CONNECTION_ERROR should be a no-op because we're already terminal.
+      const actor = createActor(connectionMachine).start()
+      actor.send({ type: 'SET_RETRY_INITIAL', retry: true })
+      actor.send({ type: 'CONNECT' })
+      actor.send({ type: 'CONFLICT' })
+      expect(actor.getSnapshot().value).toEqual({ terminal: 'conflict' })
+
+      actor.send({ type: 'CONNECTION_ERROR', error: 'transport error' })
+      expect(actor.getSnapshot().value).toEqual({ terminal: 'conflict' })
+      actor.stop()
+    })
+
+    it('should ignore CONNECTION_ERROR after AUTH_ERROR already transitioned to terminal', () => {
+      const actor = createActor(connectionMachine).start()
+      actor.send({ type: 'SET_RETRY_INITIAL', retry: true })
+      actor.send({ type: 'CONNECT' })
+      actor.send({ type: 'AUTH_ERROR' })
+      expect(actor.getSnapshot().value).toEqual({ terminal: 'authFailed' })
+
+      actor.send({ type: 'CONNECTION_ERROR', error: 'transport error' })
+      expect(actor.getSnapshot().value).toEqual({ terminal: 'authFailed' })
+      actor.stop()
+    })
+  })
 })
