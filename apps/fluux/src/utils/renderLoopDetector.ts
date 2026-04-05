@@ -33,14 +33,15 @@ interface SelectorEntry {
   componentName: string
   selectorName: string
   value: unknown
+  extra?: string
   timestamp: number
 }
 const selectorHistory: SelectorEntry[] = []
-const MAX_SELECTOR_HISTORY = 50
+const MAX_SELECTOR_HISTORY = 100
 
 // Configuration - per component thresholds
 const MAX_RENDERS_PER_WINDOW = 200  // Max renders allowed per component in time window
-const WARNING_THRESHOLD = 100       // Warn at this many renders (before throwing)
+const WARNING_THRESHOLD = 30        // Warn at this many renders (before throwing)
 const TIME_WINDOW_MS = 1000         // Time window in milliseconds
 const COOLDOWN_MS = 5000            // Cooldown before resetting after trigger
 const MAX_RENDER_HISTORY = 20       // Keep last N renders per component for debugging
@@ -138,6 +139,17 @@ export function detectRenderLoop(componentName: string): void {
     if (recentSelectors.length > 0) {
       console.warn('[RenderLoopDetector] Recent selector value changes:', recentSelectors)
     }
+    // Dispatch a window event so the app can surface an on-screen warning
+    // (useful on mobile where the console is hard to reach).
+    if (typeof window !== 'undefined') {
+      try {
+        window.dispatchEvent(new CustomEvent('fluux:render-loop-warning', {
+          detail: { componentName, renderCount: state.renderCount, windowMs: TIME_WINDOW_MS },
+        }))
+      } catch {
+        // CustomEvent not available — ignore
+      }
+    }
   }
 
   if (state.renderCount > MAX_RENDERS_PER_WINDOW) {
@@ -201,13 +213,30 @@ export function detectRenderLoop(componentName: string): void {
  * @param selectorName - A descriptive name for the selector
  * @param value - The new value (will be stringified for logging)
  */
-export function trackSelectorChange(componentName: string, selectorName: string, value: unknown): void {
+export function trackSelectorChange(componentName: string, selectorName: string, value: unknown, extra?: string): void {
   if (process.env.NODE_ENV !== 'development') return
+
+  // Describe the value compactly: type + size hint for collections
+  let describedValue: unknown
+  if (value === null) {
+    describedValue = 'null'
+  } else if (Array.isArray(value)) {
+    describedValue = `Array(${value.length})`
+  } else if (value instanceof Map) {
+    describedValue = `Map(${value.size})`
+  } else if (value instanceof Set) {
+    describedValue = `Set(${value.size})`
+  } else if (typeof value === 'object') {
+    describedValue = `[${typeof value}]`
+  } else {
+    describedValue = value
+  }
 
   selectorHistory.push({
     componentName,
     selectorName,
-    value: typeof value === 'object' ? `[${typeof value}]` : value,
+    value: describedValue,
+    extra,
     timestamp: Date.now(),
   })
 

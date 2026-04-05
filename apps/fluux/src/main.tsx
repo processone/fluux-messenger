@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
 import { XMPPProvider } from '@fluux/sdk'
 import { ThemeProvider } from './providers/ThemeProvider'
-import { RenderLoopBoundary } from './components/RenderLoopBoundary'
+import { RenderLoopBoundary, RenderLoopWarningBanner } from './components/RenderLoopBoundary'
 import App from './App'
 import './i18n'
 import './index.css'
@@ -68,6 +68,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           </HashRouter>
         </ThemeProvider>
       </XMPPProvider>
+      {import.meta.env.DEV && <RenderLoopWarningBanner />}
     </RenderLoopBoundary>
   </React.StrictMode>,
 )

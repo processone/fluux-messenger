@@ -1,6 +1,7 @@
 import React, { useState, useRef, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useListKeyboardNav, useRouteSync } from '@/hooks'
+import { detectRenderLoop, trackSelectorChange } from '@/utils/renderLoopDetector'
 import {
   useChat,
   useRoster,
@@ -36,6 +37,7 @@ import {
 // for little readability gain. Revisit if they grow more shared behaviour.
 
 export function ConversationList() {
+  detectRenderLoop('ConversationList')
   const { t } = useTranslation()
   const {
     conversations,
@@ -51,6 +53,13 @@ export function ConversationList() {
   const { navigateToMessages } = useRouteSync()
   const listRef = useRef<HTMLDivElement>(null)
   const zoneRef = useSidebarZone()
+
+  // Diagnostic: track every selector-derived value per render. Dev-only.
+  trackSelectorChange('ConversationList', 'conversations', conversations)
+  trackSelectorChange('ConversationList', 'activeConversationId', activeConversationId)
+  trackSelectorChange('ConversationList', 'typingStates', typingStates)
+  trackSelectorChange('ConversationList', 'drafts', drafts)
+  trackSelectorChange('ConversationList', 'contacts', contacts)
 
   // Create maps for quick lookup
   const contactMap = new Map(contacts.map(c => [c.jid, c]))

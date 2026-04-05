@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
-import { detectRenderLoop } from '@/utils/renderLoopDetector'
+import { detectRenderLoop, trackSelectorChange } from '@/utils/renderLoopDetector'
 import { useClickOutside, useWindowDrag, useRouteSync } from '@/hooks'
 import { useModals } from '@/contexts'
 import {
@@ -126,6 +126,21 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
   )
   const totalMentionsCount = useRoomStore((s) => s.totalMentionsCount())
   const totalNotifiableUnreadCount = useRoomStore((s) => s.totalNotifiableUnreadCount())
+
+  // Diagnostic: track every selector value per render. Dev-only (guarded inside
+  // trackSelectorChange). Helps pinpoint unstable selectors causing render loops.
+  trackSelectorChange('Sidebar', 'jid', jid)
+  trackSelectorChange('Sidebar', 'status', status)
+  trackSelectorChange('Sidebar', 'isVerifying', isVerifying)
+  trackSelectorChange('Sidebar', 'reconnectAttempt', reconnectAttempt)
+  trackSelectorChange('Sidebar', 'reconnectTargetTime', reconnectTargetTime)
+  trackSelectorChange('Sidebar', 'ownAvatar', ownAvatar)
+  trackSelectorChange('Sidebar', 'ownNickname', ownNickname)
+  trackSelectorChange('Sidebar', 'isAdmin', isAdmin)
+  trackSelectorChange('Sidebar', 'totalUnread', totalUnread)
+  trackSelectorChange('Sidebar', 'pendingCount', pendingCount)
+  trackSelectorChange('Sidebar', 'totalMentionsCount', totalMentionsCount)
+  trackSelectorChange('Sidebar', 'totalNotifiableUnreadCount', totalNotifiableUnreadCount)
   const { titleBarClass, dragRegionProps } = useWindowDrag()
 
   // Modal state from context - shared with ChatLayout

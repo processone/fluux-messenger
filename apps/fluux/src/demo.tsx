@@ -15,7 +15,7 @@ import { XMPPProvider, DemoClient } from '@fluux/sdk'
 import { adminStore, ignoreStore } from '@fluux/sdk/stores'
 import { ThemeProvider } from './providers/ThemeProvider'
 import { useThemeStore } from './stores/themeStore'
-import { RenderLoopBoundary } from './components/RenderLoopBoundary'
+import { RenderLoopBoundary, RenderLoopWarningBanner } from './components/RenderLoopBoundary'
 import { DemoTutorialProvider } from './demo/tutorial/DemoTutorialProvider'
 import { buildDemoData, buildDemoAnimation } from './demo/demoData'
 import { getDiscoverableRooms } from './demo/rooms'
@@ -176,6 +176,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           </DemoTutorialProvider>
         </ThemeProvider>
       </XMPPProvider>
+      {import.meta.env.DEV && <RenderLoopWarningBanner />}
     </RenderLoopBoundary>
   </React.StrictMode>,
 )
