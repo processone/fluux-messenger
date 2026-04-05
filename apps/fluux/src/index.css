@@ -364,10 +364,20 @@ html, body {
   margin: 0;
   padding: 0;
   background-color: var(--fluux-bg);
+  /* Lock the page itself so only designated scroll containers scroll. */
+  /* Without this, mobile browsers (dynamic toolbar) can overflow the viewport */
+  /* and the whole app becomes a scrollable page. Desktop is unaffected since */
+  /* #root is already sized to 100% and app regions scroll internally. */
+  overflow: hidden;
   /* Prevent pull-to-refresh on mobile PWA which reloads and breaks the app */
   /* Using 'contain' blocks navigation gestures while allowing child scroll containers */
   /* to have their own overscroll behavior (rubber band effect) */
   overscroll-behavior-y: contain;
+  /* Disable iOS/Safari text-size auto-adjust when rotating */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* Prevent double-tap zoom on touch devices; pinch-zoom already disabled via viewport meta */
+  touch-action: manipulation;
 }
 
 #root {
