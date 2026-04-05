@@ -545,7 +545,7 @@ export function MessageComposer({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="px-4 pt-2 pb-4 relative">
+    <form onSubmit={handleSubmit} className="px-4 pt-2 pb-safe relative">
       {/* Custom content above input (e.g., mention autocomplete) */}
       {aboveInput}
 

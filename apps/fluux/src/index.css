@@ -392,16 +392,24 @@ html, body {
 
 /* Safe area insets for mobile devices with notch/camera cutout and gesture bars */
 /* viewport-fit=cover in <meta> extends content behind safe areas; these insets */
-/* keep interactive content within the visible area while the body background */
-/* color fills the unsafe zones (notch, home indicator, rounded corners) */
-@supports (padding-bottom: env(safe-area-inset-bottom)) {
+/* keep interactive content within the visible area. */
+/* Bottom inset is intentionally NOT applied to #root — instead, bottom-aligned */
+/* components (e.g. MessageComposer) add it to their own padding so their */
+/* background color fills the home-indicator zone seamlessly. */
+@supports (padding-top: env(safe-area-inset-top)) {
   #root {
     box-sizing: border-box;
     padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
   }
+}
+
+/* Utility: extend padding-bottom by the iOS/Android safe-area inset. */
+/* Use on bottom-aligned bars (composer, action bars) so their background */
+/* extends into the home-indicator zone while content stays above it. */
+.pb-safe {
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom));
 }
 
 /* Allow native rubber band effect within scrollable elements (macOS) */
