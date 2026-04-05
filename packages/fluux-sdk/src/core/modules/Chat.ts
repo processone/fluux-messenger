@@ -26,6 +26,7 @@ import {
   NS_OCCUPANT_ID,
   NS_MESSAGE_MODERATE,
   NS_POLL,
+  NS_DELAY,
 } from '../namespaces'
 import type {
   Message,
@@ -191,7 +192,7 @@ export class Chat extends BaseModule {
     // Reactions
     const reactionsEl = stanza.getChild('reactions', NS_REACTIONS)
     if (reactionsEl) {
-      this.handleIncomingReaction(reactionsEl, from, bareFrom, bareTo, type, isSentCarbon)
+      this.handleIncomingReaction(stanza, reactionsEl, from, bareFrom, bareTo, type, isSentCarbon)
       // Always treat reaction stanzas as handled — any body is fallback for legacy clients
       // (some clients may not include <fallback for="urn:xmpp:reactions:0"> indication)
       return { handled: true }
@@ -1093,7 +1094,7 @@ export class Chat extends BaseModule {
     return messageId
   }
 
-  private handleIncomingReaction(reactionsEl: Element, from: string, bareFrom: string, bareTo: string | undefined, type: string, isSentCarbon: boolean): void {
+  private handleIncomingReaction(stanza: Element, reactionsEl: Element, from: string, bareFrom: string, bareTo: string | undefined, type: string, isSentCarbon: boolean): void {
     const messageId = reactionsEl.attrs.id
     if (!messageId) return
 
@@ -1105,14 +1106,19 @@ export class Chat extends BaseModule {
     const emojiElements = reactionsEl.getChildren('reaction')
     const emojis = emojiElements.map(el => el.getText()).filter(Boolean) as string[]
 
+    // Extract XEP-0203 delay timestamp if present (offline-queued or replayed reactions).
+    const delayEl = stanza.getChild('delay', NS_DELAY)
+    const stamp = delayEl?.attrs.stamp
+    const timestamp = stamp ? new Date(stamp) : undefined
+
     // SDK events only - bindings call store methods
     if (type === 'groupchat') {
       const roomNick = getResource(from)
       if (roomNick) {
-        this.deps.emitSDK('room:reactions', { roomJid: conversationId, messageId, reactorNick: roomNick, emojis })
+        this.deps.emitSDK('room:reactions', { roomJid: conversationId, messageId, reactorNick: roomNick, emojis, ...(timestamp && { timestamp }) })
       }
     } else {
-      this.deps.emitSDK('chat:reactions', { conversationId, messageId, reactorJid: bareFrom, emojis })
+      this.deps.emitSDK('chat:reactions', { conversationId, messageId, reactorJid: bareFrom, emojis, ...(timestamp && { timestamp }) })
     }
   }
 

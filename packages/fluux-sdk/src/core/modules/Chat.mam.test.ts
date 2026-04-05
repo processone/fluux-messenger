@@ -2163,6 +2163,7 @@ describe('XMPPClient MAM', () => {
         messageId: 'old-msg-1',
         reactorJid: 'bob@example.com',
         emojis: ['🎉'],
+        timestamp: new Date('2024-01-15T12:00:00Z'),
       })
     })
 

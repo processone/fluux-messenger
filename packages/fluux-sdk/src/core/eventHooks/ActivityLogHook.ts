@@ -79,7 +79,7 @@ export class ActivityLogHook extends EventHook {
     })
 
     // Log reactions to own messages in 1:1 chats (grouped by message)
-    this.registerEvent('chat:reactions', ({ conversationId, messageId, reactorJid, emojis }) => {
+    this.registerEvent('chat:reactions', ({ conversationId, messageId, reactorJid, emojis, timestamp }) => {
       if (emojis.length === 0) return
 
       const myJid = getBareJid(connectionStore.getState().jid ?? '')
@@ -90,11 +90,11 @@ export class ActivityLogHook extends EventHook {
       const message = findMessageById(chatMessages as Message[], messageId)
       if (!message?.isOutgoing) return
 
-      this.addOrUpdateReactionEvent(conversationId, messageId, reactorJid, emojis, message.body?.substring(0, 80), message.poll?.title)
+      this.addOrUpdateReactionEvent(conversationId, messageId, reactorJid, emojis, message.body?.substring(0, 80), message.poll?.title, timestamp)
     })
 
     // Log reactions to own messages in MUC rooms (grouped by message)
-    this.registerEvent('room:reactions', ({ roomJid, messageId, reactorNick, emojis }) => {
+    this.registerEvent('room:reactions', ({ roomJid, messageId, reactorNick, emojis, timestamp }) => {
       if (emojis.length === 0) return
 
       const state = roomStore.getState()
@@ -106,7 +106,7 @@ export class ActivityLogHook extends EventHook {
       const message = state.getMessage(roomJid, messageId)
       if (!message || message.nick !== room.nickname) return
 
-      this.addOrUpdateReactionEvent(roomJid, messageId, reactorNick, emojis, message.body?.substring(0, 80), message.poll?.title)
+      this.addOrUpdateReactionEvent(roomJid, messageId, reactorNick, emojis, message.body?.substring(0, 80), message.poll?.title, timestamp)
     })
   }
 
@@ -122,8 +122,10 @@ export class ActivityLogHook extends EventHook {
     emojis: string[],
     messagePreview?: string,
     pollTitle?: string,
+    timestamp?: Date,
   ): void {
     const store = activityLogStore.getState()
+    const reactionTimestamp = timestamp ?? new Date()
 
     // Look for an existing reaction event for the same message
     const existing = store.findEvent(
@@ -147,12 +149,16 @@ export class ActivityLogHook extends EventHook {
         reactors.push({ reactorJid, emojis })
       }
 
+      // Advance the event timestamp to the latest reaction in the group so the
+      // Activity Log reflects the most recent activity on this message.
+      const mergedTimestamp = reactionTimestamp > existing.timestamp ? reactionTimestamp : existing.timestamp
+
       // Replace event with updated reactors
       store.removeEvent(existing.id)
       store.addEvent({
         type: 'reaction-received',
         kind: 'informational',
-        timestamp: new Date(),
+        timestamp: mergedTimestamp,
         payload: {
           type: 'reaction-received',
           conversationId,
@@ -166,7 +172,7 @@ export class ActivityLogHook extends EventHook {
       store.addEvent({
         type: 'reaction-received',
         kind: 'informational',
-        timestamp: new Date(),
+        timestamp: reactionTimestamp,
         payload: {
           type: 'reaction-received',
           conversationId,

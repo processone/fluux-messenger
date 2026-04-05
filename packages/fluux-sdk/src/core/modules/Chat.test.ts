@@ -978,6 +978,36 @@ describe('XMPPClient Message', () => {
       expect(emitSDKSpy).not.toHaveBeenCalledWith('chat:message', expect.anything())
     })
 
+    it('should extract XEP-0203 delay timestamp from incoming reaction stanza', async () => {
+      await connectClient()
+
+      const stanza = createMockElement('message', {
+        from: 'contact@example.com/resource',
+        to: 'user@example.com',
+        type: 'chat',
+        id: 'reaction-delayed',
+      }, [
+        {
+          name: 'reactions',
+          attrs: { xmlns: 'urn:xmpp:reactions:0', id: 'target-msg-delayed' },
+          children: [
+            { name: 'reaction', text: '🎉' },
+          ],
+        },
+        { name: 'delay', attrs: { xmlns: 'urn:xmpp:delay', stamp: '2024-01-15T10:30:00.000Z' } },
+      ])
+
+      mockXmppClientInstance._emit('stanza', stanza)
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:reactions', {
+        conversationId: 'contact@example.com',
+        messageId: 'target-msg-delayed',
+        reactorJid: 'contact@example.com',
+        emojis: ['🎉'],
+        timestamp: new Date('2024-01-15T10:30:00.000Z'),
+      })
+    })
+
     it('should handle reaction with body and reactions fallback (entire body is fallback)', async () => {
       await connectClient()
 

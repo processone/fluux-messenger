@@ -341,6 +341,99 @@ describe('ActivityLogHook', () => {
     })
   })
 
+  describe('reaction timestamps', () => {
+    it('uses the event timestamp when provided (e.g. from XEP-0203 delay)', () => {
+      const message = makeMessage({ id: 'msg-1', isOutgoing: true, body: 'Test' })
+      chatStore.getState().messages.set('alice@example.com', [message])
+
+      const sentAt = new Date('2024-01-15T10:00:00Z')
+      client.fire('chat:reactions', {
+        conversationId: 'alice@example.com',
+        messageId: 'msg-1',
+        reactorJid: 'alice@example.com',
+        emojis: ['👍'],
+        timestamp: sentAt,
+      })
+
+      const event = activityLogStore.getState().events.find((e) => e.type === 'reaction-received')
+      expect(event).toBeDefined()
+      expect(event!.timestamp).toEqual(sentAt)
+    })
+
+    it('falls back to current time when no timestamp is provided', () => {
+      const message = makeMessage({ id: 'msg-1', isOutgoing: true, body: 'Test' })
+      chatStore.getState().messages.set('alice@example.com', [message])
+
+      const before = new Date()
+      client.fire('chat:reactions', {
+        conversationId: 'alice@example.com',
+        messageId: 'msg-1',
+        reactorJid: 'alice@example.com',
+        emojis: ['👍'],
+      })
+      const after = new Date()
+
+      const event = activityLogStore.getState().events.find((e) => e.type === 'reaction-received')
+      expect(event).toBeDefined()
+      expect(event!.timestamp.getTime()).toBeGreaterThanOrEqual(before.getTime())
+      expect(event!.timestamp.getTime()).toBeLessThanOrEqual(after.getTime())
+    })
+
+    it('advances the grouped event timestamp to the latest reaction in the group', () => {
+      const message = makeMessage({ id: 'msg-1', isOutgoing: true, body: 'Test' })
+      chatStore.getState().messages.set('alice@example.com', [message])
+
+      const older = new Date('2024-01-15T10:00:00Z')
+      const newer = new Date('2024-01-15T11:00:00Z')
+
+      client.fire('chat:reactions', {
+        conversationId: 'alice@example.com',
+        messageId: 'msg-1',
+        reactorJid: 'alice@example.com',
+        emojis: ['👍'],
+        timestamp: older,
+      })
+      client.fire('chat:reactions', {
+        conversationId: 'alice@example.com',
+        messageId: 'msg-1',
+        reactorJid: 'bob@example.com',
+        emojis: ['❤️'],
+        timestamp: newer,
+      })
+
+      const event = activityLogStore.getState().events.find((e) => e.type === 'reaction-received')
+      expect(event).toBeDefined()
+      expect(event!.timestamp).toEqual(newer)
+    })
+
+    it('keeps the existing event timestamp when a later reaction has an older timestamp', () => {
+      const message = makeMessage({ id: 'msg-1', isOutgoing: true, body: 'Test' })
+      chatStore.getState().messages.set('alice@example.com', [message])
+
+      const newer = new Date('2024-01-15T11:00:00Z')
+      const older = new Date('2024-01-15T10:00:00Z')
+
+      client.fire('chat:reactions', {
+        conversationId: 'alice@example.com',
+        messageId: 'msg-1',
+        reactorJid: 'alice@example.com',
+        emojis: ['👍'],
+        timestamp: newer,
+      })
+      client.fire('chat:reactions', {
+        conversationId: 'alice@example.com',
+        messageId: 'msg-1',
+        reactorJid: 'bob@example.com',
+        emojis: ['❤️'],
+        timestamp: older,
+      })
+
+      const event = activityLogStore.getState().events.find((e) => e.type === 'reaction-received')
+      expect(event).toBeDefined()
+      expect(event!.timestamp).toEqual(newer)
+    })
+  })
+
   describe('cleanup', () => {
     it('unsubscribes all handlers on unload', () => {
       const message = makeMessage({ id: 'msg-1', isOutgoing: true })

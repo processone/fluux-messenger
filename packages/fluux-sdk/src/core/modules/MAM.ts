@@ -80,7 +80,7 @@ interface MAMModifications {
   retractions: { targetId: string; from: string }[]
   corrections: { targetId: string; from: string; body: string; messageEl: Element; correctionStanzaId?: string }[]
   fastenings: { targetId: string; applyToEl: Element }[]
-  reactions: { targetId: string; from: string; emojis: string[] }[]
+  reactions: { targetId: string; from: string; emojis: string[]; timestamp?: Date }[]
 }
 
 /**
@@ -91,7 +91,7 @@ interface UnresolvedModifications {
   retractions: { targetId: string; from: string }[]
   corrections: { targetId: string; from: string; body: string; messageEl: Element; correctionStanzaId?: string }[]
   fastenings: { targetId: string; applyToEl: Element }[]
-  reactions: { targetId: string; from: string; emojis: string[] }[]
+  reactions: { targetId: string; from: string; emojis: string[]; timestamp?: Date }[]
 }
 
 
@@ -190,7 +190,8 @@ export class MAM extends BaseModule {
 
         const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, archiveId) => {
           // Check for modifications first
-          if (this.collectModification(messageEl, modifications, (from) => getBareJid(from))) {
+          const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
+          if (this.collectModification(messageEl, modifications, (from) => getBareJid(from), forwardedTimestamp)) {
             return
           }
 
@@ -327,7 +328,8 @@ export class MAM extends BaseModule {
 
         const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, archiveId) => {
           // Check for modifications first (keep full JID for room messages)
-          if (this.collectModification(messageEl, modifications, (from) => from)) {
+          const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
+          if (this.collectModification(messageEl, modifications, (from) => from, forwardedTimestamp)) {
             return
           }
 
@@ -445,7 +447,8 @@ export class MAM extends BaseModule {
     const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
 
     const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, archiveId) => {
-      if (this.collectModification(messageEl, modifications, (from) => getBareJid(from))) {
+      const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
+      if (this.collectModification(messageEl, modifications, (from) => getBareJid(from), forwardedTimestamp)) {
         return
       }
       // Derive conversationId from the message's from/to
@@ -506,7 +509,8 @@ export class MAM extends BaseModule {
     const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
 
     const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, archiveId) => {
-      if (this.collectModification(messageEl, modifications, (from) => from)) {
+      const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
+      if (this.collectModification(messageEl, modifications, (from) => from, forwardedTimestamp)) {
         return
       }
       const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
@@ -1238,10 +1242,21 @@ export class MAM extends BaseModule {
    * Check for and collect modifications (retractions, corrections, fastenings, reactions).
    * Returns true if the message was a modification (not a regular message).
    */
+  /**
+   * Extract the XEP-0203 delay timestamp from a MAM <forwarded> wrapper.
+   * Returns undefined if no delay stamp is present.
+   */
+  private extractForwardedTimestamp(forwarded: Element): Date | undefined {
+    const delayEl = forwarded.getChild('delay', NS_DELAY)
+    const stamp = delayEl?.attrs.stamp
+    return stamp ? new Date(stamp) : undefined
+  }
+
   private collectModification(
     messageEl: Element,
     modifications: MAMModifications,
-    normalizeFrom: (from: string) => string
+    normalizeFrom: (from: string) => string,
+    timestamp?: Date
   ): boolean {
     const from = messageEl.attrs.from
     if (!from) return false
@@ -1287,6 +1302,7 @@ export class MAM extends BaseModule {
         targetId: reactionsEl.attrs.id,
         from: normalizeFrom(from),
         emojis,
+        ...(timestamp && { timestamp }),
       })
       return true
     }
@@ -1460,6 +1476,7 @@ export class MAM extends BaseModule {
         messageId: reaction.targetId,
         reactorJid: reaction.from,
         emojis: reaction.emojis,
+        ...(reaction.timestamp && { timestamp: reaction.timestamp }),
       })
     }
   }
@@ -1520,6 +1537,7 @@ export class MAM extends BaseModule {
         messageId: reaction.targetId,
         reactorNick: getResource(reaction.from) || reaction.from,
         emojis: reaction.emojis,
+        ...(reaction.timestamp && { timestamp: reaction.timestamp }),
       })
     }
   }

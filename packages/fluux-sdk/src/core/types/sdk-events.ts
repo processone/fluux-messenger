@@ -134,6 +134,8 @@ export interface ChatEvents {
     messageId: string
     reactorJid: string
     emojis: string[]
+    /** When the reaction was sent (from XEP-0203 delay tag if present) */
+    timestamp?: Date
   }
 
   /** Message updated (correction, retraction, link preview) */
@@ -258,6 +260,8 @@ export interface RoomEvents {
     messageId: string
     reactorNick: string
     emojis: string[]
+    /** When the reaction was sent (from XEP-0203 delay tag if present) */
+    timestamp?: Date
   }
 
   /** Room subject changed */
