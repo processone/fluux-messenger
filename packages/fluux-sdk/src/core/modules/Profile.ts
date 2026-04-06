@@ -4,7 +4,7 @@ import { BaseModule } from './BaseModule'
 import { getBareJid, getLocalPart, getDomain } from '../jid'
 import type { VCardInfo } from '../types/roster'
 import { generateUUID } from '../../utils/uuid'
-import { getCachedAvatar, getAvatarHash, cacheAvatar, saveAvatarHash, getAllAvatarHashes, hasNoAvatar, markNoAvatar, clearNoAvatar, refreshAllBlobUrls } from '../../utils/avatarCache'
+import { getCachedAvatar, getAvatarHash, cacheAvatar, saveAvatarHash, getAllAvatarHashes, hasNoAvatar, markNoAvatar, clearNoAvatar, refreshAllBlobUrls, isPepForbiddenDomain, markPepForbiddenDomain, loadPepForbiddenDomains } from '../../utils/avatarCache'
 import {
   NS_PUBSUB,
   NS_NICK,
@@ -66,6 +66,13 @@ export class Profile extends BaseModule {
       return
     }
 
+    // Skip PEP for domains known to block PubSub avatar access
+    const domain = getDomain(bareJid)
+    if (isPepForbiddenDomain(domain)) {
+      await this.fetchVCardAvatar(bareJid)
+      return
+    }
+
     try {
       // Try XEP-0084 (PEP) first
       const iq = xml('iq', { type: 'get', to: bareJid, id: `avatar_${generateUUID()}` },
@@ -89,7 +96,12 @@ export class Profile extends BaseModule {
         // Fallback to VCard
         await this.fetchVCardAvatar(bareJid)
       }
-    } catch {
+    } catch (err: any) {
+      // Learn from forbidden/service-unavailable: cache the domain to skip PEP next time
+      const condition = err?.condition as string | undefined
+      if (condition === 'forbidden' || condition === 'service-unavailable') {
+        markPepForbiddenDomain(domain).catch(() => {})
+      }
       await this.fetchVCardAvatar(bareJid)
     }
   }
@@ -109,6 +121,13 @@ export class Profile extends BaseModule {
 
     // Check negative cache first - skip if we recently confirmed no avatar
     if (await hasNoAvatar(bareJid)) {
+      return null
+    }
+
+    // Skip PEP for domains known to block PubSub avatar access
+    const domain = getDomain(bareJid)
+    if (isPepForbiddenDomain(domain)) {
+      await this.fetchVCardAvatar(bareJid)
       return null
     }
 
@@ -147,7 +166,12 @@ export class Profile extends BaseModule {
         this.deps.emit('avatarMetadataUpdate', bareJid, hash)
         return hash
       }
-    } catch {
+    } catch (err: any) {
+      // Learn from forbidden/service-unavailable: cache the domain to skip PEP next time
+      const condition = err?.condition as string | undefined
+      if (condition === 'forbidden' || condition === 'service-unavailable') {
+        markPepForbiddenDomain(domain).catch(() => {})
+      }
       // Contact may not support XEP-0084 or PEP, try vCard-temp (XEP-0054) as fallback
       await this.fetchVCardAvatar(bareJid)
     }
@@ -271,47 +295,49 @@ export class Profile extends BaseModule {
     // If we have a real JID, try to fetch from their PEP or vCard
     if (realJid) {
       const bareJid = getBareJid(realJid)
+      const domain = getDomain(bareJid)
 
       // The presence advertises an avatar hash, which is a positive signal
       // that the user now has an avatar. Clear any stale negative cache entry
       // (they may have been marked as "no avatar" from a previous session).
       await clearNoAvatar(bareJid)
 
-      let gotForbidden = false
-
-      try {
-        // Try XEP-0084 (PEP) first
-        const iq = xml('iq', { type: 'get', to: bareJid, id: `avatar_${generateUUID()}` },
-          xml('pubsub', { xmlns: NS_PUBSUB },
-            xml('items', { node: NS_AVATAR_DATA },
-              xml('item', { id: avatarHash })
+      // Skip PEP for domains known to block PubSub avatar access
+      if (!isPepForbiddenDomain(domain)) {
+        try {
+          // Try XEP-0084 (PEP) first
+          const iq = xml('iq', { type: 'get', to: bareJid, id: `avatar_${generateUUID()}` },
+            xml('pubsub', { xmlns: NS_PUBSUB },
+              xml('items', { node: NS_AVATAR_DATA },
+                xml('item', { id: avatarHash })
+              )
             )
           )
-        )
-        const result = await this.deps.sendIQ(iq)
-        const data = result.getChild('pubsub', NS_PUBSUB)?.getChild('items')?.getChild('item')?.getChild('data', NS_AVATAR_DATA)?.text()
+          const result = await this.deps.sendIQ(iq)
+          const data = result.getChild('pubsub', NS_PUBSUB)?.getChild('items')?.getChild('item')?.getChild('data', NS_AVATAR_DATA)?.text()
 
-        if (data) {
-          const mimeType = 'image/png'
-          const blobUrl = await cacheAvatar(avatarHash, data, mimeType)
-          await clearNoAvatar(bareJid)
-          // Persist JID→hash mapping so we can restore from cache on next session
-          await saveAvatarHash(bareJid, avatarHash, 'contact')
-          this.deps.emitSDK('room:occupant-avatar', {
-            roomJid,
-            nick,
-            avatar: blobUrl,
-            avatarHash,
-          })
-          return
+          if (data) {
+            const mimeType = 'image/png'
+            const blobUrl = await cacheAvatar(avatarHash, data, mimeType)
+            await clearNoAvatar(bareJid)
+            // Persist JID→hash mapping so we can restore from cache on next session
+            await saveAvatarHash(bareJid, avatarHash, 'contact')
+            this.deps.emitSDK('room:occupant-avatar', {
+              roomJid,
+              nick,
+              avatar: blobUrl,
+              avatarHash,
+            })
+            return
+          }
+        } catch (err: any) {
+          // Learn from forbidden/service-unavailable: cache the domain to skip PEP next time
+          const condition = err?.condition as string | undefined
+          if (condition === 'forbidden' || condition === 'service-unavailable') {
+            markPepForbiddenDomain(domain).catch(() => {})
+          }
+          // Fall through to vCard fetch
         }
-      } catch (err) {
-        // Check if this is a forbidden error
-        const errorMsg = err instanceof Error ? err.message : String(err)
-        if (errorMsg.includes('forbidden')) {
-          gotForbidden = true
-        }
-        // Fall through to vCard fetch
       }
 
       // Try vCard-temp (XEP-0054)
@@ -341,13 +367,9 @@ export class Profile extends BaseModule {
           // vCard exists but no photo - mark as no avatar
           await markNoAvatar(bareJid, 'contact')
         }
-      } catch (err) {
-        // Check if this is a forbidden error
-        const errorMsg = err instanceof Error ? err.message : String(err)
-        if (errorMsg.includes('forbidden') || gotForbidden) {
-          // Cache forbidden errors to avoid repeated queries
-          await markNoAvatar(bareJid, 'contact')
-        }
+      } catch {
+        // vCard fetch failed - mark as no avatar
+        await markNoAvatar(bareJid, 'contact')
       }
       return
     }
@@ -921,6 +943,9 @@ export class Profile extends BaseModule {
    * This is called after roster load to populate avatars for offline contacts.
    */
   async restoreAllContactAvatarHashes(): Promise<void> {
+    // Load PEP-forbidden domains before avatar fetches begin
+    await loadPepForbiddenDomains().catch(() => {})
+
     try {
       const mappings = await getAllAvatarHashes('contact')
       for (const mapping of mappings) {

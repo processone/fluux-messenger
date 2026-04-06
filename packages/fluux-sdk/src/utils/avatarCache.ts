@@ -5,16 +5,24 @@
  */
 
 const DB_NAME = 'fluux-avatar-cache'
-const DB_VERSION = 3
+const DB_VERSION = 4
 const STORE_NAME = 'avatars'
 const HASH_STORE_NAME = 'avatar-hashes'
 const NO_AVATAR_STORE_NAME = 'no-avatar-jids'
+const PEP_FORBIDDEN_STORE_NAME = 'pep-forbidden-domains'
 
 /**
  * Default TTL for "no avatar" cache entries (24 hours in milliseconds)
  * After this time, we'll re-check if the JID has an avatar
  */
 const NO_AVATAR_TTL_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Default TTL for PEP-forbidden domain cache entries (7 days in milliseconds).
+ * Domains that return 'forbidden' or 'service-unavailable' for PEP avatar
+ * requests are cached so we skip PEP and go directly to vCard-temp.
+ */
+const PEP_FORBIDDEN_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 interface CachedAvatar {
   hash: string // SHA-1 hash (primary key)
@@ -41,6 +49,15 @@ interface NoAvatarEntry {
   type: AvatarEntityType // 'contact' or 'room'
 }
 
+/**
+ * Entry tracking a domain whose server blocks PEP avatar access.
+ * Used to skip PEP requests and go directly to vCard-temp.
+ */
+interface PepForbiddenDomainEntry {
+  domain: string // Domain (primary key)
+  timestamp: number // When this was recorded
+}
+
 let dbPromise: Promise<IDBDatabase> | null = null
 
 /**
@@ -49,6 +66,13 @@ let dbPromise: Promise<IDBDatabase> | null = null
  * proper cleanup via URL.revokeObjectURL().
  */
 const blobUrlPool = new Map<string, string>()
+
+/**
+ * In-memory set of domains known to block PEP avatar access.
+ * Populated from IndexedDB on load, updated on new forbidden responses.
+ * Enables synchronous checks to skip PEP requests entirely.
+ */
+const pepForbiddenDomains = new Set<string>()
 
 /**
  * Check if IndexedDB is available in the current environment
@@ -98,6 +122,10 @@ function getDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(NO_AVATAR_STORE_NAME)) {
         const noAvatarStore = db.createObjectStore(NO_AVATAR_STORE_NAME, { keyPath: 'jid' })
         noAvatarStore.createIndex('type', 'type', { unique: false })
+      }
+      // PEP-forbidden domains store (v4) - domain-level negative cache
+      if (!db.objectStoreNames.contains(PEP_FORBIDDEN_STORE_NAME)) {
+        db.createObjectStore(PEP_FORBIDDEN_STORE_NAME, { keyPath: 'domain' })
       }
     }
   })
@@ -533,6 +561,102 @@ export async function clearAllNoAvatarEntries(): Promise<void> {
   }
 }
 
+// =============================================================================
+// PEP-Forbidden Domain Cache Functions
+// =============================================================================
+
+/**
+ * Check if a domain is known to block PEP avatar access (synchronous).
+ * Returns true if the domain previously returned 'forbidden' or
+ * 'service-unavailable' for PEP avatar requests.
+ */
+export function isPepForbiddenDomain(domain: string): boolean {
+  return pepForbiddenDomains.has(domain)
+}
+
+/**
+ * Mark a domain as blocking PEP avatar access.
+ * Adds to in-memory Set and persists to IndexedDB.
+ */
+export async function markPepForbiddenDomain(domain: string): Promise<void> {
+  pepForbiddenDomains.add(domain)
+
+  try {
+    const db = await getDB()
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction(PEP_FORBIDDEN_STORE_NAME, 'readwrite')
+      const store = transaction.objectStore(PEP_FORBIDDEN_STORE_NAME)
+      const entry: PepForbiddenDomainEntry = {
+        domain,
+        timestamp: Date.now(),
+      }
+      const request = store.put(entry)
+
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => resolve()
+    })
+  } catch (error) {
+    if (isIndexedDBAvailable()) {
+      console.warn('Failed to persist PEP-forbidden domain:', error)
+    }
+  }
+}
+
+/**
+ * Load PEP-forbidden domains from IndexedDB into the in-memory Set.
+ * Expired entries (older than TTL) are removed during load.
+ * Call once at startup before avatar fetches begin.
+ */
+export async function loadPepForbiddenDomains(ttlMs: number = PEP_FORBIDDEN_TTL_MS): Promise<void> {
+  try {
+    const db = await getDB()
+    const transaction = db.transaction(PEP_FORBIDDEN_STORE_NAME, 'readwrite')
+    const store = transaction.objectStore(PEP_FORBIDDEN_STORE_NAME)
+    const entries: PepForbiddenDomainEntry[] = await new Promise((resolve, reject) => {
+      const request = store.getAll()
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => resolve(request.result as PepForbiddenDomainEntry[])
+    })
+
+    const cutoff = Date.now() - ttlMs
+    for (const entry of entries) {
+      if (entry.timestamp < cutoff) {
+        // Expired — remove from IndexedDB
+        store.delete(entry.domain)
+      } else {
+        pepForbiddenDomains.add(entry.domain)
+      }
+    }
+  } catch (error) {
+    if (isIndexedDBAvailable()) {
+      console.warn('Failed to load PEP-forbidden domains:', error)
+    }
+  }
+}
+
+/**
+ * Clear all PEP-forbidden domain entries (in-memory and IndexedDB).
+ */
+export async function clearAllPepForbiddenDomains(): Promise<void> {
+  pepForbiddenDomains.clear()
+
+  try {
+    const db = await getDB()
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction(PEP_FORBIDDEN_STORE_NAME, 'readwrite')
+      const store = transaction.objectStore(PEP_FORBIDDEN_STORE_NAME)
+      const request = store.clear()
+
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => resolve()
+    })
+  } catch (error) {
+    if (isIndexedDBAvailable()) {
+      console.warn('Failed to clear PEP-forbidden domains:', error)
+    }
+  }
+}
+
 /**
  * Revoke all tracked avatar blob URLs.
  * Call on disconnect or when clearing all avatar data.
@@ -584,6 +708,15 @@ export function _resetBlobUrlPoolForTesting(): void {
 }
 
 /**
+ * Reset the PEP-forbidden domains set.
+ * For test isolation only.
+ * @internal
+ */
+export function _resetPepForbiddenDomainsForTesting(): void {
+  pepForbiddenDomains.clear()
+}
+
+/**
  * Reset the database instance.
  * For test isolation only.
  * @internal
@@ -601,6 +734,7 @@ export async function clearAllAvatarData(): Promise<void> {
     clearAllAvatars(),
     clearAllAvatarHashes(),
     clearAllNoAvatarEntries(),
+    clearAllPepForbiddenDomains(),
   ])
 }
 

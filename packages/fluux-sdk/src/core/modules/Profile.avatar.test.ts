@@ -59,6 +59,10 @@ vi.mock('../../utils/avatarCache', () => ({
   hasNoAvatar: vi.fn().mockResolvedValue(false),
   markNoAvatar: vi.fn().mockResolvedValue(undefined),
   clearNoAvatar: vi.fn().mockResolvedValue(undefined),
+  // PEP-forbidden domain cache functions
+  isPepForbiddenDomain: vi.fn().mockReturnValue(false),
+  markPepForbiddenDomain: vi.fn().mockResolvedValue(undefined),
+  loadPepForbiddenDomains: vi.fn().mockResolvedValue(undefined),
 }))
 
 describe('XMPPClient Own Avatar', () => {
