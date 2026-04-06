@@ -72,7 +72,20 @@ for (const file of VERSION_FILES) {
   console.log(`  ${file}: ${oldVersion} -> ${baseVersion}`)
 }
 
-// 2. Update tauri.conf.json
+// 2. Update SDK_VERSION constant
+console.log('\nUpdating SDK version constant...')
+const SDK_VERSION_FILE = 'packages/fluux-sdk/src/version.ts'
+const versionTsPath = path.join(ROOT, SDK_VERSION_FILE)
+const versionTsContent = fs.readFileSync(versionTsPath, 'utf-8')
+const oldSdkVersion = versionTsContent.match(/SDK_VERSION = '([^']+)'/)?.[1] || 'unknown'
+const updatedVersionTs = versionTsContent.replace(
+  /export const SDK_VERSION = '.*'/,
+  `export const SDK_VERSION = '${baseVersion}'`
+)
+fs.writeFileSync(versionTsPath, updatedVersionTs)
+console.log(`  ${SDK_VERSION_FILE}: ${oldSdkVersion} -> ${baseVersion}`)
+
+// 3. Update tauri.conf.json
 console.log('\nUpdating tauri.conf.json...')
 const tauriPath = path.join(ROOT, TAURI_CONF)
 const tauriConf = JSON.parse(fs.readFileSync(tauriPath, 'utf-8'))
@@ -97,7 +110,7 @@ try {
 }
 fs.writeFileSync(tauriPath, JSON.stringify(tauriConf, null, 2) + '\n')
 
-// 3. Update Cargo.toml version
+// 4. Update Cargo.toml version
 console.log('\nUpdating Cargo.toml...')
 const cargoPath = path.join(ROOT, TAURI_CARGO)
 let cargoContent = fs.readFileSync(cargoPath, 'utf-8')
@@ -107,7 +120,7 @@ cargoContent = cargoContent.replace(/^version\s*=\s*"[^"]+"/m, `version = "${bas
 fs.writeFileSync(cargoPath, cargoContent)
 console.log(`  version: ${oldCargoVersion} -> ${baseVersion}`)
 
-// 4. Update packaging version numbers
+// 5. Update packaging version numbers
 console.log('\nUpdating packaging files...')
 
 // Debian changelog — update first entry version
@@ -170,7 +183,7 @@ if (fs.existsSync(flatpakMetainfo)) {
   }
 }
 
-// 5. Generate CHANGELOG.md from changelog.ts (step renumbered)
+// 6. Generate CHANGELOG.md from changelog.ts
 console.log('\nGenerating CHANGELOG.md from changelog.ts...')
 const changelogTsPath = path.join(ROOT, CHANGELOG_TS)
 const changelogTsContent = fs.readFileSync(changelogTsPath, 'utf-8')
@@ -326,7 +339,7 @@ for (const entry of entries) {
 fs.writeFileSync(path.join(ROOT, CHANGELOG_MD), markdown)
 console.log(`  Generated ${CHANGELOG_MD} with ${entries.length} releases`)
 
-// 6. Generate RELEASE_NOTES.md (just the current version, for GitHub release body)
+// 7. Generate RELEASE_NOTES.md (just the current version, for GitHub release body)
 console.log('\nGenerating RELEASE_NOTES.md for auto-updater...')
 const currentEntry = entries.find(e => e.version === baseVersion)
 if (currentEntry) {
@@ -349,7 +362,7 @@ if (currentEntry) {
   console.log(`  Skipped (version ${baseVersion} not in changelog.ts)`)
 }
 
-// 7. Create git tag if requested
+// 8. Create git tag if requested
 if (shouldTag) {
   console.log('\nCreating git tag...')
   try {
