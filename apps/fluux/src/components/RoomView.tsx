@@ -70,7 +70,7 @@ const EMPTY_IGNORED_ARRAY: import('@fluux/sdk/stores').IgnoredUser[] = []
 export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange, onStartChat, onShowProfile, findOnPageRef, onSearchInConversation }: RoomViewProps) {
   detectRenderLoop('RoomView')
   const { t } = useTranslation()
-  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendPoll, votePoll, closePoll, sendCorrection, retractMessage, moderateMessage, sendChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, activeMAMState, submitRoomConfig, setSubject, destroyRoom, setAffiliation, setRole, targetMessageId, clearTargetMessageId } = useRoomActive()
+  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendPoll, votePoll, closePoll, sendCorrection, retractMessage, moderateMessage, sendChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, continueRoomCatchUp, activeMAMState, submitRoomConfig, setSubject, destroyRoom, setAffiliation, setRole, targetMessageId, clearTargetMessageId } = useRoomActive()
   const { contacts } = useRoster()
   // NOTE: Use focused selectors instead of useConnection() hook to avoid
   // re-renders when unrelated connection state changes (error, reconnectAttempt, etc.)
@@ -438,6 +438,9 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             highlightTerms={find.highlightTerms}
             currentMatchId={find.currentMatchId}
             lastSentMessageId={lastSentMessageId}
+            forwardGapTimestamp={activeMAMState?.forwardGapTimestamp}
+            onCatchUpHistory={continueRoomCatchUp}
+            isCatchingUp={activeMAMState?.isLoading}
           />
         </div>
 
@@ -679,6 +682,9 @@ const RoomMessageList = memo(function RoomMessageList({
   highlightTerms,
   currentMatchId,
   lastSentMessageId,
+  forwardGapTimestamp,
+  onCatchUpHistory,
+  isCatchingUp,
 }: {
   messages: RoomMessage[]
   messagesById: Map<string, RoomMessage>
@@ -721,6 +727,9 @@ const RoomMessageList = memo(function RoomMessageList({
   highlightTerms?: string[]
   currentMatchId?: string
   lastSentMessageId?: string | null
+  forwardGapTimestamp?: number
+  onCatchUpHistory?: () => void
+  isCatchingUp?: boolean
 }) {
   const { t } = useTranslation()
   const { formatTime, effectiveTimeFormat } = useTimeFormat()
@@ -887,6 +896,9 @@ const RoomMessageList = memo(function RoomMessageList({
       isHistoryComplete={isHistoryComplete}
       renderMessage={renderMessage}
       lastSentMessageId={lastSentMessageId}
+      forwardGapTimestamp={forwardGapTimestamp}
+      onCatchUpHistory={onCatchUpHistory}
+      isCatchingUp={isCatchingUp}
     />
   )
 })

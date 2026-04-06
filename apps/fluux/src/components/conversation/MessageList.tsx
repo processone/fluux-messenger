@@ -20,6 +20,7 @@ import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { DateSeparator } from './DateSeparator'
 import { NewMessageMarker } from './NewMessageMarker'
 import { HistoryStartMarker } from './HistoryStartMarker'
+import { HistoryGapMarker } from './HistoryGapMarker'
 import { TypingIndicator } from './TypingIndicator'
 import { groupMessagesByDate } from './messageGrouping'
 import { useMessageListScroll } from './useMessageListScroll'
@@ -78,6 +79,12 @@ export interface MessageListProps<T extends BaseMessage> {
   staticMode?: boolean
   /** ID of the last message sent by the user (for send animation) */
   lastSentMessageId?: string | null
+  /** Epoch ms of the newest message before a history gap (incomplete forward catch-up) */
+  forwardGapTimestamp?: number
+  /** Callback to continue loading missing messages from the gap */
+  onCatchUpHistory?: () => void
+  /** If true, show loading indicator on the gap marker */
+  isCatchingUp?: boolean
 }
 
 // ============================================================================
@@ -106,6 +113,9 @@ export function MessageList<T extends BaseMessage>({
   onMessageSeen,
   staticMode,
   lastSentMessageId,
+  forwardGapTimestamp,
+  onCatchUpHistory,
+  isCatchingUp,
 }: MessageListProps<T>) {
   // Detect render loops before they freeze the UI
   detectRenderLoop('MessageList')
@@ -277,12 +287,25 @@ export function MessageList<T extends BaseMessage>({
               {group.messages.map((msg, idx) => {
                 const showNewMarker = firstNewMessageId === msg.id
 
+                // Show gap marker at the boundary where the forward catch-up stopped.
+                // The marker appears before the first message whose timestamp exceeds
+                // the gap boundary, signaling that messages between the two may be missing.
+                const showGapMarker = !!(
+                  forwardGapTimestamp &&
+                  onCatchUpHistory &&
+                  msg.timestamp.getTime() > forwardGapTimestamp &&
+                  (idx === 0
+                    ? (groupIndex === 0 || (groupedMessages[groupIndex - 1]?.messages.at(-1)?.timestamp.getTime() ?? 0) <= forwardGapTimestamp)
+                    : group.messages[idx - 1].timestamp.getTime() <= forwardGapTimestamp)
+                )
+
                 return (
                   <div
                     key={msg.id}
                     data-message-id={msg.id}
                     style={msg.id === lastSentMessageId ? { animation: 'message-send 300ms ease-out' } : undefined}
                   >
+                    {showGapMarker && <HistoryGapMarker onLoadMore={onCatchUpHistory} isLoading={isCatchingUp ?? false} />}
                     {showNewMarker && <NewMessageMarker />}
                     {renderMessage(msg, idx, group.messages, showNewMarker, handleMediaLoad)}
                   </div>

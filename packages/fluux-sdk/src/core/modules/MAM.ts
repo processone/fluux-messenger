@@ -40,6 +40,7 @@ import {
   MAM_CATCHUP_FORWARD_MAX,
   MAM_CATCHUP_BACKWARD_MAX,
   MAM_CACHE_LOAD_LIMIT,
+  MAM_ROOM_FORWARD_MAX_PAGES,
 } from '../../utils/mamCatchUpUtils'
 import {
   NS_MAM,
@@ -295,7 +296,7 @@ export class MAM extends BaseModule {
 
     // For forward catch-up queries, auto-paginate to retrieve all missed messages.
     // Backward queries (scroll-up) remain single-page — the caller controls pagination.
-    const maxAutoPages = isForward ? 5 : 1
+    const maxAutoPages = isForward ? MAM_ROOM_FORWARD_MAX_PAGES : 1
     const allMessages: RoomMessage[] = []
     let isComplete = false
     let lastRsm: RSMResponse = {}
@@ -991,6 +992,54 @@ export class MAM extends BaseModule {
     )
 
     logInfo(`Background catch-up for ${mamRooms.length} room(s) — complete`)
+  }
+
+  /**
+   * Force a full MAM catch-up for all joined rooms over a given time window.
+   *
+   * Unlike `catchUpAllRooms()` which starts from the newest cached message,
+   * this method queries from a fixed start date (default: 7 days ago) to
+   * fill any gaps left by previous incomplete catch-ups. The store's merge
+   * logic deduplicates messages that already exist.
+   *
+   * Intended for manual use via a UI action (e.g., sidebar menu item).
+   *
+   * @param options.days - Number of days to catch up (default: 7)
+   * @param options.concurrency - Max concurrent MAM queries (default: 2)
+   */
+  async forceCatchUpAllRooms(options: { days?: number; concurrency?: number } = {}): Promise<void> {
+    const { days = 7, concurrency = 2 } = options
+    const joinedRooms = this.deps.stores?.room.joinedRooms() || []
+    const mamRooms = joinedRooms.filter((r) => r.supportsMAM && !r.isQuickChat)
+    if (mamRooms.length === 0) return
+
+    const start = new Date(Date.now() - days * 86_400_000).toISOString()
+
+    logInfo(`Force catch-up for ${mamRooms.length} room(s) from last ${days} days`)
+    this.deps.emitSDK('console:event', {
+      message: `Force catch-up for ${mamRooms.length} room(s) from last ${days} days`,
+      category: 'sm',
+    })
+
+    await executeWithConcurrency(
+      mamRooms,
+      async (room) => {
+        try {
+          if (this.deps.stores?.connection.getStatus() !== 'online') return
+
+          await this.queryRoomArchive({
+            roomJid: room.jid,
+            start,
+            max: MAM_CATCHUP_FORWARD_MAX,
+          })
+        } catch (_error) {
+          // Silently ignore — individual failures shouldn't affect others
+        }
+      },
+      concurrency
+    )
+
+    logInfo(`Force catch-up for ${mamRooms.length} room(s) — complete`)
   }
 
   /**

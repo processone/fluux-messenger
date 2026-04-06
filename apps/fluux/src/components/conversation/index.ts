@@ -16,6 +16,7 @@ export type { DateSeparatorProps } from './DateSeparator'
 export { NewMessageMarker } from './NewMessageMarker'
 
 export { HistoryStartMarker } from './HistoryStartMarker'
+export { HistoryGapMarker } from './HistoryGapMarker'
 
 export { MessageBubble, buildReplyContext } from './MessageBubble'
 export type { MessageBubbleProps } from './MessageBubble'

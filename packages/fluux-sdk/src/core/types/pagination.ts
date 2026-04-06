@@ -196,4 +196,10 @@ export interface MAMQueryState {
    * Used by side effects to determine if a MAM query should run when conversation opens.
    */
   needsCatchUp?: boolean
+  /**
+   * Epoch ms of the newest message from an incomplete forward catch-up.
+   * Used to position the gap marker in the message list. Set when a forward
+   * catch-up query ends with complete=false, cleared when caught up to live.
+   */
+  forwardGapTimestamp?: number
 }

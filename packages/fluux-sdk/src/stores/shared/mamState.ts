@@ -77,13 +77,15 @@ export type MAMQueryDirection = 'backward' | 'forward'
  * @param complete - Whether the server indicated the query is complete
  * @param direction - Query direction: 'backward' for older history, 'forward' for catching up
  * @param oldestFetchedId - ID of oldest fetched message for pagination
+ * @param newestFetchedTimestamp - Epoch ms of the newest fetched message (for gap marker positioning)
  */
 export function setMAMQueryCompleted(
   states: Map<string, MAMQueryState>,
   id: string,
   complete: boolean,
   direction: MAMQueryDirection,
-  oldestFetchedId?: string
+  oldestFetchedId?: string,
+  newestFetchedTimestamp?: number
 ): Map<string, MAMQueryState> {
   const newStates = new Map(states)
   const current = newStates.get(id) || DEFAULT_MAM_STATE
@@ -97,6 +99,12 @@ export function setMAMQueryCompleted(
     ? complete
     : current.isCaughtUpToLive
 
+  // Track gap position for incomplete forward catch-ups.
+  // Set when forward catch-up ends without complete=true, cleared when caught up.
+  const forwardGapTimestamp = direction === 'forward'
+    ? (complete ? undefined : newestFetchedTimestamp)
+    : current.forwardGapTimestamp
+
   newStates.set(id, {
     isLoading: false,
     error: null,
@@ -109,6 +117,7 @@ export function setMAMQueryCompleted(
       : current.oldestFetchedId,
     // Clear needsCatchUp after successful query
     needsCatchUp: false,
+    forwardGapTimestamp,
   })
   return newStates
 }

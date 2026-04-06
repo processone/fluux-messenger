@@ -35,6 +35,7 @@ import {
   LogIn,
   Ban,
   UserPlus,
+  RefreshCw,
 } from 'lucide-react'
 import { clearSession } from '@/hooks/useSessionPersistence'
 import { deleteCredentials } from '@/utils/keychain'
@@ -154,6 +155,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
   const [showBrowseRooms, setShowBrowseRooms] = useState(false)
   const [showJoinRoom, setShowJoinRoom] = useState(false)
   const [showRoomDropdown, setShowRoomDropdown] = useState(false)
+  const [isCatchingUpRooms, setIsCatchingUpRooms] = useState(false)
   const roomDropdownRef = useRef<HTMLDivElement>(null)
   const [showContactDropdown, setShowContactDropdown] = useState(false)
   const contactDropdownRef = useRef<HTMLDivElement>(null)
@@ -404,6 +406,22 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
                   >
                     <Search className="w-4 h-4 text-fluux-muted" />
                     <span>{t('rooms.browseRooms')}</span>
+                  </button>
+                  <div className="border-t border-fluux-hover my-1" />
+                  <button
+                    onClick={() => {
+                      setShowRoomDropdown(false)
+                      if (isCatchingUpRooms) return
+                      setIsCatchingUpRooms(true)
+                      client.mam.forceCatchUpAllRooms().finally(() => setIsCatchingUpRooms(false))
+                    }}
+                    disabled={isCatchingUpRooms}
+                    className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 ${
+                      isCatchingUpRooms ? 'text-fluux-muted cursor-wait' : 'hover:bg-fluux-hover'
+                    }`}
+                  >
+                    <RefreshCw className={`w-4 h-4 text-fluux-muted ${isCatchingUpRooms ? 'animate-spin' : ''}`} />
+                    <span>{t('rooms.catchUpAll')}</span>
                   </button>
                 </div>
               )}

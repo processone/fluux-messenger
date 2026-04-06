@@ -27,6 +27,12 @@ export const MAM_CACHE_LOAD_LIMIT = 100
 /** Delay (ms) before room catch-up starts, to let rooms finish joining. */
 export const MAM_ROOM_CATCHUP_DELAY_MS = 10_000
 
+/** Max auto-pagination pages for forward room MAM catch-up.
+ *  Room traffic is typically higher than 1:1, so we allow many more pages
+ *  (50 × 100 = 5 000 stanzas) to close the gap after long offline periods.
+ *  The loop still breaks early on `complete=true`. */
+export const MAM_ROOM_FORWARD_MAX_PAGES = 50
+
 // ============================================================================
 // Functions
 // ============================================================================

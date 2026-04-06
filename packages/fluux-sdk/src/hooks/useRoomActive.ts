@@ -1,9 +1,15 @@
 import { useCallback, useMemo } from 'react'
-import { roomStore } from '../stores'
+import { roomStore, connectionStore } from '../stores'
 import { useRoomStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
 import type { Room, RoomMessage, MentionReference, ChatStateNotification, FileAttachment, MAMQueryState, RoomAffiliation, RoomRole, PollData, PollSettings } from '../core/types'
 import { createFetchOlderHistory } from './shared'
+import {
+  findNewestMessage,
+  buildCatchUpStartTime,
+  MAM_CATCHUP_FORWARD_MAX,
+  MAM_CACHE_LOAD_LIMIT,
+} from '../utils/mamCatchUpUtils'
 
 /**
  * Stable empty array references to prevent infinite re-renders.
@@ -100,6 +106,10 @@ export function useRoomActive() {
     if (!s.activeRoomJid) return undefined
     return s.mamQueryStates.get(s.activeRoomJid)?.oldestFetchedId
   })
+  const mamForwardGapTimestamp = useRoomStore((s) => {
+    if (!s.activeRoomJid) return undefined
+    return s.mamQueryStates.get(s.activeRoomJid)?.forwardGapTimestamp
+  })
 
   // Memoize the MAM state object to maintain stable reference
   const activeMAMState = useMemo((): MAMQueryState | null => {
@@ -110,9 +120,10 @@ export function useRoomActive() {
       isHistoryComplete: mamIsHistoryComplete,
       isCaughtUpToLive: mamIsCaughtUpToLive,
       oldestFetchedId: mamOldestFetchedId,
+      forwardGapTimestamp: mamForwardGapTimestamp,
       error: null,
     }
-  }, [activeRoomJid, mamIsLoading, mamIsHistoryComplete, mamIsCaughtUpToLive, mamOldestFetchedId])
+  }, [activeRoomJid, mamIsLoading, mamIsHistoryComplete, mamIsCaughtUpToLive, mamOldestFetchedId, mamForwardGapTimestamp])
 
   // Get typing users for the active room as an array
   const activeTypingUsers = useMemo(() => {
@@ -336,6 +347,41 @@ export function useRoomActive() {
     [client]
   )
 
+  /**
+   * Continue forward MAM catch-up for the active room.
+   * Used when a previous catch-up was incomplete (gap marker visible).
+   * Reads the newest cached message and queries forward from there.
+   */
+  const continueRoomCatchUp = useCallback(async () => {
+    const roomJid = roomStore.getState().activeRoomJid
+    if (!roomJid) return
+
+    const connectionStatus = connectionStore.getState().status
+    if (connectionStatus !== 'online') return
+
+    const mamState = roomStore.getState().getRoomMAMQueryState(roomJid)
+    if (mamState.isLoading) return
+
+    roomStore.getState().setRoomMAMLoading(roomJid, true)
+
+    try {
+      await roomStore.getState().loadMessagesFromCache(roomJid, { limit: MAM_CACHE_LOAD_LIMIT })
+      const room = roomStore.getState().rooms.get(roomJid)
+      const messages = room?.messages || []
+      const newestMessage = findNewestMessage(messages)
+
+      if (newestMessage?.timestamp) {
+        await client.chat.queryRoomMAM({
+          roomJid,
+          start: buildCatchUpStartTime(newestMessage.timestamp),
+          max: MAM_CATCHUP_FORWARD_MAX,
+        })
+      }
+    } catch {
+      roomStore.getState().setRoomMAMLoading(roomJid, false)
+    }
+  }, [client])
+
   // --- Return ---
 
   // Memoize actions object to prevent re-renders when only state changes
@@ -365,6 +411,7 @@ export function useRoomActive() {
       clearFirstNewMessageId,
       updateLastSeenMessageId,
       fetchOlderHistory,
+      continueRoomCatchUp,
       submitRoomConfig,
       setSubject,
       destroyRoom,
@@ -396,6 +443,7 @@ export function useRoomActive() {
       clearFirstNewMessageId,
       updateLastSeenMessageId,
       fetchOlderHistory,
+      continueRoomCatchUp,
       submitRoomConfig,
       setSubject,
       destroyRoom,

@@ -165,6 +165,7 @@ describe('mamState utilities', () => {
         isCaughtUpToLive: false,
         oldestFetchedId: 'msg-oldest',
         needsCatchUp: false,
+        forwardGapTimestamp: undefined,
       })
     })
 
@@ -180,6 +181,7 @@ describe('mamState utilities', () => {
         isCaughtUpToLive: true,
         oldestFetchedId: undefined, // Not updated for forward queries
         needsCatchUp: false,
+        forwardGapTimestamp: undefined, // Cleared when caught up
       })
     })
 
@@ -228,6 +230,45 @@ describe('mamState utilities', () => {
       const afterBackward = setMAMQueryCompleted(afterForward, 'conv-1', true, 'backward', 'msg-oldest')
       expect(afterBackward.get('conv-1')?.isCaughtUpToLive).toBe(true) // Preserved
       expect(afterBackward.get('conv-1')?.isHistoryComplete).toBe(true) // Updated
+    })
+
+    it('sets forwardGapTimestamp when forward catch-up is incomplete', () => {
+      const states = new Map<string, MAMQueryState>()
+      const gapTs = Date.now() - 60_000
+      const result = setMAMQueryCompleted(states, 'room-1', false, 'forward', undefined, gapTs)
+
+      expect(result.get('room-1')?.forwardGapTimestamp).toBe(gapTs)
+      expect(result.get('room-1')?.isCaughtUpToLive).toBe(false)
+    })
+
+    it('clears forwardGapTimestamp when forward catch-up completes', () => {
+      const states = new Map<string, MAMQueryState>()
+      // First: incomplete catch-up sets the gap
+      const withGap = setMAMQueryCompleted(states, 'room-1', false, 'forward', undefined, Date.now())
+      expect(withGap.get('room-1')?.forwardGapTimestamp).toBeDefined()
+
+      // Second: complete catch-up clears the gap
+      const cleared = setMAMQueryCompleted(withGap, 'room-1', true, 'forward', undefined, Date.now())
+      expect(cleared.get('room-1')?.forwardGapTimestamp).toBeUndefined()
+      expect(cleared.get('room-1')?.isCaughtUpToLive).toBe(true)
+    })
+
+    it('preserves forwardGapTimestamp during backward queries', () => {
+      const states = new Map<string, MAMQueryState>()
+      const gapTs = Date.now() - 60_000
+      const withGap = setMAMQueryCompleted(states, 'room-1', false, 'forward', undefined, gapTs)
+
+      // Backward query should not touch the gap timestamp
+      const afterBackward = setMAMQueryCompleted(withGap, 'room-1', true, 'backward', 'msg-oldest')
+      expect(afterBackward.get('room-1')?.forwardGapTimestamp).toBe(gapTs)
+    })
+
+    it('does not set forwardGapTimestamp when no timestamp is provided', () => {
+      const states = new Map<string, MAMQueryState>()
+      const result = setMAMQueryCompleted(states, 'room-1', false, 'forward')
+
+      expect(result.get('room-1')?.forwardGapTimestamp).toBeUndefined()
+      expect(result.get('room-1')?.isCaughtUpToLive).toBe(false)
     })
   })
 
