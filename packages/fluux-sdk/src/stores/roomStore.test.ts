@@ -2590,6 +2590,141 @@ describe('roomStore', () => {
     })
   })
 
+  describe('mergeRoomMAMMessages gap tracking', () => {
+    const roomJid = 'room@conference.example.com'
+
+    beforeEach(() => {
+      roomStore.getState().addRoom(createRoom(roomJid, { joined: true }))
+    })
+
+    it('should set forwardGapTimestamp when forward catch-up is incomplete', () => {
+      const mamMessages: RoomMessage[] = [
+        {
+          type: 'groupchat',
+          id: 'mam-1',
+          roomJid,
+          from: `${roomJid}/alice`,
+          nick: 'alice',
+          body: 'Message 1',
+          timestamp: new Date('2024-01-15T10:00:00Z'),
+          isOutgoing: false,
+        },
+        {
+          type: 'groupchat',
+          id: 'mam-2',
+          roomJid,
+          from: `${roomJid}/bob`,
+          nick: 'bob',
+          body: 'Message 2',
+          timestamp: new Date('2024-01-15T12:00:00Z'),
+          isOutgoing: false,
+        },
+      ]
+
+      // Forward, incomplete (complete=false)
+      roomStore.getState().mergeRoomMAMMessages(roomJid, mamMessages, {}, false, 'forward')
+
+      const mamState = roomStore.getState().getRoomMAMQueryState(roomJid)
+      expect(mamState.isCaughtUpToLive).toBe(false)
+      expect(mamState.forwardGapTimestamp).toBe(new Date('2024-01-15T12:00:00Z').getTime())
+    })
+
+    it('should clear forwardGapTimestamp when forward catch-up completes', () => {
+      const mamMessages: RoomMessage[] = [
+        {
+          type: 'groupchat',
+          id: 'mam-1',
+          roomJid,
+          from: `${roomJid}/alice`,
+          nick: 'alice',
+          body: 'Message',
+          timestamp: new Date('2024-01-15T14:00:00Z'),
+          isOutgoing: false,
+        },
+      ]
+
+      // First: incomplete sets gap
+      roomStore.getState().mergeRoomMAMMessages(roomJid, mamMessages, {}, false, 'forward')
+      expect(roomStore.getState().getRoomMAMQueryState(roomJid).forwardGapTimestamp).toBeDefined()
+
+      // Second: complete clears gap
+      roomStore.getState().mergeRoomMAMMessages(roomJid, mamMessages, {}, true, 'forward')
+      const mamState = roomStore.getState().getRoomMAMQueryState(roomJid)
+      expect(mamState.isCaughtUpToLive).toBe(true)
+      expect(mamState.forwardGapTimestamp).toBeUndefined()
+    })
+
+    it('should not set forwardGapTimestamp for empty MAM results', () => {
+      // Forward, incomplete, but no messages — no gap timestamp to compute
+      roomStore.getState().mergeRoomMAMMessages(roomJid, [], {}, false, 'forward')
+
+      const mamState = roomStore.getState().getRoomMAMQueryState(roomJid)
+      expect(mamState.isCaughtUpToLive).toBe(false)
+      expect(mamState.forwardGapTimestamp).toBeUndefined()
+    })
+
+    it('should not set forwardGapTimestamp for backward queries', () => {
+      const mamMessages: RoomMessage[] = [
+        {
+          type: 'groupchat',
+          id: 'mam-1',
+          roomJid,
+          from: `${roomJid}/alice`,
+          nick: 'alice',
+          body: 'Old message',
+          timestamp: new Date('2024-01-10T10:00:00Z'),
+          isOutgoing: false,
+        },
+      ]
+
+      roomStore.getState().mergeRoomMAMMessages(roomJid, mamMessages, { first: 'mam-1' }, false, 'backward')
+
+      const mamState = roomStore.getState().getRoomMAMQueryState(roomJid)
+      expect(mamState.forwardGapTimestamp).toBeUndefined()
+    })
+
+    it('should use the newest message timestamp for gap position', () => {
+      const mamMessages: RoomMessage[] = [
+        {
+          type: 'groupchat',
+          id: 'mam-1',
+          roomJid,
+          from: `${roomJid}/alice`,
+          nick: 'alice',
+          body: 'Earlier',
+          timestamp: new Date('2024-01-15T08:00:00Z'),
+          isOutgoing: false,
+        },
+        {
+          type: 'groupchat',
+          id: 'mam-2',
+          roomJid,
+          from: `${roomJid}/bob`,
+          nick: 'bob',
+          body: 'Latest',
+          timestamp: new Date('2024-01-15T16:00:00Z'),
+          isOutgoing: false,
+        },
+        {
+          type: 'groupchat',
+          id: 'mam-3',
+          roomJid,
+          from: `${roomJid}/carol`,
+          nick: 'carol',
+          body: 'Middle',
+          timestamp: new Date('2024-01-15T12:00:00Z'),
+          isOutgoing: false,
+        },
+      ]
+
+      roomStore.getState().mergeRoomMAMMessages(roomJid, mamMessages, {}, false, 'forward')
+
+      const mamState = roomStore.getState().getRoomMAMQueryState(roomJid)
+      // Should pick the newest timestamp (16:00), not the last in array order
+      expect(mamState.forwardGapTimestamp).toBe(new Date('2024-01-15T16:00:00Z').getTime())
+    })
+  })
+
   describe('updateLastMessagePreview', () => {
     const roomJid = 'room@conference.example.com'
 

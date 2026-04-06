@@ -678,6 +678,124 @@ describe('MAM Background Catch-Up', () => {
     })
   })
 
+  describe('forceCatchUpAllRooms', () => {
+    it('should do nothing when there are no joined rooms', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([])
+      mockXmppClientInstance.iqCaller.request.mockClear()
+
+      await xmppClient.mam.forceCatchUpAllRooms()
+
+      expect(emitSDKSpy).not.toHaveBeenCalledWith(
+        'console:event',
+        expect.objectContaining({
+          message: expect.stringContaining('Force catch-up for'),
+        })
+      )
+    })
+
+    it('should query all MAM-enabled rooms with a fixed start date', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
+        { jid: 'room1@conference.example.com', supportsMAM: true, isQuickChat: false, joined: true, messages: [] },
+        { jid: 'room2@conference.example.com', supportsMAM: true, isQuickChat: false, joined: true, messages: [] },
+      ] as any)
+
+      vi.mocked(mockStores.room.getRoom).mockReturnValue({ nickname: 'me' } as any)
+
+      const queriedRooms: string[] = []
+      mockXmppClientInstance.iqCaller.request.mockImplementation(async (iq: any) => {
+        if (iq?.attrs?.to) queriedRooms.push(iq.attrs.to)
+        return createFinResponse()
+      })
+
+      const catchUpPromise = xmppClient.mam.forceCatchUpAllRooms()
+      await waitForAsyncOps(30, 100)
+      await catchUpPromise
+
+      expect(queriedRooms).toContain('room1@conference.example.com')
+      expect(queriedRooms).toContain('room2@conference.example.com')
+
+      // Should use forward direction (start filter = fixed date, not from cache)
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:mam-messages', expect.objectContaining({
+        direction: 'forward',
+      }))
+    })
+
+    it('should skip rooms without MAM support and Quick Chats', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
+        { jid: 'mam-room@conference.example.com', supportsMAM: true, isQuickChat: false, joined: true, messages: [] },
+        { jid: 'no-mam@conference.example.com', supportsMAM: false, isQuickChat: false, joined: true, messages: [] },
+        { jid: 'quick@conference.example.com', supportsMAM: true, isQuickChat: true, joined: true, messages: [] },
+      ] as any)
+
+      vi.mocked(mockStores.room.getRoom).mockReturnValue({ nickname: 'me' } as any)
+
+      const queriedRooms: string[] = []
+      mockXmppClientInstance.iqCaller.request.mockImplementation(async (iq: any) => {
+        if (iq?.attrs?.to) queriedRooms.push(iq.attrs.to)
+        return createFinResponse()
+      })
+
+      const catchUpPromise = xmppClient.mam.forceCatchUpAllRooms()
+      await waitForAsyncOps(30, 100)
+      await catchUpPromise
+
+      expect(queriedRooms).toContain('mam-room@conference.example.com')
+      expect(queriedRooms).not.toContain('no-mam@conference.example.com')
+      expect(queriedRooms).not.toContain('quick@conference.example.com')
+    })
+
+    it('should handle individual room errors gracefully', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
+        { jid: 'room1@conference.example.com', supportsMAM: true, isQuickChat: false, joined: true, messages: [] },
+        { jid: 'room2@conference.example.com', supportsMAM: true, isQuickChat: false, joined: true, messages: [] },
+      ] as any)
+
+      vi.mocked(mockStores.room.getRoom).mockReturnValue({ nickname: 'me' } as any)
+
+      let callCount = 0
+      mockXmppClientInstance.iqCaller.request.mockImplementation(async () => {
+        callCount++
+        if (callCount === 1) throw new Error('Network error')
+        return createFinResponse()
+      })
+
+      const catchUpPromise = xmppClient.mam.forceCatchUpAllRooms()
+      await waitForAsyncOps(30, 100)
+      await expect(catchUpPromise).resolves.not.toThrow()
+
+      // Both rooms should have been attempted
+      expect(callCount).toBeGreaterThanOrEqual(2)
+    })
+
+    it('should emit console event with room count and days', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
+        { jid: 'room1@conference.example.com', supportsMAM: true, isQuickChat: false, joined: true, messages: [] },
+      ] as any)
+
+      vi.mocked(mockStores.room.getRoom).mockReturnValue({ nickname: 'me' } as any)
+      mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse())
+
+      const catchUpPromise = xmppClient.mam.forceCatchUpAllRooms({ days: 3 })
+      await waitForAsyncOps(20, 100)
+      await catchUpPromise
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('console:event', {
+        message: 'Force catch-up for 1 room(s) from last 3 days',
+        category: 'sm',
+      })
+    })
+  })
+
   describe('discoverNewConversationsFromRoster', () => {
     it('should do nothing when roster is empty', async () => {
       await connectClient()

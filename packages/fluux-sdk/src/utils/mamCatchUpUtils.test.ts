@@ -8,6 +8,7 @@ import {
   MAM_BACKGROUND_CONCURRENCY,
   MAM_CACHE_LOAD_LIMIT,
   MAM_ROOM_CATCHUP_DELAY_MS,
+  MAM_ROOM_FORWARD_MAX_PAGES,
 } from './mamCatchUpUtils'
 
 // ============================================================================
@@ -125,5 +126,6 @@ describe('MAM constants', () => {
     expect(MAM_BACKGROUND_CONCURRENCY).toBe(2)
     expect(MAM_CACHE_LOAD_LIMIT).toBe(100)
     expect(MAM_ROOM_CATCHUP_DELAY_MS).toBe(10_000)
+    expect(MAM_ROOM_FORWARD_MAX_PAGES).toBe(50)
   })
 })
