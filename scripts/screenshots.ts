@@ -378,7 +378,7 @@ async function captureViewBuffer(
   return Buffer.from(await page.screenshot({ type: 'png' }))
 }
 
-test('22 — Blog Hero v0.15.0', async ({ page }) => {
+test('22 — Blog Hero v0.15', async ({ page }) => {
   // Capture 3 light-themed screenshots for the hero image
   const chatBuf = await captureViewBuffer(page, async (p) => {
     await p.emulateMedia({ colorScheme: 'light' })
@@ -461,7 +461,7 @@ test('22 — Blog Hero v0.15.0', async ({ page }) => {
 
     ctx.fillStyle = '#5865f2'
     ctx.font = '600 38px Inter, system-ui, sans-serif'
-    ctx.fillText('v0.15.0', centerX, headerY + logoSize + 76)
+    ctx.fillText('v0.15', centerX, headerY + logoSize + 76)
 
     ctx.fillStyle = '#6d6f78'
     ctx.font = '500 26px Inter, system-ui, sans-serif'
@@ -576,7 +576,7 @@ test('22 — Blog Hero v0.15.0', async ({ page }) => {
   }, buffers)
 
   writeFileSync(
-    `${OUTPUT_DIR}/blog-hero-0.15.0.png`,
+    `${OUTPUT_DIR}/blog-hero-0.15.png`,
     Buffer.from(compositeB64, 'base64')
   )
 })
