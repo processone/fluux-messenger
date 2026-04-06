@@ -284,10 +284,10 @@ describe('usePlatformState', () => {
       })
       vi.clearAllMocks()
 
-      // Simulate macOS sleep: jump system time forward by 70s, then fire the
-      // next interval tick. This creates a gap of 70s between the last heartbeat
-      // check and now, exceeding the 60s SLEEP_THRESHOLD_MS.
-      vi.setSystemTime(new Date(startTime + 10_000 + 70_000))
+      // Simulate macOS sleep: jump system time forward by 200s, then fire the
+      // next interval tick. This creates a gap of 200s between the last heartbeat
+      // check and now, exceeding the 180s SLEEP_THRESHOLD_MS.
+      vi.setSystemTime(new Date(startTime + 10_000 + 200_000))
       await act(async () => {
         vi.advanceTimersByTime(10_000)
         await Promise.resolve()
@@ -309,8 +309,8 @@ describe('usePlatformState', () => {
       })
       vi.clearAllMocks()
 
-      // Simulate sleep gap (70s exceeds SLEEP_THRESHOLD_MS)
-      vi.setSystemTime(new Date(startTime + 10_000 + 70_000))
+      // Simulate sleep gap (200s exceeds SLEEP_THRESHOLD_MS)
+      vi.setSystemTime(new Date(startTime + 10_000 + 200_000))
       await act(async () => {
         vi.advanceTimersByTime(10_000)
         await Promise.resolve()

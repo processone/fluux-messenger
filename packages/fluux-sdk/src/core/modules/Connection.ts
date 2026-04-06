@@ -159,8 +159,13 @@ export class Connection extends BaseModule {
   // fully functional (DNS, TLS, Wi-Fi re-association), causing SASL timeouts.
   private lastWakeTimestamp = 0
 
+  // Timestamp when the connection was lost (set in handleDeadSocket).
+  // Used to compute disconnect duration and pass it to XMPPClient so SM
+  // resumption can skip heavy room refresh for short disconnects.
+  private disconnectedAtTimestamp = 0
+
   // Callback for post-connection setup (roster, presence, carbons, etc.)
-  private onConnectionSuccess?: (isResumption: boolean, previouslyJoinedRooms?: Array<{ jid: string; nickname: string; password?: string; autojoin?: boolean }>) => Promise<void>
+  private onConnectionSuccess?: (isResumption: boolean, previouslyJoinedRooms?: Array<{ jid: string; nickname: string; password?: string; autojoin?: boolean }>, disconnectDurationMs?: number) => Promise<void>
 
   // Callback for disconnect notification
   private onDisconnect?: () => void
@@ -376,7 +381,7 @@ export class Connection extends BaseModule {
    * Set callback for post-connection success handling.
    * Called after connection succeeds (both initial connect and reconnect).
    */
-  setConnectionSuccessHandler(handler: (isResumption: boolean, previouslyJoinedRooms?: Array<{ jid: string; nickname: string; password?: string; autojoin?: boolean }>) => Promise<void>): void {
+  setConnectionSuccessHandler(handler: (isResumption: boolean, previouslyJoinedRooms?: Array<{ jid: string; nickname: string; password?: string; autojoin?: boolean }>, disconnectDurationMs?: number) => Promise<void>): void {
     this.onConnectionSuccess = handler
   }
 
@@ -1041,6 +1046,11 @@ export class Connection extends BaseModule {
     // in progress. Must be set BEFORE cleanupClient/triggerReconnect so the
     // EventEmitter snapshot handler sees it and skips its own onError/reject.
     this.deadSocketRecoveryInProgress = true
+
+    // Record when the connection was lost so SM resumption can measure the gap.
+    if (this.disconnectedAtTimestamp === 0) {
+      this.disconnectedAtTimestamp = Date.now()
+    }
 
     // If we're not already reconnecting, transition now.
     // When VERIFY_FAILED already moved the machine to reconnecting, we still need
@@ -1892,9 +1902,15 @@ export class Connection extends BaseModule {
     // Emit appropriate event
     this.emit(isResumption ? 'resumed' : 'online')
 
+    // Compute how long we were disconnected (0 means first connect, not reconnect)
+    const disconnectDurationMs = this.disconnectedAtTimestamp > 0
+      ? Date.now() - this.disconnectedAtTimestamp
+      : undefined
+    this.disconnectedAtTimestamp = 0
+
     // Call registered post-connection handler (if set)
     if (this.onConnectionSuccess) {
-      await this.onConnectionSuccess(isResumption, previouslyJoinedRooms)
+      await this.onConnectionSuccess(isResumption, previouslyJoinedRooms, disconnectDurationMs)
     }
   }
 

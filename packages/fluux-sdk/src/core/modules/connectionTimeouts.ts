@@ -28,12 +28,14 @@ export const RECONNECT_ATTEMPT_TIMEOUT_MS = 30_000
 export const VERIFY_CONNECTION_TIMEOUT_MS = 10_000
 
 /**
- * Shorter timeout for post-sleep verification.
- * After sleep, the socket is almost certainly dead — waiting 10s for a
- * response that will never come feels like a freeze. Use a shorter timeout
- * so we transition to reconnecting quickly.
+ * Timeout for post-sleep connection verification.
+ * After sleep, the OS network stack (DNS, TLS session cache, Wi-Fi
+ * re-association) may need several seconds to become fully functional.
+ * A 3s timeout declares healthy-but-slow connections dead; 15s gives the
+ * network time to recover while dead sockets still fail immediately via
+ * TCP RST. Matches the SASL and fresh-session IQ timeouts.
  */
-export const WAKE_VERIFY_TIMEOUT_MS = 3_000
+export const WAKE_VERIFY_TIMEOUT_MS = 15_000
 
 /**
  * Timeout for the desktop direct-WebSocket pre-check when proxy is available.

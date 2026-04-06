@@ -863,7 +863,7 @@ describe('XMPPClient', () => {
       expect(refreshSpy).toHaveBeenCalledWith(rooms)
     })
 
-    it('should run MAM catch-up after presence refresh on SM resumption', async () => {
+    it('should run MAM catch-up on SM resumption when disconnect duration is unknown', async () => {
       const mockClientWithSM = createMockXmppClientWithSM('sm-id-catchup')
       mockClientFactory._setInstance(mockClientWithSM)
 
@@ -873,6 +873,7 @@ describe('XMPPClient', () => {
 
       vi.spyOn(newXmppClient.muc, 'refreshPresenceInRooms').mockResolvedValue()
       const catchUpSpy = vi.spyOn(newXmppClient.mam, 'catchUpAllRooms').mockResolvedValue()
+      const bookmarksSpy = vi.spyOn(newXmppClient.muc, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
 
       const connectPromise = newXmppClient.connect({
         jid: 'user@example.com',
@@ -894,8 +895,96 @@ describe('XMPPClient', () => {
 
       await connectPromise
 
-      // Should trigger MAM catch-up to verify no missed messages
+      // Unknown disconnect duration → full refresh (safe default)
       expect(catchUpSpy).toHaveBeenCalledWith({ concurrency: 2 })
+      expect(bookmarksSpy).toHaveBeenCalled()
+    })
+
+    it('should skip MAM catch-up on SM resumption for short disconnects', async () => {
+      const mockClientWithSM = createMockXmppClientWithSM('sm-id-short')
+      mockClientFactory._setInstance(mockClientWithSM)
+
+      const stores = createMockStores()
+      const newXmppClient = new XMPPClient({ debug: false })
+      newXmppClient.bindStores(stores)
+
+      vi.spyOn(newXmppClient.muc, 'refreshPresenceInRooms').mockResolvedValue()
+      const catchUpSpy = vi.spyOn(newXmppClient.mam, 'catchUpAllRooms').mockResolvedValue()
+      const bookmarksSpy = vi.spyOn(newXmppClient.muc, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
+
+      // Simulate a reconnect with short disconnect: set the disconnectedAtTimestamp
+      // on the connection module, then connect triggers handleConnectionSuccess
+      // which computes the duration.
+      // We test this by setting the internal timestamp 30s ago.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(newXmppClient.connection as any).disconnectedAtTimestamp = Date.now() - 30_000
+
+      const connectPromise = newXmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        smState: { id: 'sm-id-short', inbound: 5 },
+        skipDiscovery: true,
+        previouslyJoinedRooms: [
+          { jid: 'room1@conference.example.com', nickname: 'testuser' },
+        ],
+      })
+
+      const resumedNonza = createMockElement('resumed', {
+        xmlns: 'urn:xmpp:sm:3',
+        previd: 'sm-id-short',
+        h: '5',
+      })
+      mockClientWithSM._emit('nonza', resumedNonza)
+
+      await connectPromise
+
+      // Short disconnect (30s < 120s threshold) → skip MAM catch-up and bookmarks
+      expect(catchUpSpy).not.toHaveBeenCalled()
+      expect(bookmarksSpy).not.toHaveBeenCalled()
+      // But presence refresh should still happen
+      expect(newXmppClient.muc.refreshPresenceInRooms).toHaveBeenCalled()
+    })
+
+    it('should run MAM catch-up on SM resumption for long disconnects', async () => {
+      const mockClientWithSM = createMockXmppClientWithSM('sm-id-long')
+      mockClientFactory._setInstance(mockClientWithSM)
+
+      const stores = createMockStores()
+      const newXmppClient = new XMPPClient({ debug: false })
+      newXmppClient.bindStores(stores)
+
+      vi.spyOn(newXmppClient.muc, 'refreshPresenceInRooms').mockResolvedValue()
+      const catchUpSpy = vi.spyOn(newXmppClient.mam, 'catchUpAllRooms').mockResolvedValue()
+      const bookmarksSpy = vi.spyOn(newXmppClient.muc, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
+
+      // Simulate a reconnect with long disconnect (5 minutes ago)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(newXmppClient.connection as any).disconnectedAtTimestamp = Date.now() - 300_000
+
+      const connectPromise = newXmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        smState: { id: 'sm-id-long', inbound: 5 },
+        skipDiscovery: true,
+        previouslyJoinedRooms: [
+          { jid: 'room1@conference.example.com', nickname: 'testuser' },
+        ],
+      })
+
+      const resumedNonza = createMockElement('resumed', {
+        xmlns: 'urn:xmpp:sm:3',
+        previd: 'sm-id-long',
+        h: '5',
+      })
+      mockClientWithSM._emit('nonza', resumedNonza)
+
+      await connectPromise
+
+      // Long disconnect (300s > 120s threshold) → full refresh
+      expect(catchUpSpy).toHaveBeenCalledWith({ concurrency: 2 })
+      expect(bookmarksSpy).toHaveBeenCalled()
     })
 
     it('should detect new session when SM resume fails (online event fires)', async () => {

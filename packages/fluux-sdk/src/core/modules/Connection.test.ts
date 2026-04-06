@@ -2824,8 +2824,8 @@ describe('XMPPClient Connection', () => {
 
       const notifyPromise = xmppClient.notifySystemState('awake')
 
-      // Verification timeout is 10s by default
-      await vi.advanceTimersByTimeAsync(10_000)
+      // Wake verification timeout is 15s (WAKE_VERIFY_TIMEOUT_MS)
+      await vi.advanceTimersByTimeAsync(15_000)
       await notifyPromise
 
       // Timeout should transition to reconnecting and arm backoff timer

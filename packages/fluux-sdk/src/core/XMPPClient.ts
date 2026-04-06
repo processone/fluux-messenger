@@ -599,8 +599,8 @@ export class XMPPClient {
     this.lastActivity = new LastActivity(moduleDeps)
 
     // Set up post-connection handler
-    this.connection.setConnectionSuccessHandler(async (isResumption, previouslyJoinedRooms) => {
-      await this.handleConnectionSuccess(isResumption, previouslyJoinedRooms)
+    this.connection.setConnectionSuccessHandler(async (isResumption, previouslyJoinedRooms, disconnectDurationMs) => {
+      await this.handleConnectionSuccess(isResumption, previouslyJoinedRooms, disconnectDurationMs)
     })
 
     // Set up disconnect handler to transition presence machine
@@ -1393,7 +1393,8 @@ export class XMPPClient {
    */
   private async handleConnectionSuccess(
     isResumption: boolean,
-    previouslyJoinedRooms?: Array<{ jid: string; nickname: string; password?: string; autojoin?: boolean }>
+    previouslyJoinedRooms?: Array<{ jid: string; nickname: string; password?: string; autojoin?: boolean }>,
+    disconnectDurationMs?: number
   ): Promise<void> {
     // Increment session generation to invalidate any in-progress handleFreshSession/handleSmResumption.
     // If the system sleeps during an await below and a reconnect fires, the new call increments
@@ -1410,7 +1411,7 @@ export class XMPPClient {
     this.isSmResumedSession = isResumption
 
     if (isResumption) {
-      await this.handleSmResumption(generation, previouslyJoinedRooms)
+      await this.handleSmResumption(generation, previouslyJoinedRooms, disconnectDurationMs)
     } else {
       await this.handleFreshSession(previouslyJoinedRooms, generation)
     }
@@ -1462,7 +1463,8 @@ export class XMPPClient {
    */
   private async handleSmResumption(
     generation?: number,
-    previouslyJoinedRooms?: Array<{ jid: string; nickname: string; password?: string; autojoin?: boolean }>
+    previouslyJoinedRooms?: Array<{ jid: string; nickname: string; password?: string; autojoin?: boolean }>,
+    disconnectDurationMs?: number
   ): Promise<void> {
     const gen = generation ?? this.sessionGeneration
 
@@ -1533,24 +1535,48 @@ export class XMPPClient {
       await this.muc.refreshPresenceInRooms(previouslyJoinedRooms)
       if (this.isSessionSuperseded(gen, 'SM resumption aborted after room presence refresh')) return
 
-      // Verify we haven't missed any room messages during the disconnect.
-      // SM replay covers stanzas the server queued, but if the disconnect was
-      // long enough for messages to fall outside the SM window, a forward MAM
-      // query from the newest cached message will catch them.
-      this.mam.catchUpAllRooms({ concurrency: 2 }).catch((err) => {
-        console.error('[XMPPClient] Room catch-up after SM resumption failed:', err)
-      })
+      // For short disconnects (< 2 min), SM replay already delivered all queued
+      // stanzas — skip the expensive room MAM catch-up and bookmark fetch.
+      // For longer or unknown-duration disconnects, run the full refresh as a
+      // safety net in case messages fell outside the SM queue window.
+      const SM_SHORT_DISCONNECT_MS = 120_000
+      const isShortDisconnect = disconnectDurationMs != null
+        && disconnectDurationMs < SM_SHORT_DISCONNECT_MS
 
-      // Fetch bookmarks to restore room names and autojoin state.
-      // Also join any newly bookmarked rooms not in previouslyJoinedRooms.
-      this.muc.fetchBookmarks(FRESH_SESSION_IQ_TIMEOUT_MS).then(({ roomsToAutojoin }) => {
-        if (this.isSessionStale(gen)) return
-        for (const room of roomsToAutojoin) {
-          if (!this.stores?.room.getRoom(room.jid)?.joined) {
-            this.muc.joinRoom(room.jid, room.nick, { password: room.password }).catch(() => {})
+      if (isShortDisconnect) {
+        const sec = Math.round(disconnectDurationMs / 1000)
+        logInfo(`SM resumption: short disconnect (${sec}s) — skipping room MAM catch-up`)
+        this.stores?.console.addEvent(
+          `SM resumption: short disconnect (${sec}s) — skipping room MAM catch-up and bookmark fetch`,
+          'sm'
+        )
+      } else {
+        const sec = disconnectDurationMs != null ? Math.round(disconnectDurationMs / 1000) : 'unknown'
+        logInfo(`SM resumption: disconnect ${sec}s — running room MAM catch-up`)
+        this.stores?.console.addEvent(
+          `SM resumption: disconnect ${sec}s — running room MAM catch-up and bookmark fetch`,
+          'sm'
+        )
+
+        // Verify we haven't missed any room messages during the disconnect.
+        // SM replay covers stanzas the server queued, but if the disconnect was
+        // long enough for messages to fall outside the SM window, a forward MAM
+        // query from the newest cached message will catch them.
+        this.mam.catchUpAllRooms({ concurrency: 2 }).catch((err) => {
+          console.error('[XMPPClient] Room catch-up after SM resumption failed:', err)
+        })
+
+        // Fetch bookmarks to restore room names and autojoin state.
+        // Also join any newly bookmarked rooms not in previouslyJoinedRooms.
+        this.muc.fetchBookmarks(FRESH_SESSION_IQ_TIMEOUT_MS).then(({ roomsToAutojoin }) => {
+          if (this.isSessionStale(gen)) return
+          for (const room of roomsToAutojoin) {
+            if (!this.stores?.room.getRoom(room.jid)?.joined) {
+              this.muc.joinRoom(room.jid, room.nick, { password: room.password }).catch(() => {})
+            }
           }
-        }
-      }).catch(() => {})
+        }).catch(() => {})
+      }
     }
   }
 

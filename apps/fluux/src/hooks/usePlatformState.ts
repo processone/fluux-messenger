@@ -14,14 +14,17 @@ const ACTIVITY_THROTTLE_MS = 5000
 const HEARTBEAT_INTERVAL_MS = 10_000
 
 /** Minimum time gap to consider as system sleep (ms).
- * Set to 60s so that minor event-loop delays (React renders, IQ processing)
- * don't trigger false wake detections.  The Tauri system-did-wake event
+ * Set to 3 minutes because macOS routinely throttles WebKit JS timers when
+ * the app is on another virtual desktop or behind other windows, producing
+ * gaps of 60–120s that are NOT real sleep.  The Tauri system-did-wake event
  * handles real OS-level sleep/wake with zero delay; this heartbeat-based
  * detection is only a fallback for web mode. */
-const SLEEP_THRESHOLD_MS = 60_000
+const SLEEP_THRESHOLD_MS = 180_000
 
-/** Minimum time the page must be hidden before signaling SDK (ms). */
-const MIN_HIDDEN_TIME_MS = 60_000
+/** Minimum time the page must be hidden before signaling SDK (ms).
+ * Matches SLEEP_THRESHOLD_MS — switching virtual desktops or apps for
+ * a couple of minutes is normal macOS workflow, not worth reconnecting for. */
+const MIN_HIDDEN_TIME_MS = 180_000
 
 /** Debounce window to prevent duplicate wake handling (ms). */
 const WAKE_DEBOUNCE_MS = 2000
