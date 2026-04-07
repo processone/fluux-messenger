@@ -28,29 +28,6 @@ body:
     validations:
       required: false
 
-  - type: dropdown
-    id: platform
-    attributes:
-      label: Relevant platform(s)
-      description: Which platform(s) would benefit from this feature?
-      multiple: true
-      options:
-        - Windows
-        - macOS
-        - Linux
-        - Web
-        - All platforms
-    validations:
-      required: true
-
-  - type: textarea
-    id: alternatives
-    attributes:
-      label: Alternatives considered
-      description: Have you found any workarounds or thought about alternative approaches?
-    validations:
-      required: false
-
   - type: textarea
     id: context
     attributes:
