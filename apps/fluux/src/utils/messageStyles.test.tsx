@@ -218,6 +218,34 @@ describe('renderStyledMessage', () => {
       const container = renderText('x > y means greater than')
       expect(container.querySelector('blockquote')).toBeFalsy()
     })
+
+    it('renders nested blockquote with >> syntax', () => {
+      const container = renderText('>> Deep quote\n> Shallow quote')
+      const outer = container.querySelector('blockquote.blockquote-decorated')
+      expect(outer).toBeTruthy()
+      const nested = outer?.querySelector('blockquote.blockquote-nested')
+      expect(nested).toBeTruthy()
+      expect(nested?.textContent).toContain('Deep quote')
+      expect(outer?.textContent).toContain('Shallow quote')
+    })
+
+    it('renders mixed depth quotes with proper nesting', () => {
+      const container = renderText('> Top level\n>> Nested level\n> Back to top')
+      const outer = container.querySelector('blockquote.blockquote-decorated')
+      expect(outer).toBeTruthy()
+      expect(outer?.textContent).toContain('Top level')
+      expect(outer?.textContent).toContain('Nested level')
+      expect(outer?.textContent).toContain('Back to top')
+      const nested = outer?.querySelector('blockquote.blockquote-nested')
+      expect(nested).toBeTruthy()
+      expect(nested?.textContent).toBe('Nested level')
+    })
+
+    it('uses blockquote-decorated class on outer quote', () => {
+      const container = renderText('> Simple quote')
+      const quote = container.querySelector('blockquote')
+      expect(quote?.classList.contains('blockquote-decorated')).toBe(true)
+    })
   })
 
   describe('unordered lists (-, +, *)', () => {

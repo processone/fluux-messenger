@@ -89,6 +89,16 @@ export const JAMES_MESSAGES: Message[] = [
     },
   },
   {
+    type: 'chat', id: 'demo-james-7d', from: conv,
+    body: 'From the XEP-0198 spec:\n\n> When a session is resumed, the server MUST replay any stanzas\n> that were not handled by the client before the disconnect.\n\nSo we should be safe with our current approach.',
+    timestamp: hoursAgo(2.1), isOutgoing: false, conversationId: conv,
+  },
+  {
+    type: 'chat', id: 'demo-james-7e', from: SELF_JID,
+    body: 'Right, and building on that:\n\n>> When a session is resumed, the server MUST replay any stanzas\n> This means our queue should be empty after resume\n\nExactly what I observed in testing.',
+    timestamp: hoursAgo(2.05), isOutgoing: true, conversationId: conv,
+  },
+  {
     type: 'chat', id: 'demo-james-8', from: conv, body: 'By the way, I found a bug in the error handling — when the server returns a 503, we retry immediately instead of backing off',
     timestamp: hoursAgo(2), isOutgoing: false, conversationId: conv,
   },

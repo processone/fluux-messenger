@@ -420,6 +420,44 @@ html, body {
   -webkit-overflow-scrolling: touch;
 }
 
+/* Blockquote with decorative quotation marks — distinguishes quotes from reply indicators */
+.blockquote-decorated {
+  position: relative;
+  padding-left: 1.25rem;
+  padding-right: 0.5rem;
+  margin-block: 0.125rem;
+}
+.blockquote-decorated::before {
+  content: '\201C';
+  position: absolute;
+  left: 0;
+  top: -0.15rem;
+  font-size: 1.75rem;
+  line-height: 1;
+  color: var(--fluux-brand);
+  opacity: 0.6;
+  font-family: Georgia, 'Times New Roman', serif;
+}
+.blockquote-decorated::after {
+  content: '\201D';
+  font-size: 1.75rem;
+  line-height: 0;
+  color: var(--fluux-brand);
+  opacity: 0.6;
+  font-family: Georgia, 'Times New Roman', serif;
+  vertical-align: -0.4rem;
+  margin-left: 0.1rem;
+}
+/* Nested blockquote level — indented with a thin left border, no extra quote marks */
+.blockquote-nested {
+  position: relative;
+  padding-left: 0.625rem;
+  margin-top: 0.125rem;
+  margin-bottom: 0.125rem;
+  border-left: 2px solid var(--fluux-brand);
+  opacity: 0.85;
+}
+
 /* Remove default focus outline */
 *:focus {
   outline: none;

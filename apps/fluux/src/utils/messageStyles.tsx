@@ -648,28 +648,59 @@ function renderTextBlock(
 ): React.ReactNode[] {
   const lines = text.split('\n')
   const result: React.ReactNode[] = []
-  let quoteBuffer: { depth: number; lines: string[]; lineOffsets: number[] } | null = null
+  let quoteBuffer: { depth: number; content: string; offset: number }[] | null = null
   let ulBuffer: { lines: string[]; lineOffsets: number[] } | null = null
   let olBuffer: { items: { number: number; content: string; offset: number }[] } | null = null
   let index = startIndex
   let currentOffset = textOffset
 
+  const renderQuoteBlock = (
+    entries: { depth: number; content: string; offset: number }[],
+    currentDepth: number,
+    baseIdx: number
+  ): React.ReactNode => {
+    const children: React.ReactNode[] = []
+    let i = 0
+
+    while (i < entries.length) {
+      const entry = entries[i]
+      if (entry.depth <= currentDepth) {
+        // Render this line at the current depth
+        // Add <br/> between consecutive same-depth lines
+        if (children.length > 0 && i > 0 && entries[i - 1].depth <= currentDepth) {
+          children.push(<br key={`br-${baseIdx + i}`} />)
+        }
+        children.push(
+          <React.Fragment key={`line-${baseIdx + i}`}>
+            {renderInline(entry.content, baseIdx + i, mentionRanges, entry.offset, isDarkMode, disableMentionFallback)}
+          </React.Fragment>
+        )
+        i++
+      } else {
+        // Collect consecutive deeper lines and render as nested blockquote
+        const nestedStart = i
+        while (i < entries.length && entries[i].depth > currentDepth) {
+          i++
+        }
+        children.push(renderQuoteBlock(entries.slice(nestedStart, i), currentDepth + 1, baseIdx + nestedStart))
+      }
+    }
+
+    const isOutermost = currentDepth === 1
+    return (
+      <blockquote
+        key={`quote-${baseIdx}`}
+        className={isOutermost ? 'blockquote-decorated text-fluux-muted italic' : 'blockquote-nested text-fluux-muted italic'}
+      >
+        {children}
+      </blockquote>
+    )
+  }
+
   const flushQuote = () => {
-    if (quoteBuffer && quoteBuffer.lines.length > 0) {
-      result.push(
-        <blockquote
-          key={`quote-${index++}`}
-          className="border-l-4 border-fluux-brand pl-3 my-1 text-fluux-muted italic"
-        >
-          {quoteBuffer.lines.map((line, i) => (
-            <React.Fragment key={i}>
-              {renderInline(line, index + i, mentionRanges, quoteBuffer!.lineOffsets[i], isDarkMode, disableMentionFallback)}
-              {i < quoteBuffer!.lines.length - 1 && <br />}
-            </React.Fragment>
-          ))}
-        </blockquote>
-      )
-      index += quoteBuffer.lines.length
+    if (quoteBuffer && quoteBuffer.length > 0) {
+      result.push(renderQuoteBlock(quoteBuffer, 1, index))
+      index += quoteBuffer.length
       quoteBuffer = null
     }
   }
@@ -733,11 +764,10 @@ function renderTextBlock(
       flushOrderedList()
 
       if (!quoteBuffer) {
-        quoteBuffer = { depth: 1, lines: [], lineOffsets: [] }
+        quoteBuffer = []
       }
       const prefixLength = line.length - quoteCheck.content.length
-      quoteBuffer.lines.push(quoteCheck.content)
-      quoteBuffer.lineOffsets.push(lineOffset + prefixLength)
+      quoteBuffer.push({ depth: quoteCheck.depth, content: quoteCheck.content, offset: lineOffset + prefixLength })
       currentOffset += line.length + 1
       continue
     }
