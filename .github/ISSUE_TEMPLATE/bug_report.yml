@@ -1,0 +1,95 @@
+name: "🐛 Bug Report"
+description: Something isn't working? Let us know so we can fix it.
+labels: []
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug. What did you see? What went wrong?
+      placeholder: "When I try to send a message in a group chat, the app freezes and I have to restart it."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Help us reproduce the issue. Be as specific as you can!
+      placeholder: |
+        1. Open a group chat
+        2. Type a message
+        3. Click send
+        4. App freezes
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen instead?
+      placeholder: The message should be sent and appear in the chat.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Fluux Messenger version
+      description: Which version are you running?
+      placeholder: "e.g. v0.15.1"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      description: Where are you experiencing this issue?
+      multiple: true
+      options:
+        - Windows
+        - macOS 
+        - Linux 
+        - Web
+        - All platforms
+    validations:
+      required: true
+
+  - type: dropdown
+    id: package
+    attributes:
+      label: Installation type
+      description: How did you install Fluux Messenger?
+      multiple: false
+      options:
+        - ".exe (Windows)"
+        - ".msi (Windows)"
+        - ".dmg (macOS)"
+        - ".deb (Linux)"
+        - ".rpm (Linux)"
+        - ".flatpak (Linux)"
+        - ".tar.gz (Linux)"
+        - "Web (self-hosted)"
+        - "Web (demo.fluux.io)"
+        - Other
+    validations:
+      required: false
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or logs
+      description: If applicable, add screenshots or paste relevant logs here.
+      placeholder: Drag and drop images here, or paste error logs.
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Anything else that might help us understand the issue?
+    validations:
+      required: false

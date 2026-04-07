@@ -1,0 +1,60 @@
+name: "💡 Feature Request"
+description: Suggest an idea or improvement for Fluux Messenger.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: What would you like to see?
+      description: A clear description of the feature or improvement you're suggesting.
+      placeholder: "I'd love to be able to quote a specific part of a message when replying."
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Is this related to a frustration or a missing capability?
+      placeholder: "Right now, when I reply in a busy group chat, it's hard to tell which part of a message I'm responding to."
+    validations:
+      required: false
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How would you like this to work? Feel free to get creative!
+    validations:
+      required: false
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Relevant platform(s)
+      description: Which platform(s) would benefit from this feature?
+      multiple: true
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - Web
+        - All platforms
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Have you found any workarounds or thought about alternative approaches?
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Any mockups, screenshots, or links to relevant XEPs / specs that could help?
+    validations:
+      required: false
