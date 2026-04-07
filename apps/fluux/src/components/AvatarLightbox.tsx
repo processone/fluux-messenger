@@ -43,7 +43,7 @@ export function AvatarLightbox({ avatarUrl, identifier, name, fallbackColor, onC
       {/* Close button */}
       <button
         onClick={onClose}
-        className="absolute top-4 right-4 p-2 text-white/70 hover:text-white rounded-full hover:bg-white/10 transition-colors"
+        className="absolute top-4 end-4 p-2 text-white/70 hover:text-white rounded-full hover:bg-white/10 transition-colors"
       >
         <X className="w-6 h-6" />
       </button>

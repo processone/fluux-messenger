@@ -332,19 +332,19 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
       {/* Search */}
       <div className="px-4 py-2 border-b border-fluux-hover">
         <div className="relative">
-          <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-fluux-muted" />
+          <Search className="w-4 h-4 absolute start-2.5 top-1/2 -translate-y-1/2 text-fluux-muted" />
           <TextInput
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={activeTab === 'definitions' ? t('rooms.hatTitlePlaceholder') : t('rooms.hatJidPlaceholder')}
-            className="w-full pl-8 pr-8 py-1.5 text-sm bg-fluux-hover/50 rounded-lg border border-transparent
+            className="w-full ps-8 pe-8 py-1.5 text-sm bg-fluux-hover/50 rounded-lg border border-transparent
                        focus:border-fluux-brand/50 focus:outline-none text-fluux-text placeholder-fluux-muted"
           />
           {search && (
             <button
               onClick={() => setSearch('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-fluux-muted hover:text-fluux-text"
+              className="absolute end-2 top-1/2 -translate-y-1/2 text-fluux-muted hover:text-fluux-text"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -516,7 +516,7 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
                   background: 'linear-gradient(to right, hsl(0,70%,55%), hsl(60,70%,55%), hsl(120,70%,55%), hsl(180,70%,55%), hsl(240,70%,55%), hsl(300,70%,55%), hsl(360,70%,55%))',
                 }}
               />
-              <span className="text-xs text-fluux-muted w-8 text-right tabular-nums">
+              <span className="text-xs text-fluux-muted w-8 text-end tabular-nums">
                 {newHue || '—'}
               </span>
             </div>

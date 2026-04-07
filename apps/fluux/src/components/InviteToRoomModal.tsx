@@ -121,7 +121,7 @@ export function InviteToRoomModal({ isOpen, onClose, room }: InviteToRoomModalPr
                      disabled:opacity-50 disabled:cursor-not-allowed
                      flex items-center gap-2"
         >
-          <Send className="w-4 h-4" />
+          <Send className="rtl-mirror w-4 h-4" />
           {t('rooms.sendInvitations', { count: selectedContacts.length })}
         </button>
       </div>

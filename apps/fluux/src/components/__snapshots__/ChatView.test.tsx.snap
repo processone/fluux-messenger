@@ -108,7 +108,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                     class="relative flex-1 min-w-0 "
                   >
                     <div
-                      class="absolute -top-7 -right-2 p-4 z-20 select-none transition-all duration-200 ease-out opacity-0 translate-x-2 pointer-events-none"
+                      class="absolute -top-7 -end-2 p-4 z-20 select-none transition-all duration-200 ease-out opacity-0 translate-x-2 pointer-events-none"
                     >
                       <div
                         class="flex items-center bg-fluux-bg rounded-md shadow-lg border border-fluux-hover"
@@ -222,6 +222,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                     >
                       <div
                         class="text-fluux-text break-words whitespace-pre-wrap leading-[1.375]"
+                        dir="auto"
                       >
                         Hello there!
                       </div>
@@ -261,7 +262,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                     class="relative flex-1 min-w-0 "
                   >
                     <div
-                      class="absolute -top-7 -right-2 p-4 z-20 select-none transition-all duration-200 ease-out opacity-0 translate-x-2 pointer-events-none"
+                      class="absolute -top-7 -end-2 p-4 z-20 select-none transition-all duration-200 ease-out opacity-0 translate-x-2 pointer-events-none"
                     >
                       <div
                         class="flex items-center bg-fluux-bg rounded-md shadow-lg border border-fluux-hover"
@@ -374,6 +375,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                     >
                       <div
                         class="text-fluux-text break-words whitespace-pre-wrap leading-[1.375]"
+                        dir="auto"
                       >
                         Hi! How are you?
                       </div>
@@ -394,7 +396,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
         </div>
         <div
           aria-hidden="true"
-          class="absolute bottom-4 right-4 z-40 animate-[fab-spring-out_0.25s_ease-in_forwards] pointer-events-none"
+          class="absolute bottom-4 end-4 z-40 animate-[fab-spring-out_0.25s_ease-in_forwards] pointer-events-none"
         >
           <div
             class="inline-flex"
@@ -485,7 +487,7 @@ exports[`ChatView > Snapshots > should match snapshot with typing indicator 1`] 
         </div>
         <div
           aria-hidden="true"
-          class="absolute bottom-4 right-4 z-40 animate-[fab-spring-out_0.25s_ease-in_forwards] pointer-events-none"
+          class="absolute bottom-4 end-4 z-40 animate-[fab-spring-out_0.25s_ease-in_forwards] pointer-events-none"
         >
           <div
             class="inline-flex"

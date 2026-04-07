@@ -35,7 +35,7 @@ export function IconRailButton({
       >
         <Icon className="w-5 h-5" />
         {showBadge && (
-          <span className="absolute top-0 right-0 w-3 h-3 bg-fluux-red rounded-full border-2 border-fluux-sidebar" />
+          <span className="absolute top-0 end-0 w-3 h-3 bg-fluux-red rounded-full border-2 border-fluux-sidebar" />
         )}
       </button>
     </Tooltip>

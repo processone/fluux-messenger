@@ -46,7 +46,7 @@ export function PollClosedCard({ pollClosed, closedAt }: PollClosedCardProps) {
         <BarChart3 className="w-4 h-4 text-fluux-muted flex-shrink-0" />
         <button
           onClick={() => scrollToMessage(pollClosed.pollMessageId)}
-          className="font-medium text-fluux-text text-sm hover:text-fluux-brand transition-colors text-left truncate"
+          className="font-medium text-fluux-text text-sm hover:text-fluux-brand transition-colors text-start truncate"
           title={t('poll.scrollToOriginal', 'Scroll to original poll')}
         >
           {pollClosed.title}
@@ -97,7 +97,7 @@ export function PollClosedCard({ pollClosed, closedAt }: PollClosedCardProps) {
                 <span className={`text-sm ${isWinner ? 'font-medium text-fluux-text' : 'text-fluux-muted'}`}>
                   {percentage}%
                 </span>
-                <span className="text-xs text-fluux-muted ml-auto flex-shrink-0">({result.count})</span>
+                <span className="text-xs text-fluux-muted ms-auto flex-shrink-0">({result.count})</span>
               </div>
             </div>
           )

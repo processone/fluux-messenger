@@ -51,7 +51,7 @@ function ThemeCard({
   return (
     <button
       onClick={onSelect}
-      className={`relative flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all text-left
+      className={`relative flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all text-start
         ${isActive
           ? 'border-fluux-brand bg-fluux-brand/10'
           : 'border-fluux-hover bg-fluux-bg hover:border-fluux-muted'
@@ -76,7 +76,7 @@ function ThemeCard({
               onRemove()
             }
           }}
-          className="absolute -top-1.5 -right-1.5 p-0.5 rounded-full bg-fluux-surface text-fluux-muted hover:text-fluux-red hover:bg-fluux-hover transition-colors cursor-pointer"
+          className="absolute -top-1.5 -end-1.5 p-0.5 rounded-full bg-fluux-surface text-fluux-muted hover:text-fluux-red hover:bg-fluux-hover transition-colors cursor-pointer"
           title="Remove"
         >
           <Trash2 className="w-3 h-3" />
@@ -400,7 +400,7 @@ export function AppearanceSettings() {
                       }`}
                     >
                       <span
-                        className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                        className={`absolute top-0.5 start-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
                           snippet.enabled ? 'translate-x-4' : ''
                         }`}
                       />

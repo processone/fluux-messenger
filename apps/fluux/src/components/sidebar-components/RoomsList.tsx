@@ -409,7 +409,7 @@ const RoomItem = memo(function RoomItem({
           )}
           {/* Joining spinner */}
           {room.isJoining && (
-            <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-fluux-sidebar bg-fluux-sidebar flex items-center justify-center">
+            <div className="absolute -bottom-0.5 -end-0.5 w-3.5 h-3.5 rounded-full border-2 border-fluux-sidebar bg-fluux-sidebar flex items-center justify-center">
               <Loader2 className="w-2.5 h-2.5 text-fluux-brand animate-spin" />
             </div>
           )}
@@ -431,12 +431,12 @@ const RoomItem = memo(function RoomItem({
             )}
             {/* Timestamp */}
             {lastMessage && (
-              <span className="text-xs text-fluux-muted flex-shrink-0 ml-auto">
+              <span className="text-xs text-fluux-muted flex-shrink-0 ms-auto">
                 {formatConversationTime(lastMessage.timestamp, t, currentLang, timeFormat)}
               </span>
             )}
           </div>
-          <p className={`truncate text-xs opacity-75 ${draft ? 'italic' : ''}`}>
+          <p dir="auto" className={`truncate text-xs opacity-75 ${draft ? 'italic' : ''}`}>
             {draft ? (
               <>{t('conversations.draft')}: {draft}</>
             ) : room.isJoining ? (
@@ -475,7 +475,7 @@ const RoomItem = memo(function RoomItem({
           {!room.joined && (
             <button
               onClick={() => { menu.close(); onJoin() }}
-              className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
+              className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
             >
               <LogIn className="w-4 h-4" />
               <span>{t('rooms.joinRoom')}</span>
@@ -486,7 +486,7 @@ const RoomItem = memo(function RoomItem({
           {room.isBookmarked && (
             <button
               onClick={() => { menu.close(); onEditBookmark() }}
-              className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
+              className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
             >
               <Pencil className="w-4 h-4" />
               <span>{t('rooms.editBookmark')}</span>
@@ -497,7 +497,7 @@ const RoomItem = memo(function RoomItem({
           {room.isBookmarked && (
             <button
               onClick={() => { menu.close(); onToggleAutojoin() }}
-              className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
+              className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
             >
               {room.autojoin ? (
                 <>
@@ -522,7 +522,7 @@ const RoomItem = memo(function RoomItem({
           {room.joined && (
             <button
               onClick={() => { menu.close(); onLeave() }}
-              className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-red hover:bg-fluux-red hover:text-white transition-colors"
+              className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-red hover:bg-fluux-red hover:text-white transition-colors"
             >
               <LogOut className="w-4 h-4" />
               <span>{t('rooms.leaveRoom')}</span>
@@ -533,7 +533,7 @@ const RoomItem = memo(function RoomItem({
           {room.isBookmarked && (
             <button
               onClick={() => { menu.close(); onRemoveBookmark() }}
-              className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-red hover:bg-fluux-red hover:text-white transition-colors"
+              className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-red hover:bg-fluux-red hover:text-white transition-colors"
             >
               <BookmarkX className="w-4 h-4" />
               <span>{t('rooms.removeBookmark')}</span>

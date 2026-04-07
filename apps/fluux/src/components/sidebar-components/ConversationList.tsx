@@ -275,7 +275,7 @@ export const ConversationItem = memo(function ConversationItem({
         onClick={handleClick}
         onMouseEnter={onMouseEnter}
         onMouseMove={onMouseMove}
-        className={`w-full px-2 py-1.5 rounded border flex items-center gap-3 text-left cursor-pointer
+        className={`w-full px-2 py-1.5 rounded border flex items-center gap-3 text-start cursor-pointer
                     transition-colors ${isActive
                       ? 'bg-fluux-active text-fluux-text border-transparent'
                       : isSelected
@@ -323,7 +323,7 @@ export const ConversationItem = memo(function ConversationItem({
               {t('conversations.draft')}: {draft}
             </p>
           ) : conversation.lastMessage && (
-            <p className={`truncate text-xs opacity-75 ${conversation.lastMessage.isRetracted ? 'italic' : ''}`}>
+            <p dir="auto" className={`truncate text-xs opacity-75 ${conversation.lastMessage.isRetracted ? 'italic' : ''}`}>
               {conversation.lastMessage.isOutgoing ? `${t('chat.me')}: ` : ''}
               {conversation.lastMessage.isRetracted ? t('chat.messageDeleted') : formatMessagePreview(conversation.lastMessage)}
             </p>

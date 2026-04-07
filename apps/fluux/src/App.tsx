@@ -35,7 +35,7 @@ function TitleBar() {
   return (
     <div
       data-tauri-drag-region
-      className="fixed top-0 left-0 right-0 bg-transparent"
+      className="fixed top-0 inset-x-0 bg-transparent"
       style={{ height: TITLEBAR_HEIGHT, zIndex: 9999 }}
     />
   )

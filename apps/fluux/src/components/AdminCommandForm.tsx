@@ -116,7 +116,7 @@ export function AdminCommandForm({
       {note && <NoteDisplay note={note} />}
 
       {/* Form fields */}
-      <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pr-1">
+      <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pe-1">
         {visibleFields.map(field => (
           <FormField
             key={field.var}
@@ -199,7 +199,7 @@ export function AdminCommandResult({ form, note, onClose }: AdminCommandResultPr
 
       {note && <NoteDisplay note={note} />}
 
-      <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-1">
+      <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pe-1">
         {form.fields.filter(f => f.type !== 'hidden').map(field => (
           <div key={field.var} className="space-y-1">
             {field.type === 'fixed' ? (

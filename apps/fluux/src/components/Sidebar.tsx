@@ -334,21 +334,21 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
               : t('sidebar.events')}
           </h1>
           {sidebarView === 'directory' && (
-            <div className="relative ml-auto" ref={contactDropdownRef}>
+            <div className="relative ms-auto" ref={contactDropdownRef}>
               <Tooltip content={t('common.options')} position="bottom">
                 <button
                   onClick={() => setShowContactDropdown(!showContactDropdown)}
                   className="p-1 text-fluux-muted hover:text-fluux-text flex items-center"
                 >
                   <Users className="w-5 h-5" />
-                  <ChevronDown className="w-3 h-3 -ml-0.5" />
+                  <ChevronDown className="w-3 h-3 -ms-0.5" />
                 </button>
               </Tooltip>
               {showContactDropdown && (
-                <div className="absolute right-0 mt-1 w-52 bg-fluux-bg rounded-lg shadow-xl border border-fluux-hover py-1 z-50">
+                <div className="absolute end-0 mt-1 w-52 bg-fluux-bg rounded-lg shadow-xl border border-fluux-hover py-1 z-50">
                   <button
                     onClick={() => { setShowContactDropdown(false); modalActions.open('addContact') }}
-                    className="w-full px-3 py-2 text-left text-sm hover:bg-fluux-hover flex items-center gap-2"
+                    className="w-full px-3 py-2 text-start text-sm hover:bg-fluux-hover flex items-center gap-2"
                   >
                     <UserPlus className="w-4 h-4 text-fluux-muted" />
                     <span>{t('sidebar.addContact')}</span>
@@ -356,7 +356,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
                   <div className="border-t border-fluux-hover my-1" />
                   <button
                     onClick={() => { setShowContactDropdown(false); navigateToSettings('blocked') }}
-                    className="w-full px-3 py-2 text-left text-sm hover:bg-fluux-hover flex items-center gap-2"
+                    className="w-full px-3 py-2 text-start text-sm hover:bg-fluux-hover flex items-center gap-2"
                   >
                     <Ban className="w-4 h-4 text-fluux-muted" />
                     <span>{t('sidebar.blockedUsers')}</span>
@@ -366,28 +366,28 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
             </div>
           )}
           {sidebarView === 'rooms' && (
-            <div className="relative ml-auto" ref={roomDropdownRef}>
+            <div className="relative ms-auto" ref={roomDropdownRef}>
               <Tooltip content={t('sidebar.joinRoom')} position="bottom">
                 <button
                   onClick={() => setShowRoomDropdown(!showRoomDropdown)}
                   className="p-1 text-fluux-muted hover:text-fluux-text flex items-center"
                 >
                   <Plus className="w-5 h-5" />
-                  <ChevronDown className="w-3 h-3 -ml-0.5" />
+                  <ChevronDown className="w-3 h-3 -ms-0.5" />
                 </button>
               </Tooltip>
               {showRoomDropdown && (
-                <div className="absolute right-0 mt-1 w-52 bg-fluux-bg rounded-lg shadow-xl border border-fluux-hover py-1 z-50">
+                <div className="absolute end-0 mt-1 w-52 bg-fluux-bg rounded-lg shadow-xl border border-fluux-hover py-1 z-50">
                   <button
                     onClick={() => { setShowRoomDropdown(false); modalActions.open('quickChat') }}
-                    className="w-full px-3 py-2 text-left text-sm hover:bg-fluux-hover flex items-center gap-2"
+                    className="w-full px-3 py-2 text-start text-sm hover:bg-fluux-hover flex items-center gap-2"
                   >
                     <Zap className="w-4 h-4 text-amber-500" />
                     <span>{t('rooms.quickChat')}</span>
                   </button>
                   <button
                     onClick={() => { setShowRoomDropdown(false); setShowCreateRoom(true) }}
-                    className="w-full px-3 py-2 text-left text-sm hover:bg-fluux-hover flex items-center gap-2"
+                    className="w-full px-3 py-2 text-start text-sm hover:bg-fluux-hover flex items-center gap-2"
                   >
                     <Hash className="w-4 h-4 text-fluux-muted" />
                     <span>{t('rooms.permanentRoom')}</span>
@@ -395,14 +395,14 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
                   <div className="border-t border-fluux-hover my-1" />
                   <button
                     onClick={() => { setShowRoomDropdown(false); setShowJoinRoom(true) }}
-                    className="w-full px-3 py-2 text-left text-sm hover:bg-fluux-hover flex items-center gap-2"
+                    className="w-full px-3 py-2 text-start text-sm hover:bg-fluux-hover flex items-center gap-2"
                   >
                     <LogIn className="w-4 h-4 text-fluux-muted" />
                     <span>{t('rooms.joinRoom')}</span>
                   </button>
                   <button
                     onClick={() => { setShowRoomDropdown(false); setShowBrowseRooms(true) }}
-                    className="w-full px-3 py-2 text-left text-sm hover:bg-fluux-hover flex items-center gap-2"
+                    className="w-full px-3 py-2 text-start text-sm hover:bg-fluux-hover flex items-center gap-2"
                   >
                     <Search className="w-4 h-4 text-fluux-muted" />
                     <span>{t('rooms.browseRooms')}</span>
@@ -416,7 +416,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
                       void client.mam.forceCatchUpAllRooms().finally(() => setIsCatchingUpRooms(false))
                     }}
                     disabled={isCatchingUpRooms}
-                    className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 ${
+                    className={`w-full px-3 py-2 text-start text-sm flex items-center gap-2 ${
                       isCatchingUpRooms ? 'text-fluux-muted cursor-wait' : 'hover:bg-fluux-hover'
                     }`}
                   >
@@ -566,7 +566,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
           onMouseEnter={() => setIsResizeHover(true)}
           onMouseLeave={() => setIsResizeHover(false)}
           style={{ cursor: 'ew-resize' }}
-          className={`hidden md:block absolute top-0 right-0 w-1 h-full z-50 transition-colors
+          className={`hidden md:block absolute top-0 end-0 w-1 h-full z-50 transition-colors
                       ${isResizing ? 'bg-fluux-brand/40' : isResizeHover ? 'bg-fluux-brand/20' : ''}`}
         />
       </Tooltip>

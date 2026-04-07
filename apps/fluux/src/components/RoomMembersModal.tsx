@@ -256,19 +256,19 @@ export function RoomMembersModal({ room, onClose }: RoomMembersModalProps) {
       {/* Search */}
       <div className="px-4 py-2 border-b border-fluux-hover">
         <div className="relative">
-          <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-fluux-muted" />
+          <Search className="w-4 h-4 absolute start-2.5 top-1/2 -translate-y-1/2 text-fluux-muted" />
           <TextInput
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={t('rooms.searchMembers')}
-            className="w-full pl-8 pr-8 py-1.5 text-sm bg-fluux-hover/50 rounded-lg border border-transparent
+            className="w-full ps-8 pe-8 py-1.5 text-sm bg-fluux-hover/50 rounded-lg border border-transparent
                        focus:border-fluux-brand/50 focus:outline-none text-fluux-text placeholder-fluux-muted"
           />
           {search && (
             <button
               onClick={() => setSearch('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-fluux-muted hover:text-fluux-text"
+              className="absolute end-2 top-1/2 -translate-y-1/2 text-fluux-muted hover:text-fluux-text"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -433,7 +433,7 @@ function AffiliationDropdown({
         <ChevronDown className="w-3 h-3" />
       </button>
       {isOpen && (
-        <div className="absolute right-0 top-full mt-1 bg-fluux-bg rounded-lg shadow-xl border border-fluux-hover py-1 z-50 min-w-36">
+        <div className="absolute end-0 top-full mt-1 bg-fluux-bg rounded-lg shadow-xl border border-fluux-hover py-1 z-50 min-w-36">
           {availableAffiliations.map(aff => (
             <button
               key={aff}
@@ -441,7 +441,7 @@ function AffiliationDropdown({
                 onSelect(aff)
                 setIsOpen(false)
               }}
-              className={`w-full px-3 py-1.5 text-left text-sm hover:bg-fluux-hover transition-colors
+              className={`w-full px-3 py-1.5 text-start text-sm hover:bg-fluux-hover transition-colors
                 ${aff === 'outcast' ? 'text-fluux-red' : 'text-fluux-text'}`}
             >
               {getLabel(aff)}

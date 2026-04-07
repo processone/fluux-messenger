@@ -344,7 +344,7 @@ export const MessageBubble = memo(function MessageBubble({
       </div>
 
       {/* Content */}
-      <div className={`relative flex-1 min-w-0 ${isSelected ? 'bg-fluux-selection -my-0.5 py-0.5 -ml-2 pl-2 -mr-4 pr-4 rounded-l' : ''}`}>
+      <div className={`relative flex-1 min-w-0 ${isSelected ? 'bg-fluux-selection -my-0.5 py-0.5 -ms-2 ps-2 -me-4 pe-4 rounded-s' : ''}`}>
         {/* Floating hover toolbar - hidden when user is composing or message is retracted */}
         {!message.isRetracted && (
           <MessageToolbar
@@ -395,7 +395,7 @@ export const MessageBubble = memo(function MessageBubble({
         {!message.isRetracted && replyContext && (
           <button
             onClick={() => scrollToMessage(replyContext.messageId)}
-            className="flex items-start gap-1.5 pb-1 pl-2 border-l-2 text-left min-w-0 hover:bg-fluux-hover/50 rounded-r transition-colors cursor-pointer select-none"
+            className="flex items-start gap-1.5 pb-1 ps-2 border-s-2 text-start min-w-0 hover:bg-fluux-hover/50 rounded-e transition-colors cursor-pointer select-none"
             style={{ borderColor: replyContext.senderColor }}
           >
             <div className="flex flex-col items-center flex-shrink-0 gap-0.5">
@@ -405,7 +405,7 @@ export const MessageBubble = memo(function MessageBubble({
                 avatarUrl={replyContext.avatarUrl}
                 size="xs"
               />
-              <CornerUpRight className="w-3 h-3 text-fluux-muted" />
+              <CornerUpRight className="rtl-mirror w-3 h-3 text-fluux-muted" />
             </div>
             <div className="text-sm text-fluux-muted min-w-0 flex-1">
               <span
@@ -500,7 +500,7 @@ export const MessageBubble = memo(function MessageBubble({
               )}
             </div>
             {showErrorDetails && (
-              <div className="text-xs text-fluux-muted pl-5 py-1 bg-red-500/5 rounded">
+              <div className="text-xs text-fluux-muted ps-5 py-1 bg-red-500/5 rounded">
                 {t('chat.errorDetails', { error: formatXMPPError(message.deliveryError) })}
               </div>
             )}

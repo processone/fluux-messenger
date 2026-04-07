@@ -100,8 +100,8 @@ export const MessageBody = memo(function MessageBody({
   // /me action message
   if (isActionMessage(body)) {
     return (
-      <div className="text-fluux-text/85 italic break-words whitespace-pre-wrap leading-[1.375]">
-        <span className="text-fluux-muted mr-1">*</span>
+      <div dir="auto" className="text-fluux-text/85 italic break-words whitespace-pre-wrap leading-[1.375]">
+        <span className="text-fluux-muted me-1">*</span>
         <span className="font-medium" style={{ color: senderColor }}>
           {senderName}
         </span>
@@ -119,7 +119,7 @@ export const MessageBody = memo(function MessageBody({
 
   // Regular message
   return (
-    <div className="text-fluux-text break-words whitespace-pre-wrap leading-[1.375]">
+    <div dir="auto" className="text-fluux-text break-words whitespace-pre-wrap leading-[1.375]">
       {wrap(noStyling ? body : renderStyledMessage(body, mentions, nickname, knownNicks, isDarkMode))}
       {isEdited && <EditedIndicator originalBody={originalBody} />}
     </div>
@@ -136,7 +136,7 @@ function EditedIndicator({ originalBody, className = '' }: EditedIndicatorProps)
 
   return (
     <span
-      className={`ml-1 text-xs text-fluux-muted cursor-help ${className}`}
+      className={`ms-1 text-xs text-fluux-muted cursor-help ${className}`}
       title={originalBody ? t('chat.originalMessage', { body: originalBody }) : t('chat.messageWasEdited')}
     >
       {t('chat.edited')}

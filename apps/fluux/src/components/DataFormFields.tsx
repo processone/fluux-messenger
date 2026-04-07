@@ -216,7 +216,7 @@ export function FormField({ field, value, onChange, disabled }: FormFieldProps) 
       {field.type !== 'boolean' && (
         <label htmlFor={fieldId} className="flex items-center gap-1 text-sm font-medium text-fluux-text">
           {label}
-          {isRequired && <span className="text-red-400 ml-0.5">*</span>}
+          {isRequired && <span className="text-red-400 ms-0.5">*</span>}
           {desc && (
             <Tooltip content={desc} position="top">
               <HelpCircle className="w-3.5 h-3.5 text-fluux-muted cursor-help" />

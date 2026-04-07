@@ -220,7 +220,7 @@ interface MenuButtonProps {
 }
 
 export function MenuButton({ onClick, icon, label, variant = 'default' }: MenuButtonProps) {
-  const baseClasses = 'w-full px-3 py-2 flex items-center gap-3 text-left transition-colors'
+  const baseClasses = 'w-full px-3 py-2 flex items-center gap-3 text-start transition-colors'
   const variantClasses = variant === 'danger'
     ? 'text-fluux-red hover:bg-fluux-red hover:text-white'
     : 'text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent'

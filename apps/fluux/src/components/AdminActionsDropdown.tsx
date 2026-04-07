@@ -80,7 +80,7 @@ export function AdminActionsDropdown({
       >
         <Settings className="w-4 h-4" />
         <span>{t('admin.manageUser')}</span>
-        <ChevronDown className={`w-4 h-4 ml-auto transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-4 h-4 ms-auto transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
@@ -90,7 +90,7 @@ export function AdminActionsDropdown({
             <button
               key={cmd.node}
               onClick={() => handleSelect(cmd.node)}
-              className="w-full px-3 py-2 text-left text-sm text-fluux-text hover:bg-fluux-hover
+              className="w-full px-3 py-2 text-start text-sm text-fluux-text hover:bg-fluux-hover
                          transition-colors flex items-center gap-2"
             >
               <span>{cmd.name || humanizeCommandNode(cmd.node)}</span>

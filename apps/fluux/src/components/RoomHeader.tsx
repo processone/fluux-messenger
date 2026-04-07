@@ -142,10 +142,10 @@ export function RoomHeader({
       {onBack && (
         <button
           onClick={onBack}
-          className="p-1 -ml-1 rounded hover:bg-fluux-hover md:hidden"
+          className="p-1 -ms-1 rounded hover:bg-fluux-hover md:hidden"
           aria-label={t('rooms.backToRooms')}
         >
-          <ArrowLeft className="w-5 h-5 text-fluux-muted" />
+          <ArrowLeft className="w-5 h-5 text-fluux-muted rtl-mirror" />
         </button>
       )}
 
@@ -193,11 +193,11 @@ export function RoomHeader({
 
         {/* Dropdown menu */}
         {showNotifyMenu && (
-          <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-1 w-56 bg-fluux-bg border border-fluux-hover rounded-lg shadow-lg z-30 py-1">
+          <div className="absolute start-0 sm:start-auto sm:end-0 top-full mt-1 w-56 bg-fluux-bg border border-fluux-hover rounded-lg shadow-lg z-30 py-1">
             {/* Mentions only */}
             <button
               onClick={() => handleSelectMode('mentions')}
-              className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-left transition-colors"
+              className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-start transition-colors"
             >
               <BellOff className="w-4 h-4 text-fluux-muted" />
               <div className="flex-1">
@@ -212,7 +212,7 @@ export function RoomHeader({
             {/* All messages (session) */}
             <button
               onClick={() => handleSelectMode('all-session')}
-              className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-left transition-colors"
+              className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-start transition-colors"
             >
               <Bell className="w-4 h-4 text-fluux-muted" />
               <div className="flex-1">
@@ -228,7 +228,7 @@ export function RoomHeader({
             {!room.isQuickChat && (
               <button
                 onClick={() => handleSelectMode('all-always')}
-                className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-left transition-colors"
+                className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-start transition-colors"
               >
                 <BellRing className="w-4 h-4 text-fluux-muted" />
                 <div className="flex-1">
@@ -275,14 +275,14 @@ export function RoomHeader({
 
           {/* Room management dropdown menu */}
           {showOwnerMenu && (
-            <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-1 w-56 bg-fluux-bg border border-fluux-hover rounded-lg shadow-lg z-30 py-1">
+            <div className="absolute start-0 sm:start-auto sm:end-0 top-full mt-1 w-56 bg-fluux-bg border border-fluux-hover rounded-lg shadow-lg z-30 py-1">
               {/* Room Settings */}
               <button
                 onClick={() => {
                   setShowConfigModal(true)
                   setShowOwnerMenu(false)
                 }}
-                className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-left transition-colors"
+                className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-start transition-colors"
               >
                 <Settings className="w-4 h-4 text-fluux-muted" />
                 <div className="flex-1">
@@ -297,7 +297,7 @@ export function RoomHeader({
                   setShowConfigModal(true)
                   setShowOwnerMenu(false)
                 }}
-                className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-left transition-colors"
+                className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-start transition-colors"
               >
                 <Type className="w-4 h-4 text-fluux-muted" />
                 <div className="flex-1">
@@ -312,7 +312,7 @@ export function RoomHeader({
                     setShowAvatarModal(true)
                     setShowOwnerMenu(false)
                   }}
-                  className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-left transition-colors"
+                  className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-start transition-colors"
                 >
                   <Image className="w-4 h-4 text-fluux-muted" />
                   <div className="flex-1">
@@ -332,7 +332,7 @@ export function RoomHeader({
                       setAvatarError(t('rooms.avatarClearFailed'))
                     }
                   }}
-                  className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-left transition-colors text-fluux-red"
+                  className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-start transition-colors text-fluux-red"
                 >
                   <Trash2 className="w-4 h-4" />
                   <div className="flex-1">
@@ -348,7 +348,7 @@ export function RoomHeader({
                     setShowMembersModal(true)
                     setShowOwnerMenu(false)
                   }}
-                  className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-left transition-colors"
+                  className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-start transition-colors"
                 >
                   <UserMinus className="w-4 h-4 text-fluux-muted" />
                   <div className="flex-1">
@@ -367,7 +367,7 @@ export function RoomHeader({
                     setShowOwnerMenu(false)
                   }}
                   disabled={!room.supportsHats}
-                  className={`w-full px-3 py-2 flex items-center gap-3 text-left transition-colors ${
+                  className={`w-full px-3 py-2 flex items-center gap-3 text-start transition-colors ${
                     room.supportsHats
                       ? 'hover:bg-fluux-hover'
                       : 'opacity-50 cursor-not-allowed'
@@ -419,7 +419,7 @@ export function RoomHeader({
 
       {/* Room avatar error message */}
       {avatarError && (
-        <div className="absolute top-full left-0 right-0 mt-1 mx-4 p-2 bg-fluux-red/20 border border-fluux-red/50 rounded text-fluux-red text-sm flex items-center justify-between z-40">
+        <div className="absolute top-full inset-x-0 mt-1 mx-4 p-2 bg-fluux-red/20 border border-fluux-red/50 rounded text-fluux-red text-sm flex items-center justify-between z-40">
           <span>{avatarError}</span>
           <button onClick={() => setAvatarError(null)} className="p-1 hover:bg-fluux-red/20 rounded">
             <X className="w-4 h-4" />

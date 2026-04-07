@@ -64,7 +64,7 @@ const ConsoleEntry = React.memo(function ConsoleEntry({ entry, isSelected, expan
   if (isEvent) {
     return (
       <div
-        className={`${selectedClass} cursor-pointer border-l-4 border-l-orange-500`}
+        className={`${selectedClass} cursor-pointer border-s-4 border-s-orange-500`}
         onClick={() => onSelect(entry.id)}
       >
         <div className="flex items-start gap-2 px-3 py-1.5">
@@ -82,7 +82,7 @@ const ConsoleEntry = React.memo(function ConsoleEntry({ entry, isSelected, expan
 
   const directionIcon = isIncoming ? '←' : '→'
   const directionColor = isIncoming ? 'text-blue-400' : 'text-green-400'
-  const borderColor = isIncoming ? 'border-l-blue-500' : 'border-l-green-500'
+  const borderColor = isIncoming ? 'border-s-blue-500' : 'border-s-green-500'
   const stanzaPreview = formatStanzaPreview(entry.content)
 
   // Type badge colors
@@ -104,7 +104,7 @@ const ConsoleEntry = React.memo(function ConsoleEntry({ entry, isSelected, expan
   }
 
   return (
-    <div className={`${selectedClass} border-l-4 ${borderColor}`}>
+    <div className={`${selectedClass} border-s-4 ${borderColor}`}>
       <div
         className="flex items-center gap-2 px-3 py-1.5 cursor-pointer select-none"
         onClick={() => { onSelect(entry.id); onToggle(entry.id); }}
@@ -520,7 +520,7 @@ export function XmppConsole() {
         </div>
         <div className="flex items-center gap-2">
           {/* Direction filter */}
-          <div className="flex items-center gap-0.5 border-r border-fluux-bg/50 pr-2">
+          <div className="flex items-center gap-0.5 border-e border-fluux-bg/50 pe-2">
             {(['all', 'incoming', 'outgoing'] as DirectionFilter[]).map((dir) => (
               <Tooltip key={dir} content={dir === 'all' ? t('console.showAll') : dir === 'incoming' ? t('console.showReceived') : t('console.showSent')} position="bottom">
                 <button
@@ -555,18 +555,18 @@ export function XmppConsole() {
           </div>
           {/* Search input */}
           <div className="relative">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-fluux-muted" />
+            <Search className="absolute start-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-fluux-muted" />
             <TextInput
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t('console.filter')}
-              className="w-32 pl-7 pr-2 py-1 text-xs bg-fluux-sidebar text-fluux-text rounded border border-fluux-bg/50 focus:outline-none focus:border-fluux-brand placeholder:text-fluux-muted"
+              className="w-32 ps-7 pe-2 py-1 text-xs bg-fluux-sidebar text-fluux-text rounded border border-fluux-bg/50 focus:outline-none focus:border-fluux-brand placeholder:text-fluux-muted"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-fluux-muted hover:text-fluux-text"
+                className="absolute end-1.5 top-1/2 -translate-y-1/2 text-fluux-muted hover:text-fluux-text"
               >
                 <X className="w-3 h-3" />
               </button>
@@ -681,7 +681,7 @@ export function XmppConsole() {
                 virtualizer.scrollToIndex(filteredEntries.length - 1, { align: 'end', behavior: 'smooth' })
               }
             }}
-            className="absolute bottom-4 right-4 flex items-center gap-2 px-3 py-2 bg-fluux-brand text-fluux-text-on-accent text-sm font-medium rounded-full shadow-lg hover:bg-fluux-brand/90 transition-colors"
+            className="absolute bottom-4 end-4 flex items-center gap-2 px-3 py-2 bg-fluux-brand text-fluux-text-on-accent text-sm font-medium rounded-full shadow-lg hover:bg-fluux-brand/90 transition-colors"
           >
             <ArrowDownToLine className="w-4 h-4" />
             {t('console.goToLive')}
@@ -712,7 +712,7 @@ export function XmppConsole() {
               className="px-4 bg-fluux-brand text-fluux-text-on-accent rounded hover:bg-fluux-brand/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               aria-label={t('console.sendStanza', { modifier: isMac ? '⌘' : 'Ctrl' })}
             >
-              <Send className="w-4 h-4" />
+              <Send className="rtl-mirror w-4 h-4" />
             </button>
           </Tooltip>
         </div>
@@ -755,7 +755,7 @@ export function XmppConsole() {
                     {serverInfo.identities.map((identity, idx) => (
                       <div key={idx} className="text-fluux-text">
                         <span className="font-medium">{identity.name || 'Unknown'}</span>
-                        <span className="text-fluux-muted ml-2">({identity.category}/{identity.type})</span>
+                        <span className="text-fluux-muted ms-2">({identity.category}/{identity.type})</span>
                       </div>
                     ))}
                   </div>

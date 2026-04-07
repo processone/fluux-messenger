@@ -21,7 +21,7 @@ export function SettingsSidebar({ activeCategory, onCategoryChange }: SettingsSi
             <li key={category.id}>
               <button
                 onClick={() => onCategoryChange(category.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-start transition-colors
                   ${isActive
                     ? 'bg-fluux-brand/10 text-fluux-brand'
                     : 'text-fluux-text hover:bg-fluux-hover'

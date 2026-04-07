@@ -87,7 +87,7 @@ export function CollapsibleContent({
         {/* Gradient fade overlay when collapsed */}
         {!isExpanded && (
           <div
-            className="absolute bottom-0 left-0 right-0 h-20 pointer-events-none"
+            className="absolute bottom-0 inset-x-0 h-20 pointer-events-none"
             style={{
               // Priority: selected > hovered > default chat background
               background: `linear-gradient(to bottom, transparent, var(${

@@ -115,7 +115,7 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
       <button
         type="button"
         onClick={() => setLightboxOpen(true)}
-        className="block pt-2 rounded-lg overflow-hidden hover:opacity-90 transition-opacity cursor-pointer text-left"
+        className="block pt-2 rounded-lg overflow-hidden hover:opacity-90 transition-opacity cursor-pointer text-start"
         style={{ maxWidth: `${maxWidthPx}px` }}
         tabIndex={-1}
       >
@@ -214,7 +214,7 @@ export const VideoAttachment = memo(function VideoAttachment({ attachment, onLoa
             <a
               href={attachment.url}
               download={attachment.name || 'video'}
-              className="ml-auto p-1 rounded hover:bg-fluux-bg transition-colors flex-shrink-0"
+              className="ms-auto p-1 rounded hover:bg-fluux-bg transition-colors flex-shrink-0"
               aria-label={t('common.download')}
               tabIndex={-1}
             >
@@ -247,7 +247,7 @@ export const VideoAttachment = memo(function VideoAttachment({ attachment, onLoa
           <Film className="w-4 h-4 text-fluux-muted flex-shrink-0" />
           <span className="text-sm text-fluux-text truncate">{attachment.name}</span>
           {attachment.duration !== undefined && (
-            <span className="text-xs text-fluux-muted ml-auto flex-shrink-0">
+            <span className="text-xs text-fluux-muted ms-auto flex-shrink-0">
               {formatDuration(attachment.duration)}
             </span>
           )}

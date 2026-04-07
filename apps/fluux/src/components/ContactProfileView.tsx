@@ -162,10 +162,10 @@ export function ContactProfileView({
         {onBack && (
           <button
             onClick={onBack}
-            className="p-1 -ml-1 rounded hover:bg-fluux-hover md:hidden"
+            className="p-1 -ms-1 rounded hover:bg-fluux-hover md:hidden"
             aria-label={t('common.back')}
           >
-            <ArrowLeft className="w-5 h-5 text-fluux-muted" />
+            <ArrowLeft className="w-5 h-5 text-fluux-muted rtl-mirror" />
           </button>
         )}
         <h2 className="font-semibold text-fluux-text">{t('contacts.contact')}</h2>
@@ -211,7 +211,7 @@ export function ContactProfileView({
                 <Tooltip content={t('contacts.rename')} position="top">
                   <button
                     onClick={handleStartEdit}
-                    className="absolute left-full ml-1 p-1 text-fluux-muted hover:text-fluux-text rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute start-full ms-1 p-1 text-fluux-muted hover:text-fluux-text rounded opacity-0 group-hover:opacity-100 transition-opacity"
                     aria-label={t('contacts.rename')}
                   >
                     <Pencil className="w-4 h-4" />

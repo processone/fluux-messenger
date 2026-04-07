@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Mirror directional icons (arrows, reply, forward) in RTL mode */
+[dir="rtl"] .rtl-mirror {
+  transform: scaleX(-1);
+}
+
 /* Restore pointer cursor on interactive elements (Tailwind Preflight resets to default) */
 @layer base {
   button:not(:disabled),

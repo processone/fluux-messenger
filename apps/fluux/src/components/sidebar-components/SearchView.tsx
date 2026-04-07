@@ -109,7 +109,7 @@ export function SearchView() {
       {/* Search input */}
       <div className="px-3 pt-3 pb-2">
         <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-fluux-muted pointer-events-none" />
+          <Search className="absolute start-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-fluux-muted pointer-events-none" />
           <TextInput
             ref={inputRef}
             type="text"
@@ -117,14 +117,14 @@ export function SearchView() {
             onChange={(e) => search(e.target.value)}
             onKeyDown={handleInPrefixKeyDown}
             placeholder={t('search.placeholder', 'Search messages…')}
-            className="w-full pl-8 pr-8 py-1.5 text-sm bg-fluux-input border border-fluux-border rounded-md
+            className="w-full ps-8 pe-8 py-1.5 text-sm bg-fluux-input border border-fluux-border rounded-md
                        text-fluux-text placeholder-fluux-muted
                        focus:outline-none focus:ring-1 focus:ring-fluux-brand focus:border-fluux-brand"
           />
           {query && (
             <button
               onClick={clearSearch}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-fluux-hover text-fluux-muted"
+              className="absolute end-2 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-fluux-hover text-fluux-muted"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -132,12 +132,12 @@ export function SearchView() {
 
           {/* in: prefix autocomplete dropdown */}
           {isInPrefixActive && inPrefixSuggestions.length > 0 && (
-            <div className="absolute left-0 right-0 top-full mt-1 bg-fluux-surface border border-fluux-border rounded-md shadow-lg z-50 max-h-48 overflow-y-auto">
+            <div className="absolute inset-x-0 top-full mt-1 bg-fluux-surface border border-fluux-border rounded-md shadow-lg z-50 max-h-48 overflow-y-auto">
               {inPrefixSuggestions.map((s, i) => (
                 <button
                   key={s.id}
                   onClick={() => selectInPrefixSuggestion(s)}
-                  className={`w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 transition-colors
+                  className={`w-full px-3 py-1.5 text-start text-sm flex items-center gap-2 transition-colors
                     ${i === inPrefixHighlight ? 'bg-fluux-hover text-fluux-text' : 'text-fluux-muted hover:bg-fluux-hover hover:text-fluux-text'}`}
                 >
                   <Avatar identifier={s.id} name={s.name} size="xs" />
@@ -339,7 +339,7 @@ function SearchResultItem({ result, context, isActive, isSelected, isKeyboardNav
       {...itemAttribute}
       {...itemProps}
       onClick={onClick}
-      className={`w-full px-2 py-1.5 rounded flex items-start gap-2.5 text-left cursor-pointer
+      className={`w-full px-2 py-1.5 rounded flex items-start gap-2.5 text-start cursor-pointer
                  transition-colors group/result ${
                    highlighted
                      ? 'bg-fluux-hover text-fluux-text'

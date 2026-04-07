@@ -99,7 +99,7 @@ export function AdminRoomView({
                        rounded-lg transition-colors"
             aria-label={t('common.close')}
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="w-5 h-5 rtl-mirror" />
           </button>
         </Tooltip>
         <div className="flex-1 min-w-0">
@@ -139,7 +139,7 @@ export function AdminRoomView({
                                bg-fluux-hover/50"
                   >
                     <span className="text-sm text-fluux-muted">{option.label}</span>
-                    <span className="text-sm text-fluux-text text-right max-w-[60%] break-words">
+                    <span className="text-sm text-fluux-text text-end max-w-[60%] break-words">
                       {formatOptionValue(option.value)}
                     </span>
                   </div>

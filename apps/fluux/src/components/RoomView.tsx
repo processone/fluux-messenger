@@ -1600,7 +1600,7 @@ function RoomMessageInput({
   // Mention autocomplete dropdown
   const mentionDropdown = mentionState.isActive && mentionState.matches.length > 0 ? (
     <div
-      className="absolute bottom-full left-0 right-0 mb-1 max-h-48 overflow-y-auto
+      className="absolute bottom-full inset-x-0 mb-1 max-h-48 overflow-y-auto
                  bg-fluux-bg border border-fluux-hover rounded-lg shadow-lg z-30"
     >
       {mentionState.matches.map((match, idx) => (
@@ -1608,7 +1608,7 @@ function RoomMessageInput({
           key={match.nick}
           type="button"
           onClick={() => handleMentionSelect(idx)}
-          className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 transition-colors
+          className={`w-full px-3 py-2 text-start text-sm flex items-center gap-2 transition-colors
                      ${idx === mentionState.selectedIndex
                        ? 'bg-fluux-brand text-fluux-text-on-accent'
                        : 'hover:bg-fluux-hover text-fluux-text'}`}

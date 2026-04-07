@@ -274,7 +274,7 @@ export function ProfileSettings() {
         ) : (
           <div className="group relative flex items-center justify-center mb-1">
             <h1 className="text-xl font-bold text-fluux-text">{displayName}</h1>
-            <div className="absolute left-full ml-1 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="absolute start-full ms-1 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
               <Tooltip content={t('profile.editNickname')} position="top">
                 <button
                   onClick={handleStartEdit}
@@ -421,7 +421,7 @@ export function ProfileSettings() {
               {t('profile.addField')}
             </button>
             {showAddField && (
-              <div className="absolute top-full mt-1 left-0 bg-fluux-sidebar border border-fluux-hover rounded-lg shadow-lg py-1 z-10">
+              <div className="absolute top-full mt-1 start-0 bg-fluux-sidebar border border-fluux-hover rounded-lg shadow-lg py-1 z-10">
                 {availableVCardFields.map(({ key, label, icon: Icon }) => (
                   <button
                     key={key}

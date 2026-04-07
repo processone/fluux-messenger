@@ -322,12 +322,12 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
             </div>
           ) : (
             <div className="relative">
-              <Server className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fluux-muted pointer-events-none" />
+              <Server className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fluux-muted pointer-events-none" />
               <select
                 id="muc-service"
                 value={selectedService}
                 onChange={(e) => handleServiceChange(e.target.value)}
-                className="w-full appearance-none pl-10 pr-10 py-2.5 rounded-lg
+                className="w-full appearance-none ps-10 pe-10 py-2.5 rounded-lg
                            bg-fluux-bg text-fluux-text cursor-pointer
                            border-2 border-fluux-hover
                            hover:border-fluux-muted focus:border-fluux-brand focus:outline-none
@@ -341,7 +341,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
                 ))}
                 <option value="__custom__" className="bg-fluux-bg text-fluux-text">{t('rooms.customMucServer')}</option>
               </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fluux-muted pointer-events-none" />
+              <ChevronDown className="absolute end-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fluux-muted pointer-events-none" />
             </div>
           )}
         </div>
@@ -367,14 +367,14 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
         {/* Search */}
         <div className="px-4 py-3 border-b border-fluux-hover flex-shrink-0">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fluux-muted" />
+            <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fluux-muted" />
             <TextInput
               ref={searchInputRef}
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t('rooms.searchRooms')}
-              className="w-full pl-10 pr-3 py-2 bg-fluux-bg text-fluux-text rounded
+              className="w-full ps-10 pe-3 py-2 bg-fluux-bg text-fluux-text rounded
                          border border-transparent focus:border-fluux-brand
                          placeholder:text-fluux-muted"
             />
@@ -427,7 +427,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
                       <p className="text-xs text-fluux-muted truncate">
                         {room.jid}
                         {room.occupants !== undefined && (
-                          <span className="ml-2">
+                          <span className="ms-2">
                             • {room.occupants} {t('rooms.occupants')}
                           </span>
                         )}

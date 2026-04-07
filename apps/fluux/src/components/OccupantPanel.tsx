@@ -303,7 +303,7 @@ export function OccupantPanel({
   }
 
   return (
-    <div className={`${fullScreen ? 'w-full h-full' : 'w-64 border-l border-fluux-bg'} flex flex-col bg-fluux-sidebar`}>
+    <div className={`${fullScreen ? 'w-full h-full' : 'w-64 border-s border-fluux-bg'} flex flex-col bg-fluux-sidebar`}>
       {/* Panel header */}
       <div className={`h-14 ${titleBarClass} px-4 flex items-center justify-between border-b border-fluux-bg`}>
         {fullScreen ? (
@@ -312,7 +312,7 @@ export function OccupantPanel({
               onClick={onClose}
               className="p-1 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors"
             >
-              <ArrowLeft className="w-5 h-5" />
+              <ArrowLeft className="w-5 h-5 rtl-mirror" />
             </button>
             <h3 className="font-semibold text-fluux-text">{t('rooms.members')}</h3>
           </div>

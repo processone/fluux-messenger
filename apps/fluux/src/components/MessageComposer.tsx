@@ -551,7 +551,7 @@ export function MessageComposer({
 
       {/* Edit indicator */}
       {editingMessage && (
-        <div className={`bg-fluux-hover rounded-t-lg px-3 py-2 flex items-start gap-2 border-l-2 ${willDeleteMessage ? 'border-red-500' : 'border-green-500'}`}>
+        <div className={`bg-fluux-hover rounded-t-lg px-3 py-2 flex items-start gap-2 border-s-2 ${willDeleteMessage ? 'border-red-500' : 'border-green-500'}`}>
           {willDeleteMessage ? (
             <Trash2 className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
           ) : (
@@ -600,8 +600,8 @@ export function MessageComposer({
 
       {/* Reply preview */}
       {replyingTo && !editingMessage && (
-        <div className="bg-fluux-hover rounded-t-lg px-3 py-2 flex items-start gap-2 border-l-2 border-fluux-brand">
-          <Reply className="w-4 h-4 text-fluux-brand flex-shrink-0 mt-0.5" />
+        <div className="bg-fluux-hover rounded-t-lg px-3 py-2 flex items-start gap-2 border-s-2 border-fluux-brand">
+          <Reply className="rtl-mirror w-4 h-4 text-fluux-brand flex-shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="text-xs font-medium text-fluux-brand">
               Replying to {replyingTo.senderName}
@@ -622,7 +622,7 @@ export function MessageComposer({
 
       {/* Pending attachment preview */}
       {pendingAttachment && !editingMessage && (
-        <div className={`bg-fluux-hover ${replyingTo ? '' : 'rounded-t-lg'} px-3 py-2 flex items-center gap-3 border-l-2 border-fluux-brand`}>
+        <div className={`bg-fluux-hover ${replyingTo ? '' : 'rounded-t-lg'} px-3 py-2 flex items-center gap-3 border-s-2 border-fluux-brand`}>
           {/* Thumbnail preview for images/videos */}
           {pendingAttachment.previewUrl && pendingAttachment.file.type.startsWith('image/') ? (
             <img
@@ -639,7 +639,7 @@ export function MessageComposer({
               />
               <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded">
                 <div className="w-4 h-4 border-2 border-white rounded-full flex items-center justify-center">
-                  <div className="w-0 h-0 border-l-[5px] border-l-white border-y-[3px] border-y-transparent ml-0.5" />
+                  <div className="w-0 h-0 border-s-[5px] border-s-white border-y-[3px] border-y-transparent ms-0.5" />
                 </div>
               </div>
             </div>
@@ -706,7 +706,7 @@ export function MessageComposer({
           )}
 
           {showAttachMenu && (
-            <div className="absolute bottom-full left-0 mb-2 z-50 bg-fluux-surface border border-fluux-border rounded-lg shadow-lg py-1 min-w-[180px]">
+            <div className="absolute bottom-full start-0 mb-2 z-50 bg-fluux-surface border border-fluux-border rounded-lg shadow-lg py-1 min-w-[180px]">
               <button
                 type="button"
                 onClick={() => {
@@ -714,7 +714,7 @@ export function MessageComposer({
                   handleFileClick()
                 }}
                 disabled={!isUploadSupported}
-                className={`w-full flex items-center gap-3 px-3 py-2 text-sm text-left transition-colors ${
+                className={`w-full flex items-center gap-3 px-3 py-2 text-sm text-start transition-colors ${
                   isUploadSupported
                     ? 'text-fluux-text hover:bg-fluux-hover'
                     : 'text-fluux-muted/50 cursor-not-allowed'
@@ -730,7 +730,7 @@ export function MessageComposer({
                     setShowAttachMenu(false)
                     onCreatePoll()
                   }}
-                  className="w-full flex items-center gap-3 px-3 py-2 text-sm text-left text-fluux-text hover:bg-fluux-hover transition-colors"
+                  className="w-full flex items-center gap-3 px-3 py-2 text-sm text-start text-fluux-text hover:bg-fluux-hover transition-colors"
                 >
                   <BarChart3 className="w-4 h-4 flex-shrink-0" />
                   {t('poll.create', 'Create Poll')}
@@ -771,7 +771,7 @@ export function MessageComposer({
 
           {/* Emoji picker popup (lazy-loaded) */}
           {showEmojiPicker && (
-            <div className="absolute bottom-full right-0 mb-2 z-50">
+            <div className="absolute bottom-full end-0 mb-2 z-50">
               <Suspense fallback={null}>
                 <EmojiPicker
                   onSelect={handleEmojiSelect}
@@ -789,7 +789,7 @@ export function MessageComposer({
           className="p-3 text-fluux-brand hover:text-fluux-brand-hover
                      disabled:text-fluux-muted disabled:cursor-not-allowed transition-colors"
         >
-          <Send className="w-5 h-5" />
+          <Send className="rtl-mirror w-5 h-5" />
         </button>
       </div>
     </form>

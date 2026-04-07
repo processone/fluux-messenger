@@ -156,7 +156,7 @@ export class RenderLoopBoundary extends Component<Props, State> {
               </div>
             )}
             {isRenderLoop && this.state.selectorHistory && this.state.selectorHistory.length > 0 && (
-              <details className="mb-4 text-left" open>
+              <details className="mb-4 text-start" open>
                 <summary className="cursor-pointer text-sm text-fluux-text-secondary hover:text-fluux-text">
                   Recent selector value changes ({this.state.selectorHistory.length})
                 </summary>
@@ -174,7 +174,7 @@ export class RenderLoopBoundary extends Component<Props, State> {
               </details>
             )}
             {this.state.error && (
-              <details className="mb-4 text-left">
+              <details className="mb-4 text-start">
                 <summary className="cursor-pointer text-sm text-fluux-text-secondary hover:text-fluux-text">
                   Technical details
                 </summary>
@@ -314,7 +314,7 @@ export function RenderLoopWarningBanner() {
   const base = last[0]?.timestamp ?? 0
 
   return (
-    <div className="fixed left-2 right-2 top-2 z-[9998] rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs shadow-lg backdrop-blur">
+    <div className="fixed inset-x-2 top-2 z-[9998] rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs shadow-lg backdrop-blur">
       <div className="mb-2 flex items-start justify-between gap-2">
         <div className="font-semibold text-amber-300">
           ⚠️ Render loop warning: {warning.componentName} ({warning.renderCount} renders/{warning.windowMs}ms)

@@ -107,7 +107,7 @@ export function AdminDashboard({ activeCategory, onCategoryChange }: AdminDashbo
 
           {/* Stats commands (shown when stats is active) */}
           {activeCategory === 'stats' && (
-            <div className="ml-6 space-y-0.5 mb-2">
+            <div className="ms-6 space-y-0.5 mb-2">
               {commandsByCategory.stats.map(cmd => (
                 <CommandButton
                   key={cmd.node}
@@ -153,7 +153,7 @@ export function AdminDashboard({ activeCategory, onCategoryChange }: AdminDashbo
 
           {/* Announcement commands (shown when announcements is active) */}
           {activeCategory === 'announcements' && (
-            <div className="ml-6 space-y-0.5 mb-2">
+            <div className="ms-6 space-y-0.5 mb-2">
               {commandsByCategory.announcement.map(cmd => (
                 <CommandButton
                   key={cmd.node}
@@ -180,7 +180,7 @@ export function AdminDashboard({ activeCategory, onCategoryChange }: AdminDashbo
 
           {/* Other commands (shown when other is active) */}
           {activeCategory === 'other' && (
-            <div className="ml-6 space-y-0.5 mb-2">
+            <div className="ms-6 space-y-0.5 mb-2">
               {commandsByCategory.other.map(cmd => (
                 <CommandButton
                   key={cmd.node}
@@ -223,7 +223,7 @@ function CategoryButton({
                  }`}
     >
       <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-fluux-brand' : 'text-fluux-muted'}`} />
-      <span className="text-sm font-medium flex-1 text-left">{label}</span>
+      <span className="text-sm font-medium flex-1 text-start">{label}</span>
       {count !== undefined && (
         <span className={`text-xs px-1.5 py-0.5 rounded-full min-w-[1.5rem] text-center
                         ${isActive
@@ -257,7 +257,7 @@ function CommandButton({
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`w-full px-2 py-1.5 rounded flex items-center justify-between text-left
+      className={`w-full px-2 py-1.5 rounded flex items-center justify-between text-start
                  transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed group
                  ${highlight
                    ? 'text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent'

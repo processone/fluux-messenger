@@ -425,14 +425,14 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
         {onBack && (
           <button
             onClick={onBack}
-            className="p-1 -ml-1 mr-2 rounded hover:bg-fluux-hover md:hidden"
+            className="p-1 -ms-1 me-2 rounded hover:bg-fluux-hover md:hidden"
             aria-label={t('common.back')}
           >
-            <ArrowLeft className="w-5 h-5 text-fluux-muted" />
+            <ArrowLeft className="w-5 h-5 text-fluux-muted rtl-mirror" />
           </button>
         )}
         {getIcon()}
-        <h2 className="ml-2 font-semibold text-fluux-text capitalize">{getTitle()}</h2>
+        <h2 className="ms-2 font-semibold text-fluux-text capitalize">{getTitle()}</h2>
       </div>
 
       {/* Content */}

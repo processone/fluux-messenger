@@ -61,7 +61,7 @@ export function EntityListView<T>({
         <h2 className="text-lg font-semibold text-fluux-text">
           {title}
           {totalCount !== undefined && (
-            <span className="ml-2 text-sm font-normal text-fluux-muted">
+            <span className="ms-2 text-sm font-normal text-fluux-muted">
               ({totalCount.toLocaleString()})
             </span>
           )}
@@ -71,13 +71,13 @@ export function EntityListView<T>({
 
       {/* Search input */}
       <div className="relative mb-3">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fluux-muted" />
+        <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fluux-muted" />
         <TextInput
           type="text"
           value={searchValue}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder={t('admin.entityList.searchPlaceholder')}
-          className="w-full pl-9 pr-3 py-2 text-sm bg-fluux-bg border border-fluux-hover rounded-lg
+          className="w-full ps-9 pe-3 py-2 text-sm bg-fluux-bg border border-fluux-hover rounded-lg
                      text-fluux-text placeholder-fluux-muted focus:outline-none focus:border-fluux-brand"
         />
       </div>

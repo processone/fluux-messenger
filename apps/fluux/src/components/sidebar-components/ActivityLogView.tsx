@@ -319,9 +319,9 @@ function ReactionMuteDropdown({
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-full mt-1 z-50 bg-fluux-surface border border-fluux-border rounded-md shadow-lg py-1 min-w-[200px]">
+        <div className="absolute end-0 top-full mt-1 z-50 bg-fluux-surface border border-fluux-border rounded-md shadow-lg py-1 min-w-[200px]">
           <button
-            className="w-full text-left px-3 py-1.5 text-xs text-fluux-text hover:bg-fluux-hover transition-colors"
+            className="w-full text-start px-3 py-1.5 text-xs text-fluux-text hover:bg-fluux-hover transition-colors"
             onClick={(e) => {
               e.stopPropagation()
               if (isConversationMuted) onUnmuteConversation?.()
@@ -334,7 +334,7 @@ function ReactionMuteDropdown({
               : t('activityLog.muteConversationReactions')}
           </button>
           <button
-            className="w-full text-left px-3 py-1.5 text-xs text-fluux-text hover:bg-fluux-hover transition-colors"
+            className="w-full text-start px-3 py-1.5 text-xs text-fluux-text hover:bg-fluux-hover transition-colors"
             onClick={(e) => {
               e.stopPropagation()
               if (isMessageMuted) onUnmuteMessage?.()

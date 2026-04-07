@@ -119,7 +119,7 @@ export function StorageSettings() {
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
-            <p className="text-xs text-fluux-muted text-right">
+            <p className="text-xs text-fluux-muted text-end">
               {progress.indexed} / {progress.total} ({progressPercent}%)
             </p>
           </div>

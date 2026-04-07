@@ -137,7 +137,7 @@ exports[`RoomView > Snapshots > should match snapshot for non-joined room 1`] = 
           </div>
           <div
             aria-hidden="true"
-            class="absolute bottom-4 right-4 z-40 animate-[fab-spring-out_0.25s_ease-in_forwards] pointer-events-none"
+            class="absolute bottom-4 end-4 z-40 animate-[fab-spring-out_0.25s_ease-in_forwards] pointer-events-none"
           >
             <div
               class="inline-flex"

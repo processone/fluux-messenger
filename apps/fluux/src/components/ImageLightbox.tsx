@@ -41,7 +41,7 @@ export function ImageLightbox({ src, alt, downloadUrl, filename, onClose }: Imag
       }}
     >
       {/* Top-right controls */}
-      <div className="absolute top-4 right-4 flex items-center gap-2">
+      <div className="absolute top-4 end-4 flex items-center gap-2">
         <a
           href={downloadUrl}
           download={filename || 'image'}

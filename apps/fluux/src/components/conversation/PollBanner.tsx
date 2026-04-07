@@ -70,7 +70,7 @@ export function PollBanner({ messages, myNick, votedPollIds, dismissedPollIds, o
 
       <button
         onClick={() => scrollToMessage(latestPoll.id)}
-        className="flex-1 min-w-0 text-left text-fluux-text hover:text-fluux-brand transition-colors truncate"
+        className="flex-1 min-w-0 text-start text-fluux-text hover:text-fluux-brand transition-colors truncate"
       >
         {count === 1
           ? t('poll.bannerSingle', '📊 {{title}} — tap to vote', { title: latestPoll.poll!.title })

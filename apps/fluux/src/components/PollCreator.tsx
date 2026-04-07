@@ -109,7 +109,7 @@ export function PollCreator({ onClose, onCreatePoll }: PollCreatorProps) {
         <div className="flex flex-col gap-1.5">
           <label className="text-sm font-medium text-fluux-text">
             {t('poll.description', 'Description')}
-            <span className="text-fluux-muted font-normal ml-1">
+            <span className="text-fluux-muted font-normal ms-1">
               {t('common.optional', '(optional)')}
             </span>
           </label>
@@ -144,7 +144,7 @@ export function PollCreator({ onClose, onCreatePoll }: PollCreatorProps) {
                   {emojis[index] ?? POLL_OPTION_EMOJIS[index]}
                 </button>
                 {emojiPickerIndex === index && (
-                  <div ref={emojiPickerRef} className="absolute left-0 top-full mt-1 z-50">
+                  <div ref={emojiPickerRef} className="absolute start-0 top-full mt-1 z-50">
                     <Suspense fallback={null}>
                       <EmojiPicker
                         onSelect={(emoji) => handleEmojiSelect(index, emoji)}
@@ -215,7 +215,7 @@ export function PollCreator({ onClose, onCreatePoll }: PollCreatorProps) {
         <div className="flex flex-col gap-1.5">
           <label className="text-sm font-medium text-fluux-text">
             {t('poll.deadline', 'Deadline')}
-            <span className="text-fluux-muted font-normal ml-1">
+            <span className="text-fluux-muted font-normal ms-1">
               {t('common.optional', '(optional)')}
             </span>
           </label>

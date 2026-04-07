@@ -132,7 +132,7 @@ export const MessageToolbar = memo(function MessageToolbar({
     // This makes it easier to move the mouse to the toolbar without losing hover state
     // select-none prevents toolbar from being included in text selection
     <div
-      className={`absolute ${showAvatar ? '-top-7' : '-top-12'} -right-2 p-4 z-20 select-none transition-all duration-200 ease-out ${visibilityClass}`}
+      className={`absolute ${showAvatar ? '-top-7' : '-top-12'} -end-2 p-4 z-20 select-none transition-all duration-200 ease-out ${visibilityClass}`}
       onMouseEnter={onToolbarMouseEnter}
     >
       {/* Visible toolbar */}
@@ -186,7 +186,7 @@ export const MessageToolbar = memo(function MessageToolbar({
 
         {/* Full emoji picker for reactions */}
         {showReactionPicker && (
-          <div className={`absolute right-0 z-30 ${pickerDropUpRef.current ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
+          <div className={`absolute end-0 z-30 ${pickerDropUpRef.current ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
             <Suspense fallback={null}>
               <EmojiPicker
                 onSelect={(emoji) => handleReaction(emoji)}
@@ -206,7 +206,7 @@ export const MessageToolbar = memo(function MessageToolbar({
             className={`p-1.5 transition-colors ${showReactionPicker || showMoreMenu ? '' : 'hover:bg-fluux-hover'}`}
             aria-label={t('chat.reply')}
           >
-            <Reply className="w-4 h-4 text-fluux-muted" />
+            <Reply className="rtl-mirror w-4 h-4 text-fluux-muted" />
           </button>
         </Tooltip>
       )}
@@ -231,7 +231,7 @@ export const MessageToolbar = memo(function MessageToolbar({
           aria-label={t('chat.forwardMessage')}
           disabled
         >
-          <Forward className="w-4 h-4 text-fluux-muted" />
+          <Forward className="rtl-mirror w-4 h-4 text-fluux-muted" />
         </button>
       </Tooltip>
 
@@ -258,10 +258,10 @@ export const MessageToolbar = memo(function MessageToolbar({
 
         {/* More options dropdown menu */}
         {showMoreMenu && canDelete && (
-          <div className={`absolute right-0 min-w-[160px] bg-fluux-bg rounded-lg shadow-lg border border-fluux-hover z-30 overflow-hidden ${moreMenuDropUpRef.current ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
+          <div className={`absolute end-0 min-w-[160px] bg-fluux-bg rounded-lg shadow-lg border border-fluux-hover z-30 overflow-hidden ${moreMenuDropUpRef.current ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
             <button
               onClick={handleDelete}
-              className="w-full px-3 py-2 text-sm text-left text-red-500 hover:bg-fluux-hover transition-colors flex items-center gap-2"
+              className="w-full px-3 py-2 text-sm text-start text-red-500 hover:bg-fluux-hover transition-colors flex items-center gap-2"
             >
               <Trash2 className="w-4 h-4" />
               {t('chat.deleteMessage')}

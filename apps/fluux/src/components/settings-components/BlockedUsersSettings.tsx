@@ -161,13 +161,13 @@ export function BlockedUsersSettings() {
       {/* Search */}
       {blockedJids.length > 5 && (
         <div className="relative mb-4">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fluux-muted" />
+          <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fluux-muted" />
           <TextInput
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={t('settings.blocked.searchPlaceholder')}
-            className="w-full pl-10 pr-4 py-2 rounded-lg border-2 border-fluux-hover bg-fluux-bg
+            className="w-full ps-10 pe-4 py-2 rounded-lg border-2 border-fluux-hover bg-fluux-bg
                        text-fluux-text placeholder:text-fluux-muted
                        focus:border-fluux-brand focus:outline-none transition-colors"
           />

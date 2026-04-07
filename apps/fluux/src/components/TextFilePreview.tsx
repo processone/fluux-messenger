@@ -33,7 +33,7 @@ export function TextFilePreview({ attachment, isSelected = false, isHovered = fa
       <div className="rounded-t-lg bg-fluux-bg/60 border border-fluux-border border-b-0 overflow-hidden">
         {isLoading ? (
           <div className="flex items-center justify-center p-4 text-fluux-muted">
-            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+            <Loader2 className="w-4 h-4 animate-spin me-2" />
             <span className="text-sm">{t('chat.loadingPreview')}</span>
           </div>
         ) : error ? (
@@ -47,7 +47,7 @@ export function TextFilePreview({ attachment, isSelected = false, isHovered = fa
             </pre>
             {isTruncated && (
               <div
-                className="absolute bottom-0 left-0 right-0 h-8 pointer-events-none"
+                className="absolute bottom-0 inset-x-0 h-8 pointer-events-none"
                 style={{
                   // Adapt gradient to parent message highlight state (selected > hovered > default)
                   background: `linear-gradient(to top, var(${

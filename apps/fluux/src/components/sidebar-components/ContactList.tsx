@@ -313,7 +313,7 @@ const ContactItem = memo(function ContactItem({
           onTouchMove={menu.handleTouchEnd}
           onMouseEnter={onMouseEnter}
           onMouseMove={onMouseMove}
-          className={`w-full px-2 py-1.5 rounded border flex items-center gap-3 text-left
+          className={`w-full px-2 py-1.5 rounded border flex items-center gap-3 text-start
                      transition-colors cursor-pointer ${
                        isSelected
                          ? 'bg-fluux-hover text-fluux-text border-fluux-brand'
@@ -356,14 +356,14 @@ const ContactItem = memo(function ContactItem({
         >
           <button
             onClick={handleStartChat}
-            className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
+            className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
           >
             <MessageCircle className="w-4 h-4" />
             <span>{t('contacts.startChat')}</span>
           </button>
           <button
             onClick={handleRename}
-            className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
+            className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
           >
             <Pencil className="w-4 h-4" />
             <span>{t('contacts.rename')}</span>
@@ -373,7 +373,7 @@ const ContactItem = memo(function ContactItem({
               <div className="my-1 border-t border-fluux-hover" />
               <button
                 onClick={handleManage}
-                className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
+                className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
               >
                 <Wrench className="w-4 h-4" />
                 <span>{t('contacts.manage')}</span>
@@ -383,7 +383,7 @@ const ContactItem = memo(function ContactItem({
           <div className="my-1 border-t border-fluux-hover" />
           <button
             onClick={handleRemove}
-            className="w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-red hover:bg-fluux-red hover:text-white transition-colors"
+            className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-red hover:bg-fluux-red hover:text-white transition-colors"
           >
             <Trash2 className="w-4 h-4" />
             <span>{t('contacts.removeContact')}</span>

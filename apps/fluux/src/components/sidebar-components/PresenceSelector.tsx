@@ -140,7 +140,7 @@ export function PresenceSelector({ isOpen: isOpenProp, onOpenChange }: PresenceS
         <div
           ref={dropdownRef}
           tabIndex={-1}
-          className="absolute bottom-full left-0 mb-2 w-56 bg-fluux-bg rounded-lg shadow-xl border border-fluux-hover py-1 z-50 overflow-hidden outline-none"
+          className="absolute bottom-full start-0 mb-2 w-56 bg-fluux-bg rounded-lg shadow-xl border border-fluux-hover py-1 z-50 overflow-hidden outline-none"
         >
           {/* Presence options */}
           {presenceOptions.map((option, index) => (
@@ -148,7 +148,7 @@ export function PresenceSelector({ isOpen: isOpenProp, onOpenChange }: PresenceS
               key={option.value}
               onClick={() => void handleSelectPresence(option.value)}
               onMouseEnter={() => setFocusedIndex(index)}
-              className={`w-full px-3 py-2 flex items-center gap-3 text-left text-fluux-text transition-colors ${
+              className={`w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text transition-colors ${
                 focusedIndex === index ? 'bg-fluux-hover' : 'hover:bg-fluux-hover'
               }`}
             >

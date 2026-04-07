@@ -131,7 +131,7 @@ export function ChristmasAnimation({ onComplete, duration = 6000 }: ChristmasAni
       </div>
 
       {/* Click hint at bottom */}
-      <div className="absolute bottom-8 left-0 right-0 text-center">
+      <div className="absolute bottom-8 inset-x-0 text-center">
         <span className="text-white/60 text-sm">Click anywhere to dismiss</span>
       </div>
     </div>

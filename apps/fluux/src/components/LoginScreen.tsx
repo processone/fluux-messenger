@@ -306,7 +306,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
   return (
     <div className="h-full bg-fluux-bg flex items-center justify-center p-4 relative">
       {/* Window drag region - covers top area for title bar */}
-      <div className="absolute top-0 left-0 right-0 h-8" {...dragRegionProps} />
+      <div className="absolute top-0 inset-x-0 h-8" {...dragRegionProps} />
       <div className="w-full max-w-md">
         {/* Logo / Header */}
         <div className="text-center mb-8">
@@ -359,7 +359,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
                 onChange={(e) => { setPassword(e.target.value); setCredentialsModified(true) }}
                 required
                 disabled={isLoading}
-                className="w-full px-3 py-2 pr-10 bg-fluux-bg text-fluux-text rounded
+                className="w-full px-3 py-2 pe-10 bg-fluux-bg text-fluux-text rounded
                            border border-fluux-border focus:border-fluux-brand
                            focus-visible:ring-2 focus-visible:ring-fluux-brand/50
                            placeholder:text-fluux-muted disabled:opacity-50"
@@ -373,7 +373,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
                   passwordInputRef.current?.focus()
                 }}
                 disabled={isLoading}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-fluux-muted hover:text-fluux-text
+                className="absolute end-2 top-1/2 -translate-y-1/2 p-1 text-fluux-muted hover:text-fluux-text
                            disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 aria-label={showPassword ? t('login.hidePassword') : t('login.showPassword')}
               >

@@ -53,7 +53,7 @@ export function FindOnPageBar({
       : ''
 
   return (
-    <div className="absolute top-0 right-0 z-30 m-2">
+    <div className="absolute top-0 end-0 z-30 m-2">
       <div className="flex items-center gap-1 px-2 py-1.5 bg-fluux-bg border border-fluux-border rounded-lg shadow-lg">
         <TextInput
           ref={inputRef}

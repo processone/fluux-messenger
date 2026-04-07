@@ -182,7 +182,7 @@ function PollOption({ option, color, totalVoters, isMyVote, hasVoted, showResult
       onClick={onVote ? () => onVote(option.emoji) : undefined}
       disabled={!onVote}
       className={`
-        relative flex items-center gap-2 px-3 py-2 rounded-md border text-left transition-colors
+        relative flex items-center gap-2 px-3 py-2 rounded-md border text-start transition-colors
         ${isMyVote
           ? 'border-fluux-brand'
           : isSingleVoteResultMode

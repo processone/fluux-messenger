@@ -279,10 +279,10 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
         {onBack && (
           <button
             onClick={handleBack}
-            className="p-1 -ml-1 rounded hover:bg-fluux-hover md:hidden"
+            className="p-1 -ms-1 rounded hover:bg-fluux-hover md:hidden"
             aria-label={t('common.back', 'Back')}
           >
-            <ArrowLeft className="w-5 h-5 text-fluux-muted" />
+            <ArrowLeft className="w-5 h-5 text-fluux-muted rtl-mirror" />
           </button>
         )}
 

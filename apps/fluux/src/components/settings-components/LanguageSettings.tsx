@@ -5,6 +5,7 @@ import { useMode } from '@/hooks'
 import { useSettingsStore, type TimeFormat } from '@/stores/settingsStore'
 
 const languages = [
+  { code: 'ar', name: 'العربية' },
   { code: 'be', name: 'Беларускі' },
   { code: 'bg', name: 'Български' },
   { code: 'ca', name: 'Català' },
@@ -18,6 +19,7 @@ const languages = [
   { code: 'fi', name: 'Suomi' },
   { code: 'fr', name: 'Français' },
   { code: 'ga', name: 'Gaeilge' },
+  { code: 'he', name: 'עברית' },
   { code: 'hr', name: 'Hrvatski' },
   { code: 'hu', name: 'Magyar' },
   { code: 'is', name: 'Íslenska' },
@@ -57,7 +59,7 @@ export function LanguageSettings() {
     setLanguageChanged(true)
   }
 
-  const selectClassName = `w-full appearance-none px-4 py-3 pr-10 rounded-lg border-2 border-fluux-hover
+  const selectClassName = `w-full appearance-none px-4 py-3 pe-10 rounded-lg border-2 border-fluux-hover
                            bg-fluux-bg text-fluux-text cursor-pointer
                            hover:border-fluux-muted focus:border-fluux-brand focus:outline-none
                            transition-colors ${isDark ? '[color-scheme:dark]' : '[color-scheme:light]'}`
@@ -93,7 +95,7 @@ export function LanguageSettings() {
                 </option>
               ))}
             </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-fluux-muted pointer-events-none" />
+            <ChevronDown className="absolute end-3 top-1/2 -translate-y-1/2 w-5 h-5 text-fluux-muted pointer-events-none" />
           </div>
           {languageChanged && (
             <p className="text-xs text-fluux-muted italic">
@@ -126,7 +128,7 @@ export function LanguageSettings() {
                 </option>
               ))}
             </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-fluux-muted pointer-events-none" />
+            <ChevronDown className="absolute end-3 top-1/2 -translate-y-1/2 w-5 h-5 text-fluux-muted pointer-events-none" />
           </div>
           <p className="text-xs text-fluux-muted">
             {t('settings.timeFormatDescription')}

@@ -97,7 +97,7 @@ export function CreateRoomModal({ onClose }: CreateRoomModalProps) {
         <div className="space-y-1">
           <label className="block text-sm font-medium text-fluux-text">
             {t('rooms.roomAddress')}
-            <span className="text-red-400 ml-1">*</span>
+            <span className="text-red-400 ms-1">*</span>
           </label>
           <TextInput
             type="text"
@@ -117,7 +117,7 @@ export function CreateRoomModal({ onClose }: CreateRoomModalProps) {
         <div className="space-y-1">
           <label className="block text-sm font-medium text-fluux-text">
             {t('rooms.roomName')}
-            <span className="text-red-400 ml-1">*</span>
+            <span className="text-red-400 ms-1">*</span>
           </label>
           <TextInput
             type="text"
@@ -149,7 +149,7 @@ export function CreateRoomModal({ onClose }: CreateRoomModalProps) {
         <div className="space-y-1">
           <label className="block text-sm font-medium text-fluux-text">
             {t('rooms.nickname')}
-            <span className="text-red-400 ml-1">*</span>
+            <span className="text-red-400 ms-1">*</span>
           </label>
           <TextInput
             type="text"
@@ -185,7 +185,7 @@ export function CreateRoomModal({ onClose }: CreateRoomModalProps) {
                 }`}
               >
                 <Tooltip content={help} position="top">
-                  <HelpCircle className="absolute top-1.5 right-1.5 w-3.5 h-3.5 text-fluux-muted cursor-help" />
+                  <HelpCircle className="absolute top-1.5 end-1.5 w-3.5 h-3.5 text-fluux-muted cursor-help" />
                 </Tooltip>
                 <Icon className="w-5 h-5" />
                 <span className="text-sm font-medium">{label}</span>

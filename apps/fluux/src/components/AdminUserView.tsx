@@ -47,7 +47,7 @@ export function AdminUserView({
                        rounded-lg transition-colors"
             aria-label={t('common.close')}
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="w-5 h-5 rtl-mirror" />
           </button>
         </Tooltip>
         <div className="flex-1 min-w-0">
