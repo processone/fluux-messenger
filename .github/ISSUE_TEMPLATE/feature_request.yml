@@ -1,5 +1,5 @@
 name: "💡 Feature Request"
-description: Suggest an idea or improvement for Fluux Messenger.
+description: Suggest an idea or improvement.
 labels: [enhancement]
 body:
   - type: textarea
