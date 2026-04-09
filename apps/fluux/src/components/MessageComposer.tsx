@@ -58,6 +58,8 @@ export interface MessageComposerHandle {
 interface UploadState {
   isUploading: boolean
   progress: number
+  error: string | null
+  clearError: () => void
 }
 
 /** Pending attachment staged for sending (not yet sent) */
@@ -673,7 +675,22 @@ export function MessageComposer({
         </div>
       )}
 
-      <div className={`bg-fluux-hover ${(replyingTo || editingMessage || pendingAttachment) ? 'rounded-b-lg' : 'rounded-lg'} flex items-center`}>
+      {/* Upload error banner */}
+      {uploadState?.error && (
+        <div className={`bg-fluux-red/10 ${(replyingTo || editingMessage || pendingAttachment) ? '' : 'rounded-t-lg'} px-3 py-2 flex items-center gap-2`}>
+          <p className="text-xs text-fluux-red flex-1">{uploadState.error}</p>
+          <button
+            type="button"
+            onClick={uploadState.clearError}
+            className="p-0.5 text-fluux-red/60 hover:text-fluux-red transition-colors flex-shrink-0"
+            aria-label={t('sidebar.dismiss')}
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      <div className={`bg-fluux-hover ${(replyingTo || editingMessage || pendingAttachment || uploadState?.error) ? 'rounded-b-lg' : 'rounded-lg'} flex items-center`}>
         {/* Hidden file input */}
         <input
           ref={fileInputRef}

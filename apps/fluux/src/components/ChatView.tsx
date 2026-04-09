@@ -43,7 +43,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, m
   const ownNickname = useConnectionStore((s) => s.ownNickname)
   const status = useConnectionStore((s) => s.status)
   const isConnected = status === 'online'
-  const { uploadFile, isUploading, progress, isSupported } = useFileUpload()
+  const { uploadFile, isUploading, progress, isSupported, error: uploadError, clearError: clearUploadError } = useFileUpload()
   const { processMessageForLinkPreview } = useLinkPreview()
   const { resolvedMode } = useMode()
   const myBareJid = jid?.split('/')[0]
@@ -95,7 +95,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, m
   }
 
   // Upload state object
-  const uploadStateObj = { isUploading, progress }
+  const uploadStateObj = { isUploading, progress, error: uploadError, clearError: clearUploadError }
 
   // Composer handle ref for type-to-focus (separate from focus zone ref)
   const composerHandleRef = useRef<MessageComposerHandle>(null)
@@ -830,7 +830,7 @@ function MessageInput({
   sendEasterEgg: (to: string, type: 'chat' | 'groupchat', animation: string) => Promise<void>
   isConnected: boolean
   onEditLastMessage?: () => void
-  uploadState?: { isUploading: boolean; progress: number }
+  uploadState?: { isUploading: boolean; progress: number; error: string | null; clearError: () => void }
   isUploadSupported?: boolean
   onFileSelect?: (file: File) => void
   uploadFile?: (file: File) => Promise<import('@fluux/sdk').FileAttachment | null>
