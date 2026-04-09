@@ -1823,4 +1823,92 @@ describe('XMPPClient', () => {
       )
     })
   })
+
+  describe('fresh session discovery resilience', () => {
+    // Regression test for issue #308: fire-and-forget discovery calls must run
+    // even when earlier serial IQ calls (roster, bookmarks, etc.) fail or the
+    // overall session setup timeout fires.
+
+    it('should call discoverHttpUploadService even when fetchRoster throws', async () => {
+      // Set up a JID so discovery has a domain to query
+      ;(xmppClient as any).currentJid = 'user@example.com'
+
+      const discoverSpy = vi.spyOn(xmppClient.discovery, 'discoverHttpUploadService').mockResolvedValue()
+      const fetchServerInfoSpy = vi.spyOn(xmppClient.discovery, 'fetchServerInfo').mockResolvedValue()
+      const fetchProfileSpy = vi.spyOn(xmppClient.profile, 'fetchOwnProfile').mockResolvedValue()
+
+      // Make fetchRoster throw (simulating slow server + IQ timeout)
+      vi.spyOn(xmppClient.roster, 'fetchRoster').mockRejectedValue(new Error('IQ timeout'))
+
+      // Call runFreshSessionSetup directly (private method)
+      try {
+        await (xmppClient as any).runFreshSessionSetup(undefined, 1, 15000)
+      } catch {
+        // Expected: fetchRoster throws and propagates
+      }
+
+      // Discovery should have been called regardless of fetchRoster failure
+      expect(discoverSpy).toHaveBeenCalled()
+      expect(fetchServerInfoSpy).toHaveBeenCalled()
+      expect(fetchProfileSpy).toHaveBeenCalled()
+    })
+
+    it('should call discoverHttpUploadService even when fetchBookmarks throws', async () => {
+      ;(xmppClient as any).currentJid = 'user@example.com'
+
+      const discoverSpy = vi.spyOn(xmppClient.discovery, 'discoverHttpUploadService').mockResolvedValue()
+
+      // Let fetchRoster succeed but fetchBookmarks fail
+      vi.spyOn(xmppClient.roster, 'fetchRoster').mockResolvedValue()
+      vi.spyOn(xmppClient.roster, 'sendInitialPresence').mockResolvedValue()
+      vi.spyOn(xmppClient.muc, 'fetchBookmarks').mockRejectedValue(new Error('IQ timeout'))
+      vi.spyOn(xmppClient.discovery, 'fetchServerInfo').mockResolvedValue()
+      vi.spyOn(xmppClient.profile, 'fetchOwnProfile').mockResolvedValue()
+
+      try {
+        await (xmppClient as any).runFreshSessionSetup(undefined, 1, 15000)
+      } catch {
+        // Expected
+      }
+
+      expect(discoverSpy).toHaveBeenCalled()
+    })
+
+    it('should call discoverHttpUploadService before any await in the setup chain', async () => {
+      ;(xmppClient as any).currentJid = 'user@example.com'
+
+      const callOrder: string[] = []
+
+      vi.spyOn(xmppClient.discovery, 'discoverHttpUploadService').mockImplementation(async () => {
+        callOrder.push('discoverHttpUploadService')
+      })
+      vi.spyOn(xmppClient.discovery, 'fetchServerInfo').mockImplementation(async () => {
+        callOrder.push('fetchServerInfo')
+      })
+      vi.spyOn(xmppClient.profile, 'fetchOwnProfile').mockImplementation(async () => {
+        callOrder.push('fetchOwnProfile')
+      })
+      vi.spyOn(xmppClient.roster, 'fetchRoster').mockImplementation(async () => {
+        callOrder.push('fetchRoster')
+      })
+      vi.spyOn(xmppClient.roster, 'sendInitialPresence').mockResolvedValue()
+      vi.spyOn(xmppClient.muc, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [] })
+
+      // Mock conversation sync
+      const convSync = (xmppClient as any).conversationSync
+      if (convSync) {
+        vi.spyOn(convSync, 'fetchConversations').mockResolvedValue([])
+      }
+
+      await (xmppClient as any).runFreshSessionSetup(undefined, 1, 15000)
+
+      // Discovery calls should be initiated before fetchRoster starts
+      // (they're fire-and-forget so they start synchronously before the first await)
+      const discoverIdx = callOrder.indexOf('discoverHttpUploadService')
+      const rosterIdx = callOrder.indexOf('fetchRoster')
+      expect(discoverIdx).not.toBe(-1)
+      expect(rosterIdx).not.toBe(-1)
+      expect(discoverIdx).toBeLessThan(rosterIdx)
+    })
+  })
 })
