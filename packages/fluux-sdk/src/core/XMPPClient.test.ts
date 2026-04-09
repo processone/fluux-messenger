@@ -1892,7 +1892,7 @@ describe('XMPPClient', () => {
         callOrder.push('fetchRoster')
       })
       vi.spyOn(xmppClient.roster, 'sendInitialPresence').mockResolvedValue()
-      vi.spyOn(xmppClient.muc, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [] })
+      vi.spyOn(xmppClient.muc, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
 
       // Mock conversation sync
       const convSync = (xmppClient as any).conversationSync
