@@ -167,6 +167,10 @@ export function setupBackgroundSyncSideEffects(
           if (nonQuickChatRooms.length > 0) {
             logInfo(`Background sync: member discovery for ${nonQuickChatRooms.length} rooms`)
             for (const room of nonQuickChatRooms) {
+              if (!client.isConnected()) {
+                logInfo('Background sync: aborting member discovery — disconnected')
+                break
+              }
               await client.muc.queryRoomMembers(room.jid)
             }
           }
