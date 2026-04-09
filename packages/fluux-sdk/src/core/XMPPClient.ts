@@ -1649,6 +1649,24 @@ export class XMPPClient {
     this.stores?.roster.resetAllPresence()
     this.stores?.connection.clearOwnResources()
 
+    // Fire-and-forget discovery calls — start immediately, independent of the serial
+    // session setup chain. These must not be blocked by slow IQ responses (roster,
+    // bookmarks, conversation sync) or the overall session setup timeout.
+    this.discovery.fetchServerInfo().then(() => {
+      const serverInfo = this.stores?.connection.getServerInfo?.()
+      const hasWebPush = serverInfo?.features.includes(NS_P1_PUSH_WEBPUSH)
+      const pushEnabled = this.stores?.connection.getWebPushEnabled?.() ?? true
+      console.log('[WebPush] Server disco: p1:push:webpush feature =', hasWebPush,
+        '| pushEnabled =', pushEnabled, '| All features:', serverInfo?.features)
+      if (hasWebPush && pushEnabled) {
+        this.webPush.queryServices().catch((err) => {
+          console.warn('[WebPush] queryServices failed:', err)
+        })
+      }
+    }).catch(() => {})
+    this.discovery.discoverHttpUploadService().catch(() => {})
+    this.profile.fetchOwnProfile().catch(() => {})
+
     // Fetch roster before sending presence
     await this.roster.fetchRoster(iqTimeout)
     if (this.isSessionSuperseded(gen, 'Fresh session aborted after fetchRoster')) return
@@ -1715,23 +1733,6 @@ export class XMPPClient {
       }
     }
 
-    // Server discovery is non-blocking to avoid stalling the reconnection flow.
-    // The backgroundSync serverInfo subscriber will detect when MAM becomes available.
-    // Web Push service discovery is chained after server info to check for p1:push:webpush feature.
-    this.discovery.fetchServerInfo().then(() => {
-      const serverInfo = this.stores?.connection.getServerInfo?.()
-      const hasWebPush = serverInfo?.features.includes(NS_P1_PUSH_WEBPUSH)
-      const pushEnabled = this.stores?.connection.getWebPushEnabled?.() ?? true
-      console.log('[WebPush] Server disco: p1:push:webpush feature =', hasWebPush,
-        '| pushEnabled =', pushEnabled, '| All features:', serverInfo?.features)
-      if (hasWebPush && pushEnabled) {
-        this.webPush.queryServices().catch((err) => {
-          console.warn('[WebPush] queryServices failed:', err)
-        })
-      }
-    }).catch(() => {})
-    this.discovery.discoverHttpUploadService().catch(() => {})
-    this.profile.fetchOwnProfile().catch(() => {})
   }
 
   /**
