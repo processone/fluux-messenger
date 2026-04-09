@@ -77,7 +77,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   const ownAvatar = useConnectionStore((s) => s.ownAvatar)
   const status = useConnectionStore((s) => s.status)
   const isConnected = status === 'online'
-  const { uploadFile, isUploading, progress, isSupported } = useFileUpload()
+  const { uploadFile, isUploading, progress, isSupported, error: uploadError, clearError: clearUploadError } = useFileUpload()
   const { processMessageForLinkPreview } = useLinkPreview()
   const { resolvedMode } = useMode()
 
@@ -195,7 +195,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     nickMenu.handleTouchEnd()
   }
 
-  const uploadStateObj = { isUploading, progress }
+  const uploadStateObj = { isUploading, progress, error: uploadError, clearError: clearUploadError }
 
   // Scroll ref for programmatic scrolling and keyboard navigation
   const scrollRef = useRef<HTMLElement>(null)
@@ -1376,7 +1376,7 @@ interface RoomMessageInputProps {
   onCancelEdit: () => void
   onEditLastMessage?: () => void
   onComposingChange?: (isComposing: boolean) => void
-  uploadState?: { isUploading: boolean; progress: number }
+  uploadState?: { isUploading: boolean; progress: number; error: string | null; clearError: () => void }
   isUploadSupported?: boolean
   onFileSelect?: (file: File) => void
   uploadFile?: (file: File) => Promise<FileAttachment | null>

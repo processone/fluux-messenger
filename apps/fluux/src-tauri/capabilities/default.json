@@ -54,7 +54,9 @@
       "identifier": "http:default",
       "allow": [
         { "url": "https://*" },
-        { "url": "https://*:*/**" }
+        { "url": "https://*:*/**" },
+        { "url": "http://*" },
+        { "url": "http://*:*/**" }
       ]
     },
     "http:allow-fetch-read-body",
