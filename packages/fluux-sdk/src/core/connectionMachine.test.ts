@@ -372,7 +372,7 @@ describe('connectionMachine', () => {
       actor.stop()
     })
 
-    it('should reset backoff counter on WAKE while waiting', () => {
+    it('should preserve backoff counter on WAKE while waiting', () => {
       // Build up backoff: attempt 1 → fail → attempt 2 → fail → attempt 3
       actor.send({ type: 'TRIGGER_RECONNECT' })
       actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
@@ -383,14 +383,14 @@ describe('connectionMachine', () => {
       expect(actor.getSnapshot().context.reconnectAttempt).toBe(3)
       expect(actor.getSnapshot().context.nextRetryDelayMs).toBe(4000)
 
-      // WAKE should reset backoff so next failure starts at attempt 1
+      // WAKE should skip to attempting but preserve the attempt counter
       actor.send({ type: 'WAKE', sleepDurationMs: 5000 })
-      expect(actor.getSnapshot().context.reconnectAttempt).toBe(0)
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(3)
 
-      // Failure after WAKE-reset should use attempt 1 delay (1s)
+      // Failure after WAKE should continue backoff from attempt 3 → 4
       actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
-      expect(actor.getSnapshot().context.reconnectAttempt).toBe(1)
-      expect(actor.getSnapshot().context.nextRetryDelayMs).toBe(INITIAL_RECONNECT_DELAY)
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(4)
+      expect(actor.getSnapshot().context.nextRetryDelayMs).toBe(8000)
       actor.stop()
     })
 
@@ -405,11 +405,9 @@ describe('connectionMachine', () => {
       actor.send({ type: 'TRIGGER_RECONNECT' })
       expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
       actor.send({ type: 'WAKE', sleepDurationMs: 5000 })
-      // WAKE transitions to waiting (with nextRetryDelayMs=0, so the after
-      // timer fires immediately back to attempting for a fresh attempt)
-      // Counter is reset so backoff starts fresh
-      expect(actor.getSnapshot().context.reconnectAttempt).toBe(0)
-      expect(actor.getSnapshot().context.nextRetryDelayMs).toBe(0)
+      // WAKE transitions to waiting and increments attempt (stale attempt = failure)
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(4)
+      expect(actor.getSnapshot().context.nextRetryDelayMs).toBe(8000)
       actor.stop()
     })
 
@@ -418,10 +416,10 @@ describe('connectionMachine', () => {
       expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
       expect(actor.getSnapshot().context.smResumeViable).toBe(true)
 
-      // WAKE with sleep exceeding SM timeout
+      // WAKE with sleep exceeding SM timeout — increments attempt (stale = failure)
       actor.send({ type: 'WAKE', sleepDurationMs: SM_SESSION_TIMEOUT_MS + 1000 })
       expect(actor.getSnapshot().context.smResumeViable).toBe(false)
-      expect(actor.getSnapshot().context.reconnectAttempt).toBe(0)
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(2)
       actor.stop()
     })
 
@@ -440,10 +438,10 @@ describe('connectionMachine', () => {
     it('should mark SM resume not viable on WAKE with long sleep while waiting', () => {
       expect(actor.getSnapshot().context.smResumeViable).toBe(true)
 
-      // WAKE with sleep exceeding SM timeout while waiting
+      // WAKE with sleep exceeding SM timeout while waiting — preserves attempt counter
       actor.send({ type: 'WAKE', sleepDurationMs: SM_SESSION_TIMEOUT_MS + 1000 })
       expect(actor.getSnapshot().context.smResumeViable).toBe(false)
-      expect(actor.getSnapshot().context.reconnectAttempt).toBe(0)
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(1)
       actor.stop()
     })
 

@@ -561,19 +561,19 @@ export const connectionMachine = setup({
               target: 'attempting',
               actions: 'clearTargetTime',
             },
-            // Wake while waiting — skip to immediate attempt and reset backoff.
-            // Sleep/wake failures (network not ready) shouldn't accumulate backoff.
+            // Wake while waiting — skip remaining wait and try immediately,
+            // but preserve the attempt counter so backoff keeps growing on failure.
             // Check SM timeout so a long sleep during reconnection correctly
             // marks SM resume as not viable for the next attempt.
             WAKE: [
               {
                 guard: 'sleepExceedsSMTimeout',
                 target: 'attempting',
-                actions: ['clearTargetTime', 'resetAttemptCounter', 'markSmResumeNotViable'],
+                actions: ['clearTargetTime', 'markSmResumeNotViable'],
               },
               {
                 target: 'attempting',
-                actions: ['clearTargetTime', 'resetAttemptCounter'],
+                actions: ['clearTargetTime'],
               },
             ],
             VISIBLE: {
@@ -602,19 +602,18 @@ export const connectionMachine = setup({
               target: 'waiting',
               actions: 'incrementAttempt',
             },
-            // Wake during active attempt — abort stale attempt by transitioning
-            // to waiting. After sleep, the in-flight client has a dead socket and
-            // stale JS timers that may not fire reliably. Transitioning to waiting
-            // (with nextRetryDelayMs=0) triggers an immediate fresh attempt.
+            // Wake during active attempt — the in-flight client has a dead socket
+            // and stale JS timers. Treat it as a failed attempt so backoff grows,
+            // then retry from waiting.
             WAKE: [
               {
                 guard: 'sleepExceedsSMTimeout',
                 target: 'waiting',
-                actions: ['resetAttemptCounter', 'markSmResumeNotViable'],
+                actions: ['incrementAttempt', 'markSmResumeNotViable'],
               },
               {
                 target: 'waiting',
-                actions: 'resetAttemptCounter',
+                actions: 'incrementAttempt',
               },
             ],
             // Already attempting — ignore to prevent parallel attempts
