@@ -312,13 +312,12 @@ export function usePlatformState() {
   }, [client, shouldHandleWake, logEvent, dispatchResizeWorkaround])
 
   // ── Effect 3: Time-gap wake detection (JS heartbeat) ──────────────────────
-  // Also runs during 'connecting' status: when a reconnect attempt is in
-  // progress (reconnecting.attempting → status 'connecting'), macOS may freeze
-  // JS. Without 'connecting', the heartbeat would be torn down and couldn't
-  // detect sleep gaps that occur mid-reconnect.
+  // Also runs during 'reconnecting' status so we still update the heartbeat
+  // reference while the machine is retrying. We do NOT re-kick a wake while
+  // already reconnecting — the state machine owns that retry loop.
 
   useEffect(() => {
-    if (status !== 'online' && status !== 'reconnecting' && status !== 'connecting') return
+    if (status !== 'online' && status !== 'reconnecting') return
 
     const checkForWake = async () => {
       const now = Date.now()
@@ -326,6 +325,10 @@ export function usePlatformState() {
       lastHeartbeatRef.current = now
 
       if (gap < SLEEP_THRESHOLD_MS) return
+      // Machine is already handling the reconnect with its own backoff.
+      // Re-entering handleAwake() here would cause overlapping cleanup +
+      // attemptReconnect sequences and a render storm.
+      if (statusRef.current === 'reconnecting') return
       if (!shouldHandleWake('time-gap')) return
 
       const gapSeconds = Math.round(gap / 1000)
@@ -353,13 +356,11 @@ export function usePlatformState() {
   }, [status, client, shouldHandleWake, dispatchResizeWorkaround])
 
   // ── Effect 4: Page visibility and window focus ──────────────────────────────
-  // Also runs during 'connecting' status: when reconnecting.attempting starts,
-  // status becomes 'connecting' and macOS may freeze JS. Without 'connecting'
-  // here, the focus listener would be torn down and couldn't trigger reconnect
-  // when the user returns to the app.
+  // Runs during 'reconnecting' so window focus can still nudge a stalled
+  // reconnect attempt to retry immediately when the user returns to the app.
 
   useEffect(() => {
-    if (status !== 'online' && status !== 'reconnecting' && status !== 'connecting') return
+    if (status !== 'online' && status !== 'reconnecting') return
 
     const handleVisibilityChange = async () => {
       if (document.hidden) {

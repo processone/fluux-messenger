@@ -1101,8 +1101,23 @@ describe('connectionMachine', () => {
         expect(getConnectionStatusFromState({ reconnecting: 'waiting' })).toBe('reconnecting')
       })
 
-      it('should map reconnecting.attempting to connecting', () => {
-        expect(getConnectionStatusFromState({ reconnecting: 'attempting' })).toBe('connecting')
+      it('should map reconnecting.attempting to reconnecting (stable status across waiting↔attempting loop)', () => {
+        // Regression: this previously returned 'connecting', which caused the
+        // UI footer to show "Connexion..." during reconnects and forced the
+        // wake-detection effects in usePlatformState to include 'connecting'
+        // in their run conditions — allowing the heartbeat to re-enter
+        // handleAwake() mid-reconnect and cascade into a webview freeze.
+        expect(getConnectionStatusFromState({ reconnecting: 'attempting' })).toBe('reconnecting')
+      })
+
+      it('should keep the same status across the waiting↔attempting loop', () => {
+        // Both reconnecting substates must map to the same status so that
+        // status-driven React effects do not tear down/rebuild intervals
+        // on every machine transition during a reconnect backoff cycle.
+        const waiting = getConnectionStatusFromState({ reconnecting: 'waiting' })
+        const attempting = getConnectionStatusFromState({ reconnecting: 'attempting' })
+        expect(waiting).toBe(attempting)
+        expect(waiting).toBe('reconnecting')
       })
 
       it('should map all terminal states to error', () => {

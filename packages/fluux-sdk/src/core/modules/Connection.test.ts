@@ -2601,6 +2601,87 @@ describe('XMPPClient Connection', () => {
       // Should verify (isVerifying flag set)
       expect(mockStores.connection.setIsVerifying).toHaveBeenCalledWith(true)
     })
+
+    it('should coalesce concurrent "awake" notifications into a single handler run', async () => {
+      // Regression: overlapping wake signals (Tauri system-did-wake, deferred
+      // wake, JS heartbeat time-gap, visibility/focus) arriving during the
+      // async verifyConnection() window previously produced overlapping
+      // cleanupClient + attemptReconnect sequences, saturating the React
+      // render loop and hanging the webview. handleAwake() now single-flights.
+      mockXmppClientInstance.streamManagement = {
+        id: 'sm-123',
+        inbound: 5,
+        outbound: 0,
+        enabled: true,
+        on: vi.fn(),
+      }
+
+      // Block SM verification so the first handler stays in-flight.
+      mockXmppClientInstance.send.mockImplementation(() => {
+        setTimeout(() => {
+          const ackNonza = createMockElement('a', { xmlns: 'urn:xmpp:sm:3', h: '5' })
+          mockXmppClientInstance._emit('nonza', ackNonza)
+        }, 50)
+        return Promise.resolve()
+      })
+
+      mockStores.console.addEvent.mockClear()
+
+      // Fire 3 overlapping wake signals — they must coalesce.
+      const p1 = xmppClient.notifySystemState('awake')
+      const p2 = xmppClient.notifySystemState('awake')
+      const p3 = xmppClient.notifySystemState('awake')
+
+      await vi.runAllTimersAsync()
+      await Promise.all([p1, p2, p3])
+
+      // Only ONE verification should have been logged, not three.
+      const verifyingEvents = mockStores.console.addEvent.mock.calls.filter(
+        ([msg]) => typeof msg === 'string' && msg.includes('verifying connection')
+      )
+      expect(verifyingEvents).toHaveLength(1)
+
+      // Coalesce log line must be present at least twice (for p2 and p3).
+      // (It is only logged through logInfo, not the console store — assert via
+      // the single verifying-connection call above, which is the observable
+      // side effect of single-flighting.)
+    })
+
+    it('should allow a new handleAwake run after the previous one completes', async () => {
+      // The in-flight guard must clear on completion so subsequent real wake
+      // events (a later sleep→wake cycle) are handled normally.
+      mockXmppClientInstance.streamManagement = {
+        id: 'sm-123',
+        inbound: 5,
+        outbound: 0,
+        enabled: true,
+        on: vi.fn(),
+      }
+      mockXmppClientInstance.send.mockImplementation(() => {
+        setTimeout(() => {
+          const ackNonza = createMockElement('a', { xmlns: 'urn:xmpp:sm:3', h: '5' })
+          mockXmppClientInstance._emit('nonza', ackNonza)
+        }, 10)
+        return Promise.resolve()
+      })
+
+      // First wake — completes normally.
+      const first = xmppClient.notifySystemState('awake')
+      await vi.runAllTimersAsync()
+      await first
+
+      mockStores.console.addEvent.mockClear()
+
+      // Second wake — must not be swallowed by a stale in-flight promise.
+      const second = xmppClient.notifySystemState('awake')
+      await vi.runAllTimersAsync()
+      await second
+
+      const verifyingEvents = mockStores.console.addEvent.mock.calls.filter(
+        ([msg]) => typeof msg === 'string' && msg.includes('verifying connection')
+      )
+      expect(verifyingEvents).toHaveLength(1)
+    })
   })
 
   // ── Wake-from-sleep reconnection regression tests ─────────────────────────

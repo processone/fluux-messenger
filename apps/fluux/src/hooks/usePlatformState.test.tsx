@@ -245,15 +245,29 @@ describe('usePlatformState', () => {
       expect(mockClientNotifySystemState).not.toHaveBeenCalledWith('visible')
     })
 
-    it('should register focus listener during connecting status', () => {
-      // When status is 'connecting' (reconnect attempt in progress), the
-      // effect should still be active — not torn down. This ensures the
-      // focus handler is ready if status transitions to reconnecting.
+    it('should register focus listener during reconnecting status', () => {
+      // When status is 'reconnecting' (retry loop in progress, including the
+      // attempting substate which now also maps to 'reconnecting'), the
+      // effect must stay active so window focus can nudge a stalled retry.
+      const addSpy = vi.spyOn(window, 'addEventListener')
+      mockConnectionStatus.current = 'reconnecting'
+      renderHook(() => usePlatformState())
+
+      expect(addSpy).toHaveBeenCalledWith('focus', expect.any(Function))
+      addSpy.mockRestore()
+    })
+
+    it('should NOT register focus listener during connecting status', () => {
+      // 'connecting' is reserved for the initial connection attempt (machine
+      // state 'connecting'), not reconnects. No wake-nudge needed there.
       const addSpy = vi.spyOn(window, 'addEventListener')
       mockConnectionStatus.current = 'connecting'
       renderHook(() => usePlatformState())
 
-      expect(addSpy).toHaveBeenCalledWith('focus', expect.any(Function))
+      const focusCalls = addSpy.mock.calls.filter(
+        ([event]) => (event as string) === 'focus'
+      )
+      expect(focusCalls).toHaveLength(0)
       addSpy.mockRestore()
     })
 
@@ -270,31 +284,32 @@ describe('usePlatformState', () => {
     })
   })
 
-  describe('heartbeat during connecting status', () => {
-    it('should keep heartbeat running during connecting status', async () => {
+  describe('heartbeat during reconnecting status', () => {
+    it('should NOT re-fire notifySystemState("awake") while already reconnecting', async () => {
+      // Regression: previously, during a reconnect attempt the heartbeat
+      // would observe macOS JS throttling as a >180s time gap and re-enter
+      // handleAwake(), cascading into overlapping cleanupClient +
+      // attemptReconnect sequences and freezing the webview. The state
+      // machine owns the retry loop — the heartbeat must not re-kick it.
       const startTime = Date.now()
-      // Start with connecting status (reconnect attempt in progress)
-      mockConnectionStatus.current = 'connecting'
+      mockConnectionStatus.current = 'reconnecting'
       renderHook(() => usePlatformState())
 
-      // Let the first heartbeat tick fire (10s) to establish baseline
       await act(async () => {
         vi.advanceTimersByTime(10_000)
         await Promise.resolve()
       })
       vi.clearAllMocks()
 
-      // Simulate macOS sleep: jump system time forward by 200s, then fire the
-      // next interval tick. This creates a gap of 200s between the last heartbeat
-      // check and now, exceeding the 180s SLEEP_THRESHOLD_MS.
+      // Simulate a 200s JS-throttling gap (exceeds SLEEP_THRESHOLD_MS = 180s).
       vi.setSystemTime(new Date(startTime + 10_000 + 200_000))
       await act(async () => {
         vi.advanceTimersByTime(10_000)
         await Promise.resolve()
       })
 
-      // Should detect the time gap and call notifySystemState('awake')
-      expect(mockClientNotifySystemState).toHaveBeenCalledWith('awake', expect.any(Number))
+      // Must NOT have re-entered handleAwake via a heartbeat-driven wake.
+      expect(mockClientNotifySystemState).not.toHaveBeenCalledWith('awake', expect.any(Number))
     })
 
     it('should NOT run heartbeat when status is disconnected', async () => {
