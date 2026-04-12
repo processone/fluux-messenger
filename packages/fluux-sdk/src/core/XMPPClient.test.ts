@@ -987,6 +987,83 @@ describe('XMPPClient', () => {
       expect(bookmarksSpy).toHaveBeenCalled()
     })
 
+    it('should fall back to live room store when previouslyJoinedRooms is empty', async () => {
+      const mockClientWithSM = createMockXmppClientWithSM('sm-id-fallback')
+      mockClientFactory._setInstance(mockClientWithSM)
+
+      const stores = createMockStores()
+      // Simulate rooms restored by app persistence layer (addRoom before connect)
+      const storeRooms = [
+        createMockRoom('room1@conference.example.com', { nickname: 'testuser', joined: true }),
+        createMockRoom('room2@conference.example.com', { nickname: 'testuser', joined: true }),
+      ]
+      stores.room.joinedRooms.mockReturnValue(storeRooms)
+
+      const newXmppClient = new XMPPClient({ debug: false })
+      newXmppClient.bindStores(stores)
+
+      const refreshSpy = vi.spyOn(newXmppClient.muc, 'refreshPresenceInRooms').mockResolvedValue()
+
+      // Connect WITHOUT previouslyJoinedRooms (simulates empty SM persistence)
+      const connectPromise = newXmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        smState: { id: 'sm-id-fallback', inbound: 5 },
+        skipDiscovery: true,
+      })
+
+      const resumedNonza = createMockElement('resumed', {
+        xmlns: 'urn:xmpp:sm:3',
+        previd: 'sm-id-fallback',
+        h: '5',
+      })
+      mockClientWithSM._emit('nonza', resumedNonza)
+
+      await connectPromise
+
+      // Should use rooms from the live store as fallback
+      expect(refreshSpy).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ jid: 'room1@conference.example.com', nickname: 'testuser' }),
+          expect.objectContaining({ jid: 'room2@conference.example.com', nickname: 'testuser' }),
+        ])
+      )
+    })
+
+    it('should not refresh rooms when both previouslyJoinedRooms and store are empty', async () => {
+      const mockClientWithSM = createMockXmppClientWithSM('sm-id-empty')
+      mockClientFactory._setInstance(mockClientWithSM)
+
+      const stores = createMockStores()
+      // joinedRooms returns empty (default mock behavior)
+
+      const newXmppClient = new XMPPClient({ debug: false })
+      newXmppClient.bindStores(stores)
+
+      const refreshSpy = vi.spyOn(newXmppClient.muc, 'refreshPresenceInRooms').mockResolvedValue()
+
+      const connectPromise = newXmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        smState: { id: 'sm-id-empty', inbound: 5 },
+        skipDiscovery: true,
+      })
+
+      const resumedNonza = createMockElement('resumed', {
+        xmlns: 'urn:xmpp:sm:3',
+        previd: 'sm-id-empty',
+        h: '5',
+      })
+      mockClientWithSM._emit('nonza', resumedNonza)
+
+      await connectPromise
+
+      // No rooms anywhere → should not attempt refresh
+      expect(refreshSpy).not.toHaveBeenCalled()
+    })
+
     it('should detect new session when SM resume fails (online event fires)', async () => {
       // SM resume failed - server emits 'online' instead of 'resumed'
       const mockClientWithSM = createMockXmppClientWithSM(null)

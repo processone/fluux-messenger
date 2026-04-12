@@ -154,6 +154,14 @@ export class Connection extends BaseModule {
   // promise and sending CONNECTION_ERROR that would disrupt the new reconnect.
   private deadSocketRecoveryInProgress = false
 
+  // Single-flight guard for handleAwake(). Overlapping wake signals (Tauri
+  // system-did-wake, system-did-wake-deferred, JS heartbeat, visibility) can
+  // arrive concurrently; each would otherwise spawn its own cleanupClient +
+  // attemptReconnect sequence and race with verifyConnection(). Coalescing them
+  // into a single in-flight promise prevents the render storm that causes the
+  // webview to hang after wake.
+  private handleAwakeInFlight: Promise<void> | null = null
+
   // Timestamp of last wake-from-sleep event. Used by attemptReconnect to add a
   // short settle delay — navigator.onLine goes true before the network path is
   // fully functional (DNS, TLS, Wi-Fi re-association), causing SASL timeouts.
@@ -1148,8 +1156,22 @@ export class Connection extends BaseModule {
    * - Connected + long sleep (> SM timeout): transition to reconnecting, clean up dead client.
    * - Connected + short sleep: verify connection health (SM ack or ping).
    * - Already reconnecting: send WAKE to reset backoff and retry immediately.
+   *
+   * Single-flight: concurrent callers share the in-flight promise so only one
+   * cleanup/verify/reconnect sequence runs at a time.
    */
-  private async handleAwake(sleepDurationMs?: number): Promise<void> {
+  private handleAwake(sleepDurationMs?: number): Promise<void> {
+    if (this.handleAwakeInFlight) {
+      logInfo('handleAwake: already in flight, coalescing')
+      return this.handleAwakeInFlight
+    }
+    this.handleAwakeInFlight = this.handleAwakeImpl(sleepDurationMs).finally(() => {
+      this.handleAwakeInFlight = null
+    })
+    return this.handleAwakeInFlight
+  }
+
+  private async handleAwakeImpl(sleepDurationMs?: number): Promise<void> {
     const sleepSec = sleepDurationMs != null ? Math.round(sleepDurationMs / 1000) : null
     logInfo(`System state: awake${sleepSec != null ? ` (sleep: ${sleepSec}s)` : ''}`)
 

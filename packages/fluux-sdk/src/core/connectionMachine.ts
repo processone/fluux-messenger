@@ -713,7 +713,11 @@ export function getConnectionStatusFromState(stateValue: ConnectionStateValue): 
       case 'waiting':
         return 'reconnecting'
       case 'attempting':
-        return 'connecting'
+        // Stays 'reconnecting' (not 'connecting') so the UI label and all
+        // status-driven effects see a stable value across the whole
+        // waiting↔attempting loop. This prevents wake-detection effects from
+        // re-entering handleAwake() mid-reconnect.
+        return 'reconnecting'
     }
   }
 

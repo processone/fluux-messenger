@@ -1501,10 +1501,27 @@ export class XMPPClient {
     // SM resumption preserves our MUC membership, so we don't need a full
     // rejoin (no disco#info, no history request). We just resend directed
     // presence to confirm we're still in each room.
-    if (previouslyJoinedRooms && previouslyJoinedRooms.length > 0) {
-      logInfo(`SM resumption: refreshing presence in ${previouslyJoinedRooms.length} room(s)`)
+    //
+    // Fallback: if SM persistence had no rooms (e.g. SM was enabled before
+    // rooms joined during a fresh session), read from the live room store
+    // which may have been restored by the app persistence layer.
+    let roomsToRefresh = previouslyJoinedRooms
+    if (!roomsToRefresh || roomsToRefresh.length === 0) {
+      const storeRooms = this.stores?.room.joinedRooms() ?? []
+      if (storeRooms.length > 0) {
+        logInfo(`SM resumption: using ${storeRooms.length} room(s) from store (SM persistence was empty)`)
+        roomsToRefresh = storeRooms.map(r => ({
+          jid: r.jid,
+          nickname: r.nickname,
+          password: r.password,
+          autojoin: r.autojoin,
+        }))
+      }
+    }
+    if (roomsToRefresh && roomsToRefresh.length > 0) {
+      logInfo(`SM resumption: refreshing presence in ${roomsToRefresh.length} room(s)`)
       this.stores?.console.addEvent(
-        `Refreshing presence in ${previouslyJoinedRooms.length} room(s) after SM resumption`,
+        `Refreshing presence in ${roomsToRefresh.length} room(s) after SM resumption`,
         'sm'
       )
 
@@ -1512,7 +1529,7 @@ export class XMPPClient {
       // The room store is ephemeral (not persisted), so after page reload it's empty.
       // Without entries, self-presence responses (status 110) are silently dropped
       // by setRoomJoined() which requires the room to already exist.
-      for (const room of previouslyJoinedRooms) {
+      for (const room of roomsToRefresh) {
         if (!this.stores?.room.getRoom(room.jid)) {
           this.emitSDK('room:added', {
             room: {
@@ -1532,7 +1549,7 @@ export class XMPPClient {
         }
       }
 
-      await this.muc.refreshPresenceInRooms(previouslyJoinedRooms)
+      await this.muc.refreshPresenceInRooms(roomsToRefresh)
       if (this.isSessionSuperseded(gen, 'SM resumption aborted after room presence refresh')) return
 
       // For short disconnects (< 2 min), SM replay already delivered all queued
@@ -1567,7 +1584,7 @@ export class XMPPClient {
         })
 
         // Fetch bookmarks to restore room names and autojoin state.
-        // Also join any newly bookmarked rooms not in previouslyJoinedRooms.
+        // Also join any newly bookmarked rooms not already joined.
         this.muc.fetchBookmarks(FRESH_SESSION_IQ_TIMEOUT_MS).then(({ roomsToAutojoin }) => {
           if (this.isSessionStale(gen)) return
           for (const room of roomsToAutojoin) {
