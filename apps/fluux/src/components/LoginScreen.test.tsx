@@ -272,6 +272,64 @@ describe('LoginScreen', () => {
         })
     })
 
+    describe('server persistence on submit', () => {
+        it('should store resolved domain when server field is empty', async () => {
+            // Domain not in well-known list, so resolveServerForConnection falls back to bare domain
+            mockGetDomainFromJid.mockReturnValue('chat.example.com')
+            mockGetWebsocketUrlForDomain.mockReturnValue(null)
+
+            render(<LoginScreen />)
+
+            fireEvent.change(screen.getByLabelText('login.jidLabel'), { target: { value: 'alice@chat.example.com' } })
+            fireEvent.change(screen.getByLabelText('login.passwordLabel'), { target: { value: 'secret' } })
+            fireEvent.click(screen.getByRole('button', { name: 'login.connect' }))
+
+            await waitFor(() => {
+                expect(mockConnect).toHaveBeenCalled()
+            })
+
+            // Should store the domain (from resolveServerForConnection), not empty string
+            expect(localStorage.getItem('xmpp-last-server')).toBe('chat.example.com')
+        })
+
+        it('should store well-known WebSocket URL when available', async () => {
+            mockGetDomainFromJid.mockReturnValue('process-one.net')
+            mockGetWebsocketUrlForDomain.mockReturnValue('wss://chat.process-one.net/xmpp')
+
+            render(<LoginScreen />)
+
+            fireEvent.change(screen.getByLabelText('login.jidLabel'), { target: { value: 'alice@process-one.net' } })
+            fireEvent.change(screen.getByLabelText('login.passwordLabel'), { target: { value: 'secret' } })
+            fireEvent.click(screen.getByRole('button', { name: 'login.connect' }))
+
+            await waitFor(() => {
+                expect(mockConnect).toHaveBeenCalled()
+            })
+
+            expect(localStorage.getItem('xmpp-last-server')).toBe('wss://chat.process-one.net/xmpp')
+        })
+
+        it('should store explicit server input as-is', async () => {
+            mockGetDomainFromJid.mockReturnValue('example.com')
+            mockGetWebsocketUrlForDomain.mockReturnValue(null)
+
+            render(<LoginScreen />)
+
+            fireEvent.change(screen.getByLabelText('login.jidLabel'), { target: { value: 'alice@example.com' } })
+            fireEvent.change(screen.getByLabelText('login.passwordLabel'), { target: { value: 'secret' } })
+            // Show and fill server field
+            fireEvent.click(screen.getByText('login.serverLabel'))
+            fireEvent.change(screen.getByPlaceholderText('login.serverPlaceholder'), { target: { value: 'wss://custom.example.com/ws' } })
+            fireEvent.click(screen.getByRole('button', { name: 'login.connect' }))
+
+            await waitFor(() => {
+                expect(mockConnect).toHaveBeenCalled()
+            })
+
+            expect(localStorage.getItem('xmpp-last-server')).toBe('wss://custom.example.com/ws')
+        })
+    })
+
     describe('FAST token cleanup on auth error', () => {
         it('should delete FAST token on authentication error', () => {
             localStorage.setItem('xmpp-last-jid', 'user@example.com')

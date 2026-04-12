@@ -129,7 +129,10 @@ function App() {
     const rememberMe = localStorage.getItem('xmpp-remember-me') === 'true'
     const savedJid = localStorage.getItem('xmpp-last-jid')
     const savedServer = localStorage.getItem('xmpp-last-server')
-    return !!(rememberMe && savedJid && savedServer && hasFastToken(savedJid))
+    // Fallback: derive server from JID domain when savedServer is empty
+    // (backward compat with older sessions that stored '' for the server field)
+    const effectiveServer = savedServer || (savedJid ? savedJid.split('@')[1] : null)
+    return !!(rememberMe && savedJid && effectiveServer && hasFastToken(savedJid))
   })
 
   // Track if we've ever been online this session

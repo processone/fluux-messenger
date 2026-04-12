@@ -621,7 +621,10 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
     const rememberMe = localStorage.getItem('xmpp-remember-me') === 'true'
     const savedJid = localStorage.getItem('xmpp-last-jid')
     const savedServer = localStorage.getItem('xmpp-last-server')
-    if (rememberMe && savedJid && savedServer && hasFastToken(savedJid)) {
+    // Fallback: derive server from JID domain when savedServer is empty
+    // (backward compat with older sessions that stored '' for the server field)
+    const effectiveServer = savedServer || (savedJid ? savedJid.split('@')[1] : null)
+    if (rememberMe && savedJid && effectiveServer && hasFastToken(savedJid)) {
       const resource = getResource()
       console.log('[Auth] Attempting FAST token auto-connect (no password)')
 
@@ -630,10 +633,10 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
         // after a fresh tab open faces the same wake-from-sleep network
         // flakiness as page-reload. Auth failures (bad/expired token) still
         // surface via the machine's AUTH_ERROR path and delete the token.
-        connect(savedJid, undefined, savedServer, undefined, resource, i18n.language, false, true, true).then(() => {
+        connect(savedJid, undefined, effectiveServer, undefined, resource, i18n.language, false, true, true).then(() => {
           // Save session for subsequent in-tab reconnects (no password needed —
           // FAST token in localStorage handles auth on future reconnects too)
-          saveSession(savedJid, '', savedServer)
+          saveSession(savedJid, '', effectiveServer)
         }).catch((err) => {
           console.log('[Auth] FAST token connect failed:', err?.message || err)
           deleteFastToken(savedJid)
