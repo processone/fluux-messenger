@@ -190,6 +190,82 @@ describe('SmPersistence', () => {
 
       await expect(sm.persist('user@example.com', 'res1')).resolves.toBeUndefined()
     })
+
+    it('should preserve existing rooms when current joinedRooms is empty', async () => {
+      const existingRooms = [
+        { jid: 'room1@conf.example.com', nickname: 'me' },
+        { jid: 'room2@conf.example.com', nickname: 'me' },
+      ]
+      // Pre-populate storage with rooms from a previous session
+      mockStorage.store.set('user@example.com', {
+        smId: 'old-sm',
+        smInbound: 10,
+        resource: 'res1',
+        timestamp: Date.now() - 5000,
+        joinedRooms: existingRooms,
+      })
+
+      // Current store returns no rooms (e.g. SM enabled before rooms joined)
+      const sm = new SmPersistence(createDeps({
+        storageAdapter: mockStorage.adapter,
+        getJoinedRooms: () => [],
+      }))
+      sm.updateCache('new-sm', 0)
+
+      await sm.persist('user@example.com', 'res1')
+
+      // Should update SM state but preserve the existing rooms
+      expect(mockStorage.adapter.setSessionState).toHaveBeenCalledWith('user@example.com', {
+        smId: 'new-sm',
+        smInbound: 0,
+        resource: 'res1',
+        timestamp: expect.any(Number),
+        joinedRooms: existingRooms,
+      })
+    })
+
+    it('should overwrite rooms when current joinedRooms is non-empty', async () => {
+      const existingRooms = [
+        { jid: 'room1@conf.example.com', nickname: 'me' },
+        { jid: 'room2@conf.example.com', nickname: 'me' },
+      ]
+      mockStorage.store.set('user@example.com', {
+        smId: 'old-sm',
+        smInbound: 10,
+        resource: 'res1',
+        timestamp: Date.now() - 5000,
+        joinedRooms: existingRooms,
+      })
+
+      const currentRooms = [{ jid: 'room3@conf.example.com', nickname: 'me' }]
+      const sm = new SmPersistence(createDeps({
+        storageAdapter: mockStorage.adapter,
+        getJoinedRooms: () => currentRooms,
+      }))
+      sm.updateCache('new-sm', 0)
+
+      await sm.persist('user@example.com', 'res1')
+
+      // Should use current rooms, not preserved ones
+      expect(mockStorage.adapter.setSessionState).toHaveBeenCalledWith('user@example.com', expect.objectContaining({
+        joinedRooms: currentRooms,
+      }))
+    })
+
+    it('should save empty rooms when no existing state in storage', async () => {
+      // No pre-existing state in storage
+      const sm = new SmPersistence(createDeps({
+        storageAdapter: mockStorage.adapter,
+        getJoinedRooms: () => [],
+      }))
+      sm.updateCache('new-sm', 0)
+
+      await sm.persist('user@example.com', 'res1')
+
+      expect(mockStorage.adapter.setSessionState).toHaveBeenCalledWith('user@example.com', expect.objectContaining({
+        joinedRooms: [],
+      }))
+    })
   })
 
   describe('persistNow', () => {

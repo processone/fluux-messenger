@@ -105,12 +105,24 @@ export class SmPersistence {
     }
     try {
       const joinedRooms = this.deps.getJoinedRooms()
+
+      // If current joinedRooms is empty, preserve previously persisted rooms.
+      // This avoids overwriting valid room data during SM negotiation when
+      // rooms haven't joined yet (e.g. SM enabled fires before bookmark join).
+      let roomsToSave = joinedRooms
+      if (joinedRooms.length === 0) {
+        const existing = await this.deps.storageAdapter.getSessionState(jid)
+        if (existing?.joinedRooms && existing.joinedRooms.length > 0) {
+          roomsToSave = existing.joinedRooms
+        }
+      }
+
       await this.deps.storageAdapter.setSessionState(jid, {
         smId: this.cache.id,
         smInbound: this.cache.inbound,
         resource: resource || '',
         timestamp: Date.now(),
-        joinedRooms,
+        joinedRooms: roomsToSave,
       })
     } catch {
       // Storage errors are non-fatal
