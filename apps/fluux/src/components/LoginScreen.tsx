@@ -254,8 +254,10 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
     const actualServer = resolveServerForConnection(jid, server)
 
     // Save JID and server for next time
+    // Store the resolved server (not the raw input) so FAST token auto-reconnect
+    // can use it even when the server field was left empty (hidden by default).
     localStorage.setItem(STORAGE_KEY_JID, jid)
-    localStorage.setItem(STORAGE_KEY_SERVER, server)
+    localStorage.setItem(STORAGE_KEY_SERVER, actualServer || server)
 
     // Save remember me preference
     localStorage.setItem(STORAGE_KEY_REMEMBER, rememberMe ? 'true' : 'false')
