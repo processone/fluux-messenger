@@ -122,6 +122,61 @@ describe('useProxiedUrl', () => {
     )
   })
 
+  // --- Web with Cache API tests ---
+
+  it('should fall back to direct URL when web cache fetch fails (e.g. CORS)', async () => {
+    // Simulate browser environment with Cache API available
+    const originalCaches = globalThis.caches
+    globalThis.caches = {} as CacheStorage
+    mockResolveWebMediaUrl.mockRejectedValue(new Error('Fetch failed'))
+
+    const { result } = renderHook(() =>
+      useProxiedUrl('https://upload.example.com/photo.jpg')
+    )
+
+    expect(result.current.isLoading).toBe(true)
+
+    await waitFor(() => {
+      expect(result.current.url).toBe('https://upload.example.com/photo.jpg')
+    })
+
+    expect(result.current.isLoading).toBe(false)
+    expect(result.current.error).toBeNull()
+    expect(mockResolveWebMediaUrl).toHaveBeenCalledWith('https://upload.example.com/photo.jpg')
+
+    // Restore
+    if (originalCaches) {
+      globalThis.caches = originalCaches
+    } else {
+      delete (globalThis as Record<string, unknown>).caches
+    }
+  })
+
+  it('should use web cache result when available', async () => {
+    const originalCaches = globalThis.caches
+    globalThis.caches = {} as CacheStorage
+    mockResolveWebMediaUrl.mockResolvedValue('blob:http://localhost/abc123')
+
+    const { result } = renderHook(() =>
+      useProxiedUrl('https://upload.example.com/photo.jpg')
+    )
+
+    expect(result.current.isLoading).toBe(true)
+
+    await waitFor(() => {
+      expect(result.current.url).toBe('blob:http://localhost/abc123')
+    })
+
+    expect(result.current.isLoading).toBe(false)
+    expect(result.current.error).toBeNull()
+
+    if (originalCaches) {
+      globalThis.caches = originalCaches
+    } else {
+      delete (globalThis as Record<string, unknown>).caches
+    }
+  })
+
   // --- Tauri mode tests ---
 
   it('should resolve via media cache in Tauri mode', async () => {
