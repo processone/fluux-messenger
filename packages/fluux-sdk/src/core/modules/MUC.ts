@@ -1410,24 +1410,35 @@ export class MUC extends BaseModule {
 
         allRoomJids.push(jid)
 
-        const room: Room = {
-          jid,
-          name,
-          nickname: nick || 'user',
-          joined: false,
-          isBookmarked: true,
-          autojoin,
-          password,
-          notifyAll,
-          notifyAllPersistent: notifyAll,
-          occupants: new Map(),
-          messages: [],
-          unreadCount: 0,
-          mentionsCount: 0,
-          typingUsers: new Set(),
+        const existingRoom = this.deps.stores?.room.getRoom(jid)
+        if (existingRoom) {
+          // Update bookmark fields only — preserves runtime (messages, occupants).
+          // Using room:added here would wipe messages loaded by MAM catch-up
+          // that races with fetchBookmarks during fresh session reconnect.
+          this.deps.emitSDK('room:bookmark', {
+            roomJid: jid,
+            bookmark: { name, nick: nick || 'user', autojoin, password, notifyAll },
+          })
+        } else {
+          const room: Room = {
+            jid,
+            name,
+            nickname: nick || 'user',
+            joined: false,
+            isBookmarked: true,
+            autojoin,
+            password,
+            notifyAll,
+            notifyAllPersistent: notifyAll,
+            occupants: new Map(),
+            messages: [],
+            unreadCount: 0,
+            mentionsCount: 0,
+            typingUsers: new Set(),
+          }
+          // SDK event only - binding calls store.addRoom
+          this.deps.emitSDK('room:added', { room })
         }
-        // SDK event only - binding calls store.addRoom
-        this.deps.emitSDK('room:added', { room })
 
         if (autojoin && nick) {
           roomsToAutojoin.push({ jid, nick, password })
