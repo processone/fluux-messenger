@@ -207,11 +207,12 @@ export const connectionMachine = setup({
     }),
 
     // Increment attempt counter and compute next backoff delay.
-    // Attempt value saturates at maxReconnectAttempts so the UI attempt label
-    // and delay remain stable after hitting the backoff ceiling.
+    // Counter keeps incrementing so logs/UI show progress even after the
+    // backoff ceiling is reached (delay is independently capped by
+    // computeBackoffDelay via MAX_RECONNECT_DELAY).
     // Sets reconnectTargetTime as an absolute timestamp for UI countdown.
     incrementAttempt: assign(({ context }) => {
-      const attempt = Math.min(context.reconnectAttempt + 1, context.maxReconnectAttempts)
+      const attempt = context.reconnectAttempt + 1
       const delay = computeBackoffDelay(attempt)
       return {
         reconnectAttempt: attempt,

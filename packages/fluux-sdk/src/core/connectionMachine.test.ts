@@ -473,7 +473,7 @@ describe('connectionMachine', () => {
       actor.stop()
     })
 
-    it('should keep retrying and cap attempt growth on repeated SOCKET_DIED failures', () => {
+    it('should keep retrying with capped delay but growing attempt counter', () => {
       // We start at attempt 1 from beforeEach (SOCKET_DIED from connected)
       for (let i = 0; i < 30; i++) {
         actor.send({ type: 'TRIGGER_RECONNECT' })
@@ -481,7 +481,9 @@ describe('connectionMachine', () => {
       }
 
       expect(actor.getSnapshot().value).toEqual({ reconnecting: 'waiting' })
-      expect(actor.getSnapshot().context.reconnectAttempt).toBe(DEFAULT_MAX_RECONNECT_ATTEMPTS)
+      // Counter keeps growing (1 from setup + 30 failures = 31)
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(31)
+      // Delay is independently capped
       expect(actor.getSnapshot().context.nextRetryDelayMs).toBe(MAX_RECONNECT_DELAY)
       actor.stop()
     })
@@ -674,7 +676,8 @@ describe('connectionMachine', () => {
         }
 
         expect(actor.getSnapshot().value).toEqual({ reconnecting: 'waiting' })
-        expect(actor.getSnapshot().context.reconnectAttempt).toBe(DEFAULT_MAX_RECONNECT_ATTEMPTS)
+        // Counter keeps growing (1 from SOCKET_DIED + 30 CONNECTION_ERRORs = 31)
+        expect(actor.getSnapshot().context.reconnectAttempt).toBe(31)
         expect(actor.getSnapshot().context.nextRetryDelayMs).toBe(MAX_RECONNECT_DELAY)
         expect(actor.getSnapshot().context.lastError).toBe('fail 30')
         actor.stop()
@@ -692,7 +695,8 @@ describe('connectionMachine', () => {
         }
 
         expect(actor.getSnapshot().value).toEqual({ reconnecting: 'waiting' })
-        expect(actor.getSnapshot().context.reconnectAttempt).toBe(DEFAULT_MAX_RECONNECT_ATTEMPTS)
+        // Counter keeps growing (1 from SOCKET_DIED + 20 errors = 21)
+        expect(actor.getSnapshot().context.reconnectAttempt).toBe(21)
 
         actor.send({ type: 'TRIGGER_RECONNECT' })
         actor.send({ type: 'CONNECTION_SUCCESS' })
@@ -1031,13 +1035,14 @@ describe('connectionMachine', () => {
       actor.send({ type: 'CONNECTION_SUCCESS' })
       actor.send({ type: 'SOCKET_DIED' })
 
-      // Drive many failures to hit capped backoff
+      // Drive many failures past backoff ceiling
       for (let i = 0; i < 25; i++) {
         actor.send({ type: 'TRIGGER_RECONNECT' })
         actor.send({ type: 'CONNECTION_ERROR', error: `fail ${i}` })
       }
       expect(actor.getSnapshot().value).toEqual({ reconnecting: 'waiting' })
-      expect(actor.getSnapshot().context.reconnectAttempt).toBe(DEFAULT_MAX_RECONNECT_ATTEMPTS)
+      // Counter keeps growing (1 from SOCKET_DIED + 25 errors = 26)
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(26)
       expect(actor.getSnapshot().context.nextRetryDelayMs).toBe(MAX_RECONNECT_DELAY)
 
       // Successful reconnect resets everything
