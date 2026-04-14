@@ -416,7 +416,6 @@ export async function getTotalMessageCount(): Promise<number> {
  */
 export async function getTotalRoomMessageCount(): Promise<number> {
   try {
-    await flushPendingRoomMessages()
     const db = await getDB(getStorageScopeJid())
     return await db.count(ROOM_MESSAGES_STORE)
   } catch {
@@ -500,81 +499,16 @@ export async function deleteConversationMessages(conversationId: string): Promis
 // =============================================================================
 
 /**
- * Write buffer for room messages.
- * Collects messages and flushes them in batches for better performance
- * and reliability during rapid-fire history message delivery (e.g., room join).
- */
-const roomMessageBuffer: RoomMessage[] = []
-let roomMessageFlushTimer: ReturnType<typeof setTimeout> | null = null
-let roomMessageBufferScope: string | null = null
-const ROOM_MESSAGE_FLUSH_DELAY = 100 // ms - flush after 100ms of inactivity
-
-/**
- * Flush the room message buffer to IndexedDB.
- */
-async function flushRoomMessageBuffer(scopeJid: string | null): Promise<void> {
-  if (roomMessageBuffer.length === 0) return
-
-  // Take all messages from buffer
-  const messagesToSave = roomMessageBuffer.splice(0, roomMessageBuffer.length)
-
-  try {
-    const db = await getDB(scopeJid)
-    const tx = db.transaction(ROOM_MESSAGES_STORE, 'readwrite')
-    const store = tx.objectStore(ROOM_MESSAGES_STORE)
-
-    await Promise.all(messagesToSave.map((msg) => store.put(serializeRoomMessage(msg))))
-    await tx.done
-  } catch (error) {
-    if (isIndexedDBAvailable()) {
-      console.warn('Failed to flush room message buffer:', error)
-    }
-  }
-}
-
-/**
  * Save a room message to IndexedDB.
- * Uses a write buffer to batch rapid writes for better performance.
+ *
+ * Writes directly to the store — no batching. A live message must reach IDB
+ * before the next `window.location.reload()` (e.g. long-sleep detection),
+ * otherwise the message is lost from the cache and the subsequent MAM
+ * catch-up cursor may skip past it. Batched writes for history replay
+ * should use {@link saveRoomMessages} instead.
  */
 export async function saveRoomMessage(message: RoomMessage): Promise<void> {
-  const currentScope = getStorageScopeJid()
-
-  // Ensure queued messages are flushed to the account-specific DB they belong to.
-  if (roomMessageBuffer.length > 0 && roomMessageBufferScope !== currentScope) {
-    await flushPendingRoomMessages()
-  }
-
-  roomMessageBufferScope = currentScope
-
-  // Add to buffer
-  roomMessageBuffer.push(message)
-
-  // Clear existing timer
-  if (roomMessageFlushTimer) {
-    clearTimeout(roomMessageFlushTimer)
-  }
-
-  // Set new timer to flush after delay
-  roomMessageFlushTimer = setTimeout(() => {
-    roomMessageFlushTimer = null
-    const flushScope = roomMessageBufferScope
-    roomMessageBufferScope = null
-    void flushRoomMessageBuffer(flushScope)
-  }, ROOM_MESSAGE_FLUSH_DELAY)
-}
-
-/**
- * Force flush any pending room messages immediately.
- * Call this before disconnect or when ensuring data persistence.
- */
-export async function flushPendingRoomMessages(): Promise<void> {
-  if (roomMessageFlushTimer) {
-    clearTimeout(roomMessageFlushTimer)
-    roomMessageFlushTimer = null
-  }
-  const flushScope = roomMessageBufferScope
-  roomMessageBufferScope = null
-  await flushRoomMessageBuffer(flushScope)
+  await saveRoomMessages([message])
 }
 
 /**
@@ -856,7 +790,6 @@ export async function deleteRoomMessages(roomJid: string): Promise<void> {
  */
 export async function clearAllMessages(): Promise<void> {
   try {
-    await flushPendingRoomMessages()
     const db = await getDB(getStorageScopeJid())
     const tx = db.transaction([MESSAGES_STORE, ROOM_MESSAGES_STORE], 'readwrite')
     await Promise.all([tx.objectStore(MESSAGES_STORE).clear(), tx.objectStore(ROOM_MESSAGES_STORE).clear()])
@@ -960,8 +893,6 @@ export async function iterateAllRoomMessages(
   batchSize: number,
   onBatch: (messages: RoomMessage[]) => Promise<void>
 ): Promise<void> {
-  // Flush any buffered room messages to IDB before reading
-  await flushPendingRoomMessages()
   const db = await getDB(getStorageScopeJid())
   const allRaw = await db.getAll(ROOM_MESSAGES_STORE)
 
@@ -987,12 +918,6 @@ export function isMessageCacheAvailable(): boolean {
  * @internal
  */
 export function _resetDBForTesting(): void {
-  if (roomMessageFlushTimer) {
-    clearTimeout(roomMessageFlushTimer)
-    roomMessageFlushTimer = null
-  }
-  roomMessageBuffer.length = 0
-  roomMessageBufferScope = null
   dbPromise = null
   dbNameForPromise = null
 }

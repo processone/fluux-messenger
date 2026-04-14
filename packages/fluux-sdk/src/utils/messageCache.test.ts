@@ -359,7 +359,6 @@ describe('messageCache', () => {
         const message = createMockRoomMessage(roomJid, { id: 'room-1' })
 
         await messageCache.saveRoomMessage(message)
-        await messageCache.flushPendingRoomMessages() // Flush buffer to persist
 
         const retrieved = await messageCache.getRoomMessage('room-1')
         expect(retrieved).not.toBeNull()
@@ -373,7 +372,6 @@ describe('messageCache', () => {
         })
 
         await messageCache.saveRoomMessage(message)
-        await messageCache.flushPendingRoomMessages() // Flush buffer to persist
 
         const byStanzaId = await messageCache.getRoomMessageByStanzaId('room-stanza-123')
         expect(byStanzaId).not.toBeNull()
@@ -431,7 +429,6 @@ describe('messageCache', () => {
       it('should update an existing room message', async () => {
         const message = createMockRoomMessage(roomJid, { id: 'room-update', body: 'Original' })
         await messageCache.saveRoomMessage(message)
-        await messageCache.flushPendingRoomMessages() // Flush buffer before update
 
         await messageCache.updateRoomMessage('room-update', {
           body: 'Updated',
@@ -448,7 +445,6 @@ describe('messageCache', () => {
       it('should delete a room message', async () => {
         const message = createMockRoomMessage(roomJid, { id: 'room-delete' })
         await messageCache.saveRoomMessage(message)
-        await messageCache.flushPendingRoomMessages() // Flush buffer before delete
 
         await messageCache.deleteRoomMessage('room-delete')
 
@@ -470,7 +466,6 @@ describe('messageCache', () => {
         await messageCache.saveRoomMessage(
           createMockRoomMessage(otherRoom, { id: 'other-room' })
         )
-        await messageCache.flushPendingRoomMessages() // Flush buffer before delete
 
         await messageCache.deleteRoomMessages(roomJid)
 
@@ -535,7 +530,6 @@ describe('messageCache', () => {
       await messageCache.saveRoomMessage(
         createMockRoomMessage('room2@conference.example.com', { id: 'rtotal-2' })
       )
-      await messageCache.flushPendingRoomMessages()
 
       const count = await messageCache.getTotalRoomMessageCount()
       expect(count).toBe(2)
@@ -545,23 +539,15 @@ describe('messageCache', () => {
       const count = await messageCache.getTotalRoomMessageCount()
       expect(count).toBe(0)
     })
-
-    it('should flush buffered room messages before counting', async () => {
-      // Save without explicit flush — getTotalRoomMessageCount should flush internally
-      await messageCache.saveRoomMessage(
-        createMockRoomMessage('room@conference.example.com', { id: 'buffered-1' })
-      )
-
-      const count = await messageCache.getTotalRoomMessageCount()
-      expect(count).toBe(1)
-    })
   })
 
   describe('iterateAllRoomMessages', () => {
-    it('should flush buffered room messages before iterating', async () => {
-      // Save room messages without explicit flush
+    it('should iterate a saved room message without any flush dance', async () => {
+      // Direct-write semantics: a single save is visible immediately,
+      // no buffer to drain. This is the guarantee that fixes the
+      // reload-loses-notified-message race.
       await messageCache.saveRoomMessage(
-        createMockRoomMessage('room@conference.example.com', { id: 'iter-buf-1', body: 'Buffered message' })
+        createMockRoomMessage('room@conference.example.com', { id: 'iter-direct-1', body: 'Direct write' })
       )
 
       const collected: RoomMessage[] = []
@@ -570,7 +556,7 @@ describe('messageCache', () => {
       })
 
       expect(collected.length).toBe(1)
-      expect(collected[0].body).toBe('Buffered message')
+      expect(collected[0].body).toBe('Direct write')
     })
   })
 
@@ -586,7 +572,6 @@ describe('messageCache', () => {
       await messageCache.saveRoomMessage(
         createMockRoomMessage(roomJid, { id: 'clear-room' })
       )
-      await messageCache.flushPendingRoomMessages() // Flush buffer before clear
 
       await messageCache.clearAllMessages()
 

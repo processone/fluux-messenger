@@ -38,7 +38,6 @@ vi.mock('../utils/messageCache', () => ({
   getOldestRoomMessageTimestamp: vi.fn().mockResolvedValue(null),
   getMessageCount: vi.fn().mockResolvedValue(0),
   getRoomMessageCount: vi.fn().mockResolvedValue(0),
-  flushPendingRoomMessages: vi.fn().mockResolvedValue(undefined),
 }))
 
 import { setupChatSideEffects } from './chatSideEffects'
