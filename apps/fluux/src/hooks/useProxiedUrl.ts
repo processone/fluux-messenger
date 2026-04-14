@@ -100,13 +100,12 @@ export function useProxiedUrl(originalUrl: string | undefined, enabled: boolean 
       })
       .catch(() => {
         if (!cancelled) {
-          if (isTauri()) {
-            // Tauri: fall back to direct sanitized URL on cache/fetch error
-            setState({ url: sanitized, isLoading: false, error: null })
-          } else {
-            // Web: report error so the error UI shows (the fetch already failed)
-            setState({ url: null, isLoading: false, error: 'Fetch failed' })
-          }
+          // Fall back to direct sanitized URL on cache/fetch error.
+          // The fetch() API may fail due to CORS, but <img>/<video>/<audio>
+          // elements can still load cross-origin resources directly.
+          // If the resource is truly unavailable, the element's onError
+          // handler will show the error UI.
+          setState({ url: sanitized, isLoading: false, error: null })
         }
       })
 
