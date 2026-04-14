@@ -20,7 +20,7 @@ import {
   parseSearchQuery,
   _resetDBForTesting,
 } from './searchIndex'
-import { _resetDBForTesting as _resetMessageCacheDB, flushPendingRoomMessages } from './messageCache'
+import { _resetDBForTesting as _resetMessageCacheDB } from './messageCache'
 
 // =============================================================================
 // Test helpers
@@ -612,7 +612,6 @@ describe('searchIndex', () => {
         stanzaId: 'stanza-old-1',
         body: 'Historical room discussion',
       }))
-      await flushPendingRoomMessages()
 
       await backfillFromMessageCache()
 
@@ -654,7 +653,6 @@ describe('searchIndex', () => {
         stanzaId: 'stanza-mixed',
         body: 'Searchable content in room',
       }))
-      await flushPendingRoomMessages()
 
       await backfillFromMessageCache()
 
@@ -715,7 +713,6 @@ describe('searchIndex', () => {
       await messageCache.saveRoomMessage(createRoomMessage('room@conference.example.com', {
         id: 'count-3', stanzaId: 'stanza-count-3', body: 'Third message',
       }))
-      await flushPendingRoomMessages()
 
       const count = await rebuildSearchIndex()
       expect(count).toBe(3)
@@ -784,7 +781,6 @@ describe('searchIndex', () => {
           timestamp: new Date(Date.now() - i * 1000),
         }))
       }
-      await flushPendingRoomMessages()
 
       const count = await rebuildSearchIndex()
 
@@ -803,7 +799,6 @@ describe('searchIndex', () => {
       await messageCache.saveRoomMessage(createRoomMessage('room@conference.example.com', {
         id: 'prog-3', stanzaId: 'stanza-prog-3', body: 'Third progress message',
       }))
-      await flushPendingRoomMessages()
 
       const progressUpdates: Array<{ indexed: number; total: number }> = []
       await rebuildSearchIndex((p) => progressUpdates.push({ ...p }))

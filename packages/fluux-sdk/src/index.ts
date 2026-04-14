@@ -599,7 +599,6 @@ export {
   deleteRoomMessage,
   deleteRoomMessages,
   getOldestRoomMessageTimestamp,
-  flushPendingRoomMessages,
   // Utility
   clearAllMessages,
   isMessageCacheAvailable,

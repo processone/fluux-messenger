@@ -54,21 +54,9 @@ const { mockDiscoverWebSocket } = vi.hoisted(() => ({
   mockDiscoverWebSocket: vi.fn(),
 }))
 
-const { mockFlushPendingRoomMessages } = vi.hoisted(() => ({
-  mockFlushPendingRoomMessages: vi.fn(),
-}))
-
 vi.mock('../../utils/websocketDiscovery', () => ({
   discoverWebSocket: mockDiscoverWebSocket,
 }))
-
-vi.mock('../../utils/messageCache', async () => {
-  const actual = await vi.importActual<typeof import('../../utils/messageCache')>('../../utils/messageCache')
-  return {
-    ...actual,
-    flushPendingRoomMessages: mockFlushPendingRoomMessages,
-  }
-})
 
 vi.mock('../fastTokenStorage', () => ({
   fetchFastToken: vi.fn().mockReturnValue(null),
@@ -124,8 +112,6 @@ describe('Connection race conditions', () => {
 
     mockDiscoverWebSocket.mockClear()
     mockDiscoverWebSocket.mockResolvedValue(null)
-    mockFlushPendingRoomMessages.mockClear()
-    mockFlushPendingRoomMessages.mockResolvedValue(undefined)
 
     mockStores = createMockStores()
     xmppClient = new XMPPClient({ debug: false })

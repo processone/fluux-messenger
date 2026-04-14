@@ -6,7 +6,6 @@ import type { ConnectOptions, ConnectionMethod } from '../types'
 import { getBareJid, getDomain, getLocalPart, getResource } from '../jid'
 import { getClientIdentity, CLIENT_FEATURES } from '../caps'
 import { NS_DISCO_INFO, NS_PING, NS_TIME } from '../namespaces'
-import { flushPendingRoomMessages } from '../../utils/messageCache'
 import { logInfo, logWarn, logError as logErr } from '../logger'
 import {
   type SmPatchState,
@@ -732,31 +731,8 @@ export class Connection extends BaseModule {
       }
     }
 
-    logDisconnect('flushing pending room message cache')
-    try {
-      let timedOut = false
-      await Promise.race([
-        flushPendingRoomMessages(),
-        new Promise<void>((resolve) => {
-          setTimeout(() => {
-            timedOut = true
-            resolve()
-          }, DISCONNECT_CLEANUP_TIMEOUT_MS)
-        }),
-      ])
-      if (timedOut) {
-        logWarn(`Disconnect cleanup: room message flush timed out after ${DISCONNECT_CLEANUP_TIMEOUT_MS}ms`)
-        this.stores.console.addEvent('Disconnect cleanup warning: room message flush timed out', 'error')
-        logDisconnect('room message flush timed out')
-      } else {
-        logDisconnect('room message flush complete')
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      logWarn(`Disconnect cleanup: failed to flush room message buffer: ${message}`)
-      this.stores.console.addEvent(`Disconnect cleanup warning: failed to flush message cache (${message})`, 'error')
-      logDisconnect(`room message flush failed (${message})`)
-    }
+    // Room messages are written to IDB directly on arrival; no buffer to
+    // flush on disconnect.
 
     if (clientToStop) {
       logDisconnect('stopping xmpp client (non-blocking)')
