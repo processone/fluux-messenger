@@ -208,6 +208,28 @@ export function usePlatformState() {
   )
 
   /**
+   * Unified 'awake' wake handler shared by the Tauri native wake events
+   * and the JS heartbeat fallback. Kept separate from the visibility
+   * handler because visibility uses the lighter 'visible' nudge semantic.
+   */
+  const handleWakeFromSleep = useCallback(
+    (durationMs: number | undefined, source: string): void => {
+      const secs = durationMs !== undefined ? Math.round(durationMs / 1000) : undefined
+      const message = secs !== undefined
+        ? `System woke from sleep (${source}, ~${secs}s)`
+        : `System woke from sleep (${source})`
+      console.log(`[PlatformState] ${message}`)
+      logEvent(message)
+      if (maybeReloadOnLongWake(durationMs, source)) return
+      client.notifySystemState('awake', durationMs).catch((err) => {
+        console.error('[PlatformState] Error handling wake:', err)
+      })
+      lastActivityRef.current = Date.now()
+    },
+    [client, logEvent, maybeReloadOnLongWake]
+  )
+
+  /**
    * Handle user activity — signals SDK, throttled to avoid flooding.
    */
   const handleActivity = useCallback(async () => {
@@ -334,32 +356,23 @@ export function usePlatformState() {
       // Immediate wake notification
       void listen('system-did-wake', () => {
         if (cancelled) return
-        console.log('[PlatformState] Tauri system-did-wake event received')
         if (!shouldHandleWake('system-did-wake')) return
         const sleepDuration = sleepStartRef.current ? Date.now() - sleepStartRef.current : undefined
         sleepStartRef.current = null
-        console.log(`[PlatformState] System woke from sleep (OS notification${sleepDuration ? `, ~${Math.round(sleepDuration / 1000)}s` : ''})`)
-        logEvent(`System woke from sleep (OS notification${sleepDuration ? `, ~${Math.round(sleepDuration / 1000)}s` : ''})`)
-        if (maybeReloadOnLongWake(sleepDuration, 'system-did-wake')) return
-        client.notifySystemState('awake', sleepDuration).catch(() => {})
-        lastActivityRef.current = Date.now()
+        handleWakeFromSleep(sleepDuration, 'system-did-wake')
       }).then(fn => {
         if (cancelled) { fn() } else { unlistenWake = fn }
       })
 
-      // Deferred wake notification (app was in background during wake)
+      // Deferred wake notification (app was in background during wake;
+      // Tauri delivers the event with a delay measured in seconds).
       void listen<number>('system-did-wake-deferred', (event) => {
         if (cancelled) return
         const delaySecs = event.payload || 0
-        console.log(`[PlatformState] Tauri system-did-wake-deferred event received (delay=${delaySecs}s)`)
         if (!shouldHandleWake('system-did-wake-deferred')) return
         const sleepDuration = sleepStartRef.current ? Date.now() - sleepStartRef.current : undefined
         sleepStartRef.current = null
-        console.log(`[PlatformState] System woke from sleep (deferred ${delaySecs}s${sleepDuration ? `, ~${Math.round(sleepDuration / 1000)}s sleep` : ''})`)
-        logEvent(`System woke from sleep (deferred ${delaySecs}s - app was in background${sleepDuration ? `, ~${Math.round(sleepDuration / 1000)}s sleep` : ''})`)
-        if (maybeReloadOnLongWake(sleepDuration, 'system-did-wake-deferred')) return
-        client.notifySystemState('awake', sleepDuration).catch(() => {})
-        lastActivityRef.current = Date.now()
+        handleWakeFromSleep(sleepDuration, `system-did-wake-deferred +${delaySecs}s`)
       }).then(fn => {
         if (cancelled) { fn() } else { unlistenWakeDeferred = fn }
       })
@@ -367,8 +380,8 @@ export function usePlatformState() {
       // Sleep notification
       void listen('system-will-sleep', () => {
         if (cancelled) return
-        console.log('[PlatformState] Tauri system-will-sleep event received')
         sleepStartRef.current = Date.now()
+        console.log('[PlatformState] Tauri system-will-sleep event received')
         logEvent('System going to sleep')
         client.notifySystemState('sleeping').catch(() => {})
       }).then(fn => {
@@ -382,7 +395,7 @@ export function usePlatformState() {
       unlistenWakeDeferred?.()
       unlistenSleep?.()
     }
-  }, [client, shouldHandleWake, logEvent, maybeReloadOnLongWake])
+  }, [client, shouldHandleWake, logEvent, handleWakeFromSleep])
 
   // ── Effect 3: Time-gap wake detection (JS heartbeat) ──────────────────────
   // Also runs during 'reconnecting' status so we still update the heartbeat
@@ -405,11 +418,7 @@ export function usePlatformState() {
       if (statusRef.current === 'reconnecting') return
       if (!shouldHandleWake('time-gap')) return
 
-      console.log(`[PlatformState] Detected wake from sleep (${Math.round(gap / 1000)}s gap)`)
-      if (maybeReloadOnLongWake(gap, 'heartbeat')) return
-      client.notifySystemState('awake', gap).catch((err) => {
-        console.error('[PlatformState] Error handling wake:', err)
-      })
+      handleWakeFromSleep(gap, 'heartbeat')
     }
 
     const interval = setInterval(checkForWake, HEARTBEAT_INTERVAL_MS)
@@ -417,7 +426,7 @@ export function usePlatformState() {
     return () => {
       clearInterval(interval)
     }
-  }, [status, client, shouldHandleWake, maybeReloadOnLongWake])
+  }, [status, shouldHandleWake, handleWakeFromSleep])
 
   // ── Effect 4: Page visibility and window focus ──────────────────────────────
   // Runs during 'reconnecting' so window focus can still nudge a stalled
