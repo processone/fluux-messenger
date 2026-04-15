@@ -938,14 +938,17 @@ export class XMPPClient {
   }
 
   /**
-   * Immediately trigger a reconnection attempt.
+   * Nudge the reconnect loop forward if it is currently stuck waiting.
    *
    * @remarks
-   * Useful when you want to reconnect without waiting for the
-   * automatic reconnection timer.
+   * Only does work when the state machine is in `reconnecting.waiting`: it
+   * skips the remaining backoff delay and transitions to `attempting`.
+   * When the machine is in `reconnecting.attempting` the signal is ignored,
+   * and outside of reconnecting states this method early-returns. Safe to
+   * call repeatedly as a heartbeat (e.g., from a native-thread keepalive).
    */
-  triggerReconnect(): void {
-    this.connection.triggerReconnect()
+  nudgeReconnect(): void {
+    this.connection.nudgeReconnect()
   }
 
   /**
@@ -957,7 +960,7 @@ export class XMPPClient {
    * ```typescript
    * const isAlive = await client.verifyConnection()
    * if (!isAlive) {
-   *   client.triggerReconnect()
+   *   client.nudgeReconnect()
    * }
    * ```
    */

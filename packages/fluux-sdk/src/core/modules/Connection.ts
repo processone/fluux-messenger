@@ -113,7 +113,7 @@ const isAuthStreamError = (message: string): boolean =>
  *
  * // Manual reconnection control
  * client.connection.cancelReconnect()
- * client.connection.triggerReconnect()
+ * client.connection.nudgeReconnect()
  *
  * // Check connection health after sleep
  * const isAlive = await client.verifyConnection()
@@ -553,6 +553,17 @@ export class Connection extends BaseModule {
             'connection'
           )
 
+          // Record the original server target in ProxyManager before the
+          // direct-WS attempt. credentials.server will soon hold the resolved
+          // wss:// URL, which is useless for starting the Rust proxy later —
+          // the proxy needs the original XMPP host/domain. If a later
+          // reconnect fails on direct WS and falls back to proxy, the
+          // ProxyManager reads this to bring the proxy up against the right
+          // target. Safe idempotent call; harmless if direct WS then fails
+          // and we fall through to the ensureProxy() path below, which also
+          // updates the same field.
+          this.proxyManager.setOriginalServer(server || domain)
+
           try {
             const timeoutSentinel = Symbol('direct-ws-precheck-timeout')
             const result = await Promise.race([
@@ -780,15 +791,22 @@ export class Connection extends BaseModule {
   }
 
   /**
-   * Immediately trigger a reconnection attempt.
+   * Nudge the reconnect loop forward if it is currently stuck waiting.
    *
-   * Use this when the app becomes visible while in a reconnecting state,
-   * since background timers may have been suspended by the browser/OS.
-   * This cancels any pending scheduled reconnection attempts immediately.
+   * Only does work when the state machine is in `reconnecting.waiting`: it
+   * skips the remaining backoff delay and transitions to `attempting`. When
+   * the machine is in `reconnecting.attempting` (an attempt is already in
+   * flight) the signal is ignored, and outside of reconnecting states this
+   * method early-returns. Safe to call repeatedly as a heartbeat.
+   *
+   * Use this when you have an external signal that the reconnect loop may
+   * have stalled — e.g., the app became visible while in a reconnecting
+   * state and background timers may have been suspended by the OS, or a
+   * native-thread keepalive is nudging a JS-throttled backoff timer.
    */
-  triggerReconnect(): void {
+  nudgeReconnect(): void {
     if (!this.isInReconnectingState() || !this.credentials) {
-      const message = `triggerReconnect skipped (reconnecting=${this.isInReconnectingState()}, hasCredentials=${!!this.credentials}, state=${JSON.stringify(this.getMachineState())})`
+      const message = `nudgeReconnect skipped (reconnecting=${this.isInReconnectingState()}, hasCredentials=${!!this.credentials}, state=${JSON.stringify(this.getMachineState())})`
       this.stores.console.addEvent(message, 'connection')
       logInfo(message)
       return
@@ -796,7 +814,9 @@ export class Connection extends BaseModule {
 
     // Signal machine: skip waiting, go directly to attempting.
     // The state-machine subscription starts the reconnect attempt.
-    this.sendMachineEvent({ type: 'TRIGGER_RECONNECT' }, 'triggerReconnect')
+    // In `attempting` state the machine ignores TRIGGER_RECONNECT, so this
+    // is a safe no-op even while an attempt is in flight.
+    this.sendMachineEvent({ type: 'TRIGGER_RECONNECT' }, 'nudgeReconnect')
   }
 
   /**
@@ -1027,7 +1047,7 @@ export class Connection extends BaseModule {
     }
 
     // Signal to setupConnectionHandlers' error handler that recovery is already
-    // in progress. Must be set BEFORE cleanupClient/triggerReconnect so the
+    // in progress. Must be set BEFORE cleanupClient/nudgeReconnect so the
     // EventEmitter snapshot handler sees it and skips its own onError/reject.
     this.deadSocketRecoveryInProgress = true
 
@@ -1058,10 +1078,10 @@ export class Connection extends BaseModule {
 
     if (immediateReconnect) {
       this.stores.console.addEvent(
-        `Dead-socket recovery: triggering immediate reconnect (state=${JSON.stringify(this.getMachineState())})`,
+        `Dead-socket recovery: nudging reconnect immediately (state=${JSON.stringify(this.getMachineState())})`,
         'connection'
       )
-      this.triggerReconnect()
+      this.nudgeReconnect()
     }
 
     // Reconnect scheduling is handled by the state machine (`reconnecting.waiting`).
@@ -1107,9 +1127,9 @@ export class Connection extends BaseModule {
 
       case 'visible':
         if (this.isInReconnectingState()) {
-          logInfo('System state: visible, triggering immediate reconnect')
-          this.stores.console.addEvent('System state: visible, triggering immediate reconnect', 'connection')
-          this.triggerReconnect()
+          logInfo('System state: visible, nudging reconnect')
+          this.stores.console.addEvent('System state: visible, nudging reconnect', 'connection')
+          this.nudgeReconnect()
         }
         break
 
@@ -1209,8 +1229,25 @@ export class Connection extends BaseModule {
    * After wake-from-sleep, the OS network stack may need several seconds
    * to reinitialize. This prevents wasting reconnect attempts on a
    * network that isn't ready yet.
+   *
+   * Short-circuits to `true` when a proxy adapter is in use (typically
+   * Tauri desktop): the XMPP socket is owned by the native Rust proxy,
+   * not by the webview, so `navigator.onLine` reflects the webview's
+   * browser-level network perception rather than actual reachability.
+   * On WKWebView in particular, `navigator.onLine` is known to lie
+   * after sleep/wake — can stay `true` when the real network is dead,
+   * or report `false` spuriously while the Rust proxy could have
+   * connected fine. The proxy-fallback path in attemptReconnect() is
+   * the correct recovery mechanism on desktop; blocking on the
+   * unreliable browser signal first just adds latency.
    */
   private waitForNetworkReady(timeoutMs: number = NETWORK_READY_TIMEOUT_MS): Promise<boolean> {
+    // Proxy mode: trust the Rust side; `navigator.onLine` is not a
+    // meaningful signal for an OS-level TCP socket.
+    if (this.proxyManager.hasProxy) {
+      return Promise.resolve(true)
+    }
+
     // Fast path: already online
     if (typeof navigator !== 'undefined' && navigator.onLine) {
       return Promise.resolve(true)
@@ -2101,31 +2138,67 @@ export class Connection extends BaseModule {
         await connectWithOptions(reconnectOptions)
       } catch (reconnectError) {
         const errorMsg = reconnectError instanceof Error ? reconnectError.message : String(reconnectError)
-        // Only when reconnecting through a cached local proxy endpoint and that
-        // endpoint fails do we refresh/restart the proxy and retry once.
+
+        // Two recovery paths on reconnect failure:
+        //
+        //  (1) `shouldRefreshProxy` — we were already on the Rust proxy and the
+        //      cached endpoint died (e.g., proxy watchdog closed the socket).
+        //      Restart the proxy against the same target and retry once.
+        //
+        //  (2) `shouldFallBackToProxy` — we were on a direct WebSocket endpoint
+        //      and it failed. Switch to the Rust proxy for the retry and for
+        //      the rest of the session. On Tauri the webview's WebSocket can
+        //      lose its context after background/sleep; the proxy owns its own
+        //      OS-level TCP connection and is far more resilient, so a single
+        //      direct-WS failure should flip us onto the proxy permanently
+        //      rather than retrying the same doomed URL forever.
         const shouldRefreshProxy = reconnectUsesCachedProxy && !this.isInTerminalState()
-        if (!shouldRefreshProxy) {
+        const shouldFallBackToProxy =
+          !reconnectUsesCachedProxy &&
+          this.proxyManager.hasProxy &&
+          !this.isLocalProxyServer(reconnectOptions.server) &&
+          !this.isInTerminalState()
+
+        if (!shouldRefreshProxy && !shouldFallBackToProxy) {
           throw reconnectError
         }
 
         const reconnectDomain = getDomain(reconnectOptions.jid)
         const proxyServer = this.proxyManager.getOriginalServer() || reconnectDomain
-        this.stores.console.addEvent(
-          `Reconnect: cached proxy endpoint failed (${errorMsg}), refreshing endpoint`,
-          'connection'
-        )
+
+        if (shouldRefreshProxy) {
+          this.stores.console.addEvent(
+            `Reconnect: cached proxy endpoint failed (${errorMsg}), refreshing endpoint`,
+            'connection'
+          )
+        } else {
+          this.stores.console.addEvent(
+            `Reconnect: direct WebSocket failed (${errorMsg}), falling back to proxy (${proxyServer})`,
+            'connection'
+          )
+          logInfo(`attemptReconnect: direct WebSocket failed, falling back to proxy for ${proxyServer}`)
+        }
+
         this.cleanupClient()
-        const proxyRefreshStart = Date.now()
-        const refreshed = await this.proxyManager.restartProxy(proxyServer, reconnectDomain)
-        const proxyRefreshMs = Date.now() - proxyRefreshStart
+        const proxyStart = Date.now()
+        const refreshed = shouldRefreshProxy
+          ? await this.proxyManager.restartProxy(proxyServer, reconnectDomain)
+          : await this.proxyManager.ensureProxy(proxyServer, reconnectDomain)
+        const proxyMs = Date.now() - proxyStart
         reconnectOptions = { ...reconnectOptions, server: refreshed.server }
         this.credentials = reconnectOptions
         this.stores.connection.setConnectionMethod(refreshed.connectionMethod)
         this.stores.console.addEvent(
-          `Reconnect: proxy refreshed in ${proxyRefreshMs}ms -> ${refreshed.server}`,
+          shouldRefreshProxy
+            ? `Reconnect: proxy refreshed in ${proxyMs}ms -> ${refreshed.server}`
+            : `Reconnect: proxy started in ${proxyMs}ms -> ${refreshed.server}`,
           'connection'
         )
-        logInfo(`attemptReconnect: proxy refreshed (${refreshed.server}) in ${proxyRefreshMs}ms`)
+        logInfo(
+          shouldRefreshProxy
+            ? `attemptReconnect: proxy refreshed (${refreshed.server}) in ${proxyMs}ms`
+            : `attemptReconnect: fell back to proxy (${refreshed.server}) in ${proxyMs}ms`
+        )
 
         await connectWithOptions(reconnectOptions)
       }
