@@ -91,7 +91,12 @@ vi.mock('@fluux/sdk', () => ({
 }))
 
 // Import after mocks are set up
-import { usePlatformState, shouldHandleProxyClosedStatus, handleXmppKeepalive } from './usePlatformState'
+import {
+  usePlatformState,
+  shouldHandleProxyClosedStatus,
+  handleXmppKeepalive,
+  shouldReloadWebviewOnWake,
+} from './usePlatformState'
 
 describe('usePlatformState', () => {
   beforeEach(() => {
@@ -433,6 +438,34 @@ describe('usePlatformState', () => {
       expect(shouldHandleProxyClosedStatus('reconnecting')).toBe(false)
       expect(shouldHandleProxyClosedStatus('disconnected')).toBe(false)
       expect(shouldHandleProxyClosedStatus('error')).toBe(false)
+    })
+  })
+
+  describe('shouldReloadWebviewOnWake', () => {
+    // Gates the Tauri webview reload on wake-from-sleep. The 3-minute
+    // threshold comes from SLEEP_THRESHOLD_MS — the project-wide
+    // "real sleep vs timer throttling" line.
+
+    it('returns true for a 3+ minute wake in Tauri', () => {
+      expect(shouldReloadWebviewOnWake(180_000, true)).toBe(true)
+      expect(shouldReloadWebviewOnWake(5 * 60 * 1000, true)).toBe(true)
+      expect(shouldReloadWebviewOnWake(60 * 60 * 1000, true)).toBe(true)
+    })
+
+    it('returns false for a sub-threshold wake in Tauri (brief hide / timer throttling)', () => {
+      expect(shouldReloadWebviewOnWake(0, true)).toBe(false)
+      expect(shouldReloadWebviewOnWake(30_000, true)).toBe(false)
+      expect(shouldReloadWebviewOnWake(179_999, true)).toBe(false)
+    })
+
+    it('returns false on web even for a long wake (web browsers do not have the WRY rendering-context bug)', () => {
+      expect(shouldReloadWebviewOnWake(180_000, false)).toBe(false)
+      expect(shouldReloadWebviewOnWake(60 * 60 * 1000, false)).toBe(false)
+    })
+
+    it('returns false for unknown duration (cannot tell if it was real sleep)', () => {
+      expect(shouldReloadWebviewOnWake(undefined, true)).toBe(false)
+      expect(shouldReloadWebviewOnWake(undefined, false)).toBe(false)
     })
   })
 })

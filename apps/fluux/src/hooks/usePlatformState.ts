@@ -13,28 +13,28 @@ const ACTIVITY_THROTTLE_MS = 5000
 /** Heartbeat interval for time-gap sleep detection (ms). */
 const HEARTBEAT_INTERVAL_MS = 10_000
 
-/** Minimum time gap to consider as system sleep (ms).
+/** Minimum time gap to consider a real sleep/wake cycle (ms).
+ *
  * Set to 3 minutes because macOS routinely throttles WebKit JS timers when
  * the app is on another virtual desktop or behind other windows, producing
- * gaps of 60–120s that are NOT real sleep.  The Tauri system-did-wake event
- * handles real OS-level sleep/wake with zero delay; this heartbeat-based
- * detection is only a fallback for web mode. */
+ * gaps of 60–120s that are NOT real sleep.
+ *
+ * This same threshold also gates the Tauri webview reload on wake: any
+ * confirmed sleep/wake ≥ 3 minutes is long enough for WKWebView to have
+ * lost its rendering context (wry#184), so we force-reload the page and
+ * let useSessionPersistence auto-reconnect from the stored session.
+ * Short hides (lock screen under 3 min, alt-tab for a moment) don't
+ * trigger a reload — those keep working through the normal reconnect
+ * path. */
 const SLEEP_THRESHOLD_MS = 180_000
 
 /** Minimum time the page must be hidden before signaling SDK (ms).
- * Matches SLEEP_THRESHOLD_MS — switching virtual desktops or apps for
- * a couple of minutes is normal macOS workflow, not worth reconnecting for. */
-const MIN_HIDDEN_TIME_MS = 180_000
+ * Matches SLEEP_THRESHOLD_MS — same "real sleep vs timer throttling"
+ * definition. */
+const MIN_HIDDEN_TIME_MS = SLEEP_THRESHOLD_MS
 
 /** Debounce window to prevent duplicate wake handling (ms). */
 const WAKE_DEBOUNCE_MS = 2000
-
-/** Sleep duration above which we force-reload the webview on wake (ms).
- * After very long sleep (overnight), the WRY/WKWebView on macOS can lose
- * its rendering context — the app window shows but the content is blank.
- * Reloading resets the webview pipeline; useSessionPersistence will
- * auto-reconnect from the stored session. */
-const LONG_SLEEP_RELOAD_MS = 60 * 60 * 1000 // 1 hour
 
 /**
  * Proxy-close events should only trigger wake/reconnect while the app was
@@ -42,6 +42,33 @@ const LONG_SLEEP_RELOAD_MS = 60 * 60 * 1000 // 1 hour
  */
 export function shouldHandleProxyClosedStatus(status: string): boolean {
   return status === 'online'
+}
+
+/**
+ * Decide whether a wake from sleep should reload the Tauri webview.
+ *
+ * Background: after a confirmed sleep/wake cycle the WRY/WKWebView on
+ * macOS can lose its rendering context — the app window shows but the
+ * content is blank (wry#184). The only reliable recovery is a full
+ * `window.location.reload()`, which rebuilds the rendering pipeline;
+ * `useSessionPersistence` then auto-reconnects from the stored session.
+ *
+ * Gating rules:
+ * - Only in Tauri (the web browser path doesn't have this bug).
+ * - Only when duration is ≥ SLEEP_THRESHOLD_MS, which is the project-wide
+ *   threshold for "real sleep" vs "timer throttling / brief hide".
+ * - Unknown duration → no reload (we can't tell if it was real sleep).
+ *
+ * Extracted as a pure function so it can be unit-tested without touching
+ * `window.location.reload()` in jsdom.
+ */
+export function shouldReloadWebviewOnWake(
+  durationMs: number | undefined,
+  isTauriMode: boolean
+): boolean {
+  if (!isTauriMode) return false
+  if (durationMs === undefined) return false
+  return durationMs >= SLEEP_THRESHOLD_MS
 }
 
 /** Minimal client surface the keepalive handler needs, for unit testing. */
@@ -157,13 +184,28 @@ export function usePlatformState() {
   }, [])
 
   /**
-   * Dispatch CSS resize workaround for WebKit layout corruption after wake.
+   * Decide whether to reload the Tauri webview on a wake event and do it.
+   *
+   * Returns true if a reload was triggered — caller should bail out of
+   * any follow-up work, the page is going away.
+   *
+   * This is the single place in the hook that calls window.location.reload().
+   * Splitting the reload decision from the "what to do instead" path keeps
+   * each wake source in control of its own non-reload semantics (Tauri OS
+   * wake + heartbeat want to signal 'awake' for state-machine verify;
+   * visibility-change wants to signal 'visible' for reconnect nudge).
    */
-  const dispatchResizeWorkaround = useCallback(() => {
-    requestAnimationFrame(() => {
-      window.dispatchEvent(new Event('resize'))
-    })
-  }, [])
+  const maybeReloadOnLongWake = useCallback(
+    (durationMs: number | undefined, source: string): boolean => {
+      if (!shouldReloadWebviewOnWake(durationMs, isTauri())) return false
+      const secs = Math.round((durationMs ?? 0) / 1000)
+      console.log(`[PlatformState] Wake from sleep (${source}, ${secs}s), reloading webview to restore rendering`)
+      logEvent(`Wake from sleep (${source}, ${secs}s), reloading webview`)
+      window.location.reload()
+      return true
+    },
+    [logEvent]
+  )
 
   /**
    * Handle user activity — signals SDK, throttled to avoid flooding.
@@ -298,14 +340,9 @@ export function usePlatformState() {
         sleepStartRef.current = null
         console.log(`[PlatformState] System woke from sleep (OS notification${sleepDuration ? `, ~${Math.round(sleepDuration / 1000)}s` : ''})`)
         logEvent(`System woke from sleep (OS notification${sleepDuration ? `, ~${Math.round(sleepDuration / 1000)}s` : ''})`)
-        if (sleepDuration && sleepDuration >= LONG_SLEEP_RELOAD_MS) {
-          console.log(`[PlatformState] Long sleep detected (${Math.round(sleepDuration / 1000)}s), reloading webview to restore rendering`)
-          window.location.reload()
-          return
-        }
+        if (maybeReloadOnLongWake(sleepDuration, 'system-did-wake')) return
         client.notifySystemState('awake', sleepDuration).catch(() => {})
         lastActivityRef.current = Date.now()
-        dispatchResizeWorkaround()
       }).then(fn => {
         if (cancelled) { fn() } else { unlistenWake = fn }
       })
@@ -320,14 +357,9 @@ export function usePlatformState() {
         sleepStartRef.current = null
         console.log(`[PlatformState] System woke from sleep (deferred ${delaySecs}s${sleepDuration ? `, ~${Math.round(sleepDuration / 1000)}s sleep` : ''})`)
         logEvent(`System woke from sleep (deferred ${delaySecs}s - app was in background${sleepDuration ? `, ~${Math.round(sleepDuration / 1000)}s sleep` : ''})`)
-        if (sleepDuration && sleepDuration >= LONG_SLEEP_RELOAD_MS) {
-          console.log(`[PlatformState] Long sleep detected (${Math.round(sleepDuration / 1000)}s), reloading webview to restore rendering`)
-          window.location.reload()
-          return
-        }
+        if (maybeReloadOnLongWake(sleepDuration, 'system-did-wake-deferred')) return
         client.notifySystemState('awake', sleepDuration).catch(() => {})
         lastActivityRef.current = Date.now()
-        dispatchResizeWorkaround()
       }).then(fn => {
         if (cancelled) { fn() } else { unlistenWakeDeferred = fn }
       })
@@ -350,7 +382,7 @@ export function usePlatformState() {
       unlistenWakeDeferred?.()
       unlistenSleep?.()
     }
-  }, [client, shouldHandleWake, logEvent, dispatchResizeWorkaround])
+  }, [client, shouldHandleWake, logEvent, maybeReloadOnLongWake])
 
   // ── Effect 3: Time-gap wake detection (JS heartbeat) ──────────────────────
   // Also runs during 'reconnecting' status so we still update the heartbeat
@@ -360,33 +392,24 @@ export function usePlatformState() {
   useEffect(() => {
     if (status !== 'online' && status !== 'reconnecting') return
 
-    const checkForWake = async () => {
+    const checkForWake = () => {
       const now = Date.now()
       const gap = now - lastHeartbeatRef.current
       lastHeartbeatRef.current = now
 
       if (gap < SLEEP_THRESHOLD_MS) return
-      // Machine is already handling the reconnect with its own backoff.
-      // Re-entering handleAwake() here would cause overlapping cleanup +
-      // attemptReconnect sequences and a render storm.
+      // Machine is already handling the reconnect with its own backoff +
+      // the Rust keepalive nudge. Re-entering handleAwake() here would
+      // cause overlapping cleanup + attemptReconnect sequences and a
+      // render storm.
       if (statusRef.current === 'reconnecting') return
       if (!shouldHandleWake('time-gap')) return
 
-      const gapSeconds = Math.round(gap / 1000)
-      console.log(`[PlatformState] Detected wake from sleep (${gapSeconds}s gap)`)
-
-      if (isTauri() && gap >= LONG_SLEEP_RELOAD_MS) {
-        console.log(`[PlatformState] Long sleep detected (${gapSeconds}s), reloading webview to restore rendering`)
-        window.location.reload()
-        return
-      }
-
-      try {
-        await client.notifySystemState('awake', gap)
-        dispatchResizeWorkaround()
-      } catch (err) {
+      console.log(`[PlatformState] Detected wake from sleep (${Math.round(gap / 1000)}s gap)`)
+      if (maybeReloadOnLongWake(gap, 'heartbeat')) return
+      client.notifySystemState('awake', gap).catch((err) => {
         console.error('[PlatformState] Error handling wake:', err)
-      }
+      })
     }
 
     const interval = setInterval(checkForWake, HEARTBEAT_INTERVAL_MS)
@@ -394,7 +417,7 @@ export function usePlatformState() {
     return () => {
       clearInterval(interval)
     }
-  }, [status, client, shouldHandleWake, dispatchResizeWorkaround])
+  }, [status, client, shouldHandleWake, maybeReloadOnLongWake])
 
   // ── Effect 4: Page visibility and window focus ──────────────────────────────
   // Runs during 'reconnecting' so window focus can still nudge a stalled
@@ -428,9 +451,16 @@ export function usePlatformState() {
       if (!shouldHandleWake('visibility')) return
 
       console.log(`[PlatformState] Page visible after ${Math.round(hiddenDuration / 1000)}s`)
+
+      // If the hide was long enough to count as a real sleep on Tauri,
+      // reload the webview (same rendering-context hazard as OS sleep).
+      if (maybeReloadOnLongWake(hiddenDuration, 'visibility')) return
+
+      // Sub-threshold (or web mode): just nudge a stalled reconnect via
+      // notifySystemState('visible'). Lighter "tab came back" path — no
+      // state-machine WAKE, no verify.
       try {
         await client.notifySystemState('visible')
-        dispatchResizeWorkaround()
       } catch (err) {
         console.error('[PlatformState] Error handling visibility change:', err)
       }
@@ -459,7 +489,7 @@ export function usePlatformState() {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('focus', handleWindowFocus)
     }
-  }, [status, client, shouldHandleWake, dispatchResizeWorkaround])
+  }, [status, client, shouldHandleWake, maybeReloadOnLongWake])
 
   // ── Effect 5: Tauri native events (keepalive + proxy watchdog) ────────────
 
