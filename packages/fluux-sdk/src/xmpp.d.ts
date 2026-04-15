@@ -44,6 +44,14 @@ declare module '@xmpp/client' {
     password?: string
     resource?: string
     lang?: string  // Sets xml:lang attribute on the stream
+    /**
+     * Timeout (ms) for low-level stream operations: waiting for the server's
+     * `<stream:open>` reply, stream close, and raw `sendReceive` exchanges.
+     * xmpp.js defaults to 2000ms; we override to give the desktop proxy path
+     * room to do DNS + TCP + TLS on cold networks after wake. IQ requests
+     * have their own independent 30s default in `@xmpp/iq/caller`.
+     */
+    timeout?: number
     /** Custom SASL credentials handler. When provided, username/password are ignored. */
     credentials?: (
       authenticate: (creds: Record<string, unknown>, mechanism: string, userAgent?: unknown) => Promise<void>,

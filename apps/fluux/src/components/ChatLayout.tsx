@@ -31,7 +31,6 @@ import { useWebPush } from '@/hooks/useWebPush'
 import { useSoundNotification } from '@/hooks/useSoundNotification'
 import { useEventsSoundNotification } from '@/hooks/useEventsSoundNotification'
 import { useEventsDesktopNotifications } from '@/hooks/useEventsDesktopNotifications'
-import { usePlatformState } from '@/hooks/usePlatformState'
 import { useSDKErrorToasts } from '@/hooks/useSDKErrorToasts'
 import { useFocusZones, useViewNavigation, isMobileWeb, isSmallScreen, useWindowVisibility, useRouteSync, type FocusZoneRefs } from '@/hooks'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
@@ -81,9 +80,6 @@ function GlobalEffects() {
 
   // Register for web push notifications (browser only, skipped in Tauri)
   useWebPush()
-
-  // Platform state detection: wake/sleep, idle/activity, visibility
-  usePlatformState()
 
   // Track window visibility for new message markers
   useWindowVisibility()

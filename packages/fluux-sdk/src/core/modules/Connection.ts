@@ -39,6 +39,7 @@ import {
   SASL_AUTH_TIMEOUT_MS,
   VERIFY_CONNECTION_TIMEOUT_MS,
   WAKE_VERIFY_TIMEOUT_MS,
+  XMPP_STREAM_OPEN_TIMEOUT_MS,
 } from './connectionTimeouts'
 import {
   shouldSkipDiscovery,
@@ -1310,6 +1311,7 @@ export class Connection extends BaseModule {
       domain,
       resource,
       lang,
+      timeout: XMPP_STREAM_OPEN_TIMEOUT_MS,
       credentials: async (
         authenticate: (creds: Record<string, unknown>, mechanism: string, userAgent?: unknown) => Promise<void>,
         mechanisms: string[],

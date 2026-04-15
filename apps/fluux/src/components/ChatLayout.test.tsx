@@ -325,10 +325,6 @@ vi.mock('@/hooks/useEventsDesktopNotifications', () => ({
   useEventsDesktopNotifications: () => {},
 }))
 
-vi.mock('@/hooks/usePlatformState', () => ({
-  usePlatformState: () => {},
-}))
-
 vi.mock('@/utils/renderLoopDetector', () => ({
   detectRenderLoop: () => {},
 }))

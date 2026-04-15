@@ -12,6 +12,15 @@
 export const DISCONNECT_CLEANUP_TIMEOUT_MS = 2_000
 
 /**
+ * Timeout waiting for the server's initial stream-open reply.
+ *
+ * xmpp.js defaults this to 2s, which is too aggressive on wake/network-change
+ * recovery when the desktop proxy path may need fresh SRV lookup, TCP connect,
+ * TLS handshake, and only then the server's `<open/>` response.
+ */
+export const XMPP_STREAM_OPEN_TIMEOUT_MS = 15_000
+
+/**
  * Timeout for graceful client stop (stream close + socket close).
  * Used as a safety bound when xmpp.js stop() hangs on dead transports.
  */
