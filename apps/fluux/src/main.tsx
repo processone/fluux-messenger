@@ -58,6 +58,24 @@ document.addEventListener('keydown', (e) => {
 // Block control characters Tauri's macOS webview inserts on arrow-key boundary hits
 installBeforeInputGuard()
 
+// Auto-recover from dynamic import failures. Vite's production build uses
+// content-hashed chunk filenames, so a tab that was open before a deploy may
+// hold stale URLs that now 404 — and a hosted SPA typically rewrites 404s to
+// index.html, which Safari rejects as "not a valid JavaScript MIME type".
+// React.lazy has no retry logic, so the error bubbles to RenderLoopBoundary.
+// Vite dispatches 'vite:preloadError' from its runtime when import() fails;
+// reloading the page transparently recovers. Safeguard: at most one reload
+// per 60s so a persistent failure surfaces instead of looping forever.
+window.addEventListener('vite:preloadError', (event) => {
+  const KEY = 'fluux:preload-error-reload-at'
+  const last = Number(sessionStorage.getItem(KEY) || '0')
+  if (Date.now() - last < 60_000) return
+  sessionStorage.setItem(KEY, String(Date.now()))
+  event.preventDefault()
+  console.warn('[Fluux] Dynamic import failed, reloading to recover:', event)
+  window.location.reload()
+})
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <RenderLoopBoundary>
