@@ -930,6 +930,135 @@ describe('XMPPClient Connection', () => {
       proxyClient.cancelReconnect()
     })
 
+    it('should fall back to proxy when direct WebSocket reconnect fails on a Tauri install', async () => {
+      // Regression for "stuck on reconnect" where a Tauri client that won
+      // initial connect on direct WebSocket would retry the same doomed URL
+      // forever, never touching the available Rust proxy. After this fix
+      // the first reconnect failure flips the client onto the proxy.
+      //
+      // Uses a server ('chat.example.com') that is intentionally different
+      // from the JID domain ('example.com'). If the fallback code fell back
+      // to getDomain(jid) instead of reading the recorded originalServer,
+      // startProxy would be called with 'example.com' — asserting the
+      // expected 'chat.example.com' proves that setOriginalServer() was
+      // wired on the initial direct-WS path.
+      mockDiscoverWebSocket.mockResolvedValue('wss://chat.example.com/xmpp')
+
+      const mockProxyAdapter = {
+        startProxy: vi.fn().mockResolvedValue({ url: 'ws://127.0.0.1:12345' }),
+        stopProxy: vi.fn().mockResolvedValue(undefined),
+      }
+      const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
+      proxyClient.bindStores(mockStores)
+
+      // Initial connect wins via direct WebSocket (XEP-0156 discovery).
+      const connectPromise = proxyClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'chat.example.com',
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      // Direct-WS initial path should NOT have started the proxy yet.
+      expect(mockProxyAdapter.startProxy).not.toHaveBeenCalled()
+      expect(mockClientFactory).toHaveBeenLastCalledWith(
+        expect.objectContaining({ service: 'wss://chat.example.com/xmpp' })
+      )
+      expect(mockStores.connection.setConnectionMethod).toHaveBeenLastCalledWith('websocket')
+
+      // Trigger unexpected disconnect — machine → reconnecting.
+      vi.mocked(mockStores.console.addEvent).mockClear()
+      vi.mocked(mockStores.connection.setConnectionMethod).mockClear()
+      mockXmppClientInstance._emit('disconnect', { clean: false })
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
+
+      // First reconnect attempt retries the direct-WS URL and fails; the
+      // fallback catch block then calls ensureProxy() and retries on the
+      // proxy URL, which succeeds.
+      const failedDirectClient = createMockXmppClient()
+      failedDirectClient.start.mockRejectedValue(new Error('direct websocket still dead'))
+      const proxyReconnectClient = createMockXmppClient()
+      mockClientFactory
+        .mockImplementationOnce(() => failedDirectClient)
+        .mockImplementationOnce(() => proxyReconnectClient)
+
+      // Advance past the 1s backoff timer so the waiting substate fires.
+      await vi.advanceTimersByTimeAsync(1000)
+      // Let the catch block run ensureProxy() and schedule the retry.
+      await vi.advanceTimersByTimeAsync(0)
+
+      // Resolve the proxy retry.
+      proxyReconnectClient._emit('online')
+      await vi.advanceTimersByTimeAsync(0)
+
+      // Proxy was started exactly once — during the fallback.
+      expect(mockProxyAdapter.startProxy).toHaveBeenCalledTimes(1)
+      // And it was started with the ORIGINAL user-provided server
+      // (proof that setOriginalServer ran on the initial direct-WS path).
+      expect(mockProxyAdapter.startProxy).toHaveBeenCalledWith('chat.example.com')
+
+      // The second reconnect attempt used the proxy URL.
+      expect(mockClientFactory).toHaveBeenLastCalledWith(
+        expect.objectContaining({ service: 'ws://127.0.0.1:12345' })
+      )
+      expect(mockStores.connection.setConnectionMethod).toHaveBeenCalledWith('proxy')
+
+      // Operator-visible fallback log was emitted.
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        expect.stringContaining('falling back to proxy'),
+        'connection'
+      )
+
+      proxyClient.cancelReconnect()
+    })
+
+    it('should NOT fall back to proxy on direct-WS reconnect failure when there is no proxy adapter (web mode)', async () => {
+      // Regression guard: the new fallback gate requires proxyManager.hasProxy.
+      // Without a proxy adapter, a failed direct-WS reconnect should propagate
+      // the error to the state machine (which retries with backoff) without
+      // any proxy calls. The default xmppClient from beforeEach has no
+      // proxyAdapter, which simulates web mode.
+      mockDiscoverWebSocket.mockResolvedValue('wss://chat.example.com/xmpp')
+
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'chat.example.com',
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      // Trigger disconnect; reconnect attempt should fail and simply
+      // propagate to CONNECTION_ERROR → reconnecting.waiting.
+      mockXmppClientInstance._emit('disconnect', { clean: false })
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
+
+      const failedReconnect = createMockXmppClient()
+      failedReconnect.start.mockRejectedValue(new Error('direct websocket failed'))
+      mockClientFactory._setInstance(failedReconnect)
+
+      await vi.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(0)
+
+      // The reconnect attempt's error must have surfaced on the error store
+      // (proving we did not swallow it via a fallback attempt).
+      const errorCalls = vi.mocked(mockStores.connection.setError).mock.calls.map(c => c[0])
+      expect(
+        errorCalls.some(err => typeof err === 'string' && err.includes('direct websocket failed'))
+      ).toBe(true)
+
+      // And no "falling back to proxy" log was emitted.
+      const consoleCalls = vi.mocked(mockStores.console.addEvent).mock.calls.map(c => c[0])
+      expect(
+        consoleCalls.some(msg => typeof msg === 'string' && msg.includes('falling back to proxy'))
+      ).toBe(false)
+
+      xmppClient.cancelReconnect()
+    })
+
     it('should auto-reconnect when connection drops after successful connection', async () => {
       // First, connect successfully
       const connectPromise = xmppClient.connect({

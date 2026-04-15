@@ -12,6 +12,8 @@ const {
   mockPresenceConnect,
   mockPresenceDisconnect,
   mockClientNotifySystemState,
+  mockClientNudgeReconnect,
+  mockClientVerifyConnectionHealth,
   mockConnectionStatus,
   tauriListeners,
   mockListen,
@@ -24,6 +26,8 @@ const {
     mockPresenceConnect: vi.fn(),
     mockPresenceDisconnect: vi.fn(),
     mockClientNotifySystemState: vi.fn().mockResolvedValue(undefined),
+    mockClientNudgeReconnect: vi.fn(),
+    mockClientVerifyConnectionHealth: vi.fn().mockResolvedValue(undefined),
     mockConnectionStatus: { current: 'online' },
     tauriListeners: listeners,
     mockListen: vi.fn((event: string, handler: (event?: { payload?: unknown }) => unknown) => {
@@ -61,6 +65,8 @@ vi.mock('@fluux/sdk', () => ({
   useXMPP: () => ({
     client: {
       notifySystemState: mockClientNotifySystemState,
+      nudgeReconnect: mockClientNudgeReconnect,
+      verifyConnectionHealth: mockClientVerifyConnectionHealth,
     },
   }),
   useSystemState: () => ({
@@ -85,7 +91,7 @@ vi.mock('@fluux/sdk', () => ({
 }))
 
 // Import after mocks are set up
-import { usePlatformState, shouldHandleProxyClosedStatus } from './usePlatformState'
+import { usePlatformState, shouldHandleProxyClosedStatus, handleXmppKeepalive } from './usePlatformState'
 
 describe('usePlatformState', () => {
   beforeEach(() => {
@@ -333,6 +339,87 @@ describe('usePlatformState', () => {
 
       // Should not call notifySystemState('awake') since heartbeat is inactive
       expect(mockClientNotifySystemState).not.toHaveBeenCalledWith('awake', expect.any(Number))
+    })
+  })
+
+  describe('handleXmppKeepalive', () => {
+    // The Rust side emits `xmpp-keepalive` every 30s on a native thread
+    // (immune to macOS JS timer throttling). It is the one reliable clock
+    // we have while the webview is backgrounded, so the handler must route
+    // it to nudgeReconnect() whenever the state machine is stuck in
+    // reconnecting — otherwise the JS setTimeout backoff can sit frozen
+    // for many minutes and the app looks "stuck on reconnect".
+    //
+    // Tested as a pure function (extracted from the listener) to avoid
+    // the Tauri event plumbing in unit tests. The listener → function
+    // wiring is a one-liner that's manually verified in Tauri dev mode.
+
+    let client: {
+      nudgeReconnect: ReturnType<typeof vi.fn<() => void>>
+      verifyConnectionHealth: ReturnType<typeof vi.fn<() => Promise<unknown>>>
+    }
+
+    beforeEach(() => {
+      client = {
+        nudgeReconnect: vi.fn<() => void>(),
+        verifyConnectionHealth: vi.fn<() => Promise<unknown>>().mockResolvedValue(undefined),
+      }
+    })
+
+    it('calls nudgeReconnect (not verifyConnectionHealth) when status is reconnecting', () => {
+      handleXmppKeepalive('reconnecting', client)
+      expect(client.nudgeReconnect).toHaveBeenCalledTimes(1)
+      expect(client.verifyConnectionHealth).not.toHaveBeenCalled()
+    })
+
+    it('calls verifyConnectionHealth (not nudgeReconnect) when status is online', () => {
+      handleXmppKeepalive('online', client)
+      expect(client.verifyConnectionHealth).toHaveBeenCalledTimes(1)
+      expect(client.nudgeReconnect).not.toHaveBeenCalled()
+    })
+
+    it('is a no-op when status is disconnected', () => {
+      handleXmppKeepalive('disconnected', client)
+      expect(client.nudgeReconnect).not.toHaveBeenCalled()
+      expect(client.verifyConnectionHealth).not.toHaveBeenCalled()
+    })
+
+    it('is a no-op when status is connecting (initial connect is not our retry loop)', () => {
+      handleXmppKeepalive('connecting', client)
+      expect(client.nudgeReconnect).not.toHaveBeenCalled()
+      expect(client.verifyConnectionHealth).not.toHaveBeenCalled()
+    })
+
+    it('is a no-op when status is error (terminal state)', () => {
+      handleXmppKeepalive('error', client)
+      expect(client.nudgeReconnect).not.toHaveBeenCalled()
+      expect(client.verifyConnectionHealth).not.toHaveBeenCalled()
+    })
+
+    it('nudges every time it is called (no dedup, safe to tick repeatedly)', () => {
+      // Regression guard for the backgrounded-reconnect scenario: when the
+      // machine's own setTimeout is frozen, only the 30s native tick is
+      // advancing. Each tick must keep nudging — otherwise the loop stays
+      // stuck. State-machine-side guards (TRIGGER_RECONNECT ignored in
+      // reconnecting.attempting) prevent churn when an attempt is in flight.
+      handleXmppKeepalive('reconnecting', client)
+      handleXmppKeepalive('reconnecting', client)
+      handleXmppKeepalive('reconnecting', client)
+      expect(client.nudgeReconnect).toHaveBeenCalledTimes(3)
+    })
+
+    it('swallows verifyConnectionHealth rejections without throwing', async () => {
+      const failingClient = {
+        nudgeReconnect: vi.fn<() => void>(),
+        verifyConnectionHealth: vi.fn<() => Promise<unknown>>().mockRejectedValue(new Error('unreachable')),
+      }
+      // Must not throw synchronously.
+      expect(() => handleXmppKeepalive('online', failingClient)).not.toThrow()
+      // Let the microtask queue drain so the .catch runs. If the rejection
+      // weren't caught, Node would report an unhandled rejection.
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(failingClient.verifyConnectionHealth).toHaveBeenCalledTimes(1)
     })
   })
 

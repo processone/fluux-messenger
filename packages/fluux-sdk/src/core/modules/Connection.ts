@@ -554,6 +554,17 @@ export class Connection extends BaseModule {
             'connection'
           )
 
+          // Record the original server target in ProxyManager before the
+          // direct-WS attempt. credentials.server will soon hold the resolved
+          // wss:// URL, which is useless for starting the Rust proxy later —
+          // the proxy needs the original XMPP host/domain. If a later
+          // reconnect fails on direct WS and falls back to proxy, the
+          // ProxyManager reads this to bring the proxy up against the right
+          // target. Safe idempotent call; harmless if direct WS then fails
+          // and we fall through to the ensureProxy() path below, which also
+          // updates the same field.
+          this.proxyManager.setOriginalServer(server || domain)
+
           try {
             const timeoutSentinel = Symbol('direct-ws-precheck-timeout')
             const result = await Promise.race([
@@ -2134,31 +2145,67 @@ export class Connection extends BaseModule {
         await connectWithOptions(reconnectOptions)
       } catch (reconnectError) {
         const errorMsg = reconnectError instanceof Error ? reconnectError.message : String(reconnectError)
-        // Only when reconnecting through a cached local proxy endpoint and that
-        // endpoint fails do we refresh/restart the proxy and retry once.
+
+        // Two recovery paths on reconnect failure:
+        //
+        //  (1) `shouldRefreshProxy` — we were already on the Rust proxy and the
+        //      cached endpoint died (e.g., proxy watchdog closed the socket).
+        //      Restart the proxy against the same target and retry once.
+        //
+        //  (2) `shouldFallBackToProxy` — we were on a direct WebSocket endpoint
+        //      and it failed. Switch to the Rust proxy for the retry and for
+        //      the rest of the session. On Tauri the webview's WebSocket can
+        //      lose its context after background/sleep; the proxy owns its own
+        //      OS-level TCP connection and is far more resilient, so a single
+        //      direct-WS failure should flip us onto the proxy permanently
+        //      rather than retrying the same doomed URL forever.
         const shouldRefreshProxy = reconnectUsesCachedProxy && !this.isInTerminalState()
-        if (!shouldRefreshProxy) {
+        const shouldFallBackToProxy =
+          !reconnectUsesCachedProxy &&
+          this.proxyManager.hasProxy &&
+          !this.isLocalProxyServer(reconnectOptions.server) &&
+          !this.isInTerminalState()
+
+        if (!shouldRefreshProxy && !shouldFallBackToProxy) {
           throw reconnectError
         }
 
         const reconnectDomain = getDomain(reconnectOptions.jid)
         const proxyServer = this.proxyManager.getOriginalServer() || reconnectDomain
-        this.stores.console.addEvent(
-          `Reconnect: cached proxy endpoint failed (${errorMsg}), refreshing endpoint`,
-          'connection'
-        )
+
+        if (shouldRefreshProxy) {
+          this.stores.console.addEvent(
+            `Reconnect: cached proxy endpoint failed (${errorMsg}), refreshing endpoint`,
+            'connection'
+          )
+        } else {
+          this.stores.console.addEvent(
+            `Reconnect: direct WebSocket failed (${errorMsg}), falling back to proxy (${proxyServer})`,
+            'connection'
+          )
+          logInfo(`attemptReconnect: direct WebSocket failed, falling back to proxy for ${proxyServer}`)
+        }
+
         this.cleanupClient()
-        const proxyRefreshStart = Date.now()
-        const refreshed = await this.proxyManager.restartProxy(proxyServer, reconnectDomain)
-        const proxyRefreshMs = Date.now() - proxyRefreshStart
+        const proxyStart = Date.now()
+        const refreshed = shouldRefreshProxy
+          ? await this.proxyManager.restartProxy(proxyServer, reconnectDomain)
+          : await this.proxyManager.ensureProxy(proxyServer, reconnectDomain)
+        const proxyMs = Date.now() - proxyStart
         reconnectOptions = { ...reconnectOptions, server: refreshed.server }
         this.credentials = reconnectOptions
         this.stores.connection.setConnectionMethod(refreshed.connectionMethod)
         this.stores.console.addEvent(
-          `Reconnect: proxy refreshed in ${proxyRefreshMs}ms -> ${refreshed.server}`,
+          shouldRefreshProxy
+            ? `Reconnect: proxy refreshed in ${proxyMs}ms -> ${refreshed.server}`
+            : `Reconnect: proxy started in ${proxyMs}ms -> ${refreshed.server}`,
           'connection'
         )
-        logInfo(`attemptReconnect: proxy refreshed (${refreshed.server}) in ${proxyRefreshMs}ms`)
+        logInfo(
+          shouldRefreshProxy
+            ? `attemptReconnect: proxy refreshed (${refreshed.server}) in ${proxyMs}ms`
+            : `attemptReconnect: fell back to proxy (${refreshed.server}) in ${proxyMs}ms`
+        )
 
         await connectWithOptions(reconnectOptions)
       }
