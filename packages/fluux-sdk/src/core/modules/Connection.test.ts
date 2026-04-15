@@ -3886,6 +3886,40 @@ describe('XMPPClient Connection', () => {
       expect(result).toBe(false)
     })
 
+    it('waitForNetworkReady short-circuits to true when a proxy adapter is in use', async () => {
+      // Regression: on Tauri desktop the XMPP socket is owned by the Rust
+      // proxy at the OS level, not by the webview. `navigator.onLine` is
+      // the browser's own network perception and can lie after WKWebView
+      // sleep/wake — stay true when the network is dead, or go false while
+      // the Rust proxy could have connected fine. We must NOT block on
+      // that signal when a proxy adapter is available; the proxy-fallback
+      // path in attemptReconnect is the real recovery mechanism on desktop.
+      const mockProxyAdapter = {
+        startProxy: vi.fn().mockResolvedValue({ url: 'ws://127.0.0.1:12345' }),
+        stopProxy: vi.fn().mockResolvedValue(undefined),
+      }
+      const proxyClient = new XMPPClient({ debug: false, proxyAdapter: mockProxyAdapter })
+      proxyClient.bindStores(mockStores)
+
+      // Force navigator.onLine false — a non-proxy client would block here
+      // for up to `timeoutMs` waiting for the 'online' event.
+      Object.defineProperty(navigator, 'onLine', { value: false, configurable: true })
+
+      const connectionModule = (proxyClient.connection as any)
+      const result = await connectionModule.waitForNetworkReady(5000)
+      expect(result).toBe(true)
+
+      // Confirm we did NOT emit the "waiting for network" diagnostic —
+      // the short-circuit must bail before touching the console store
+      // or registering event listeners.
+      const consoleCalls = vi.mocked(mockStores.console.addEvent).mock.calls.map(c => c[0])
+      expect(
+        consoleCalls.some(msg => typeof msg === 'string' && msg.includes('Waiting for network'))
+      ).toBe(false)
+
+      proxyClient.cancelReconnect()
+    })
+
     it('attemptReconnect skips WebSocket creation when network is not available', async () => {
       // Connect first
       const connectPromise = xmppClient.connect({

@@ -1253,8 +1253,25 @@ export class Connection extends BaseModule {
    * After wake-from-sleep, the OS network stack may need several seconds
    * to reinitialize. This prevents wasting reconnect attempts on a
    * network that isn't ready yet.
+   *
+   * Short-circuits to `true` when a proxy adapter is in use (typically
+   * Tauri desktop): the XMPP socket is owned by the native Rust proxy,
+   * not by the webview, so `navigator.onLine` reflects the webview's
+   * browser-level network perception rather than actual reachability.
+   * On WKWebView in particular, `navigator.onLine` is known to lie
+   * after sleep/wake — can stay `true` when the real network is dead,
+   * or report `false` spuriously while the Rust proxy could have
+   * connected fine. The proxy-fallback path in attemptReconnect() is
+   * the correct recovery mechanism on desktop; blocking on the
+   * unreliable browser signal first just adds latency.
    */
   private waitForNetworkReady(timeoutMs: number = NETWORK_READY_TIMEOUT_MS): Promise<boolean> {
+    // Proxy mode: trust the Rust side; `navigator.onLine` is not a
+    // meaningful signal for an OS-level TCP socket.
+    if (this.proxyManager.hasProxy) {
+      return Promise.resolve(true)
+    }
+
     // Fast path: already online
     if (typeof navigator !== 'undefined' && navigator.onLine) {
       return Promise.resolve(true)
