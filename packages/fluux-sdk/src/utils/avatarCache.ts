@@ -227,60 +227,6 @@ export async function cacheAvatar(
 }
 
 /**
- * Check if an avatar is cached (without creating a blob URL)
- */
-export async function hasAvatar(hash: string): Promise<boolean> {
-  try {
-    const db = await getDB()
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(STORE_NAME, 'readonly')
-      const store = transaction.objectStore(STORE_NAME)
-      const request = store.count(IDBKeyRange.only(hash))
-
-      request.onerror = () => reject(request.error)
-      request.onsuccess = () => resolve(request.result > 0)
-    })
-  } catch (error) {
-    // Only log if IndexedDB is available (skip in test environments)
-    if (isIndexedDBAvailable()) {
-      console.warn('Failed to check avatar cache:', error)
-    }
-    return false
-  }
-}
-
-/**
- * Clear avatars older than maxAgeDays
- */
-export async function clearOldAvatars(maxAgeDays: number): Promise<void> {
-  const maxAge = maxAgeDays * 24 * 60 * 60 * 1000
-  const cutoff = Date.now() - maxAge
-
-  try {
-    const db = await getDB()
-    const transaction = db.transaction(STORE_NAME, 'readwrite')
-    const store = transaction.objectStore(STORE_NAME)
-
-    const request = store.openCursor()
-    request.onsuccess = () => {
-      const cursor = request.result
-      if (cursor) {
-        const avatar = cursor.value as CachedAvatar
-        if (avatar.timestamp < cutoff) {
-          cursor.delete()
-        }
-        cursor.continue()
-      }
-    }
-  } catch (error) {
-    // Only log if IndexedDB is available (skip in test environments)
-    if (isIndexedDBAvailable()) {
-      console.warn('Failed to clear old avatars:', error)
-    }
-  }
-}
-
-/**
  * Clear all cached avatars
  */
 export async function clearAllAvatars(): Promise<void> {
