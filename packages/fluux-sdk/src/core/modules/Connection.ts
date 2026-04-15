@@ -114,7 +114,7 @@ const isAuthStreamError = (message: string): boolean =>
  *
  * // Manual reconnection control
  * client.connection.cancelReconnect()
- * client.connection.triggerReconnect()
+ * client.connection.nudgeReconnect()
  *
  * // Check connection health after sleep
  * const isAlive = await client.verifyConnection()
@@ -804,15 +804,22 @@ export class Connection extends BaseModule {
   }
 
   /**
-   * Immediately trigger a reconnection attempt.
+   * Nudge the reconnect loop forward if it is currently stuck waiting.
    *
-   * Use this when the app becomes visible while in a reconnecting state,
-   * since background timers may have been suspended by the browser/OS.
-   * This cancels any pending scheduled reconnection attempts immediately.
+   * Only does work when the state machine is in `reconnecting.waiting`: it
+   * skips the remaining backoff delay and transitions to `attempting`. When
+   * the machine is in `reconnecting.attempting` (an attempt is already in
+   * flight) the signal is ignored, and outside of reconnecting states this
+   * method early-returns. Safe to call repeatedly as a heartbeat.
+   *
+   * Use this when you have an external signal that the reconnect loop may
+   * have stalled — e.g., the app became visible while in a reconnecting
+   * state and background timers may have been suspended by the OS, or a
+   * native-thread keepalive is nudging a JS-throttled backoff timer.
    */
-  triggerReconnect(): void {
+  nudgeReconnect(): void {
     if (!this.isInReconnectingState() || !this.credentials) {
-      const message = `triggerReconnect skipped (reconnecting=${this.isInReconnectingState()}, hasCredentials=${!!this.credentials}, state=${JSON.stringify(this.getMachineState())})`
+      const message = `nudgeReconnect skipped (reconnecting=${this.isInReconnectingState()}, hasCredentials=${!!this.credentials}, state=${JSON.stringify(this.getMachineState())})`
       this.stores.console.addEvent(message, 'connection')
       logInfo(message)
       return
@@ -820,7 +827,9 @@ export class Connection extends BaseModule {
 
     // Signal machine: skip waiting, go directly to attempting.
     // The state-machine subscription starts the reconnect attempt.
-    this.sendMachineEvent({ type: 'TRIGGER_RECONNECT' }, 'triggerReconnect')
+    // In `attempting` state the machine ignores TRIGGER_RECONNECT, so this
+    // is a safe no-op even while an attempt is in flight.
+    this.sendMachineEvent({ type: 'TRIGGER_RECONNECT' }, 'nudgeReconnect')
   }
 
   /**
@@ -1051,7 +1060,7 @@ export class Connection extends BaseModule {
     }
 
     // Signal to setupConnectionHandlers' error handler that recovery is already
-    // in progress. Must be set BEFORE cleanupClient/triggerReconnect so the
+    // in progress. Must be set BEFORE cleanupClient/nudgeReconnect so the
     // EventEmitter snapshot handler sees it and skips its own onError/reject.
     this.deadSocketRecoveryInProgress = true
 
@@ -1082,10 +1091,10 @@ export class Connection extends BaseModule {
 
     if (immediateReconnect) {
       this.stores.console.addEvent(
-        `Dead-socket recovery: triggering immediate reconnect (state=${JSON.stringify(this.getMachineState())})`,
+        `Dead-socket recovery: nudging reconnect immediately (state=${JSON.stringify(this.getMachineState())})`,
         'connection'
       )
-      this.triggerReconnect()
+      this.nudgeReconnect()
     }
 
     // Reconnect scheduling is handled by the state machine (`reconnecting.waiting`).
@@ -1131,9 +1140,9 @@ export class Connection extends BaseModule {
 
       case 'visible':
         if (this.isInReconnectingState()) {
-          logInfo('System state: visible, triggering immediate reconnect')
-          this.stores.console.addEvent('System state: visible, triggering immediate reconnect', 'connection')
-          this.triggerReconnect()
+          logInfo('System state: visible, nudging reconnect')
+          this.stores.console.addEvent('System state: visible, nudging reconnect', 'connection')
+          this.nudgeReconnect()
         }
         break
 

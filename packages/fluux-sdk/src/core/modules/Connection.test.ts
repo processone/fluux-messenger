@@ -985,7 +985,7 @@ describe('XMPPClient Connection', () => {
       )
       expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
       expect(mockStores.console.addEvent).toHaveBeenCalledWith(
-        expect.stringContaining('Dead-socket recovery: triggering immediate reconnect'),
+        expect.stringContaining('Dead-socket recovery: nudging reconnect immediately'),
         'connection'
       )
 
@@ -2936,28 +2936,29 @@ describe('XMPPClient Connection', () => {
       await vi.advanceTimersByTimeAsync(1000)
       expect(mockClientFactory).toHaveBeenCalledTimes(1)
 
-      // Now call triggerReconnect() while the first attempt is still in progress
-      // (simulates app becoming visible while reconnecting)
+      // Now call nudgeReconnect() while the first attempt is still in progress
+      // (simulates app becoming visible while reconnecting). The machine ignores
+      // TRIGGER_RECONNECT in `reconnecting.attempting`, so this must be a no-op.
       mockClientFactory.mockClear()
-      xmppClient.triggerReconnect()
+      xmppClient.nudgeReconnect()
 
       // No second reconnect attempt should start while machine stays in attempting.
       expect(mockClientFactory).not.toHaveBeenCalled()
     })
 
-    it('should allow repeated reconnect triggers after "still online" short-circuit', async () => {
+    it('should allow repeated reconnect nudges after "still online" short-circuit', async () => {
       // Force the defensive online short-circuit path in attemptReconnect()
       ;(mockXmppClientInstance as any).status = 'online'
 
       // First immediate reconnect short-circuits
       xmppClient.connectionActor.send({ type: 'SOCKET_DIED' })
-      xmppClient.triggerReconnect()
+      xmppClient.nudgeReconnect()
       await vi.advanceTimersByTimeAsync(0)
 
-      // A second trigger should still run through attempting, not get stuck.
+      // A second nudge should still run through attempting, not get stuck.
       vi.mocked(mockStores.console.addEvent).mockClear()
       xmppClient.connectionActor.send({ type: 'SOCKET_DIED' })
-      xmppClient.triggerReconnect()
+      xmppClient.nudgeReconnect()
       await vi.advanceTimersByTimeAsync(0)
 
       expect(mockStores.console.addEvent).toHaveBeenCalled()
@@ -3011,12 +3012,14 @@ describe('XMPPClient Connection', () => {
       expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
 
       // Prepare mock for reconnect BEFORE calling notifySystemState,
-      // because triggerReconnect() fires attemptReconnect() synchronously
+      // because the WAKE event fires attemptReconnect() synchronously via
+      // the state-machine subscription.
       const reconnectClient = createMockXmppClient()
       mockClientFactory._setInstance(reconnectClient)
 
-      // Now the wake event fires with a long sleep duration (8 hours)
-      // Since we're already in reconnecting state, this should triggerReconnect
+      // Now the wake event fires with a long sleep duration (8 hours).
+      // Since we're already in reconnecting state, handleAwake sends WAKE
+      // to the machine, which transitions waiting → attempting.
       const eightHoursMs = 8 * 60 * 60 * 1000
       await xmppClient.notifySystemState('awake', eightHoursMs)
 
@@ -3030,7 +3033,7 @@ describe('XMPPClient Connection', () => {
       // After wake, attemptReconnect adds a 2s network settle delay (NETWORK_SETTLE_DELAY_MS).
       await vi.advanceTimersByTimeAsync(3000)
 
-      // The triggerReconnect should have started attemptReconnect
+      // The WAKE event should have started attemptReconnect
       expect(mockClientFactory).toHaveBeenCalledTimes(1)
 
       // Simulate successful reconnection on the new client
