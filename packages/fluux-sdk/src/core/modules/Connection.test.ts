@@ -3605,6 +3605,84 @@ describe('XMPPClient Connection', () => {
       expect(mockStores.connection.setStatus).not.toHaveBeenCalledWith('reconnecting')
     })
 
+    describe('handleKeepaliveTick', () => {
+      it('runs health check when connected', async () => {
+        mockXmppClientInstance.send.mockImplementation(() => {
+          setTimeout(() => {
+            const ackNonza = createMockElement('a', { xmlns: 'urn:xmpp:sm:3', h: '5' })
+            mockXmppClientInstance._emit('nonza', ackNonza)
+          }, 50)
+          return Promise.resolve()
+        })
+
+        xmppClient.handleKeepaliveTick()
+
+        await vi.advanceTimersByTimeAsync(100)
+        expect(mockXmppClientInstance.send).toHaveBeenCalled()
+      })
+
+      it('nudges reconnect when in reconnecting.waiting', async () => {
+        // Disconnect → first reconnect attempt starts automatically
+        mockXmppClientInstance._emit('disconnect', { clean: false })
+        await vi.advanceTimersByTimeAsync(1000)
+
+        // Let the attempt fail (no 'online' event) via the 30s timeout
+        await vi.advanceTimersByTimeAsync(30_000)
+
+        // Machine should now be in reconnecting.waiting (backoff before next attempt)
+        const clientsBefore = mockClientFactory.mock.calls.length
+
+        xmppClient.handleKeepaliveTick()
+        await vi.advanceTimersByTimeAsync(0)
+
+        // nudge should have skipped the backoff and started a new attempt
+        expect(mockClientFactory.mock.calls.length).toBeGreaterThan(clientsBefore)
+      })
+
+      it('is safe to tick repeatedly (no dedup)', async () => {
+        mockXmppClientInstance.send.mockImplementation(() => {
+          setTimeout(() => {
+            const ackNonza = createMockElement('a', { xmlns: 'urn:xmpp:sm:3', h: '5' })
+            mockXmppClientInstance._emit('nonza', ackNonza)
+          }, 50)
+          return Promise.resolve()
+        })
+
+        xmppClient.handleKeepaliveTick()
+        xmppClient.handleKeepaliveTick()
+        xmppClient.handleKeepaliveTick()
+
+        await vi.advanceTimersByTimeAsync(100)
+        // Each tick triggers a health check — at least 3 SM <r/> requests sent
+        expect(mockXmppClientInstance.send.mock.calls.length).toBeGreaterThanOrEqual(3)
+      })
+
+      it('swallows health check rejections', async () => {
+        mockXmppClientInstance.send.mockRejectedValue(new Error('unreachable'))
+
+        xmppClient.handleKeepaliveTick()
+
+        await vi.advanceTimersByTimeAsync(100)
+        // No unhandled rejection — the catch inside handleKeepaliveTick absorbs it
+      })
+
+      it('is a no-op when disconnected', async () => {
+        await xmppClient.disconnect()
+        mockXmppClientInstance.send.mockClear()
+
+        xmppClient.handleKeepaliveTick()
+
+        expect(mockXmppClientInstance.send).not.toHaveBeenCalled()
+      })
+
+      it('is a no-op during initial connecting state', async () => {
+        // Start a fresh client that hasn't connected yet
+        const freshClient = new XMPPClient(createMockStores())
+        freshClient.handleKeepaliveTick()
+        // No crash, no side effects — method returns silently
+      })
+    })
+
     it('should preserve rooms across multiple rapid disconnect/reconnect cycles', async () => {
       // Simulate 9 rooms joined (as seen in the real log)
       const nineRooms = Array.from({ length: 9 }, (_, i) => ({
