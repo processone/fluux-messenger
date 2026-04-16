@@ -1166,6 +1166,11 @@ export class MAM extends BaseModule {
    */
   async fetchPreviewForRoom(roomJid: string): Promise<void> {
     try {
+      // Cache-first: try loading preview from IndexedDB before making a network query.
+      // Background catch-up (catchUpAllRooms) will correct the preview later if stale.
+      const cached = await this.deps.stores?.room.loadPreviewFromCache(roomJid)
+      if (cached) return
+
       const queryId = `preview_${generateUUID()}`
 
       // Room MAM doesn't need a 'with' filter

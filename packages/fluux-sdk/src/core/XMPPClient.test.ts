@@ -863,7 +863,7 @@ describe('XMPPClient', () => {
       expect(refreshSpy).toHaveBeenCalledWith(rooms)
     })
 
-    it('should run MAM catch-up on SM resumption when disconnect duration is unknown', async () => {
+    it('should skip MAM catch-up but fetch bookmarks on SM resumption when disconnect duration is unknown', async () => {
       const mockClientWithSM = createMockXmppClientWithSM('sm-id-catchup')
       mockClientFactory._setInstance(mockClientWithSM)
 
@@ -895,8 +895,8 @@ describe('XMPPClient', () => {
 
       await connectPromise
 
-      // Unknown disconnect duration → full refresh (safe default)
-      expect(catchUpSpy).toHaveBeenCalledWith({ concurrency: 2 })
+      // Unknown disconnect duration → SM replay covers messages, fetch bookmarks only
+      expect(catchUpSpy).not.toHaveBeenCalled()
       expect(bookmarksSpy).toHaveBeenCalled()
     })
 
@@ -946,7 +946,7 @@ describe('XMPPClient', () => {
       expect(newXmppClient.muc.refreshPresenceInRooms).toHaveBeenCalled()
     })
 
-    it('should run MAM catch-up on SM resumption for long disconnects', async () => {
+    it('should skip MAM catch-up but fetch bookmarks on SM resumption for long disconnects', async () => {
       const mockClientWithSM = createMockXmppClientWithSM('sm-id-long')
       mockClientFactory._setInstance(mockClientWithSM)
 
@@ -982,8 +982,8 @@ describe('XMPPClient', () => {
 
       await connectPromise
 
-      // Long disconnect (300s > 120s threshold) → full refresh
-      expect(catchUpSpy).toHaveBeenCalledWith({ concurrency: 2 })
+      // Long disconnect (300s > 120s threshold) → SM replay covers messages, fetch bookmarks only
+      expect(catchUpSpy).not.toHaveBeenCalled()
       expect(bookmarksSpy).toHaveBeenCalled()
     })
 

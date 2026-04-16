@@ -728,6 +728,71 @@ describe('MAM Preview Refresh', () => {
     })
   })
 
+  describe('fetchPreviewForRoom (cache-first)', () => {
+    it('should skip MAM query when IndexedDB cache has a preview', async () => {
+      await connectClient()
+
+      const cachedMessage = {
+        type: 'groupchat' as const,
+        id: 'cached-msg',
+        roomJid: 'room1@conference.example.com',
+        from: 'room1@conference.example.com/alice',
+        nick: 'alice',
+        body: 'Cached message',
+        timestamp: new Date(),
+        isOutgoing: false,
+      }
+
+      // Cache returns a message
+      vi.mocked(mockStores.room.loadPreviewFromCache).mockResolvedValue(cachedMessage as any)
+
+      // Track MAM queries
+      const mamQueryTargets: string[] = []
+      mockXmppClientInstance.iqCaller.request.mockImplementation(async (iq: any) => {
+        if (iq?.attrs?.to) mamQueryTargets.push(iq.attrs.to)
+        return createMockElement('iq', { type: 'result' }, [
+          { name: 'fin', attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' }, children: [] },
+        ])
+      })
+
+      await xmppClient.mam.fetchPreviewForRoom('room1@conference.example.com')
+
+      // Should have tried the cache
+      expect(mockStores.room.loadPreviewFromCache).toHaveBeenCalledWith('room1@conference.example.com')
+      // Should NOT have made any MAM query
+      expect(mamQueryTargets).not.toContain('room1@conference.example.com')
+    })
+
+    it('should fall through to MAM query when cache is empty', async () => {
+      await connectClient()
+
+      // Cache returns null (no cached messages)
+      vi.mocked(mockStores.room.loadPreviewFromCache).mockResolvedValue(null)
+
+      // Mock room for nickname lookup
+      vi.mocked(mockStores.room.getRoom).mockReturnValue({
+        jid: 'room1@conference.example.com',
+        nickname: 'me',
+      } as any)
+
+      // Track MAM queries
+      const mamQueryTargets: string[] = []
+      mockXmppClientInstance.iqCaller.request.mockImplementation(async (iq: any) => {
+        if (iq?.attrs?.to) mamQueryTargets.push(iq.attrs.to)
+        return createMockElement('iq', { type: 'result' }, [
+          { name: 'fin', attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' }, children: [] },
+        ])
+      })
+
+      await xmppClient.mam.fetchPreviewForRoom('room1@conference.example.com')
+
+      // Should have tried the cache first
+      expect(mockStores.room.loadPreviewFromCache).toHaveBeenCalledWith('room1@conference.example.com')
+      // Should fall through to MAM query
+      expect(mamQueryTargets).toContain('room1@conference.example.com')
+    })
+  })
+
   describe('refreshArchivedConversationPreviews', () => {
     it('should do nothing when there are no archived conversations', async () => {
       await connectClient()

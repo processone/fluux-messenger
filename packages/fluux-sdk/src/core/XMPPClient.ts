@@ -1566,36 +1566,34 @@ export class XMPPClient {
       await this.muc.refreshPresenceInRooms(roomsToRefresh)
       if (this.isSessionSuperseded(gen, 'SM resumption aborted after room presence refresh')) return
 
-      // For short disconnects (< 2 min), SM replay already delivered all queued
-      // stanzas — skip the expensive room MAM catch-up and bookmark fetch.
-      // For longer or unknown-duration disconnects, run the full refresh as a
-      // safety net in case messages fell outside the SM queue window.
+      // SM replay already delivered all queued stanzas — room MAM catch-up
+      // is always skipped on successful SM resume, regardless of disconnect
+      // duration. If a room kicked the user during the disconnect, the kick
+      // notification is part of the SM replay; roomSideEffects excludes
+      // kicked rooms from fetchInitiated, so they get targeted MAM catch-up
+      // when they rejoin via the room:joined event.
+      //
+      // For long or unknown-duration disconnects, fetch bookmarks as a safety
+      // net (bookmarks are PEP items, not SM-queued stanzas, so they may have
+      // changed while disconnected).
       const SM_SHORT_DISCONNECT_MS = 120_000
       const isShortDisconnect = disconnectDurationMs != null
         && disconnectDurationMs < SM_SHORT_DISCONNECT_MS
 
       if (isShortDisconnect) {
         const sec = Math.round(disconnectDurationMs / 1000)
-        logInfo(`SM resumption: short disconnect (${sec}s) — skipping room MAM catch-up`)
+        logInfo(`SM resumption: short disconnect (${sec}s) — skipping bookmark fetch`)
         this.stores?.console.addEvent(
-          `SM resumption: short disconnect (${sec}s) — skipping room MAM catch-up and bookmark fetch`,
+          `SM resumption: short disconnect (${sec}s) — skipping bookmark fetch`,
           'sm'
         )
       } else {
         const sec = disconnectDurationMs != null ? Math.round(disconnectDurationMs / 1000) : 'unknown'
-        logInfo(`SM resumption: disconnect ${sec}s — running room MAM catch-up`)
+        logInfo(`SM resumption: disconnect ${sec}s — fetching bookmarks`)
         this.stores?.console.addEvent(
-          `SM resumption: disconnect ${sec}s — running room MAM catch-up and bookmark fetch`,
+          `SM resumption: disconnect ${sec}s — fetching bookmarks`,
           'sm'
         )
-
-        // Verify we haven't missed any room messages during the disconnect.
-        // SM replay covers stanzas the server queued, but if the disconnect was
-        // long enough for messages to fall outside the SM window, a forward MAM
-        // query from the newest cached message will catch them.
-        this.mam.catchUpAllRooms({ concurrency: 2 }).catch((err) => {
-          console.error('[XMPPClient] Room catch-up after SM resumption failed:', err)
-        })
 
         // Fetch bookmarks to restore room names and autojoin state.
         // Also join any newly bookmarked rooms not already joined.
