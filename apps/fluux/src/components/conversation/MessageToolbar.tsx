@@ -236,7 +236,7 @@ export const MessageToolbar = memo(function MessageToolbar({
       </Tooltip>
 
       {/* More options button with dropdown */}
-      <div className="relative" ref={moreMenuRef}>
+      <div className="inline-flex relative" ref={moreMenuRef}>
         <Tooltip content={t('chat.moreOptions')} position="top" disabled={showReactionPicker || showMoreMenu}>
           <button
             ref={moreButtonRef}
