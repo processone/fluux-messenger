@@ -413,7 +413,7 @@ export function RoomHeader({
         >
           <Users className="w-4 h-4" />
           <span className="text-sm font-medium">{uniqueOccupantCount}</span>
-          <ChevronRight className={`w-4 h-4 transition-transform ${showOccupants ? 'rotate-180' : ''}`} />
+          <ChevronRight className={`w-4 h-4 transition-transform ${showOccupants ? '' : 'rotate-180'}`} />
         </button>
       </Tooltip>
 
