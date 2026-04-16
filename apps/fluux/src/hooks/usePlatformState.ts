@@ -71,6 +71,29 @@ export function shouldReloadWebviewOnWake(
   return durationMs >= SLEEP_THRESHOLD_MS
 }
 
+/**
+ * Decide whether a visibility-triggered wake should reload the webview.
+ *
+ * Unlike OS wake events (which are authoritative), the visibilitychange
+ * API cannot distinguish "machine slept for 10 minutes" from "user was
+ * in another app for 10 minutes while the machine stayed awake."
+ *
+ * We cross-check the JS heartbeat timer (Effect 3): if it was firing
+ * normally, the gap between `now` and `lastHeartbeatRef` will be small
+ * (≈ HEARTBEAT_INTERVAL_MS). A large gap (≥ SLEEP_THRESHOLD_MS) means
+ * the OS froze JS execution — i.e. real sleep — and the rendering
+ * context may be lost.
+ */
+export function shouldReloadOnVisibilityWake(
+  hiddenDurationMs: number,
+  heartbeatGapMs: number,
+  isTauriMode: boolean
+): boolean {
+  if (!shouldReloadWebviewOnWake(hiddenDurationMs, isTauriMode)) return false
+  if (heartbeatGapMs < SLEEP_THRESHOLD_MS) return false
+  return true
+}
+
 
 // ── Hook ───────────────────────────────────────────────────────────────────────
 
@@ -419,15 +442,24 @@ export function usePlatformState() {
 
       if (!shouldHandleWake('visibility')) return
 
+      const heartbeatGap = now - lastHeartbeatRef.current
       console.log(`[PlatformState] Page visible after ${Math.round(hiddenDuration / 1000)}s`)
 
       // If the hide was long enough to count as a real sleep on Tauri,
       // reload the webview (same rendering-context hazard as OS sleep).
-      if (maybeReloadOnLongWake(hiddenDuration, 'visibility')) return
+      // Cross-check the JS heartbeat: if it was firing normally (gap
+      // below threshold), the machine was awake and the app was merely
+      // hidden — no rendering context loss, no reload needed.
+      if (shouldReloadOnVisibilityWake(hiddenDuration, heartbeatGap, isTauri())) {
+        const secs = Math.round(hiddenDuration / 1000)
+        console.log(`[PlatformState] Wake from sleep (visibility, ${secs}s), reloading webview to restore rendering`)
+        logEvent(`Wake from sleep (visibility, ${secs}s), reloading webview`)
+        window.location.reload()
+        return
+      }
 
-      // Sub-threshold (or web mode): just nudge a stalled reconnect via
-      // notifySystemState('visible'). Lighter "tab came back" path — no
-      // state-machine WAKE, no verify.
+      // Sub-threshold, machine was awake, or web mode: just nudge a
+      // stalled reconnect via notifySystemState('visible').
       try {
         await client.notifySystemState('visible')
       } catch (err) {
