@@ -95,6 +95,7 @@ import {
   usePlatformState,
   shouldHandleProxyClosedStatus,
   shouldReloadWebviewOnWake,
+  shouldReloadOnVisibilityWake,
 } from './usePlatformState'
 
 describe('usePlatformState', () => {
@@ -384,6 +385,40 @@ describe('usePlatformState', () => {
     it('returns false for unknown duration (cannot tell if it was real sleep)', () => {
       expect(shouldReloadWebviewOnWake(undefined, true)).toBe(false)
       expect(shouldReloadWebviewOnWake(undefined, false)).toBe(false)
+    })
+  })
+
+  describe('shouldReloadOnVisibilityWake', () => {
+    // The visibility handler cannot distinguish "machine slept" from
+    // "app was hidden while machine stayed awake." The heartbeat gap
+    // disambiguates: a small gap means JS was running (machine awake),
+    // a large gap means JS was frozen by the OS (real sleep).
+
+    const THRESHOLD = 180_000 // SLEEP_THRESHOLD_MS
+
+    it('returns true when both hidden duration AND heartbeat gap exceed threshold (real sleep)', () => {
+      expect(shouldReloadOnVisibilityWake(THRESHOLD, THRESHOLD, true)).toBe(true)
+      expect(shouldReloadOnVisibilityWake(5 * 60_000, 5 * 60_000, true)).toBe(true)
+      expect(shouldReloadOnVisibilityWake(60 * 60_000, 60 * 60_000, true)).toBe(true)
+    })
+
+    it('returns false when hidden long but heartbeat was recent (app just hidden, machine awake)', () => {
+      // This is the bug scenario: user switched to another app for 7+ minutes,
+      // machine stayed awake, heartbeat kept firing every ~10s.
+      expect(shouldReloadOnVisibilityWake(7 * 60_000, 10_000, true)).toBe(false)
+      expect(shouldReloadOnVisibilityWake(THRESHOLD, 30_000, true)).toBe(false)
+      expect(shouldReloadOnVisibilityWake(10 * 60_000, THRESHOLD - 1, true)).toBe(false)
+    })
+
+    it('returns false when hidden duration is below threshold', () => {
+      expect(shouldReloadOnVisibilityWake(THRESHOLD - 1, THRESHOLD, true)).toBe(false)
+      expect(shouldReloadOnVisibilityWake(60_000, 60_000, true)).toBe(false)
+      expect(shouldReloadOnVisibilityWake(0, 0, true)).toBe(false)
+    })
+
+    it('returns false on web even with real sleep (no WKWebView rendering bug)', () => {
+      expect(shouldReloadOnVisibilityWake(THRESHOLD, THRESHOLD, false)).toBe(false)
+      expect(shouldReloadOnVisibilityWake(60 * 60_000, 60 * 60_000, false)).toBe(false)
     })
   })
 })
