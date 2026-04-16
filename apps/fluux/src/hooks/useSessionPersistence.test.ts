@@ -16,6 +16,7 @@ import {
   getSavedServerInfo,
   saveOwnResources,
   getSavedOwnResources,
+  toJoinedRoomInfos,
   type ViewStateData,
 } from './useSessionPersistence'
 import type { Contact, Room, RoomMessage, ServerInfo, HttpUploadService, ResourcePresence } from '@fluux/sdk'
@@ -684,8 +685,74 @@ describe('useSessionPersistence', () => {
       expect(getSession()).toBeNull()
     })
   })
-})
 
-// ============================================================================
-// Note: Hook behavior tests were removed as presence synchronization is now
-// handled by XState's native persistence in XMPPProvider
+  describe('toJoinedRoomInfos', () => {
+    const makeRoom = (overrides: Partial<Room> & { jid: string; nickname: string }): Room => ({
+      name: overrides.jid.split('@')[0],
+      joined: false,
+      occupants: new Map(),
+      typingUsers: new Set(),
+      messages: [],
+      unreadCount: 0,
+      mentionsCount: 0,
+      isBookmarked: false,
+      ...overrides,
+    })
+
+    it('should include only joined rooms', () => {
+      const rooms: Room[] = [
+        makeRoom({ jid: 'a@conf.example.com', nickname: 'me', joined: true }),
+        makeRoom({ jid: 'b@conf.example.com', nickname: 'me', joined: false, isBookmarked: true }),
+        makeRoom({ jid: 'c@conf.example.com', nickname: 'me', joined: true }),
+      ]
+
+      const result = toJoinedRoomInfos(rooms)
+
+      expect(result).toHaveLength(2)
+      expect(result.map(r => r.jid)).toEqual(['a@conf.example.com', 'c@conf.example.com'])
+    })
+
+    it('should preserve password and autojoin', () => {
+      const rooms: Room[] = [
+        makeRoom({ jid: 'secret@conf.example.com', nickname: 'me', joined: true, password: 'p4ss', autojoin: true }),
+      ]
+
+      const result = toJoinedRoomInfos(rooms)
+
+      expect(result[0]).toEqual({
+        jid: 'secret@conf.example.com',
+        nickname: 'me',
+        password: 'p4ss',
+        autojoin: true,
+      })
+    })
+
+    it('should return empty array when no rooms are joined', () => {
+      const rooms: Room[] = [
+        makeRoom({ jid: 'a@conf.example.com', nickname: 'me', joined: false }),
+      ]
+
+      expect(toJoinedRoomInfos(rooms)).toEqual([])
+    })
+
+    it('should return empty array for empty input', () => {
+      expect(toJoinedRoomInfos([])).toEqual([])
+    })
+
+    it('should round-trip through save/restore correctly', () => {
+      const rooms = new Map<string, Room>([
+        ['a@conf.example.com', makeRoom({ jid: 'a@conf.example.com', nickname: 'nick1', joined: true, autojoin: true })],
+        ['b@conf.example.com', makeRoom({ jid: 'b@conf.example.com', nickname: 'nick2', joined: false, isBookmarked: true })],
+        ['c@conf.example.com', makeRoom({ jid: 'c@conf.example.com', nickname: 'nick3', joined: true, password: 'pw' })],
+      ])
+
+      saveRooms(rooms, TEST_JID)
+      const restored = getSavedRooms(TEST_JID)!
+      const infos = toJoinedRoomInfos(restored)
+
+      expect(infos).toHaveLength(2)
+      expect(infos[0]).toEqual({ jid: 'a@conf.example.com', nickname: 'nick1', password: undefined, autojoin: true })
+      expect(infos[1]).toEqual({ jid: 'c@conf.example.com', nickname: 'nick3', password: 'pw', autojoin: undefined })
+    })
+  })
+})

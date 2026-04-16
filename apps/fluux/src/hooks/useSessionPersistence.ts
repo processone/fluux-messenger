@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { connectionStore, rosterStore, roomStore, useXMPPContext, getBareJid, hasFastToken, deleteFastToken } from '@fluux/sdk'
 import { useRosterStore, useConnectionStore, useRoomStore } from '@fluux/sdk/react'
-import type { Contact, Room, RoomOccupant, ServerInfo, HttpUploadService, RoomMessage, ResourcePresence } from '@fluux/sdk'
+import type { Contact, Room, RoomOccupant, ServerInfo, HttpUploadService, RoomMessage, ResourcePresence, JoinedRoomInfo } from '@fluux/sdk'
 import { getResource } from '@/utils/xmppResource'
 import { isTauri } from '@/utils/tauri'
 
@@ -446,6 +446,17 @@ export function getSession(jid?: string | null): SessionData | null {
 }
 
 /**
+ * Convert saved Room objects to the JoinedRoomInfo format expected by
+ * ConnectOptions.previouslyJoinedRooms. Only includes rooms that were
+ * actually joined (not just bookmarked).
+ */
+export function toJoinedRoomInfos(rooms: Room[]): JoinedRoomInfo[] {
+  return rooms
+    .filter((r) => r.joined)
+    .map((r) => ({ jid: r.jid, nickname: r.nickname, password: r.password, autojoin: r.autojoin }))
+}
+
+/**
  * Hook to auto-reconnect on page reload if session exists.
  * Uses sessionStorage which persists across reload but clears when tab closes.
  * Supports XEP-0198 Stream Management for faster session resumption.
@@ -479,12 +490,13 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
     lang?: string,
     disableSmKeepalive?: boolean,
     rememberSession?: boolean,
-    autoRetryOnTransientFailure?: boolean
+    autoRetryOnTransientFailure?: boolean,
+    previouslyJoinedRooms?: JoinedRoomInfo[]
   ) => {
     connectionStore.getState().setStatus('connecting')
     connectionStore.getState().setError(null)
     try {
-      await client.connect({ jid, password, server, resource, smState, lang, disableSmKeepalive, rememberSession, autoRetryOnTransientFailure })
+      await client.connect({ jid, password, server, resource, smState, lang, disableSmKeepalive, rememberSession, autoRetryOnTransientFailure, previouslyJoinedRooms })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Connection failed'
       connectionStore.getState().setStatus('error')
@@ -524,8 +536,10 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
 
       // Restore rooms (bookmarks, join status, occupants)
       const savedRooms = getSavedRooms(session.jid)
+      let joinedRoomInfos: JoinedRoomInfo[] | undefined
       if (savedRooms && savedRooms.length > 0) {
         savedRooms.forEach((room) => addRoom(room))
+        joinedRoomInfos = toJoinedRoomInfos(savedRooms)
       }
 
       // Restore server discovery info
@@ -591,14 +605,14 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
             isResumptionRef.current = false
             return
           }
-          connect(session.jid, session.password, session.server, undefined, resource, i18n.language, disableSmKeepalive, rememberSession, autoRetry).catch((err) => {
+          connect(session.jid, session.password, session.server, undefined, resource, i18n.language, disableSmKeepalive, rememberSession, autoRetry, joinedRoomInfos).catch((err) => {
             console.log('[Auth] Reconnection failed:', err?.message || err)
             clearSession()
             isResumptionRef.current = false
           })
         }).catch(() => {
           // Claim check failed, try connecting anyway
-          connect(session.jid, session.password, session.server, undefined, resource, i18n.language, disableSmKeepalive, rememberSession, autoRetry).catch((err) => {
+          connect(session.jid, session.password, session.server, undefined, resource, i18n.language, disableSmKeepalive, rememberSession, autoRetry, joinedRoomInfos).catch((err) => {
             console.log('[Auth] Reconnection failed:', err?.message || err)
             clearSession()
             isResumptionRef.current = false
@@ -607,7 +621,7 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
         return
       }
 
-      connect(session.jid, session.password, session.server, undefined, resource, i18n.language, disableSmKeepalive, rememberSession, autoRetry).catch((err) => {
+      connect(session.jid, session.password, session.server, undefined, resource, i18n.language, disableSmKeepalive, rememberSession, autoRetry, joinedRoomInfos).catch((err) => {
         console.log('[Auth] Reconnection failed:', err?.message || err)
         // If auto-reconnect fails, clear session
         clearSession()
