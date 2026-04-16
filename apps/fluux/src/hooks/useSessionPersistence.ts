@@ -570,6 +570,12 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
       const disableSmKeepalive = isTauri()
       console.log('[Auth] Reconnecting on page reload with password (SDK will attempt SM resumption first)')
 
+      // Preserve "Remember Me" preference so the SDK persists rotated FAST
+      // tokens during this session. Without this, a page-reload connect uses
+      // rememberSession=undefined → saveToken is a no-op → server rotates
+      // the token but the new one is lost → next tab-close/reopen fails.
+      const rememberSession = localStorage.getItem('xmpp-remember-me') === 'true' || undefined
+
       // Auto-retry transient transport failures (e.g., WebSocket ECONNERROR
       // right after wake from sleep). The SDK will route those into its
       // normal reconnect/backoff loop instead of going to terminal.initialFailure.
@@ -585,14 +591,14 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
             isResumptionRef.current = false
             return
           }
-          connect(session.jid, session.password, session.server, undefined, resource, i18n.language, disableSmKeepalive, undefined, autoRetry).catch((err) => {
+          connect(session.jid, session.password, session.server, undefined, resource, i18n.language, disableSmKeepalive, rememberSession, autoRetry).catch((err) => {
             console.log('[Auth] Reconnection failed:', err?.message || err)
             clearSession()
             isResumptionRef.current = false
           })
         }).catch(() => {
           // Claim check failed, try connecting anyway
-          connect(session.jid, session.password, session.server, undefined, resource, i18n.language, disableSmKeepalive, undefined, autoRetry).catch((err) => {
+          connect(session.jid, session.password, session.server, undefined, resource, i18n.language, disableSmKeepalive, rememberSession, autoRetry).catch((err) => {
             console.log('[Auth] Reconnection failed:', err?.message || err)
             clearSession()
             isResumptionRef.current = false
@@ -601,7 +607,7 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
         return
       }
 
-      connect(session.jid, session.password, session.server, undefined, resource, i18n.language, disableSmKeepalive, undefined, autoRetry).catch((err) => {
+      connect(session.jid, session.password, session.server, undefined, resource, i18n.language, disableSmKeepalive, rememberSession, autoRetry).catch((err) => {
         console.log('[Auth] Reconnection failed:', err?.message || err)
         // If auto-reconnect fails, clear session
         clearSession()
