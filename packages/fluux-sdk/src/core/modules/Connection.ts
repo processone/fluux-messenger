@@ -893,6 +893,31 @@ export class Connection extends BaseModule {
   }
 
   /**
+   * Handle a keepalive tick from an external clock (e.g., Rust native timer).
+   *
+   * Routes the tick to the appropriate action based on the current connection
+   * state — the app does not need to inspect status and decide which method
+   * to call. Safe to invoke on every tick; no-ops when there is nothing to do.
+   *
+   * - `reconnecting`: nudge the state machine out of `reconnecting.waiting`
+   *   so a frozen JS setTimeout backoff doesn't stall recovery.
+   * - `connected` (online): run a lightweight health check (SM ack) without
+   *   changing status or triggering presence events.
+   * - anything else: no-op.
+   */
+  handleKeepaliveTick(): void {
+    if (this.isInReconnectingState()) {
+      this.nudgeReconnect()
+      return
+    }
+    if (!this.isInConnectedState()) return
+    this.verifyConnectionHealth().catch((err) => {
+      const msg = err instanceof Error ? err.message : String(err)
+      logInfo(`Keepalive health check error: ${msg}`)
+    })
+  }
+
+  /**
    * Probe connection health via SM ack or ping fallback.
    *
    * Shared implementation for {@link verifyConnection} and

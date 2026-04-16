@@ -71,46 +71,6 @@ export function shouldReloadWebviewOnWake(
   return durationMs >= SLEEP_THRESHOLD_MS
 }
 
-/** Minimal client surface the keepalive handler needs, for unit testing. */
-export interface XmppKeepaliveClient {
-  nudgeReconnect: () => void
-  verifyConnectionHealth: () => Promise<unknown>
-}
-
-/**
- * Handle a tick from the Rust-native `xmpp-keepalive` event.
- *
- * The Rust side emits this every 30s on a native thread — it is the one
- * clock in the app that is immune to macOS JS timer throttling. Behaviour:
- *
- * - `online`: run a lightweight health check (`verifyConnectionHealth`)
- *   which silently sends an SM `<r/>` without changing status.
- * - `reconnecting`: nudge the state machine out of `reconnecting.waiting`
- *   whenever an attempt is pending. Without this, the machine's backoff
- *   `setTimeout` can sit frozen for many minutes while the OS throttles
- *   the JS runtime, leaving the app "stuck on reconnect" from the user's
- *   point of view even though the reconnect logic is healthy.
- *   `nudgeReconnect()` is a safe no-op when the machine is already in
- *   `reconnecting.attempting`, so firing this every 30s during a
- *   reconnect loop only accelerates progress — it cannot cause churn.
- * - anything else (`disconnected`, `connecting`, terminal): no-op.
- *
- * Extracted as a named export so it can be unit-tested without going
- * through the Tauri event dispatch plumbing.
- */
-export function handleXmppKeepalive(
-  status: string,
-  client: XmppKeepaliveClient
-): void {
-  if (status === 'reconnecting') {
-    client.nudgeReconnect()
-    return
-  }
-  if (status !== 'online') return
-  client.verifyConnectionHealth().catch((err) => {
-    console.debug('[PlatformState] Keepalive health check error:', err)
-  })
-}
 
 // ── Hook ───────────────────────────────────────────────────────────────────────
 
@@ -510,12 +470,10 @@ export function usePlatformState() {
     let cleanedUp = false
 
     void import('@tauri-apps/api/event').then(({ listen }) => {
-      // Rust-driven keepalive tick every 30s. See handleXmppKeepalive above
-      // for the routing logic (online → health check, reconnecting → nudge,
-      // else → no-op). Extracted to a named function so it can be
-      // unit-tested without going through the Tauri event dispatch.
+      // Rust-driven keepalive tick every 30s. The SDK routes the tick
+      // internally (nudge reconnect, health check, or no-op).
       void listen('xmpp-keepalive', () => {
-        handleXmppKeepalive(statusRef.current, client)
+        client.handleKeepaliveTick()
       }).then((fn) => {
         if (cleanedUp) { fn() } else { unlistenKeepalive = fn }
       })

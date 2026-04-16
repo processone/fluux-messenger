@@ -982,6 +982,17 @@ export class XMPPClient {
   }
 
   /**
+   * Handle a keepalive tick from an external clock (e.g., Rust native timer).
+   *
+   * The SDK routes the tick internally: nudges a stalled reconnect loop,
+   * runs a health check when connected, or no-ops otherwise. Apps should
+   * call this on every tick without inspecting connection status.
+   */
+  handleKeepaliveTick(): void {
+    this.connection.handleKeepaliveTick()
+  }
+
+  /**
    * Notify the SDK of a system state change.
    *
    * This is the recommended way for apps to signal platform-specific events
