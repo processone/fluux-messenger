@@ -42,6 +42,10 @@ vi.mock('./hooks/useFullscreen', () => ({
   useFullscreen: vi.fn(() => false),
 }))
 
+vi.mock('./hooks/usePlatformState', () => ({
+  usePlatformState: vi.fn(),
+}))
+
 // Mock Tauri close handler (no-op in tests)
 vi.mock('./hooks/useTauriCloseHandler', () => ({
   useTauriCloseHandler: vi.fn(),

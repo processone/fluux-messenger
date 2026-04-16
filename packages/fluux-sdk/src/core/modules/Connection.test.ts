@@ -5,7 +5,11 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { XMPPClient } from '../XMPPClient'
-import { DIRECT_WEBSOCKET_PRECHECK_TIMEOUT_MS, RECONNECT_ATTEMPT_TIMEOUT_MS } from './connectionTimeouts'
+import {
+  DIRECT_WEBSOCKET_PRECHECK_TIMEOUT_MS,
+  RECONNECT_ATTEMPT_TIMEOUT_MS,
+  XMPP_STREAM_OPEN_TIMEOUT_MS,
+} from './connectionTimeouts'
 import {
   createMockXmppClient,
   createMockStores,
@@ -113,6 +117,7 @@ describe('XMPPClient Connection', () => {
         expect.objectContaining({
           service: 'wss://example.com/ws',
           domain: 'example.com',
+          timeout: XMPP_STREAM_OPEN_TIMEOUT_MS,
           credentials: expect.any(Function),
         })
       )
