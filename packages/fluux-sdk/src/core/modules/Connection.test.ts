@@ -3677,7 +3677,7 @@ describe('XMPPClient Connection', () => {
 
       it('is a no-op during initial connecting state', async () => {
         // Start a fresh client that hasn't connected yet
-        const freshClient = new XMPPClient(createMockStores())
+        const freshClient = new XMPPClient()
         freshClient.handleKeepaliveTick()
         // No crash, no side effects — method returns silently
       })
