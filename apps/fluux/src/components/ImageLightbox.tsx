@@ -63,7 +63,7 @@ export function ImageLightbox({ src, alt, downloadUrl, filename, onClose }: Imag
       <img
         src={src}
         alt={alt || 'Image'}
-        className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg select-none"
+        className="w-[90vw] h-[85vh] object-contain rounded-lg select-none"
         draggable={false}
       />
 
