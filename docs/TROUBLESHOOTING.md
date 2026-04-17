@@ -1,5 +1,9 @@
 # Troubleshooting
 
+## Related Guides
+
+- [Memory Troubleshooting](MEMORY_TROUBLESHOOTING.md) — diagnosing high memory usage and renderer leaks.
+
 ## Log Files
 
 Fluux writes daily-rotating log files (`fluux.log`) automatically. These are useful for diagnosing connection issues, crashes, or unexpected behavior.
