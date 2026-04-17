@@ -233,7 +233,8 @@ export const ConversationItem = memo(function ConversationItem({
 
   // Per-item subscriptions: each item only re-renders when ITS typing/draft
   // changes, not when any conversation's state changes.
-  const isTyping = useChatStore((s) => (s.typingStates.get(conversation.id)?.size ?? 0) > 0)
+  const typingCount = useChatStore((s) => s.typingStates.get(conversation.id)?.size ?? 0)
+  const isTyping = typingCount > 0
   const draft = useChatStore((s) => s.drafts.get(conversation.id))
 
   const isGroupChat = conversation.type === 'groupchat'
