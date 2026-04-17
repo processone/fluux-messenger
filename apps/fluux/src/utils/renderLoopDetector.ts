@@ -46,7 +46,7 @@ const TIME_WINDOW_MS = 1000         // Time window in milliseconds
 const COOLDOWN_MS = 5000            // Cooldown before resetting after trigger
 const MAX_RENDER_HISTORY = 20       // Keep last N renders per component for debugging
 const WAKE_GRACE_PERIOD_MS = 3000   // Suppress warnings for this long after wake
-const SYNC_GRACE_PERIOD_MS = 5000   // Raise error threshold after fresh connection
+const SYNC_GRACE_PERIOD_MS = 15000  // Raise error threshold after fresh connection (covers full MAM + roster + room catch-up)
 const SYNC_GRACE_THRESHOLD = 500    // Error threshold during sync grace period
 
 // Track if we're in a grace period (e.g., after wake from sleep)

@@ -13,7 +13,7 @@ import {
   type Contact,
   type Room,
 } from '@fluux/sdk'
-import { useConnectionStore } from '@fluux/sdk/react'
+import { useChatStore, useConnectionStore } from '@fluux/sdk/react'
 import { Avatar, TypingIndicator } from '../Avatar'
 import { Tooltip } from '../Tooltip'
 import { useSidebarZone, ContactTooltipContent } from './types'
@@ -45,8 +45,6 @@ export function ConversationList() {
     setActiveConversation,
     deleteConversation,
     archiveConversation,
-    typingStates,
-    drafts,
   } = useChat()
   const { setActiveRoom, getRoom } = useRoom()
   const { contacts } = useRoster()
@@ -55,10 +53,11 @@ export function ConversationList() {
   const zoneRef = useSidebarZone()
 
   // Diagnostic: track every selector-derived value per render. Dev-only.
+  // Note: typingStates / drafts are NOT subscribed at the list level — each
+  // ConversationItem subscribes to its own entry to avoid re-rendering the
+  // full list on every typing / draft change during background sync.
   trackSelectorChange('ConversationList', 'conversations', conversations)
   trackSelectorChange('ConversationList', 'activeConversationId', activeConversationId)
-  trackSelectorChange('ConversationList', 'typingStates', typingStates)
-  trackSelectorChange('ConversationList', 'drafts', drafts)
   trackSelectorChange('ConversationList', 'contacts', contacts)
 
   // Create maps for quick lookup
@@ -95,27 +94,20 @@ export function ConversationList() {
   return (
     <SidebarListMenuProvider<Conversation>>
       <div ref={listRef} className="px-2 space-y-0.5" {...getContainerProps()}>
-        {conversations.map((conv, index) => {
-          const typingSet = typingStates.get(conv.id)
-          const isTyping = typingSet && typingSet.size > 0
-          const draft = drafts.get(conv.id)
-          return (
-            <ConversationItem
-              key={conv.id}
-              conversation={conv}
-              contact={conv.type === 'chat' ? contactMap.get(conv.id) : undefined}
-              room={conv.type === 'groupchat' ? getRoom(conv.id) : undefined}
-              isActive={conv.id === activeConversationId}
-              isSelected={index === selectedIndex}
-              isKeyboardNav={isKeyboardNav}
-              isTyping={isTyping}
-              draft={draft}
-              onClick={() => handleConversationClick(conv.id)}
-              {...getItemAttribute(index)}
-              {...getItemProps(index)}
-            />
-          )
-        })}
+        {conversations.map((conv, index) => (
+          <ConversationItem
+            key={conv.id}
+            conversation={conv}
+            contact={conv.type === 'chat' ? contactMap.get(conv.id) : undefined}
+            room={conv.type === 'groupchat' ? getRoom(conv.id) : undefined}
+            isActive={conv.id === activeConversationId}
+            isSelected={index === selectedIndex}
+            isKeyboardNav={isKeyboardNav}
+            onClick={() => handleConversationClick(conv.id)}
+            {...getItemAttribute(index)}
+            {...getItemProps(index)}
+          />
+        ))}
       </div>
       <ConversationContextMenu
         isArchived={false}
@@ -137,8 +129,6 @@ export function ArchiveList() {
     setActiveConversation,
     deleteConversation,
     unarchiveConversation,
-    typingStates,
-    drafts,
   } = useChat()
   const { setActiveRoom, getRoom } = useRoom()
   const { contacts } = useRoster()
@@ -178,27 +168,20 @@ export function ArchiveList() {
   return (
     <SidebarListMenuProvider<Conversation>>
       <div ref={listRef} className="px-2 space-y-0.5" {...getContainerProps()}>
-        {archivedConversations.map((conv, index) => {
-          const typingSet = typingStates.get(conv.id)
-          const isTyping = typingSet && typingSet.size > 0
-          const draft = drafts.get(conv.id)
-          return (
-            <ConversationItem
-              key={conv.id}
-              conversation={conv}
-              contact={conv.type === 'chat' ? contactMap.get(conv.id) : undefined}
-              room={conv.type === 'groupchat' ? getRoom(conv.id) : undefined}
-              isActive={conv.id === activeConversationId}
-              isSelected={index === selectedIndex}
-              isKeyboardNav={isKeyboardNav}
-              isTyping={isTyping}
-              draft={draft}
-              onClick={() => handleConversationClick(conv.id)}
-              {...getItemAttribute(index)}
-              {...getItemProps(index)}
-            />
-          )
-        })}
+        {archivedConversations.map((conv, index) => (
+          <ConversationItem
+            key={conv.id}
+            conversation={conv}
+            contact={conv.type === 'chat' ? contactMap.get(conv.id) : undefined}
+            room={conv.type === 'groupchat' ? getRoom(conv.id) : undefined}
+            isActive={conv.id === activeConversationId}
+            isSelected={index === selectedIndex}
+            isKeyboardNav={isKeyboardNav}
+            onClick={() => handleConversationClick(conv.id)}
+            {...getItemAttribute(index)}
+            {...getItemProps(index)}
+          />
+        ))}
       </div>
       <ConversationContextMenu
         isArchived={true}
@@ -221,8 +204,6 @@ interface ConversationItemProps {
   isActive: boolean
   isSelected?: boolean
   isKeyboardNav?: boolean
-  isTyping?: boolean
-  draft?: string
   onClick: () => void
   onMouseEnter?: (e: React.MouseEvent) => void
   onMouseMove?: (e: React.MouseEvent) => void
@@ -237,8 +218,6 @@ export const ConversationItem = memo(function ConversationItem({
   isActive,
   isSelected,
   isKeyboardNav,
-  isTyping,
-  draft,
   onClick,
   onMouseEnter,
   onMouseMove,
@@ -251,6 +230,12 @@ export const ConversationItem = memo(function ConversationItem({
   const { getItemMenuProps, isOpen, longPressTriggered } = useSidebarListMenu<Conversation>()
   const currentLang = i18n.language.split('-')[0]
   const timeFormat = useSettingsStore((s) => s.timeFormat)
+
+  // Per-item subscriptions: each item only re-renders when ITS typing/draft
+  // changes, not when any conversation's state changes.
+  const typingCount = useChatStore((s) => s.typingStates.get(conversation.id)?.size ?? 0)
+  const isTyping = typingCount > 0
+  const draft = useChatStore((s) => s.drafts.get(conversation.id))
 
   const isGroupChat = conversation.type === 'groupchat'
   const menuProps = getItemMenuProps(conversation)
