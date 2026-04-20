@@ -582,23 +582,24 @@ export class XMPPClient {
     this.stores = stores
 
     // Build the E2EEManager early so modules can consult it during stanza
-    // handling. The XMPPPrimitives adapter wires sendStanza through and stubs
-    // PEP helpers that real plugins will need in a later slice.
+    // handling. The XMPPPrimitives adapter delegates PEP ops to the PubSub
+    // module and disco to the Discovery module; plugins therefore share the
+    // same stanza-building and routing code as native features.
     const e2eePrimitives: XMPPPrimitives = {
       sendStanza: async (data) => {
         await this.sendStanza(dataToElement(data))
       },
-      queryDisco: async () => {
-        throw new Error('E2EE: queryDisco primitive is not implemented in this build')
+      queryDisco: async (jid) => {
+        return this.discovery.queryInfo(jid)
       },
-      publishPEP: async () => {
-        throw new Error('E2EE: publishPEP primitive is not implemented in this build')
+      publishPEP: async (node, item) => {
+        await this.pubsub.publish(node, item)
       },
-      queryPEP: async () => {
-        throw new Error('E2EE: queryPEP primitive is not implemented in this build')
+      queryPEP: async (jid, node) => {
+        return this.pubsub.query(jid, node)
       },
-      subscribePEP: () => {
-        throw new Error('E2EE: subscribePEP primitive is not implemented in this build')
+      subscribePEP: (jid, node, cb) => {
+        return this.pubsub.subscribe(jid, node, cb)
       },
     }
     this.e2ee = new E2EEManager({
