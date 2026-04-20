@@ -1,5 +1,5 @@
 import type { Message } from '@fluux/sdk'
-import { hoursAgo, daysAgo } from '@fluux/sdk'
+import { hoursAgo, daysAgo, minutesAgo } from '@fluux/sdk'
 import { DOMAIN, SELF_JID } from '../constants'
 
 const conv = `ava@${DOMAIN}`
@@ -52,5 +52,23 @@ export const AVA_MESSAGES: Message[] = [
     type: 'chat', id: 'demo-ava-10', from: conv, body: 'Heads up — a new device is on my account. I haven\'t verified its fingerprint yet.',
     timestamp: hoursAgo(4), isOutgoing: false, conversationId: conv,
     securityContext: { protocolId: 'openpgp', trust: 'untrusted', notes: ['New device — verification pending'] },
+  },
+  // Tight burst demonstrating the group-break-on-trust-change behaviour.
+  // Without the rule, ava-12 would group silently under ava-11; with it,
+  // the yellow lock re-appears and signals that a different device sent it.
+  {
+    type: 'chat', id: 'demo-ava-11', from: conv, body: 'Following up on search — I\'ll put together a proper rollout plan this week.',
+    timestamp: minutesAgo(4), isOutgoing: false, conversationId: conv,
+    securityContext: { protocolId: 'openpgp', trust: 'trusted' },
+  },
+  {
+    type: 'chat', id: 'demo-ava-12', from: conv, body: '…and just noting that this reply is from my laptop — haven\'t verified its key from phone yet.',
+    timestamp: minutesAgo(3), isOutgoing: false, conversationId: conv,
+    securityContext: { protocolId: 'openpgp', trust: 'untrusted' },
+  },
+  {
+    type: 'chat', id: 'demo-ava-13', from: conv, body: 'Back on the main device now.',
+    timestamp: minutesAgo(2), isOutgoing: false, conversationId: conv,
+    securityContext: { protocolId: 'openpgp', trust: 'trusted' },
   },
 ]

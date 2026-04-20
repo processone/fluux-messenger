@@ -9,12 +9,37 @@ export function isActionMessage(body: string | undefined): boolean {
 }
 
 /**
+ * Security context subset used for grouping. Matches the SDK's
+ * `MessageSecurityContext` shape — duplicated here to keep this module
+ * free of SDK imports so it stays cheap to unit-test.
+ */
+interface GroupingSecurityContext {
+  protocolId: string
+  trust: 'verified' | 'trusted' | 'untrusted'
+}
+
+/**
  * Base message interface for grouping (works with both Message and RoomMessage)
  */
 interface GroupableMessage {
   id: string
   timestamp: Date
   from: string
+  securityContext?: GroupingSecurityContext
+}
+
+/**
+ * Two messages share a group only if their (protocolId, trust) are the same —
+ * including both being cleartext (no context). A trust change mid-burst forces
+ * a group break so the lock indicator re-shows.
+ */
+function sameSecurityContext(
+  a: GroupingSecurityContext | undefined,
+  b: GroupingSecurityContext | undefined,
+): boolean {
+  if (!a && !b) return true
+  if (!a || !b) return false
+  return a.protocolId === b.protocolId && a.trust === b.trust
 }
 
 /**
@@ -68,6 +93,10 @@ export function groupMessagesByDate<T extends GroupableMessage>(messages: T[]): 
  * - First message always shows avatar
  * - Different sender from previous message
  * - More than 5 minutes gap from previous message
+ * - E2EE security context differs from previous (protocol or trust change
+ *   forces a group break so the lock indicator re-shows — without this, a
+ *   sender's untrusted message nestled between trusted ones would render
+ *   without any security-state cue).
  */
 export function shouldShowAvatar<T extends GroupableMessage>(messages: T[], index: number): boolean {
   if (index === 0) return true
@@ -77,6 +106,9 @@ export function shouldShowAvatar<T extends GroupableMessage>(messages: T[], inde
 
   // Show avatar if different sender
   if (current.from !== previous.from) return true
+
+  // Show avatar if security context changed (encryption added/removed/trust shift)
+  if (!sameSecurityContext(current.securityContext, previous.securityContext)) return true
 
   // Show avatar if more than 5 minutes apart
   const timeDiff = current.timestamp.getTime() - previous.timestamp.getTime()
