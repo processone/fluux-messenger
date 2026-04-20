@@ -362,12 +362,14 @@ export type { Element } from '@xmpp/client'
 // Consumers register E2EEPlugin implementations with an E2EEManager; the
 // manager handles strategy selection and dispatch. Integration with the
 // message send/receive path is intentionally not wired in this slice.
+// Note: DummyPlaintextPlugin is intentionally NOT re-exported. It is an
+// internal validation tool; pinning it from an app would send plaintext
+// while the UI suggests encryption. Tests import it via relative path.
 export {
   E2EEManager,
   CapabilityCache,
   InMemoryStorageBackend,
   createPluginStorage,
-  DummyPlaintextPlugin,
 } from './core/e2ee'
 export type {
   AccountInfo,

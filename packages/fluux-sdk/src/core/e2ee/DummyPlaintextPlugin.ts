@@ -26,8 +26,11 @@ const DUMMY_XMLNS = 'urn:fluux:e2ee-dummy:0'
  * path that real plugins will use. NOT secure and NOT selectable above
  * a real plugin (securityLevel is 0).
  *
- * Use this in tests and for local integration work before a real plugin
- * is registered.
+ * **Not exported from the public SDK surface by design.** Auto-selection
+ * would never pick this over a real plugin, but an app that pins it would
+ * transmit plaintext while the UI suggests encryption. Keeping it out of
+ * the public surface removes that foot-gun. SDK tests import it via
+ * relative path.
  */
 export class DummyPlaintextPlugin implements E2EEPlugin {
   readonly descriptor: E2EEProtocolDescriptor = {
