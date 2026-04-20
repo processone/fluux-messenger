@@ -23,7 +23,10 @@
  *
  *    We patch outbound_q.shift() to return a sentinel object when empty
  *    (preventing the crash), and patch sm.emit to suppress 'ack' events
- *    for sentinel items.
+ *    for sentinel items. The patch must also stay compatible with xmpp.js's
+ *    failQueue() loop, which uses `while (shift())`; that path must still see
+ *    `undefined` after the queue drains so SM resume failure can fall back
+ *    cleanly instead of spinning forever.
  *
  * @module
  */
@@ -92,7 +95,7 @@ export function patchSmAckDebounce(state: SmPatchState, xmppClient: Client): voi
  * Patches outbound_q.shift() to return a sentinel `{ stanza: null }` when the
  * queue is empty (preventing crash in ackQueue's `item.stanza` access).
  *
- * Also patches sm.emit to suppress 'ack' events for sentinel items, and uses
+ * Also patches sm.emit to suppress sentinel-derived events, and uses
  * Object.defineProperty to re-patch whenever xmpp.js reassigns outbound_q
  * (e.g., `sm.outbound_q = []` in resumed()).
  */
@@ -101,12 +104,22 @@ export function patchSmAckQueue(sm: any): void {
 
   // Sentinel: has .stanza property to prevent crash in ackQueue's `item.stanza`
   const SENTINEL = { stanza: null }
+  let allowEmptySentinel = true
 
   // Patch shift on the current outbound_q array
   const patchQueueShift = (q: any[]) => {
     const nativeShift = Array.prototype.shift
     q.shift = function() {
-      if (this.length === 0) return SENTINEL
+      if (this.length === 0) {
+        // failQueue() uses `while (shift())` and must see undefined after the
+        // queue drains. We temporarily disable the sentinel after emitting one
+        // synthetic fail item so the next empty shift exits the loop cleanly.
+        if (!allowEmptySentinel) {
+          allowEmptySentinel = true
+          return undefined
+        }
+        return SENTINEL
+      }
       return nativeShift.call(this)
     }
   }
@@ -124,10 +137,15 @@ export function patchSmAckQueue(sm: any): void {
     configurable: true,
   })
 
-  // Suppress 'ack' events for sentinel items (stanza === null)
+  // Suppress synthetic events for sentinel items (stanza === null)
   const originalEmit = sm.emit.bind(sm)
   sm.emit = function(event: string, ...args: any[]) {
-    if (event === 'ack' && args[0] === null) return false
+    if (args[0] === null) {
+      if (event === 'fail') {
+        allowEmptySentinel = false
+      }
+      if (event === 'ack' || event === 'fail') return false
+    }
     return originalEmit(event, ...args)
   }
 }

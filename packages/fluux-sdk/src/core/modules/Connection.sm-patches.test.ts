@@ -296,6 +296,61 @@ describe('SM ackQueue desync fix (patchSmAckQueue)', () => {
     expect(result).toBe(false) // Suppressed — no handlers called
   })
 
+  it('should let failQueue terminate after the queue drains', () => {
+    const smMock = mockXmppClientInstance.streamManagement as any
+
+    smMock.outbound_q.length = 0
+
+    let failEvents = 0
+    smMock.on('fail', () => {
+      failEvents++
+    })
+
+    let iterations = 0
+    let item
+    while ((item = smMock.outbound_q.shift())) {
+      iterations++
+      smMock.emit('fail', item.stanza)
+      expect(iterations).toBeLessThan(5)
+    }
+
+    // The sentinel must not leak a synthetic fail event, and the loop must stop.
+    expect(iterations).toBe(1)
+    expect(failEvents).toBe(0)
+
+    // After failQueue exits, empty shifts should once again return the sentinel
+    // so ackQueue resync can keep working on the next connection.
+    const nextItem = smMock.outbound_q.shift()
+    expect(nextItem).toBeDefined()
+    expect(nextItem.stanza).toBeNull()
+  })
+
+  it('should deliver real fail events before exiting when queue had items', () => {
+    const smMock = mockXmppClientInstance.streamManagement as any
+
+    const stanzaA = { name: 'message', attrs: { id: 'a' } }
+    const stanzaB = { name: 'message', attrs: { id: 'b' } }
+    smMock.outbound_q.push({ stanza: stanzaA }, { stanza: stanzaB })
+
+    const failedStanzas: any[] = []
+    smMock.on('fail', (stanza: any) => {
+      failedStanzas.push(stanza)
+    })
+
+    let iterations = 0
+    let item
+    while ((item = smMock.outbound_q.shift())) {
+      iterations++
+      smMock.emit('fail', item.stanza)
+      expect(iterations).toBeLessThan(6)
+    }
+
+    expect(failedStanzas).toEqual([stanzaA, stanzaB])
+    // 2 real items + 1 sentinel iteration to trigger loop exit on the next shift
+    expect(iterations).toBe(3)
+    expect(smMock.outbound_q.length).toBe(0)
+  })
+
   it('should re-patch queue when outbound_q is reassigned', () => {
     const smMock = mockXmppClientInstance.streamManagement as any
 
