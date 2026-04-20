@@ -310,13 +310,41 @@ describe('SequoiaPgpPlugin', () => {
   })
 
   describe('shutdown', () => {
-    it('clears key material via the Rust forget_account command', async () => {
+    it('releases in-process references without destroying Rust-side key material', async () => {
       const { ctx } = makeContext('me@example.com')
       await plugin.init(ctx)
       expect(fake.accounts.has('me@example.com')).toBe(true)
+
       await plugin.shutdown()
+
+      // Plugin state is cleared so the manager sees it as released.
+      expect(plugin.getOwnFingerprint()).toBeNull()
+      // But the Rust-side bundle remains — toggling E2EE back on must
+      // reuse the same identity for the rest of the session.
+      expect(fake.accounts.has('me@example.com')).toBe(true)
+    })
+
+    it('deleteIdentity calls the Rust forget_account command', async () => {
+      const { ctx } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      expect(fake.accounts.has('me@example.com')).toBe(true)
+
+      await plugin.deleteIdentity()
+
       expect(fake.accounts.has('me@example.com')).toBe(false)
       expect(plugin.getOwnFingerprint()).toBeNull()
+    })
+
+    it('re-init after shutdown returns the same fingerprint (key preserved)', async () => {
+      const { ctx: ctx1 } = makeContext('me@example.com')
+      await plugin.init(ctx1)
+      const fp = plugin.getOwnFingerprint()
+      await plugin.shutdown()
+
+      const plugin2 = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const { ctx: ctx2 } = makeContext('me@example.com')
+      await plugin2.init(ctx2)
+      expect(plugin2.getOwnFingerprint()).toBe(fp)
     })
   })
 })

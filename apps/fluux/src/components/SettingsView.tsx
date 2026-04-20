@@ -10,6 +10,7 @@ import {
   UpdatesSettings,
   BlockedUsersSettings,
   StorageSettings,
+  EncryptionSettings,
   type SettingsCategory,
   SETTINGS_CATEGORIES,
   DEFAULT_SETTINGS_CATEGORY,
@@ -57,6 +58,8 @@ export function SettingsView({ onBack }: SettingsViewProps) {
         return <BlockedUsersSettings />
       case 'storage':
         return <StorageSettings />
+      case 'encryption':
+        return <EncryptionSettings />
       default:
         return <ProfileSettings />
     }

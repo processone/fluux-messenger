@@ -87,13 +87,31 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
   }
 
   async shutdown(): Promise<void> {
+    // Intentionally does NOT call `openpgp_forget_account`. Shutdown means
+    // "this plugin instance is no longer attached to the E2EEManager" —
+    // e.g. the user toggled E2EE off in Settings. Preserving the Rust-side
+    // key material means a subsequent re-enable reuses the same identity
+    // for the rest of the session, rather than silently cycling the user's
+    // fingerprint on every toggle. An explicit "delete key" action in the
+    // settings UI is the right place to call `openpgp_forget_account`.
+    this.ownBundle = null
+    this.peerKeys.clear()
+    this.ctx = null
+  }
+
+  /**
+   * Permanently destroy the local key material for this account. Intended
+   * to be called from a confirmed, destructive "Delete my OpenPGP key"
+   * action — not from shutdown. The next `init` will generate a fresh key
+   * with a new fingerprint.
+   */
+  async deleteIdentity(): Promise<void> {
     const accountJid = this.ctx?.account.jid
     if (accountJid) {
       await this.invoke<void>('openpgp_forget_account', { accountJid }).catch(() => {})
     }
     this.ownBundle = null
     this.peerKeys.clear()
-    this.ctx = null
   }
 
   /**

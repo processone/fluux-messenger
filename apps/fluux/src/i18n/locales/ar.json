@@ -459,7 +459,8 @@
             "notifications": "الإشعارات",
             "updates": "التحديثات",
             "blocked": "المستخدمون المحظورون",
-            "storage": "التخزين"
+            "storage": "التخزين",
+            "encryption": "Encryption"
         },
         "blocked": {
             "title": "المستخدمون المحظورون",
@@ -544,6 +545,22 @@
             "rebuildIndex": "إعادة بناء فهرس البحث",
             "rebuildingIndex": "جارٍ إعادة البناء…",
             "indexRebuilt": "تمت فهرسة {{count}} رسالة"
+        },
+        "encryption": {
+            "experimental": "Experimental",
+            "openpgpLabel": "OpenPGP end-to-end encryption",
+            "openpgpDescription": "Publish a public key to your server and encrypt 1:1 messages to contacts who also have one.",
+            "statusLabel": "Status",
+            "statusWaitingOnline": "Waiting for connection…",
+            "statusGenerating": "Generating your key…",
+            "statusReady": "Your key is ready and published.",
+            "copyFingerprint": "Copy fingerprint",
+            "copyFailed": "Couldn't copy fingerprint",
+            "toggleFailed": "Couldn't change encryption setting",
+            "limitationsTitle": "Current limitations",
+            "limitationVerification": "Contact fingerprints are not yet verified — lock icons show trust-on-first-use only.",
+            "limitationPersistence": "Keys are in-memory for this session; restarting the app regenerates them.",
+            "limitationBackend": "Uses an experimental pure-Rust crypto backend; not hardened for high-assurance scenarios."
         }
     },
     "update": {
