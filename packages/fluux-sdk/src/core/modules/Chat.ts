@@ -356,41 +356,70 @@ export class Chat extends BaseModule {
   ): Promise<void> {
     const from = stanza.attrs.from
     const bareFrom = from ? getBareJid(from) : ''
+
+    let plaintext: string | null = null
+    let securityContext: SecurityContext | null = null
+    let failureReason: string | null = null
+
     try {
       const result = await manager.decryptInbound(claim.payload.stanzaElement, {
         kind: 'direct',
         peer: bareFrom,
       })
-      if (!result) {
-        logWarn(`E2EE decrypt returned null for ${bareFrom}`)
-        return
+      if (result) {
+        plaintext = new TextDecoder().decode(result.plaintext)
+        securityContext = result.securityContext
+      } else {
+        failureReason = 'no plugin claimed the payload'
       }
+    } catch (err) {
+      failureReason = err instanceof Error ? err.message : String(err)
+    }
 
-      const plaintext = new TextDecoder().decode(result.plaintext)
+    // Always strip the encrypted element — either we replace the body with
+    // plaintext (success) or we fall through to whatever fallback <body>
+    // the sender included per XEP-0373. Leaving the encrypted element in
+    // place would cause the re-entered call to claim it again and loop.
+    const encryptedIdx = stanza.children.indexOf(encryptedChild)
+    if (encryptedIdx >= 0) stanza.children.splice(encryptedIdx, 1)
 
-      // Strip the encrypted element so the re-entered call doesn't re-claim it.
-      const idx = stanza.children.indexOf(encryptedChild)
-      if (idx >= 0) stanza.children.splice(idx, 1)
-
-      // Replace the fallback body with decrypted plaintext.
+    if (failureReason !== null) {
+      logWarn(`E2EE decrypt failed for message from ${bareFrom}: ${failureReason}`)
+      // Honour the XEP-0373 convention: a well-behaved sender inserted a
+      // fallback <body> for clients that cannot decrypt. Leave it in place.
+      // Synthesize a minimal placeholder only when none was provided, so
+      // the message still surfaces in the conversation with a clear signal
+      // rather than being silently dropped.
+      if (!stanza.getChild('body')) {
+        stanza.children.push(
+          xml('body', {}, '[Encrypted message: could not decrypt]'),
+        )
+      }
+      securityContext = {
+        protocolId: claim.plugin.descriptor.id,
+        trust: 'untrusted',
+        notes: ['Could not decrypt'],
+      }
+    } else if (plaintext !== null) {
+      // Success path — replace the fallback body with the decrypted text.
       const bodyEl = stanza.getChild('body')
       if (bodyEl) {
         bodyEl.children = [plaintext]
       } else {
         stanza.children.push(xml('body', {}, plaintext))
       }
-
-      // Stash security context for downstream consumers (wire-through in a
-      // later slice — Message type doesn't carry it yet).
-      this.attachSecurityContext(stanza, result.securityContext)
-
-      // Mark as already-decrypted so tryHandleEncrypted bails out on re-entry.
-      ;(stanza as unknown as { __e2eeDecrypted: boolean }).__e2eeDecrypted = true
-
-      this.handleMessageInternal(stanza, isCarbonCopy, isSentCarbon)
-    } catch (err) {
-      logWarn(`E2EE decrypt failed for message from ${bareFrom}: ${err instanceof Error ? err.message : String(err)}`)
     }
+
+    if (securityContext) {
+      this.attachSecurityContext(stanza, securityContext)
+    }
+
+    // Mark as already-decrypted (or already-attempted) so tryHandleEncrypted
+    // bails out on re-entry. The stripped encrypted element already prevents
+    // re-claiming; the marker is belt-and-braces.
+    ;(stanza as unknown as { __e2eeDecrypted: boolean }).__e2eeDecrypted = true
+
+    this.handleMessageInternal(stanza, isCarbonCopy, isSentCarbon)
   }
 
   private attachSecurityContext(stanza: Element, securityContext: SecurityContext): void {

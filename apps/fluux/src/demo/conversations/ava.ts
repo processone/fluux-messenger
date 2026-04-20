@@ -83,4 +83,27 @@ export const AVA_MESSAGES: Message[] = [
       notes: ['Signature did not verify'],
     },
   },
+  // Separator so the next message gets its own avatar + lock in the demo
+  // (consecutive untrusted messages from the same sender are grouped
+  // together by the UI).
+  {
+    type: 'chat', id: 'demo-ava-14b', from: SELF_JID, body: 'Let me take a look.',
+    timestamp: minutesAgo(1), isOutgoing: true, conversationId: conv,
+    securityContext: { protocolId: 'openpgp', trust: 'trusted' },
+  },
+  // Example of the decrypt-failure fallback path: the sender-supplied
+  // fallback body surfaces with a yellow lock whose tooltip reads
+  // "Could not decrypt". This is what the user sees when Sequoia can't
+  // open the ciphertext (wrong subkey, corrupt payload, unsupported
+  // cipher suite, etc.) — the message shows up rather than being
+  // silently dropped.
+  {
+    type: 'chat', id: 'demo-ava-15', from: conv, body: '[OpenPGP-encrypted message]',
+    timestamp: minutesAgo(1), isOutgoing: false, conversationId: conv,
+    securityContext: {
+      protocolId: 'openpgp',
+      trust: 'untrusted',
+      notes: ['Could not decrypt'],
+    },
+  },
 ]

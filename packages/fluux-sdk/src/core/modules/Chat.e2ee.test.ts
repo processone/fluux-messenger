@@ -333,4 +333,157 @@ describe('Chat E2EE wiring', () => {
       expect(chatMessageEvent!.payload.message.securityContext).toBeUndefined()
     })
   })
+
+  describe('decrypt failure fallback', () => {
+    /**
+     * Build an inbound stanza carrying an encrypted element the dummy plugin
+     * would claim. We craft it by hand (instead of round-tripping through
+     * sendMessage) so the test doesn't depend on a successful encrypt.
+     */
+    function buildEncryptedInbound(options: {
+      from: string
+      to: string
+      id: string
+      fallbackBody?: string | null
+    }): Element {
+      const children: Array<string | Element> = [
+        xml('plain', { xmlns: 'urn:fluux:e2ee-dummy:0' }, 'aGVsbG8='),
+      ]
+      if (options.fallbackBody !== null) {
+        children.unshift(
+          xml('body', {}, options.fallbackBody ?? '[OpenPGP-encrypted message]'),
+        )
+      }
+      return xml(
+        'message',
+        { from: options.from, to: options.to, type: 'chat', id: options.id },
+        ...children,
+      )
+    }
+
+    function emittedChatMessage(
+      sdkEmittedList: unknown[],
+    ):
+      | {
+          body: string
+          securityContext?: { protocolId: string; trust: string; notes?: string[] }
+        }
+      | undefined {
+      const evt = sdkEmittedList.find(
+        (e) => (e as { event: string }).event === 'chat:message',
+      ) as
+        | { payload: { message: { body: string; securityContext?: { protocolId: string; trust: string; notes?: string[] } } } }
+        | undefined
+      return evt?.payload.message
+    }
+
+    it('emits the fallback body with a "Could not decrypt" note when the plugin throws', async () => {
+      const decryptSpy = vi
+        .spyOn(manager, 'decryptInbound')
+        .mockRejectedValue(new Error('bad block'))
+
+      const rxBuilt = makeDeps({
+        jid: 'me@example.com',
+        manager,
+        captureStanza: () => {},
+      })
+      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+
+      const inbound = buildEncryptedInbound({
+        from: 'bob@example.com/r',
+        to: 'me@example.com',
+        id: 'm-fail-throw',
+        fallbackBody: '[OpenPGP-encrypted message]',
+      })
+      rxChat.handle(inbound)
+      await new Promise((r) => setTimeout(r, 0))
+
+      expect(decryptSpy).toHaveBeenCalledTimes(1)
+      const message = emittedChatMessage(rxBuilt.sdkEmitted)
+      expect(message).toBeDefined()
+      // Body is the sender-provided fallback, not silently dropped.
+      expect(message!.body).toBe('[OpenPGP-encrypted message]')
+      expect(message!.securityContext).toBeDefined()
+      expect(message!.securityContext!.protocolId).toBe('dummy-plaintext')
+      expect(message!.securityContext!.trust).toBe('untrusted')
+      expect(message!.securityContext!.notes).toContain('Could not decrypt')
+    })
+
+    it('emits the fallback body with a "Could not decrypt" note when the manager returns null', async () => {
+      vi.spyOn(manager, 'decryptInbound').mockResolvedValue(null)
+
+      const rxBuilt = makeDeps({
+        jid: 'me@example.com',
+        manager,
+        captureStanza: () => {},
+      })
+      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+
+      const inbound = buildEncryptedInbound({
+        from: 'bob@example.com/r',
+        to: 'me@example.com',
+        id: 'm-fail-null',
+        fallbackBody: '[OpenPGP-encrypted message]',
+      })
+      rxChat.handle(inbound)
+      await new Promise((r) => setTimeout(r, 0))
+
+      const message = emittedChatMessage(rxBuilt.sdkEmitted)
+      expect(message).toBeDefined()
+      expect(message!.body).toBe('[OpenPGP-encrypted message]')
+      expect(message!.securityContext?.notes).toContain('Could not decrypt')
+    })
+
+    it('synthesizes a placeholder body when the sender omitted the fallback', async () => {
+      vi.spyOn(manager, 'decryptInbound').mockRejectedValue(new Error('bad'))
+
+      const rxBuilt = makeDeps({
+        jid: 'me@example.com',
+        manager,
+        captureStanza: () => {},
+      })
+      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+
+      const inbound = buildEncryptedInbound({
+        from: 'bob@example.com/r',
+        to: 'me@example.com',
+        id: 'm-fail-no-body',
+        // Explicit null → skip the fallback <body>, simulating a
+        // non-spec-compliant sender.
+        fallbackBody: null,
+      })
+      rxChat.handle(inbound)
+      await new Promise((r) => setTimeout(r, 0))
+
+      const message = emittedChatMessage(rxBuilt.sdkEmitted)
+      expect(message).toBeDefined()
+      expect(message!.body).toContain('could not decrypt')
+      expect(message!.securityContext?.trust).toBe('untrusted')
+    })
+
+    it('strips the encrypted element on failure so re-entry does not loop', async () => {
+      const spy = vi
+        .spyOn(manager, 'decryptInbound')
+        .mockRejectedValue(new Error('boom'))
+
+      const rxBuilt = makeDeps({
+        jid: 'me@example.com',
+        manager,
+        captureStanza: () => {},
+      })
+      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+
+      const inbound = buildEncryptedInbound({
+        from: 'bob@example.com/r',
+        to: 'me@example.com',
+        id: 'm-loop-guard',
+      })
+      rxChat.handle(inbound)
+      await new Promise((r) => setTimeout(r, 0))
+
+      // Failure path must not re-claim the (now-stripped) encrypted element
+      // during the synthetic re-enter. One call only.
+      expect(spy).toHaveBeenCalledTimes(1)
+    })
+  })
 })
