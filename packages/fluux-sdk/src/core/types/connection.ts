@@ -93,6 +93,12 @@ export interface ConnectOptions {
     id: string
     /** Number of stanzas received (for acknowledgment) */
     inbound: number
+    /**
+     * Total outbound stanzas the server is expected to know about
+     * (= sm.outbound + outbound_q.length at persist time). Required so
+     * xmpp.js's ackQueue doesn't shift an empty queue on resume.
+     */
+    outbound: number
   }
   /** Language for the XMPP stream (xml:lang attribute, e.g., 'en', 'fr') */
   lang?: string

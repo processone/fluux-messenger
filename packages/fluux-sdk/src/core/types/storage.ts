@@ -38,6 +38,14 @@ export interface SessionState {
   smId: string
   /** Last acknowledged inbound stanza count */
   smInbound: number
+  /**
+   * Total outbound stanzas the server is expected to know about on resume
+   * (= `sm.outbound` + pending `outbound_q` length at persist time).
+   * Required to hydrate `sm.outbound` so xmpp.js's ackQueue loop runs 0
+   * iterations when `<resumed h=N/>` comes back — preventing a crash on
+   * the empty in-memory queue after page reload.
+   */
+  smOutbound: number
   /** XMPP resource for this session */
   resource: string
   /** Timestamp when this state was saved */

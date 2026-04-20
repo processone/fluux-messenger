@@ -1695,7 +1695,7 @@ describe('XMPPClient Connection', () => {
         jid: 'user@example.com',
         password: 'secret',
         server: 'example.com',
-        smState: { id: 'sm-123', inbound: 3 },
+        smState: { id: 'sm-123', inbound: 3, outbound: 0 },
         skipDiscovery: true,
       })
       mockXmppClientInstance._emit('online')

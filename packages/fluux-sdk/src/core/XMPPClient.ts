@@ -1283,7 +1283,7 @@ export class XMPPClient {
    * await client.connect({ ...options, smState: saved })
    * ```
    */
-  getStreamManagementState(): { id: string; inbound: number } | null {
+  getStreamManagementState(): { id: string; inbound: number; outbound: number } | null {
     return this.connection.getStreamManagementState()
   }
 

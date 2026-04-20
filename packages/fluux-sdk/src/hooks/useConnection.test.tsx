@@ -252,7 +252,7 @@ describe('useConnection hook', () => {
 
       mockClient.connect.mockResolvedValue(undefined)
 
-      const smState = { id: 'sm-session-1', inbound: 5 }
+      const smState = { id: 'sm-session-1', inbound: 5, outbound: 0 }
 
       await act(async () => {
         await result.current.connect(
@@ -418,7 +418,7 @@ describe('useConnection hook', () => {
     it('should call client.getStreamManagementState', () => {
       const { result } = renderHook(() => useConnection(), { wrapper })
 
-      const smState = { id: 'sm-session-1', inbound: 10 }
+      const smState = { id: 'sm-session-1', inbound: 10, outbound: 0 }
       mockClient.getStreamManagementState.mockReturnValue(smState)
 
       const state = result.current.getStreamManagementState()

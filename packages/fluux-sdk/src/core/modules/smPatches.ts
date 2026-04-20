@@ -15,18 +15,26 @@
  *    "as soon as possible". A 250ms debounce is well within server timeout
  *    windows (Prosody: 30s, ejabberd: 60s).
  *
- * 2. **SM ackQueue desync fix** (patchSmAckQueue):
- *    When a page reloads, the outbound queue is lost but the server maintains
- *    its counter. On session resume, ackQueue() tries to shift N items from
- *    an empty queue, causing `item.stanza` to crash on undefined.
- *    See: https://github.com/xmppjs/xmpp.js/pull/1119
+ * 2. **SM ackQueue crash defense** (patchSmAckQueue):
+ *    xmpp.js's ackQueue() at stream-management/index.js:90-97 reads
+ *    `sm.outbound_q.shift().stanza` without a null check. If the server
+ *    reports a higher `h` than we've tracked locally (possible on SM resume
+ *    after a page reload if our persisted outbound count is slightly behind
+ *    what the server received), the unconditional .stanza access throws.
+ *    Upstream fix: https://github.com/xmppjs/xmpp.js/pull/1119 (still OPEN
+ *    as of @xmpp/stream-management 0.14.0 — we are on the latest release).
  *
- *    We patch outbound_q.shift() to return a sentinel object when empty
- *    (preventing the crash), and patch sm.emit to suppress 'ack' events
- *    for sentinel items. The patch must also stay compatible with xmpp.js's
- *    failQueue() loop, which uses `while (shift())`; that path must still see
- *    `undefined` after the queue drains so SM resume failure can fall back
- *    cleanly instead of spinning forever.
+ *    Primary defense is now in smPersistence.getState + Connection.hydrate-
+ *    StreamManagement, which persist + restore `sm.outbound` so the loop
+ *    runs 0 iterations in the common case. This patch stays as defense-in-
+ *    depth for rare races (stanzas sent between beforeunload and socket
+ *    close, legacy storage formats slipping through validation, etc.).
+ *
+ *    Mechanics: shift() returns a sentinel `{ stanza: null }` on empty so
+ *    ackQueue survives the .stanza read; sm.emit suppresses the phantom
+ *    'ack' and 'fail' events. failQueue() uses `while (shift())` and needs
+ *    to exit eventually, so `allowEmptySentinel` flips on the first
+ *    synthetic 'fail' emit and the next empty shift returns `undefined`.
  *
  * @module
  */
@@ -90,7 +98,13 @@ export function patchSmAckDebounce(state: SmPatchState, xmppClient: Client): voi
 }
 
 /**
- * Fix SM ackQueue crash after page reload (xmppjs/xmpp.js#1119).
+ * Defense-in-depth against xmpp.js ackQueue crash (xmppjs/xmpp.js#1119).
+ *
+ * The primary fix is hydration: Connection.hydrateStreamManagement restores
+ * `sm.outbound` from persisted state so ackQueue's loop runs 0 iterations on
+ * the expected `<resumed h=N/>`. This patch exists only for races where the
+ * persisted count briefly trails the server's count (e.g. stanzas sent after
+ * beforeunload fires).
  *
  * Patches outbound_q.shift() to return a sentinel `{ stanza: null }` when the
  * queue is empty (preventing crash in ackQueue's `item.stanza` access).

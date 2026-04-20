@@ -117,7 +117,7 @@ export function useConnection() {
       jid: string,
       password: string | undefined,
       server: string,
-      smState?: { id: string; inbound: number },
+      smState?: { id: string; inbound: number; outbound: number },
       resource?: string,
       lang?: string,
       disableSmKeepalive?: boolean,

@@ -1373,7 +1373,7 @@ describe('XMPPClient Presence', () => {
         jid: 'user@example.com',
         password: 'secret',
         server: 'example.com',
-        smState: { id: 'sm-session-123', inbound: 5 },
+        smState: { id: 'sm-session-123', inbound: 5, outbound: 0 },
         skipDiscovery: true,
       })
 
@@ -1406,7 +1406,7 @@ describe('XMPPClient Presence', () => {
         jid: 'user@example.com',
         password: 'secret',
         server: 'example.com',
-        smState: { id: 'sm-session-123', inbound: 5 },
+        smState: { id: 'sm-session-123', inbound: 5, outbound: 0 },
         skipDiscovery: true,
       })
 

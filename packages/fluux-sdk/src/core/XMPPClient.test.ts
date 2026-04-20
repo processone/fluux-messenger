@@ -763,7 +763,7 @@ describe('XMPPClient', () => {
         jid: 'user@example.com',
         password: 'secret',
         server: 'example.com',
-        smState: { id: 'sm-id-123', inbound: 5 },
+        smState: { id: 'sm-id-123', inbound: 5, outbound: 0 },
         skipDiscovery: true,
       })
 
@@ -797,7 +797,7 @@ describe('XMPPClient', () => {
         jid: 'user@example.com',
         password: 'secret',
         server: 'example.com',
-        smState: { id: 'sm-id-rooms', inbound: 5 },
+        smState: { id: 'sm-id-rooms', inbound: 5, outbound: 0 },
         skipDiscovery: true,
         previouslyJoinedRooms: [
           { jid: 'room1@conference.example.com', nickname: 'testuser' },
@@ -845,7 +845,7 @@ describe('XMPPClient', () => {
         jid: 'user@example.com',
         password: 'secret',
         server: 'example.com',
-        smState: { id: 'sm-id-mixed', inbound: 5 },
+        smState: { id: 'sm-id-mixed', inbound: 5, outbound: 0 },
         skipDiscovery: true,
         previouslyJoinedRooms: rooms,
       })
@@ -879,7 +879,7 @@ describe('XMPPClient', () => {
         jid: 'user@example.com',
         password: 'secret',
         server: 'example.com',
-        smState: { id: 'sm-id-catchup', inbound: 5 },
+        smState: { id: 'sm-id-catchup', inbound: 5, outbound: 0 },
         skipDiscovery: true,
         previouslyJoinedRooms: [
           { jid: 'room1@conference.example.com', nickname: 'testuser' },
@@ -923,7 +923,7 @@ describe('XMPPClient', () => {
         jid: 'user@example.com',
         password: 'secret',
         server: 'example.com',
-        smState: { id: 'sm-id-short', inbound: 5 },
+        smState: { id: 'sm-id-short', inbound: 5, outbound: 0 },
         skipDiscovery: true,
         previouslyJoinedRooms: [
           { jid: 'room1@conference.example.com', nickname: 'testuser' },
@@ -966,7 +966,7 @@ describe('XMPPClient', () => {
         jid: 'user@example.com',
         password: 'secret',
         server: 'example.com',
-        smState: { id: 'sm-id-long', inbound: 5 },
+        smState: { id: 'sm-id-long', inbound: 5, outbound: 0 },
         skipDiscovery: true,
         previouslyJoinedRooms: [
           { jid: 'room1@conference.example.com', nickname: 'testuser' },
@@ -1009,7 +1009,7 @@ describe('XMPPClient', () => {
         jid: 'user@example.com',
         password: 'secret',
         server: 'example.com',
-        smState: { id: 'sm-id-fallback', inbound: 5 },
+        smState: { id: 'sm-id-fallback', inbound: 5, outbound: 0 },
         skipDiscovery: true,
       })
 
@@ -1047,7 +1047,7 @@ describe('XMPPClient', () => {
         jid: 'user@example.com',
         password: 'secret',
         server: 'example.com',
-        smState: { id: 'sm-id-empty', inbound: 5 },
+        smState: { id: 'sm-id-empty', inbound: 5, outbound: 0 },
         skipDiscovery: true,
       })
 
@@ -1077,7 +1077,7 @@ describe('XMPPClient', () => {
         jid: 'user@example.com',
         password: 'secret',
         server: 'example.com',
-        smState: { id: 'old-sm-id-456', inbound: 10 }, // Previous SM state
+        smState: { id: 'old-sm-id-456', inbound: 10, outbound: 0 }, // Previous SM state
         skipDiscovery: true,
       })
 
@@ -1131,7 +1131,7 @@ describe('XMPPClient', () => {
         jid: 'user@example.com',
         password: 'secret',
         server: 'example.com',
-        smState: { id: 'same-sm-id', inbound: 5 },
+        smState: { id: 'same-sm-id', inbound: 5, outbound: 0 },
         skipDiscovery: true,
       })
 
@@ -1158,7 +1158,7 @@ describe('XMPPClient', () => {
         jid: 'user@example.com',
         password: 'secret',
         server: 'example.com',
-        smState: { id: 'old-sm-id', inbound: 5 },
+        smState: { id: 'old-sm-id', inbound: 5, outbound: 0 },
         skipDiscovery: true,
       })
 

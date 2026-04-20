@@ -838,7 +838,7 @@ export class Connection extends BaseModule {
    * (e.g., after socket death during sleep). The cache is updated
    * whenever SM is enabled or resumed.
    */
-  getStreamManagementState(): { id: string; inbound: number } | null {
+  getStreamManagementState(): { id: string; inbound: number; outbound: number } | null {
     return this.smPersistence.getState(this.xmpp)
   }
 
@@ -1469,7 +1469,7 @@ export class Connection extends BaseModule {
    * Hydrate Stream Management state for session resumption (XEP-0198).
    * Must be called after creating the client but before starting.
    */
-  private hydrateStreamManagement(smState?: { id: string; inbound: number }): void {
+  private hydrateStreamManagement(smState?: { id: string; inbound: number; outbound: number }): void {
     // Reset resume tracking - we're starting a new resume attempt
     // This ensures 'fail' events during resume are properly logged as resume failures
     this.smResumeCompleted = false
@@ -1478,8 +1478,13 @@ export class Connection extends BaseModule {
     const sm = this.xmpp.streamManagement as any
     sm.id = smState.id
     sm.inbound = smState.inbound
+    // Hydrate sm.outbound to the count the server is expected to report in
+    // <resumed h=N/>. This makes xmpp.js's ackQueue(N) loop run 0 iterations
+    // on an empty in-memory outbound_q — avoiding the crash on `item.stanza`
+    // that otherwise required the patchSmAckQueue sentinel workaround.
+    sm.outbound = smState.outbound
     this.stores.console.addEvent(
-      `Attempting SM session resumption (id: ${smState.id.slice(0, 8)}..., h: ${smState.inbound})`,
+      `Attempting SM session resumption (id: ${smState.id.slice(0, 8)}..., h_in: ${smState.inbound}, h_out: ${smState.outbound})`,
       'sm'
     )
   }
@@ -1540,7 +1545,8 @@ export class Connection extends BaseModule {
         // Read from the live SM object since xmpp.js has already processed the attrs.
         const smObj = this.xmpp?.streamManagement as any
         if (smObj?.id) {
-          this.smPersistence.updateCache(smObj.id, smObj.inbound || 0)
+          // New session: outbound starts at 0 (xmpp.js resets on <enabled/>).
+          this.smPersistence.updateCache(smObj.id, smObj.inbound || 0, 0)
           if (this.credentials?.jid) {
             void this.smPersistence.persist(this.credentials.jid, this.credentials.resource || '')
           }
@@ -1548,14 +1554,18 @@ export class Connection extends BaseModule {
       } else if (nonza.is('resumed', 'urn:xmpp:sm:3')) {
         // SM session successfully resumed
         const previd = nonza.attrs.previd as string
-        const inbound = this.xmpp?.streamManagement ? (this.xmpp.streamManagement as any).inbound : 0
+        const smLive = this.xmpp?.streamManagement as any
+        const inbound = smLive ? smLive.inbound : 0
+        // xmpp.js resumed() already processed ackQueue(h) and spliced outbound_q,
+        // so sm.outbound + sm.outbound_q.length reflects the new total sent count.
+        const outbound = smLive ? (smLive.outbound || 0) + (Array.isArray(smLive.outbound_q) ? smLive.outbound_q.length : 0) : 0
         this.stores.console.addEvent(`Stream Management session resumed (id: ${previd.slice(0, 8)}...)`, 'sm')
-        logInfo(`SM session resumed (id: ${previd.slice(0, 8)}..., h: ${inbound})`)
+        logInfo(`SM session resumed (id: ${previd.slice(0, 8)}..., h: ${inbound}, out: ${outbound})`)
         // Mark resume as completed - any 'fail' events after this are for new stanzas, not resume failures
         this.smResumeCompleted = true
 
         // Update cached SM state (survives socket death for next reconnection)
-        this.smPersistence.updateCache(previd, inbound)
+        this.smPersistence.updateCache(previd, inbound, outbound)
         if (this.credentials?.jid) {
           void this.smPersistence.persist(this.credentials.jid, this.credentials.resource || '')
         }
@@ -2149,7 +2159,7 @@ export class Connection extends BaseModule {
         this.stores.console.addEvent('SM resume skipped (long sleep detected by state machine)', 'sm')
       } else if (smState) {
         this.stores.console.addEvent(
-          `Saved SM state for resumption (id: ${smState.id.slice(0, 8)}..., h: ${smState.inbound})`,
+          `Saved SM state for resumption (id: ${smState.id.slice(0, 8)}..., h_in: ${smState.inbound}, h_out: ${smState.outbound})`,
           'sm'
         )
       } else {

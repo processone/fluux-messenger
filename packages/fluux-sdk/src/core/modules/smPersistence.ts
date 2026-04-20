@@ -16,6 +16,14 @@ const SM_TIMEOUT_MS = 10 * 60 * 1000
 export interface SmStateCache {
   id: string
   inbound: number
+  /**
+   * Total outbound stanzas the server is expected to know about on resume
+   * (= `sm.outbound` + pending `outbound_q.length` at capture time).
+   * Used to hydrate `sm.outbound` so xmpp.js's ackQueue runs 0 iterations
+   * when the server's `<resumed h=N/>` comes back. See smPersistence tests
+   * and Connection.hydrateStreamManagement for the full resume flow.
+   */
+  outbound: number
   /** When this cache entry was last updated (ms since epoch). Used for staleness detection. */
   timestamp: number
 }
@@ -51,8 +59,8 @@ export class SmPersistence {
   // ── Cache operations ──────────────────────────────────────────────────────
 
   /** Update cache when SM is enabled or resumed. */
-  updateCache(id: string, inbound: number): void {
-    this.cache = { id, inbound, timestamp: Date.now() }
+  updateCache(id: string, inbound: number, outbound: number): void {
+    this.cache = { id, inbound, outbound, timestamp: Date.now() }
   }
 
   /** Clear cache (manual disconnect → fresh session next time). */
@@ -79,8 +87,13 @@ export class SmPersistence {
     if (xmpp?.streamManagement) {
       const sm = xmpp.streamManagement as any
       if (sm.id) {
-        // Update cache with latest state
-        this.cache = { id: sm.id, inbound: sm.inbound || 0, timestamp: Date.now() }
+        // Capture total outbound: already-acked (sm.outbound) + still-pending (outbound_q).
+        // Server's <resumed h=N/> counts *every* stanza it received, acked or not — so
+        // persisting just sm.outbound would leave us short when the queue was non-empty
+        // at disconnect and the crash path would re-open.
+        const pendingOutbound = Array.isArray(sm.outbound_q) ? sm.outbound_q.length : 0
+        const outbound = (sm.outbound || 0) + pendingOutbound
+        this.cache = { id: sm.id, inbound: sm.inbound || 0, outbound, timestamp: Date.now() }
         return this.cache
       }
     }
@@ -120,6 +133,7 @@ export class SmPersistence {
       await this.deps.storageAdapter.setSessionState(jid, {
         smId: this.cache.id,
         smInbound: this.cache.inbound,
+        smOutbound: this.cache.outbound,
         resource: resource || '',
         timestamp: Date.now(),
         joinedRooms: roomsToSave,
@@ -148,6 +162,7 @@ export class SmPersistence {
     const state = {
       smId: this.cache.id,
       smInbound: this.cache.inbound,
+      smOutbound: this.cache.outbound,
       resource: resource || '',
       timestamp: Date.now(),
       joinedRooms: rooms,
@@ -177,10 +192,17 @@ export class SmPersistence {
           // SM state is stale, but joined rooms are still useful for rejoin
           return { smState: null, joinedRooms: state.joinedRooms ?? [] }
         }
+        // Sessions persisted before smOutbound was introduced can't safely resume
+        // — without it, ackQueue would crash when the server's h exceeds our count.
+        // Drop SM state (keep rooms for rejoin).
+        if (typeof state.smOutbound !== 'number') {
+          return { smState: null, joinedRooms: state.joinedRooms ?? [] }
+        }
         return {
           smState: {
             id: state.smId,
             inbound: state.smInbound,
+            outbound: state.smOutbound,
             timestamp: state.timestamp,
           },
           joinedRooms: state.joinedRooms ?? [],
