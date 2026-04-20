@@ -221,6 +221,56 @@ describe('XMPPClient Connection', () => {
         })
       ).rejects.toThrow('Connection refused')
     })
+
+    it('should time out a stalled initial connection and surface the error', async () => {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      const rejection = expect(connectPromise).rejects.toThrow('Connection attempt timed out after 30s')
+
+      await vi.advanceTimersByTimeAsync(0)
+      expect((xmppClient.connection as any).xmpp).toBe(mockXmppClientInstance)
+
+      await vi.advanceTimersByTimeAsync(RECONNECT_ATTEMPT_TIMEOUT_MS)
+
+      await rejection
+      expect((xmppClient.connection as any).xmpp).toBeNull()
+      expect(mockStores.console.addEvent).toHaveBeenCalledWith(
+        'Connection error: Connection attempt timed out after 30s',
+        'error'
+      )
+    })
+
+    it('should route a stalled auto-reconnect-style initial connect into the retry loop', async () => {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+        autoRetryOnTransientFailure: true,
+      })
+
+      await vi.advanceTimersByTimeAsync(0)
+      expect((xmppClient.connection as any).xmpp).toBe(mockXmppClientInstance)
+
+      await vi.advanceTimersByTimeAsync(RECONNECT_ATTEMPT_TIMEOUT_MS)
+      await connectPromise
+
+      expect((xmppClient.connection as any).xmpp).toBeNull()
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
+      expect(mockStores.connection.setReconnectState).toHaveBeenCalledWith(1, expect.any(Number))
+
+      const retryClient = createMockXmppClient()
+      mockClientFactory._setInstance(retryClient)
+      mockClientFactory.mockClear()
+
+      await vi.advanceTimersByTimeAsync(1000)
+
+      expect(mockClientFactory).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('connect() guard against concurrent connections', () => {

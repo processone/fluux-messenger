@@ -27,7 +27,11 @@ export const XMPP_STREAM_OPEN_TIMEOUT_MS = 15_000
 export const CLIENT_STOP_TIMEOUT_MS = 2_000
 
 /**
- * Timeout for a single reconnect attempt (XMPP negotiation/start path).
+ * Timeout for a single connection attempt (XMPP negotiation/start path).
+ *
+ * Used for both reconnect attempts and initial auto-connect flows such as
+ * page-reload recovery after wake-from-sleep, which can otherwise hang
+ * indefinitely after SASL if the transport goes half-open.
  */
 export const RECONNECT_ATTEMPT_TIMEOUT_MS = 30_000
 

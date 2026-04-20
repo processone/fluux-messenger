@@ -523,21 +523,14 @@ export class Connection extends BaseModule {
       this.hydrateStreamManagement(effectiveSmState)
       this.setupHandlers()
 
-      await new Promise<void>((resolve, reject) => {
-        this.setupConnectionHandlers(
-          async (isResumption) => {
-            // Signal machine: initial connection succeeded
-            this.sendMachineEvent({ type: 'CONNECTION_SUCCESS' }, 'connect:connection-success')
-            try {
-              await this.handleConnectionSuccess(isResumption, `Connected as ${jid}`, effectiveJoinedRooms)
-              resolve()
-            } catch (err) {
-              reject(err instanceof Error ? err : new Error(String(err)))
-            }
-          },
-          (err) => reject(err)
-        )
-      })
+      await this.runTimedConnectionAttempt(
+        'Connection attempt',
+        async (isResumption) => {
+          // Signal machine: initial connection succeeded
+          this.sendMachineEvent({ type: 'CONNECTION_SUCCESS' }, 'connect:connection-success')
+          await this.handleConnectionSuccess(isResumption, `Connected as ${jid}`, effectiveJoinedRooms)
+        }
+      )
     }
 
     try {
@@ -642,6 +635,10 @@ export class Connection extends BaseModule {
       await attemptConnection(directWebSocketUrl, 'websocket')
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err))
+      if (error.message === 'Connection attempt superseded') {
+        logInfo('connect(): stale timed-out attempt superseded, ignoring')
+        return
+      }
       logError('Connection error:', error.message)
       logErr(`Connection error: ${error.message}`)
       // Signal machine: initial connection failed. The machine's `connecting`
@@ -1616,6 +1613,74 @@ export class Connection extends BaseModule {
   }
 
   /**
+   * Run a single connection attempt with a safety timeout.
+   *
+   * This protects both reconnect attempts and initial auto-connects from
+   * hanging forever after partial handshake progress (for example SASL
+   * succeeds but post-auth stream restart or resource binding never finishes).
+   */
+  private runTimedConnectionAttempt(
+    timeoutLabel: string,
+    onConnected: (isResumption: boolean) => void | Promise<void>
+  ): Promise<void> {
+    if (!this.xmpp) {
+      return Promise.reject(new Error(`${timeoutLabel} setup failed: no client`))
+    }
+
+    const clientForThisAttempt = this.xmpp
+
+    return new Promise<void>((resolve, reject) => {
+      const attemptStart = Date.now()
+      let timeoutId: ReturnType<typeof setTimeout> | undefined
+      let abortHandlers: (() => void) | undefined
+
+      timeoutId = setTimeout(() => {
+        const elapsed = Date.now() - attemptStart
+        if (elapsed > RECONNECT_ATTEMPT_TIMEOUT_MS * 1.5) {
+          logInfo(
+            `${timeoutLabel} timeout fired late (${Math.round(elapsed / 1000)}s elapsed, expected ${RECONNECT_ATTEMPT_TIMEOUT_MS / 1000}s) — system likely slept through it`
+          )
+        }
+
+        // Prevent any late events from this client from resolving the attempt.
+        abortHandlers?.()
+
+        // If another attempt already replaced this client (or a manual
+        // disconnect cleared it), do not touch the current client state.
+        if (this.xmpp !== clientForThisAttempt) {
+          logInfo(`${timeoutLabel} timeout fired for superseded client, skipping cleanup`)
+          reject(new Error(`${timeoutLabel} superseded`))
+          return
+        }
+
+        logWarn(`${timeoutLabel} timed out after ${Math.round(elapsed / 1000)}s, cleaning up stale client`)
+        this.cleanupClient()
+        reject(new Error(`${timeoutLabel} timed out after ${Math.round(elapsed / 1000)}s`))
+      }, RECONNECT_ATTEMPT_TIMEOUT_MS)
+
+      abortHandlers = this.setupConnectionHandlers(
+        async (isResumption) => {
+          if (timeoutId) {
+            clearTimeout(timeoutId)
+          }
+          try {
+            await onConnected(isResumption)
+            resolve()
+          } catch (err) {
+            reject(err instanceof Error ? err : new Error(String(err)))
+          }
+        },
+        (err) => {
+          if (timeoutId) {
+            clearTimeout(timeoutId)
+          }
+          reject(err)
+        }
+      )
+    })
+  }
+
+  /**
    * Setup connection event handlers (error, offline, etc.).
    */
   private setupHandlers(): void {
@@ -2087,66 +2152,23 @@ export class Connection extends BaseModule {
       const connectWithOptions = async (options: ConnectOptions): Promise<void> => {
         this.deadSocketRecoveryInProgress = false
         this.xmpp = this.createXmppClient(options)
-        // Capture the client for this specific attempt so we can detect if a
-        // newer attempt replaced it (e.g., WAKE triggered a fresh attempt while
-        // this timeout was paused during sleep).
-        const clientForThisAttempt = this.xmpp
         clientCreatedByThisAttempt = this.xmpp
         this.hydrateStreamManagement(smState ?? undefined)
         this.setupHandlers()
         logInfo(`attemptReconnect: new client created, calling start() (${options.server})`)
 
-        await new Promise<void>((resolve, reject) => {
-          const attemptStart = Date.now()
-          const timeout = setTimeout(() => {
-            const elapsed = Date.now() - attemptStart
-            if (elapsed > RECONNECT_ATTEMPT_TIMEOUT_MS * 1.5) {
-              logInfo(`Reconnect timeout fired late (${Math.round(elapsed / 1000)}s elapsed, expected ${RECONNECT_ATTEMPT_TIMEOUT_MS / 1000}s) — system likely slept through it`)
-            }
-
-            // Abort connection handlers to prevent stale events (e.g., a
-            // belated 'online') from triggering CONNECTION_SUCCESS after timeout.
-            abortHandlers()
-
-            // Guard: if a newer attempt replaced this client (e.g., WAKE during
-            // sleep triggered a fresh attempt), don't destroy the new client.
-            if (this.xmpp !== clientForThisAttempt) {
-              logInfo('Stale reconnect timeout fired for superseded client, skipping cleanup')
-              reject(new Error('Reconnect attempt superseded'))
-              return
-            }
-
-            // Always clean up and reject on timeout, even if it fired late.
-            // The wake handler will trigger a fresh reconnect attempt with
-            // correct SM state. Ignoring stale timeouts risks leaving the
-            // promise hanging forever if no subsequent wake event fires.
-            logWarn(`Reconnect attempt timed out after ${Math.round(elapsed / 1000)}s, cleaning up stale client`)
-            this.cleanupClient()
-            reject(new Error(`Reconnect attempt timed out after ${Math.round(elapsed / 1000)}s`))
-          }, RECONNECT_ATTEMPT_TIMEOUT_MS)
-
-          const abortHandlers = this.setupConnectionHandlers(
-            async (isResumption) => {
-              clearTimeout(timeout)
-              // Signal machine: reconnect succeeded → connected.healthy
-              this.sendMachineEvent({ type: 'CONNECTION_SUCCESS' }, 'attemptReconnect:success')
-              try {
-                await this.handleConnectionSuccess(
-                  isResumption,
-                  'Reconnected',
-                  previouslyJoinedRooms
-                )
-                resolve()
-              } catch (err) {
-                reject(err instanceof Error ? err : new Error(String(err)))
-              }
-            },
-            (err) => {
-              clearTimeout(timeout)
-              reject(err)
-            }
-          )
-        })
+        await this.runTimedConnectionAttempt(
+          'Reconnect attempt',
+          async (isResumption) => {
+            // Signal machine: reconnect succeeded → connected.healthy
+            this.sendMachineEvent({ type: 'CONNECTION_SUCCESS' }, 'attemptReconnect:success')
+            await this.handleConnectionSuccess(
+              isResumption,
+              'Reconnected',
+              previouslyJoinedRooms
+            )
+          }
+        )
       }
 
       let reconnectOptions = this.credentials
@@ -2230,11 +2252,11 @@ export class Connection extends BaseModule {
         await connectWithOptions(reconnectOptions)
       }
     } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error'
       // Guard: if a WAKE event already replaced this attempt's client with a
       // newer one, don't destroy the new client or send CONNECTION_ERROR — the
       // new attempt is already in progress.
       if (this.xmpp != null && this.xmpp !== clientCreatedByThisAttempt) {
-        const errorMsg = err instanceof Error ? err.message : 'Unknown error'
         logInfo(`Stale attemptReconnect catch (client replaced): ${errorMsg}`)
         return
       }
@@ -2245,7 +2267,6 @@ export class Connection extends BaseModule {
       this.cleanupClient()
 
       logError('Reconnect failed:', err)
-      const errorMsg = err instanceof Error ? err.message : 'Unknown error'
       this.stores.console.addEvent(`Reconnect attempt failed: ${errorMsg}`, 'error')
       logErr(`Reconnect failed: ${errorMsg}`)
       // Signal machine: reconnect failed → back to waiting (attempt/delay are
