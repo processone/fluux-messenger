@@ -1,0 +1,369 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { E2EEManager } from './E2EEManager'
+import { DummyPlaintextPlugin } from './DummyPlaintextPlugin'
+import { InMemoryStorageBackend } from './PluginStorage'
+import type {
+  BareJID,
+  ConversationHandle,
+  ConversationTarget,
+  E2EEPlugin,
+  E2EEProtocolDescriptor,
+  EncryptedPayload,
+  PeerSupport,
+  PluginContext,
+  VerificationFlow,
+  XMLElementData,
+  XMPPPrimitives,
+} from './types'
+
+function makeXmpp(): XMPPPrimitives {
+  return {
+    sendStanza: async () => {},
+    queryDisco: async () => ({ features: [], identities: [] }),
+    publishPEP: async () => {},
+    queryPEP: async () => [],
+    subscribePEP: () => ({ unsubscribe: () => {} }),
+  }
+}
+
+function makeManager(): E2EEManager {
+  return new E2EEManager({
+    storage: new InMemoryStorageBackend(),
+    xmpp: makeXmpp(),
+    account: { jid: 'me@example.com' },
+  })
+}
+
+/** Minimal configurable plugin for selection / dispatch tests. */
+class FakePlugin implements E2EEPlugin {
+  readonly descriptor: E2EEProtocolDescriptor
+  private readonly xmlns: string
+  public probed: BareJID[] = []
+  public closedHandles = 0
+  public support: (peer: BareJID) => PeerSupport
+  public encryptImpl: ((plaintext: Uint8Array) => EncryptedPayload) | null = null
+  public decryptThrows = false
+
+  constructor(
+    descriptor: E2EEProtocolDescriptor,
+    xmlns: string,
+    opts: { support?: (peer: BareJID) => PeerSupport } = {},
+  ) {
+    this.descriptor = descriptor
+    this.xmlns = xmlns
+    this.support = opts.support ?? (() => ({ supported: true, ttl: 60 }))
+  }
+
+  async init(_ctx: PluginContext): Promise<void> {}
+  async shutdown(): Promise<void> {}
+  async ensureIdentity() {
+    return { fingerprint: `fake-${this.descriptor.id}` }
+  }
+
+  async probePeer(peer: BareJID): Promise<PeerSupport> {
+    this.probed.push(peer)
+    return this.support(peer)
+  }
+
+  async openConversation(target: ConversationTarget): Promise<ConversationHandle> {
+    return { protocolId: this.descriptor.id, state: { target } }
+  }
+
+  async closeConversation(_handle: ConversationHandle): Promise<void> {
+    this.closedHandles++
+  }
+
+  async encrypt(_h: ConversationHandle, plaintext: Uint8Array): Promise<EncryptedPayload> {
+    if (this.encryptImpl) return this.encryptImpl(plaintext)
+    return {
+      protocolId: this.descriptor.id,
+      stanzaElement: { name: 'fake', attrs: { xmlns: this.xmlns }, children: [] },
+    }
+  }
+
+  async decrypt(_h: ConversationHandle, payload: EncryptedPayload) {
+    if (this.decryptThrows) throw new Error('boom')
+    return {
+      plaintext: new Uint8Array([0x42]),
+      senderDevice: { jid: 'sender@example.com', deviceId: 'd1' },
+      securityContext: { protocolId: payload.protocolId, trust: 'trusted' as const },
+    }
+  }
+
+  getVerificationMethods() {
+    return []
+  }
+  async startVerification(): Promise<VerificationFlow> {
+    throw new Error('unused')
+  }
+  async getPeerTrust() {
+    return 'unknown' as const
+  }
+  async getDeviceTrust() {
+    return 'unknown' as const
+  }
+
+  tryClaimInbound(stanzaChild: XMLElementData): EncryptedPayload | null {
+    if (stanzaChild.attrs?.xmlns !== this.xmlns) return null
+    return { protocolId: this.descriptor.id, stanzaElement: stanzaChild }
+  }
+}
+
+const strongDescriptor: E2EEProtocolDescriptor = {
+  id: 'omemo:2',
+  displayName: 'OMEMO 2',
+  securityLevel: 80,
+  features: {
+    forwardSecrecy: true,
+    postCompromiseSecurity: true,
+    multiDevice: true,
+    groupChat: true,
+    asynchronous: true,
+    deniability: true,
+  },
+}
+
+const weakDescriptor: E2EEProtocolDescriptor = {
+  id: 'openpgp',
+  displayName: 'OpenPGP',
+  securityLevel: 30,
+  features: {
+    forwardSecrecy: false,
+    postCompromiseSecurity: false,
+    multiDevice: true,
+    groupChat: false,
+    asynchronous: true,
+    deniability: false,
+  },
+}
+
+describe('E2EEManager — registration', () => {
+  it('registers and lists plugins sorted by securityLevel desc', async () => {
+    const mgr = makeManager()
+    await mgr.register(new FakePlugin(weakDescriptor, 'urn:test:weak'))
+    await mgr.register(new FakePlugin(strongDescriptor, 'urn:test:strong'))
+
+    const descriptors = mgr.listPlugins()
+    expect(descriptors.map((d) => d.id)).toEqual(['omemo:2', 'openpgp'])
+  })
+
+  it('calls plugin.init with a namespaced storage', async () => {
+    const mgr = makeManager()
+    const plugin = new FakePlugin(weakDescriptor, 'urn:test:weak')
+    const initSpy = vi.spyOn(plugin, 'init')
+    await mgr.register(plugin)
+
+    expect(initSpy).toHaveBeenCalledTimes(1)
+    const ctx = initSpy.mock.calls[0][0]
+    expect(ctx.account.jid).toBe('me@example.com')
+    expect(typeof ctx.storage.get).toBe('function')
+  })
+
+  it('rejects duplicate plugin ids', async () => {
+    const mgr = makeManager()
+    await mgr.register(new FakePlugin(weakDescriptor, 'urn:test:weak'))
+    await expect(
+      mgr.register(new FakePlugin(weakDescriptor, 'urn:test:weak-2')),
+    ).rejects.toThrow(/already registered/)
+  })
+
+  it('unregister calls shutdown and removes the plugin', async () => {
+    const mgr = makeManager()
+    const plugin = new FakePlugin(weakDescriptor, 'urn:test:weak')
+    const shutdown = vi.spyOn(plugin, 'shutdown')
+    await mgr.register(plugin)
+    await mgr.unregister(weakDescriptor.id)
+    expect(shutdown).toHaveBeenCalledTimes(1)
+    expect(mgr.getPlugin(weakDescriptor.id)).toBeNull()
+  })
+})
+
+describe('E2EEManager — strategy selection', () => {
+  it('picks highest securityLevel among mutually-supported plugins', async () => {
+    const mgr = makeManager()
+    const strong = new FakePlugin(strongDescriptor, 'urn:test:strong')
+    const weak = new FakePlugin(weakDescriptor, 'urn:test:weak')
+    await mgr.register(strong)
+    await mgr.register(weak)
+
+    const selected = await mgr.selectStrategy({ kind: 'direct', peer: 'bob@example.com' })
+    expect(selected?.descriptor.id).toBe('omemo:2')
+  })
+
+  it('falls back to a lower-ranked plugin when the strong one is unsupported by the peer', async () => {
+    const mgr = makeManager()
+    const strong = new FakePlugin(strongDescriptor, 'urn:test:strong', {
+      support: () => ({ supported: false, ttl: 60 }),
+    })
+    const weak = new FakePlugin(weakDescriptor, 'urn:test:weak')
+    await mgr.register(strong)
+    await mgr.register(weak)
+
+    const selected = await mgr.selectStrategy({ kind: 'direct', peer: 'bob@example.com' })
+    expect(selected?.descriptor.id).toBe('openpgp')
+  })
+
+  it('returns null when no plugin supports the peer (no plaintext fallback)', async () => {
+    const mgr = makeManager()
+    const weak = new FakePlugin(weakDescriptor, 'urn:test:weak', {
+      support: () => ({ supported: false, ttl: 60 }),
+    })
+    await mgr.register(weak)
+
+    const selected = await mgr.selectStrategy({ kind: 'direct', peer: 'bob@example.com' })
+    expect(selected).toBeNull()
+  })
+
+  it('honors per-conversation pin even if stronger plugins are available', async () => {
+    const mgr = makeManager()
+    const strong = new FakePlugin(strongDescriptor, 'urn:test:strong')
+    const weak = new FakePlugin(weakDescriptor, 'urn:test:weak')
+    await mgr.register(strong)
+    await mgr.register(weak)
+
+    const target = { kind: 'direct' as const, peer: 'bob@example.com' }
+    mgr.setPinnedStrategy(target, 'openpgp')
+
+    const selected = await mgr.selectStrategy(target)
+    expect(selected?.descriptor.id).toBe('openpgp')
+  })
+
+  it('excludes non-groupChat plugins from MUC selection', async () => {
+    const mgr = makeManager()
+    await mgr.register(new FakePlugin(weakDescriptor, 'urn:test:weak')) // groupChat=false
+    await mgr.register(new FakePlugin(strongDescriptor, 'urn:test:strong')) // groupChat=true
+
+    const selected = await mgr.selectStrategy({
+      kind: 'muc',
+      room: 'room@muc.example.com',
+      participants: ['alice@example.com', 'bob@example.com'],
+    })
+    expect(selected?.descriptor.id).toBe('omemo:2')
+  })
+
+  it('caches probe results across repeated selections', async () => {
+    const mgr = makeManager()
+    const plugin = new FakePlugin(strongDescriptor, 'urn:test:strong')
+    await mgr.register(plugin)
+
+    await mgr.selectStrategy({ kind: 'direct', peer: 'bob@example.com' })
+    await mgr.selectStrategy({ kind: 'direct', peer: 'bob@example.com' })
+
+    expect(plugin.probed).toEqual(['bob@example.com']) // only once
+  })
+
+  it('re-probes after invalidateCapability', async () => {
+    const mgr = makeManager()
+    const plugin = new FakePlugin(strongDescriptor, 'urn:test:strong')
+    await mgr.register(plugin)
+
+    await mgr.selectStrategy({ kind: 'direct', peer: 'bob@example.com' })
+    mgr.invalidateCapability('bob@example.com')
+    await mgr.selectStrategy({ kind: 'direct', peer: 'bob@example.com' })
+
+    expect(plugin.probed.length).toBe(2)
+  })
+})
+
+describe('E2EEManager — dispatch', () => {
+  it('encryptOutbound picks a plugin, opens a handle, and encrypts', async () => {
+    const mgr = makeManager()
+    await mgr.register(new DummyPlaintextPlugin())
+
+    const plaintext = new TextEncoder().encode('hello')
+    const result = await mgr.encryptOutbound({ kind: 'direct', peer: 'bob@example.com' }, plaintext)
+
+    expect(result).not.toBeNull()
+    expect(result!.payload.protocolId).toBe('dummy-plaintext')
+  })
+
+  it('encryptOutbound returns null if no plugin supports the target', async () => {
+    const mgr = makeManager()
+    await mgr.register(
+      new FakePlugin(strongDescriptor, 'urn:test:strong', {
+        support: () => ({ supported: false, ttl: 60 }),
+      }),
+    )
+    const result = await mgr.encryptOutbound(
+      { kind: 'direct', peer: 'bob@example.com' },
+      new Uint8Array(),
+    )
+    expect(result).toBeNull()
+  })
+
+  it('encryptOutbound closes the handle if encrypt throws', async () => {
+    const mgr = makeManager()
+    const plugin = new FakePlugin(strongDescriptor, 'urn:test:strong')
+    plugin.encryptImpl = () => {
+      throw new Error('encrypt blew up')
+    }
+    await mgr.register(plugin)
+
+    await expect(
+      mgr.encryptOutbound({ kind: 'direct', peer: 'bob@example.com' }, new Uint8Array()),
+    ).rejects.toThrow(/encrypt blew up/)
+    expect(plugin.closedHandles).toBe(1)
+  })
+
+  it('decryptInbound routes stanza child to the plugin that claims it', async () => {
+    const mgr = makeManager()
+    const strong = new FakePlugin(strongDescriptor, 'urn:test:strong')
+    const weak = new FakePlugin(weakDescriptor, 'urn:test:weak')
+    await mgr.register(strong)
+    await mgr.register(weak)
+
+    const stanzaChild: XMLElementData = {
+      name: 'fake',
+      attrs: { xmlns: 'urn:test:weak' },
+      children: [],
+    }
+    const result = await mgr.decryptInbound(stanzaChild, { kind: 'direct', peer: 'bob@example.com' })
+    expect(result).not.toBeNull()
+    expect(result!.securityContext.protocolId).toBe('openpgp')
+    expect(weak.closedHandles).toBe(1)
+  })
+
+  it('decryptInbound returns null when no plugin claims the element', async () => {
+    const mgr = makeManager()
+    await mgr.register(new FakePlugin(weakDescriptor, 'urn:test:weak'))
+    const result = await mgr.decryptInbound(
+      { name: 'encrypted', attrs: { xmlns: 'urn:unknown' }, children: [] },
+      { kind: 'direct', peer: 'bob@example.com' },
+    )
+    expect(result).toBeNull()
+  })
+
+  it('full outbound → inbound round-trip through the dummy plugin', async () => {
+    const mgr = makeManager()
+    await mgr.register(new DummyPlaintextPlugin())
+
+    const plaintext = new TextEncoder().encode('round trip')
+    const out = await mgr.encryptOutbound({ kind: 'direct', peer: 'bob@example.com' }, plaintext)
+    expect(out).not.toBeNull()
+
+    const decrypted = await mgr.decryptInbound(out!.payload.stanzaElement, {
+      kind: 'direct',
+      peer: 'me@example.com',
+    })
+    expect(decrypted).not.toBeNull()
+    expect(new TextDecoder().decode(decrypted!.plaintext)).toBe('round trip')
+  })
+})
+
+describe('E2EEManager — shutdown', () => {
+  it('shuts down all plugins and clears state', async () => {
+    const mgr = makeManager()
+    const strong = new FakePlugin(strongDescriptor, 'urn:test:strong')
+    const weak = new FakePlugin(weakDescriptor, 'urn:test:weak')
+    const shutdownStrong = vi.spyOn(strong, 'shutdown')
+    const shutdownWeak = vi.spyOn(weak, 'shutdown')
+
+    await mgr.register(strong)
+    await mgr.register(weak)
+    await mgr.shutdown()
+
+    expect(shutdownStrong).toHaveBeenCalledTimes(1)
+    expect(shutdownWeak).toHaveBeenCalledTimes(1)
+    expect(mgr.listPlugins()).toEqual([])
+  })
+})

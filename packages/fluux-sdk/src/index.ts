@@ -355,6 +355,53 @@ export { xml } from '@xmpp/client'
 export type { Element } from '@xmpp/client'
 
 // =============================================================================
+// E2EE PLUGIN ARCHITECTURE
+// =============================================================================
+
+// Host, plugin trait, and supporting types. See core/e2ee/index.ts for details.
+// Consumers register E2EEPlugin implementations with an E2EEManager; the
+// manager handles strategy selection and dispatch. Integration with the
+// message send/receive path is intentionally not wired in this slice.
+export {
+  E2EEManager,
+  CapabilityCache,
+  InMemoryStorageBackend,
+  createPluginStorage,
+  DummyPlaintextPlugin,
+} from './core/e2ee'
+export type {
+  AccountInfo,
+  BareJID,
+  CapabilityCacheOptions,
+  ConversationHandle,
+  ConversationTarget,
+  DecryptResult,
+  DeviceIdentifier,
+  DiscoFeature,
+  DiscoResult,
+  E2EEManagerOptions,
+  E2EEPlugin,
+  E2EEProtocolDescriptor,
+  EncryptedPayload,
+  IdentityInfo,
+  Logger as E2EELogger,
+  PEPItem,
+  PeerSupport,
+  PinnedStrategy,
+  PluginContext,
+  PluginStorage,
+  ProtocolFeatures,
+  SecurityContext,
+  StorageBackend,
+  Subscription as E2EESubscription,
+  TrustState,
+  VerificationFlow,
+  VerificationMethod,
+  XMLElementData,
+  XMPPPrimitives,
+} from './core/e2ee'
+
+// =============================================================================
 // UTILITIES
 // =============================================================================
 
