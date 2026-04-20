@@ -40,10 +40,17 @@ export const AVA_MESSAGES: Message[] = [
     type: 'chat', id: 'demo-ava-8', from: conv, body: 'What about OMEMO for E2EE? The privacy-focused users have been very vocal about it',
     timestamp: hoursAgo(5), isOutgoing: false, conversationId: conv,
     replyTo: { id: 'demo-ava-7', fallbackBody: 'Voice/video is the biggest lift. We\'d need to integrate Jingle (XEP-0166) for that' },
+    securityContext: { protocolId: 'openpgp', trust: 'verified' },
   },
   {
     type: 'chat', id: 'demo-ava-9', from: SELF_JID, body: 'OMEMO (XEP-0384) is on the list — it\'s well-specified and we have a good crypto library ready. Should be feasible in Q2.',
     timestamp: hoursAgo(4.5), isOutgoing: true, conversationId: conv,
     reactions: { '🔐': [conv], '🙌': [conv] } as Record<string, string[]>,
+    securityContext: { protocolId: 'openpgp', trust: 'trusted' },
+  },
+  {
+    type: 'chat', id: 'demo-ava-10', from: conv, body: 'Heads up — a new device is on my account. I haven\'t verified its fingerprint yet.',
+    timestamp: hoursAgo(4), isOutgoing: false, conversationId: conv,
+    securityContext: { protocolId: 'openpgp', trust: 'untrusted', notes: ['New device — verification pending'] },
   },
 ]
