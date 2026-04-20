@@ -48,6 +48,7 @@ use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_opener::OpenerExt;
 
 mod xmpp_proxy;
+mod openpgp;
 
 #[cfg(target_os = "macos")]
 mod idle {
@@ -1087,6 +1088,7 @@ fn main() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(openpgp::OpenpgpState::new())
         .invoke_handler(tauri::generate_handler![
             get_idle_time,
             save_credentials,
@@ -1096,7 +1098,12 @@ fn main() {
             fetch_url_metadata,
             start_xmpp_proxy,
             stop_xmpp_proxy,
-            log_to_terminal
+            log_to_terminal,
+            openpgp::openpgp_generate_key,
+            openpgp::openpgp_encrypt,
+            openpgp::openpgp_decrypt,
+            openpgp::openpgp_fingerprint,
+            openpgp::openpgp_forget_account
         ])
         .on_page_load(move |webview, payload| {
             // Always inject console-forwarding script so SDK diagnostic logs

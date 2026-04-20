@@ -1386,6 +1386,7 @@ dependencies = [
 name = "fluux"
 version = "0.15.2"
 dependencies = [
+ "base64 0.22.1",
  "block2",
  "ctor 0.8.0",
  "dirs",
@@ -1423,6 +1424,7 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "user-idle",
+ "uuid",
  "x11",
 ]
 

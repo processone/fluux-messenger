@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useConnection, useXMPPContext, hasFastToken } from '@fluux/sdk'
+import { registerE2EEPlugins } from './e2ee/registerPlugins'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { LoginScreen } from './components/LoginScreen'
 import { ChatLayout } from './components/ChatLayout'
@@ -157,6 +158,10 @@ function App() {
       // Uses '__wry_' prefix so clearLocalData() won't remove it (it only
       // clears 'fluux:' prefixed keys).
       sessionStorage.setItem('__wry_was_online', '1')
+      // Register desktop E2EE plugins now that the account JID is available.
+      // No-op on web (web has no root-of-trust desktop key). Fire-and-forget:
+      // a failure must not block the chat path.
+      void registerE2EEPlugins(client)
     } else if (status !== 'connecting') {
       // For any non-online, non-connecting status (error, disconnected, reconnecting),
       // check if session was cleared — if so, stop showing the reconnecting spinner
@@ -165,7 +170,7 @@ function App() {
         setIsAutoReconnecting(false)
       }
     }
-  }, [status])
+  }, [status, client])
 
   // Check if we have a stored session (for reconnect scenarios)
   const hasSession = getSession() !== null

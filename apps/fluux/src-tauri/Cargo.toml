@@ -39,6 +39,12 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
 dirs = "6"
 
+# E2EE / OpenPGP plugin skeleton — crypto ops are currently stubbed
+# (base64 round-trip) pending sequoia-openpgp integration. See
+# src/openpgp.rs for TODO(sequoia) markers.
+base64 = "0.22"
+uuid = { version = "1", features = ["v4"] }
+
 # Updater plugin for auto-updates (desktop only)
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
