@@ -172,4 +172,30 @@ export interface BaseMessage {
    * When set, voting is disabled on this poll.
    */
   pollClosedAt?: Date
+  /**
+   * End-to-end encryption context for this message.
+   * - Present on incoming messages that a plugin successfully decrypted;
+   *   carries the protocol id and the trust evaluation the plugin returned.
+   * - Present on outgoing messages that were encrypted; the host synthesizes
+   *   it from the plugin descriptor at send time.
+   * - Absent when the message was handled as cleartext.
+   *
+   * The UI uses this to render per-message indicators (lock icon, trust
+   * state, protocol badge).
+   */
+  securityContext?: MessageSecurityContext
+}
+
+/**
+ * Per-message E2EE context surfaced to the UI. Mirrors the `SecurityContext`
+ * returned by E2EE plugins but is redeclared here to avoid an import cycle
+ * between message types and the e2ee module.
+ */
+export interface MessageSecurityContext {
+  /** Plugin identifier, e.g. `openpgp`, `omemo:2`. */
+  protocolId: string
+  /** Trust evaluation from the plugin. */
+  trust: 'verified' | 'trusted' | 'untrusted'
+  /** Optional display notes (e.g. "subkey 3 days old"). */
+  notes?: string[]
 }

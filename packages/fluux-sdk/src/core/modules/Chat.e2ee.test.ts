@@ -79,16 +79,18 @@ describe('Chat E2EE wiring', () => {
   let captured: Element[]
   let manager: E2EEManager
   let chat: Chat
+  let sdkEmitted: unknown[]
 
   beforeEach(async () => {
     captured = []
     manager = await makeManagerWithDummyPlugin('me@example.com')
-    const { deps } = makeDeps({
+    const built = makeDeps({
       jid: 'me@example.com',
       manager,
       captureStanza: (el) => captured.push(el),
     })
-    chat = new Chat(deps, stubMAM())
+    sdkEmitted = built.sdkEmitted
+    chat = new Chat(built.deps, stubMAM())
   })
 
   describe('outbound encryption', () => {
@@ -231,6 +233,104 @@ describe('Chat E2EE wiring', () => {
       // Manager.decryptInbound should be called exactly once — not on the
       // re-dispatched synthetic pass.
       expect(spy).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('securityContext threading', () => {
+    it('sets securityContext on outbound encrypted messages', async () => {
+      await chat.sendMessage('bob@example.com', 'Hello, Bob!')
+
+      const chatMessageEvent = sdkEmitted.find(
+        (e) => (e as { event: string }).event === 'chat:message',
+      ) as { payload: { message: { securityContext?: { protocolId: string; trust: string } } } } | undefined
+
+      expect(chatMessageEvent).toBeDefined()
+      expect(chatMessageEvent!.payload.message.securityContext).toEqual({
+        protocolId: 'dummy-plaintext',
+        trust: 'trusted',
+      })
+    })
+
+    it('does not set securityContext on outbound plaintext messages', async () => {
+      const emptyManager = new E2EEManager({
+        storage: new InMemoryStorageBackend(),
+        xmpp: stubXmppPrimitives(async () => {}),
+        account: { jid: 'me@example.com' },
+      })
+      const built = makeDeps({
+        jid: 'me@example.com',
+        manager: emptyManager,
+        captureStanza: () => {},
+      })
+      const plainChat = new Chat(built.deps, stubMAM())
+      await plainChat.sendMessage('bob@example.com', 'Hi')
+
+      const chatMessageEvent = built.sdkEmitted.find(
+        (e) => (e as { event: string }).event === 'chat:message',
+      ) as { payload: { message: { securityContext?: unknown } } } | undefined
+      expect(chatMessageEvent).toBeDefined()
+      expect(chatMessageEvent!.payload.message.securityContext).toBeUndefined()
+    })
+
+    it('sets securityContext on inbound decrypted messages', async () => {
+      // Produce a real encrypted stanza.
+      await chat.sendMessage('bob@example.com', 'Encrypted hello')
+      const outgoing = captured[0]
+
+      const inbound = xml(
+        'message',
+        { from: 'bob@example.com/r', to: 'me@example.com', type: 'chat', id: 'm-sc' },
+        ...outgoing.children.filter((c) => typeof c === 'string' || c.name !== 'active'),
+      )
+
+      const rxBuilt = makeDeps({
+        jid: 'me@example.com',
+        manager,
+        captureStanza: () => {},
+      })
+      // Need a conversation so processChatMessage emits (stranger path would bail).
+      // In this test setup deps.stores is null, so hasConversation/hasContact aren't
+      // hit — the message goes straight through.
+      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+
+      rxChat.handle(inbound)
+      await new Promise((r) => setTimeout(r, 0))
+
+      const chatMessageEvent = rxBuilt.sdkEmitted.find(
+        (e) => (e as { event: string }).event === 'chat:message',
+      ) as { payload: { message: { body: string; securityContext?: { protocolId: string; trust: string } } } } | undefined
+
+      expect(chatMessageEvent).toBeDefined()
+      expect(chatMessageEvent!.payload.message.body).toBe('Encrypted hello')
+      expect(chatMessageEvent!.payload.message.securityContext).toEqual({
+        protocolId: 'dummy-plaintext',
+        trust: 'untrusted',
+        notes: ['dummy plugin — plaintext transport'],
+      })
+    })
+
+    it('does not set securityContext on inbound plaintext messages', async () => {
+      const inbound = xml(
+        'message',
+        { from: 'bob@example.com/r', to: 'me@example.com', type: 'chat', id: 'm-pt' },
+        xml('body', {}, 'plain body'),
+      )
+
+      const rxBuilt = makeDeps({
+        jid: 'me@example.com',
+        manager,
+        captureStanza: () => {},
+      })
+      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+
+      rxChat.handle(inbound)
+      await new Promise((r) => setTimeout(r, 0))
+
+      const chatMessageEvent = rxBuilt.sdkEmitted.find(
+        (e) => (e as { event: string }).event === 'chat:message',
+      ) as { payload: { message: { securityContext?: unknown } } } | undefined
+      expect(chatMessageEvent).toBeDefined()
+      expect(chatMessageEvent!.payload.message.securityContext).toBeUndefined()
     })
   })
 })

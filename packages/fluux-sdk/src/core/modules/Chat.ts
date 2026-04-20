@@ -39,6 +39,7 @@ import type {
   ChatStateNotification,
   MAMQueryOptions,
   MAMResult,
+  MessageSecurityContext,
   RoomMessage,
   RoomMAMQueryOptions,
   RoomMAMResult,
@@ -396,6 +397,23 @@ export class Chat extends BaseModule {
     ;(stanza as unknown as { __securityContext?: SecurityContext }).__securityContext = securityContext
   }
 
+  /**
+   * Read back the security context stashed on a stanza by
+   * {@link decryptAndReprocess}. Returns `undefined` for stanzas that were
+   * never claimed by a plugin (cleartext messages). The shape matches
+   * {@link MessageSecurityContext} exactly; we narrow it here so downstream
+   * consumers don't need to import from the e2ee module.
+   */
+  private readStashedSecurityContext(stanza: Element): MessageSecurityContext | undefined {
+    const stash = (stanza as unknown as { __securityContext?: SecurityContext }).__securityContext
+    if (!stash) return undefined
+    return {
+      protocolId: stash.protocolId,
+      trust: stash.trust,
+      ...(stash.notes && { notes: stash.notes }),
+    }
+  }
+
   // --- Chat Methods (Outgoing) ---
 
   /**
@@ -544,6 +562,7 @@ export class Chat extends BaseModule {
     // replace the plaintext <body> with a fallback and append the encrypted
     // element, EME (XEP-0380), and MAM store hint (XEP-0334).
     // MUC encryption is a later phase.
+    let outgoingSecurityContext: MessageSecurityContext | undefined
     if (type === 'chat') {
       const manager = this.deps.getE2EEManager?.()
       if (manager) {
@@ -554,7 +573,8 @@ export class Chat extends BaseModule {
           )
           if (result) {
             const bodyIdx = children.findIndex(
-              (c) => c instanceof Element && c.name === 'body',
+              (c): c is Element =>
+                typeof c !== 'string' && (c as { name?: string }).name === 'body',
             )
             const fallbackBody =
               result.payload.fallbackBody ?? '[encrypted message]'
@@ -573,6 +593,10 @@ export class Chat extends BaseModule {
               }),
             )
             children.push(xml('store', { xmlns: NS_HINTS }))
+            outgoingSecurityContext = {
+              protocolId: result.plugin.descriptor.id,
+              trust: 'trusted',
+            }
           }
         } catch (err) {
           logWarn(`E2EE encrypt failed for ${recipient}, sending plaintext: ${err instanceof Error ? err.message : String(err)}`)
@@ -599,6 +623,7 @@ export class Chat extends BaseModule {
         isOutgoing: true,
         ...(replyTo && { replyTo: { id: replyTo.id, to: replyTo.to } }),
         ...(attachment && { attachment }),
+        ...(outgoingSecurityContext && { securityContext: outgoingSecurityContext }),
       }
       this.deps.emitSDK('chat:message', { message })
     }
@@ -1450,6 +1475,7 @@ export class Chat extends BaseModule {
     // Use stable ID for messages without ID (e.g., from IRC bridges) to enable deduplication
     const messageId = replaceTargetId || stanza.attrs.id || generateStableMessageId(bareFrom, parsed.timestamp, body)
 
+    const securityContext = this.readStashedSecurityContext(stanza)
     const message: Message = {
       type: 'chat',
       id: messageId,
@@ -1465,6 +1491,7 @@ export class Chat extends BaseModule {
       ...(parsed.replyTo && { replyTo: parsed.replyTo }),
       ...(parsed.attachment && { attachment: parsed.attachment }),
       ...(isCorrection && { isEdited: true }),
+      ...(securityContext && { securityContext }),
     }
 
     if (!isOutgoing && this.deps.stores) {
@@ -1507,6 +1534,7 @@ export class Chat extends BaseModule {
     // XEP-0421: Anonymous Unique Occupant Identifiers
     const occupantId = stanza.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id
 
+    const securityContext = this.readStashedSecurityContext(stanza)
     const message: RoomMessage = {
       type: 'groupchat',
       id: messageId,
@@ -1524,6 +1552,7 @@ export class Chat extends BaseModule {
       ...(parsed.attachment && { attachment: parsed.attachment }),
       ...(isCorrection && { isEdited: true }),
       ...(occupantId && { occupantId }),
+      ...(securityContext && { securityContext }),
     }
 
     // Poll detection: check for <poll> or <poll-closed> elements
