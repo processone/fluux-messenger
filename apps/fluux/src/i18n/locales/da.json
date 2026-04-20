@@ -560,7 +560,15 @@
             "limitationsTitle": "Nuværende begrænsninger",
             "limitationVerification": "Kontakters fingeraftryk verificeres endnu ikke — låseikoner viser kun tillid ved første brug.",
             "limitationPersistence": "Nøglerne findes kun i hukommelsen i denne session; hvis appen genstartes, genereres de på ny.",
-            "limitationBackend": "Bruger en eksperimentel ren-Rust-kryptobackend; ikke hærdet til scenarier med høje sikkerhedskrav."
+            "limitationBackend": "Bruger en eksperimentel ren-Rust-kryptobackend; ikke hærdet til scenarier med høje sikkerhedskrav.",
+            "dangerZone": "Farezone",
+            "deleteKey": "Slet min OpenPGP-nøgle",
+            "deleteKeyDescription": "Fjerner permanent din private nøgle fra denne enhed. Beskeder, der tidligere blev krypteret til nøglen, bliver ulæselige. Kryptering slås fra, indtil du genererer en ny nøgle.",
+            "deleteKeyConfirmTitle": "Slet din OpenPGP-nøgle?",
+            "deleteKeyConfirmMessage": "Dette tilintetgør den private nøgle med fingeraftrykket {{fingerprint}}. Du kan ikke dekryptere tidligere beskeder. Handlingen kan ikke fortrydes.",
+            "deleteKeyConfirmAction": "Slet nøgle",
+            "deleteKeySuccess": "OpenPGP-nøgle slettet",
+            "deleteKeyFailed": "Nøglen kunne ikke slettes"
         }
     },
     "update": {

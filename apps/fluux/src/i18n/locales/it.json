@@ -562,7 +562,15 @@
             "limitationsTitle": "Limitazioni attuali",
             "limitationVerification": "Le impronte dei contatti non sono ancora verificate — le icone del lucchetto indicano solo la fiducia al primo utilizzo.",
             "limitationPersistence": "Le chiavi risiedono in memoria solo per questa sessione; al riavvio dell'applicazione vengono rigenerate.",
-            "limitationBackend": "Usa un backend crittografico sperimentale in Rust puro; non rinforzato per scenari ad alta sicurezza."
+            "limitationBackend": "Usa un backend crittografico sperimentale in Rust puro; non rinforzato per scenari ad alta sicurezza.",
+            "dangerZone": "Zona sensibile",
+            "deleteKey": "Elimina la mia chiave OpenPGP",
+            "deleteKeyDescription": "Rimuove definitivamente la tua chiave privata da questo dispositivo. I messaggi precedentemente cifrati con questa chiave non saranno più leggibili. La crittografia sarà disattivata finché non generi una nuova chiave.",
+            "deleteKeyConfirmTitle": "Eliminare la tua chiave OpenPGP?",
+            "deleteKeyConfirmMessage": "Questo distrugge la chiave privata con impronta {{fingerprint}}. Non potrai più decifrare i messaggi passati. L'azione non è reversibile.",
+            "deleteKeyConfirmAction": "Elimina chiave",
+            "deleteKeySuccess": "Chiave OpenPGP eliminata",
+            "deleteKeyFailed": "Impossibile eliminare la chiave"
         }
     },
     "update": {

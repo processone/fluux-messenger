@@ -561,7 +561,15 @@
             "limitationsTitle": "Aktuálne obmedzenia",
             "limitationVerification": "Odtlačky kontaktov zatiaľ nie sú overené — ikony zámku odrážajú iba dôveru pri prvom použití.",
             "limitationPersistence": "Kľúče existujú iba v pamäti tejto relácie; reštartovanie aplikácie ich vygeneruje nanovo.",
-            "limitationBackend": "Používa experimentálny kryptografický backend v čistom Ruste; nie je spevnený pre scenáre s vysokými bezpečnostnými požiadavkami."
+            "limitationBackend": "Používa experimentálny kryptografický backend v čistom Ruste; nie je spevnený pre scenáre s vysokými bezpečnostnými požiadavkami.",
+            "dangerZone": "Nebezpečná zóna",
+            "deleteKey": "Odstrániť môj kľúč OpenPGP",
+            "deleteKeyDescription": "Trvalo odstráni váš súkromný kľúč z tohto zariadenia. Správy predtým zašifrované týmto kľúčom sa stanú nečitateľnými. Šifrovanie sa vypne, kým nevygenerujete nový kľúč.",
+            "deleteKeyConfirmTitle": "Odstrániť váš kľúč OpenPGP?",
+            "deleteKeyConfirmMessage": "Týmto sa zničí súkromný kľúč s odtlačkom {{fingerprint}}. Predchádzajúce správy už nebudete môcť dešifrovať. Akciu nemožno vrátiť späť.",
+            "deleteKeyConfirmAction": "Odstrániť kľúč",
+            "deleteKeySuccess": "Kľúč OpenPGP bol odstránený",
+            "deleteKeyFailed": "Kľúč sa nepodarilo odstrániť"
         }
     },
     "update": {

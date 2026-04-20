@@ -562,7 +562,15 @@
             "limitationsTitle": "Limitări actuale",
             "limitationVerification": "Amprentele contactelor nu sunt încă verificate — pictogramele lacăt reflectă doar încrederea la prima utilizare.",
             "limitationPersistence": "Cheile există doar în memoria acestei sesiuni; repornirea aplicației le regenerează.",
-            "limitationBackend": "Folosește un backend criptografic experimental scris în Rust pur; nu este consolidat pentru scenarii cu cerințe înalte de securitate."
+            "limitationBackend": "Folosește un backend criptografic experimental scris în Rust pur; nu este consolidat pentru scenarii cu cerințe înalte de securitate.",
+            "dangerZone": "Zonă periculoasă",
+            "deleteKey": "Șterge cheia mea OpenPGP",
+            "deleteKeyDescription": "Elimină definitiv cheia dvs. privată de pe acest dispozitiv. Mesajele criptate anterior cu această cheie devin ilizibile. Criptarea se dezactivează până când generați o cheie nouă.",
+            "deleteKeyConfirmTitle": "Ștergeți cheia dvs. OpenPGP?",
+            "deleteKeyConfirmMessage": "Acest lucru distruge cheia privată cu amprenta {{fingerprint}}. Nu veți mai putea decripta mesajele anterioare. Această acțiune nu poate fi anulată.",
+            "deleteKeyConfirmAction": "Șterge cheia",
+            "deleteKeySuccess": "Cheia OpenPGP a fost ștearsă",
+            "deleteKeyFailed": "Cheia nu a putut fi ștearsă"
         }
     },
     "update": {

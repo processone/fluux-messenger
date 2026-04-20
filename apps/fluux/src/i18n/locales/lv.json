@@ -561,7 +561,15 @@
             "limitationsTitle": "Pašreizējie ierobežojumi",
             "limitationVerification": "Kontaktu pirkstu nospiedumi vēl netiek verificēti — slēdzenes ikonas rāda tikai uzticību pirmajā lietošanā.",
             "limitationPersistence": "Atslēgas pastāv tikai šīs sesijas atmiņā; lietotnes restartēšana tās ģenerē no jauna.",
-            "limitationBackend": "Izmanto eksperimentālu tīra Rust kriptogrāfijas backend; nav nostiprināts augstas drošības scenārijiem."
+            "limitationBackend": "Izmanto eksperimentālu tīra Rust kriptogrāfijas backend; nav nostiprināts augstas drošības scenārijiem.",
+            "dangerZone": "Bīstamā zona",
+            "deleteKey": "Dzēst manu OpenPGP atslēgu",
+            "deleteKeyDescription": "Neatgriezeniski noņem jūsu privāto atslēgu no šīs ierīces. Iepriekš ar šo atslēgu šifrētās ziņas kļūs nelasāmas. Šifrēšana tiks izslēgta, līdz ģenerēsiet jaunu atslēgu.",
+            "deleteKeyConfirmTitle": "Dzēst jūsu OpenPGP atslēgu?",
+            "deleteKeyConfirmMessage": "Tas iznīcina privāto atslēgu ar pirkstu nospiedumu {{fingerprint}}. Jūs nevarēsiet atšifrēt iepriekšējās ziņas. Darbību nevar atsaukt.",
+            "deleteKeyConfirmAction": "Dzēst atslēgu",
+            "deleteKeySuccess": "OpenPGP atslēga dzēsta",
+            "deleteKeyFailed": "Atslēgu neizdevās dzēst"
         }
     },
     "update": {

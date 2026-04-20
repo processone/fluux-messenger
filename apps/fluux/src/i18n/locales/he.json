@@ -560,7 +560,15 @@
             "limitationsTitle": "מגבלות נוכחיות",
             "limitationVerification": "טביעות האצבע של אנשי הקשר אינן מאומתות עדיין — סמלי המנעול מציגים רק אמון בשימוש הראשון.",
             "limitationPersistence": "המפתחות קיימים בזיכרון לסשן הזה בלבד; הפעלה מחדש של היישום יוצרת אותם שוב.",
-            "limitationBackend": "משתמש ב-backend הצפנה ניסיוני ב-Rust טהור; אינו מחוזק לתרחישים עם דרישות אבטחה גבוהות."
+            "limitationBackend": "משתמש ב-backend הצפנה ניסיוני ב-Rust טהור; אינו מחוזק לתרחישים עם דרישות אבטחה גבוהות.",
+            "dangerZone": "אזור מסוכן",
+            "deleteKey": "מחיקת מפתח ה-OpenPGP שלי",
+            "deleteKeyDescription": "מסיר לצמיתות את המפתח הפרטי שלך מהמכשיר הזה. הודעות שהוצפנו קודם באמצעות המפתח הזה יהפכו לבלתי קריאות. ההצפנה תכובה עד שתיצור מפתח חדש.",
+            "deleteKeyConfirmTitle": "למחוק את מפתח ה-OpenPGP שלך?",
+            "deleteKeyConfirmMessage": "הדבר מחסל את המפתח הפרטי עם טביעת האצבע {{fingerprint}}. לא תוכל לפענח הודעות עבר. לא ניתן לבטל פעולה זו.",
+            "deleteKeyConfirmAction": "מחיקת המפתח",
+            "deleteKeySuccess": "מפתח OpenPGP נמחק",
+            "deleteKeyFailed": "לא ניתן למחוק את המפתח"
         }
     },
     "update": {

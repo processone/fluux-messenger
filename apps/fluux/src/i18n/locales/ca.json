@@ -562,7 +562,15 @@
             "limitationsTitle": "Limitacions actuals",
             "limitationVerification": "Les empremtes dels contactes encara no es verifiquen — les icones del cadenat només indiquen confiança de primer ús.",
             "limitationPersistence": "Les claus viuen a la memòria només en aquesta sessió; en reiniciar l'aplicació es tornen a generar.",
-            "limitationBackend": "Fa servir un rerefons criptogràfic experimental escrit en Rust pur; no està endurit per a escenaris d'alta seguretat."
+            "limitationBackend": "Fa servir un rerefons criptogràfic experimental escrit en Rust pur; no està endurit per a escenaris d'alta seguretat.",
+            "dangerZone": "Zona de perill",
+            "deleteKey": "Elimina la meva clau OpenPGP",
+            "deleteKeyDescription": "Elimina permanentment la vostra clau privada d'aquest dispositiu. Els missatges xifrats amb aquesta clau esdevindran illegibles. El xifratge es desactiva fins que en genereu una de nova.",
+            "deleteKeyConfirmTitle": "Voleu eliminar la vostra clau OpenPGP?",
+            "deleteKeyConfirmMessage": "Això destrueix la clau privada amb l'empremta {{fingerprint}}. No podreu desxifrar els missatges anteriors. Aquesta acció no es pot desfer.",
+            "deleteKeyConfirmAction": "Elimina la clau",
+            "deleteKeySuccess": "Clau OpenPGP eliminada",
+            "deleteKeyFailed": "No s'ha pogut eliminar la clau"
         }
     },
     "update": {

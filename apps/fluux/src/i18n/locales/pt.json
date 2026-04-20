@@ -562,7 +562,15 @@
             "limitationsTitle": "Limitações atuais",
             "limitationVerification": "As impressões digitais dos contactos ainda não são verificadas — os ícones de cadeado apenas refletem confiança no primeiro uso.",
             "limitationPersistence": "As chaves existem apenas em memória nesta sessão; reiniciar a aplicação regenera-as.",
-            "limitationBackend": "Usa um backend criptográfico experimental em Rust puro; não endurecido para cenários de alta segurança."
+            "limitationBackend": "Usa um backend criptográfico experimental em Rust puro; não endurecido para cenários de alta segurança.",
+            "dangerZone": "Zona de perigo",
+            "deleteKey": "Eliminar a minha chave OpenPGP",
+            "deleteKeyDescription": "Remove definitivamente a sua chave privada deste dispositivo. As mensagens anteriormente criptografadas com esta chave ficarão ilegíveis. A criptografia é desativada até gerar uma nova chave.",
+            "deleteKeyConfirmTitle": "Eliminar a sua chave OpenPGP?",
+            "deleteKeyConfirmMessage": "Isto destrói a chave privada com impressão digital {{fingerprint}}. Não conseguirá decifrar mensagens anteriores. Esta ação não pode ser anulada.",
+            "deleteKeyConfirmAction": "Eliminar chave",
+            "deleteKeySuccess": "Chave OpenPGP eliminada",
+            "deleteKeyFailed": "Não foi possível eliminar a chave"
         }
     },
     "update": {

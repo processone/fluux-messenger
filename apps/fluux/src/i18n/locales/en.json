@@ -476,7 +476,15 @@
             "limitationsTitle": "Current limitations",
             "limitationVerification": "Contact fingerprints are not yet verified — lock icons show trust-on-first-use only.",
             "limitationPersistence": "Keys are in-memory for this session; restarting the app regenerates them.",
-            "limitationBackend": "Uses an experimental pure-Rust crypto backend; not hardened for high-assurance scenarios."
+            "limitationBackend": "Uses an experimental pure-Rust crypto backend; not hardened for high-assurance scenarios.",
+            "dangerZone": "Danger zone",
+            "deleteKey": "Delete my OpenPGP key",
+            "deleteKeyDescription": "Permanently removes your private key from this device. Messages previously encrypted to this key become unreadable. Encryption is turned off until you generate a new key.",
+            "deleteKeyConfirmTitle": "Delete your OpenPGP key?",
+            "deleteKeyConfirmMessage": "This destroys the private key for fingerprint {{fingerprint}}. You won't be able to decrypt past messages. This action cannot be undone.",
+            "deleteKeyConfirmAction": "Delete key",
+            "deleteKeySuccess": "OpenPGP key deleted",
+            "deleteKeyFailed": "Couldn't delete the key"
         },
         "blocked": {
             "title": "Blocked Users",

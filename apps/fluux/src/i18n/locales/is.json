@@ -560,7 +560,15 @@
             "limitationsTitle": "Núverandi takmarkanir",
             "limitationVerification": "Fingraför tengiliða eru ekki enn sannreynd — lásatáknin sýna aðeins traust við fyrstu notkun.",
             "limitationPersistence": "Lyklar búa aðeins í minninu á þessari lotu; endurræsing forritsins býr þá til á ný.",
-            "limitationBackend": "Notar tilraunakennt dulmálsbakendi í hreinum Rust; ekki styrkt fyrir atburðarásir með háar öryggiskröfur."
+            "limitationBackend": "Notar tilraunakennt dulmálsbakendi í hreinum Rust; ekki styrkt fyrir atburðarásir með háar öryggiskröfur.",
+            "dangerZone": "Hættusvæði",
+            "deleteKey": "Eyða OpenPGP-lyklinum mínum",
+            "deleteKeyDescription": "Fjarlægir einkalykilinn þinn varanlega úr þessu tæki. Skilaboð sem áður voru dulkóðuð með þessum lykli verða ólesanleg. Dulkóðun er slökkt þar til þú býrð til nýjan lykil.",
+            "deleteKeyConfirmTitle": "Eyða OpenPGP-lyklinum þínum?",
+            "deleteKeyConfirmMessage": "Þetta eyðir einkalyklinum með fingrafarið {{fingerprint}}. Þú munt ekki geta afkóðað fyrri skilaboð. Aðgerðin er óafturkræf.",
+            "deleteKeyConfirmAction": "Eyða lykli",
+            "deleteKeySuccess": "OpenPGP-lyklinum eytt",
+            "deleteKeyFailed": "Ekki tókst að eyða lyklinum"
         }
     },
     "update": {

@@ -562,7 +562,15 @@
             "limitationsTitle": "Aktuální omezení",
             "limitationVerification": "Otisky kontaktů zatím nejsou ověřeny — ikony zámku odrážejí pouze důvěru při prvním použití.",
             "limitationPersistence": "Klíče žijí pouze v paměti této relace; restart aplikace je vygeneruje znovu.",
-            "limitationBackend": "Používá experimentální kryptografický backend v čistém Rustu; není zpevněn pro scénáře s vysokými bezpečnostními nároky."
+            "limitationBackend": "Používá experimentální kryptografický backend v čistém Rustu; není zpevněn pro scénáře s vysokými bezpečnostními nároky.",
+            "dangerZone": "Nebezpečná zóna",
+            "deleteKey": "Smazat můj klíč OpenPGP",
+            "deleteKeyDescription": "Trvale odstraní váš soukromý klíč z tohoto zařízení. Zprávy dříve zašifrované tímto klíčem se stanou nečitelnými. Šifrování bude vypnuto, dokud nevygenerujete nový klíč.",
+            "deleteKeyConfirmTitle": "Smazat váš klíč OpenPGP?",
+            "deleteKeyConfirmMessage": "Tímto se zničí soukromý klíč s otiskem {{fingerprint}}. Minulé zprávy už nebudete moci dešifrovat. Akci nelze vrátit zpět.",
+            "deleteKeyConfirmAction": "Smazat klíč",
+            "deleteKeySuccess": "Klíč OpenPGP byl smazán",
+            "deleteKeyFailed": "Klíč se nepodařilo smazat"
         }
     },
     "update": {

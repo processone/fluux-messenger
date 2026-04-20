@@ -560,7 +560,15 @@
             "limitationsTitle": "Huidige beperkingen",
             "limitationVerification": "Vingerafdrukken van contacten worden nog niet geverifieerd — slotpictogrammen tonen alleen vertrouwen bij eerste gebruik.",
             "limitationPersistence": "Sleutels bestaan alleen in het geheugen voor deze sessie; bij herstart van de app worden ze opnieuw gegenereerd.",
-            "limitationBackend": "Gebruikt een experimentele pure-Rust-cryptobackend; niet gehard voor scenario's met hoge beveiligingsvereisten."
+            "limitationBackend": "Gebruikt een experimentele pure-Rust-cryptobackend; niet gehard voor scenario's met hoge beveiligingsvereisten.",
+            "dangerZone": "Gevarenzone",
+            "deleteKey": "Mijn OpenPGP-sleutel verwijderen",
+            "deleteKeyDescription": "Verwijdert je privésleutel permanent van dit apparaat. Eerder met deze sleutel versleutelde berichten worden onleesbaar. Versleuteling wordt uitgeschakeld totdat je een nieuwe sleutel genereert.",
+            "deleteKeyConfirmTitle": "Je OpenPGP-sleutel verwijderen?",
+            "deleteKeyConfirmMessage": "Dit vernietigt de privésleutel met vingerafdruk {{fingerprint}}. Je kunt eerdere berichten niet meer ontsleutelen. Deze actie kan niet ongedaan worden gemaakt.",
+            "deleteKeyConfirmAction": "Sleutel verwijderen",
+            "deleteKeySuccess": "OpenPGP-sleutel verwijderd",
+            "deleteKeyFailed": "Sleutel kon niet worden verwijderd"
         }
     },
     "update": {

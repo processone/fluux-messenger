@@ -562,7 +562,15 @@
             "limitationsTitle": "Praegused piirangud",
             "limitationVerification": "Kontaktide sõrmejälgi veel ei kontrollita — lukuikoonid näitavad ainult esmakordset usaldust.",
             "limitationPersistence": "Võtmed asuvad ainult selle seansi mälus; rakenduse taaskäivitamisel luuakse need uuesti.",
-            "limitationBackend": "Kasutab eksperimentaalset puhtas Rustis krüptotagasüsteemi; pole tugevdatud kõrgete turvanõuetega stsenaariumide jaoks."
+            "limitationBackend": "Kasutab eksperimentaalset puhtas Rustis krüptotagasüsteemi; pole tugevdatud kõrgete turvanõuetega stsenaariumide jaoks.",
+            "dangerZone": "Ohutsoon",
+            "deleteKey": "Kustuta minu OpenPGP võti",
+            "deleteKeyDescription": "Eemaldab sinu privaatvõtme sellest seadmest jäädavalt. Selle võtmega varem krüptitud sõnumid muutuvad loetamatuks. Krüpteerimine lülitatakse välja, kuni genereerid uue võtme.",
+            "deleteKeyConfirmTitle": "Kas kustutada sinu OpenPGP võti?",
+            "deleteKeyConfirmMessage": "See hävitab privaatvõtme sõrmejäljega {{fingerprint}}. Sa ei saa enam dekrüpteerida varasemaid sõnumeid. Seda toimingut ei saa tagasi võtta.",
+            "deleteKeyConfirmAction": "Kustuta võti",
+            "deleteKeySuccess": "OpenPGP võti kustutatud",
+            "deleteKeyFailed": "Võtme kustutamine ebaõnnestus"
         }
     },
     "update": {

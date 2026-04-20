@@ -560,7 +560,15 @@
             "limitationsTitle": "Dabartiniai apribojimai",
             "limitationVerification": "Kontaktų atspaudai dar netikrinami — spynų piktogramos rodo tik pasitikėjimą pirmą kartą.",
             "limitationPersistence": "Raktai gyvena tik šios sesijos atmintyje; paleidus programą iš naujo jie sukuriami iš naujo.",
-            "limitationBackend": "Naudoja eksperimentinį gryno Rust kriptografijos backend; nėra sutvirtintas aukšto saugumo scenarijams."
+            "limitationBackend": "Naudoja eksperimentinį gryno Rust kriptografijos backend; nėra sutvirtintas aukšto saugumo scenarijams.",
+            "dangerZone": "Pavojaus zona",
+            "deleteKey": "Ištrinti mano OpenPGP raktą",
+            "deleteKeyDescription": "Visam laikui pašalina jūsų privatų raktą iš šio įrenginio. Šiuo raktu anksčiau užšifruoti pranešimai taps neperskaitomi. Šifravimas išjungiamas, kol nesukursite naujo rakto.",
+            "deleteKeyConfirmTitle": "Ištrinti jūsų OpenPGP raktą?",
+            "deleteKeyConfirmMessage": "Tai sunaikina privatų raktą su atspaudu {{fingerprint}}. Nebegalėsite iššifruoti ankstesnių pranešimų. Šio veiksmo atšaukti negalima.",
+            "deleteKeyConfirmAction": "Ištrinti raktą",
+            "deleteKeySuccess": "OpenPGP raktas ištrintas",
+            "deleteKeyFailed": "Nepavyko ištrinti rakto"
         }
     },
     "update": {

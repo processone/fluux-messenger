@@ -562,7 +562,15 @@
             "limitationsTitle": "Trenutne omejitve",
             "limitationVerification": "Prstni odtisi stikov še niso preverjeni — ikone ključavnice prikazujejo samo zaupanje ob prvi uporabi.",
             "limitationPersistence": "Ključi obstajajo le v pomnilniku za to sejo; ponovni zagon aplikacije jih ustvari znova.",
-            "limitationBackend": "Uporablja eksperimentalen kriptografski backend v čistem Rustu; ni utrjen za scenarije z visokimi varnostnimi zahtevami."
+            "limitationBackend": "Uporablja eksperimentalen kriptografski backend v čistem Rustu; ni utrjen za scenarije z visokimi varnostnimi zahtevami.",
+            "dangerZone": "Nevarno območje",
+            "deleteKey": "Izbriši moj ključ OpenPGP",
+            "deleteKeyDescription": "Trajno odstrani vaš zasebni ključ iz te naprave. Sporočila, prej šifrirana s tem ključem, bodo postala neberljiva. Šifriranje je izklopljeno, dokler ne ustvarite novega ključa.",
+            "deleteKeyConfirmTitle": "Izbrišem vaš ključ OpenPGP?",
+            "deleteKeyConfirmMessage": "To uniči zasebni ključ s prstnim odtisom {{fingerprint}}. Prejšnjih sporočil ne boste mogli dešifrirati. Dejanja ni mogoče razveljaviti.",
+            "deleteKeyConfirmAction": "Izbriši ključ",
+            "deleteKeySuccess": "Ključ OpenPGP je izbrisan",
+            "deleteKeyFailed": "Ključa ni bilo mogoče izbrisati"
         }
     },
     "update": {

@@ -560,7 +560,15 @@
             "limitationsTitle": "当前限制",
             "limitationVerification": "联系人指纹尚未经过验证 — 锁图标仅表示首次使用信任。",
             "limitationPersistence": "密钥仅在本次会话中保存于内存；重启应用会重新生成。",
-            "limitationBackend": "使用纯 Rust 实验性加密后端；未加固以应对高安全场景。"
+            "limitationBackend": "使用纯 Rust 实验性加密后端；未加固以应对高安全场景。",
+            "dangerZone": "危险区域",
+            "deleteKey": "删除我的 OpenPGP 密钥",
+            "deleteKeyDescription": "从此设备永久删除你的私钥。之前用此密钥加密的消息将无法阅读。在生成新密钥之前，加密会被关闭。",
+            "deleteKeyConfirmTitle": "删除你的 OpenPGP 密钥？",
+            "deleteKeyConfirmMessage": "这将销毁指纹为 {{fingerprint}} 的私钥。你将无法解密以前的消息。此操作无法撤消。",
+            "deleteKeyConfirmAction": "删除密钥",
+            "deleteKeySuccess": "OpenPGP 密钥已删除",
+            "deleteKeyFailed": "无法删除密钥"
         }
     },
     "update": {

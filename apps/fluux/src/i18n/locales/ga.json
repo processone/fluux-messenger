@@ -560,7 +560,15 @@
             "limitationsTitle": "Teorainneacha reatha",
             "limitationVerification": "Níor fíoraíodh méarloirg teagmhálaithe fós — ní léiríonn na deilbhíní glais ach muinín-chéad-úsáide.",
             "limitationPersistence": "Maireann eochracha sa chuimhne don seisiún seo amháin; atosaíonn an aip iad.",
-            "limitationBackend": "Úsáideann cúlchóras criptiúcháin turgnamhach in Rust amháin; níl sé cruaite do chásanna ard-shlándála."
+            "limitationBackend": "Úsáideann cúlchóras criptiúcháin turgnamhach in Rust amháin; níl sé cruaite do chásanna ard-shlándála.",
+            "dangerZone": "Criosanna contúirte",
+            "deleteKey": "Scrios m'eochair OpenPGP",
+            "deleteKeyDescription": "Bainfear d'eochair phríobháideach go buan ón ngléas seo. Ní bheidh teachtaireachtaí a criptíodh leis an eochair seo inléite a thuilleadh. Cuirfear an criptiúchán as go dtí go gcruthóidh tú eochair nua.",
+            "deleteKeyConfirmTitle": "Scrios d'eochair OpenPGP?",
+            "deleteKeyConfirmMessage": "Díothóidh sé seo an eochair phríobháideach le méarlorg {{fingerprint}}. Ní bheidh tú in ann teachtaireachtaí atá caite a dhíchriptiú. Ní féidir an gníomh seo a chealú.",
+            "deleteKeyConfirmAction": "Scrios an eochair",
+            "deleteKeySuccess": "Eochair OpenPGP scriosta",
+            "deleteKeyFailed": "Níorbh fhéidir an eochair a scriosadh"
         }
     },
     "update": {

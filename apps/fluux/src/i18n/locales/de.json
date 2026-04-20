@@ -562,7 +562,15 @@
             "limitationsTitle": "Aktuelle Einschränkungen",
             "limitationVerification": "Kontakt-Fingerabdrücke werden noch nicht verifiziert — Schloss-Symbole zeigen nur Vertrauen bei erster Nutzung.",
             "limitationPersistence": "Die Schlüssel liegen nur während dieser Sitzung im Speicher; ein Neustart der App erzeugt sie neu.",
-            "limitationBackend": "Nutzt ein experimentelles Krypto-Backend in reinem Rust; nicht für Hochsicherheitsszenarien gehärtet."
+            "limitationBackend": "Nutzt ein experimentelles Krypto-Backend in reinem Rust; nicht für Hochsicherheitsszenarien gehärtet.",
+            "dangerZone": "Gefahrenbereich",
+            "deleteKey": "Meinen OpenPGP-Schlüssel löschen",
+            "deleteKeyDescription": "Entfernt Ihren privaten Schlüssel dauerhaft von diesem Gerät. Früher mit diesem Schlüssel verschlüsselte Nachrichten werden unlesbar. Die Verschlüsselung wird deaktiviert, bis Sie einen neuen Schlüssel erzeugen.",
+            "deleteKeyConfirmTitle": "OpenPGP-Schlüssel löschen?",
+            "deleteKeyConfirmMessage": "Dies zerstört den privaten Schlüssel mit Fingerabdruck {{fingerprint}}. Sie können vergangene Nachrichten nicht mehr entschlüsseln. Die Aktion kann nicht rückgängig gemacht werden.",
+            "deleteKeyConfirmAction": "Schlüssel löschen",
+            "deleteKeySuccess": "OpenPGP-Schlüssel gelöscht",
+            "deleteKeyFailed": "Schlüssel konnte nicht gelöscht werden"
         }
     },
     "update": {

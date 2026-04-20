@@ -560,7 +560,15 @@
             "limitationsTitle": "Nuvarande begränsningar",
             "limitationVerification": "Kontakternas fingeravtryck verifieras ännu inte — hänglåsikonerna visar bara förtroende vid första användningen.",
             "limitationPersistence": "Nycklar finns bara i minnet för den här sessionen; om appen startas om genereras de på nytt.",
-            "limitationBackend": "Använder en experimentell ren-Rust-kryptobackend; inte härdad för scenarier med höga säkerhetskrav."
+            "limitationBackend": "Använder en experimentell ren-Rust-kryptobackend; inte härdad för scenarier med höga säkerhetskrav.",
+            "dangerZone": "Farozon",
+            "deleteKey": "Ta bort min OpenPGP-nyckel",
+            "deleteKeyDescription": "Tar permanent bort din privata nyckel från den här enheten. Meddelanden som krypterats med nyckeln blir oläsliga. Krypteringen stängs av tills du genererar en ny nyckel.",
+            "deleteKeyConfirmTitle": "Ta bort din OpenPGP-nyckel?",
+            "deleteKeyConfirmMessage": "Detta förstör den privata nyckeln med fingeravtryck {{fingerprint}}. Du kommer inte kunna dekryptera tidigare meddelanden. Åtgärden kan inte ångras.",
+            "deleteKeyConfirmAction": "Ta bort nyckel",
+            "deleteKeySuccess": "OpenPGP-nyckeln har tagits bort",
+            "deleteKeyFailed": "Det gick inte att ta bort nyckeln"
         }
     },
     "update": {

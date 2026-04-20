@@ -561,7 +561,15 @@
             "limitationsTitle": "Limitations actuelles",
             "limitationVerification": "Les empreintes des contacts ne sont pas encore vérifiées — les icônes de cadenas reflètent seulement la confiance à la première utilisation.",
             "limitationPersistence": "Les clés ne résident qu'en mémoire pour cette session ; le redémarrage de l'application les régénère.",
-            "limitationBackend": "Utilise un backend cryptographique expérimental en Rust pur ; non durci pour des scénarios à fort niveau d'exigence."
+            "limitationBackend": "Utilise un backend cryptographique expérimental en Rust pur ; non durci pour des scénarios à fort niveau d'exigence.",
+            "dangerZone": "Zone sensible",
+            "deleteKey": "Supprimer ma clé OpenPGP",
+            "deleteKeyDescription": "Supprime définitivement votre clé privée de cet appareil. Les messages précédemment chiffrés avec cette clé deviennent illisibles. Le chiffrement est désactivé jusqu'à ce que vous génériez une nouvelle clé.",
+            "deleteKeyConfirmTitle": "Supprimer votre clé OpenPGP ?",
+            "deleteKeyConfirmMessage": "Cela détruit la clé privée d'empreinte {{fingerprint}}. Vous ne pourrez plus déchiffrer les messages passés. Cette action est irréversible.",
+            "deleteKeyConfirmAction": "Supprimer la clé",
+            "deleteKeySuccess": "Clé OpenPGP supprimée",
+            "deleteKeyFailed": "Impossible de supprimer la clé"
         }
     },
     "update": {

@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Copy, Check, Lock, AlertTriangle } from 'lucide-react'
+import { Copy, Check, Lock, AlertTriangle, Trash2 } from 'lucide-react'
 import { useConnection, useXMPPContext } from '@fluux/sdk'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { registerE2EEPlugins, unregisterE2EEPlugins } from '@/e2ee/registerPlugins'
 import { useToastStore } from '@/stores/toastStore'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 
 type PluginStatus = 'disabled' | 'generating' | 'ready' | 'waiting-online'
 
@@ -27,6 +28,8 @@ export function EncryptionSettings() {
   const [fingerprint, setFingerprint] = useState<string | null>(null)
   const [isCopied, setIsCopied] = useState(false)
   const [isToggling, setIsToggling] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const online = status === 'online'
   const pluginStatus: PluginStatus = !openpgpEnabled
@@ -102,6 +105,28 @@ export function EncryptionSettings() {
       addToast('error', t('settings.encryption.copyFailed'))
     }
   }, [fingerprint, addToast, t])
+
+  const handleDeleteKey = useCallback(async () => {
+    setIsDeleting(true)
+    try {
+      const plugin = client.e2ee.getPlugin('openpgp') as
+        | { deleteIdentity?: () => Promise<void> }
+        | null
+      if (plugin?.deleteIdentity) {
+        await plugin.deleteIdentity()
+      }
+      await unregisterE2EEPlugins(client)
+      setOpenpgpEnabled(false)
+      setFingerprint(null)
+      setShowDeleteConfirm(false)
+      addToast('success', t('settings.encryption.deleteKeySuccess'))
+    } catch (err) {
+      console.error('[Fluux] E2EE delete key failed:', err)
+      addToast('error', t('settings.encryption.deleteKeyFailed'))
+    } finally {
+      setIsDeleting(false)
+    }
+  }, [client, setOpenpgpEnabled, addToast, t])
 
   return (
     <section className="max-w-md w-full">
@@ -196,7 +221,42 @@ export function EncryptionSettings() {
             </ul>
           </div>
         </div>
+
+        {/* Destructive action — only when a key actually exists to delete. */}
+        {pluginStatus === 'ready' && (
+          <div className="space-y-2 pt-2 border-t border-fluux-hover">
+            <label className="text-sm font-medium text-fluux-text">
+              {t('settings.encryption.dangerZone')}
+            </label>
+            <p className="text-xs text-fluux-muted leading-snug">
+              {t('settings.encryption.deleteKeyDescription')}
+            </p>
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              disabled={isDeleting}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-red-500/10 hover:bg-red-500/20 text-red-500 dark:text-red-400 rounded transition-colors disabled:opacity-50 disabled:cursor-wait"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              {t('settings.encryption.deleteKey')}
+            </button>
+          </div>
+        )}
       </div>
+
+      {showDeleteConfirm && (
+        <ConfirmDialog
+          title={t('settings.encryption.deleteKeyConfirmTitle')}
+          message={t('settings.encryption.deleteKeyConfirmMessage', {
+            fingerprint: fingerprint ? formatFingerprint(fingerprint) : '',
+          })}
+          confirmLabel={t('settings.encryption.deleteKeyConfirmAction')}
+          variant="danger"
+          onConfirm={handleDeleteKey}
+          onCancel={() => {
+            if (!isDeleting) setShowDeleteConfirm(false)
+          }}
+        />
+      )}
     </section>
   )
 }

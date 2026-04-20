@@ -562,7 +562,15 @@
             "limitationsTitle": "Limitazzjonijiet attwali",
             "limitationVerification": "Il-marki tal-kuntatti għadhom ma jiġux ivverifikati — l-ikoni tal-lucchetto juru biss fiduċja fl-ewwel użu.",
             "limitationPersistence": "Iċ-ċwievet jgħixu biss fil-memorja għal din is-sessjoni; ir-restart tal-app jiġġenerahom mill-ġdid.",
-            "limitationBackend": "Juża backend kriptografiku sperimentali f'Rust pur; mhux imsaħħaħ għal xenarji ta' sigurtà għolja."
+            "limitationBackend": "Juża backend kriptografiku sperimentali f'Rust pur; mhux imsaħħaħ għal xenarji ta' sigurtà għolja.",
+            "dangerZone": "Żona ta' periklu",
+            "deleteKey": "Ħassar iċ-ċavetta OpenPGP tiegħi",
+            "deleteKeyDescription": "Jneħħi b'mod permanenti ċ-ċavetta privata tiegħek minn dan it-tagħmir. Il-messaġġi li qabel kienu kriptati b'din iċ-ċavetta jsiru illeġġibbli. Il-kriptaġġ jintefa sakemm tiġġenera ċavetta ġdida.",
+            "deleteKeyConfirmTitle": "Tħassar iċ-ċavetta OpenPGP tiegħek?",
+            "deleteKeyConfirmMessage": "Dan jeqred iċ-ċavetta privata bil-marka {{fingerprint}}. Ma tkunx tista' tiddikripta messaġġi ta' qabel. Din l-azzjoni ma tistax titreġġa' lura.",
+            "deleteKeyConfirmAction": "Ħassar iċ-ċavetta",
+            "deleteKeySuccess": "Iċ-ċavetta OpenPGP tħassret",
+            "deleteKeyFailed": "Iċ-ċavetta ma setgħetx titħassar"
         }
     },
     "update": {
