@@ -86,6 +86,19 @@ const isAuthStreamError = (message: string): boolean =>
   AUTH_STREAM_ERROR_MARKERS.some(marker => message.includes(marker))
 
 /**
+ * Thrown by `runTimedConnectionAttempt` when its timeout fires for a client
+ * that has already been replaced by a newer attempt. The outer `connect()`
+ * catch uses `instanceof` to swallow it silently instead of emitting a
+ * spurious CONNECTION_ERROR on the new attempt.
+ */
+class SupersededConnectionAttemptError extends Error {
+  constructor(timeoutLabel: string) {
+    super(`${timeoutLabel} superseded`)
+    this.name = 'SupersededConnectionAttemptError'
+  }
+}
+
+/**
  * Connection lifecycle and stream management module.
  *
  * Handles the XMPP connection lifecycle including:
@@ -635,7 +648,7 @@ export class Connection extends BaseModule {
       await attemptConnection(directWebSocketUrl, 'websocket')
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err))
-      if (error.message === 'Connection attempt superseded') {
+      if (error instanceof SupersededConnectionAttemptError) {
         logInfo('connect(): stale timed-out attempt superseded, ignoring')
         return
       }
@@ -1631,10 +1644,13 @@ export class Connection extends BaseModule {
 
     return new Promise<void>((resolve, reject) => {
       const attemptStart = Date.now()
-      let timeoutId: ReturnType<typeof setTimeout> | undefined
-      let abortHandlers: (() => void) | undefined
 
-      timeoutId = setTimeout(() => {
+      // `timeoutId` and `abortHandlers` reference each other inside async
+      // callbacks (the timeout calls abortHandlers; the handlers clear the
+      // timeout). The forward reference to `abortHandlers` inside the setTimeout
+      // callback is safe because the callback runs later, after both consts
+      // are initialized.
+      const timeoutId = setTimeout(() => {
         const elapsed = Date.now() - attemptStart
         if (elapsed > RECONNECT_ATTEMPT_TIMEOUT_MS * 1.5) {
           logInfo(
@@ -1643,13 +1659,13 @@ export class Connection extends BaseModule {
         }
 
         // Prevent any late events from this client from resolving the attempt.
-        abortHandlers?.()
+        abortHandlers()
 
         // If another attempt already replaced this client (or a manual
         // disconnect cleared it), do not touch the current client state.
         if (this.xmpp !== clientForThisAttempt) {
           logInfo(`${timeoutLabel} timeout fired for superseded client, skipping cleanup`)
-          reject(new Error(`${timeoutLabel} superseded`))
+          reject(new SupersededConnectionAttemptError(timeoutLabel))
           return
         }
 
@@ -1658,11 +1674,9 @@ export class Connection extends BaseModule {
         reject(new Error(`${timeoutLabel} timed out after ${Math.round(elapsed / 1000)}s`))
       }, RECONNECT_ATTEMPT_TIMEOUT_MS)
 
-      abortHandlers = this.setupConnectionHandlers(
+      const abortHandlers = this.setupConnectionHandlers(
         async (isResumption) => {
-          if (timeoutId) {
-            clearTimeout(timeoutId)
-          }
+          clearTimeout(timeoutId)
           try {
             await onConnected(isResumption)
             resolve()
@@ -1671,9 +1685,7 @@ export class Connection extends BaseModule {
           }
         },
         (err) => {
-          if (timeoutId) {
-            clearTimeout(timeoutId)
-          }
+          clearTimeout(timeoutId)
           reject(err)
         }
       )
