@@ -117,6 +117,9 @@ export const NS_CONVERSATIONS = 'urn:xmpp:fluux:conversations:0'
 // XEP-0334: Message Processing Hints
 export const NS_HINTS = 'urn:xmpp:hints'
 
+// XEP-0380: Explicit Message Encryption
+export const NS_EME = 'urn:xmpp:eme:0'
+
 // XEP-0422: Message Fastening
 export const NS_FASTEN = 'urn:xmpp:fasten:0'
 

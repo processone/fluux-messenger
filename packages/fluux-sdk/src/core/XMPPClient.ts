@@ -107,6 +107,8 @@ import { EntityTime } from './modules/EntityTime'
 import { LastActivity } from './modules/LastActivity'
 import { MAM } from './modules/MAM'
 import { Poll } from './modules/Poll'
+import { E2EEManager, InMemoryStorageBackend, type StorageBackend, type XMPPPrimitives } from './e2ee'
+import { dataToElement } from './e2ee/stanzaAdapter'
 import { NS_CARBONS, NS_MAM, NS_P1_PUSH_WEBPUSH } from './namespaces'
 import { createDefaultStoreBindings, type DefaultStoreBindingsOptions } from './defaultStoreBindings'
 import { logInfo } from './logger'
@@ -179,6 +181,7 @@ import { SDK_VERSION } from '../version'
 export class XMPPClient {
   protected currentJid: string | null = null
   private storageAdapter?: StorageAdapter
+  private e2eeStorageBackend: StorageBackend = new InMemoryStorageBackend()
   private proxyAdapter?: ProxyAdapter
   private privacyOptions?: PrivacyOptions
   private stateSnapshot?: StateSnapshot
@@ -194,6 +197,16 @@ export class XMPPClient {
    * Handles messages, reactions, chat states, corrections, and MAM queries.
    */
   public chat!: Chat
+
+  /**
+   * End-to-end encryption plugin host.
+   *
+   * Apps register {@link E2EEPlugin} implementations here after the client
+   * is `online`; the Chat module consults the manager when sending and
+   * receiving messages. No plugins are registered by default — messages
+   * flow in cleartext until the app opts in by calling `e2ee.register()`.
+   */
+  public e2ee!: E2EEManager
 
   /**
    * Roster management module.
@@ -568,6 +581,32 @@ export class XMPPClient {
 
     this.stores = stores
 
+    // Build the E2EEManager early so modules can consult it during stanza
+    // handling. The XMPPPrimitives adapter wires sendStanza through and stubs
+    // PEP helpers that real plugins will need in a later slice.
+    const e2eePrimitives: XMPPPrimitives = {
+      sendStanza: async (data) => {
+        await this.sendStanza(dataToElement(data))
+      },
+      queryDisco: async () => {
+        throw new Error('E2EE: queryDisco primitive is not implemented in this build')
+      },
+      publishPEP: async () => {
+        throw new Error('E2EE: publishPEP primitive is not implemented in this build')
+      },
+      queryPEP: async () => {
+        throw new Error('E2EE: queryPEP primitive is not implemented in this build')
+      },
+      subscribePEP: () => {
+        throw new Error('E2EE: subscribePEP primitive is not implemented in this build')
+      },
+    }
+    this.e2ee = new E2EEManager({
+      storage: this.e2eeStorageBackend,
+      xmpp: e2eePrimitives,
+      account: { jid: this.currentJid ? getBareJid(this.currentJid) : '' },
+    })
+
     const moduleDeps = {
       stores: this.stores,
       sendStanza: (stanza: Element) => this.sendStanza(stanza),
@@ -580,6 +619,7 @@ export class XMPPClient {
       proxyAdapter: this.proxyAdapter,
       registerMAMCollector: (queryId: string, collector: (stanza: Element) => void) => this.registerMAMCollector(queryId, collector),
       privacyOptions: this.privacyOptions,
+      getE2EEManager: () => this.e2ee,
     }
 
     this.connection = new Connection(moduleDeps)

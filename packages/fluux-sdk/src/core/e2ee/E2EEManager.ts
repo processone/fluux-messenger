@@ -3,7 +3,6 @@ import { createPluginStorage, type StorageBackend } from './PluginStorage'
 import type {
   AccountInfo,
   BareJID,
-  ConversationHandle,
   ConversationTarget,
   DecryptResult,
   E2EEPlugin,
@@ -190,20 +189,22 @@ export class E2EEManager {
    * End-to-end outbound helper: pick a strategy, open a conversation, encrypt.
    * Returns `null` if no plugin is available — the caller decides whether to
    * fall back to plaintext (requires explicit user opt-in per architecture).
+   *
+   * The handle is opened and closed internally; plugins that need persistent
+   * state should cache it themselves, keyed by `target`.
    */
   async encryptOutbound(
     target: ConversationTarget,
     plaintext: Uint8Array,
-  ): Promise<{ plugin: E2EEPlugin; handle: ConversationHandle; payload: EncryptedPayload } | null> {
+  ): Promise<{ plugin: E2EEPlugin; payload: EncryptedPayload } | null> {
     const plugin = await this.selectStrategy(target)
     if (!plugin) return null
     const handle = await plugin.openConversation(target)
     try {
       const payload = await plugin.encrypt(handle, plaintext)
-      return { plugin, handle, payload }
-    } catch (err) {
+      return { plugin, payload }
+    } finally {
       await plugin.closeConversation(handle).catch(() => {})
-      throw err
     }
   }
 

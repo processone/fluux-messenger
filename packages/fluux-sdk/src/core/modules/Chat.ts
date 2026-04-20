@@ -1,4 +1,5 @@
-import { xml, Element } from '@xmpp/client'
+import { xml } from '@xmpp/client'
+import type { Element } from '@xmpp/client'
 import { BaseModule, type ModuleDependencies } from './BaseModule'
 import { getBareJid, getLocalPart, getResource, isQuickChatJid } from '../jid'
 import { isMucJid } from '../../utils/xmppUri'
@@ -22,12 +23,15 @@ import {
   NS_REFERENCE,
   NS_MENTION_ALL,
   NS_HINTS,
+  NS_EME,
   NS_FLUUX,
   NS_OCCUPANT_ID,
   NS_MESSAGE_MODERATE,
   NS_POLL,
   NS_DELAY,
 } from '../namespaces'
+import { dataToElement, elementToData } from '../e2ee/stanzaAdapter'
+import type { E2EEManager, E2EEPlugin, EncryptedPayload, SecurityContext } from '../e2ee'
 import type {
   Message,
   MentionReference,
@@ -147,6 +151,15 @@ export class Chat extends BaseModule {
       if (forwardedMessage) {
         return this.handleMessageInternal(forwardedMessage, true, !!carbonSent)
       }
+      return { handled: true }
+    }
+
+    // E2EE decrypt hook: if a registered plugin claims one of the stanza's
+    // children, decrypt asynchronously, then re-enter this method with the
+    // plaintext body in place of the encrypted element. Returning
+    // `{ handled: true }` here prevents other modules from also processing
+    // the encrypted stanza.
+    if (this.tryHandleEncrypted(stanza, isCarbonCopy, isSentCarbon)) {
       return { handled: true }
     }
 
@@ -301,6 +314,88 @@ export class Chat extends BaseModule {
     return { handled: false }
   }
 
+  /**
+   * Look for an E2EE-plugin-claimed element in this stanza. If found, kick
+   * off the async decrypt-and-reprocess flow and return true. Returns false
+   * if no manager is available, no plugin claims a child, or the stanza
+   * has already been decrypted in a previous pass (guarded by a marker).
+   */
+  private tryHandleEncrypted(
+    stanza: Element,
+    isCarbonCopy: boolean,
+    isSentCarbon: boolean,
+  ): boolean {
+    const manager = this.deps.getE2EEManager?.()
+    if (!manager) return false
+    // The re-entered call after decryption has the marker set; skip the hook
+    // then so we don't loop on our own synthetic state.
+    if ((stanza as unknown as { __e2eeDecrypted?: boolean }).__e2eeDecrypted) {
+      return false
+    }
+
+    for (const child of stanza.children) {
+      if (typeof child === 'string') continue
+      const childEl = child as Element
+      const claim = manager.claimInbound(elementToData(childEl))
+      if (claim) {
+        void this.decryptAndReprocess(manager, claim, childEl, stanza, isCarbonCopy, isSentCarbon)
+        return true
+      }
+    }
+    return false
+  }
+
+  private async decryptAndReprocess(
+    manager: E2EEManager,
+    claim: { plugin: E2EEPlugin; payload: EncryptedPayload },
+    encryptedChild: Element,
+    stanza: Element,
+    isCarbonCopy: boolean,
+    isSentCarbon: boolean,
+  ): Promise<void> {
+    const from = stanza.attrs.from
+    const bareFrom = from ? getBareJid(from) : ''
+    try {
+      const result = await manager.decryptInbound(claim.payload.stanzaElement, {
+        kind: 'direct',
+        peer: bareFrom,
+      })
+      if (!result) {
+        logWarn(`E2EE decrypt returned null for ${bareFrom}`)
+        return
+      }
+
+      const plaintext = new TextDecoder().decode(result.plaintext)
+
+      // Strip the encrypted element so the re-entered call doesn't re-claim it.
+      const idx = stanza.children.indexOf(encryptedChild)
+      if (idx >= 0) stanza.children.splice(idx, 1)
+
+      // Replace the fallback body with decrypted plaintext.
+      const bodyEl = stanza.getChild('body')
+      if (bodyEl) {
+        bodyEl.children = [plaintext]
+      } else {
+        stanza.children.push(xml('body', {}, plaintext))
+      }
+
+      // Stash security context for downstream consumers (wire-through in a
+      // later slice — Message type doesn't carry it yet).
+      this.attachSecurityContext(stanza, result.securityContext)
+
+      // Mark as already-decrypted so tryHandleEncrypted bails out on re-entry.
+      ;(stanza as unknown as { __e2eeDecrypted: boolean }).__e2eeDecrypted = true
+
+      this.handleMessageInternal(stanza, isCarbonCopy, isSentCarbon)
+    } catch (err) {
+      logWarn(`E2EE decrypt failed for message from ${bareFrom}: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  private attachSecurityContext(stanza: Element, securityContext: SecurityContext): void {
+    ;(stanza as unknown as { __securityContext?: SecurityContext }).__securityContext = securityContext
+  }
+
   // --- Chat Methods (Outgoing) ---
 
   /**
@@ -444,6 +539,46 @@ export class Chat extends BaseModule {
 
     // XEP-0359: Include origin-id for echo deduplication
     children.push(createOriginIdElement(id))
+
+    // E2EE hook: if a plugin is registered and selects this 1:1 recipient,
+    // replace the plaintext <body> with a fallback and append the encrypted
+    // element, EME (XEP-0380), and MAM store hint (XEP-0334).
+    // MUC encryption is a later phase.
+    if (type === 'chat') {
+      const manager = this.deps.getE2EEManager?.()
+      if (manager) {
+        try {
+          const result = await manager.encryptOutbound(
+            { kind: 'direct', peer: recipient },
+            new TextEncoder().encode(fullBody),
+          )
+          if (result) {
+            const bodyIdx = children.findIndex(
+              (c) => c instanceof Element && c.name === 'body',
+            )
+            const fallbackBody =
+              result.payload.fallbackBody ?? '[encrypted message]'
+            if (bodyIdx >= 0) {
+              children[bodyIdx] = xml('body', {}, fallbackBody)
+            } else {
+              children.unshift(xml('body', {}, fallbackBody))
+            }
+            children.push(dataToElement(result.payload.stanzaElement))
+            children.push(
+              xml('encryption', {
+                xmlns: NS_EME,
+                namespace:
+                  result.payload.stanzaElement.attrs.xmlns ??
+                  result.payload.protocolId,
+              }),
+            )
+            children.push(xml('store', { xmlns: NS_HINTS }))
+          }
+        } catch (err) {
+          logWarn(`E2EE encrypt failed for ${recipient}, sending plaintext: ${err instanceof Error ? err.message : String(err)}`)
+        }
+      }
+    }
 
     const message = xml('message', { to: recipient, type, id }, ...children)
     await this.deps.sendStanza(message)
