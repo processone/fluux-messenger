@@ -71,10 +71,15 @@ function makeFakeRust() {
         return bundle as T
       }
       case 'openpgp_encrypt': {
+        const senderJid = args!.senderAccountJid as string
+        const senderBundle = accounts.get(senderJid)
+        if (!senderBundle) throw new Error(`no key for sender account: ${senderJid}`)
         const recipientFp = extractFingerprint(args!.recipientPublicArmored as string)
         if (!recipientFp) throw new Error('bad recipient key')
         const encoded = btoa(unescape(encodeURIComponent(args!.plaintext as string)))
-        return `${STUB_ENCRYPT_PREFIX}${recipientFp}:${encoded}` as T
+        // Embed both fingerprints so decrypt can simulate signcrypt:
+        //   OPENPGP-STUB:<recipientFp>:<senderFp>:<base64-plaintext>
+        return `${STUB_ENCRYPT_PREFIX}${recipientFp}:${senderBundle.fingerprint}:${encoded}` as T
       }
       case 'openpgp_decrypt': {
         const jid = args!.accountJid as string
@@ -82,13 +87,35 @@ function makeFakeRust() {
         if (!bundle) throw new Error(`no key for ${jid}`)
         const ciphertext = args!.ciphertext as string
         if (!ciphertext.startsWith(STUB_ENCRYPT_PREFIX)) throw new Error('not a stub ciphertext')
-        const rest = ciphertext.slice(STUB_ENCRYPT_PREFIX.length)
-        const colon = rest.indexOf(':')
-        const targetFp = rest.slice(0, colon)
+        const parts = ciphertext.slice(STUB_ENCRYPT_PREFIX.length).split(':')
+        if (parts.length !== 3) {
+          throw new Error(`malformed stub ciphertext (expected 3 parts, got ${parts.length})`)
+        }
+        const [targetFp, embeddedSenderFp, payload] = parts
         if (targetFp !== bundle.fingerprint) {
           throw new Error(`addressed to ${targetFp}, this account holds ${bundle.fingerprint}`)
         }
-        return decodeURIComponent(escape(atob(rest.slice(colon + 1)))) as T
+        const plaintext = decodeURIComponent(escape(atob(payload)))
+
+        // Simulate signature verification: only succeeds if a sender cert
+        // was supplied AND its fingerprint matches the one embedded at
+        // encrypt time.
+        let signatureVerified = false
+        let signerFingerprint: string | null = null
+        const senderArmored = args!.senderPublicArmored as string | null | undefined
+        if (senderArmored) {
+          const claimedFp = extractFingerprint(senderArmored)
+          if (claimedFp && claimedFp === embeddedSenderFp) {
+            signatureVerified = true
+            signerFingerprint = embeddedSenderFp
+          }
+        }
+
+        return {
+          plaintext,
+          signatureVerified,
+          signerFingerprint,
+        } as T
       }
       case 'openpgp_forget_account': {
         accounts.delete(args!.accountJid as string)
@@ -105,6 +132,47 @@ function makeFakeRust() {
   }
 
   return { invoke, accounts }
+}
+
+/**
+ * Build two fully-wired plugin instances (alice + bob) that have published
+ * their own keys to their respective PEP nodes AND mutually exposed them
+ * via their peer-publish maps. Returned plugins are NOT yet probed — that's
+ * up to the individual test so we can cover the "peer key not cached" path.
+ */
+async function buildCrossPublishedPair(fake: ReturnType<typeof makeFakeRust>): Promise<{
+  alice: { plugin: SequoiaPgpPlugin; ctx: PluginContext }
+  bob: { plugin: SequoiaPgpPlugin; ctx: PluginContext }
+}> {
+  const alicePlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+  const bobPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+  const aliceBuilt = makeContext('alice@example.com')
+  const bobBuilt = makeContext('bob@example.com')
+  await alicePlugin.init(aliceBuilt.ctx)
+  await bobPlugin.init(bobBuilt.ctx)
+
+  const publishPubkeyItemFor = async (jid: string) => {
+    const bundle = await fake.invoke<KeyBundle>('openpgp_generate_key', {
+      accountJid: jid,
+      userId: jid,
+    })
+    return {
+      id: bundle.fingerprint,
+      payload: {
+        name: 'pubkey',
+        attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+        children: [btoa(unescape(encodeURIComponent(bundle.publicArmored)))],
+      },
+    }
+  }
+
+  aliceBuilt.peerPublish('bob@example.com', await publishPubkeyItemFor('bob@example.com'))
+  bobBuilt.peerPublish('alice@example.com', await publishPubkeyItemFor('alice@example.com'))
+
+  return {
+    alice: { plugin: alicePlugin, ctx: aliceBuilt.ctx },
+    bob: { plugin: bobPlugin, ctx: bobBuilt.ctx },
+  }
 }
 
 function makeContext(accountJid: string): { ctx: PluginContext; published: Array<{ node: string; item: PEPItem }>; peerPublish: (peer: string, item: PEPItem) => void } {
@@ -226,57 +294,80 @@ describe('SequoiaPgpPlugin', () => {
   })
 
   describe('encrypt / decrypt round-trip', () => {
-    it('encrypts for a probed peer, decrypts back to plaintext', async () => {
-      const alice = new SequoiaPgpPlugin({ invoke: fake.invoke })
-      const bob = new SequoiaPgpPlugin({ invoke: fake.invoke })
+    it('encrypts for a probed peer, decrypts back to plaintext with signature verified', async () => {
+      const { alice, bob } = await buildCrossPublishedPair(fake)
 
-      const { ctx: aliceCtx, peerPublish: alicePub } = makeContext('alice@example.com')
-      const { ctx: bobCtx, peerPublish: bobPub } = makeContext('bob@example.com')
-      await alice.init(aliceCtx)
-      await bob.init(bobCtx)
-
-      // Cross-publish so each side can fetch the other's key.
-      alicePub('bob@example.com', {
-        id: bob.getOwnFingerprint()!,
-        payload: {
-          name: 'pubkey',
-          attrs: { xmlns: 'urn:xmpp:openpgp:0' },
-          children: [btoa(unescape(encodeURIComponent(
-            (await fake.invoke<KeyBundle>('openpgp_generate_key', {
-              accountJid: 'bob@example.com',
-              userId: 'bob@example.com',
-            })).publicArmored,
-          )))],
-        },
-      })
-      bobPub('alice@example.com', {
-        id: alice.getOwnFingerprint()!,
-        payload: {
-          name: 'pubkey',
-          attrs: { xmlns: 'urn:xmpp:openpgp:0' },
-          children: [btoa(unescape(encodeURIComponent(
-            (await fake.invoke<KeyBundle>('openpgp_generate_key', {
-              accountJid: 'alice@example.com',
-              userId: 'alice@example.com',
-            })).publicArmored,
-          )))],
-        },
-      })
-
-      // Alice encrypts to Bob.
-      await alice.probePeer('bob@example.com')
-      const handle = await alice.openConversation({ kind: 'direct', peer: 'bob@example.com' })
-      const payload = await alice.encrypt(handle, new TextEncoder().encode('hello bob'))
+      await alice.plugin.probePeer('bob@example.com')
+      const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
+      const payload = await alice.plugin.encrypt(handle, new TextEncoder().encode('hello bob'))
       expect(payload.stanzaElement.name).toBe('openpgp')
       expect(payload.fallbackBody).toContain('OpenPGP')
 
-      // Bob receives and decrypts.
-      const claim = bob.tryClaimInbound(payload.stanzaElement)
+      // Bob has cached Alice's public key, so the inbound signature should verify.
+      await bob.plugin.probePeer('alice@example.com')
+
+      const claim = bob.plugin.tryClaimInbound(payload.stanzaElement)
       expect(claim).not.toBeNull()
-      const bobHandle = await bob.openConversation({ kind: 'direct', peer: 'alice@example.com' })
-      const decrypted = await bob.decrypt(bobHandle, claim!)
+      const bobHandle = await bob.plugin.openConversation({ kind: 'direct', peer: 'alice@example.com' })
+      const decrypted = await bob.plugin.decrypt(bobHandle, claim!)
       expect(new TextDecoder().decode(decrypted.plaintext)).toBe('hello bob')
       expect(decrypted.securityContext.protocolId).toBe('openpgp')
+      expect(decrypted.securityContext.trust).toBe('trusted')
+      expect(decrypted.securityContext.notes).toBeUndefined()
+      expect(decrypted.senderDevice.deviceId).toBe(alice.plugin.getOwnFingerprint())
+    })
+
+    it('marks trust untrusted when the sender key is not cached at decrypt time', async () => {
+      const { alice, bob } = await buildCrossPublishedPair(fake)
+
+      // Alice has bob cached (probed during publish), encrypts.
+      await alice.plugin.probePeer('bob@example.com')
+      const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
+      const payload = await alice.plugin.encrypt(handle, new TextEncoder().encode('hi'))
+
+      // Bob has NOT probed alice, so he can decrypt but cannot verify.
+      const claim = bob.plugin.tryClaimInbound(payload.stanzaElement)!
+      const bobHandle = await bob.plugin.openConversation({ kind: 'direct', peer: 'alice@example.com' })
+      const decrypted = await bob.plugin.decrypt(bobHandle, claim)
+
+      expect(new TextDecoder().decode(decrypted.plaintext)).toBe('hi')
+      expect(decrypted.securityContext.trust).toBe('untrusted')
+      expect(decrypted.securityContext.notes?.join(' ')).toMatch(/Sender key not cached/)
+    })
+
+    it('marks trust untrusted when the signature does not match the cached sender cert', async () => {
+      const { alice, bob } = await buildCrossPublishedPair(fake)
+      await alice.plugin.probePeer('bob@example.com')
+      const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
+      const payload = await alice.plugin.encrypt(handle, new TextEncoder().encode('hi'))
+
+      // Before decrypting, poison Bob's cached copy of Alice's key with
+      // Eve's (a completely unrelated third account). Decrypt must flag
+      // the signature mismatch.
+      const evePubkey = await fake.invoke<KeyBundle>('openpgp_generate_key', {
+        accountJid: 'eve@example.com',
+        userId: 'eve@example.com',
+      })
+      // Reach into the plugin's internals via the test-only probe seed path:
+      // re-issue probePeer after overwriting the PEP result with eve's key.
+      ;(bob.ctx.xmpp.queryPEP as (jid: string, node: string) => Promise<PEPItem[]>) =
+        async () => [{
+          id: evePubkey.fingerprint,
+          payload: {
+            name: 'pubkey',
+            attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+            children: [btoa(unescape(encodeURIComponent(evePubkey.publicArmored)))],
+          },
+        }]
+      await bob.plugin.probePeer('alice@example.com')
+
+      const claim = bob.plugin.tryClaimInbound(payload.stanzaElement)!
+      const bobHandle = await bob.plugin.openConversation({ kind: 'direct', peer: 'alice@example.com' })
+      const decrypted = await bob.plugin.decrypt(bobHandle, claim)
+
+      expect(new TextDecoder().decode(decrypted.plaintext)).toBe('hi')
+      expect(decrypted.securityContext.trust).toBe('untrusted')
+      expect(decrypted.securityContext.notes?.join(' ')).toMatch(/Signature did not verify/)
     })
 
     it('encrypt refuses when the peer key is not cached', async () => {

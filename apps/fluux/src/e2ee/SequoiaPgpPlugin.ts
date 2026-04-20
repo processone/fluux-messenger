@@ -40,6 +40,14 @@ interface KeyBundle {
   secretArmored: string
 }
 
+/** Shape of the Rust-side `DecryptOutput` (kept in sync with `openpgp.rs`). */
+interface RustDecryptOutput {
+  plaintext: string
+  signatureVerified: boolean
+  /** Present when the Rust side matched a signature against the supplied sender cert. */
+  signerFingerprint: string | null
+}
+
 /**
  * Typed wrapper over Tauri's `invoke`. Abstracted so tests can inject a
  * fake implementation without dynamically importing `@tauri-apps/api/core`.
@@ -176,6 +184,7 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
   }
 
   async encrypt(handle: ConversationHandle, plaintext: Uint8Array): Promise<EncryptedPayload> {
+    const ctx = this.requireCtx()
     const peer = extractPeer(handle)
     const peerBundle = this.peerKeys.get(peer)
     if (!peerBundle) {
@@ -184,6 +193,7 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
 
     const plaintextStr = new TextDecoder().decode(plaintext)
     const ciphertext = await this.invoke<string>('openpgp_encrypt', {
+      senderAccountJid: ctx.account.jid,
       recipientPublicArmored: peerBundle.publicArmored,
       plaintext: plaintextStr,
     })
@@ -211,22 +221,65 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
     }
     const ciphertext = base64Decode(encodedCiphertext)
 
-    const plaintextStr = await this.invoke<string>('openpgp_decrypt', {
+    const peer = extractPeer(handle)
+    const senderPublicArmored = this.peerKeys.get(peer)?.publicArmored ?? null
+
+    const rust = await this.invoke<RustDecryptOutput>('openpgp_decrypt', {
       accountJid: ctx.account.jid,
       ciphertext,
+      senderPublicArmored,
     })
-    const plaintext = new TextEncoder().encode(plaintextStr)
 
-    const peer = extractPeer(handle)
-    const trust = await this.evaluatePeerTrust(peer)
-    const securityContext: SecurityContext = {
-      protocolId: descriptor.id,
-      trust: trust === 'unknown' ? 'untrusted' : trust,
-    }
+    const plaintext = new TextEncoder().encode(rust.plaintext)
+    const securityContext = this.buildInboundSecurityContext(peer, rust)
+
     return {
       plaintext,
-      senderDevice: { jid: peer, deviceId: this.peerKeys.get(peer)?.fingerprint ?? 'unknown' },
+      senderDevice: {
+        jid: peer,
+        deviceId: rust.signerFingerprint ?? this.peerKeys.get(peer)?.fingerprint ?? 'unknown',
+      },
       securityContext,
+    }
+  }
+
+  /**
+   * Turn the Rust-side signature verification result into the trust state
+   * the Chat UI renders. Three outcomes:
+   *
+   * - `trusted`   — signature verified against the peer's cached cert. This
+   *                 is the BTBV "seen-this-peer-before + message actually
+   *                 signed by them" state. Upgraded to `verified` only via
+   *                 an explicit user verification action (future slice).
+   * - `untrusted` — no cached peer cert (verification couldn't be
+   *                 attempted), signature missing, or signature didn't
+   *                 match the peer's cert. The user sees a yellow lock.
+   *
+   * The sanity check that `signerFingerprint` matches the cached peer's
+   * own fingerprint guards against a future bug where Rust returns a
+   * valid signature from the wrong cert; defence in depth.
+   */
+  private buildInboundSecurityContext(
+    peer: BareJID,
+    rust: RustDecryptOutput,
+  ): SecurityContext {
+    const cached = this.peerKeys.get(peer)
+    const fingerprintMatches =
+      cached && rust.signerFingerprint && cached.fingerprint === rust.signerFingerprint
+    const trust: SecurityContext['trust'] =
+      rust.signatureVerified && fingerprintMatches ? 'trusted' : 'untrusted'
+
+    const notes: string[] = []
+    if (!rust.signatureVerified) {
+      notes.push(cached ? 'Signature did not verify' : 'Sender key not cached — signature not checked')
+    } else if (!fingerprintMatches) {
+      notes.push('Signature verified but fingerprint does not match cached peer')
+    }
+
+    return {
+      protocolId: descriptor.id,
+      trust,
+      ...(notes.length > 0 && { notes }),
     }
   }
 

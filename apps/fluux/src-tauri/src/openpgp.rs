@@ -5,6 +5,14 @@
 //! operations it cannot perform in the web layer. The crypto is provided by
 //! [Sequoia-PGP](https://sequoia-pgp.org/) with its pure-Rust backend.
 //!
+//! # Signcrypt
+//!
+//! Outgoing messages are encrypted to the recipient **and** signed with the
+//! sender's signing subkey. On decrypt, if the caller supplies the sender's
+//! public key, we verify the signature and return the signing fingerprint so
+//! the UI can lift trust from `untrusted` to `trusted` for messages that
+//! match a known peer.
+//!
 //! # Key material lifecycle
 //!
 //! Keys live only in process memory, keyed on the account JID. The TS
@@ -16,7 +24,7 @@ use anyhow::{anyhow, Context, Result};
 use sequoia_openpgp as openpgp;
 use serde::{Deserialize, Serialize};
 use std::io::Write as _;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::State;
 
 use openpgp::{
@@ -25,17 +33,18 @@ use openpgp::{
     packet::{PKESK, SKESK},
     parse::{
         stream::{
-            DecryptionHelper, DecryptorBuilder, MessageStructure, VerificationHelper,
+            DecryptionHelper, DecryptorBuilder, MessageLayer, MessageStructure,
+            VerificationHelper,
         },
         Parse,
     },
     policy::StandardPolicy,
     serialize::{
-        stream::{Armorer, Encryptor, LiteralWriter, Message, Recipient},
+        stream::{Armorer, Encryptor, LiteralWriter, Message, Recipient, Signer},
         SerializeInto,
     },
     types::SymmetricAlgorithm,
-    Fingerprint, KeyHandle,
+    Cert as _Cert, Fingerprint, KeyHandle,
 };
 
 /// Serializable output of [`openpgp_generate_key`].
@@ -48,6 +57,22 @@ pub struct KeyBundle {
     pub public_armored: String,
     /// ASCII-armored secret key block. Callers must treat as sensitive.
     pub secret_armored: String,
+}
+
+/// Serializable output of [`openpgp_decrypt`].
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DecryptOutput {
+    /// Decrypted plaintext.
+    pub plaintext: String,
+    /// `true` iff the TS side supplied a `sender_public_armored` and at least
+    /// one signature in the message was made by one of that cert's signing
+    /// subkeys. `false` when verification wasn't attempted (no sender key
+    /// provided) or no valid signature was found.
+    pub signature_verified: bool,
+    /// Fingerprint of the signing subkey's cert, when a signature was
+    /// successfully verified. `None` otherwise.
+    pub signer_fingerprint: Option<String>,
 }
 
 /// State held by the Tauri managed-state system. One entry per logged-in
@@ -77,7 +102,39 @@ impl OpenpgpState {
         Ok(bundle)
     }
 
-    pub fn decrypt(&self, account_jid: &str, ciphertext: &str) -> Result<String, String> {
+    /// Encrypt `plaintext` to `recipient_public_armored`, signed with the
+    /// secret key stored for `sender_account_jid`. Matches the XEP-0373
+    /// signcrypt convention — every encrypted payload carries a signature.
+    pub fn encrypt(
+        &self,
+        sender_account_jid: &str,
+        recipient_public_armored: &str,
+        plaintext: &str,
+    ) -> Result<String, String> {
+        let sender_secret = {
+            let accounts = self
+                .accounts
+                .lock()
+                .map_err(|e| format!("openpgp state poisoned: {e}"))?;
+            accounts
+                .get(sender_account_jid)
+                .map(|b| b.secret_armored.clone())
+                .ok_or_else(|| format!("no key for sender account: {sender_account_jid}"))?
+        };
+
+        encrypt_and_sign(recipient_public_armored, &sender_secret, plaintext)
+            .map_err(anyhow_to_string)
+    }
+
+    /// Decrypt `ciphertext` with the secret key for `account_jid`. When
+    /// `sender_public_armored` is provided, verify signatures against that
+    /// cert and report the verified signer fingerprint.
+    pub fn decrypt(
+        &self,
+        account_jid: &str,
+        ciphertext: &str,
+        sender_public_armored: Option<&str>,
+    ) -> Result<DecryptOutput, String> {
         let secret_armored = {
             let accounts = self
                 .accounts
@@ -89,7 +146,8 @@ impl OpenpgpState {
                 .ok_or_else(|| format!("no key for account: {account_jid}"))?
         };
 
-        decrypt_message(&secret_armored, ciphertext).map_err(anyhow_to_string)
+        decrypt_and_verify(&secret_armored, ciphertext, sender_public_armored)
+            .map_err(anyhow_to_string)
     }
 
     pub fn forget_account(&self, account_jid: &str) -> Result<(), String> {
@@ -100,13 +158,6 @@ impl OpenpgpState {
         accounts.remove(account_jid);
         Ok(())
     }
-}
-
-pub fn encrypt_for_recipient(
-    recipient_public_armored: &str,
-    plaintext: &str,
-) -> Result<String, String> {
-    encrypt_message(recipient_public_armored, plaintext).map_err(anyhow_to_string)
 }
 
 pub fn fingerprint_of(public_armored: &str) -> Result<String, String> {
@@ -130,19 +181,22 @@ pub fn openpgp_generate_key(
 
 #[tauri::command]
 pub fn openpgp_encrypt(
+    sender_account_jid: String,
     recipient_public_armored: String,
     plaintext: String,
+    state: State<'_, OpenpgpState>,
 ) -> Result<String, String> {
-    encrypt_for_recipient(&recipient_public_armored, &plaintext)
+    state.encrypt(&sender_account_jid, &recipient_public_armored, &plaintext)
 }
 
 #[tauri::command]
 pub fn openpgp_decrypt(
     account_jid: String,
     ciphertext: String,
+    sender_public_armored: Option<String>,
     state: State<'_, OpenpgpState>,
-) -> Result<String, String> {
-    state.decrypt(&account_jid, &ciphertext)
+) -> Result<DecryptOutput, String> {
+    state.decrypt(&account_jid, &ciphertext, sender_public_armored.as_deref())
 }
 
 #[tauri::command]
@@ -198,10 +252,16 @@ fn armored_string(cert: &Cert, kind: KeyExport) -> Result<String> {
     String::from_utf8(bytes).context("armored OpenPGP block is not UTF-8")
 }
 
-fn encrypt_message(recipient_public_armored: &str, plaintext: &str) -> Result<String> {
+fn encrypt_and_sign(
+    recipient_public_armored: &str,
+    sender_secret_armored: &str,
+    plaintext: &str,
+) -> Result<String> {
     let policy = StandardPolicy::new();
     let recipient_cert = Cert::from_bytes(recipient_public_armored.as_bytes())
         .context("parse recipient public key")?;
+    let sender_cert = Cert::from_bytes(sender_secret_armored.as_bytes())
+        .context("parse sender secret key")?;
 
     let recipients: Vec<Recipient> = recipient_cert
         .keys()
@@ -219,6 +279,21 @@ fn encrypt_message(recipient_public_armored: &str, plaintext: &str) -> Result<St
         ));
     }
 
+    let signer_keypair = sender_cert
+        .keys()
+        .with_policy(&policy, None)
+        .supported()
+        .alive()
+        .revoked(false)
+        .for_signing()
+        .secret()
+        .next()
+        .ok_or_else(|| anyhow!("sender certificate has no usable signing key"))?
+        .key()
+        .clone()
+        .into_keypair()
+        .context("unlock sender signing key")?;
+
     let mut sink: Vec<u8> = Vec::new();
     {
         let message = Message::new(&mut sink);
@@ -226,6 +301,12 @@ fn encrypt_message(recipient_public_armored: &str, plaintext: &str) -> Result<St
         let message = Encryptor::for_recipients(message, recipients)
             .build()
             .context("build encryptor")?;
+        // Sign INSIDE the encryption layer per XEP-0373: the recipient
+        // needs to decrypt before they can see (and verify) the signature.
+        let message = Signer::new(message, signer_keypair)
+            .context("build signer")?
+            .build()
+            .context("finalize signer")?;
         let mut message = LiteralWriter::new(message)
             .build()
             .context("build literal writer")?;
@@ -238,14 +319,30 @@ fn encrypt_message(recipient_public_armored: &str, plaintext: &str) -> Result<St
     String::from_utf8(sink).context("armored ciphertext is not UTF-8")
 }
 
-fn decrypt_message(secret_armored: &str, ciphertext: &str) -> Result<String> {
+fn decrypt_and_verify(
+    secret_armored: &str,
+    ciphertext: &str,
+    sender_public_armored: Option<&str>,
+) -> Result<DecryptOutput> {
     let policy = StandardPolicy::new();
     let secret_cert = Cert::from_bytes(secret_armored.as_bytes())
         .context("parse own secret key")?;
 
+    let sender_cert = match sender_public_armored {
+        Some(armored) => {
+            Some(Cert::from_bytes(armored.as_bytes()).context("parse sender public key")?)
+        }
+        None => None,
+    };
+
+    // Shared state set by the helper during stream reading.
+    let verified_fingerprint: Arc<Mutex<Option<Fingerprint>>> = Arc::new(Mutex::new(None));
+
     let helper = DecryptHelper {
         secret: &secret_cert,
+        sender: sender_cert.as_ref(),
         policy: &policy,
+        verified_fingerprint: verified_fingerprint.clone(),
     };
 
     let mut decryptor = DecryptorBuilder::from_bytes(ciphertext.as_bytes())
@@ -255,25 +352,58 @@ fn decrypt_message(secret_armored: &str, ciphertext: &str) -> Result<String> {
 
     let mut plaintext = Vec::new();
     std::io::copy(&mut decryptor, &mut plaintext).context("read decrypted stream")?;
+    let plaintext = String::from_utf8(plaintext).context("decrypted payload is not UTF-8")?;
 
-    String::from_utf8(plaintext).context("decrypted payload is not UTF-8")
+    let signer = verified_fingerprint
+        .lock()
+        .map_err(|e| anyhow!("verification state poisoned: {e}"))?
+        .clone();
+
+    Ok(DecryptOutput {
+        signature_verified: signer.is_some(),
+        signer_fingerprint: signer.map(|fp| fp.to_hex()),
+        plaintext,
+    })
 }
 
 struct DecryptHelper<'a> {
     secret: &'a Cert,
+    sender: Option<&'a Cert>,
     policy: &'a StandardPolicy<'a>,
+    /// Set by [`check`] when at least one signature validates against
+    /// `sender`. Observed by the outer function after the stream is drained.
+    verified_fingerprint: Arc<Mutex<Option<Fingerprint>>>,
 }
 
 impl VerificationHelper for DecryptHelper<'_> {
     fn get_certs(&mut self, _ids: &[KeyHandle]) -> openpgp::Result<Vec<Cert>> {
-        // Signature verification is a Phase 1 follow-up (XEP-0373 defines
-        // signcrypt). For now we accept any envelope — Chat still renders
-        // a lock indicator but trust level stays at "trusted" / "untrusted"
-        // based on peer-key presence, not cryptographic signatures.
-        Ok(Vec::new())
+        // Hand the verifier the sender's cert (when supplied) so it can
+        // check signatures. Returning an empty Vec — the default — causes
+        // every signature to be reported as `MissingKey`, which is exactly
+        // what we want when no sender cert was provided: decrypt without
+        // verification.
+        Ok(self.sender.map(|c| vec![c.clone()]).unwrap_or_default())
     }
 
-    fn check(&mut self, _structure: MessageStructure) -> openpgp::Result<()> {
+    fn check(&mut self, structure: MessageStructure) -> openpgp::Result<()> {
+        // Walk the structure looking for a valid signature. Decryption still
+        // succeeds if none is found — we report the state through
+        // `verified_fingerprint` rather than aborting, because the UI wants
+        // to render an "untrusted" lock for unsigned messages, not drop
+        // them entirely.
+        for layer in structure.iter() {
+            if let MessageLayer::SignatureGroup { results } = layer {
+                for result in results {
+                    if let Ok(verification) = result {
+                        let fp = verification.ka.cert().fingerprint();
+                        if let Ok(mut slot) = self.verified_fingerprint.lock() {
+                            *slot = Some(fp);
+                        }
+                        return Ok(());
+                    }
+                }
+            }
+        }
         Ok(())
     }
 }
@@ -310,20 +440,26 @@ impl DecryptionHelper for DecryptHelper<'_> {
 
 fn anyhow_to_string(err: anyhow::Error) -> String {
     let mut out = format!("{err:#}");
-    // Flatten chained error contexts onto one line so the TS side gets a
-    // readable message.
     out = out.replace('\n', " ").replace("  ", " ");
     out
 }
 
-// Keep a `Fingerprint` import bound so we can add signature verification
-// later without touching the uses block. Silencing dead-code for now.
+// The unused `_Cert` alias keeps the `Cert` import path explicit even when
+// no other item in this module ends up referring to it bare — simplifies
+// adding future helpers that operate on Cert values.
 #[allow(dead_code)]
-fn _fingerprint_type_reference(_: &Fingerprint) {}
+fn _cert_type_reference(_: &_Cert) {}
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn setup_two_accounts() -> (OpenpgpState, KeyBundle, KeyBundle) {
+        let state = OpenpgpState::new();
+        let alice = state.generate_key("alice@example.com", "Alice").unwrap();
+        let bob = state.generate_key("bob@example.com", "Bob").unwrap();
+        (state, alice, bob)
+    }
 
     #[test]
     fn generate_then_fingerprint_round_trip() {
@@ -333,7 +469,6 @@ mod tests {
             .unwrap();
         let fp = fingerprint_of(&bundle.public_armored).unwrap();
         assert_eq!(fp, bundle.fingerprint);
-        // v4 Sequoia fingerprints are 40 hex chars.
         assert_eq!(bundle.fingerprint.len(), 40);
     }
 
@@ -356,31 +491,70 @@ mod tests {
 
     #[test]
     fn encrypt_then_decrypt_round_trip() {
-        let state = OpenpgpState::new();
-        let bundle = state.generate_key("bob@example.com", "Bob").unwrap();
-        let ciphertext = encrypt_for_recipient(&bundle.public_armored, "hello, bob").unwrap();
-        // Real OpenPGP armored messages start with this header.
+        let (state, alice, bob) = setup_two_accounts();
+        let ciphertext = state
+            .encrypt("alice@example.com", &bob.public_armored, "hello, bob")
+            .unwrap();
         assert!(
             ciphertext.contains("BEGIN PGP MESSAGE"),
             "expected PGP armored block, got {}",
             &ciphertext[..ciphertext.len().min(80)]
         );
-        let plaintext = state.decrypt("bob@example.com", &ciphertext).unwrap();
-        assert_eq!(plaintext, "hello, bob");
+
+        // Decrypt WITH alice's public key supplied — must verify the signature.
+        let out = state
+            .decrypt("bob@example.com", &ciphertext, Some(&alice.public_armored))
+            .unwrap();
+        assert_eq!(out.plaintext, "hello, bob");
+        assert!(out.signature_verified, "signature must verify for alice->bob");
+        assert_eq!(out.signer_fingerprint.as_deref(), Some(alice.fingerprint.as_str()));
+    }
+
+    #[test]
+    fn decrypt_without_sender_key_succeeds_but_signature_not_verified() {
+        let (state, _alice, bob) = setup_two_accounts();
+        let ciphertext = state
+            .encrypt("alice@example.com", &bob.public_armored, "hi")
+            .unwrap();
+        let out = state
+            .decrypt("bob@example.com", &ciphertext, None)
+            .unwrap();
+        assert_eq!(out.plaintext, "hi");
+        assert!(
+            !out.signature_verified,
+            "verification must be false when no sender cert is supplied"
+        );
+        assert!(out.signer_fingerprint.is_none());
+    }
+
+    #[test]
+    fn decrypt_with_wrong_sender_key_does_not_verify() {
+        // Alice signs, but Bob's client mistakenly supplies Eve's public
+        // key for verification. Decryption succeeds; signature does not.
+        let (state, _alice, bob) = setup_two_accounts();
+        let eve = state.generate_key("eve@example.com", "Eve").unwrap();
+        let ciphertext = state
+            .encrypt("alice@example.com", &bob.public_armored, "hi")
+            .unwrap();
+        let out = state
+            .decrypt("bob@example.com", &ciphertext, Some(&eve.public_armored))
+            .unwrap();
+        assert_eq!(out.plaintext, "hi");
+        assert!(
+            !out.signature_verified,
+            "alice-signed ciphertext must not verify against eve's cert"
+        );
     }
 
     #[test]
     fn decrypt_rejects_ciphertext_for_another_account() {
-        let state = OpenpgpState::new();
-        let alice = state.generate_key("alice@example.com", "Alice").unwrap();
-        let _bob = state.generate_key("bob@example.com", "Bob").unwrap();
-        let ciphertext = encrypt_for_recipient(&alice.public_armored, "for alice").unwrap();
+        let (state, _alice, _bob) = setup_two_accounts();
+        let ciphertext = state
+            .encrypt("alice@example.com", &_alice.public_armored, "for alice")
+            .unwrap();
         let err = state
-            .decrypt("bob@example.com", &ciphertext)
+            .decrypt("bob@example.com", &ciphertext, Some(&_alice.public_armored))
             .expect_err("bob must not decrypt alice's ciphertext");
-        // Sequoia reports decryption failure; the exact wording isn't stable
-        // across versions, so we just assert we got some error and that it's
-        // not a false positive returning the wrong plaintext.
         assert!(!err.is_empty(), "expected an error");
     }
 
@@ -389,19 +563,31 @@ mod tests {
         let state = OpenpgpState::new();
         state.generate_key("alice@example.com", "Alice").unwrap();
         let err = state
-            .decrypt("alice@example.com", "not-a-pgp-ciphertext")
+            .decrypt("alice@example.com", "not-a-pgp-ciphertext", None)
             .expect_err("malformed ciphertext must be rejected");
         assert!(!err.is_empty(), "expected an error");
     }
 
     #[test]
-    fn forget_account_removes_key() {
+    fn encrypt_fails_without_a_sender_key() {
         let state = OpenpgpState::new();
-        let alice = state.generate_key("alice@example.com", "Alice").unwrap();
-        let ciphertext = encrypt_for_recipient(&alice.public_armored, "x").unwrap();
+        // Generate only Bob's key; Alice is absent.
+        let bob = state.generate_key("bob@example.com", "Bob").unwrap();
+        let err = state
+            .encrypt("alice@example.com", &bob.public_armored, "hi")
+            .expect_err("encrypt must fail without sender account");
+        assert!(err.contains("no key for sender"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn forget_account_removes_key() {
+        let (state, alice, _bob) = setup_two_accounts();
+        let ciphertext = state
+            .encrypt("alice@example.com", &alice.public_armored, "self-note")
+            .unwrap();
         state.forget_account("alice@example.com").unwrap();
         let err = state
-            .decrypt("alice@example.com", &ciphertext)
+            .decrypt("alice@example.com", &ciphertext, None)
             .expect_err("decrypt must fail after forget");
         assert!(err.contains("no key"), "unexpected error: {err}");
     }
@@ -414,8 +600,6 @@ mod tests {
 
     #[test]
     fn public_key_armor_is_stable_across_generate_reads() {
-        // Generated armored blocks must parse back into a Cert with the
-        // same fingerprint — the TS side relies on publish→fetch round-trip.
         let state = OpenpgpState::new();
         let bundle = state.generate_key("alice@example.com", "Alice").unwrap();
         let parsed = Cert::from_bytes(bundle.public_armored.as_bytes()).unwrap();

@@ -71,4 +71,16 @@ export const AVA_MESSAGES: Message[] = [
     timestamp: minutesAgo(2), isOutgoing: false, conversationId: conv,
     securityContext: { protocolId: 'openpgp', trust: 'trusted' },
   },
+  // Example of a signature that failed to verify — the lock stays yellow
+  // but the tooltip now reads "Signature did not verify" so the user can
+  // tell this apart from the benign "sender key not cached" case above.
+  {
+    type: 'chat', id: 'demo-ava-14', from: conv, body: 'Weird — this message shows up but my laptop says it couldn\'t verify the signature. Hmm.',
+    timestamp: minutesAgo(1), isOutgoing: false, conversationId: conv,
+    securityContext: {
+      protocolId: 'openpgp',
+      trust: 'untrusted',
+      notes: ['Signature did not verify'],
+    },
+  },
 ]

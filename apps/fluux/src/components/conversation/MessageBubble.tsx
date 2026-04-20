@@ -397,11 +397,7 @@ export const MessageBubble = memo(function MessageBubble({
                     ? 'text-yellow-500'
                     : 'text-fluux-muted'
                 }`}
-                title={t('chat.encryptedMessage', {
-                  protocol: message.securityContext.protocolId,
-                  trust: message.securityContext.trust,
-                  defaultValue: 'Encrypted · {{protocol}} · {{trust}}',
-                })}
+                title={formatSecurityTooltip(t, message.securityContext)}
                 aria-label={`Encrypted with ${message.securityContext.protocolId}, trust ${message.securityContext.trust}`}
               >
                 <Lock className="w-3 h-3" />
@@ -540,6 +536,26 @@ export const MessageBubble = memo(function MessageBubble({
     </div>
   )
 }, arePropsEqual)
+
+/**
+ * Build the tooltip shown on hover of the per-message lock indicator.
+ * Base line is protocol + trust; plugin-supplied `notes` are appended on
+ * subsequent lines so the user can tell apart e.g. "signature did not
+ * verify" (alarming) from "sender key not cached — signature not
+ * checked" (benign, resolves after the peer is probed).
+ */
+function formatSecurityTooltip(
+  t: (key: string, opts?: Record<string, unknown>) => string,
+  ctx: NonNullable<BaseMessage['securityContext']>,
+): string {
+  const head = t('chat.encryptedMessage', {
+    protocol: ctx.protocolId,
+    trust: ctx.trust,
+    defaultValue: 'Encrypted · {{protocol}} · {{trust}}',
+  })
+  if (!ctx.notes || ctx.notes.length === 0) return head
+  return [head, ...ctx.notes].join('\n')
+}
 
 /**
  * Helper to build reply context from a message and lookup functions.
