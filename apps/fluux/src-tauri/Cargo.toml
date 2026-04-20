@@ -39,11 +39,24 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
 dirs = "6"
 
-# E2EE / OpenPGP plugin skeleton — crypto ops are currently stubbed
-# (base64 round-trip) pending sequoia-openpgp integration. See
-# src/openpgp.rs for TODO(sequoia) markers.
+# E2EE / OpenPGP (XEP-0373 "OX")
+# Sequoia-PGP provides cert generation, encryption, decryption, and
+# fingerprinting. `crypto-rust` keeps us on a pure-Rust backend
+# (consistent with the rest of the project — ring for rustls, etc.)
+# rather than requiring system libnettle or OpenSSL.
+sequoia-openpgp = { version = "2.0", default-features = false, features = [
+    "crypto-rust",
+    "compression-deflate",
+    # The RustCrypto backend is not yet production-grade and uses some
+    # variable-time operations. Accepting both flags keeps the skeleton
+    # building on all three desktop OSs without system libs; a future
+    # hardening pass should switch to crypto-openssl on platforms where
+    # it is available.
+    "allow-experimental-crypto",
+    "allow-variable-time-crypto",
+] }
+anyhow = "1"
 base64 = "0.22"
-uuid = { version = "1", features = ["v4"] }
 
 # Updater plugin for auto-updates (desktop only)
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]

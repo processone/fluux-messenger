@@ -1,48 +1,48 @@
-//! OpenPGP plugin skeleton for XEP-0373 (OX) end-to-end encryption.
+//! OpenPGP operations for the XEP-0373 (OX) E2EE plugin.
 //!
-//! This module is the Rust side of the E2EE plugin architecture described
-//! in `private/E2EE_PLUGIN_ARCHITECTURE.md`. The TypeScript side lives in
-//! `apps/fluux/src/e2ee/SequoiaPgpPlugin.ts` and invokes the commands
-//! defined here via Tauri's IPC.
+//! This module exposes Tauri commands that the TypeScript-side plugin
+//! (`apps/fluux/src/e2ee/SequoiaPgpPlugin.ts`) invokes for the cryptographic
+//! operations it cannot perform in the web layer. The crypto is provided by
+//! [Sequoia-PGP](https://sequoia-pgp.org/) with its pure-Rust backend.
 //!
-//! # TODO(sequoia): swap stubs for real Sequoia-PGP operations
+//! # Key material lifecycle
 //!
-//! Every `#[tauri::command]` below currently performs a pass-through
-//! operation so the end-to-end architecture (TS plugin → Tauri IPC →
-//! Rust → response → TS) can be validated. The cryptographic operations
-//! are intentionally NOT secure. Real Sequoia wiring is a dedicated
-//! follow-up slice (Phase 1 of the architecture doc).
-//!
-//! Stub contract:
-//! - `openpgp_generate_key` produces a UUID fingerprint and opaque key
-//!   material strings shaped like armored OpenPGP blocks.
-//! - `openpgp_encrypt` wraps plaintext as `OPENPGP-STUB:<b64>` so the
-//!   payload is unambiguous to the matching `openpgp_decrypt`.
-//! - `openpgp_decrypt` unwraps the same prefix.
-//! - `openpgp_fingerprint` returns the fingerprint embedded in our stub
-//!   public-key blob.
-//!
-//! The TS plugin does not know any of this — it just invokes and reads
-//! armored strings back. Replacing this file with Sequoia is drop-in.
+//! Keys live only in process memory, keyed on the account JID. The TS
+//! plugin calls [`openpgp_forget_account`] on shutdown so secrets don't
+//! outlive a session. OS keyring integration (for persistence across app
+//! restarts) is a follow-up.
 
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+use anyhow::{anyhow, Context, Result};
+use sequoia_openpgp as openpgp;
 use serde::{Deserialize, Serialize};
+use std::io::Write as _;
 use std::sync::Mutex;
 use tauri::State;
-use uuid::Uuid;
 
-const STUB_ENCRYPT_PREFIX: &str = "OPENPGP-STUB:";
-const STUB_PUBLIC_HEADER: &str = "-----BEGIN PGP PUBLIC KEY BLOCK (STUB)-----";
-const STUB_PUBLIC_FOOTER: &str = "-----END PGP PUBLIC KEY BLOCK (STUB)-----";
-const STUB_SECRET_HEADER: &str = "-----BEGIN PGP PRIVATE KEY BLOCK (STUB)-----";
-const STUB_SECRET_FOOTER: &str = "-----END PGP PRIVATE KEY BLOCK (STUB)-----";
-const STUB_FINGERPRINT_TAG: &str = "Fingerprint:";
+use openpgp::{
+    cert::{Cert, CertBuilder},
+    crypto::SessionKey,
+    packet::{PKESK, SKESK},
+    parse::{
+        stream::{
+            DecryptionHelper, DecryptorBuilder, MessageStructure, VerificationHelper,
+        },
+        Parse,
+    },
+    policy::StandardPolicy,
+    serialize::{
+        stream::{Armorer, Encryptor, LiteralWriter, Message, Recipient},
+        SerializeInto,
+    },
+    types::SymmetricAlgorithm,
+    Fingerprint, KeyHandle,
+};
 
 /// Serializable output of [`openpgp_generate_key`].
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct KeyBundle {
-    /// Hex fingerprint, no separators. Matches the Sequoia-PGP convention.
+    /// Upper-case hex fingerprint (40 chars for v4 keys), no separators.
     pub fingerprint: String,
     /// ASCII-armored public key block, suitable for publishing to a PEP node.
     pub public_armored: String,
@@ -51,14 +51,10 @@ pub struct KeyBundle {
 }
 
 /// State held by the Tauri managed-state system. One entry per logged-in
-/// account — keyed on the account JID. Cleared on disconnect by the TS
-/// plugin via [`openpgp_forget_account`].
+/// account — keyed on the account JID. Cleared by
+/// [`openpgp_forget_account`] on shutdown.
 #[derive(Default)]
 pub struct OpenpgpState {
-    /// Per-account secret key material. Mutex is coarse on purpose — the
-    /// number of accounts is small and operations are short. Real Sequoia
-    /// will want finer-grained access to avoid serializing long crypto
-    /// calls.
     accounts: Mutex<std::collections::HashMap<String, KeyBundle>>,
 }
 
@@ -66,11 +62,7 @@ impl OpenpgpState {
     pub fn new() -> Self {
         Self::default()
     }
-}
 
-/// Core logic, separated from the Tauri command shim so unit tests can
-/// exercise it without spinning up a Tauri app.
-impl OpenpgpState {
     pub fn generate_key(&self, account_jid: &str, user_id: &str) -> Result<KeyBundle, String> {
         let mut accounts = self
             .accounts
@@ -80,55 +72,24 @@ impl OpenpgpState {
             return Ok(existing.clone());
         }
 
-        // TODO(sequoia): replace with CertBuilder::general_purpose(None, Some(user_id)).generate()
-        let fingerprint = Uuid::new_v4().simple().to_string().to_uppercase();
-        let bundle = KeyBundle {
-            fingerprint: fingerprint.clone(),
-            public_armored: stub_armored_block(
-                STUB_PUBLIC_HEADER,
-                STUB_PUBLIC_FOOTER,
-                &fingerprint,
-                user_id,
-                "public",
-            ),
-            secret_armored: stub_armored_block(
-                STUB_SECRET_HEADER,
-                STUB_SECRET_FOOTER,
-                &fingerprint,
-                user_id,
-                "secret",
-            ),
-        };
+        let bundle = build_new_key(user_id).map_err(anyhow_to_string)?;
         accounts.insert(account_jid.to_string(), bundle.clone());
         Ok(bundle)
     }
 
     pub fn decrypt(&self, account_jid: &str, ciphertext: &str) -> Result<String, String> {
-        let accounts = self
-            .accounts
-            .lock()
-            .map_err(|e| format!("openpgp state poisoned: {e}"))?;
-        let bundle = accounts
-            .get(account_jid)
-            .ok_or_else(|| format!("no key for account: {account_jid}"))?;
+        let secret_armored = {
+            let accounts = self
+                .accounts
+                .lock()
+                .map_err(|e| format!("openpgp state poisoned: {e}"))?;
+            accounts
+                .get(account_jid)
+                .map(|b| b.secret_armored.clone())
+                .ok_or_else(|| format!("no key for account: {account_jid}"))?
+        };
 
-        // TODO(sequoia): open Cert from secret_armored, decrypt message, return plaintext.
-        let rest = ciphertext
-            .strip_prefix(STUB_ENCRYPT_PREFIX)
-            .ok_or_else(|| "ciphertext not produced by this stub build".to_string())?;
-        let (target_fp, payload) = rest
-            .split_once(':')
-            .ok_or_else(|| "ciphertext missing recipient marker".to_string())?;
-        if target_fp != bundle.fingerprint {
-            return Err(format!(
-                "ciphertext is addressed to {target_fp}, this account holds {}",
-                bundle.fingerprint
-            ));
-        }
-        let bytes = BASE64
-            .decode(payload)
-            .map_err(|e| format!("decode: {e}"))?;
-        String::from_utf8(bytes).map_err(|e| format!("utf8: {e}"))
+        decrypt_message(&secret_armored, ciphertext).map_err(anyhow_to_string)
     }
 
     pub fn forget_account(&self, account_jid: &str) -> Result<(), String> {
@@ -145,26 +106,19 @@ pub fn encrypt_for_recipient(
     recipient_public_armored: &str,
     plaintext: &str,
 ) -> Result<String, String> {
-    // TODO(sequoia): parse recipient Cert, build Encryptor, stream plaintext.
-    let recipient_fp = extract_fingerprint(recipient_public_armored)
-        .ok_or_else(|| "recipient key is not a valid stub bundle".to_string())?;
-    let encoded = BASE64.encode(plaintext.as_bytes());
-    Ok(format!("{STUB_ENCRYPT_PREFIX}{recipient_fp}:{encoded}"))
+    encrypt_message(recipient_public_armored, plaintext).map_err(anyhow_to_string)
 }
 
 pub fn fingerprint_of(public_armored: &str) -> Result<String, String> {
-    // TODO(sequoia): parse Cert, return cert.fingerprint().to_hex().
-    extract_fingerprint(public_armored)
-        .ok_or_else(|| "not a recognizable stub public key".to_string())
+    let cert = Cert::from_bytes(public_armored.as_bytes())
+        .map_err(|e| format!("not a recognizable OpenPGP public key: {e}"))?;
+    Ok(cert.fingerprint().to_hex())
 }
 
-/// Generate a fresh OpenPGP identity for `account_jid` with the given
-/// primary user ID, persist it in in-process memory, and return the
-/// armored public/secret blocks + fingerprint.
-///
-/// If the account already has a key, the existing bundle is returned
-/// unchanged (idempotent — matches the `ensureIdentity` contract on the
-/// TS plugin).
+// ---------------------------------------------------------------------------
+// Tauri command shims
+// ---------------------------------------------------------------------------
+
 #[tauri::command]
 pub fn openpgp_generate_key(
     account_jid: String,
@@ -174,10 +128,6 @@ pub fn openpgp_generate_key(
     state.generate_key(&account_jid, &user_id)
 }
 
-/// Encrypt `plaintext` for the holder of `recipient_public_armored`.
-///
-/// The returned string is an armored OpenPGP message body suitable for
-/// embedding in a XEP-0373 `<openpgp/>` element.
 #[tauri::command]
 pub fn openpgp_encrypt(
     recipient_public_armored: String,
@@ -186,7 +136,6 @@ pub fn openpgp_encrypt(
     encrypt_for_recipient(&recipient_public_armored, &plaintext)
 }
 
-/// Decrypt `ciphertext` with the secret key identified by `account_jid`.
 #[tauri::command]
 pub fn openpgp_decrypt(
     account_jid: String,
@@ -196,14 +145,11 @@ pub fn openpgp_decrypt(
     state.decrypt(&account_jid, &ciphertext)
 }
 
-/// Return the fingerprint embedded in an armored public key block.
 #[tauri::command]
 pub fn openpgp_fingerprint(public_armored: String) -> Result<String, String> {
     fingerprint_of(&public_armored)
 }
 
-/// Forget the in-memory key material for `account_jid`. Called by the TS
-/// plugin on shutdown / disconnect so secrets don't outlive a session.
 #[tauri::command]
 pub fn openpgp_forget_account(
     account_jid: String,
@@ -212,28 +158,168 @@ pub fn openpgp_forget_account(
     state.forget_account(&account_jid)
 }
 
-fn stub_armored_block(
-    header: &str,
-    footer: &str,
-    fingerprint: &str,
-    user_id: &str,
-    kind: &str,
-) -> String {
-    // The fingerprint line must be parseable by `extract_fingerprint`.
-    // User id is informative only.
-    format!(
-        "{header}\n{STUB_FINGERPRINT_TAG} {fingerprint}\nUID: {user_id}\nKind: {kind}\n{footer}",
-    )
+// ---------------------------------------------------------------------------
+// Sequoia-backed primitives
+// ---------------------------------------------------------------------------
+
+fn build_new_key(user_id: &str) -> Result<KeyBundle> {
+    let (cert, _revocation) = CertBuilder::general_purpose(Some(user_id))
+        .generate()
+        .context("generate OpenPGP cert")?;
+
+    let public_armored = armored_string(&cert, KeyExport::Public)?;
+    let secret_armored = armored_string(&cert, KeyExport::Secret)?;
+    let fingerprint = cert.fingerprint().to_hex();
+
+    Ok(KeyBundle {
+        fingerprint,
+        public_armored,
+        secret_armored,
+    })
 }
 
-fn extract_fingerprint(armored: &str) -> Option<String> {
-    for line in armored.lines() {
-        if let Some(rest) = line.strip_prefix(STUB_FINGERPRINT_TAG) {
-            return Some(rest.trim().to_string());
-        }
-    }
-    None
+enum KeyExport {
+    Public,
+    Secret,
 }
+
+fn armored_string(cert: &Cert, kind: KeyExport) -> Result<String> {
+    let bytes = match kind {
+        KeyExport::Public => cert
+            .armored()
+            .to_vec()
+            .context("serialize public key to armor")?,
+        KeyExport::Secret => cert
+            .as_tsk()
+            .armored()
+            .to_vec()
+            .context("serialize secret key to armor")?,
+    };
+    String::from_utf8(bytes).context("armored OpenPGP block is not UTF-8")
+}
+
+fn encrypt_message(recipient_public_armored: &str, plaintext: &str) -> Result<String> {
+    let policy = StandardPolicy::new();
+    let recipient_cert = Cert::from_bytes(recipient_public_armored.as_bytes())
+        .context("parse recipient public key")?;
+
+    let recipients: Vec<Recipient> = recipient_cert
+        .keys()
+        .with_policy(&policy, None)
+        .supported()
+        .alive()
+        .revoked(false)
+        .for_transport_encryption()
+        .map(Recipient::from)
+        .collect();
+
+    if recipients.is_empty() {
+        return Err(anyhow!(
+            "recipient certificate has no usable encryption-capable key"
+        ));
+    }
+
+    let mut sink: Vec<u8> = Vec::new();
+    {
+        let message = Message::new(&mut sink);
+        let message = Armorer::new(message).build().context("build armorer")?;
+        let message = Encryptor::for_recipients(message, recipients)
+            .build()
+            .context("build encryptor")?;
+        let mut message = LiteralWriter::new(message)
+            .build()
+            .context("build literal writer")?;
+        message
+            .write_all(plaintext.as_bytes())
+            .context("write plaintext")?;
+        message.finalize().context("finalize encryption")?;
+    }
+
+    String::from_utf8(sink).context("armored ciphertext is not UTF-8")
+}
+
+fn decrypt_message(secret_armored: &str, ciphertext: &str) -> Result<String> {
+    let policy = StandardPolicy::new();
+    let secret_cert = Cert::from_bytes(secret_armored.as_bytes())
+        .context("parse own secret key")?;
+
+    let helper = DecryptHelper {
+        secret: &secret_cert,
+        policy: &policy,
+    };
+
+    let mut decryptor = DecryptorBuilder::from_bytes(ciphertext.as_bytes())
+        .context("parse ciphertext")?
+        .with_policy(&policy, None, helper)
+        .context("open decryptor")?;
+
+    let mut plaintext = Vec::new();
+    std::io::copy(&mut decryptor, &mut plaintext).context("read decrypted stream")?;
+
+    String::from_utf8(plaintext).context("decrypted payload is not UTF-8")
+}
+
+struct DecryptHelper<'a> {
+    secret: &'a Cert,
+    policy: &'a StandardPolicy<'a>,
+}
+
+impl VerificationHelper for DecryptHelper<'_> {
+    fn get_certs(&mut self, _ids: &[KeyHandle]) -> openpgp::Result<Vec<Cert>> {
+        // Signature verification is a Phase 1 follow-up (XEP-0373 defines
+        // signcrypt). For now we accept any envelope — Chat still renders
+        // a lock indicator but trust level stays at "trusted" / "untrusted"
+        // based on peer-key presence, not cryptographic signatures.
+        Ok(Vec::new())
+    }
+
+    fn check(&mut self, _structure: MessageStructure) -> openpgp::Result<()> {
+        Ok(())
+    }
+}
+
+impl DecryptionHelper for DecryptHelper<'_> {
+    fn decrypt(
+        &mut self,
+        pkesks: &[PKESK],
+        _skesks: &[SKESK],
+        sym_algo: Option<SymmetricAlgorithm>,
+        decrypt: &mut dyn FnMut(Option<SymmetricAlgorithm>, &SessionKey) -> bool,
+    ) -> openpgp::Result<Option<Cert>> {
+        for ka in self
+            .secret
+            .keys()
+            .with_policy(self.policy, None)
+            .for_transport_encryption()
+            .secret()
+        {
+            let mut pair = ka.key().clone().into_keypair()?;
+            for pkesk in pkesks {
+                if pkesk
+                    .decrypt(&mut pair, sym_algo)
+                    .map(|(algo, sk)| decrypt(algo, &sk))
+                    .unwrap_or(false)
+                {
+                    return Ok(Some(self.secret.clone()));
+                }
+            }
+        }
+        Ok(None)
+    }
+}
+
+fn anyhow_to_string(err: anyhow::Error) -> String {
+    let mut out = format!("{err:#}");
+    // Flatten chained error contexts onto one line so the TS side gets a
+    // readable message.
+    out = out.replace('\n', " ").replace("  ", " ");
+    out
+}
+
+// Keep a `Fingerprint` import bound so we can add signature verification
+// later without touching the uses block. Silencing dead-code for now.
+#[allow(dead_code)]
+fn _fingerprint_type_reference(_: &Fingerprint) {}
 
 #[cfg(test)]
 mod tests {
@@ -247,6 +333,8 @@ mod tests {
             .unwrap();
         let fp = fingerprint_of(&bundle.public_armored).unwrap();
         assert_eq!(fp, bundle.fingerprint);
+        // v4 Sequoia fingerprints are 40 hex chars.
+        assert_eq!(bundle.fingerprint.len(), 40);
     }
 
     #[test]
@@ -271,6 +359,12 @@ mod tests {
         let state = OpenpgpState::new();
         let bundle = state.generate_key("bob@example.com", "Bob").unwrap();
         let ciphertext = encrypt_for_recipient(&bundle.public_armored, "hello, bob").unwrap();
+        // Real OpenPGP armored messages start with this header.
+        assert!(
+            ciphertext.contains("BEGIN PGP MESSAGE"),
+            "expected PGP armored block, got {}",
+            &ciphertext[..ciphertext.len().min(80)]
+        );
         let plaintext = state.decrypt("bob@example.com", &ciphertext).unwrap();
         assert_eq!(plaintext, "hello, bob");
     }
@@ -284,7 +378,10 @@ mod tests {
         let err = state
             .decrypt("bob@example.com", &ciphertext)
             .expect_err("bob must not decrypt alice's ciphertext");
-        assert!(err.contains("addressed to"), "unexpected error: {err}");
+        // Sequoia reports decryption failure; the exact wording isn't stable
+        // across versions, so we just assert we got some error and that it's
+        // not a false positive returning the wrong plaintext.
+        assert!(!err.is_empty(), "expected an error");
     }
 
     #[test]
@@ -292,9 +389,9 @@ mod tests {
         let state = OpenpgpState::new();
         state.generate_key("alice@example.com", "Alice").unwrap();
         let err = state
-            .decrypt("alice@example.com", "not-a-stub-ciphertext")
+            .decrypt("alice@example.com", "not-a-pgp-ciphertext")
             .expect_err("malformed ciphertext must be rejected");
-        assert!(err.contains("stub build"), "unexpected error: {err}");
+        assert!(!err.is_empty(), "expected an error");
     }
 
     #[test]
@@ -310,8 +407,18 @@ mod tests {
     }
 
     #[test]
-    fn fingerprint_of_handles_missing_marker() {
-        let err = fingerprint_of("-----BEGIN PGP PUBLIC KEY BLOCK-----\nno marker here\n-----END-----").expect_err("must reject");
-        assert!(err.contains("not a recognizable"));
+    fn fingerprint_of_handles_non_pgp_input() {
+        let err = fingerprint_of("not an OpenPGP block").expect_err("must reject");
+        assert!(!err.is_empty());
+    }
+
+    #[test]
+    fn public_key_armor_is_stable_across_generate_reads() {
+        // Generated armored blocks must parse back into a Cert with the
+        // same fingerprint — the TS side relies on publish→fetch round-trip.
+        let state = OpenpgpState::new();
+        let bundle = state.generate_key("alice@example.com", "Alice").unwrap();
+        let parsed = Cert::from_bytes(bundle.public_armored.as_bytes()).unwrap();
+        assert_eq!(parsed.fingerprint().to_hex(), bundle.fingerprint);
     }
 }
