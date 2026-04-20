@@ -462,7 +462,7 @@
             "updates": "Actualizări",
             "blocked": "Utilizatori blocați",
             "storage": "Stocare",
-            "encryption": "Encryption"
+            "encryption": "Criptare"
         },
         "blocked": {
             "title": "Utilizatori blocați",
@@ -550,19 +550,19 @@
         },
         "encryption": {
             "experimental": "Experimental",
-            "openpgpLabel": "OpenPGP end-to-end encryption",
-            "openpgpDescription": "Publish a public key to your server and encrypt 1:1 messages to contacts who also have one.",
-            "statusLabel": "Status",
-            "statusWaitingOnline": "Waiting for connection…",
-            "statusGenerating": "Generating your key…",
-            "statusReady": "Your key is ready and published.",
-            "copyFingerprint": "Copy fingerprint",
-            "copyFailed": "Couldn't copy fingerprint",
-            "toggleFailed": "Couldn't change encryption setting",
-            "limitationsTitle": "Current limitations",
-            "limitationVerification": "Contact fingerprints are not yet verified — lock icons show trust-on-first-use only.",
-            "limitationPersistence": "Keys are in-memory for this session; restarting the app regenerates them.",
-            "limitationBackend": "Uses an experimental pure-Rust crypto backend; not hardened for high-assurance scenarios."
+            "openpgpLabel": "Criptare end-to-end OpenPGP",
+            "openpgpDescription": "Publicați o cheie publică pe serverul dvs. și criptați mesajele 1:1 cu contactele care au și ele o cheie.",
+            "statusLabel": "Stare",
+            "statusWaitingOnline": "Se așteaptă conexiunea…",
+            "statusGenerating": "Se generează cheia dvs…",
+            "statusReady": "Cheia dvs. este pregătită și publicată.",
+            "copyFingerprint": "Copiați amprenta",
+            "copyFailed": "Nu s-a putut copia amprenta",
+            "toggleFailed": "Nu s-a putut modifica setarea de criptare",
+            "limitationsTitle": "Limitări actuale",
+            "limitationVerification": "Amprentele contactelor nu sunt încă verificate — pictogramele lacăt reflectă doar încrederea la prima utilizare.",
+            "limitationPersistence": "Cheile există doar în memoria acestei sesiuni; repornirea aplicației le regenerează.",
+            "limitationBackend": "Folosește un backend criptografic experimental scris în Rust pur; nu este consolidat pentru scenarii cu cerințe înalte de securitate."
         }
     },
     "update": {

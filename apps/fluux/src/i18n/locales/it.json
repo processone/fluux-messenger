@@ -462,7 +462,7 @@
             "updates": "Aggiornamenti",
             "blocked": "Utenti bloccati",
             "storage": "Archiviazione",
-            "encryption": "Encryption"
+            "encryption": "Crittografia"
         },
         "blocked": {
             "title": "Utenti bloccati",
@@ -549,20 +549,20 @@
             "indexRebuilt": "{{count}} messaggi indicizzati"
         },
         "encryption": {
-            "experimental": "Experimental",
-            "openpgpLabel": "OpenPGP end-to-end encryption",
-            "openpgpDescription": "Publish a public key to your server and encrypt 1:1 messages to contacts who also have one.",
-            "statusLabel": "Status",
-            "statusWaitingOnline": "Waiting for connection…",
-            "statusGenerating": "Generating your key…",
-            "statusReady": "Your key is ready and published.",
-            "copyFingerprint": "Copy fingerprint",
-            "copyFailed": "Couldn't copy fingerprint",
-            "toggleFailed": "Couldn't change encryption setting",
-            "limitationsTitle": "Current limitations",
-            "limitationVerification": "Contact fingerprints are not yet verified — lock icons show trust-on-first-use only.",
-            "limitationPersistence": "Keys are in-memory for this session; restarting the app regenerates them.",
-            "limitationBackend": "Uses an experimental pure-Rust crypto backend; not hardened for high-assurance scenarios."
+            "experimental": "Sperimentale",
+            "openpgpLabel": "Crittografia end-to-end OpenPGP",
+            "openpgpDescription": "Pubblica una chiave pubblica sul tuo server e cifra i messaggi 1:1 con i contatti che ne hanno una.",
+            "statusLabel": "Stato",
+            "statusWaitingOnline": "In attesa di connessione…",
+            "statusGenerating": "Generazione della tua chiave…",
+            "statusReady": "La tua chiave è pronta e pubblicata.",
+            "copyFingerprint": "Copia l'impronta",
+            "copyFailed": "Impossibile copiare l'impronta",
+            "toggleFailed": "Impossibile modificare l'impostazione di crittografia",
+            "limitationsTitle": "Limitazioni attuali",
+            "limitationVerification": "Le impronte dei contatti non sono ancora verificate — le icone del lucchetto indicano solo la fiducia al primo utilizzo.",
+            "limitationPersistence": "Le chiavi risiedono in memoria solo per questa sessione; al riavvio dell'applicazione vengono rigenerate.",
+            "limitationBackend": "Usa un backend crittografico sperimentale in Rust puro; non rinforzato per scenari ad alta sicurezza."
         }
     },
     "update": {

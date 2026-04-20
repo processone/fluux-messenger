@@ -460,7 +460,7 @@
             "updates": "Frissítések",
             "blocked": "Letiltott felhasználók",
             "storage": "Tárhely",
-            "encryption": "Encryption"
+            "encryption": "Titkosítás"
         },
         "blocked": {
             "title": "Letiltott felhasználók",
@@ -547,20 +547,20 @@
             "indexRebuilt": "{{count}} üzenet indexelve"
         },
         "encryption": {
-            "experimental": "Experimental",
-            "openpgpLabel": "OpenPGP end-to-end encryption",
-            "openpgpDescription": "Publish a public key to your server and encrypt 1:1 messages to contacts who also have one.",
-            "statusLabel": "Status",
-            "statusWaitingOnline": "Waiting for connection…",
-            "statusGenerating": "Generating your key…",
-            "statusReady": "Your key is ready and published.",
-            "copyFingerprint": "Copy fingerprint",
-            "copyFailed": "Couldn't copy fingerprint",
-            "toggleFailed": "Couldn't change encryption setting",
-            "limitationsTitle": "Current limitations",
-            "limitationVerification": "Contact fingerprints are not yet verified — lock icons show trust-on-first-use only.",
-            "limitationPersistence": "Keys are in-memory for this session; restarting the app regenerates them.",
-            "limitationBackend": "Uses an experimental pure-Rust crypto backend; not hardened for high-assurance scenarios."
+            "experimental": "Kísérleti",
+            "openpgpLabel": "OpenPGP végpontok közötti titkosítás",
+            "openpgpDescription": "Tegye közzé a nyilvános kulcsát a szerverén, és titkosítsa a kétszemélyes üzeneteket azoknak a névjegyeknek, akiknek szintén van kulcsuk.",
+            "statusLabel": "Állapot",
+            "statusWaitingOnline": "Várakozás a kapcsolatra…",
+            "statusGenerating": "A kulcsa generálása…",
+            "statusReady": "A kulcsa elkészült és közzé lett téve.",
+            "copyFingerprint": "Ujjlenyomat másolása",
+            "copyFailed": "Nem sikerült az ujjlenyomatot másolni",
+            "toggleFailed": "A titkosítás beállítása nem módosítható",
+            "limitationsTitle": "Jelenlegi korlátozások",
+            "limitationVerification": "A névjegyek ujjlenyomatai még nincsenek ellenőrizve — a lakatikonok csak első használatkori bizalmat jeleznek.",
+            "limitationPersistence": "A kulcsok csak ennek a munkamenetnek a memóriájában élnek; az alkalmazás újraindításakor újragenerálódnak.",
+            "limitationBackend": "Kísérleti, tiszta Rust kriptográfiai hátteret használ; nincs megerősítve magas biztonsági követelményű helyzetekhez."
         }
     },
     "update": {

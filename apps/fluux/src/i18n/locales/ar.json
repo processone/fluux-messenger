@@ -460,7 +460,7 @@
             "updates": "التحديثات",
             "blocked": "المستخدمون المحظورون",
             "storage": "التخزين",
-            "encryption": "Encryption"
+            "encryption": "التشفير"
         },
         "blocked": {
             "title": "المستخدمون المحظورون",
@@ -547,20 +547,20 @@
             "indexRebuilt": "تمت فهرسة {{count}} رسالة"
         },
         "encryption": {
-            "experimental": "Experimental",
-            "openpgpLabel": "OpenPGP end-to-end encryption",
-            "openpgpDescription": "Publish a public key to your server and encrypt 1:1 messages to contacts who also have one.",
-            "statusLabel": "Status",
-            "statusWaitingOnline": "Waiting for connection…",
-            "statusGenerating": "Generating your key…",
-            "statusReady": "Your key is ready and published.",
-            "copyFingerprint": "Copy fingerprint",
-            "copyFailed": "Couldn't copy fingerprint",
-            "toggleFailed": "Couldn't change encryption setting",
-            "limitationsTitle": "Current limitations",
-            "limitationVerification": "Contact fingerprints are not yet verified — lock icons show trust-on-first-use only.",
-            "limitationPersistence": "Keys are in-memory for this session; restarting the app regenerates them.",
-            "limitationBackend": "Uses an experimental pure-Rust crypto backend; not hardened for high-assurance scenarios."
+            "experimental": "تجريبي",
+            "openpgpLabel": "تشفير OpenPGP من طرف إلى طرف",
+            "openpgpDescription": "انشر مفتاحًا عامًا على خادمك وشفّر الرسائل الفردية مع جهات الاتصال التي لديها مفتاح أيضًا.",
+            "statusLabel": "الحالة",
+            "statusWaitingOnline": "في انتظار الاتصال…",
+            "statusGenerating": "جارٍ إنشاء مفتاحك…",
+            "statusReady": "مفتاحك جاهز ومنشور.",
+            "copyFingerprint": "نسخ البصمة",
+            "copyFailed": "تعذّر نسخ البصمة",
+            "toggleFailed": "تعذّر تغيير إعداد التشفير",
+            "limitationsTitle": "القيود الحالية",
+            "limitationVerification": "لم يتم التحقق من بصمات جهات الاتصال بعد — تُظهر أيقونات القفل الثقة عند أول استخدام فقط.",
+            "limitationPersistence": "تُخزَّن المفاتيح في الذاكرة لهذه الجلسة فقط؛ إعادة تشغيل التطبيق يعيد إنشاءها.",
+            "limitationBackend": "يستخدم واجهة تشفير تجريبية مكتوبة بلغة Rust؛ غير مُهيّأة لسيناريوهات ذات متطلبات أمان عالية."
         }
     },
     "update": {

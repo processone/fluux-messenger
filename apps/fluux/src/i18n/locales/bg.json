@@ -460,7 +460,7 @@
             "updates": "Актуализации",
             "blocked": "Блокирани потребители",
             "storage": "Съхранение",
-            "encryption": "Encryption"
+            "encryption": "Шифроване"
         },
         "blocked": {
             "title": "Блокирани потребители",
@@ -547,20 +547,20 @@
             "indexRebuilt": "{{count}} съобщения индексирани"
         },
         "encryption": {
-            "experimental": "Experimental",
-            "openpgpLabel": "OpenPGP end-to-end encryption",
-            "openpgpDescription": "Publish a public key to your server and encrypt 1:1 messages to contacts who also have one.",
-            "statusLabel": "Status",
-            "statusWaitingOnline": "Waiting for connection…",
-            "statusGenerating": "Generating your key…",
-            "statusReady": "Your key is ready and published.",
-            "copyFingerprint": "Copy fingerprint",
-            "copyFailed": "Couldn't copy fingerprint",
-            "toggleFailed": "Couldn't change encryption setting",
-            "limitationsTitle": "Current limitations",
-            "limitationVerification": "Contact fingerprints are not yet verified — lock icons show trust-on-first-use only.",
-            "limitationPersistence": "Keys are in-memory for this session; restarting the app regenerates them.",
-            "limitationBackend": "Uses an experimental pure-Rust crypto backend; not hardened for high-assurance scenarios."
+            "experimental": "Експериментално",
+            "openpgpLabel": "Шифроване от край до край с OpenPGP",
+            "openpgpDescription": "Публикувайте публичен ключ на вашия сървър и шифровайте лични съобщения с контакти, които също имат ключ.",
+            "statusLabel": "Състояние",
+            "statusWaitingOnline": "Изчакване на връзка…",
+            "statusGenerating": "Генериране на вашия ключ…",
+            "statusReady": "Вашият ключ е готов и публикуван.",
+            "copyFingerprint": "Копиране на отпечатъка",
+            "copyFailed": "Отпечатъкът не може да бъде копиран",
+            "toggleFailed": "Настройката за шифроване не може да бъде променена",
+            "limitationsTitle": "Текущи ограничения",
+            "limitationVerification": "Отпечатъците на контактите все още не се потвърждават — иконите с катинар показват само доверие при първа употреба.",
+            "limitationPersistence": "Ключовете се пазят в паметта само за тази сесия; при рестартиране на приложението се генерират наново.",
+            "limitationBackend": "Използва експериментален крипто-бекенд изцяло на Rust; не е подсилен за сценарии с високи изисквания към сигурността."
         }
     },
     "update": {

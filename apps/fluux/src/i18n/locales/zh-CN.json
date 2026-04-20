@@ -460,7 +460,7 @@
             "updates": "更新",
             "blocked": "已屏蔽用户",
             "storage": "存储",
-            "encryption": "Encryption"
+            "encryption": "加密"
         },
         "blocked": {
             "title": "已屏蔽用户",
@@ -547,20 +547,20 @@
             "indexRebuilt": "已索引 {{count}} 条消息"
         },
         "encryption": {
-            "experimental": "Experimental",
-            "openpgpLabel": "OpenPGP end-to-end encryption",
-            "openpgpDescription": "Publish a public key to your server and encrypt 1:1 messages to contacts who also have one.",
-            "statusLabel": "Status",
-            "statusWaitingOnline": "Waiting for connection…",
-            "statusGenerating": "Generating your key…",
-            "statusReady": "Your key is ready and published.",
-            "copyFingerprint": "Copy fingerprint",
-            "copyFailed": "Couldn't copy fingerprint",
-            "toggleFailed": "Couldn't change encryption setting",
-            "limitationsTitle": "Current limitations",
-            "limitationVerification": "Contact fingerprints are not yet verified — lock icons show trust-on-first-use only.",
-            "limitationPersistence": "Keys are in-memory for this session; restarting the app regenerates them.",
-            "limitationBackend": "Uses an experimental pure-Rust crypto backend; not hardened for high-assurance scenarios."
+            "experimental": "实验性",
+            "openpgpLabel": "OpenPGP 端到端加密",
+            "openpgpDescription": "将公钥发布到你的服务器，并与同样拥有密钥的联系人加密 1 对 1 消息。",
+            "statusLabel": "状态",
+            "statusWaitingOnline": "等待连接…",
+            "statusGenerating": "正在生成你的密钥…",
+            "statusReady": "你的密钥已就绪并已发布。",
+            "copyFingerprint": "复制指纹",
+            "copyFailed": "无法复制指纹",
+            "toggleFailed": "无法更改加密设置",
+            "limitationsTitle": "当前限制",
+            "limitationVerification": "联系人指纹尚未经过验证 — 锁图标仅表示首次使用信任。",
+            "limitationPersistence": "密钥仅在本次会话中保存于内存；重启应用会重新生成。",
+            "limitationBackend": "使用纯 Rust 实验性加密后端；未加固以应对高安全场景。"
         }
     },
     "update": {

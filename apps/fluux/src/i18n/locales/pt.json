@@ -462,7 +462,7 @@
             "updates": "Atualizações",
             "blocked": "Utilizadores bloqueados",
             "storage": "Armazenamento",
-            "encryption": "Encryption"
+            "encryption": "Criptografia"
         },
         "blocked": {
             "title": "Utilizadores bloqueados",
@@ -550,19 +550,19 @@
         },
         "encryption": {
             "experimental": "Experimental",
-            "openpgpLabel": "OpenPGP end-to-end encryption",
-            "openpgpDescription": "Publish a public key to your server and encrypt 1:1 messages to contacts who also have one.",
-            "statusLabel": "Status",
-            "statusWaitingOnline": "Waiting for connection…",
-            "statusGenerating": "Generating your key…",
-            "statusReady": "Your key is ready and published.",
-            "copyFingerprint": "Copy fingerprint",
-            "copyFailed": "Couldn't copy fingerprint",
-            "toggleFailed": "Couldn't change encryption setting",
-            "limitationsTitle": "Current limitations",
-            "limitationVerification": "Contact fingerprints are not yet verified — lock icons show trust-on-first-use only.",
-            "limitationPersistence": "Keys are in-memory for this session; restarting the app regenerates them.",
-            "limitationBackend": "Uses an experimental pure-Rust crypto backend; not hardened for high-assurance scenarios."
+            "openpgpLabel": "Criptografia de ponta a ponta OpenPGP",
+            "openpgpDescription": "Publique uma chave pública no seu servidor e criptografe mensagens 1:1 com contactos que também tenham uma.",
+            "statusLabel": "Estado",
+            "statusWaitingOnline": "A aguardar a ligação…",
+            "statusGenerating": "A gerar a sua chave…",
+            "statusReady": "A sua chave está pronta e publicada.",
+            "copyFingerprint": "Copiar impressão digital",
+            "copyFailed": "Não foi possível copiar a impressão digital",
+            "toggleFailed": "Não foi possível alterar a definição de criptografia",
+            "limitationsTitle": "Limitações atuais",
+            "limitationVerification": "As impressões digitais dos contactos ainda não são verificadas — os ícones de cadeado apenas refletem confiança no primeiro uso.",
+            "limitationPersistence": "As chaves existem apenas em memória nesta sessão; reiniciar a aplicação regenera-as.",
+            "limitationBackend": "Usa um backend criptográfico experimental em Rust puro; não endurecido para cenários de alta segurança."
         }
     },
     "update": {

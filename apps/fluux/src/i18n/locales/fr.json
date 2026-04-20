@@ -461,7 +461,7 @@
             "updates": "Mises à jour",
             "blocked": "Utilisateurs bloqués",
             "storage": "Stockage",
-            "encryption": "Encryption"
+            "encryption": "Chiffrement"
         },
         "blocked": {
             "title": "Utilisateurs bloqués",
@@ -548,20 +548,20 @@
             "indexRebuilt": "{{count}} messages indexés"
         },
         "encryption": {
-            "experimental": "Experimental",
-            "openpgpLabel": "OpenPGP end-to-end encryption",
-            "openpgpDescription": "Publish a public key to your server and encrypt 1:1 messages to contacts who also have one.",
-            "statusLabel": "Status",
-            "statusWaitingOnline": "Waiting for connection…",
-            "statusGenerating": "Generating your key…",
-            "statusReady": "Your key is ready and published.",
-            "copyFingerprint": "Copy fingerprint",
-            "copyFailed": "Couldn't copy fingerprint",
-            "toggleFailed": "Couldn't change encryption setting",
-            "limitationsTitle": "Current limitations",
-            "limitationVerification": "Contact fingerprints are not yet verified — lock icons show trust-on-first-use only.",
-            "limitationPersistence": "Keys are in-memory for this session; restarting the app regenerates them.",
-            "limitationBackend": "Uses an experimental pure-Rust crypto backend; not hardened for high-assurance scenarios."
+            "experimental": "Expérimental",
+            "openpgpLabel": "Chiffrement de bout en bout OpenPGP",
+            "openpgpDescription": "Publiez une clé publique sur votre serveur et chiffrez les messages 1:1 avec les contacts qui en ont également une.",
+            "statusLabel": "État",
+            "statusWaitingOnline": "En attente de connexion…",
+            "statusGenerating": "Génération de votre clé…",
+            "statusReady": "Votre clé est prête et publiée.",
+            "copyFingerprint": "Copier l'empreinte",
+            "copyFailed": "Impossible de copier l'empreinte",
+            "toggleFailed": "Impossible de modifier le paramètre de chiffrement",
+            "limitationsTitle": "Limitations actuelles",
+            "limitationVerification": "Les empreintes des contacts ne sont pas encore vérifiées — les icônes de cadenas reflètent seulement la confiance à la première utilisation.",
+            "limitationPersistence": "Les clés ne résident qu'en mémoire pour cette session ; le redémarrage de l'application les régénère.",
+            "limitationBackend": "Utilise un backend cryptographique expérimental en Rust pur ; non durci pour des scénarios à fort niveau d'exigence."
         }
     },
     "update": {

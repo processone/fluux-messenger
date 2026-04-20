@@ -461,7 +461,7 @@
             "updates": "Aktualizácie",
             "blocked": "Blokovaní používatelia",
             "storage": "Úložisko",
-            "encryption": "Encryption"
+            "encryption": "Šifrovanie"
         },
         "blocked": {
             "title": "Blokovaní používatelia",
@@ -548,20 +548,20 @@
             "indexRebuilt": "{{count}} správ indexovaných"
         },
         "encryption": {
-            "experimental": "Experimental",
-            "openpgpLabel": "OpenPGP end-to-end encryption",
-            "openpgpDescription": "Publish a public key to your server and encrypt 1:1 messages to contacts who also have one.",
-            "statusLabel": "Status",
-            "statusWaitingOnline": "Waiting for connection…",
-            "statusGenerating": "Generating your key…",
-            "statusReady": "Your key is ready and published.",
-            "copyFingerprint": "Copy fingerprint",
-            "copyFailed": "Couldn't copy fingerprint",
-            "toggleFailed": "Couldn't change encryption setting",
-            "limitationsTitle": "Current limitations",
-            "limitationVerification": "Contact fingerprints are not yet verified — lock icons show trust-on-first-use only.",
-            "limitationPersistence": "Keys are in-memory for this session; restarting the app regenerates them.",
-            "limitationBackend": "Uses an experimental pure-Rust crypto backend; not hardened for high-assurance scenarios."
+            "experimental": "Experimentálne",
+            "openpgpLabel": "OpenPGP šifrovanie medzi koncovými bodmi",
+            "openpgpDescription": "Zverejnite verejný kľúč na svojom serveri a šifrujte súkromné správy kontaktom, ktorí tiež majú kľúč.",
+            "statusLabel": "Stav",
+            "statusWaitingOnline": "Čaká sa na pripojenie…",
+            "statusGenerating": "Generuje sa váš kľúč…",
+            "statusReady": "Váš kľúč je pripravený a zverejnený.",
+            "copyFingerprint": "Kopírovať odtlačok",
+            "copyFailed": "Odtlačok sa nepodarilo skopírovať",
+            "toggleFailed": "Nastavenie šifrovania sa nepodarilo zmeniť",
+            "limitationsTitle": "Aktuálne obmedzenia",
+            "limitationVerification": "Odtlačky kontaktov zatiaľ nie sú overené — ikony zámku odrážajú iba dôveru pri prvom použití.",
+            "limitationPersistence": "Kľúče existujú iba v pamäti tejto relácie; reštartovanie aplikácie ich vygeneruje nanovo.",
+            "limitationBackend": "Používa experimentálny kryptografický backend v čistom Ruste; nie je spevnený pre scenáre s vysokými bezpečnostnými požiadavkami."
         }
     },
     "update": {

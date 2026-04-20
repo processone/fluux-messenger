@@ -460,7 +460,7 @@
             "updates": "Atnaujinimai",
             "blocked": "Užblokuoti vartotojai",
             "storage": "Saugykla",
-            "encryption": "Encryption"
+            "encryption": "Šifravimas"
         },
         "blocked": {
             "title": "Užblokuoti vartotojai",
@@ -547,20 +547,20 @@
             "indexRebuilt": "{{count}} žinučių indeksuota"
         },
         "encryption": {
-            "experimental": "Experimental",
-            "openpgpLabel": "OpenPGP end-to-end encryption",
-            "openpgpDescription": "Publish a public key to your server and encrypt 1:1 messages to contacts who also have one.",
-            "statusLabel": "Status",
-            "statusWaitingOnline": "Waiting for connection…",
-            "statusGenerating": "Generating your key…",
-            "statusReady": "Your key is ready and published.",
-            "copyFingerprint": "Copy fingerprint",
-            "copyFailed": "Couldn't copy fingerprint",
-            "toggleFailed": "Couldn't change encryption setting",
-            "limitationsTitle": "Current limitations",
-            "limitationVerification": "Contact fingerprints are not yet verified — lock icons show trust-on-first-use only.",
-            "limitationPersistence": "Keys are in-memory for this session; restarting the app regenerates them.",
-            "limitationBackend": "Uses an experimental pure-Rust crypto backend; not hardened for high-assurance scenarios."
+            "experimental": "Eksperimentinis",
+            "openpgpLabel": "OpenPGP visapusis šifravimas",
+            "openpgpDescription": "Paskelbkite viešąjį raktą savo serveryje ir šifruokite 1:1 žinutes kontaktams, kurie taip pat turi raktą.",
+            "statusLabel": "Būsena",
+            "statusWaitingOnline": "Laukiama prisijungimo…",
+            "statusGenerating": "Jūsų raktas generuojamas…",
+            "statusReady": "Jūsų raktas paruoštas ir paskelbtas.",
+            "copyFingerprint": "Kopijuoti atspaudą",
+            "copyFailed": "Nepavyko nukopijuoti atspaudo",
+            "toggleFailed": "Nepavyko pakeisti šifravimo nustatymo",
+            "limitationsTitle": "Dabartiniai apribojimai",
+            "limitationVerification": "Kontaktų atspaudai dar netikrinami — spynų piktogramos rodo tik pasitikėjimą pirmą kartą.",
+            "limitationPersistence": "Raktai gyvena tik šios sesijos atmintyje; paleidus programą iš naujo jie sukuriami iš naujo.",
+            "limitationBackend": "Naudoja eksperimentinį gryno Rust kriptografijos backend; nėra sutvirtintas aukšto saugumo scenarijams."
         }
     },
     "update": {

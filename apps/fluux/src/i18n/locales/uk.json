@@ -460,7 +460,7 @@
             "updates": "Оновлення",
             "blocked": "Заблоковані користувачі",
             "storage": "Сховище",
-            "encryption": "Encryption"
+            "encryption": "Шифрування"
         },
         "blocked": {
             "title": "Заблоковані користувачі",
@@ -547,20 +547,20 @@
             "indexRebuilt": "{{count}} повідомлень проіндексовано"
         },
         "encryption": {
-            "experimental": "Experimental",
-            "openpgpLabel": "OpenPGP end-to-end encryption",
-            "openpgpDescription": "Publish a public key to your server and encrypt 1:1 messages to contacts who also have one.",
-            "statusLabel": "Status",
-            "statusWaitingOnline": "Waiting for connection…",
-            "statusGenerating": "Generating your key…",
-            "statusReady": "Your key is ready and published.",
-            "copyFingerprint": "Copy fingerprint",
-            "copyFailed": "Couldn't copy fingerprint",
-            "toggleFailed": "Couldn't change encryption setting",
-            "limitationsTitle": "Current limitations",
-            "limitationVerification": "Contact fingerprints are not yet verified — lock icons show trust-on-first-use only.",
-            "limitationPersistence": "Keys are in-memory for this session; restarting the app regenerates them.",
-            "limitationBackend": "Uses an experimental pure-Rust crypto backend; not hardened for high-assurance scenarios."
+            "experimental": "Експериментально",
+            "openpgpLabel": "Наскрізне шифрування OpenPGP",
+            "openpgpDescription": "Опублікуйте відкритий ключ на своєму сервері та шифруйте приватні повідомлення контактам, у яких також є ключ.",
+            "statusLabel": "Статус",
+            "statusWaitingOnline": "Очікування підключення…",
+            "statusGenerating": "Створюємо ваш ключ…",
+            "statusReady": "Ваш ключ готовий і опублікований.",
+            "copyFingerprint": "Скопіювати відбиток",
+            "copyFailed": "Не вдалося скопіювати відбиток",
+            "toggleFailed": "Не вдалося змінити налаштування шифрування",
+            "limitationsTitle": "Поточні обмеження",
+            "limitationVerification": "Відбитки контактів поки не перевіряються — значки замка позначають лише довіру при першому використанні.",
+            "limitationPersistence": "Ключі існують лише в пам'яті цієї сесії; перезапуск програми створює їх заново.",
+            "limitationBackend": "Використовує експериментальний криптобекенд на чистому Rust; не загартований для сценаріїв з високими вимогами до безпеки."
         }
     },
     "update": {

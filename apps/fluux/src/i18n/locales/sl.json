@@ -462,7 +462,7 @@
             "updates": "Posodobitve",
             "blocked": "Blokirani uporabniki",
             "storage": "Shramba",
-            "encryption": "Encryption"
+            "encryption": "Šifriranje"
         },
         "blocked": {
             "title": "Blokirani uporabniki",
@@ -549,20 +549,20 @@
             "indexRebuilt": "{{count}} sporočil indeksiranih"
         },
         "encryption": {
-            "experimental": "Experimental",
-            "openpgpLabel": "OpenPGP end-to-end encryption",
-            "openpgpDescription": "Publish a public key to your server and encrypt 1:1 messages to contacts who also have one.",
-            "statusLabel": "Status",
-            "statusWaitingOnline": "Waiting for connection…",
-            "statusGenerating": "Generating your key…",
-            "statusReady": "Your key is ready and published.",
-            "copyFingerprint": "Copy fingerprint",
-            "copyFailed": "Couldn't copy fingerprint",
-            "toggleFailed": "Couldn't change encryption setting",
-            "limitationsTitle": "Current limitations",
-            "limitationVerification": "Contact fingerprints are not yet verified — lock icons show trust-on-first-use only.",
-            "limitationPersistence": "Keys are in-memory for this session; restarting the app regenerates them.",
-            "limitationBackend": "Uses an experimental pure-Rust crypto backend; not hardened for high-assurance scenarios."
+            "experimental": "Eksperimentalno",
+            "openpgpLabel": "OpenPGP šifriranje od konca do konca",
+            "openpgpDescription": "Objavite javni ključ na svojem strežniku in šifrirajte sporočila 1:1 stikom, ki prav tako imajo ključ.",
+            "statusLabel": "Stanje",
+            "statusWaitingOnline": "Čakanje na povezavo…",
+            "statusGenerating": "Ustvarjanje vašega ključa…",
+            "statusReady": "Vaš ključ je pripravljen in objavljen.",
+            "copyFingerprint": "Kopiraj prstni odtis",
+            "copyFailed": "Prstnega odtisa ni bilo mogoče kopirati",
+            "toggleFailed": "Nastavitve šifriranja ni bilo mogoče spremeniti",
+            "limitationsTitle": "Trenutne omejitve",
+            "limitationVerification": "Prstni odtisi stikov še niso preverjeni — ikone ključavnice prikazujejo samo zaupanje ob prvi uporabi.",
+            "limitationPersistence": "Ključi obstajajo le v pomnilniku za to sejo; ponovni zagon aplikacije jih ustvari znova.",
+            "limitationBackend": "Uporablja eksperimentalen kriptografski backend v čistem Rustu; ni utrjen za scenarije z visokimi varnostnimi zahtevami."
         }
     },
     "update": {

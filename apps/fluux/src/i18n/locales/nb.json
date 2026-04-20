@@ -460,7 +460,7 @@
             "updates": "Oppdateringer",
             "blocked": "Blokkerte brukere",
             "storage": "Lagring",
-            "encryption": "Encryption"
+            "encryption": "Kryptering"
         },
         "blocked": {
             "title": "Blokkerte brukere",
@@ -547,20 +547,20 @@
             "indexRebuilt": "{{count}} meldinger indeksert"
         },
         "encryption": {
-            "experimental": "Experimental",
-            "openpgpLabel": "OpenPGP end-to-end encryption",
-            "openpgpDescription": "Publish a public key to your server and encrypt 1:1 messages to contacts who also have one.",
+            "experimental": "Eksperimentell",
+            "openpgpLabel": "OpenPGP ende-til-ende-kryptering",
+            "openpgpDescription": "Publiser en offentlig nøkkel på serveren din, og krypter 1:1-meldinger til kontakter som også har en.",
             "statusLabel": "Status",
-            "statusWaitingOnline": "Waiting for connection…",
-            "statusGenerating": "Generating your key…",
-            "statusReady": "Your key is ready and published.",
-            "copyFingerprint": "Copy fingerprint",
-            "copyFailed": "Couldn't copy fingerprint",
-            "toggleFailed": "Couldn't change encryption setting",
-            "limitationsTitle": "Current limitations",
-            "limitationVerification": "Contact fingerprints are not yet verified — lock icons show trust-on-first-use only.",
-            "limitationPersistence": "Keys are in-memory for this session; restarting the app regenerates them.",
-            "limitationBackend": "Uses an experimental pure-Rust crypto backend; not hardened for high-assurance scenarios."
+            "statusWaitingOnline": "Venter på tilkobling…",
+            "statusGenerating": "Genererer nøkkelen din…",
+            "statusReady": "Nøkkelen din er klar og publisert.",
+            "copyFingerprint": "Kopier fingeravtrykk",
+            "copyFailed": "Kunne ikke kopiere fingeravtrykket",
+            "toggleFailed": "Kunne ikke endre krypteringsinnstillingen",
+            "limitationsTitle": "Nåværende begrensninger",
+            "limitationVerification": "Fingeravtrykk til kontakter verifiseres ennå ikke — låseikonene viser kun tillit ved første bruk.",
+            "limitationPersistence": "Nøklene eksisterer kun i minnet for denne økten; omstart av appen genererer dem på nytt.",
+            "limitationBackend": "Bruker en eksperimentell ren-Rust-kryptobackend; ikke herdet for scenarier med høye sikkerhetskrav."
         }
     },
     "update": {

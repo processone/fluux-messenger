@@ -461,7 +461,7 @@
             "updates": "Ενημερώσεις",
             "blocked": "Αποκλεισμένοι χρήστες",
             "storage": "Αποθήκευση",
-            "encryption": "Encryption"
+            "encryption": "Κρυπτογράφηση"
         },
         "blocked": {
             "title": "Αποκλεισμένοι χρήστες",
@@ -548,20 +548,20 @@
             "indexRebuilt": "{{count}} μηνύματα ευρετηριάστηκαν"
         },
         "encryption": {
-            "experimental": "Experimental",
-            "openpgpLabel": "OpenPGP end-to-end encryption",
-            "openpgpDescription": "Publish a public key to your server and encrypt 1:1 messages to contacts who also have one.",
-            "statusLabel": "Status",
-            "statusWaitingOnline": "Waiting for connection…",
-            "statusGenerating": "Generating your key…",
-            "statusReady": "Your key is ready and published.",
-            "copyFingerprint": "Copy fingerprint",
-            "copyFailed": "Couldn't copy fingerprint",
-            "toggleFailed": "Couldn't change encryption setting",
-            "limitationsTitle": "Current limitations",
-            "limitationVerification": "Contact fingerprints are not yet verified — lock icons show trust-on-first-use only.",
-            "limitationPersistence": "Keys are in-memory for this session; restarting the app regenerates them.",
-            "limitationBackend": "Uses an experimental pure-Rust crypto backend; not hardened for high-assurance scenarios."
+            "experimental": "Πειραματικό",
+            "openpgpLabel": "Κρυπτογράφηση από άκρο σε άκρο OpenPGP",
+            "openpgpDescription": "Δημοσιεύστε ένα δημόσιο κλειδί στον διακομιστή σας και κρυπτογραφήστε προσωπικά μηνύματα σε επαφές που έχουν επίσης κλειδί.",
+            "statusLabel": "Κατάσταση",
+            "statusWaitingOnline": "Αναμονή σύνδεσης…",
+            "statusGenerating": "Δημιουργία του κλειδιού σας…",
+            "statusReady": "Το κλειδί σας είναι έτοιμο και δημοσιευμένο.",
+            "copyFingerprint": "Αντιγραφή αποτυπώματος",
+            "copyFailed": "Δεν ήταν δυνατή η αντιγραφή του αποτυπώματος",
+            "toggleFailed": "Δεν ήταν δυνατή η αλλαγή της ρύθμισης κρυπτογράφησης",
+            "limitationsTitle": "Τρέχοντες περιορισμοί",
+            "limitationVerification": "Τα αποτυπώματα επαφών δεν επαληθεύονται ακόμη — τα εικονίδια λουκέτου δηλώνουν μόνο εμπιστοσύνη πρώτης χρήσης.",
+            "limitationPersistence": "Τα κλειδιά υπάρχουν μόνο στη μνήμη αυτής της συνεδρίας· η επανεκκίνηση της εφαρμογής τα αναγεννά.",
+            "limitationBackend": "Χρησιμοποιεί πειραματικό κρυπτογραφικό backend σε καθαρή Rust· δεν έχει ενισχυθεί για σενάρια υψηλών απαιτήσεων ασφάλειας."
         }
     },
     "update": {

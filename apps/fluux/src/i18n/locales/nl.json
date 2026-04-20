@@ -460,7 +460,7 @@
             "updates": "Updates",
             "blocked": "Geblokkeerde gebruikers",
             "storage": "Opslag",
-            "encryption": "Encryption"
+            "encryption": "Versleuteling"
         },
         "blocked": {
             "title": "Geblokkeerde gebruikers",
@@ -547,20 +547,20 @@
             "indexRebuilt": "{{count}} berichten geïndexeerd"
         },
         "encryption": {
-            "experimental": "Experimental",
-            "openpgpLabel": "OpenPGP end-to-end encryption",
-            "openpgpDescription": "Publish a public key to your server and encrypt 1:1 messages to contacts who also have one.",
+            "experimental": "Experimenteel",
+            "openpgpLabel": "OpenPGP end-to-end-versleuteling",
+            "openpgpDescription": "Publiceer een openbare sleutel op je server en versleutel 1-op-1-berichten naar contacten die er ook een hebben.",
             "statusLabel": "Status",
-            "statusWaitingOnline": "Waiting for connection…",
-            "statusGenerating": "Generating your key…",
-            "statusReady": "Your key is ready and published.",
-            "copyFingerprint": "Copy fingerprint",
-            "copyFailed": "Couldn't copy fingerprint",
-            "toggleFailed": "Couldn't change encryption setting",
-            "limitationsTitle": "Current limitations",
-            "limitationVerification": "Contact fingerprints are not yet verified — lock icons show trust-on-first-use only.",
-            "limitationPersistence": "Keys are in-memory for this session; restarting the app regenerates them.",
-            "limitationBackend": "Uses an experimental pure-Rust crypto backend; not hardened for high-assurance scenarios."
+            "statusWaitingOnline": "Wachten op verbinding…",
+            "statusGenerating": "Je sleutel wordt gegenereerd…",
+            "statusReady": "Je sleutel is klaar en gepubliceerd.",
+            "copyFingerprint": "Vingerafdruk kopiëren",
+            "copyFailed": "Vingerafdruk kon niet worden gekopieerd",
+            "toggleFailed": "Versleutelinginstelling kon niet worden gewijzigd",
+            "limitationsTitle": "Huidige beperkingen",
+            "limitationVerification": "Vingerafdrukken van contacten worden nog niet geverifieerd — slotpictogrammen tonen alleen vertrouwen bij eerste gebruik.",
+            "limitationPersistence": "Sleutels bestaan alleen in het geheugen voor deze sessie; bij herstart van de app worden ze opnieuw gegenereerd.",
+            "limitationBackend": "Gebruikt een experimentele pure-Rust-cryptobackend; niet gehard voor scenario's met hoge beveiligingsvereisten."
         }
     },
     "update": {

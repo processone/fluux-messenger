@@ -462,7 +462,7 @@
             "updates": "Aktualizace",
             "blocked": "Zablokovaní uživatelé",
             "storage": "Úložiště",
-            "encryption": "Encryption"
+            "encryption": "Šifrování"
         },
         "blocked": {
             "title": "Zablokovaní uživatelé",
@@ -549,20 +549,20 @@
             "indexRebuilt": "{{count}} zpráv indexováno"
         },
         "encryption": {
-            "experimental": "Experimental",
-            "openpgpLabel": "OpenPGP end-to-end encryption",
-            "openpgpDescription": "Publish a public key to your server and encrypt 1:1 messages to contacts who also have one.",
-            "statusLabel": "Status",
-            "statusWaitingOnline": "Waiting for connection…",
-            "statusGenerating": "Generating your key…",
-            "statusReady": "Your key is ready and published.",
-            "copyFingerprint": "Copy fingerprint",
-            "copyFailed": "Couldn't copy fingerprint",
-            "toggleFailed": "Couldn't change encryption setting",
-            "limitationsTitle": "Current limitations",
-            "limitationVerification": "Contact fingerprints are not yet verified — lock icons show trust-on-first-use only.",
-            "limitationPersistence": "Keys are in-memory for this session; restarting the app regenerates them.",
-            "limitationBackend": "Uses an experimental pure-Rust crypto backend; not hardened for high-assurance scenarios."
+            "experimental": "Experimentální",
+            "openpgpLabel": "Koncové šifrování OpenPGP",
+            "openpgpDescription": "Zveřejněte veřejný klíč na svém serveru a šifrujte soukromé zprávy s kontakty, kteří také mají klíč.",
+            "statusLabel": "Stav",
+            "statusWaitingOnline": "Čeká se na připojení…",
+            "statusGenerating": "Generuje se váš klíč…",
+            "statusReady": "Váš klíč je připraven a zveřejněn.",
+            "copyFingerprint": "Kopírovat otisk",
+            "copyFailed": "Otisk se nepodařilo zkopírovat",
+            "toggleFailed": "Nastavení šifrování se nepodařilo změnit",
+            "limitationsTitle": "Aktuální omezení",
+            "limitationVerification": "Otisky kontaktů zatím nejsou ověřeny — ikony zámku odrážejí pouze důvěru při prvním použití.",
+            "limitationPersistence": "Klíče žijí pouze v paměti této relace; restart aplikace je vygeneruje znovu.",
+            "limitationBackend": "Používá experimentální kryptografický backend v čistém Rustu; není zpevněn pro scénáře s vysokými bezpečnostními nároky."
         }
     },
     "update": {

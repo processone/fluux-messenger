@@ -462,7 +462,7 @@
             "updates": "Aktualizacje",
             "blocked": "Zablokowani użytkownicy",
             "storage": "Pamięć",
-            "encryption": "Encryption"
+            "encryption": "Szyfrowanie"
         },
         "blocked": {
             "title": "Zablokowani użytkownicy",
@@ -549,20 +549,20 @@
             "indexRebuilt": "{{count}} wiadomości zindeksowanych"
         },
         "encryption": {
-            "experimental": "Experimental",
-            "openpgpLabel": "OpenPGP end-to-end encryption",
-            "openpgpDescription": "Publish a public key to your server and encrypt 1:1 messages to contacts who also have one.",
-            "statusLabel": "Status",
-            "statusWaitingOnline": "Waiting for connection…",
-            "statusGenerating": "Generating your key…",
-            "statusReady": "Your key is ready and published.",
-            "copyFingerprint": "Copy fingerprint",
-            "copyFailed": "Couldn't copy fingerprint",
-            "toggleFailed": "Couldn't change encryption setting",
-            "limitationsTitle": "Current limitations",
-            "limitationVerification": "Contact fingerprints are not yet verified — lock icons show trust-on-first-use only.",
-            "limitationPersistence": "Keys are in-memory for this session; restarting the app regenerates them.",
-            "limitationBackend": "Uses an experimental pure-Rust crypto backend; not hardened for high-assurance scenarios."
+            "experimental": "Eksperymentalne",
+            "openpgpLabel": "Szyfrowanie end-to-end OpenPGP",
+            "openpgpDescription": "Opublikuj klucz publiczny na swoim serwerze i szyfruj wiadomości 1:1 z kontaktami, którzy również mają klucz.",
+            "statusLabel": "Stan",
+            "statusWaitingOnline": "Oczekiwanie na połączenie…",
+            "statusGenerating": "Generowanie Twojego klucza…",
+            "statusReady": "Twój klucz jest gotowy i opublikowany.",
+            "copyFingerprint": "Kopiuj odcisk",
+            "copyFailed": "Nie udało się skopiować odcisku",
+            "toggleFailed": "Nie udało się zmienić ustawienia szyfrowania",
+            "limitationsTitle": "Obecne ograniczenia",
+            "limitationVerification": "Odciski kontaktów nie są jeszcze weryfikowane — ikony kłódki oznaczają jedynie zaufanie przy pierwszym użyciu.",
+            "limitationPersistence": "Klucze istnieją tylko w pamięci tej sesji; ponowne uruchomienie aplikacji generuje je na nowo.",
+            "limitationBackend": "Używa eksperymentalnego backendu kryptograficznego w czystym Ruście; nie jest utwardzony do scenariuszy o wysokich wymaganiach bezpieczeństwa."
         }
     },
     "update": {

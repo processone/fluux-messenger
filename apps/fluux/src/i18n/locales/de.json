@@ -462,7 +462,7 @@
             "updates": "Aktualisierungen",
             "blocked": "Blockierte Benutzer",
             "storage": "Speicher",
-            "encryption": "Encryption"
+            "encryption": "Verschlüsselung"
         },
         "blocked": {
             "title": "Blockierte Benutzer",
@@ -549,20 +549,20 @@
             "indexRebuilt": "{{count}} Nachrichten indexiert"
         },
         "encryption": {
-            "experimental": "Experimental",
-            "openpgpLabel": "OpenPGP end-to-end encryption",
-            "openpgpDescription": "Publish a public key to your server and encrypt 1:1 messages to contacts who also have one.",
+            "experimental": "Experimentell",
+            "openpgpLabel": "OpenPGP Ende-zu-Ende-Verschlüsselung",
+            "openpgpDescription": "Veröffentlichen Sie einen öffentlichen Schlüssel auf Ihrem Server und verschlüsseln Sie Einzelnachrichten an Kontakte, die ebenfalls einen haben.",
             "statusLabel": "Status",
-            "statusWaitingOnline": "Waiting for connection…",
-            "statusGenerating": "Generating your key…",
-            "statusReady": "Your key is ready and published.",
-            "copyFingerprint": "Copy fingerprint",
-            "copyFailed": "Couldn't copy fingerprint",
-            "toggleFailed": "Couldn't change encryption setting",
-            "limitationsTitle": "Current limitations",
-            "limitationVerification": "Contact fingerprints are not yet verified — lock icons show trust-on-first-use only.",
-            "limitationPersistence": "Keys are in-memory for this session; restarting the app regenerates them.",
-            "limitationBackend": "Uses an experimental pure-Rust crypto backend; not hardened for high-assurance scenarios."
+            "statusWaitingOnline": "Warten auf Verbindung…",
+            "statusGenerating": "Ihr Schlüssel wird generiert…",
+            "statusReady": "Ihr Schlüssel ist bereit und veröffentlicht.",
+            "copyFingerprint": "Fingerabdruck kopieren",
+            "copyFailed": "Fingerabdruck konnte nicht kopiert werden",
+            "toggleFailed": "Verschlüsselungseinstellung konnte nicht geändert werden",
+            "limitationsTitle": "Aktuelle Einschränkungen",
+            "limitationVerification": "Kontakt-Fingerabdrücke werden noch nicht verifiziert — Schloss-Symbole zeigen nur Vertrauen bei erster Nutzung.",
+            "limitationPersistence": "Die Schlüssel liegen nur während dieser Sitzung im Speicher; ein Neustart der App erzeugt sie neu.",
+            "limitationBackend": "Nutzt ein experimentelles Krypto-Backend in reinem Rust; nicht für Hochsicherheitsszenarien gehärtet."
         }
     },
     "update": {

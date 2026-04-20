@@ -460,7 +460,7 @@
             "updates": "Ažuriranja",
             "blocked": "Blokirani korisnici",
             "storage": "Pohrana",
-            "encryption": "Encryption"
+            "encryption": "Šifriranje"
         },
         "blocked": {
             "title": "Blokirani korisnici",
@@ -547,20 +547,20 @@
             "indexRebuilt": "{{count}} poruka indeksirano"
         },
         "encryption": {
-            "experimental": "Experimental",
-            "openpgpLabel": "OpenPGP end-to-end encryption",
-            "openpgpDescription": "Publish a public key to your server and encrypt 1:1 messages to contacts who also have one.",
+            "experimental": "Eksperimentalno",
+            "openpgpLabel": "OpenPGP šifriranje s kraja na kraj",
+            "openpgpDescription": "Objavite javni ključ na svom poslužitelju i šifrirajte 1:1 poruke kontaktima koji također imaju ključ.",
             "statusLabel": "Status",
-            "statusWaitingOnline": "Waiting for connection…",
-            "statusGenerating": "Generating your key…",
-            "statusReady": "Your key is ready and published.",
-            "copyFingerprint": "Copy fingerprint",
-            "copyFailed": "Couldn't copy fingerprint",
-            "toggleFailed": "Couldn't change encryption setting",
-            "limitationsTitle": "Current limitations",
-            "limitationVerification": "Contact fingerprints are not yet verified — lock icons show trust-on-first-use only.",
-            "limitationPersistence": "Keys are in-memory for this session; restarting the app regenerates them.",
-            "limitationBackend": "Uses an experimental pure-Rust crypto backend; not hardened for high-assurance scenarios."
+            "statusWaitingOnline": "Čekanje na vezu…",
+            "statusGenerating": "Generiranje vašeg ključa…",
+            "statusReady": "Vaš ključ je spreman i objavljen.",
+            "copyFingerprint": "Kopiraj otisak",
+            "copyFailed": "Otisak se nije mogao kopirati",
+            "toggleFailed": "Postavka šifriranja nije se mogla promijeniti",
+            "limitationsTitle": "Trenutna ograničenja",
+            "limitationVerification": "Otisci kontakata još se ne provjeravaju — ikone lokota prikazuju samo povjerenje pri prvom korištenju.",
+            "limitationPersistence": "Ključevi postoje samo u memoriji ove sesije; ponovno pokretanje aplikacije ih generira ponovno.",
+            "limitationBackend": "Koristi eksperimentalni kripto-backend u čistom Rustu; nije ojačan za scenarije visoke sigurnosti."
         }
     },
     "update": {

@@ -462,7 +462,7 @@
             "updates": "Actualitzacions",
             "blocked": "Usuaris blocats",
             "storage": "Emmagatzematge",
-            "encryption": "Encryption"
+            "encryption": "Xifratge"
         },
         "blocked": {
             "title": "Usuaris blocats",
@@ -550,19 +550,19 @@
         },
         "encryption": {
             "experimental": "Experimental",
-            "openpgpLabel": "OpenPGP end-to-end encryption",
-            "openpgpDescription": "Publish a public key to your server and encrypt 1:1 messages to contacts who also have one.",
-            "statusLabel": "Status",
-            "statusWaitingOnline": "Waiting for connection…",
-            "statusGenerating": "Generating your key…",
-            "statusReady": "Your key is ready and published.",
-            "copyFingerprint": "Copy fingerprint",
-            "copyFailed": "Couldn't copy fingerprint",
-            "toggleFailed": "Couldn't change encryption setting",
-            "limitationsTitle": "Current limitations",
-            "limitationVerification": "Contact fingerprints are not yet verified — lock icons show trust-on-first-use only.",
-            "limitationPersistence": "Keys are in-memory for this session; restarting the app regenerates them.",
-            "limitationBackend": "Uses an experimental pure-Rust crypto backend; not hardened for high-assurance scenarios."
+            "openpgpLabel": "Xifratge d'extrem a extrem OpenPGP",
+            "openpgpDescription": "Publica una clau pública al teu servidor i xifra els missatges privats amb contactes que també en tinguin una.",
+            "statusLabel": "Estat",
+            "statusWaitingOnline": "Esperant la connexió…",
+            "statusGenerating": "S'està generant la vostra clau…",
+            "statusReady": "La vostra clau està a punt i publicada.",
+            "copyFingerprint": "Copia l'empremta",
+            "copyFailed": "No s'ha pogut copiar l'empremta",
+            "toggleFailed": "No s'ha pogut canviar la configuració de xifratge",
+            "limitationsTitle": "Limitacions actuals",
+            "limitationVerification": "Les empremtes dels contactes encara no es verifiquen — les icones del cadenat només indiquen confiança de primer ús.",
+            "limitationPersistence": "Les claus viuen a la memòria només en aquesta sessió; en reiniciar l'aplicació es tornen a generar.",
+            "limitationBackend": "Fa servir un rerefons criptogràfic experimental escrit en Rust pur; no està endurit per a escenaris d'alta seguretat."
         }
     },
     "update": {

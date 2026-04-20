@@ -461,7 +461,7 @@
             "updates": "Atjauninājumi",
             "blocked": "Bloķētie lietotāji",
             "storage": "Krātuve",
-            "encryption": "Encryption"
+            "encryption": "Šifrēšana"
         },
         "blocked": {
             "title": "Bloķētie lietotāji",
@@ -548,20 +548,20 @@
             "indexRebuilt": "{{count}} ziņojumi indeksēti"
         },
         "encryption": {
-            "experimental": "Experimental",
-            "openpgpLabel": "OpenPGP end-to-end encryption",
-            "openpgpDescription": "Publish a public key to your server and encrypt 1:1 messages to contacts who also have one.",
-            "statusLabel": "Status",
-            "statusWaitingOnline": "Waiting for connection…",
-            "statusGenerating": "Generating your key…",
-            "statusReady": "Your key is ready and published.",
-            "copyFingerprint": "Copy fingerprint",
-            "copyFailed": "Couldn't copy fingerprint",
-            "toggleFailed": "Couldn't change encryption setting",
-            "limitationsTitle": "Current limitations",
-            "limitationVerification": "Contact fingerprints are not yet verified — lock icons show trust-on-first-use only.",
-            "limitationPersistence": "Keys are in-memory for this session; restarting the app regenerates them.",
-            "limitationBackend": "Uses an experimental pure-Rust crypto backend; not hardened for high-assurance scenarios."
+            "experimental": "Eksperimentāls",
+            "openpgpLabel": "OpenPGP galapunkta šifrēšana",
+            "openpgpDescription": "Publicējiet publisko atslēgu savā serverī un šifrējiet 1:1 ziņas kontaktiem, kuriem arī ir atslēga.",
+            "statusLabel": "Statuss",
+            "statusWaitingOnline": "Gaida savienojumu…",
+            "statusGenerating": "Ģenerē jūsu atslēgu…",
+            "statusReady": "Jūsu atslēga ir gatava un publicēta.",
+            "copyFingerprint": "Kopēt pirkstu nospiedumu",
+            "copyFailed": "Neizdevās kopēt pirkstu nospiedumu",
+            "toggleFailed": "Neizdevās mainīt šifrēšanas iestatījumu",
+            "limitationsTitle": "Pašreizējie ierobežojumi",
+            "limitationVerification": "Kontaktu pirkstu nospiedumi vēl netiek verificēti — slēdzenes ikonas rāda tikai uzticību pirmajā lietošanā.",
+            "limitationPersistence": "Atslēgas pastāv tikai šīs sesijas atmiņā; lietotnes restartēšana tās ģenerē no jauna.",
+            "limitationBackend": "Izmanto eksperimentālu tīra Rust kriptogrāfijas backend; nav nostiprināts augstas drošības scenārijiem."
         }
     },
     "update": {

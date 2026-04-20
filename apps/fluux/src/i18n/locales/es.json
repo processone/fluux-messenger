@@ -462,7 +462,7 @@
             "updates": "Actualizaciones",
             "blocked": "Usuarios Bloqueados",
             "storage": "Almacenamiento",
-            "encryption": "Encryption"
+            "encryption": "Cifrado"
         },
         "blocked": {
             "title": "Usuarios Bloqueados",
@@ -550,19 +550,19 @@
         },
         "encryption": {
             "experimental": "Experimental",
-            "openpgpLabel": "OpenPGP end-to-end encryption",
-            "openpgpDescription": "Publish a public key to your server and encrypt 1:1 messages to contacts who also have one.",
-            "statusLabel": "Status",
-            "statusWaitingOnline": "Waiting for connection…",
-            "statusGenerating": "Generating your key…",
-            "statusReady": "Your key is ready and published.",
-            "copyFingerprint": "Copy fingerprint",
-            "copyFailed": "Couldn't copy fingerprint",
-            "toggleFailed": "Couldn't change encryption setting",
-            "limitationsTitle": "Current limitations",
-            "limitationVerification": "Contact fingerprints are not yet verified — lock icons show trust-on-first-use only.",
-            "limitationPersistence": "Keys are in-memory for this session; restarting the app regenerates them.",
-            "limitationBackend": "Uses an experimental pure-Rust crypto backend; not hardened for high-assurance scenarios."
+            "openpgpLabel": "Cifrado de extremo a extremo OpenPGP",
+            "openpgpDescription": "Publica una clave pública en tu servidor y cifra los mensajes 1:1 con los contactos que también tengan una.",
+            "statusLabel": "Estado",
+            "statusWaitingOnline": "Esperando la conexión…",
+            "statusGenerating": "Generando tu clave…",
+            "statusReady": "Tu clave está lista y publicada.",
+            "copyFingerprint": "Copiar huella",
+            "copyFailed": "No se pudo copiar la huella",
+            "toggleFailed": "No se pudo cambiar la configuración de cifrado",
+            "limitationsTitle": "Limitaciones actuales",
+            "limitationVerification": "Las huellas de los contactos aún no se verifican — los iconos de candado solo indican confianza en el primer uso.",
+            "limitationPersistence": "Las claves solo viven en memoria durante esta sesión; al reiniciar la aplicación se regeneran.",
+            "limitationBackend": "Usa un backend criptográfico experimental en Rust puro; no está reforzado para escenarios de alta seguridad."
         }
     },
     "update": {
