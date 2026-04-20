@@ -3313,6 +3313,62 @@ describe('XMPPClient Connection', () => {
       expect(smState?.id).toBe('sm-resumed-session')
     })
 
+    // Regression: connecting with a hydrated smState must set sm.outbound BEFORE
+    // xmpp.js's ackQueue could run, so that `<resumed h=N/>` against an empty
+    // in-memory queue iterates zero times instead of crashing on item.stanza.
+    // See Connection.hydrateStreamManagement + xmpp.js stream-management#1119.
+    it('should hydrate sm.outbound before resume so ackQueue runs 0 iterations', async () => {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+        smState: { id: 'sm-resume-42', inbound: 9, outbound: 17 },
+      })
+
+      // Flush connect()'s async setup (server resolution + attemptConnection) so
+      // hydrateStreamManagement has run by the time we inspect the mock.
+      await vi.advanceTimersByTimeAsync(0)
+
+      // Hydration is what sets sm.outbound = 17 — the server's expected h value
+      // on <resumed/>. xmpp.js would otherwise find outbound=0 on a fresh client
+      // and iterate 17 times over an empty queue, crashing on item.stanza.
+      expect(mockXmppClientInstance.streamManagement.id).toBe('sm-resume-42')
+      expect(mockXmppClientInstance.streamManagement.inbound).toBe(9)
+      expect(mockXmppClientInstance.streamManagement.outbound).toBe(17)
+
+      // Simulate xmpp.js's ackQueue against an empty outbound_q on resume:
+      // `for (let i = 0; i < +h - sm.outbound; i++) sm.outbound_q.shift().stanza`
+      // With hydration, h=17 and sm.outbound=17 → 0 iterations, no shift, no crash.
+      const smMock = mockXmppClientInstance.streamManagement as unknown as {
+        outbound: number
+      }
+      const serverH = 17
+      const simulateAckQueue = () => {
+        const emptyQ: Array<{ stanza: unknown }> = []
+        for (let i = 0; i < serverH - smMock.outbound; i++) {
+          const item = emptyQ.shift()
+          smMock.outbound++
+          void (item as { stanza: unknown }).stanza
+        }
+      }
+      expect(simulateAckQueue).not.toThrow()
+      expect(smMock.outbound).toBe(17)
+
+      // Finish the resume handshake and confirm the cache reflects it.
+      mockXmppClientInstance.streamManagement.enabled = true
+      const resumedNonza = createMockElement('resumed', {
+        xmlns: 'urn:xmpp:sm:3',
+        previd: 'sm-resume-42',
+        h: '17',
+      })
+      mockXmppClientInstance._emit('nonza', resumedNonza)
+      await connectPromise
+
+      const cached = xmppClient.getStreamManagementState()
+      expect(cached).toMatchObject({ id: 'sm-resume-42', inbound: 9, outbound: 17 })
+    })
+
     it('should preserve SM state through dead-socket → reconnect cycle', async () => {
       const connectPromise = xmppClient.connect({
         jid: 'user@example.com',

@@ -484,4 +484,73 @@ describe('Connection race conditions', () => {
       expect(snapshot.context.smResumeViable).toBe(false)
     })
   })
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Race 6: Reconnect attempt stalls mid-handshake → 30s timeout fires → retry
+  //
+  // Guards commit ed33cb1: post-wake auto-connect could stall after SASL and
+  // never emit 'online' or 'error', leaving the client wedged. The 30s
+  // RECONNECT_ATTEMPT_TIMEOUT_MS is the safety net. This test exercises the
+  // safety net end-to-end: stall → timeout → next backoff → success.
+  //
+  // Timeline:
+  //   T=0:     connected.healthy
+  //   T=0:     disconnect(clean:false) → reconnecting
+  //   T=1000:  attempting, clientA created, xmpp.start() resolves but no events
+  //   T=31000: RECONNECT_ATTEMPT_TIMEOUT_MS fires → clientA destroyed, waiting
+  //   T=33000: next backoff → attempting again, clientB created
+  //   T=33000+: clientB emits 'online' → connected.healthy
+  //   Assert:  final state is healthy, status is 'online', clientB is active
+  // ─────────────────────────────────────────────────────────────────────────
+
+  describe('Race 6: reconnect attempt stalls → timeout safety net → retry succeeds', () => {
+    it('should recover when an attempt hangs forever mid-handshake', async () => {
+      await connectAndGoOnline(xmppClient, mockXmppClientInstance)
+
+      // Enter reconnecting via unexpected disconnect
+      mockXmppClientInstance._emit('disconnect', { clean: false })
+      await vi.advanceTimersByTimeAsync(0)
+
+      // Prime clientA for the first reconnect attempt. Crucially, clientA
+      // never emits 'online' or 'error' — it just hangs after start() resolves,
+      // simulating a post-SASL stall.
+      const clientA = createMockXmppClient()
+      mockClientFactory._setInstance(clientA)
+      mockClientFactory.mockClear()
+
+      // First reconnect attempt fires after 1s backoff
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(mockClientFactory).toHaveBeenCalledTimes(1)
+      expect(getMachineState(xmppClient)).toEqual({ reconnecting: 'attempting' })
+
+      // Prime clientB for the NEXT attempt that will happen after timeout +
+      // backoff. We install it now so mockClientFactory returns it next call.
+      const clientB = createMockXmppClient()
+      mockClientFactory._setInstance(clientB)
+      mockClientFactory.mockClear()
+
+      // Fast-forward past the 30s safety net — clientA's attempt is abandoned.
+      await vi.advanceTimersByTimeAsync(RECONNECT_ATTEMPT_TIMEOUT_MS)
+
+      // clientA must have been cleanly torn down — no stale handlers survive
+      // to interfere with clientB if a belated event arrives.
+      expect(clientA.removeAllListeners).toHaveBeenCalled()
+
+      // Advance enough to clear any next-attempt backoff (the second attempt
+      // uses exponential backoff, usually 2s). 5s comfortably covers both
+      // the backoff and attemptReconnect's internal network-settle delay.
+      await vi.advanceTimersByTimeAsync(5000)
+
+      // A fresh client must have been created for the retry.
+      expect(mockClientFactory).toHaveBeenCalledTimes(1)
+
+      // clientB completes the handshake normally.
+      clientB._emit('online')
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(getStatus(mockStores)).toBe('online')
+      expect(hasActiveClient(xmppClient)).toBe(true)
+      expect(getMachineState(xmppClient)).toMatchObject({ connected: expect.anything() })
+    })
+  })
 })
