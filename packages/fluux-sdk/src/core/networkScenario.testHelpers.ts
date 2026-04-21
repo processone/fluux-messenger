@@ -94,27 +94,16 @@ export function simulateDisconnect(
 /**
  * Simulate the full SM resumption flow as XMPPClient.handleSmResumption does:
  * 1. Emit 'resumed' event (side effects mark fetchInitiated)
- * 2. markAllRoomsNotJoined() — clears stuck isJoining flags
- * 3. Re-join specified rooms (setRoomJoined + emit room:joined)
+ * 2. Leave room state intact — SM preserves MUC membership server-side; the
+ *    client trusts its existing in-memory (or hydrated-from-storage) state.
  *
- * @param roomJids - rooms that were previously joined (captured before disconnect)
+ * @param roomJids - rooms that were previously joined (unchanged by resumption)
  */
 export async function simulateSmResumptionWithRejoin(
   client: ScenarioMockClient,
-  roomJids: string[]
+  _roomJids: string[]
 ): Promise<void> {
-  // Step 1: SM resume event (triggers side effects — marks fetchInitiated)
   baseSmResumption(client)
-  await settle()
-
-  // Step 2: Reset room state (matches handleSmResumption)
-  roomStore.getState().markAllRoomsNotJoined()
-
-  // Step 3: Rejoin rooms (matches rejoinActiveRooms → joinRoom flow)
-  for (const jid of roomJids) {
-    roomStore.getState().setRoomJoined(jid, true)
-    client._emitSDK('room:joined', { roomJid: jid, joined: true })
-  }
   await settle()
 }
 

@@ -90,6 +90,7 @@ function savePresenceSnapshot(actor: PresenceActor): void {
     // Storage full or unavailable, ignore
   }
 }
+import { StateSnapshot } from './modules/stateSnapshot'
 import { Chat } from './modules/Chat'
 import { Roster } from './modules/Roster'
 import { MUC } from './modules/MUC'
@@ -180,6 +181,7 @@ export class XMPPClient {
   private storageAdapter?: StorageAdapter
   private proxyAdapter?: ProxyAdapter
   private privacyOptions?: PrivacyOptions
+  private stateSnapshot?: StateSnapshot
 
   /**
    * Connection management module.
@@ -697,6 +699,19 @@ export class XMPPClient {
       })
     }
 
+    // Start the snapshot subscriber so SM-resumable state (rooms, roster,
+    // server info, own profile) is persisted as it changes. Hydration on
+    // connect() will read it back before the socket starts, so SM replays
+    // land on populated state.
+    if (this.storageAdapter) {
+      this.stateSnapshot?.stop()
+      this.stateSnapshot = new StateSnapshot({
+        storageAdapter: this.storageAdapter,
+        getJid: () => this.currentJid ? getBareJid(this.currentJid) : null,
+      })
+      this.stateSnapshot.start()
+    }
+
     this.modulesInitialized = true
   }
 
@@ -904,6 +919,15 @@ export class XMPPClient {
 
     this.currentJid = options.jid
     this.stores?.connection.setJid(options.jid)
+
+    // Hydrate stores from the persisted snapshot BEFORE handing the socket
+    // to xmpp.js. SM replay delivers diffs (occupant leaves, new messages,
+    // presence changes) as patches on existing state — if the stores are
+    // empty on resume the diffs are silently lost.
+    if (this.stateSnapshot) {
+      await this.stateSnapshot.hydrate(scopedJid)
+    }
+
     return this.connection.connect(options)
   }
 
@@ -1087,8 +1111,37 @@ export class XMPPClient {
     }
     this.cleanupFunctions = []
 
+    // Tear down the snapshot subscriber + cancel pending debounced writes
+    this.stateSnapshot?.stop()
+    this.stateSnapshot = undefined
+
     // Clean up MUC pending joins to prevent orphaned timeouts
     this.muc?.cleanup()
+  }
+
+  /**
+   * Flush any pending debounced snapshot writes to storage.
+   *
+   * Call this from `beforeunload`/`pagehide` handlers so the latest store
+   * state (roster, rooms, profile) survives page reload. SM counters still
+   * need `persistSmState()` — they use synchronous storage for write
+   * reliability during unload.
+   */
+  async flushStateSnapshot(): Promise<void> {
+    if (this.stateSnapshot) {
+      await this.stateSnapshot.flush()
+    }
+  }
+
+  /**
+   * Clear the persisted snapshot for the current JID. Called on explicit
+   * logout so a subsequent login starts with an empty store.
+   */
+  async clearStateSnapshot(): Promise<void> {
+    const jid = this.currentJid ? getBareJid(this.currentJid) : null
+    if (this.stateSnapshot && jid) {
+      await this.stateSnapshot.clear(jid)
+    }
   }
 
   // ============================================================================
@@ -1511,101 +1564,43 @@ export class XMPPClient {
     this.stores?.console.addEvent('Sending presence probes to refresh contact status', 'sm')
     this.roster.sendPresenceProbes().catch(() => {})
 
-    // Refresh presence in previously joined rooms.
-    // SM resumption preserves our MUC membership, so we don't need a full
-    // rejoin (no disco#info, no history request). We just resend directed
-    // presence to confirm we're still in each room.
+    // SM resumption preserves MUC membership on the server side, so we do NOT
+    // rejoin rooms or refresh presence here. The store's room list (whether
+    // in-memory from the previous session or hydrated from storage on page
+    // reload) is authoritative; any diff the server accumulated during the
+    // disconnect — occupant leaves/joins, messages, presence changes — is
+    // delivered via the SM replay queue and patched onto that state.
     //
-    // Fallback: if SM persistence had no rooms (e.g. SM was enabled before
-    // rooms joined during a fresh session), read from the live room store
-    // which may have been restored by the app persistence layer.
-    let roomsToRefresh = previouslyJoinedRooms
-    if (!roomsToRefresh || roomsToRefresh.length === 0) {
-      const storeRooms = this.stores?.room.joinedRooms() ?? []
-      if (storeRooms.length > 0) {
-        logInfo(`SM resumption: using ${storeRooms.length} room(s) from store (SM persistence was empty)`)
-        roomsToRefresh = storeRooms.map(r => ({
-          jid: r.jid,
-          nickname: r.nickname,
-          password: r.password,
-          autojoin: r.autojoin,
-        }))
-      }
-    }
-    if (roomsToRefresh && roomsToRefresh.length > 0) {
-      logInfo(`SM resumption: refreshing presence in ${roomsToRefresh.length} room(s)`)
+    // Bookmarks are PEP items, not SM-queued stanzas, so they may have
+    // changed on another client while disconnected. For long/unknown-duration
+    // disconnects, refresh them and pick up any newly-autojoined rooms.
+    const SM_SHORT_DISCONNECT_MS = 120_000
+    const isShortDisconnect = disconnectDurationMs != null
+      && disconnectDurationMs < SM_SHORT_DISCONNECT_MS
+
+    if (isShortDisconnect) {
+      const sec = Math.round(disconnectDurationMs / 1000)
+      logInfo(`SM resumption: short disconnect (${sec}s) — skipping bookmark fetch`)
       this.stores?.console.addEvent(
-        `Refreshing presence in ${roomsToRefresh.length} room(s) after SM resumption`,
+        `SM resumption: short disconnect (${sec}s) — skipping bookmark fetch`,
+        'sm'
+      )
+    } else {
+      const sec = disconnectDurationMs != null ? Math.round(disconnectDurationMs / 1000) : 'unknown'
+      logInfo(`SM resumption: disconnect ${sec}s — fetching bookmarks`)
+      this.stores?.console.addEvent(
+        `SM resumption: disconnect ${sec}s — fetching bookmarks`,
         'sm'
       )
 
-      // Ensure room entries exist in the store before refreshing presence.
-      // The room store is ephemeral (not persisted), so after page reload it's empty.
-      // Without entries, self-presence responses (status 110) are silently dropped
-      // by setRoomJoined() which requires the room to already exist.
-      for (const room of roomsToRefresh) {
-        if (!this.stores?.room.getRoom(room.jid)) {
-          this.emitSDK('room:added', {
-            room: {
-              jid: room.jid,
-              name: getLocalPart(room.jid),
-              nickname: room.nickname,
-              joined: false,
-              isJoining: true,
-              isBookmarked: room.autojoin ?? false,
-              occupants: new Map(),
-              messages: [],
-              unreadCount: 0,
-              mentionsCount: 0,
-              typingUsers: new Set(),
-            }
-          })
-        }
-      }
-
-      await this.muc.refreshPresenceInRooms(roomsToRefresh)
-      if (this.isSessionSuperseded(gen, 'SM resumption aborted after room presence refresh')) return
-
-      // SM replay already delivered all queued stanzas — room MAM catch-up
-      // is always skipped on successful SM resume, regardless of disconnect
-      // duration. If a room kicked the user during the disconnect, the kick
-      // notification is part of the SM replay; roomSideEffects excludes
-      // kicked rooms from fetchInitiated, so they get targeted MAM catch-up
-      // when they rejoin via the room:joined event.
-      //
-      // For long or unknown-duration disconnects, fetch bookmarks as a safety
-      // net (bookmarks are PEP items, not SM-queued stanzas, so they may have
-      // changed while disconnected).
-      const SM_SHORT_DISCONNECT_MS = 120_000
-      const isShortDisconnect = disconnectDurationMs != null
-        && disconnectDurationMs < SM_SHORT_DISCONNECT_MS
-
-      if (isShortDisconnect) {
-        const sec = Math.round(disconnectDurationMs / 1000)
-        logInfo(`SM resumption: short disconnect (${sec}s) — skipping bookmark fetch`)
-        this.stores?.console.addEvent(
-          `SM resumption: short disconnect (${sec}s) — skipping bookmark fetch`,
-          'sm'
-        )
-      } else {
-        const sec = disconnectDurationMs != null ? Math.round(disconnectDurationMs / 1000) : 'unknown'
-        logInfo(`SM resumption: disconnect ${sec}s — fetching bookmarks`)
-        this.stores?.console.addEvent(
-          `SM resumption: disconnect ${sec}s — fetching bookmarks`,
-          'sm'
-        )
-
-        // Fetch bookmarks to restore room names and autojoin state.
-        // Also join any newly bookmarked rooms not already joined.
-        this.muc.fetchBookmarks(FRESH_SESSION_IQ_TIMEOUT_MS).then(({ roomsToAutojoin }) => {
-          if (this.isSessionStale(gen)) return
-          for (const room of roomsToAutojoin) {
-            if (!this.stores?.room.getRoom(room.jid)?.joined) {
-              this.muc.joinRoom(room.jid, room.nick, { password: room.password }).catch(() => {})
-            }
+      this.muc.fetchBookmarks(FRESH_SESSION_IQ_TIMEOUT_MS).then(({ roomsToAutojoin }) => {
+        if (this.isSessionStale(gen)) return
+        for (const room of roomsToAutojoin) {
+          if (!this.stores?.room.getRoom(room.jid)?.joined) {
+            this.muc.joinRoom(room.jid, room.nick, { password: room.password }).catch(() => {})
           }
-        }).catch(() => {})
-      }
+        }
+      }).catch(() => {})
     }
   }
 
@@ -1670,13 +1665,17 @@ export class XMPPClient {
     this.stores?.chat.resetMAMStates()
     this.stores?.room.resetRoomMAMStates()
 
-    // Reset room joined state so joinRoom() won't skip rooms with stale joined:true
-    // from the previous session (e.g., reconnect after sleep/wake or network drop)
-    this.stores?.room.markAllRoomsNotJoined()
-
     // Reset presence and resources for fresh session
     this.stores?.roster.resetAllPresence()
     this.stores?.connection.clearOwnResources()
+
+    // NOTE: markAllRoomsNotJoined() is intentionally deferred to just before
+    // rejoinActiveRooms() below. Clearing it here would leave the room store in
+    // a "nothing joined" state for the duration of roster/bookmark fetches — if
+    // the session is aborted in that window (slow server, socket death), a
+    // subsequent SM-resumed reconnect lands on corrupted state with no way to
+    // recover. Keeping the flags until the actual rejoin preserves the live
+    // view; joinRoom()'s skip-guard gets lifted atomically with the rejoin.
 
     // Fire-and-forget discovery calls — start immediately, independent of the serial
     // session setup chain. These must not be blocked by slow IQ responses (roster,
@@ -1743,6 +1742,18 @@ export class XMPPClient {
     const rejoinCount = previouslyJoinedRooms?.filter(r => !autojoinJids.has(r.jid)).length ?? 0
     if (roomsToAutojoin.length > 0 || rejoinCount > 0) {
       logInfo(`Fresh session: ${roomsToAutojoin.length} rooms to autojoin, ${rejoinCount} to rejoin`)
+    }
+
+    const hasRoomsToRejoin =
+      (previouslyJoinedRooms && previouslyJoinedRooms.length > 0) ||
+      roomsToAutojoin.length > 0
+
+    if (hasRoomsToRejoin) {
+      // Lift joinRoom()'s skip-guard just before actually rejoining. Doing this
+      // here (vs at the top of runFreshSessionSetup) means the previous session's
+      // room state stays visible through roster/bookmark fetches, so a socket
+      // death in that window doesn't strand the store in "nothing joined".
+      this.stores?.room.markAllRoomsNotJoined()
     }
 
     if (previouslyJoinedRooms && previouslyJoinedRooms.length > 0) {

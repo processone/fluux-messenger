@@ -610,46 +610,6 @@ export class MUC extends BaseModule {
   }
 
   /**
-   * Send directed presence to previously joined rooms after SM resumption.
-   *
-   * Unlike joinRoom(), this does NOT include the MUC `<x>` element, so it
-   * won't trigger history replay or a fresh join. It simply confirms our
-   * presence in rooms we believe we're still in after stream resumption.
-   *
-   * @param rooms - List of rooms to refresh presence in
-   */
-  async refreshPresenceInRooms(
-    rooms: Array<{ jid: string; nickname: string }>
-  ): Promise<void> {
-    if (!rooms || rooms.length === 0) return
-
-    const currentPresence = this.deps.stores?.connection.getPresenceShow()
-    const currentStatus = this.deps.stores?.connection.getStatusMessage()
-
-    for (const room of rooms) {
-      if (!room.nickname) continue
-
-      const children: Element[] = []
-      if (currentPresence && currentPresence !== 'online' && currentPresence !== 'offline') {
-        children.push(xml('show', {}, currentPresence))
-      }
-      if (currentStatus) {
-        children.push(xml('status', {}, currentStatus))
-      }
-
-      const presence = xml(
-        'presence',
-        { to: `${room.jid}/${room.nickname}` },
-        ...children
-      )
-
-      await this.deps.sendStanza(presence)
-    }
-
-    logInfo(`Refreshed presence in ${rooms.filter(r => r.nickname).length} room(s) after SM resumption`)
-  }
-
-  /**
    * Send a mediated invitation to a MUC room (XEP-0045).
    *
    * The invitation is sent through the room server, which forwards it

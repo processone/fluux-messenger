@@ -782,7 +782,10 @@ describe('XMPPClient', () => {
       expect(stores.connection.setJid).toHaveBeenCalledWith('user@example.com')
     })
 
-    it('should refresh presence in rooms on SM resumption (not full rejoin)', async () => {
+    it('should NOT refresh or rejoin rooms on SM resumption', async () => {
+      // SM resumption preserves MUC membership server-side. The client must not
+      // send directed presence or re-join; any diff (occupant changes, messages)
+      // is delivered via the SM replay queue.
       const mockClientWithSM = createMockXmppClientWithSM('sm-id-rooms')
       mockClientFactory._setInstance(mockClientWithSM)
 
@@ -790,8 +793,9 @@ describe('XMPPClient', () => {
       const newXmppClient = new XMPPClient({ debug: false })
       newXmppClient.bindStores(stores)
 
-      const refreshSpy = vi.spyOn(newXmppClient.muc, 'refreshPresenceInRooms').mockResolvedValue()
       const joinRoomSpy = vi.spyOn(newXmppClient.muc, 'joinRoom').mockResolvedValue()
+      const fetchBookmarksSpy = vi.spyOn(newXmppClient.muc, 'fetchBookmarks')
+        .mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
 
       const connectPromise = newXmppClient.connect({
         jid: 'user@example.com',
@@ -805,7 +809,6 @@ describe('XMPPClient', () => {
         ],
       })
 
-      // SM resume succeeded
       const resumedNonza = createMockElement('resumed', {
         xmlns: 'urn:xmpp:sm:3',
         previd: 'sm-id-rooms',
@@ -815,52 +818,11 @@ describe('XMPPClient', () => {
 
       await connectPromise
 
-      // Should use lightweight presence refresh, not full joinRoom
-      expect(refreshSpy).toHaveBeenCalledWith([
-        { jid: 'room1@conference.example.com', nickname: 'testuser' },
-        { jid: 'room2@conference.example.com', nickname: 'testuser' },
-      ])
       expect(joinRoomSpy).not.toHaveBeenCalled()
-      // Should NOT reset room state (rooms stay joined)
+      // Room store must not be touched — live state is authoritative
       expect(stores.room.markAllRoomsNotJoined).not.toHaveBeenCalled()
-    })
-
-    it('should refresh presence for all rooms regardless of autojoin flag', async () => {
-      const mockClientWithSM = createMockXmppClientWithSM('sm-id-mixed')
-      mockClientFactory._setInstance(mockClientWithSM)
-
-      const stores = createMockStores()
-      const newXmppClient = new XMPPClient({ debug: false })
-      newXmppClient.bindStores(stores)
-
-      const refreshSpy = vi.spyOn(newXmppClient.muc, 'refreshPresenceInRooms').mockResolvedValue()
-
-      const rooms = [
-        { jid: 'autojoin@conference.example.com', nickname: 'testuser', autojoin: true },
-        { jid: 'manual@conference.example.com', nickname: 'testuser', autojoin: false },
-        { jid: 'noflag@conference.example.com', nickname: 'testuser' },
-      ]
-
-      const connectPromise = newXmppClient.connect({
-        jid: 'user@example.com',
-        password: 'secret',
-        server: 'example.com',
-        smState: { id: 'sm-id-mixed', inbound: 5, outbound: 0 },
-        skipDiscovery: true,
-        previouslyJoinedRooms: rooms,
-      })
-
-      const resumedNonza = createMockElement('resumed', {
-        xmlns: 'urn:xmpp:sm:3',
-        previd: 'sm-id-mixed',
-        h: '5',
-      })
-      mockClientWithSM._emit('nonza', resumedNonza)
-
-      await connectPromise
-
-      // ALL rooms should have presence refreshed regardless of autojoin flag
-      expect(refreshSpy).toHaveBeenCalledWith(rooms)
+      // Bookmarks fetched as a safety net (unknown disconnect duration)
+      expect(fetchBookmarksSpy).toHaveBeenCalled()
     })
 
     it('should skip MAM catch-up but fetch bookmarks on SM resumption when disconnect duration is unknown', async () => {
@@ -871,7 +833,6 @@ describe('XMPPClient', () => {
       const newXmppClient = new XMPPClient({ debug: false })
       newXmppClient.bindStores(stores)
 
-      vi.spyOn(newXmppClient.muc, 'refreshPresenceInRooms').mockResolvedValue()
       const catchUpSpy = vi.spyOn(newXmppClient.mam, 'catchUpAllRooms').mockResolvedValue()
       const bookmarksSpy = vi.spyOn(newXmppClient.muc, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
 
@@ -908,7 +869,6 @@ describe('XMPPClient', () => {
       const newXmppClient = new XMPPClient({ debug: false })
       newXmppClient.bindStores(stores)
 
-      vi.spyOn(newXmppClient.muc, 'refreshPresenceInRooms').mockResolvedValue()
       const catchUpSpy = vi.spyOn(newXmppClient.mam, 'catchUpAllRooms').mockResolvedValue()
       const bookmarksSpy = vi.spyOn(newXmppClient.muc, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
 
@@ -942,8 +902,6 @@ describe('XMPPClient', () => {
       // Short disconnect (30s < 120s threshold) → skip MAM catch-up and bookmarks
       expect(catchUpSpy).not.toHaveBeenCalled()
       expect(bookmarksSpy).not.toHaveBeenCalled()
-      // But presence refresh should still happen
-      expect(newXmppClient.muc.refreshPresenceInRooms).toHaveBeenCalled()
     })
 
     it('should skip MAM catch-up but fetch bookmarks on SM resumption for long disconnects', async () => {
@@ -954,7 +912,6 @@ describe('XMPPClient', () => {
       const newXmppClient = new XMPPClient({ debug: false })
       newXmppClient.bindStores(stores)
 
-      vi.spyOn(newXmppClient.muc, 'refreshPresenceInRooms').mockResolvedValue()
       const catchUpSpy = vi.spyOn(newXmppClient.mam, 'catchUpAllRooms').mockResolvedValue()
       const bookmarksSpy = vi.spyOn(newXmppClient.muc, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
 
@@ -987,81 +944,46 @@ describe('XMPPClient', () => {
       expect(bookmarksSpy).toHaveBeenCalled()
     })
 
-    it('should fall back to live room store when previouslyJoinedRooms is empty', async () => {
-      const mockClientWithSM = createMockXmppClientWithSM('sm-id-fallback')
+    it('should leave the live room store untouched on SM resumption', async () => {
+      // Whether or not previouslyJoinedRooms is provided, the store already
+      // reflects the session's room state (either from in-memory continuity on
+      // mid-session reconnect, or from storage hydration on page reload). SM
+      // resume trusts it.
+      const mockClientWithSM = createMockXmppClientWithSM('sm-id-store')
       mockClientFactory._setInstance(mockClientWithSM)
 
       const stores = createMockStores()
-      // Simulate rooms restored by app persistence layer (addRoom before connect)
       const storeRooms = [
         createMockRoom('room1@conference.example.com', { nickname: 'testuser', joined: true }),
-        createMockRoom('room2@conference.example.com', { nickname: 'testuser', joined: true }),
       ]
       stores.room.joinedRooms.mockReturnValue(storeRooms)
 
       const newXmppClient = new XMPPClient({ debug: false })
       newXmppClient.bindStores(stores)
 
-      const refreshSpy = vi.spyOn(newXmppClient.muc, 'refreshPresenceInRooms').mockResolvedValue()
+      const joinRoomSpy = vi.spyOn(newXmppClient.muc, 'joinRoom').mockResolvedValue()
+      vi.spyOn(newXmppClient.muc, 'fetchBookmarks')
+        .mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
 
-      // Connect WITHOUT previouslyJoinedRooms (simulates empty SM persistence)
       const connectPromise = newXmppClient.connect({
         jid: 'user@example.com',
         password: 'secret',
         server: 'example.com',
-        smState: { id: 'sm-id-fallback', inbound: 5, outbound: 0 },
+        smState: { id: 'sm-id-store', inbound: 5, outbound: 0 },
         skipDiscovery: true,
       })
 
       const resumedNonza = createMockElement('resumed', {
         xmlns: 'urn:xmpp:sm:3',
-        previd: 'sm-id-fallback',
+        previd: 'sm-id-store',
         h: '5',
       })
       mockClientWithSM._emit('nonza', resumedNonza)
 
       await connectPromise
 
-      // Should use rooms from the live store as fallback
-      expect(refreshSpy).toHaveBeenCalledWith(
-        expect.arrayContaining([
-          expect.objectContaining({ jid: 'room1@conference.example.com', nickname: 'testuser' }),
-          expect.objectContaining({ jid: 'room2@conference.example.com', nickname: 'testuser' }),
-        ])
-      )
-    })
-
-    it('should not refresh rooms when both previouslyJoinedRooms and store are empty', async () => {
-      const mockClientWithSM = createMockXmppClientWithSM('sm-id-empty')
-      mockClientFactory._setInstance(mockClientWithSM)
-
-      const stores = createMockStores()
-      // joinedRooms returns empty (default mock behavior)
-
-      const newXmppClient = new XMPPClient({ debug: false })
-      newXmppClient.bindStores(stores)
-
-      const refreshSpy = vi.spyOn(newXmppClient.muc, 'refreshPresenceInRooms').mockResolvedValue()
-
-      const connectPromise = newXmppClient.connect({
-        jid: 'user@example.com',
-        password: 'secret',
-        server: 'example.com',
-        smState: { id: 'sm-id-empty', inbound: 5, outbound: 0 },
-        skipDiscovery: true,
-      })
-
-      const resumedNonza = createMockElement('resumed', {
-        xmlns: 'urn:xmpp:sm:3',
-        previd: 'sm-id-empty',
-        h: '5',
-      })
-      mockClientWithSM._emit('nonza', resumedNonza)
-
-      await connectPromise
-
-      // No rooms anywhere → should not attempt refresh
-      expect(refreshSpy).not.toHaveBeenCalled()
+      expect(joinRoomSpy).not.toHaveBeenCalled()
+      expect(stores.room.markAllRoomsNotJoined).not.toHaveBeenCalled()
     })
 
     it('should detect new session when SM resume fails (online event fires)', async () => {
@@ -1949,6 +1871,74 @@ describe('XMPPClient', () => {
       }
 
       expect(discoverSpy).toHaveBeenCalled()
+    })
+
+    it('should NOT call markAllRoomsNotJoined until just before rejoinActiveRooms', async () => {
+      // Regression: an aborted fresh-session setup (e.g. socket dies mid-flight
+      // between fetchBookmarks and rejoinActiveRooms) must not leave the room
+      // store stranded with every room marked joined:false. The skip-guard lift
+      // is deferred so the previous session's state stays visible until the
+      // rejoin actually happens.
+      ;(xmppClient as any).currentJid = 'user@example.com'
+
+      const stores = (xmppClient as any).stores
+      const markAllSpy = stores.room.markAllRoomsNotJoined as ReturnType<typeof vi.fn>
+      markAllSpy.mockClear()
+
+      vi.spyOn(xmppClient.discovery, 'fetchServerInfo').mockResolvedValue()
+      vi.spyOn(xmppClient.discovery, 'discoverHttpUploadService').mockResolvedValue()
+      vi.spyOn(xmppClient.profile, 'fetchOwnProfile').mockResolvedValue()
+      vi.spyOn(xmppClient.roster, 'fetchRoster').mockResolvedValue()
+      vi.spyOn(xmppClient.roster, 'sendInitialPresence').mockResolvedValue()
+      // Bookmarks fails — simulates the socket dying mid-setup
+      vi.spyOn(xmppClient.muc, 'fetchBookmarks').mockRejectedValue(new Error('IQ timeout'))
+
+      try {
+        await (xmppClient as any).runFreshSessionSetup(
+          [{ jid: 'r@conf.example.com', nickname: 'me' }],
+          1,
+          15000,
+        )
+      } catch { /* expected */ }
+
+      // The room state must be untouched — any subsequent SM-resumed reconnect
+      // needs to see the same joined rooms it had going in.
+      expect(markAllSpy).not.toHaveBeenCalled()
+    })
+
+    it('should call markAllRoomsNotJoined exactly when rejoinActiveRooms runs', async () => {
+      ;(xmppClient as any).currentJid = 'user@example.com'
+      // Match the sessionGeneration so the guard doesn't abort mid-setup.
+      ;(xmppClient as any).sessionGeneration = 1
+
+      const stores = (xmppClient as any).stores
+      const markAllSpy = stores.room.markAllRoomsNotJoined as ReturnType<typeof vi.fn>
+      markAllSpy.mockClear()
+
+      const rejoinSpy = vi.spyOn(xmppClient.muc, 'rejoinActiveRooms').mockResolvedValue()
+
+      vi.spyOn(xmppClient.discovery, 'fetchServerInfo').mockResolvedValue()
+      vi.spyOn(xmppClient.discovery, 'discoverHttpUploadService').mockResolvedValue()
+      vi.spyOn(xmppClient.profile, 'fetchOwnProfile').mockResolvedValue()
+      vi.spyOn(xmppClient.roster, 'fetchRoster').mockResolvedValue()
+      vi.spyOn(xmppClient.roster, 'sendInitialPresence').mockResolvedValue()
+      vi.spyOn(xmppClient.muc, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
+
+      const convSync = (xmppClient as any).conversationSync
+      if (convSync) vi.spyOn(convSync, 'fetchConversations').mockResolvedValue([])
+
+      await (xmppClient as any).runFreshSessionSetup(
+        [{ jid: 'r@conf.example.com', nickname: 'me' }],
+        1,
+        15000,
+      )
+
+      expect(markAllSpy).toHaveBeenCalledTimes(1)
+      expect(rejoinSpy).toHaveBeenCalledTimes(1)
+      // Skip-guard is lifted before rejoin, not after
+      const markAllCallOrder = markAllSpy.mock.invocationCallOrder[0]!
+      const rejoinCallOrder = rejoinSpy.mock.invocationCallOrder[0]!
+      expect(markAllCallOrder).toBeLessThan(rejoinCallOrder)
     })
 
     it('should call discoverHttpUploadService before any await in the setup chain', async () => {

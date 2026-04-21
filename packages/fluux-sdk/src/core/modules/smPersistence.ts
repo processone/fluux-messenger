@@ -178,6 +178,11 @@ export class SmPersistence {
   /**
    * Load SM state + joined rooms from storage.
    * Returns stale rooms even if SM state is expired (useful for rejoin).
+   *
+   * Stale storage is NOT cleared — the `joinedRooms` field is still useful
+   * across subsequent reconnect cycles, and wiping it here would force the
+   * next `persist()` call (which runs with an empty store on fresh `<enabled/>`)
+   * to save an empty room list, stranding the rejoin path.
    */
   async load(jid: string): Promise<SmLoadResult> {
     if (!this.deps.storageAdapter) {
@@ -188,7 +193,6 @@ export class SmPersistence {
       if (state) {
         // Check if state is stale (> 10 minutes old — typical SM timeout)
         if (Date.now() - state.timestamp > SM_TIMEOUT_MS) {
-          await this.deps.storageAdapter.clearSessionState(jid)
           // SM state is stale, but joined rooms are still useful for rejoin
           return { smState: null, joinedRooms: state.joinedRooms ?? [] }
         }

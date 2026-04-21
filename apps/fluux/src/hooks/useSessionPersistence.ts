@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { connectionStore, rosterStore, roomStore, useXMPPContext, getBareJid, hasFastToken, deleteFastToken } from '@fluux/sdk'
+import { connectionStore, useXMPPContext, getBareJid, hasFastToken, deleteFastToken } from '@fluux/sdk'
 import { useRosterStore, useConnectionStore, useRoomStore } from '@fluux/sdk/react'
 import type { Contact, Room, RoomOccupant, ServerInfo, HttpUploadService, RoomMessage, ResourcePresence, JoinedRoomInfo } from '@fluux/sdk'
 import { getResource } from '@/utils/xmppResource'
@@ -692,78 +692,13 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
     }
   }, [status])
 
-  // Note: SM state persistence is now handled by SDK's storage adapter.
-  // The SDK automatically persists SM state on enable/resume and before page unload.
-
-  // Save roster and rooms periodically while online
-  // We use an interval instead of subscribing to contacts/rooms Maps to avoid
-  // render loops during connection when many contacts/rooms are loaded.
-  useEffect(() => {
-    if (status !== 'online') return
-
-    // Helper to save current state
-    const saveCurrentState = () => {
-      const state = connectionStore.getState()
-      const scopeJid = state.jid
-
-      const contacts = rosterStore.getState().contacts
-      const contactsArray = Array.from(contacts.values())
-      if (contactsArray.length > 0) {
-        saveRoster(contactsArray, scopeJid)
-      }
-
-      const rooms = roomStore.getState().rooms
-      if (rooms.size > 0) {
-        saveRooms(rooms, scopeJid)
-      }
-    }
-
-    // Save immediately on connect
-    saveCurrentState()
-
-    // Save periodically (every 30 seconds)
-    const interval = setInterval(saveCurrentState, 30000)
-
-    // Also save on beforeunload for immediate state capture
-    const handleUnload = () => saveCurrentState()
-    window.addEventListener('beforeunload', handleUnload)
-    window.addEventListener('pagehide', handleUnload)
-
-    return () => {
-      clearInterval(interval)
-      window.removeEventListener('beforeunload', handleUnload)
-      window.removeEventListener('pagehide', handleUnload)
-    }
-  }, [status])
-
-  // Note: Presence state is now saved automatically by XState's native persistence
-  // in XMPPProvider, so we don't need to save it here manually.
-
-  // Save profile, own resources, and server info periodically while online
-  // NOTE: We use an interval instead of reactive effects because subscribing to
-  // ownAvatarHash, ownNickname, ownResources, serverInfo, httpUploadService
-  // causes App to re-render on every change, which cascades to ChatLayout and
-  // causes render loops during connection when these values update frequently.
-  useEffect(() => {
-    if (status !== 'online') return
-
-    // Save immediately on becoming online
-    const saveAll = () => {
-      const connectionState = connectionStore.getState()
-      saveProfile(connectionState.ownAvatarHash, connectionState.ownNickname, connectionState.jid)
-      if (connectionState.ownResources.size > 0) {
-        saveOwnResources(connectionState.ownResources, connectionState.jid)
-      }
-      if (connectionState.serverInfo || connectionState.httpUploadService) {
-        saveServerInfo(connectionState.serverInfo, connectionState.httpUploadService, connectionState.jid)
-      }
-    }
-
-    saveAll()
-
-    // Save periodically (every 30 seconds) to catch updates
-    const interval = setInterval(saveAll, 30000)
-
-    return () => clearInterval(interval)
-  }, [status])
+  // Persistence of SM-resumable state (rooms, roster, server info, own
+  // profile, own resources) is handled inside the SDK via StateSnapshot:
+  // it subscribes to each store, writes through to StorageAdapter with a
+  // 500ms debounce, and flushes on beforeunload via XMPPProvider. The
+  // standalone save*() functions remain exported for tests and legacy
+  // migration but are no longer wired to an auto-save effect here.
+  //
+  // Presence state is saved automatically by XState's native persistence
+  // in XMPPProvider (key: 'fluux:presence-machine').
 }

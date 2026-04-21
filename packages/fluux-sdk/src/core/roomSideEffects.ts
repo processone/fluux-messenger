@@ -203,26 +203,20 @@ export function setupRoomSideEffects(
     }
   })
 
-  // SM resumption: no MAM catchup needed — server replays undelivered stanzas.
-  // Mark ALL joined rooms as already fetched so room:joined events from the
-  // rejoin flow don't trigger redundant MAM queries.
-  // This runs BEFORE handleSmResumption resets room state (Connection.ts emits
-  // 'resumed' before calling onConnectionSuccess), so rooms still have their
-  // pre-reset joined/isJoining flags.
+  // SM resumption: no MAM catch-up needed — the server replays undelivered
+  // stanzas via the SM queue, and we don't re-issue presence/joinRoom so there
+  // are no spurious room:joined events. We still seed fetchInitiated for every
+  // joined room so any belated room:joined (e.g. from a bookmark-driven join
+  // after a long disconnect) skips redundant MAM.
   const unsubscribeResumed = client.on('resumed', () => {
     if (debug) console.log('[SideEffects] Room: SM resumption — skipping MAM catchup')
 
-    // Mark ALL joined/joining rooms as already fetched so room:joined events
-    // from the rejoin flow don't trigger redundant MAM queries.
-    // SM replay already delivered any undelivered stanzas.
     const state = roomStore.getState()
     for (const [jid, room] of state.rooms) {
       if (room.joined || room.isJoining) {
         fetchInitiated.add(jid)
       }
     }
-    // Also mark the active room even if not yet joined (handles SM replaying
-    // self-presence before handleSmResumption resets and re-joins rooms)
     if (state.activeRoomJid) {
       fetchInitiated.add(state.activeRoomJid)
     }
