@@ -74,6 +74,16 @@ vi.mock('../fastTokenStorage', () => ({
   hasFastToken: vi.fn(),
 }))
 
+// Mock the short-lived invalidation helper so we can assert it is (or isn't)
+// invoked without spinning up a real xmpp.js client.
+const { mockInvalidateFastTokenOnServer } = vi.hoisted(() => ({
+  mockInvalidateFastTokenOnServer: vi.fn().mockResolvedValue({ ok: true }),
+}))
+
+vi.mock('../fastTokenInvalidation', () => ({
+  invalidateFastTokenOnServer: mockInvalidateFastTokenOnServer,
+}))
+
 describe('XMPPClient Connection', () => {
   let xmppClient: XMPPClient
   let mockStores: MockStoreBindings
@@ -417,6 +427,67 @@ describe('XMPPClient Connection', () => {
       expect(mockXmppClientInstance.stop).toHaveBeenCalled()
       expect(mockStores.connection.setStatus).toHaveBeenCalledWith('disconnected')
       expect(mockStores.connection.setJid).toHaveBeenCalledWith(null)
+    })
+
+    it('does not request FAST token invalidation by default (XEP-0484)', async () => {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      mockInvalidateFastTokenOnServer.mockClear()
+      await xmppClient.disconnect()
+
+      expect(mockInvalidateFastTokenOnServer).not.toHaveBeenCalled()
+    })
+
+    it('requests server-side FAST token invalidation when invalidateFastToken:true', async () => {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      mockInvalidateFastTokenOnServer.mockClear()
+      mockInvalidateFastTokenOnServer.mockResolvedValue({ ok: true })
+
+      await xmppClient.disconnect({ invalidateFastToken: true })
+
+      expect(mockInvalidateFastTokenOnServer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          jid: 'user@example.com',
+          server: expect.stringContaining('example.com'),
+        })
+      )
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('disconnected')
+    })
+
+    it('continues disconnect cleanup when FAST token invalidation fails', async () => {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      mockInvalidateFastTokenOnServer.mockClear()
+      mockInvalidateFastTokenOnServer.mockRejectedValueOnce(new Error('network down'))
+
+      await expect(
+        xmppClient.disconnect({ invalidateFastToken: true })
+      ).resolves.not.toThrow()
+
+      expect(mockXmppClientInstance.stop).toHaveBeenCalled()
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('disconnected')
     })
 
     it('should resolve disconnect even when client.stop never settles', async () => {
@@ -3469,7 +3540,8 @@ describe('XMPPClient Connection', () => {
       // Should authenticate with password, no token
       expect(mockAuthenticate).toHaveBeenCalledWith(
         expect.objectContaining({ username: 'user', password: 'secret' }),
-        expect.any(String)
+        expect.any(String),
+        expect.objectContaining({ name: 'user-agent', attrs: expect.objectContaining({ id: expect.any(String) }) })
       )
       // Auth method should be 'password'
       expect(mockStores.connection.setAuthMethod).toHaveBeenCalledWith('password')
@@ -3500,7 +3572,8 @@ describe('XMPPClient Connection', () => {
       // Should have token in credentials
       expect(mockAuthenticate).toHaveBeenCalledWith(
         expect.objectContaining({ token: mockToken }),
-        expect.any(String)
+        expect.any(String),
+        expect.objectContaining({ name: 'user-agent', attrs: expect.objectContaining({ id: expect.any(String) }) })
       )
       // Auth method should be 'fast-token'
       expect(mockStores.connection.setAuthMethod).toHaveBeenCalledWith('fast-token')
@@ -3557,7 +3630,8 @@ describe('XMPPClient Connection', () => {
       // Should succeed with token, no password
       expect(mockAuthenticate).toHaveBeenCalledWith(
         expect.objectContaining({ token: mockToken }),
-        expect.any(String)
+        expect.any(String),
+        expect.objectContaining({ name: 'user-agent', attrs: expect.objectContaining({ id: expect.any(String) }) })
       )
       expect(mockStores.connection.setAuthMethod).toHaveBeenCalledWith('fast-token')
     })

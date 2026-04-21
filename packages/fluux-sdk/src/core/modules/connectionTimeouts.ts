@@ -101,3 +101,11 @@ export const SASL_AUTH_TIMEOUT_MS = 15_000
  * half-ready path, burning through backoff attempts with 15s timeouts each.
  */
 export const NETWORK_SETTLE_DELAY_MS = 2_000
+
+/**
+ * Budget for the best-effort FAST token invalidation roundtrip on logout
+ * (XEP-0484 §6). A short-lived SASL2 session is opened with `invalidate='true'`
+ * so the server drops the stored token; if the network is slow we give up
+ * and let client-side storage cleanup proceed.
+ */
+export const FAST_TOKEN_INVALIDATION_TIMEOUT_MS = 5_000
