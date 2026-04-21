@@ -4,11 +4,12 @@
  */
 import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Download } from 'lucide-react'
+import { X, Download, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useProxiedUrl } from '@/hooks'
 
 interface ImageLightboxProps {
-  /** Image source URL (proxied/cached) for display */
+  /** Original full-resolution image URL (proxied internally for display) */
   src: string
   /** Alt text for the image */
   alt?: string
@@ -16,13 +17,16 @@ interface ImageLightboxProps {
   downloadUrl: string
   /** Original filename */
   filename?: string
+  /** Optional preview URL (e.g. already-proxied thumbnail) shown while the full-size image loads */
+  placeholderSrc?: string
   /** Close handler */
   onClose: () => void
 }
 
-export function ImageLightbox({ src, alt, downloadUrl, filename, onClose }: ImageLightboxProps) {
+export function ImageLightbox({ src, alt, downloadUrl, filename, placeholderSrc, onClose }: ImageLightboxProps) {
   const { t } = useTranslation()
   const mouseDownTargetRef = useRef<EventTarget | null>(null)
+  const { url: proxiedSrc, isLoading } = useProxiedUrl(src)
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -31,6 +35,8 @@ export function ImageLightbox({ src, alt, downloadUrl, filename, onClose }: Imag
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [onClose])
+
+  const displaySrc = proxiedSrc ?? placeholderSrc
 
   return createPortal(
     <div
@@ -60,12 +66,16 @@ export function ImageLightbox({ src, alt, downloadUrl, filename, onClose }: Imag
       </div>
 
       {/* Image */}
-      <img
-        src={src}
-        alt={alt || 'Image'}
-        className="w-[90vw] h-[85vh] object-contain rounded-lg select-none"
-        draggable={false}
-      />
+      {displaySrc ? (
+        <img
+          src={displaySrc}
+          alt={alt || 'Image'}
+          className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg select-none"
+          draggable={false}
+        />
+      ) : (
+        isLoading && <Loader2 className="w-8 h-8 text-white/70 animate-spin" />
+      )}
 
       {/* Filename label */}
       {filename && (
