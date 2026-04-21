@@ -33,7 +33,7 @@ quick-xml = "0.39"
 tokio-rustls = "0.26"
 rustls = { version = "0.23", features = ["ring"] }
 rustls-native-certs = "0.8"
-trust-dns-resolver = "0.23"
+hickory-resolver = "0.26"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
