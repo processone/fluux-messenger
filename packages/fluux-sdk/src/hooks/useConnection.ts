@@ -141,9 +141,12 @@ export function useConnection() {
     return client.getStreamManagementState()
   }, [client])
 
-  const disconnect = useCallback(async () => {
-    await client.disconnect()
-  }, [client])
+  const disconnect = useCallback(
+    async (options: { invalidateFastToken?: boolean } = {}) => {
+      await client.disconnect(options)
+    },
+    [client]
+  )
 
   const cancelReconnect = useCallback(() => {
     client.cancelReconnect()

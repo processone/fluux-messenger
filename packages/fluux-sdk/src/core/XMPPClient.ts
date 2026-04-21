@@ -934,20 +934,30 @@ export class XMPPClient {
   /**
    * Disconnect from the XMPP server.
    *
+   * @param options.invalidateFastToken - When true and a FAST token
+   *   (XEP-0484) is stored for this account, request server-side
+   *   invalidation before tearing down the transport. Use this on
+   *   explicit user logout so the stored token can no longer be
+   *   replayed from another device.
+   *
    * @returns Promise that resolves when disconnected
    *
    * @example
    * ```typescript
+   * // Regular disconnect (preserves the FAST token)
    * await client.disconnect()
+   *
+   * // Explicit logout — also drops the server-side FAST token
+   * await client.disconnect({ invalidateFastToken: true })
    * ```
    */
-  async disconnect(): Promise<void> {
+  async disconnect(options: { invalidateFastToken?: boolean } = {}): Promise<void> {
     this.currentJid = null
     // Clear session-scoped tracking data
     this.xep0084AvatarChecked.clear()
     this.entityTime?.clearCache()
     this.lastActivity?.clearCache()
-    return this.connection.disconnect()
+    return this.connection.disconnect(options)
   }
 
   /**

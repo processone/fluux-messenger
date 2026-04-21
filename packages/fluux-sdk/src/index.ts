@@ -559,6 +559,17 @@ export type { DiscoveryResult } from './utils/websocketDiscovery'
 // FAST token utilities (XEP-0484)
 export { hasFastToken, deleteFastToken } from './core/fastTokenStorage'
 
+// SASL2 user-agent identity (XEP-0388 §2.2)
+// - id: stable per-device UUID, bound to by FAST tokens
+// - device name: user-visible label in other clients' session lists
+export {
+  getUserAgentId,
+  clearUserAgentIdentity,
+  getUserAgentDeviceName,
+  setUserAgentDeviceName,
+  getEffectiveDeviceName,
+} from './core/userAgent'
+
 // Storage adapters for session persistence
 export { sessionStorageAdapter } from './utils/sessionStorageAdapter'
 export type { StorageAdapter, SessionState, StoredCredentials, JoinedRoomInfo } from './core/types'

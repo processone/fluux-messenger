@@ -50,6 +50,8 @@ import {
 } from './serverResolution'
 import { SmPersistence } from './smPersistence'
 import { fetchFastToken, saveFastToken, deleteFastToken } from '../fastTokenStorage'
+import { invalidateFastTokenOnServer } from '../fastTokenInvalidation'
+import { buildUserAgentElement } from '../userAgent'
 import { ProxyManager } from './proxyManager'
 import { isConnectionTraceEnabled } from './connectionDiagnostics'
 
@@ -678,8 +680,13 @@ export class Connection extends BaseModule {
 
   /**
    * Disconnect from XMPP server.
+   *
+   * @param options.invalidateFastToken - When true and a FAST token
+   *   (XEP-0484) is stored for this account, open a short-lived SASL2
+   *   session to invalidate the token on the server before teardown.
+   *   Best-effort: failures do not block the rest of the disconnect.
    */
-  async disconnect(): Promise<void> {
+  async disconnect(options: { invalidateFastToken?: boolean } = {}): Promise<void> {
     const disconnectOp = ++this.disconnectOperationSeq
     const disconnectStart = Date.now()
     const logDisconnect = (message: string) => {
@@ -688,7 +695,7 @@ export class Connection extends BaseModule {
       this.logTrace(line)
     }
 
-    logDisconnect(`begin (state=${JSON.stringify(this.getMachineState())}, hasClient=${!!this.xmpp}, hasCredentials=${!!this.credentials})`)
+    logDisconnect(`begin (state=${JSON.stringify(this.getMachineState())}, hasClient=${!!this.xmpp}, hasCredentials=${!!this.credentials}, invalidateFastToken=${!!options.invalidateFastToken})`)
 
     // Signal machine: user-initiated disconnect
     this.sendMachineEvent({ type: 'DISCONNECT' }, 'disconnect:user')
@@ -701,6 +708,8 @@ export class Connection extends BaseModule {
     // Capture references needed for async cleanup before nulling them
     const clientToStop = this.xmpp
     const jidForSmCleanup = this.credentials?.jid
+    const serverForInvalidation = this.credentials?.server
+    const shouldInvalidateFastToken = !!options.invalidateFastToken
 
     if (clientToStop) {
       this.xmpp = null
@@ -722,6 +731,29 @@ export class Connection extends BaseModule {
     // ── Async cleanup phase ──
     // SM persistence, room message flush, and XMPP stream close.
     // Safe to run after UI has transitioned.
+
+    // Best-effort FAST token invalidation (XEP-0484 §6). Runs before the
+    // transport is torn down so the short-lived invalidation session can
+    // reach the server while we still have network path established.
+    if (shouldInvalidateFastToken && jidForSmCleanup && serverForInvalidation) {
+      const bareJid = getBareJid(jidForSmCleanup)
+      logDisconnect(`attempting FAST token invalidation for ${bareJid}`)
+      try {
+        const result = await invalidateFastTokenOnServer({
+          jid: bareJid,
+          server: serverForInvalidation,
+        })
+        if (result.ok) {
+          logDisconnect(`FAST token invalidated on server${result.reason ? ` (${result.reason})` : ''}`)
+          this.stores.console.addEvent('FAST token invalidated on server', 'connection')
+        } else {
+          logDisconnect(`FAST token invalidation skipped or failed (${result.reason ?? 'unknown'})`)
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        logDisconnect(`FAST token invalidation threw (${message})`)
+      }
+    }
 
     this.smPersistence.clearCache()
     logDisconnect('SM in-memory cache cleared')
@@ -1405,10 +1437,13 @@ export class Connection extends BaseModule {
           'connection'
         )
         logInfo(`Auth: ${authMethod} (SASL: ${mechanism}, offered: ${mechanisms.join(', ')})`)
+        // XEP-0388 §2.2 / XEP-0484: FAST binds issued tokens to the user-agent
+        // id, so we MUST include <user-agent/> for the server to issue tokens.
+        const userAgent = buildUserAgentElement()
         const saslStart = Date.now()
         let saslTimeoutId: ReturnType<typeof setTimeout> | undefined
         await Promise.race([
-          Promise.resolve(authenticate(creds, mechanism)).then(() => {
+          Promise.resolve(authenticate(creds, mechanism, userAgent)).then(() => {
             clearTimeout(saslTimeoutId)
             logInfo(`SASL complete (${Date.now() - saslStart}ms)`)
           }),

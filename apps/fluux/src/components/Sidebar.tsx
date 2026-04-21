@@ -108,7 +108,8 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
   const ownNickname = useConnectionStore((s) => s.ownNickname)
   // Get methods from client (not from store)
   const { client } = useXMPP()
-  const disconnect = () => client.disconnect()
+  const disconnect = (options?: { invalidateFastToken?: boolean }) =>
+    client.disconnect(options)
   const cancelReconnect = () => client.cancelReconnect()
   const isAdmin = useAdminStore((s) => s.isAdmin)
   // Use targeted store selectors instead of useChat()/useRoom() to avoid render loops.
@@ -515,9 +516,13 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
               </Tooltip>
             ) : (
               <UserMenu onLogout={async (shouldCleanLocalData) => {
-                // Always attempt disconnect first.
+                // Always attempt disconnect first. Request FAST token
+                // invalidation (XEP-0484 §6) so the server drops any
+                // stored token instead of leaving it usable until expiry.
                 const disconnectSettled = await Promise.race([
-                  disconnect().then(() => 'done' as const).catch(() => 'error' as const),
+                  disconnect({ invalidateFastToken: true })
+                    .then(() => 'done' as const)
+                    .catch(() => 'error' as const),
                   new Promise<'timeout'>((resolve) => {
                     setTimeout(() => resolve('timeout'), LOGOUT_DISCONNECT_TIMEOUT_MS)
                   }),
