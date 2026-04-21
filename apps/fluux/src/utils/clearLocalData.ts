@@ -11,6 +11,7 @@ import {
   getBareJid,
   deleteFastToken,
   clearSearchIndex,
+  clearUserAgentIdentity,
 } from '@fluux/sdk'
 import { clearSession, getSession } from '@/hooks/useSessionPersistence'
 import { deleteCredentials } from '@/utils/keychain'
@@ -80,6 +81,10 @@ export async function clearLocalData(options: ClearLocalDataOptions = {}): Promi
         }
       }
       fastTokenKeys.forEach((key) => localStorage.removeItem(key))
+      // Full wipe: also reset the SASL2 user-agent identity so the next
+      // login presents a fresh device to the server. On per-account logout
+      // we keep the id (same device, tokens are already scoped by JID).
+      clearUserAgentIdentity()
     } else if (scopedJid) {
       deleteFastToken(scopedJid)
     }
