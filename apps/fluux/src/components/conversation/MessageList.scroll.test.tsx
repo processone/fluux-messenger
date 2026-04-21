@@ -1130,9 +1130,9 @@ describe('MessageList scroll behavior', () => {
           container.dispatchEvent(new Event('scroll'))
         })
 
-        // FAB should NOT be visible - wrapper div should have aria-hidden="true"
-        const fabWrapper = document.querySelector('[aria-hidden]')
-        expect(fabWrapper?.getAttribute('aria-hidden')).toBe('true')
+        // FAB should NOT be visible - wrapper div should have inert set
+        const fabWrapper = document.querySelector('.animate-\\[fab-spring-out_0\\.25s_ease-in_forwards\\]')
+        expect(fabWrapper?.hasAttribute('inert')).toBe(true)
       }
     })
 
@@ -1165,8 +1165,8 @@ describe('MessageList scroll behavior', () => {
           container.dispatchEvent(new Event('scroll'))
         })
 
-        let fabWrapper = document.querySelector('[aria-hidden]')
-        expect(fabWrapper?.getAttribute('aria-hidden')).toBe('true')
+        let fabWrapper = document.querySelector('[class*="fab-spring"]')
+        expect(fabWrapper?.hasAttribute('inert')).toBe(true)
 
         // Scroll up far from bottom
         scrollTopValue = 200 // distance from bottom = 2000-200-500 = 1300px
@@ -1176,14 +1176,15 @@ describe('MessageList scroll behavior', () => {
         })
 
         // Now FAB should be visible
-        fabWrapper = document.querySelector('[aria-hidden]')
-        expect(fabWrapper?.getAttribute('aria-hidden')).toBe('false')
+        fabWrapper = document.querySelector('[class*="fab-spring"]')
+        expect(fabWrapper?.hasAttribute('inert')).toBe(false)
       }
     })
 
-    it('should keep FAB hidden during active prepend (scroll events suppressed)', () => {
-      // During prepending (isLoadingOlder=true), scroll events are suppressed
-      // to avoid interfering with scroll position restoration, so FAB stays hidden
+    it('should update FAB visibility based on scroll position even during prepend', () => {
+      // FAB visibility is driven purely by scroll position; isLoadingOlder does not
+      // gate it. When the user is scrolled far from the bottom, the FAB is shown
+      // regardless of whether an older-messages fetch is in flight.
       const messages = createTestMessages(20)
       const onScrollToTop = vi.fn()
 
@@ -1193,14 +1194,13 @@ describe('MessageList scroll behavior', () => {
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
           onScrollToTop={onScrollToTop}
-          isLoadingOlder={true} // Triggers prepending state
+          isLoadingOlder={true}
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
       )
 
       const container = document.querySelector('.overflow-y-auto') as HTMLDivElement
       if (container) {
-        // Set scrolled up position (far from bottom)
         let scrollTopValue = 100
         Object.defineProperty(container, 'scrollHeight', { value: 2000, configurable: true })
         Object.defineProperty(container, 'clientHeight', { value: 500, configurable: true })
@@ -1210,14 +1210,12 @@ describe('MessageList scroll behavior', () => {
           configurable: true,
         })
 
-        // Trigger scroll event during "prepending" state
         act(() => {
           container.dispatchEvent(new Event('scroll'))
         })
 
-        // FAB should remain hidden — scroll processing is suppressed during prepend
-        const fabWrapper = document.querySelector('[aria-hidden]')
-        expect(fabWrapper?.getAttribute('aria-hidden')).toBe('true')
+        const fabWrapper = document.querySelector('[class*="fab-spring"]')
+        expect(fabWrapper?.hasAttribute('inert')).toBe(false)
       }
     })
 

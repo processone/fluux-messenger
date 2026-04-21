@@ -334,7 +334,7 @@ export function MessageList<T extends BaseMessage>({
             ? 'animate-[fab-spring-in_0.4s_cubic-bezier(0.34,1.56,0.64,1)_forwards]'
             : 'animate-[fab-spring-out_0.25s_ease-in_forwards] pointer-events-none'
         }`}
-        aria-hidden={!showScrollToBottom}
+        inert={!showScrollToBottom}
       >
         <Tooltip content={t('chat.scrollToBottom') + ` (${isMac ? '⌘↓' : 'Ctrl+↓'})`} position="left">
           <button

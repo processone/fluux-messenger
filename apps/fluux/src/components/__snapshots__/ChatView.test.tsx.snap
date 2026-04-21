@@ -395,8 +395,8 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
           </div>
         </div>
         <div
-          aria-hidden="true"
           class="absolute bottom-4 end-4 z-40 animate-[fab-spring-out_0.25s_ease-in_forwards] pointer-events-none"
+          inert=""
         >
           <div
             class="inline-flex"
@@ -486,8 +486,8 @@ exports[`ChatView > Snapshots > should match snapshot with typing indicator 1`] 
           </div>
         </div>
         <div
-          aria-hidden="true"
           class="absolute bottom-4 end-4 z-40 animate-[fab-spring-out_0.25s_ease-in_forwards] pointer-events-none"
+          inert=""
         >
           <div
             class="inline-flex"
