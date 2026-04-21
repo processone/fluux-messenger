@@ -1472,7 +1472,12 @@ export class Connection extends BaseModule {
           }
         : () => { /* rememberSession disabled — do not persist FAST token */ }
       fastModule.deleteToken = () => {
-        logInfo('FAST token invalidated/deleted')
+        // xmpp.js calls deleteToken() whenever it takes the "invalid token" path,
+        // including when no token existed (isTokenValid(undefined) === false).
+        // Only log when a token was actually present to avoid spurious noise on first login.
+        if (fetchFastToken(bareJid) !== null) {
+          logInfo('FAST token invalidated/deleted')
+        }
         deleteFastToken(bareJid)
       }
     }
