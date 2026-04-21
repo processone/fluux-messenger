@@ -358,19 +358,24 @@ describe('SmPersistence', () => {
       expect(result.joinedRooms).toHaveLength(1)
     })
 
-    it('should clear stale state from storage', async () => {
+    it('should preserve stale state in storage (not clear it)', async () => {
+      // Stale SM state is useless for resume, but the joinedRooms alongside it
+      // are still valid for rejoin. Clearing here would force the next persist()
+      // to overwrite with an empty room list during fresh-session <enabled/>.
       mockStorage.store.set('user@example.com', {
         smId: 'old-id',
         smInbound: 10,
         smOutbound: 4,
         resource: 'res1',
         timestamp: Date.now() - 15 * 60 * 1000,
+        joinedRooms: [{ jid: 'room@conf.example.com', nickname: 'me' }],
       })
 
       const sm = new SmPersistence(createDeps({ storageAdapter: mockStorage.adapter }))
       await sm.load('user@example.com')
 
-      expect(mockStorage.adapter.clearSessionState).toHaveBeenCalledWith('user@example.com')
+      expect(mockStorage.adapter.clearSessionState).not.toHaveBeenCalled()
+      expect(mockStorage.store.get('user@example.com')?.joinedRooms).toHaveLength(1)
     })
 
     it('should drop SM state when smOutbound is missing (pre-outbound persistence format)', async () => {

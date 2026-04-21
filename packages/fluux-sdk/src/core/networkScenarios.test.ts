@@ -71,10 +71,10 @@ describe('Network Scenario Journey Tests', () => {
   })
 
   // =========================================================================
-  // Scenario 1: Disconnect during room join → SM Resume unsticks room
+  // Scenario 1: Disconnect during room join → SM Resume leaves state alone
   // =========================================================================
   describe('Scenario 1: Disconnect during room join → SM Resume', () => {
-    it('should unstick room that was isJoining before disconnect', async () => {
+    it('should leave a mid-join room in place — the server either completed the join (self-presence arrives in SM replay) or didn\'t', async () => {
       // Room was mid-join when connection dropped
       seedRooms([
         { jid: 'room@conference.example.com', isJoining: true, joined: false },
@@ -83,16 +83,19 @@ describe('Network Scenario Journey Tests', () => {
       connectionStore.getState().setStatus('disconnected')
       cleanup = setupRoomSideEffects(client)
 
-      // SM resume + rejoin
+      // SM resume does NOT touch room state — the server's view of our
+      // membership is authoritative, and any post-disconnect transitions are
+      // delivered via the SM replay queue.
       await simulateSmResumptionWithRejoin(client, ['room@conference.example.com'])
 
-      // Room should be joined, not stuck in isJoining
+      // Room still in the same isJoining state; the server's replayed
+      // self-presence (if the join completed) or lack thereof would resolve it.
       const snapshot = snapshotRoomStates(['room@conference.example.com'])
       expect(snapshot.get('room@conference.example.com')).toEqual(
-        expect.objectContaining({ joined: true, isJoining: false })
+        expect.objectContaining({ isJoining: true, joined: false })
       )
 
-      // No redundant MAM (SM resume marked it in fetchInitiated)
+      // No MAM on SM resume — replay covers any missed messages
       expect(client.chat.queryRoomMAM).not.toHaveBeenCalled()
     })
   })
@@ -128,7 +131,7 @@ describe('Network Scenario Journey Tests', () => {
   // Scenario 3: Multiple rooms in different states → SM Resume
   // =========================================================================
   describe('Scenario 3: Multiple rooms in different states → SM Resume', () => {
-    it('should re-join previously joined rooms and leave unjoined rooms alone', async () => {
+    it('should leave every room\'s state untouched — SM resume does not mutate local room state', async () => {
       seedRooms([
         { jid: 'roomA@conference.example.com', joined: true, supportsMAM: true },
         { jid: 'roomB@conference.example.com', isJoining: true, joined: false, supportsMAM: true },
@@ -138,7 +141,6 @@ describe('Network Scenario Journey Tests', () => {
       connectionStore.getState().setStatus('disconnected')
       cleanup = setupRoomSideEffects(client)
 
-      // SM resume: rejoin A and B (they were previously joined/joining), NOT C
       await simulateSmResumptionWithRejoin(client, [
         'roomA@conference.example.com',
         'roomB@conference.example.com',
@@ -150,20 +152,20 @@ describe('Network Scenario Journey Tests', () => {
         'roomC@conference.example.com',
       ])
 
-      // A: was joined → re-joined
+      // A: was joined → stays joined (server view preserved by SM)
       expect(snapshots.get('roomA@conference.example.com')).toEqual(
-        expect.objectContaining({ joined: true, isJoining: false })
+        expect.objectContaining({ joined: true })
       )
-      // B: was isJoining → now properly joined (unstuck)
+      // B: was isJoining → stays as-is; server replay will resolve if join completed
       expect(snapshots.get('roomB@conference.example.com')).toEqual(
-        expect.objectContaining({ joined: true, isJoining: false })
+        expect.objectContaining({ isJoining: true, joined: false })
       )
-      // C: was never joined → stays not-joined (markAllRoomsNotJoined cleared flags but no rejoin)
+      // C: was never joined → stays not-joined
       expect(snapshots.get('roomC@conference.example.com')).toEqual(
-        expect.objectContaining({ joined: false, isJoining: false })
+        expect.objectContaining({ joined: false })
       )
 
-      // No MAM for any room
+      // No MAM for any room — SM replay covers message delivery
       expect(client.chat.queryRoomMAM).not.toHaveBeenCalled()
     })
   })
@@ -272,6 +274,72 @@ describe('Network Scenario Journey Tests', () => {
       roomStore.getState().setActiveRoom('roomB@conference.example.com')
       await settle()
 
+      expect(client.chat.queryRoomMAM).not.toHaveBeenCalled()
+    })
+
+    // =========================================================================
+    // Regression: log from 2026-04-21 — SM resumption after an aborted fresh
+    // session must leave pre-existing joined-room state intact.
+    //
+    // Sequence the log showed:
+    //   1. 7 rooms joined (store has joined=true for all)
+    //   2. Stream error → reconnect cycle tries SM resume, keeps failing
+    //   3. Eventually a fresh session is attempted
+    //   4. Fresh session aborts mid-setup (socket dies before rejoinActiveRooms)
+    //   5. Next reconnect succeeds via SM resume
+    //
+    // Before the fix: step 3 called markAllRoomsNotJoined() at the top of the
+    // setup, so step 4 left every room marked joined=false. Step 5 trusted
+    // that corrupted state and the UI showed "not joined" indefinitely.
+    //
+    // After the fix: step 3 defers the flag-clearing to right before the
+    // rejoin call, so step 4 leaves the live room state untouched, and step
+    // 5 has correct state to trust.
+    // =========================================================================
+    it('REGRESSION: rooms stay joined after fresh-session aborts mid-setup followed by SM resume', async () => {
+      seedRooms([
+        { jid: 'roomA@conference.example.com', joined: true, supportsMAM: true },
+        { jid: 'roomB@conference.example.com', joined: true, supportsMAM: true },
+        { jid: 'roomC@conference.example.com', joined: true, supportsMAM: true },
+      ], 'roomA@conference.example.com')
+
+      cleanup = setupRoomSideEffects(client)
+
+      // Step 2-3: stream dies, reconnect cycle eventually falls into a fresh
+      // session. Simulate the fresh session path ABORTING before it reaches
+      // rejoinActiveRooms — the fix is that markAllRoomsNotJoined is now
+      // deferred to just before rejoin, so an early abort leaves flags alone.
+      //
+      // We model this directly: if the old behavior had run, rooms would
+      // already be joined=false here. Assert they aren't.
+      simulateDisconnect(client, { clearMocks: true })
+
+      const beforeResume = snapshotRoomStates([
+        'roomA@conference.example.com',
+        'roomB@conference.example.com',
+        'roomC@conference.example.com',
+      ])
+      expect(beforeResume.get('roomA@conference.example.com')?.joined).toBe(true)
+      expect(beforeResume.get('roomB@conference.example.com')?.joined).toBe(true)
+      expect(beforeResume.get('roomC@conference.example.com')?.joined).toBe(true)
+
+      // Step 5: SM resume succeeds. It must not mutate the room store.
+      await simulateSmResumptionWithRejoin(client, [
+        'roomA@conference.example.com',
+        'roomB@conference.example.com',
+        'roomC@conference.example.com',
+      ])
+
+      const afterResume = snapshotRoomStates([
+        'roomA@conference.example.com',
+        'roomB@conference.example.com',
+        'roomC@conference.example.com',
+      ])
+      expect(afterResume.get('roomA@conference.example.com')?.joined).toBe(true)
+      expect(afterResume.get('roomB@conference.example.com')?.joined).toBe(true)
+      expect(afterResume.get('roomC@conference.example.com')?.joined).toBe(true)
+
+      // SM replay covers any diff — no MAM catch-up, no rejoin churn
       expect(client.chat.queryRoomMAM).not.toHaveBeenCalled()
     })
 

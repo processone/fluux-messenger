@@ -196,6 +196,13 @@ export function XMPPProvider({
       // Persist the latest SM inbound counter before page unloads
       // This ensures session resumption works correctly after page reload
       client.persistSmState()
+      // Fire-and-forget flush of the SM-resumable state snapshot (rooms,
+      // roster, server info, profile). The 500ms debounce means recent
+      // changes may still be pending; this flush tries to write them before
+      // the page is torn down. If the async write doesn't complete in time,
+      // the next reload may see slightly stale state — non-fatal, the server
+      // will reconcile via SM replay.
+      void client.flushStateSnapshot()
     }
 
     // beforeunload fires on page refresh/navigation
