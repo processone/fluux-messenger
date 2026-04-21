@@ -1344,6 +1344,15 @@ export class Connection extends BaseModule {
     const xmppClient = client({
       service: wsUrl,
       domain,
+      // Pass username so xmpp.js sets entity.jid = bare JID before opening the stream.
+      // This lets @xmpp/client-core's header() attach from="user@domain" to the <open/>
+      // (or <stream:stream>), which is a hard prerequisite for ejabberd to advertise
+      // SASL2 (XEP-0388) stream features. See xmpp_stream_in.erl send_features/1:
+      // SASL2 features are gated on sasl2_stream_from, which is only set when the
+      // client's stream opening header carries a from attribute with a non-empty localpart.
+      // RFC 6120 §4.7.1 has always said clients SHOULD include this; setting it explicitly
+      // unlocks SASL2/FAST/Bind 2 on compliant servers.
+      username,
       resource,
       lang,
       timeout: XMPP_STREAM_OPEN_TIMEOUT_MS,
@@ -1363,8 +1372,20 @@ export class Connection extends BaseModule {
           } else {
             logInfo('FAST token not available, falling back to password')
           }
+        } else if (fast === undefined) {
+          // Legacy SASL (RFC 6120) path: credentials callback got 2 args, not 4.
+          // Server did not advertise SASL2 (XEP-0388); FAST (XEP-0484) requires it.
+          logInfo('FAST unavailable: server did not advertise SASL2 (XEP-0388); FAST requires SASL2')
         } else {
-          logInfo('FAST module not present on this connection')
+          // SASL2 was negotiated but no usable FAST: inspect the client's fast module to say why.
+          const clientFast = (entity as { fast?: { available?: boolean; mechanisms?: string[] } }).fast
+          if (clientFast?.available) {
+            logInfo(
+              `FAST unavailable: server advertised <fast/> but no compatible mechanism (client supports HT-SHA-256-NONE only; server offered: ${clientFast.mechanisms?.join(', ') || 'none compatible'})`
+            )
+          } else {
+            logInfo('FAST unavailable: server advertised SASL2 but no <fast xmlns="urn:xmpp:fast:0"/> inline feature')
+          }
         }
 
         // Detect auth method explicitly
