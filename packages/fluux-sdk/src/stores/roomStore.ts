@@ -14,7 +14,7 @@ import type {
 import { setTypingTimeout, clearTypingTimeout } from './typingTimeout'
 import { findMessageById } from '../utils/messageLookup'
 import { getBareJid } from '../core/jid'
-import { logWarn } from '../core/logger'
+import { logInfo } from '../core/logger'
 import * as messageCache from '../utils/messageCache'
 import * as searchIndex from '../utils/searchIndex'
 import type { GetMessagesOptions } from '../utils/messageCache'
@@ -997,7 +997,7 @@ export const roomStore = createStore<RoomState>()(
       } else {
         // Message not in memory — update reactions directly in IndexedDB cache
         // so the correct state is restored when the message is loaded later
-        logWarn(`Reaction for message ${messageId} not in memory — updating in cache`)
+        logInfo(`Reaction for message ${messageId} not in memory — updating in cache`)
         void messageCache.updateRoomMessageReactions(messageId, reactorNick, emojis)
       }
 

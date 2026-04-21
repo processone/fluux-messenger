@@ -47,7 +47,7 @@ document.addEventListener('keydown', enableFocusRings)
 document.addEventListener('keydown', (e) => {
   // Use e.code for reliable key detection regardless of Shift state
   // Also check e.key with lowercase for fallback compatibility
-  const isRKey = e.code === 'KeyR' || e.key.toLowerCase() === 'r'
+  const isRKey = e.code === 'KeyR' || e.key?.toLowerCase() === 'r'
   if ((e.metaKey || e.ctrlKey) && e.altKey && e.shiftKey && isRKey) {
     e.preventDefault()
     console.warn('[Emergency] Force reload triggered')
