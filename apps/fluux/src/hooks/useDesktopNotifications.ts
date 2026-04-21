@@ -9,6 +9,7 @@ import { useNotificationPermission, isTauri } from './useNotificationPermission'
 import { getNotificationAvatarUrl } from '@/utils/notificationAvatar'
 import { formatMessagePreview } from '@fluux/sdk'
 import { notificationDebug } from '@/utils/notificationDebug'
+import { showWebNotification } from '@/utils/webNotification'
 
 /**
  * Hook to show desktop notifications for new messages and room mentions.
@@ -97,21 +98,16 @@ export function useDesktopNotifications(): void {
         extra: { navType: 'conversation', navTarget: conv.id },
       })
     } else {
-      if (typeof Notification === 'undefined') return
-
-      const notification = new Notification(title, {
-        body,
-        icon: avatarUrl || './icon-512.png',
-        tag: conv.id, // Prevents duplicate notifications for same conversation
-      })
-
-      notification.onclick = () => {
-        window.focus()
-        navigateToConversation(conv.id)
-        notification.close()
-      }
-
-      setTimeout(() => notification.close(), 5000)
+      await showWebNotification(
+        title,
+        {
+          body,
+          icon: avatarUrl || './icon-512.png',
+          tag: conv.id,
+          onClick: () => navigateToConversation(conv.id),
+        },
+        { from: conv.id, type: 'conversation' },
+      )
     }
   }
 
@@ -148,21 +144,16 @@ export function useDesktopNotifications(): void {
         extra: { navType: 'room', navTarget: room.jid },
       })
     } else {
-      if (typeof Notification === 'undefined') return
-
-      const notification = new Notification(title, {
-        body,
-        icon: avatarUrl || './icon-512.png',
-        tag: `room-${room.jid}`,
-      })
-
-      notification.onclick = () => {
-        window.focus()
-        navigateToRoom(room.jid)
-        notification.close()
-      }
-
-      setTimeout(() => notification.close(), 5000)
+      await showWebNotification(
+        title,
+        {
+          body,
+          icon: avatarUrl || './icon-512.png',
+          tag: `room-${room.jid}`,
+          onClick: () => navigateToRoom(room.jid),
+        },
+        { from: room.jid, type: 'room' },
+      )
     }
   }
 
