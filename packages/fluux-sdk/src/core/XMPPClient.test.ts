@@ -1906,6 +1906,34 @@ describe('XMPPClient', () => {
       expect(markAllSpy).not.toHaveBeenCalled()
     })
 
+    it('should NOT call markAllRoomsNotJoined when a fresh session has no rooms to rejoin', async () => {
+      // Edge case: first-ever connect (no previouslyJoinedRooms, no autojoin
+      // bookmarks). There's nothing to rejoin, so lifting joinRoom()'s
+      // skip-guard is unnecessary — and leaving the flag alone avoids a
+      // spurious store update that would cascade through subscribers.
+      ;(xmppClient as any).currentJid = 'user@example.com'
+      ;(xmppClient as any).sessionGeneration = 1
+
+      const stores = (xmppClient as any).stores
+      const markAllSpy = stores.room.markAllRoomsNotJoined as ReturnType<typeof vi.fn>
+      markAllSpy.mockClear()
+
+      vi.spyOn(xmppClient.discovery, 'fetchServerInfo').mockResolvedValue()
+      vi.spyOn(xmppClient.discovery, 'discoverHttpUploadService').mockResolvedValue()
+      vi.spyOn(xmppClient.profile, 'fetchOwnProfile').mockResolvedValue()
+      vi.spyOn(xmppClient.roster, 'fetchRoster').mockResolvedValue()
+      vi.spyOn(xmppClient.roster, 'sendInitialPresence').mockResolvedValue()
+      vi.spyOn(xmppClient.muc, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
+
+      const convSync = (xmppClient as any).conversationSync
+      if (convSync) vi.spyOn(convSync, 'fetchConversations').mockResolvedValue([])
+
+      // No previouslyJoinedRooms, no autojoin bookmarks
+      await (xmppClient as any).runFreshSessionSetup(undefined, 1, 15000)
+
+      expect(markAllSpy).not.toHaveBeenCalled()
+    })
+
     it('should call markAllRoomsNotJoined exactly when rejoinActiveRooms runs', async () => {
       ;(xmppClient as any).currentJid = 'user@example.com'
       // Match the sessionGeneration so the guard doesn't abort mid-setup.

@@ -193,6 +193,47 @@ describe('StateSnapshot', () => {
       expect(rosterStore.getState().contacts.size).toBe(0)
       expect(roomStore.getState().rooms.size).toBe(0)
     })
+
+    it('does NOT overwrite an already-populated store slice', async () => {
+      // Transition guard: during the migration period the legacy app-level
+      // persistence may have already populated stores via its own useEffect
+      // before XMPPClient.connect() runs. Hydrating over live data would risk
+      // reverting fresher state to a stale snapshot.
+      rosterStore.getState().setContacts([makeContact('live@example.com', { name: 'Live' })])
+      roomStore.getState().addRoom(makeRoom('live@conf.example.com', { name: 'Live Room' }))
+      connectionStore.getState().setOwnNickname('LiveNick')
+
+      adapterData.store.set('user@example.com', {
+        roster: [{
+          jid: 'stale@example.com',
+          name: 'Stale',
+          presence: 'offline',
+          subscription: 'both',
+        }],
+        rooms: [{
+          jid: 'stale@conf.example.com',
+          name: 'Stale Room',
+          nickname: 'me',
+          joined: true,
+          occupants: [],
+          unreadCount: 0,
+          mentionsCount: 0,
+          isBookmarked: false,
+          messages: [],
+        }],
+        profile: { avatarHash: 'stale-hash', nickname: 'StaleNick' },
+      })
+
+      await snapshot.hydrate('user@example.com')
+
+      // Live data preserved — stale snapshot is ignored because each slice
+      // already has data.
+      expect(rosterStore.getState().contacts.has('live@example.com')).toBe(true)
+      expect(rosterStore.getState().contacts.has('stale@example.com')).toBe(false)
+      expect(roomStore.getState().rooms.has('live@conf.example.com')).toBe(true)
+      expect(roomStore.getState().rooms.has('stale@conf.example.com')).toBe(false)
+      expect(connectionStore.getState().ownNickname).toBe('LiveNick')
+    })
   })
 
   describe('start / auto-persist', () => {
