@@ -1,6 +1,6 @@
 # Maintainer: ProcessOne <contact@process-one.net>
 pkgname=fluux-messenger-bin
-pkgver=0.15.1
+pkgver=0.15.2
 pkgrel=1
 pkgdesc="A modern XMPP chat client built with Tauri"
 arch=('x86_64' 'aarch64')

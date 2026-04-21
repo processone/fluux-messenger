@@ -31,38 +31,113 @@ npm run release:prepare X.Y.Z
 
 ## Step-by-Step Release
 
-### 1. Update the Changelog
+Every release — stable or beta, minor or patch — follows these steps in order. Unless otherwise noted, work happens on a **release branch** (`release/X.Y.Z`), not directly on `main`. This keeps `main` clean during the stabilization window and lets us cherry-pick late fixes without disrupting other work.
 
-Edit `apps/fluux/src/data/changelog.ts` and add a new entry at the top of the array:
+### 0. Set Up the Release Branch
 
-```typescript
-export const changelog: ChangelogEntry[] = [
-  {
-    version: '0.9.0',
-    date: '2026-01-15',
-    sections: [
-      {
-        type: 'added',
-        items: [
-          'New feature description',
-          'Another new feature',
-        ],
-      },
-      {
-        type: 'fixed',
-        items: [
-          'Bug fix description',
-        ],
-      },
-    ],
-  },
-  // ... previous versions
-]
-```
+1. Ensure `main` is up to date locally:
+   ```bash
+   git checkout main
+   git pull origin main
+   ```
+2. Create a release branch named after the target version:
+   ```bash
+   git checkout -b release/0.9.0
+   ```
+   If the branch already exists (e.g. a beta was cut previously and you're now preparing the stable), check it out instead and rebase or merge `main` into it.
+3. Cherry-pick any additional fixes that should land in this release but aren't yet on `main`:
+   ```bash
+   git fetch origin pull/<PR_NUMBER>/head:pr-<PR_NUMBER>
+   git cherry-pick <commit-sha>
+   git branch -D pr-<PR_NUMBER>
+   ```
+   When cherry-picking a user-visible fix, remember to add it to the changelog entry in step 1.
 
-Available section types: `added`, `changed`, `fixed`, `removed`
+### 1. Draft the Changelog Entry
 
-### 2. Run the Release Preparation Script
+Before anything else, prepare a draft entry for `apps/fluux/src/data/changelog.ts` based on the changes since the last release.
+
+1. Identify commits since the previous release tag:
+   ```bash
+   git log --oneline vX.Y.Z..HEAD
+   ```
+   (where `vX.Y.Z` is the most recent release tag — `git describe --tags --abbrev=0` finds it).
+2. Group them into `added` / `changed` / `fixed` / `removed` sections, rewriting terse commit subjects into user-facing language. Skip noise (merge commits, internal refactors with no user impact, CI-only changes).
+3. Insert the draft entry at the top of the `changelog` array in `apps/fluux/src/data/changelog.ts`:
+
+   ```typescript
+   export const changelog: ChangelogEntry[] = [
+     {
+       version: '0.9.0',
+       date: '2026-01-15',
+       sections: [
+         {
+           type: 'added',
+           items: [
+             'New feature description',
+             'Another new feature',
+           ],
+         },
+         {
+           type: 'fixed',
+           items: [
+             'Bug fix description',
+           ],
+         },
+       ],
+     },
+     // ... previous versions
+   ]
+   ```
+
+   Available section types: `added`, `changed`, `fixed`, `removed`.
+
+4. **Stop and hand off to the developer.** The developer must review and modify the draft before the release script runs — they decide what's worth highlighting, what wording resonates with users, and what to omit. Do not proceed to step 2 until the developer has confirmed the entry is ready.
+
+### 2. Refresh Release Assets
+
+If the release includes UI or layout changes, regenerate the visual assets before running the release script. **Do these in order** — the blog hero may incorporate fresh screenshots, so screenshots must be up-to-date first.
+
+1. **Agree on the release highlights** with the developer. Pick the 1–3 changes to emphasize — they'll drive both the screenshot set and the hero image. The hero should tell the release's headline story, not summarize every changelog entry.
+
+2. **Extend the screenshot script if new highlights call for new captures.** Edit `scripts/screenshots.ts` to add captures that showcase the headline features. For example, adding Arabic and Hebrew translations with RTL support should add new captures like `chat-ar` and `chat-he` alongside the existing `19-chat-fr` / `20-chat-el`.
+
+3. **Regenerate the auto-generated screenshots** (from demo mode) so they reflect the new layout and include any newly-added captures:
+   ```bash
+   npm run screenshots
+   ```
+   The screenshots end up in `screenshots/` and are committed alongside the release. Review the diff to confirm nothing unexpected changed.
+
+4. **Update the auto-generated blog hero** in `scripts/screenshots.ts` (the `Blog Hero` test). The hero test encodes the release story — version text, feature strip, which views to compose, labels, and tagline — so it needs editing each release:
+   - Change the output filename to include the new version (e.g. `blog-hero-0.15.2.png`). **Do not overwrite previous hero images** — the prior `blog-hero-X.Y.Z.png` stays committed as a release archive.
+   - Update the version text, feature strip, panel captures, labels, and tagline to match the agreed highlights.
+   - Re-run `npm run screenshots` to produce the new hero PNG.
+
+5. **Create the marketing blog post / release announcement image** based on the agreed highlights. This lives outside the repo — follow the marketing workflow. It complements (not replaces) the auto-generated hero from step 4.
+
+6. **Update references to renumbered or renamed screenshots.** If renumbering captures (e.g. inserting `21-chat-ar` pushes the existing `21-chat-light-dark` to `23-chat-light-dark`), grep the repo for the old filenames and update them:
+   ```bash
+   grep -rn "21-chat-light-dark" README.md screenshots/OVERVIEW.md docs/
+   ```
+   Also `git rm` any old-numbered PNGs that are no longer generated.
+
+Skip any asset that isn't affected by the changes in this release.
+
+### 3. Pre-flight Checks
+
+Before running the release preparation script, confirm the branch is healthy:
+
+- [ ] Tests pass: `npm test`
+- [ ] Typecheck passes: `npm run typecheck`
+- [ ] SDK builds cleanly: `npm run build:sdk`
+- [ ] Changelog entry is finalized in `apps/fluux/src/data/changelog.ts`
+- [ ] `git log main..HEAD` shows all intended commits (and nothing unintended)
+- [ ] No uncommitted or untracked files remain beyond what this release will commit
+- [ ] Screenshots and the auto-generated hero are up to date (if applicable)
+
+Fix any failures before proceeding. Running `release:prepare` on a broken branch wastes time, since the version bump and generated files will need to be rolled back.
+
+### 4. Run the Release Preparation Script
 
 ```bash
 npm run release:prepare 0.9.0
@@ -74,7 +149,7 @@ This will:
 - Generate `CHANGELOG.md` from `changelog.ts`
 - Generate `RELEASE_NOTES.md` for the auto-updater
 
-### 3. Review the Changes
+### 5. Review the Changes
 
 ```bash
 git diff
@@ -85,22 +160,63 @@ Verify that:
 - `CHANGELOG.md` looks correct
 - `RELEASE_NOTES.md` contains only the new version's notes
 
-### 4. Commit the Release
+### 6. Commit the Release
 
 ```bash
 git add -A
 git commit -m "chore: release v0.9.0"
 ```
 
-### 5. Create and Push the Tag
+### 7. Create and Push the Tag
+
+Push the release branch first so the tag has somewhere to live, then the tag:
 
 ```bash
+git push origin release/0.9.0
 git tag -a v0.9.0 -m "Release v0.9.0"
-git push origin main
 git push origin v0.9.0
 ```
 
 The tag push triggers the GitHub Actions release workflow.
+
+### 8. Verify the Release
+
+Wait for GitHub Actions to finish (~15–25 min), then verify:
+
+- [ ] The workflow run for the tag is green (check https://github.com/processone/fluux-messenger/actions)
+- [ ] A GitHub Release was created at `https://github.com/processone/fluux-messenger/releases/tag/vX.Y.Z`
+- [ ] All platform binaries (macOS `.dmg`, Windows `.msi`/`.exe`, Linux `.AppImage`/`.deb`) are attached
+- [ ] `latest.json` is attached (for stable releases only — beta/RC tags skip this)
+- [ ] Release notes render correctly on the GitHub Release page
+- [ ] `latest.json` version matches the tag (download it and inspect)
+- [ ] Install one of the binaries and confirm it launches and connects
+
+If the workflow failed, see the [Troubleshooting](#troubleshooting) section before retrying. Do not delete the tag without a good reason — retag with a suffix (e.g. `v0.9.0-redo`) if you need a replacement build, or fix forward with the next patch version.
+
+### 9. Merge the Release Branch Back to `main`
+
+Once the release is verified, the release branch's commits (version bumps, changelog updates, regenerated screenshots, hero images) need to land on `main` so the next cycle starts from the new version.
+
+```bash
+git checkout main
+git pull origin main
+git merge --no-ff release/0.9.0 -m "chore: merge release/0.9.0 into main"
+git push origin main
+```
+
+Then delete the release branch:
+
+```bash
+git branch -d release/0.9.0
+git push origin --delete release/0.9.0
+```
+
+### 10. Announce the Release
+
+- Publish the marketing blog post with the hero image from step 2 (sub-step 5)
+- Post the announcement to the `@fluux` XMPP MUC, relevant Mastodon/social accounts, and any release channels the team uses
+- Link to the GitHub Release for the changelog
+- If the release has a headline feature (e.g. RTL + new languages), call it out specifically — don't just dump the full changelog
 
 ## What Happens After Tagging
 
@@ -154,7 +270,7 @@ Check that:
 
 ## Beta / Pre-release
 
-Beta releases are published to GitHub but **do not trigger Tauri autoupdate** for existing users. This lets testers download and try new versions without pushing them to all users.
+Beta releases follow the same step-by-step flow above, with a few differences. They are published to GitHub but **do not trigger Tauri autoupdate** for existing users — tested rollouts, not forced upgrades.
 
 ### How it works
 
@@ -163,56 +279,14 @@ Beta releases are published to GitHub but **do not trigger Tauri autoupdate** fo
 3. The `latest.json` updater manifest is **not generated**, so the Tauri autoupdater never sees it
 4. All platform binaries are still built, signed, and uploaded normally
 
-### Branch workflow
+Testers download the beta from the GitHub Releases page directly.
 
-Beta releases use a **release branch**:
+### Differences from the stable flow
 
-1. **Create** a release branch from `main`:
-   ```bash
-   git checkout -b release/0.14.0 main
-   ```
-2. **Develop and stabilize** on the release branch — fix bugs, refine features
-3. **Tag the beta** from the release branch (not from `main`)
-4. **Promote to stable**: merge the release branch back to `main`, then tag the stable release from `main`
-
-### Pre-flight checklist
-
-Before running `release:prepare`, verify:
-
-- [ ] Tests pass: `npm test`
-- [ ] Typecheck passes: `npm run typecheck`
-- [ ] SDK builds cleanly: `npm run build:sdk`
-- [ ] Changelog entry added in `apps/fluux/src/data/changelog.ts` with the beta version (e.g. `'0.14.0-beta.1'`)
-- [ ] Review `git log` to confirm all intended commits are on the branch
-- [ ] No untracked or uncommitted changes beyond what's intended for the release
-
-### Beta release steps
-
-```bash
-# 1. Add changelog entry in changelog.ts with the beta version
-#    version: '0.14.0-beta.1'
-
-# 2. Run the prepare script with the beta version
-npm run release:prepare 0.14.0-beta.1
-
-# 3. Review generated files
-git diff
-
-# 4. Commit and tag
-git add -A
-git commit -m "chore: release v0.14.0-beta.1"
-git tag -a v0.14.0-beta.1 -m "Release v0.14.0-beta.1"
-
-# 5. Push the release branch and the tag
-git push origin release/0.14.0 && git push origin v0.14.0-beta.1
-```
-
-The release workflow detects the `-beta.` suffix and automatically:
-- Creates the GitHub Release with the **prerelease** flag
-- Builds and uploads all platform binaries
-- **Skips** `latest.json` generation (no autoupdate prompt)
-
-Testers can download the beta from the GitHub Releases page directly.
+- **Version string**: use a pre-release suffix, e.g. `0.14.0-beta.1`, `0.14.0-rc.2`. The release-prepare script accepts this as-is: `npm run release:prepare 0.14.0-beta.1`.
+- **Changelog entry**: record the pre-release version in `changelog.ts` (e.g. `version: '0.14.0-beta.1'`). When promoting to stable, add a separate entry for the final version.
+- **Branch**: the release branch is typically named after the *target stable* version (`release/0.14.0`), and hosts every beta/rc leading up to it.
+- **Skip Step 9** (merge back to `main`) for intermediate betas — only merge when you cut the stable release.
 
 ### Local build verification (optional)
 
@@ -228,29 +302,13 @@ Launch the built binary and verify basic functionality (connect, send a message,
 
 ### Promoting a beta to stable
 
-When the beta is ready for general release:
+Once the beta is stable enough for general release, follow steps 1–10 of the main flow with the final version number:
 
-1. Merge the release branch to `main`:
-   ```bash
-   git checkout main
-   git merge release/0.14.0
-   ```
-2. Update the changelog entry to the stable version and run the prepare script:
-   ```bash
-   npm run release:prepare 0.14.0
-   ```
-3. Commit, tag, and push as usual:
-   ```bash
-   git add -A
-   git commit -m "chore: release v0.14.0"
-   git tag -a v0.14.0 -m "Release v0.14.0"
-   git push origin main && git push origin v0.14.0
-   ```
-4. Delete the release branch:
-   ```bash
-   git branch -d release/0.14.0
-   git push origin --delete release/0.14.0
-   ```
+1. On the same `release/0.14.0` branch, add a new changelog entry for the stable version (`0.14.0`). You can consolidate the beta entries into one stable entry, or keep the beta history in the changelog.
+2. Run `npm run release:prepare 0.14.0`.
+3. Commit, tag (`v0.14.0`), push the tag.
+4. Verify the release (step 8), merge back to `main` (step 9), delete the release branch.
+5. Announce (step 10).
 
 This creates a normal release with `latest.json`, and all users will be prompted to update.
 
