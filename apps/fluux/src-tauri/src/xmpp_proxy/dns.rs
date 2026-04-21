@@ -6,8 +6,10 @@
 //! highest-priority endpoint is unreachable.
 
 use tracing::{info, warn};
-use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
-use trust_dns_resolver::TokioAsyncResolver;
+use hickory_resolver::config::ResolverConfig;
+use hickory_resolver::net::runtime::TokioRuntimeProvider;
+use hickory_resolver::proto::rr::RData;
+use hickory_resolver::TokioResolver;
 
 fn elapsed_ms(start: std::time::Instant) -> u64 {
     start.elapsed().as_millis() as u64
@@ -140,7 +142,7 @@ pub fn parse_server_input(server: &str) -> ParsedServer {
 pub async fn resolve_xmpp_server(domain: &str) -> Result<Vec<XmppEndpoint>, String> {
     let resolve_started = std::time::Instant::now();
     let resolver_init_started = std::time::Instant::now();
-    let resolver = match TokioAsyncResolver::tokio_from_system_conf() {
+    let resolver = match TokioResolver::builder_tokio().and_then(|b| b.build()) {
         Ok(r) => {
             info!(
                 resolver_init_ms = elapsed_ms(resolver_init_started),
@@ -153,7 +155,15 @@ pub async fn resolve_xmpp_server(domain: &str) -> Result<Vec<XmppEndpoint>, Stri
                 resolver_init_ms = elapsed_ms(resolver_init_started),
                 "Failed to load system DNS config: {}, falling back to default resolver", e
             );
-            TokioAsyncResolver::tokio(ResolverConfig::default(), ResolverOpts::default())
+            match TokioResolver::builder_with_config(
+                ResolverConfig::default(),
+                TokioRuntimeProvider::default(),
+            )
+            .build()
+            {
+                Ok(r) => r,
+                Err(e) => return Err(format!("Failed to build fallback DNS resolver: {}", e)),
+            }
         }
     };
 
@@ -166,27 +176,30 @@ pub async fn resolve_xmpp_server(domain: &str) -> Result<Vec<XmppEndpoint>, Stri
     match resolver.srv_lookup(&srv_name).await {
         Ok(lookup) => {
             let lookup_ms = elapsed_ms(srv_lookup_started);
-            let mut records: Vec<_> = lookup.iter().collect();
-            if !records.is_empty() {
+            let mut srvs: Vec<_> = lookup
+                .answers()
+                .iter()
+                .filter_map(|r| match &r.data {
+                    RData::SRV(srv) => Some(srv),
+                    _ => None,
+                })
+                .collect();
+            if !srvs.is_empty() {
                 // Sort by priority ascending (lower = preferred), then weight descending (higher = preferred)
-                records.sort_by(|a, b| {
-                    a.priority()
-                        .cmp(&b.priority())
-                        .then(b.weight().cmp(&a.weight()))
-                });
-                for r in &records {
-                    let target = r.target().to_string().trim_end_matches('.').to_string();
+                srvs.sort_by(|a, b| a.priority.cmp(&b.priority).then(b.weight.cmp(&a.weight)));
+                for srv in &srvs {
+                    let target = srv.target.to_string().trim_end_matches('.').to_string();
                     // RFC 2782: target "." means service explicitly not available
                     if target.is_empty() {
                         info!(domain, "SRV record with '.' target (service not available), skipping");
                         continue;
                     }
-                    info!(domain, host = %target, port = r.port(),
-                        priority = r.priority(), weight = r.weight(),
+                    info!(domain, host = %target, port = srv.port,
+                        priority = srv.priority, weight = srv.weight,
                         "SRV record (direct TLS)");
                     endpoints.push(XmppEndpoint {
                         host: target,
-                        port: r.port(),
+                        port: srv.port,
                         mode: ConnectionMode::DirectTls,
                         domain: Some(domain.to_string()),
                     });
@@ -215,25 +228,28 @@ pub async fn resolve_xmpp_server(domain: &str) -> Result<Vec<XmppEndpoint>, Stri
     match resolver.srv_lookup(&srv_name).await {
         Ok(lookup) => {
             let lookup_ms = elapsed_ms(srv_lookup_started);
-            let mut records: Vec<_> = lookup.iter().collect();
-            if !records.is_empty() {
-                records.sort_by(|a, b| {
-                    a.priority()
-                        .cmp(&b.priority())
-                        .then(b.weight().cmp(&a.weight()))
-                });
-                for r in &records {
-                    let target = r.target().to_string().trim_end_matches('.').to_string();
+            let mut srvs: Vec<_> = lookup
+                .answers()
+                .iter()
+                .filter_map(|r| match &r.data {
+                    RData::SRV(srv) => Some(srv),
+                    _ => None,
+                })
+                .collect();
+            if !srvs.is_empty() {
+                srvs.sort_by(|a, b| a.priority.cmp(&b.priority).then(b.weight.cmp(&a.weight)));
+                for srv in &srvs {
+                    let target = srv.target.to_string().trim_end_matches('.').to_string();
                     if target.is_empty() {
                         info!(domain, "SRV record with '.' target (service not available), skipping");
                         continue;
                     }
-                    info!(domain, host = %target, port = r.port(),
-                        priority = r.priority(), weight = r.weight(),
+                    info!(domain, host = %target, port = srv.port,
+                        priority = srv.priority, weight = srv.weight,
                         "SRV record (STARTTLS)");
                     endpoints.push(XmppEndpoint {
                         host: target,
-                        port: r.port(),
+                        port: srv.port,
                         mode: ConnectionMode::Tcp,
                         domain: Some(domain.to_string()),
                     });
