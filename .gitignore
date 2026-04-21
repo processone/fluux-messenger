@@ -45,6 +45,7 @@ playwright-report/
 
 # Private
 private/
+server/
 
 # Temporary files
 *.tmp

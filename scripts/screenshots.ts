@@ -301,6 +301,22 @@ test('20 — Chat (Greek)', async ({ page }) => {
   await capture(page, '20-chat-el')
 })
 
+test('21 — Chat (Arabic, RTL)', async ({ page }) => {
+  await waitForDemoReady(page)
+  await setLanguage(page, 'ar')
+  await navigateTo(page, 'messages')
+  await selectItem(page, 'Emma Wilson')
+  await capture(page, '21-chat-ar')
+})
+
+test('22 — Chat (Hebrew, RTL)', async ({ page }) => {
+  await waitForDemoReady(page)
+  await setLanguage(page, 'he')
+  await navigateTo(page, 'messages')
+  await selectItem(page, 'Emma Wilson')
+  await capture(page, '22-chat-he')
+})
+
 // ── Composite Screenshots ─────────────────────────────────────────
 
 /** Capture the 1:1 chat view and return a PNG buffer. */
@@ -313,7 +329,7 @@ async function captureChatBuffer(page: Page, colorScheme: 'dark' | 'light'): Pro
   return Buffer.from(await page.screenshot({ type: 'png' }))
 }
 
-test('21 — Light/Dark Composite', async ({ page }) => {
+test('23 — Light/Dark Composite', async ({ page }) => {
   // Capture both themes
   const lightBuf = await captureChatBuffer(page, 'light')
   const darkBuf = await captureChatBuffer(page, 'dark')
@@ -361,7 +377,7 @@ test('21 — Light/Dark Composite', async ({ page }) => {
     { light: lightB64, dark: darkB64 }
   )
 
-  writeFileSync(`${OUTPUT_DIR}/21-chat-light-dark.png`, Buffer.from(compositeB64, 'base64'))
+  writeFileSync(`${OUTPUT_DIR}/23-chat-light-dark.png`, Buffer.from(compositeB64, 'base64'))
 })
 
 // ── Blog Hero Illustration ───────────────────────────────────────
@@ -378,32 +394,33 @@ async function captureViewBuffer(
   return Buffer.from(await page.screenshot({ type: 'png' }))
 }
 
-test('22 — Blog Hero v0.15', async ({ page }) => {
-  // Capture 3 light-themed screenshots for the hero image
+test('24 — Blog Hero v0.15.2', async ({ page }) => {
+  // 0.15.2 story: Arabic + Hebrew translations with full RTL layout support.
+  // Three panels: English baseline, Arabic (RTL), Hebrew (RTL).
   const chatBuf = await captureViewBuffer(page, async (p) => {
     await p.emulateMedia({ colorScheme: 'light' })
     await navigateTo(p, 'messages')
     await selectItem(p, 'Emma Wilson')
   })
 
-  const solarizedBuf = await captureViewBuffer(page, async (p) => {
-    await setTheme(p, 'solarized')
+  const arabicBuf = await captureViewBuffer(page, async (p) => {
+    await setLanguage(p, 'ar')
     await p.emulateMedia({ colorScheme: 'light' })
     await navigateTo(p, 'messages')
     await selectItem(p, 'Emma Wilson')
   })
 
-  const draculaBuf = await captureViewBuffer(page, async (p) => {
-    await setTheme(p, 'dracula')
-    await p.emulateMedia({ colorScheme: 'dark' })
+  const hebrewBuf = await captureViewBuffer(page, async (p) => {
+    await setLanguage(p, 'he')
+    await p.emulateMedia({ colorScheme: 'light' })
     await navigateTo(p, 'messages')
     await selectItem(p, 'Emma Wilson')
   })
 
   const buffers = {
     chat: chatBuf.toString('base64'),
-    solarized: solarizedBuf.toString('base64'),
-    dracula: draculaBuf.toString('base64'),
+    solarized: arabicBuf.toString('base64'),
+    dracula: hebrewBuf.toString('base64'),
   }
 
   const compositeB64 = await page.evaluate(async (bufs) => {
@@ -461,12 +478,12 @@ test('22 — Blog Hero v0.15', async ({ page }) => {
 
     ctx.fillStyle = '#5865f2'
     ctx.font = '600 38px Inter, system-ui, sans-serif'
-    ctx.fillText('v0.15', centerX, headerY + logoSize + 76)
+    ctx.fillText('v0.15.2', centerX, headerY + logoSize + 76)
 
     ctx.fillStyle = '#6d6f78'
     ctx.font = '500 26px Inter, system-ui, sans-serif'
     ctx.fillText(
-      'Themes  \u00b7  Search  \u00b7  Polls  \u00b7  FAST Auth  \u00b7  React 19',
+      'Arabic  \u00b7  Hebrew  \u00b7  RTL Support  \u00b7  Reliability  \u00b7  Security',
       centerX,
       headerY + logoSize + 126
     )
@@ -557,26 +574,26 @@ test('22 — Blog Hero v0.15', async ({ page }) => {
     ctx.textBaseline = 'top'
     ctx.font = '600 24px Inter, system-ui, sans-serif'
     ctx.fillStyle = '#1a1b1e'
-    ctx.fillText('Default Light', centerX - 420, labelY)
+    ctx.fillText('English', centerX - 420, labelY)
     ctx.fillStyle = '#5865f2'
     ctx.font = 'bold 26px Inter, system-ui, sans-serif'
-    ctx.fillText('Solarized', centerX, labelY)
+    ctx.fillText('Arabic (RTL)', centerX, labelY)
     ctx.fillStyle = '#5865f2'
     ctx.font = '600 24px Inter, system-ui, sans-serif'
-    ctx.fillText('Dracula', centerX + 400, labelY)
+    ctx.fillText('Hebrew (RTL)', centerX + 400, labelY)
 
-    // ── Theme count line at bottom ──
+    // ── Tagline at bottom ──
     ctx.fillStyle = '#4e5058'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'top'
     ctx.font = '600 30px Inter, system-ui, sans-serif'
-    ctx.fillText('12 built-in themes  \u00b7  custom theme support', centerX, H - 110)
+    ctx.fillText('33 languages  \u00b7  Full right-to-left support', centerX, H - 110)
 
     return canvas.toDataURL('image/png').replace('data:image/png;base64,', '')
   }, buffers)
 
   writeFileSync(
-    `${OUTPUT_DIR}/blog-hero-0.15.png`,
+    `${OUTPUT_DIR}/blog-hero-0.15.2.png`,
     Buffer.from(compositeB64, 'base64')
   )
 })

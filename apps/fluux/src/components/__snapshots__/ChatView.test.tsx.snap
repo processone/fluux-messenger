@@ -178,7 +178,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                           </button>
                         </div>
                         <div
-                          class="relative"
+                          class="inline-flex relative"
                         >
                           <div
                             class="inline-flex"
@@ -332,7 +332,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                           </button>
                         </div>
                         <div
-                          class="relative"
+                          class="inline-flex relative"
                         >
                           <div
                             class="inline-flex"

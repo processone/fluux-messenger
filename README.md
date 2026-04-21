@@ -33,7 +33,7 @@
 
 <div align="center">
 
-<a href="screenshots/21-chat-light-dark.png"><img src="screenshots/21-chat-light-dark.png" width="600" alt="Light and Dark themes"/></a>
+<a href="screenshots/23-chat-light-dark.png"><img src="screenshots/23-chat-light-dark.png" width="600" alt="Light and Dark themes"/></a>
 
 *Light and dark modes side by side*
 

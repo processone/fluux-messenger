@@ -141,7 +141,8 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
       </button>
       {lightboxOpen && (
         <ImageLightbox
-          src={proxiedImageSrc}
+          src={attachment.url}
+          placeholderSrc={proxiedImageSrc ?? undefined}
           alt={attachment.name || 'Image attachment'}
           downloadUrl={attachment.url}
           filename={attachment.name}
