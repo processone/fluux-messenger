@@ -167,6 +167,26 @@ describe('E2EEManager — registration', () => {
     ).rejects.toThrow(/already registered/)
   })
 
+  it('setAccount updates the JID handed to later plugin registrations', async () => {
+    // The manager is typically constructed before the user logs in (so account.jid
+    // is the empty string). After login the host calls setAccount() so any plugin
+    // registered afterwards sees the real JID in its init context.
+    const mgr = new E2EEManager({
+      storage: new InMemoryStorageBackend(),
+      xmpp: makeXmpp(),
+      account: { jid: '' }, // pre-login snapshot
+    })
+
+    mgr.setAccount({ jid: 'alice@example.com' })
+
+    const plugin = new FakePlugin(weakDescriptor, 'urn:test:weak')
+    const initSpy = vi.spyOn(plugin, 'init')
+    await mgr.register(plugin)
+
+    const ctx = initSpy.mock.calls[0][0]
+    expect(ctx.account.jid).toBe('alice@example.com')
+  })
+
   it('unregister calls shutdown and removes the plugin', async () => {
     const mgr = makeManager()
     const plugin = new FakePlugin(weakDescriptor, 'urn:test:weak')

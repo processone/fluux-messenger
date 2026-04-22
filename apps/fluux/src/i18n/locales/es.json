@@ -570,7 +570,8 @@
             "deleteKeyConfirmMessage": "Esto destruye la clave privada con huella {{fingerprint}}. No podrás descifrar los mensajes anteriores. Esta acción no se puede deshacer.",
             "deleteKeyConfirmAction": "Eliminar clave",
             "deleteKeySuccess": "Clave OpenPGP eliminada",
-            "deleteKeyFailed": "No se pudo eliminar la clave"
+            "deleteKeyFailed": "No se pudo eliminar la clave",
+            "statusGenerationFailed": "Ha fallado la generación de la clave. Consulta la consola del desarrollador para más detalles."
         }
     },
     "update": {

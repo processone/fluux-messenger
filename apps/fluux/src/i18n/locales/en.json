@@ -470,6 +470,7 @@
             "statusWaitingOnline": "Waiting for connection…",
             "statusGenerating": "Generating your key…",
             "statusReady": "Your key is ready and published.",
+            "statusGenerationFailed": "Key generation failed. Check the developer console for details.",
             "copyFingerprint": "Copy fingerprint",
             "copyFailed": "Couldn't copy fingerprint",
             "toggleFailed": "Couldn't change encryption setting",

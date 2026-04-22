@@ -568,7 +568,8 @@
             "deleteKeyConfirmMessage": "Detta förstör den privata nyckeln med fingeravtryck {{fingerprint}}. Du kommer inte kunna dekryptera tidigare meddelanden. Åtgärden kan inte ångras.",
             "deleteKeyConfirmAction": "Ta bort nyckel",
             "deleteKeySuccess": "OpenPGP-nyckeln har tagits bort",
-            "deleteKeyFailed": "Det gick inte att ta bort nyckeln"
+            "deleteKeyFailed": "Det gick inte att ta bort nyckeln",
+            "statusGenerationFailed": "Nyckelgenerering misslyckades. Se utvecklarkonsolen för detaljer."
         }
     },
     "update": {

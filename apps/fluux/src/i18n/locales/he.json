@@ -568,7 +568,8 @@
             "deleteKeyConfirmMessage": "הדבר מחסל את המפתח הפרטי עם טביעת האצבע {{fingerprint}}. לא תוכל לפענח הודעות עבר. לא ניתן לבטל פעולה זו.",
             "deleteKeyConfirmAction": "מחיקת המפתח",
             "deleteKeySuccess": "מפתח OpenPGP נמחק",
-            "deleteKeyFailed": "לא ניתן למחוק את המפתח"
+            "deleteKeyFailed": "לא ניתן למחוק את המפתח",
+            "statusGenerationFailed": "יצירת המפתח נכשלה. בדוק את קונסולת המפתחים לפרטים."
         }
     },
     "update": {

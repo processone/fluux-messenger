@@ -568,7 +568,8 @@
             "deleteKeyConfirmMessage": "Tämä tuhoaa yksityisen avaimen, jonka sormenjälki on {{fingerprint}}. Et voi enää purkaa aiempia viestejä. Toimintoa ei voi peruuttaa.",
             "deleteKeyConfirmAction": "Poista avain",
             "deleteKeySuccess": "OpenPGP-avain poistettu",
-            "deleteKeyFailed": "Avaimen poisto epäonnistui"
+            "deleteKeyFailed": "Avaimen poisto epäonnistui",
+            "statusGenerationFailed": "Avaimen luominen epäonnistui. Katso tiedot kehittäjäkonsolista."
         }
     },
     "update": {

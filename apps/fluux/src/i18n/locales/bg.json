@@ -568,7 +568,8 @@
             "deleteKeyConfirmMessage": "Това унищожава личния ключ с отпечатък {{fingerprint}}. Няма да можете да дешифрирате минали съобщения. Действието не може да бъде отменено.",
             "deleteKeyConfirmAction": "Изтрий ключа",
             "deleteKeySuccess": "Ключът OpenPGP е изтрит",
-            "deleteKeyFailed": "Ключът не може да бъде изтрит"
+            "deleteKeyFailed": "Ключът не може да бъде изтрит",
+            "statusGenerationFailed": "Генерирането на ключа се провали. Проверете конзолата на разработчика за подробности."
         }
     },
     "update": {

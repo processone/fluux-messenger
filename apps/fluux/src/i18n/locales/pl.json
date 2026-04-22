@@ -570,7 +570,8 @@
             "deleteKeyConfirmMessage": "To zniszczy klucz prywatny o odcisku {{fingerprint}}. Nie będziesz w stanie odszyfrować poprzednich wiadomości. Tej czynności nie można cofnąć.",
             "deleteKeyConfirmAction": "Usuń klucz",
             "deleteKeySuccess": "Klucz OpenPGP usunięty",
-            "deleteKeyFailed": "Nie udało się usunąć klucza"
+            "deleteKeyFailed": "Nie udało się usunąć klucza",
+            "statusGenerationFailed": "Nie udało się wygenerować klucza. Szczegóły w konsoli dewelopera."
         }
     },
     "update": {

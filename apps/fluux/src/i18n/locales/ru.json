@@ -568,7 +568,8 @@
             "deleteKeyConfirmMessage": "Это уничтожает закрытый ключ с отпечатком {{fingerprint}}. Вы не сможете расшифровать прошлые сообщения. Действие нельзя отменить.",
             "deleteKeyConfirmAction": "Удалить ключ",
             "deleteKeySuccess": "Ключ OpenPGP удалён",
-            "deleteKeyFailed": "Не удалось удалить ключ"
+            "deleteKeyFailed": "Не удалось удалить ключ",
+            "statusGenerationFailed": "Не удалось создать ключ. Подробности в консоли разработчика."
         }
     },
     "update": {

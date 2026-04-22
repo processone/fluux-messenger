@@ -568,7 +568,8 @@
             "deleteKeyConfirmMessage": "سيتم إتلاف المفتاح الخاص ذي البصمة {{fingerprint}}. لن تتمكن من فك تشفير الرسائل السابقة. لا يمكن التراجع عن هذا الإجراء.",
             "deleteKeyConfirmAction": "حذف المفتاح",
             "deleteKeySuccess": "تم حذف مفتاح OpenPGP",
-            "deleteKeyFailed": "تعذّر حذف المفتاح"
+            "deleteKeyFailed": "تعذّر حذف المفتاح",
+            "statusGenerationFailed": "فشل إنشاء المفتاح. راجع وحدة تحكم المطور للمزيد من التفاصيل."
         }
     },
     "update": {

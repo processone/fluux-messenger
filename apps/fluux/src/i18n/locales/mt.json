@@ -570,7 +570,8 @@
             "deleteKeyConfirmMessage": "Dan jeqred iċ-ċavetta privata bil-marka {{fingerprint}}. Ma tkunx tista' tiddikripta messaġġi ta' qabel. Din l-azzjoni ma tistax titreġġa' lura.",
             "deleteKeyConfirmAction": "Ħassar iċ-ċavetta",
             "deleteKeySuccess": "Iċ-ċavetta OpenPGP tħassret",
-            "deleteKeyFailed": "Iċ-ċavetta ma setgħetx titħassar"
+            "deleteKeyFailed": "Iċ-ċavetta ma setgħetx titħassar",
+            "statusGenerationFailed": "Il-ġenerazzjoni taċ-ċavetta falliet. Iċċekkja l-console tal-iżviluppatur għad-dettalji."
         }
     },
     "update": {

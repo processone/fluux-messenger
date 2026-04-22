@@ -568,7 +568,8 @@
             "deleteKeyConfirmMessage": "这将销毁指纹为 {{fingerprint}} 的私钥。你将无法解密以前的消息。此操作无法撤消。",
             "deleteKeyConfirmAction": "删除密钥",
             "deleteKeySuccess": "OpenPGP 密钥已删除",
-            "deleteKeyFailed": "无法删除密钥"
+            "deleteKeyFailed": "无法删除密钥",
+            "statusGenerationFailed": "密钥生成失败。详情请查看开发者控制台。"
         }
     },
     "update": {

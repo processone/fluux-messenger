@@ -568,7 +568,8 @@
             "deleteKeyConfirmMessage": "Þetta eyðir einkalyklinum með fingrafarið {{fingerprint}}. Þú munt ekki geta afkóðað fyrri skilaboð. Aðgerðin er óafturkræf.",
             "deleteKeyConfirmAction": "Eyða lykli",
             "deleteKeySuccess": "OpenPGP-lyklinum eytt",
-            "deleteKeyFailed": "Ekki tókst að eyða lyklinum"
+            "deleteKeyFailed": "Ekki tókst að eyða lyklinum",
+            "statusGenerationFailed": "Ekki tókst að búa til lykil. Sjá nánar í forritaraglugganum."
         }
     },
     "update": {

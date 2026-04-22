@@ -570,7 +570,8 @@
             "deleteKeyConfirmMessage": "Tímto se zničí soukromý klíč s otiskem {{fingerprint}}. Minulé zprávy už nebudete moci dešifrovat. Akci nelze vrátit zpět.",
             "deleteKeyConfirmAction": "Smazat klíč",
             "deleteKeySuccess": "Klíč OpenPGP byl smazán",
-            "deleteKeyFailed": "Klíč se nepodařilo smazat"
+            "deleteKeyFailed": "Klíč se nepodařilo smazat",
+            "statusGenerationFailed": "Vytvoření klíče selhalo. Podrobnosti najdete v konzoli vývojáře."
         }
     },
     "update": {

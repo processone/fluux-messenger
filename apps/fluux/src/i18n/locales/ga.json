@@ -568,7 +568,8 @@
             "deleteKeyConfirmMessage": "Díothóidh sé seo an eochair phríobháideach le méarlorg {{fingerprint}}. Ní bheidh tú in ann teachtaireachtaí atá caite a dhíchriptiú. Ní féidir an gníomh seo a chealú.",
             "deleteKeyConfirmAction": "Scrios an eochair",
             "deleteKeySuccess": "Eochair OpenPGP scriosta",
-            "deleteKeyFailed": "Níorbh fhéidir an eochair a scriosadh"
+            "deleteKeyFailed": "Níorbh fhéidir an eochair a scriosadh",
+            "statusGenerationFailed": "Theip ar ghiniúint na heochrach. Féach an consól forbartha le haghaidh sonraí."
         }
     },
     "update": {

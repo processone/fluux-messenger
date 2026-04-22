@@ -570,7 +570,8 @@
             "deleteKeyConfirmMessage": "Questo distrugge la chiave privata con impronta {{fingerprint}}. Non potrai più decifrare i messaggi passati. L'azione non è reversibile.",
             "deleteKeyConfirmAction": "Elimina chiave",
             "deleteKeySuccess": "Chiave OpenPGP eliminata",
-            "deleteKeyFailed": "Impossibile eliminare la chiave"
+            "deleteKeyFailed": "Impossibile eliminare la chiave",
+            "statusGenerationFailed": "Generazione della chiave non riuscita. Consulta la console sviluppatore per i dettagli."
         }
     },
     "update": {

@@ -569,7 +569,8 @@
             "deleteKeyConfirmMessage": "Týmto sa zničí súkromný kľúč s odtlačkom {{fingerprint}}. Predchádzajúce správy už nebudete môcť dešifrovať. Akciu nemožno vrátiť späť.",
             "deleteKeyConfirmAction": "Odstrániť kľúč",
             "deleteKeySuccess": "Kľúč OpenPGP bol odstránený",
-            "deleteKeyFailed": "Kľúč sa nepodarilo odstrániť"
+            "deleteKeyFailed": "Kľúč sa nepodarilo odstrániť",
+            "statusGenerationFailed": "Generovanie kľúča zlyhalo. Podrobnosti nájdete v konzole vývojára."
         }
     },
     "update": {

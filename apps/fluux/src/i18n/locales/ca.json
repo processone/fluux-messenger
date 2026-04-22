@@ -570,7 +570,8 @@
             "deleteKeyConfirmMessage": "Això destrueix la clau privada amb l'empremta {{fingerprint}}. No podreu desxifrar els missatges anteriors. Aquesta acció no es pot desfer.",
             "deleteKeyConfirmAction": "Elimina la clau",
             "deleteKeySuccess": "Clau OpenPGP eliminada",
-            "deleteKeyFailed": "No s'ha pogut eliminar la clau"
+            "deleteKeyFailed": "No s'ha pogut eliminar la clau",
+            "statusGenerationFailed": "La generació de la clau ha fallat. Consulta la consola del desenvolupador per als detalls."
         }
     },
     "update": {

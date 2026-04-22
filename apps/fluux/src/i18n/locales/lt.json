@@ -568,7 +568,8 @@
             "deleteKeyConfirmMessage": "Tai sunaikina privatų raktą su atspaudu {{fingerprint}}. Nebegalėsite iššifruoti ankstesnių pranešimų. Šio veiksmo atšaukti negalima.",
             "deleteKeyConfirmAction": "Ištrinti raktą",
             "deleteKeySuccess": "OpenPGP raktas ištrintas",
-            "deleteKeyFailed": "Nepavyko ištrinti rakto"
+            "deleteKeyFailed": "Nepavyko ištrinti rakto",
+            "statusGenerationFailed": "Nepavyko sukurti rakto. Išsamesnę informaciją rasite kūrėjo konsolėje."
         }
     },
     "update": {

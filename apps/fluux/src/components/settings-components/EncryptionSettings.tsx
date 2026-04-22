@@ -7,7 +7,21 @@ import { registerE2EEPlugins, unregisterE2EEPlugins } from '@/e2ee/registerPlugi
 import { useToastStore } from '@/stores/toastStore'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 
-type PluginStatus = 'disabled' | 'generating' | 'ready' | 'waiting-online'
+type PluginStatus =
+  | 'disabled'
+  | 'generating'
+  | 'ready'
+  | 'waiting-online'
+  | 'generation-failed'
+
+/**
+ * If the Rust-side key generation doesn't produce a fingerprint within this
+ * window the plugin almost certainly failed (IPC error, panic, unwired
+ * command) — surface a clear error instead of a forever-spinning placeholder.
+ * 60s is generous; even the slow RustCrypto backend completes in <10s on
+ * target hardware.
+ */
+const GENERATION_TIMEOUT_MS = 60_000
 
 /**
  * Settings → Encryption panel.
@@ -30,6 +44,7 @@ export function EncryptionSettings() {
   const [isToggling, setIsToggling] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [generationFailed, setGenerationFailed] = useState(false)
 
   const online = status === 'online'
   const pluginStatus: PluginStatus = !openpgpEnabled
@@ -38,7 +53,9 @@ export function EncryptionSettings() {
       ? 'waiting-online'
       : fingerprint
         ? 'ready'
-        : 'generating'
+        : generationFailed
+          ? 'generation-failed'
+          : 'generating'
 
   // Track fingerprint — poll briefly after enable so the "Generating…"
   // state resolves without needing a manual reload. The plugin exposes
@@ -46,10 +63,13 @@ export function EncryptionSettings() {
   useEffect(() => {
     if (!openpgpEnabled || !online) {
       setFingerprint(null)
+      setGenerationFailed(false)
       return
     }
 
     let cancelled = false
+    const startedAt = Date.now()
+
     const poll = () => {
       if (cancelled) return
       const plugin = client.e2ee.getPlugin('openpgp') as
@@ -58,6 +78,15 @@ export function EncryptionSettings() {
       const fp = plugin?.getOwnFingerprint?.() ?? null
       if (fp) {
         setFingerprint(fp)
+        setGenerationFailed(false)
+        return
+      }
+      if (Date.now() - startedAt >= GENERATION_TIMEOUT_MS) {
+        // Plugin hasn't produced a fingerprint within the generous window.
+        // Almost always means registration failed (see console for the
+        // [Fluux] E2EE plugin registration failed error). Stop spinning
+        // and surface the failure.
+        setGenerationFailed(true)
         return
       }
       setTimeout(poll, 250)
@@ -176,13 +205,27 @@ export function EncryptionSettings() {
             <label className="text-sm font-medium text-fluux-text">
               {t('settings.encryption.statusLabel')}
             </label>
-            <div className="rounded-lg border-2 border-fluux-hover bg-fluux-bg p-3 space-y-2">
-              <div className="text-xs text-fluux-muted">
+            <div
+              className={`rounded-lg border-2 p-3 space-y-2 ${
+                pluginStatus === 'generation-failed'
+                  ? 'border-red-500/40 bg-red-500/5'
+                  : 'border-fluux-hover bg-fluux-bg'
+              }`}
+            >
+              <div
+                className={`text-xs ${
+                  pluginStatus === 'generation-failed'
+                    ? 'text-red-500 dark:text-red-400'
+                    : 'text-fluux-muted'
+                }`}
+              >
                 {pluginStatus === 'waiting-online' &&
                   t('settings.encryption.statusWaitingOnline')}
                 {pluginStatus === 'generating' &&
                   t('settings.encryption.statusGenerating')}
                 {pluginStatus === 'ready' && t('settings.encryption.statusReady')}
+                {pluginStatus === 'generation-failed' &&
+                  t('settings.encryption.statusGenerationFailed')}
               </div>
               {fingerprint && (
                 <div className="flex items-center gap-2">

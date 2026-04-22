@@ -570,7 +570,8 @@
             "deleteKeyConfirmMessage": "Dies zerstört den privaten Schlüssel mit Fingerabdruck {{fingerprint}}. Sie können vergangene Nachrichten nicht mehr entschlüsseln. Die Aktion kann nicht rückgängig gemacht werden.",
             "deleteKeyConfirmAction": "Schlüssel löschen",
             "deleteKeySuccess": "OpenPGP-Schlüssel gelöscht",
-            "deleteKeyFailed": "Schlüssel konnte nicht gelöscht werden"
+            "deleteKeyFailed": "Schlüssel konnte nicht gelöscht werden",
+            "statusGenerationFailed": "Schlüsselerzeugung fehlgeschlagen. Details in der Entwicklerkonsole."
         }
     },
     "update": {

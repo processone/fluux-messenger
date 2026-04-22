@@ -570,7 +570,8 @@
             "deleteKeyConfirmMessage": "See hävitab privaatvõtme sõrmejäljega {{fingerprint}}. Sa ei saa enam dekrüpteerida varasemaid sõnumeid. Seda toimingut ei saa tagasi võtta.",
             "deleteKeyConfirmAction": "Kustuta võti",
             "deleteKeySuccess": "OpenPGP võti kustutatud",
-            "deleteKeyFailed": "Võtme kustutamine ebaõnnestus"
+            "deleteKeyFailed": "Võtme kustutamine ebaõnnestus",
+            "statusGenerationFailed": "Võtme genereerimine ebaõnnestus. Üksikasjad leiate arendaja konsoolist."
         }
     },
     "update": {

@@ -568,7 +568,8 @@
             "deleteKeyConfirmMessage": "Ovo uništava privatni ključ s otiskom {{fingerprint}}. Nećete moći dešifrirati prethodne poruke. Ovu radnju nije moguće poništiti.",
             "deleteKeyConfirmAction": "Izbriši ključ",
             "deleteKeySuccess": "OpenPGP ključ izbrisan",
-            "deleteKeyFailed": "Ključ se nije mogao izbrisati"
+            "deleteKeyFailed": "Ključ se nije mogao izbrisati",
+            "statusGenerationFailed": "Generiranje ključa nije uspjelo. Detalje potražite u programskoj konzoli."
         }
     },
     "update": {

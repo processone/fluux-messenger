@@ -568,7 +568,8 @@
             "deleteKeyConfirmMessage": "Гэта знішчае прыватны ключ з адбіткам {{fingerprint}}. Вы не зможаце расшыфраваць папярэднія паведамленні. Гэта дзеянне нельга адрабіць.",
             "deleteKeyConfirmAction": "Выдаліць ключ",
             "deleteKeySuccess": "Ключ OpenPGP выдалены",
-            "deleteKeyFailed": "Не ўдалося выдаліць ключ"
+            "deleteKeyFailed": "Не ўдалося выдаліць ключ",
+            "statusGenerationFailed": "Не ўдалося стварыць ключ. Падрабязнасці ў кансолі распрацоўшчыка."
         }
     },
     "update": {

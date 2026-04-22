@@ -47,7 +47,7 @@ export class E2EEManager {
   private readonly capabilityCache: CapabilityCache
   private readonly storage: StorageBackend
   private readonly xmpp: XMPPPrimitives
-  private readonly account: AccountInfo
+  private account: AccountInfo
   private readonly logger: Logger
 
   constructor(options: E2EEManagerOptions) {
@@ -56,6 +56,21 @@ export class E2EEManager {
     this.account = options.account
     this.logger = options.logger ?? silentLogger
     this.capabilityCache = new CapabilityCache(options.capabilityCache)
+  }
+
+  /**
+   * Update the account info handed to plugins during {@link register}.
+   * The host calls this when the logged-in JID becomes known (or changes)
+   * so plugins registered after construction see the current account.
+   *
+   * Already-registered plugins keep the context they were initialized with;
+   * their `ctx.account` is a snapshot. If we later need runtime-updatable
+   * account info on live plugins we'd refactor `PluginContext.account` to a
+   * getter — for now all identity-sensitive work happens inside
+   * `plugin.init`, so updating here before `register()` is sufficient.
+   */
+  setAccount(account: AccountInfo): void {
+    this.account = account
   }
 
   /**

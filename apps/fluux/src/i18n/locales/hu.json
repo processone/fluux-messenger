@@ -568,7 +568,8 @@
             "deleteKeyConfirmMessage": "Ez megsemmisíti a(z) {{fingerprint}} ujjlenyomatú privát kulcsot. A korábbi üzeneteket nem fogja tudni visszafejteni. A művelet nem vonható vissza.",
             "deleteKeyConfirmAction": "Kulcs törlése",
             "deleteKeySuccess": "OpenPGP-kulcs törölve",
-            "deleteKeyFailed": "A kulcsot nem sikerült törölni"
+            "deleteKeyFailed": "A kulcsot nem sikerült törölni",
+            "statusGenerationFailed": "A kulcs létrehozása sikertelen. Részletek a fejlesztői konzolon."
         }
     },
     "update": {

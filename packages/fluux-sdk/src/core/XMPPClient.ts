@@ -960,6 +960,10 @@ export class XMPPClient {
 
     this.currentJid = options.jid
     this.stores?.connection.setJid(options.jid)
+    // Keep the E2EEManager's account snapshot in sync so plugins registered
+    // after login (the normal path — Settings toggle fires on `online`)
+    // see the real JID instead of the construction-time empty string.
+    this.e2ee.setAccount({ jid: getBareJid(options.jid) })
 
     // Hydrate stores from the persisted snapshot BEFORE handing the socket
     // to xmpp.js. SM replay delivers diffs (occupant leaves, new messages,

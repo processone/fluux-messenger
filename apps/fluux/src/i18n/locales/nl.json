@@ -568,7 +568,8 @@
             "deleteKeyConfirmMessage": "Dit vernietigt de privésleutel met vingerafdruk {{fingerprint}}. Je kunt eerdere berichten niet meer ontsleutelen. Deze actie kan niet ongedaan worden gemaakt.",
             "deleteKeyConfirmAction": "Sleutel verwijderen",
             "deleteKeySuccess": "OpenPGP-sleutel verwijderd",
-            "deleteKeyFailed": "Sleutel kon niet worden verwijderd"
+            "deleteKeyFailed": "Sleutel kon niet worden verwijderd",
+            "statusGenerationFailed": "Sleutelgeneratie is mislukt. Raadpleeg de ontwikkelaarsconsole voor details."
         }
     },
     "update": {

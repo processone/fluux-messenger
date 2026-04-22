@@ -568,7 +568,8 @@
             "deleteKeyConfirmMessage": "Dette tilintetgør den private nøgle med fingeraftrykket {{fingerprint}}. Du kan ikke dekryptere tidligere beskeder. Handlingen kan ikke fortrydes.",
             "deleteKeyConfirmAction": "Slet nøgle",
             "deleteKeySuccess": "OpenPGP-nøgle slettet",
-            "deleteKeyFailed": "Nøglen kunne ikke slettes"
+            "deleteKeyFailed": "Nøglen kunne ikke slettes",
+            "statusGenerationFailed": "Nøglegenerering mislykkedes. Se udviklerkonsollen for detaljer."
         }
     },
     "update": {
