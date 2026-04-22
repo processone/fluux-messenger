@@ -296,7 +296,7 @@ export const ConversationItem = memo(function ConversationItem({
         )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2">
-            <p className="truncate font-medium">{conversation.name}</p>
+            <p dir="auto" className="truncate font-medium">{conversation.name}</p>
             {conversation.lastMessage && (
               <span className="text-xs text-fluux-muted flex-shrink-0">
                 {formatConversationTime(conversation.lastMessage.timestamp, t, currentLang, timeFormat)}

@@ -333,7 +333,7 @@ const ContactItem = memo(function ContactItem({
           />
 
           <div className="flex-1 min-w-0">
-            <p className="truncate font-medium">{contact.name}</p>
+            <p dir="auto" className="truncate font-medium">{contact.name}</p>
             {contact.presenceError ? (
               <p className="truncate text-xs opacity-75">{contact.presenceError}</p>
             ) : forceOffline ? (
