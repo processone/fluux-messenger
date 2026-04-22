@@ -14,6 +14,34 @@
  * fallback). `openpgp_ensure_key` is idempotent — the first call per
  * account per process generates or loads; subsequent calls are served
  * from an in-memory cache.
+ *
+ * # PEP publication layout (XEP-0373 §4)
+ *
+ * Two nodes per identity:
+ *
+ * - **Metadata** at `urn:xmpp:openpgp:0:public-keys`. Single item
+ *   `<public-keys-list xmlns='urn:xmpp:openpgp:0'>` listing every
+ *   advertised key's `<pubkey-metadata v4-fingerprint='…' date='…'/>`.
+ * - **Data** at `urn:xmpp:openpgp:0:public-keys:FINGERPRINT` (one node
+ *   per key). Single item `<pubkey xmlns='urn:xmpp:openpgp:0'><data>
+ *   BASE64-armored-public-key</data></pubkey>`.
+ *
+ * On publish we write data first and metadata second: if metadata ever
+ * lists a fingerprint, the data node for that fingerprint is guaranteed
+ * to be fetchable. On probe we walk the metadata list, fetch each
+ * advertised key, and validate the returned key's fingerprint matches
+ * what was advertised.
+ *
+ * # v6 fingerprints + `v4-fingerprint` attribute
+ *
+ * Fluux emits v6 keys (RFC 9580) whose fingerprints are 64 hex chars.
+ * XEP-0373 §4.1.2 names the attribute `v4-fingerprint`, originally
+ * designed for 40-char v4 fingerprints. We treat the attribute as
+ * "the fingerprint of the advertised key, regardless of version" —
+ * matches what modern implementations do in practice, pending a
+ * spec revision for v6. Parsers that strictly validate 40-char length
+ * will reject our emissions; that's a known interop limitation today
+ * and will get revisited if/when the spec updates.
  */
 
 import type {
@@ -25,6 +53,7 @@ import type {
   E2EEProtocolDescriptor,
   EncryptedPayload,
   IdentityInfo,
+  PEPItem,
   PeerSupport,
   PluginContext,
   SecurityContext,
@@ -34,10 +63,23 @@ import type {
   XMLElementData,
 } from '@fluux/sdk'
 
-/** PEP node where account public keys are published (XEP-0373). */
-const PUBLIC_KEYS_NODE = 'urn:xmpp:openpgp:0:public-keys'
-/** XEP-0373 encrypted payload namespace. */
+/** XEP-0373 namespace for all PEP/message elements. */
 const OX_NAMESPACE = 'urn:xmpp:openpgp:0'
+/** PEP node that carries the `<public-keys-list>` metadata document. */
+const PUBLIC_KEYS_METADATA_NODE = 'urn:xmpp:openpgp:0:public-keys'
+/**
+ * Build the per-key data node name for `fingerprint`. Each advertised
+ * key gets its own node so a rotation can cleanly replace one entry
+ * without disturbing the others.
+ */
+function publicKeyDataNodeFor(fingerprint: string): string {
+  return `${PUBLIC_KEYS_METADATA_NODE}:${fingerprint}`
+}
+/**
+ * XEP-0373 uses `id='current'` for the single-item nodes so republishes
+ * overwrite cleanly without needing `max_items=1` node config.
+ */
+const CURRENT_ITEM_ID = 'current'
 
 /** Shape of the Rust-side `KeyBundle` (kept in sync with `openpgp.rs`). */
 interface KeyBundle {
@@ -136,11 +178,17 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
   }
 
   /**
-   * Generate or load our key via Rust, then publish the public block to
-   * our own PEP node. Idempotent on both sides: Rust returns the cached
-   * bundle within a session and reads the persisted file across
-   * restarts, so the fingerprint is stable for the lifetime of the
-   * account.
+   * Generate or load our key via Rust, then publish it to PEP in
+   * XEP-0373 §4.1 layout (data node first, metadata node second).
+   *
+   * Idempotent on both sides: Rust returns the cached bundle within a
+   * session and reads the persisted file across restarts, so the
+   * fingerprint is stable for the lifetime of the account.
+   *
+   * A failure to publish leaves local state untouched — encryption of
+   * incoming messages still works (peers can still send to us if they
+   * have our key), we just won't be discoverable until a later
+   * successful publish.
    */
   async ensureIdentity(): Promise<IdentityInfo> {
     const ctx = this.requireCtx()
@@ -155,41 +203,138 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
       )
     }
 
-    const publicKeyItem: XMLElementData = {
-      name: 'pubkey',
-      attrs: { xmlns: OX_NAMESPACE },
-      children: [base64Encode(bundle.publicArmored)],
-    }
     try {
-      await ctx.xmpp.publishPEP(PUBLIC_KEYS_NODE, {
-        id: bundle.fingerprint,
-        payload: publicKeyItem,
-      })
+      // Publish the data node FIRST. If the data publish fails we
+      // deliberately skip the metadata step: advertising a fingerprint
+      // whose data node returns 404 would break peers' probe path.
+      await this.publishOwnPublicKeyData(bundle)
+      await this.publishOwnPublicKeyMetadata(bundle)
     } catch (err) {
-      ctx.logger.warn(`SequoiaPgpPlugin: public key publish failed: ${formatError(err)}`)
+      ctx.logger.warn(
+        `SequoiaPgpPlugin: public key publish failed: ${formatError(err)}`,
+      )
     }
 
     return { fingerprint: bundle.fingerprint }
   }
 
+  /**
+   * Publish `<pubkey><data>BASE64</data></pubkey>` at
+   * `urn:xmpp:openpgp:0:public-keys:FP`.
+   */
+  private async publishOwnPublicKeyData(bundle: KeyBundle): Promise<void> {
+    const ctx = this.requireCtx()
+    const payload: XMLElementData = {
+      name: 'pubkey',
+      attrs: { xmlns: OX_NAMESPACE },
+      children: [
+        {
+          name: 'data',
+          attrs: {},
+          children: [base64Encode(bundle.publicArmored)],
+        },
+      ],
+    }
+    await ctx.xmpp.publishPEP(publicKeyDataNodeFor(bundle.fingerprint), {
+      id: CURRENT_ITEM_ID,
+      payload,
+    })
+  }
+
+  /**
+   * Publish `<public-keys-list><pubkey-metadata .../></public-keys-list>`
+   * at `urn:xmpp:openpgp:0:public-keys`. The `date` attribute is the
+   * publish time, not the key's creation time — that's what XEP-0373
+   * §4.1.2 specifies.
+   */
+  private async publishOwnPublicKeyMetadata(bundle: KeyBundle): Promise<void> {
+    const ctx = this.requireCtx()
+    const payload: XMLElementData = {
+      name: 'public-keys-list',
+      attrs: { xmlns: OX_NAMESPACE },
+      children: [
+        {
+          name: 'pubkey-metadata',
+          attrs: {
+            'v4-fingerprint': bundle.fingerprint,
+            date: new Date().toISOString(),
+          },
+          children: [],
+        },
+      ],
+    }
+    await ctx.xmpp.publishPEP(PUBLIC_KEYS_METADATA_NODE, {
+      id: CURRENT_ITEM_ID,
+      payload,
+    })
+  }
+
+  /**
+   * XEP-0373 §4.2 two-step fetch: read the peer's metadata node to
+   * discover which fingerprints they advertise, then fetch each
+   * advertised key's data node. We cache the first key that validates
+   * (matches its advertised fingerprint); additional keys are ignored
+   * for this phase. Multi-key support — e.g. picking the most recent,
+   * or verifying against a per-peer allowlist — is a later slice.
+   */
   async probePeer(peer: BareJID): Promise<PeerSupport> {
     const ctx = this.requireCtx()
     if (this.peerKeys.has(peer)) {
       return { supported: true, ttl: 300 }
     }
     try {
-      const items = await ctx.xmpp.queryPEP(peer, PUBLIC_KEYS_NODE)
-      for (const item of items) {
-        const bundle = parsePublicKeyItem(item.payload)
+      const metadataItems = await ctx.xmpp.queryPEP(peer, PUBLIC_KEYS_METADATA_NODE)
+      const fingerprints = parseAdvertisedFingerprints(metadataItems)
+      if (fingerprints.length === 0) {
+        return { supported: false, ttl: 300 }
+      }
+
+      for (const fingerprint of fingerprints) {
+        const bundle = await this.fetchAdvertisedKey(peer, fingerprint)
         if (bundle) {
           this.peerKeys.set(peer, bundle)
           return { supported: true, ttl: 300 }
         }
       }
     } catch (err) {
-      ctx.logger.debug(`SequoiaPgpPlugin: probePeer(${peer}) failed: ${formatError(err)}`)
+      ctx.logger.debug(
+        `SequoiaPgpPlugin: probePeer(${peer}) failed: ${formatError(err)}`,
+      )
     }
     return { supported: false, ttl: 300 }
+  }
+
+  /**
+   * Pull one advertised key's data node. Returns `null` when the node
+   * has no parseable key item, or when the fetched key's fingerprint
+   * doesn't match what the metadata node advertised — that mismatch is
+   * a loud defensive check against a misconfigured or tampered PEP
+   * node (e.g. a server rewriting items under its tenants' JIDs).
+   */
+  private async fetchAdvertisedKey(
+    peer: BareJID,
+    fingerprint: string,
+  ): Promise<KeyBundle | null> {
+    const ctx = this.requireCtx()
+    try {
+      const items = await ctx.xmpp.queryPEP(peer, publicKeyDataNodeFor(fingerprint))
+      for (const item of items) {
+        const parsed = parsePublicKeyDataItem(item.payload)
+        if (!parsed) continue
+        if (parsed.fingerprint !== fingerprint) {
+          ctx.logger.warn(
+            `SequoiaPgpPlugin: ${peer} advertised ${fingerprint} but served key with ${parsed.fingerprint}; discarding`,
+          )
+          continue
+        }
+        return parsed
+      }
+    } catch (err) {
+      ctx.logger.debug(
+        `SequoiaPgpPlugin: fetch ${peer} key ${fingerprint} failed: ${formatError(err)}`,
+      )
+    }
+    return null
   }
 
   async openConversation(target: ConversationTarget): Promise<ConversationHandle> {
@@ -369,9 +514,44 @@ function extractPeer(handle: ConversationHandle): BareJID {
   return peer
 }
 
-function parsePublicKeyItem(payload: XMLElementData): KeyBundle | null {
+/**
+ * Extract every advertised fingerprint from a peer's metadata node
+ * items (XEP-0373 §4.1.2). Accepts a list because the PEP server may
+ * return multiple history items; we walk them all and take every
+ * `<pubkey-metadata v4-fingerprint='…' />` we find. Order is preserved
+ * so callers can prefer newer entries when the server returns history.
+ */
+function parseAdvertisedFingerprints(items: PEPItem[]): string[] {
+  const fingerprints: string[] = []
+  for (const item of items) {
+    const list = item.payload
+    if (list.name !== 'public-keys-list' || list.attrs?.xmlns !== OX_NAMESPACE) continue
+    for (const child of list.children) {
+      if (typeof child === 'string') continue
+      if (child.name !== 'pubkey-metadata') continue
+      const fp = firstAttr(child.attrs, ['v4-fingerprint', 'v6-fingerprint'])
+      if (fp) fingerprints.push(fp)
+    }
+  }
+  return fingerprints
+}
+
+/**
+ * Parse a single `<pubkey xmlns='urn:xmpp:openpgp:0'><data>…</data></pubkey>`
+ * item from a data node (XEP-0373 §4.1.2.1).
+ */
+function parsePublicKeyDataItem(payload: XMLElementData): KeyBundle | null {
   if (payload.name !== 'pubkey' || payload.attrs?.xmlns !== OX_NAMESPACE) return null
-  const encoded = firstText(payload)
+  // Find the `<data>` child — the spec wraps the base64 in this element
+  // rather than putting the text directly under `<pubkey>`.
+  let encoded: string | null = null
+  for (const child of payload.children) {
+    if (typeof child === 'string') continue
+    if (child.name === 'data') {
+      encoded = firstText(child)
+      if (encoded) break
+    }
+  }
   if (!encoded) return null
   const armored = base64Decode(encoded)
   const fingerprint = extractFingerprint(armored)
@@ -386,6 +566,23 @@ function parsePublicKeyItem(payload: XMLElementData): KeyBundle | null {
     // on our own identity. Default false; callers never inspect it here.
     keychainBacked: false,
   }
+}
+
+/**
+ * Return the first non-empty attribute value from `names` against
+ * `attrs`. Used to read either `v4-fingerprint` (legacy spec name) or
+ * `v6-fingerprint` (what newer clients may emit).
+ */
+function firstAttr(
+  attrs: Record<string, unknown> | undefined,
+  names: readonly string[],
+): string | null {
+  if (!attrs) return null
+  for (const name of names) {
+    const v = attrs[name]
+    if (typeof v === 'string' && v.trim().length > 0) return v.trim()
+  }
+  return null
 }
 
 /** Mirrors the Rust `extract_fingerprint` — reads `Fingerprint: <hex>`. */

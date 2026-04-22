@@ -13,6 +13,7 @@ import {
   createPluginStorage,
   type PEPItem,
   type PluginContext,
+  type XMLElementData,
   type XMPPPrimitives,
 } from '@fluux/sdk'
 
@@ -140,6 +141,59 @@ function makeFakeRust() {
 }
 
 /**
+ * XEP-0373 namespace / node helpers mirrored on the test side so we
+ * don't import them from the production module (the whole point of
+ * these tests is to exercise what the module publishes).
+ */
+const OX_NS = 'urn:xmpp:openpgp:0'
+const METADATA_NODE = 'urn:xmpp:openpgp:0:public-keys'
+const dataNodeFor = (fp: string) => `${METADATA_NODE}:${fp}`
+
+/**
+ * Simulate a spec-compliant XEP-0373 publisher on the peer side:
+ * writes `<public-keys-list>` to the metadata node AND `<pubkey><data/></pubkey>`
+ * to the per-fingerprint data node. Mirrors what a real Gajim / Dino
+ * account would have in its PEP tree.
+ */
+function publishKeyAsXep0373(
+  ctx: ReturnType<typeof makeContext>,
+  peer: string,
+  bundle: KeyBundle,
+) {
+  ctx.peerPublish(peer, dataNodeFor(bundle.fingerprint), {
+    id: 'current',
+    payload: {
+      name: 'pubkey',
+      attrs: { xmlns: OX_NS },
+      children: [
+        {
+          name: 'data',
+          attrs: {},
+          children: [btoa(unescape(encodeURIComponent(bundle.publicArmored)))],
+        },
+      ],
+    },
+  })
+  ctx.peerPublish(peer, METADATA_NODE, {
+    id: 'current',
+    payload: {
+      name: 'public-keys-list',
+      attrs: { xmlns: OX_NS },
+      children: [
+        {
+          name: 'pubkey-metadata',
+          attrs: {
+            'v4-fingerprint': bundle.fingerprint,
+            date: '2024-01-01T00:00:00Z',
+          },
+          children: [],
+        },
+      ],
+    },
+  })
+}
+
+/**
  * Build two fully-wired plugin instances (alice + bob) that have published
  * their own keys to their respective PEP nodes AND mutually exposed them
  * via their peer-publish maps. Returned plugins are NOT yet probed — that's
@@ -156,23 +210,16 @@ async function buildCrossPublishedPair(fake: ReturnType<typeof makeFakeRust>): P
   await alicePlugin.init(aliceBuilt.ctx)
   await bobPlugin.init(bobBuilt.ctx)
 
-  const publishPubkeyItemFor = async (jid: string) => {
-    const bundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
-      accountJid: jid,
-      userId: jid,
-    })
-    return {
-      id: bundle.fingerprint,
-      payload: {
-        name: 'pubkey',
-        attrs: { xmlns: 'urn:xmpp:openpgp:0' },
-        children: [btoa(unescape(encodeURIComponent(bundle.publicArmored)))],
-      },
-    }
-  }
-
-  aliceBuilt.peerPublish('bob@example.com', await publishPubkeyItemFor('bob@example.com'))
-  bobBuilt.peerPublish('alice@example.com', await publishPubkeyItemFor('alice@example.com'))
+  const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+    accountJid: 'bob@example.com',
+    userId: 'bob@example.com',
+  })
+  const aliceBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+    accountJid: 'alice@example.com',
+    userId: 'alice@example.com',
+  })
+  publishKeyAsXep0373(aliceBuilt, 'bob@example.com', bobBundle)
+  publishKeyAsXep0373(bobBuilt, 'alice@example.com', aliceBundle)
 
   return {
     alice: { plugin: alicePlugin, ctx: aliceBuilt.ctx },
@@ -180,7 +227,27 @@ async function buildCrossPublishedPair(fake: ReturnType<typeof makeFakeRust>): P
   }
 }
 
-function makeContext(accountJid: string): { ctx: PluginContext; published: Array<{ node: string; item: PEPItem }>; peerPublish: (peer: string, item: PEPItem) => void } {
+/**
+ * Find the first `XMLElementData` child named `name` inside `parent`.
+ * Narrows from the `string | XMLElementData` union so test assertions
+ * can access `.attrs` without repeating the guard.
+ */
+function findChild(parent: XMLElementData, name: string): XMLElementData | undefined {
+  return parent.children.find(
+    (c): c is XMLElementData => typeof c !== 'string' && c.name === name,
+  )
+}
+
+/**
+ * Mock-XMPP factory. The returned `peerPublish(peer, node, item)` stores
+ * a PEPItem under a specific (jid, node) pair, letting tests simulate the
+ * XEP-0373 two-node scheme (metadata node + per-fingerprint data node).
+ */
+function makeContext(accountJid: string): {
+  ctx: PluginContext
+  published: Array<{ node: string; item: PEPItem }>
+  peerPublish: (peer: string, node: string, item: PEPItem) => void
+} {
   const peerNodes = new Map<string, PEPItem[]>() // keyed "jid\0node"
   const published: Array<{ node: string; item: PEPItem }> = []
 
@@ -199,8 +266,8 @@ function makeContext(accountJid: string): { ctx: PluginContext; published: Array
     logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
     account: { jid: accountJid },
   }
-  const peerPublish = (peer: string, item: PEPItem) => {
-    const key = `${peer}\u0000urn:xmpp:openpgp:0:public-keys`
+  const peerPublish = (peer: string, node: string, item: PEPItem) => {
+    const key = `${peer}\u0000${node}`
     const existing = peerNodes.get(key) ?? []
     existing.push(item)
     peerNodes.set(key, existing)
@@ -218,15 +285,60 @@ describe('SequoiaPgpPlugin', () => {
   })
 
   describe('init / ensureIdentity', () => {
-    it('generates a key on Rust and publishes it to PEP', async () => {
+    it('generates a key and publishes XEP-0373 data + metadata nodes', async () => {
       const { ctx, published } = makeContext('me@example.com')
       await plugin.init(ctx)
 
-      expect(plugin.getOwnFingerprint()).not.toBeNull()
-      expect(published).toHaveLength(1)
-      expect(published[0].node).toBe('urn:xmpp:openpgp:0:public-keys')
-      expect(published[0].item.payload.name).toBe('pubkey')
-      expect(published[0].item.payload.attrs.xmlns).toBe('urn:xmpp:openpgp:0')
+      const fp = plugin.getOwnFingerprint()
+      expect(fp).not.toBeNull()
+
+      // Two publishes: per-fingerprint data node first, metadata
+      // second. The order matters — publishing metadata before data
+      // would leave a window where peers can see the advertised
+      // fingerprint but can't fetch the key.
+      expect(published).toHaveLength(2)
+
+      const [dataPub, metaPub] = published
+      expect(dataPub.node).toBe(`urn:xmpp:openpgp:0:public-keys:${fp}`)
+      expect(dataPub.item.id).toBe('current')
+      expect(dataPub.item.payload.name).toBe('pubkey')
+      expect(dataPub.item.payload.attrs.xmlns).toBe('urn:xmpp:openpgp:0')
+      // <pubkey><data>BASE64</data></pubkey> — the `<data>` wrapper is
+      // what XEP-0373 §4.1.2.1 mandates (the original slice was missing it).
+      const dataChild = findChild(dataPub.item.payload, 'data')
+      expect(dataChild).toBeDefined()
+
+      expect(metaPub.node).toBe('urn:xmpp:openpgp:0:public-keys')
+      expect(metaPub.item.id).toBe('current')
+      expect(metaPub.item.payload.name).toBe('public-keys-list')
+      expect(metaPub.item.payload.attrs.xmlns).toBe('urn:xmpp:openpgp:0')
+      const metadataChild = findChild(metaPub.item.payload, 'pubkey-metadata')
+      expect(metadataChild).toBeDefined()
+      expect(metadataChild!.attrs['v4-fingerprint']).toBe(fp)
+      // `date` is an ISO 8601 timestamp; we don't pin the exact value
+      // but it must be parseable.
+      expect(Date.parse(metadataChild!.attrs.date)).not.toBeNaN()
+    })
+
+    it('skips metadata publish when the data publish fails', async () => {
+      // If a peer sees a fingerprint in our metadata list, the data
+      // node for that fingerprint must be fetchable — otherwise probe
+      // returns supported=false and we look broken. Enforce the order
+      // by forcing the data publish to fail and checking metadata was
+      // never attempted.
+      const { ctx, published } = makeContext('me@example.com')
+      ctx.xmpp.publishPEP = async (node, item) => {
+        if (node.includes(':public-keys:')) {
+          throw new Error('simulated data-node publish failure')
+        }
+        published.push({ node, item })
+      }
+
+      await plugin.init(ctx)
+
+      // Only the metadata node would be reached if we hadn't short-
+      // circuited; with the ordering guard, published stays empty.
+      expect(published).toHaveLength(0)
     })
 
     it('is idempotent across calls for the same account', async () => {
@@ -244,24 +356,16 @@ describe('SequoiaPgpPlugin', () => {
   })
 
   describe('probePeer', () => {
-    it('returns supported=true and caches the key when PEP has a public key item', async () => {
-      const { ctx, peerPublish } = makeContext('me@example.com')
-      await plugin.init(ctx)
+    it('returns supported=true after the XEP-0373 two-step fetch', async () => {
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
 
-      // Simulate bob publishing to his PEP node, mimicking what our own
-      // ensureIdentity did for us.
+      // Simulate bob publishing a spec-compliant XEP-0373 identity.
       const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'bob@example.com',
         userId: 'Bob',
       })
-      peerPublish('bob@example.com', {
-        id: bobBundle.fingerprint,
-        payload: {
-          name: 'pubkey',
-          attrs: { xmlns: 'urn:xmpp:openpgp:0' },
-          children: [btoa(unescape(encodeURIComponent(bobBundle.publicArmored)))],
-        },
-      })
+      publishKeyAsXep0373(built, 'bob@example.com', bobBundle)
 
       const support = await plugin.probePeer('bob@example.com')
       expect(support.supported).toBe(true)
@@ -269,32 +373,104 @@ describe('SequoiaPgpPlugin', () => {
       expect(plugin.getPeerFingerprint('bob@example.com')).toBe(bobBundle.fingerprint)
     })
 
-    it('returns supported=false when the peer has no key', async () => {
+    it('returns supported=false when the peer has no metadata node', async () => {
       const { ctx } = makeContext('me@example.com')
       await plugin.init(ctx)
       const support = await plugin.probePeer('nobody@example.com')
       expect(support.supported).toBe(false)
     })
 
+    it('returns supported=false when metadata advertises a fingerprint but the data node is empty', async () => {
+      // Half-published peer: metadata lists a key, data node 404s.
+      // We must NOT cache anything and must NOT declare the peer
+      // supported — otherwise encrypt will try to use a non-existent
+      // key cache entry.
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
+
+      built.peerPublish('broken@example.com', METADATA_NODE, {
+        id: 'current',
+        payload: {
+          name: 'public-keys-list',
+          attrs: { xmlns: OX_NS },
+          children: [
+            {
+              name: 'pubkey-metadata',
+              attrs: { 'v4-fingerprint': 'FP123456', date: '2024-01-01T00:00:00Z' },
+              children: [],
+            },
+          ],
+        },
+      })
+      // Note: no peerPublish for dataNodeFor('FP123456') — empty.
+
+      const support = await plugin.probePeer('broken@example.com')
+      expect(support.supported).toBe(false)
+      expect(plugin.getPeerFingerprint('broken@example.com')).toBeNull()
+    })
+
+    it('discards a key whose actual fingerprint does not match what was advertised', async () => {
+      // Defensive check: PEP might return a <pubkey> whose fingerprint
+      // differs from the metadata-advertised one (misconfigured server,
+      // rotated key mid-fetch, or adversarial server). The plugin must
+      // not cache such a mismatch.
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
+
+      const realBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'impostor@example.com',
+        userId: 'impostor',
+      })
+      built.peerPublish('suspect@example.com', METADATA_NODE, {
+        id: 'current',
+        payload: {
+          name: 'public-keys-list',
+          attrs: { xmlns: OX_NS },
+          children: [
+            {
+              name: 'pubkey-metadata',
+              attrs: { 'v4-fingerprint': 'LIES000001', date: '2024-01-01T00:00:00Z' },
+              children: [],
+            },
+          ],
+        },
+      })
+      // The data node for 'LIES000001' actually contains impostor's real key.
+      built.peerPublish('suspect@example.com', dataNodeFor('LIES000001'), {
+        id: 'current',
+        payload: {
+          name: 'pubkey',
+          attrs: { xmlns: OX_NS },
+          children: [
+            {
+              name: 'data',
+              attrs: {},
+              children: [btoa(unescape(encodeURIComponent(realBundle.publicArmored)))],
+            },
+          ],
+        },
+      })
+
+      const support = await plugin.probePeer('suspect@example.com')
+      expect(support.supported).toBe(false)
+    })
+
     it('re-uses cached probe results', async () => {
-      const { ctx, peerPublish } = makeContext('me@example.com')
-      await plugin.init(ctx)
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
       const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'bob@example.com',
         userId: 'Bob',
       })
-      peerPublish('bob@example.com', {
-        id: bobBundle.fingerprint,
-        payload: {
-          name: 'pubkey',
-          attrs: { xmlns: 'urn:xmpp:openpgp:0' },
-          children: [btoa(unescape(encodeURIComponent(bobBundle.publicArmored)))],
-        },
-      })
-      const querySpy = vi.spyOn(ctx.xmpp, 'queryPEP')
+      publishKeyAsXep0373(built, 'bob@example.com', bobBundle)
+
+      const querySpy = vi.spyOn(built.ctx.xmpp, 'queryPEP')
       await plugin.probePeer('bob@example.com')
+      // First probe: one queryPEP for metadata, one for the data node.
+      expect(querySpy).toHaveBeenCalledTimes(2)
       await plugin.probePeer('bob@example.com')
-      expect(querySpy).toHaveBeenCalledTimes(1)
+      // Second probe hits the in-plugin cache — no additional queryPEP.
+      expect(querySpy).toHaveBeenCalledTimes(2)
     })
   })
 
@@ -346,24 +522,54 @@ describe('SequoiaPgpPlugin', () => {
       const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
       const payload = await alice.plugin.encrypt(handle, new TextEncoder().encode('hi'))
 
-      // Before decrypting, poison Bob's cached copy of Alice's key with
-      // Eve's (a completely unrelated third account). Decrypt must flag
-      // the signature mismatch.
+      // Before bob probes alice for the first time, intercept his PEP
+      // queries so the metadata-then-data flow returns eve's key
+      // (with eve's fingerprint advertised AND served). The plugin
+      // will successfully cache eve-as-alice; decrypt must then flag
+      // the signature mismatch against what was actually signed.
       const evePubkey = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'eve@example.com',
         userId: 'eve@example.com',
       })
-      // Reach into the plugin's internals via the test-only probe seed path:
-      // re-issue probePeer after overwriting the PEP result with eve's key.
-      ;(bob.ctx.xmpp.queryPEP as (jid: string, node: string) => Promise<PEPItem[]>) =
-        async () => [{
-          id: evePubkey.fingerprint,
-          payload: {
-            name: 'pubkey',
-            attrs: { xmlns: 'urn:xmpp:openpgp:0' },
-            children: [btoa(unescape(encodeURIComponent(evePubkey.publicArmored)))],
-          },
-        }]
+      bob.ctx.xmpp.queryPEP = async (_jid, node) => {
+        if (node === METADATA_NODE) {
+          return [
+            {
+              id: 'current',
+              payload: {
+                name: 'public-keys-list',
+                attrs: { xmlns: OX_NS },
+                children: [
+                  {
+                    name: 'pubkey-metadata',
+                    attrs: { 'v4-fingerprint': evePubkey.fingerprint, date: '2024-01-01T00:00:00Z' },
+                    children: [],
+                  },
+                ],
+              },
+            },
+          ]
+        }
+        if (node === dataNodeFor(evePubkey.fingerprint)) {
+          return [
+            {
+              id: 'current',
+              payload: {
+                name: 'pubkey',
+                attrs: { xmlns: OX_NS },
+                children: [
+                  {
+                    name: 'data',
+                    attrs: {},
+                    children: [btoa(unescape(encodeURIComponent(evePubkey.publicArmored)))],
+                  },
+                ],
+              },
+            },
+          ]
+        }
+        return []
+      }
       await bob.plugin.probePeer('alice@example.com')
 
       const claim = bob.plugin.tryClaimInbound(payload.stanzaElement)!
