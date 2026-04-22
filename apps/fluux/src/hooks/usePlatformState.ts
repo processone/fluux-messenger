@@ -36,6 +36,74 @@ const MIN_HIDDEN_TIME_MS = SLEEP_THRESHOLD_MS
 /** Debounce window to prevent duplicate wake handling (ms). */
 const WAKE_DEBOUNCE_MS = 2000
 
+/** How long after a wake-triggered reload we treat additional wake
+ * signals as redundant (ms).
+ *
+ * When a wake is big enough to require `window.location.reload()`, the
+ * fresh webview takes real time to boot — 5-50s observed, dominated by
+ * network re-establishment after sleep. During that window the OS
+ * replays queued wake signals to the new React instance (the heartbeat
+ * tick re-detects the same sleep gap, `system-did-wake` fires once the
+ * JS engine resumes listening, visibility changes as the window is
+ * reparented). Each of those signals would otherwise be treated as a
+ * fresh wake and kick another reconnect or reload cycle.
+ *
+ * 60s covers the slowest reloads we've observed without being long
+ * enough to swallow a genuinely new wake after the system briefly
+ * slept again. */
+const POST_RELOAD_COOLDOWN_MS = 60_000
+
+/** localStorage key for the timestamp we last initiated
+ * window.location.reload() from a wake handler. Read by the post-reload
+ * instance on mount to recognize it was spawned by a wake the previous
+ * instance already handled. */
+export const RELOAD_MARKER_STORAGE_KEY = 'fluux.platformState.reloadInitiatedAt'
+
+export function readReloadMarker(): number {
+  try {
+    if (typeof localStorage === 'undefined') return 0
+    const raw = localStorage.getItem(RELOAD_MARKER_STORAGE_KEY)
+    const parsed = raw ? Number(raw) : 0
+    return Number.isFinite(parsed) ? parsed : 0
+  } catch {
+    return 0
+  }
+}
+
+export function writeReloadMarker(ts: number): void {
+  try {
+    if (typeof localStorage === 'undefined') return
+    localStorage.setItem(RELOAD_MARKER_STORAGE_KEY, String(ts))
+  } catch {
+    // Persistence is best-effort; if it fails we lose the cooldown
+    // but the in-memory debounce still catches ms-level duplicates.
+  }
+}
+
+export function clearReloadMarker(): void {
+  try {
+    if (typeof localStorage === 'undefined') return
+    localStorage.removeItem(RELOAD_MARKER_STORAGE_KEY)
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Decide whether a wake signal arrived inside the post-reload cooldown
+ * and should be treated as a redundant echo of the wake that triggered
+ * the reload.
+ */
+export function isWithinReloadCooldown(
+  markerAt: number,
+  nowMs: number,
+  cooldownMs: number
+): boolean {
+  if (markerAt <= 0) return false
+  const elapsed = nowMs - markerAt
+  return elapsed >= 0 && elapsed < cooldownMs
+}
+
 /**
  * Proxy-close events should only trigger wake/reconnect while the app was
  * previously connected. Reconnect loops already manage backoff internally.
@@ -181,11 +249,29 @@ export function usePlatformState() {
   }, [])
 
   /**
-   * Check if a wake event should be processed (debounce).
-   * Returns true and updates lastWakeTime if the event should be handled.
+   * Check if a wake event should be processed.
+   *
+   * Two gates:
+   *  1. Post-reload cooldown (localStorage-backed, survives reload).
+   *     After a wake big enough to trigger window.location.reload(),
+   *     the new instance ignores all wake signals for
+   *     POST_RELOAD_COOLDOWN_MS — they're echoes of the wake the old
+   *     instance already handled.
+   *  2. Short in-memory debounce. Collapses simultaneous signals from
+   *     independent sources (heartbeat + system-did-wake firing within
+   *     the same event loop tick).
    */
   const shouldHandleWake = useCallback((source: string): boolean => {
     const now = Date.now()
+
+    if (isWithinReloadCooldown(readReloadMarker(), now, POST_RELOAD_COOLDOWN_MS)) {
+      consoleStore.getState().addEvent(
+        `[${source}] Wake ignored: post-reload cooldown`,
+        'presence'
+      )
+      return false
+    }
+
     if (now - lastWakeTimeRef.current < WAKE_DEBOUNCE_MS) {
       return false
     }
@@ -213,6 +299,11 @@ export function usePlatformState() {
       const secs = Math.round((durationMs ?? 0) / 1000)
       console.log(`[PlatformState] Wake from sleep (${source}, ${secs}s), reloading webview to restore rendering`)
       logEvent(`Wake from sleep (${source}, ${secs}s), reloading webview`)
+      // Persist the reload time BEFORE navigating away so the instance
+      // that mounts after the reload sees it and ignores residual wake
+      // signals (queued system-did-wake, first heartbeat tick, etc.)
+      // for the duration of the cooldown window.
+      writeReloadMarker(Date.now())
       window.location.reload()
       return true
     },

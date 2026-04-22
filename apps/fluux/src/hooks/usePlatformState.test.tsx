@@ -97,6 +97,11 @@ import {
   shouldHandleDisplayWake,
   shouldReloadWebviewOnWake,
   shouldReloadOnVisibilityWake,
+  readReloadMarker,
+  writeReloadMarker,
+  clearReloadMarker,
+  isWithinReloadCooldown,
+  RELOAD_MARKER_STORAGE_KEY,
 } from './usePlatformState'
 
 describe('usePlatformState', () => {
@@ -358,6 +363,92 @@ describe('usePlatformState', () => {
       expect(shouldHandleProxyClosedStatus('reconnecting')).toBe(false)
       expect(shouldHandleProxyClosedStatus('disconnected')).toBe(false)
       expect(shouldHandleProxyClosedStatus('error')).toBe(false)
+    })
+  })
+
+  describe('post-reload cooldown', () => {
+    beforeEach(() => {
+      localStorage.removeItem(RELOAD_MARKER_STORAGE_KEY)
+    })
+
+    describe('readReloadMarker / writeReloadMarker / clearReloadMarker', () => {
+      it('returns 0 when no marker has been written', () => {
+        expect(readReloadMarker()).toBe(0)
+      })
+
+      it('round-trips a written timestamp', () => {
+        writeReloadMarker(1_700_000_000_000)
+        expect(readReloadMarker()).toBe(1_700_000_000_000)
+      })
+
+      it('returns 0 when the stored value is not a finite number', () => {
+        localStorage.setItem(RELOAD_MARKER_STORAGE_KEY, 'garbage')
+        expect(readReloadMarker()).toBe(0)
+      })
+
+      it('clearReloadMarker removes the stored value', () => {
+        writeReloadMarker(1_700_000_000_000)
+        clearReloadMarker()
+        expect(readReloadMarker()).toBe(0)
+      })
+    })
+
+    describe('isWithinReloadCooldown', () => {
+      const COOLDOWN = 60_000
+
+      it('returns false when no marker has been set', () => {
+        expect(isWithinReloadCooldown(0, 1_000_000, COOLDOWN)).toBe(false)
+      })
+
+      it('returns true for a marker set moments ago', () => {
+        expect(isWithinReloadCooldown(1_000_000, 1_000_050, COOLDOWN)).toBe(true)
+      })
+
+      it('returns true for a marker near but within the cooldown boundary', () => {
+        expect(isWithinReloadCooldown(1_000_000, 1_059_999, COOLDOWN)).toBe(true)
+      })
+
+      it('returns false once the cooldown has elapsed', () => {
+        expect(isWithinReloadCooldown(1_000_000, 1_060_000, COOLDOWN)).toBe(false)
+        expect(isWithinReloadCooldown(1_000_000, 2_000_000, COOLDOWN)).toBe(false)
+      })
+
+      it('returns false when the clock has moved backward since the marker was set', () => {
+        // NTP adjustment edge case — don't gate on a negative elapsed window.
+        expect(isWithinReloadCooldown(1_000_000, 999_000, COOLDOWN)).toBe(false)
+      })
+    })
+
+    it('suppresses window-focus wakes while within the post-reload cooldown', async () => {
+      // Simulate the state the new React instance sees right after
+      // window.location.reload() was called by a previous instance:
+      // a recent marker in localStorage. The window-focus handler is a
+      // clean test vehicle because it calls shouldHandleWake with no
+      // time-gap guard in front of it, so we can observe the cooldown
+      // decision directly.
+      writeReloadMarker(Date.now() - 1_000)
+      mockConnectionStatus.current = 'reconnecting'
+      renderHook(() => usePlatformState())
+
+      await act(async () => {
+        window.dispatchEvent(new Event('focus'))
+        await Promise.resolve()
+      })
+
+      expect(mockClientNotifySystemState).not.toHaveBeenCalledWith('visible')
+    })
+
+    it('handles wake signals normally once the cooldown has elapsed', async () => {
+      writeReloadMarker(Date.now() - 120_000) // 2 min ago, well past the 60s cooldown
+      mockConnectionStatus.current = 'reconnecting'
+      renderHook(() => usePlatformState())
+
+      await act(async () => {
+        window.dispatchEvent(new Event('focus'))
+        await Promise.resolve()
+      })
+
+      expect(mockClientNotifySystemState).toHaveBeenCalledWith('visible')
     })
   })
 
