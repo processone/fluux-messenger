@@ -559,7 +559,7 @@
             "toggleFailed": "Versleutelinginstelling kon niet worden gewijzigd",
             "limitationsTitle": "Huidige beperkingen",
             "limitationVerification": "Vingerafdrukken van contacten worden nog niet geverifieerd — slotpictogrammen tonen alleen vertrouwen bij eerste gebruik.",
-            "limitationPersistence": "Sleutels bestaan alleen in het geheugen voor deze sessie; bij herstart van de app worden ze opnieuw gegenereerd.",
+            "limitationDeviceBound": "Deze sleutel bestaat alleen op dit apparaat — nog geen synchronisatie tussen apparaten of versleutelde back-up; het apparaat verliezen betekent de identiteit verliezen.",
             "limitationBackend": "Gebruikt een experimentele pure-Rust-cryptobackend; niet gehard voor scenario's met hoge beveiligingsvereisten.",
             "dangerZone": "Gevarenzone",
             "deleteKey": "Mijn OpenPGP-sleutel verwijderen",

@@ -559,7 +559,7 @@
             "toggleFailed": "Níorbh fhéidir an socrú criptiúcháin a athrú",
             "limitationsTitle": "Teorainneacha reatha",
             "limitationVerification": "Níor fíoraíodh méarloirg teagmhálaithe fós — ní léiríonn na deilbhíní glais ach muinín-chéad-úsáide.",
-            "limitationPersistence": "Maireann eochracha sa chuimhne don seisiún seo amháin; atosaíonn an aip iad.",
+            "limitationDeviceBound": "Ní mhaireann an eochair seo ach ar an ngléas seo — níl sioncronú ilghléis ná cúltaca criptithe ar fáil go fóill; má chailltear an gléas cailltear an fhéiniúlacht.",
             "limitationBackend": "Úsáideann cúlchóras criptiúcháin turgnamhach in Rust amháin; níl sé cruaite do chásanna ard-shlándála.",
             "dangerZone": "Criosanna contúirte",
             "deleteKey": "Scrios m'eochair OpenPGP",

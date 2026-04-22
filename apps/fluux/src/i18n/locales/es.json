@@ -561,7 +561,7 @@
             "toggleFailed": "No se pudo cambiar la configuración de cifrado",
             "limitationsTitle": "Limitaciones actuales",
             "limitationVerification": "Las huellas de los contactos aún no se verifican — los iconos de candado solo indican confianza en el primer uso.",
-            "limitationPersistence": "Las claves solo viven en memoria durante esta sesión; al reiniciar la aplicación se regeneran.",
+            "limitationDeviceBound": "Esta clave solo existe en este dispositivo — aún no hay sincronización multi-dispositivo ni copia de seguridad cifrada; perder el dispositivo significa perder la identidad.",
             "limitationBackend": "Usa un backend criptográfico experimental en Rust puro; no está reforzado para escenarios de alta seguridad.",
             "dangerZone": "Zona de peligro",
             "deleteKey": "Eliminar mi clave OpenPGP",

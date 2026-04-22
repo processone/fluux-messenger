@@ -263,7 +263,7 @@ export function EncryptionSettings() {
             </p>
             <ul className="mt-1 space-y-1 list-disc list-inside">
               <li>{t('settings.encryption.limitationVerification')}</li>
-              <li>{t('settings.encryption.limitationPersistence')}</li>
+              <li>{t('settings.encryption.limitationDeviceBound')}</li>
               <li>{t('settings.encryption.limitationBackend')}</li>
             </ul>
           </div>

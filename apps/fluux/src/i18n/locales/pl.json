@@ -561,7 +561,7 @@
             "toggleFailed": "Nie udało się zmienić ustawienia szyfrowania",
             "limitationsTitle": "Obecne ograniczenia",
             "limitationVerification": "Odciski kontaktów nie są jeszcze weryfikowane — ikony kłódki oznaczają jedynie zaufanie przy pierwszym użyciu.",
-            "limitationPersistence": "Klucze istnieją tylko w pamięci tej sesji; ponowne uruchomienie aplikacji generuje je na nowo.",
+            "limitationDeviceBound": "Ten klucz istnieje tylko na tym urządzeniu — brak synchronizacji między urządzeniami i zaszyfrowanej kopii zapasowej; utrata urządzenia oznacza utratę tożsamości.",
             "limitationBackend": "Używa eksperymentalnego backendu kryptograficznego w czystym Ruście; nie jest utwardzony do scenariuszy o wysokich wymaganiach bezpieczeństwa.",
             "dangerZone": "Strefa zagrożenia",
             "deleteKey": "Usuń mój klucz OpenPGP",

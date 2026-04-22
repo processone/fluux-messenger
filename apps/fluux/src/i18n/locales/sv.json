@@ -559,7 +559,7 @@
             "toggleFailed": "Det gick inte att ändra krypteringsinställningen",
             "limitationsTitle": "Nuvarande begränsningar",
             "limitationVerification": "Kontakternas fingeravtryck verifieras ännu inte — hänglåsikonerna visar bara förtroende vid första användningen.",
-            "limitationPersistence": "Nycklar finns bara i minnet för den här sessionen; om appen startas om genereras de på nytt.",
+            "limitationDeviceBound": "Denna nyckel finns endast på den här enheten — ingen synkronisering mellan enheter eller krypterad säkerhetskopia ännu; att förlora enheten innebär att förlora identiteten.",
             "limitationBackend": "Använder en experimentell ren-Rust-kryptobackend; inte härdad för scenarier med höga säkerhetskrav.",
             "dangerZone": "Farozon",
             "deleteKey": "Ta bort min OpenPGP-nyckel",

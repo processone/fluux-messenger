@@ -561,7 +561,7 @@
             "toggleFailed": "No s'ha pogut canviar la configuració de xifratge",
             "limitationsTitle": "Limitacions actuals",
             "limitationVerification": "Les empremtes dels contactes encara no es verifiquen — les icones del cadenat només indiquen confiança de primer ús.",
-            "limitationPersistence": "Les claus viuen a la memòria només en aquesta sessió; en reiniciar l'aplicació es tornen a generar.",
+            "limitationDeviceBound": "Aquesta clau només existeix en aquest dispositiu — encara no hi ha sincronització entre dispositius ni còpia de seguretat xifrada; perdre el dispositiu significa perdre la identitat.",
             "limitationBackend": "Fa servir un rerefons criptogràfic experimental escrit en Rust pur; no està endurit per a escenaris d'alta seguretat.",
             "dangerZone": "Zona de perill",
             "deleteKey": "Elimina la meva clau OpenPGP",

@@ -561,7 +561,7 @@
             "toggleFailed": "Nu s-a putut modifica setarea de criptare",
             "limitationsTitle": "Limitări actuale",
             "limitationVerification": "Amprentele contactelor nu sunt încă verificate — pictogramele lacăt reflectă doar încrederea la prima utilizare.",
-            "limitationPersistence": "Cheile există doar în memoria acestei sesiuni; repornirea aplicației le regenerează.",
+            "limitationDeviceBound": "Această cheie există doar pe acest dispozitiv — încă nu există sincronizare între dispozitive sau copie de rezervă criptată; pierderea dispozitivului înseamnă pierderea identității.",
             "limitationBackend": "Folosește un backend criptografic experimental scris în Rust pur; nu este consolidat pentru scenarii cu cerințe înalte de securitate.",
             "dangerZone": "Zonă periculoasă",
             "deleteKey": "Șterge cheia mea OpenPGP",

@@ -559,7 +559,7 @@
             "toggleFailed": "Salausasetuksen muuttaminen epäonnistui",
             "limitationsTitle": "Nykyiset rajoitukset",
             "limitationVerification": "Yhteystietojen sormenjälkiä ei vielä tarkisteta — lukon kuvakkeet ilmaisevat vain luottamusta ensikäytöllä.",
-            "limitationPersistence": "Avaimet säilyvät vain tämän istunnon muistissa; sovelluksen uudelleenkäynnistys luo ne uudelleen.",
+            "limitationDeviceBound": "Tämä avain on vain tällä laitteella — ei vielä useiden laitteiden synkronointia eikä salattua varmuuskopiota; laitteen menettäminen tarkoittaa identiteetin menettämistä.",
             "limitationBackend": "Käyttää kokeellista puhtaan Rustin salaustaustajärjestelmää; ei ole kovetettu korkean turvallisuuden skenaarioille.",
             "dangerZone": "Vaaravyöhyke",
             "deleteKey": "Poista OpenPGP-avaimeni",

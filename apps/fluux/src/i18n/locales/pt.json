@@ -561,7 +561,7 @@
             "toggleFailed": "Não foi possível alterar a definição de criptografia",
             "limitationsTitle": "Limitações atuais",
             "limitationVerification": "As impressões digitais dos contactos ainda não são verificadas — os ícones de cadeado apenas refletem confiança no primeiro uso.",
-            "limitationPersistence": "As chaves existem apenas em memória nesta sessão; reiniciar a aplicação regenera-as.",
+            "limitationDeviceBound": "Esta chave só existe neste dispositivo — ainda não há sincronização multi-dispositivo nem backup encriptado; perder o dispositivo significa perder a identidade.",
             "limitationBackend": "Usa um backend criptográfico experimental em Rust puro; não endurecido para cenários de alta segurança.",
             "dangerZone": "Zona de perigo",
             "deleteKey": "Eliminar a minha chave OpenPGP",

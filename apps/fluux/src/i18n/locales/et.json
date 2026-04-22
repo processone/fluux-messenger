@@ -561,7 +561,7 @@
             "toggleFailed": "Krüpteerimise seadet ei saanud muuta",
             "limitationsTitle": "Praegused piirangud",
             "limitationVerification": "Kontaktide sõrmejälgi veel ei kontrollita — lukuikoonid näitavad ainult esmakordset usaldust.",
-            "limitationPersistence": "Võtmed asuvad ainult selle seansi mälus; rakenduse taaskäivitamisel luuakse need uuesti.",
+            "limitationDeviceBound": "See võti eksisteerib ainult sellel seadmel — seadmete vahel sünkroonimist ega krüpteeritud varukoopiat veel pole; seadme kaotamine tähendab identiteedi kaotamist.",
             "limitationBackend": "Kasutab eksperimentaalset puhtas Rustis krüptotagasüsteemi; pole tugevdatud kõrgete turvanõuetega stsenaariumide jaoks.",
             "dangerZone": "Ohutsoon",
             "deleteKey": "Kustuta minu OpenPGP võti",

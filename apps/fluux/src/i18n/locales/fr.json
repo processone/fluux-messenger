@@ -560,7 +560,7 @@
             "toggleFailed": "Impossible de modifier le paramètre de chiffrement",
             "limitationsTitle": "Limitations actuelles",
             "limitationVerification": "Les empreintes des contacts ne sont pas encore vérifiées — les icônes de cadenas reflètent seulement la confiance à la première utilisation.",
-            "limitationPersistence": "Les clés ne résident qu'en mémoire pour cette session ; le redémarrage de l'application les régénère.",
+            "limitationDeviceBound": "Cette clé ne vit que sur cet appareil — pas encore de synchronisation multi-appareils ni de sauvegarde chiffrée ; perdre l'appareil revient à perdre l'identité.",
             "limitationBackend": "Utilise un backend cryptographique expérimental en Rust pur ; non durci pour des scénarios à fort niveau d'exigence.",
             "dangerZone": "Zone sensible",
             "deleteKey": "Supprimer ma clé OpenPGP",

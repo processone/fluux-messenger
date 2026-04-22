@@ -561,7 +561,7 @@
             "toggleFailed": "Ma setax jinbidel is-setting tal-kriptaġġ",
             "limitationsTitle": "Limitazzjonijiet attwali",
             "limitationVerification": "Il-marki tal-kuntatti għadhom ma jiġux ivverifikati — l-ikoni tal-lucchetto juru biss fiduċja fl-ewwel użu.",
-            "limitationPersistence": "Iċ-ċwievet jgħixu biss fil-memorja għal din is-sessjoni; ir-restart tal-app jiġġenerahom mill-ġdid.",
+            "limitationDeviceBound": "Din iċ-ċavetta teżisti biss fuq dan it-tagħmir — għad m'hemmx sinkronizzazzjoni bejn tagħmir jew backup ikriptat; it-telf tat-tagħmir ifisser telf tal-identità.",
             "limitationBackend": "Juża backend kriptografiku sperimentali f'Rust pur; mhux imsaħħaħ għal xenarji ta' sigurtà għolja.",
             "dangerZone": "Żona ta' periklu",
             "deleteKey": "Ħassar iċ-ċavetta OpenPGP tiegħi",

@@ -559,7 +559,7 @@
             "toggleFailed": "Postavka šifriranja nije se mogla promijeniti",
             "limitationsTitle": "Trenutna ograničenja",
             "limitationVerification": "Otisci kontakata još se ne provjeravaju — ikone lokota prikazuju samo povjerenje pri prvom korištenju.",
-            "limitationPersistence": "Ključevi postoje samo u memoriji ove sesije; ponovno pokretanje aplikacije ih generira ponovno.",
+            "limitationDeviceBound": "Ovaj ključ postoji samo na ovom uređaju — još nema sinkronizacije između uređaja ni šifrirane sigurnosne kopije; gubitak uređaja znači gubitak identiteta.",
             "limitationBackend": "Koristi eksperimentalni kripto-backend u čistom Rustu; nije ojačan za scenarije visoke sigurnosti.",
             "dangerZone": "Opasna zona",
             "deleteKey": "Izbriši moj OpenPGP ključ",

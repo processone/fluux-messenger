@@ -561,7 +561,7 @@
             "toggleFailed": "Verschlüsselungseinstellung konnte nicht geändert werden",
             "limitationsTitle": "Aktuelle Einschränkungen",
             "limitationVerification": "Kontakt-Fingerabdrücke werden noch nicht verifiziert — Schloss-Symbole zeigen nur Vertrauen bei erster Nutzung.",
-            "limitationPersistence": "Die Schlüssel liegen nur während dieser Sitzung im Speicher; ein Neustart der App erzeugt sie neu.",
+            "limitationDeviceBound": "Dieser Schlüssel existiert nur auf diesem Gerät — noch keine Geräte-Synchronisierung oder verschlüsseltes Backup; Verlust des Geräts bedeutet Verlust der Identität.",
             "limitationBackend": "Nutzt ein experimentelles Krypto-Backend in reinem Rust; nicht für Hochsicherheitsszenarien gehärtet.",
             "dangerZone": "Gefahrenbereich",
             "deleteKey": "Meinen OpenPGP-Schlüssel löschen",

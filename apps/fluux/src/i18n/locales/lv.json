@@ -560,7 +560,7 @@
             "toggleFailed": "Neizdevās mainīt šifrēšanas iestatījumu",
             "limitationsTitle": "Pašreizējie ierobežojumi",
             "limitationVerification": "Kontaktu pirkstu nospiedumi vēl netiek verificēti — slēdzenes ikonas rāda tikai uzticību pirmajā lietošanā.",
-            "limitationPersistence": "Atslēgas pastāv tikai šīs sesijas atmiņā; lietotnes restartēšana tās ģenerē no jauna.",
+            "limitationDeviceBound": "Šī atslēga pastāv tikai šajā ierīcē — vēl nav sinhronizācijas starp ierīcēm vai šifrētas rezerves kopijas; ierīces zaudēšana nozīmē identitātes zaudēšanu.",
             "limitationBackend": "Izmanto eksperimentālu tīra Rust kriptogrāfijas backend; nav nostiprināts augstas drošības scenārijiem.",
             "dangerZone": "Bīstamā zona",
             "deleteKey": "Dzēst manu OpenPGP atslēgu",

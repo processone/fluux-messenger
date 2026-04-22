@@ -559,7 +559,7 @@
             "toggleFailed": "A titkosítás beállítása nem módosítható",
             "limitationsTitle": "Jelenlegi korlátozások",
             "limitationVerification": "A névjegyek ujjlenyomatai még nincsenek ellenőrizve — a lakatikonok csak első használatkori bizalmat jeleznek.",
-            "limitationPersistence": "A kulcsok csak ennek a munkamenetnek a memóriájában élnek; az alkalmazás újraindításakor újragenerálódnak.",
+            "limitationDeviceBound": "Ez a kulcs csak ezen az eszközön létezik — még nincs eszközök közötti szinkronizálás vagy titkosított biztonsági mentés; az eszköz elvesztése az azonosság elvesztését jelenti.",
             "limitationBackend": "Kísérleti, tiszta Rust kriptográfiai hátteret használ; nincs megerősítve magas biztonsági követelményű helyzetekhez.",
             "dangerZone": "Veszélyzóna",
             "deleteKey": "OpenPGP-kulcsom törlése",

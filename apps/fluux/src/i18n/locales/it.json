@@ -561,7 +561,7 @@
             "toggleFailed": "Impossibile modificare l'impostazione di crittografia",
             "limitationsTitle": "Limitazioni attuali",
             "limitationVerification": "Le impronte dei contatti non sono ancora verificate — le icone del lucchetto indicano solo la fiducia al primo utilizzo.",
-            "limitationPersistence": "Le chiavi risiedono in memoria solo per questa sessione; al riavvio dell'applicazione vengono rigenerate.",
+            "limitationDeviceBound": "Questa chiave esiste solo su questo dispositivo — nessuna sincronizzazione multi-dispositivo né backup cifrato; perdere il dispositivo significa perdere l'identità.",
             "limitationBackend": "Usa un backend crittografico sperimentale in Rust puro; non rinforzato per scenari ad alta sicurezza.",
             "dangerZone": "Zona sensibile",
             "deleteKey": "Elimina la mia chiave OpenPGP",

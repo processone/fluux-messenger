@@ -559,7 +559,7 @@
             "toggleFailed": "Nepavyko pakeisti šifravimo nustatymo",
             "limitationsTitle": "Dabartiniai apribojimai",
             "limitationVerification": "Kontaktų atspaudai dar netikrinami — spynų piktogramos rodo tik pasitikėjimą pirmą kartą.",
-            "limitationPersistence": "Raktai gyvena tik šios sesijos atmintyje; paleidus programą iš naujo jie sukuriami iš naujo.",
+            "limitationDeviceBound": "Šis raktas egzistuoja tik šiame įrenginyje — kol kas nėra sinchronizavimo tarp įrenginių ar užšifruotos atsarginės kopijos; įrenginio praradimas reiškia tapatybės praradimą.",
             "limitationBackend": "Naudoja eksperimentinį gryno Rust kriptografijos backend; nėra sutvirtintas aukšto saugumo scenarijams.",
             "dangerZone": "Pavojaus zona",
             "deleteKey": "Ištrinti mano OpenPGP raktą",
