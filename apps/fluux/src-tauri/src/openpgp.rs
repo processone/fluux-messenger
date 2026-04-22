@@ -26,10 +26,12 @@
 use anyhow::{anyhow, Context, Result};
 use sequoia_openpgp as openpgp;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::io::Write as _;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::State;
+use tokio::sync::OnceCell as AsyncOnceCell;
 
 use crate::openpgp_storage::{KeyStorage, PassphraseBacking};
 
@@ -86,14 +88,43 @@ pub struct DecryptOutput {
 }
 
 /// State held by the Tauri managed-state system. One entry per logged-in
-/// account — keyed on the account JID. The in-memory map is a cache on
-/// top of [`KeyStorage`]: the first [`Self::ensure_key`] call per account
-/// after a restart hits disk; subsequent calls in the same session serve
-/// from memory.
+/// account, keyed on the bare JID.
+///
+/// # Non-blocking unlock
+///
+/// The CPU-bound part of [`Self::ensure_key`] (Argon2id key-derivation,
+/// one call per secret packet — ~500 ms total on M-series hardware) runs
+/// on [`tokio::task::spawn_blocking`] so the Tauri IPC thread stays
+/// responsive while we unlock. The async `ensure_key` Tauri command is
+/// what surfaces that; the sync commands (`encrypt`, `decrypt`, etc.)
+/// only do cheap in-memory lookups against the already-populated cell.
+///
+/// # Concurrent-call coalescing
+///
+/// Every account has an [`AsyncOnceCell<UnlockOutcome>`]: the first
+/// `ensure_key` or `prewarm` caller for a given JID runs the unlock; any
+/// concurrent caller awaits the same cell instead of racing to a second
+/// KDF run. On error the cell is evicted so a subsequent attempt starts
+/// fresh (e.g. after the user fixes a vanished `.pass` fallback file).
+///
+/// [`AsyncOnceCell`]: tokio::sync::OnceCell
 pub struct OpenpgpState {
-    accounts: Mutex<std::collections::HashMap<String, KeyBundle>>,
-    storage: KeyStorage,
+    /// Per-JID coordination cell. `Some(Ok(KeyBundle))` = unlocked and
+    /// cached; pending inside the cell = unlock is in flight and awaiters
+    /// should join; absent = no attempt started yet. Cells carrying `Err`
+    /// are evicted after observation so the next caller retries.
+    entries: Mutex<HashMap<String, Arc<AsyncOnceCell<UnlockOutcome>>>>,
+    storage: Arc<KeyStorage>,
+    /// Test-only instrumentation: how many times the blocking KDF path
+    /// actually ran. Concurrent `ensure_key` calls must coalesce to one
+    /// KDF; we assert that by reading this counter in tests.
+    #[cfg(test)]
+    blocking_runs: std::sync::atomic::AtomicUsize,
 }
+
+/// Shared result type stored in each [`AsyncOnceCell`]. `Clone` so
+/// multiple awaiters can each take a copy without another KDF round.
+type UnlockOutcome = Result<KeyBundle, String>;
 
 impl OpenpgpState {
     /// Production constructor — persists keys under
@@ -101,8 +132,10 @@ impl OpenpgpState {
     /// per-account passphrase.
     pub fn new(base_dir: PathBuf) -> Self {
         Self {
-            accounts: Mutex::new(std::collections::HashMap::new()),
-            storage: KeyStorage::new(base_dir),
+            entries: Mutex::new(HashMap::new()),
+            storage: Arc::new(KeyStorage::new(base_dir)),
+            #[cfg(test)]
+            blocking_runs: std::sync::atomic::AtomicUsize::new(0),
         }
     }
 
@@ -112,106 +145,228 @@ impl OpenpgpState {
     #[cfg(test)]
     pub fn for_testing(base_dir: PathBuf) -> Self {
         Self {
-            accounts: Mutex::new(std::collections::HashMap::new()),
-            storage: KeyStorage::for_testing(base_dir),
+            entries: Mutex::new(HashMap::new()),
+            storage: Arc::new(KeyStorage::for_testing(base_dir)),
+            blocking_runs: std::sync::atomic::AtomicUsize::new(0),
         }
     }
 
-    /// Load-or-generate an OpenPGP identity for `account_jid`. On cold
-    /// start this hits disk; on warm start it serves from the in-memory
-    /// cache. Only the first caller per account pays the key-generation
-    /// cost (roughly a few seconds on the RustCrypto backend).
-    pub fn ensure_key(&self, account_jid: &str, user_id: &str) -> Result<KeyBundle, String> {
-        let mut accounts = self
-            .accounts
-            .lock()
-            .map_err(|e| format!("openpgp state poisoned: {e}"))?;
-        if let Some(existing) = accounts.get(account_jid) {
-            return Ok(existing.clone());
+    /// Load-or-generate an OpenPGP identity for `account_jid`. The KDF
+    /// work runs on a blocking worker thread so we never hold up the IPC
+    /// runtime. Concurrent calls for the same JID coalesce to a single
+    /// blocking run.
+    ///
+    /// Takes owned `String` arguments because they move into a
+    /// `'static` blocking closure.
+    pub async fn ensure_key(
+        self: &Arc<Self>,
+        account_jid: String,
+        user_id: String,
+    ) -> Result<KeyBundle, String> {
+        let cell = self.cell_for(&account_jid);
+
+        let storage = Arc::clone(&self.storage);
+        let jid_for_task = account_jid.clone();
+        let user_id_for_task = user_id;
+        #[cfg(test)]
+        let counter = &self.blocking_runs;
+
+        let outcome = cell
+            .get_or_init(|| async move {
+                #[cfg(test)]
+                counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                tokio::task::spawn_blocking(move || {
+                    Self::run_blocking(&storage, &jid_for_task, &user_id_for_task)
+                })
+                .await
+                .unwrap_or_else(|join_err| {
+                    // A panic on the blocking thread maps to a clean
+                    // error here rather than bubbling up as a JoinError.
+                    Err(format!("openpgp unlock task panicked: {join_err}"))
+                })
+            })
+            .await
+            .clone();
+
+        if outcome.is_err() {
+            // Evict the cell so the next caller retries. A successful
+            // unlock stays cached indefinitely (the fingerprint is
+            // stable for the identity's lifetime).
+            self.entries.lock().unwrap().remove(&account_jid);
         }
 
-        // Try to restore a previously-persisted key first. Corruption or
-        // a vanished passphrase surfaces as an error here — we don't
-        // silently overwrite; the user must explicitly delete-and-regen.
-        if let Some(persisted) = self.storage.load(account_jid).map_err(anyhow_to_string)? {
-            let bundle =
-                bundle_from_cert(&persisted.cert, persisted.backing).map_err(anyhow_to_string)?;
-            accounts.insert(account_jid.to_string(), bundle.clone());
-            return Ok(bundle);
-        }
-
-        // Fresh account — generate, persist, cache.
-        let cert = generate_cert(user_id).map_err(anyhow_to_string)?;
-        let backing = self
-            .storage
-            .save(account_jid, &cert)
-            .map_err(anyhow_to_string)?;
-        let bundle = bundle_from_cert(&cert, backing).map_err(anyhow_to_string)?;
-        accounts.insert(account_jid.to_string(), bundle.clone());
-        Ok(bundle)
+        outcome
     }
 
-    /// Encrypt `plaintext` to `recipient_public_armored`, signed with the
-    /// secret key stored for `sender_account_jid`. Matches the XEP-0373
-    /// signcrypt convention — every encrypted payload carries a signature.
+    /// Safe boot-time prewarm: only kicks off the unlock when a key
+    /// file already exists on disk. Used from `main.rs` setup so we
+    /// can overlap the Argon2id KDF with Tauri window creation / React
+    /// boot without speculatively generating a key for a user who
+    /// hasn't actually enabled E2EE. No-op when there's no persisted
+    /// key for `account_jid`.
+    pub fn prewarm_if_persisted(self: &Arc<Self>, account_jid: String, user_id: String) {
+        if !self.storage.has_persisted_key(&account_jid) {
+            return;
+        }
+        self.prewarm(account_jid, user_id);
+    }
+
+    /// Fire-and-forget unlock: starts the KDF on a background task if no
+    /// attempt is already in flight, returns immediately. Idempotent —
+    /// repeated calls for the same JID noop; a concurrent
+    /// [`ensure_key`] awaits the same in-flight unlock.
+    ///
+    /// Called when the login form is submitted (before the XMPP socket
+    /// connects) so the unlock overlaps with the login round-trip.
+    pub fn prewarm(self: &Arc<Self>, account_jid: String, user_id: String) {
+        // If the cell already has a Ready outcome, there's nothing to do.
+        {
+            let entries = self.entries.lock().unwrap();
+            if let Some(cell) = entries.get(&account_jid) {
+                if cell.initialized() {
+                    return;
+                }
+            }
+        }
+        let this = Arc::clone(self);
+        tokio::spawn(async move {
+            match this.ensure_key(account_jid.clone(), user_id).await {
+                Ok(bundle) => tracing::info!(
+                    "openpgp prewarm: key ready for {} ({})",
+                    account_jid,
+                    short_fp(&bundle.fingerprint),
+                ),
+                Err(e) => {
+                    tracing::warn!("openpgp prewarm: unlock failed for {}: {}", account_jid, e)
+                }
+            }
+        });
+    }
+
+    /// Encrypt `plaintext` to `recipient_public_armored`, signed with
+    /// the secret key stored for `sender_account_jid`. Matches the
+    /// XEP-0373 signcrypt convention.
+    ///
+    /// Synchronous by design: it runs after [`Self::ensure_key`] has
+    /// populated the cell, so this is a cheap in-memory lookup plus the
+    /// Sequoia encrypt operation. The encrypt step itself is fast
+    /// compared to the KDF — no IPC concern here.
     pub fn encrypt(
         &self,
         sender_account_jid: &str,
         recipient_public_armored: &str,
         plaintext: &str,
     ) -> Result<String, String> {
-        let sender_secret = {
-            let accounts = self
-                .accounts
-                .lock()
-                .map_err(|e| format!("openpgp state poisoned: {e}"))?;
-            accounts
-                .get(sender_account_jid)
-                .map(|b| b.secret_armored.clone())
-                .ok_or_else(|| format!("no key for sender account: {sender_account_jid}"))?
-        };
-
-        encrypt_and_sign(recipient_public_armored, &sender_secret, plaintext)
+        let bundle = self.read_cached_bundle(sender_account_jid, "sender")?;
+        encrypt_and_sign(recipient_public_armored, &bundle.secret_armored, plaintext)
             .map_err(anyhow_to_string)
     }
 
     /// Decrypt `ciphertext` with the secret key for `account_jid`. When
-    /// `sender_public_armored` is provided, verify signatures against that
-    /// cert and report the verified signer fingerprint.
+    /// `sender_public_armored` is provided, verify signatures against
+    /// that cert and report the verified signer fingerprint.
     pub fn decrypt(
         &self,
         account_jid: &str,
         ciphertext: &str,
         sender_public_armored: Option<&str>,
     ) -> Result<DecryptOutput, String> {
-        let secret_armored = {
-            let accounts = self
-                .accounts
-                .lock()
-                .map_err(|e| format!("openpgp state poisoned: {e}"))?;
-            accounts
-                .get(account_jid)
-                .map(|b| b.secret_armored.clone())
-                .ok_or_else(|| format!("no key for account: {account_jid}"))?
-        };
-
-        decrypt_and_verify(&secret_armored, ciphertext, sender_public_armored)
+        let bundle = self.read_cached_bundle(account_jid, "account")?;
+        decrypt_and_verify(&bundle.secret_armored, ciphertext, sender_public_armored)
             .map_err(anyhow_to_string)
     }
 
-    /// Forget the account: drop the in-memory cache entry AND remove
-    /// every on-disk trace (encrypted TSK, fallback passphrase file,
-    /// keychain entry). Safe to call for an unknown account.
+    /// Forget the account: drop the cell AND remove every on-disk trace
+    /// (encrypted TSK, fallback passphrase file, keychain entry). Safe
+    /// to call for an unknown account.
     pub fn forget_account(&self, account_jid: &str) -> Result<(), String> {
-        let mut accounts = self
-            .accounts
-            .lock()
-            .map_err(|e| format!("openpgp state poisoned: {e}"))?;
-        accounts.remove(account_jid);
-        drop(accounts);
+        self.entries.lock().unwrap().remove(account_jid);
         self.storage.forget(account_jid).map_err(anyhow_to_string)?;
         Ok(())
     }
+
+    // ---- internals ----------------------------------------------------
+
+    /// Get-or-insert the per-JID cell. The returned `Arc` is cheap to
+    /// hold across an await because the inner `AsyncOnceCell` does its
+    /// own synchronization.
+    fn cell_for(&self, account_jid: &str) -> Arc<AsyncOnceCell<UnlockOutcome>> {
+        let mut entries = self.entries.lock().unwrap();
+        Arc::clone(
+            entries
+                .entry(account_jid.to_string())
+                .or_insert_with(|| Arc::new(AsyncOnceCell::new())),
+        )
+    }
+
+    /// Look up a cached unlock outcome for `jid`. Returns a clear error
+    /// if the cell isn't initialised yet — callers that need the key
+    /// eagerly must call [`Self::ensure_key`] first.
+    ///
+    /// `role` is used purely to shape the error message ("sender" /
+    /// "account") so we stay backward-compatible with existing error
+    /// strings that downstream tests match on.
+    fn read_cached_bundle(&self, jid: &str, role: &str) -> Result<KeyBundle, String> {
+        let cell = {
+            let entries = self.entries.lock().unwrap();
+            entries.get(jid).cloned()
+        };
+        let cell = cell.ok_or_else(|| format!("no key for {role} account: {jid}"))?;
+        // `get` does not await — if the cell is still initialising we
+        // treat it as "no key yet" rather than blocking the caller.
+        let outcome = cell
+            .get()
+            .ok_or_else(|| format!("no key for {role} account: {jid}"))?;
+        match outcome {
+            Ok(bundle) => Ok(bundle.clone()),
+            Err(e) => Err(e.clone()),
+        }
+    }
+
+    /// The actual CPU-bound work: load-or-generate + persist. Pulled
+    /// out of the method body so [`tokio::task::spawn_blocking`] can
+    /// run it on a dedicated worker thread without capturing `&self`.
+    fn run_blocking(storage: &KeyStorage, jid: &str, user_id: &str) -> Result<KeyBundle, String> {
+        if let Some(persisted) = storage.load(jid).map_err(anyhow_to_string)? {
+            return bundle_from_cert(&persisted.cert, persisted.backing).map_err(anyhow_to_string);
+        }
+        let cert = generate_cert(user_id).map_err(anyhow_to_string)?;
+        let backing = storage.save(jid, &cert).map_err(anyhow_to_string)?;
+        bundle_from_cert(&cert, backing).map_err(anyhow_to_string)
+    }
+
+    /// Test helper — number of times the blocking KDF path executed
+    /// for this state. Used by the concurrency test to prove that
+    /// simultaneous `ensure_key` calls for the same JID coalesce.
+    #[cfg(test)]
+    pub fn blocking_run_count(&self) -> usize {
+        self.blocking_runs
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Test helper — synchronous wrapper around the async `ensure_key`.
+    /// Spins up a one-shot current-thread runtime so test code can keep
+    /// its pre-async shape without every test needing `#[tokio::test]`.
+    /// Production code always calls `ensure_key` from an existing
+    /// Tauri-provided runtime instead.
+    #[cfg(test)]
+    pub fn ensure_key_sync(
+        self: &Arc<Self>,
+        account_jid: &str,
+        user_id: &str,
+    ) -> Result<KeyBundle, String> {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("test tokio runtime")
+            .block_on(self.ensure_key(account_jid.to_string(), user_id.to_string()))
+    }
+}
+
+/// First 16 hex chars of a fingerprint — enough to eyeball in a log
+/// line without dragging the full 64 chars onto each prewarm record.
+fn short_fp(full: &str) -> &str {
+    &full[..full.len().min(16)]
 }
 
 pub fn fingerprint_of(public_armored: &str) -> Result<String, String> {
@@ -224,13 +379,31 @@ pub fn fingerprint_of(public_armored: &str) -> Result<String, String> {
 // Tauri command shims
 // ---------------------------------------------------------------------------
 
+/// Async — runs the Argon2id key-derivation on a blocking worker
+/// thread so the Tauri IPC runtime thread isn't held up. Concurrent
+/// invocations for the same JID coalesce to a single KDF run.
 #[tauri::command]
-pub fn openpgp_ensure_key(
+pub async fn openpgp_ensure_key(
     account_jid: String,
     user_id: String,
-    state: State<'_, OpenpgpState>,
+    state: State<'_, Arc<OpenpgpState>>,
 ) -> Result<KeyBundle, String> {
-    state.ensure_key(&account_jid, &user_id)
+    let state = Arc::clone(&state);
+    state.ensure_key(account_jid, user_id).await
+}
+
+/// Fire-and-forget prewarm: starts unlocking in the background so a
+/// later `openpgp_ensure_key` / `SequoiaPgpPlugin.init()` hits an
+/// already-warm cache. Typically invoked the moment the user submits
+/// the login form, overlapping the KDF with XMPP handshake round-trips.
+#[tauri::command]
+pub fn openpgp_prewarm(
+    account_jid: String,
+    user_id: String,
+    state: State<'_, Arc<OpenpgpState>>,
+) -> Result<(), String> {
+    Arc::clone(&state).prewarm(account_jid, user_id);
+    Ok(())
 }
 
 #[tauri::command]
@@ -238,7 +411,7 @@ pub fn openpgp_encrypt(
     sender_account_jid: String,
     recipient_public_armored: String,
     plaintext: String,
-    state: State<'_, OpenpgpState>,
+    state: State<'_, Arc<OpenpgpState>>,
 ) -> Result<String, String> {
     state.encrypt(&sender_account_jid, &recipient_public_armored, &plaintext)
 }
@@ -248,7 +421,7 @@ pub fn openpgp_decrypt(
     account_jid: String,
     ciphertext: String,
     sender_public_armored: Option<String>,
-    state: State<'_, OpenpgpState>,
+    state: State<'_, Arc<OpenpgpState>>,
 ) -> Result<DecryptOutput, String> {
     state.decrypt(&account_jid, &ciphertext, sender_public_armored.as_deref())
 }
@@ -261,7 +434,7 @@ pub fn openpgp_fingerprint(public_armored: String) -> Result<String, String> {
 #[tauri::command]
 pub fn openpgp_forget_account(
     account_jid: String,
-    state: State<'_, OpenpgpState>,
+    state: State<'_, Arc<OpenpgpState>>,
 ) -> Result<(), String> {
     state.forget_account(&account_jid)
 }
@@ -540,14 +713,17 @@ mod tests {
         dir
     }
 
-    fn new_state() -> OpenpgpState {
-        OpenpgpState::for_testing(fresh_tmp_dir())
+    /// `Arc<OpenpgpState>` because the async API takes `self: &Arc<Self>`
+    /// so [`ensure_key`] can be spawned to background tasks. The test
+    /// wrapper `ensure_key_sync` handles the async → sync bridging.
+    fn new_state() -> Arc<OpenpgpState> {
+        Arc::new(OpenpgpState::for_testing(fresh_tmp_dir()))
     }
 
-    fn setup_two_accounts() -> (OpenpgpState, KeyBundle, KeyBundle) {
+    fn setup_two_accounts() -> (Arc<OpenpgpState>, KeyBundle, KeyBundle) {
         let state = new_state();
-        let alice = state.ensure_key("alice@example.com", "Alice").unwrap();
-        let bob = state.ensure_key("bob@example.com", "Bob").unwrap();
+        let alice = state.ensure_key_sync("alice@example.com", "Alice").unwrap();
+        let bob = state.ensure_key_sync("bob@example.com", "Bob").unwrap();
         (state, alice, bob)
     }
 
@@ -555,7 +731,7 @@ mod tests {
     fn generate_then_fingerprint_round_trip() {
         let state = new_state();
         let bundle = state
-            .ensure_key("alice@example.com", "Alice <alice@example.com>")
+            .ensure_key_sync("alice@example.com", "Alice <alice@example.com>")
             .unwrap();
         let fp = fingerprint_of(&bundle.public_armored).unwrap();
         assert_eq!(fp, bundle.fingerprint);
@@ -572,8 +748,8 @@ mod tests {
     #[test]
     fn ensure_key_is_idempotent_per_account() {
         let state = new_state();
-        let a = state.ensure_key("alice@example.com", "Alice").unwrap();
-        let b = state.ensure_key("alice@example.com", "Alice").unwrap();
+        let a = state.ensure_key_sync("alice@example.com", "Alice").unwrap();
+        let b = state.ensure_key_sync("alice@example.com", "Alice").unwrap();
         assert_eq!(a.fingerprint, b.fingerprint);
         assert_eq!(a.secret_armored, b.secret_armored);
     }
@@ -581,8 +757,8 @@ mod tests {
     #[test]
     fn different_accounts_get_distinct_fingerprints() {
         let state = new_state();
-        let alice = state.ensure_key("alice@example.com", "Alice").unwrap();
-        let bob = state.ensure_key("bob@example.com", "Bob").unwrap();
+        let alice = state.ensure_key_sync("alice@example.com", "Alice").unwrap();
+        let bob = state.ensure_key_sync("bob@example.com", "Bob").unwrap();
         assert_ne!(alice.fingerprint, bob.fingerprint);
     }
 
@@ -594,13 +770,15 @@ mod tests {
         // fails the "stuck at key generation" UX on restart returns.
         let dir = fresh_tmp_dir();
 
-        let first = OpenpgpState::for_testing(dir.clone());
-        let initial = first.ensure_key("alice@example.com", "Alice").unwrap();
+        let first = Arc::new(OpenpgpState::for_testing(dir.clone()));
+        let initial = first.ensure_key_sync("alice@example.com", "Alice").unwrap();
         let initial_fp = initial.fingerprint.clone();
         drop(first);
 
-        let second = OpenpgpState::for_testing(dir);
-        let reloaded = second.ensure_key("alice@example.com", "Alice").unwrap();
+        let second = Arc::new(OpenpgpState::for_testing(dir));
+        let reloaded = second
+            .ensure_key_sync("alice@example.com", "Alice")
+            .unwrap();
         assert_eq!(reloaded.fingerprint, initial_fp);
         // Secret block must also be stable — otherwise later encrypt /
         // sign calls on a reloaded state will produce signatures that
@@ -615,15 +793,17 @@ mod tests {
         // but breaks crypto operations.
         let dir = fresh_tmp_dir();
 
-        let first = OpenpgpState::for_testing(dir.clone());
-        let alice = first.ensure_key("alice@example.com", "Alice").unwrap();
-        let bob = first.ensure_key("bob@example.com", "Bob").unwrap();
+        let first = Arc::new(OpenpgpState::for_testing(dir.clone()));
+        let alice = first.ensure_key_sync("alice@example.com", "Alice").unwrap();
+        let bob = first.ensure_key_sync("bob@example.com", "Bob").unwrap();
         drop(first);
 
-        let reloaded = OpenpgpState::for_testing(dir);
+        let reloaded = Arc::new(OpenpgpState::for_testing(dir));
         // `ensure_key` now hits disk and must produce identical bundles.
-        let alice_reloaded = reloaded.ensure_key("alice@example.com", "Alice").unwrap();
-        let bob_reloaded = reloaded.ensure_key("bob@example.com", "Bob").unwrap();
+        let alice_reloaded = reloaded
+            .ensure_key_sync("alice@example.com", "Alice")
+            .unwrap();
+        let bob_reloaded = reloaded.ensure_key_sync("bob@example.com", "Bob").unwrap();
         assert_eq!(alice_reloaded.fingerprint, alice.fingerprint);
         assert_eq!(bob_reloaded.fingerprint, bob.fingerprint);
 
@@ -684,7 +864,7 @@ mod tests {
         // Alice signs, but Bob's client mistakenly supplies Eve's public
         // key for verification. Decryption succeeds; signature does not.
         let (state, _alice, bob) = setup_two_accounts();
-        let eve = state.ensure_key("eve@example.com", "Eve").unwrap();
+        let eve = state.ensure_key_sync("eve@example.com", "Eve").unwrap();
         let ciphertext = state
             .encrypt("alice@example.com", &bob.public_armored, "hi")
             .unwrap();
@@ -713,7 +893,7 @@ mod tests {
     #[test]
     fn decrypt_rejects_unknown_ciphertext_shape() {
         let state = new_state();
-        state.ensure_key("alice@example.com", "Alice").unwrap();
+        state.ensure_key_sync("alice@example.com", "Alice").unwrap();
         let err = state
             .decrypt("alice@example.com", "not-a-pgp-ciphertext", None)
             .expect_err("malformed ciphertext must be rejected");
@@ -724,7 +904,7 @@ mod tests {
     fn encrypt_fails_without_a_sender_key() {
         let state = new_state();
         // Generate only Bob's key; Alice is absent.
-        let bob = state.ensure_key("bob@example.com", "Bob").unwrap();
+        let bob = state.ensure_key_sync("bob@example.com", "Bob").unwrap();
         let err = state
             .encrypt("alice@example.com", &bob.public_armored, "hi")
             .expect_err("encrypt must fail without sender account");
@@ -734,8 +914,8 @@ mod tests {
     #[test]
     fn forget_account_removes_key_and_persisted_file() {
         let dir = fresh_tmp_dir();
-        let state = OpenpgpState::for_testing(dir.clone());
-        let alice = state.ensure_key("alice@example.com", "Alice").unwrap();
+        let state = Arc::new(OpenpgpState::for_testing(dir.clone()));
+        let alice = state.ensure_key_sync("alice@example.com", "Alice").unwrap();
         let ciphertext = state
             .encrypt("alice@example.com", &alice.public_armored, "self-note")
             .unwrap();
@@ -749,8 +929,8 @@ mod tests {
         assert!(err.contains("no key"), "unexpected error: {err}");
 
         // Persistence was also wiped: a fresh state can't find the key.
-        let fresh = OpenpgpState::for_testing(dir);
-        let regenerated = fresh.ensure_key("alice@example.com", "Alice").unwrap();
+        let fresh = Arc::new(OpenpgpState::for_testing(dir));
+        let regenerated = fresh.ensure_key_sync("alice@example.com", "Alice").unwrap();
         assert_ne!(
             regenerated.fingerprint, alice.fingerprint,
             "forget must wipe the on-disk file so the next ensure_key generates fresh"
@@ -766,8 +946,94 @@ mod tests {
     #[test]
     fn public_key_armor_is_stable_across_generate_reads() {
         let state = new_state();
-        let bundle = state.ensure_key("alice@example.com", "Alice").unwrap();
+        let bundle = state.ensure_key_sync("alice@example.com", "Alice").unwrap();
         let parsed = Cert::from_bytes(bundle.public_armored.as_bytes()).unwrap();
         assert_eq!(parsed.fingerprint().to_hex(), bundle.fingerprint);
+    }
+
+    // ---- concurrency / prewarm --------------------------------------
+
+    /// Two tasks hitting the same account at the same time must
+    /// coalesce to a single KDF run (one disk save, one fingerprint).
+    /// Without the [`AsyncOnceCell`] per-JID coordination we'd see two
+    /// saves race — the second would overwrite the first, and every
+    /// concurrent caller could end up with a fingerprint that doesn't
+    /// match the file on disk.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn concurrent_ensure_key_runs_kdf_exactly_once() {
+        let state = Arc::new(OpenpgpState::for_testing(fresh_tmp_dir()));
+
+        // Spawn 4 concurrent ensure_key calls for the same JID. If the
+        // coalescing is broken, this would produce 4 KDF runs; with the
+        // coalescing, exactly 1.
+        let mut handles = Vec::new();
+        for _ in 0..4 {
+            let s = Arc::clone(&state);
+            handles.push(tokio::spawn(async move {
+                s.ensure_key("alice@example.com".into(), "Alice".into())
+                    .await
+            }));
+        }
+
+        let mut bundles = Vec::new();
+        for h in handles {
+            bundles.push(h.await.unwrap().unwrap());
+        }
+
+        // Every caller saw the same bundle.
+        for b in &bundles[1..] {
+            assert_eq!(b.fingerprint, bundles[0].fingerprint);
+            assert_eq!(b.secret_armored, bundles[0].secret_armored);
+        }
+        // And the blocking KDF ran exactly once.
+        assert_eq!(
+            state.blocking_run_count(),
+            1,
+            "concurrent ensure_key calls must coalesce to a single KDF run"
+        );
+    }
+
+    /// A cached entry serves later ensure_key calls without running
+    /// the KDF again. (Separate from the concurrent test so a failure
+    /// here points to the cache-hit path specifically.)
+    #[tokio::test]
+    async fn cached_entry_skips_subsequent_kdf_runs() {
+        let state = Arc::new(OpenpgpState::for_testing(fresh_tmp_dir()));
+
+        let first = state
+            .ensure_key("alice@example.com".into(), "Alice".into())
+            .await
+            .unwrap();
+        let second = state
+            .ensure_key("alice@example.com".into(), "Alice".into())
+            .await
+            .unwrap();
+        assert_eq!(first.fingerprint, second.fingerprint);
+        assert_eq!(state.blocking_run_count(), 1);
+    }
+
+    /// Prewarm is fire-and-forget: calling it kicks off an unlock we
+    /// can observe by awaiting a subsequent ensure_key. There must be
+    /// exactly one KDF run across prewarm + ensure_key.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn prewarm_is_observed_by_later_ensure_key() {
+        let state = Arc::new(OpenpgpState::for_testing(fresh_tmp_dir()));
+
+        state.prewarm("alice@example.com".into(), "Alice".into());
+
+        // ensure_key should either catch the in-flight prewarm task
+        // (cell occupied but not yet initialised) or find the result
+        // already cached (prewarm finished first). Either way the
+        // count stays at 1.
+        let bundle = state
+            .ensure_key("alice@example.com".into(), "Alice".into())
+            .await
+            .unwrap();
+        assert_eq!(bundle.fingerprint.len(), 64);
+        assert_eq!(
+            state.blocking_run_count(),
+            1,
+            "prewarm + ensure_key must coalesce"
+        );
     }
 }

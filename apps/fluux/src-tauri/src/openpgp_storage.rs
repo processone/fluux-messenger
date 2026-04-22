@@ -127,6 +127,17 @@ impl KeyStorage {
         }
     }
 
+    /// Cheap presence check — returns `true` iff an encrypted key file
+    /// exists for `jid`. Used by the boot-time prewarm path to decide
+    /// whether it's safe to call `ensure_key` without accidentally
+    /// generating a fresh key for a user who never opted into E2EE.
+    pub fn has_persisted_key(&self, jid: &str) -> bool {
+        match self.key_file_path(jid) {
+            Ok(path) => path.exists(),
+            Err(_) => false,
+        }
+    }
+
     /// Load the persisted key for `jid`, if one exists.
     ///
     /// Returns `Ok(None)` when there is no stored key file for this
@@ -987,6 +998,43 @@ mod tests {
                 "v4 classic path is CFB; AEAD must not appear"
             );
         }
+    }
+
+    /// Opt-in latency probe. Runs Argon2id encrypt × 3 packets + decrypt ×
+    /// 3 packets and prints the wall-times. Gated by `#[ignore]` because
+    /// debug-mode Argon2 at m=64MiB is slow (tens of seconds per run) and
+    /// there's no numeric assertion to catch regressions.
+    ///
+    /// Run with:
+    /// ```ignore
+    /// cd apps/fluux/src-tauri
+    /// cargo test --release -- --ignored argon2_unlock_latency_probe --nocapture
+    /// ```
+    ///
+    /// The number informs IPC-blocking / prewarm decisions — if per-packet
+    /// decrypt is >150 ms the prewarm is high-priority; <50 ms skip it.
+    #[test]
+    #[ignore = "latency probe — run manually with --release --nocapture"]
+    fn argon2_unlock_latency_probe() {
+        use std::time::Instant;
+
+        let dir = fresh_tmp_dir();
+        let storage = KeyStorage::for_testing(dir);
+        let cert = generate_cert("probe@example.com");
+
+        let save_start = Instant::now();
+        storage.save("probe@example.com", &cert).unwrap();
+        let save_elapsed = save_start.elapsed();
+
+        let load_start = Instant::now();
+        let _ = storage.load("probe@example.com").unwrap().unwrap();
+        let load_elapsed = load_start.elapsed();
+
+        println!(
+            "argon2 latency: save={} ms, load={} ms (general_purpose cert = 3 secret packets: primary + signing + encryption)",
+            save_elapsed.as_millis(),
+            load_elapsed.as_millis()
+        );
     }
 
     /// After one save the module's variant-recording cell is populated.

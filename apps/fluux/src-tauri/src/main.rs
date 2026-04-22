@@ -1100,6 +1100,7 @@ fn main() {
             stop_xmpp_proxy,
             log_to_terminal,
             openpgp::openpgp_ensure_key,
+            openpgp::openpgp_prewarm,
             openpgp::openpgp_encrypt,
             openpgp::openpgp_decrypt,
             openpgp::openpgp_fingerprint,
@@ -1159,7 +1160,37 @@ fn main() {
                     std::env::temp_dir().join("fluux-openpgp-ephemeral")
                 }
             };
-            app.manage(openpgp::OpenpgpState::new(openpgp_data_dir));
+            // Wrap in Arc so the async `openpgp_ensure_key` command and
+            // the detached prewarm task can each hold an owned reference
+            // across thread boundaries without borrowing the Tauri
+            // `State<'_>`. (Tauri's State guard is tied to the command's
+            // stack frame — we can't move it into a `'static` task.)
+            let openpgp_state = Arc::new(openpgp::OpenpgpState::new(openpgp_data_dir));
+            app.manage(Arc::clone(&openpgp_state));
+
+            // Boot-time prewarm: if `last_user` is stashed in the keychain
+            // AND we have an encrypted TSK on disk for that JID, start the
+            // unlock now so it overlaps with Tauri window creation, React
+            // boot, and the XMPP handshake. Both preconditions matter —
+            // the disk check avoids speculatively GENERATING a new key
+            // for users who never opted into E2EE.
+            //
+            // This runs on a detached blocking thread to keep setup()
+            // non-blocking. `prewarm_if_persisted` itself is cheap (just
+            // a file-exists check); the Argon2id work it spawns runs on
+            // tokio's blocking pool.
+            let prewarm_state = Arc::clone(&openpgp_state);
+            std::thread::spawn(move || {
+                let entry = match keyring::Entry::new(KEYRING_SERVICE, "last_user") {
+                    Ok(e) => e,
+                    Err(_) => return,
+                };
+                let jid = match entry.get_password() {
+                    Ok(j) => j,
+                    Err(_) => return, // NoEntry or access failure — quiet no-op
+                };
+                prewarm_state.prewarm_if_persisted(jid.clone(), jid);
+            });
 
             // Handle --clear-storage CLI flag (useful for debugging connection issues)
             if clear_storage {
