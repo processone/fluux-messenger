@@ -93,14 +93,9 @@ export const NETWORK_READY_TIMEOUT_MS = 15_000
  */
 export const SASL_AUTH_TIMEOUT_MS = 15_000
 
-/**
- * Delay before the first reconnect attempt after wake-from-sleep.
- * Even when navigator.onLine is true, the OS network stack (DNS, TLS session
- * cache, Wi-Fi re-association) may need a moment to become fully functional.
- * Without this, WebSocket TCP connects but SASL exchanges hang on a
- * half-ready path, burning through backoff attempts with 15s timeouts each.
- */
-export const NETWORK_SETTLE_DELAY_MS = 2_000
+// NETWORK_SETTLE_DELAY_MS was removed — the settle budget is now computed
+// per-wake by computeNetworkSettleMs(sleepDurationMs) in connectionUtils,
+// scaling with how long we were gone. See that function for the bands.
 
 /**
  * Budget for the best-effort FAST token invalidation roundtrip on logout

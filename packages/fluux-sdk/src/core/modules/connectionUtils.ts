@@ -104,6 +104,30 @@ export function didTimerSleepThrough(
 }
 
 /**
+ * Budget for how long to let the OS network stack settle after a wake,
+ * scaled to the length of sleep we just came out of.
+ *
+ * Short sleeps (lid flicks, brief throttling) keep the network path
+ * mostly warm and don't need a delay at all — blocking would only add
+ * perceived latency. Long sleeps typically require Wi-Fi re-association,
+ * DHCP renewal, and a fresh TLS session, so SASL fires into a half-open
+ * socket if we don't give the stack a moment. The upper bound caps at
+ * 3s because past that the bottleneck is the TCP/TLS handshake itself,
+ * not the pre-connect settle.
+ *
+ * `undefined` falls through to the middle-of-the-road default so a wake
+ * from an untagged source (e.g. a heartbeat with no duration hint) is
+ * still protected.
+ */
+export function computeNetworkSettleMs(sleepDurationMs: number | undefined): number {
+  if (sleepDurationMs === undefined) return 2_000
+  if (sleepDurationMs < 30_000) return 0
+  if (sleepDurationMs < 180_000) return 500
+  if (sleepDurationMs < 900_000) return 1_500
+  return 3_000
+}
+
+/**
  * Check if an error indicates a dead WebSocket connection.
  * This can happen after system sleep when the socket dies silently.
  */

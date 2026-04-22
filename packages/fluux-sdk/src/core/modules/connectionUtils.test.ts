@@ -3,6 +3,7 @@ import {
   withTimeout,
   forceDestroyClient,
   isDeadSocketError,
+  computeNetworkSettleMs,
   computePostWakeSettleMs,
   didTimerSleepThrough,
   CLIENT_STOP_TIMEOUT_MS,
@@ -129,6 +130,38 @@ describe('connectionUtils', () => {
 
     it('returns 0 once past the upper slack bound', () => {
       expect(computePostWakeSettleMs(100_000, 103_000, 2_000)).toBe(0)
+    })
+  })
+
+  describe('computeNetworkSettleMs', () => {
+    it('returns the default 2000ms when no sleep duration is known', () => {
+      // Undefined comes through for wake sources that don't report a
+      // duration (e.g. a heartbeat without a prior system-will-sleep).
+      expect(computeNetworkSettleMs(undefined)).toBe(2_000)
+    })
+
+    it('returns 0 for sub-threshold sleeps that are really just throttling', () => {
+      expect(computeNetworkSettleMs(0)).toBe(0)
+      expect(computeNetworkSettleMs(5_000)).toBe(0)
+      expect(computeNetworkSettleMs(29_999)).toBe(0)
+    })
+
+    it('returns 500ms for short sleeps (30s–3min)', () => {
+      expect(computeNetworkSettleMs(30_000)).toBe(500)
+      expect(computeNetworkSettleMs(120_000)).toBe(500)
+      expect(computeNetworkSettleMs(179_999)).toBe(500)
+    })
+
+    it('returns 1500ms for medium sleeps (3min–15min)', () => {
+      expect(computeNetworkSettleMs(180_000)).toBe(1_500)
+      expect(computeNetworkSettleMs(600_000)).toBe(1_500)
+      expect(computeNetworkSettleMs(899_999)).toBe(1_500)
+    })
+
+    it('returns 3000ms for long sleeps (>= 15min, capped)', () => {
+      expect(computeNetworkSettleMs(900_000)).toBe(3_000)
+      expect(computeNetworkSettleMs(3_600_000)).toBe(3_000)
+      expect(computeNetworkSettleMs(8 * 60 * 60 * 1000)).toBe(3_000)
     })
   })
 

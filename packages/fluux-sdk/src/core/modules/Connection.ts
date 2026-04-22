@@ -28,6 +28,7 @@ import {
   withTimeout,
   forceDestroyClient,
   isDeadSocketError,
+  computeNetworkSettleMs,
   computePostWakeSettleMs,
   didTimerSleepThrough,
 } from './connectionUtils'
@@ -36,7 +37,6 @@ import {
   CLIENT_STOP_TIMEOUT_MS,
   DISCONNECT_CLEANUP_TIMEOUT_MS,
   NETWORK_READY_TIMEOUT_MS,
-  NETWORK_SETTLE_DELAY_MS,
   RECONNECT_ATTEMPT_TIMEOUT_MS,
   SASL_AUTH_TIMEOUT_MS,
   VERIFY_CONNECTION_TIMEOUT_MS,
@@ -183,6 +183,11 @@ export class Connection extends BaseModule {
   // short settle delay — navigator.onLine goes true before the network path is
   // fully functional (DNS, TLS, Wi-Fi re-association), causing SASL timeouts.
   private lastWakeTimestamp = 0
+
+  // Sleep duration that produced `lastWakeTimestamp`, used to scale the settle
+  // delay by how long we were gone (undefined = source didn't report duration,
+  // fall back to the policy default). See computeNetworkSettleMs for the bands.
+  private lastSleepDurationMs: number | undefined = undefined
 
   // Timestamp when the connection was lost (set in handleDeadSocket).
   // Used to compute disconnect duration and pass it to XMPPClient so SM
@@ -1242,6 +1247,7 @@ export class Connection extends BaseModule {
     logInfo(`System state: awake${sleepSec != null ? ` (sleep: ${sleepSec}s)` : ''}`)
 
     this.lastWakeTimestamp = Date.now()
+    this.lastSleepDurationMs = sleepDurationMs
 
     if (this.isInConnectedState()) {
       // Send WAKE to the machine — if sleep exceeds SM timeout, the guard
@@ -1298,19 +1304,25 @@ export class Connection extends BaseModule {
    * Centralizes the post-wake delay logic so every point that starts a
    * fresh connection attempt (initial attemptReconnect, the proxy
    * fallback inside attemptReconnect, synthesized wakes from late-firing
-   * timers) observes the same quiet window. No-op when no wake has been
-   * recorded or the settle window has already passed.
+   * timers) observes the same quiet window. The settle budget is scaled
+   * to the length of sleep we just came out of — short sleeps skip the
+   * delay entirely, long sleeps get a longer window to let Wi-Fi /
+   * DHCP / DNS recover before SASL runs.
    */
   private async awaitPostWakeSettle(source: string): Promise<void> {
+    const budgetMs = computeNetworkSettleMs(this.lastSleepDurationMs)
     const settleMs = computePostWakeSettleMs(
       this.lastWakeTimestamp,
       Date.now(),
-      NETWORK_SETTLE_DELAY_MS
+      budgetMs
     )
     if (settleMs <= 0) return
-    logInfo(`${source}: waiting ${settleMs}ms for network to settle after wake`)
+    const sleepSec = this.lastSleepDurationMs != null
+      ? `${Math.round(this.lastSleepDurationMs / 1000)}s`
+      : 'unknown'
+    logInfo(`${source}: waiting ${settleMs}ms for network to settle after wake (sleep: ${sleepSec}, budget: ${budgetMs}ms)`)
     this.stores.console.addEvent(
-      `Waiting ${Math.round(settleMs / 1000)}s for network to settle after wake`,
+      `Waiting ${Math.round(settleMs / 1000)}s for network to settle after wake (sleep ${sleepSec})`,
       'connection'
     )
     await new Promise((resolve) => setTimeout(resolve, settleMs))
@@ -1760,6 +1772,11 @@ export class Connection extends BaseModule {
           // it, that retry connects on a half-ready network and SASL times
           // out, turning a 30s stale timer into a multi-minute outage.
           this.lastWakeTimestamp = Date.now()
+          // Approximate the sleep duration from the timer drift so the
+          // settle budget scales correctly: a timer that should have
+          // fired after RECONNECT_ATTEMPT_TIMEOUT_MS but fired `elapsed`
+          // later was frozen for ~`elapsed - RECONNECT_ATTEMPT_TIMEOUT_MS`.
+          this.lastSleepDurationMs = Math.max(0, elapsed - RECONNECT_ATTEMPT_TIMEOUT_MS)
         }
 
         // Prevent any late events from this client from resolving the attempt.
