@@ -31,6 +31,7 @@ pub fn translate_ws_to_tcp<'a>(text: &'a str) -> Cow<'a, str> {
         };
 
         let mut to = String::new();
+        let mut from = String::new();
         let mut version = String::from("1.0");
         let mut lang = String::new();
 
@@ -40,6 +41,13 @@ pub fn translate_ws_to_tcp<'a>(text: &'a str) -> Cow<'a, str> {
                 let value = String::from_utf8_lossy(&attr.value);
                 match key.as_ref() {
                     "to" => to = value.to_string(),
+                    // Forward the `from` attribute: ejabberd gates SASL2 (XEP-0388)
+                    // stream features on the client's stream header carrying a
+                    // non-empty localpart `from=`. Without it, FAST (XEP-0484) auth
+                    // is never advertised and FAST token auto-connect fails with
+                    // "No credentials available". xmpp.js sets `from` on <open/>
+                    // when `username` is passed at connect time.
+                    "from" => from = value.to_string(),
                     "version" => version = value.to_string(),
                     "xml:lang" => lang = value.to_string(),
                     _ => {} // Skip xmlns and other attributes
@@ -51,6 +59,9 @@ pub fn translate_ws_to_tcp<'a>(text: &'a str) -> Cow<'a, str> {
         let mut stream_tag = String::from("<?xml version='1.0'?><stream:stream");
         if !to.is_empty() {
             stream_tag.push_str(&format!(" to='{}'", to));
+        }
+        if !from.is_empty() {
+            stream_tag.push_str(&format!(" from='{}'", from));
         }
         stream_tag.push_str(&format!(" version='{}'", version));
         if !lang.is_empty() {
@@ -420,6 +431,32 @@ mod tests {
         assert!(translated.contains("xml:lang='en'"));
         assert!(translated.contains("xmlns='jabber:client'"));
         assert!(translated.contains("xmlns:stream='http://etherx.jabber.org/streams'"));
+    }
+
+    #[test]
+    fn test_translate_open_forwards_from_attribute() {
+        // Regression: ejabberd gates SASL2 on the client's stream header carrying
+        // a non-empty localpart `from=`. The proxy MUST forward `from` from the
+        // <open/> frame to <stream:stream> or FAST auth is unreachable.
+        let open_tag = r#"<open xmlns="urn:ietf:params:xml:ns:xmpp-framing" to="example.com" from="user@example.com" version="1.0"/>"#;
+        let translated = translate_ws_to_tcp(open_tag);
+
+        assert!(translated.contains("<stream:stream"));
+        assert!(translated.contains("to='example.com'"));
+        assert!(translated.contains("from='user@example.com'"));
+        assert!(translated.contains("version='1.0'"));
+    }
+
+    #[test]
+    fn test_translate_open_without_from_attribute() {
+        // When <open/> has no `from`, the resulting <stream:stream> must not
+        // contain a stray `from=` attribute.
+        let open_tag = r#"<open xmlns="urn:ietf:params:xml:ns:xmpp-framing" to="example.com" version="1.0"/>"#;
+        let translated = translate_ws_to_tcp(open_tag);
+
+        assert!(translated.contains("<stream:stream"));
+        assert!(translated.contains("to='example.com'"));
+        assert!(!translated.contains(" from="));
     }
 
     #[test]

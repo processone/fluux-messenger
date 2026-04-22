@@ -5,6 +5,7 @@ import { useRosterStore, useConnectionStore, useRoomStore } from '@fluux/sdk/rea
 import type { Contact, Room, RoomOccupant, ServerInfo, HttpUploadService, RoomMessage, ResourcePresence, JoinedRoomInfo } from '@fluux/sdk'
 import { getResource } from '@/utils/xmppResource'
 import { isTauri } from '@/utils/tauri'
+import { getCredentials, hasSavedCredentials } from '@/utils/keychain'
 
 const SESSION_KEY = 'xmpp-session'
 const ROSTER_KEY = 'xmpp-roster'
@@ -634,10 +635,9 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
     // When the user closed the tab, sessionStorage is lost but a FAST token
     // may persist in localStorage (valid for up to 14 days).
     // Only attempt this when the user previously opted in via "Remember Me".
-    // hasFastToken() only checks client-side token existence + expiry.
-    // Server-side FAST/SASL2 support is verified during negotiation by xmpp.js —
-    // if the server doesn't support SASL2/FAST, the token auth path is skipped,
-    // no password fallback is available, and we show the login screen.
+    // On Tauri, the OS keychain password is loaded as a fallback: if the
+    // server doesn't advertise SASL2/FAST during negotiation, xmpp.js will
+    // use the password over legacy SASL instead of throwing "no credentials".
     const rememberMe = localStorage.getItem('xmpp-remember-me') === 'true'
     const savedJid = localStorage.getItem('xmpp-last-jid')
     const savedServer = localStorage.getItem('xmpp-last-server')
@@ -646,22 +646,52 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
     const effectiveServer = savedServer || (savedJid ? savedJid.split('@')[1] : null)
     if (rememberMe && savedJid && effectiveServer && hasFastToken(savedJid)) {
       const resource = getResource()
-      console.log('[Auth] Attempting FAST token auto-connect (no password)')
 
-      const attemptFastConnect = () => {
+      const attemptFastConnect = async () => {
+        // On Tauri, load the keychain password as a fallback. xmpp.js will
+        // prefer the FAST token when the server advertises SASL2+FAST; the
+        // password is only used when FAST is unavailable. Web has no keychain
+        // — the FAST-only path remains unchanged.
+        let fallbackPassword: string | undefined
+        if (isTauri() && hasSavedCredentials()) {
+          try {
+            const creds = await getCredentials()
+            if (creds && getBareJid(creds.jid) === getBareJid(savedJid)) {
+              fallbackPassword = creds.password
+            }
+          } catch (err) {
+            console.log('[Auth] Keychain fallback unavailable:', err)
+          }
+        }
+
+        console.log(
+          fallbackPassword
+            ? '[Auth] Attempting FAST token auto-connect (keychain password as fallback)'
+            : '[Auth] Attempting FAST token auto-connect (no password)'
+        )
+
         // Auto-retry transient transport failures: FAST token auto-connect
         // after a fresh tab open faces the same wake-from-sleep network
         // flakiness as page-reload. Auth failures (bad/expired token) still
         // surface via the machine's AUTH_ERROR path and delete the token.
-        connect(savedJid, undefined, effectiveServer, undefined, resource, i18n.language, false, true, true).then(() => {
-          // Save session for subsequent in-tab reconnects (no password needed —
-          // FAST token in localStorage handles auth on future reconnects too)
-          saveSession(savedJid, '', effectiveServer)
-        }).catch((err) => {
-          console.log('[Auth] FAST token connect failed:', err?.message || err)
-          deleteFastToken(savedJid)
+        try {
+          await connect(savedJid, fallbackPassword, effectiveServer, undefined, resource, i18n.language, false, true, true)
+          // Save session for subsequent in-tab reconnects. Store the
+          // fallback password so reloads (Path A) don't have to re-hit
+          // the keychain; empty string preserves prior behavior when no
+          // password is available.
+          saveSession(savedJid, fallbackPassword ?? '', effectiveServer)
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err)
+          console.log('[Auth] FAST token connect failed:', message)
+          // Only delete the token on an actual auth failure. Transport or
+          // "no credentials" errors (e.g. SASL2 not advertised) leave a valid
+          // token in place for a future attempt.
+          if (message.includes('not-authorized') || message.toLowerCase().includes('authentication')) {
+            deleteFastToken(savedJid)
+          }
           // Login screen shows (status reverts to error/disconnected)
-        })
+        }
       }
 
       // Check if another tab already holds this JID (web only)
@@ -671,14 +701,14 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
             console.log('[Auth] Another tab already connected, skipping FAST auto-connect')
             return
           }
-          attemptFastConnect()
+          void attemptFastConnect()
         }).catch(() => {
-          attemptFastConnect()
+          void attemptFastConnect()
         })
         return
       }
 
-      attemptFastConnect()
+      void attemptFastConnect()
     }
   }, [status, connect, setContacts, i18n.language, addRoom, restoreOwnAvatarFromCache, setHttpUploadService, setOwnNickname, setServerInfo, updateOwnResource, claimConnection])
 
