@@ -5,6 +5,7 @@ node_modules/
 dist/
 ts-docs/
 *.tsbuildinfo
+target/
 
 # Tauri
 **/src-tauri/target/
