@@ -94,6 +94,7 @@ vi.mock('@fluux/sdk', () => ({
 import {
   usePlatformState,
   shouldHandleProxyClosedStatus,
+  shouldHandleDisplayWake,
   shouldReloadWebviewOnWake,
   shouldReloadOnVisibilityWake,
 } from './usePlatformState'
@@ -357,6 +358,24 @@ describe('usePlatformState', () => {
       expect(shouldHandleProxyClosedStatus('reconnecting')).toBe(false)
       expect(shouldHandleProxyClosedStatus('disconnected')).toBe(false)
       expect(shouldHandleProxyClosedStatus('error')).toBe(false)
+    })
+  })
+
+  describe('shouldHandleDisplayWake', () => {
+    it('returns true when no payload is attached (Linux/Windows or older build)', () => {
+      expect(shouldHandleDisplayWake(undefined)).toBe(true)
+    })
+
+    it('returns true when the display is active on macOS (user-driven wake)', () => {
+      expect(shouldHandleDisplayWake({ displayActive: true })).toBe(true)
+    })
+
+    it('returns false when the display is asleep on macOS (DarkWake / PowerNap)', () => {
+      expect(shouldHandleDisplayWake({ displayActive: false })).toBe(false)
+    })
+
+    it('returns true when displayActive is missing but payload exists (fail-open)', () => {
+      expect(shouldHandleDisplayWake({})).toBe(true)
     })
   })
 

@@ -45,6 +45,35 @@ export function shouldHandleProxyClosedStatus(status: string): boolean {
 }
 
 /**
+ * Payload for macOS `system-did-wake`. On other platforms the event carries
+ * no payload; the field will be undefined and the wake is always handled.
+ */
+export interface SystemWakePayload {
+  /** False on macOS DarkWake/PowerNap (display off); true or undefined otherwise. */
+  displayActive?: boolean
+}
+
+/**
+ * Decide whether to act on a wake event or drop it as a DarkWake.
+ *
+ * macOS wakes the system periodically so background daemons (Mail, iCloud,
+ * Time Machine) can sync — the display stays off and the user isn't
+ * present. The Rust side probes `CGDisplayIsAsleep` and sets
+ * `displayActive=false` on those. We want to let the existing SM session
+ * ride through instead of triggering a full reconnect + MAM catch-up
+ * + webview reload that no one will see.
+ *
+ * When the payload is missing the field entirely (Linux/Windows, or an
+ * older build) we default to handling the wake — losing a real wake is
+ * much worse than doing unnecessary work on a dark one.
+ */
+export function shouldHandleDisplayWake(payload: SystemWakePayload | undefined): boolean {
+  if (!payload) return true
+  if (payload.displayActive === false) return false
+  return true
+}
+
+/**
  * Decide whether a wake from sleep should reload the Tauri webview.
  *
  * Background: after a confirmed sleep/wake cycle the WRY/WKWebView on
@@ -337,8 +366,17 @@ export function usePlatformState() {
 
     void import('@tauri-apps/api/event').then(({ listen }) => {
       // Immediate wake notification
-      void listen('system-did-wake', () => {
+      void listen<SystemWakePayload | undefined>('system-did-wake', (event) => {
         if (cancelled) return
+        // DarkWake filter: when macOS wakes for background sync and the
+        // display is still asleep, there's no user to receive the work.
+        // Skip *before* the debounce so that if a real wake arrives
+        // moments later, it still gets processed.
+        if (!shouldHandleDisplayWake(event.payload)) {
+          console.log('[PlatformState] Ignoring system-did-wake (display asleep / DarkWake)')
+          logEvent('Ignored wake (display asleep / DarkWake)')
+          return
+        }
         if (!shouldHandleWake('system-did-wake')) return
         const sleepDuration = sleepStartRef.current ? Date.now() - sleepStartRef.current : undefined
         sleepStartRef.current = null
