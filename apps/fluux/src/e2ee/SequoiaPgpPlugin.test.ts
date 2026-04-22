@@ -314,7 +314,12 @@ describe('SequoiaPgpPlugin', () => {
       expect(metaPub.item.payload.attrs.xmlns).toBe('urn:xmpp:openpgp:0')
       const metadataChild = findChild(metaPub.item.payload, 'pubkey-metadata')
       expect(metadataChild).toBeDefined()
+      // We emit BOTH attribute names with the same value (our v6 fp):
+      // `v4-fingerprint` keeps legacy XEP parsers happy; `v6-fingerprint`
+      // is the semantically accurate one and what we ourselves prefer on
+      // read.
       expect(metadataChild!.attrs['v4-fingerprint']).toBe(fp)
+      expect(metadataChild!.attrs['v6-fingerprint']).toBe(fp)
       // `date` is an ISO 8601 timestamp; we don't pin the exact value
       // but it must be parseable.
       expect(Date.parse(metadataChild!.attrs.date)).not.toBeNaN()
@@ -471,6 +476,110 @@ describe('SequoiaPgpPlugin', () => {
       await plugin.probePeer('bob@example.com')
       // Second probe hits the in-plugin cache — no additional queryPEP.
       expect(querySpy).toHaveBeenCalledTimes(2)
+    })
+
+    it('resolves a peer that advertises only v6-fingerprint', async () => {
+      // Forward-compat scenario: a peer that drops the legacy
+      // `v4-fingerprint` attribute entirely once the spec catches up.
+      // We must still parse them — it's our preferred attribute anyway.
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
+      const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'bob@example.com',
+        userId: 'Bob',
+      })
+      built.peerPublish('bob@example.com', METADATA_NODE, {
+        id: 'current',
+        payload: {
+          name: 'public-keys-list',
+          attrs: { xmlns: OX_NS },
+          children: [
+            {
+              name: 'pubkey-metadata',
+              attrs: {
+                // No v4-fingerprint on purpose.
+                'v6-fingerprint': bobBundle.fingerprint,
+                date: '2024-01-01T00:00:00Z',
+              },
+              children: [],
+            },
+          ],
+        },
+      })
+      built.peerPublish('bob@example.com', dataNodeFor(bobBundle.fingerprint), {
+        id: 'current',
+        payload: {
+          name: 'pubkey',
+          attrs: { xmlns: OX_NS },
+          children: [
+            {
+              name: 'data',
+              attrs: {},
+              children: [btoa(unescape(encodeURIComponent(bobBundle.publicArmored)))],
+            },
+          ],
+        },
+      })
+
+      const support = await plugin.probePeer('bob@example.com')
+      expect(support.supported).toBe(true)
+      expect(plugin.getPeerFingerprint('bob@example.com')).toBe(bobBundle.fingerprint)
+    })
+
+    it('prefers v6-fingerprint over v4-fingerprint when both are present', async () => {
+      // Pathological emitter: the two attributes name different
+      // fingerprints. Only the v6-attributed one has a fetchable
+      // data node — if we accidentally picked v4 we'd fail. This
+      // pins down the preference in code, which matters for
+      // verification: v6 fingerprints are unambiguous modulo key
+      // version, whereas `v4-fingerprint` has historically been
+      // overloaded with length-loose semantics.
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
+      const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'bob@example.com',
+        userId: 'Bob',
+      })
+      const V4_DECOY = 'DECOY0000000000000000000000000000000000'
+      built.peerPublish('bob@example.com', METADATA_NODE, {
+        id: 'current',
+        payload: {
+          name: 'public-keys-list',
+          attrs: { xmlns: OX_NS },
+          children: [
+            {
+              name: 'pubkey-metadata',
+              attrs: {
+                // Decoy v4 value — if we consulted this attribute, the
+                // subsequent data-node fetch would miss.
+                'v4-fingerprint': V4_DECOY,
+                'v6-fingerprint': bobBundle.fingerprint,
+                date: '2024-01-01T00:00:00Z',
+              },
+              children: [],
+            },
+          ],
+        },
+      })
+      // Data only published under the v6 fingerprint.
+      built.peerPublish('bob@example.com', dataNodeFor(bobBundle.fingerprint), {
+        id: 'current',
+        payload: {
+          name: 'pubkey',
+          attrs: { xmlns: OX_NS },
+          children: [
+            {
+              name: 'data',
+              attrs: {},
+              children: [btoa(unescape(encodeURIComponent(bobBundle.publicArmored)))],
+            },
+          ],
+        },
+      })
+
+      const support = await plugin.probePeer('bob@example.com')
+      expect(support.supported).toBe(true)
+      expect(plugin.getPeerFingerprint('bob@example.com')).toBe(bobBundle.fingerprint)
     })
   })
 

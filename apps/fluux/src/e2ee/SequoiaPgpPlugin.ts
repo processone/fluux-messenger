@@ -32,16 +32,25 @@
  * advertised key, and validate the returned key's fingerprint matches
  * what was advertised.
  *
- * # v6 fingerprints + `v4-fingerprint` attribute
+ * # v6 fingerprints + dual-attribute metadata
  *
  * Fluux emits v6 keys (RFC 9580) whose fingerprints are 64 hex chars.
  * XEP-0373 §4.1.2 names the attribute `v4-fingerprint`, originally
- * designed for 40-char v4 fingerprints. We treat the attribute as
- * "the fingerprint of the advertised key, regardless of version" —
- * matches what modern implementations do in practice, pending a
- * spec revision for v6. Parsers that strictly validate 40-char length
- * will reject our emissions; that's a known interop limitation today
- * and will get revisited if/when the spec updates.
+ * designed for 40-char v4 fingerprints. To maximise interop we emit
+ * BOTH attributes on every `<pubkey-metadata>` element with the same
+ * value (our v6 fingerprint):
+ *
+ * - `v4-fingerprint` — satisfies parsers that only know the legacy
+ *   attribute name. Length-strict implementations (checking for 40
+ *   chars) will still reject; loose parsers accept whatever hex they
+ *   find there.
+ * - `v6-fingerprint` — semantically accurate. Future-forward, and
+ *   the attribute we ourselves prefer on read.
+ *
+ * On parse we look for `v6-fingerprint` first and fall back to
+ * `v4-fingerprint`, so a peer emitting either (or both, matching us)
+ * is handled. Once the XEP formally adopts v6 we can drop the
+ * `v4-fingerprint` emission.
  */
 
 import type {
@@ -246,6 +255,11 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
    * at `urn:xmpp:openpgp:0:public-keys`. The `date` attribute is the
    * publish time, not the key's creation time — that's what XEP-0373
    * §4.1.2 specifies.
+   *
+   * Emits BOTH `v4-fingerprint` (legacy XEP attribute name) AND
+   * `v6-fingerprint` (semantically accurate for our RFC 9580 keys)
+   * with the same value. See the module-level docstring for the
+   * interop rationale.
    */
   private async publishOwnPublicKeyMetadata(bundle: KeyBundle): Promise<void> {
     const ctx = this.requireCtx()
@@ -257,6 +271,7 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
           name: 'pubkey-metadata',
           attrs: {
             'v4-fingerprint': bundle.fingerprint,
+            'v6-fingerprint': bundle.fingerprint,
             date: new Date().toISOString(),
           },
           children: [],
@@ -529,7 +544,11 @@ function parseAdvertisedFingerprints(items: PEPItem[]): string[] {
     for (const child of list.children) {
       if (typeof child === 'string') continue
       if (child.name !== 'pubkey-metadata') continue
-      const fp = firstAttr(child.attrs, ['v4-fingerprint', 'v6-fingerprint'])
+      // Prefer `v6-fingerprint` when present: it's the unambiguous
+      // semantic name, and when both are emitted (as we do) they
+      // carry the same value anyway. Falls back to `v4-fingerprint`
+      // so peers that only emit the legacy attribute still resolve.
+      const fp = firstAttr(child.attrs, ['v6-fingerprint', 'v4-fingerprint'])
       if (fp) fingerprints.push(fp)
     }
   }
