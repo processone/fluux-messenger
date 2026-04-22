@@ -15,17 +15,23 @@
 //!
 //! # Key material lifecycle
 //!
-//! Keys live only in process memory, keyed on the account JID. The TS
-//! plugin calls [`openpgp_forget_account`] on shutdown so secrets don't
-//! outlive a session. OS keyring integration (for persistence across app
-//! restarts) is a follow-up.
+//! Keys are persisted across app restarts via [`crate::openpgp_storage`]:
+//! the secret key lives on disk encrypted under a per-account passphrase
+//! that lives in the OS keychain (or a 0600 fallback file when the
+//! keychain is unreachable). The in-memory map here is a cache — the
+//! first [`OpenpgpState::ensure_key`] call per account after a restart
+//! loads from disk. [`openpgp_forget_account`] removes both the cached
+//! entry and the on-disk material.
 
 use anyhow::{anyhow, Context, Result};
 use sequoia_openpgp as openpgp;
 use serde::{Deserialize, Serialize};
 use std::io::Write as _;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::State;
+
+use crate::openpgp_storage::{KeyStorage, PassphraseBacking};
 
 use openpgp::{
     cert::{Cert, CertBuilder},
@@ -33,8 +39,7 @@ use openpgp::{
     packet::{PKESK, SKESK},
     parse::{
         stream::{
-            DecryptionHelper, DecryptorBuilder, MessageLayer, MessageStructure,
-            VerificationHelper,
+            DecryptionHelper, DecryptorBuilder, MessageLayer, MessageStructure, VerificationHelper,
         },
         Parse,
     },
@@ -47,7 +52,7 @@ use openpgp::{
     Cert as _Cert, Fingerprint, KeyHandle,
 };
 
-/// Serializable output of [`openpgp_generate_key`].
+/// Serializable output of [`openpgp_ensure_key`].
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct KeyBundle {
@@ -57,6 +62,11 @@ pub struct KeyBundle {
     pub public_armored: String,
     /// ASCII-armored secret key block. Callers must treat as sensitive.
     pub secret_armored: String,
+    /// `true` when the per-account passphrase is stored in the OS
+    /// keychain; `false` when we fell through to a 0600-permissioned
+    /// file. Surfaced to the UI so a future slice can nudge the user to
+    /// fix their keychain setup.
+    pub keychain_backed: bool,
 }
 
 /// Serializable output of [`openpgp_decrypt`].
@@ -76,19 +86,42 @@ pub struct DecryptOutput {
 }
 
 /// State held by the Tauri managed-state system. One entry per logged-in
-/// account — keyed on the account JID. Cleared by
-/// [`openpgp_forget_account`] on shutdown.
-#[derive(Default)]
+/// account — keyed on the account JID. The in-memory map is a cache on
+/// top of [`KeyStorage`]: the first [`Self::ensure_key`] call per account
+/// after a restart hits disk; subsequent calls in the same session serve
+/// from memory.
 pub struct OpenpgpState {
     accounts: Mutex<std::collections::HashMap<String, KeyBundle>>,
+    storage: KeyStorage,
 }
 
 impl OpenpgpState {
-    pub fn new() -> Self {
-        Self::default()
+    /// Production constructor — persists keys under
+    /// `<base_dir>/openpgp/` and prefers the OS keychain for the
+    /// per-account passphrase.
+    pub fn new(base_dir: PathBuf) -> Self {
+        Self {
+            accounts: Mutex::new(std::collections::HashMap::new()),
+            storage: KeyStorage::new(base_dir),
+        }
     }
 
-    pub fn generate_key(&self, account_jid: &str, user_id: &str) -> Result<KeyBundle, String> {
+    /// Test constructor that writes under `base_dir` and skips the
+    /// keychain (CI lacks one, and a macOS dev box would otherwise pop a
+    /// keychain authorization dialog during `cargo test`).
+    #[cfg(test)]
+    pub fn for_testing(base_dir: PathBuf) -> Self {
+        Self {
+            accounts: Mutex::new(std::collections::HashMap::new()),
+            storage: KeyStorage::for_testing(base_dir),
+        }
+    }
+
+    /// Load-or-generate an OpenPGP identity for `account_jid`. On cold
+    /// start this hits disk; on warm start it serves from the in-memory
+    /// cache. Only the first caller per account pays the key-generation
+    /// cost (roughly a few seconds on the RustCrypto backend).
+    pub fn ensure_key(&self, account_jid: &str, user_id: &str) -> Result<KeyBundle, String> {
         let mut accounts = self
             .accounts
             .lock()
@@ -97,7 +130,23 @@ impl OpenpgpState {
             return Ok(existing.clone());
         }
 
-        let bundle = build_new_key(user_id).map_err(anyhow_to_string)?;
+        // Try to restore a previously-persisted key first. Corruption or
+        // a vanished passphrase surfaces as an error here — we don't
+        // silently overwrite; the user must explicitly delete-and-regen.
+        if let Some(persisted) = self.storage.load(account_jid).map_err(anyhow_to_string)? {
+            let bundle =
+                bundle_from_cert(&persisted.cert, persisted.backing).map_err(anyhow_to_string)?;
+            accounts.insert(account_jid.to_string(), bundle.clone());
+            return Ok(bundle);
+        }
+
+        // Fresh account — generate, persist, cache.
+        let cert = generate_cert(user_id).map_err(anyhow_to_string)?;
+        let backing = self
+            .storage
+            .save(account_jid, &cert)
+            .map_err(anyhow_to_string)?;
+        let bundle = bundle_from_cert(&cert, backing).map_err(anyhow_to_string)?;
         accounts.insert(account_jid.to_string(), bundle.clone());
         Ok(bundle)
     }
@@ -150,12 +199,17 @@ impl OpenpgpState {
             .map_err(anyhow_to_string)
     }
 
+    /// Forget the account: drop the in-memory cache entry AND remove
+    /// every on-disk trace (encrypted TSK, fallback passphrase file,
+    /// keychain entry). Safe to call for an unknown account.
     pub fn forget_account(&self, account_jid: &str) -> Result<(), String> {
         let mut accounts = self
             .accounts
             .lock()
             .map_err(|e| format!("openpgp state poisoned: {e}"))?;
         accounts.remove(account_jid);
+        drop(accounts);
+        self.storage.forget(account_jid).map_err(anyhow_to_string)?;
         Ok(())
     }
 }
@@ -171,12 +225,12 @@ pub fn fingerprint_of(public_armored: &str) -> Result<String, String> {
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-pub fn openpgp_generate_key(
+pub fn openpgp_ensure_key(
     account_jid: String,
     user_id: String,
     state: State<'_, OpenpgpState>,
 ) -> Result<KeyBundle, String> {
-    state.generate_key(&account_jid, &user_id)
+    state.ensure_key(&account_jid, &user_id)
 }
 
 #[tauri::command]
@@ -216,19 +270,38 @@ pub fn openpgp_forget_account(
 // Sequoia-backed primitives
 // ---------------------------------------------------------------------------
 
-fn build_new_key(user_id: &str) -> Result<KeyBundle> {
+/// Generate a fresh general-purpose cert for `user_id`. Kept separate
+/// from [`bundle_from_cert`] so [`OpenpgpState::ensure_key`] can reuse
+/// the serialization path for certs loaded from disk.
+///
+/// The cert is emitted under the RFC 9580 profile (v6 keys). That's a
+/// prerequisite for protecting the secret packets with Argon2id S2K +
+/// AEAD at rest (RFC 9580 §3.7 restricts Argon2 to v6 keys), and aligns
+/// the project with the modern OpenPGP wire format going forward. We
+/// never generate v4 keys on this branch; the on-disk storage still
+/// knows how to decrypt any stray v4 cert a user might carry over from
+/// a pre-v6 install.
+fn generate_cert(user_id: &str) -> Result<Cert> {
     let (cert, _revocation) = CertBuilder::general_purpose(Some(user_id))
+        .set_profile(openpgp::Profile::RFC9580)
+        .context("select RFC 9580 / v6 key profile")?
         .generate()
         .context("generate OpenPGP cert")?;
+    Ok(cert)
+}
 
-    let public_armored = armored_string(&cert, KeyExport::Public)?;
-    let secret_armored = armored_string(&cert, KeyExport::Secret)?;
-    let fingerprint = cert.fingerprint().to_hex();
-
+/// Turn a Cert (either freshly generated or loaded from disk) into the
+/// serializable [`KeyBundle`] the TS side consumes. The passphrase
+/// backing is surfaced to the UI without the caller needing to know
+/// anything about `KeyStorage`.
+fn bundle_from_cert(cert: &Cert, backing: PassphraseBacking) -> Result<KeyBundle> {
+    let public_armored = armored_string(cert, KeyExport::Public)?;
+    let secret_armored = armored_string(cert, KeyExport::Secret)?;
     Ok(KeyBundle {
-        fingerprint,
+        fingerprint: cert.fingerprint().to_hex(),
         public_armored,
         secret_armored,
+        keychain_backed: backing == PassphraseBacking::Keychain,
     })
 }
 
@@ -260,8 +333,8 @@ fn encrypt_and_sign(
     let policy = StandardPolicy::new();
     let recipient_cert = Cert::from_bytes(recipient_public_armored.as_bytes())
         .context("parse recipient public key")?;
-    let sender_cert = Cert::from_bytes(sender_secret_armored.as_bytes())
-        .context("parse sender secret key")?;
+    let sender_cert =
+        Cert::from_bytes(sender_secret_armored.as_bytes()).context("parse sender secret key")?;
 
     let recipients: Vec<Recipient> = recipient_cert
         .keys()
@@ -325,8 +398,8 @@ fn decrypt_and_verify(
     sender_public_armored: Option<&str>,
 ) -> Result<DecryptOutput> {
     let policy = StandardPolicy::new();
-    let secret_cert = Cert::from_bytes(secret_armored.as_bytes())
-        .context("parse own secret key")?;
+    let secret_cert =
+        Cert::from_bytes(secret_armored.as_bytes()).context("parse own secret key")?;
 
     let sender_cert = match sender_public_armored {
         Some(armored) => {
@@ -453,40 +526,115 @@ fn _cert_type_reference(_: &_Cert) {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    /// Produce a unique tempdir per test so parallel test runs don't
+    /// collide on the persisted key files.
+    fn fresh_tmp_dir() -> PathBuf {
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let pid = std::process::id();
+        let dir = std::env::temp_dir().join(format!("fluux-openpgp-state-test-{pid}-{n}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn new_state() -> OpenpgpState {
+        OpenpgpState::for_testing(fresh_tmp_dir())
+    }
 
     fn setup_two_accounts() -> (OpenpgpState, KeyBundle, KeyBundle) {
-        let state = OpenpgpState::new();
-        let alice = state.generate_key("alice@example.com", "Alice").unwrap();
-        let bob = state.generate_key("bob@example.com", "Bob").unwrap();
+        let state = new_state();
+        let alice = state.ensure_key("alice@example.com", "Alice").unwrap();
+        let bob = state.ensure_key("bob@example.com", "Bob").unwrap();
         (state, alice, bob)
     }
 
     #[test]
     fn generate_then_fingerprint_round_trip() {
-        let state = OpenpgpState::new();
+        let state = new_state();
         let bundle = state
-            .generate_key("alice@example.com", "Alice <alice@example.com>")
+            .ensure_key("alice@example.com", "Alice <alice@example.com>")
             .unwrap();
         let fp = fingerprint_of(&bundle.public_armored).unwrap();
         assert_eq!(fp, bundle.fingerprint);
-        assert_eq!(bundle.fingerprint.len(), 40);
+        // v6 fingerprints (RFC 9580) are SHA-256 truncation → 32 bytes
+        // → 64 hex chars. v4 keys used 20 bytes → 40 hex chars; we
+        // switched to v6 as part of the Argon2id-at-rest upgrade.
+        assert_eq!(bundle.fingerprint.len(), 64);
+        // Tests use the filesystem fallback; production tests live in
+        // the storage module. Surfacing the flag on the bundle is what
+        // the TS side reads, so worth asserting here.
+        assert!(!bundle.keychain_backed);
     }
 
     #[test]
-    fn generate_is_idempotent_per_account() {
-        let state = OpenpgpState::new();
-        let a = state.generate_key("alice@example.com", "Alice").unwrap();
-        let b = state.generate_key("alice@example.com", "Alice").unwrap();
+    fn ensure_key_is_idempotent_per_account() {
+        let state = new_state();
+        let a = state.ensure_key("alice@example.com", "Alice").unwrap();
+        let b = state.ensure_key("alice@example.com", "Alice").unwrap();
         assert_eq!(a.fingerprint, b.fingerprint);
         assert_eq!(a.secret_armored, b.secret_armored);
     }
 
     #[test]
     fn different_accounts_get_distinct_fingerprints() {
-        let state = OpenpgpState::new();
-        let alice = state.generate_key("alice@example.com", "Alice").unwrap();
-        let bob = state.generate_key("bob@example.com", "Bob").unwrap();
+        let state = new_state();
+        let alice = state.ensure_key("alice@example.com", "Alice").unwrap();
+        let bob = state.ensure_key("bob@example.com", "Bob").unwrap();
         assert_ne!(alice.fingerprint, bob.fingerprint);
+    }
+
+    #[test]
+    fn key_persists_across_state_instances() {
+        // This is the core persistence guarantee: generate under one
+        // OpenpgpState, drop it, create a fresh one pointing at the same
+        // base dir, and get the same fingerprint back. If this test
+        // fails the "stuck at key generation" UX on restart returns.
+        let dir = fresh_tmp_dir();
+
+        let first = OpenpgpState::for_testing(dir.clone());
+        let initial = first.ensure_key("alice@example.com", "Alice").unwrap();
+        let initial_fp = initial.fingerprint.clone();
+        drop(first);
+
+        let second = OpenpgpState::for_testing(dir);
+        let reloaded = second.ensure_key("alice@example.com", "Alice").unwrap();
+        assert_eq!(reloaded.fingerprint, initial_fp);
+        // Secret block must also be stable — otherwise later encrypt /
+        // sign calls on a reloaded state will produce signatures that
+        // don't chain to the original cert.
+        assert_eq!(reloaded.secret_armored, initial.secret_armored);
+    }
+
+    #[test]
+    fn reloaded_key_can_still_encrypt_and_decrypt() {
+        // Regression guard against the save/load cycle mangling the
+        // secret material in a way that passes fingerprint comparison
+        // but breaks crypto operations.
+        let dir = fresh_tmp_dir();
+
+        let first = OpenpgpState::for_testing(dir.clone());
+        let alice = first.ensure_key("alice@example.com", "Alice").unwrap();
+        let bob = first.ensure_key("bob@example.com", "Bob").unwrap();
+        drop(first);
+
+        let reloaded = OpenpgpState::for_testing(dir);
+        // `ensure_key` now hits disk and must produce identical bundles.
+        let alice_reloaded = reloaded.ensure_key("alice@example.com", "Alice").unwrap();
+        let bob_reloaded = reloaded.ensure_key("bob@example.com", "Bob").unwrap();
+        assert_eq!(alice_reloaded.fingerprint, alice.fingerprint);
+        assert_eq!(bob_reloaded.fingerprint, bob.fingerprint);
+
+        let ciphertext = reloaded
+            .encrypt("alice@example.com", &bob.public_armored, "ping")
+            .unwrap();
+        let out = reloaded
+            .decrypt("bob@example.com", &ciphertext, Some(&alice.public_armored))
+            .unwrap();
+        assert_eq!(out.plaintext, "ping");
+        assert!(out.signature_verified);
     }
 
     #[test]
@@ -506,8 +654,14 @@ mod tests {
             .decrypt("bob@example.com", &ciphertext, Some(&alice.public_armored))
             .unwrap();
         assert_eq!(out.plaintext, "hello, bob");
-        assert!(out.signature_verified, "signature must verify for alice->bob");
-        assert_eq!(out.signer_fingerprint.as_deref(), Some(alice.fingerprint.as_str()));
+        assert!(
+            out.signature_verified,
+            "signature must verify for alice->bob"
+        );
+        assert_eq!(
+            out.signer_fingerprint.as_deref(),
+            Some(alice.fingerprint.as_str())
+        );
     }
 
     #[test]
@@ -516,9 +670,7 @@ mod tests {
         let ciphertext = state
             .encrypt("alice@example.com", &bob.public_armored, "hi")
             .unwrap();
-        let out = state
-            .decrypt("bob@example.com", &ciphertext, None)
-            .unwrap();
+        let out = state.decrypt("bob@example.com", &ciphertext, None).unwrap();
         assert_eq!(out.plaintext, "hi");
         assert!(
             !out.signature_verified,
@@ -532,7 +684,7 @@ mod tests {
         // Alice signs, but Bob's client mistakenly supplies Eve's public
         // key for verification. Decryption succeeds; signature does not.
         let (state, _alice, bob) = setup_two_accounts();
-        let eve = state.generate_key("eve@example.com", "Eve").unwrap();
+        let eve = state.ensure_key("eve@example.com", "Eve").unwrap();
         let ciphertext = state
             .encrypt("alice@example.com", &bob.public_armored, "hi")
             .unwrap();
@@ -560,8 +712,8 @@ mod tests {
 
     #[test]
     fn decrypt_rejects_unknown_ciphertext_shape() {
-        let state = OpenpgpState::new();
-        state.generate_key("alice@example.com", "Alice").unwrap();
+        let state = new_state();
+        state.ensure_key("alice@example.com", "Alice").unwrap();
         let err = state
             .decrypt("alice@example.com", "not-a-pgp-ciphertext", None)
             .expect_err("malformed ciphertext must be rejected");
@@ -570,9 +722,9 @@ mod tests {
 
     #[test]
     fn encrypt_fails_without_a_sender_key() {
-        let state = OpenpgpState::new();
+        let state = new_state();
         // Generate only Bob's key; Alice is absent.
-        let bob = state.generate_key("bob@example.com", "Bob").unwrap();
+        let bob = state.ensure_key("bob@example.com", "Bob").unwrap();
         let err = state
             .encrypt("alice@example.com", &bob.public_armored, "hi")
             .expect_err("encrypt must fail without sender account");
@@ -580,16 +732,29 @@ mod tests {
     }
 
     #[test]
-    fn forget_account_removes_key() {
-        let (state, alice, _bob) = setup_two_accounts();
+    fn forget_account_removes_key_and_persisted_file() {
+        let dir = fresh_tmp_dir();
+        let state = OpenpgpState::for_testing(dir.clone());
+        let alice = state.ensure_key("alice@example.com", "Alice").unwrap();
         let ciphertext = state
             .encrypt("alice@example.com", &alice.public_armored, "self-note")
             .unwrap();
+
         state.forget_account("alice@example.com").unwrap();
+
+        // In-memory cache was cleared: decrypt now fails.
         let err = state
             .decrypt("alice@example.com", &ciphertext, None)
             .expect_err("decrypt must fail after forget");
         assert!(err.contains("no key"), "unexpected error: {err}");
+
+        // Persistence was also wiped: a fresh state can't find the key.
+        let fresh = OpenpgpState::for_testing(dir);
+        let regenerated = fresh.ensure_key("alice@example.com", "Alice").unwrap();
+        assert_ne!(
+            regenerated.fingerprint, alice.fingerprint,
+            "forget must wipe the on-disk file so the next ensure_key generates fresh"
+        );
     }
 
     #[test]
@@ -600,8 +765,8 @@ mod tests {
 
     #[test]
     fn public_key_armor_is_stable_across_generate_reads() {
-        let state = OpenpgpState::new();
-        let bundle = state.generate_key("alice@example.com", "Alice").unwrap();
+        let state = new_state();
+        let bundle = state.ensure_key("alice@example.com", "Alice").unwrap();
         let parsed = Cert::from_bytes(bundle.public_armored.as_bytes()).unwrap();
         assert_eq!(parsed.fingerprint().to_hex(), bundle.fingerprint);
     }

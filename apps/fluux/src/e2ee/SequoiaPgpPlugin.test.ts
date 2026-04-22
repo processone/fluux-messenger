@@ -20,6 +20,7 @@ interface KeyBundle {
   fingerprint: string
   publicArmored: string
   secretArmored: string
+  keychainBacked: boolean
 }
 
 /**
@@ -45,7 +46,7 @@ function makeFakeRust() {
 
   const invoke: InvokeFn = async <T>(cmd: string, args?: Record<string, unknown>) => {
     switch (cmd) {
-      case 'openpgp_generate_key': {
+      case 'openpgp_ensure_key': {
         const jid = args!.accountJid as string
         if (accounts.has(jid)) return accounts.get(jid) as T
         const fp = `FP${String(nextFingerprint++).padStart(6, '0')}`
@@ -66,6 +67,10 @@ function makeFakeRust() {
             userId,
             'secret',
           ),
+          // Mock the happy path — the real Rust impl surfaces `false` when
+          // the keychain is unavailable. Individual tests that want to
+          // exercise the fallback warning path can override.
+          keychainBacked: true,
         }
         accounts.set(jid, bundle)
         return bundle as T
@@ -152,7 +157,7 @@ async function buildCrossPublishedPair(fake: ReturnType<typeof makeFakeRust>): P
   await bobPlugin.init(bobBuilt.ctx)
 
   const publishPubkeyItemFor = async (jid: string) => {
-    const bundle = await fake.invoke<KeyBundle>('openpgp_generate_key', {
+    const bundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
       accountJid: jid,
       userId: jid,
     })
@@ -245,7 +250,7 @@ describe('SequoiaPgpPlugin', () => {
 
       // Simulate bob publishing to his PEP node, mimicking what our own
       // ensureIdentity did for us.
-      const bobBundle = await fake.invoke<KeyBundle>('openpgp_generate_key', {
+      const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'bob@example.com',
         userId: 'Bob',
       })
@@ -274,7 +279,7 @@ describe('SequoiaPgpPlugin', () => {
     it('re-uses cached probe results', async () => {
       const { ctx, peerPublish } = makeContext('me@example.com')
       await plugin.init(ctx)
-      const bobBundle = await fake.invoke<KeyBundle>('openpgp_generate_key', {
+      const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'bob@example.com',
         userId: 'Bob',
       })
@@ -344,7 +349,7 @@ describe('SequoiaPgpPlugin', () => {
       // Before decrypting, poison Bob's cached copy of Alice's key with
       // Eve's (a completely unrelated third account). Decrypt must flag
       // the signature mismatch.
-      const evePubkey = await fake.invoke<KeyBundle>('openpgp_generate_key', {
+      const evePubkey = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'eve@example.com',
         userId: 'eve@example.com',
       })

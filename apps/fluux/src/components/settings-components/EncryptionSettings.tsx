@@ -308,7 +308,11 @@ export function EncryptionSettings() {
   )
 }
 
-/** Split a 40-char hex fingerprint into space-separated blocks of 4. */
+/**
+ * Split a hex fingerprint into space-separated blocks of 4 for display.
+ * Works for any length: 40 chars (v4/RFC 4880, SHA-1) → 10 groups, or
+ * 64 chars (v6/RFC 9580, SHA-256) → 16 groups.
+ */
 function formatFingerprint(fp: string): string {
   return fp.match(/.{1,4}/g)?.join(' ') ?? fp
 }

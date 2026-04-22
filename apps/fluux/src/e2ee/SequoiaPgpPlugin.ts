@@ -1,13 +1,19 @@
 /**
- * Sequoia-PGP plugin skeleton for XEP-0373 (OpenPGP for XMPP, "OX").
+ * Sequoia-PGP plugin for XEP-0373 (OpenPGP for XMPP, "OX").
  *
  * TypeScript side of the E2EE plugin that bridges to Rust-side crypto
  * operations via Tauri commands (see `apps/fluux/src-tauri/src/openpgp.rs`).
+ * Key generation, encryption, decryption, and signature verification all
+ * live in Rust; this file handles PEP publication, conversation state,
+ * and translation between the Rust output and the SDK's E2EE plugin
+ * contract.
  *
- * The Rust crypto is currently stubbed (base64 round-trip behind real
- * OpenPGP-shaped APIs) — see the TODO(sequoia) markers in `openpgp.rs`.
- * The TS plugin is itself complete: swapping in real Sequoia on the Rust
- * side is a drop-in change that does not touch this file.
+ * Key persistence is owned by the Rust side: the secret key is written
+ * to an ASCII-armored file under the app data dir, encrypted under a
+ * per-account passphrase stored in the OS keychain (with a 0600 file
+ * fallback). `openpgp_ensure_key` is idempotent — the first call per
+ * account per process generates or loads; subsequent calls are served
+ * from an in-memory cache.
  */
 
 import type {
@@ -38,6 +44,13 @@ interface KeyBundle {
   fingerprint: string
   publicArmored: string
   secretArmored: string
+  /**
+   * `true` when the per-account passphrase is stored in the OS keychain;
+   * `false` when the Rust side fell through to writing it to a 0600 file
+   * under the app data dir. Peer keys (parsed from PEP) always carry
+   * `false` — the field is ignored for peer entries.
+   */
+  keychainBacked: boolean
 }
 
 /** Shape of the Rust-side `DecryptOutput` (kept in sync with `openpgp.rs`). */
@@ -124,16 +137,23 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
 
   /**
    * Generate or load our key via Rust, then publish the public block to
-   * our own PEP node. Idempotent on the Rust side (returns the existing
-   * bundle for an account that already has one).
+   * our own PEP node. Idempotent on both sides: Rust returns the cached
+   * bundle within a session and reads the persisted file across
+   * restarts, so the fingerprint is stable for the lifetime of the
+   * account.
    */
   async ensureIdentity(): Promise<IdentityInfo> {
     const ctx = this.requireCtx()
-    const bundle = await this.invoke<KeyBundle>('openpgp_generate_key', {
+    const bundle = await this.invoke<KeyBundle>('openpgp_ensure_key', {
       accountJid: ctx.account.jid,
       userId: ctx.account.jid,
     })
     this.ownBundle = bundle
+    if (!bundle.keychainBacked) {
+      ctx.logger.warn(
+        'SequoiaPgpPlugin: passphrase stored on disk (0600 fallback) — keychain was unavailable',
+      )
+    }
 
     const publicKeyItem: XMLElementData = {
       name: 'pubkey',
@@ -288,7 +308,7 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
       {
         id: 'fingerprint',
         displayName: 'Fingerprint comparison',
-        description: "Compare the 40-character fingerprint with your contact's other client.",
+        description: "Compare the hex fingerprint with your contact's other client.",
       },
     ]
   }
@@ -362,6 +382,9 @@ function parsePublicKeyItem(payload: XMLElementData): KeyBundle | null {
     // We never receive a peer's secret; carrying an empty string keeps the
     // shape aligned with our own bundle without tempting the encrypt path.
     secretArmored: '',
+    // Peer bundles have no stored passphrase — the flag is only meaningful
+    // on our own identity. Default false; callers never inspect it here.
+    keychainBacked: false,
   }
 }
 
