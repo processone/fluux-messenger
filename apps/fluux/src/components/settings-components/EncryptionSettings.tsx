@@ -72,7 +72,10 @@ export function EncryptionSettings() {
 
     const poll = () => {
       if (cancelled) return
-      const plugin = client.e2ee.getPlugin('openpgp') as
+      // Manager becomes available on the first `online` event. If we're
+      // polling early (edge case — UI rendered before handler ran), wait
+      // one more tick rather than racing to a false-negative.
+      const plugin = client.e2ee?.getPlugin('openpgp') as
         | { getOwnFingerprint?: () => string | null }
         | null
       const fp = plugin?.getOwnFingerprint?.() ?? null
@@ -138,9 +141,10 @@ export function EncryptionSettings() {
   const handleDeleteKey = useCallback(async () => {
     setIsDeleting(true)
     try {
-      const plugin = client.e2ee.getPlugin('openpgp') as
+      const plugin = client.e2ee?.getPlugin('openpgp') as
         | { deleteIdentity?: () => Promise<void> }
         | null
+        | undefined
       if (plugin?.deleteIdentity) {
         await plugin.deleteIdentity()
       }

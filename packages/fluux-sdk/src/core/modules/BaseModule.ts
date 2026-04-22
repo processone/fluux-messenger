@@ -50,10 +50,11 @@ export interface ModuleDependencies {
   /**
    * Accessor for the end-to-end encryption plugin host. Chat consults it
    * on the send and receive paths to decide whether to encrypt/decrypt.
-   * Returns the live manager; when no plugins are registered, the manager
-   * simply has no protocols to select so messages flow in cleartext.
+   * Returns `null` before login (manager is tied to a logged-in identity);
+   * once `online` the manager is live even with no plugins registered, in
+   * which case messages simply flow in cleartext.
    */
-  getE2EEManager?: () => E2EEManager
+  getE2EEManager?: () => E2EEManager | null
 }
 
 /**

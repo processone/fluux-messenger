@@ -26,12 +26,17 @@ import { SequoiaPgpPlugin } from './SequoiaPgpPlugin'
 export async function registerE2EEPlugins(client: XMPPClient): Promise<void> {
   if (!isTauri()) return
   if (!isOpenpgpEnabled()) return
-  if (client.e2ee.getPlugin('openpgp')) return
+  // Manager is null until after the first successful connection. Caller
+  // should invoke this on the `online` event — but guard anyway so an
+  // earlier call is a silent no-op rather than a crash.
+  const manager = client.e2ee
+  if (!manager) return
+  if (manager.getPlugin('openpgp')) return
 
   try {
     const { invoke } = await import('@tauri-apps/api/core')
     const plugin = new SequoiaPgpPlugin({ invoke })
-    await client.e2ee.register(plugin)
+    await manager.register(plugin)
   } catch (err) {
     // Log but don't throw — E2EE plugin failure should never take down
     // the chat path. The UI drops to cleartext with the lock icon absent.
@@ -41,12 +46,16 @@ export async function registerE2EEPlugins(client: XMPPClient): Promise<void> {
 
 /**
  * Tear down any registered E2EE plugin. Called from the Settings UI
- * when the user flips the toggle off. No-op if no plugin is registered.
+ * when the user flips the toggle off. No-op if no plugin is registered
+ * (or if the manager itself hasn't been built yet — e.g. toggle off
+ * before first connection).
  */
 export async function unregisterE2EEPlugins(client: XMPPClient): Promise<void> {
-  if (!client.e2ee.getPlugin('openpgp')) return
+  const manager = client.e2ee
+  if (!manager) return
+  if (!manager.getPlugin('openpgp')) return
   try {
-    await client.e2ee.unregister('openpgp')
+    await manager.unregister('openpgp')
   } catch (err) {
     console.error('[Fluux] E2EE plugin unregistration failed:', err)
   }
