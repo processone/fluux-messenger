@@ -3,6 +3,8 @@ import {
   withTimeout,
   forceDestroyClient,
   isDeadSocketError,
+  computePostWakeSettleMs,
+  didTimerSleepThrough,
   CLIENT_STOP_TIMEOUT_MS,
   RECONNECT_ATTEMPT_TIMEOUT_MS,
 } from './connectionUtils'
@@ -105,6 +107,40 @@ describe('connectionUtils', () => {
       }
       expect(() => forceDestroyClient(client)).not.toThrow()
       expect(endFn).toHaveBeenCalled()
+    })
+  })
+
+  describe('computePostWakeSettleMs', () => {
+    it('returns 0 when no wake has been recorded', () => {
+      expect(computePostWakeSettleMs(0, 100_000, 2_000)).toBe(0)
+    })
+
+    it('returns 0 when the wake happened long before the settle window', () => {
+      expect(computePostWakeSettleMs(1_000, 100_000, 2_000)).toBe(0)
+    })
+
+    it('returns the remaining delay when wake is mid-window', () => {
+      expect(computePostWakeSettleMs(100_000, 100_500, 2_000)).toBe(1_500)
+    })
+
+    it('returns the full delay when the wake just happened', () => {
+      expect(computePostWakeSettleMs(100_000, 100_000, 2_000)).toBe(2_000)
+    })
+
+    it('returns 0 once past the upper slack bound', () => {
+      expect(computePostWakeSettleMs(100_000, 103_000, 2_000)).toBe(0)
+    })
+  })
+
+  describe('didTimerSleepThrough', () => {
+    it('returns false when the timer fires near the scheduled delay', () => {
+      expect(didTimerSleepThrough(30_000, 30_000)).toBe(false)
+      expect(didTimerSleepThrough(40_000, 30_000)).toBe(false)
+    })
+
+    it('returns true when elapsed clearly exceeds 1.5x the scheduled delay', () => {
+      expect(didTimerSleepThrough(46_000, 30_000)).toBe(true)
+      expect(didTimerSleepThrough(1_059_000, 30_000)).toBe(true)
     })
   })
 
