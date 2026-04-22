@@ -486,6 +486,50 @@ describe('Connection race conditions', () => {
   })
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Race 7: Reconnect timer slept through (no wake event delivered)
+  //
+  // macOS suspends JS timers while the system sleeps. If the app is in the
+  // middle of a reconnect attempt when sleep begins, the 30s RECONNECT_ATTEMPT
+  // timer freezes. On wake, the Tauri `system-did-wake` event may be dropped
+  // (observed in prod logs) so `handleAwake` never runs — only the stale
+  // setTimeout fires, many minutes late. Without an explicit wake, the
+  // follow-up proxy fallback connects on a half-ready network and SASL
+  // times out, turning a 30s stale timer into a multi-minute outage.
+  //
+  // The fix records an implicit wake (via lastWakeTimestamp) when the timer
+  // fires with >1.5x drift, so the next attempt applies the settle delay.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  describe('Race 7: stale timer synthesizes a wake when no explicit event fired', () => {
+    it('updates lastWakeTimestamp when the reconnect timer fires far past its scheduled time', async () => {
+      await connectAndGoOnline(xmppClient, mockXmppClientInstance)
+      mockXmppClientInstance._emit('disconnect', { clean: false })
+      await vi.advanceTimersByTimeAsync(0)
+
+      const clientA = createMockXmppClient()
+      mockClientFactory._setInstance(clientA)
+      mockClientFactory.mockClear()
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(getMachineState(xmppClient)).toEqual({ reconnecting: 'attempting' })
+
+      // Baseline: no wake has been recorded yet.
+      expect((xmppClient.connection as any).lastWakeTimestamp).toBe(0)
+
+      // Simulate the system sleeping while the 30s reconnect timer is pending:
+      // jump the wall-clock forward so when the timer finally fires the
+      // callback observes huge `Date.now() - attemptStart` drift.
+      const sleepDurationMs = 1_000_000
+      vi.setSystemTime(Date.now() + sleepDurationMs)
+      await vi.advanceTimersByTimeAsync(RECONNECT_ATTEMPT_TIMEOUT_MS)
+
+      // The stale-timer branch must synthesize a wake timestamp — without it
+      // the subsequent proxy fallback skips the settle delay.
+      const wakeTs = (xmppClient.connection as any).lastWakeTimestamp
+      expect(wakeTs).toBeGreaterThan(0)
+    })
+  })
+
+  // ─────────────────────────────────────────────────────────────────────────
   // Race 6: Reconnect attempt stalls mid-handshake → 30s timeout fires → retry
   //
   // Guards commit ed33cb1: post-wake auto-connect could stall after SASL and

@@ -66,6 +66,68 @@ export function forceDestroyClient(client: any): void {
 }
 
 /**
+ * Compute how long to wait for the network stack to settle after a wake-from-sleep.
+ *
+ * Returns 0 when no wait is needed: either no wake has been recorded, the
+ * wake was long enough ago that the settle window has already passed, or
+ * the remaining delay rounds to zero.
+ *
+ * The `+ 1_000` slack on the upper bound keeps the window open slightly
+ * past `settleDelayMs` so clocks reading a few hundred ms after the wake
+ * still apply the delay.
+ */
+export function computePostWakeSettleMs(
+  lastWakeTimestamp: number,
+  nowMs: number,
+  settleDelayMs: number
+): number {
+  if (lastWakeTimestamp <= 0) return 0
+  const msSinceWake = nowMs - lastWakeTimestamp
+  if (msSinceWake >= settleDelayMs + 1_000) return 0
+  return Math.max(0, settleDelayMs - msSinceWake)
+}
+
+/**
+ * Decide whether a connection-attempt timer firing `elapsedMs` after it was
+ * scheduled should be treated as evidence that the system slept through it.
+ *
+ * `setTimeout` freezes while macOS sleeps; when the app wakes, the timer
+ * fires immediately regardless of how long the sleep lasted. An elapsed
+ * time well past the scheduled timeout is a strong signal that we just
+ * came out of sleep, even when no explicit wake event was delivered.
+ */
+export function didTimerSleepThrough(
+  elapsedMs: number,
+  timeoutMs: number
+): boolean {
+  return elapsedMs > timeoutMs * 1.5
+}
+
+/**
+ * Budget for how long to let the OS network stack settle after a wake,
+ * scaled to the length of sleep we just came out of.
+ *
+ * Short sleeps (lid flicks, brief throttling) keep the network path
+ * mostly warm and don't need a delay at all — blocking would only add
+ * perceived latency. Long sleeps typically require Wi-Fi re-association,
+ * DHCP renewal, and a fresh TLS session, so SASL fires into a half-open
+ * socket if we don't give the stack a moment. The upper bound caps at
+ * 3s because past that the bottleneck is the TCP/TLS handshake itself,
+ * not the pre-connect settle.
+ *
+ * `undefined` falls through to the middle-of-the-road default so a wake
+ * from an untagged source (e.g. a heartbeat with no duration hint) is
+ * still protected.
+ */
+export function computeNetworkSettleMs(sleepDurationMs: number | undefined): number {
+  if (sleepDurationMs === undefined) return 2_000
+  if (sleepDurationMs < 30_000) return 0
+  if (sleepDurationMs < 180_000) return 500
+  if (sleepDurationMs < 900_000) return 1_500
+  return 3_000
+}
+
+/**
  * Check if an error indicates a dead WebSocket connection.
  * This can happen after system sleep when the socket dies silently.
  */

@@ -15,6 +15,10 @@
 
 const PREFIX = '[Fluux]'
 
+export function logDebug(message: string): void {
+  console.debug(PREFIX, message)
+}
+
 export function logInfo(message: string): void {
   console.info(PREFIX, message)
 }

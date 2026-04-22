@@ -667,10 +667,46 @@ mod macos {
     use objc2_foundation::{
         NSNotification, NSNotificationCenter, NSNotificationName, NSProcessInfo, NSString,
     };
+    use serde::Serialize;
     use std::ptr::NonNull;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::{Arc, Mutex};
     use tauri::WebviewWindow;
+
+    // CoreGraphics FFI: detects whether the main display is actually awake.
+    //
+    // macOS wakes the system periodically for background tasks (DarkWake /
+    // PowerNap — e.g. Mail fetch, Time Machine) without turning the display
+    // on. From the app's point of view these look identical to a real wake:
+    // `NSWorkspaceDidWakeNotification` fires, timers resume, the network
+    // briefly comes up. Without a way to distinguish the two, the client
+    // performs a full reconnect + MAM catch-up + webview reload dozens of
+    // times per night, burning battery and churning state that no one sees.
+    //
+    // `CGDisplayIsAsleep(CGMainDisplayID())` returns non-zero during dark
+    // wake and zero during user-driven wake. We pipe this into the wake
+    // event payload so the webview can skip handling when no user is
+    // present to benefit from the work.
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGMainDisplayID() -> u32;
+        fn CGDisplayIsAsleep(display: u32) -> i32;
+    }
+
+    fn is_display_active() -> bool {
+        // SAFETY: CGMainDisplayID / CGDisplayIsAsleep are pure Core Graphics
+        // queries with no preconditions; safe to call from any thread.
+        unsafe {
+            let display = CGMainDisplayID();
+            CGDisplayIsAsleep(display) == 0
+        }
+    }
+
+    #[derive(Serialize, Clone)]
+    struct WakeEventPayload {
+        #[serde(rename = "displayActive")]
+        display_active: bool,
+    }
 
     // Store the window reference for the observer callback
     static WINDOW: std::sync::OnceLock<Arc<Mutex<Option<WebviewWindow>>>> =
@@ -802,9 +838,19 @@ mod macos {
                         .unwrap_or(0);
                     PENDING_WAKE_TIME.store(now, Ordering::SeqCst);
 
+                    // Probe the display state before emitting so the webview
+                    // can distinguish DarkWake/PowerNap (display asleep, no
+                    // user present) from a user-driven wake. The probe runs
+                    // on the notification-center dispatch thread; it's a
+                    // read-only CG call and doesn't block.
+                    let display_active = is_display_active();
+
                     // Also emit immediately - if app is in foreground, JS will handle it
                     // and the pending wake will be cleared when activation fires
-                    let _ = wake_handle.emit("system-did-wake", ());
+                    let _ = wake_handle.emit(
+                        "system-did-wake",
+                        WakeEventPayload { display_active },
+                    );
                 }),
             );
         }
