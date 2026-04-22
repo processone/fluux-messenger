@@ -416,7 +416,7 @@ const RoomItem = memo(function RoomItem({
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <p className="truncate font-medium">{room.name}</p>
+            <p dir="auto" className="truncate font-medium">{room.name}</p>
             {/* Activity dot for unread (non-mention) activity */}
             {room.joined && room.unreadCount > 0 && room.mentionsCount === 0 && (
               <Tooltip content={`${room.unreadCount} unread`} position="top">
