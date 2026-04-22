@@ -6,7 +6,7 @@ import type { ConnectOptions, ConnectionMethod } from '../types'
 import { getBareJid, getDomain, getLocalPart, getResource } from '../jid'
 import { getClientIdentity, CLIENT_FEATURES } from '../caps'
 import { NS_DISCO_INFO, NS_PING, NS_TIME } from '../namespaces'
-import { logInfo, logWarn, logError as logErr } from '../logger'
+import { logDebug, logInfo, logWarn, logError as logErr } from '../logger'
 import {
   type SmPatchState,
   createSmPatchState,
@@ -856,9 +856,13 @@ export class Connection extends BaseModule {
    */
   nudgeReconnect(): void {
     if (!this.isInReconnectingState() || !this.credentials) {
+      // Benign: callers (keepalive, visibility, WS error handler) invoke
+      // this liberally and it no-ops whenever the machine is not in a
+      // reconnecting substate. Log at debug so normal logs stay quiet;
+      // the in-app console event remains visible for diagnostics.
       const message = `nudgeReconnect skipped (reconnecting=${this.isInReconnectingState()}, hasCredentials=${!!this.credentials}, state=${JSON.stringify(this.getMachineState())})`
       this.stores.console.addEvent(message, 'connection')
-      logInfo(message)
+      logDebug(message)
       return
     }
 
