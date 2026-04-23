@@ -449,7 +449,6 @@
         "errorDetails": "Napaka: {{error}}",
         "encryption": {
             "encryptedTo": "Šifrirano za {{name}}",
-            "notEncrypted": "Ni šifrirano — stik nima ključa OpenPGP",
             "checking": "Preverjanje stika…"
         }
     },

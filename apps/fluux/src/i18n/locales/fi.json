@@ -447,7 +447,6 @@
         "errorDetails": "Virhe: {{error}}",
         "encryption": {
             "encryptedTo": "Salattu kohteelle {{name}}",
-            "notEncrypted": "Ei salattu — yhteyshenkilöllä ei ole OpenPGP-avainta",
             "checking": "Tarkistetaan yhteyshenkilöä…"
         }
     },

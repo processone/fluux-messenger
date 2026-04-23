@@ -447,7 +447,6 @@
         "errorDetails": "Feil: {{error}}",
         "encryption": {
             "encryptedTo": "Kryptert til {{name}}",
-            "notEncrypted": "Ikke kryptert — kontakten har ingen OpenPGP-nøkkel",
             "checking": "Sjekker kontakt…"
         }
     },

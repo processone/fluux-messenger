@@ -449,7 +449,6 @@
         "errorDetails": "Błąd: {{error}}",
         "encryption": {
             "encryptedTo": "Zaszyfrowane do {{name}}",
-            "notEncrypted": "Bez szyfrowania — kontakt nie ma klucza OpenPGP",
             "checking": "Sprawdzanie kontaktu…"
         }
     },

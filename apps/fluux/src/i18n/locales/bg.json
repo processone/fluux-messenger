@@ -447,7 +447,6 @@
         "errorDetails": "Грешка: {{error}}",
         "encryption": {
             "encryptedTo": "Шифровано за {{name}}",
-            "notEncrypted": "Без шифроване — контактът няма OpenPGP ключ",
             "checking": "Проверка на контакта…"
         }
     },

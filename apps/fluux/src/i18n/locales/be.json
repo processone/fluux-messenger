@@ -447,7 +447,6 @@
         "errorDetails": "Памылка: {{error}}",
         "encryption": {
             "encryptedTo": "Зашыфравана для {{name}}",
-            "notEncrypted": "Без шыфравання — у суразмоўцы няма ключа OpenPGP",
             "checking": "Праверка суразмоўцы…"
         }
     },

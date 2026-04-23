@@ -447,7 +447,6 @@
         "errorDetails": "Fout: {{error}}",
         "encryption": {
             "encryptedTo": "Versleuteld naar {{name}}",
-            "notEncrypted": "Niet versleuteld — contact heeft geen OpenPGP-sleutel",
             "checking": "Contact wordt gecontroleerd…"
         }
     },

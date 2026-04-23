@@ -447,7 +447,6 @@
         "errorDetails": "错误：{{error}}",
         "encryption": {
             "encryptedTo": "加密发送给 {{name}}",
-            "notEncrypted": "未加密 — 对方没有 OpenPGP 密钥",
             "checking": "正在检查对方…"
         }
     },

@@ -449,7 +449,6 @@
         "errorDetails": "Errore: {{error}}",
         "encryption": {
             "encryptedTo": "Cifrato per {{name}}",
-            "notEncrypted": "Non cifrato — il contatto non ha una chiave OpenPGP",
             "checking": "Controllo del contatto…"
         }
     },

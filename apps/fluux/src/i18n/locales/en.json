@@ -447,7 +447,6 @@
         "errorDetails": "Error: {{error}}",
         "encryption": {
             "encryptedTo": "Encrypted to {{name}}",
-            "notEncrypted": "Not encrypted — peer has no OpenPGP key",
             "checking": "Checking peer…"
         }
     },

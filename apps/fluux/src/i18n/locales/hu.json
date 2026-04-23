@@ -447,7 +447,6 @@
         "errorDetails": "Hiba: {{error}}",
         "encryption": {
             "encryptedTo": "Titkosítva {{name}} részére",
-            "notEncrypted": "Nincs titkosítás — a partnernek nincs OpenPGP kulcsa",
             "checking": "Partner ellenőrzése…"
         }
     },

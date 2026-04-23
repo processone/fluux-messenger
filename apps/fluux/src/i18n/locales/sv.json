@@ -447,7 +447,6 @@
         "errorDetails": "Fel: {{error}}",
         "encryption": {
             "encryptedTo": "Krypterat till {{name}}",
-            "notEncrypted": "Inte krypterat — kontakten har ingen OpenPGP-nyckel",
             "checking": "Kontrollerar kontakt…"
         }
     },

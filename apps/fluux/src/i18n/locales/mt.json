@@ -449,7 +449,6 @@
         "errorDetails": "Errur: {{error}}",
         "encryption": {
             "encryptedTo": "Ikkriptat għal {{name}}",
-            "notEncrypted": "Mhux ikkriptat — il-kuntatt m’għandux ċavetta OpenPGP",
             "checking": "Qed nikkontrolla l-kuntatt…"
         }
     },

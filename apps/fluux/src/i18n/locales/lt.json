@@ -447,7 +447,6 @@
         "errorDetails": "Klaida: {{error}}",
         "encryption": {
             "encryptedTo": "Užšifruota gavėjui {{name}}",
-            "notEncrypted": "Nešifruota — kontaktas neturi OpenPGP rakto",
             "checking": "Tikrinamas kontaktas…"
         }
     },

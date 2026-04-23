@@ -447,7 +447,6 @@
         "errorDetails": "خطأ: {{error}}",
         "encryption": {
             "encryptedTo": "مشفَّر إلى {{name}}",
-            "notEncrypted": "غير مشفَّر — لا يملك المراسل مفتاح OpenPGP",
             "checking": "يجري التحقق من المراسل…"
         }
     },

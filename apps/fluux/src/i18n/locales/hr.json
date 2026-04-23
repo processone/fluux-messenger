@@ -447,7 +447,6 @@
         "errorDetails": "Greška: {{error}}",
         "encryption": {
             "encryptedTo": "Šifrirano za {{name}}",
-            "notEncrypted": "Bez šifriranja — kontakt nema OpenPGP ključ",
             "checking": "Provjera kontakta…"
         }
     },

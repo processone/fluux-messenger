@@ -1,4 +1,4 @@
-import { Lock, Unlock, Loader2 } from 'lucide-react'
+import { Lock, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 
@@ -12,9 +12,12 @@ interface EncryptionChipProps {
  * A small pill rendered above the message composer showing whether
  * the next outgoing message will be end-to-end encrypted.
  *
- * Renders nothing when the state is `disabled` (master toggle off,
- * not a 1:1 chat, offline, or plugin not yet ready) — we deliberately
- * keep the chrome invisible for users who haven't opted into E2EE.
+ * Renders nothing for `disabled` (master toggle off, not a 1:1 chat,
+ * offline, or plugin not yet ready) and `unsupported` (peer has no
+ * published OpenPGP key). Most peers today fall into the latter —
+ * surfacing a persistent "Not encrypted" warning in every such
+ * conversation would be noise for a population that hasn't adopted
+ * E2EE yet. Positive signals only: `checking` and `encrypted`.
  *
  * For the `encrypted` state the chip's tooltip carries the peer's
  * full hex fingerprint, which is the fastest way to read it off during
@@ -23,7 +26,7 @@ interface EncryptionChipProps {
 export function EncryptionChip({ state, peerName }: EncryptionChipProps) {
   const { t } = useTranslation()
 
-  if (state.kind === 'disabled') return null
+  if (state.kind === 'disabled' || state.kind === 'unsupported') return null
 
   const commonClasses =
     'flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium select-none'
@@ -41,27 +44,15 @@ export function EncryptionChip({ state, peerName }: EncryptionChipProps) {
     )
   }
 
-  if (state.kind === 'encrypted') {
-    return (
-      <div
-        className={`${commonClasses} text-fluux-muted bg-fluux-hover/40`}
-        title={formatFingerprint(state.fingerprint)}
-        role="status"
-      >
-        <Lock className="w-3 h-3" />
-        <span>{t('chat.encryption.encryptedTo', { name: peerName })}</span>
-      </div>
-    )
-  }
-
-  // unsupported
+  // encrypted
   return (
     <div
-      className={`${commonClasses} text-yellow-600 dark:text-yellow-400 bg-yellow-500/10`}
+      className={`${commonClasses} text-fluux-muted bg-fluux-hover/40`}
+      title={formatFingerprint(state.fingerprint)}
       role="status"
     >
-      <Unlock className="w-3 h-3" />
-      <span>{t('chat.encryption.notEncrypted')}</span>
+      <Lock className="w-3 h-3" />
+      <span>{t('chat.encryption.encryptedTo', { name: peerName })}</span>
     </div>
   )
 }

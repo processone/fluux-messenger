@@ -448,7 +448,6 @@
         "errorDetails": "Σφάλμα: {{error}}",
         "encryption": {
             "encryptedTo": "Κρυπτογραφημένο προς {{name}}",
-            "notEncrypted": "Χωρίς κρυπτογράφηση — ο συνομιλητής δεν έχει κλειδί OpenPGP",
             "checking": "Έλεγχος συνομιλητή…"
         }
     },
