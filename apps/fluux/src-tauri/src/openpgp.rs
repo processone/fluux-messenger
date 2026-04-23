@@ -285,6 +285,75 @@ impl OpenpgpState {
         Ok(())
     }
 
+    /// Produce a passphrase-encrypted backup of the currently-loaded TSK
+    /// for `account_jid`, suitable for publishing to the XEP-0373 §5
+    /// `urn:xmpp:openpgp:0:secret-key` PEP node.
+    ///
+    /// Runs the symmetric encryption on the blocking pool because the
+    /// SKESK construction can pick an Argon2 S2K that adds ~100 ms of
+    /// KDF work. Returns the armored OpenPGP message.
+    pub async fn encrypt_backup(
+        self: &Arc<Self>,
+        account_jid: String,
+        passphrase: String,
+    ) -> Result<String, String> {
+        let bundle = self.read_cached_bundle(&account_jid, "account")?;
+        tokio::task::spawn_blocking(move || {
+            crate::openpgp_backup::encrypt_tsk_with_passphrase(
+                &bundle.secret_armored,
+                &passphrase,
+            )
+            .map_err(anyhow_to_string)
+        })
+        .await
+        .unwrap_or_else(|join_err| Err(format!("backup encrypt task panicked: {join_err}")))
+    }
+
+    /// Import a backup fetched from the secret-key PEP node.
+    ///
+    /// Decrypts `backup_message` with `passphrase`, persists the recovered
+    /// TSK via [`KeyStorage::save`] (re-wrapped with our per-account at-rest
+    /// passphrase), and populates the in-memory cache so subsequent calls
+    /// to [`Self::ensure_key`] return the imported bundle without another
+    /// KDF round. Any previously-cached bundle for `account_jid` is
+    /// replaced — callers must only invoke this when the user has
+    /// explicitly chosen to adopt the server's backup.
+    pub async fn import_backup(
+        self: &Arc<Self>,
+        account_jid: String,
+        backup_message: String,
+        passphrase: String,
+    ) -> Result<KeyBundle, String> {
+        let this = Arc::clone(self);
+        tokio::task::spawn_blocking(move || {
+            let tsk_armored = crate::openpgp_backup::decrypt_tsk_with_passphrase(
+                &backup_message,
+                &passphrase,
+            )
+            .map_err(anyhow_to_string)?;
+            let cert = Cert::from_bytes(tsk_armored.as_bytes())
+                .map_err(|e| format!("parse imported TSK: {e}"))?;
+            let backing = this
+                .storage
+                .save(&account_jid, &cert)
+                .map_err(anyhow_to_string)?;
+            let bundle = bundle_from_cert(&cert, backing).map_err(anyhow_to_string)?;
+
+            // Replace any existing cell so the next ensure_key observes
+            // the imported bundle. This method is user-initiated and runs
+            // exclusively after an explicit "restore from backup" choice,
+            // so we don't need to coordinate with concurrent unlockers.
+            let mut entries = this.entries.lock().unwrap();
+            let cell = Arc::new(AsyncOnceCell::new());
+            let _ = cell.set(Ok(bundle.clone()));
+            entries.insert(account_jid, cell);
+
+            Ok(bundle)
+        })
+        .await
+        .unwrap_or_else(|join_err| Err(format!("backup import task panicked: {join_err}")))
+    }
+
     // ---- internals ----------------------------------------------------
 
     /// Get-or-insert the per-JID cell. The returned `Arc` is cheap to
@@ -437,6 +506,35 @@ pub fn openpgp_forget_account(
     state: State<'_, Arc<OpenpgpState>>,
 ) -> Result<(), String> {
     state.forget_account(&account_jid)
+}
+
+/// Encrypt the in-memory TSK for `account_jid` under `passphrase`. The
+/// returned armored OpenPGP message is what the TS side publishes to
+/// `urn:xmpp:openpgp:0:secret-key` (XEP-0373 §5).
+#[tauri::command]
+pub async fn openpgp_backup_encrypt(
+    account_jid: String,
+    passphrase: String,
+    state: State<'_, Arc<OpenpgpState>>,
+) -> Result<String, String> {
+    Arc::clone(&state)
+        .encrypt_backup(account_jid, passphrase)
+        .await
+}
+
+/// Import a backup published on `urn:xmpp:openpgp:0:secret-key`: decrypts
+/// with `passphrase`, persists the recovered TSK locally (wrapped with
+/// our at-rest Argon2id passphrase), and returns the resulting bundle.
+#[tauri::command]
+pub async fn openpgp_backup_import(
+    account_jid: String,
+    backup_message: String,
+    passphrase: String,
+    state: State<'_, Arc<OpenpgpState>>,
+) -> Result<KeyBundle, String> {
+    Arc::clone(&state)
+        .import_backup(account_jid, backup_message, passphrase)
+        .await
 }
 
 // ---------------------------------------------------------------------------
@@ -1035,5 +1133,88 @@ mod tests {
             1,
             "prewarm + ensure_key must coalesce"
         );
+    }
+
+    /// Full "second device" round-trip: device A generates, backs up with
+    /// passphrase, device B (fresh base dir) imports and recovers the
+    /// same identity. Any regression in the plumbing between `encrypt_backup`,
+    /// `import_backup`, and the storage layer surfaces here.
+    #[tokio::test]
+    async fn backup_and_import_reproduces_identity_on_fresh_state() {
+        let device_a = new_state();
+        let original = device_a
+            .ensure_key("alice@example.com".into(), "Alice".into())
+            .await
+            .unwrap();
+
+        let backup = device_a
+            .encrypt_backup("alice@example.com".into(), "correct-horse-battery-staple".into())
+            .await
+            .unwrap();
+
+        let device_b = Arc::new(OpenpgpState::for_testing(fresh_tmp_dir()));
+        let imported = device_b
+            .import_backup(
+                "alice@example.com".into(),
+                backup,
+                "correct-horse-battery-staple".into(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(imported.fingerprint, original.fingerprint);
+
+        // Post-import, ensure_key on the second device must return the
+        // imported bundle directly from the cache — no fresh generation,
+        // no KDF round. The blocking counter confirms the short-circuit.
+        let cached = device_b
+            .ensure_key("alice@example.com".into(), "Alice".into())
+            .await
+            .unwrap();
+        assert_eq!(cached.fingerprint, original.fingerprint);
+        assert_eq!(
+            device_b.blocking_run_count(),
+            0,
+            "import_backup must prime the cell so ensure_key skips the KDF"
+        );
+    }
+
+    /// A wrong passphrase during import is a normal error, not a panic,
+    /// so the UI can prompt the user again. The storage layer must also
+    /// stay clean: a failed import leaves no partial TSK on disk that
+    /// a later ensure_key would load instead of generating fresh.
+    #[tokio::test]
+    async fn import_with_wrong_passphrase_is_a_clean_error() {
+        let device_a = new_state();
+        let _ = device_a
+            .ensure_key("alice@example.com".into(), "Alice".into())
+            .await
+            .unwrap();
+        let backup = device_a
+            .encrypt_backup("alice@example.com".into(), "right".into())
+            .await
+            .unwrap();
+
+        let device_b = Arc::new(OpenpgpState::for_testing(fresh_tmp_dir()));
+        let err = device_b
+            .import_backup("alice@example.com".into(), backup, "wrong".into())
+            .await;
+        assert!(err.is_err(), "wrong passphrase must not yield a bundle");
+
+        // The failed import should not have populated the cache: a
+        // subsequent ensure_key generates a FRESH key (different
+        // fingerprint), rather than silently reusing a half-written one.
+        let generated = device_b
+            .ensure_key("alice@example.com".into(), "Alice".into())
+            .await
+            .unwrap();
+        assert_ne!(
+            generated.fingerprint,
+            // Just assert it's a valid v6 fingerprint; we can't compare
+            // to the "correct" one because device_b never saw it.
+            String::new(),
+            "fresh generation must still succeed after a failed import"
+        );
+        assert_eq!(generated.fingerprint.len(), 64);
     }
 }

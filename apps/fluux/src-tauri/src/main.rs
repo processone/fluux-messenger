@@ -49,6 +49,7 @@ use tauri_plugin_opener::OpenerExt;
 
 mod xmpp_proxy;
 mod openpgp;
+mod openpgp_backup;
 mod openpgp_storage;
 
 #[cfg(target_os = "macos")]
@@ -1104,7 +1105,9 @@ fn main() {
             openpgp::openpgp_encrypt,
             openpgp::openpgp_decrypt,
             openpgp::openpgp_fingerprint,
-            openpgp::openpgp_forget_account
+            openpgp::openpgp_forget_account,
+            openpgp::openpgp_backup_encrypt,
+            openpgp::openpgp_backup_import
         ])
         .on_page_load(move |webview, payload| {
             // Always inject console-forwarding script so SDK diagnostic logs
