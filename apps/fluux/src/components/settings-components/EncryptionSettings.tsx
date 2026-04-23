@@ -8,6 +8,9 @@ import { useToastStore } from '@/stores/toastStore'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { BackupPassphraseDialog } from '@/components/BackupPassphraseDialog'
 import { RestorePassphraseDialog } from '@/components/RestorePassphraseDialog'
+import { EnableWithBackupDialog } from '@/components/EnableWithBackupDialog'
+import { probeRemoteSecretKeyBackup } from '@/e2ee/secretKeyProbe'
+import { isTauri } from '@/utils/tauri'
 
 type PluginStatus =
   | 'disabled'
@@ -35,7 +38,7 @@ const GENERATION_TIMEOUT_MS = 60_000
  */
 export function EncryptionSettings() {
   const { t } = useTranslation()
-  const { status } = useConnection()
+  const { status, jid } = useConnection()
   const { client } = useXMPPContext()
   const openpgpEnabled = useEncryptionSettingsStore((s) => s.openpgpEnabled)
   const setOpenpgpEnabled = useEncryptionSettingsStore((s) => s.setOpenpgpEnabled)
@@ -52,6 +55,14 @@ export function EncryptionSettings() {
   // null = not yet probed, true/false = known. Kept narrow so the UI
   // can show a "Checking…" placeholder without flickering a wrong state.
   const [remoteBackupExists, setRemoteBackupExists] = useState<boolean | null>(null)
+  // Non-null only while the "we found a backup on enable — restore or
+  // start fresh?" dialog is open. Holds the armored backup ciphertext
+  // the probe pulled from PEP so the restore handler doesn't need to
+  // re-fetch it.
+  const [pendingEnableBackup, setPendingEnableBackup] = useState<{
+    accountJid: string
+    backupMessage: string
+  } | null>(null)
 
   const online = status === 'online'
   const pluginStatus: PluginStatus = !openpgpEnabled
@@ -112,27 +123,103 @@ export function EncryptionSettings() {
     const next = !openpgpEnabled
     setIsToggling(true)
     try {
-      setOpenpgpEnabled(next)
-      if (!online) {
-        // Nothing to register yet — registration will run on the next
-        // `online` event via App.tsx.
+      if (!next) {
+        // Turning OFF — unchanged behaviour.
+        setOpenpgpEnabled(false)
+        if (online) await unregisterE2EEPlugins(client)
+        setFingerprint(null)
         return
       }
-      if (next) {
-        await registerE2EEPlugins(client)
-      } else {
-        await unregisterE2EEPlugins(client)
-        setFingerprint(null)
+
+      // Turning ON. We want to avoid the "fork first, restore second"
+      // pattern: if the server already has a backup and this device
+      // has no local key, generating a fresh key here would publish a
+      // competing public key and burn the user's existing identity.
+      // Probe first; only register the plugin (which auto-generates)
+      // after we know no restore is needed or the user has chosen.
+      setOpenpgpEnabled(true)
+      if (!online) {
+        // Offline toggle: defer. Registration will fire on the next
+        // `online` event via App.tsx; we can't probe without a
+        // connection anyway.
+        return
       }
+      const bareJid = jid ? jid.split('/')[0] : null
+      if (!bareJid || !isTauri()) {
+        // Web (no Tauri backend) or unknown JID: the probe pre-step
+        // doesn't apply — just register, which is a no-op on web and
+        // generates fresh on desktop.
+        await registerE2EEPlugins(client)
+        return
+      }
+
+      const { invoke } = await import('@tauri-apps/api/core')
+      const hasLocal = await invoke<boolean>('openpgp_has_persisted_key', {
+        accountJid: bareJid,
+      })
+      if (hasLocal) {
+        // Existing identity on this device — the normal register path
+        // loads it from disk. No server-side probe needed.
+        await registerE2EEPlugins(client)
+        return
+      }
+
+      // No local key; check the server before generating.
+      const backupMessage = await probeRemoteSecretKeyBackup(client, bareJid)
+      if (!backupMessage) {
+        // No backup, no local key — fresh generation is the only path.
+        await registerE2EEPlugins(client)
+        return
+      }
+
+      // Backup exists AND no local key: defer registration and hand
+      // the decision to the user. The dialog's handlers will either
+      // restore + register, generate fresh + register, or cancel the
+      // whole toggle.
+      setPendingEnableBackup({ accountJid: bareJid, backupMessage })
     } catch (err) {
       addToast('error', t('settings.encryption.toggleFailed'))
       console.error('[Fluux] E2EE toggle failed:', err)
-      // Roll the preference back if the hot-toggle step failed.
       setOpenpgpEnabled(!next)
     } finally {
       setIsToggling(false)
     }
-  }, [openpgpEnabled, online, client, setOpenpgpEnabled, addToast, t])
+  }, [openpgpEnabled, online, client, jid, setOpenpgpEnabled, addToast, t])
+
+  const handleEnableRestore = useCallback(
+    async (passphrase: string) => {
+      if (!pendingEnableBackup) return
+      const { invoke } = await import('@tauri-apps/api/core')
+      await invoke('openpgp_backup_import', {
+        accountJid: pendingEnableBackup.accountJid,
+        backupMessage: pendingEnableBackup.backupMessage,
+        passphrase,
+      })
+      // The import persisted the TSK on disk; register now so the
+      // plugin's init loads (not generates) and the identity the user
+      // picked is the one advertised.
+      await registerE2EEPlugins(client)
+      setPendingEnableBackup(null)
+      addToast('success', t('settings.encryption.restoreSuccess'))
+    },
+    [pendingEnableBackup, client, addToast, t],
+  )
+
+  const handleEnableUseFresh = useCallback(async () => {
+    // User declined the backup — register without touching the
+    // secret-key node. Generation produces a new identity that will
+    // overwrite the server-side public-keys metadata, which is what
+    // the user has explicitly chosen.
+    await registerE2EEPlugins(client)
+    setPendingEnableBackup(null)
+  }, [client])
+
+  const handleEnableCancel = useCallback(() => {
+    // Revert the toggle: neither register nor generate. The user
+    // isn't ready to decide yet; leave the server backup untouched.
+    setPendingEnableBackup(null)
+    setOpenpgpEnabled(false)
+  }, [setOpenpgpEnabled])
 
   const handleCopyFingerprint = useCallback(async () => {
     if (!fingerprint) return
@@ -448,6 +535,14 @@ export function EncryptionSettings() {
         <RestorePassphraseDialog
           onConfirm={handleRestoreConfirm}
           onCancel={() => setShowRestoreDialog(false)}
+        />
+      )}
+
+      {pendingEnableBackup && (
+        <EnableWithBackupDialog
+          onRestore={handleEnableRestore}
+          onUseFresh={handleEnableUseFresh}
+          onCancel={handleEnableCancel}
         />
       )}
     </section>

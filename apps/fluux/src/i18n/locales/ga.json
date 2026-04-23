@@ -598,7 +598,11 @@
             "restorePassphraseLabel": "Passphrase",
             "restorePassphrasePlaceholder": "Enter the backup passphrase",
             "restoreSuccess": "Key restored from server",
-            "restoreFailed": "Couldn't restore — wrong passphrase?"
+            "restoreFailed": "Couldn't restore — wrong passphrase?",
+            "enableBackupFoundTitle": "Backup found on this server",
+            "enableBackupFoundBody": "A backup of an OpenPGP key is stored for this account. Enter the passphrase you saved to restore your existing identity, or start fresh to generate a new key (which will replace the backup's public half).",
+            "enableBackupFoundWarning": "Only the passphrase saved when the backup was created can restore it. If you've lost it, start fresh and back up the new key afterwards.",
+            "enableBackupFoundUseFresh": "Start fresh"
         }
     },
     "update": {
