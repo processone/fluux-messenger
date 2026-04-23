@@ -48,7 +48,7 @@ export function EncryptionChip({ state, peerName }: EncryptionChipProps) {
   return (
     <div
       className={`${commonClasses} text-fluux-muted bg-fluux-hover/40`}
-      title={formatFingerprint(state.fingerprint)}
+      title={`OpenPGP\n${formatFingerprint(state.fingerprint)}`}
       role="status"
     >
       <Lock className="w-3 h-3" />
