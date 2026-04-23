@@ -760,6 +760,12 @@ export class Connection extends BaseModule {
         const message = err instanceof Error ? err.message : String(err)
         logDisconnect(`FAST token invalidation threw (${message})`)
       }
+
+      // Remove the client-side token regardless of server-side outcome.
+      // Leaving it behind lets the app's post-disconnect auto-reconnect path
+      // silently re-authenticate after logout.
+      deleteFastToken(bareJid)
+      logDisconnect('FAST token removed from local storage')
     }
 
     this.smPersistence.clearCache()

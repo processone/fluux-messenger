@@ -440,9 +440,11 @@ describe('XMPPClient Connection', () => {
       await connectPromise
 
       mockInvalidateFastTokenOnServer.mockClear()
+      mockDeleteFastToken.mockClear()
       await xmppClient.disconnect()
 
       expect(mockInvalidateFastTokenOnServer).not.toHaveBeenCalled()
+      expect(mockDeleteFastToken).not.toHaveBeenCalled()
     })
 
     it('requests server-side FAST token invalidation when invalidateFastToken:true', async () => {
@@ -457,6 +459,7 @@ describe('XMPPClient Connection', () => {
 
       mockInvalidateFastTokenOnServer.mockClear()
       mockInvalidateFastTokenOnServer.mockResolvedValue({ ok: true })
+      mockDeleteFastToken.mockClear()
 
       await xmppClient.disconnect({ invalidateFastToken: true })
 
@@ -466,6 +469,9 @@ describe('XMPPClient Connection', () => {
           server: expect.stringContaining('example.com'),
         })
       )
+      // Client-side token must also be removed so auto-reconnect paths
+      // cannot silently log the user back in after an explicit logout.
+      expect(mockDeleteFastToken).toHaveBeenCalledWith('user@example.com')
       expect(mockStores.connection.setStatus).toHaveBeenCalledWith('disconnected')
     })
 
@@ -481,6 +487,7 @@ describe('XMPPClient Connection', () => {
 
       mockInvalidateFastTokenOnServer.mockClear()
       mockInvalidateFastTokenOnServer.mockRejectedValueOnce(new Error('network down'))
+      mockDeleteFastToken.mockClear()
 
       await expect(
         xmppClient.disconnect({ invalidateFastToken: true })
@@ -488,6 +495,29 @@ describe('XMPPClient Connection', () => {
 
       expect(mockXmppClientInstance.stop).toHaveBeenCalled()
       expect(mockStores.connection.setStatus).toHaveBeenCalledWith('disconnected')
+      // Client-side token must be removed even when the server round-trip
+      // failed — user intent is clear, and a lingering entry would re-enable
+      // auto-reconnect after logout.
+      expect(mockDeleteFastToken).toHaveBeenCalledWith('user@example.com')
+    })
+
+    it('removes client-side FAST token when server returns not-ok result', async () => {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      mockInvalidateFastTokenOnServer.mockClear()
+      mockInvalidateFastTokenOnServer.mockResolvedValue({ ok: false, reason: 'no-token' })
+      mockDeleteFastToken.mockClear()
+
+      await xmppClient.disconnect({ invalidateFastToken: true })
+
+      expect(mockDeleteFastToken).toHaveBeenCalledWith('user@example.com')
     })
 
     it('should resolve disconnect even when client.stop never settles', async () => {
