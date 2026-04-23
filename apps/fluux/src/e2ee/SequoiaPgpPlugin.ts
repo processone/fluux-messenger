@@ -71,6 +71,11 @@ import type {
   VerificationMethod,
   XMLElementData,
 } from '@fluux/sdk'
+import {
+  clearBackedUpFingerprint,
+  readBackedUpFingerprint,
+  writeBackedUpFingerprint,
+} from './backupMarker'
 
 /** XEP-0373 namespace for all PEP/message elements. */
 const OX_NAMESPACE = 'urn:xmpp:openpgp:0'
@@ -198,6 +203,9 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
     const accountJid = this.ctx?.account.jid
     if (accountJid) {
       await this.invoke<void>('openpgp_forget_account', { accountJid }).catch(() => {})
+      // The local key is gone; any marker pointing at its fingerprint
+      // is stale and would mislead the UI on the next key generation.
+      clearBackedUpFingerprint(accountJid)
     }
     this.ownBundle = null
     this.peerKeys.clear()
@@ -251,6 +259,9 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
         `SequoiaPgpPlugin: retract secret-key backup failed: ${formatError(err)}`,
       )
     })
+    // The server backup is (best-effort) gone — a stale marker would
+    // tell the UI "in sync" next time and hide the backup button.
+    clearBackedUpFingerprint(ctx.account.jid)
   }
 
   // ---- XEP-0373 §5 Secret Key Synchronization ------------------------
@@ -290,6 +301,10 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
       { id: CURRENT_ITEM_ID, payload },
       { accessModel: 'whitelist', maxItems: 1, persistItems: true },
     )
+    // Record which fingerprint we just pushed. The UI compares this
+    // against the current local fingerprint to tell "already in sync"
+    // from "backup needed" without re-prompting for the passphrase.
+    writeBackedUpFingerprint(ctx.account.jid, this.ownBundle.fingerprint)
   }
 
   /**
@@ -351,6 +366,9 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
       passphrase,
     })
     this.ownBundle = bundle
+    // Restore means local key == server backup by construction. Mark
+    // the sync state so the UI hides the backup/restore buttons.
+    writeBackedUpFingerprint(ctx.account.jid, bundle.fingerprint)
 
     // Re-advertise our public key so peers can encrypt to the restored
     // identity. A failure here isn't fatal for the restore itself — the
@@ -507,6 +525,12 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
    * doesn't match what the metadata node advertised — that mismatch is
    * a loud defensive check against a misconfigured or tampered PEP
    * node (e.g. a server rewriting items under its tenants' JIDs).
+   *
+   * Fingerprint extraction is delegated to the Rust side
+   * (`openpgp_fingerprint`, backed by Sequoia) so we handle every armor
+   * flavor the spec allows — RFC 9580 v6 keys emit a `Comment:` header
+   * rather than the legacy `Fingerprint:` header, and a JS regex parser
+   * silently mis-identified those as invalid.
    */
   private async fetchAdvertisedKey(
     peer: BareJID,
@@ -516,15 +540,34 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
     try {
       const items = await ctx.xmpp.queryPEP(peer, publicKeyDataNodeFor(fingerprint))
       for (const item of items) {
-        const parsed = parsePublicKeyDataItem(item.payload)
-        if (!parsed) continue
-        if (parsed.fingerprint !== fingerprint) {
-          ctx.logger.warn(
-            `SequoiaPgpPlugin: ${peer} advertised ${fingerprint} but served key with ${parsed.fingerprint}; discarding`,
+        const armored = parsePublicKeyDataItem(item.payload)
+        if (!armored) continue
+        let parsedFingerprint: string
+        try {
+          parsedFingerprint = await this.invoke<string>('openpgp_fingerprint', {
+            publicArmored: armored,
+          })
+        } catch (err) {
+          ctx.logger.debug(
+            `SequoiaPgpPlugin: openpgp_fingerprint for ${peer}/${fingerprint} failed: ${formatError(err)}`,
           )
           continue
         }
-        return parsed
+        if (!fingerprintsEqual(parsedFingerprint, fingerprint)) {
+          ctx.logger.warn(
+            `SequoiaPgpPlugin: ${peer} advertised ${fingerprint} but served key with ${parsedFingerprint}; discarding`,
+          )
+          continue
+        }
+        return {
+          fingerprint: parsedFingerprint,
+          publicArmored: armored,
+          // We never receive a peer's secret; empty string keeps the shape
+          // aligned with our own bundle without tempting the encrypt path.
+          secretArmored: '',
+          // Flag only meaningful on our own identity — peers always `false`.
+          keychainBacked: false,
+        }
       }
     } catch (err) {
       ctx.logger.debug(
@@ -693,6 +736,18 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
     return this.ownBundle?.fingerprint ?? null
   }
 
+  /**
+   * Fingerprint last pushed to (or pulled from) the server-side backup
+   * node, or `null` when no backup has been recorded on this device.
+   * The UI compares this to {@link getOwnFingerprint} to decide whether
+   * the backup/restore buttons are needed.
+   */
+  getBackedUpFingerprint(): string | null {
+    const jid = this.ctx?.account.jid
+    if (!jid) return null
+    return readBackedUpFingerprint(jid)
+  }
+
   /** Cached peer fingerprint, or `null` if not probed / not published. */
   getPeerFingerprint(peer: BareJID): string | null {
     return this.peerKeys.get(peer)?.fingerprint ?? null
@@ -749,34 +804,37 @@ function parseAdvertisedFingerprints(items: PEPItem[]): string[] {
 
 /**
  * Parse a single `<pubkey xmlns='urn:xmpp:openpgp:0'><data>…</data></pubkey>`
- * item from a data node (XEP-0373 §4.1.2.1).
+ * item from a data node (XEP-0373 §4.1.2.1) and return the decoded
+ * ASCII-armored OpenPGP key. Returns `null` when the element has the
+ * wrong shape (missing `<data>` or a wrong namespace).
+ *
+ * Intentionally does NOT try to derive the fingerprint: the armor format
+ * a peer ships is outside our control (legacy `Fingerprint:` header vs
+ * RFC 9580 `Comment:` header vs no header at all), so we leave that to
+ * the Rust side via `openpgp_fingerprint` where Sequoia understands
+ * every variant.
  */
-function parsePublicKeyDataItem(payload: XMLElementData): KeyBundle | null {
+function parsePublicKeyDataItem(payload: XMLElementData): string | null {
   if (payload.name !== 'pubkey' || payload.attrs?.xmlns !== OX_NAMESPACE) return null
   // Find the `<data>` child — the spec wraps the base64 in this element
   // rather than putting the text directly under `<pubkey>`.
-  let encoded: string | null = null
   for (const child of payload.children) {
     if (typeof child === 'string') continue
-    if (child.name === 'data') {
-      encoded = firstText(child)
-      if (encoded) break
-    }
+    if (child.name !== 'data') continue
+    const encoded = firstText(child)
+    if (encoded) return base64Decode(encoded)
   }
-  if (!encoded) return null
-  const armored = base64Decode(encoded)
-  const fingerprint = extractFingerprint(armored)
-  if (!fingerprint) return null
-  return {
-    fingerprint,
-    publicArmored: armored,
-    // We never receive a peer's secret; carrying an empty string keeps the
-    // shape aligned with our own bundle without tempting the encrypt path.
-    secretArmored: '',
-    // Peer bundles have no stored passphrase — the flag is only meaningful
-    // on our own identity. Default false; callers never inspect it here.
-    keychainBacked: false,
-  }
+  return null
+}
+
+/**
+ * Case-insensitive fingerprint comparison. The advertised value on the
+ * PEP metadata node and the value we get back from Sequoia are both hex
+ * strings with no separators, but nothing in the spec says they agree on
+ * casing — normalize both sides before comparing.
+ */
+function fingerprintsEqual(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase()
 }
 
 /**
@@ -809,16 +867,6 @@ function firstAttr(
   for (const name of names) {
     const v = attrs[name]
     if (typeof v === 'string' && v.trim().length > 0) return v.trim()
-  }
-  return null
-}
-
-/** Mirrors the Rust `extract_fingerprint` — reads `Fingerprint: <hex>`. */
-function extractFingerprint(armored: string): string | null {
-  for (const line of armored.split('\n')) {
-    if (line.startsWith('Fingerprint:')) {
-      return line.slice('Fingerprint:'.length).trim()
-    }
   }
   return null
 }

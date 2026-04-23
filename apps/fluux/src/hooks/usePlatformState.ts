@@ -619,7 +619,7 @@ export function usePlatformState() {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('focus', handleWindowFocus)
     }
-  }, [status, client, shouldHandleWake, maybeReloadOnLongWake])
+  }, [status, client, shouldHandleWake, maybeReloadOnLongWake, logEvent])
 
   // ── Effect 5: Tauri native events (keepalive + proxy watchdog) ────────────
 

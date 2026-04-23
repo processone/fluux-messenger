@@ -598,6 +598,172 @@ describe('SequoiaPgpPlugin', () => {
       expect(plugin.getPeerFingerprint('bob@example.com')).toBe(bobBundle.fingerprint)
     })
 
+    it('does not parse the armor in JS — delegates fingerprint extraction to Rust', async () => {
+      // Regression: the plugin used to read the fingerprint from a
+      // `Fingerprint:` line in the armor. That worked for our own
+      // generated keys but silently failed for peers whose armor carries
+      // the fingerprint in a `Comment:` header instead (what real
+      // Sequoia-produced RFC 9580 v6 keys emit). Result: probe returned
+      // `unsupported` for keys we could actually use, and the composer
+      // chip never surfaced the peer's OpenPGP support.
+      //
+      // The fix routes fingerprint extraction through
+      // `openpgp_fingerprint` so Sequoia — which parses any valid armor
+      // flavor — is the sole authority. Pin that contract: publish a
+      // peer armor that has NO `Fingerprint:` line, wire Rust to
+      // recognize the armor via its `Comment:` header, and verify probe
+      // resolves successfully.
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
+
+      const COMMENT_FP = 'COMMENTFPFORREALSEQUOIAKEY0000000000'
+      const commentStyleArmor = [
+        '-----BEGIN PGP PUBLIC KEY BLOCK-----',
+        `Comment: ${COMMENT_FP}`,
+        'Comment: bob@example.com',
+        '',
+        'xioGfakebase64body==',
+        '-----END PGP PUBLIC KEY BLOCK-----',
+      ].join('\n')
+
+      // Wrap the fake invoke so `openpgp_fingerprint` teaches it about
+      // the Comment-style header — mirrors the Rust side's reality.
+      const wrappedInvoke: InvokeFn = async <T>(
+        cmd: string,
+        args?: Record<string, unknown>,
+      ) => {
+        if (cmd === 'openpgp_fingerprint') {
+          const armored = args!.publicArmored as string
+          for (const line of armored.split('\n')) {
+            if (line.startsWith('Comment:')) {
+              const candidate = line.slice('Comment:'.length).trim()
+              // Crude hex-only filter so the "bob@example.com" Comment
+              // line doesn't accidentally register as a fingerprint.
+              if (/^[0-9A-Z]+$/i.test(candidate)) return candidate as T
+            }
+          }
+          throw new Error('no fingerprint')
+        }
+        return fake.invoke<T>(cmd, args)
+      }
+      const pluginUnderTest = new SequoiaPgpPlugin({ invoke: wrappedInvoke })
+      await pluginUnderTest.init(built.ctx)
+
+      built.peerPublish('bob@example.com', METADATA_NODE, {
+        id: 'current',
+        payload: {
+          name: 'public-keys-list',
+          attrs: { xmlns: OX_NS },
+          children: [
+            {
+              name: 'pubkey-metadata',
+              attrs: { 'v4-fingerprint': COMMENT_FP, date: '2024-01-01T00:00:00Z' },
+              children: [],
+            },
+          ],
+        },
+      })
+      built.peerPublish('bob@example.com', dataNodeFor(COMMENT_FP), {
+        id: 'current',
+        payload: {
+          name: 'pubkey',
+          attrs: { xmlns: OX_NS },
+          children: [
+            {
+              name: 'data',
+              attrs: {},
+              children: [btoa(unescape(encodeURIComponent(commentStyleArmor)))],
+            },
+          ],
+        },
+      })
+
+      const support = await pluginUnderTest.probePeer('bob@example.com')
+      expect(support.supported).toBe(true)
+      expect(pluginUnderTest.getPeerFingerprint('bob@example.com')).toBe(COMMENT_FP)
+    })
+
+    it('matches fingerprints case-insensitively across advertised-vs-Rust', async () => {
+      // The advertised attribute on the metadata node and the string
+      // Rust produces from `cert.fingerprint().to_hex()` are both hex,
+      // but nothing in the spec fixes the case. A peer emitting UPPER
+      // while Rust reports lower would previously look like a mismatch
+      // and get discarded. Keep this permissive.
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
+      const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'bob@example.com',
+        userId: 'Bob',
+      })
+
+      const upperFp = bobBundle.fingerprint.toUpperCase()
+      built.peerPublish('bob@example.com', METADATA_NODE, {
+        id: 'current',
+        payload: {
+          name: 'public-keys-list',
+          attrs: { xmlns: OX_NS },
+          children: [
+            {
+              name: 'pubkey-metadata',
+              attrs: { 'v4-fingerprint': upperFp, date: '2024-01-01T00:00:00Z' },
+              children: [],
+            },
+          ],
+        },
+      })
+      // Data node is keyed by the exact advertised fingerprint string
+      // — we query it verbatim, so mirror that.
+      built.peerPublish('bob@example.com', dataNodeFor(upperFp), {
+        id: 'current',
+        payload: {
+          name: 'pubkey',
+          attrs: { xmlns: OX_NS },
+          children: [
+            {
+              name: 'data',
+              attrs: {},
+              // The body's `Fingerprint:` line still carries the
+              // original (fake-lowercase) casing — forcing the match
+              // check to normalize.
+              children: [btoa(unescape(encodeURIComponent(bobBundle.publicArmored)))],
+            },
+          ],
+        },
+      })
+
+      const support = await plugin.probePeer('bob@example.com')
+      expect(support.supported).toBe(true)
+    })
+
+    it('silently skips a key when openpgp_fingerprint throws', async () => {
+      // Rust can refuse an armor (corrupt body, unsupported key version,
+      // etc.). That's an unsupported key, not a crash-worthy error. The
+      // probe should swallow the failure and return unsupported, just
+      // like it does for a missing data node.
+      const built = makeContext('me@example.com')
+      const wrappedInvoke: InvokeFn = async <T>(
+        cmd: string,
+        args?: Record<string, unknown>,
+      ) => {
+        if (cmd === 'openpgp_fingerprint') {
+          throw new Error('Rust: not a recognizable OpenPGP public key')
+        }
+        return fake.invoke<T>(cmd, args)
+      }
+      const pluginUnderTest = new SequoiaPgpPlugin({ invoke: wrappedInvoke })
+      await pluginUnderTest.init(built.ctx)
+
+      const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'bob@example.com',
+        userId: 'Bob',
+      })
+      publishKeyAsXep0373(built, 'bob@example.com', bobBundle)
+
+      const support = await pluginUnderTest.probePeer('bob@example.com')
+      expect(support.supported).toBe(false)
+      expect(pluginUnderTest.getPeerFingerprint('bob@example.com')).toBeNull()
+    })
+
     it('prefers v6-fingerprint over v4-fingerprint when both are present', async () => {
       // Pathological emitter: the two attributes name different
       // fingerprints. Only the v6-attributed one has a fetchable
@@ -949,7 +1115,7 @@ describe('SequoiaPgpPlugin', () => {
       // failure.
       const { ctx } = makeContext('me@example.com')
       // Do NOT call init — we want to exercise the guard path.
-      plugin['ctx'] = ctx // eslint-disable-line @typescript-eslint/no-explicit-any
+      plugin['ctx'] = ctx
 
       await expect(plugin.backupSecretKey('pp')).rejects.toThrow(/no identity/)
     })
@@ -1062,6 +1228,138 @@ describe('SequoiaPgpPlugin', () => {
       // Unused to silence "published is declared but never read" from the
       // device A context.
       void publishedA
+    })
+  })
+
+  describe('backup sync marker (getBackedUpFingerprint)', () => {
+    // The marker lets the UI answer "is my local key already backed up?"
+    // without re-prompting for the passphrase. These tests pin the
+    // write/clear points and the getter contract.
+
+    beforeEach(() => {
+      // The marker is persisted in localStorage (see `backupMarker.ts`),
+      // which jsdom provides but does NOT reset between tests.
+      localStorage.clear()
+    })
+
+    it('is null before any backup has happened', async () => {
+      const { ctx } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      expect(plugin.getBackedUpFingerprint()).toBeNull()
+    })
+
+    it('records the current fingerprint after a successful backup', async () => {
+      const { ctx } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      const fp = plugin.getOwnFingerprint()
+      expect(fp).not.toBeNull()
+
+      await plugin.backupSecretKey('pp')
+
+      expect(plugin.getBackedUpFingerprint()).toBe(fp)
+    })
+
+    it('does NOT record the marker when the publish fails', async () => {
+      // Contract: if the server never accepted the backup, the marker
+      // must stay unset so the UI keeps offering the backup button on
+      // the next probe.
+      const { ctx } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      ctx.xmpp.publishPEP = async (node) => {
+        if (node === 'urn:xmpp:openpgp:0:secret-key') {
+          throw new Error('simulated publish failure')
+        }
+      }
+
+      await expect(plugin.backupSecretKey('pp')).rejects.toThrow(/simulated/)
+      expect(plugin.getBackedUpFingerprint()).toBeNull()
+    })
+
+    it('records the restored fingerprint after a successful restore', async () => {
+      // Device A publishes, device B (fresh state) restores. After the
+      // restore, device B's marker must point at the *restored*
+      // fingerprint — because local and server are, by construction,
+      // now in sync.
+      const { ctx: ctxA } = makeContext('me@example.com')
+      await plugin.init(ctxA)
+      const fpA = plugin.getOwnFingerprint()
+      await plugin.backupSecretKey('shared-pp')
+      const backup = await plugin.fetchSecretKeyBackup()
+
+      fake.accounts.clear()
+      localStorage.clear()
+      const pluginB = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const { ctx: ctxB } = makeContext('me@example.com')
+      await pluginB.init(ctxB)
+      // Seed the backup onto device B's PEP tree.
+      await ctxB.xmpp.publishPEP('urn:xmpp:openpgp:0:secret-key', {
+        id: 'current',
+        payload: {
+          name: 'secretkey',
+          attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+          children: [
+            {
+              name: 'data',
+              attrs: {},
+              children: [btoa(unescape(encodeURIComponent(backup!)))],
+            },
+          ],
+        },
+      })
+
+      await pluginB.restoreSecretKey('shared-pp')
+
+      expect(pluginB.getBackedUpFingerprint()).toBe(fpA)
+    })
+
+    it('leaves a stale marker alone when restore fails (wrong passphrase)', async () => {
+      // A failed restore mustn't wipe a marker that corresponds to the
+      // local key — the user's backup relationship is unchanged.
+      const { ctx } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      const fp = plugin.getOwnFingerprint()
+      await plugin.backupSecretKey('right')
+      expect(plugin.getBackedUpFingerprint()).toBe(fp)
+
+      await expect(plugin.restoreSecretKey('wrong')).rejects.toThrow()
+      expect(plugin.getBackedUpFingerprint()).toBe(fp)
+    })
+
+    it('clears the marker when the server-side backup is retracted', async () => {
+      // The server backup is (best-effort) gone; leaving the marker
+      // would tell the UI "in sync" and hide the backup button even
+      // though there's nothing to restore from.
+      const { ctx } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      await plugin.backupSecretKey('pp')
+      expect(plugin.getBackedUpFingerprint()).not.toBeNull()
+
+      await plugin.retractSecretKeyBackup()
+
+      expect(plugin.getBackedUpFingerprint()).toBeNull()
+    })
+
+    it('clears the marker when the local identity is deleted', async () => {
+      // After a destructive delete, any surviving marker points at a
+      // fingerprint that no longer exists locally. A subsequent fresh
+      // generate would land a new key with a different fingerprint;
+      // the marker would falsely claim "mismatched" when the user has
+      // in fact never backed this new key up.
+      const { ctx } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      await plugin.backupSecretKey('pp')
+      expect(plugin.getBackedUpFingerprint()).not.toBeNull()
+
+      await plugin.deleteIdentity()
+
+      expect(plugin.getBackedUpFingerprint()).toBeNull()
+    })
+
+    it('is null when the plugin has no context (pre-init edge case)', () => {
+      // The UI may peek at the getter before init completes. A null
+      // answer is correct — there's no account to scope the marker to.
+      const fresh = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      expect(fresh.getBackedUpFingerprint()).toBeNull()
     })
   })
 })

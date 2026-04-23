@@ -55,6 +55,11 @@ export function EncryptionSettings() {
   // null = not yet probed, true/false = known. Kept narrow so the UI
   // can show a "Checking…" placeholder without flickering a wrong state.
   const [remoteBackupExists, setRemoteBackupExists] = useState<boolean | null>(null)
+  // Fingerprint recorded locally at the moment of the last successful
+  // backup/restore. When this equals the current local fingerprint AND
+  // a remote backup exists, local and server are known to be in sync
+  // and the backup/restore buttons are redundant.
+  const [backedUpFingerprint, setBackedUpFingerprint] = useState<string | null>(null)
   // Non-null only while the "we found a backup on enable — restore or
   // start fresh?" dialog is open. Holds the armored backup ciphertext
   // the probe pulled from PEP so the restore handler doesn't need to
@@ -240,14 +245,24 @@ export function EncryptionSettings() {
   useEffect(() => {
     if (pluginStatus !== 'ready') {
       setRemoteBackupExists(null)
+      setBackedUpFingerprint(null)
       return
     }
     let cancelled = false
     void (async () => {
       const plugin = client.e2ee?.getPlugin('openpgp') as
-        | { hasSecretKeyBackup?: () => Promise<boolean> }
+        | {
+            hasSecretKeyBackup?: () => Promise<boolean>
+            getBackedUpFingerprint?: () => string | null
+          }
         | null
         | undefined
+      // Read the local marker synchronously — it's cheap and lets the
+      // in-sync status land in the same render as the server probe
+      // instead of flickering through a "backup needed" frame.
+      if (!cancelled) {
+        setBackedUpFingerprint(plugin?.getBackedUpFingerprint?.() ?? null)
+      }
       if (!plugin?.hasSecretKeyBackup) {
         if (!cancelled) setRemoteBackupExists(false)
         return
@@ -299,6 +314,10 @@ export function EncryptionSettings() {
       // the effect without waiting for the next polling tick.
       setFingerprint(info.fingerprint)
       setShowRestoreDialog(false)
+      // Re-read the local marker (restore wrote it) so the status
+      // flips to "in sync" without waiting for the next render.
+      setBackedUpFingerprint((plugin as { getBackedUpFingerprint?: () => string | null })
+        .getBackedUpFingerprint?.() ?? info.fingerprint)
       addToast('success', t('settings.encryption.restoreSuccess'))
     },
     [client, addToast, t],
@@ -467,47 +486,68 @@ export function EncryptionSettings() {
             <p className="text-xs text-fluux-muted leading-snug">
               {t('settings.encryption.backupDescription')}
             </p>
-            {/*
-              Status line. `remoteBackupExists === null` is the pre-probe
-              transient window; we intentionally render it rather than
-              hide the row so the user understands a check is happening
-              and doesn't wonder why a backup button has no context.
-            */}
-            <p className="text-xs leading-snug">
-              {remoteBackupExists === null && (
-                <span className="text-fluux-muted">
-                  {t('settings.encryption.backupStatusChecking')}
-                </span>
-              )}
-              {remoteBackupExists === false && (
-                <span className="text-fluux-muted">
-                  {t('settings.encryption.backupStatusNone')}
-                </span>
-              )}
-              {remoteBackupExists === true && (
-                <span className="text-green-600 dark:text-green-400">
-                  {t('settings.encryption.backupStatusExists')}
-                </span>
-              )}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setShowBackupDialog(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
-              >
-                <CloudUpload className="w-3.5 h-3.5" />
-                {t('settings.encryption.backupAction')}
-              </button>
-              {remoteBackupExists === true && (
-                <button
-                  onClick={() => setShowRestoreDialog(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
-                >
-                  <CloudDownload className="w-3.5 h-3.5" />
-                  {t('settings.encryption.restoreAction')}
-                </button>
-              )}
-            </div>
+            {(() => {
+              // Three visible states:
+              //   checking  → pre-probe transient
+              //   inSync    → server has a backup AND it matches this
+              //               device's current fingerprint (by our local
+              //               marker). Buttons are redundant.
+              //   outOfSync → backup is missing, or present but for a
+              //               different fingerprint — show backup, and
+              //               show restore when something is there to
+              //               restore from.
+              const checking = remoteBackupExists === null
+              const inSync =
+                remoteBackupExists === true &&
+                !!fingerprint &&
+                backedUpFingerprint === fingerprint
+              return (
+                <>
+                  <p className="text-xs leading-snug">
+                    {checking && (
+                      <span className="text-fluux-muted">
+                        {t('settings.encryption.backupStatusChecking')}
+                      </span>
+                    )}
+                    {!checking && inSync && (
+                      <span className="text-green-600 dark:text-green-400">
+                        {t('settings.encryption.backupStatusInSync')}
+                      </span>
+                    )}
+                    {!checking && !inSync && remoteBackupExists === false && (
+                      <span className="text-fluux-muted">
+                        {t('settings.encryption.backupStatusNone')}
+                      </span>
+                    )}
+                    {!checking && !inSync && remoteBackupExists === true && (
+                      <span className="text-yellow-600 dark:text-yellow-400">
+                        {t('settings.encryption.backupStatusMismatch')}
+                      </span>
+                    )}
+                  </p>
+                  {!checking && !inSync && (
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => setShowBackupDialog(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
+                      >
+                        <CloudUpload className="w-3.5 h-3.5" />
+                        {t('settings.encryption.backupAction')}
+                      </button>
+                      {remoteBackupExists === true && (
+                        <button
+                          onClick={() => setShowRestoreDialog(true)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
+                        >
+                          <CloudDownload className="w-3.5 h-3.5" />
+                          {t('settings.encryption.restoreAction')}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </>
+              )
+            })()}
           </div>
         )}
 

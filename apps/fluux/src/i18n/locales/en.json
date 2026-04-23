@@ -510,6 +510,8 @@
             "backupStatusChecking": "Checking server…",
             "backupStatusNone": "Not backed up on this server yet.",
             "backupStatusExists": "Backed up on this server.",
+            "backupStatusInSync": "This key is backed up on the server.",
+            "backupStatusMismatch": "A backup exists on the server, but it doesn't match this device's key.",
             "restoreAction": "Restore from server",
             "restoreDialogTitle": "Restore your OpenPGP key from backup",
             "restoreDialogBody": "Enter the passphrase you saved when you created this backup. The restored key will replace the one currently stored on this device.",

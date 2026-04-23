@@ -595,6 +595,8 @@
             "backupStatusChecking": "Vérification sur le serveur…",
             "backupStatusNone": "Pas encore sauvegardée sur ce serveur.",
             "backupStatusExists": "Sauvegardée sur ce serveur.",
+            "backupStatusInSync": "Cette clé est sauvegardée sur le serveur.",
+            "backupStatusMismatch": "Une sauvegarde existe sur le serveur, mais elle ne correspond pas à la clé de cet appareil.",
             "restoreAction": "Restaurer depuis le serveur",
             "restoreDialogTitle": "Restaurer votre clé OpenPGP depuis la sauvegarde",
             "restoreDialogBody": "Saisissez la phrase secrète que vous avez enregistrée lors de la création de cette sauvegarde. La clé restaurée remplacera celle actuellement stockée sur cet appareil.",

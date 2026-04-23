@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { E2EEManager } from './E2EEManager'
 import { DummyPlaintextPlugin } from './DummyPlaintextPlugin'
 import { InMemoryStorageBackend } from './PluginStorage'

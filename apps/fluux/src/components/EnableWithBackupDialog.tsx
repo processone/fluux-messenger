@@ -122,7 +122,7 @@ export function EnableWithBackupDialog({
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && passphrase.trim() && busy === 'idle') {
-              handleRestore()
+              void handleRestore()
             }
           }}
           placeholder={t('settings.encryption.restorePassphrasePlaceholder')}

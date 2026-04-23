@@ -109,7 +109,7 @@ export function RestorePassphraseDialog({
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && passphrase.trim() && !isRestoring) {
-              handleConfirm()
+              void handleConfirm()
             }
           }}
           placeholder={t('settings.encryption.restorePassphrasePlaceholder')}
