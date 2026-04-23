@@ -189,7 +189,7 @@ We have many ideas and exciting additions planned for Fluux Messenger! We welcom
 
 #### Which XMPP servers are compatible with Fluux Messenger?
 
-We aim to create an XMPP client that respects standards, but currently the project has been tested **exclusively with [ejabberd](https://github.com/processone/ejabberd)**. We're eager to receive feedback on compatibility with other servers. If you test Fluux Messenger with a different XMPP server, please share your experience in the [Discussions](https://github.com/processone/fluux-messenger/discussions)!
+We aim to create an XMPP client that respects standards, but currently the project has been tested **exclusively with [ejabberd](https://github.com/processone/ejabberd)**. We're eager to receive feedback on compatibility with other servers.
 
 #### Will there be other installations methods? Can I run it on my own server?
 
