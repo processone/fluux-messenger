@@ -444,7 +444,12 @@
         "deliveryFailed": "Níor seachadadh an teachtaireacht",
         "viewError": "Féach ar earráid",
         "retry": "Bain triail arís",
-        "errorDetails": "Earráid: {{error}}"
+        "errorDetails": "Earráid: {{error}}",
+        "encryption": {
+            "encryptedTo": "Criptithe chuig {{name}}",
+            "notEncrypted": "Gan chriptiú — níl eochair OpenPGP ag an teagmhálaí",
+            "checking": "Ag seiceáil an teagmhálaí…"
+        }
     },
     "dates": {
         "today": "Inniu",

@@ -444,7 +444,12 @@
         "deliveryFailed": "ההודעה לא נמסרה",
         "viewError": "הצג שגיאה",
         "retry": "נסה שוב",
-        "errorDetails": "שגיאה: {{error}}"
+        "errorDetails": "שגיאה: {{error}}",
+        "encryption": {
+            "encryptedTo": "מוצפן אל {{name}}",
+            "notEncrypted": "לא מוצפן — לאיש הקשר אין מפתח OpenPGP",
+            "checking": "בודק את איש הקשר…"
+        }
     },
     "dates": {
         "today": "היום",

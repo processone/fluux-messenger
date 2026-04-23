@@ -445,7 +445,12 @@
         "deliveryFailed": "Το μήνυμα δεν παραδόθηκε",
         "viewError": "Προβολή σφάλματος",
         "retry": "Επανάληψη",
-        "errorDetails": "Σφάλμα: {{error}}"
+        "errorDetails": "Σφάλμα: {{error}}",
+        "encryption": {
+            "encryptedTo": "Κρυπτογραφημένο προς {{name}}",
+            "notEncrypted": "Χωρίς κρυπτογράφηση — ο συνομιλητής δεν έχει κλειδί OpenPGP",
+            "checking": "Έλεγχος συνομιλητή…"
+        }
     },
     "dates": {
         "today": "Σήμερα",

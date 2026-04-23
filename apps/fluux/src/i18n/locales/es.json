@@ -446,7 +446,12 @@
         "deliveryFailed": "Mensaje no entregado",
         "viewError": "Ver error",
         "retry": "Reintentar",
-        "errorDetails": "Error: {{error}}"
+        "errorDetails": "Error: {{error}}",
+        "encryption": {
+            "encryptedTo": "Cifrado para {{name}}",
+            "notEncrypted": "Sin cifrar — el contacto no tiene clave OpenPGP",
+            "checking": "Consultando al contacto…"
+        }
     },
     "dates": {
         "today": "Hoy",

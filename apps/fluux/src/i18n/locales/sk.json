@@ -445,7 +445,12 @@
         "deliveryFailed": "Správa nebola doručená",
         "viewError": "Zobraziť chybu",
         "retry": "Skúsiť znova",
-        "errorDetails": "Chyba: {{error}}"
+        "errorDetails": "Chyba: {{error}}",
+        "encryption": {
+            "encryptedTo": "Šifrované pre {{name}}",
+            "notEncrypted": "Bez šifrovania — kontakt nemá kľúč OpenPGP",
+            "checking": "Kontrola kontaktu…"
+        }
     },
     "dates": {
         "today": "Dnes",

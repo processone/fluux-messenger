@@ -446,7 +446,12 @@
         "deliveryFailed": "Mesaj nelivrat",
         "viewError": "Vezi eroarea",
         "retry": "Reîncearcă",
-        "errorDetails": "Eroare: {{error}}"
+        "errorDetails": "Eroare: {{error}}",
+        "encryption": {
+            "encryptedTo": "Criptat pentru {{name}}",
+            "notEncrypted": "Necriptat — contactul nu are cheie OpenPGP",
+            "checking": "Se verifică contactul…"
+        }
     },
     "dates": {
         "today": "Astăzi",

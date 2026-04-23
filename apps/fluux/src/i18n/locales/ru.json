@@ -444,7 +444,12 @@
         "deliveryFailed": "Сообщение не доставлено",
         "viewError": "Посмотреть ошибку",
         "retry": "Повторить",
-        "errorDetails": "Ошибка: {{error}}"
+        "errorDetails": "Ошибка: {{error}}",
+        "encryption": {
+            "encryptedTo": "Зашифровано для {{name}}",
+            "notEncrypted": "Без шифрования — у собеседника нет ключа OpenPGP",
+            "checking": "Проверка собеседника…"
+        }
     },
     "dates": {
         "today": "Сегодня",

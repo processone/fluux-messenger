@@ -445,7 +445,12 @@
         "deliveryFailed": "Ziņojums nav piegādāts",
         "viewError": "Skatīt kļūdu",
         "retry": "Mēģināt vēlreiz",
-        "errorDetails": "Kļūda: {{error}}"
+        "errorDetails": "Kļūda: {{error}}",
+        "encryption": {
+            "encryptedTo": "Šifrēts adresātam {{name}}",
+            "notEncrypted": "Bez šifrēšanas — kontaktam nav OpenPGP atslēgas",
+            "checking": "Pārbauda kontaktu…"
+        }
     },
     "dates": {
         "today": "Šodien",

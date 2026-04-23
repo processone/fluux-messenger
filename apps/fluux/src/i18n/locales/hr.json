@@ -444,7 +444,12 @@
         "deliveryFailed": "Poruka nije isporučena",
         "viewError": "Prikaži grešku",
         "retry": "Pokušaj ponovo",
-        "errorDetails": "Greška: {{error}}"
+        "errorDetails": "Greška: {{error}}",
+        "encryption": {
+            "encryptedTo": "Šifrirano za {{name}}",
+            "notEncrypted": "Bez šifriranja — kontakt nema OpenPGP ključ",
+            "checking": "Provjera kontakta…"
+        }
     },
     "dates": {
         "today": "Danas",

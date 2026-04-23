@@ -444,7 +444,12 @@
         "deliveryFailed": "Message not delivered",
         "viewError": "View error",
         "retry": "Retry",
-        "errorDetails": "Error: {{error}}"
+        "errorDetails": "Error: {{error}}",
+        "encryption": {
+            "encryptedTo": "Encrypted to {{name}}",
+            "notEncrypted": "Not encrypted — peer has no OpenPGP key",
+            "checking": "Checking peer…"
+        }
     },
     "dates": {
         "today": "Today",

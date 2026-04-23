@@ -446,7 +446,12 @@
         "deliveryFailed": "Zpráva nebyla doručena",
         "viewError": "Zobrazit chybu",
         "retry": "Zkusit znovu",
-        "errorDetails": "Chyba: {{error}}"
+        "errorDetails": "Chyba: {{error}}",
+        "encryption": {
+            "encryptedTo": "Šifrováno pro {{name}}",
+            "notEncrypted": "Bez šifrování — kontakt nemá klíč OpenPGP",
+            "checking": "Kontrola kontaktu…"
+        }
     },
     "dates": {
         "today": "Dnes",

@@ -445,7 +445,12 @@
         "deliveryFailed": "Message non délivré",
         "viewError": "Voir l'erreur",
         "retry": "Réessayer",
-        "errorDetails": "Erreur : {{error}}"
+        "errorDetails": "Erreur : {{error}}",
+        "encryption": {
+            "encryptedTo": "Chiffré avec {{name}}",
+            "notEncrypted": "Non chiffré — votre correspondant n’a pas de clé OpenPGP",
+            "checking": "Vérification du correspondant…"
+        }
     },
     "dates": {
         "today": "Aujourd'hui",

@@ -444,7 +444,12 @@
         "deliveryFailed": "Žinutė nepristatyta",
         "viewError": "Peržiūrėti klaidą",
         "retry": "Bandyti dar kartą",
-        "errorDetails": "Klaida: {{error}}"
+        "errorDetails": "Klaida: {{error}}",
+        "encryption": {
+            "encryptedTo": "Užšifruota gavėjui {{name}}",
+            "notEncrypted": "Nešifruota — kontaktas neturi OpenPGP rakto",
+            "checking": "Tikrinamas kontaktas…"
+        }
     },
     "dates": {
         "today": "Šiandien",

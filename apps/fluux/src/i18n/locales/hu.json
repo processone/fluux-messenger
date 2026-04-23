@@ -444,7 +444,12 @@
         "deliveryFailed": "Üzenet nem kézbesítve",
         "viewError": "Hiba megtekintése",
         "retry": "Újrapróbálás",
-        "errorDetails": "Hiba: {{error}}"
+        "errorDetails": "Hiba: {{error}}",
+        "encryption": {
+            "encryptedTo": "Titkosítva {{name}} részére",
+            "notEncrypted": "Nincs titkosítás — a partnernek nincs OpenPGP kulcsa",
+            "checking": "Partner ellenőrzése…"
+        }
     },
     "dates": {
         "today": "Ma",

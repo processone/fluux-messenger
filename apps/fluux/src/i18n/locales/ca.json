@@ -446,7 +446,12 @@
         "deliveryFailed": "Missatge no lliurat",
         "viewError": "Veure error",
         "retry": "Reintentar",
-        "errorDetails": "Error: {{error}}"
+        "errorDetails": "Error: {{error}}",
+        "encryption": {
+            "encryptedTo": "Xifrat per a {{name}}",
+            "notEncrypted": "Sense xifrar — el contacte no té clau OpenPGP",
+            "checking": "Comprovant el contacte…"
+        }
     },
     "dates": {
         "today": "Avui",

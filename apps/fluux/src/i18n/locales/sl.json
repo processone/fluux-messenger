@@ -446,7 +446,12 @@
         "deliveryFailed": "Sporočilo ni bilo dostavljeno",
         "viewError": "Poglej napako",
         "retry": "Poskusi znova",
-        "errorDetails": "Napaka: {{error}}"
+        "errorDetails": "Napaka: {{error}}",
+        "encryption": {
+            "encryptedTo": "Šifrirano za {{name}}",
+            "notEncrypted": "Ni šifrirano — stik nima ključa OpenPGP",
+            "checking": "Preverjanje stika…"
+        }
     },
     "dates": {
         "today": "Danes",

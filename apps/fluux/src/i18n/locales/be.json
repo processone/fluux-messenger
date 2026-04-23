@@ -444,7 +444,12 @@
         "deliveryFailed": "Паведамленне не дастаўлена",
         "viewError": "Паказаць памылку",
         "retry": "Паўтарыць",
-        "errorDetails": "Памылка: {{error}}"
+        "errorDetails": "Памылка: {{error}}",
+        "encryption": {
+            "encryptedTo": "Зашыфравана для {{name}}",
+            "notEncrypted": "Без шыфравання — у суразмоўцы няма ключа OpenPGP",
+            "checking": "Праверка суразмоўцы…"
+        }
     },
     "dates": {
         "today": "Сёння",

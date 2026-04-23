@@ -444,7 +444,12 @@
         "deliveryFailed": "Съобщението не е доставено",
         "viewError": "Преглед на грешка",
         "retry": "Опитай отново",
-        "errorDetails": "Грешка: {{error}}"
+        "errorDetails": "Грешка: {{error}}",
+        "encryption": {
+            "encryptedTo": "Шифровано за {{name}}",
+            "notEncrypted": "Без шифроване — контактът няма OpenPGP ключ",
+            "checking": "Проверка на контакта…"
+        }
     },
     "dates": {
         "today": "Днес",

@@ -141,6 +141,13 @@ vi.mock('@fluux/sdk', () => ({
     isConnected: () => false,
     getJid: () => null,
   }),
+  // Consumed by useConversationEncryptionState. Returning a client
+  // without an e2ee manager puts the hook into the `disabled` branch,
+  // so the EncryptionChip renders nothing and these tests stay
+  // unaffected by E2EE UX changes.
+  useXMPPContext: () => ({
+    client: { e2ee: null },
+  }),
 }))
 
 // Mock React store hooks (from @fluux/sdk/react)

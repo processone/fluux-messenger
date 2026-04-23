@@ -444,7 +444,12 @@
         "deliveryFailed": "Meddelandet levererades inte",
         "viewError": "Visa fel",
         "retry": "Försök igen",
-        "errorDetails": "Fel: {{error}}"
+        "errorDetails": "Fel: {{error}}",
+        "encryption": {
+            "encryptedTo": "Krypterat till {{name}}",
+            "notEncrypted": "Inte krypterat — kontakten har ingen OpenPGP-nyckel",
+            "checking": "Kontrollerar kontakt…"
+        }
     },
     "dates": {
         "today": "Idag",

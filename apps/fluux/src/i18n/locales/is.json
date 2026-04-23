@@ -444,7 +444,12 @@
         "deliveryFailed": "Skilaboð ekki afhent",
         "viewError": "Skoða villu",
         "retry": "Reyna aftur",
-        "errorDetails": "Villa: {{error}}"
+        "errorDetails": "Villa: {{error}}",
+        "encryption": {
+            "encryptedTo": "Dulkóðað til {{name}}",
+            "notEncrypted": "Ódulkóðað — viðmælandinn er ekki með OpenPGP lykil",
+            "checking": "Athuga viðmælanda…"
+        }
     },
     "dates": {
         "today": "Í dag",

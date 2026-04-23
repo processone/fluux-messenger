@@ -444,7 +444,12 @@
         "deliveryFailed": "Besked ikke leveret",
         "viewError": "Vis fejl",
         "retry": "Prøv igen",
-        "errorDetails": "Fejl: {{error}}"
+        "errorDetails": "Fejl: {{error}}",
+        "encryption": {
+            "encryptedTo": "Krypteret til {{name}}",
+            "notEncrypted": "Ikke krypteret — kontakten har ingen OpenPGP-nøgle",
+            "checking": "Tjekker kontakt…"
+        }
     },
     "dates": {
         "today": "I dag",

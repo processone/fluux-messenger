@@ -446,7 +446,12 @@
         "deliveryFailed": "Sõnum ei ole kohale toimetatud",
         "viewError": "Vaata viga",
         "retry": "Proovi uuesti",
-        "errorDetails": "Viga: {{error}}"
+        "errorDetails": "Viga: {{error}}",
+        "encryption": {
+            "encryptedTo": "Krüpteeritud saajale {{name}}",
+            "notEncrypted": "Pole krüpteeritud — kontaktil puudub OpenPGP võti",
+            "checking": "Kontaktikontroll…"
+        }
     },
     "dates": {
         "today": "Täna",

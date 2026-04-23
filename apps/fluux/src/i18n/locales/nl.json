@@ -444,7 +444,12 @@
         "deliveryFailed": "Bericht niet bezorgd",
         "viewError": "Fout bekijken",
         "retry": "Opnieuw proberen",
-        "errorDetails": "Fout: {{error}}"
+        "errorDetails": "Fout: {{error}}",
+        "encryption": {
+            "encryptedTo": "Versleuteld naar {{name}}",
+            "notEncrypted": "Niet versleuteld — contact heeft geen OpenPGP-sleutel",
+            "checking": "Contact wordt gecontroleerd…"
+        }
     },
     "dates": {
         "today": "Vandaag",

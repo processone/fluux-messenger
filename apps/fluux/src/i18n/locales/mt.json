@@ -446,7 +446,12 @@
         "deliveryFailed": "Il-messaġġ ma wasalx",
         "viewError": "Ara l-errur",
         "retry": "Erġa' pprova",
-        "errorDetails": "Errur: {{error}}"
+        "errorDetails": "Errur: {{error}}",
+        "encryption": {
+            "encryptedTo": "Ikkriptat għal {{name}}",
+            "notEncrypted": "Mhux ikkriptat — il-kuntatt m’għandux ċavetta OpenPGP",
+            "checking": "Qed nikkontrolla l-kuntatt…"
+        }
     },
     "dates": {
         "today": "Illum",

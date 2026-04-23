@@ -7,8 +7,10 @@ import { getConsistentTextColor } from './Avatar'
 import { useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat } from '@/hooks'
 import { Upload, Loader2 } from 'lucide-react'
 import { MessageBubble, MessageList as MessageListComponent, shouldShowAvatar, buildReplyContext } from './conversation'
+import { EncryptionChip } from './conversation/EncryptionChip'
 import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
+import { useConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { ChristmasAnimation } from './ChristmasAnimation'
 import { ChatHeader } from './ChatHeader'
 import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment } from './MessageComposer'
@@ -941,33 +943,49 @@ function MessageInput({
     void sendChatState(conversationId, state, type)
   }
 
+  // Status chip above the composer showing whether the next send will
+  // be end-to-end encrypted. Renders nothing when the master toggle is
+  // off, we're offline, or this is a MUC — so users who haven't opted
+  // into E2EE see no extra chrome. See [`useConversationEncryptionState`].
+  const encryptionState = useConversationEncryptionState(
+    type === 'chat' ? conversationId : null,
+    type,
+  )
+
   return (
-    <MessageComposer
-      ref={composerRef}
-      textareaRef={textareaRef}
-      placeholder={t('chat.messageTo', { name: conversationName })}
-      replyingTo={replyInfo}
-      onCancelReply={onCancelReply}
-      editingMessage={editInfo}
-      onCancelEdit={onCancelEdit}
-      onSendCorrection={handleCorrection}
-      onRetractMessage={handleRetract}
-      onComposingChange={onComposingChange}
-      onInputResize={onInputResize}
-      onSend={handleSend}
-      onSendEasterEgg={(animation) => sendEasterEgg(conversationId, type, animation)}
-      onSendTypingState={handleTypingState}
-      typingNotificationsEnabled={true}
-      onFileSelect={onFileSelect}
-      uploadState={uploadState}
-      isUploadSupported={isUploadSupported}
-      pendingAttachment={pendingAttachment}
-      onRemovePendingAttachment={onRemovePendingAttachment}
-      disabled={!isConnected}
-      value={text}
-      onValueChange={setText}
-      onEditLastMessage={onEditLastMessage}
-    />
+    <>
+      {encryptionState.kind !== 'disabled' && (
+        <div className="px-3 pt-1">
+          <EncryptionChip state={encryptionState} peerName={conversationName} />
+        </div>
+      )}
+      <MessageComposer
+        ref={composerRef}
+        textareaRef={textareaRef}
+        placeholder={t('chat.messageTo', { name: conversationName })}
+        replyingTo={replyInfo}
+        onCancelReply={onCancelReply}
+        editingMessage={editInfo}
+        onCancelEdit={onCancelEdit}
+        onSendCorrection={handleCorrection}
+        onRetractMessage={handleRetract}
+        onComposingChange={onComposingChange}
+        onInputResize={onInputResize}
+        onSend={handleSend}
+        onSendEasterEgg={(animation) => sendEasterEgg(conversationId, type, animation)}
+        onSendTypingState={handleTypingState}
+        typingNotificationsEnabled={true}
+        onFileSelect={onFileSelect}
+        uploadState={uploadState}
+        isUploadSupported={isUploadSupported}
+        pendingAttachment={pendingAttachment}
+        onRemovePendingAttachment={onRemovePendingAttachment}
+        disabled={!isConnected}
+        value={text}
+        onValueChange={setText}
+        onEditLastMessage={onEditLastMessage}
+      />
+    </>
   )
 }
 

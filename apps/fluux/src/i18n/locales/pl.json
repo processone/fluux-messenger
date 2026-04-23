@@ -446,7 +446,12 @@
         "deliveryFailed": "Wiadomość niedostarczona",
         "viewError": "Zobacz błąd",
         "retry": "Ponów",
-        "errorDetails": "Błąd: {{error}}"
+        "errorDetails": "Błąd: {{error}}",
+        "encryption": {
+            "encryptedTo": "Zaszyfrowane do {{name}}",
+            "notEncrypted": "Bez szyfrowania — kontakt nie ma klucza OpenPGP",
+            "checking": "Sprawdzanie kontaktu…"
+        }
     },
     "dates": {
         "today": "Dzisiaj",

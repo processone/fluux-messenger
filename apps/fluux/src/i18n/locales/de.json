@@ -446,7 +446,12 @@
         "deliveryFailed": "Nachricht nicht zugestellt",
         "viewError": "Fehler anzeigen",
         "retry": "Erneut versuchen",
-        "errorDetails": "Fehler: {{error}}"
+        "errorDetails": "Fehler: {{error}}",
+        "encryption": {
+            "encryptedTo": "Verschlüsselt an {{name}}",
+            "notEncrypted": "Nicht verschlüsselt — Gegenstelle hat keinen OpenPGP-Schlüssel",
+            "checking": "Prüfe Gegenstelle…"
+        }
     },
     "dates": {
         "today": "Heute",

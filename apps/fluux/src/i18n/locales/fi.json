@@ -444,7 +444,12 @@
         "deliveryFailed": "Viestiä ei toimitettu",
         "viewError": "Näytä virhe",
         "retry": "Yritä uudelleen",
-        "errorDetails": "Virhe: {{error}}"
+        "errorDetails": "Virhe: {{error}}",
+        "encryption": {
+            "encryptedTo": "Salattu kohteelle {{name}}",
+            "notEncrypted": "Ei salattu — yhteyshenkilöllä ei ole OpenPGP-avainta",
+            "checking": "Tarkistetaan yhteyshenkilöä…"
+        }
     },
     "dates": {
         "today": "Tänään",

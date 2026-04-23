@@ -444,7 +444,12 @@
         "deliveryFailed": "消息未送达",
         "viewError": "查看错误",
         "retry": "重试",
-        "errorDetails": "错误：{{error}}"
+        "errorDetails": "错误：{{error}}",
+        "encryption": {
+            "encryptedTo": "加密发送给 {{name}}",
+            "notEncrypted": "未加密 — 对方没有 OpenPGP 密钥",
+            "checking": "正在检查对方…"
+        }
     },
     "dates": {
         "today": "今天",
