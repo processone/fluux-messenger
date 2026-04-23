@@ -398,9 +398,9 @@ export function EncryptionSettings() {
                   t('settings.encryption.statusGenerationFailed')}
               </div>
               {fingerprint && (
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 text-xs font-mono text-fluux-text break-all">
-                    {formatFingerprint(fingerprint)}
+                <div className="flex items-start gap-2">
+                  <code className="flex-1 text-xs font-mono text-fluux-text whitespace-pre-line leading-relaxed">
+                    {formatFingerprintMultiline(fingerprint)}
                   </code>
                   <button
                     onClick={handleCopyFingerprint}
@@ -556,4 +556,15 @@ export function EncryptionSettings() {
  */
 function formatFingerprint(fp: string): string {
   return fp.match(/.{1,4}/g)?.join(' ') ?? fp
+}
+
+/**
+ * Same as formatFingerprint, but splits the groups across two balanced lines
+ * so the fingerprint is easier to read and fills the available width.
+ */
+function formatFingerprintMultiline(fp: string): string {
+  const groups = fp.match(/.{1,4}/g)
+  if (!groups || groups.length <= 1) return fp
+  const mid = Math.ceil(groups.length / 2)
+  return `${groups.slice(0, mid).join(' ')}\n${groups.slice(mid).join(' ')}`
 }
