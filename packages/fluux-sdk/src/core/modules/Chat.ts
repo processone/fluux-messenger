@@ -32,6 +32,7 @@ import {
 } from '../namespaces'
 import { dataToElement, elementToData } from '../e2ee/stanzaAdapter'
 import type { E2EEManager, E2EEPlugin, EncryptedPayload, SecurityContext } from '../e2ee'
+import { E2EEEncryptionRequiredError } from '../e2ee'
 import type {
   Message,
   MentionReference,
@@ -626,8 +627,16 @@ export class Chat extends BaseModule {
               protocolId: result.plugin.descriptor.id,
               trust: 'trusted',
             }
+          } else if (manager.getSendPolicy() === 'strict') {
+            // Strict mode: the user opted into E2EE, so a peer without a
+            // usable key is a send-time error, not a silent downgrade.
+            // Surface it to the caller (UI) — that's the only layer that
+            // can legitimately decide to retry or to explicitly send in
+            // cleartext as a one-off.
+            throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
           }
         } catch (err) {
+          if (err instanceof E2EEEncryptionRequiredError) throw err
           logWarn(`E2EE encrypt failed for ${recipient}, sending plaintext: ${err instanceof Error ? err.message : String(err)}`)
         }
       }

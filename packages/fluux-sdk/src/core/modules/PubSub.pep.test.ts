@@ -314,3 +314,51 @@ describe('PubSub.subscribe', () => {
     expect(b).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('PubSub — openpgp public-keys headline', () => {
+  it('routes headline to E2EEManager.notifyPeerKeysChanged for the bare JID', () => {
+    const notify = vi.fn()
+    const deps: ModuleDependencies = {
+      ...makeDeps(async () => xml('iq', {})),
+      getE2EEManager: () =>
+        ({
+          notifyPeerKeysChanged: notify,
+        }) as unknown as ReturnType<NonNullable<ModuleDependencies['getE2EEManager']>>,
+    }
+    const pubsub = new PubSub(deps)
+
+    const stanza = xml('message', { from: 'mrtest@process-one.net' },
+      xml('event', { xmlns: 'http://jabber.org/protocol/pubsub#event' },
+        xml('items', { node: 'urn:xmpp:openpgp:0:public-keys' },
+          xml('item', { id: 'current' },
+            xml('public-keys-list', { xmlns: 'urn:xmpp:openpgp:0' },
+              xml('pubkey-metadata', {
+                'v4-fingerprint': 'AAAA',
+                'v6-fingerprint': 'AAAA',
+                date: '2026-04-23T15:06:00Z',
+              }),
+            ),
+          ),
+        ),
+      ),
+    )
+    pubsub.handle(stanza)
+
+    expect(notify).toHaveBeenCalledWith('mrtest@process-one.net', 'openpgp')
+  })
+
+  it('is a silent no-op when no E2EE manager is wired', () => {
+    const deps = makeDeps(async () => xml('iq', {}))
+    const pubsub = new PubSub(deps)
+
+    const stanza = xml('message', { from: 'mrtest@process-one.net/x' },
+      xml('event', { xmlns: 'http://jabber.org/protocol/pubsub#event' },
+        xml('items', { node: 'urn:xmpp:openpgp:0:public-keys' },
+          xml('item', { id: 'current' }),
+        ),
+      ),
+    )
+
+    expect(() => pubsub.handle(stanza)).not.toThrow()
+  })
+})

@@ -1602,6 +1602,9 @@ export class XMPPClient {
       publishPEP: async (node, item, options) => {
         await this.pubsub.publish(node, item, options)
       },
+      retractPEP: async (node, itemId) => {
+        await this.pubsub.retract(node, itemId)
+      },
       queryPEP: async (jid, node) => {
         return this.pubsub.query(jid, node)
       },

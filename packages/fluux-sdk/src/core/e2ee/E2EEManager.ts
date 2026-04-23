@@ -37,6 +37,34 @@ export interface E2EEManagerOptions {
 export type PinnedStrategy = string | null
 
 /**
+ * What the host does when the user tries to send to a conversation for
+ * which no plugin is mutually available.
+ *
+ * - `opportunistic` — silently ship plaintext. Preserves delivery when
+ *    the peer has not published keys yet. Appropriate when E2EE is off
+ *    globally and a single conversation happens to be encryptable.
+ * - `strict` — fail the send with {@link E2EEEncryptionRequiredError}.
+ *    The UI is expected to surface the failure and let the user retry
+ *    (e.g. after their peer publishes keys) or explicitly send in
+ *    plaintext as a one-off. Right default whenever the user has
+ *    enabled E2EE in settings.
+ */
+export type E2EESendPolicy = 'opportunistic' | 'strict'
+
+/**
+ * Thrown by {@link E2EEManager.requireEncryption} (and, by extension, by
+ * the Chat send path in strict mode) when no plugin can encrypt to the
+ * recipient. Callers catch this specifically to decide whether to block
+ * the send or fall back to plaintext with explicit user consent.
+ */
+export class E2EEEncryptionRequiredError extends Error {
+  constructor(public readonly target: ConversationTarget) {
+    super('E2EE required but no plugin available for this conversation')
+    this.name = 'E2EEEncryptionRequiredError'
+  }
+}
+
+/**
  * Host that owns registered plugins and dispatches encrypt/decrypt to the
  * right one. Plugins do not negotiate among themselves; all selection
  * happens here.
@@ -49,6 +77,7 @@ export class E2EEManager {
   private readonly xmpp: XMPPPrimitives
   private readonly account: AccountInfo
   private readonly logger: Logger
+  private sendPolicy: E2EESendPolicy = 'opportunistic'
 
   constructor(options: E2EEManagerOptions) {
     this.storage = options.storage
@@ -120,6 +149,20 @@ export class E2EEManager {
   }
 
   /**
+   * Policy for outgoing messages when no plugin is mutually available.
+   * See {@link E2EESendPolicy}. Default is `opportunistic` so an
+   * E2EE-disabled account behaves the same as before; the host flips
+   * this to `strict` when the user opts into E2EE.
+   */
+  getSendPolicy(): E2EESendPolicy {
+    return this.sendPolicy
+  }
+
+  setSendPolicy(policy: E2EESendPolicy): void {
+    this.sendPolicy = policy
+  }
+
+  /**
    * Pick the plugin to use for `target`. Selection rules:
    * 1. User/admin pin wins.
    * 2. Otherwise, highest securityLevel among mutually-supported plugins.
@@ -175,6 +218,25 @@ export class E2EEManager {
   invalidateCapability(peer: BareJID, protocolId?: string): void {
     if (protocolId) this.capabilityCache.invalidate(protocolId, peer)
     else this.capabilityCache.invalidatePeer(peer)
+  }
+
+  /**
+   * PEP change for this peer's per-protocol key material. Drops the host
+   * capability cache entry AND asks the plugin to evict its own positive
+   * cache, so the next send re-probes and picks up a rotated key.
+   *
+   * When `protocolId` is omitted every plugin is notified (e.g. a peer
+   * retracted everything at once); when it's set only that plugin is.
+   */
+  notifyPeerKeysChanged(peer: BareJID, protocolId?: string): void {
+    this.invalidateCapability(peer, protocolId)
+    if (protocolId) {
+      this.plugins.get(protocolId)?.onPeerKeysChanged?.(peer)
+      return
+    }
+    for (const plugin of this.plugins.values()) {
+      plugin.onPeerKeysChanged?.(peer)
+    }
   }
 
   /**

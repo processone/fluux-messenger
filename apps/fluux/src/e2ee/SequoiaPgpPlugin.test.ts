@@ -646,6 +646,50 @@ describe('SequoiaPgpPlugin', () => {
     })
   })
 
+  describe('onPeerKeysChanged', () => {
+    it('drops the cached peer key so the next probe re-fetches', async () => {
+      // Regression: without this, a peer rotating their OX key would be
+      // invisible to us — the positive cache from the first publish
+      // masks every subsequent fetch.
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
+      const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'bob@example.com',
+        userId: 'Bob',
+      })
+      publishKeyAsXep0373(built, 'bob@example.com', bobBundle)
+
+      await plugin.probePeer('bob@example.com')
+      expect(plugin.getPeerFingerprint('bob@example.com')).toBe(bobBundle.fingerprint)
+
+      plugin.onPeerKeysChanged('bob@example.com')
+      expect(plugin.getPeerFingerprint('bob@example.com')).toBeNull()
+    })
+
+    it('only evicts the targeted peer', async () => {
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
+      const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'bob@example.com',
+        userId: 'Bob',
+      })
+      const carolBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'carol@example.com',
+        userId: 'Carol',
+      })
+      publishKeyAsXep0373(built, 'bob@example.com', bobBundle)
+      publishKeyAsXep0373(built, 'carol@example.com', carolBundle)
+
+      await plugin.probePeer('bob@example.com')
+      await plugin.probePeer('carol@example.com')
+
+      plugin.onPeerKeysChanged('bob@example.com')
+
+      expect(plugin.getPeerFingerprint('bob@example.com')).toBeNull()
+      expect(plugin.getPeerFingerprint('carol@example.com')).toBe(carolBundle.fingerprint)
+    })
+  })
+
   describe('encrypt / decrypt round-trip', () => {
     it('encrypts for a probed peer, decrypts back to plaintext with signature verified', async () => {
       const { alice, bob } = await buildCrossPublishedPair(fake)

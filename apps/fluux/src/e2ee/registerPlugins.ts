@@ -37,6 +37,10 @@ export async function registerE2EEPlugins(client: XMPPClient): Promise<void> {
     const { invoke } = await import('@tauri-apps/api/core')
     const plugin = new SequoiaPgpPlugin({ invoke })
     await manager.register(plugin)
+    // User explicitly enabled E2EE — silently downgrading to cleartext
+    // when a peer has no key would contradict that choice. Flip to
+    // strict so the send path throws and the UI can surface the miss.
+    manager.setSendPolicy('strict')
   } catch (err) {
     // Log but don't throw — E2EE plugin failure should never take down
     // the chat path. The UI drops to cleartext with the lock icon absent.
@@ -56,6 +60,10 @@ export async function unregisterE2EEPlugins(client: XMPPClient): Promise<void> {
   if (!manager.getPlugin('openpgp')) return
   try {
     await manager.unregister('openpgp')
+    // No plugins left → a strict policy would block every outgoing
+    // chat unconditionally. Revert to the SDK default (opportunistic)
+    // so the user can keep sending cleartext after disabling E2EE.
+    manager.setSendPolicy('opportunistic')
   } catch (err) {
     console.error('[Fluux] E2EE plugin unregistration failed:', err)
   }

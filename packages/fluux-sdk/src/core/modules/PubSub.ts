@@ -20,7 +20,7 @@ import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 import { BaseModule } from './BaseModule'
 import { getBareJid } from '../jid'
-import { NS_PUBSUB, NS_NICK } from '../namespaces'
+import { NS_PUBSUB, NS_NICK, NS_OPENPGP_PUBLIC_KEYS } from '../namespaces'
 import { generateUUID } from '../../utils/uuid'
 import { dataToElement, elementToData } from '../e2ee/stanzaAdapter'
 import type { PEPItem, Subscription, XMLElementData } from '../e2ee'
@@ -99,6 +99,17 @@ export class PubSub extends BaseModule {
     // XEP-0172: User Nickname
     if (node === NS_NICK) {
       this.handleNicknameUpdate(bareFrom, items)
+    }
+
+    // XEP-0373: OpenPGP public-keys metadata.
+    // A headline here means the peer rotated / published / retracted
+    // their key. Evict any cached "supported" or "not-supported" probe
+    // result for this peer so the next send re-fetches and the new key
+    // is actually used. Plugin-local key caches are cleared via the
+    // same hook so a rotated fingerprint doesn't get masked by a stale
+    // positive entry either.
+    if (node === NS_OPENPGP_PUBLIC_KEYS) {
+      this.invalidateOpenPgpKeys(bareFrom)
     }
 
     // Dispatch to any user-registered subscribers for (bareFrom, node).
@@ -200,6 +211,19 @@ export class PubSub extends BaseModule {
    * Handle XEP-0084 User Avatar metadata notification.
    * Triggers avatar data fetch when new avatar is published.
    */
+  /**
+   * XEP-0373 OpenPGP public-keys PEP change handler.
+   *
+   * Routed through the E2EE manager so we drop the shared capability
+   * cache entry *and* the plugin's own positive key cache in one call.
+   * If the manager or the openpgp plugin isn't registered (e.g. E2EE
+   * disabled) this is a no-op — the headline still flows to any
+   * generic subscribers via dispatchToSubscribers.
+   */
+  private invalidateOpenPgpKeys(bareFrom: string): void {
+    this.deps.getE2EEManager?.()?.notifyPeerKeysChanged(bareFrom, 'openpgp')
+  }
+
   private handleAvatarMetadata(bareFrom: string, items: Element): void {
     const item = items.getChild('item')
     const metadata = item?.getChild('metadata', 'urn:xmpp:avatar:metadata')

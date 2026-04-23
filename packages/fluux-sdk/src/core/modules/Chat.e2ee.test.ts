@@ -12,6 +12,7 @@ import { Chat } from './Chat'
 import type { MAM } from './MAM'
 import type { ModuleDependencies } from './BaseModule'
 import {
+  E2EEEncryptionRequiredError,
   E2EEManager,
   InMemoryStorageBackend,
   type XMPPPrimitives,
@@ -27,6 +28,7 @@ function stubXmppPrimitives(sendStanza: (el: Element) => Promise<void>): XMPPPri
     },
     queryDisco: async () => ({ features: [], identities: [] }),
     publishPEP: async () => {},
+    retractPEP: async () => {},
     queryPEP: async () => [],
     subscribePEP: () => ({ unsubscribe: () => {} }),
   }
@@ -147,6 +149,30 @@ describe('Chat E2EE wiring', () => {
       const sent = captured[0]
       expect(sent.getChild('body')?.text()).toBe('hi room')
       expect(sent.getChild('plain', 'urn:fluux:e2ee-dummy:0')).toBeUndefined()
+    })
+
+    it('strict policy throws E2EEEncryptionRequiredError instead of silent plaintext', async () => {
+      // Empty manager — no plugin will claim the recipient, so
+      // encryptOutbound returns null. Strict policy must surface that.
+      const strictManager = new E2EEManager({
+        storage: new InMemoryStorageBackend(),
+        xmpp: stubXmppPrimitives(async () => {}),
+        account: { jid: 'me@example.com' },
+      })
+      strictManager.setSendPolicy('strict')
+      const { deps } = makeDeps({
+        jid: 'me@example.com',
+        manager: strictManager,
+        captureStanza: (el) => captured.push(el),
+      })
+      const strictChat = new Chat(deps, stubMAM())
+
+      await expect(
+        strictChat.sendMessage('bob@example.com', 'secret'),
+      ).rejects.toBeInstanceOf(E2EEEncryptionRequiredError)
+
+      // Critically: nothing was sent to the wire.
+      expect(captured).toHaveLength(0)
     })
   })
 

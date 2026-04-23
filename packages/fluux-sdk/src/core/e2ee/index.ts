@@ -40,6 +40,12 @@ export {
   createPluginStorage,
   type StorageBackend,
 } from './PluginStorage'
-export { E2EEManager, type E2EEManagerOptions, type PinnedStrategy } from './E2EEManager'
+export {
+  E2EEManager,
+  E2EEEncryptionRequiredError,
+  type E2EEManagerOptions,
+  type E2EESendPolicy,
+  type PinnedStrategy,
+} from './E2EEManager'
 // DummyPlaintextPlugin is intentionally not re-exported here — see its file
 // for the rationale. Tests import it via relative path.

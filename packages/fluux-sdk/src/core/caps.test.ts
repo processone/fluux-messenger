@@ -40,6 +40,13 @@ describe('caps (XEP-0115)', () => {
     it('should include XEP-0153 vCard avatar updates', () => {
       expect(CLIENT_FEATURES).toContain('vcard-temp:x:update')
     })
+
+    it('should include XEP-0373 OpenPGP public-keys +notify', () => {
+      // Without this, ejabberd will not push PEP headlines when a peer
+      // publishes or rotates their OX key — the client would keep a
+      // stale negative cache and silently fall back to plaintext.
+      expect(CLIENT_FEATURES).toContain('urn:xmpp:openpgp:0:public-keys+notify')
+    })
   })
 
   describe('getClientIdentity', () => {

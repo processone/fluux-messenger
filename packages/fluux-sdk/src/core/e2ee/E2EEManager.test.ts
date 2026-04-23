@@ -283,6 +283,53 @@ describe('E2EEManager — strategy selection', () => {
 
     expect(plugin.probed.length).toBe(2)
   })
+
+  it('notifyPeerKeysChanged invalidates cache AND calls plugin hook', async () => {
+    const mgr = makeManager()
+    const plugin = new FakePlugin(strongDescriptor, 'urn:test:strong')
+    const onChanged = vi.fn()
+    ;(plugin as E2EEPlugin).onPeerKeysChanged = onChanged
+    await mgr.register(plugin)
+
+    await mgr.selectStrategy({ kind: 'direct', peer: 'bob@example.com' })
+    mgr.notifyPeerKeysChanged('bob@example.com', strongDescriptor.id)
+    await mgr.selectStrategy({ kind: 'direct', peer: 'bob@example.com' })
+
+    expect(plugin.probed.length).toBe(2) // cache was dropped
+    expect(onChanged).toHaveBeenCalledWith('bob@example.com')
+  })
+
+  it('notifyPeerKeysChanged with no protocolId notifies every plugin', async () => {
+    const mgr = makeManager()
+    const a = new FakePlugin(strongDescriptor, 'urn:test:strong')
+    const b = new FakePlugin(weakDescriptor, 'urn:test:weak')
+    const aHook = vi.fn()
+    const bHook = vi.fn()
+    ;(a as E2EEPlugin).onPeerKeysChanged = aHook
+    ;(b as E2EEPlugin).onPeerKeysChanged = bHook
+    await mgr.register(a)
+    await mgr.register(b)
+
+    mgr.notifyPeerKeysChanged('bob@example.com')
+
+    expect(aHook).toHaveBeenCalledWith('bob@example.com')
+    expect(bHook).toHaveBeenCalledWith('bob@example.com')
+  })
+})
+
+describe('E2EEManager — send policy', () => {
+  it('defaults to opportunistic', () => {
+    const mgr = makeManager()
+    expect(mgr.getSendPolicy()).toBe('opportunistic')
+  })
+
+  it('setSendPolicy round-trips', () => {
+    const mgr = makeManager()
+    mgr.setSendPolicy('strict')
+    expect(mgr.getSendPolicy()).toBe('strict')
+    mgr.setSendPolicy('opportunistic')
+    expect(mgr.getSendPolicy()).toBe('opportunistic')
+  })
 })
 
 describe('E2EEManager — dispatch', () => {

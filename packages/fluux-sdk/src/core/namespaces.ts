@@ -120,6 +120,12 @@ export const NS_HINTS = 'urn:xmpp:hints'
 // XEP-0380: Explicit Message Encryption
 export const NS_EME = 'urn:xmpp:eme:0'
 
+// XEP-0373: OpenPGP for XMPP ("OX") — public-keys metadata PEP node.
+// The `+notify` variant is what we advertise in caps so the server
+// pushes PEP headlines whenever a peer publishes or rotates their key.
+export const NS_OPENPGP_PUBLIC_KEYS = 'urn:xmpp:openpgp:0:public-keys'
+export const NS_OPENPGP_PUBLIC_KEYS_NOTIFY = 'urn:xmpp:openpgp:0:public-keys+notify'
+
 // XEP-0422: Message Fastening
 export const NS_FASTEN = 'urn:xmpp:fasten:0'
 

@@ -217,6 +217,13 @@ export interface XMPPPrimitives {
    * server's defaults.
    */
   publishPEP(node: string, item: PEPItem, options?: PEPPublishOptions): Promise<void>
+  /**
+   * Retract a previously published item from one of our own PEP nodes.
+   * Servers typically tolerate retracting an already-absent item silently;
+   * callers should still catch errors to distinguish "already gone" from
+   * a genuine failure they want to surface.
+   */
+  retractPEP(node: string, itemId: string): Promise<void>
   /** Fetch items from a remote PEP node. */
   queryPEP(jid: BareJID, node: string): Promise<PEPItem[]>
   /** Subscribe to PEP notifications from a remote JID for a given node. */
@@ -291,4 +298,13 @@ export interface E2EEPlugin {
    * `securityLevel` order, until one claims the stanza.
    */
   tryClaimInbound(stanzaChild: XMLElementData): EncryptedPayload | null
+
+  /**
+   * Optional hook: the host noticed (via a PEP headline or an explicit
+   * caller) that `peer`'s public key material has changed. The plugin
+   * should drop any positive cache it holds so the next probe re-fetches
+   * the current key. The capability cache the host owns is invalidated
+   * separately — plugins only need to evict their own state here.
+   */
+  onPeerKeysChanged?(peer: BareJID): void
 }

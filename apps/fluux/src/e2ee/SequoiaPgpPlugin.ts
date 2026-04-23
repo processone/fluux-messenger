@@ -620,6 +620,16 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
     }
   }
 
+  /**
+   * Evict the cached public key for `peer`. Called by the host when a
+   * PEP headline announces a key rotation — without this, a rotated
+   * fingerprint would be masked by our positive cache from the previous
+   * publish and `encrypt()` would keep using the superseded key.
+   */
+  onPeerKeysChanged(peer: BareJID): void {
+    this.peerKeys.delete(peer)
+  }
+
   /** Own fingerprint, or `null` if ensureIdentity hasn't completed. */
   getOwnFingerprint(): string | null {
     return this.ownBundle?.fingerprint ?? null
