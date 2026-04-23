@@ -508,6 +508,18 @@ pub fn openpgp_forget_account(
     state.forget_account(&account_jid)
 }
 
+/// Cheap "has any persisted key for this JID?" probe. Used by the
+/// restore-first flow to decide — without kicking off key generation —
+/// whether the user already has local material or is starting fresh.
+/// Just a file-exists check; does not touch the keychain or run any KDF.
+#[tauri::command]
+pub fn openpgp_has_persisted_key(
+    account_jid: String,
+    state: State<'_, Arc<OpenpgpState>>,
+) -> bool {
+    state.storage.has_persisted_key(&account_jid)
+}
+
 /// Encrypt the in-memory TSK for `account_jid` under `passphrase`. The
 /// returned armored OpenPGP message is what the TS side publishes to
 /// `urn:xmpp:openpgp:0:secret-key` (XEP-0373 §5).

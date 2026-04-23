@@ -1599,8 +1599,8 @@ export class XMPPClient {
       queryDisco: async (jid) => {
         return this.discovery.queryInfo(jid)
       },
-      publishPEP: async (node, item) => {
-        await this.pubsub.publish(node, item)
+      publishPEP: async (node, item, options) => {
+        await this.pubsub.publish(node, item, options)
       },
       queryPEP: async (jid, node) => {
         return this.pubsub.query(jid, node)

@@ -189,13 +189,34 @@ export interface Subscription {
   unsubscribe(): void
 }
 
+/**
+ * PEP publish options passed through to XEP-0060 `<publish-options/>`.
+ * The SDK's `PubSub.publish` supports more fields; we expose only the
+ * subset plugins actually need so the interface stays small.
+ */
+export interface PEPPublishOptions {
+  /** `pubsub#access_model` — who may read the node. */
+  accessModel?: 'open' | 'whitelist' | 'presence' | 'roster' | 'authorize'
+  /** `pubsub#max_items` — cap retained items. `1` produces a current-value node. */
+  maxItems?: number
+  /** `pubsub#persist_items` — retain across sessions (defaults to server policy). */
+  persistItems?: boolean
+}
+
 export interface XMPPPrimitives {
   /** Send an already-built outgoing stanza. */
   sendStanza(stanza: XMLElementData): Promise<void>
   /** Disco#info on a JID. */
   queryDisco(jid: BareJID): Promise<DiscoResult>
-  /** Publish to our own PEP node. */
-  publishPEP(node: string, item: PEPItem): Promise<void>
+  /**
+   * Publish to our own PEP node.
+   *
+   * `options` forwards XEP-0060 `<publish-options/>` configuration so a
+   * plugin can pin, for example, the secret-key backup node to
+   * `accessModel: 'whitelist'` (owner-only). Omitting it keeps the
+   * server's defaults.
+   */
+  publishPEP(node: string, item: PEPItem, options?: PEPPublishOptions): Promise<void>
   /** Fetch items from a remote PEP node. */
   queryPEP(jid: BareJID, node: string): Promise<PEPItem[]>
   /** Subscribe to PEP notifications from a remote JID for a given node. */

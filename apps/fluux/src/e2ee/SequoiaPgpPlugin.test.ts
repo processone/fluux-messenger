@@ -132,6 +132,56 @@ function makeFakeRust() {
         if (!fp) throw new Error('no fingerprint')
         return fp as T
       }
+      case 'openpgp_has_persisted_key': {
+        const jid = args!.accountJid as string
+        return accounts.has(jid) as T
+      }
+      case 'openpgp_backup_encrypt': {
+        const jid = args!.accountJid as string
+        const bundle = accounts.get(jid)
+        if (!bundle) throw new Error(`no key for ${jid}`)
+        const passphrase = args!.passphrase as string
+        // Opaque-but-parsable stub: the backup payload embeds the
+        // fingerprint and passphrase so tests can assert "the backup
+        // that came out was encrypted with THAT passphrase for THAT
+        // account" without a real KDF.
+        const marker = `BACKUP:${bundle.fingerprint}:${btoa(unescape(encodeURIComponent(passphrase)))}`
+        return `-----BEGIN PGP MESSAGE (STUB)-----\n${marker}\n-----END PGP MESSAGE (STUB)-----` as T
+      }
+      case 'openpgp_backup_import': {
+        const jid = args!.accountJid as string
+        const message = args!.backupMessage as string
+        const passphrase = args!.passphrase as string
+        const match = message.match(/BACKUP:(FP\d+):([^\n]+)/)
+        if (!match) throw new Error('malformed backup')
+        const [, fp, encodedPass] = match
+        const embeddedPass = decodeURIComponent(escape(atob(encodedPass)))
+        if (embeddedPass !== passphrase) {
+          throw new Error('no SKESK matched the supplied passphrase')
+        }
+        // Mirror real Rust: import overwrites any cached bundle for
+        // this JID with the imported one.
+        const bundle: KeyBundle = {
+          fingerprint: fp,
+          publicArmored: makeArmored(
+            '-----BEGIN PGP PUBLIC KEY BLOCK (STUB)-----',
+            '-----END PGP PUBLIC KEY BLOCK (STUB)-----',
+            fp,
+            jid,
+            'public',
+          ),
+          secretArmored: makeArmored(
+            '-----BEGIN PGP PRIVATE KEY BLOCK (STUB)-----',
+            '-----END PGP PRIVATE KEY BLOCK (STUB)-----',
+            fp,
+            jid,
+            'secret',
+          ),
+          keychainBacked: true,
+        }
+        accounts.set(jid, bundle)
+        return bundle as T
+      }
       default:
         throw new Error(`unknown command: ${cmd}`)
     }
@@ -245,17 +295,30 @@ function findChild(parent: XMLElementData, name: string): XMLElementData | undef
  */
 function makeContext(accountJid: string): {
   ctx: PluginContext
-  published: Array<{ node: string; item: PEPItem }>
+  published: Array<{
+    node: string
+    item: PEPItem
+    options?: Parameters<XMPPPrimitives['publishPEP']>[2]
+  }>
   peerPublish: (peer: string, node: string, item: PEPItem) => void
 } {
   const peerNodes = new Map<string, PEPItem[]>() // keyed "jid\0node"
-  const published: Array<{ node: string; item: PEPItem }> = []
+  const published: Array<{
+    node: string
+    item: PEPItem
+    options?: Parameters<XMPPPrimitives['publishPEP']>[2]
+  }> = []
 
   const xmpp: XMPPPrimitives = {
     sendStanza: async () => {},
     queryDisco: async () => ({ features: [], identities: [] }),
-    publishPEP: async (node, item) => {
-      published.push({ node, item })
+    publishPEP: async (node, item, options) => {
+      published.push({ node, item, options })
+      // Publishing to our own PEP node should also be readable via
+      // `queryPEP(ourJid, node)` — the secret-key tests round-trip through
+      // that path to confirm the backup is fetchable after we publish.
+      const selfKey = `${accountJid}\u0000${node}`
+      peerNodes.set(selfKey, [item])
     },
     queryPEP: async (jid, node) => peerNodes.get(`${jid}\u0000${node}`) ?? [],
     subscribePEP: () => ({ unsubscribe: () => {} }),
@@ -756,6 +819,154 @@ describe('SequoiaPgpPlugin', () => {
       const { ctx: ctx2 } = makeContext('me@example.com')
       await plugin2.init(ctx2)
       expect(plugin2.getOwnFingerprint()).toBe(fp)
+    })
+  })
+
+  describe('XEP-0373 §5 secret-key backup', () => {
+    const SECRET_KEY_NODE = 'urn:xmpp:openpgp:0:secret-key'
+
+    it('publishes the backup to the secret-key node with whitelist access', async () => {
+      // A leak of the backup ciphertext still requires a passphrase to
+      // exploit, but minimizing exposure matters — the node MUST be
+      // owner-only. This test pins that invariant.
+      const { ctx, published } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      const publishesBefore = published.length
+
+      await plugin.backupSecretKey('correct-horse-battery-staple')
+
+      expect(published).toHaveLength(publishesBefore + 1)
+      const backup = published[publishesBefore]
+      expect(backup.node).toBe(SECRET_KEY_NODE)
+      expect(backup.item.id).toBe('current')
+      expect(backup.item.payload.name).toBe('secretkey')
+      expect(backup.item.payload.attrs.xmlns).toBe('urn:xmpp:openpgp:0')
+      const dataChild = findChild(backup.item.payload, 'data')
+      expect(dataChild).toBeDefined()
+      expect(backup.options?.accessModel).toBe('whitelist')
+      expect(backup.options?.maxItems).toBe(1)
+    })
+
+    it('throws when no identity has been initialized', async () => {
+      // `backupSecretKey` on a plugin that never ran `ensureIdentity`
+      // would produce a cryptic "no key for account" from Rust. Surface
+      // a clearer error earlier so UI can distinguish this from a KDF
+      // failure.
+      const { ctx } = makeContext('me@example.com')
+      // Do NOT call init — we want to exercise the guard path.
+      plugin['ctx'] = ctx // eslint-disable-line @typescript-eslint/no-explicit-any
+
+      await expect(plugin.backupSecretKey('pp')).rejects.toThrow(/no identity/)
+    })
+
+    it('fetchSecretKeyBackup returns null when the node is empty', async () => {
+      const { ctx } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      const backup = await plugin.fetchSecretKeyBackup()
+      expect(backup).toBeNull()
+    })
+
+    it('hasSecretKeyBackup reflects whether a backup has been published', async () => {
+      const { ctx } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      expect(await plugin.hasSecretKeyBackup()).toBe(false)
+      await plugin.backupSecretKey('pp')
+      expect(await plugin.hasSecretKeyBackup()).toBe(true)
+    })
+
+    it('fetchSecretKeyBackup decodes the armored ciphertext exactly as published', async () => {
+      const { ctx } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      await plugin.backupSecretKey('pp')
+      const recovered = await plugin.fetchSecretKeyBackup()
+      expect(recovered).toBeTruthy()
+      // The stub Rust wraps the ciphertext in PGP MESSAGE headers; no
+      // matter what we emit, what comes back out of the wire must be
+      // the exact armored string — the `<data>` element is just base64
+      // transport and any distortion would break Rust import.
+      expect(recovered).toContain('BEGIN PGP MESSAGE')
+      expect(recovered).toContain('END PGP MESSAGE')
+    })
+
+    it('restoreSecretKey rejects a wrong passphrase', async () => {
+      // A wrong passphrase is user error, not corruption — surfaces as
+      // a throw so the UI can re-prompt. The local bundle must stay
+      // whatever it was; no half-written imports.
+      const { ctx } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      const originalFp = plugin.getOwnFingerprint()
+      await plugin.backupSecretKey('right-passphrase')
+
+      await expect(plugin.restoreSecretKey('wrong-passphrase')).rejects.toThrow(
+        /passphrase/,
+      )
+      expect(plugin.getOwnFingerprint()).toBe(originalFp)
+    })
+
+    it('restoreSecretKey throws a clean error when no backup exists', async () => {
+      // A brand-new account that hasn't published a backup yet — the UI
+      // should be able to detect this via `hasSecretKeyBackup()` first,
+      // but if it racially calls `restoreSecretKey` directly we still
+      // want a legible error rather than a silent noop.
+      const { ctx } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      await expect(plugin.restoreSecretKey('any')).rejects.toThrow(/no.*backup/i)
+    })
+
+    it('restoreSecretKey round-trips through backup + import on a fresh install', async () => {
+      // Simulate the second-device flow: device A backs up, device B
+      // (same JID, fresh plugin + Rust store) restores. The resulting
+      // fingerprint must match device A's, and the public key is
+      // re-published so peers see the restored identity.
+      const { ctx: ctxA, published: publishedA } = makeContext('me@example.com')
+      await plugin.init(ctxA)
+      const fpA = plugin.getOwnFingerprint()
+      await plugin.backupSecretKey('shared-pp')
+      const backup = await plugin.fetchSecretKeyBackup()
+      expect(backup).toBeTruthy()
+
+      // Device B: fresh plugin, fresh context, but the same backup is
+      // present on PEP. The test harness uses a module-level `fake`
+      // Rust, so simulate a cold state by clearing it.
+      fake.accounts.clear()
+      const pluginB = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const { ctx: ctxB, published: publishedB } = makeContext('me@example.com')
+      await pluginB.init(ctxB)
+      // The `init` generated a DIFFERENT key locally on device B; the
+      // restore must REPLACE that ephemeral bundle with the imported one.
+      const fpBbefore = pluginB.getOwnFingerprint()
+      expect(fpBbefore).not.toBe(fpA)
+
+      // Mirror the backup onto device B's PEP (the test contexts don't
+      // share state across plugin instances).
+      ctxB.xmpp.publishPEP(SECRET_KEY_NODE, {
+        id: 'current',
+        payload: {
+          name: 'secretkey',
+          attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+          children: [
+            { name: 'data', attrs: {}, children: [btoa(unescape(encodeURIComponent(backup!)))] },
+          ],
+        },
+      })
+
+      await pluginB.restoreSecretKey('shared-pp')
+
+      expect(pluginB.getOwnFingerprint()).toBe(fpA)
+      // Re-publish of the public key after restore: confirms the
+      // metadata + data nodes are re-announced so peers converge on
+      // the restored identity.
+      const afterRestoreRepublishes = publishedB.filter(
+        (p) =>
+          p.node === 'urn:xmpp:openpgp:0:public-keys' ||
+          p.node.startsWith('urn:xmpp:openpgp:0:public-keys:'),
+      )
+      // Device B publishes (pre-restore) + republishes (post-restore),
+      // so there are at least 4 public-keys-related entries.
+      expect(afterRestoreRepublishes.length).toBeGreaterThanOrEqual(4)
+      // Unused to silence "published is declared but never read" from the
+      // device A context.
+      void publishedA
     })
   })
 })

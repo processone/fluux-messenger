@@ -77,6 +77,15 @@ const OX_NAMESPACE = 'urn:xmpp:openpgp:0'
 /** PEP node that carries the `<public-keys-list>` metadata document. */
 const PUBLIC_KEYS_METADATA_NODE = 'urn:xmpp:openpgp:0:public-keys'
 /**
+ * PEP node for XEP-0373 §5 secret-key synchronization. Holds one
+ * `<secretkey>` item whose `<data>` is a base64-armored OpenPGP message
+ * symmetrically encrypted to the user's backup passphrase. MUST be
+ * published with `accessModel='whitelist'` so only the owning account
+ * can read the ciphertext — even a strong passphrase deserves not to
+ * be paired with an offline guessing target that's world-readable.
+ */
+const SECRET_KEY_NODE = 'urn:xmpp:openpgp:0:secret-key'
+/**
  * Build the per-key data node name for `fingerprint`. Each advertised
  * key gets its own node so a rotation can cleanly replace one entry
  * without disturbing the others.
@@ -184,6 +193,121 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
     }
     this.ownBundle = null
     this.peerKeys.clear()
+  }
+
+  // ---- XEP-0373 §5 Secret Key Synchronization ------------------------
+
+  /**
+   * Encrypt the in-memory TSK under `passphrase` and publish it to the
+   * secret-key PEP node. `accessModel: 'whitelist'` locks the node to
+   * the owning account — third parties can't even fetch the ciphertext.
+   *
+   * Callers must have successfully called {@link ensureIdentity} first;
+   * otherwise there's nothing to back up. The encrypt step runs
+   * server-side of the IPC boundary (Argon2 KDF) so it's async and
+   * may take a moment on slower machines.
+   */
+  async backupSecretKey(passphrase: string): Promise<void> {
+    const ctx = this.requireCtx()
+    if (!this.ownBundle) {
+      throw new Error('SequoiaPgpPlugin: no identity to back up — call ensureIdentity first')
+    }
+    const armoredMessage = await this.invoke<string>('openpgp_backup_encrypt', {
+      accountJid: ctx.account.jid,
+      passphrase,
+    })
+    const payload: XMLElementData = {
+      name: 'secretkey',
+      attrs: { xmlns: OX_NAMESPACE },
+      children: [
+        {
+          name: 'data',
+          attrs: {},
+          children: [base64Encode(armoredMessage)],
+        },
+      ],
+    }
+    await ctx.xmpp.publishPEP(
+      SECRET_KEY_NODE,
+      { id: CURRENT_ITEM_ID, payload },
+      { accessModel: 'whitelist', maxItems: 1, persistItems: true },
+    )
+  }
+
+  /**
+   * Retrieve the current secret-key backup from our own PEP, or `null`
+   * if no backup is published. Returns the armored OpenPGP message
+   * (what Rust's `openpgp_backup_import` expects) — the caller is
+   * responsible for prompting the user for a passphrase and handing
+   * both to {@link restoreSecretKey}.
+   */
+  async fetchSecretKeyBackup(): Promise<string | null> {
+    const ctx = this.requireCtx()
+    try {
+      const items = await ctx.xmpp.queryPEP(ctx.account.jid, SECRET_KEY_NODE)
+      for (const item of items) {
+        const armored = parseSecretKeyBackupItem(item.payload)
+        if (armored) return armored
+      }
+    } catch (err) {
+      // A server that hasn't seen the node before returns
+      // `item-not-found` — that's a perfectly normal "no backup yet"
+      // outcome, not an error the caller should propagate.
+      ctx.logger.debug(
+        `SequoiaPgpPlugin: fetchSecretKeyBackup: ${formatError(err)} (treated as no backup)`,
+      )
+    }
+    return null
+  }
+
+  /**
+   * Convenience check: does our PEP currently hold a backup? Implemented
+   * on top of {@link fetchSecretKeyBackup} rather than a disco round-trip
+   * because the fetch is the same cost and gives the caller the
+   * ciphertext if it decides to restore immediately after.
+   */
+  async hasSecretKeyBackup(): Promise<boolean> {
+    return (await this.fetchSecretKeyBackup()) !== null
+  }
+
+  /**
+   * Fetch the backup, decrypt with `passphrase`, persist locally, and
+   * re-publish the public key so peers converge on the restored
+   * identity. Any previously-cached local bundle for this account is
+   * replaced — callers should reserve this method for a confirmed
+   * "restore from server" user action.
+   *
+   * Throws when no backup exists or when the passphrase is wrong; the
+   * UI layer distinguishes by inspecting the error message or by
+   * calling {@link fetchSecretKeyBackup} first.
+   */
+  async restoreSecretKey(passphrase: string): Promise<IdentityInfo> {
+    const ctx = this.requireCtx()
+    const armoredMessage = await this.fetchSecretKeyBackup()
+    if (!armoredMessage) {
+      throw new Error('SequoiaPgpPlugin: no secret-key backup found on server')
+    }
+    const bundle = await this.invoke<KeyBundle>('openpgp_backup_import', {
+      accountJid: ctx.account.jid,
+      backupMessage: armoredMessage,
+      passphrase,
+    })
+    this.ownBundle = bundle
+
+    // Re-advertise our public key so peers can encrypt to the restored
+    // identity. A failure here isn't fatal for the restore itself — the
+    // key is already usable locally — but peers will be blind to us
+    // until a later publish succeeds.
+    try {
+      await this.publishOwnPublicKeyData(bundle)
+      await this.publishOwnPublicKeyMetadata(bundle)
+    } catch (err) {
+      ctx.logger.warn(
+        `SequoiaPgpPlugin: public key publish after restore failed: ${formatError(err)}`,
+      )
+    }
+
+    return { fingerprint: bundle.fingerprint }
   }
 
   /**
@@ -585,6 +709,23 @@ function parsePublicKeyDataItem(payload: XMLElementData): KeyBundle | null {
     // on our own identity. Default false; callers never inspect it here.
     keychainBacked: false,
   }
+}
+
+/**
+ * Parse a single `<secretkey xmlns='urn:xmpp:openpgp:0'><data>…</data></secretkey>`
+ * PEP item (XEP-0373 §5.1). The wrapped `<data>` text is the base64 of
+ * an armored OpenPGP message — return it decoded. `null` when the item
+ * is shaped unexpectedly (wrong namespace, missing `<data>`).
+ */
+function parseSecretKeyBackupItem(payload: XMLElementData): string | null {
+  if (payload.name !== 'secretkey' || payload.attrs?.xmlns !== OX_NAMESPACE) return null
+  for (const child of payload.children) {
+    if (typeof child === 'string') continue
+    if (child.name !== 'data') continue
+    const encoded = firstText(child)
+    if (encoded) return base64Decode(encoded)
+  }
+  return null
 }
 
 /**
