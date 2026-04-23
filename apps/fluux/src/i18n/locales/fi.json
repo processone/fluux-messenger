@@ -587,7 +587,18 @@
             "backupRegenerate": "Generate a new passphrase",
             "backupPublish": "Back up",
             "backupSuccess": "Key backed up to server",
-            "backupPluginUnavailable": "OpenPGP plugin not available"
+            "backupPluginUnavailable": "OpenPGP plugin not available",
+            "backupStatusChecking": "Checking server…",
+            "backupStatusNone": "Not backed up on this server yet.",
+            "backupStatusExists": "Backed up on this server.",
+            "restoreAction": "Restore from server",
+            "restoreDialogTitle": "Restore your OpenPGP key from backup",
+            "restoreDialogBody": "Enter the passphrase you saved when you created this backup. The restored key will replace the one currently stored on this device.",
+            "restoreDialogWarning": "Any encrypted messages sent since the backup was created — addressed only to the key on this device — will remain unreadable after the restore. Encrypt-to-all-devices is not supported by OpenPGP for XMPP.",
+            "restorePassphraseLabel": "Passphrase",
+            "restorePassphrasePlaceholder": "Enter the backup passphrase",
+            "restoreSuccess": "Key restored from server",
+            "restoreFailed": "Couldn't restore — wrong passphrase?"
         }
     },
     "update": {

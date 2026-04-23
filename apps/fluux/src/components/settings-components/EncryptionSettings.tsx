@@ -1,12 +1,13 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Copy, Check, Lock, AlertTriangle, Trash2, CloudUpload } from 'lucide-react'
+import { Copy, Check, Lock, AlertTriangle, Trash2, CloudUpload, CloudDownload } from 'lucide-react'
 import { useConnection, useXMPPContext } from '@fluux/sdk'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { registerE2EEPlugins, unregisterE2EEPlugins } from '@/e2ee/registerPlugins'
 import { useToastStore } from '@/stores/toastStore'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { BackupPassphraseDialog } from '@/components/BackupPassphraseDialog'
+import { RestorePassphraseDialog } from '@/components/RestorePassphraseDialog'
 
 type PluginStatus =
   | 'disabled'
@@ -47,6 +48,10 @@ export function EncryptionSettings() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [generationFailed, setGenerationFailed] = useState(false)
   const [showBackupDialog, setShowBackupDialog] = useState(false)
+  const [showRestoreDialog, setShowRestoreDialog] = useState(false)
+  // null = not yet probed, true/false = known. Kept narrow so the UI
+  // can show a "Checking…" placeholder without flickering a wrong state.
+  const [remoteBackupExists, setRemoteBackupExists] = useState<boolean | null>(null)
 
   const online = status === 'online'
   const pluginStatus: PluginStatus = !openpgpEnabled
@@ -140,6 +145,40 @@ export function EncryptionSettings() {
     }
   }, [fingerprint, addToast, t])
 
+  // Probe the server for an existing backup once the local plugin is
+  // ready. We don't spam this — fire once per transition into `ready`
+  // (or after the user has just published/restored, which we do by
+  // bumping a local "needs-refresh" nonce).
+  const [backupProbeNonce, setBackupProbeNonce] = useState(0)
+  useEffect(() => {
+    if (pluginStatus !== 'ready') {
+      setRemoteBackupExists(null)
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      const plugin = client.e2ee?.getPlugin('openpgp') as
+        | { hasSecretKeyBackup?: () => Promise<boolean> }
+        | null
+        | undefined
+      if (!plugin?.hasSecretKeyBackup) {
+        if (!cancelled) setRemoteBackupExists(false)
+        return
+      }
+      try {
+        const exists = await plugin.hasSecretKeyBackup()
+        if (!cancelled) setRemoteBackupExists(exists)
+      } catch {
+        // Treat probe failure (server down, unsupported PEP feature)
+        // as "no backup" rather than leaving the UI in limbo.
+        if (!cancelled) setRemoteBackupExists(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [pluginStatus, client, backupProbeNonce])
+
   const handleBackupConfirm = useCallback(
     async (passphrase: string) => {
       const plugin = client.e2ee?.getPlugin('openpgp') as
@@ -151,7 +190,29 @@ export function EncryptionSettings() {
       }
       await plugin.backupSecretKey(passphrase)
       setShowBackupDialog(false)
+      // Re-probe now that we've published — status line should flip to
+      // "backed up on server" without needing a page reload.
+      setBackupProbeNonce((n) => n + 1)
       addToast('success', t('settings.encryption.backupSuccess'))
+    },
+    [client, addToast, t],
+  )
+
+  const handleRestoreConfirm = useCallback(
+    async (passphrase: string) => {
+      const plugin = client.e2ee?.getPlugin('openpgp') as
+        | { restoreSecretKey?: (pp: string) => Promise<{ fingerprint: string }> }
+        | null
+        | undefined
+      if (!plugin?.restoreSecretKey) {
+        throw new Error(t('settings.encryption.backupPluginUnavailable'))
+      }
+      const info = await plugin.restoreSecretKey(passphrase)
+      // Surface the restored fingerprint immediately so the user sees
+      // the effect without waiting for the next polling tick.
+      setFingerprint(info.fingerprint)
+      setShowRestoreDialog(false)
+      addToast('success', t('settings.encryption.restoreSuccess'))
     },
     [client, addToast, t],
   )
@@ -296,13 +357,47 @@ export function EncryptionSettings() {
             <p className="text-xs text-fluux-muted leading-snug">
               {t('settings.encryption.backupDescription')}
             </p>
-            <button
-              onClick={() => setShowBackupDialog(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
-            >
-              <CloudUpload className="w-3.5 h-3.5" />
-              {t('settings.encryption.backupAction')}
-            </button>
+            {/*
+              Status line. `remoteBackupExists === null` is the pre-probe
+              transient window; we intentionally render it rather than
+              hide the row so the user understands a check is happening
+              and doesn't wonder why a backup button has no context.
+            */}
+            <p className="text-xs leading-snug">
+              {remoteBackupExists === null && (
+                <span className="text-fluux-muted">
+                  {t('settings.encryption.backupStatusChecking')}
+                </span>
+              )}
+              {remoteBackupExists === false && (
+                <span className="text-fluux-muted">
+                  {t('settings.encryption.backupStatusNone')}
+                </span>
+              )}
+              {remoteBackupExists === true && (
+                <span className="text-green-600 dark:text-green-400">
+                  {t('settings.encryption.backupStatusExists')}
+                </span>
+              )}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setShowBackupDialog(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
+              >
+                <CloudUpload className="w-3.5 h-3.5" />
+                {t('settings.encryption.backupAction')}
+              </button>
+              {remoteBackupExists === true && (
+                <button
+                  onClick={() => setShowRestoreDialog(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
+                >
+                  <CloudDownload className="w-3.5 h-3.5" />
+                  {t('settings.encryption.restoreAction')}
+                </button>
+              )}
+            </div>
           </div>
         )}
 
@@ -346,6 +441,13 @@ export function EncryptionSettings() {
         <BackupPassphraseDialog
           onConfirm={handleBackupConfirm}
           onCancel={() => setShowBackupDialog(false)}
+        />
+      )}
+
+      {showRestoreDialog && (
+        <RestorePassphraseDialog
+          onConfirm={handleRestoreConfirm}
+          onCancel={() => setShowRestoreDialog(false)}
         />
       )}
     </section>

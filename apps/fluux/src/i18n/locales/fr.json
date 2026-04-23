@@ -588,7 +588,18 @@
             "backupRegenerate": "Générer une nouvelle phrase",
             "backupPublish": "Sauvegarder",
             "backupSuccess": "Clé sauvegardée sur le serveur",
-            "backupPluginUnavailable": "Plugin OpenPGP indisponible"
+            "backupPluginUnavailable": "Plugin OpenPGP indisponible",
+            "backupStatusChecking": "Vérification sur le serveur…",
+            "backupStatusNone": "Pas encore sauvegardée sur ce serveur.",
+            "backupStatusExists": "Sauvegardée sur ce serveur.",
+            "restoreAction": "Restaurer depuis le serveur",
+            "restoreDialogTitle": "Restaurer votre clé OpenPGP depuis la sauvegarde",
+            "restoreDialogBody": "Saisissez la phrase secrète que vous avez enregistrée lors de la création de cette sauvegarde. La clé restaurée remplacera celle actuellement stockée sur cet appareil.",
+            "restoreDialogWarning": "Les messages chiffrés envoyés depuis la création de la sauvegarde — adressés uniquement à la clé de cet appareil — resteront illisibles après la restauration. OpenPGP pour XMPP ne gère pas le chiffrement vers plusieurs appareils.",
+            "restorePassphraseLabel": "Phrase secrète",
+            "restorePassphrasePlaceholder": "Saisissez la phrase de sauvegarde",
+            "restoreSuccess": "Clé restaurée depuis le serveur",
+            "restoreFailed": "Échec de la restauration — phrase secrète incorrecte ?"
         }
     },
     "update": {
