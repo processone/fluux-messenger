@@ -185,15 +185,68 @@ We have many ideas and exciting additions planned for Fluux Messenger! We welcom
 
 *Have suggestions for this FAQ? Feel free to ask questions or propose additions in our [Q&A Discussions](https://github.com/processone/fluux-messenger/discussions/categories/q-a).*
 
-### Which XMPP servers are compatible with Fluux Messenger?
+### Installation & Compatibility
+
+#### Which XMPP servers are compatible with Fluux Messenger?
 
 We aim to create an XMPP client that respects standards, but currently the project has been tested **exclusively with [ejabberd](https://github.com/processone/ejabberd)**. We're eager to receive feedback on compatibility with other servers. If you test Fluux Messenger with a different XMPP server, please share your experience in the [Discussions](https://github.com/processone/fluux-messenger/discussions)!
 
-### Will there be other installations methods? Can I run it on my own server?
+#### Will there be other installations methods? Can I run it on my own server?
 
 Yes. A pre-built static web bundle (`-web.zip`) is available on the [releases page](https://github.com/processone/fluux-messenger/releases/latest). Simply extract it and serve it with any web server.
 
 Looking ahead, we also plan to make Fluux Messenger available on F-Droid, and possibly on the Google Play Store as well.
+
+#### My XMPP server only listens on the standard TCP port (5222), can I still use Fluux Messenger?
+
+Yes, on the **desktop** app: it ships with a built-in WebSocket-to-TCP proxy. It first tries WebSocket (via [XEP-0156](https://xmpp.org/extensions/xep-0156.html) discovery), then falls back to TCP/TLS.
+
+The **web** version requires WebSocket on your server, with [CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) configured to allow the origin from which Fluux is served.
+
+### Features & Roadmap
+
+#### Does Fluux Messenger support end-to-end encryption?
+
+Not yet, but it's on our roadmap. We're currently prototyping **OpenPGP** support (see the [`openpgp`](https://github.com/processone/fluux-messenger/tree/openpgp) branch if you're curious). **OMEMO** will probably come later: beyond the implementation work, it raises licensing questions we want to address properly. We're also watching **MLS** as an option for group chats.
+
+#### When will voice and video calls be available?
+
+We know it's important and we want to bring it. We can't commit to a timeline yet: there's real work to do on both the client and server side, especially for group calls which need a media-mixing SFU to be reliable.
+
+#### Does Fluux Messenger support read receipts?
+
+Not yet. Read receipts are on our list and we plan to start with 1-to-1 chats. For group rooms we're still weighing the question: how useful they actually are at scale, how best to implement them and the privacy implications of broadcasting read state to every participant.
+
+#### Does Fluux Messenger support Spaces (bundles of rooms)?
+
+Not yet. Spaces ([XEP-0503](https://xmpp.org/extensions/xep-0503.html)) have started to appear in the ecosystem (Movim has an experimental implementation) and we're watching how it evolves before committing to an approach.
+
+#### Can I contribute a translation for my language?
+
+Yes, translations are welcome. Locale files live under `apps/fluux/src/i18n/locales/`. See [CONTRIBUTING.md](CONTRIBUTING.md) for the general contribution workflow. Feel free to open an issue or discussion first if you have questions.
+
+#### Is there a roadmap?
+
+There's no formal roadmap document, but we track upcoming work through GitHub [Milestones](https://github.com/processone/fluux-messenger/milestones) and [Issues](https://github.com/processone/fluux-messenger/issues). Feel free to follow, comment or open a new issue for anything you'd like to see.
+
+### Troubleshooting
+
+#### My antivirus flags the Windows installer as malicious, is the app safe?
+
+Yes. Two things can trigger warnings right now:
+
+- Starting with 0.15, the Windows binary is temporarily **not code-signed** while we work through the signing infrastructure (see [#290](https://github.com/processone/fluux-messenger/issues/290)).
+- The combination of [Tauri](https://tauri.app/) and [NSIS](https://nsis.sourceforge.io/) used to package the app is also a known source of antivirus false positives affecting many legitimate apps.
+
+If you'd rather verify for yourself, you can always [build the app from source](docs/DEVELOPER.md).
+
+#### Closing the window doesn't quit the app, is that normal?
+
+Yes. By default, closing the main window minimizes Fluux to the system tray or menu bar so it can keep your XMPP session alive and deliver notifications. To fully exit, use the **Quit** entry from the tray menu.
+
+#### On the web version, why do I have to log in again after closing the tab?
+
+For security, credentials are only kept in the session context. Nothing sensitive is persisted to local storage. If your XMPP server supports [FAST](https://xmpp.org/extensions/xep-0484.html) authentication tokens (SASL2), reconnection across page reloads will work seamlessly, without ever storing your password. If it doesn't, your server likely doesn't yet support FAST.
 
 ## Contributing
 
