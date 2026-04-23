@@ -5,7 +5,7 @@ import { useConnection, useXMPPContext } from '@fluux/sdk'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { registerE2EEPlugins, unregisterE2EEPlugins } from '@/e2ee/registerPlugins'
 import { useToastStore } from '@/stores/toastStore'
-import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { DeleteOpenpgpKeyDialog } from '@/components/DeleteOpenpgpKeyDialog'
 import { BackupPassphraseDialog } from '@/components/BackupPassphraseDialog'
 import { RestorePassphraseDialog } from '@/components/RestorePassphraseDialog'
 import { EnableWithBackupDialog } from '@/components/EnableWithBackupDialog'
@@ -304,28 +304,51 @@ export function EncryptionSettings() {
     [client, addToast, t],
   )
 
-  const handleDeleteKey = useCallback(async () => {
-    setIsDeleting(true)
-    try {
-      const plugin = client.e2ee?.getPlugin('openpgp') as
-        | { deleteIdentity?: () => Promise<void> }
-        | null
-        | undefined
-      if (plugin?.deleteIdentity) {
-        await plugin.deleteIdentity()
+  const handleDeleteKey = useCallback(
+    async ({ deleteBackup }: { deleteBackup: boolean }) => {
+      setIsDeleting(true)
+      try {
+        const plugin = client.e2ee?.getPlugin('openpgp') as
+          | {
+              retractPublicKeys?: () => Promise<void>
+              retractSecretKeyBackup?: () => Promise<void>
+              deleteIdentity?: () => Promise<void>
+            }
+          | null
+          | undefined
+
+        // Order matters. Retract FIRST so peers stop discovering our
+        // fingerprint while we still have an XMPP session. If the
+        // retract throws (network, server rejected the IQ), we bubble
+        // the error to the dialog and leave local key material intact —
+        // the user can retry without being stranded.
+        if (plugin?.retractPublicKeys) {
+          await plugin.retractPublicKeys()
+        }
+        if (deleteBackup && plugin?.retractSecretKeyBackup) {
+          await plugin.retractSecretKeyBackup()
+        }
+
+        // Peers are now (best-effort) unable to encrypt to us — safe to
+        // wipe the local key material and unregister.
+        if (plugin?.deleteIdentity) {
+          await plugin.deleteIdentity()
+        }
+        await unregisterE2EEPlugins(client)
+        setOpenpgpEnabled(false)
+        setFingerprint(null)
+        setShowDeleteConfirm(false)
+        addToast('success', t('settings.encryption.deleteKeySuccess'))
+      } catch (err) {
+        console.error('[Fluux] E2EE delete key failed:', err)
+        addToast('error', t('settings.encryption.deleteKeyFailed'))
+        throw err
+      } finally {
+        setIsDeleting(false)
       }
-      await unregisterE2EEPlugins(client)
-      setOpenpgpEnabled(false)
-      setFingerprint(null)
-      setShowDeleteConfirm(false)
-      addToast('success', t('settings.encryption.deleteKeySuccess'))
-    } catch (err) {
-      console.error('[Fluux] E2EE delete key failed:', err)
-      addToast('error', t('settings.encryption.deleteKeyFailed'))
-    } finally {
-      setIsDeleting(false)
-    }
-  }, [client, setOpenpgpEnabled, addToast, t])
+    },
+    [client, setOpenpgpEnabled, addToast, t],
+  )
 
   return (
     <section className="max-w-md w-full">
@@ -509,14 +532,10 @@ export function EncryptionSettings() {
         )}
       </div>
 
-      {showDeleteConfirm && (
-        <ConfirmDialog
-          title={t('settings.encryption.deleteKeyConfirmTitle')}
-          message={t('settings.encryption.deleteKeyConfirmMessage', {
-            fingerprint: fingerprint ? formatFingerprint(fingerprint) : '',
-          })}
-          confirmLabel={t('settings.encryption.deleteKeyConfirmAction')}
-          variant="danger"
+      {showDeleteConfirm && fingerprint && (
+        <DeleteOpenpgpKeyDialog
+          fingerprint={fingerprint}
+          backupExists={remoteBackupExists === true}
           onConfirm={handleDeleteKey}
           onCancel={() => {
             if (!isDeleting) setShowDeleteConfirm(false)
@@ -550,17 +569,10 @@ export function EncryptionSettings() {
 }
 
 /**
- * Split a hex fingerprint into space-separated blocks of 4 for display.
- * Works for any length: 40 chars (v4/RFC 4880, SHA-1) → 10 groups, or
- * 64 chars (v6/RFC 9580, SHA-256) → 16 groups.
- */
-function formatFingerprint(fp: string): string {
-  return fp.match(/.{1,4}/g)?.join(' ') ?? fp
-}
-
-/**
- * Same as formatFingerprint, but splits the groups across two balanced lines
- * so the fingerprint is easier to read and fills the available width.
+ * Split a hex fingerprint into groups of 4 across two balanced lines so
+ * it's easy to read and fills the available width. Works for any length:
+ * 40 chars (v4/RFC 4880, SHA-1) → 10 groups, or 64 chars (v6/RFC 9580,
+ * SHA-256) → 16 groups.
  */
 function formatFingerprintMultiline(fp: string): string {
   const groups = fp.match(/.{1,4}/g)

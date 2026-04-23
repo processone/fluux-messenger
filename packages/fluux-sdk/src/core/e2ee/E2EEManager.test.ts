@@ -21,6 +21,7 @@ function makeXmpp(): XMPPPrimitives {
     sendStanza: async () => {},
     queryDisco: async () => ({ features: [], identities: [] }),
     publishPEP: async () => {},
+    retractPEP: async () => {},
     queryPEP: async () => [],
     subscribePEP: () => ({ unsubscribe: () => {} }),
   }

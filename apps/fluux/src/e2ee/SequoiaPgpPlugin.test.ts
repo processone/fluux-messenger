@@ -300,6 +300,7 @@ function makeContext(accountJid: string): {
     item: PEPItem
     options?: Parameters<XMPPPrimitives['publishPEP']>[2]
   }>
+  retracted: Array<{ node: string; itemId: string }>
   peerPublish: (peer: string, node: string, item: PEPItem) => void
 } {
   const peerNodes = new Map<string, PEPItem[]>() // keyed "jid\0node"
@@ -308,6 +309,7 @@ function makeContext(accountJid: string): {
     item: PEPItem
     options?: Parameters<XMPPPrimitives['publishPEP']>[2]
   }> = []
+  const retracted: Array<{ node: string; itemId: string }> = []
 
   const xmpp: XMPPPrimitives = {
     sendStanza: async () => {},
@@ -319,6 +321,13 @@ function makeContext(accountJid: string): {
       // that path to confirm the backup is fetchable after we publish.
       const selfKey = `${accountJid}\u0000${node}`
       peerNodes.set(selfKey, [item])
+    },
+    retractPEP: async (node, itemId) => {
+      retracted.push({ node, itemId })
+      // Mirror the server's behaviour: a retract makes the item disappear
+      // from our own node so subsequent queries don't re-surface it.
+      const selfKey = `${accountJid}\u0000${node}`
+      peerNodes.delete(selfKey)
     },
     queryPEP: async (jid, node) => peerNodes.get(`${jid}\u0000${node}`) ?? [],
     subscribePEP: () => ({ unsubscribe: () => {} }),
@@ -335,7 +344,7 @@ function makeContext(accountJid: string): {
     existing.push(item)
     peerNodes.set(key, existing)
   }
-  return { ctx, published, peerPublish }
+  return { ctx, published, retracted, peerPublish }
 }
 
 describe('SequoiaPgpPlugin', () => {
@@ -863,6 +872,48 @@ describe('SequoiaPgpPlugin', () => {
       const { ctx: ctx2 } = makeContext('me@example.com')
       await plugin2.init(ctx2)
       expect(plugin2.getOwnFingerprint()).toBe(fp)
+    })
+
+    it('retractPublicKeys removes both metadata and per-fingerprint data nodes', async () => {
+      const { ctx, retracted } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      const fp = plugin.getOwnFingerprint()
+      expect(fp).not.toBeNull()
+
+      await plugin.retractPublicKeys()
+
+      const nodes = retracted.map((r) => r.node).sort()
+      expect(nodes).toEqual(
+        [
+          'urn:xmpp:openpgp:0:public-keys',
+          `urn:xmpp:openpgp:0:public-keys:${fp}`,
+        ].sort(),
+      )
+      // All item ids are the XEP-0373 canonical "current".
+      expect(retracted.every((r) => r.itemId === 'current')).toBe(true)
+    })
+
+    it('retractPublicKeys tolerates retract failures so the local wipe can still proceed', async () => {
+      const { ctx } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      // Replace retractPEP with one that always rejects, mimicking an
+      // unreachable server during the destructive delete flow.
+      ctx.xmpp.retractPEP = async () => {
+        throw new Error('server unreachable')
+      }
+
+      await expect(plugin.retractPublicKeys()).resolves.toBeUndefined()
+    })
+
+    it('retractSecretKeyBackup retracts the secret-key node', async () => {
+      const { ctx, retracted } = makeContext('me@example.com')
+      await plugin.init(ctx)
+
+      await plugin.retractSecretKeyBackup()
+
+      expect(retracted).toEqual([
+        { node: 'urn:xmpp:openpgp:0:secret-key', itemId: 'current' },
+      ])
     })
   })
 

@@ -185,6 +185,14 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
    * to be called from a confirmed, destructive "Delete my OpenPGP key"
    * action — not from shutdown. The next `init` will generate a fresh key
    * with a new fingerprint.
+   *
+   * Callers who care about peers no longer encrypting to the soon-to-be
+   * dead key must call {@link retractPublicKeys} FIRST while the XMPP
+   * session and the known fingerprint are both still available. This
+   * method deliberately does not trigger retraction itself — retraction
+   * can fail for reasons unrelated to local deletion (network, server
+   * unavailable) and the caller needs to decide whether to bail or
+   * proceed anyway.
    */
   async deleteIdentity(): Promise<void> {
     const accountJid = this.ctx?.account.jid
@@ -193,6 +201,56 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
     }
     this.ownBundle = null
     this.peerKeys.clear()
+  }
+
+  /**
+   * Retract our published public key from PEP so peers stop encrypting to
+   * this identity. Retracts the per-fingerprint data node item first, then
+   * the metadata list — order mirrors the inverse of publish so peers
+   * never see "metadata points to a fingerprint whose data node is gone".
+   *
+   * Servers normally tolerate retracting an already-absent item silently;
+   * we still `.catch(() => {})` each call so a partially-published state
+   * (metadata present, data missing, or vice versa) doesn't break the
+   * caller's flow. Returns without error when there's nothing to retract.
+   */
+  async retractPublicKeys(): Promise<void> {
+    const ctx = this.requireCtx()
+    const fingerprint = this.ownBundle?.fingerprint
+    // Retract metadata first so peers immediately stop discovering the
+    // fingerprint, then clean up the data node. The opposite order would
+    // briefly leave metadata pointing at a 404 data node.
+    await ctx.xmpp
+      .retractPEP(PUBLIC_KEYS_METADATA_NODE, CURRENT_ITEM_ID)
+      .catch((err) => {
+        ctx.logger.debug(
+          `SequoiaPgpPlugin: retract metadata failed: ${formatError(err)}`,
+        )
+      })
+    if (fingerprint) {
+      await ctx.xmpp
+        .retractPEP(publicKeyDataNodeFor(fingerprint), CURRENT_ITEM_ID)
+        .catch((err) => {
+          ctx.logger.debug(
+            `SequoiaPgpPlugin: retract data node for ${fingerprint} failed: ${formatError(err)}`,
+          )
+        })
+    }
+  }
+
+  /**
+   * Retract the server-side secret-key backup. Idempotent — safe to call
+   * when no backup is published. Intended for the "also delete my backup"
+   * branch of the destructive delete flow; the default delete path
+   * preserves the backup so the user can still restore.
+   */
+  async retractSecretKeyBackup(): Promise<void> {
+    const ctx = this.requireCtx()
+    await ctx.xmpp.retractPEP(SECRET_KEY_NODE, CURRENT_ITEM_ID).catch((err) => {
+      ctx.logger.debug(
+        `SequoiaPgpPlugin: retract secret-key backup failed: ${formatError(err)}`,
+      )
+    })
   }
 
   // ---- XEP-0373 §5 Secret Key Synchronization ------------------------
