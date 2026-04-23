@@ -30,9 +30,10 @@ import {
   NS_POLL,
   NS_DELAY,
 } from '../namespaces'
-import { dataToElement, elementToData } from '../e2ee/stanzaAdapter'
-import type { E2EEManager, E2EEPlugin, EncryptedPayload, SecurityContext } from '../e2ee'
+import { dataToElement } from '../e2ee/stanzaAdapter'
+import type { E2EEManager } from '../e2ee'
 import { E2EEEncryptionRequiredError } from '../e2ee'
+import { decryptStanzaInPlace, readStashedSecurityContext, stanzaHasE2EEClaim } from '../e2ee/stanzaDecrypt'
 import type {
   Message,
   MentionReference,
@@ -321,6 +322,10 @@ export class Chat extends BaseModule {
    * off the async decrypt-and-reprocess flow and return true. Returns false
    * if no manager is available, no plugin claims a child, or the stanza
    * has already been decrypted in a previous pass (guarded by a marker).
+   *
+   * The actual decrypt step lives in {@link decryptStanzaInPlace} and is
+   * shared with the MAM module so archived encrypted messages go through
+   * the exact same pipeline.
    */
   private tryHandleEncrypted(
     stanza: Element,
@@ -329,113 +334,32 @@ export class Chat extends BaseModule {
   ): boolean {
     const manager = this.deps.getE2EEManager?.()
     if (!manager) return false
-    // The re-entered call after decryption has the marker set; skip the hook
-    // then so we don't loop on our own synthetic state.
-    if ((stanza as unknown as { __e2eeDecrypted?: boolean }).__e2eeDecrypted) {
-      return false
-    }
-
-    for (const child of stanza.children) {
-      if (typeof child === 'string') continue
-      const childEl = child as Element
-      const claim = manager.claimInbound(elementToData(childEl))
-      if (claim) {
-        void this.decryptAndReprocess(manager, claim, childEl, stanza, isCarbonCopy, isSentCarbon)
-        return true
-      }
-    }
-    return false
+    if (!stanzaHasE2EEClaim(stanza, manager)) return false
+    void this.decryptAndReprocess(manager, stanza, isCarbonCopy, isSentCarbon)
+    return true
   }
 
   private async decryptAndReprocess(
     manager: E2EEManager,
-    claim: { plugin: E2EEPlugin; payload: EncryptedPayload },
-    encryptedChild: Element,
     stanza: Element,
     isCarbonCopy: boolean,
     isSentCarbon: boolean,
   ): Promise<void> {
     const from = stanza.attrs.from
     const bareFrom = from ? getBareJid(from) : ''
-
-    let plaintext: string | null = null
-    let securityContext: SecurityContext | null = null
-    let failureReason: string | null = null
-
-    try {
-      const result = await manager.decryptInbound(claim.payload.stanzaElement, {
-        kind: 'direct',
-        peer: bareFrom,
-      })
-      if (result) {
-        plaintext = new TextDecoder().decode(result.plaintext)
-        securityContext = result.securityContext
-      } else {
-        failureReason = 'no plugin claimed the payload'
-      }
-    } catch (err) {
-      failureReason = err instanceof Error ? err.message : String(err)
-    }
-
-    // Always strip the encrypted element — either we replace the body with
-    // plaintext (success) or we fall through to whatever fallback <body>
-    // the sender included per XEP-0373. Leaving the encrypted element in
-    // place would cause the re-entered call to claim it again and loop.
-    const encryptedIdx = stanza.children.indexOf(encryptedChild)
-    if (encryptedIdx >= 0) stanza.children.splice(encryptedIdx, 1)
-
-    if (failureReason !== null) {
-      logWarn(`E2EE decrypt failed for message from ${bareFrom}: ${failureReason}`)
-      // Honour the XEP-0373 convention: a well-behaved sender inserted a
-      // fallback <body> for clients that cannot decrypt. Leave it in place.
-      // Synthesize a minimal placeholder only when none was provided, so
-      // the message still surfaces in the conversation with a clear signal
-      // rather than being silently dropped.
-      if (!stanza.getChild('body')) {
-        stanza.children.push(
-          xml('body', {}, '[Encrypted message: could not decrypt]'),
-        )
-      }
-      securityContext = {
-        protocolId: claim.plugin.descriptor.id,
-        trust: 'untrusted',
-        notes: ['Could not decrypt'],
-      }
-    } else if (plaintext !== null) {
-      // Success path — replace the fallback body with the decrypted text.
-      const bodyEl = stanza.getChild('body')
-      if (bodyEl) {
-        bodyEl.children = [plaintext]
-      } else {
-        stanza.children.push(xml('body', {}, plaintext))
-      }
-    }
-
-    if (securityContext) {
-      this.attachSecurityContext(stanza, securityContext)
-    }
-
-    // Mark as already-decrypted (or already-attempted) so tryHandleEncrypted
-    // bails out on re-entry. The stripped encrypted element already prevents
-    // re-claiming; the marker is belt-and-braces.
-    ;(stanza as unknown as { __e2eeDecrypted: boolean }).__e2eeDecrypted = true
-
+    await decryptStanzaInPlace(stanza, manager, bareFrom)
     this.handleMessageInternal(stanza, isCarbonCopy, isSentCarbon)
-  }
-
-  private attachSecurityContext(stanza: Element, securityContext: SecurityContext): void {
-    ;(stanza as unknown as { __securityContext?: SecurityContext }).__securityContext = securityContext
   }
 
   /**
    * Read back the security context stashed on a stanza by
-   * {@link decryptAndReprocess}. Returns `undefined` for stanzas that were
+   * {@link decryptStanzaInPlace}. Returns `undefined` for stanzas that were
    * never claimed by a plugin (cleartext messages). The shape matches
    * {@link MessageSecurityContext} exactly; we narrow it here so downstream
    * consumers don't need to import from the e2ee module.
    */
-  private readStashedSecurityContext(stanza: Element): MessageSecurityContext | undefined {
-    const stash = (stanza as unknown as { __securityContext?: SecurityContext }).__securityContext
+  private readMessageSecurityContext(stanza: Element): MessageSecurityContext | undefined {
+    const stash = readStashedSecurityContext(stanza)
     if (!stash) return undefined
     return {
       protocolId: stash.protocolId,
@@ -1513,7 +1437,7 @@ export class Chat extends BaseModule {
     // Use stable ID for messages without ID (e.g., from IRC bridges) to enable deduplication
     const messageId = replaceTargetId || stanza.attrs.id || generateStableMessageId(bareFrom, parsed.timestamp, body)
 
-    const securityContext = this.readStashedSecurityContext(stanza)
+    const securityContext = this.readMessageSecurityContext(stanza)
     const message: Message = {
       type: 'chat',
       id: messageId,
@@ -1572,7 +1496,7 @@ export class Chat extends BaseModule {
     // XEP-0421: Anonymous Unique Occupant Identifiers
     const occupantId = stanza.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id
 
-    const securityContext = this.readStashedSecurityContext(stanza)
+    const securityContext = this.readMessageSecurityContext(stanza)
     const message: RoomMessage = {
       type: 'groupchat',
       id: messageId,
