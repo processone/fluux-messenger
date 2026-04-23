@@ -574,7 +574,21 @@
             "deleteKeyConfirmAction": "Supprimer la clé",
             "deleteKeySuccess": "Clé OpenPGP supprimée",
             "deleteKeyFailed": "Impossible de supprimer la clé",
-            "statusGenerationFailed": "Échec de la génération de la clé. Consultez la console développeur pour les détails."
+            "statusGenerationFailed": "Échec de la génération de la clé. Consultez la console développeur pour les détails.",
+            "backupLabel": "Sauvegarde de la clé",
+            "backupDescription": "Publie une copie chiffrée de votre clé sur votre serveur XMPP. Protégée par une phrase secrète que vous seul connaissez, lisible uniquement par votre compte (access model : whitelist). Permet de lire l'historique chiffré sur un nouvel appareil après connexion et saisie de la phrase.",
+            "backupAction": "Sauvegarder sur le serveur",
+            "backupDialogTitle": "Sauvegarder votre clé OpenPGP",
+            "backupDialogBody": "Une phrase secrète a été générée pour protéger votre clé. Notez-la ou rangez-la dans un gestionnaire de mots de passe — vous en aurez besoin pour restaurer la clé sur un autre appareil.",
+            "backupDialogWarning": "Si vous perdez cette phrase, la sauvegarde est irrécupérable et votre historique chiffré sera illisible sur un nouvel appareil. Enregistrez-la maintenant.",
+            "backupAcknowledgment": "J'ai enregistré cette phrase secrète en lieu sûr.",
+            "backupCopy": "Copier la phrase",
+            "backupCopied": "Copié",
+            "backupCopyFailed": "Impossible de copier dans le presse-papiers",
+            "backupRegenerate": "Générer une nouvelle phrase",
+            "backupPublish": "Sauvegarder",
+            "backupSuccess": "Clé sauvegardée sur le serveur",
+            "backupPluginUnavailable": "Plugin OpenPGP indisponible"
         }
     },
     "update": {

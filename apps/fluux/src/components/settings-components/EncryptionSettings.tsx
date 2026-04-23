@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Copy, Check, Lock, AlertTriangle, Trash2 } from 'lucide-react'
+import { Copy, Check, Lock, AlertTriangle, Trash2, CloudUpload } from 'lucide-react'
 import { useConnection, useXMPPContext } from '@fluux/sdk'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { registerE2EEPlugins, unregisterE2EEPlugins } from '@/e2ee/registerPlugins'
 import { useToastStore } from '@/stores/toastStore'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { BackupPassphraseDialog } from '@/components/BackupPassphraseDialog'
 
 type PluginStatus =
   | 'disabled'
@@ -45,6 +46,7 @@ export function EncryptionSettings() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [generationFailed, setGenerationFailed] = useState(false)
+  const [showBackupDialog, setShowBackupDialog] = useState(false)
 
   const online = status === 'online'
   const pluginStatus: PluginStatus = !openpgpEnabled
@@ -137,6 +139,22 @@ export function EncryptionSettings() {
       addToast('error', t('settings.encryption.copyFailed'))
     }
   }, [fingerprint, addToast, t])
+
+  const handleBackupConfirm = useCallback(
+    async (passphrase: string) => {
+      const plugin = client.e2ee?.getPlugin('openpgp') as
+        | { backupSecretKey?: (pp: string) => Promise<void> }
+        | null
+        | undefined
+      if (!plugin?.backupSecretKey) {
+        throw new Error(t('settings.encryption.backupPluginUnavailable'))
+      }
+      await plugin.backupSecretKey(passphrase)
+      setShowBackupDialog(false)
+      addToast('success', t('settings.encryption.backupSuccess'))
+    },
+    [client, addToast, t],
+  )
 
   const handleDeleteKey = useCallback(async () => {
     setIsDeleting(true)
@@ -269,6 +287,25 @@ export function EncryptionSettings() {
           </div>
         </div>
 
+        {/* Backup to server — only when a key actually exists to back up. */}
+        {pluginStatus === 'ready' && (
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-fluux-text">
+              {t('settings.encryption.backupLabel')}
+            </label>
+            <p className="text-xs text-fluux-muted leading-snug">
+              {t('settings.encryption.backupDescription')}
+            </p>
+            <button
+              onClick={() => setShowBackupDialog(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
+            >
+              <CloudUpload className="w-3.5 h-3.5" />
+              {t('settings.encryption.backupAction')}
+            </button>
+          </div>
+        )}
+
         {/* Destructive action — only when a key actually exists to delete. */}
         {pluginStatus === 'ready' && (
           <div className="space-y-2 pt-2 border-t border-fluux-hover">
@@ -302,6 +339,13 @@ export function EncryptionSettings() {
           onCancel={() => {
             if (!isDeleting) setShowDeleteConfirm(false)
           }}
+        />
+      )}
+
+      {showBackupDialog && (
+        <BackupPassphraseDialog
+          onConfirm={handleBackupConfirm}
+          onCancel={() => setShowBackupDialog(false)}
         />
       )}
     </section>

@@ -489,7 +489,21 @@
             "deleteKeyConfirmMessage": "This destroys the private key for fingerprint {{fingerprint}}. You won't be able to decrypt past messages. This action cannot be undone.",
             "deleteKeyConfirmAction": "Delete key",
             "deleteKeySuccess": "OpenPGP key deleted",
-            "deleteKeyFailed": "Couldn't delete the key"
+            "deleteKeyFailed": "Couldn't delete the key",
+            "backupLabel": "Key backup",
+            "backupDescription": "Publish an encrypted copy of your key to your XMPP server. Protected by a passphrase only you know, and readable only by your account (access model: whitelist). Lets you read encrypted history on a new device after signing in and entering the passphrase.",
+            "backupAction": "Back up to server",
+            "backupDialogTitle": "Back up your OpenPGP key",
+            "backupDialogBody": "A passphrase has been generated to protect your key. Write it down or store it in a password manager — you'll need it when restoring on another device.",
+            "backupDialogWarning": "If you lose this passphrase, the backup is unrecoverable and your encrypted history becomes unreadable on a new device. Save it now.",
+            "backupAcknowledgment": "I've saved this passphrase somewhere safe.",
+            "backupCopy": "Copy passphrase",
+            "backupCopied": "Copied",
+            "backupCopyFailed": "Couldn't copy to clipboard",
+            "backupRegenerate": "Generate a new passphrase",
+            "backupPublish": "Back up",
+            "backupSuccess": "Key backed up to server",
+            "backupPluginUnavailable": "OpenPGP plugin not available"
         },
         "blocked": {
             "title": "Blocked Users",
