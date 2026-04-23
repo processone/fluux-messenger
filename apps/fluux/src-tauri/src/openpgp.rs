@@ -465,8 +465,13 @@ pub async fn openpgp_ensure_key(
 /// later `openpgp_ensure_key` / `SequoiaPgpPlugin.init()` hits an
 /// already-warm cache. Typically invoked the moment the user submits
 /// the login form, overlapping the KDF with XMPP handshake round-trips.
+///
+/// `async fn` (not `fn`) so Tauri dispatches the body on
+/// `tauri::async_runtime` — `OpenpgpState::prewarm` calls
+/// `tokio::spawn` internally, and a sync command would run on the main
+/// thread where that panics with "there is no reactor running".
 #[tauri::command]
-pub fn openpgp_prewarm(
+pub async fn openpgp_prewarm(
     account_jid: String,
     user_id: String,
     state: State<'_, Arc<OpenpgpState>>,
