@@ -361,4 +361,96 @@ describe('PubSub — openpgp public-keys headline', () => {
 
     expect(() => pubsub.handle(stanza)).not.toThrow()
   })
+
+  it('invalidates on <items><retract/></items> (key removed, not rotated)', () => {
+    // Regression: a peer disabling OX may retract a single item via
+    // XEP-0060 §12.4 instead of publishing a replacement. The handler
+    // keys off the node attribute on <items>, not the child shape, so
+    // this flow must still reach notifyPeerKeysChanged.
+    const notify = vi.fn()
+    const deps: ModuleDependencies = {
+      ...makeDeps(async () => xml('iq', {})),
+      getE2EEManager: () =>
+        ({ notifyPeerKeysChanged: notify }) as unknown as ReturnType<
+          NonNullable<ModuleDependencies['getE2EEManager']>
+        >,
+    }
+    const pubsub = new PubSub(deps)
+
+    const stanza = xml('message', { from: 'mrtest@process-one.net' },
+      xml('event', { xmlns: 'http://jabber.org/protocol/pubsub#event' },
+        xml('items', { node: 'urn:xmpp:openpgp:0:public-keys' },
+          xml('retract', { id: 'current' }),
+        ),
+      ),
+    )
+    pubsub.handle(stanza)
+
+    expect(notify).toHaveBeenCalledWith('mrtest@process-one.net', 'openpgp')
+  })
+
+  it('invalidates on <purge/> of the OX node', () => {
+    const notify = vi.fn()
+    const deps: ModuleDependencies = {
+      ...makeDeps(async () => xml('iq', {})),
+      getE2EEManager: () =>
+        ({ notifyPeerKeysChanged: notify }) as unknown as ReturnType<
+          NonNullable<ModuleDependencies['getE2EEManager']>
+        >,
+    }
+    const pubsub = new PubSub(deps)
+
+    // XEP-0060 §12.4: <purge> is a sibling of <items>, not a child.
+    const stanza = xml('message', { from: 'mrtest@process-one.net' },
+      xml('event', { xmlns: 'http://jabber.org/protocol/pubsub#event' },
+        xml('purge', { node: 'urn:xmpp:openpgp:0:public-keys' }),
+      ),
+    )
+    pubsub.handle(stanza)
+
+    expect(notify).toHaveBeenCalledWith('mrtest@process-one.net', 'openpgp')
+  })
+
+  it('invalidates on <delete/> of the OX node', () => {
+    const notify = vi.fn()
+    const deps: ModuleDependencies = {
+      ...makeDeps(async () => xml('iq', {})),
+      getE2EEManager: () =>
+        ({ notifyPeerKeysChanged: notify }) as unknown as ReturnType<
+          NonNullable<ModuleDependencies['getE2EEManager']>
+        >,
+    }
+    const pubsub = new PubSub(deps)
+
+    // XEP-0060 §12.4: <delete> is a sibling of <items>, not a child.
+    const stanza = xml('message', { from: 'mrtest@process-one.net' },
+      xml('event', { xmlns: 'http://jabber.org/protocol/pubsub#event' },
+        xml('delete', { node: 'urn:xmpp:openpgp:0:public-keys' }),
+      ),
+    )
+    pubsub.handle(stanza)
+
+    expect(notify).toHaveBeenCalledWith('mrtest@process-one.net', 'openpgp')
+  })
+
+  it('ignores <purge/>/<delete/> for an unrelated node', () => {
+    const notify = vi.fn()
+    const deps: ModuleDependencies = {
+      ...makeDeps(async () => xml('iq', {})),
+      getE2EEManager: () =>
+        ({ notifyPeerKeysChanged: notify }) as unknown as ReturnType<
+          NonNullable<ModuleDependencies['getE2EEManager']>
+        >,
+    }
+    const pubsub = new PubSub(deps)
+
+    const stanza = xml('message', { from: 'mrtest@process-one.net' },
+      xml('event', { xmlns: 'http://jabber.org/protocol/pubsub#event' },
+        xml('delete', { node: 'some-other-node' }),
+      ),
+    )
+    pubsub.handle(stanza)
+
+    expect(notify).not.toHaveBeenCalled()
+  })
 })

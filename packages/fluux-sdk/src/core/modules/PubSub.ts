@@ -85,11 +85,29 @@ export class PubSub extends BaseModule {
    * @param event - The PubSub event element
    */
   handlePubSubEvent(from: string, event: Element): void {
+    const bareFrom = getBareJid(from)
+
+    // XEP-0060 §12.4 sibling-level notifications: `<purge>` wipes every
+    // item on a node (node kept), `<delete>` removes the node entirely.
+    // For OX specifically either event means "the peer no longer
+    // advertises keys here" — semantically identical to a retract for
+    // our cache-invalidation purposes. Handle these before the `items`
+    // early-return below because they arrive *without* an `<items>`
+    // child. Keeping this OX-specific: generic subscribers don't have a
+    // useful payload to deliver for bulk removal, so there's nothing to
+    // dispatch to them.
+    const removalNode =
+      event.getChild('purge')?.attrs.node ??
+      event.getChild('delete')?.attrs.node
+    if (removalNode === NS_OPENPGP_PUBLIC_KEYS) {
+      this.invalidateOpenPgpKeys(bareFrom)
+      return
+    }
+
     const items = event.getChild('items')
     if (!items) return
 
     const node = items.attrs.node
-    const bareFrom = getBareJid(from)
 
     // XEP-0084: User Avatar (Metadata)
     if (node === 'urn:xmpp:avatar:metadata') {
@@ -102,12 +120,13 @@ export class PubSub extends BaseModule {
     }
 
     // XEP-0373: OpenPGP public-keys metadata.
-    // A headline here means the peer rotated / published / retracted
-    // their key. Evict any cached "supported" or "not-supported" probe
-    // result for this peer so the next send re-fetches and the new key
-    // is actually used. Plugin-local key caches are cleared via the
-    // same hook so a rotated fingerprint doesn't get masked by a stale
-    // positive entry either.
+    // A headline here means the peer rotated, published, or retracted a
+    // single key item (`<items>` may contain either `<item>` or
+    // `<retract>` children per XEP-0060 §12.4). Evict any cached
+    // "supported" or "not-supported" probe result for this peer so the
+    // next send re-fetches and the new key is actually used. Plugin-
+    // local key caches are cleared via the same hook so a rotated
+    // fingerprint doesn't get masked by a stale positive entry either.
     if (node === NS_OPENPGP_PUBLIC_KEYS) {
       this.invalidateOpenPgpKeys(bareFrom)
     }
