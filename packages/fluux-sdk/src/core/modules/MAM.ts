@@ -1643,11 +1643,10 @@ export class MAM extends BaseModule {
    * `<body>` is replaced with plaintext, and a security context is
    * stashed for {@link parseArchiveMessage} to read.
    *
-   * Self-outgoing entries are skipped. OpenPGP 1:1 encrypts to the peer
-   * only, so attempting to decrypt our own archived messages would always
-   * fail and smear "untrusted — could not decrypt" onto our own history.
-   * The XEP-0373 hint the sender inserted is what we surface instead.
-   * Encrypt-to-self for MAM replay is tracked as a separate follow-up.
+   * Self-outgoing entries are decrypted just like inbound ones: outbound
+   * ciphertexts are encrypted to our own key as well as the peer's, so
+   * MAM replay on this device (and on any other device we log in from)
+   * can recover the plaintext.
    */
   private async decryptArchiveEntryIfNeeded(
     messageEl: Element,
@@ -1655,10 +1654,6 @@ export class MAM extends BaseModule {
   ): Promise<void> {
     const manager = this.deps.getE2EEManager?.()
     if (!manager) return
-    const from = messageEl.attrs.from
-    const bareFrom = from ? getBareJid(from) : ''
-    const selfBareJid = getBareJid(this.deps.getCurrentJid() ?? '')
-    if (bareFrom && bareFrom === selfBareJid) return
     await decryptStanzaInPlace(messageEl, manager, peer)
   }
 

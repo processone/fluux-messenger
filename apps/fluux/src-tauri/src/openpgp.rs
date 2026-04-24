@@ -630,7 +630,7 @@ fn encrypt_and_sign(
     let sender_cert =
         Cert::from_bytes(sender_secret_armored.as_bytes()).context("parse sender secret key")?;
 
-    let recipients: Vec<Recipient> = recipient_cert
+    let mut recipients: Vec<Recipient> = recipient_cert
         .keys()
         .with_policy(&policy, None)
         .supported()
@@ -645,6 +645,20 @@ fn encrypt_and_sign(
             "recipient certificate has no usable encryption-capable key"
         ));
     }
+
+    // Encrypt-to-self: also add the sender's own encryption subkeys so that
+    // our other devices (and this device on MAM replay) can read outgoing
+    // messages. Without this, a second logged-in client pulling history
+    // from the archive would only see the XEP-0373 fallback body.
+    let self_recipients = sender_cert
+        .keys()
+        .with_policy(&policy, None)
+        .supported()
+        .alive()
+        .revoked(false)
+        .for_transport_encryption()
+        .map(Recipient::from);
+    recipients.extend(self_recipients);
 
     let signer_keypair = sender_cert
         .keys()
@@ -1061,6 +1075,26 @@ mod tests {
             .decrypt("alice@example.com", "not-a-pgp-ciphertext", None)
             .expect_err("malformed ciphertext must be rejected");
         assert!(!err.is_empty(), "expected an error");
+    }
+
+    #[test]
+    fn sender_can_decrypt_own_outgoing_ciphertext() {
+        // XEP-0373 multi-device / MAM replay: when alice encrypts to bob,
+        // the ciphertext must also be readable by alice herself so her
+        // other devices (and this device, on MAM catch-up) recover the
+        // plaintext instead of the fallback body.
+        let (state, alice, bob) = setup_two_accounts();
+        let ciphertext = state
+            .encrypt("alice@example.com", &bob.public_armored, "note to self + bob")
+            .unwrap();
+        let out = state
+            .decrypt("alice@example.com", &ciphertext, Some(&alice.public_armored))
+            .unwrap();
+        assert_eq!(out.plaintext, "note to self + bob");
+        assert!(
+            out.signature_verified,
+            "alice's own signature must verify when alice decrypts her outgoing ciphertext"
+        );
     }
 
     #[test]

@@ -231,19 +231,28 @@ describe('MAM E2EE wiring', () => {
     expect(msg.securityContext!.notes).toContain('Could not decrypt')
   })
 
-  it('does not attempt to decrypt self-outgoing archive entries', async () => {
+  it('decrypts self-outgoing archive entries (encrypt-to-self for MAM replay)', async () => {
     // Self-outgoing encrypted stanza — the archive replayed one of our
-    // own sent messages. OpenPGP 1:1 encrypts to the peer only, so the
-    // plugin cannot decrypt our own ciphertext. We must skip the decrypt
-    // attempt entirely rather than smearing "could not decrypt" onto our
-    // own history.
+    // own sent messages. Since we encrypt-to-self (XEP-0373 multi-device),
+    // the plugin must run on the archived payload just like an inbound
+    // one, so the plaintext body is surfaced instead of the fallback.
+    const payload = await manager.encryptOutbound(
+      { kind: 'direct', peer: PEER },
+      new TextEncoder().encode('outgoing, replayed from archive'),
+    )
+    if (!payload) throw new Error('Test setup: encryptOutbound returned null')
+
     const spy = vi.spyOn(manager, 'decryptInbound')
 
     const forwardedMessage = xml(
       'message',
       { from: ME + '/r', to: PEER, type: 'chat', id: 'mam-self' },
-      xml('body', {}, '[OpenPGP-encrypted message]'),
-      xml('plain', { xmlns: 'urn:fluux:e2ee-dummy:0' }, 'ciphertext-to-peer'),
+      xml('body', {}, payload.payload.fallbackBody ?? '[encrypted]'),
+      xml(
+        payload.payload.stanzaElement.name,
+        payload.payload.stanzaElement.attrs,
+        ...(payload.payload.stanzaElement.children as (string | Element)[]),
+      ),
     )
     const archiveEntry = buildMAMResult({
       archiveId: 'arch-self',
@@ -252,11 +261,12 @@ describe('MAM E2EE wiring', () => {
 
     const messages = await runQueryWithEntry(harness, PEER, archiveEntry)
 
-    expect(spy).not.toHaveBeenCalled()
+    expect(spy).toHaveBeenCalledTimes(1)
     expect(messages).toHaveLength(1)
     const msg = messages[0]
-    expect(msg.body).toBe('[OpenPGP-encrypted message]')
-    expect(msg.securityContext).toBeUndefined()
+    expect(msg.body).toBe('outgoing, replayed from archive')
+    expect(msg.securityContext).toBeDefined()
+    expect(msg.securityContext!.protocolId).toBe('dummy-plaintext')
   })
 
   it('passes cleartext archive entries straight through without a security context', async () => {
