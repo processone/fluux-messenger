@@ -495,6 +495,62 @@ describe('messagingUtils', () => {
     })
   })
 
+  describe('parseMessageContent - authoredAt (E2EE envelope timestamp)', () => {
+    it('uses authoredAt when supplied, overriding <delay/> and default-to-now', () => {
+      // A hostile server could rewrite <delay/> on MAM replay. The
+      // in-envelope timestamp, signed by the sender, is authoritative.
+      // This test pins that authoredAt wins over <delay/>.
+      const serverDelayStamp = '2025-01-01T00:00:00Z'
+      const senderAuthored = new Date('2026-03-15T12:34:56Z')
+      const messageEl = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'body', text: 'Hello' },
+        {
+          name: 'delay',
+          attrs: { xmlns: 'urn:xmpp:delay', stamp: serverDelayStamp },
+        },
+      ])
+
+      const result = parseMessageContent({
+        messageEl,
+        body: 'Hello',
+        authoredAt: senderAuthored,
+      })
+
+      expect(result.timestamp.toISOString()).toBe(senderAuthored.toISOString())
+      // Still marked delayed — a live MAM catch-up message is historical
+      // from the receiver's POV even when the authored time is signed.
+      expect(result.isDelayed).toBe(true)
+    })
+
+    it('falls back to <delay/> when no authoredAt is supplied', () => {
+      const stamp = '2025-01-01T00:00:00Z'
+      const messageEl = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'body', text: 'Hello' },
+        { name: 'delay', attrs: { xmlns: 'urn:xmpp:delay', stamp } },
+      ])
+
+      const result = parseMessageContent({ messageEl, body: 'Hello' })
+
+      expect(result.timestamp.toISOString()).toBe(new Date(stamp).toISOString())
+      expect(result.isDelayed).toBe(true)
+    })
+
+    it('uses authoredAt even when no <delay/> is present', () => {
+      const senderAuthored = new Date('2026-03-15T12:34:56Z')
+      const messageEl = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'body', text: 'Hello' },
+      ])
+
+      const result = parseMessageContent({
+        messageEl,
+        body: 'Hello',
+        authoredAt: senderAuthored,
+      })
+
+      expect(result.timestamp.toISOString()).toBe(senderAuthored.toISOString())
+    })
+  })
+
   describe('parseMessageContent - OOB URL stripping', () => {
     it('should strip OOB URL from body when body equals URL only', () => {
       const url = 'https://example.com/image.jpg'

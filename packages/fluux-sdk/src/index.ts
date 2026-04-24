@@ -387,7 +387,14 @@ export {
   CapabilityCache,
   InMemoryStorageBackend,
   createPluginStorage,
+  serializePayloadEnvelope,
+  parsePayloadEnvelope,
+  isPayloadEnvelope,
+  wrapForSigncrypt,
+  unwrapSigncrypt,
+  SigncryptEnvelopeError,
 } from './core/e2ee'
+export type { SigncryptEnvelope } from './core/e2ee'
 export type {
   AccountInfo,
   BareJID,

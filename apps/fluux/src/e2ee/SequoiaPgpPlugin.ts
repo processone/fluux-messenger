@@ -72,7 +72,14 @@ import type {
   VerificationMethod,
   XMLElementData,
 } from '@fluux/sdk'
-import { E2EEPluginError, type E2EEErrorKind } from '@fluux/sdk'
+import {
+  E2EEPluginError,
+  SigncryptEnvelopeError,
+  unwrapSigncrypt,
+  wrapForSigncrypt,
+  type E2EEErrorKind,
+} from '@fluux/sdk'
+import { getBareJid } from '@fluux/sdk'
 import {
   clearBackedUpFingerprint,
   readBackedUpFingerprint,
@@ -192,6 +199,15 @@ const SIGNATURE_BUFFER_SIZE = 50
  * further back than this).
  */
 const SIGNATURE_BUFFER_TTL_MS = 10 * 60 * 1000
+
+/**
+ * Maximum allowed delta between the sender's `<time/>` stamp and our local
+ * clock before we treat an inbound signcrypt as stale. ±7 days is loose
+ * enough that a MAM catch-up of messages a few days old still decrypts,
+ * and tight enough that an adversary can't bank a captured ciphertext for
+ * years before replaying it.
+ */
+const SIGNCRYPT_CLOCK_SKEW_MS = 7 * 24 * 60 * 60 * 1000
 
 /**
  * Capability-cache TTL (seconds) for a negative `probePeer` result that the
@@ -967,11 +983,20 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
       throw new Error(`SequoiaPgpPlugin: no cached public key for ${peer} — probe first`)
     }
 
-    const plaintextStr = new TextDecoder().decode(plaintext)
+    // Chat.ts hands us a serialized `<payload xmlns='jabber:client'>…</payload>`
+    // (see payloadEnvelope.serialize). Wrap it per XEP-0373 §4.1 so the
+    // ciphertext carries reflection/replay/length-hiding affixes on top of
+    // the OpenPGP signature. The wrapped string is what Rust signs+encrypts.
+    const payloadXml = new TextDecoder().decode(plaintext)
+    const envelope = wrapForSigncrypt({
+      payloadXml,
+      peerJid: getBareJid(peer),
+      timestamp: new Date(this.now()),
+    })
     const ciphertext = await this.invoke<string>('openpgp_encrypt', {
       senderAccountJid: ctx.account.jid,
       recipientPublicArmored: peerBundle.publicArmored,
-      plaintext: plaintextStr,
+      plaintext: envelope,
     })
 
     const stanzaElement: XMLElementData = {
@@ -1010,7 +1035,31 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
       senderPublicArmored,
     })
 
-    const plaintext = new TextEncoder().encode(rust.plaintext)
+    // The decrypted plaintext MUST be a XEP-0373 §4.1 `<signcrypt/>`
+    // envelope. Unwrap it, enforce the reflection + replay policies the
+    // envelope enables, and surface the inner `<payload/>` as the plaintext
+    // stanzaDecrypt expects. Anything that fails shape validation, the
+    // reflection check, or the skew window is thrown as a classified
+    // E2EEPluginError — we never silently fall back to raw plaintext.
+    const envelope = this.unwrapOrRethrow(rust.plaintext)
+    const ownBareJid = getBareJid(ctx.account.jid)
+    if (!envelope.addressees.some((addr: string) => getBareJid(addr) === ownBareJid)) {
+      throw new E2EEPluginError(
+        'permanent',
+        'envelope-reflection',
+        `SequoiaPgpPlugin: signcrypt <to/> does not address ${ownBareJid} (peer ${peer}, addressees [${envelope.addressees.join(', ')}])`,
+      )
+    }
+    const skew = Math.abs(envelope.timestamp.getTime() - this.now())
+    if (skew > SIGNCRYPT_CLOCK_SKEW_MS) {
+      throw new E2EEPluginError(
+        'permanent',
+        'envelope-stale',
+        `SequoiaPgpPlugin: signcrypt <time/> is ${Math.round(skew / 1000)}s outside the ±7-day skew window (stamp: ${envelope.timestamp.toISOString()})`,
+      )
+    }
+
+    const plaintext = new TextEncoder().encode(envelope.payloadXml)
     const securityContext = this.buildInboundSecurityContext(peer, rust)
 
     // Stash only for the specific race this buffer exists for: we had no
@@ -1040,6 +1089,11 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
         deviceId: rust.signerFingerprint ?? this.peerKeys.get(peer)?.fingerprint ?? 'unknown',
       },
       securityContext,
+      // Envelope `<time/>` is sender-attested and signed inside the
+      // ciphertext — more trustworthy than `<delay/>` (which a relay can
+      // rewrite) or local arrival time. Downstream (Chat, MAM) uses it as
+      // the message's display timestamp.
+      authoredAt: envelope.timestamp,
     }
   }
 
@@ -1278,6 +1332,29 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
   private requireCtx(): PluginContext {
     if (!this.ctx) throw new Error('SequoiaPgpPlugin: not initialized')
     return this.ctx
+  }
+
+  /**
+   * Parse the XEP-0373 §4.1 signcrypt envelope Rust returned to us and
+   * translate any shape-validation failure into a classified
+   * {@link E2EEPluginError}. Isolated here so the decrypt flow stays
+   * linear — try/catch for the inside-Rust boundary already lives one
+   * level up, this wraps the envelope-layer failure mode.
+   */
+  private unwrapOrRethrow(plaintext: string) {
+    try {
+      return unwrapSigncrypt(plaintext)
+    } catch (err) {
+      if (err instanceof SigncryptEnvelopeError) {
+        throw new E2EEPluginError(
+          'permanent',
+          `envelope-${err.code}`,
+          `SequoiaPgpPlugin: signcrypt envelope rejected: ${err.message}`,
+          err,
+        )
+      }
+      throw err
+    }
   }
 }
 

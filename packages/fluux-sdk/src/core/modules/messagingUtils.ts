@@ -265,6 +265,14 @@ export interface ParseMessageContentOptions {
   messageContext?: 'chat' | 'room'
   /** Keep full JID in replyTo.to (for room messages) instead of converting to bare JID */
   preserveFullReplyToJid?: boolean
+  /**
+   * Sender-attested composition time recovered from inside an E2EE envelope
+   * (e.g. XEP-0373 §4.1 `<time>`). When present, it overrides both the
+   * stanza-level `<delay/>` and the default-to-now fallback: it's the only
+   * timestamp on the message that wasn't set by an intermediary. Callers
+   * that have no authenticated timestamp omit this field.
+   */
+  authoredAt?: Date
 }
 
 /**
@@ -293,6 +301,7 @@ export function parseMessageContent(options: ParseMessageContentOptions): Parsed
     forceDelayed = false,
     messageContext = 'chat',
     preserveFullReplyToJid = false,
+    authoredAt,
   } = options
 
   const fallbackTargets = messageContext === 'room' ? ROOM_FALLBACK_TARGETS : CHAT_FALLBACK_TARGETS
@@ -307,6 +316,15 @@ export function parseMessageContent(options: ParseMessageContentOptions): Parsed
       timestamp = new Date(stamp)
       isDelayed = true
     }
+  }
+  // E2EE in-envelope timestamp (e.g. XEP-0373 §4.1 `<time/>`) is sender-
+  // attested and signed inside the ciphertext — more trustworthy than
+  // `<delay/>`, which an intermediate server can rewrite. When present,
+  // it wins. `isDelayed` is preserved as-is: whether this message is
+  // historical from the receiver's POV is independent of the authored-at
+  // source (a live MAM catch-up arrival is still "delayed").
+  if (authoredAt) {
+    timestamp = authoredAt
   }
 
   // XEP-0359: Unique stanza ID (server-assigned) and origin ID (sender-assigned)

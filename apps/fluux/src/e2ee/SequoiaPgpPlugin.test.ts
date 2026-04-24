@@ -13,12 +13,42 @@ import {
   InMemoryStorageBackend,
   createPluginStorage,
   isE2EEPluginError,
+  parsePayloadEnvelope,
+  serializePayloadEnvelope,
+  xml,
   type PEPItem,
   type PluginContext,
   type SecurityContextUpdate,
   type XMLElementData,
   type XMPPPrimitives,
 } from '@fluux/sdk'
+
+/**
+ * Wrap a body string in the `<payload xmlns='jabber:client'><body>…</body></payload>`
+ * envelope the plugin now expects as its plaintext input. Matches what Chat.ts
+ * produces on the real send path (see `serializePayloadEnvelope`).
+ */
+function encodeBodyAsPayload(text: string): Uint8Array {
+  return new TextEncoder().encode(serializePayloadEnvelope([xml('body', {}, text)]))
+}
+
+/**
+ * Extract a single `<body/>` child's text from an envelope-formatted
+ * plaintext returned by `plugin.decrypt`. Mirrors how stanzaDecrypt
+ * dispatches the envelope children back onto the stanza root, just
+ * boiled down to "give me the body string" for assertions.
+ */
+function decodeBodyFromPayload(plaintext: Uint8Array): string {
+  const envelopeXml = new TextDecoder().decode(plaintext)
+  const children = parsePayloadEnvelope(envelopeXml)
+  if (!children) {
+    throw new Error(
+      `decodeBodyFromPayload: plaintext is not a payload envelope: ${envelopeXml}`,
+    )
+  }
+  const body = children.find((c) => c.name === 'body')
+  return body?.text() ?? ''
+}
 
 // Mirrors the Rust-side `PublicKeyInfo` IPC DTO — the secret-key armor
 // stays in the Rust process and never crosses the Tauri boundary.
@@ -1019,7 +1049,7 @@ describe('SequoiaPgpPlugin', () => {
       })
       const payload = await alicePlugin.encrypt(
         aliceHandle,
-        new TextEncoder().encode('race winner'),
+        encodeBodyAsPayload('race winner'),
       )
 
       // Inbound decrypt: alice's key still missing → stash engages.
@@ -1067,7 +1097,7 @@ describe('SequoiaPgpPlugin', () => {
       })
       const payload = await alicePlugin.encrypt(
         aliceHandle,
-        new TextEncoder().encode('already verified'),
+        encodeBodyAsPayload('already verified'),
       )
 
       const decrypted = await decryptWithoutPeerKey(bobPlugin, payload.stanzaElement, 'm-verified')
@@ -1103,7 +1133,7 @@ describe('SequoiaPgpPlugin', () => {
       })
       const payload = await alicePlugin.encrypt(
         aliceHandle,
-        new TextEncoder().encode('from real alice'),
+        encodeBodyAsPayload('from real alice'),
       )
 
       await decryptWithoutPeerKey(bobPlugin, payload.stanzaElement, 'm-mismatch')
@@ -1151,7 +1181,7 @@ describe('SequoiaPgpPlugin', () => {
       for (let i = 0; i < BUFFER_SIZE_PLUS_ONE; i++) {
         const payload = await alicePlugin.encrypt(
           aliceHandle,
-          new TextEncoder().encode(`msg-${i}`),
+          encodeBodyAsPayload(`msg-${i}`),
         )
         await decryptWithoutPeerKey(bobPlugin, payload.stanzaElement, `m-${i}`)
       }
@@ -1174,8 +1204,14 @@ describe('SequoiaPgpPlugin', () => {
       const bobBuilt = makeContext('bob@example.com')
       await alicePlugin.init(aliceBuilt.ctx)
       await bobPlugin.init(bobBuilt.ctx)
-      // Monotonic test clock so TTL expiry is deterministic.
+      // Monotonic test clock so TTL expiry is deterministic. Wire both
+      // plugins to the same clock — Alice's encrypt stamps the signcrypt
+      // `<time/>` off her `now()`, and Bob's decrypt validates that stamp
+      // against his `now()` with a ±7-day skew window. Sharing the clock
+      // keeps the skew at zero regardless of how far we advance it for
+      // TTL purposes.
       let clock = 0
+      alicePlugin._setClockForTesting(() => clock)
       bobPlugin._setClockForTesting(() => clock)
 
       const aliceBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
@@ -1194,14 +1230,14 @@ describe('SequoiaPgpPlugin', () => {
       })
 
       // Entry 1 at t=0.
-      const p1 = await alicePlugin.encrypt(aliceHandle, new TextEncoder().encode('early'))
+      const p1 = await alicePlugin.encrypt(aliceHandle, encodeBodyAsPayload('early'))
       await decryptWithoutPeerKey(bobPlugin, p1.stanzaElement, 'm-early')
 
       // Jump 11 minutes — older than the 10min TTL.
       clock = 11 * 60 * 1000
 
       // Entry 2 at t=11min — triggers lazy prune of m-early.
-      const p2 = await alicePlugin.encrypt(aliceHandle, new TextEncoder().encode('late'))
+      const p2 = await alicePlugin.encrypt(aliceHandle, encodeBodyAsPayload('late'))
       await decryptWithoutPeerKey(bobPlugin, p2.stanzaElement, 'm-late')
 
       publishKeyAsXep0373(bobBuilt, 'alice@example.com', aliceBundle)
@@ -1238,7 +1274,7 @@ describe('SequoiaPgpPlugin', () => {
       })
       const payload = await alicePlugin.encrypt(
         aliceHandle,
-        new TextEncoder().encode('nocontext'),
+        encodeBodyAsPayload('nocontext'),
       )
 
       const claim = bobPlugin.tryClaimInbound(payload.stanzaElement)!
@@ -1279,8 +1315,8 @@ describe('SequoiaPgpPlugin', () => {
       await carolPlugin.probePeer('bob@example.com')
       const aH = await alicePlugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
       const cH = await carolPlugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
-      const aP = await alicePlugin.encrypt(aH, new TextEncoder().encode('from alice'))
-      const cP = await carolPlugin.encrypt(cH, new TextEncoder().encode('from carol'))
+      const aP = await alicePlugin.encrypt(aH, encodeBodyAsPayload('from alice'))
+      const cP = await carolPlugin.encrypt(cH, encodeBodyAsPayload('from carol'))
 
       await decryptWithoutPeerKey(bobPlugin, aP.stanzaElement, 'm-alice')
       // Manually craft a "from carol" decrypt via buildCrossPublishedPair
@@ -1309,7 +1345,7 @@ describe('SequoiaPgpPlugin', () => {
 
       await alice.plugin.probePeer('bob@example.com')
       const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
-      const payload = await alice.plugin.encrypt(handle, new TextEncoder().encode('hello bob'))
+      const payload = await alice.plugin.encrypt(handle, encodeBodyAsPayload('hello bob'))
       expect(payload.stanzaElement.name).toBe('openpgp')
       expect(payload.fallbackBody).toContain('OpenPGP')
 
@@ -1320,7 +1356,7 @@ describe('SequoiaPgpPlugin', () => {
       expect(claim).not.toBeNull()
       const bobHandle = await bob.plugin.openConversation({ kind: 'direct', peer: 'alice@example.com' })
       const decrypted = await bob.plugin.decrypt(bobHandle, claim!)
-      expect(new TextDecoder().decode(decrypted.plaintext)).toBe('hello bob')
+      expect(decodeBodyFromPayload(decrypted.plaintext)).toBe('hello bob')
       expect(decrypted.securityContext.protocolId).toBe('openpgp')
       expect(decrypted.securityContext.trust).toBe('trusted')
       expect(decrypted.securityContext.notes).toBeUndefined()
@@ -1333,14 +1369,14 @@ describe('SequoiaPgpPlugin', () => {
       // Alice has bob cached (probed during publish), encrypts.
       await alice.plugin.probePeer('bob@example.com')
       const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
-      const payload = await alice.plugin.encrypt(handle, new TextEncoder().encode('hi'))
+      const payload = await alice.plugin.encrypt(handle, encodeBodyAsPayload('hi'))
 
       // Bob has NOT probed alice, so he can decrypt but cannot verify.
       const claim = bob.plugin.tryClaimInbound(payload.stanzaElement)!
       const bobHandle = await bob.plugin.openConversation({ kind: 'direct', peer: 'alice@example.com' })
       const decrypted = await bob.plugin.decrypt(bobHandle, claim)
 
-      expect(new TextDecoder().decode(decrypted.plaintext)).toBe('hi')
+      expect(decodeBodyFromPayload(decrypted.plaintext)).toBe('hi')
       expect(decrypted.securityContext.trust).toBe('untrusted')
       expect(decrypted.securityContext.notes?.join(' ')).toMatch(/Sender key not cached/)
     })
@@ -1349,7 +1385,7 @@ describe('SequoiaPgpPlugin', () => {
       const { alice, bob } = await buildCrossPublishedPair(fake)
       await alice.plugin.probePeer('bob@example.com')
       const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
-      const payload = await alice.plugin.encrypt(handle, new TextEncoder().encode('hi'))
+      const payload = await alice.plugin.encrypt(handle, encodeBodyAsPayload('hi'))
 
       // Before bob probes alice for the first time, intercept his PEP
       // queries so the metadata-then-data flow returns eve's key
@@ -1405,9 +1441,184 @@ describe('SequoiaPgpPlugin', () => {
       const bobHandle = await bob.plugin.openConversation({ kind: 'direct', peer: 'alice@example.com' })
       const decrypted = await bob.plugin.decrypt(bobHandle, claim)
 
-      expect(new TextDecoder().decode(decrypted.plaintext)).toBe('hi')
+      expect(decodeBodyFromPayload(decrypted.plaintext)).toBe('hi')
       expect(decrypted.securityContext.trust).toBe('untrusted')
       expect(decrypted.securityContext.notes?.join(' ')).toMatch(/Signature did not verify/)
+    })
+
+    it('wraps the plaintext in a XEP-0373 §4.1 <signcrypt> envelope with all affixes', async () => {
+      // Pin the exact XML the Rust side sees. Without a stable test seam
+      // here, a regression that drops the signcrypt wrapper (sending a
+      // bare <payload/> back on the wire) would only surface as a decrypt
+      // failure at the peer — too late to catch in CI.
+      const { alice } = await buildCrossPublishedPair(fake)
+      await alice.plugin.probePeer('bob@example.com')
+      const handle = await alice.plugin.openConversation({
+        kind: 'direct',
+        peer: 'bob@example.com',
+      })
+      const payload = await alice.plugin.encrypt(
+        handle,
+        encodeBodyAsPayload('hello bob'),
+      )
+      // Pull the ciphertext back through the stub's base64 to get the
+      // exact plaintext Alice handed to Rust.
+      const encoded = payload.stanzaElement.children[0] as string
+      const ciphertext = decodeURIComponent(escape(atob(encoded)))
+      // Stub shape: `OPENPGP-STUB:<recipientFp>:<senderFp>:<base64-of-envelope>`
+      const envelopeB64 = ciphertext.split(':').slice(3).join(':')
+      const envelope = decodeURIComponent(escape(atob(envelopeB64)))
+
+      expect(envelope).toMatch(/^<signcrypt xmlns=["']urn:xmpp:openpgp:0["']>/)
+      expect(envelope).toMatch(/<to jid=["']bob@example\.com["']\/>/)
+      expect(envelope).toMatch(/<time stamp=["'][0-9TZ:.\-+]+["']\/>/)
+      expect(envelope).toMatch(/<rpad>[A-Za-z0-9]*<\/rpad>/)
+      expect(envelope).toMatch(/<payload xmlns=["']jabber:client["']>/)
+      expect(envelope).toMatch(/<body[^>]*>hello bob<\/body>/)
+      expect(envelope).toMatch(/<\/signcrypt>$/)
+    })
+
+    it('surfaces the envelope <time/> as authoredAt on DecryptResult', async () => {
+      // Downstream (messagingUtils.parseMessageContent) uses authoredAt
+      // to override <delay/> and arrival time, because in-envelope time
+      // is sender-signed. Pin that the plugin surfaces it.
+      const { alice, bob } = await buildCrossPublishedPair(fake)
+      await alice.plugin.probePeer('bob@example.com')
+      await bob.plugin.probePeer('alice@example.com')
+
+      const before = Date.now()
+      const handle = await alice.plugin.openConversation({
+        kind: 'direct',
+        peer: 'bob@example.com',
+      })
+      const payload = await alice.plugin.encrypt(handle, encodeBodyAsPayload('hi'))
+      const bobHandle = await bob.plugin.openConversation({
+        kind: 'direct',
+        peer: 'alice@example.com',
+      })
+      const decrypted = await bob.plugin.decrypt(
+        bobHandle,
+        bob.plugin.tryClaimInbound(payload.stanzaElement)!,
+      )
+      const after = Date.now()
+
+      expect(decrypted.authoredAt).toBeInstanceOf(Date)
+      const stamp = decrypted.authoredAt!.getTime()
+      expect(stamp).toBeGreaterThanOrEqual(before)
+      expect(stamp).toBeLessThanOrEqual(after)
+    })
+
+    it('rejects an envelope whose <to/> addresses a different account (reflection)', async () => {
+      // Simulate the classic "Eve captures Alice's ciphertext destined
+      // for Eve, replays it at Bob" attack. Even if the OpenPGP layer
+      // decrypts (it would, if Eve re-encrypted to Bob's key), the
+      // signcrypt reflection check must reject because `<to/>` doesn't
+      // name Bob.
+      const { alice, bob } = await buildCrossPublishedPair(fake)
+      await alice.plugin.probePeer('bob@example.com')
+      await bob.plugin.probePeer('alice@example.com')
+
+      const aliceFp = alice.plugin.getOwnFingerprint()!
+      const bobFp = bob.plugin.getOwnFingerprint()!
+      const envelope =
+        `<signcrypt xmlns='urn:xmpp:openpgp:0'>` +
+        `<to jid='eve@example.com'/>` +
+        `<time stamp='${new Date().toISOString()}'/>` +
+        `<rpad></rpad>` +
+        `<payload xmlns='jabber:client'><body>reflected</body></payload>` +
+        `</signcrypt>`
+      const stubCiphertext =
+        `OPENPGP-STUB:${bobFp}:${aliceFp}:` + btoa(unescape(encodeURIComponent(envelope)))
+      const b64 = btoa(unescape(encodeURIComponent(stubCiphertext)))
+
+      const bobHandle = await bob.plugin.openConversation({
+        kind: 'direct',
+        peer: 'alice@example.com',
+      })
+      const claim = bob.plugin.tryClaimInbound({
+        name: 'openpgp',
+        attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+        children: [b64],
+      })!
+      await expect(bob.plugin.decrypt(bobHandle, claim)).rejects.toSatisfy(
+        (err: unknown) => {
+          if (!isE2EEPluginError(err)) return false
+          expect(err.code).toBe('envelope-reflection')
+          expect(err.kind).toBe('permanent')
+          return true
+        },
+      )
+    })
+
+    it('rejects an envelope whose <time/> is more than 7 days skewed', async () => {
+      const { alice, bob } = await buildCrossPublishedPair(fake)
+      await alice.plugin.probePeer('bob@example.com')
+      await bob.plugin.probePeer('alice@example.com')
+
+      const aliceFp = alice.plugin.getOwnFingerprint()!
+      const bobFp = bob.plugin.getOwnFingerprint()!
+      const stale = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString()
+      const envelope =
+        `<signcrypt xmlns='urn:xmpp:openpgp:0'>` +
+        `<to jid='bob@example.com'/>` +
+        `<time stamp='${stale}'/>` +
+        `<rpad></rpad>` +
+        `<payload xmlns='jabber:client'><body>old news</body></payload>` +
+        `</signcrypt>`
+      const stubCiphertext =
+        `OPENPGP-STUB:${bobFp}:${aliceFp}:` + btoa(unescape(encodeURIComponent(envelope)))
+      const b64 = btoa(unescape(encodeURIComponent(stubCiphertext)))
+
+      const bobHandle = await bob.plugin.openConversation({
+        kind: 'direct',
+        peer: 'alice@example.com',
+      })
+      const claim = bob.plugin.tryClaimInbound({
+        name: 'openpgp',
+        attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+        children: [b64],
+      })!
+      await expect(bob.plugin.decrypt(bobHandle, claim)).rejects.toSatisfy(
+        (err: unknown) => {
+          if (!isE2EEPluginError(err)) return false
+          expect(err.code).toBe('envelope-stale')
+          expect(err.kind).toBe('permanent')
+          return true
+        },
+      )
+    })
+
+    it('rejects a decrypted plaintext that is not a signcrypt envelope', async () => {
+      // Bare plaintext (legacy body-only sender) must fail loudly rather
+      // than surface as if it were a successful decrypt — that's exactly
+      // the ambiguity XEP-0373 §4.1 is designed to eliminate.
+      const { alice, bob } = await buildCrossPublishedPair(fake)
+      await alice.plugin.probePeer('bob@example.com')
+      await bob.plugin.probePeer('alice@example.com')
+
+      const aliceFp = alice.plugin.getOwnFingerprint()!
+      const bobFp = bob.plugin.getOwnFingerprint()!
+      const stubCiphertext =
+        `OPENPGP-STUB:${bobFp}:${aliceFp}:` +
+        btoa(unescape(encodeURIComponent('bare body, no envelope')))
+      const b64 = btoa(unescape(encodeURIComponent(stubCiphertext)))
+
+      const bobHandle = await bob.plugin.openConversation({
+        kind: 'direct',
+        peer: 'alice@example.com',
+      })
+      const claim = bob.plugin.tryClaimInbound({
+        name: 'openpgp',
+        attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+        children: [b64],
+      })!
+      await expect(bob.plugin.decrypt(bobHandle, claim)).rejects.toSatisfy(
+        (err: unknown) => {
+          if (!isE2EEPluginError(err)) return false
+          expect(err.code.startsWith('envelope-')).toBe(true)
+          return true
+        },
+      )
     })
 
     it('encrypt refuses when the peer key is not cached', async () => {
@@ -1933,10 +2144,10 @@ describe('SequoiaPgpPlugin', () => {
       // so the result is `trusted`.
       const payload = await pair.alice.plugin.encrypt(
         aliceHandle,
-        new TextEncoder().encode('post-rotation greeting'),
+        encodeBodyAsPayload('post-rotation greeting'),
       )
       const result = await pair.bob.plugin.decrypt(bobHandle, payload)
-      expect(new TextDecoder().decode(result.plaintext)).toBe('post-rotation greeting')
+      expect(decodeBodyFromPayload(result.plaintext)).toBe('post-rotation greeting')
       expect(result.securityContext.trust).toBe('trusted')
     })
   })

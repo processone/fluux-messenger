@@ -33,7 +33,12 @@ import {
 import { dataToElement } from '../e2ee/stanzaAdapter'
 import type { E2EEManager } from '../e2ee'
 import { E2EEEncryptionRequiredError } from '../e2ee'
-import { decryptStanzaInPlace, readStashedSecurityContext, stanzaHasE2EEClaim } from '../e2ee/stanzaDecrypt'
+import {
+  decryptStanzaInPlace,
+  readStashedAuthoredAt,
+  readStashedSecurityContext,
+  stanzaHasE2EEClaim,
+} from '../e2ee/stanzaDecrypt'
 import { serialize as serializePayloadEnvelope } from '../e2ee/payloadEnvelope'
 import { build as buildAesgcmUri } from './AesgcmUri'
 import type {
@@ -1601,7 +1606,12 @@ export class Chat extends BaseModule {
       this.deps.emitSDK('chat:typing', { conversationId, jid: bareFrom, isTyping: false })
     }
 
-    const parsed = parseMessageContent({ messageEl: stanza, body })
+    const authoredAt = readStashedAuthoredAt(stanza)
+    const parsed = parseMessageContent({
+      messageEl: stanza,
+      body,
+      ...(authoredAt && { authoredAt }),
+    })
     const isCorrection = !!stanza.getChild('replace', NS_CORRECTION)
 
     // For corrections whose target isn't in store: use the replace target ID
@@ -1657,7 +1667,14 @@ export class Chat extends BaseModule {
 
     // Case-insensitive nickname comparison - some servers may change case
     const isOutgoing = isSentCarbon || (room.nickname.toLowerCase() === nick.toLowerCase())
-    const parsed = parseMessageContent({ messageEl: stanza, body, preserveFullReplyToJid: true, messageContext: 'room' })
+    const roomAuthoredAt = readStashedAuthoredAt(stanza)
+    const parsed = parseMessageContent({
+      messageEl: stanza,
+      body,
+      preserveFullReplyToJid: true,
+      messageContext: 'room',
+      ...(roomAuthoredAt && { authoredAt: roomAuthoredAt }),
+    })
     const isCorrection = !!stanza.getChild('replace', NS_CORRECTION)
 
     // For corrections whose target isn't in store: use the replace target ID

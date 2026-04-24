@@ -53,5 +53,18 @@ export {
   type PinnedStrategy,
   type SecurityContextUpdateListener,
 } from './E2EEManager'
+// Payload envelope helpers are part of the plugin-authoring surface: the
+// SDK wraps outgoing children in a `<payload/>` and XEP-0373-capable
+// plugins wrap that again in a `<signcrypt/>` with `<to>`/`<time>`/`<rpad>`
+// affixes for reflection + replay + length-hiding defence.
+export {
+  serialize as serializePayloadEnvelope,
+  parse as parsePayloadEnvelope,
+  isPayloadEnvelope,
+  wrapForSigncrypt,
+  unwrapSigncrypt,
+  SigncryptEnvelopeError,
+  type SigncryptEnvelope,
+} from './payloadEnvelope'
 // DummyPlaintextPlugin is intentionally not re-exported here — see its file
 // for the rationale. Tests import it via relative path.

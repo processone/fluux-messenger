@@ -131,6 +131,19 @@ export interface DecryptResult {
   plaintext: Uint8Array
   senderDevice: DeviceIdentifier
   securityContext: SecurityContext
+  /**
+   * Sender-attested composition time recovered from inside the encrypted
+   * envelope. When set, it supersedes the stanza-level `<delay/>` and local
+   * arrival time for display and ordering: those are set by intermediaries
+   * (server, relay, MAM) and can be tampered with, while this value was
+   * signed by the sender as part of the ciphertext.
+   *
+   * Optional because not every E2EE protocol carries an in-envelope
+   * timestamp (XEP-0373 §4.1 does via `<time stamp='…'/>`; OMEMO 1 does
+   * not). Plugins without one omit the field; the SDK falls back to
+   * `<delay/>` or arrival time as before.
+   */
+  authoredAt?: Date
 }
 
 /**

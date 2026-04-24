@@ -27,6 +27,7 @@ import { logWarn } from '../logger'
 
 const DECRYPTED_MARKER = '__e2eeDecrypted'
 const SECURITY_CONTEXT_STASH = '__securityContext'
+const AUTHORED_AT_STASH = '__authoredAt'
 
 /**
  * Result of {@link decryptStanzaInPlace}. `attempted` is true whenever a
@@ -37,6 +38,13 @@ const SECURITY_CONTEXT_STASH = '__securityContext'
 export interface DecryptInPlaceResult {
   attempted: boolean
   securityContext?: SecurityContext
+  /**
+   * Sender-attested composition time recovered from inside the decrypted
+   * envelope (e.g. XEP-0373 §4.1 `<time stamp='…'/>`). Callers that care
+   * about authentic timestamps — message list ordering, MAM replay —
+   * should prefer this over the stanza's `<delay/>` or arrival time.
+   */
+  authoredAt?: Date
 }
 
 /**
@@ -65,12 +73,16 @@ export async function decryptStanzaInPlace(
   const marked = stanza as unknown as {
     [DECRYPTED_MARKER]?: boolean
     [SECURITY_CONTEXT_STASH]?: SecurityContext
+    [AUTHORED_AT_STASH]?: Date
   }
   if (marked[DECRYPTED_MARKER]) {
     return {
       attempted: true,
       ...(marked[SECURITY_CONTEXT_STASH] && {
         securityContext: marked[SECURITY_CONTEXT_STASH],
+      }),
+      ...(marked[AUTHORED_AT_STASH] && {
+        authoredAt: marked[AUTHORED_AT_STASH],
       }),
     }
   }
@@ -93,6 +105,7 @@ export async function decryptStanzaInPlace(
 
   let plaintext: string | null = null
   let securityContext: SecurityContext | null = null
+  let authoredAt: Date | null = null
   let failureReason: string | null = null
 
   try {
@@ -106,6 +119,7 @@ export async function decryptStanzaInPlace(
     if (result) {
       plaintext = new TextDecoder().decode(result.plaintext)
       securityContext = result.securityContext
+      if (result.authoredAt) authoredAt = result.authoredAt
     } else {
       failureReason = 'no plugin claimed the payload'
     }
@@ -173,11 +187,15 @@ export async function decryptStanzaInPlace(
   if (securityContext) {
     marked[SECURITY_CONTEXT_STASH] = securityContext
   }
+  if (authoredAt) {
+    marked[AUTHORED_AT_STASH] = authoredAt
+  }
   marked[DECRYPTED_MARKER] = true
 
   return {
     attempted: true,
     ...(securityContext && { securityContext }),
+    ...(authoredAt && { authoredAt }),
   }
 }
 
@@ -192,6 +210,16 @@ export function readStashedSecurityContext(
   return (stanza as unknown as { [SECURITY_CONTEXT_STASH]?: SecurityContext })[
     SECURITY_CONTEXT_STASH
   ]
+}
+
+/**
+ * Read back the sender-attested `authoredAt` timestamp that
+ * {@link decryptStanzaInPlace} stashed on a stanza. Returns `undefined`
+ * when the stanza wasn't E2EE-claimed, the plugin had no in-envelope
+ * timestamp, or decrypt failed.
+ */
+export function readStashedAuthoredAt(stanza: Element): Date | undefined {
+  return (stanza as unknown as { [AUTHORED_AT_STASH]?: Date })[AUTHORED_AT_STASH]
 }
 
 /**
