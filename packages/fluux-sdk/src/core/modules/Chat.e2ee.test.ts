@@ -512,4 +512,136 @@ describe('Chat E2EE wiring', () => {
       expect(spy).toHaveBeenCalledTimes(1)
     })
   })
+
+  describe('plugin context plumbing', () => {
+    it('forwards the inbound messageId to plugin.decrypt via decryptInbound', async () => {
+      // Race-window upgrade hinges on this: the plugin needs the messageId
+      // at decrypt time so the eventual security-context update can target
+      // the right rendered message. We assert the SDK-managed plumbing
+      // hands it through end-to-end.
+      const spy = vi.spyOn(manager, 'decryptInbound')
+
+      await chat.sendMessage('bob@example.com', 'plumbing check')
+      const outgoing = captured[0]
+      const inbound = xml(
+        'message',
+        { from: 'bob@example.com/r', to: 'me@example.com', type: 'chat', id: 'm-pid' },
+        ...outgoing.children.filter((c) => typeof c === 'string' || c.name !== 'active'),
+      )
+      const rxBuilt = makeDeps({
+        jid: 'me@example.com',
+        manager,
+        captureStanza: () => {},
+      })
+      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+
+      rxChat.handle(inbound)
+      await new Promise((r) => setTimeout(r, 0))
+
+      // Third arg to decryptInbound is the InboundDecryptContext.
+      const lastCall = spy.mock.calls[spy.mock.calls.length - 1]
+      expect(lastCall[2]).toEqual({ messageId: 'm-pid' })
+    })
+
+    it('emits message:security-updated when the manager reports an upgrade', async () => {
+      // Simulate the plugin reporting an upgrade after a sender key
+      // arrived: dispatch via the manager's listener mechanism and assert
+      // the SDK event is emitted with the right shape.
+      const rxBuilt = makeDeps({
+        jid: 'me@example.com',
+        manager,
+        captureStanza: () => {},
+      })
+      // Wire a listener on manager → emit SDK event the same way
+      // XMPPClient.ensureE2EEManager does in production. We mirror that
+      // wire here so the Chat-level test stays self-contained.
+      manager.onSecurityContextUpdated(({ peer, messageId, securityContext }) => {
+        rxBuilt.deps.emitSDK('message:security-updated', {
+          conversationId: peer,
+          messageId,
+          securityContext,
+        })
+      })
+
+      // The dummy plugin doesn't expose its captured ctx — we register a
+      // tiny side plugin solely so the test can reach its
+      // reportSecurityContextUpdate (the production channel a real
+      // plugin would use to report a successful re-verify).
+      const captureCtx = await capturePluginCtx(manager)
+      captureCtx.reportSecurityContextUpdate({
+        peer: 'bob@example.com',
+        messageId: 'm-up',
+        securityContext: { protocolId: 'capture', trust: 'trusted' },
+      })
+
+      const evt = rxBuilt.sdkEmitted.find(
+        (e) => (e as { event: string }).event === 'message:security-updated',
+      ) as
+        | {
+            payload: {
+              conversationId: string
+              messageId: string
+              securityContext: { protocolId: string; trust: string }
+            }
+          }
+        | undefined
+      expect(evt).toBeDefined()
+      expect(evt!.payload).toEqual({
+        conversationId: 'bob@example.com',
+        messageId: 'm-up',
+        securityContext: { protocolId: 'capture', trust: 'trusted' },
+      })
+    })
+  })
 })
+
+/**
+ * Register a throwaway plugin solely to capture the {@link PluginContext}
+ * the manager builds. The `reportSecurityContextUpdate` method on the
+ * captured ctx is the production-side channel a real plugin uses to report
+ * a re-verification result.
+ */
+async function capturePluginCtx(
+  manager: import('../e2ee').E2EEManager,
+): Promise<import('../e2ee').PluginContext> {
+  let captured: import('../e2ee').PluginContext | null = null
+  const probe: import('../e2ee').E2EEPlugin = {
+    descriptor: {
+      id: 'capture',
+      displayName: 'Capture probe',
+      securityLevel: 1,
+      features: {
+        forwardSecrecy: false,
+        postCompromiseSecurity: false,
+        multiDevice: false,
+        groupChat: false,
+        asynchronous: false,
+        deniability: false,
+      },
+    },
+    init: async (ctx) => {
+      captured = ctx
+    },
+    shutdown: async () => {},
+    ensureIdentity: async () => ({ fingerprint: 'capture' }),
+    probePeer: async () => ({ supported: false, ttl: 0 }),
+    openConversation: async () => ({ protocolId: 'capture', state: {} }),
+    closeConversation: async () => {},
+    encrypt: async () => ({ protocolId: 'capture', stanzaElement: { name: 'x', attrs: {}, children: [] } }),
+    decrypt: async () => ({
+      plaintext: new Uint8Array(),
+      senderDevice: { jid: '', deviceId: '' },
+      securityContext: { protocolId: 'capture', trust: 'untrusted' },
+    }),
+    getVerificationMethods: () => [],
+    startVerification: async () => {
+      throw new Error('unused')
+    },
+    getPeerTrust: async () => 'unknown',
+    getDeviceTrust: async () => 'unknown',
+    tryClaimInbound: () => null,
+  }
+  await manager.register(probe)
+  if (!captured) throw new Error('capturePluginCtx: ctx was not captured')
+  return captured
+}

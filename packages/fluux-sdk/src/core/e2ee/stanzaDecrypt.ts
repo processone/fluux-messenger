@@ -88,10 +88,12 @@ export async function decryptStanzaInPlace(
   let failureReason: string | null = null
 
   try {
-    const result = await manager.decryptInbound(claim.payload.stanzaElement, {
-      kind: 'direct',
-      peer: senderPeer,
-    })
+    const messageId = stanza.attrs.id
+    const result = await manager.decryptInbound(
+      claim.payload.stanzaElement,
+      { kind: 'direct', peer: senderPeer },
+      messageId ? { messageId } : undefined,
+    )
     if (result) {
       plaintext = new TextDecoder().decode(result.plaintext)
       securityContext = result.securityContext

@@ -62,6 +62,7 @@ import type {
   E2EEProtocolDescriptor,
   EncryptedPayload,
   IdentityInfo,
+  InboundDecryptContext,
   PEPItem,
   PeerSupport,
   PluginContext,
@@ -124,7 +125,46 @@ interface RustDecryptOutput {
   signatureVerified: boolean
   /** Present when the Rust side matched a signature against the supplied sender cert. */
   signerFingerprint: string | null
+  /**
+   * Whether at least one signature packet was observed in the decrypted
+   * payload, regardless of whether we could verify it. `false` for
+   * cleartext (well, plaintext-encrypted) messages; `true` for any
+   * XEP-0373 signcrypt — including ones we couldn't verify yet because
+   * the sender's public key hadn't arrived.
+   */
+  signaturePresent: boolean
 }
+
+/**
+ * An inbound message whose signature couldn't be checked at decrypt time —
+ * typically because the peer's OpenPGP key hadn't finished fetching from
+ * PEP yet. Stashed in-memory per-peer so that when the key arrives we can
+ * replay the decrypt against it and upgrade the trust badge.
+ */
+interface PendingVerification {
+  messageId: string
+  /** Original armored ciphertext, as passed to `openpgp_decrypt`. */
+  ciphertext: string
+  /** Expected plaintext, cached to skip the re-decrypt round-trip on upgrade. */
+  plaintext: string
+  /** `Date.now()` at which this entry should be discarded. */
+  expiresAt: number
+}
+
+/**
+ * Maximum pending entries held per-peer. Deliberately small — the race
+ * window this buffer exists for is measured in seconds, so ~50 messages
+ * covers a very bursty sender. The buffer is strictly an in-memory
+ * optimisation and never persisted.
+ */
+const SIGNATURE_BUFFER_SIZE = 50
+/**
+ * How long a stashed entry remains eligible for upgrade. Messages older
+ * than this stay at `untrusted` forever (the architecture doc calls for
+ * a separate manual "re-check signature" path if we ever need to go
+ * further back than this).
+ */
+const SIGNATURE_BUFFER_TTL_MS = 10 * 60 * 1000
 
 /**
  * Typed wrapper over Tauri's `invoke`. Abstracted so tests can inject a
@@ -159,6 +199,19 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
   private ownBundle: KeyBundle | null = null
   /** Cached peer public keys, keyed on bare JID. */
   private readonly peerKeys = new Map<BareJID, KeyBundle>()
+  /**
+   * Per-peer buffer of messages we decrypted before their sender key had
+   * arrived. On a subsequent `onPeerKeysChanged` we replay each entry
+   * against the new key and, for entries that now verify, report the
+   * upgraded security context via the plugin context.
+   *
+   * Bounded by both {@link SIGNATURE_BUFFER_SIZE} (per-peer) and
+   * {@link SIGNATURE_BUFFER_TTL_MS}; entries older than the TTL are
+   * pruned lazily at insert time.
+   */
+  private readonly pendingVerifications = new Map<BareJID, PendingVerification[]>()
+  /** Test seam — overridable clock. Production: `Date.now`. */
+  private now: () => number = () => Date.now()
 
   constructor(options: SequoiaPgpPluginOptions) {
     this.invoke = options.invoke
@@ -182,6 +235,7 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
     // settings UI is the right place to call `openpgp_forget_account`.
     this.ownBundle = null
     this.peerKeys.clear()
+    this.pendingVerifications.clear()
     this.ctx = null
   }
 
@@ -615,7 +669,11 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
     }
   }
 
-  async decrypt(handle: ConversationHandle, payload: EncryptedPayload): Promise<DecryptResult> {
+  async decrypt(
+    handle: ConversationHandle,
+    payload: EncryptedPayload,
+    context?: InboundDecryptContext,
+  ): Promise<DecryptResult> {
     const ctx = this.requireCtx()
     if (payload.protocolId !== descriptor.id) {
       throw new Error(`SequoiaPgpPlugin cannot decrypt protocol: ${payload.protocolId}`)
@@ -638,6 +696,26 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
     const plaintext = new TextEncoder().encode(rust.plaintext)
     const securityContext = this.buildInboundSecurityContext(peer, rust)
 
+    // Stash only for the specific race this buffer exists for: we had no
+    // sender cert at decrypt time AND the message actually carried a
+    // signature. A verified result needs no stash (nothing to upgrade); a
+    // signed message that failed verification against a cached cert stays
+    // untrusted forever (a rotation won't rehabilitate a bad sig); an
+    // unsigned message has nothing to re-check.
+    if (
+      context?.messageId &&
+      !rust.signatureVerified &&
+      rust.signaturePresent &&
+      !senderPublicArmored
+    ) {
+      this.stashPendingVerification(peer, {
+        messageId: context.messageId,
+        ciphertext,
+        plaintext: rust.plaintext,
+        expiresAt: this.now() + SIGNATURE_BUFFER_TTL_MS,
+      })
+    }
+
     return {
       plaintext,
       senderDevice: {
@@ -646,6 +724,102 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
       },
       securityContext,
     }
+  }
+
+  /**
+   * Insert (or update) a pending-verification entry for `peer`. Prunes any
+   * expired entries first, then enforces the per-peer size cap by evicting
+   * the oldest entries. An entry for the same `messageId` replaces the
+   * previous one so duplicate deliveries don't stack up.
+   */
+  private stashPendingVerification(peer: BareJID, entry: PendingVerification): void {
+    const existing = this.pendingVerifications.get(peer) ?? []
+    // Lazy prune: drop expired entries before deciding whether to evict.
+    const now = this.now()
+    const alive = existing.filter((e) => e.expiresAt > now && e.messageId !== entry.messageId)
+    alive.push(entry)
+    // Oldest-first eviction once we're over the cap. `alive` was built by
+    // appending newer entries, so the head is the oldest — drop from there.
+    while (alive.length > SIGNATURE_BUFFER_SIZE) {
+      alive.shift()
+    }
+    this.pendingVerifications.set(peer, alive)
+  }
+
+  /**
+   * Replay every stashed entry for `peer` against the currently-cached
+   * sender key. For entries that now verify, patch the security context
+   * and report an upgrade through the plugin context; drop verified or
+   * expired entries from the buffer either way.
+   *
+   * Runs serially to keep the Rust-side IPC load predictable — a buffer of
+   * 50 entries is small enough that sequential invokes finish quickly and
+   * parallelism would only invite races on the shared cached-peer state.
+   */
+  private async drainPendingVerifications(peer: BareJID): Promise<void> {
+    const ctx = this.ctx
+    const entries = this.pendingVerifications.get(peer)
+    if (!ctx || !entries || entries.length === 0) return
+
+    const peerBundle = this.peerKeys.get(peer)
+    if (!peerBundle) {
+      // We evicted the peer cache on PEP change; no key yet → probe will
+      // happen on the next send. Lazy-prune expired entries while we wait.
+      const now = this.now()
+      const alive = entries.filter((e) => e.expiresAt > now)
+      if (alive.length === 0) this.pendingVerifications.delete(peer)
+      else this.pendingVerifications.set(peer, alive)
+      return
+    }
+
+    const now = this.now()
+    const remaining: PendingVerification[] = []
+    for (const entry of entries) {
+      if (entry.expiresAt <= now) continue // TTL expired — drop quietly.
+      try {
+        const rust = await this.invoke<RustDecryptOutput>('openpgp_decrypt', {
+          accountJid: ctx.account.jid,
+          ciphertext: entry.ciphertext,
+          senderPublicArmored: peerBundle.publicArmored,
+        })
+        // Guard against the Rust side returning a different plaintext than
+        // we stashed. The identical ciphertext must decrypt to the same
+        // plaintext — a mismatch means something went wrong, keep the
+        // entry out of the buffer and don't report a spurious upgrade.
+        if (rust.plaintext !== entry.plaintext) continue
+        if (rust.signatureVerified) {
+          const securityContext = this.buildInboundSecurityContext(peer, rust)
+          ctx.reportSecurityContextUpdate({
+            peer,
+            messageId: entry.messageId,
+            securityContext,
+          })
+          // Evict — upgrade delivered, no need to replay again.
+          continue
+        }
+        // Signature still doesn't verify against the new key — keep the
+        // entry so a *subsequent* rotation still has a shot. (When it
+        // eventually expires it'll be dropped by the TTL filter.)
+        remaining.push(entry)
+      } catch (err) {
+        ctx.logger.debug(
+          `SequoiaPgpPlugin: re-verify for ${peer}/${entry.messageId} failed: ${formatError(err)}`,
+        )
+        remaining.push(entry)
+      }
+    }
+    if (remaining.length === 0) this.pendingVerifications.delete(peer)
+    else this.pendingVerifications.set(peer, remaining)
+  }
+
+  /**
+   * Test seam — override the clock used for TTL calculations. Production
+   * code uses the default `Date.now`; tests inject a monotonic counter so
+   * TTL-based eviction can be exercised without timers.
+   * @internal
+   */
+  _setClockForTesting(fn: () => number): void {
+    this.now = fn
   }
 
   /**
@@ -722,13 +896,34 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
   }
 
   /**
-   * Evict the cached public key for `peer`. Called by the host when a
-   * PEP headline announces a key rotation — without this, a rotated
-   * fingerprint would be masked by our positive cache from the previous
-   * publish and `encrypt()` would keep using the superseded key.
+   * Evict the cached public key for `peer` and kick off re-verification of
+   * any messages we previously stashed because their signatures couldn't
+   * be checked. Called by the host on a PEP headline — either a key
+   * rotation or the first-ever publish (the case we most care about: a
+   * brand-new peer whose messages landed seconds before their PEP fetch
+   * completed).
+   *
+   * Re-verification is async: we fetch the now-current key via
+   * {@link probePeer} and replay each stashed ciphertext against it.
+   * Errors are swallowed — a failed probe or a transient IPC hiccup
+   * leaves the stash in place; the TTL will eventually clean it up.
    */
   onPeerKeysChanged(peer: BareJID): void {
     this.peerKeys.delete(peer)
+    if (!this.pendingVerifications.get(peer)?.length) return
+    // Fire-and-forget: the host's notifyPeerKeysChanged is sync, and we
+    // don't want to block the PEP dispatch path on IPC. The caller
+    // doesn't need the return value; errors are logged inside the drain.
+    void (async () => {
+      try {
+        await this.probePeer(peer)
+      } catch (err) {
+        this.ctx?.logger.debug(
+          `SequoiaPgpPlugin: probePeer after key rotation failed for ${peer}: ${formatError(err)}`,
+        )
+      }
+      await this.drainPendingVerifications(peer)
+    })()
   }
 
   /** Own fingerprint, or `null` if ensureIdentity hasn't completed. */

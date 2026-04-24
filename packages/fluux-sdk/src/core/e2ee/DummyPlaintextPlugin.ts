@@ -7,6 +7,7 @@ import type {
   E2EEProtocolDescriptor,
   EncryptedPayload,
   IdentityInfo,
+  InboundDecryptContext,
   PeerSupport,
   PluginContext,
   SecurityContext,
@@ -94,7 +95,11 @@ export class DummyPlaintextPlugin implements E2EEPlugin {
     }
   }
 
-  async decrypt(_handle: ConversationHandle, payload: EncryptedPayload): Promise<DecryptResult> {
+  async decrypt(
+    _handle: ConversationHandle,
+    payload: EncryptedPayload,
+    _context?: InboundDecryptContext,
+  ): Promise<DecryptResult> {
     if (payload.protocolId !== this.descriptor.id) {
       throw new Error(`DummyPlaintextPlugin cannot decrypt protocol: ${payload.protocolId}`)
     }

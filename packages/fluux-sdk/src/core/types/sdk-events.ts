@@ -178,6 +178,19 @@ export interface ChatEvents {
     complete: boolean
     direction: MAMQueryDirection
   }
+
+  /**
+   * Plugin-driven upgrade of a previously-delivered message's security
+   * context. Emitted after an E2EE plugin re-evaluates a buffered
+   * message — typically when the sender's public key arrived moments
+   * after the message was surfaced as `untrusted`. The SDK binding
+   * patches `message.securityContext` so the lock icon re-renders.
+   */
+  'message:security-updated': {
+    conversationId: string
+    messageId: string
+    securityContext: import('./message-base').MessageSecurityContext
+  }
 }
 
 // ============================================================================

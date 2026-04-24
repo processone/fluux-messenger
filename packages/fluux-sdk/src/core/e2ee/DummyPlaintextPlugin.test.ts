@@ -17,6 +17,7 @@ function makeCtx(): PluginContext {
     xmpp,
     logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
     account: { jid: 'me@example.com' },
+    reportSecurityContextUpdate: () => {},
   }
 }
 

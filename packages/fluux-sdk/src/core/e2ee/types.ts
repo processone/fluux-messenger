@@ -133,6 +133,38 @@ export interface DecryptResult {
   securityContext: SecurityContext
 }
 
+/**
+ * Optional context handed to {@link E2EEPlugin.decrypt} alongside the
+ * payload. Populated by the SDK when the inbound message has identity
+ * fields that the plugin may need for protocol-level features (e.g.
+ * stashing a not-yet-verifiable signature for later re-checking).
+ *
+ * Plugins that don't need any of these fields can ignore the parameter.
+ */
+export interface InboundDecryptContext {
+  /**
+   * Stanza-level message id (`<message id="...">`). Plugins that buffer
+   * decrypts for later re-verification key their entries on this so the
+   * upgrade event can patch the right rendered message.
+   */
+  messageId?: string
+}
+
+/**
+ * Notification a plugin emits after re-evaluating a previously-delivered
+ * message — typically when a sender's key arrived after the message had
+ * already been surfaced as `untrusted`. The host re-publishes this to
+ * downstream consumers so the UI re-renders the affected message with
+ * the upgraded trust state.
+ */
+export interface SecurityContextUpdate {
+  /** Bare JID of the conversation peer. */
+  peer: BareJID
+  /** Stanza-level message id of the message whose context changed. */
+  messageId: string
+  securityContext: SecurityContext
+}
+
 /** Trust state for a peer or one of their devices. */
 export type TrustState = 'verified' | 'trusted' | 'untrusted' | 'unknown'
 
@@ -249,6 +281,16 @@ export interface PluginContext {
   xmpp: XMPPPrimitives
   logger: Logger
   account: AccountInfo
+  /**
+   * Plugin-driven channel for telling the host that a previously-delivered
+   * message's security context has changed (e.g. signature verified after a
+   * peer's key arrived). The host re-publishes this through its SDK event
+   * surface so any UI bound to the message re-renders. Wired by
+   * {@link E2EEManager} when it constructs the context; plugins must NOT
+   * call it during a `decrypt` call (that path returns a fresh
+   * {@link SecurityContext} via {@link DecryptResult} instead).
+   */
+  reportSecurityContextUpdate(update: SecurityContextUpdate): void
 }
 
 /**
@@ -281,8 +323,16 @@ export interface E2EEPlugin {
 
   /** Encrypt plaintext bytes for the conversation. */
   encrypt(handle: ConversationHandle, plaintext: Uint8Array): Promise<EncryptedPayload>
-  /** Decrypt an encrypted payload. */
-  decrypt(handle: ConversationHandle, payload: EncryptedPayload): Promise<DecryptResult>
+  /**
+   * Decrypt an encrypted payload. `context` carries optional message-level
+   * metadata the plugin may need (e.g. the stanza message-id, used to key
+   * deferred re-verification entries).
+   */
+  decrypt(
+    handle: ConversationHandle,
+    payload: EncryptedPayload,
+    context?: InboundDecryptContext,
+  ): Promise<DecryptResult>
 
   /** List verification methods this protocol supports (may be empty). */
   getVerificationMethods(): VerificationMethod[]

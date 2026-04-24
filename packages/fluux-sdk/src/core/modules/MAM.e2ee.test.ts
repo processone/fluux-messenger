@@ -276,4 +276,38 @@ describe('MAM E2EE wiring', () => {
     expect(messages[0].body).toBe('hello plaintext')
     expect(messages[0].securityContext).toBeUndefined()
   })
+
+  it('forwards the archived stanza messageId to plugin.decrypt', async () => {
+    // Same race-window guarantee as the live path: the SDK must thread the
+    // messageId of the forwarded stanza into the plugin's decrypt call so
+    // a deferred re-verify can target the right rendered message later.
+    const peerManager = await makeManagerWithDummyPlugin(PEER)
+    const payload = await peerManager.encryptOutbound(
+      { kind: 'direct', peer: ME },
+      new TextEncoder().encode('archived with id'),
+    )
+    if (!payload) throw new Error('Test setup: encryptOutbound returned null')
+
+    const decryptSpy = vi.spyOn(manager, 'decryptInbound')
+
+    const forwardedMessage = xml(
+      'message',
+      { from: PEER + '/res', to: ME, type: 'chat', id: 'mam-msg-id' },
+      xml('body', {}, payload.payload.fallbackBody ?? '[encrypted]'),
+      xml(
+        payload.payload.stanzaElement.name,
+        payload.payload.stanzaElement.attrs,
+        ...(payload.payload.stanzaElement.children as (string | Element)[]),
+      ),
+    )
+    const archiveEntry = buildMAMResult({
+      archiveId: 'arch-id',
+      forwardedMessage,
+    })
+
+    await runQueryWithEntry(harness, PEER, archiveEntry)
+
+    const lastCall = decryptSpy.mock.calls[decryptSpy.mock.calls.length - 1]
+    expect(lastCall[2]).toEqual({ messageId: 'mam-msg-id' })
+  })
 })

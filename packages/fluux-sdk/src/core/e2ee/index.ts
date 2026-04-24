@@ -19,6 +19,7 @@ export type {
   E2EEProtocolDescriptor,
   EncryptedPayload,
   IdentityInfo,
+  InboundDecryptContext,
   Logger,
   PEPItem,
   PeerSupport,
@@ -26,6 +27,7 @@ export type {
   PluginStorage,
   ProtocolFeatures,
   SecurityContext,
+  SecurityContextUpdate,
   Subscription,
   TrustState,
   VerificationFlow,
@@ -46,6 +48,7 @@ export {
   type E2EEManagerOptions,
   type E2EESendPolicy,
   type PinnedStrategy,
+  type SecurityContextUpdateListener,
 } from './E2EEManager'
 // DummyPlaintextPlugin is intentionally not re-exported here — see its file
 // for the rationale. Tests import it via relative path.

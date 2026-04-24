@@ -13,6 +13,7 @@ import {
   createPluginStorage,
   type PEPItem,
   type PluginContext,
+  type SecurityContextUpdate,
   type XMLElementData,
   type XMPPPrimitives,
 } from '@fluux/sdk'
@@ -121,6 +122,10 @@ function makeFakeRust() {
           plaintext,
           signatureVerified,
           signerFingerprint,
+          // Stub ciphertext always embeds a sender fingerprint, so every
+          // decrypt mimics a signcrypted OpenPGP message for the purposes
+          // of "was there a signature at all" bookkeeping.
+          signaturePresent: true,
         } as T
       }
       case 'openpgp_forget_account': {
@@ -302,6 +307,12 @@ function makeContext(accountJid: string): {
   }>
   retracted: Array<{ node: string; itemId: string }>
   peerPublish: (peer: string, node: string, item: PEPItem) => void
+  /**
+   * Every `reportSecurityContextUpdate` call captured on this ctx, in the
+   * order they arrived. Tests inspect this to assert the drain produced
+   * an upgrade for the right messageId.
+   */
+  securityUpdates: SecurityContextUpdate[]
 } {
   const peerNodes = new Map<string, PEPItem[]>() // keyed "jid\0node"
   const published: Array<{
@@ -310,6 +321,7 @@ function makeContext(accountJid: string): {
     options?: Parameters<XMPPPrimitives['publishPEP']>[2]
   }> = []
   const retracted: Array<{ node: string; itemId: string }> = []
+  const securityUpdates: SecurityContextUpdate[] = []
 
   const xmpp: XMPPPrimitives = {
     sendStanza: async () => {},
@@ -337,6 +349,9 @@ function makeContext(accountJid: string): {
     xmpp,
     logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
     account: { jid: accountJid },
+    reportSecurityContextUpdate: (update) => {
+      securityUpdates.push(update)
+    },
   }
   const peerPublish = (peer: string, node: string, item: PEPItem) => {
     const key = `${peer}\u0000${node}`
@@ -344,7 +359,7 @@ function makeContext(accountJid: string): {
     existing.push(item)
     peerNodes.set(key, existing)
   }
-  return { ctx, published, retracted, peerPublish }
+  return { ctx, published, retracted, peerPublish, securityUpdates }
 }
 
 describe('SequoiaPgpPlugin', () => {
@@ -862,6 +877,343 @@ describe('SequoiaPgpPlugin', () => {
 
       expect(plugin.getPeerFingerprint('bob@example.com')).toBeNull()
       expect(plugin.getPeerFingerprint('carol@example.com')).toBe(carolBundle.fingerprint)
+    })
+  })
+
+  describe('pending-signature buffer', () => {
+    /**
+     * Wait for the drain loop kicked off by `onPeerKeysChanged` to finish.
+     * The drain chains probePeer → queryPEP → per-entry decrypt, so
+     * a single await is not sufficient. Run a few setTimeout(0) rounds
+     * to guarantee every microtask chain resolves before inspection.
+     */
+    const flushAsync = async () => {
+      for (let i = 0; i < 5; i++) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 0))
+      }
+    }
+
+    async function decryptWithoutPeerKey(
+      bobPlugin: SequoiaPgpPlugin,
+      payload: XMLElementData,
+      messageId: string,
+      peer: string = 'alice@example.com',
+    ) {
+      const claim = bobPlugin.tryClaimInbound(payload)!
+      const bobHandle = await bobPlugin.openConversation({ kind: 'direct', peer })
+      return bobPlugin.decrypt(bobHandle, claim, { messageId })
+    }
+
+    it('drains the buffer on onPeerKeysChanged and reports an upgrade for verified entries', async () => {
+      // Build the pair manually so we hold references to the captured
+      // securityUpdates on bob's context.
+      const alicePlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const bobPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const aliceBuilt = makeContext('alice@example.com')
+      const bobBuilt = makeContext('bob@example.com')
+      await alicePlugin.init(aliceBuilt.ctx)
+      await bobPlugin.init(bobBuilt.ctx)
+
+      const aliceBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'alice@example.com',
+        userId: 'alice@example.com',
+      })
+      const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'bob@example.com',
+        userId: 'bob@example.com',
+      })
+      // Alice needs bob's key cached to encrypt to him.
+      publishKeyAsXep0373(aliceBuilt, 'bob@example.com', bobBundle)
+      await alicePlugin.probePeer('bob@example.com')
+      // Alice published her key, but bob's PEP view of her doesn't yet
+      // expose it — the critical race-window state.
+      const aliceHandle = await alicePlugin.openConversation({
+        kind: 'direct',
+        peer: 'bob@example.com',
+      })
+      const payload = await alicePlugin.encrypt(
+        aliceHandle,
+        new TextEncoder().encode('race winner'),
+      )
+
+      // Inbound decrypt: alice's key still missing → stash engages.
+      const decrypted = await decryptWithoutPeerKey(bobPlugin, payload.stanzaElement, 'm-upgrade')
+      expect(decrypted.securityContext.trust).toBe('untrusted')
+      expect(bobBuilt.securityUpdates).toHaveLength(0)
+
+      // NOW alice's PEP view appears for bob — the headline fires.
+      publishKeyAsXep0373(bobBuilt, 'alice@example.com', aliceBundle)
+      bobPlugin.onPeerKeysChanged('alice@example.com')
+      await flushAsync()
+
+      expect(bobBuilt.securityUpdates).toHaveLength(1)
+      expect(bobBuilt.securityUpdates[0]).toMatchObject({
+        peer: 'alice@example.com',
+        messageId: 'm-upgrade',
+        securityContext: { protocolId: 'openpgp', trust: 'trusted' },
+      })
+    })
+
+    it('does not stash when the signature verified on first decrypt', async () => {
+      const alicePlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const bobPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const aliceBuilt = makeContext('alice@example.com')
+      const bobBuilt = makeContext('bob@example.com')
+      await alicePlugin.init(aliceBuilt.ctx)
+      await bobPlugin.init(bobBuilt.ctx)
+
+      const aliceBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'alice@example.com',
+        userId: 'alice',
+      })
+      const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'bob@example.com',
+        userId: 'bob',
+      })
+      publishKeyAsXep0373(aliceBuilt, 'bob@example.com', bobBundle)
+      publishKeyAsXep0373(bobBuilt, 'alice@example.com', aliceBundle)
+      await alicePlugin.probePeer('bob@example.com')
+      await bobPlugin.probePeer('alice@example.com')
+
+      const aliceHandle = await alicePlugin.openConversation({
+        kind: 'direct',
+        peer: 'bob@example.com',
+      })
+      const payload = await alicePlugin.encrypt(
+        aliceHandle,
+        new TextEncoder().encode('already verified'),
+      )
+
+      const decrypted = await decryptWithoutPeerKey(bobPlugin, payload.stanzaElement, 'm-verified')
+      expect(decrypted.securityContext.trust).toBe('trusted')
+
+      // Firing the key-change hook with an empty buffer must be a no-op:
+      // no re-verify invokes, no upgrades reported.
+      bobPlugin.onPeerKeysChanged('alice@example.com')
+      await flushAsync()
+      expect(bobBuilt.securityUpdates).toHaveLength(0)
+    })
+
+    it('stash-then-verify-fails keeps the entry and does not upgrade', async () => {
+      // The key that finally arrives is a DIFFERENT identity (eve's). The
+      // re-verify reports signatureVerified=false, so no upgrade fires and
+      // the entry stays for a potential next rotation.
+      const alicePlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const bobPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const aliceBuilt = makeContext('alice@example.com')
+      const bobBuilt = makeContext('bob@example.com')
+      await alicePlugin.init(aliceBuilt.ctx)
+      await bobPlugin.init(bobBuilt.ctx)
+      const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'bob@example.com',
+        userId: 'bob@example.com',
+      })
+      publishKeyAsXep0373(aliceBuilt, 'bob@example.com', bobBundle)
+      await alicePlugin.probePeer('bob@example.com')
+
+      const aliceHandle = await alicePlugin.openConversation({
+        kind: 'direct',
+        peer: 'bob@example.com',
+      })
+      const payload = await alicePlugin.encrypt(
+        aliceHandle,
+        new TextEncoder().encode('from real alice'),
+      )
+
+      await decryptWithoutPeerKey(bobPlugin, payload.stanzaElement, 'm-mismatch')
+
+      // Bob later sees eve's key advertised as alice (misconfigured server).
+      const eveBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'eve@example.com',
+        userId: 'eve@example.com',
+      })
+      publishKeyAsXep0373(bobBuilt, 'alice@example.com', eveBundle)
+
+      bobPlugin.onPeerKeysChanged('alice@example.com')
+      await flushAsync()
+
+      expect(bobBuilt.securityUpdates).toHaveLength(0)
+    })
+
+    it('enforces the per-peer buffer size cap by evicting oldest entries', async () => {
+      // Stuff SIGNATURE_BUFFER_SIZE + 1 entries in, then verify the oldest
+      // is gone by triggering a drain with the legitimate key and counting
+      // upgrades. We expect exactly SIGNATURE_BUFFER_SIZE upgrades.
+      const alicePlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const bobPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const aliceBuilt = makeContext('alice@example.com')
+      const bobBuilt = makeContext('bob@example.com')
+      await alicePlugin.init(aliceBuilt.ctx)
+      await bobPlugin.init(bobBuilt.ctx)
+      const aliceBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'alice@example.com',
+        userId: 'alice',
+      })
+      const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'bob@example.com',
+        userId: 'bob',
+      })
+      publishKeyAsXep0373(aliceBuilt, 'bob@example.com', bobBundle)
+      await alicePlugin.probePeer('bob@example.com')
+      const aliceHandle = await alicePlugin.openConversation({
+        kind: 'direct',
+        peer: 'bob@example.com',
+      })
+
+      // 51 decrypts: oldest must be evicted by the cap.
+      const BUFFER_SIZE_PLUS_ONE = 51
+      for (let i = 0; i < BUFFER_SIZE_PLUS_ONE; i++) {
+        const payload = await alicePlugin.encrypt(
+          aliceHandle,
+          new TextEncoder().encode(`msg-${i}`),
+        )
+        await decryptWithoutPeerKey(bobPlugin, payload.stanzaElement, `m-${i}`)
+      }
+
+      publishKeyAsXep0373(bobBuilt, 'alice@example.com', aliceBundle)
+      bobPlugin.onPeerKeysChanged('alice@example.com')
+      await flushAsync()
+
+      // Exactly SIGNATURE_BUFFER_SIZE (=50) upgrades fired; m-0 was evicted.
+      expect(bobBuilt.securityUpdates).toHaveLength(50)
+      const upgradedIds = new Set(bobBuilt.securityUpdates.map((u) => u.messageId))
+      expect(upgradedIds.has('m-0')).toBe(false)
+      expect(upgradedIds.has('m-50')).toBe(true)
+    })
+
+    it('evicts entries older than the TTL on subsequent inserts', async () => {
+      const alicePlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const bobPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const aliceBuilt = makeContext('alice@example.com')
+      const bobBuilt = makeContext('bob@example.com')
+      await alicePlugin.init(aliceBuilt.ctx)
+      await bobPlugin.init(bobBuilt.ctx)
+      // Monotonic test clock so TTL expiry is deterministic.
+      let clock = 0
+      bobPlugin._setClockForTesting(() => clock)
+
+      const aliceBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'alice@example.com',
+        userId: 'alice',
+      })
+      const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'bob@example.com',
+        userId: 'bob',
+      })
+      publishKeyAsXep0373(aliceBuilt, 'bob@example.com', bobBundle)
+      await alicePlugin.probePeer('bob@example.com')
+      const aliceHandle = await alicePlugin.openConversation({
+        kind: 'direct',
+        peer: 'bob@example.com',
+      })
+
+      // Entry 1 at t=0.
+      const p1 = await alicePlugin.encrypt(aliceHandle, new TextEncoder().encode('early'))
+      await decryptWithoutPeerKey(bobPlugin, p1.stanzaElement, 'm-early')
+
+      // Jump 11 minutes — older than the 10min TTL.
+      clock = 11 * 60 * 1000
+
+      // Entry 2 at t=11min — triggers lazy prune of m-early.
+      const p2 = await alicePlugin.encrypt(aliceHandle, new TextEncoder().encode('late'))
+      await decryptWithoutPeerKey(bobPlugin, p2.stanzaElement, 'm-late')
+
+      publishKeyAsXep0373(bobBuilt, 'alice@example.com', aliceBundle)
+      bobPlugin.onPeerKeysChanged('alice@example.com')
+      await flushAsync()
+
+      // Only m-late remains and gets upgraded; m-early expired.
+      expect(bobBuilt.securityUpdates.map((u) => u.messageId)).toEqual(['m-late'])
+    })
+
+    it('does not stash when no messageId is available', async () => {
+      // The SDK only passes messageId when the stanza carries one. A
+      // message without an id has no stable key to buffer on — we skip
+      // the stash entirely rather than inventing an opaque token.
+      const alicePlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const bobPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const aliceBuilt = makeContext('alice@example.com')
+      const bobBuilt = makeContext('bob@example.com')
+      await alicePlugin.init(aliceBuilt.ctx)
+      await bobPlugin.init(bobBuilt.ctx)
+      const aliceBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'alice@example.com',
+        userId: 'alice',
+      })
+      const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'bob@example.com',
+        userId: 'bob',
+      })
+      publishKeyAsXep0373(aliceBuilt, 'bob@example.com', bobBundle)
+      await alicePlugin.probePeer('bob@example.com')
+      const aliceHandle = await alicePlugin.openConversation({
+        kind: 'direct',
+        peer: 'bob@example.com',
+      })
+      const payload = await alicePlugin.encrypt(
+        aliceHandle,
+        new TextEncoder().encode('nocontext'),
+      )
+
+      const claim = bobPlugin.tryClaimInbound(payload.stanzaElement)!
+      const bobHandle = await bobPlugin.openConversation({
+        kind: 'direct',
+        peer: 'alice@example.com',
+      })
+      // No messageId in context → no stash.
+      await bobPlugin.decrypt(bobHandle, claim)
+
+      publishKeyAsXep0373(bobBuilt, 'alice@example.com', aliceBundle)
+      bobPlugin.onPeerKeysChanged('alice@example.com')
+      await flushAsync()
+      expect(bobBuilt.securityUpdates).toHaveLength(0)
+    })
+
+    it('only upgrades messages from the peer whose keys changed', async () => {
+      const alicePlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const bobPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const carolPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const aliceBuilt = makeContext('alice@example.com')
+      const bobBuilt = makeContext('bob@example.com')
+      const carolBuilt = makeContext('carol@example.com')
+      await alicePlugin.init(aliceBuilt.ctx)
+      await bobPlugin.init(bobBuilt.ctx)
+      await carolPlugin.init(carolBuilt.ctx)
+      const aliceBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'alice@example.com',
+        userId: 'alice',
+      })
+      const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'bob@example.com',
+        userId: 'bob',
+      })
+      publishKeyAsXep0373(aliceBuilt, 'bob@example.com', bobBundle)
+      publishKeyAsXep0373(carolBuilt, 'bob@example.com', bobBundle)
+      await alicePlugin.probePeer('bob@example.com')
+      await carolPlugin.probePeer('bob@example.com')
+      const aH = await alicePlugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
+      const cH = await carolPlugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
+      const aP = await alicePlugin.encrypt(aH, new TextEncoder().encode('from alice'))
+      const cP = await carolPlugin.encrypt(cH, new TextEncoder().encode('from carol'))
+
+      await decryptWithoutPeerKey(bobPlugin, aP.stanzaElement, 'm-alice')
+      // Manually craft a "from carol" decrypt via buildCrossPublishedPair
+      // pattern, but direct: bob opens a conversation keyed on carol.
+      const bobFromCarolHandle = await bobPlugin.openConversation({
+        kind: 'direct',
+        peer: 'carol@example.com',
+      })
+      await bobPlugin.decrypt(bobFromCarolHandle, bobPlugin.tryClaimInbound(cP.stanzaElement)!, {
+        messageId: 'm-carol',
+      })
+
+      // Only alice's key becomes available.
+      publishKeyAsXep0373(bobBuilt, 'alice@example.com', aliceBundle)
+      bobPlugin.onPeerKeysChanged('alice@example.com')
+      await flushAsync()
+
+      expect(bobBuilt.securityUpdates.map((u) => u.messageId)).toEqual(['m-alice'])
+      // Carol's entry is still in the buffer — untouched by an alice-only drain.
     })
   })
 

@@ -85,6 +85,12 @@ pub struct DecryptOutput {
     /// Fingerprint of the signing subkey's cert, when a signature was
     /// successfully verified. `None` otherwise.
     pub signer_fingerprint: Option<String>,
+    /// `true` iff the decrypted message carried at least one signature
+    /// packet — regardless of whether the TS side supplied a sender cert.
+    /// The plugin uses this to distinguish "unsigned message" (never
+    /// upgradable) from "signed but we didn't have the key to verify yet"
+    /// (stash for later re-verification when the sender's PEP key arrives).
+    pub signature_present: bool,
 }
 
 /// State held by the Tauri managed-state system. One entry per logged-in
@@ -698,12 +704,14 @@ fn decrypt_and_verify(
 
     // Shared state set by the helper during stream reading.
     let verified_fingerprint: Arc<Mutex<Option<Fingerprint>>> = Arc::new(Mutex::new(None));
+    let signature_present: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
 
     let helper = DecryptHelper {
         secret: &secret_cert,
         sender: sender_cert.as_ref(),
         policy: &policy,
         verified_fingerprint: verified_fingerprint.clone(),
+        signature_present: signature_present.clone(),
     };
 
     let mut decryptor = DecryptorBuilder::from_bytes(ciphertext.as_bytes())
@@ -719,11 +727,15 @@ fn decrypt_and_verify(
         .lock()
         .map_err(|e| anyhow!("verification state poisoned: {e}"))?
         .clone();
+    let had_signature = *signature_present
+        .lock()
+        .map_err(|e| anyhow!("signature presence state poisoned: {e}"))?;
 
     Ok(DecryptOutput {
         signature_verified: signer.is_some(),
         signer_fingerprint: signer.map(|fp| fp.to_hex()),
         plaintext,
+        signature_present: had_signature,
     })
 }
 
@@ -734,6 +746,11 @@ struct DecryptHelper<'a> {
     /// Set by [`check`] when at least one signature validates against
     /// `sender`. Observed by the outer function after the stream is drained.
     verified_fingerprint: Arc<Mutex<Option<Fingerprint>>>,
+    /// Set to true by [`check`] when any signature result is observed —
+    /// verified or not, keyed or not. The outer function uses this to
+    /// distinguish an unsigned message from a signed one whose verification
+    /// was deferred pending a cert.
+    signature_present: Arc<Mutex<bool>>,
 }
 
 impl VerificationHelper for DecryptHelper<'_> {
@@ -755,6 +772,14 @@ impl VerificationHelper for DecryptHelper<'_> {
         for layer in structure.iter() {
             if let MessageLayer::SignatureGroup { results } = layer {
                 for result in results {
+                    // Any result (Ok OR Err) means a signature packet was
+                    // observed. MissingKey errors surface here when no
+                    // sender cert was provided; record presence so the
+                    // plugin can distinguish "unsigned" from "we just
+                    // couldn't verify yet".
+                    if let Ok(mut slot) = self.signature_present.lock() {
+                        *slot = true;
+                    }
                     if let Ok(verification) = result {
                         let fp = verification.ka.cert().fingerprint();
                         if let Ok(mut slot) = self.verified_fingerprint.lock() {
@@ -972,6 +997,29 @@ mod tests {
             "verification must be false when no sender cert is supplied"
         );
         assert!(out.signer_fingerprint.is_none());
+        // The plugin relies on this flag to know "signed but not yet
+        // verifiable" vs "unsigned" — keep it true whenever a signature
+        // packet was observed, even without a sender cert.
+        assert!(
+            out.signature_present,
+            "signature_present must be true for a signcrypted message even when no sender cert was supplied"
+        );
+    }
+
+    #[test]
+    fn decrypt_verified_reports_signature_present() {
+        // Positive-path companion to the key-not-cached case: a verified
+        // signcrypt still sets signature_present so the plugin can treat
+        // the "already verified" branch without re-inspecting the payload.
+        let (state, alice, bob) = setup_two_accounts();
+        let ciphertext = state
+            .encrypt("alice@example.com", &bob.public_armored, "hey")
+            .unwrap();
+        let out = state
+            .decrypt("bob@example.com", &ciphertext, Some(&alice.public_armored))
+            .unwrap();
+        assert!(out.signature_verified);
+        assert!(out.signature_present);
     }
 
     #[test]

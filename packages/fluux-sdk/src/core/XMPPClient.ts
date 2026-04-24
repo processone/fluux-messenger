@@ -1567,6 +1567,18 @@ export class XMPPClient {
       xmpp: this.buildE2EEPrimitives(),
       account: { jid: bareJid },
     })
+    // Route plugin-reported security upgrades (e.g. a late-arriving
+    // sender key flipping a previously-untrusted message to trusted)
+    // onto the SDK event surface so store bindings can patch messages
+    // in place. Stays alive for the lifetime of this manager; a shutdown
+    // in tearDownE2EEManager releases the manager and with it the listener.
+    this.e2ee.onSecurityContextUpdated(({ peer, messageId, securityContext }) => {
+      this.emitSDK('message:security-updated', {
+        conversationId: peer,
+        messageId,
+        securityContext,
+      })
+    })
   }
 
   /**

@@ -8,8 +8,10 @@ import type {
   E2EEPlugin,
   E2EEProtocolDescriptor,
   EncryptedPayload,
+  InboundDecryptContext,
   Logger,
   PluginContext,
+  SecurityContextUpdate,
   XMLElementData,
   XMPPPrimitives,
 } from './types'
@@ -29,6 +31,9 @@ export interface E2EEManagerOptions {
   logger?: Logger
   capabilityCache?: CapabilityCacheOptions
 }
+
+/** Listener for plugin-driven security-context upgrades. See {@link E2EEManager.onSecurityContextUpdated}. */
+export type SecurityContextUpdateListener = (update: SecurityContextUpdate) => void
 
 /**
  * User or admin pin that forces a specific plugin on a conversation.
@@ -78,6 +83,7 @@ export class E2EEManager {
   private readonly account: AccountInfo
   private readonly logger: Logger
   private sendPolicy: E2EESendPolicy = 'opportunistic'
+  private readonly securityContextListeners = new Set<SecurityContextUpdateListener>()
 
   constructor(options: E2EEManagerOptions) {
     this.storage = options.storage
@@ -110,6 +116,7 @@ export class E2EEManager {
       xmpp: this.xmpp,
       logger: this.logger,
       account: this.account,
+      reportSecurityContextUpdate: (update) => this.dispatchSecurityContextUpdate(update),
     }
     await plugin.init(ctx)
     this.plugins.set(id, plugin)
@@ -282,18 +289,52 @@ export class E2EEManager {
   /**
    * End-to-end inbound helper: claim the element, open a conversation for the
    * sender, decrypt. Returns `null` if no plugin claims the element.
+   *
+   * `context` forwards optional message-level metadata (e.g. the stanza
+   * message-id) to the plugin so features like signature re-verification
+   * can reference a specific inbound message later on.
    */
   async decryptInbound(
     stanzaChild: XMLElementData,
     senderTarget: ConversationTarget,
+    context?: InboundDecryptContext,
   ): Promise<DecryptResult | null> {
     const claim = this.claimInbound(stanzaChild)
     if (!claim) return null
     const handle = await claim.plugin.openConversation(senderTarget)
     try {
-      return await claim.plugin.decrypt(handle, claim.payload)
+      return await claim.plugin.decrypt(handle, claim.payload, context)
     } finally {
       await claim.plugin.closeConversation(handle).catch(() => {})
+    }
+  }
+
+  /**
+   * Subscribe to plugin-driven security-context updates. Plugins call
+   * {@link PluginContext.reportSecurityContextUpdate} (e.g. after a
+   * previously-untrusted message's signature becomes verifiable because a
+   * sender key finally arrived); every registered listener is invoked with
+   * the same payload. Returns an `unsubscribe` function.
+   *
+   * Listeners are local to this manager instance — shutting down the
+   * manager does not call them, but also does not warn if they stay
+   * registered; callers are expected to unsubscribe on teardown.
+   */
+  onSecurityContextUpdated(listener: SecurityContextUpdateListener): () => void {
+    this.securityContextListeners.add(listener)
+    return () => {
+      this.securityContextListeners.delete(listener)
+    }
+  }
+
+  /** Dispatch a plugin-reported update to every registered listener. */
+  private dispatchSecurityContextUpdate(update: SecurityContextUpdate): void {
+    for (const listener of this.securityContextListeners) {
+      try {
+        listener(update)
+      } catch (err) {
+        this.logger.warn('E2EEManager: security context listener threw', err)
+      }
     }
   }
 
@@ -305,6 +346,7 @@ export class E2EEManager {
     }
     this.pins.clear()
     this.capabilityCache.clear()
+    this.securityContextListeners.clear()
   }
 }
 

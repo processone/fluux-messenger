@@ -318,6 +318,125 @@ describe('E2EEManager — strategy selection', () => {
   })
 })
 
+describe('E2EEManager — security context updates', () => {
+  it('routes plugin reports to every registered listener', async () => {
+    const mgr = makeManager()
+    const plugin = new FakePlugin(strongDescriptor, 'urn:test:strong')
+    let captured: PluginContext | null = null
+    plugin.init = async (ctx: PluginContext) => {
+      captured = ctx
+    }
+    await mgr.register(plugin)
+
+    const a = vi.fn()
+    const b = vi.fn()
+    mgr.onSecurityContextUpdated(a)
+    mgr.onSecurityContextUpdated(b)
+
+    captured!.reportSecurityContextUpdate({
+      peer: 'bob@example.com',
+      messageId: 'm-42',
+      securityContext: { protocolId: strongDescriptor.id, trust: 'trusted' },
+    })
+
+    expect(a).toHaveBeenCalledWith({
+      peer: 'bob@example.com',
+      messageId: 'm-42',
+      securityContext: { protocolId: strongDescriptor.id, trust: 'trusted' },
+    })
+    expect(b).toHaveBeenCalledWith(expect.objectContaining({ messageId: 'm-42' }))
+  })
+
+  it('unsubscribe stops further deliveries', async () => {
+    const mgr = makeManager()
+    const plugin = new FakePlugin(strongDescriptor, 'urn:test:strong')
+    let captured: PluginContext | null = null
+    plugin.init = async (ctx: PluginContext) => {
+      captured = ctx
+    }
+    await mgr.register(plugin)
+
+    const listener = vi.fn()
+    const unsubscribe = mgr.onSecurityContextUpdated(listener)
+    unsubscribe()
+
+    captured!.reportSecurityContextUpdate({
+      peer: 'bob@example.com',
+      messageId: 'm-1',
+      securityContext: { protocolId: strongDescriptor.id, trust: 'trusted' },
+    })
+    expect(listener).not.toHaveBeenCalled()
+  })
+
+  it('a throwing listener does not stop dispatch to the next listener', async () => {
+    const mgr = makeManager()
+    const plugin = new FakePlugin(strongDescriptor, 'urn:test:strong')
+    let captured: PluginContext | null = null
+    plugin.init = async (ctx: PluginContext) => {
+      captured = ctx
+    }
+    await mgr.register(plugin)
+
+    const survivor = vi.fn()
+    mgr.onSecurityContextUpdated(() => {
+      throw new Error('first listener exploded')
+    })
+    mgr.onSecurityContextUpdated(survivor)
+
+    captured!.reportSecurityContextUpdate({
+      peer: 'bob@example.com',
+      messageId: 'm-1',
+      securityContext: { protocolId: strongDescriptor.id, trust: 'trusted' },
+    })
+    expect(survivor).toHaveBeenCalled()
+  })
+
+  it('decryptInbound forwards InboundDecryptContext to the chosen plugin', async () => {
+    const mgr = makeManager()
+    const plugin = new FakePlugin(strongDescriptor, 'urn:test:strong')
+    const decryptSpy = vi.spyOn(plugin, 'decrypt')
+    await mgr.register(plugin)
+
+    await mgr.decryptInbound(
+      { name: 'fake', attrs: { xmlns: 'urn:test:strong' }, children: [] },
+      { kind: 'direct', peer: 'bob@example.com' },
+      { messageId: 'm-99' },
+    )
+
+    expect(decryptSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      { messageId: 'm-99' },
+    )
+  })
+
+  it('shutdown clears subscribed listeners', async () => {
+    const mgr = makeManager()
+    const plugin = new FakePlugin(strongDescriptor, 'urn:test:strong')
+    let captured: PluginContext | null = null
+    plugin.init = async (ctx: PluginContext) => {
+      captured = ctx
+    }
+    await mgr.register(plugin)
+
+    const listener = vi.fn()
+    mgr.onSecurityContextUpdated(listener)
+    // Snapshot the context before shutdown nukes the plugin.
+    const ctxSnapshot = captured!
+    await mgr.shutdown()
+
+    // Calling reportSecurityContextUpdate after shutdown is a no-op
+    // because listeners were cleared. (The closure still works — we're
+    // asserting the listener side of the dispatch was emptied.)
+    ctxSnapshot.reportSecurityContextUpdate({
+      peer: 'bob@example.com',
+      messageId: 'm-1',
+      securityContext: { protocolId: strongDescriptor.id, trust: 'trusted' },
+    })
+    expect(listener).not.toHaveBeenCalled()
+  })
+})
+
 describe('E2EEManager — send policy', () => {
   it('defaults to opportunistic', () => {
     const mgr = makeManager()
