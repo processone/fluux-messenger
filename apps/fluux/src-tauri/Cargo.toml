@@ -58,6 +58,13 @@ sequoia-openpgp = { version = "2.0", default-features = false, features = [
 anyhow = "1"
 base64 = "0.22"
 
+# Unicode NFKD normalization for the backup passphrase. BIP-39 wordlists
+# for non-English languages contain precomposed diacritics that user
+# keyboards and copy-paste sources may decompose differently; applying
+# NFKD on both encrypt and decrypt guarantees byte-identical KDF input
+# regardless of how the text reached us.
+unicode-normalization = "0.1"
+
 # Updater plugin for auto-updates (desktop only)
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"

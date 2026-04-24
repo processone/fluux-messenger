@@ -23,6 +23,7 @@
 
 use anyhow::{anyhow, Context, Result};
 use sequoia_openpgp as openpgp;
+use unicode_normalization::UnicodeNormalization;
 
 use openpgp::{
     cert::Cert,
@@ -41,6 +42,33 @@ use openpgp::{
     KeyHandle,
 };
 use std::io::Write as _;
+
+/// Normalize a backup passphrase to a canonical byte sequence before
+/// handing it to Argon2id + SKESK unlock. Applied identically on the
+/// encrypt and decrypt paths so whatever round-trips through keyboards,
+/// clipboards, password managers, or hand-transcription still derives
+/// the same key.
+///
+/// Pipeline:
+///   1. **NFKD** — required by BIP-39 and the general fix for
+///      precomposed-vs-combining diacritic mismatches ("é" as U+00E9
+///      vs. "e" + U+0301). Compatibility decomposition also maps
+///      width-variant ASCII (full-width digits etc.) to plain ASCII.
+///   2. **Lowercase** — BIP-39 wordlists are all-lowercase by
+///      convention; folding case tolerates a stuck caps-lock on
+///      restore without weakening entropy (the passphrase alphabet is
+///      already lowercase at generation).
+///   3. **Whitespace collapse** — trim leading/trailing, squash any
+///      run of Unicode whitespace (newlines from password-manager
+///      paste, NBSP U+00A0, ideographic space U+3000) to a single
+///      ASCII space.
+fn normalize_passphrase(raw: &str) -> String {
+    let nfkd: String = raw.nfkd().collect::<String>().to_lowercase();
+    // Split on *any* Unicode whitespace, then rejoin with single ASCII
+    // space. `split_whitespace` already skips empty components, so
+    // leading/trailing/duplicate separators are handled in one step.
+    nfkd.split_whitespace().collect::<Vec<_>>().join(" ")
+}
 
 /// Encrypt an armored TSK to `passphrase`, returning an armored OpenPGP
 /// message ready for publication on the XEP-0373 §5 secret-key node.
@@ -66,7 +94,11 @@ pub fn encrypt_tsk_with_passphrase(tsk_armored: &str, passphrase: &str) -> Resul
         .serialize(&mut tsk_bytes)
         .context("serialize TSK to binary")?;
 
-    let password = Password::from(passphrase);
+    let normalized = normalize_passphrase(passphrase);
+    if normalized.is_empty() {
+        return Err(anyhow!("backup passphrase is empty after normalization"));
+    }
+    let password = Password::from(normalized);
     let mut sink: Vec<u8> = Vec::new();
     {
         let message = Message::new(&mut sink);
@@ -95,7 +127,7 @@ pub fn encrypt_tsk_with_passphrase(tsk_armored: &str, passphrase: &str) -> Resul
 /// an `Err` rather than a panic — the UI can catch and prompt again.
 pub fn decrypt_tsk_with_passphrase(message_armored: &str, passphrase: &str) -> Result<String> {
     let policy = StandardPolicy::new();
-    let password = Password::from(passphrase);
+    let password = Password::from(normalize_passphrase(passphrase));
     let helper = BackupHelper {
         password: &password,
     };
@@ -232,6 +264,92 @@ mod tests {
             format!("{err:#}").contains("public key"),
             "error should name the mistake, got: {err:#}"
         );
+    }
+
+    // ---------- passphrase normalization ----------
+
+    #[test]
+    fn normalize_is_idempotent() {
+        // Applying the normalizer twice must be a no-op — otherwise a
+        // caller who pre-normalizes then we re-normalize could drift.
+        let samples = [
+            "correct horse battery staple",
+            "  trim   me   ",
+            "MiXeD CaSe",
+            "café", // precomposed é
+        ];
+        for s in samples {
+            let once = normalize_passphrase(s);
+            let twice = normalize_passphrase(&once);
+            assert_eq!(once, twice, "normalize must be idempotent for {s:?}");
+        }
+    }
+
+    #[test]
+    fn normalize_unifies_nfc_and_nfd_forms() {
+        // "café" — precomposed é (U+00E9) vs. e + combining acute
+        // (U+0065 U+0301). Both sequences print the same; NFKD must
+        // fold them to the same byte string so the KDF can't tell
+        // which keyboard or clipboard produced the input.
+        let nfc = "caf\u{00E9}";
+        let nfd = "cafe\u{0301}";
+        assert_ne!(nfc.as_bytes(), nfd.as_bytes(), "inputs must differ pre-normalization");
+        assert_eq!(normalize_passphrase(nfc), normalize_passphrase(nfd));
+    }
+
+    #[test]
+    fn normalize_lowercases() {
+        assert_eq!(normalize_passphrase("CAFÉ"), normalize_passphrase("café"));
+        assert_eq!(normalize_passphrase("Hello World"), "hello world");
+    }
+
+    #[test]
+    fn normalize_collapses_and_trims_whitespace() {
+        // Triple space, leading/trailing space, tab, newline, non-
+        // breaking space (U+00A0), ideographic space (U+3000) — all
+        // must reduce to a single ASCII space between words.
+        assert_eq!(normalize_passphrase("  a    b  "), "a b");
+        assert_eq!(normalize_passphrase("a\tb\nc"), "a b c");
+        assert_eq!(normalize_passphrase("a\u{00A0}b"), "a b");
+        assert_eq!(normalize_passphrase("a\u{3000}b"), "a b");
+    }
+
+    #[test]
+    fn encrypt_empty_passphrase_is_rejected() {
+        // An all-whitespace passphrase normalizes to empty; we refuse
+        // to encrypt rather than produce a backup that unlocks on any
+        // whitespace-only guess.
+        let tsk = fresh_tsk();
+        let err = encrypt_tsk_with_passphrase(&tsk, "   \t\n  ")
+            .expect_err("whitespace-only passphrase must be rejected");
+        assert!(format!("{err:#}").contains("empty"));
+    }
+
+    #[test]
+    fn round_trip_survives_unicode_form_mismatch() {
+        // End-to-end: encrypt with NFC, decrypt with NFD of the same
+        // visible string. Before normalization landed this would fail
+        // with "no SKESK matched".
+        let tsk = fresh_tsk();
+        let nfc_pp = "caf\u{00E9} soleil"; // é precomposed
+        let nfd_pp = "cafe\u{0301} soleil"; // é decomposed
+        let backup = encrypt_tsk_with_passphrase(&tsk, nfc_pp).unwrap();
+        let recovered = decrypt_tsk_with_passphrase(&backup, nfd_pp)
+            .expect("NFD input must unlock an NFC-encrypted backup");
+        assert!(Cert::from_bytes(recovered.as_bytes()).unwrap().is_tsk());
+    }
+
+    #[test]
+    fn round_trip_survives_case_and_whitespace_variants() {
+        // User transcribed onto another device with double spaces and
+        // a stuck shift key. Normalization must make this succeed.
+        let tsk = fresh_tsk();
+        let generated = "able bacon chair daisy eagle";
+        let typed = "  ABLE  bacon\tchair  daisy eagle  ";
+        let backup = encrypt_tsk_with_passphrase(&tsk, generated).unwrap();
+        let recovered = decrypt_tsk_with_passphrase(&backup, typed)
+            .expect("whitespace/case variants must unlock");
+        assert!(Cert::from_bytes(recovered.as_bytes()).unwrap().is_tsk());
     }
 
     #[test]

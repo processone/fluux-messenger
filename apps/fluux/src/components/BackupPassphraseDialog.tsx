@@ -3,6 +3,12 @@ import { useTranslation } from 'react-i18next'
 import { Copy, Check, AlertTriangle, Loader2, RefreshCw } from 'lucide-react'
 import { generateBackupPassphrase } from '@/e2ee/passphraseGenerator'
 
+// Draw a fresh passphrase in the user's UI language. 8 words ×
+// 11 bits (BIP-39) = 88 bits, which matches the acceptability gate
+// for user-supplied passphrases and gives durable Argon2id margin
+// over the 10–20-year lifetime of the OpenPGP identity key.
+const BACKUP_WORD_COUNT = 8
+
 interface BackupPassphraseDialogProps {
   /** Called with the user-confirmed passphrase when they click "Back up". */
   onConfirm: (passphrase: string) => Promise<void>
@@ -29,17 +35,37 @@ export function BackupPassphraseDialog({
   onConfirm,
   onCancel,
 }: BackupPassphraseDialogProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const mouseDownTargetRef = useRef<EventTarget | null>(null)
 
   // Regenerate on every open rather than keeping a stable value — a
   // user who cancelled and reopened should get a fresh passphrase so
   // a shoulder-surfing observer of the first attempt can't reuse it.
-  const [passphrase, setPassphrase] = useState<string>(() => generateBackupPassphrase())
+  // `null` while the language-specific wordlist chunk is loading.
+  const [passphrase, setPassphrase] = useState<string | null>(null)
   const [acknowledged, setAcknowledged] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
   const [isPublishing, setIsPublishing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Generate on mount and whenever the UI language changes — a user
+  // who switches locale mid-dialog gets a passphrase in the new
+  // language rather than a stale one. Cancellation guards against a
+  // late-arriving chunk overwriting a newer draw.
+  useEffect(() => {
+    let cancelled = false
+    setPassphrase(null)
+    generateBackupPassphrase(BACKUP_WORD_COUNT, i18n.language)
+      .then((pp) => {
+        if (!cancelled) setPassphrase(pp)
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [i18n.language])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -49,14 +75,21 @@ export function BackupPassphraseDialog({
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [onCancel, isPublishing])
 
-  const handleRegenerate = useCallback(() => {
+  const handleRegenerate = useCallback(async () => {
     if (isPublishing) return
-    setPassphrase(generateBackupPassphrase())
     setAcknowledged(false)
     setIsCopied(false)
-  }, [isPublishing])
+    setPassphrase(null)
+    try {
+      const pp = await generateBackupPassphrase(BACKUP_WORD_COUNT, i18n.language)
+      setPassphrase(pp)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }, [isPublishing, i18n.language])
 
   const handleCopy = useCallback(async () => {
+    if (!passphrase) return
     try {
       await navigator.clipboard.writeText(passphrase)
       setIsCopied(true)
@@ -69,6 +102,7 @@ export function BackupPassphraseDialog({
   }, [passphrase, t])
 
   const handleConfirm = useCallback(async () => {
+    if (!passphrase) return
     setIsPublishing(true)
     setError(null)
     try {
@@ -84,7 +118,7 @@ export function BackupPassphraseDialog({
   // Group the space-separated words into a grid of three columns so
   // long passphrases wrap cleanly and each word is readable on its
   // own — transcription onto a second device is the main use case.
-  const wordGroups = useMemo(() => passphrase.split(' '), [passphrase])
+  const wordGroups = useMemo(() => (passphrase ? passphrase.split(' ') : []), [passphrase])
 
   return (
     <div
@@ -117,26 +151,30 @@ export function BackupPassphraseDialog({
         </div>
 
         {/* Passphrase display */}
-        <div className="rounded-lg border border-fluux-hover bg-fluux-bg p-3 mb-2">
-          <div className="grid grid-cols-3 gap-2">
-            {wordGroups.map((word, i) => (
-              <code
-                // Word positions are stable within a single passphrase instance;
-                // React key is the index, which is fine because the list is
-                // never reordered, only replaced on regenerate.
-                key={i}
-                className="text-sm font-mono text-fluux-text text-center py-1 rounded bg-fluux-hover/50"
-              >
-                {word}
-              </code>
-            ))}
-          </div>
+        <div className="rounded-lg border border-fluux-hover bg-fluux-bg p-3 mb-2 min-h-[3.5rem] flex items-center justify-center">
+          {passphrase ? (
+            <div className="grid grid-cols-3 gap-2 w-full">
+              {wordGroups.map((word, i) => (
+                <code
+                  // Word positions are stable within a single passphrase instance;
+                  // React key is the index, which is fine because the list is
+                  // never reordered, only replaced on regenerate.
+                  key={i}
+                  className="text-sm font-mono text-fluux-text text-center py-1 rounded bg-fluux-hover/50"
+                >
+                  {word}
+                </code>
+              ))}
+            </div>
+          ) : (
+            <Loader2 className="w-4 h-4 animate-spin text-fluux-muted" />
+          )}
         </div>
 
         <div className="flex gap-2 mb-4">
           <button
             onClick={handleCopy}
-            disabled={isPublishing}
+            disabled={isPublishing || !passphrase}
             className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors disabled:opacity-50"
           >
             {isCopied ? (
@@ -150,7 +188,7 @@ export function BackupPassphraseDialog({
           </button>
           <button
             onClick={handleRegenerate}
-            disabled={isPublishing}
+            disabled={isPublishing || !passphrase}
             className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors disabled:opacity-50"
             title={t('settings.encryption.backupRegenerate')}
             aria-label={t('settings.encryption.backupRegenerate')}
@@ -189,7 +227,7 @@ export function BackupPassphraseDialog({
           </button>
           <button
             onClick={handleConfirm}
-            disabled={!acknowledged || isPublishing}
+            disabled={!acknowledged || isPublishing || !passphrase}
             className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-fluux-brand hover:opacity-90 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isPublishing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
