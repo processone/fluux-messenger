@@ -140,6 +140,16 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps): bool
   const nextReactions = JSON.stringify(next.message.reactions ?? {})
   if (prevReactions !== nextReactions) return false
 
+  // Security context — drives the lock/trust indicator. The SDK can mutate
+  // this AFTER the message first arrives (e.g. the openpgp plugin upgrades
+  // a previously-untrusted message to trusted once the sender's PEP key
+  // finishes fetching). Without comparing it here React skips the render
+  // and the lock badge stays at its stale value forever. Stringify mirrors
+  // the reactions pattern above and is fine for a tiny three-field object.
+  const prevSec = JSON.stringify(prev.message.securityContext ?? null)
+  const nextSec = JSON.stringify(next.message.securityContext ?? null)
+  if (prevSec !== nextSec) return false
+
   // My reactions array
   if (prev.myReactions.length !== next.myReactions.length) return false
   if (prev.myReactions.some((r, i) => r !== next.myReactions[i])) return false
