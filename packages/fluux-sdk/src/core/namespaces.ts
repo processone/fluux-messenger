@@ -126,6 +126,13 @@ export const NS_EME = 'urn:xmpp:eme:0'
 export const NS_OPENPGP_PUBLIC_KEYS = 'urn:xmpp:openpgp:0:public-keys'
 export const NS_OPENPGP_PUBLIC_KEYS_NOTIFY = 'urn:xmpp:openpgp:0:public-keys+notify'
 
+// XEP-0374: OpenPGP for XMPP Instant Messaging ("OX-IM") — the discovery
+// feature clients advertise to signal "I can decrypt `<openpgp>` elements
+// wrapped in a `<signcrypt>` envelope on `<message>` stanzas". XEP-0374 §5
+// makes this a MUST for any OX-IM-capable client; without it a peer cannot
+// tell whether to encrypt or send plaintext.
+export const NS_OPENPGP_IM = 'urn:xmpp:openpgp:im:0'
+
 // XEP-0422: Message Fastening
 export const NS_FASTEN = 'urn:xmpp:fasten:0'
 

@@ -47,6 +47,14 @@ describe('caps (XEP-0115)', () => {
       // stale negative cache and silently fall back to plaintext.
       expect(CLIENT_FEATURES).toContain('urn:xmpp:openpgp:0:public-keys+notify')
     })
+
+    it('should include XEP-0374 OX-IM discovery feature', () => {
+      // XEP-0374 §5 mandates this so a peer can tell whether to wrap a
+      // message in a signcrypt envelope or send plaintext. A peer that
+      // does not see this feature on our caps will (correctly) refuse
+      // to encrypt to us.
+      expect(CLIENT_FEATURES).toContain('urn:xmpp:openpgp:im:0')
+    })
   })
 
   describe('getClientIdentity', () => {
