@@ -105,16 +105,29 @@ function publicKeyDataNodeFor(fingerprint: string): string {
  */
 const CURRENT_ITEM_ID = 'current'
 
-/** Shape of the Rust-side `KeyBundle` (kept in sync with `openpgp.rs`). */
+/**
+ * Shape of the Rust-side `PublicKeyInfo` IPC DTO (kept in sync with
+ * `openpgp.rs`).
+ *
+ * Deliberately does NOT include the secret-key armor: encrypt, decrypt,
+ * backup, and import all execute in Rust against the cached secret, so
+ * the webview never needs the TSK. Keeping it out of JS memory means an
+ * XSS / devtools snoop / log leak in the renderer can't exfiltrate the
+ * private key.
+ *
+ * Used both for our own identity (with `keychainBacked` reflecting the
+ * actual passphrase backing) and for peer keys parsed from PEP (where
+ * `keychainBacked` is always `false` and ignored — see the peer cache
+ * write site).
+ */
 interface KeyBundle {
   fingerprint: string
   publicArmored: string
-  secretArmored: string
   /**
    * `true` when the per-account passphrase is stored in the OS keychain;
    * `false` when the Rust side fell through to writing it to a 0600 file
-   * under the app data dir. Peer keys (parsed from PEP) always carry
-   * `false` — the field is ignored for peer entries.
+   * under the app data dir. Peer keys always carry `false` — the field
+   * is ignored for peer entries.
    */
   keychainBacked: boolean
 }
@@ -616,9 +629,6 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
         return {
           fingerprint: parsedFingerprint,
           publicArmored: armored,
-          // We never receive a peer's secret; empty string keeps the shape
-          // aligned with our own bundle without tempting the encrypt path.
-          secretArmored: '',
           // Flag only meaningful on our own identity — peers always `false`.
           keychainBacked: false,
         }

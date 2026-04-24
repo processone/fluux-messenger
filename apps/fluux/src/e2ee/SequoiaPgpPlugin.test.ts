@@ -18,10 +18,11 @@ import {
   type XMPPPrimitives,
 } from '@fluux/sdk'
 
+// Mirrors the Rust-side `PublicKeyInfo` IPC DTO — the secret-key armor
+// stays in the Rust process and never crosses the Tauri boundary.
 interface KeyBundle {
   fingerprint: string
   publicArmored: string
-  secretArmored: string
   keychainBacked: boolean
 }
 
@@ -61,13 +62,6 @@ function makeFakeRust() {
             fp,
             userId,
             'public',
-          ),
-          secretArmored: makeArmored(
-            '-----BEGIN PGP PRIVATE KEY BLOCK (STUB)-----',
-            '-----END PGP PRIVATE KEY BLOCK (STUB)-----',
-            fp,
-            userId,
-            'secret',
           ),
           // Mock the happy path — the real Rust impl surfaces `false` when
           // the keychain is unavailable. Individual tests that want to
@@ -174,13 +168,6 @@ function makeFakeRust() {
             fp,
             jid,
             'public',
-          ),
-          secretArmored: makeArmored(
-            '-----BEGIN PGP PRIVATE KEY BLOCK (STUB)-----',
-            '-----END PGP PRIVATE KEY BLOCK (STUB)-----',
-            fp,
-            jid,
-            'secret',
           ),
           keychainBacked: true,
         }

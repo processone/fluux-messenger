@@ -25,7 +25,7 @@
 
 use anyhow::{anyhow, Context, Result};
 use sequoia_openpgp as openpgp;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::HashMap;
 use std::io::Write as _;
 use std::path::PathBuf;
@@ -54,21 +54,58 @@ use openpgp::{
     Cert as _Cert, Fingerprint, KeyHandle,
 };
 
-/// Serializable output of [`openpgp_ensure_key`].
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
+/// Internal-to-Rust bundle. Holds the secret-key material that crypto
+/// operations need; **never** crosses the IPC boundary. The Tauri command
+/// shims project to [`PublicKeyInfo`] before serializing to the webview.
+///
+/// Marked `pub(crate)` so other modules in this crate can read it for
+/// tests and helpers, but external callers (i.e. JS via Tauri commands)
+/// cannot deserialize one — the type intentionally has no `Deserialize`
+/// impl and no `Serialize` either.
+#[derive(Debug, Clone)]
 pub struct KeyBundle {
-    /// Upper-case hex fingerprint (40 chars for v4 keys), no separators.
+    /// Upper-case hex fingerprint (40 chars for v4 keys, 64 for v6),
+    /// no separators.
     pub fingerprint: String,
     /// ASCII-armored public key block, suitable for publishing to a PEP node.
     pub public_armored: String,
-    /// ASCII-armored secret key block. Callers must treat as sensitive.
+    /// ASCII-armored secret key block. Stays inside the Rust process.
     pub secret_armored: String,
     /// `true` when the per-account passphrase is stored in the OS
     /// keychain; `false` when we fell through to a 0600-permissioned
-    /// file. Surfaced to the UI so a future slice can nudge the user to
-    /// fix their keychain setup.
+    /// file.
     pub keychain_backed: bool,
+}
+
+/// IPC DTO returned to the webview by every Tauri command that previously
+/// returned a [`KeyBundle`]. Carries only the fields the TS plugin
+/// actually consumes — the secret key block stays in the Rust process so
+/// a webview compromise (XSS, devtools snoop, log leak) can't exfiltrate
+/// the TSK. All crypto operations execute in Rust against the cached
+/// [`KeyBundle`]; the TS side only needs the fingerprint to drive the
+/// trust UI, the public armor to publish to PEP, and the keychain flag
+/// to surface a fallback warning.
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PublicKeyInfo {
+    /// Upper-case hex fingerprint, no separators.
+    pub fingerprint: String,
+    /// ASCII-armored public key block.
+    pub public_armored: String,
+    /// `true` when the per-account passphrase is stored in the OS
+    /// keychain; `false` when we fell through to a 0600-permissioned
+    /// file. Surfaced so the UI can nudge the user to fix their setup.
+    pub keychain_backed: bool,
+}
+
+impl From<&KeyBundle> for PublicKeyInfo {
+    fn from(bundle: &KeyBundle) -> Self {
+        Self {
+            fingerprint: bundle.fingerprint.clone(),
+            public_armored: bundle.public_armored.clone(),
+            keychain_backed: bundle.keychain_backed,
+        }
+    }
 }
 
 /// Serializable output of [`openpgp_decrypt`].
@@ -457,14 +494,20 @@ pub fn fingerprint_of(public_armored: &str) -> Result<String, String> {
 /// Async — runs the Argon2id key-derivation on a blocking worker
 /// thread so the Tauri IPC runtime thread isn't held up. Concurrent
 /// invocations for the same JID coalesce to a single KDF run.
+///
+/// Returns the [`PublicKeyInfo`] DTO — the secret key block stays in
+/// the Rust process. See [`PublicKeyInfo`] for the rationale.
 #[tauri::command]
 pub async fn openpgp_ensure_key(
     account_jid: String,
     user_id: String,
     state: State<'_, Arc<OpenpgpState>>,
-) -> Result<KeyBundle, String> {
+) -> Result<PublicKeyInfo, String> {
     let state = Arc::clone(&state);
-    state.ensure_key(account_jid, user_id).await
+    state
+        .ensure_key(account_jid, user_id)
+        .await
+        .map(|bundle| PublicKeyInfo::from(&bundle))
 }
 
 /// Fire-and-forget prewarm: starts unlocking in the background so a
@@ -547,17 +590,19 @@ pub async fn openpgp_backup_encrypt(
 
 /// Import a backup published on `urn:xmpp:openpgp:0:secret-key`: decrypts
 /// with `passphrase`, persists the recovered TSK locally (wrapped with
-/// our at-rest Argon2id passphrase), and returns the resulting bundle.
+/// our at-rest Argon2id passphrase), and returns the [`PublicKeyInfo`]
+/// projection of the imported bundle. The secret key stays in Rust.
 #[tauri::command]
 pub async fn openpgp_backup_import(
     account_jid: String,
     backup_message: String,
     passphrase: String,
     state: State<'_, Arc<OpenpgpState>>,
-) -> Result<KeyBundle, String> {
+) -> Result<PublicKeyInfo, String> {
     Arc::clone(&state)
         .import_backup(account_jid, backup_message, passphrase)
         .await
+        .map(|bundle| PublicKeyInfo::from(&bundle))
 }
 
 // ---------------------------------------------------------------------------
