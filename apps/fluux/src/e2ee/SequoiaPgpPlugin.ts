@@ -72,6 +72,7 @@ import type {
   VerificationMethod,
   XMLElementData,
 } from '@fluux/sdk'
+import { E2EEPluginError, type E2EEErrorKind } from '@fluux/sdk'
 import {
   clearBackedUpFingerprint,
   readBackedUpFingerprint,
@@ -193,10 +194,101 @@ const SIGNATURE_BUFFER_SIZE = 50
 const SIGNATURE_BUFFER_TTL_MS = 10 * 60 * 1000
 
 /**
+ * Capability-cache TTL (seconds) for a negative `probePeer` result that the
+ * plugin classified as permanent — e.g. the peer doesn't publish OpenPGP
+ * keys at all. 5 minutes balances "refresh cheaply if they publish later"
+ * against "don't pound the server".
+ */
+const PROBE_NEGATIVE_TTL_SECONDS = 300
+/**
+ * Capability-cache TTL (seconds) for a negative `probePeer` result whose
+ * failure mode is classified as transient (network, IQ timeout, IPC
+ * hiccup). Short enough that the next send attempt retries almost
+ * immediately — we don't want a 5-minute blackhole after a single flaky
+ * round-trip. Long enough that a burst of sends does not fan out a burst
+ * of probes.
+ */
+const PROBE_TRANSIENT_TTL_SECONDS = 30
+
+/**
  * Typed wrapper over Tauri's `invoke`. Abstracted so tests can inject a
  * fake implementation without dynamically importing `@tauri-apps/api/core`.
  */
 export type InvokeFn = <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>
+
+/**
+ * Classify an error raised across the Tauri/IQ boundary into a
+ * transient/permanent verdict plus a short machine-readable code. Used by
+ * the plugin to:
+ *
+ * - pick a short vs full TTL for {@link SequoiaPgpPlugin.probePeer} results
+ *   (transient → short TTL so the next send retries; permanent → full TTL
+ *   so we don't hammer a peer who genuinely doesn't publish keys),
+ * - wrap thrown errors from `ensureIdentity`, `backupSecretKey`, and
+ *   `restoreSecretKey` into {@link E2EEPluginError} so the app UI can
+ *   distinguish "prompt to unlock again" from "the backup passphrase is
+ *   wrong" without string-matching at call sites.
+ *
+ * The heuristic matches known error-message fragments from the Rust side
+ * (`openpgp.rs`, `openpgp_storage.rs`, `openpgp_backup.rs`) and from the
+ * IQ-stanza paths the SDK surfaces as `Error` messages. Unknown errors
+ * default to `transient` — a retry prompt is the less destructive UX
+ * than a spurious "key lost" banner.
+ */
+function classifyBoundaryError(err: unknown): { kind: E2EEErrorKind; code: string } {
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase()
+
+  // Permanent — no retry will help.
+  if (msg.includes('no skesk matched')) return { kind: 'permanent', code: 'wrong-passphrase' }
+  if (msg.includes('passphrase is empty')) return { kind: 'permanent', code: 'empty-passphrase' }
+  if (msg.includes('passphrase for account') && msg.includes('not in the keychain')) {
+    return { kind: 'permanent', code: 'key-unrecoverable' }
+  }
+  if (msg.includes('no key for account') || msg.includes('no identity')) {
+    return { kind: 'permanent', code: 'key-missing' }
+  }
+  if (msg.includes('not a recognizable openpgp')) {
+    return { kind: 'permanent', code: 'malformed-key' }
+  }
+  if (msg.includes('backup input is a public key')) {
+    return { kind: 'permanent', code: 'malformed-backup' }
+  }
+  if (msg.includes('parse ') || msg.includes('not valid')) {
+    return { kind: 'permanent', code: 'malformed-data' }
+  }
+  if (msg.includes('item-not-found')) return { kind: 'permanent', code: 'not-found' }
+  if (msg.includes('feature-not-implemented') || msg.includes('does not advertise pep')) {
+    return { kind: 'permanent', code: 'pep-unsupported' }
+  }
+
+  // Transient — worth retrying.
+  if (msg.includes('panicked')) return { kind: 'transient', code: 'ipc-panic' }
+  if (msg.includes('timeout') || msg.includes('timed out')) {
+    return { kind: 'transient', code: 'timeout' }
+  }
+  if (msg.includes('remote-server-timeout')) return { kind: 'transient', code: 'timeout' }
+  if (msg.includes('remote-server-not-found') || msg.includes('service-unavailable')) {
+    return { kind: 'transient', code: 'server-unreachable' }
+  }
+  if (msg.includes('internal-server-error') || msg.includes('resource-constraint')) {
+    return { kind: 'transient', code: 'server-error' }
+  }
+
+  // Unknown → transient. Prefer a retry prompt over a false "recover" UX.
+  return { kind: 'transient', code: 'unknown' }
+}
+
+/**
+ * Wrap a raw boundary error into an {@link E2EEPluginError} carrying a
+ * classified kind + code. Pass-through when `err` is already one of ours,
+ * so we don't double-wrap.
+ */
+function toPluginError(op: string, err: unknown): E2EEPluginError {
+  if (err instanceof E2EEPluginError) return err
+  const { kind, code } = classifyBoundaryError(err)
+  const detail = err instanceof Error ? err.message : String(err)
+  return new E2EEPluginError(kind, code, `SequoiaPgpPlugin: ${op}: ${detail}`, err)
+}
 
 export interface SequoiaPgpPluginOptions {
   /** Tauri command dispatcher. Tests pass a mock; app code passes the real one. */
@@ -318,15 +410,22 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
   async rotateEncryptionKey(backupPassphrase?: string): Promise<IdentityInfo> {
     const ctx = this.requireCtx()
     if (!this.ownBundle) {
-      throw new Error(
+      throw new E2EEPluginError(
+        'permanent',
+        'no-identity',
         'SequoiaPgpPlugin: cannot rotate before ensureIdentity has completed',
       )
     }
     const previousFingerprint = this.ownBundle.fingerprint
 
-    const bundle = await this.invoke<KeyBundle>('openpgp_rotate_encryption_subkey', {
-      accountJid: ctx.account.jid,
-    })
+    let bundle: KeyBundle
+    try {
+      bundle = await this.invoke<KeyBundle>('openpgp_rotate_encryption_subkey', {
+        accountJid: ctx.account.jid,
+      })
+    } catch (err) {
+      throw toPluginError('rotateEncryptionKey', err)
+    }
 
     // Defence in depth: the Rust side guarantees a stable primary FP
     // across rotation, but if that ever regresses we want to surface
@@ -436,12 +535,21 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
   async backupSecretKey(passphrase: string): Promise<void> {
     const ctx = this.requireCtx()
     if (!this.ownBundle) {
-      throw new Error('SequoiaPgpPlugin: no identity to back up — call ensureIdentity first')
+      throw new E2EEPluginError(
+        'permanent',
+        'no-identity',
+        'SequoiaPgpPlugin: no identity to back up — call ensureIdentity first',
+      )
     }
-    const armoredMessage = await this.invoke<string>('openpgp_backup_encrypt', {
-      accountJid: ctx.account.jid,
-      passphrase,
-    })
+    let armoredMessage: string
+    try {
+      armoredMessage = await this.invoke<string>('openpgp_backup_encrypt', {
+        accountJid: ctx.account.jid,
+        passphrase,
+      })
+    } catch (err) {
+      throw toPluginError('backupSecretKey', err)
+    }
     const payload: XMLElementData = {
       name: 'secretkey',
       attrs: { xmlns: OX_NAMESPACE },
@@ -515,13 +623,26 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
     const ctx = this.requireCtx()
     const armoredMessage = await this.fetchSecretKeyBackup()
     if (!armoredMessage) {
-      throw new Error('SequoiaPgpPlugin: no secret-key backup found on server')
+      throw new E2EEPluginError(
+        'permanent',
+        'no-backup',
+        'SequoiaPgpPlugin: no secret-key backup found on server',
+      )
     }
-    const bundle = await this.invoke<KeyBundle>('openpgp_backup_import', {
-      accountJid: ctx.account.jid,
-      backupMessage: armoredMessage,
-      passphrase,
-    })
+    let bundle: KeyBundle
+    try {
+      bundle = await this.invoke<KeyBundle>('openpgp_backup_import', {
+        accountJid: ctx.account.jid,
+        backupMessage: armoredMessage,
+        passphrase,
+      })
+    } catch (err) {
+      // Wrong passphrase is the common case here — classifyBoundaryError
+      // maps Rust's "no SKESK matched the supplied passphrase" to
+      // `permanent/wrong-passphrase`, which the UI uses to show the
+      // "try another passphrase" prompt instead of a retry button.
+      throw toPluginError('restoreSecretKey', err)
+    }
     this.ownBundle = bundle
     // Restore means local key == server backup by construction. Mark
     // the sync state so the UI hides the backup/restore buttons.
@@ -558,10 +679,19 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
    */
   async ensureIdentity(): Promise<IdentityInfo> {
     const ctx = this.requireCtx()
-    const bundle = await this.invoke<KeyBundle>('openpgp_ensure_key', {
-      accountJid: ctx.account.jid,
-      userId: ctx.account.jid,
-    })
+    let bundle: KeyBundle
+    try {
+      bundle = await this.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: ctx.account.jid,
+        userId: ctx.account.jid,
+      })
+    } catch (err) {
+      // Surface a classified error so the app layer can pick the right
+      // UX — transient (keychain momentarily locked, IPC timeout) lets
+      // the user retry, permanent (key-unrecoverable, malformed data)
+      // points at the recovery flow.
+      throw toPluginError('ensureIdentity', err)
+    }
     this.ownBundle = bundle
     if (!bundle.keychainBacked) {
       ctx.logger.warn(
@@ -619,16 +749,20 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
     try {
       disco = await ctx.xmpp.queryDisco(ctx.account.jid)
     } catch (err) {
-      throw new Error(
-        `SequoiaPgpPlugin: PEP support probe failed: ${formatError(err)}`,
-      )
+      // Disco round-trip failures are almost always network/server
+      // hiccups rather than "the server definitively lacks PEP" — keep
+      // the transient classification so the app can retry rather than
+      // throw up a hard "OpenPGP unsupported" banner.
+      throw toPluginError('pep-support-probe', err)
     }
     const hasPepIdentity = disco.identities.some(
       (id) => id.category === PEP_IDENTITY_CATEGORY && id.type === PEP_IDENTITY_TYPE,
     )
     const hasPubsubFeature = disco.features.some((f) => f.var === PUBSUB_NAMESPACE)
     if (!hasPepIdentity && !hasPubsubFeature) {
-      throw new Error(
+      throw new E2EEPluginError(
+        'permanent',
+        'pep-unsupported',
         `SequoiaPgpPlugin: account JID ${ctx.account.jid} does not advertise PEP (XEP-0163); OpenPGP key publication is unsupported on this server`,
       )
     }
@@ -712,32 +846,51 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
    * (matches its advertised fingerprint); additional keys are ignored
    * for this phase. Multi-key support — e.g. picking the most recent,
    * or verifying against a per-peer allowlist — is a later slice.
+   *
+   * Negative results are returned with two distinct TTLs:
+   * - permanent (peer has no PEP entry, `item-not-found`, malformed
+   *   advertisement) → {@link PROBE_NEGATIVE_TTL_SECONDS}. The peer
+   *   genuinely doesn't publish; the host cache holds the verdict so
+   *   subsequent sends don't re-probe.
+   * - transient (network/timeout/server-unreachable) →
+   *   {@link PROBE_TRANSIENT_TTL_SECONDS}. A 5-minute blackhole from a
+   *   single flaky round-trip would be user-hostile; the short TTL lets
+   *   the next send retry.
    */
   async probePeer(peer: BareJID): Promise<PeerSupport> {
     const ctx = this.requireCtx()
     if (this.peerKeys.has(peer)) {
-      return { supported: true, ttl: 300 }
+      return { supported: true, ttl: PROBE_NEGATIVE_TTL_SECONDS }
     }
     try {
       const metadataItems = await ctx.xmpp.queryPEP(peer, PUBLIC_KEYS_METADATA_NODE)
       const fingerprints = parseAdvertisedFingerprints(metadataItems)
       if (fingerprints.length === 0) {
-        return { supported: false, ttl: 300 }
+        // Peer advertises no fingerprints — this is a clear "doesn't
+        // support", not a failure we should re-probe soon.
+        return { supported: false, ttl: PROBE_NEGATIVE_TTL_SECONDS }
       }
 
       for (const fingerprint of fingerprints) {
         const bundle = await this.fetchAdvertisedKey(peer, fingerprint)
         if (bundle) {
           this.peerKeys.set(peer, bundle)
-          return { supported: true, ttl: 300 }
+          return { supported: true, ttl: PROBE_NEGATIVE_TTL_SECONDS }
         }
       }
+      // Metadata advertised keys but none resolved / validated. Treat as
+      // permanent-ish: the advertisement itself is stable, cache long.
+      return { supported: false, ttl: PROBE_NEGATIVE_TTL_SECONDS }
     } catch (err) {
+      const { kind, code } = classifyBoundaryError(err)
       ctx.logger.debug(
-        `SequoiaPgpPlugin: probePeer(${peer}) failed: ${formatError(err)}`,
+        `SequoiaPgpPlugin: probePeer(${peer}) failed (${kind}/${code}): ${formatError(err)}`,
       )
+      return {
+        supported: false,
+        ttl: kind === 'transient' ? PROBE_TRANSIENT_TTL_SECONDS : PROBE_NEGATIVE_TTL_SECONDS,
+      }
     }
-    return { supported: false, ttl: 300 }
   }
 
   /**

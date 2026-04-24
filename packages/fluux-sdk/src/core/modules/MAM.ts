@@ -1654,7 +1654,7 @@ export class MAM extends BaseModule {
   ): Promise<void> {
     const manager = this.deps.getE2EEManager?.()
     if (!manager) return
-    await decryptStanzaInPlace(messageEl, manager, peer)
+    await decryptStanzaInPlace(messageEl, manager, peer, 'archive')
   }
 
   /**

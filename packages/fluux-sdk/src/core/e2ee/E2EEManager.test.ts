@@ -535,6 +535,64 @@ describe('E2EEManager — dispatch', () => {
     expect(decrypted).not.toBeNull()
     expect(new TextDecoder().decode(decrypted!.plaintext)).toBe('round trip')
   })
+
+  it('decryptArchive prefers plugin.decryptArchive when the plugin implements it', async () => {
+    // Stateful-ratchet plugins (OMEMO, MLS) implement decryptArchive so MAM
+    // replay does not consume forward-only key material. Verify the host
+    // actually routes the archive path — not the live one — when the plugin
+    // advertises both.
+    const mgr = makeManager()
+    const plugin = new FakePlugin(strongDescriptor, 'urn:test:strong')
+    const archiveSpy = vi.fn(async () => ({
+      plaintext: new Uint8Array([0xAA]),
+      senderDevice: { jid: 'sender@example.com', deviceId: 'archive-d' },
+      securityContext: { protocolId: strongDescriptor.id, trust: 'trusted' as const },
+    }))
+    ;(plugin as unknown as { decryptArchive: typeof archiveSpy }).decryptArchive = archiveSpy
+    const liveSpy = vi.spyOn(plugin, 'decrypt')
+    await mgr.register(plugin)
+
+    const result = await mgr.decryptArchive(
+      { name: 'fake', attrs: { xmlns: 'urn:test:strong' }, children: [] },
+      { kind: 'direct', peer: 'bob@example.com' },
+      { messageId: 'arch-1' },
+    )
+
+    expect(result).not.toBeNull()
+    expect(archiveSpy).toHaveBeenCalledTimes(1)
+    expect(liveSpy).not.toHaveBeenCalled()
+    expect(plugin.closedHandles).toBe(1)
+  })
+
+  it('decryptArchive falls back to plugin.decrypt when decryptArchive is not implemented', async () => {
+    // OpenPGP (and any stateless plugin) can skip decryptArchive — the host
+    // transparently reuses the live decrypt. Prevents a regression where a
+    // plugin without ratchet state needs a no-op override just to participate
+    // in archive flows.
+    const mgr = makeManager()
+    const plugin = new FakePlugin(weakDescriptor, 'urn:test:weak')
+    const liveSpy = vi.spyOn(plugin, 'decrypt')
+    await mgr.register(plugin)
+
+    const result = await mgr.decryptArchive(
+      { name: 'fake', attrs: { xmlns: 'urn:test:weak' }, children: [] },
+      { kind: 'direct', peer: 'bob@example.com' },
+    )
+
+    expect(result).not.toBeNull()
+    expect(liveSpy).toHaveBeenCalledTimes(1)
+    expect(plugin.closedHandles).toBe(1)
+  })
+
+  it('decryptArchive returns null when no plugin claims the element', async () => {
+    const mgr = makeManager()
+    await mgr.register(new FakePlugin(weakDescriptor, 'urn:test:weak'))
+    const result = await mgr.decryptArchive(
+      { name: 'other', attrs: { xmlns: 'urn:unknown' }, children: [] },
+      { kind: 'direct', peer: 'bob@example.com' },
+    )
+    expect(result).toBeNull()
+  })
 })
 
 describe('E2EEManager — shutdown', () => {

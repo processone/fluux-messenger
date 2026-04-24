@@ -21,6 +21,7 @@ import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 import { elementToData } from './stanzaAdapter'
 import type { E2EEManager, SecurityContext } from './index'
+import type { InboundSource } from './types'
 import { logWarn } from '../logger'
 
 const DECRYPTED_MARKER = '__e2eeDecrypted'
@@ -48,11 +49,17 @@ export interface DecryptInPlaceResult {
  *   messages it's the conversation partner (which may differ from `from`
  *   when the archived message is a carbon/self-outgoing entry — callers
  *   are responsible for that mapping).
+ * @param source - `'live'` for freshly-delivered stanzas, `'archive'` for
+ *   stanzas replayed from XEP-0313 MAM. Routing through the archive path
+ *   lets ratcheting plugins (OMEMO/MLS) decrypt history without advancing
+ *   their live session state; stateless plugins (OpenPGP) see no
+ *   difference. Defaults to `'live'` for backwards compatibility.
  */
 export async function decryptStanzaInPlace(
   stanza: Element,
   manager: E2EEManager,
   senderPeer: string,
+  source: InboundSource = 'live',
 ): Promise<DecryptInPlaceResult> {
   const marked = stanza as unknown as {
     [DECRYPTED_MARKER]?: boolean
@@ -89,11 +96,12 @@ export async function decryptStanzaInPlace(
 
   try {
     const messageId = stanza.attrs.id
-    const result = await manager.decryptInbound(
-      claim.payload.stanzaElement,
-      { kind: 'direct', peer: senderPeer },
-      messageId ? { messageId } : undefined,
-    )
+    const context = messageId ? { messageId } : undefined
+    const target = { kind: 'direct' as const, peer: senderPeer }
+    const result =
+      source === 'archive'
+        ? await manager.decryptArchive(claim.payload.stanzaElement, target, context)
+        : await manager.decryptInbound(claim.payload.stanzaElement, target, context)
     if (result) {
       plaintext = new TextDecoder().decode(result.plaintext)
       securityContext = result.securityContext

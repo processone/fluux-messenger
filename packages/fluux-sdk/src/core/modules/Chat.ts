@@ -347,7 +347,7 @@ export class Chat extends BaseModule {
   ): Promise<void> {
     const from = stanza.attrs.from
     const bareFrom = from ? getBareJid(from) : ''
-    await decryptStanzaInPlace(stanza, manager, bareFrom)
+    await decryptStanzaInPlace(stanza, manager, bareFrom, 'live')
     this.handleMessageInternal(stanza, isCarbonCopy, isSentCarbon)
   }
 

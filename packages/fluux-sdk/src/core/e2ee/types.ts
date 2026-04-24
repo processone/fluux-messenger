@@ -151,6 +151,18 @@ export interface InboundDecryptContext {
 }
 
 /**
+ * Where an inbound encrypted stanza came from. The distinction matters for
+ * stateful-ratchet protocols (OMEMO, MLS) that must NOT consume
+ * forward-only key material when replaying MAM history: archived messages
+ * should be decrypted against a frozen side-channel, not the live session
+ * state. Stateless protocols (OpenPGP) can treat both sources identically.
+ *
+ * - `live`    — the stanza just arrived from the server (or from a carbon).
+ * - `archive` — the stanza was retrieved via XEP-0313 MAM replay.
+ */
+export type InboundSource = 'live' | 'archive'
+
+/**
  * Notification a plugin emits after re-evaluating a previously-delivered
  * message — typically when a sender's key arrived after the message had
  * already been surfaced as `untrusted`. The host re-publishes this to
@@ -324,11 +336,37 @@ export interface E2EEPlugin {
   /** Encrypt plaintext bytes for the conversation. */
   encrypt(handle: ConversationHandle, plaintext: Uint8Array): Promise<EncryptedPayload>
   /**
-   * Decrypt an encrypted payload. `context` carries optional message-level
-   * metadata the plugin may need (e.g. the stanza message-id, used to key
-   * deferred re-verification entries).
+   * Decrypt a live encrypted payload. `context` carries optional
+   * message-level metadata the plugin may need (e.g. the stanza
+   * message-id, used to key deferred re-verification entries).
+   *
+   * A plugin with forward-secure session state (OMEMO, MLS) must advance
+   * that state here — this is the "live" path. Archived messages
+   * retrieved via MAM take the {@link E2EEPlugin.decryptArchive} path
+   * instead so replay can't consume forward-only key material.
    */
   decrypt(
+    handle: ConversationHandle,
+    payload: EncryptedPayload,
+    context?: InboundDecryptContext,
+  ): Promise<DecryptResult>
+
+  /**
+   * Optional: decrypt a message pulled from XEP-0313 MAM history without
+   * advancing the live session state.
+   *
+   * Ratcheting protocols (OMEMO, MLS) must not consume forward-only key
+   * material on replay — a single ratchet step consumed during archive
+   * catch-up would break decryption of the in-flight live message with
+   * the same counter. Plugins that have such state should implement this
+   * hook to decrypt against archived/session keys only.
+   *
+   * Stateless protocols (e.g. OpenPGP / XEP-0373) have no forward
+   * secrecy to protect and may omit this method entirely; the host falls
+   * back to {@link E2EEPlugin.decrypt} for archive decryption in that
+   * case, which is semantically equivalent.
+   */
+  decryptArchive?(
     handle: ConversationHandle,
     payload: EncryptedPayload,
     context?: InboundDecryptContext,

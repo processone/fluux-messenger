@@ -325,6 +325,36 @@ export class E2EEManager {
   }
 
   /**
+   * Archive variant of {@link decryptInbound} — for stanzas retrieved via
+   * XEP-0313 MAM. Plugins with forward-secure session state (OMEMO, MLS)
+   * implement {@link E2EEPlugin.decryptArchive} to decrypt against
+   * frozen/session state without advancing the live ratchet; plugins
+   * without such state (OpenPGP) simply inherit the live path because the
+   * host transparently falls back to {@link E2EEPlugin.decrypt} when
+   * `decryptArchive` is not implemented.
+   *
+   * The host never calls the live path on archived messages for a plugin
+   * that ships `decryptArchive` — that separation is the whole point of
+   * this entry point.
+   */
+  async decryptArchive(
+    stanzaChild: XMLElementData,
+    senderTarget: ConversationTarget,
+    context?: InboundDecryptContext,
+  ): Promise<DecryptResult | null> {
+    const claim = this.claimInbound(stanzaChild)
+    if (!claim) return null
+    const handle = await claim.plugin.openConversation(senderTarget)
+    try {
+      const archiveFn = claim.plugin.decryptArchive?.bind(claim.plugin)
+      const decryptFn = archiveFn ?? claim.plugin.decrypt.bind(claim.plugin)
+      return await decryptFn(handle, claim.payload, context)
+    } finally {
+      await claim.plugin.closeConversation(handle).catch(() => {})
+    }
+  }
+
+  /**
    * Subscribe to plugin-driven security-context updates. Plugins call
    * {@link PluginContext.reportSecurityContextUpdate} (e.g. after a
    * previously-untrusted message's signature becomes verifiable because a

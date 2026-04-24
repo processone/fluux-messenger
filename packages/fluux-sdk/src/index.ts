@@ -368,6 +368,8 @@ export type { Element } from '@xmpp/client'
 // while the UI suggests encryption. Tests import it via relative path.
 export {
   E2EEManager,
+  E2EEPluginError,
+  isE2EEPluginError,
   CapabilityCache,
   InMemoryStorageBackend,
   createPluginStorage,
@@ -382,12 +384,14 @@ export type {
   DeviceIdentifier,
   DiscoFeature,
   DiscoResult,
+  E2EEErrorKind,
   E2EEManagerOptions,
   E2EEPlugin,
   E2EEProtocolDescriptor,
   EncryptedPayload,
   IdentityInfo,
   InboundDecryptContext,
+  InboundSource,
   Logger as E2EELogger,
   PEPItem,
   PeerSupport,

@@ -20,6 +20,7 @@ export type {
   EncryptedPayload,
   IdentityInfo,
   InboundDecryptContext,
+  InboundSource,
   Logger,
   PEPItem,
   PeerSupport,
@@ -35,6 +36,8 @@ export type {
   XMLElementData,
   XMPPPrimitives,
 } from './types'
+
+export { E2EEPluginError, isE2EEPluginError, type E2EEErrorKind } from './errors'
 
 export { CapabilityCache, type CapabilityCacheOptions } from './CapabilityCache'
 export {

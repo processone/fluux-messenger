@@ -206,7 +206,7 @@ describe('MAM E2EE wiring', () => {
 
   it('falls back to the XEP-0373 hint body and marks untrusted when decrypt fails', async () => {
     const spy = vi
-      .spyOn(manager, 'decryptInbound')
+      .spyOn(manager, 'decryptArchive')
       .mockRejectedValue(new Error('broken ciphertext'))
 
     const forwardedMessage = xml(
@@ -242,7 +242,7 @@ describe('MAM E2EE wiring', () => {
     )
     if (!payload) throw new Error('Test setup: encryptOutbound returned null')
 
-    const spy = vi.spyOn(manager, 'decryptInbound')
+    const spy = vi.spyOn(manager, 'decryptArchive')
 
     const forwardedMessage = xml(
       'message',
@@ -298,7 +298,7 @@ describe('MAM E2EE wiring', () => {
     )
     if (!payload) throw new Error('Test setup: encryptOutbound returned null')
 
-    const decryptSpy = vi.spyOn(manager, 'decryptInbound')
+    const decryptSpy = vi.spyOn(manager, 'decryptArchive')
 
     const forwardedMessage = xml(
       'message',

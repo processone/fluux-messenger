@@ -9,8 +9,10 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import type { InvokeFn } from './SequoiaPgpPlugin'
 import { SequoiaPgpPlugin } from './SequoiaPgpPlugin'
 import {
+  E2EEPluginError,
   InMemoryStorageBackend,
   createPluginStorage,
+  isE2EEPluginError,
   type PEPItem,
   type PluginContext,
   type SecurityContextUpdate,
@@ -526,7 +528,7 @@ describe('SequoiaPgpPlugin', () => {
         throw new Error('simulated disco timeout')
       }
 
-      await expect(plugin.init(ctx)).rejects.toThrow(/PEP support probe failed/)
+      await expect(plugin.init(ctx)).rejects.toThrow(/pep-support-probe/)
       expect(published).toHaveLength(0)
     })
   })
@@ -1936,6 +1938,138 @@ describe('SequoiaPgpPlugin', () => {
       const result = await pair.bob.plugin.decrypt(bobHandle, payload)
       expect(new TextDecoder().decode(result.plaintext)).toBe('post-rotation greeting')
       expect(result.securityContext.trust).toBe('trusted')
+    })
+  })
+
+  describe('Tauri boundary error classification', () => {
+    // Failures that cross the Tauri/IPC/XMPP boundary must be turned into
+    // typed errors so the app UI can pick the right UX — retry prompt for
+    // transient, recovery flow for permanent. The heuristic matches known
+    // error substrings from `openpgp.rs`, `openpgp_storage.rs`, and
+    // `openpgp_backup.rs`; these tests pin the classification so a future
+    // refactor of the Rust messages (or a bundler quirk that loses
+    // E2EEPluginError identity) is caught loudly.
+
+    it('ensureIdentity raises a permanent E2EEPluginError when the key is unrecoverable', async () => {
+      const { ctx } = makeContext('me@example.com')
+      const fakeInvoke: InvokeFn = async (cmd) => {
+        if (cmd === 'openpgp_ensure_key') {
+          throw new Error(
+            "passphrase for account 'me@example.com' is not in the keychain or on disk — key material cannot be decrypted",
+          )
+        }
+        throw new Error('unexpected cmd: ' + cmd)
+      }
+      const unrecoverablePlugin = new SequoiaPgpPlugin({ invoke: fakeInvoke })
+      let caught: unknown
+      try {
+        await unrecoverablePlugin.init(ctx)
+      } catch (err) {
+        caught = err
+      }
+      expect(isE2EEPluginError(caught)).toBe(true)
+      const e = caught as E2EEPluginError
+      expect(e.kind).toBe('permanent')
+      expect(e.code).toBe('key-unrecoverable')
+    })
+
+    it('ensureIdentity raises a transient E2EEPluginError on IPC panic', async () => {
+      const { ctx } = makeContext('me@example.com')
+      const fakeInvoke: InvokeFn = async () => {
+        throw new Error('openpgp unlock task panicked: kaboom')
+      }
+      const flakyPlugin = new SequoiaPgpPlugin({ invoke: fakeInvoke })
+      let caught: unknown
+      try {
+        await flakyPlugin.init(ctx)
+      } catch (err) {
+        caught = err
+      }
+      expect(isE2EEPluginError(caught)).toBe(true)
+      const e = caught as E2EEPluginError
+      expect(e.kind).toBe('transient')
+      expect(e.code).toBe('ipc-panic')
+      expect(e.isTransient()).toBe(true)
+    })
+
+    it('restoreSecretKey maps wrong-passphrase to a permanent error', async () => {
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
+
+      // Publish a backup so restore has something to fetch. We reuse the
+      // real backup flow to get a legit armored message on the server
+      // side; only the subsequent import step will fail.
+      await plugin.backupSecretKey('correct horse battery staple')
+
+      // Now swap in an invoke that simulates the Rust side refusing the
+      // supplied passphrase.
+      const realInvoke = fake.invoke
+      const spyingInvoke: InvokeFn = async (cmd, args) => {
+        if (cmd === 'openpgp_backup_import') {
+          throw new Error('no SKESK matched the supplied passphrase')
+        }
+        return realInvoke(cmd, args)
+      }
+      const restorer = new SequoiaPgpPlugin({ invoke: spyingInvoke })
+      // Init will succeed against the real backup (ensure_key reuses the
+      // cached bundle). Re-init on a fresh context so the restore path is
+      // isolated from init.
+      const { ctx: restoreCtx } = makeContext('me@example.com')
+      // Seed the fetchSecretKeyBackup lookup: plumb the published backup
+      // into the new ctx's peerNodes via a direct publish (matches how
+      // PEP would replay items to a re-connecting client).
+      const backupItem = built.published.find(
+        (p) => p.node === 'urn:xmpp:openpgp:0:secret-key',
+      )
+      expect(backupItem).toBeDefined()
+      await restoreCtx.xmpp.publishPEP(
+        backupItem!.node,
+        backupItem!.item,
+        backupItem!.options,
+      )
+      await restorer.init(restoreCtx)
+
+      let caught: unknown
+      try {
+        await restorer.restoreSecretKey('WRONG passphrase')
+      } catch (err) {
+        caught = err
+      }
+      expect(isE2EEPluginError(caught)).toBe(true)
+      const e = caught as E2EEPluginError
+      expect(e.kind).toBe('permanent')
+      expect(e.code).toBe('wrong-passphrase')
+    })
+
+    it('probePeer returns a short TTL on a transient failure so the next send retries', async () => {
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
+
+      built.ctx.xmpp.queryPEP = async () => {
+        throw new Error('remote-server-timeout')
+      }
+
+      const support = await plugin.probePeer('bob@example.com')
+      expect(support.supported).toBe(false)
+      // Transient TTL (30s) << permanent TTL (300s). Pin the boundary
+      // with a strict inequality so the constant can be tuned without
+      // breaking the test, but a regression that flips transient to the
+      // full TTL would be caught.
+      expect(support.ttl).toBeLessThan(300)
+    })
+
+    it('probePeer returns the full negative TTL when the peer advertises no keys', async () => {
+      // Contrast case to the transient test above: a peer who genuinely
+      // doesn't publish keys should be cached for the long TTL so we
+      // don't re-probe on every send.
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
+
+      // queryPEP default returns [] — i.e. "node exists but has no items,
+      // or no node at all". Plugin treats that as permanent.
+      const support = await plugin.probePeer('nobody@example.com')
+      expect(support.supported).toBe(false)
+      expect(support.ttl).toBe(300)
     })
   })
 })
