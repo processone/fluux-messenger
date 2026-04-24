@@ -420,6 +420,21 @@ describe('SequoiaPgpPlugin', () => {
       // `date` is an ISO 8601 timestamp; we don't pin the exact value
       // but it must be parseable.
       expect(Date.parse(metadataChild!.attrs.date)).not.toBeNaN()
+
+      // Both nodes must be created with `accessModel='open'` so non-roster
+      // peers can fetch our key — that's the XEP-0373 expectation. Without
+      // explicit publish-options most servers default to `presence`, which
+      // would silently break encrypted DMs from strangers.
+      expect(dataPub.options).toEqual({
+        accessModel: 'open',
+        persistItems: true,
+        maxItems: 1,
+      })
+      expect(metaPub.options).toEqual({
+        accessModel: 'open',
+        persistItems: true,
+        maxItems: 1,
+      })
     })
 
     it('skips metadata publish when the data publish fails', async () => {

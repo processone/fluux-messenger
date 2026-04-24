@@ -574,6 +574,13 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
   /**
    * Publish `<pubkey><data>BASE64</data></pubkey>` at
    * `urn:xmpp:openpgp:0:public-keys:FP`.
+   *
+   * The publish-options pin the node to `accessModel='open'` so that
+   * non-roster peers can fetch the key and start an encrypted DM —
+   * which is XEP-0373's whole point. Without an explicit access model
+   * most servers default to `presence`, restricting fetches to roster
+   * contacts. `maxItems=1` and `persistItems=true` make this a stable
+   * current-value node: rotating the key just overwrites the slot.
    */
   private async publishOwnPublicKeyData(bundle: KeyBundle): Promise<void> {
     const ctx = this.requireCtx()
@@ -588,10 +595,11 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
         },
       ],
     }
-    await ctx.xmpp.publishPEP(publicKeyDataNodeFor(bundle.fingerprint), {
-      id: CURRENT_ITEM_ID,
-      payload,
-    })
+    await ctx.xmpp.publishPEP(
+      publicKeyDataNodeFor(bundle.fingerprint),
+      { id: CURRENT_ITEM_ID, payload },
+      { accessModel: 'open', persistItems: true, maxItems: 1 },
+    )
   }
 
   /**
@@ -622,10 +630,11 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
         },
       ],
     }
-    await ctx.xmpp.publishPEP(PUBLIC_KEYS_METADATA_NODE, {
-      id: CURRENT_ITEM_ID,
-      payload,
-    })
+    await ctx.xmpp.publishPEP(
+      PUBLIC_KEYS_METADATA_NODE,
+      { id: CURRENT_ITEM_ID, payload },
+      { accessModel: 'open', persistItems: true, maxItems: 1 },
+    )
   }
 
   /**
