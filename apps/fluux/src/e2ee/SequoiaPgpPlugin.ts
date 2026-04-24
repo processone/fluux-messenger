@@ -80,6 +80,19 @@ import {
 
 /** XEP-0373 namespace for all PEP/message elements. */
 const OX_NAMESPACE = 'urn:xmpp:openpgp:0'
+/** XEP-0060 base pubsub namespace. Some PEP servers advertise this on the
+ * account JID even when they omit the `pubsub/pep` identity, so we accept
+ * either signal as evidence of PEP support. */
+const PUBSUB_NAMESPACE = 'http://jabber.org/protocol/pubsub'
+/** XEP-0060 §8.7 feature for `<publish-options/>`. We rely on this to pin
+ * `accessModel='open'` on public-key nodes and `'whitelist'` on the
+ * secret-key backup. A PEP server missing the advertisement may still
+ * accept the form (silently or by rejecting it) — we proceed with a
+ * warning rather than a hard fail. */
+const PUBSUB_PUBLISH_OPTIONS_FEATURE = 'http://jabber.org/protocol/pubsub#publish-options'
+/** XEP-0163 §4 PEP service identity advertised on the account's bare JID. */
+const PEP_IDENTITY_CATEGORY = 'pubsub'
+const PEP_IDENTITY_TYPE = 'pep'
 /** PEP node that carries the `<public-keys-list>` metadata document. */
 const PUBLIC_KEYS_METADATA_NODE = 'urn:xmpp:openpgp:0:public-keys'
 /**
@@ -556,6 +569,15 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
       )
     }
 
+    // Verify the server speaks XEP-0163 PEP before attempting to
+    // publish. Without this probe a non-PEP server (or a deployment
+    // that disabled PEP) would silently swallow our publishes — peers
+    // would never see our key, and the user would think OpenPGP was
+    // working. The probe runs AFTER key generation so a transient
+    // server-side issue doesn't block local key material from being
+    // ready for a later retry.
+    await this.probePepSupport()
+
     try {
       // Publish the data node FIRST. If the data publish fails we
       // deliberately skip the metadata step: advertising a fingerprint
@@ -569,6 +591,52 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
     }
 
     return { fingerprint: bundle.fingerprint }
+  }
+
+  /**
+   * Disco#info on the account's bare JID to confirm PEP (XEP-0163) is
+   * available before any publish. PEP services advertise either the
+   * `{category:'pubsub', type:'pep'}` identity or the base
+   * `http://jabber.org/protocol/pubsub` feature; we accept either.
+   *
+   * Hard-throws when the server clearly doesn't support PEP — the
+   * surrounding registration path catches this and logs it, so the
+   * plugin fails to register and the chat continues in cleartext rather
+   * than silently pretending OpenPGP is on.
+   *
+   * Soft-warns when PEP is present but the `publish-options` feature is
+   * not advertised. Some servers that DO support `<publish-options/>`
+   * forget to list it in disco; the publish itself will tell us if the
+   * accessModel pinning was honored, so we proceed rather than block.
+   *
+   * Only called from {@link ensureIdentity}: rotation and restore both
+   * presuppose a successful prior `ensureIdentity`, so they inherit the
+   * confirmation rather than re-paying the round-trip.
+   */
+  private async probePepSupport(): Promise<void> {
+    const ctx = this.requireCtx()
+    let disco
+    try {
+      disco = await ctx.xmpp.queryDisco(ctx.account.jid)
+    } catch (err) {
+      throw new Error(
+        `SequoiaPgpPlugin: PEP support probe failed: ${formatError(err)}`,
+      )
+    }
+    const hasPepIdentity = disco.identities.some(
+      (id) => id.category === PEP_IDENTITY_CATEGORY && id.type === PEP_IDENTITY_TYPE,
+    )
+    const hasPubsubFeature = disco.features.some((f) => f.var === PUBSUB_NAMESPACE)
+    if (!hasPepIdentity && !hasPubsubFeature) {
+      throw new Error(
+        `SequoiaPgpPlugin: account JID ${ctx.account.jid} does not advertise PEP (XEP-0163); OpenPGP key publication is unsupported on this server`,
+      )
+    }
+    if (!disco.features.some((f) => f.var === PUBSUB_PUBLISH_OPTIONS_FEATURE)) {
+      ctx.logger.warn(
+        'SequoiaPgpPlugin: PEP present but `publish-options` feature not advertised — proceeding; accessModel pinning may be ignored',
+      )
+    }
   }
 
   /**

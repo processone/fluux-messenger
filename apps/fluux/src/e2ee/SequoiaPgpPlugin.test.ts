@@ -335,7 +335,16 @@ function makeContext(accountJid: string): {
 
   const xmpp: XMPPPrimitives = {
     sendStanza: async () => {},
-    queryDisco: async () => ({ features: [], identities: [] }),
+    // Default the disco stub to a fully PEP-capable server so the
+    // probe in `ensureIdentity` is satisfied. Negative-path tests
+    // override `ctx.xmpp.queryDisco` per-case.
+    queryDisco: async () => ({
+      features: [
+        { var: 'http://jabber.org/protocol/pubsub' },
+        { var: 'http://jabber.org/protocol/pubsub#publish-options' },
+      ],
+      identities: [{ category: 'pubsub', type: 'pep' }],
+    }),
     publishPEP: async (node, item, options) => {
       published.push({ node, item, options })
       // Publishing to our own PEP node should also be readable via
@@ -469,6 +478,56 @@ describe('SequoiaPgpPlugin', () => {
     it('refuses to init without an account JID', async () => {
       const { ctx } = makeContext('')
       await expect(plugin.init(ctx)).rejects.toThrow(/account JID/)
+    })
+
+    it('throws when the server does not advertise PEP support', async () => {
+      // A non-PEP server (or a deployment with PEP disabled) returns a
+      // disco#info payload missing both the `pubsub/pep` identity and
+      // the base `pubsub` feature. Without an explicit probe the
+      // subsequent publish would be silently swallowed and the user
+      // would believe OpenPGP was working.
+      const { ctx, published } = makeContext('me@example.com')
+      ctx.xmpp.queryDisco = async () => ({ features: [], identities: [] })
+
+      await expect(plugin.init(ctx)).rejects.toThrow(/does not advertise PEP/)
+      // The probe must run BEFORE any publish. If it didn't, the data /
+      // metadata nodes would have been (uselessly) sent to a server
+      // that can't host them.
+      expect(published).toHaveLength(0)
+    })
+
+    it('proceeds with a warning when PEP is present but publish-options is not advertised', async () => {
+      // Some PEP servers honor `<publish-options/>` without listing the
+      // feature in disco. We can't tell from disco alone whether the
+      // pinning will be respected — proceeding lets the publish itself
+      // be the source of truth, and the warning gives the operator
+      // something to grep for if a peer reports key fetches failing.
+      const { ctx, published } = makeContext('me@example.com')
+      ctx.xmpp.queryDisco = async () => ({
+        features: [{ var: 'http://jabber.org/protocol/pubsub' }],
+        identities: [{ category: 'pubsub', type: 'pep' }],
+      })
+      const warn = vi.fn()
+      ctx.logger.warn = warn
+
+      await plugin.init(ctx)
+
+      expect(warn).toHaveBeenCalledWith(expect.stringMatching(/publish-options/))
+      // Soft warning, not an abort — both nodes must still be published.
+      expect(published).toHaveLength(2)
+    })
+
+    it('throws when the disco probe itself fails', async () => {
+      // Distinguish this case from "server says no PEP": disco may fail
+      // for transient reasons (timeout, server-side error). Either way
+      // we cannot confirm support, so we refuse to publish blind.
+      const { ctx, published } = makeContext('me@example.com')
+      ctx.xmpp.queryDisco = async () => {
+        throw new Error('simulated disco timeout')
+      }
+
+      await expect(plugin.init(ctx)).rejects.toThrow(/PEP support probe failed/)
+      expect(published).toHaveLength(0)
     })
   })
 
