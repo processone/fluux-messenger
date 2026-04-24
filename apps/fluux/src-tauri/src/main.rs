@@ -1108,7 +1108,8 @@ fn main() {
             openpgp::openpgp_forget_account,
             openpgp::openpgp_has_persisted_key,
             openpgp::openpgp_backup_encrypt,
-            openpgp::openpgp_backup_import
+            openpgp::openpgp_backup_import,
+            openpgp::openpgp_rotate_encryption_subkey
         ])
         .on_page_load(move |webview, payload| {
             // Always inject console-forwarding script so SDK diagnostic logs

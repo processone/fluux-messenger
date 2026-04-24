@@ -279,6 +279,83 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
   }
 
   /**
+   * Rotate the encryption subkey. The primary key — and therefore the
+   * fingerprint peers verified — is unchanged, so trust survives the
+   * rotation transparently: no re-verification ceremony, no churn in
+   * the Chat UI's lock badges.
+   *
+   * What happens end-to-end:
+   *
+   * 1. Rust generates a fresh `[E]` subkey, expires the superseded one
+   *    in place (retained locally so historical MAM stays decryptable),
+   *    persists the rotated TSK under the existing at-rest passphrase.
+   * 2. We re-publish the public cert to PEP. The data node item carries
+   *    only the current `[E]` (Rust strips retired subkeys on the
+   *    publish path); the metadata node advertises the same primary
+   *    fingerprint with a refreshed `date` attribute.
+   * 3. If a backup is published to `urn:xmpp:openpgp:0:secret-key` we
+   *    re-wrap with the supplied passphrase so a later restore includes
+   *    the new subkey. When `backupPassphrase` is omitted we skip the
+   *    backup refresh — the server copy then lags the local cert until
+   *    the next explicit {@link backupSecretKey} call.
+   *
+   * Preconditions: must be called after {@link ensureIdentity}. Throws
+   * otherwise — there's no identity material to rotate.
+   */
+  async rotateEncryptionKey(backupPassphrase?: string): Promise<IdentityInfo> {
+    const ctx = this.requireCtx()
+    if (!this.ownBundle) {
+      throw new Error(
+        'SequoiaPgpPlugin: cannot rotate before ensureIdentity has completed',
+      )
+    }
+    const previousFingerprint = this.ownBundle.fingerprint
+
+    const bundle = await this.invoke<KeyBundle>('openpgp_rotate_encryption_subkey', {
+      accountJid: ctx.account.jid,
+    })
+
+    // Defence in depth: the Rust side guarantees a stable primary FP
+    // across rotation, but if that ever regresses we want to surface
+    // the break instead of silently publishing a cert peers won't trust.
+    if (!fingerprintsEqual(bundle.fingerprint, previousFingerprint)) {
+      throw new Error(
+        `SequoiaPgpPlugin: rotation produced new fingerprint ${bundle.fingerprint} (expected stable ${previousFingerprint})`,
+      )
+    }
+    this.ownBundle = bundle
+
+    // Re-publish the public cert so senders converge on the current [E].
+    // Data node first, metadata second — same ordering as ensureIdentity,
+    // for the same reason (never advertise a fingerprint whose data node
+    // isn't resolvable).
+    try {
+      await this.publishOwnPublicKeyData(bundle)
+      await this.publishOwnPublicKeyMetadata(bundle)
+    } catch (err) {
+      ctx.logger.warn(
+        `SequoiaPgpPlugin: rotated key publish failed: ${formatError(err)}`,
+      )
+    }
+
+    // Re-wrap the server-side backup only when the caller supplied the
+    // passphrase — rotation without a passphrase at hand is still a
+    // valid operation (the local cert is already persisted), just
+    // leaves the server backup stale until the next manual backup.
+    if (backupPassphrase !== undefined) {
+      try {
+        await this.backupSecretKey(backupPassphrase)
+      } catch (err) {
+        ctx.logger.warn(
+          `SequoiaPgpPlugin: rotated backup publish failed: ${formatError(err)}`,
+        )
+      }
+    }
+
+    return { fingerprint: bundle.fingerprint }
+  }
+
+  /**
    * Retract our published public key from PEP so peers stop encrypting to
    * this identity. Retracts the per-fingerprint data node item first, then
    * the metadata list — order mirrors the inverse of publish so peers

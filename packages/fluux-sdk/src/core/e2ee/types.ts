@@ -357,4 +357,19 @@ export interface E2EEPlugin {
    * separately — plugins only need to evict their own state here.
    */
   onPeerKeysChanged?(peer: BareJID): void
+
+  /**
+   * Optional: rotate the encryption material while preserving identity.
+   *
+   * The primary key / verified fingerprint stays the same — peers who
+   * already trust this identity do not need to re-verify. Only the key
+   * used to encrypt to the account changes. Superseded material is
+   * retained locally so history remains decryptable.
+   *
+   * Not every protocol supports this shape: some cycle the whole
+   * identity on rotation, others have no stable identity at all. Plugins
+   * that implement this MUST preserve {@link IdentityInfo.fingerprint}
+   * across rotations.
+   */
+  rotateEncryptionKey?(): Promise<IdentityInfo>
 }

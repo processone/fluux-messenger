@@ -36,9 +36,13 @@ use tokio::sync::OnceCell as AsyncOnceCell;
 use crate::openpgp_storage::{KeyStorage, PassphraseBacking};
 
 use openpgp::{
-    cert::{Cert, CertBuilder},
+    cert::{amalgamation::ValidateAmalgamation, Cert, CertBuilder},
     crypto::SessionKey,
-    packet::{PKESK, SKESK},
+    packet::{
+        key::{self, Key6},
+        signature::SignatureBuilder,
+        Key, Packet, PKESK, SKESK,
+    },
     parse::{
         stream::{
             DecryptionHelper, DecryptorBuilder, MessageLayer, MessageStructure, VerificationHelper,
@@ -50,9 +54,10 @@ use openpgp::{
         stream::{Armorer, Encryptor, LiteralWriter, Message, Recipient, Signer},
         SerializeInto,
     },
-    types::SymmetricAlgorithm,
+    types::{KeyFlags, SignatureType, SymmetricAlgorithm},
     Cert as _Cert, Fingerprint, KeyHandle,
 };
+use std::time::{Duration, SystemTime};
 
 /// Internal-to-Rust bundle. Holds the secret-key material that crypto
 /// operations need; **never** crosses the IPC boundary. The Tauri command
@@ -397,6 +402,48 @@ impl OpenpgpState {
         .unwrap_or_else(|join_err| Err(format!("backup import task panicked: {join_err}")))
     }
 
+    /// Rotate the encryption subkey for `account_jid`: generate a fresh
+    /// `[E]` subkey, expire superseded ones in place, persist the updated
+    /// cert, and swap the cached bundle. The *primary* fingerprint stays
+    /// the same — that's the whole point — so callers can re-publish the
+    /// public cert to PEP without changing the advertised identity.
+    ///
+    /// Runs the CPU-bound parts on the blocking pool because fresh key
+    /// generation + re-signing bindings + re-wrapping secret packets
+    /// under Argon2id at save time adds up to noticeable latency.
+    ///
+    /// Returns the rotated [`KeyBundle`]. Fails when no key is currently
+    /// loaded for `account_jid`: callers must have called
+    /// [`Self::ensure_key`] first.
+    pub async fn rotate_encryption_subkey(
+        self: &Arc<Self>,
+        account_jid: String,
+    ) -> Result<KeyBundle, String> {
+        let bundle = self.read_cached_bundle(&account_jid, "account")?;
+        let this = Arc::clone(self);
+        tokio::task::spawn_blocking(move || {
+            let current = Cert::from_bytes(bundle.secret_armored.as_bytes())
+                .map_err(|e| format!("parse current cert for rotation: {e}"))?;
+            let rotated = rotate_encryption_subkey(current).map_err(anyhow_to_string)?;
+            let backing = this.storage.save(&account_jid, &rotated).map_err(anyhow_to_string)?;
+            let new_bundle = bundle_from_cert(&rotated, backing).map_err(anyhow_to_string)?;
+
+            // Replace the cached cell so subsequent encrypt / decrypt
+            // / backup calls observe the rotated material immediately.
+            // Rotation is a user-initiated action, so it runs exclusively
+            // with respect to other key lifecycle ops on this account —
+            // no coordination with concurrent unlockers needed.
+            let mut entries = this.entries.lock().unwrap();
+            let cell = Arc::new(AsyncOnceCell::new());
+            let _ = cell.set(Ok(new_bundle.clone()));
+            entries.insert(account_jid, cell);
+
+            Ok(new_bundle)
+        })
+        .await
+        .unwrap_or_else(|join_err| Err(format!("rotation task panicked: {join_err}")))
+    }
+
     // ---- internals ----------------------------------------------------
 
     /// Get-or-insert the per-JID cell. The returned `Arc` is cheap to
@@ -605,6 +652,25 @@ pub async fn openpgp_backup_import(
         .map(|bundle| PublicKeyInfo::from(&bundle))
 }
 
+/// Rotate the encryption subkey for `account_jid`. The primary
+/// fingerprint — which is what peers verify and what PEP metadata
+/// advertises — is unchanged, so no re-verification is needed. The
+/// returned [`PublicKeyInfo`] carries the *stripped* public cert (old
+/// encryption subkeys removed) ready to be re-published to PEP.
+///
+/// Async because the heavy lifting (key generation, Argon2id re-wrap
+/// on persist) runs on a blocking worker thread.
+#[tauri::command]
+pub async fn openpgp_rotate_encryption_subkey(
+    account_jid: String,
+    state: State<'_, Arc<OpenpgpState>>,
+) -> Result<PublicKeyInfo, String> {
+    Arc::clone(&state)
+        .rotate_encryption_subkey(account_jid)
+        .await
+        .map(|bundle| PublicKeyInfo::from(&bundle))
+}
+
 // ---------------------------------------------------------------------------
 // Sequoia-backed primitives
 // ---------------------------------------------------------------------------
@@ -620,6 +686,21 @@ pub async fn openpgp_backup_import(
 /// never generate v4 keys on this branch; the on-disk storage still
 /// knows how to decrypt any stray v4 cert a user might carry over from
 /// a pre-v6 install.
+///
+/// # Key structure
+///
+/// Sequoia's `general_purpose()` builder produces three packets:
+///
+/// - **Primary key** `[C]` — certification only. Its fingerprint is the
+///   identity fingerprint peers verify; it never rotates.
+/// - **Signing subkey** `[S]` — used to sign outgoing signcrypt messages.
+///   A verifier's `ka.cert().fingerprint()` still resolves to the primary,
+///   so trust comparison stays stable across subkey rotations.
+/// - **Encryption subkey** `[E]` — the rotatable one. See
+///   [`rotate_encryption_subkey`]: on rotation we add a fresh `[E]` and
+///   expire every currently-alive `[E]` so `.alive()` recipient selection
+///   picks only the new one while retained subkeys stay decryption-capable
+///   for historical MAM replay.
 fn generate_cert(user_id: &str) -> Result<Cert> {
     let (cert, _revocation) = CertBuilder::general_purpose(Some(user_id))
         .set_profile(openpgp::Profile::RFC9580)
@@ -629,12 +710,141 @@ fn generate_cert(user_id: &str) -> Result<Cert> {
     Ok(cert)
 }
 
+/// Strip retired encryption subkeys from `cert`, keeping:
+///
+/// - the primary key,
+/// - every signing subkey,
+/// - exactly the encryption subkeys that are currently *alive* per the
+///   standard policy (i.e. whose binding signature has not been overridden
+///   by a later one with an expired validity period).
+///
+/// Intended for **publication**: the PEP data node carries the result,
+/// so peers only ever encrypt to the current rotation. Retired `[E]`
+/// subkeys stay in the on-disk (secret) cert so historical messages
+/// replayed from MAM are still decryptable.
+fn published_cert(cert: &Cert) -> Cert {
+    let policy = StandardPolicy::new();
+    cert.clone().retain_subkeys(|ka| match ka.with_policy(&policy, None) {
+        Ok(vka) => match vka.key_flags() {
+            Some(flags) => {
+                if flags.for_transport_encryption() || flags.for_storage_encryption() {
+                    // Drop expired / superseded encryption subkeys.
+                    vka.alive().is_ok()
+                } else {
+                    // Keep signing subkeys and anything non-encryption as-is.
+                    true
+                }
+            }
+            // A subkey with no declared flags is unusable; drop it.
+            None => false,
+        },
+        // Unbound or policy-rejected subkey — not publishable.
+        Err(_) => false,
+    })
+}
+
+/// Rotate the encryption subkey on `cert`: generate a fresh `[E]` subkey
+/// bound to the primary, and expire every currently-alive `[E]` subkey
+/// in place so recipient selection (`.alive()`) picks only the new one.
+///
+/// The retired subkeys stay present in the returned cert — their binding
+/// signatures are still valid, only their *key* validity period has been
+/// overridden with a value in the past. That means:
+///
+/// - outbound encryption (which filters with `.alive()`) targets only the
+///   new `[E]`, so senders converge on the current rotation;
+/// - inbound decryption (which does **not** filter with `.alive()`) still
+///   finds the retired `[E]` subkeys in the iterator, so historical MAM
+///   messages remain readable;
+/// - the primary fingerprint is unchanged, so peers' BTBV trust and the
+///   PEP metadata node's `v6-fingerprint` attribute stay stable.
+///
+/// Requires the primary key's secret material to be unlocked (the caller
+/// already holds it via `OpenpgpState`'s cache, which is populated by the
+/// Argon2id unlock on startup).
+fn rotate_encryption_subkey(cert: Cert) -> Result<Cert> {
+    let policy = StandardPolicy::new();
+    let now = SystemTime::now();
+
+    // Primary signer. We need the secret material on the primary — a
+    // public-only cert can't rotate itself. Fail loudly so callers
+    // don't silently publish an unrotated cert.
+    let primary_secret = cert
+        .primary_key()
+        .key()
+        .clone()
+        .parts_into_secret()
+        .context("primary key has no secret material — cannot rotate")?;
+    let mut primary_signer = primary_secret
+        .into_keypair()
+        .context("unlock primary key for subkey binding")?;
+
+    // Re-bind each currently-alive encryption subkey with a past validity
+    // period. Cloning the old binding preserves the key flags, issuer
+    // subpackets, and any other subpackets we don't care to reconstruct;
+    // we only override the creation time and validity period.
+    let mut rotation_packets: Vec<Packet> = Vec::new();
+    for subkey_ka in cert.keys().with_policy(&policy, now).subkeys() {
+        let flags = match subkey_ka.key_flags() {
+            Some(f) => f,
+            None => continue,
+        };
+        if !(flags.for_transport_encryption() || flags.for_storage_encryption()) {
+            continue;
+        }
+        if subkey_ka.alive().is_err() {
+            // Already retired from a previous rotation; don't re-bind.
+            continue;
+        }
+        let old_binding = subkey_ka.binding_signature().clone();
+        let expired_builder = SignatureBuilder::from(old_binding)
+            .set_signature_creation_time(now)
+            .context("set expired-binding creation time")?
+            .set_key_validity_period(Duration::from_secs(1))
+            .context("set expired validity period for retired encryption subkey")?;
+        let expired_binding = subkey_ka
+            .key()
+            .clone()
+            .bind(&mut primary_signer, &cert, expired_builder)
+            .context("sign expired binding for retired encryption subkey")?;
+        rotation_packets.push(expired_binding.into());
+    }
+
+    // Generate the new [E] subkey. v6 X25519 matches the RFC 9580 profile
+    // `general_purpose` emits for freshly generated certs.
+    let new_subkey: Key<_, key::SubordinateRole> = Key6::generate_x25519()
+        .context("generate new X25519 encryption subkey")?
+        .into();
+
+    let new_builder = SignatureBuilder::new(SignatureType::SubkeyBinding)
+        .set_signature_creation_time(now)
+        .context("set new-binding creation time")?
+        .set_key_flags(KeyFlags::empty().set_transport_encryption())
+        .context("set new-binding key flags")?;
+    let new_binding = new_subkey
+        .bind(&mut primary_signer, &cert, new_builder)
+        .context("sign new encryption subkey binding")?;
+
+    rotation_packets.push(Packet::from(new_subkey));
+    rotation_packets.push(new_binding.into());
+
+    let (rotated, _) = cert
+        .insert_packets(rotation_packets)
+        .context("merge rotated subkey into cert")?;
+    Ok(rotated)
+}
+
 /// Turn a Cert (either freshly generated or loaded from disk) into the
 /// serializable [`KeyBundle`] the TS side consumes. The passphrase
 /// backing is surfaced to the UI without the caller needing to know
 /// anything about `KeyStorage`.
+///
+/// The *public* armor published to peers is the output of
+/// [`published_cert`] — retired encryption subkeys are stripped so
+/// senders encrypt only to the current rotation. The *secret* armor
+/// keeps every subkey so historical messages stay decryptable locally.
 fn bundle_from_cert(cert: &Cert, backing: PassphraseBacking) -> Result<KeyBundle> {
-    let public_armored = armored_string(cert, KeyExport::Public)?;
+    let public_armored = armored_string(&published_cert(cert), KeyExport::Public)?;
     let secret_armored = armored_string(cert, KeyExport::Secret)?;
     Ok(KeyBundle {
         fingerprint: cert.fingerprint().to_hex(),
@@ -1320,6 +1530,376 @@ mod tests {
             device_b.blocking_run_count(),
             0,
             "import_backup must prime the cell so ensure_key skips the KDF"
+        );
+    }
+
+    // ---- encryption-subkey rotation --------------------------------
+
+    /// Count the alive encryption-capable subkeys in `cert` under the
+    /// standard policy. Used by rotation tests to distinguish the
+    /// "current subkey" from "retired subkeys still present for MAM".
+    fn alive_encryption_subkey_count(cert: &Cert) -> usize {
+        let policy = StandardPolicy::new();
+        cert.keys()
+            .with_policy(&policy, None)
+            .subkeys()
+            .supported()
+            .alive()
+            .revoked(false)
+            .for_transport_encryption()
+            .count()
+    }
+
+    /// Return the fingerprints of every encryption-capable subkey
+    /// (alive or retired) present in `cert`. Order is the cert's
+    /// packet order.
+    fn all_encryption_subkey_fingerprints(cert: &Cert) -> Vec<String> {
+        let policy = StandardPolicy::new();
+        cert.keys()
+            .with_policy(&policy, None)
+            .subkeys()
+            .filter(|ka| {
+                ka.key_flags()
+                    .map(|f| f.for_transport_encryption() || f.for_storage_encryption())
+                    .unwrap_or(false)
+            })
+            .map(|ka| ka.key().fingerprint().to_hex())
+            .collect()
+    }
+
+    #[test]
+    fn generated_cert_has_primary_plus_signing_and_encryption_subkeys() {
+        // Rotation preserves the primary fingerprint by keeping a stable
+        // identity key and rotating only the encryption subkey. Proof-
+        // of-structure test: confirm the assumed primary [C] + [S] + [E]
+        // shape Sequoia's `general_purpose` produces before we rely on
+        // it elsewhere.
+        let state = new_state();
+        let bundle = state.ensure_key_sync("alice@example.com", "Alice").unwrap();
+        let cert = Cert::from_bytes(bundle.secret_armored.as_bytes()).unwrap();
+
+        // Primary certifies (that's what a cert's fingerprint identifies).
+        assert!(
+            cert.primary_key().key().version() == 6,
+            "rotation expects a v6 primary (RFC 9580 profile)"
+        );
+
+        // Exactly one alive encryption subkey before rotation.
+        assert_eq!(
+            alive_encryption_subkey_count(&cert),
+            1,
+            "fresh cert should have exactly one alive encryption subkey"
+        );
+
+        // At least one signing subkey — we don't care about the exact
+        // count, but a missing [S] would break the signer selection
+        // in `encrypt_and_sign`.
+        let policy = StandardPolicy::new();
+        let signing_count = cert
+            .keys()
+            .with_policy(&policy, None)
+            .subkeys()
+            .for_signing()
+            .count();
+        assert!(
+            signing_count >= 1,
+            "general_purpose cert must expose a signing subkey"
+        );
+    }
+
+    #[test]
+    fn rotation_preserves_primary_fingerprint() {
+        // The whole point of identity/subkey separation: peers who
+        // verified the primary FP before rotation must still match
+        // after. Any regression here silently breaks trust for every
+        // peer on every rotation.
+        let state = new_state();
+        let before = state.ensure_key_sync("alice@example.com", "Alice").unwrap();
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let rotated = runtime
+            .block_on(state.rotate_encryption_subkey("alice@example.com".into()))
+            .unwrap();
+
+        assert_eq!(
+            rotated.fingerprint, before.fingerprint,
+            "rotation must preserve the primary fingerprint"
+        );
+    }
+
+    #[test]
+    fn rotation_adds_a_fresh_encryption_subkey_and_retires_the_previous_one() {
+        // Post-rotation we expect:
+        // - exactly one ALIVE encryption subkey (the new one)
+        // - two encryption subkeys total in the local cert (old + new)
+        // - the alive one's fingerprint differs from the pre-rotation one
+        let state = new_state();
+        let before = state.ensure_key_sync("alice@example.com", "Alice").unwrap();
+        let before_cert = Cert::from_bytes(before.secret_armored.as_bytes()).unwrap();
+        let pre_enc_fps = all_encryption_subkey_fingerprints(&before_cert);
+        assert_eq!(pre_enc_fps.len(), 1);
+        let original_enc_fp = pre_enc_fps[0].clone();
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let rotated = runtime
+            .block_on(state.rotate_encryption_subkey("alice@example.com".into()))
+            .unwrap();
+        let rotated_cert = Cert::from_bytes(rotated.secret_armored.as_bytes()).unwrap();
+
+        assert_eq!(
+            alive_encryption_subkey_count(&rotated_cert),
+            1,
+            "only the new encryption subkey should be alive post-rotation"
+        );
+
+        let post_enc_fps = all_encryption_subkey_fingerprints(&rotated_cert);
+        assert_eq!(
+            post_enc_fps.len(),
+            2,
+            "local cert must retain the old [E] for MAM replay alongside the new one"
+        );
+        assert!(
+            post_enc_fps.contains(&original_enc_fp),
+            "old encryption subkey must stay in the local cert (got {post_enc_fps:?})"
+        );
+
+        // The new alive subkey has a fresh fingerprint.
+        let policy = StandardPolicy::new();
+        let alive_fp = rotated_cert
+            .keys()
+            .with_policy(&policy, None)
+            .subkeys()
+            .alive()
+            .for_transport_encryption()
+            .next()
+            .unwrap()
+            .key()
+            .fingerprint()
+            .to_hex();
+        assert_ne!(
+            alive_fp, original_enc_fp,
+            "rotation must introduce a distinct encryption subkey"
+        );
+    }
+
+    #[test]
+    fn published_public_cert_strips_retired_encryption_subkeys() {
+        // The PEP-published cert carries only the current [E]. Retired
+        // subkeys stay local-only — if one leaks into the published
+        // armor, senders would encrypt to material we may intentionally
+        // prune from disk in a future retention policy.
+        let state = new_state();
+        let _ = state.ensure_key_sync("alice@example.com", "Alice").unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let rotated = runtime
+            .block_on(state.rotate_encryption_subkey("alice@example.com".into()))
+            .unwrap();
+
+        let published = Cert::from_bytes(rotated.public_armored.as_bytes()).unwrap();
+        let local = Cert::from_bytes(rotated.secret_armored.as_bytes()).unwrap();
+
+        // Local retains the retired subkey for MAM; published doesn't.
+        assert_eq!(
+            all_encryption_subkey_fingerprints(&local).len(),
+            2,
+            "local cert keeps retired [E] for historical decryption"
+        );
+        assert_eq!(
+            all_encryption_subkey_fingerprints(&published).len(),
+            1,
+            "published cert must expose only the current [E] (retired stripped)"
+        );
+    }
+
+    #[test]
+    fn ciphertext_encrypted_to_old_subkey_still_decrypts_after_rotation() {
+        // Historical MAM messages carry PKESK packets targeted at the
+        // encryption subkey that was current at send time. If rotation
+        // drops the old subkey from the *local* cert, those messages
+        // become undecryptable on next replay. Guard against that with
+        // a concrete pre-rotation send + post-rotation decrypt round.
+        let (state, _alice, bob) = setup_two_accounts();
+
+        // Bob encrypts to Alice while she's still on her original [E].
+        let pre_rotation_ciphertext = state
+            .encrypt("bob@example.com", &_alice.public_armored, "pre-rotation greeting")
+            .unwrap();
+
+        // Alice rotates.
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let _rotated = runtime
+            .block_on(state.rotate_encryption_subkey("alice@example.com".into()))
+            .unwrap();
+
+        // Alice replays the pre-rotation ciphertext. It targets the
+        // retired [E], which is still present in her local cert — so
+        // decryption must succeed.
+        let out = state
+            .decrypt(
+                "alice@example.com",
+                &pre_rotation_ciphertext,
+                Some(&bob.public_armored),
+            )
+            .unwrap();
+        assert_eq!(out.plaintext, "pre-rotation greeting");
+        assert!(
+            out.signature_verified,
+            "bob's signature must verify on replay regardless of alice's rotation"
+        );
+    }
+
+    #[test]
+    fn new_ciphertext_targets_only_the_current_subkey_after_rotation() {
+        // Encryption filters recipients with `.alive()`, so senders must
+        // converge on the new [E] immediately — including encrypt-to-self,
+        // which uses the sender's own cert.
+        let (state, alice, bob) = setup_two_accounts();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let _ = runtime
+            .block_on(state.rotate_encryption_subkey("alice@example.com".into()))
+            .unwrap();
+
+        // Fetch Alice's rotated published cert — the bundle after
+        // rotation exposes only the current [E] in its public armor.
+        let alice_after = state
+            .ensure_key_sync("alice@example.com", "Alice")
+            .unwrap();
+        assert_eq!(
+            alice_after.fingerprint, alice.fingerprint,
+            "ensure_key post-rotation must still return the same fingerprint"
+        );
+        let alice_published = Cert::from_bytes(alice_after.public_armored.as_bytes()).unwrap();
+        assert_eq!(
+            alive_encryption_subkey_count(&alice_published),
+            1,
+            "post-rotation published cert must expose only the current [E]"
+        );
+
+        // Alice → Bob: new ciphertext must decrypt cleanly with Bob's key.
+        let new_ct = state
+            .encrypt("alice@example.com", &bob.public_armored, "after rotation")
+            .unwrap();
+        let out = state
+            .decrypt("bob@example.com", &new_ct, Some(&alice_after.public_armored))
+            .unwrap();
+        assert_eq!(out.plaintext, "after rotation");
+        assert!(out.signature_verified);
+    }
+
+    #[test]
+    fn signer_fingerprint_is_stable_across_rotation() {
+        // The trust comparison in the plugin uses `signerFingerprint`
+        // (the Rust-reported fingerprint of the signing cert) and
+        // matches it to the cached peer's primary fingerprint. Rotation
+        // must not perturb this: the signer_fingerprint before and after
+        // must both equal the primary FP.
+        let (state, alice, bob) = setup_two_accounts();
+
+        let ct_before = state
+            .encrypt("alice@example.com", &bob.public_armored, "before")
+            .unwrap();
+        let out_before = state
+            .decrypt("bob@example.com", &ct_before, Some(&alice.public_armored))
+            .unwrap();
+        assert_eq!(
+            out_before.signer_fingerprint.as_deref(),
+            Some(alice.fingerprint.as_str())
+        );
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let alice_after = runtime
+            .block_on(state.rotate_encryption_subkey("alice@example.com".into()))
+            .unwrap();
+
+        let ct_after = state
+            .encrypt("alice@example.com", &bob.public_armored, "after")
+            .unwrap();
+        let out_after = state
+            .decrypt(
+                "bob@example.com",
+                &ct_after,
+                Some(&alice_after.public_armored),
+            )
+            .unwrap();
+        assert_eq!(
+            out_after.signer_fingerprint.as_deref(),
+            Some(alice.fingerprint.as_str()),
+            "signer fingerprint must resolve to the primary, unchanged across rotation"
+        );
+    }
+
+    #[test]
+    fn rotation_persists_and_survives_state_restart() {
+        // After rotation, a fresh OpenpgpState pointed at the same
+        // base dir must load the rotated cert — otherwise rotation
+        // would appear to take effect in-session only and peers would
+        // silently revert to the old [E] after an app restart.
+        let dir = fresh_tmp_dir();
+        let state = Arc::new(OpenpgpState::for_testing(dir.clone()));
+        let _ = state.ensure_key_sync("alice@example.com", "Alice").unwrap();
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let rotated = runtime
+            .block_on(state.rotate_encryption_subkey("alice@example.com".into()))
+            .unwrap();
+        drop(state);
+
+        let reloaded = Arc::new(OpenpgpState::for_testing(dir));
+        let after_restart = reloaded
+            .ensure_key_sync("alice@example.com", "Alice")
+            .unwrap();
+        assert_eq!(after_restart.fingerprint, rotated.fingerprint);
+
+        let on_disk_cert = Cert::from_bytes(after_restart.secret_armored.as_bytes()).unwrap();
+        assert_eq!(
+            alive_encryption_subkey_count(&on_disk_cert),
+            1,
+            "post-restart cert must expose exactly one alive [E] (the rotated one)"
+        );
+        assert_eq!(
+            all_encryption_subkey_fingerprints(&on_disk_cert).len(),
+            2,
+            "retired [E] must survive the disk round-trip for MAM replay"
+        );
+    }
+
+    #[test]
+    fn rotation_without_cached_key_fails_cleanly() {
+        // Calling rotate before ensure_key is a programming error the
+        // plugin guards against, but the Rust side should reject with
+        // a clear message rather than panic.
+        let state = new_state();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let err = runtime
+            .block_on(state.rotate_encryption_subkey("ghost@example.com".into()))
+            .expect_err("rotation without ensure_key must error");
+        assert!(
+            err.contains("no key"),
+            "expected 'no key' error, got: {err}"
         );
     }
 

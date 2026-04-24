@@ -147,6 +147,29 @@ function makeFakeRust() {
         const marker = `BACKUP:${bundle.fingerprint}:${btoa(unescape(encodeURIComponent(passphrase)))}`
         return `-----BEGIN PGP MESSAGE (STUB)-----\n${marker}\n-----END PGP MESSAGE (STUB)-----` as T
       }
+      case 'openpgp_rotate_encryption_subkey': {
+        const jid = args!.accountJid as string
+        const current = accounts.get(jid)
+        if (!current) throw new Error(`no key for ${jid}`)
+        // Rotation preserves the primary fingerprint; that's the whole
+        // point of the identity/subkey split. The armored material
+        // differs (a real rotation adds a fresh [E] subkey packet + a
+        // new binding signature), so we regenerate the placeholder with
+        // a rotation counter the tests can inspect.
+        const prevRotation = Number(current.publicArmored.match(/Rotation: (\d+)/)?.[1] ?? 0)
+        const rotated: KeyBundle = {
+          ...current,
+          publicArmored: `${makeArmored(
+            '-----BEGIN PGP PUBLIC KEY BLOCK (STUB)-----',
+            '-----END PGP PUBLIC KEY BLOCK (STUB)-----',
+            current.fingerprint,
+            jid,
+            'public',
+          )}\nRotation: ${prevRotation + 1}`,
+        }
+        accounts.set(jid, rotated)
+        return rotated as T
+      }
       case 'openpgp_backup_import': {
         const jid = args!.accountJid as string
         const message = args!.backupMessage as string
@@ -1699,6 +1722,146 @@ describe('SequoiaPgpPlugin', () => {
       // answer is correct — there's no account to scope the marker to.
       const fresh = new SequoiaPgpPlugin({ invoke: fake.invoke })
       expect(fresh.getBackedUpFingerprint()).toBeNull()
+    })
+  })
+
+  describe('rotateEncryptionKey', () => {
+    const METADATA_NODE = 'urn:xmpp:openpgp:0:public-keys'
+    const SECRET_KEY_NODE = 'urn:xmpp:openpgp:0:secret-key'
+
+    it('preserves the primary fingerprint across rotation', async () => {
+      // This is the whole point of identity/subkey separation: peers who
+      // verified the primary FP before rotation must still match after.
+      const { ctx } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      const before = plugin.getOwnFingerprint()
+      expect(before).not.toBeNull()
+
+      const info = await plugin.rotateEncryptionKey()
+
+      expect(info.fingerprint).toBe(before)
+      expect(plugin.getOwnFingerprint()).toBe(before)
+    })
+
+    it('republishes the data + metadata nodes so senders converge on the new [E]', async () => {
+      // ensureIdentity publishes once (data + metadata). Rotation must
+      // publish them again with the updated public armor so peers
+      // encrypt to the current encryption subkey on their next probe.
+      const { ctx, published } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      const fp = plugin.getOwnFingerprint()!
+      const publishesBeforeRotation = published.length
+
+      await plugin.rotateEncryptionKey()
+
+      const postRotation = published.slice(publishesBeforeRotation)
+      // Exactly two publishes (data, then metadata) — same order as
+      // ensureIdentity. Emitting metadata first would leave a window
+      // where peers discover a fingerprint whose data node is stale.
+      expect(postRotation).toHaveLength(2)
+      expect(postRotation[0].node).toBe(`${METADATA_NODE}:${fp}`)
+      expect(postRotation[1].node).toBe(METADATA_NODE)
+
+      // Metadata re-advertises the SAME fingerprint (unchanged identity).
+      const meta = findChild(postRotation[1].item.payload, 'pubkey-metadata')
+      expect(meta).toBeDefined()
+      expect(meta!.attrs['v6-fingerprint']).toBe(fp)
+    })
+
+    it('passes the rotated public armor to the PEP data node', async () => {
+      // The fake Rust stub marks rotations with `Rotation: N` in the
+      // armored block. A subsequent probe must receive the updated
+      // armor so encryption converges on the new [E].
+      const { ctx, published } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      const publishesBeforeRotation = published.length
+
+      await plugin.rotateEncryptionKey()
+
+      const dataPub = published[publishesBeforeRotation]
+      const dataChild = findChild(dataPub.item.payload, 'data')
+      expect(dataChild).toBeDefined()
+      const encoded = dataChild!.children[0]
+      expect(typeof encoded).toBe('string')
+      const decoded = atob(encoded as string)
+      expect(decoded).toMatch(/Rotation: 1/)
+    })
+
+    it('re-wraps the backup when a passphrase is supplied', async () => {
+      // A rotated [E] needs to make it into the server-side backup too,
+      // otherwise restoring after rotation would revert to the pre-
+      // rotation material.
+      const { ctx, published } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      await plugin.backupSecretKey('correct-horse-battery-staple')
+      const publishesBeforeRotation = published.length
+
+      await plugin.rotateEncryptionKey('correct-horse-battery-staple')
+
+      // Data node + metadata node + secret-key backup = 3 publishes.
+      const postRotation = published.slice(publishesBeforeRotation)
+      const backupPub = postRotation.find((p) => p.node === SECRET_KEY_NODE)
+      expect(backupPub).toBeDefined()
+      expect(backupPub!.options?.accessModel).toBe('whitelist')
+    })
+
+    it('leaves the server backup untouched when no passphrase is supplied', async () => {
+      // Rotation without a passphrase at hand is still valid — the
+      // local cert is already persisted, the user just has to re-enter
+      // their passphrase later to refresh the server backup.
+      const { ctx, published } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      await plugin.backupSecretKey('pp')
+      const publishesBeforeRotation = published.length
+
+      await plugin.rotateEncryptionKey() // no passphrase
+
+      const postRotation = published.slice(publishesBeforeRotation)
+      const backupPubs = postRotation.filter((p) => p.node === SECRET_KEY_NODE)
+      expect(backupPubs).toHaveLength(0)
+    })
+
+    it('throws when called before ensureIdentity', async () => {
+      // Programming error — the SDK host should never dispatch rotate
+      // on an unconfigured plugin, but if it does, we want a clear
+      // error rather than a confusing Rust-side "no key for account".
+      const { ctx } = makeContext('me@example.com')
+      plugin['ctx'] = ctx // bypass init(), so ownBundle stays null
+
+      await expect(plugin.rotateEncryptionKey()).rejects.toThrow(/ensureIdentity/)
+    })
+
+    it('preserves peer trust across our own rotation', async () => {
+      // BTBV survives rotation: a peer who already trusted us before
+      // rotation keeps trusting us after — they only need to re-fetch
+      // the public cert, no re-verification ceremony.
+      const pair = await buildCrossPublishedPair(fake)
+      await pair.alice.plugin.probePeer('bob@example.com')
+      await pair.bob.plugin.probePeer('alice@example.com')
+
+      // Bob encrypted a message to Alice BEFORE her rotation.
+      const aliceHandle = await pair.alice.plugin.openConversation({
+        kind: 'direct',
+        peer: 'bob@example.com',
+      })
+      const bobHandle = await pair.bob.plugin.openConversation({
+        kind: 'direct',
+        peer: 'alice@example.com',
+      })
+
+      // Alice rotates.
+      await pair.alice.plugin.rotateEncryptionKey()
+
+      // Alice sends to Bob post-rotation. Bob's trust decision uses
+      // Alice's cached fingerprint (the primary), which is unchanged —
+      // so the result is `trusted`.
+      const payload = await pair.alice.plugin.encrypt(
+        aliceHandle,
+        new TextEncoder().encode('post-rotation greeting'),
+      )
+      const result = await pair.bob.plugin.decrypt(bobHandle, payload)
+      expect(new TextDecoder().decode(result.plaintext)).toBe('post-rotation greeting')
+      expect(result.securityContext.trust).toBe('trusted')
     })
   })
 })
