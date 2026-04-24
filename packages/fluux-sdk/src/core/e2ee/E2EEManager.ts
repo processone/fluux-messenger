@@ -170,6 +170,21 @@ export class E2EEManager {
   }
 
   /**
+   * Cheap "is encryption available for `target` right now?" probe. Used by
+   * call sites that need to decide between two stanza shapes BEFORE
+   * building children — e.g. reactions, where the legacy reply-quote
+   * fallback embeds the original body in cleartext and must be skipped
+   * whenever the recipient can be reached over E2EE.
+   *
+   * Implemented on top of {@link selectStrategy} so the answer is exactly
+   * "would `encryptOutbound` succeed for this target". Hits the capability
+   * cache when warm, so repeated calls in a single send path are free.
+   */
+  async canEncryptTo(target: ConversationTarget): Promise<boolean> {
+    return (await this.selectStrategy(target)) !== null
+  }
+
+  /**
    * Pick the plugin to use for `target`. Selection rules:
    * 1. User/admin pin wins.
    * 2. Otherwise, highest securityLevel among mutually-supported plugins.

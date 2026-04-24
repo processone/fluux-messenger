@@ -368,6 +368,80 @@ export class Chat extends BaseModule {
     }
   }
 
+  /**
+   * Wrap an outbound 1:1 chat stanza with E2EE if a plugin can encrypt to
+   * `recipient`. Mutates `children` in place: the existing `<body>` (if any)
+   * is replaced with the plugin-supplied fallback string, and the encrypted
+   * element + EME (XEP-0380) + MAM `<store>` hint (XEP-0334) are appended.
+   *
+   * Returns the {@link MessageSecurityContext} when encryption succeeded so
+   * the caller can stamp it on the local store entry; returns `undefined`
+   * when no manager is registered or no plugin matches the peer.
+   *
+   * Strict-mode contract: when a manager exists but no plugin can reach the
+   * peer, throws {@link E2EEEncryptionRequiredError} instead of silently
+   * letting the caller send plaintext. The UI is the only layer that can
+   * legitimately decide to retry or to send unencrypted as a one-off, so
+   * the error has to surface there. Other failures (probe errors, plugin
+   * exceptions) are logged and treated as permissive — the caller's stanza
+   * goes out as built.
+   *
+   * Centralizing this here is a security-critical invariant: every chat-like
+   * outbound path (send, resend, correction, reaction reply-fallback) must
+   * route through one helper, otherwise a code path can build cleartext
+   * children and reach the wire without the E2EE rewrite. Adding a new
+   * outgoing chat-like primitive? Call this helper before `sendStanza`.
+   */
+  private async applyE2EEToOutboundChat(
+    recipient: string,
+    plaintextBody: string,
+    children: Element[],
+  ): Promise<MessageSecurityContext | undefined> {
+    const manager = this.deps.getE2EEManager?.()
+    if (!manager) return undefined
+
+    try {
+      const result = await manager.encryptOutbound(
+        { kind: 'direct', peer: recipient },
+        new TextEncoder().encode(plaintextBody),
+      )
+      if (result) {
+        const bodyIdx = children.findIndex(
+          (c): c is Element =>
+            typeof c !== 'string' && (c as { name?: string }).name === 'body',
+        )
+        const fallbackBody = result.payload.fallbackBody ?? '[encrypted message]'
+        if (bodyIdx >= 0) {
+          children[bodyIdx] = xml('body', {}, fallbackBody)
+        } else {
+          children.unshift(xml('body', {}, fallbackBody))
+        }
+        children.push(dataToElement(result.payload.stanzaElement))
+        children.push(
+          xml('encryption', {
+            xmlns: NS_EME,
+            namespace:
+              result.payload.stanzaElement.attrs.xmlns ?? result.payload.protocolId,
+          }),
+        )
+        children.push(xml('store', { xmlns: NS_HINTS }))
+        return {
+          protocolId: result.plugin.descriptor.id,
+          trust: 'trusted',
+        }
+      }
+      if (manager.getSendPolicy() === 'strict') {
+        throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
+      }
+    } catch (err) {
+      if (err instanceof E2EEEncryptionRequiredError) throw err
+      logWarn(
+        `E2EE encrypt failed for ${recipient}, sending plaintext: ${err instanceof Error ? err.message : String(err)}`,
+      )
+    }
+    return undefined
+  }
+
   // --- Chat Methods (Outgoing) ---
 
   /**
@@ -512,59 +586,12 @@ export class Chat extends BaseModule {
     // XEP-0359: Include origin-id for echo deduplication
     children.push(createOriginIdElement(id))
 
-    // E2EE hook: if a plugin is registered and selects this 1:1 recipient,
-    // replace the plaintext <body> with a fallback and append the encrypted
-    // element, EME (XEP-0380), and MAM store hint (XEP-0334).
-    // MUC encryption is a later phase.
-    let outgoingSecurityContext: MessageSecurityContext | undefined
-    if (type === 'chat') {
-      const manager = this.deps.getE2EEManager?.()
-      if (manager) {
-        try {
-          const result = await manager.encryptOutbound(
-            { kind: 'direct', peer: recipient },
-            new TextEncoder().encode(fullBody),
-          )
-          if (result) {
-            const bodyIdx = children.findIndex(
-              (c): c is Element =>
-                typeof c !== 'string' && (c as { name?: string }).name === 'body',
-            )
-            const fallbackBody =
-              result.payload.fallbackBody ?? '[encrypted message]'
-            if (bodyIdx >= 0) {
-              children[bodyIdx] = xml('body', {}, fallbackBody)
-            } else {
-              children.unshift(xml('body', {}, fallbackBody))
-            }
-            children.push(dataToElement(result.payload.stanzaElement))
-            children.push(
-              xml('encryption', {
-                xmlns: NS_EME,
-                namespace:
-                  result.payload.stanzaElement.attrs.xmlns ??
-                  result.payload.protocolId,
-              }),
-            )
-            children.push(xml('store', { xmlns: NS_HINTS }))
-            outgoingSecurityContext = {
-              protocolId: result.plugin.descriptor.id,
-              trust: 'trusted',
-            }
-          } else if (manager.getSendPolicy() === 'strict') {
-            // Strict mode: the user opted into E2EE, so a peer without a
-            // usable key is a send-time error, not a silent downgrade.
-            // Surface it to the caller (UI) — that's the only layer that
-            // can legitimately decide to retry or to explicitly send in
-            // cleartext as a one-off.
-            throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
-          }
-        } catch (err) {
-          if (err instanceof E2EEEncryptionRequiredError) throw err
-          logWarn(`E2EE encrypt failed for ${recipient}, sending plaintext: ${err instanceof Error ? err.message : String(err)}`)
-        }
-      }
-    }
+    // E2EE hook: for 1:1 recipients, attempt to encrypt and rewrite the
+    // outgoing children. MUC encryption is a later phase.
+    const outgoingSecurityContext =
+      type === 'chat'
+        ? await this.applyE2EEToOutboundChat(recipient, fullBody, children)
+        : undefined
 
     const message = xml('message', { to: recipient, type, id }, ...children)
     await this.deps.sendStanza(message)
@@ -653,6 +680,12 @@ export class Chat extends BaseModule {
 
     children.push(createOriginIdElement(messageId))
 
+    // Same E2EE rewrite as the original sendMessage path. Without this a
+    // failed encrypted send would retry as plaintext, leaking the body to
+    // the server and onward to the recipient. Strict mode bubbles the
+    // E2EEEncryptionRequiredError so the UI can decide what to do.
+    await this.applyE2EEToOutboundChat(recipient, fullBody, children)
+
     const message = xml('message', { to: recipient, type: 'chat', id: messageId }, ...children)
     await this.deps.sendStanza(message)
   }
@@ -735,7 +768,29 @@ export class Chat extends BaseModule {
       ? this.deps.stores?.room.getMessage(to, messageId)
       : this.deps.stores?.chat.getMessage(to, messageId)
 
-    if (originalMsg?.body && emojis.length > 0) {
+    // The reply-quote fallback embeds the *decrypted* original body in
+    // cleartext for legacy reactions-blind clients. For 1:1 chats with
+    // E2EE active that branch would publish the original plaintext to
+    // the server — far worse than the reaction itself leaking. Skip the
+    // entire fallback block whenever encryption is available; an E2EE-
+    // capable peer is by definition modern enough to handle <reactions>
+    // natively. In strict mode we additionally refuse to send the
+    // reply-quote fallback even when the peer is currently unreachable
+    // over E2EE — better to throw than silently downgrade.
+    const manager = this.deps.getE2EEManager?.()
+    let suppressReplyFallback = false
+    if (type === 'chat' && manager) {
+      const peerCanEncrypt = await manager
+        .canEncryptTo({ kind: 'direct', peer: recipient })
+        .catch(() => false)
+      if (peerCanEncrypt) {
+        suppressReplyFallback = true
+      } else if (manager.getSendPolicy() === 'strict') {
+        throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
+      }
+    }
+
+    if (originalMsg?.body && emojis.length > 0 && !suppressReplyFallback) {
       // Build full stanza with fallback for backward compatibility:
       // - Reactions-capable clients: handle <reactions>, ignore body (reactions fallback)
       // - Reply-capable clients (no reactions): show quoted reply with emoji body
@@ -761,7 +816,9 @@ export class Chat extends BaseModule {
       )
       children.push(xml('store', { xmlns: NS_HINTS }))
     } else {
-      // No original message or removing reactions — simple stanza without fallback body
+      // No original message, removing reactions, or suppressing the
+      // cleartext reply-quote because the peer can be encrypted to —
+      // simple stanza without fallback body.
       children.push(xml('reactions', { xmlns: NS_REACTIONS, id: referenceId }, ...reactionElements))
     }
 
@@ -873,6 +930,15 @@ export class Chat extends BaseModule {
 
     const correctionStanzaId = generateUUID()
     children.push(createOriginIdElement(correctionStanzaId))
+
+    // Encrypt the corrected body for 1:1 chats. Without this an edit on
+    // an encrypted conversation would push the plaintext correction to
+    // the server. The cleartext "[Corrected] " prefix only mattered to
+    // legacy clients that don't know <replace>; E2EE peers handle the
+    // edit natively. MUC encryption is a later phase.
+    if (type === 'chat') {
+      await this.applyE2EEToOutboundChat(recipient, bodyText, children)
+    }
 
     await this.deps.sendStanza(xml('message', { to: recipient, type, id: correctionStanzaId }, ...children))
 

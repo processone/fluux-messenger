@@ -593,6 +593,198 @@ describe('Chat E2EE wiring', () => {
       })
     })
   })
+
+  // -------------------------------------------------------------------
+  // Regression: every chat-like outbound primitive must route through the
+  // E2EE wrap. A leak in any of these paths (resend a failed encrypted
+  // message, edit it, react to it) would publish the original plaintext
+  // to the server even though the user opted into E2EE.
+  // -------------------------------------------------------------------
+  describe('outbound encryption — resendMessage', () => {
+    it('replaces <body> with fallback and appends the encrypted element on resend', async () => {
+      await chat.resendMessage('bob@example.com', 'second try', 'msg-retry-1')
+
+      expect(captured).toHaveLength(1)
+      const sent = captured[0]
+      const body = sent.getChild('body')
+      // The plaintext retry body must NOT reach the wire.
+      expect(body?.text()).not.toContain('second try')
+      expect(body?.text()).toBe('[dummy-plaintext payload]')
+      expect(sent.getChild('plain', 'urn:fluux:e2ee-dummy:0')).toBeDefined()
+      expect(sent.getChild('encryption', 'urn:xmpp:eme:0')).toBeDefined()
+      expect(sent.getChild('store', 'urn:xmpp:hints')).toBeDefined()
+    })
+
+    it('strict mode throws E2EEEncryptionRequiredError instead of resending plaintext', async () => {
+      const strictManager = new E2EEManager({
+        storage: new InMemoryStorageBackend(),
+        xmpp: stubXmppPrimitives(async () => {}),
+        account: { jid: 'me@example.com' },
+      })
+      strictManager.setSendPolicy('strict')
+      const { deps } = makeDeps({
+        jid: 'me@example.com',
+        manager: strictManager,
+        captureStanza: (el) => captured.push(el),
+      })
+      const strictChat = new Chat(deps, stubMAM())
+
+      await expect(
+        strictChat.resendMessage('bob@example.com', 'leaky retry', 'msg-retry-2'),
+      ).rejects.toBeInstanceOf(E2EEEncryptionRequiredError)
+      expect(captured).toHaveLength(0)
+    })
+  })
+
+  describe('outbound encryption — sendCorrection', () => {
+    it('encrypts the corrected body for 1:1 chats', async () => {
+      await chat.sendCorrection('bob@example.com', 'orig-id', 'fixed text')
+
+      expect(captured).toHaveLength(1)
+      const sent = captured[0]
+      const body = sent.getChild('body')
+      expect(body?.text()).not.toContain('fixed text')
+      expect(body?.text()).not.toContain('[Corrected]')
+      expect(body?.text()).toBe('[dummy-plaintext payload]')
+      expect(sent.getChild('plain', 'urn:fluux:e2ee-dummy:0')).toBeDefined()
+      expect(sent.getChild('encryption', 'urn:xmpp:eme:0')).toBeDefined()
+      expect(sent.getChild('replace', 'urn:xmpp:message-correct:0')).toBeDefined()
+    })
+
+    it('strict mode throws when correcting to an E2EE-unreachable peer', async () => {
+      const strictManager = new E2EEManager({
+        storage: new InMemoryStorageBackend(),
+        xmpp: stubXmppPrimitives(async () => {}),
+        account: { jid: 'me@example.com' },
+      })
+      strictManager.setSendPolicy('strict')
+      const { deps } = makeDeps({
+        jid: 'me@example.com',
+        manager: strictManager,
+        captureStanza: (el) => captured.push(el),
+      })
+      const strictChat = new Chat(deps, stubMAM())
+
+      await expect(
+        strictChat.sendCorrection('bob@example.com', 'orig-id', 'leaky edit'),
+      ).rejects.toBeInstanceOf(E2EEEncryptionRequiredError)
+      expect(captured).toHaveLength(0)
+    })
+
+    it('groupchat correction sends plaintext (MUC E2EE not supported in this phase)', async () => {
+      await chat.sendCorrection('room@conf.example.com', 'orig-id', 'fixed text', 'groupchat')
+
+      expect(captured).toHaveLength(1)
+      const sent = captured[0]
+      const body = sent.getChild('body')
+      expect(body?.text()).toBe('[Corrected] fixed text')
+      expect(sent.getChild('plain', 'urn:fluux:e2ee-dummy:0')).toBeUndefined()
+    })
+  })
+
+  describe('outbound encryption — sendReaction', () => {
+    /**
+     * Build a deps object with a `chat.getMessage` stub that hands out a
+     * fixed "original" message — the reactions reply-fallback would quote
+     * its `body` in cleartext if it ran. We use this fixture to prove the
+     * suppression actually fires when E2EE is reachable.
+     */
+    function makeDepsWithOriginal(options: {
+      manager: E2EEManager
+      originalBody: string
+    }): {
+      deps: ModuleDependencies
+      capturedStanzas: Element[]
+      sdkEmitted: unknown[]
+    } {
+      const capturedStanzas: Element[] = []
+      const built = makeDeps({
+        jid: 'me@example.com',
+        manager: options.manager,
+        captureStanza: (el) => capturedStanzas.push(el),
+      })
+      // Cast through unknown — we only stub the methods sendReaction
+      // touches (chat.getMessage). The full StoreBindings surface is
+      // huge and irrelevant to this test.
+      built.deps.stores = {
+        chat: {
+          getMessage: () => ({
+            id: 'orig-id',
+            from: 'bob@example.com',
+            body: options.originalBody,
+          } as unknown as import('../types').Message),
+        },
+      } as unknown as import('../types').StoreBindings
+      return { deps: built.deps, capturedStanzas, sdkEmitted: built.sdkEmitted }
+    }
+
+    it('omits the cleartext reply-quote fallback when the peer can be encrypted to', async () => {
+      const built = makeDepsWithOriginal({
+        manager,
+        originalBody: 'super secret original message',
+      })
+      const reactingChat = new Chat(built.deps, stubMAM())
+
+      await reactingChat.sendReaction('bob@example.com', 'orig-id', ['👍'])
+
+      expect(built.capturedStanzas).toHaveLength(1)
+      const sent = built.capturedStanzas[0]
+      // The whole point: no <body> at all (so no plaintext quote of the
+      // original message reaches the server), and no <reply>/<fallback>
+      // legacy machinery either.
+      expect(sent.getChild('body')).toBeUndefined()
+      expect(sent.getChild('reply', 'urn:xmpp:reply:0')).toBeUndefined()
+      // The reactions element itself is still present in cleartext —
+      // XEP-0444 doesn't define encrypted reactions and the server already
+      // sees emoji metadata; that's a known limitation, not a regression.
+      const reactions = sent.getChild('reactions', 'urn:xmpp:reactions:0')
+      expect(reactions).toBeDefined()
+      expect(reactions?.getChildren('reaction').length).toBe(1)
+    })
+
+    it('strict mode throws when reacting to an E2EE-unreachable peer with a quoted original', async () => {
+      const strictManager = new E2EEManager({
+        storage: new InMemoryStorageBackend(),
+        xmpp: stubXmppPrimitives(async () => {}),
+        account: { jid: 'me@example.com' },
+      })
+      strictManager.setSendPolicy('strict')
+      const built = makeDepsWithOriginal({
+        manager: strictManager,
+        originalBody: 'must stay encrypted',
+      })
+      const strictChat = new Chat(built.deps, stubMAM())
+
+      await expect(
+        strictChat.sendReaction('bob@example.com', 'orig-id', ['🔥']),
+      ).rejects.toBeInstanceOf(E2EEEncryptionRequiredError)
+      expect(built.capturedStanzas).toHaveLength(0)
+    })
+
+    it('keeps the legacy reply-quote fallback when no E2EE manager is wired', async () => {
+      // Regression guard: removing the leak for E2EE peers must not
+      // change behavior for accounts that never opted into E2EE, where
+      // the cleartext fallback is the actual interop story for legacy
+      // clients that don't speak <reactions/>.
+      const emptyManager = new E2EEManager({
+        storage: new InMemoryStorageBackend(),
+        xmpp: stubXmppPrimitives(async () => {}),
+        account: { jid: 'me@example.com' },
+      })
+      const built = makeDepsWithOriginal({
+        manager: emptyManager,
+        originalBody: 'legacy chat — already plaintext anyway',
+      })
+      const plainChat = new Chat(built.deps, stubMAM())
+
+      await plainChat.sendReaction('bob@example.com', 'orig-id', ['🎉'])
+
+      const sent = built.capturedStanzas[0]
+      const body = sent.getChild('body')
+      expect(body?.text()).toContain('legacy chat — already plaintext anyway')
+      expect(sent.getChild('reply', 'urn:xmpp:reply:0')).toBeDefined()
+    })
+  })
 })
 
 /**
