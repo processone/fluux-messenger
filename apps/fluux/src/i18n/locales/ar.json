@@ -561,6 +561,7 @@
             "copyFingerprint": "نسخ البصمة",
             "copyFailed": "تعذّر نسخ البصمة",
             "toggleFailed": "تعذّر تغيير إعداد التشفير",
+            "probeFailed": "Couldn't reach the server to check for an existing backup. Try again — nothing was changed.",
             "limitationsTitle": "القيود الحالية",
             "limitationVerification": "لم يتم التحقق من بصمات جهات الاتصال بعد — تُظهر أيقونات القفل الثقة عند أول استخدام فقط.",
             "limitationDeviceBound": "هذا المفتاح موجود فقط على هذا الجهاز — لا يوجد بعد مزامنة بين الأجهزة أو نسخة احتياطية مشفرة؛ فقدان الجهاز يعني فقدان الهوية.",

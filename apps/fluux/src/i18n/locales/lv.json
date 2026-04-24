@@ -562,6 +562,7 @@
             "copyFingerprint": "Kopēt pirkstu nospiedumu",
             "copyFailed": "Neizdevās kopēt pirkstu nospiedumu",
             "toggleFailed": "Neizdevās mainīt šifrēšanas iestatījumu",
+            "probeFailed": "Couldn't reach the server to check for an existing backup. Try again — nothing was changed.",
             "limitationsTitle": "Pašreizējie ierobežojumi",
             "limitationVerification": "Kontaktu pirkstu nospiedumi vēl netiek verificēti — slēdzenes ikonas rāda tikai uzticību pirmajā lietošanā.",
             "limitationDeviceBound": "Šī atslēga pastāv tikai šajā ierīcē — vēl nav sinhronizācijas starp ierīcēm vai šifrētas rezerves kopijas; ierīces zaudēšana nozīmē identitātes zaudēšanu.",

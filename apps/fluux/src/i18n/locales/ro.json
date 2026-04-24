@@ -563,6 +563,7 @@
             "copyFingerprint": "Copiați amprenta",
             "copyFailed": "Nu s-a putut copia amprenta",
             "toggleFailed": "Nu s-a putut modifica setarea de criptare",
+            "probeFailed": "Couldn't reach the server to check for an existing backup. Try again — nothing was changed.",
             "limitationsTitle": "Limitări actuale",
             "limitationVerification": "Amprentele contactelor nu sunt încă verificate — pictogramele lacăt reflectă doar încrederea la prima utilizare.",
             "limitationDeviceBound": "Această cheie există doar pe acest dispozitiv — încă nu există sincronizare între dispozitive sau copie de rezervă criptată; pierderea dispozitivului înseamnă pierderea identității.",

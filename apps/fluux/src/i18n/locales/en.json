@@ -478,6 +478,7 @@
             "copyFingerprint": "Copy fingerprint",
             "copyFailed": "Couldn't copy fingerprint",
             "toggleFailed": "Couldn't change encryption setting",
+            "probeFailed": "Couldn't reach the server to check for an existing backup. Try again — nothing was changed.",
             "limitationsTitle": "Current limitations",
             "limitationVerification": "Contact fingerprints are not yet verified — lock icons show trust-on-first-use only.",
             "limitationDeviceBound": "This key lives only on this device — no multi-device sync or encrypted backup yet, so losing the device loses the identity.",

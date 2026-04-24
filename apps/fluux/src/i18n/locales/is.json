@@ -561,6 +561,7 @@
             "copyFingerprint": "Afrita fingrafar",
             "copyFailed": "Ekki tókst að afrita fingrafarið",
             "toggleFailed": "Ekki tókst að breyta dulkóðunarstillingunni",
+            "probeFailed": "Couldn't reach the server to check for an existing backup. Try again — nothing was changed.",
             "limitationsTitle": "Núverandi takmarkanir",
             "limitationVerification": "Fingraför tengiliða eru ekki enn sannreynd — lásatáknin sýna aðeins traust við fyrstu notkun.",
             "limitationDeviceBound": "Þessi lykill er aðeins til á þessu tæki — engin samstilling milli tækja eða dulkóðuð öryggisafritun enn; ef tækið tapast tapast sjálfsmyndin.",

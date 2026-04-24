@@ -563,6 +563,7 @@
             "copyFingerprint": "Copia l'empremta",
             "copyFailed": "No s'ha pogut copiar l'empremta",
             "toggleFailed": "No s'ha pogut canviar la configuració de xifratge",
+            "probeFailed": "Couldn't reach the server to check for an existing backup. Try again — nothing was changed.",
             "limitationsTitle": "Limitacions actuals",
             "limitationVerification": "Les empremtes dels contactes encara no es verifiquen — les icones del cadenat només indiquen confiança de primer ús.",
             "limitationDeviceBound": "Aquesta clau només existeix en aquest dispositiu — encara no hi ha sincronització entre dispositius ni còpia de seguretat xifrada; perdre el dispositiu significa perdre la identitat.",

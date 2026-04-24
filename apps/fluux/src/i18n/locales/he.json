@@ -561,6 +561,7 @@
             "copyFingerprint": "העתקת טביעת האצבע",
             "copyFailed": "לא ניתן להעתיק את טביעת האצבע",
             "toggleFailed": "לא ניתן לשנות את הגדרת ההצפנה",
+            "probeFailed": "Couldn't reach the server to check for an existing backup. Try again — nothing was changed.",
             "limitationsTitle": "מגבלות נוכחיות",
             "limitationVerification": "טביעות האצבע של אנשי הקשר אינן מאומתות עדיין — סמלי המנעול מציגים רק אמון בשימוש הראשון.",
             "limitationDeviceBound": "המפתח הזה קיים רק במכשיר הזה — אין עדיין סנכרון בין מכשירים או גיבוי מוצפן; אבדן המכשיר משמעו אבדן הזהות.",

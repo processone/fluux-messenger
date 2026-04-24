@@ -561,6 +561,7 @@
             "copyFingerprint": "Kopioi sormenjälki",
             "copyFailed": "Sormenjäljen kopiointi epäonnistui",
             "toggleFailed": "Salausasetuksen muuttaminen epäonnistui",
+            "probeFailed": "Couldn't reach the server to check for an existing backup. Try again — nothing was changed.",
             "limitationsTitle": "Nykyiset rajoitukset",
             "limitationVerification": "Yhteystietojen sormenjälkiä ei vielä tarkisteta — lukon kuvakkeet ilmaisevat vain luottamusta ensikäytöllä.",
             "limitationDeviceBound": "Tämä avain on vain tällä laitteella — ei vielä useiden laitteiden synkronointia eikä salattua varmuuskopiota; laitteen menettäminen tarkoittaa identiteetin menettämistä.",

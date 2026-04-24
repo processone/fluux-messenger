@@ -561,6 +561,7 @@
             "copyFingerprint": "Kopiera fingeravtryck",
             "copyFailed": "Det gick inte att kopiera fingeravtrycket",
             "toggleFailed": "Det gick inte att ändra krypteringsinställningen",
+            "probeFailed": "Couldn't reach the server to check for an existing backup. Try again — nothing was changed.",
             "limitationsTitle": "Nuvarande begränsningar",
             "limitationVerification": "Kontakternas fingeravtryck verifieras ännu inte — hänglåsikonerna visar bara förtroende vid första användningen.",
             "limitationDeviceBound": "Denna nyckel finns endast på den här enheten — ingen synkronisering mellan enheter eller krypterad säkerhetskopia ännu; att förlora enheten innebär att förlora identiteten.",

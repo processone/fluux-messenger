@@ -563,6 +563,7 @@
             "copyFingerprint": "Copia l'impronta",
             "copyFailed": "Impossibile copiare l'impronta",
             "toggleFailed": "Impossibile modificare l'impostazione di crittografia",
+            "probeFailed": "Couldn't reach the server to check for an existing backup. Try again — nothing was changed.",
             "limitationsTitle": "Limitazioni attuali",
             "limitationVerification": "Le impronte dei contatti non sono ancora verificate — le icone del lucchetto indicano solo la fiducia al primo utilizzo.",
             "limitationDeviceBound": "Questa chiave esiste solo su questo dispositivo — nessuna sincronizzazione multi-dispositivo né backup cifrato; perdere il dispositivo significa perdere l'identità.",

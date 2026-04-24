@@ -563,6 +563,7 @@
             "copyFingerprint": "Kopeeri sõrmejälg",
             "copyFailed": "Sõrmejälge ei saanud kopeerida",
             "toggleFailed": "Krüpteerimise seadet ei saanud muuta",
+            "probeFailed": "Couldn't reach the server to check for an existing backup. Try again — nothing was changed.",
             "limitationsTitle": "Praegused piirangud",
             "limitationVerification": "Kontaktide sõrmejälgi veel ei kontrollita — lukuikoonid näitavad ainult esmakordset usaldust.",
             "limitationDeviceBound": "See võti eksisteerib ainult sellel seadmel — seadmete vahel sünkroonimist ega krüpteeritud varukoopiat veel pole; seadme kaotamine tähendab identiteedi kaotamist.",

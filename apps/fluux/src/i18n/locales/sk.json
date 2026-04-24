@@ -562,6 +562,7 @@
             "copyFingerprint": "Kopírovať odtlačok",
             "copyFailed": "Odtlačok sa nepodarilo skopírovať",
             "toggleFailed": "Nastavenie šifrovania sa nepodarilo zmeniť",
+            "probeFailed": "Couldn't reach the server to check for an existing backup. Try again — nothing was changed.",
             "limitationsTitle": "Aktuálne obmedzenia",
             "limitationVerification": "Odtlačky kontaktov zatiaľ nie sú overené — ikony zámku odrážajú iba dôveru pri prvom použití.",
             "limitationDeviceBound": "Tento kľúč existuje iba na tomto zariadení — zatiaľ žiadna synchronizácia medzi zariadeniami ani šifrovaná záloha; strata zariadenia znamená stratu identity.",

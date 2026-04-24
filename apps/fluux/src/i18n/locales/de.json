@@ -563,6 +563,7 @@
             "copyFingerprint": "Fingerabdruck kopieren",
             "copyFailed": "Fingerabdruck konnte nicht kopiert werden",
             "toggleFailed": "Verschlüsselungseinstellung konnte nicht geändert werden",
+            "probeFailed": "Couldn't reach the server to check for an existing backup. Try again — nothing was changed.",
             "limitationsTitle": "Aktuelle Einschränkungen",
             "limitationVerification": "Kontakt-Fingerabdrücke werden noch nicht verifiziert — Schloss-Symbole zeigen nur Vertrauen bei erster Nutzung.",
             "limitationDeviceBound": "Dieser Schlüssel existiert nur auf diesem Gerät — noch keine Geräte-Synchronisierung oder verschlüsseltes Backup; Verlust des Geräts bedeutet Verlust der Identität.",

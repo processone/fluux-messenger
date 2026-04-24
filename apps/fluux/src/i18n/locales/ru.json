@@ -561,6 +561,7 @@
             "copyFingerprint": "Скопировать отпечаток",
             "copyFailed": "Не удалось скопировать отпечаток",
             "toggleFailed": "Не удалось изменить настройку шифрования",
+            "probeFailed": "Couldn't reach the server to check for an existing backup. Try again — nothing was changed.",
             "limitationsTitle": "Текущие ограничения",
             "limitationVerification": "Отпечатки контактов пока не проверяются — значки замка означают лишь доверие при первом использовании.",
             "limitationDeviceBound": "Этот ключ существует только на этом устройстве — пока нет синхронизации между устройствами и зашифрованной резервной копии; потеря устройства означает потерю личности.",

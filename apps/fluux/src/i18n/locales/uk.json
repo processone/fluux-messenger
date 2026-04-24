@@ -561,6 +561,7 @@
             "copyFingerprint": "Скопіювати відбиток",
             "copyFailed": "Не вдалося скопіювати відбиток",
             "toggleFailed": "Не вдалося змінити налаштування шифрування",
+            "probeFailed": "Couldn't reach the server to check for an existing backup. Try again — nothing was changed.",
             "limitationsTitle": "Поточні обмеження",
             "limitationVerification": "Відбитки контактів поки не перевіряються — значки замка позначають лише довіру при першому використанні.",
             "limitationDeviceBound": "Цей ключ існує лише на цьому пристрої — поки немає синхронізації між пристроями та зашифрованої резервної копії; втрата пристрою означає втрату особистості.",

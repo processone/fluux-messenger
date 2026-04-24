@@ -563,6 +563,7 @@
             "copyFingerprint": "Kopiuj odcisk",
             "copyFailed": "Nie udało się skopiować odcisku",
             "toggleFailed": "Nie udało się zmienić ustawienia szyfrowania",
+            "probeFailed": "Couldn't reach the server to check for an existing backup. Try again — nothing was changed.",
             "limitationsTitle": "Obecne ograniczenia",
             "limitationVerification": "Odciski kontaktów nie są jeszcze weryfikowane — ikony kłódki oznaczają jedynie zaufanie przy pierwszym użyciu.",
             "limitationDeviceBound": "Ten klucz istnieje tylko na tym urządzeniu — brak synchronizacji między urządzeniami i zaszyfrowanej kopii zapasowej; utrata urządzenia oznacza utratę tożsamości.",

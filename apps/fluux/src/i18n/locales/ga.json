@@ -561,6 +561,7 @@
             "copyFingerprint": "Cóipeáil an méarlorg",
             "copyFailed": "Níorbh fhéidir an méarlorg a chóipeáil",
             "toggleFailed": "Níorbh fhéidir an socrú criptiúcháin a athrú",
+            "probeFailed": "Couldn't reach the server to check for an existing backup. Try again — nothing was changed.",
             "limitationsTitle": "Teorainneacha reatha",
             "limitationVerification": "Níor fíoraíodh méarloirg teagmhálaithe fós — ní léiríonn na deilbhíní glais ach muinín-chéad-úsáide.",
             "limitationDeviceBound": "Ní mhaireann an eochair seo ach ar an ngléas seo — níl sioncronú ilghléis ná cúltaca criptithe ar fáil go fóill; má chailltear an gléas cailltear an fhéiniúlacht.",

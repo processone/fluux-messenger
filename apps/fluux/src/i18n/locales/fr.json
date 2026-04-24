@@ -562,6 +562,7 @@
             "copyFingerprint": "Copier l'empreinte",
             "copyFailed": "Impossible de copier l'empreinte",
             "toggleFailed": "Impossible de modifier le paramètre de chiffrement",
+            "probeFailed": "Impossible de joindre le serveur pour vérifier la présence d'une sauvegarde. Veuillez réessayer — aucune modification n'a été effectuée.",
             "limitationsTitle": "Limitations actuelles",
             "limitationVerification": "Les empreintes des contacts ne sont pas encore vérifiées — les icônes de cadenas reflètent seulement la confiance à la première utilisation.",
             "limitationDeviceBound": "Cette clé ne vit que sur cet appareil — pas encore de synchronisation multi-appareils ni de sauvegarde chiffrée ; perdre l'appareil revient à perdre l'identité.",

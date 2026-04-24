@@ -563,6 +563,7 @@
             "copyFingerprint": "Kopiraj prstni odtis",
             "copyFailed": "Prstnega odtisa ni bilo mogoče kopirati",
             "toggleFailed": "Nastavitve šifriranja ni bilo mogoče spremeniti",
+            "probeFailed": "Couldn't reach the server to check for an existing backup. Try again — nothing was changed.",
             "limitationsTitle": "Trenutne omejitve",
             "limitationVerification": "Prstni odtisi stikov še niso preverjeni — ikone ključavnice prikazujejo samo zaupanje ob prvi uporabi.",
             "limitationDeviceBound": "Ta ključ obstaja samo na tej napravi — še ni sinhronizacije med napravami ali šifrirane varnostne kopije; izguba naprave pomeni izgubo identitete.",

@@ -561,6 +561,7 @@
             "copyFingerprint": "Ujjlenyomat másolása",
             "copyFailed": "Nem sikerült az ujjlenyomatot másolni",
             "toggleFailed": "A titkosítás beállítása nem módosítható",
+            "probeFailed": "Couldn't reach the server to check for an existing backup. Try again — nothing was changed.",
             "limitationsTitle": "Jelenlegi korlátozások",
             "limitationVerification": "A névjegyek ujjlenyomatai még nincsenek ellenőrizve — a lakatikonok csak első használatkori bizalmat jeleznek.",
             "limitationDeviceBound": "Ez a kulcs csak ezen az eszközön létezik — még nincs eszközök közötti szinkronizálás vagy titkosított biztonsági mentés; az eszköz elvesztése az azonosság elvesztését jelenti.",

@@ -9,7 +9,7 @@ import { DeleteOpenpgpKeyDialog } from '@/components/DeleteOpenpgpKeyDialog'
 import { BackupPassphraseDialog } from '@/components/BackupPassphraseDialog'
 import { RestorePassphraseDialog } from '@/components/RestorePassphraseDialog'
 import { EnableWithBackupDialog } from '@/components/EnableWithBackupDialog'
-import { probeRemoteSecretKeyBackup } from '@/e2ee/secretKeyProbe'
+import { probeRemoteSecretKeyBackup, SecretKeyBackupProbeError } from '@/e2ee/secretKeyProbe'
 import { isTauri } from '@/utils/tauri'
 
 type PluginStatus =
@@ -183,7 +183,17 @@ export function EncryptionSettings() {
       // whole toggle.
       setPendingEnableBackup({ accountJid: bareJid, backupMessage })
     } catch (err) {
-      addToast('error', t('settings.encryption.toggleFailed'))
+      // A probe failure is structurally different from a generic toggle
+      // failure: nothing was registered, nothing was generated, nothing
+      // was published. The user just needs to retry once their network /
+      // server is reachable. Surfacing the right toast (instead of the
+      // generic "couldn't change encryption setting") tells them it's
+      // safe to try again — and keeps any existing server backup intact.
+      if (err instanceof SecretKeyBackupProbeError) {
+        addToast('error', t('settings.encryption.probeFailed'))
+      } else {
+        addToast('error', t('settings.encryption.toggleFailed'))
+      }
       console.error('[Fluux] E2EE toggle failed:', err)
       setOpenpgpEnabled(!next)
     } finally {

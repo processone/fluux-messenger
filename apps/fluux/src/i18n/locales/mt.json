@@ -563,6 +563,7 @@
             "copyFingerprint": "Ikkopja l-marka",
             "copyFailed": "Ma setax tiġi kkopjata l-marka",
             "toggleFailed": "Ma setax jinbidel is-setting tal-kriptaġġ",
+            "probeFailed": "Couldn't reach the server to check for an existing backup. Try again — nothing was changed.",
             "limitationsTitle": "Limitazzjonijiet attwali",
             "limitationVerification": "Il-marki tal-kuntatti għadhom ma jiġux ivverifikati — l-ikoni tal-lucchetto juru biss fiduċja fl-ewwel użu.",
             "limitationDeviceBound": "Din iċ-ċavetta teżisti biss fuq dan it-tagħmir — għad m'hemmx sinkronizzazzjoni bejn tagħmir jew backup ikriptat; it-telf tat-tagħmir ifisser telf tal-identità.",

@@ -561,6 +561,7 @@
             "copyFingerprint": "Kopiraj otisak",
             "copyFailed": "Otisak se nije mogao kopirati",
             "toggleFailed": "Postavka šifriranja nije se mogla promijeniti",
+            "probeFailed": "Couldn't reach the server to check for an existing backup. Try again — nothing was changed.",
             "limitationsTitle": "Trenutna ograničenja",
             "limitationVerification": "Otisci kontakata još se ne provjeravaju — ikone lokota prikazuju samo povjerenje pri prvom korištenju.",
             "limitationDeviceBound": "Ovaj ključ postoji samo na ovom uređaju — još nema sinkronizacije između uređaja ni šifrirane sigurnosne kopije; gubitak uređaja znači gubitak identiteta.",
