@@ -10,9 +10,13 @@ vi.mock('react-i18next', () => ({
   }),
 }))
 
-// Mock useProxiedUrl hook
+// The component was refactored from `useProxiedUrl` to `useAttachmentUrl`
+// (which branches internally to the decrypting path when `encryption` is
+// present). These tests exercise only the plaintext renderer path, so one
+// mock covers both — either hook resolves to the same stub state.
 const mockUseProxiedUrl = vi.fn()
 vi.mock('@/hooks', () => ({
+  useAttachmentUrl: (...args: unknown[]) => mockUseProxiedUrl(...args),
   useProxiedUrl: (...args: unknown[]) => mockUseProxiedUrl(...args),
   formatBytes: (bytes: number) => `${bytes} bytes`,
 }))

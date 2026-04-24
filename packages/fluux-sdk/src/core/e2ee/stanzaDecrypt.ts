@@ -20,6 +20,7 @@
 import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 import { elementToData } from './stanzaAdapter'
+import { parse as parsePayloadEnvelope } from './payloadEnvelope'
 import type { E2EEManager, SecurityContext } from './index'
 import type { InboundSource } from './types'
 import { logWarn } from '../logger'
@@ -136,11 +137,36 @@ export async function decryptStanzaInPlace(
       notes: ['Could not decrypt'],
     }
   } else if (plaintext !== null) {
-    const bodyEl = stanza.getChild('body')
-    if (bodyEl) {
-      bodyEl.children = [plaintext]
+    // Plaintext can come in two shapes. New senders ship an XML payload
+    // envelope — `<payload xmlns='jabber:client'>…children…</payload>` —
+    // that carries `<body/>` alongside stanza extensions (XEP-0066 OOB,
+    // XEP-0446 file-metadata, and in later phases chat states / receipts
+    // / reactions / reply). We unwrap those children back onto the stanza
+    // root so the existing parsers (parseOobData, chat-state handler, …)
+    // continue to work unchanged — the decrypted stanza looks structurally
+    // identical to a plaintext stanza carrying the same elements.
+    //
+    // Legacy senders (including our own code before this change) ship a
+    // bare body string as the plaintext. `parsePayloadEnvelope` returns
+    // `null` for that shape, and we fall back to replacing just `<body/>`.
+    const envelopeChildren = parsePayloadEnvelope(plaintext)
+    if (envelopeChildren) {
+      // Drop any existing body hint so the decrypted one wins.
+      const existingBody = stanza.getChild('body')
+      if (existingBody) {
+        const idx = stanza.children.indexOf(existingBody)
+        if (idx >= 0) stanza.children.splice(idx, 1)
+      }
+      for (const child of envelopeChildren) {
+        stanza.children.push(child)
+      }
     } else {
-      stanza.children.push(xml('body', {}, plaintext))
+      const bodyEl = stanza.getChild('body')
+      if (bodyEl) {
+        bodyEl.children = [plaintext]
+      } else {
+        stanza.children.push(xml('body', {}, plaintext))
+      }
     }
   }
 

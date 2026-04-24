@@ -21,9 +21,11 @@ import {
   NS_XHTML,
   NS_FASTEN,
 } from '../namespaces'
-import type { FileAttachment, ThumbnailInfo, LinkPreview, ReplyInfo } from '../types'
+import type { FileAttachment, FileEncryption, ThumbnailInfo, LinkPreview, ReplyInfo } from '../types'
 import { processFallback } from '../../utils/fallbackUtils'
 import { CHAT_FALLBACK_TARGETS, ROOM_FALLBACK_TARGETS } from '../../utils/fallbackRegistry'
+import { isAesgcmUri, parse as parseAesgcmUri } from './AesgcmUri'
+import { logWarn } from '../logger'
 
 /**
  * Parse XEP-0422 apply-to fastening with OGP metadata for link previews.
@@ -91,8 +93,30 @@ export function parseOobData(stanza: Element): FileAttachment | undefined {
   const urlEl = oobEl.getChild('url')
   if (!urlEl) return undefined
 
-  const url = urlEl.text()
-  if (!url) return undefined
+  const rawUrl = urlEl.text()
+  if (!rawUrl) return undefined
+
+  // XEP-0454: if the URL is an aesgcm:// URI, parse out the IV+key from the
+  // fragment and rebuild the plain HTTPS URL. The UI layer uses the HTTPS
+  // URL to fetch the ciphertext and the `encryption` params to decrypt it.
+  //
+  // An aesgcm:// URI inbound here must have ridden inside an E2EE
+  // `<payload/>` — if it ever appears at a plaintext stanza root that's
+  // either a misconfigured sender leaking their key to the server or a
+  // downgrade attempt. We don't reject (harmless to render as encrypted
+  // anyway — the fragment is already in the clear at that point), but we
+  // log so operators can spot it.
+  let url = rawUrl
+  let encryption: FileEncryption | undefined
+  if (isAesgcmUri(rawUrl)) {
+    try {
+      const parts = parseAesgcmUri(rawUrl)
+      url = parts.httpsUrl
+      encryption = { cipher: 'aes-256-gcm', key: parts.key, iv: parts.iv }
+    } catch (err) {
+      logWarn(`parseOobData: malformed aesgcm:// URI — falling back to raw URL: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
 
   // Get optional description
   const descEl = oobEl.getChild('desc')
@@ -189,6 +213,7 @@ export function parseOobData(stanza: Element): FileAttachment | undefined {
     ...(fileWidth !== undefined && { width: fileWidth }),
     ...(fileHeight !== undefined && { height: fileHeight }),
     ...(thumbnail && { thumbnail }),
+    ...(encryption && { encryption }),
   }
 }
 

@@ -83,6 +83,21 @@ From that point on, the new device can read your encrypted history and send encr
 
 Treat the backup passphrase like the recovery phrase of a cryptocurrency wallet: write it down, store it somewhere durable, and do not rely on memory alone.
 
+## Media and file sharing
+
+When E2EE is on, images, videos, audio clips, and other files you attach to a conversation are protected the same way your messages are. Fluux follows the approach described in [XEP-0454](https://xmpp.org/extensions/xep-0454.html), adapted to work with OpenPGP:
+
+1. **Your device encrypts the file.** Before the file leaves your machine, Fluux encrypts its bytes with a fresh AES-256-GCM key. A new key is generated for every file you send — keys are never reused.
+2. **Only ciphertext is uploaded.** The upload server (the XMPP HTTP File Upload service) receives only the encrypted bytes. The filename, size, and type sent to the upload service are also stripped — the server sees `application/octet-stream` with a random name.
+3. **The key travels inside the encrypted message.** The URL where the ciphertext is stored, the AES key, the IV, and the original filename/size/type all ride inside the OpenPGP-encrypted message envelope. The XMPP server sees only the blob; it cannot reconstruct the URL or the key.
+4. **The recipient's device decrypts the file.** When your contact opens the message, their client fetches the ciphertext, decrypts it locally with the key from the envelope, and shows the file.
+
+Thumbnails for images and videos are encrypted with their own separate key so a preview cannot leak the contents of the protected file.
+
+**Caveat on link previews.** The ciphertext URL is still visible to your upload server (since it hosts the file), and to any proxy or monitoring tool between your client and that server. The *contents* are not — anyone who grabs the URL by itself gets only ciphertext bytes they cannot decrypt without the AES key.
+
+**Compatibility.** Clients that don't yet implement this will see a message saying the content is encrypted, with a fallback notice — same as they would for text. Plain (non-encrypted) file attachments, sent in conversations where E2EE is off, keep working exactly as before.
+
 ## Encrypt-to-self and message history
 
 When you send an encrypted message, Fluux also encrypts a copy to **your own key**. This is what lets other devices you own — and message replays from the server's [Message Archive](https://xmpp.org/extensions/xep-0313.html) — decrypt your outgoing history. Without it, you could send a message from your laptop and never be able to read it back on your phone.
@@ -111,6 +126,7 @@ On Linux and Windows the secret key falls back to a file with restricted permiss
 - **Metadata**: who you talk to, when, and how often. XMPP routing information is always visible to the server.
 - **Group chats** (multi-user rooms): the current OX implementation covers one-to-one conversations only.
 - **Compromised devices**: if someone can read your device's storage and the OS keychain, they can decrypt your messages. Use full-disk encryption.
+- **Local message cache**: for responsiveness, Fluux stores decrypted messages and attachment metadata in the browser/webview's local database. They are not re-encrypted at rest today. The OS file-system permissions and (for Tauri builds) the OS keychain protecting the secret key are the security boundary. Use full-disk encryption for best protection. Encrypting this cache is planned as a follow-up.
 - **Lost backup passphrase**: see above. There is no recovery side channel.
 
 ## Frequently asked questions
@@ -132,10 +148,14 @@ Not yet. Fluux's encryption engine is built as a plugin layer so OMEMO can be ad
 
 ## Reference
 
-| Specification                                                                | Role                                                  |
-|------------------------------------------------------------------------------|-------------------------------------------------------|
-| [XEP-0373](https://xmpp.org/extensions/xep-0373.html) OpenPGP for XMPP       | Encrypted message format, key publication, backup    |
-| [XEP-0380](https://xmpp.org/extensions/xep-0380.html) Explicit Encryption    | Hints to clients that a stanza is encrypted          |
-| [XEP-0420](https://xmpp.org/extensions/xep-0420.html) Stanza Content         | Authenticated envelope used inside the encrypted blob |
-| [XEP-0163](https://xmpp.org/extensions/xep-0163.html) Personal Eventing      | Distributes your public key and encrypted backup     |
-| [RFC 9580](https://www.rfc-editor.org/rfc/rfc9580) OpenPGP                   | The underlying cryptography (via Sequoia-PGP)        |
+| Specification                                                                | Role                                                    |
+|------------------------------------------------------------------------------|---------------------------------------------------------|
+| [XEP-0373](https://xmpp.org/extensions/xep-0373.html) OpenPGP for XMPP       | Encrypted message format, key publication, backup       |
+| [XEP-0380](https://xmpp.org/extensions/xep-0380.html) Explicit Encryption    | Hints to clients that a stanza is encrypted             |
+| [XEP-0420](https://xmpp.org/extensions/xep-0420.html) Stanza Content         | Authenticated envelope used inside the encrypted blob   |
+| [XEP-0163](https://xmpp.org/extensions/xep-0163.html) Personal Eventing      | Distributes your public key and encrypted backup        |
+| [XEP-0363](https://xmpp.org/extensions/xep-0363.html) HTTP File Upload       | Transport for file attachments                          |
+| [XEP-0454](https://xmpp.org/extensions/xep-0454.html) Encrypted Media        | AES-256-GCM scheme reused for encrypted file attachments |
+| [XEP-0066](https://xmpp.org/extensions/xep-0066.html) Out of Band Data       | Carries the file URL in encrypted messages              |
+| [XEP-0446](https://xmpp.org/extensions/xep-0446.html) File Metadata          | Original filename, size, mimetype — encrypted with body |
+| [RFC 9580](https://www.rfc-editor.org/rfc/rfc9580) OpenPGP                   | The underlying cryptography (via Sequoia-PGP)           |

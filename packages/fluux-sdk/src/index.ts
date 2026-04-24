@@ -264,8 +264,9 @@ export type {
   WebPushRegistration,
   WebPushStatus,
 
-  // File attachment types (XEP-0066, XEP-0264)
+  // File attachment types (XEP-0066, XEP-0264, XEP-0454)
   FileAttachment,
+  FileEncryption,
   ThumbnailInfo,
   OobInfo,
 
@@ -330,6 +331,19 @@ export type {
 // EventHook base class (Obsidian-inspired plugin pattern)
 export { EventHook } from './core/EventHook'
 export { ActivityLogHook } from './core/eventHooks'
+
+// Media encryption helpers (XEP-0454-style encrypted file attachments).
+// Apps wrap HTTP Upload bytes in AES-256-GCM and carry the key/IV in the
+// FileAttachment; Chat.sendMessage moves the resulting OOB URL inside the
+// OpenPGP `<payload/>`. See docs/ENCRYPTION.md §Media sharing.
+export { encryptFile, decryptFile } from './core/modules/MediaEncryption'
+export type { EncryptedFile } from './core/modules/MediaEncryption'
+export {
+  buildAesgcmUri,
+  parseAesgcmUri,
+  isAesgcmUri,
+} from './core'
+export type { AesgcmUriParts } from './core/modules/AesgcmUri'
 
 // SDK Events (for event-based decoupling)
 export type {

@@ -835,7 +835,7 @@ function MessageInput({
   uploadState?: { isUploading: boolean; progress: number; error: string | null; clearError: () => void }
   isUploadSupported?: boolean
   onFileSelect?: (file: File) => void
-  uploadFile?: (file: File) => Promise<import('@fluux/sdk').FileAttachment | null>
+  uploadFile?: (file: File, options?: { encrypt?: boolean }) => Promise<import('@fluux/sdk').FileAttachment | null>
   pendingAttachment?: PendingAttachment | null
   onRemovePendingAttachment?: () => void
   processLinkPreview?: (messageId: string, body: string, to: string, type: 'chat' | 'groupchat') => Promise<void>
@@ -900,10 +900,15 @@ function MessageInput({
       }
     }
 
-    // If there's a pending attachment, upload it first (privacy: only upload when user explicitly sends)
+    // If there's a pending attachment, upload it first (privacy: only upload when user explicitly sends).
+    // When the conversation is E2EE-active we encrypt the file bytes
+    // client-side with a fresh AES-256-GCM key before upload; the key/IV
+    // then ride inside the OpenPGP `<payload/>` via the SDK's stanza
+    // assembly, so the HTTP Upload server stores only ciphertext.
     let attachment: import('@fluux/sdk').FileAttachment | null | undefined
     if (pendingAttachment && uploadFile) {
-      attachment = await uploadFile(pendingAttachment.file)
+      const encryptAttachment = encryptionState.kind === 'encrypted'
+      attachment = await uploadFile(pendingAttachment.file, { encrypt: encryptAttachment })
       if (!attachment) {
         // Upload failed - don't send the message
         return false

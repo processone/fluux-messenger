@@ -101,6 +101,7 @@ export type {
   ThumbnailInfo,
   OobInfo,
   FileAttachment,
+  FileEncryption,
 } from './upload'
 
 // Media types

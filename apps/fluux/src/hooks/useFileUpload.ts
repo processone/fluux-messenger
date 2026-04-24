@@ -1,6 +1,12 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useXMPP, type FileAttachment, type ThumbnailInfo } from '@fluux/sdk'
+import {
+  useXMPP,
+  encryptFile,
+  type FileAttachment,
+  type FileEncryption,
+  type ThumbnailInfo,
+} from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import {
   generateThumbnail,
@@ -62,9 +68,20 @@ export function useFileUpload() {
    * - Images: generates and uploads thumbnail
    * - Videos: generates thumbnail and extracts duration
    * - Audio: extracts duration
-   * Returns FileAttachment with URL, thumbnail info, and duration, or null on failure.
+   *
+   * When `encrypt` is true the file bytes (and thumbnail bytes, if any)
+   * are AES-256-GCM-encrypted client-side before HTTP Upload. The returned
+   * `FileAttachment.url` is the HTTPS URL of the ciphertext, and
+   * `encryption` carries the per-file key/IV — the SDK's Chat module then
+   * embeds an `aesgcm://` URI inside the E2EE `<payload/>` so the XMPP
+   * server never sees the key. Each call generates fresh key + IV; reuse
+   * would be catastrophic for GCM.
+   *
+   * Returns FileAttachment with URL, thumbnail info, duration, and
+   * optional encryption metadata, or null on failure.
    */
-  const uploadFile = async (file: File): Promise<FileAttachment | null> => {
+  const uploadFile = async (file: File, options?: { encrypt?: boolean }): Promise<FileAttachment | null> => {
+    const shouldEncrypt = options?.encrypt === true
     if (!httpUploadService) {
       setState(s => ({ ...s, error: t('upload.notSupported') }))
       return null
@@ -135,51 +152,105 @@ export function useFileUpload() {
         setState(s => ({ ...s, progress: overall }))
       }
 
-      // 1. Request upload slot for main file
+      // 1. Prepare main file bytes — encrypted or plaintext depending on mode.
+      // When encrypting we PUT the ciphertext (plaintext_len + 16-byte GCM
+      // tag) and store the key/IV in `encryption` for the downstream stanza
+      // assembly. The XEP-0363 slot is requested with the CIPHERTEXT size
+      // so the server's size limit applies to what actually goes on the wire.
       const effectiveMimeType = getEffectiveMimeType(file)
+      let mainEncryption: FileEncryption | undefined
+      let mainUploadBlob: Blob = file
+      let mainUploadMimeType = effectiveMimeType
+      let mainUploadFilename = file.name
+      let mainUploadSize = file.size
+      if (shouldEncrypt) {
+        const plaintextBytes = new Uint8Array(await file.arrayBuffer())
+        const enc = await encryptFile(plaintextBytes)
+        mainEncryption = { cipher: 'aes-256-gcm', key: enc.key, iv: enc.iv }
+        mainUploadBlob = new Blob([enc.ciphertext as BlobPart], { type: 'application/octet-stream' })
+        // Don't leak the original filename / mimetype via HTTP Upload — the
+        // real name/mimetype ride inside the encrypted `<file-metadata/>`.
+        mainUploadMimeType = 'application/octet-stream'
+        mainUploadFilename = `${crypto.randomUUID()}.bin`
+        mainUploadSize = enc.ciphertext.byteLength
+      }
       const slot = await requestUploadSlot(
-        file.name,
-        file.size,
-        effectiveMimeType
+        mainUploadFilename,
+        mainUploadSize,
+        mainUploadMimeType,
       )
 
-      // 2. Upload main file via HTTP PUT with progress
-      await uploadWithProgress(slot.putUrl, file, effectiveMimeType, slot.headers, (progress) => {
-        mainProgress = progress
-        updateProgress()
-      })
+      // 2. Upload main file (ciphertext or plaintext) via HTTP PUT with progress.
+      await uploadWithProgress(
+        slot.putUrl,
+        new File([mainUploadBlob], mainUploadFilename, { type: mainUploadMimeType }),
+        mainUploadMimeType,
+        slot.headers,
+        (progress) => {
+          mainProgress = progress
+          updateProgress()
+        },
+      )
 
-      // 3. Upload thumbnail if generated
+      // 3. Upload thumbnail if generated. Encrypted attachments get an
+      // encrypted thumbnail too — a plaintext thumbnail would leak a
+      // preview of the very file we just protected.
       let thumbnailInfo: ThumbnailInfo | undefined
       if (thumbnailResult) {
-        const thumbFilename = `thumb_${file.name.replace(/\.[^.]+$/, '')}.jpg`
+        let thumbBytes: Uint8Array
+        let thumbUploadMime: string
+        let thumbFilename: string
+        let thumbEncryption: FileEncryption | undefined
+        if (shouldEncrypt) {
+          const thumbPlain = new Uint8Array(await thumbnailResult.blob.arrayBuffer())
+          const enc = await encryptFile(thumbPlain)
+          thumbBytes = enc.ciphertext
+          thumbEncryption = { cipher: 'aes-256-gcm', key: enc.key, iv: enc.iv }
+          thumbUploadMime = 'application/octet-stream'
+          thumbFilename = `${crypto.randomUUID()}.bin`
+        } else {
+          thumbBytes = new Uint8Array(await thumbnailResult.blob.arrayBuffer())
+          thumbUploadMime = thumbnailResult.mediaType
+          thumbFilename = `thumb_${file.name.replace(/\.[^.]+$/, '')}.jpg`
+        }
+
         const thumbSlot = await requestUploadSlot(
           thumbFilename,
-          thumbnailResult.blob.size,
-          thumbnailResult.mediaType
+          thumbBytes.byteLength,
+          thumbUploadMime,
         )
 
         await uploadWithProgress(
           thumbSlot.putUrl,
-          new File([thumbnailResult.blob], thumbFilename, { type: thumbnailResult.mediaType }),
-          thumbnailResult.mediaType,
+          new File([thumbBytes as BlobPart], thumbFilename, { type: thumbUploadMime }),
+          thumbUploadMime,
           thumbSlot.headers,
           (progress) => {
             thumbProgress = progress
             updateProgress()
-          }
+          },
         )
 
+        // Store plain HTTPS URL locally; encryption params ride in a
+        // separate field. Chat.ts converts to `aesgcm://` only when
+        // building the outgoing stanza's OOB thumbnail attribute.
         thumbnailInfo = {
           uri: thumbSlot.getUrl,
           mediaType: thumbnailResult.mediaType,
           width: thumbnailResult.width,
           height: thumbnailResult.height,
+          ...(thumbEncryption && { encryption: thumbEncryption }),
         }
       }
 
       setState({ isUploading: false, progress: 100, error: null })
 
+      // `url` is always the plain HTTPS URL of the (cipher)text on the
+      // upload server. Encryption params ride in `encryption`. Chat.ts
+      // converts this to an `aesgcm://` URI only at stanza-assembly time,
+      // where the URI goes inside the OpenPGP `<payload/>`. Keeping the
+      // local form separate means UI code can fetch the URL directly and
+      // renderers reason about encryption as an explicit field.
       return {
         url: slot.getUrl,
         name: file.name,
@@ -189,6 +260,7 @@ export function useFileUpload() {
         height,
         thumbnail: thumbnailInfo,
         duration,
+        ...(mainEncryption && { encryption: mainEncryption }),
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : t('upload.failed')

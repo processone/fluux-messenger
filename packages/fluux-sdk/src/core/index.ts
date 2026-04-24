@@ -27,6 +27,7 @@ export type {
   XmppPacket,
   ChatStateNotification,
   FileAttachment,
+  FileEncryption,
   ThumbnailInfo,
   MAMQueryState,
   RSMResponse,
@@ -40,6 +41,18 @@ export type {
   SessionState,
   StoredCredentials,
 } from './types'
+
+// Media encryption for XEP-0454-style encrypted file attachments.
+// Apps use these to encrypt file bytes locally before HTTP Upload and to
+// decrypt inbound ciphertext. See docs/ENCRYPTION.md §Media sharing.
+export { encryptFile, decryptFile } from './modules/MediaEncryption'
+export type { EncryptedFile } from './modules/MediaEncryption'
+export {
+  build as buildAesgcmUri,
+  parse as parseAesgcmUri,
+  isAesgcmUri,
+} from './modules/AesgcmUri'
+export type { AesgcmUriParts } from './modules/AesgcmUri'
 
 // Store-based side effects (auto-load, MAM fetch, etc.)
 export {
