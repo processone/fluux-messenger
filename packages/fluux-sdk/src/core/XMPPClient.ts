@@ -113,6 +113,7 @@ import { NS_CARBONS, NS_MAM, NS_P1_PUSH_WEBPUSH } from './namespaces'
 import { createDefaultStoreBindings, type DefaultStoreBindingsOptions } from './defaultStoreBindings'
 import { logInfo } from './logger'
 import { SDK_VERSION } from '../version'
+import { initSearchIndex, backfillFromMessageCache } from '../utils/searchIndex'
 
 /**
  * Core XMPP client with namespace-based module API.
@@ -939,10 +940,14 @@ export class XMPPClient {
     }
 
     // Open the search index DB and backfill from message cache if needed (one-time migration)
-    void import('../utils/searchIndex').then(async (m) => {
-      await m.initSearchIndex(scopedJid)
-      await m.backfillFromMessageCache()
-    }).catch(() => {})
+    void (async () => {
+      try {
+        await initSearchIndex(scopedJid)
+        await backfillFromMessageCache()
+      } catch {
+        // Ignore — search index is non-critical for connection
+      }
+    })()
 
     this.currentJid = options.jid
     this.stores?.connection.setJid(options.jid)
@@ -1616,6 +1621,9 @@ export class XMPPClient {
       },
       retractPEP: async (node, itemId) => {
         await this.pubsub.retract(node, itemId)
+      },
+      deletePEP: async (node) => {
+        await this.pubsub.deleteNode(node)
       },
       queryPEP: async (jid, node) => {
         return this.pubsub.query(jid, node)
