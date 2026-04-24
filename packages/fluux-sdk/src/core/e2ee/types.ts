@@ -281,6 +281,16 @@ export interface XMPPPrimitives {
    * a genuine failure they want to surface.
    */
   retractPEP(node: string, itemId: string): Promise<void>
+  /**
+   * Delete one of our own PEP nodes (XEP-0060 §8.2).
+   *
+   * Needed to recover from `precondition-not-met` on publish: if the node
+   * persists with an accessModel we can no longer match, re-publishing is
+   * impossible without tearing the node down and recreating it. Plugins
+   * use this as a last-resort self-heal — they should catch the publish
+   * error, delete, then retry the publish.
+   */
+  deletePEP(node: string): Promise<void>
   /** Fetch items from a remote PEP node. */
   queryPEP(jid: BareJID, node: string): Promise<PEPItem[]>
   /** Subscribe to PEP notifications from a remote JID for a given node. */

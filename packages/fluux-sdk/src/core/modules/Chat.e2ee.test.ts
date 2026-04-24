@@ -29,6 +29,7 @@ function stubXmppPrimitives(sendStanza: (el: Element) => Promise<void>): XMPPPri
     queryDisco: async () => ({ features: [], identities: [] }),
     publishPEP: async () => {},
     retractPEP: async () => {},
+    deletePEP: async () => {},
     queryPEP: async () => [],
     subscribePEP: () => ({ unsubscribe: () => {} }),
   }

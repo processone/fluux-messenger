@@ -178,6 +178,27 @@ export class PubSub extends BaseModule {
   }
 
   /**
+   * Delete one of our own PEP nodes entirely (XEP-0060 §8.2).
+   *
+   * Unlike {@link retract}, which removes a single item while leaving the
+   * node (and its configuration) intact, this tears the node down so a
+   * subsequent {@link publish} recreates it with whatever `publish-options`
+   * the publisher wants. That's what lets us self-heal a node whose
+   * persisted access model no longer matches the current policy (e.g. an
+   * old `accessModel='presence'` OpenPGP public-key node that now needs
+   * to be `'open'`): the server refuses to reconfigure on publish with
+   * `precondition-not-met`, but we can delete + recreate.
+   */
+  async deleteNode(node: string): Promise<void> {
+    const iq = xml('iq', { type: 'set', id: `pubsub_del_${generateUUID()}` },
+      xml('pubsub', { xmlns: `${NS_PUBSUB}#owner` },
+        xml('delete', { node }),
+      ),
+    )
+    await this.deps.sendIQ(iq)
+  }
+
+  /**
    * Fetch items from a remote PEP node. If `maxItems` is provided, the
    * server is asked for at most that many of the most recent items;
    * otherwise the default retained set is returned.

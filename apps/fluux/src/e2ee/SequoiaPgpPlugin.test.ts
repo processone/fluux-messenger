@@ -348,6 +348,7 @@ function makeContext(accountJid: string): {
     options?: Parameters<XMPPPrimitives['publishPEP']>[2]
   }>
   retracted: Array<{ node: string; itemId: string }>
+  deletedNodes: string[]
   peerPublish: (peer: string, node: string, item: PEPItem) => void
   /**
    * Every `reportSecurityContextUpdate` call captured on this ctx, in the
@@ -363,6 +364,7 @@ function makeContext(accountJid: string): {
     options?: Parameters<XMPPPrimitives['publishPEP']>[2]
   }> = []
   const retracted: Array<{ node: string; itemId: string }> = []
+  const deletedNodes: string[] = []
   const securityUpdates: SecurityContextUpdate[] = []
 
   const xmpp: XMPPPrimitives = {
@@ -392,6 +394,12 @@ function makeContext(accountJid: string): {
       const selfKey = `${accountJid}\u0000${node}`
       peerNodes.delete(selfKey)
     },
+    deletePEP: async (node) => {
+      deletedNodes.push(node)
+      // Delete tears down the whole node, not just an item.
+      const selfKey = `${accountJid}\u0000${node}`
+      peerNodes.delete(selfKey)
+    },
     queryPEP: async (jid, node) => peerNodes.get(`${jid}\u0000${node}`) ?? [],
     subscribePEP: () => ({ unsubscribe: () => {} }),
   }
@@ -410,7 +418,7 @@ function makeContext(accountJid: string): {
     existing.push(item)
     peerNodes.set(key, existing)
   }
-  return { ctx, published, retracted, peerPublish, securityUpdates }
+  return { ctx, published, retracted, deletedNodes, peerPublish, securityUpdates }
 }
 
 describe('SequoiaPgpPlugin', () => {
@@ -560,6 +568,86 @@ describe('SequoiaPgpPlugin', () => {
 
       await expect(plugin.init(ctx)).rejects.toThrow(/pep-support-probe/)
       expect(published).toHaveLength(0)
+    })
+
+    it('deletes and retries when publish hits precondition-not-met', async () => {
+      // The regression we are guarding against: older Fluux builds created
+      // the OpenPGP PEP nodes with `accessModel='presence'` (the PEP
+      // default). Current builds pin `accessModel='open'`. Per XEP-0060
+      // §7.1.5 the server rejects such a publish with precondition-not-met;
+      // without this heal the publish silently fails and peers see an
+      // empty metadata node. Verify we tear the node down and retry.
+      const { ctx, published, deletedNodes } = makeContext('me@example.com')
+      const failedOnce = new Set<string>()
+      const originalPublish = ctx.xmpp.publishPEP
+      ctx.xmpp.publishPEP = async (node, item, options) => {
+        if (!failedOnce.has(node)) {
+          failedOnce.add(node)
+          const err = new Error('conflict - precondition-not-met') as Error & {
+            condition: string
+          }
+          err.condition = 'precondition-not-met'
+          throw err
+        }
+        await originalPublish(node, item, options)
+      }
+
+      await plugin.init(ctx)
+
+      // Both OpenPGP PEP nodes should have been deleted-and-retried.
+      expect(deletedNodes).toContain('urn:xmpp:openpgp:0:public-keys')
+      expect(deletedNodes.some((n) => n.startsWith('urn:xmpp:openpgp:0:public-keys:'))).toBe(
+        true,
+      )
+      // After the retry, BOTH nodes end up populated with the desired config.
+      expect(published).toHaveLength(2)
+      expect(published[0].options).toEqual({
+        accessModel: 'open',
+        persistItems: true,
+        maxItems: 1,
+      })
+    })
+
+    it('does not retry on unrelated publish errors', async () => {
+      // Guard: only `precondition-not-met` is safe to heal with a delete.
+      // Other failures (timeouts, forbidden, internal-server-error) must
+      // propagate so the caller's warning path sees them unchanged.
+      const { ctx, published, deletedNodes } = makeContext('me@example.com')
+      ctx.xmpp.publishPEP = async () => {
+        throw new Error('forbidden')
+      }
+
+      // init catches publish failures internally (logs a warning); the
+      // point here is just that no delete happened.
+      await plugin.init(ctx)
+      expect(deletedNodes).toHaveLength(0)
+      expect(published).toHaveLength(0)
+    })
+
+    it('does not retry a second time if the retry also fails', async () => {
+      // Two failures in a row almost always point at an unrelated server
+      // issue (rate limit, broken node config) rather than a stale access
+      // model. Letting the error propagate on the second attempt keeps
+      // the warning path informative and avoids loops.
+      const { ctx, deletedNodes } = makeContext('me@example.com')
+      let calls = 0
+      ctx.xmpp.publishPEP = async () => {
+        calls++
+        const err = new Error('conflict - precondition-not-met') as Error & {
+          condition: string
+        }
+        err.condition = 'precondition-not-met'
+        throw err
+      }
+
+      // init swallows the warning-level failure; we only care about the
+      // retry count here.
+      await plugin.init(ctx)
+      // One failed publish → one delete → one retry that also failed.
+      // Then ensureIdentity bails on the data node, so only the first
+      // node's pair ran.
+      expect(deletedNodes).toHaveLength(1)
+      expect(calls).toBe(2)
     })
   })
 

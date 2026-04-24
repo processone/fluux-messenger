@@ -29,6 +29,7 @@ function stubXmppPrimitives(): XMPPPrimitives {
     queryDisco: async () => ({ features: [], identities: [] }),
     publishPEP: async () => {},
     retractPEP: async () => {},
+    deletePEP: async () => {},
     queryPEP: async () => [],
     subscribePEP: () => ({ unsubscribe: () => {} }),
   }

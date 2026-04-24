@@ -801,7 +801,6 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
    * current-value node: rotating the key just overwrites the slot.
    */
   private async publishOwnPublicKeyData(bundle: KeyBundle): Promise<void> {
-    const ctx = this.requireCtx()
     const payload: XMLElementData = {
       name: 'pubkey',
       attrs: { xmlns: OX_NAMESPACE },
@@ -813,7 +812,7 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
         },
       ],
     }
-    await ctx.xmpp.publishPEP(
+    await this.publishWithPreconditionHeal(
       publicKeyDataNodeFor(bundle.fingerprint),
       { id: CURRENT_ITEM_ID, payload },
       { accessModel: 'open', persistItems: true, maxItems: 1 },
@@ -832,7 +831,6 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
    * interop rationale.
    */
   private async publishOwnPublicKeyMetadata(bundle: KeyBundle): Promise<void> {
-    const ctx = this.requireCtx()
     const payload: XMLElementData = {
       name: 'public-keys-list',
       attrs: { xmlns: OX_NAMESPACE },
@@ -848,11 +846,61 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
         },
       ],
     }
-    await ctx.xmpp.publishPEP(
+    await this.publishWithPreconditionHeal(
       PUBLIC_KEYS_METADATA_NODE,
       { id: CURRENT_ITEM_ID, payload },
       { accessModel: 'open', persistItems: true, maxItems: 1 },
     )
+  }
+
+  /**
+   * Publish, but if the server rejects with `precondition-not-met` because
+   * a pre-existing node's configuration conflicts with the requested
+   * publish-options (XEP-0060 §7.1.5), delete the node and retry once.
+   *
+   * This is our one-shot migration path for users whose OpenPGP PEP nodes
+   * were created by an earlier build that didn't pin `accessModel='open'`:
+   * the server stored the node with `accessModel='presence'` (the PEP
+   * default) and refuses to reconfigure via `<publish-options/>`. The only
+   * recovery is to tear the node down and let our publish recreate it with
+   * the correct config — the delete is safe because these are single-item
+   * current-value nodes and the retry re-seeds the expected item.
+   *
+   * We do NOT retry the delete-then-publish cycle a second time: if the
+   * second publish still fails, the caller's existing warning path logs
+   * it and we fall through. Two failures in a row almost always point at
+   * an unrelated server issue (rate limit, auth) that a third attempt
+   * wouldn't fix either.
+   */
+  private async publishWithPreconditionHeal(
+    node: string,
+    item: { id: string; payload: XMLElementData },
+    options: {
+      accessModel?: 'open' | 'whitelist' | 'presence' | 'roster' | 'authorize'
+      maxItems?: number
+      persistItems?: boolean
+    },
+  ): Promise<void> {
+    const ctx = this.requireCtx()
+    try {
+      await ctx.xmpp.publishPEP(node, item, options)
+    } catch (err) {
+      if (!isPreconditionNotMet(err)) throw err
+      ctx.logger.warn(
+        `SequoiaPgpPlugin: publish rejected on ${node} with precondition-not-met; deleting node and retrying`,
+      )
+      try {
+        await ctx.xmpp.deletePEP(node)
+      } catch (deleteErr) {
+        // If delete itself fails, surface the ORIGINAL publish error —
+        // it's the meaningful one for the caller's warning log.
+        ctx.logger.debug(
+          `SequoiaPgpPlugin: delete ${node} after precondition-not-met failed: ${formatError(deleteErr)}`,
+        )
+        throw err
+      }
+      await ctx.xmpp.publishPEP(node, item, options)
+    }
   }
 
   /**
@@ -1363,6 +1411,45 @@ function extractPeer(handle: ConversationHandle): BareJID {
   const peer = state?.peer
   if (!peer) throw new Error('SequoiaPgpPlugin: conversation handle is missing peer JID')
   return peer
+}
+
+/**
+ * Detect the XEP-0060 §7.1.5 `precondition-not-met` error on a failed
+ * publish. Servers emit this when the requested `<publish-options/>` don't
+ * match the existing node's stored configuration.
+ *
+ * The @xmpp/client library surfaces stanza errors with:
+ * - `err.condition` — name of the first child element in the `<error/>`
+ *   (may be the app-specific condition OR the RFC-6120 defined condition,
+ *   depending on which one the server wrote first).
+ * - `err.application` — the second element, when two are present.
+ * - `err.element` — the full `<error/>` element, which we scan as a
+ *   fallback so ordering and namespace variations don't cause false
+ *   negatives.
+ */
+function isPreconditionNotMet(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false
+  const e = err as {
+    condition?: string
+    application?: { name?: string } | null
+    element?: {
+      getChildren?: (name: string, xmlns?: string) => unknown[]
+      getChild?: (name: string, xmlns?: string) => unknown
+    } | null
+  }
+  if (e.condition === 'precondition-not-met') return true
+  if (e.application?.name === 'precondition-not-met') return true
+  // Fallback: walk the <error/> children for any element named
+  // precondition-not-met under the XEP-0060 pubsub errors namespace.
+  const errorEl = e.element
+  if (errorEl?.getChild) {
+    const hit = errorEl.getChild(
+      'precondition-not-met',
+      'http://jabber.org/protocol/pubsub#errors',
+    )
+    if (hit) return true
+  }
+  return false
 }
 
 /**

@@ -117,6 +117,28 @@ describe('PubSub.retract', () => {
   })
 })
 
+describe('PubSub.deleteNode', () => {
+  it('sends an IQ set with pubsub#owner/delete[@node]', async () => {
+    let captured: Element | null = null
+    const deps = makeDeps(async (iq) => {
+      captured = iq
+      return xml('iq', { type: 'result', id: iq.attrs.id })
+    })
+    const pubsub = new PubSub(deps)
+
+    await pubsub.deleteNode('urn:xmpp:openpgp:0:public-keys')
+
+    expect(captured!.attrs.type).toBe('set')
+    const pubsubEl = captured!.getChild(
+      'pubsub',
+      'http://jabber.org/protocol/pubsub#owner',
+    )
+    expect(pubsubEl).toBeDefined()
+    const del = pubsubEl!.getChild('delete')
+    expect(del?.attrs.node).toBe('urn:xmpp:openpgp:0:public-keys')
+  })
+})
+
 describe('PubSub.query', () => {
   it('parses returned items and their payload children', async () => {
     const response = xml(
