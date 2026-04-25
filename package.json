@@ -24,7 +24,8 @@
     "release:prepare": "node scripts/prepare-release.js",
     "docs": "npm run ts-docs -w @fluux/sdk",
     "docs:watch": "npm run docs:watch -w @fluux/sdk",
-    "screenshots": "npx playwright test --config playwright.config.ts"
+    "screenshots": "npx playwright test --config playwright.config.ts",
+    "ux:audit": "npx playwright test --config playwright.ux.config.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
