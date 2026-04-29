@@ -42,6 +42,6 @@
     "serialize-javascript": "^7.0.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "zod-validation-error": "4.0.2"
+    "zod-validation-error": "5.0.0"
   }
 }
