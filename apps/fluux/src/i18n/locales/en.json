@@ -461,7 +461,8 @@
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Verified OpenPGP key",
             "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed — resolve to resume encryption"
+            "blockedTooltip": "Peer's key has changed — resolve to resume encryption",
+            "attachmentKeyWouldLeak": "Message not sent — the attachment is encrypted but end-to-end encryption is unavailable. Sending would expose the file key."
         },
         "verifyPeer": {
             "chipAriaLabel": "Encrypted to {{name}} — click to verify fingerprint",

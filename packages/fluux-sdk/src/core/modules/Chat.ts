@@ -706,6 +706,13 @@ export class Chat extends BaseModule {
           )
         : undefined
 
+    // Guard: an encrypted attachment's aesgcm:// OOB URL carries the AES
+    // key. If stanza-level E2EE didn't move that element into the payload,
+    // the key reaches the server in cleartext — abort rather than leak.
+    if (attachment?.encryption && !outgoingSecurityContext) {
+      throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
+    }
+
     const message = xml('message', { to: recipient, type, id }, ...children)
     await this.deps.sendStanza(message)
 
@@ -802,12 +809,15 @@ export class Chat extends BaseModule {
     // failed encrypted send would retry as plaintext, leaking the body to
     // the server and onward to the recipient. Strict mode bubbles the
     // E2EEEncryptionRequiredError so the UI can decide what to do.
-    await this.applyE2EEToOutboundChat(
+    const resendSecurityContext = await this.applyE2EEToOutboundChat(
       recipient,
       fullBody,
       children,
       Chat.E2EE_PROTECTED_CHILD_KEYS,
     )
+    if (attachment?.encryption && !resendSecurityContext) {
+      throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
+    }
 
     const message = xml('message', { to: recipient, type: 'chat', id: messageId }, ...children)
     await this.deps.sendStanza(message)
@@ -1064,13 +1074,16 @@ export class Chat extends BaseModule {
     // the server. The cleartext "[Corrected] " prefix only mattered to
     // legacy clients that don't know <replace>; E2EE peers handle the
     // edit natively. MUC encryption is a later phase.
-    if (type === 'chat') {
-      await this.applyE2EEToOutboundChat(
-        recipient,
-        bodyText,
-        children,
-        Chat.E2EE_PROTECTED_CHILD_KEYS,
-      )
+    const correctionSecurityContext = type === 'chat'
+      ? await this.applyE2EEToOutboundChat(
+          recipient,
+          bodyText,
+          children,
+          Chat.E2EE_PROTECTED_CHILD_KEYS,
+        )
+      : undefined
+    if (attachment?.encryption && !correctionSecurityContext) {
+      throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
     }
 
     await this.deps.sendStanza(xml('message', { to: recipient, type, id: correctionStanzaId }, ...children))

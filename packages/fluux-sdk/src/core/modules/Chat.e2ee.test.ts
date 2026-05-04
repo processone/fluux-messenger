@@ -272,6 +272,63 @@ describe('Chat E2EE wiring', () => {
       // Critically: nothing was sent to the wire.
       expect(captured).toHaveLength(0)
     })
+
+    it('throws when E2EE fails and attachment carries an aesgcm key (permissive mode)', async () => {
+      // Permissive mode + no plugin registered → encryptOutbound returns null.
+      // The attachment has an AES-GCM key embedded in its aesgcm:// URL, so
+      // sending plaintext would expose that key to the server. The guard must
+      // abort even though the policy is permissive.
+      const emptyManager = new E2EEManager({
+        storage: new InMemoryStorageBackend(),
+        xmpp: stubXmppPrimitives(async () => {}),
+        account: { jid: 'me@example.com' },
+      })
+      const { deps } = makeDeps({
+        jid: 'me@example.com',
+        manager: emptyManager,
+        captureStanza: (el) => captured.push(el),
+      })
+      const guardedChat = new Chat(deps, stubMAM())
+
+      await expect(
+        guardedChat.sendMessage('bob@example.com', 'secret photo', 'chat', undefined, undefined, {
+          url: 'https://upload.example.com/photo.bin',
+          name: 'photo.jpg',
+          mediaType: 'image/jpeg',
+          encryption: {
+            cipher: 'aes-256-gcm',
+            key: new Uint8Array(32).fill(1),
+            iv: new Uint8Array(12).fill(2),
+          },
+        }),
+      ).rejects.toBeInstanceOf(E2EEEncryptionRequiredError)
+
+      expect(captured).toHaveLength(0)
+    })
+
+    it('sends normally when attachment has no encryption metadata and E2EE is absent', async () => {
+      // Plain attachment without encryption: aesgcm guard must not fire.
+      const emptyManager = new E2EEManager({
+        storage: new InMemoryStorageBackend(),
+        xmpp: stubXmppPrimitives(async () => {}),
+        account: { jid: 'me@example.com' },
+      })
+      const { deps } = makeDeps({
+        jid: 'me@example.com',
+        manager: emptyManager,
+        captureStanza: (el) => captured.push(el),
+      })
+      const plainChat = new Chat(deps, stubMAM())
+
+      await plainChat.sendMessage('bob@example.com', 'here is the file', 'chat', undefined, undefined, {
+        url: 'https://upload.example.com/plain.jpg',
+        name: 'plain.jpg',
+        mediaType: 'image/jpeg',
+      })
+
+      expect(captured).toHaveLength(1)
+      expect(captured[0].getChild('x', 'jabber:x:oob')).toBeDefined()
+    })
   })
 
   describe('inbound decryption', () => {
@@ -732,6 +789,35 @@ describe('Chat E2EE wiring', () => {
       ).rejects.toBeInstanceOf(E2EEEncryptionRequiredError)
       expect(captured).toHaveLength(0)
     })
+
+    it('throws when retrying a message whose attachment carries an aesgcm key', async () => {
+      const emptyManager = new E2EEManager({
+        storage: new InMemoryStorageBackend(),
+        xmpp: stubXmppPrimitives(async () => {}),
+        account: { jid: 'me@example.com' },
+      })
+      const { deps } = makeDeps({
+        jid: 'me@example.com',
+        manager: emptyManager,
+        captureStanza: (el) => captured.push(el),
+      })
+      const guardedChat = new Chat(deps, stubMAM())
+
+      await expect(
+        guardedChat.resendMessage('bob@example.com', 'retry photo', 'msg-retry-3', {
+          url: 'https://upload.example.com/retry.bin',
+          name: 'retry.jpg',
+          mediaType: 'image/jpeg',
+          encryption: {
+            cipher: 'aes-256-gcm',
+            key: new Uint8Array(32).fill(5),
+            iv: new Uint8Array(12).fill(6),
+          },
+        }),
+      ).rejects.toBeInstanceOf(E2EEEncryptionRequiredError)
+
+      expect(captured).toHaveLength(0)
+    })
   })
 
   describe('outbound encryption — sendCorrection', () => {
@@ -766,6 +852,35 @@ describe('Chat E2EE wiring', () => {
       await expect(
         strictChat.sendCorrection('bob@example.com', 'orig-id', 'leaky edit'),
       ).rejects.toBeInstanceOf(E2EEEncryptionRequiredError)
+      expect(captured).toHaveLength(0)
+    })
+
+    it('throws when correcting a message whose attachment carries an aesgcm key', async () => {
+      const emptyManager = new E2EEManager({
+        storage: new InMemoryStorageBackend(),
+        xmpp: stubXmppPrimitives(async () => {}),
+        account: { jid: 'me@example.com' },
+      })
+      const { deps } = makeDeps({
+        jid: 'me@example.com',
+        manager: emptyManager,
+        captureStanza: (el) => captured.push(el),
+      })
+      const guardedChat = new Chat(deps, stubMAM())
+
+      await expect(
+        guardedChat.sendCorrection('bob@example.com', 'orig-id', 'updated caption', 'chat', {
+          url: 'https://upload.example.com/edit.bin',
+          name: 'edit.jpg',
+          mediaType: 'image/jpeg',
+          encryption: {
+            cipher: 'aes-256-gcm',
+            key: new Uint8Array(32).fill(7),
+            iv: new Uint8Array(12).fill(8),
+          },
+        }),
+      ).rejects.toBeInstanceOf(E2EEEncryptionRequiredError)
+
       expect(captured).toHaveLength(0)
     })
 

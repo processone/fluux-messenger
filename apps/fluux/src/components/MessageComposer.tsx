@@ -9,7 +9,9 @@ import { TextArea } from './ui/TextInput'
 // Lazy-load emoji picker — keeps ~150KB of emoji data out of the main bundle
 const emojiPickerImport = () => import('./EmojiPicker').then(m => ({ default: m.EmojiPicker }))
 const EmojiPicker = lazy(emojiPickerImport)
+import { E2EEEncryptionRequiredError } from '@fluux/sdk'
 import type { FileAttachment } from '@fluux/sdk'
+import { useToastStore } from '@/stores/toastStore'
 
 // Format file size for display
 function formatFileSize(bytes: number): string {
@@ -168,6 +170,7 @@ export function MessageComposer({
 }: MessageComposerProps & { ref?: Ref<MessageComposerHandle> }) {
   detectRenderLoop('MessageComposer')
   const { t } = useTranslation()
+  const addToast = useToastStore((s) => s.addToast)
   // Internal state for uncontrolled mode
   const [internalText, setInternalText] = useState('')
   const text = controlledValue !== undefined ? controlledValue : internalText
@@ -403,7 +406,11 @@ export function MessageComposer({
         }
       }
     } catch (err) {
-      console.error('Failed to send message:', err)
+      if (err instanceof E2EEEncryptionRequiredError) {
+        addToast('error', t('chat.encryption.attachmentKeyWouldLeak'))
+      } else {
+        console.error('Failed to send message:', err)
+      }
     } finally {
       setSending(false)
     }
