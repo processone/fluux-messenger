@@ -3509,6 +3509,116 @@ describe('XMPPClient Connection', () => {
     })
   })
 
+  // Regression: SASL2 inline SM resumption (XEP-0388 + XEP-0198).
+  // When ejabberd negotiates SM resumption inline inside the SASL2 <success>
+  // element, xmpp.js does NOT emit a top-level <resumed/> nonza and does NOT
+  // emit the 'online' event. Only sm.emit("resumed") fires on the SM plugin.
+  // Before the fix, Connection.ts only listened for 'online' and nonza-based
+  // <resumed/>, so connect() would hang until the 30-second timeout.
+  describe('SASL2 inline SM resumption (XEP-0388)', () => {
+    it('should resolve connect() when sm "resumed" event fires without online or nonza', async () => {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        smState: { id: 'sasl2-sm-abc', inbound: 7, outbound: 3 },
+        skipDiscovery: true,
+      })
+
+      // SASL2 inline resumption: xmpp.js sets SM state then emits 'resumed' on the
+      // SM plugin. No top-level 'online' and no <resumed/> nonza.
+      mockXmppClientInstance.streamManagement.id = 'sasl2-sm-abc'
+      mockXmppClientInstance.streamManagement.enabled = true
+      mockXmppClientInstance.streamManagement.inbound = 7
+      mockXmppClientInstance.streamManagement.outbound = 3
+
+      mockXmppClientInstance._emitSM('resumed')
+
+      // connect() must resolve — before the fix it would hang until the 30s timeout
+      await connectPromise
+    })
+
+    it('should cache SM state when resumption completes via SASL2 inline', async () => {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        smState: { id: 'sasl2-sm-def', inbound: 10, outbound: 5 },
+        skipDiscovery: true,
+      })
+
+      mockXmppClientInstance.streamManagement.id = 'sasl2-sm-def'
+      mockXmppClientInstance.streamManagement.enabled = true
+      mockXmppClientInstance.streamManagement.inbound = 10
+      mockXmppClientInstance.streamManagement.outbound = 5
+
+      mockXmppClientInstance._emitSM('resumed')
+      await connectPromise
+
+      const smState = xmppClient.getStreamManagementState()
+      expect(smState).not.toBeNull()
+      expect(smState?.id).toBe('sasl2-sm-def')
+      expect(smState?.inbound).toBe(10)
+    })
+  })
+
+  // Regression: duplicate SM <enable> suppression on SASL2+bind2 connections.
+  // After bind2 negotiates SM inline, ejabberd sends a second <stream:features>
+  // that still includes <sm>. xmpp.js's setupStreamFeature handler sees it and
+  // sends a duplicate <enable>, which the server rejects with <failed>. The catch
+  // block then clears sm.enabled, silently disabling SM for the session.
+  // The fix: a prependListener on 'element' strips <sm> from the features element
+  // before the middleware sees it, gated on a bind2SmEnabling flag that is set
+  // when the credentials callback detects the SASL2 path (fast !== undefined).
+  describe('bind2 SM duplicate-enable suppression (XEP-0386 + XEP-0198)', () => {
+    it('should strip <sm> from post-auth <stream:features> when SASL2 bind2 is active', async () => {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+
+      // Let createXmppClient() run so prependListener is registered
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(mockXmppClientInstance.prependListener).toHaveBeenCalledWith('element', expect.any(Function))
+      const prependCall = mockXmppClientInstance.prependListener.mock.calls.find(([event]) => event === 'element')
+      const elementHandler = prependCall?.[1] as ((el: unknown) => void)
+      expect(elementHandler).toBeDefined()
+
+      // Invoke the credentials callback with fast !== undefined to set bind2SmEnabling=true
+      const credentialsFn = (mockClientFactory.mock.calls[mockClientFactory.mock.calls.length - 1] as any)[0].credentials
+      const mockAuthenticate = vi.fn().mockResolvedValue(undefined)
+      const mockFast = { fetch: vi.fn().mockResolvedValue(null) }
+      await credentialsFn(mockAuthenticate, ['SCRAM-SHA-256'], mockFast, { isSecure: () => true })
+
+      // Build a <stream:features> element with an <sm> child — what ejabberd sends post-auth
+      const featuresEl = createMockElement('features', { xmlns: 'http://etherx.jabber.org/streams' }, [
+        { name: 'sm', attrs: { xmlns: 'urn:xmpp:sm:3' } },
+      ])
+      const smBefore = (featuresEl as any).children.find((c: any) => c.name === 'sm')
+      expect(smBefore).toBeDefined()
+
+      // Call the interceptor — <sm> must be removed since bind2SmEnabling=true
+      elementHandler(featuresEl)
+      const smAfter = (featuresEl as any).children.find((c: any) => c.name === 'sm')
+      expect(smAfter).toBeUndefined()
+
+      // bind2SmEnabling is now reset to false — a second <stream:features> must not be modified
+      const featuresEl2 = createMockElement('features', { xmlns: 'http://etherx.jabber.org/streams' }, [
+        { name: 'sm', attrs: { xmlns: 'urn:xmpp:sm:3' } },
+      ])
+      elementHandler(featuresEl2)
+      const smAfter2 = (featuresEl2 as any).children.find((c: any) => c.name === 'sm')
+      expect(smAfter2).toBeDefined()
+
+      // Finish the connection
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+    })
+  })
+
   describe('FAST token authentication (XEP-0484)', () => {
     /**
      * Helper to extract the credentials callback passed to the xmpp.js client factory.
