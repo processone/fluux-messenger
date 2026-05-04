@@ -158,6 +158,7 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
           placeholderSrc={proxiedImageSrc ?? undefined}
           alt={attachment.name || 'Image attachment'}
           downloadUrl={attachment.url}
+          encryption={attachment.encryption}
           filename={attachment.name}
           onClose={() => setLightboxOpen(false)}
         />

@@ -467,6 +467,27 @@ export class Chat extends BaseModule {
         for (let i = protectedIndices.length - 1; i >= 0; i--) {
           children.splice(protectedIndices[i], 1)
         }
+        // Remove <fallback for="NS_OOB"> (and any other fallback whose feature
+        // just moved into the encrypted payload). Leaving them would let the
+        // XMPP server infer that an attachment was sent — the `for` attribute
+        // names the feature namespace, which is now confidential.
+        if (protectedIndices.length > 0 && protectedChildKeys) {
+          const protectedNamespaces = new Set(
+            [...protectedChildKeys].map(key => key.split('|')[1]).filter(ns => ns.length > 0),
+          )
+          for (let i = children.length - 1; i >= 0; i--) {
+            const c = children[i]
+            if (typeof c === 'string') continue
+            const el = c as Element
+            if (
+              el.name === 'fallback' &&
+              el.attrs?.xmlns === NS_FALLBACK &&
+              protectedNamespaces.has(el.attrs?.for)
+            ) {
+              children.splice(i, 1)
+            }
+          }
+        }
         const bodyIdx = children.findIndex(
           (c): c is Element =>
             typeof c !== 'string' && (c as { name?: string }).name === 'body',

@@ -126,14 +126,26 @@ export function parseOobData(stanza: Element): FileAttachment | undefined {
   let thumbnail: ThumbnailInfo | undefined
   const thumbEl = oobEl.getChild('thumbnail', NS_THUMBS)
   if (thumbEl) {
-    const { uri, width, height } = thumbEl.attrs
+    const { uri: rawThumbUri, width, height } = thumbEl.attrs
     const mediaType = thumbEl.attrs['media-type']
-    if (uri && mediaType && width && height) {
+    if (rawThumbUri && mediaType && width && height) {
+      let thumbUri = rawThumbUri
+      let thumbEncryption: FileEncryption | undefined
+      if (isAesgcmUri(rawThumbUri)) {
+        try {
+          const parts = parseAesgcmUri(rawThumbUri)
+          thumbUri = parts.httpsUrl
+          thumbEncryption = { cipher: 'aes-256-gcm', key: parts.key, iv: parts.iv }
+        } catch (err) {
+          logWarn(`parseOobData: malformed aesgcm:// thumbnail URI — keeping raw: ${err instanceof Error ? err.message : String(err)}`)
+        }
+      }
       thumbnail = {
-        uri,
+        uri: thumbUri,
         mediaType,
         width: parseInt(width, 10),
         height: parseInt(height, 10),
+        ...(thumbEncryption && { encryption: thumbEncryption }),
       }
     }
   }
