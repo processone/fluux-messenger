@@ -600,7 +600,7 @@
             "toggleFailed": "No se pudo cambiar la configuración de cifrado",
             "probeFailed": "No se pudo contactar con el servidor para comprobar si hay una copia de seguridad existente. Inténtalo de nuevo — no se ha cambiado nada.",
             "limitationsTitle": "Limitaciones actuales",
-            "limitationBackend": "Usa un backend criptográfico experimental en Rust puro; no está reforzado para escenarios de alta seguridad.",
+            "limitationBackend": "Backend criptográfico no auditado de forma independiente — no recomendado para usos de muy alta sensibilidad.",
             "dangerZone": "Zona de peligro",
             "deleteKey": "Eliminar mi clave OpenPGP",
             "deleteKeyDescription": "Elimina permanentemente tu clave privada de este dispositivo. Los mensajes cifrados con esta clave dejarán de ser legibles. El cifrado se desactivará hasta que generes una nueva clave.",

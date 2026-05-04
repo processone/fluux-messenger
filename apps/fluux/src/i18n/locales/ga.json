@@ -598,7 +598,7 @@
             "toggleFailed": "Níorbh fhéidir an socrú criptiúcháin a athrú",
             "probeFailed": "Níorbh fhéidir teagmháil leis an bhfreastalaí chun seiceáil le haghaidh cúltaca atá ann cheana. Bain triail eile as — níor athraíodh aon rud.",
             "limitationsTitle": "Teorainneacha reatha",
-            "limitationBackend": "Úsáideann cúlchóras criptiúcháin turgnamhach in Rust amháin; níl sé cruaite do chásanna ard-shlándála.",
+            "limitationBackend": "Cúlra cripteagrafaíochta nach bhfuil iniúchadh neamhspleách déanta air — ní mholtar é d'úsáidí an-íogaire.",
             "dangerZone": "Criosanna contúirte",
             "deleteKey": "Scrios m'eochair OpenPGP",
             "deleteKeyDescription": "Bainfear d'eochair phríobháideach go buan ón ngléas seo. Ní bheidh teachtaireachtaí a criptíodh leis an eochair seo inléite a thuilleadh. Cuirfear an criptiúchán as go dtí go gcruthóidh tú eochair nua.",

@@ -515,7 +515,7 @@
             "toggleFailed": "Couldn't change encryption setting",
             "probeFailed": "Couldn't reach the server to check for an existing backup. Try again — nothing was changed.",
             "limitationsTitle": "Current limitations",
-            "limitationBackend": "Uses an experimental pure-Rust crypto backend; not hardened for high-assurance scenarios.",
+            "limitationBackend": "Crypto backend not independently audited — not recommended for very high-sensitivity use cases.",
             "dangerZone": "Danger zone",
             "deleteKey": "Delete my OpenPGP key",
             "deleteKeyDescription": "Permanently removes your private key from this device. Messages previously encrypted to this key become unreadable. Encryption is turned off until you generate a new key.",

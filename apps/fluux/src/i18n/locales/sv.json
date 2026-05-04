@@ -598,7 +598,7 @@
             "toggleFailed": "Det gick inte att ändra krypteringsinställningen",
             "probeFailed": "Kunde inte nå servern för att kontrollera om en befintlig säkerhetskopia finns. Försök igen — inget har ändrats.",
             "limitationsTitle": "Nuvarande begränsningar",
-            "limitationBackend": "Använder en experimentell ren-Rust-kryptobackend; inte härdad för scenarier med höga säkerhetskrav.",
+            "limitationBackend": "Kryptografisk bakände inte oberoende granskad — rekommenderas inte för användning med mycket hög känslighet.",
             "dangerZone": "Farozon",
             "deleteKey": "Ta bort min OpenPGP-nyckel",
             "deleteKeyDescription": "Tar permanent bort din privata nyckel från den här enheten. Meddelanden som krypterats med nyckeln blir oläsliga. Krypteringen stängs av tills du genererar en ny nyckel.",

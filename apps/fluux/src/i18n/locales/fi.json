@@ -598,7 +598,7 @@
             "toggleFailed": "Salausasetuksen muuttaminen epäonnistui",
             "probeFailed": "Palvelimeen ei saatu yhteyttä olemassa olevan varmuuskopion tarkistamiseksi. Yritä uudelleen — mitään ei ole muutettu.",
             "limitationsTitle": "Nykyiset rajoitukset",
-            "limitationBackend": "Käyttää kokeellista puhtaan Rustin salaustaustajärjestelmää; ei ole kovetettu korkean turvallisuuden skenaarioille.",
+            "limitationBackend": "Kryptografista taustajärjestelmää ei ole itsenäisesti auditoitu — ei suositella erittäin arkaluonteiseen käyttöön.",
             "dangerZone": "Vaaravyöhyke",
             "deleteKey": "Poista OpenPGP-avaimeni",
             "deleteKeyDescription": "Poistaa yksityisen avaimesi pysyvästi tältä laitteelta. Aiemmin tällä avaimella salatut viestit muuttuvat lukukelvottomiksi. Salaus poistetaan käytöstä, kunnes luot uuden avaimen.",

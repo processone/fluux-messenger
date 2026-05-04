@@ -598,7 +598,7 @@
             "toggleFailed": "Kunne ikke ændre krypteringsindstillingen",
             "probeFailed": "Kunne ikke nå serveren for at tjekke for en eksisterende sikkerhedskopi. Prøv igen — intet er ændret.",
             "limitationsTitle": "Nuværende begrænsninger",
-            "limitationBackend": "Bruger en eksperimentel ren-Rust-kryptobackend; ikke hærdet til scenarier med høje sikkerhedskrav.",
+            "limitationBackend": "Kryptobagenden er ikke uafhængigt revideret — anbefales ikke til meget følsomme anvendelser.",
             "dangerZone": "Farezone",
             "deleteKey": "Slet min OpenPGP-nøgle",
             "deleteKeyDescription": "Fjerner permanent din private nøgle fra denne enhed. Beskeder, der tidligere blev krypteret til nøglen, bliver ulæselige. Kryptering slås fra, indtil du genererer en ny nøgle.",

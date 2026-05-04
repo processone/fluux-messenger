@@ -598,7 +598,7 @@
             "toggleFailed": "Versleutelinginstelling kon niet worden gewijzigd",
             "probeFailed": "Server niet bereikbaar om naar een bestaande back-up te zoeken. Probeer het opnieuw — er is niets gewijzigd.",
             "limitationsTitle": "Huidige beperkingen",
-            "limitationBackend": "Gebruikt een experimentele pure-Rust-cryptobackend; niet gehard voor scenario's met hoge beveiligingsvereisten.",
+            "limitationBackend": "Cryptografische backend niet onafhankelijk gecontroleerd — niet aanbevolen voor zeer gevoelig gebruik.",
             "dangerZone": "Gevarenzone",
             "deleteKey": "Mijn OpenPGP-sleutel verwijderen",
             "deleteKeyDescription": "Verwijdert je privésleutel permanent van dit apparaat. Eerder met deze sleutel versleutelde berichten worden onleesbaar. Versleuteling wordt uitgeschakeld totdat je een nieuwe sleutel genereert.",

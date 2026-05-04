@@ -599,7 +599,7 @@
             "toggleFailed": "Nastavenie šifrovania sa nepodarilo zmeniť",
             "probeFailed": "Nepodarilo sa kontaktovať server na overenie existujúcej zálohy. Skúste to znova — nič sa nezmenilo.",
             "limitationsTitle": "Aktuálne obmedzenia",
-            "limitationBackend": "Používa experimentálny kryptografický backend v čistom Ruste; nie je spevnený pre scenáre s vysokými bezpečnostnými požiadavkami.",
+            "limitationBackend": "Kryptografický backend nebol nezávisle auditovaný — neodporúča sa pre použitie s veľmi vysokou citlivosťou.",
             "dangerZone": "Nebezpečná zóna",
             "deleteKey": "Odstrániť môj kľúč OpenPGP",
             "deleteKeyDescription": "Trvalo odstráni váš súkromný kľúč z tohto zariadenia. Správy predtým zašifrované týmto kľúčom sa stanú nečitateľnými. Šifrovanie sa vypne, kým nevygenerujete nový kľúč.",

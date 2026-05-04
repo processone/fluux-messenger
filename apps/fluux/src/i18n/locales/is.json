@@ -598,7 +598,7 @@
             "toggleFailed": "Ekki tókst að breyta dulkóðunarstillingunni",
             "probeFailed": "Ekki tókst að ná í þjóninn til að athuga fyrirliggjandi öryggisafrit. Reyndu aftur — engu var breytt.",
             "limitationsTitle": "Núverandi takmarkanir",
-            "limitationBackend": "Notar tilraunakennt dulmálsbakendi í hreinum Rust; ekki styrkt fyrir atburðarásir með háar öryggiskröfur.",
+            "limitationBackend": "Dulritunarbakendi hefur ekki verið óháð endurskoðaður — mælt er ekki með honum fyrir mjög viðkvæmar notkunir.",
             "dangerZone": "Hættusvæði",
             "deleteKey": "Eyða OpenPGP-lyklinum mínum",
             "deleteKeyDescription": "Fjarlægir einkalykilinn þinn varanlega úr þessu tæki. Skilaboð sem áður voru dulkóðuð með þessum lykli verða ólesanleg. Dulkóðun er slökkt þar til þú býrð til nýjan lykil.",

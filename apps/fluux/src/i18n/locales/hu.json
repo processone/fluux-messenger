@@ -598,7 +598,7 @@
             "toggleFailed": "A titkosítás beállítása nem módosítható",
             "probeFailed": "Nem sikerült elérni a kiszolgálót a meglévő biztonsági mentés ellenőrzéséhez. Próbálja újra — semmi sem változott.",
             "limitationsTitle": "Jelenlegi korlátozások",
-            "limitationBackend": "Kísérleti, tiszta Rust kriptográfiai hátteret használ; nincs megerősítve magas biztonsági követelményű helyzetekhez.",
+            "limitationBackend": "A kriptográfiai háttérrendszer nem lett függetlenül auditálva — nem ajánlott nagyon érzékeny felhasználáshoz.",
             "dangerZone": "Veszélyzóna",
             "deleteKey": "OpenPGP-kulcsom törlése",
             "deleteKeyDescription": "Véglegesen eltávolítja a privát kulcsot erről az eszközről. A kulcshoz korábban titkosított üzenetek olvashatatlanná válnak. A titkosítás kikapcsol, amíg új kulcsot nem generál.",

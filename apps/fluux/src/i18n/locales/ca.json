@@ -600,7 +600,7 @@
             "toggleFailed": "No s'ha pogut canviar la configuració de xifratge",
             "probeFailed": "No s'ha pogut contactar amb el servidor per comprovar si hi ha una còpia de seguretat existent. Torna-ho a provar — no s'ha canviat res.",
             "limitationsTitle": "Limitacions actuals",
-            "limitationBackend": "Fa servir un rerefons criptogràfic experimental escrit en Rust pur; no està endurit per a escenaris d'alta seguretat.",
+            "limitationBackend": "Backend criptogràfic no auditat de manera independent — no recomanat per a usos d'alta sensibilitat.",
             "dangerZone": "Zona de perill",
             "deleteKey": "Elimina la meva clau OpenPGP",
             "deleteKeyDescription": "Elimina permanentment la vostra clau privada d'aquest dispositiu. Els missatges xifrats amb aquesta clau esdevindran illegibles. El xifratge es desactiva fins que en genereu una de nova.",

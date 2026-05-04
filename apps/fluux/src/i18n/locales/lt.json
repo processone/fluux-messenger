@@ -598,7 +598,7 @@
             "toggleFailed": "Nepavyko pakeisti šifravimo nustatymo",
             "probeFailed": "Nepavyko susisiekti su serveriu, kad patikrintų esamą atsarginę kopiją. Bandykite dar kartą — niekas nepakeista.",
             "limitationsTitle": "Dabartiniai apribojimai",
-            "limitationBackend": "Naudoja eksperimentinį gryno Rust kriptografijos backend; nėra sutvirtintas aukšto saugumo scenarijams.",
+            "limitationBackend": "Kriptografinis užpakalinė sistema nėra nepriklausomai audituota — nerekomenduojama labai jautriems naudojimams.",
             "dangerZone": "Pavojaus zona",
             "deleteKey": "Ištrinti mano OpenPGP raktą",
             "deleteKeyDescription": "Visam laikui pašalina jūsų privatų raktą iš šio įrenginio. Šiuo raktu anksčiau užšifruoti pranešimai taps neperskaitomi. Šifravimas išjungiamas, kol nesukursite naujo rakto.",

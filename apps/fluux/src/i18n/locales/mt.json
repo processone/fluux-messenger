@@ -600,7 +600,7 @@
             "toggleFailed": "Ma setax jinbidel is-setting tal-kriptaġġ",
             "probeFailed": "Ma stajtx nikkonettja mas-server biex niċċekkja jekk hemmx kopja ta' backup eżistenti. Erġa' pprova — ma nbidel xejn.",
             "limitationsTitle": "Limitazzjonijiet attwali",
-            "limitationBackend": "Juża backend kriptografiku sperimentali f'Rust pur; mhux imsaħħaħ għal xenarji ta' sigurtà għolja.",
+            "limitationBackend": "Il-backend kriptografiku mhuwiex awditjat b'mod indipendenti — mhux rakkomandat għal użu ta' sensittività għolja ħafna.",
             "dangerZone": "Żona ta' periklu",
             "deleteKey": "Ħassar iċ-ċavetta OpenPGP tiegħi",
             "deleteKeyDescription": "Jneħħi b'mod permanenti ċ-ċavetta privata tiegħek minn dan it-tagħmir. Il-messaġġi li qabel kienu kriptati b'din iċ-ċavetta jsiru illeġġibbli. Il-kriptaġġ jintefa sakemm tiġġenera ċavetta ġdida.",

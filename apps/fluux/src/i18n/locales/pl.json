@@ -600,7 +600,7 @@
             "toggleFailed": "Nie udało się zmienić ustawienia szyfrowania",
             "probeFailed": "Nie udało się skontaktować z serwerem, aby sprawdzić istniejącą kopię zapasową. Spróbuj ponownie — nic nie zostało zmienione.",
             "limitationsTitle": "Obecne ograniczenia",
-            "limitationBackend": "Używa eksperymentalnego backendu kryptograficznego w czystym Ruście; nie jest utwardzony do scenariuszy o wysokich wymaganiach bezpieczeństwa.",
+            "limitationBackend": "Backend kryptograficzny nie został niezależnie zaudytowany — nie jest zalecany do zastosowań o bardzo wysokiej wrażliwości.",
             "dangerZone": "Strefa zagrożenia",
             "deleteKey": "Usuń mój klucz OpenPGP",
             "deleteKeyDescription": "Trwale usuwa Twój klucz prywatny z tego urządzenia. Wiadomości wcześniej zaszyfrowane tym kluczem staną się nieczytelne. Szyfrowanie zostanie wyłączone, dopóki nie wygenerujesz nowego klucza.",

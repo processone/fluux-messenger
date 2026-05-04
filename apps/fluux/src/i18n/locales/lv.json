@@ -599,7 +599,7 @@
             "toggleFailed": "Neizdevās mainīt šifrēšanas iestatījumu",
             "probeFailed": "Neizdevās sazināties ar serveri, lai pārbaudītu esošu rezerves kopiju. Mēģiniet vēlreiz — nekas nav mainīts.",
             "limitationsTitle": "Pašreizējie ierobežojumi",
-            "limitationBackend": "Izmanto eksperimentālu tīra Rust kriptogrāfijas backend; nav nostiprināts augstas drošības scenārijiem.",
+            "limitationBackend": "Kriptogrāfijas aizmugursistēma nav neatkarīgi auditēta — nav ieteicama ļoti augsta jutīguma lietošanai.",
             "dangerZone": "Bīstamā zona",
             "deleteKey": "Dzēst manu OpenPGP atslēgu",
             "deleteKeyDescription": "Neatgriezeniski noņem jūsu privāto atslēgu no šīs ierīces. Iepriekš ar šo atslēgu šifrētās ziņas kļūs nelasāmas. Šifrēšana tiks izslēgta, līdz ģenerēsiet jaunu atslēgu.",

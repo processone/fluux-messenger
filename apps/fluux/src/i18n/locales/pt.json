@@ -600,7 +600,7 @@
             "toggleFailed": "Não foi possível alterar a definição de criptografia",
             "probeFailed": "Não foi possível contactar o servidor para procurar uma cópia de segurança existente. Tenta novamente — nada foi alterado.",
             "limitationsTitle": "Limitações atuais",
-            "limitationBackend": "Usa um backend criptográfico experimental em Rust puro; não endurecido para cenários de alta segurança.",
+            "limitationBackend": "Backend criptográfico não auditado de forma independente — não recomendado para usos de altíssima sensibilidade.",
             "dangerZone": "Zona de perigo",
             "deleteKey": "Eliminar a minha chave OpenPGP",
             "deleteKeyDescription": "Remove definitivamente a sua chave privada deste dispositivo. As mensagens anteriormente criptografadas com esta chave ficarão ilegíveis. A criptografia é desativada até gerar uma nova chave.",

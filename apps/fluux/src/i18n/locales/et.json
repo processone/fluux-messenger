@@ -600,7 +600,7 @@
             "toggleFailed": "Krüpteerimise seadet ei saanud muuta",
             "probeFailed": "Serveriga ühendumine olemasoleva varukoopia kontrollimiseks ebaõnnestus. Proovi uuesti — midagi pole muudetud.",
             "limitationsTitle": "Praegused piirangud",
-            "limitationBackend": "Kasutab eksperimentaalset puhtas Rustis krüptotagasüsteemi; pole tugevdatud kõrgete turvanõuetega stsenaariumide jaoks.",
+            "limitationBackend": "Krüptograafia taustarakendus pole sõltumatult auditeeritud — ei soovitata väga kõrge tundlikkusega kasutuseks.",
             "dangerZone": "Ohutsoon",
             "deleteKey": "Kustuta minu OpenPGP võti",
             "deleteKeyDescription": "Eemaldab sinu privaatvõtme sellest seadmest jäädavalt. Selle võtmega varem krüptitud sõnumid muutuvad loetamatuks. Krüpteerimine lülitatakse välja, kuni genereerid uue võtme.",

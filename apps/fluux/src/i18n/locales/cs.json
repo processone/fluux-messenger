@@ -600,7 +600,7 @@
             "toggleFailed": "Nastavení šifrování se nepodařilo změnit",
             "probeFailed": "Nepodařilo se kontaktovat server pro kontrolu existující zálohy. Zkuste to znovu — nic nebylo změněno.",
             "limitationsTitle": "Aktuální omezení",
-            "limitationBackend": "Používá experimentální kryptografický backend v čistém Rustu; není zpevněn pro scénáře s vysokými bezpečnostními nároky.",
+            "limitationBackend": "Kryptografický backend nebyl nezávisle auditován — nedoporučuje se pro použití s velmi vysokou citlivostí.",
             "dangerZone": "Nebezpečná zóna",
             "deleteKey": "Smazat můj klíč OpenPGP",
             "deleteKeyDescription": "Trvale odstraní váš soukromý klíč z tohoto zařízení. Zprávy dříve zašifrované tímto klíčem se stanou nečitelnými. Šifrování bude vypnuto, dokud nevygenerujete nový klíč.",

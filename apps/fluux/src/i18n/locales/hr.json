@@ -598,7 +598,7 @@
             "toggleFailed": "Postavka šifriranja nije se mogla promijeniti",
             "probeFailed": "Nije moguće kontaktirati poslužitelj radi provjere postojeće sigurnosne kopije. Pokušajte ponovno — ništa nije promijenjeno.",
             "limitationsTitle": "Trenutna ograničenja",
-            "limitationBackend": "Koristi eksperimentalni kripto-backend u čistom Rustu; nije ojačan za scenarije visoke sigurnosti.",
+            "limitationBackend": "Kriptografski backend nije neovisno revidiran — ne preporučuje se za korištenje s vrlo visokom osjetljivošću.",
             "dangerZone": "Opasna zona",
             "deleteKey": "Izbriši moj OpenPGP ključ",
             "deleteKeyDescription": "Trajno uklanja vaš privatni ključ s ovog uređaja. Poruke ranije šifrirane ovim ključem postat će nečitljive. Šifriranje se isključuje dok ne generirate novi ključ.",

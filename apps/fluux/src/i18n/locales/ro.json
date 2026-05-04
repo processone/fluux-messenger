@@ -600,7 +600,7 @@
             "toggleFailed": "Nu s-a putut modifica setarea de criptare",
             "probeFailed": "Nu s-a putut contacta serverul pentru a verifica o copie de rezervă existentă. Încercați din nou — nimic nu a fost schimbat.",
             "limitationsTitle": "Limitări actuale",
-            "limitationBackend": "Folosește un backend criptografic experimental scris în Rust pur; nu este consolidat pentru scenarii cu cerințe înalte de securitate.",
+            "limitationBackend": "Backend-ul criptografic nu a fost auditat independent — nu este recomandat pentru utilizări cu sensibilitate foarte ridicată.",
             "dangerZone": "Zonă periculoasă",
             "deleteKey": "Șterge cheia mea OpenPGP",
             "deleteKeyDescription": "Elimină definitiv cheia dvs. privată de pe acest dispozitiv. Mesajele criptate anterior cu această cheie devin ilizibile. Criptarea se dezactivează până când generați o cheie nouă.",

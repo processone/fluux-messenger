@@ -599,7 +599,7 @@
             "toggleFailed": "Impossible de modifier le paramètre de chiffrement",
             "probeFailed": "Impossible de joindre le serveur pour vérifier la présence d'une sauvegarde. Veuillez réessayer — aucune modification n'a été effectuée.",
             "limitationsTitle": "Limitations actuelles",
-            "limitationBackend": "Utilise un backend cryptographique expérimental en Rust pur ; non durci pour des scénarios à fort niveau d'exigence.",
+            "limitationBackend": "Backend cryptographique non audité de façon indépendante — déconseillé pour des usages à très haute sensibilité.",
             "dangerZone": "Zone sensible",
             "deleteKey": "Supprimer ma clé OpenPGP",
             "deleteKeyDescription": "Supprime définitivement votre clé privée de cet appareil. Les messages précédemment chiffrés avec cette clé deviennent illisibles. Le chiffrement est désactivé jusqu'à ce que vous génériez une nouvelle clé.",

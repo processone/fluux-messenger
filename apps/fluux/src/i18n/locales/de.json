@@ -600,7 +600,7 @@
             "toggleFailed": "Verschlüsselungseinstellung konnte nicht geändert werden",
             "probeFailed": "Server konnte nicht erreicht werden, um nach einem vorhandenen Backup zu suchen. Versuche es erneut — nichts wurde geändert.",
             "limitationsTitle": "Aktuelle Einschränkungen",
-            "limitationBackend": "Nutzt ein experimentelles Krypto-Backend in reinem Rust; nicht für Hochsicherheitsszenarien gehärtet.",
+            "limitationBackend": "Krypto-Backend nicht unabhängig geprüft — nicht empfohlen für Anwendungen mit sehr hoher Sensibilität.",
             "dangerZone": "Gefahrenbereich",
             "deleteKey": "Meinen OpenPGP-Schlüssel löschen",
             "deleteKeyDescription": "Entfernt Ihren privaten Schlüssel dauerhaft von diesem Gerät. Früher mit diesem Schlüssel verschlüsselte Nachrichten werden unlesbar. Die Verschlüsselung wird deaktiviert, bis Sie einen neuen Schlüssel erzeugen.",
