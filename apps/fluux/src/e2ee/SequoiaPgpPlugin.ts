@@ -85,6 +85,11 @@ import {
   readBackedUpFingerprint,
   writeBackedUpFingerprint,
 } from './backupMarker'
+import {
+  clearPeerVerified,
+  getVerifiedPeerFingerprint,
+  isPeerVerified,
+} from '@/stores/verifiedPeerKeysStore'
 
 /** XEP-0373 namespace for all PEP/message elements. */
 const OX_NAMESPACE = 'urn:xmpp:openpgp:0'
@@ -938,7 +943,7 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
       for (const fingerprint of fingerprints) {
         const bundle = await this.fetchAdvertisedKey(peer, fingerprint)
         if (bundle) {
-          this.peerKeys.set(peer, bundle)
+          this.cachePeerKey(peer, bundle)
           return { supported: true, ttl: PROBE_NEGATIVE_TTL_SECONDS }
         }
       }
@@ -1243,12 +1248,16 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
 
   /**
    * Turn the Rust-side signature verification result into the trust state
-   * the Chat UI renders. Three outcomes:
+   * the Chat UI renders. Outcomes:
    *
-   * - `trusted`   — signature verified against the peer's cached cert. This
-   *                 is the BTBV "seen-this-peer-before + message actually
-   *                 signed by them" state. Upgraded to `verified` only via
-   *                 an explicit user verification action (future slice).
+   * - `verified`  — signature verified, fingerprint matches the cached
+   *                 cert, AND the user has explicitly confirmed that
+   *                 fingerprint via the verify-peer dialog. Lifts the
+   *                 message lock to the green palette.
+   * - `trusted`   — signature verified against the peer's cached cert
+   *                 but the fingerprint hasn't been confirmed
+   *                 out-of-band. BTBV "seen-this-peer-before + message
+   *                 actually signed by them" state.
    * - `untrusted` — no cached peer cert (verification couldn't be
    *                 attempted), signature missing, or signature didn't
    *                 match the peer's cert. The user sees a yellow lock.
@@ -1264,8 +1273,17 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
     const cached = this.peerKeys.get(peer)
     const fingerprintMatches =
       cached && rust.signerFingerprint && cached.fingerprint === rust.signerFingerprint
-    const trust: SecurityContext['trust'] =
-      rust.signatureVerified && fingerprintMatches ? 'trusted' : 'untrusted'
+    let trust: SecurityContext['trust']
+    if (rust.signatureVerified && fingerprintMatches) {
+      // Promote to `verified` only when the *currently cached*
+      // fingerprint is the one the user confirmed. The store check
+      // already pins to `(peer, fp)` so a key rotation auto-demotes;
+      // re-checking here keeps the invariant local to the trust
+      // decision rather than relying on the cache-write path alone.
+      trust = isPeerVerified(peer, cached.fingerprint) ? 'verified' : 'trusted'
+    } else {
+      trust = 'untrusted'
+    }
 
     const notes: string[] = []
     if (!rust.signatureVerified) {
@@ -1368,13 +1386,38 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
   }
 
   /**
-   * TOFU for the skeleton: a peer we've seen a key from is "trusted",
-   * unseen peers are "unknown". The follow-up verification UX will lift
-   * confirmed peers to "verified"; a key rotation without re-verification
-   * drops back to "trusted".
+   * Trust ladder:
+   *   - `unknown`   — we have never cached a key for this peer.
+   *   - `trusted`   — BTBV: we've seen a key (from PEP), can encrypt
+   *                   to it, but the user has not confirmed the
+   *                   fingerprint out-of-band.
+   *   - `verified`  — the user explicitly confirmed the cached
+   *                   fingerprint via the verify-peer dialog. A later
+   *                   key rotation drops back to `trusted` because the
+   *                   verification store keys on `(peer, fingerprint)`
+   *                   AND `cachePeerKey` clears stale entries on
+   *                   mismatch — both layers fail safe.
    */
   private async evaluatePeerTrust(peer: BareJID): Promise<TrustState> {
-    return this.peerKeys.has(peer) ? 'trusted' : 'unknown'
+    const cached = this.peerKeys.get(peer)
+    if (!cached) return 'unknown'
+    return isPeerVerified(peer, cached.fingerprint) ? 'verified' : 'trusted'
+  }
+
+  /**
+   * Replace the cached peer key for `peer`. Demotes any stale
+   * verification: if the user previously verified a fingerprint that
+   * isn't the one we're caching, clear the verification — the new key
+   * needs explicit re-confirmation before the chip turns green again.
+   * Used wherever we write to `peerKeys` so the demote-on-rotation
+   * invariant holds in one place.
+   */
+  private cachePeerKey(peer: BareJID, bundle: KeyBundle): void {
+    const previouslyVerified = getVerifiedPeerFingerprint(peer)
+    if (previouslyVerified && previouslyVerified !== bundle.fingerprint) {
+      clearPeerVerified(peer)
+    }
+    this.peerKeys.set(peer, bundle)
   }
 
   private requireCtx(): PluginContext {

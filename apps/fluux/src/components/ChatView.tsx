@@ -1,7 +1,10 @@
-import React, { useState, useRef, useEffect, useImperativeHandle, memo, type RefObject } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useImperativeHandle, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useChatActive, useContactIdentities, createMessageLookup, getBareJid, getLocalPart, getMyReactions, type Message, type ContactIdentity } from '@fluux/sdk'
+import { useChatActive, useContactIdentities, createMessageLookup, getBareJid, getLocalPart, getMyReactions, useXMPPContext, type Message, type ContactIdentity } from '@fluux/sdk'
+import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
+import { useToastStore } from '@/stores/toastStore'
+import { VerifyPeerDialog } from './VerifyPeerDialog'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { getConsistentTextColor } from './Avatar'
 import { useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat } from '@/hooks'
@@ -957,12 +960,62 @@ function MessageInput({
     type,
   )
 
+  // Verify-peer dialog state. Opens from the chip when state is
+  // `encrypted` so the user can promote BTBV `unverified` to `verified`.
+  // Own fingerprint is read at open time rather than subscribed because
+  // it changes only on key rotation / plugin restart, both of which the
+  // existing surface already remounts the chat view on.
+  const { client } = useXMPPContext()
+  const setPeerVerified = useVerifiedPeerKeysStore((s) => s.setVerified)
+  const addToast = useToastStore((s) => s.addToast)
+  const [verifyDialogState, setVerifyDialogState] = useState<
+    | { open: false }
+    | { open: true; peerJid: string; peerFingerprint: string; ownFingerprint: string | null }
+  >({ open: false })
+  const handleOpenVerify = useCallback(() => {
+    if (encryptionState.kind !== 'encrypted' || type !== 'chat') return
+    const plugin = client.e2ee?.getPlugin('openpgp') as
+      | { getOwnFingerprint?: () => string | null }
+      | null
+      | undefined
+    setVerifyDialogState({
+      open: true,
+      peerJid: conversationId,
+      peerFingerprint: encryptionState.fingerprint,
+      ownFingerprint: plugin?.getOwnFingerprint?.() ?? null,
+    })
+  }, [client, conversationId, type, encryptionState])
+  const handleVerifyConfirm = useCallback(
+    (fingerprint: string) => {
+      if (!verifyDialogState.open) return
+      setPeerVerified(verifyDialogState.peerJid, fingerprint)
+      setVerifyDialogState({ open: false })
+      addToast('success', t('chat.verifyPeer.confirmSuccess'))
+    },
+    [verifyDialogState, setPeerVerified, addToast, t],
+  )
+
   return (
     <>
       {encryptionState.kind !== 'disabled' && (
         <div className="px-3 pt-1">
-          <EncryptionChip state={encryptionState} peerName={conversationName} />
+          <EncryptionChip
+            state={encryptionState}
+            peerName={conversationName}
+            onVerifyClick={
+              encryptionState.kind === 'encrypted' ? handleOpenVerify : undefined
+            }
+          />
         </div>
+      )}
+      {verifyDialogState.open && (
+        <VerifyPeerDialog
+          peerName={conversationName}
+          peerFingerprint={verifyDialogState.peerFingerprint}
+          ownFingerprint={verifyDialogState.ownFingerprint}
+          onConfirm={handleVerifyConfirm}
+          onCancel={() => setVerifyDialogState({ open: false })}
+        />
       )}
       <MessageComposer
         ref={composerRef}

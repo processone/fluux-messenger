@@ -2371,4 +2371,150 @@ describe('SequoiaPgpPlugin', () => {
       expect(support.ttl).toBe(300)
     })
   })
+
+  describe('verification trust', () => {
+    // Reuses the real verifiedPeerKeysStore — the plugin reads from it
+    // imperatively and we want any regression in that lookup path to
+    // surface here, not be hidden by a mock.
+    type VerifiedStore = typeof import('@/stores/verifiedPeerKeysStore')
+    let verifiedStore: VerifiedStore
+    beforeEach(async () => {
+      localStorage.clear()
+      verifiedStore = (await import('@/stores/verifiedPeerKeysStore')) as VerifiedStore
+      verifiedStore.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
+    })
+    afterEach(() => {
+      verifiedStore.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
+    })
+
+    it("getPeerTrust returns 'verified' when the cached fingerprint is in the store", async () => {
+      const { alice } = await buildCrossPublishedPair(fake)
+      await alice.plugin.probePeer('bob@example.com')
+      const peerFp = alice.plugin.getPeerFingerprint('bob@example.com')!
+      verifiedStore.useVerifiedPeerKeysStore
+        .getState()
+        .setVerified('bob@example.com', peerFp)
+
+      const trust = await alice.plugin.getPeerTrust('bob@example.com')
+      expect(trust).toBe('verified')
+    })
+
+    it("getPeerTrust stays 'trusted' when the verified fingerprint is for a different peer", async () => {
+      // Pin verification for charlie, but ask about bob — the lookup
+      // should miss and bob stays at BTBV `trusted`.
+      const { alice } = await buildCrossPublishedPair(fake)
+      await alice.plugin.probePeer('bob@example.com')
+      verifiedStore.useVerifiedPeerKeysStore
+        .getState()
+        .setVerified('charlie@example.com', 'unrelated-fp')
+
+      const trust = await alice.plugin.getPeerTrust('bob@example.com')
+      expect(trust).toBe('trusted')
+    })
+
+    it("decrypt produces 'verified' security context when the sender is verified", async () => {
+      const { alice, bob } = await buildCrossPublishedPair(fake)
+      await alice.plugin.probePeer('bob@example.com')
+      await bob.plugin.probePeer('alice@example.com')
+      // Mark alice as verified on bob's side BEFORE the inbound message
+      // arrives, so the decrypt path observes the verification.
+      verifiedStore.useVerifiedPeerKeysStore
+        .getState()
+        .setVerified('alice@example.com', alice.plugin.getOwnFingerprint()!)
+
+      const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
+      const payload = await alice.plugin.encrypt(handle, encodeBodyAsPayload('hello, verified bob'))
+      const claim = bob.plugin.tryClaimInbound(payload.stanzaElement)!
+      const bobHandle = await bob.plugin.openConversation({ kind: 'direct', peer: 'alice@example.com' })
+      const decrypted = await bob.plugin.decrypt(bobHandle, claim)
+
+      expect(decrypted.securityContext.trust).toBe('verified')
+      // No notes — verified is the cleanest possible state, no warnings
+      // surfaced. (BTBV `trusted` likewise had no notes; this just
+      // confirms the upgrade doesn't accidentally introduce a note.)
+      expect(decrypted.securityContext.notes).toBeUndefined()
+    })
+
+    it('clears the verification when probePeer caches a fresh fingerprint that differs', async () => {
+      // Simulate a key rotation: peer's cached fingerprint changes
+      // mid-session. The cachePeerKey path must drop the old
+      // verification so the chip auto-demotes to `unverified` until
+      // the user re-confirms the new fp.
+      const { alice } = await buildCrossPublishedPair(fake)
+      await alice.plugin.probePeer('bob@example.com')
+      const oldFp = alice.plugin.getPeerFingerprint('bob@example.com')!
+      verifiedStore.useVerifiedPeerKeysStore
+        .getState()
+        .setVerified('bob@example.com', oldFp)
+      expect(await alice.plugin.getPeerTrust('bob@example.com')).toBe('verified')
+
+      // Force a rotation: invalidate alice's cache for bob and have
+      // bob's PEP serve a different key.
+      alice.plugin.onPeerKeysChanged('bob@example.com')
+      // Generate a fresh bob key by spawning a NEW account for the
+      // same JID; the fake forgets and re-creates with a new fp.
+      fake.accounts.delete('bob@example.com')
+      const newBob = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'bob@example.com',
+        userId: 'bob@example.com',
+      })
+      expect(newBob.fingerprint).not.toBe(oldFp)
+      // Re-publish bob's NEW key onto alice's view of the PEP tree.
+      const aliceCtx = alice.ctx as { xmpp: XMPPPrimitives } & {
+        peerPublish?: (peer: string, node: string, item: PEPItem) => void
+      }
+      void aliceCtx
+      // Use the helper's xmpp.queryPEP override path: replace queryPEP
+      // for this test to return the new bundle on the metadata + data
+      // nodes for bob.
+      const dataNode = `urn:xmpp:openpgp:0:public-keys:${newBob.fingerprint}`
+      alice.ctx.xmpp.queryPEP = async (jid, node) => {
+        if (jid !== 'bob@example.com') return []
+        if (node === 'urn:xmpp:openpgp:0:public-keys') {
+          return [
+            {
+              id: 'current',
+              payload: {
+                name: 'public-keys-list',
+                attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+                children: [
+                  {
+                    name: 'pubkey-metadata',
+                    attrs: { 'v4-fingerprint': newBob.fingerprint, date: '2024-01-01T00:00:00Z' },
+                    children: [],
+                  },
+                ],
+              },
+            },
+          ]
+        }
+        if (node === dataNode) {
+          return [
+            {
+              id: 'current',
+              payload: {
+                name: 'pubkey',
+                attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+                children: [
+                  {
+                    name: 'data',
+                    attrs: {},
+                    children: [btoa(unescape(encodeURIComponent(newBob.publicArmored)))],
+                  },
+                ],
+              },
+            },
+          ]
+        }
+        return []
+      }
+
+      // Re-probe — the plugin caches the new fingerprint AND clears the
+      // stale verification.
+      await alice.plugin.probePeer('bob@example.com')
+      expect(alice.plugin.getPeerFingerprint('bob@example.com')).toBe(newBob.fingerprint)
+      expect(verifiedStore.getVerifiedPeerFingerprint('bob@example.com')).toBeNull()
+      expect(await alice.plugin.getPeerTrust('bob@example.com')).toBe('trusted')
+    })
+  })
 })

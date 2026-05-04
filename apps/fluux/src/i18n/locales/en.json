@@ -447,7 +447,20 @@
         "errorDetails": "Error: {{error}}",
         "encryption": {
             "encryptedTo": "Encrypted to {{name}}",
-            "checking": "Checking peer…"
+            "checking": "Checking peer…",
+            "openpgpTooltip": "OpenPGP",
+            "verifiedTooltip": "Verified OpenPGP key"
+        },
+        "verifyPeer": {
+            "chipAriaLabel": "Encrypted to {{name}} — click to verify fingerprint",
+            "dialogTitle": "Verify {{name}}'s OpenPGP key",
+            "dialogBody": "Compare these fingerprints with what {{name}} sees on their device. They must match in both directions for the verification to be meaningful.",
+            "dialogWarning": "Only confirm after checking the fingerprint over a trusted second channel — in person, a video call you recognise the person on, an already-verified end-to-end-encrypted chat. The server can't be trusted to relay this comparison for you.",
+            "peerFingerprintLabel": "{{name}}'s fingerprint",
+            "ownFingerprintLabel": "Your fingerprint",
+            "ownFingerprintUnavailable": "Your fingerprint isn't available yet — close the dialog and try again in a moment.",
+            "confirmAction": "Fingerprints match — verify",
+            "confirmSuccess": "Fingerprint verified"
         }
     },
     "dates": {

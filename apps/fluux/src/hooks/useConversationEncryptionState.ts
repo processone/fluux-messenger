@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useConnection, useXMPPContext } from '@fluux/sdk'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
+import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
 
 /**
  * Per-conversation encryption status surfaced to the composer chip.
@@ -15,13 +16,31 @@ import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
  *                   chip tooltip — invaluable for interop testing,
  *                   where reading the peer's fingerprint off the
  *                   chip is faster than diving into the PEP node.
+ *                   `trust` reflects whether the user has confirmed
+ *                   the fingerprint out-of-band — `verified` lifts
+ *                   the chip to the green-trust palette.
  * - `unsupported` — probe completed but the peer has no advertised
  *                   OpenPGP key. Composer falls back to plaintext.
  */
 export type ConversationEncryptionState =
   | { kind: 'disabled' }
   | { kind: 'checking' }
-  | { kind: 'encrypted'; fingerprint: string }
+  | {
+      kind: 'encrypted'
+      fingerprint: string
+      /**
+       * `verified` — the user has confirmed this exact fingerprint via
+       * the verify-peer dialog. A subsequent key rotation drops back
+       * to `unverified` automatically (the store keys on
+       * fingerprint, not just JID).
+       *
+       * `unverified` — peer key is cached and we can encrypt to it,
+       * but the user hasn't confirmed it. This is the BTBV ground
+       * state: trust the cached key for cryptographic purposes,
+       * surface the unverified state in the UI.
+       */
+      trust: 'verified' | 'unverified'
+    }
   | { kind: 'unsupported' }
 
 /**
@@ -63,14 +82,28 @@ export function useConversationEncryptionState(
   // or a manager rebuild.
   const e2eeManager = client.e2ee ?? null
 
-  const [state, setState] = useState<ConversationEncryptionState>({
-    kind: 'disabled',
-  })
+  // Subscribe to ONLY the current peer's verified fingerprint. The
+  // selector takes a primitive (string | null) so unrelated entries
+  // changing in the verifications map don't trigger a re-render here.
+  const verifiedFingerprint = useVerifiedPeerKeysStore((s) =>
+    peerJid ? (s.verifiedFingerprintByJid[peerJid] ?? null) : null,
+  )
+
+  // The base state is what the probe / cache produces — kind, peer
+  // fingerprint, and so on. Trust is derived below from this plus the
+  // verified-store snapshot, so a verify action re-renders without
+  // needing the effect to run again.
+  type BaseEncryptionState =
+    | { kind: 'disabled' }
+    | { kind: 'checking' }
+    | { kind: 'encrypted'; fingerprint: string }
+    | { kind: 'unsupported' }
+  const [base, setBase] = useState<BaseEncryptionState>({ kind: 'disabled' })
 
   useEffect(() => {
     // Short-circuit all the "not applicable" cases first.
     if (!openpgpEnabled || !online || conversationType !== 'chat' || !peerJid) {
-      setState({ kind: 'disabled' })
+      setBase({ kind: 'disabled' })
       return
     }
 
@@ -83,7 +116,7 @@ export function useConversationEncryptionState(
       // `online` fires but before `registerE2EEPlugins` completes.
       // Stay disabled; a later render with the plugin available will
       // re-enter this effect and move us to `checking` / `encrypted`.
-      setState({ kind: 'disabled' })
+      setBase({ kind: 'disabled' })
       return
     }
 
@@ -92,11 +125,11 @@ export function useConversationEncryptionState(
     // conversation we've encrypted to before.
     const cachedFp = plugin.getPeerFingerprint?.(peerJid) ?? null
     if (cachedFp) {
-      setState({ kind: 'encrypted', fingerprint: cachedFp })
+      setBase({ kind: 'encrypted', fingerprint: cachedFp })
       return
     }
 
-    setState({ kind: 'checking' })
+    setBase({ kind: 'checking' })
     let cancelled = false
     void (async () => {
       try {
@@ -104,15 +137,15 @@ export function useConversationEncryptionState(
         if (cancelled) return
         const fp = plugin.getPeerFingerprint?.(peerJid) ?? null
         if (support?.supported && fp) {
-          setState({ kind: 'encrypted', fingerprint: fp })
+          setBase({ kind: 'encrypted', fingerprint: fp })
         } else {
-          setState({ kind: 'unsupported' })
+          setBase({ kind: 'unsupported' })
         }
       } catch {
         // Probe failures (network hiccup, server glitch) are not a
         // correctness signal — we just can't encrypt RIGHT NOW. Treat
         // as unsupported until the next conversation switch retries.
-        if (!cancelled) setState({ kind: 'unsupported' })
+        if (!cancelled) setBase({ kind: 'unsupported' })
       }
     })()
 
@@ -121,5 +154,15 @@ export function useConversationEncryptionState(
     }
   }, [peerJid, conversationType, openpgpEnabled, online, e2eeManager])
 
-  return state
+  // Merge the verification trust into the encrypted state. The
+  // identity check pins trust to a specific fingerprint: a key
+  // rotation auto-demotes to `unverified` until the user re-verifies.
+  return useMemo<ConversationEncryptionState>(() => {
+    if (base.kind !== 'encrypted') return base
+    return {
+      kind: 'encrypted',
+      fingerprint: base.fingerprint,
+      trust: verifiedFingerprint === base.fingerprint ? 'verified' : 'unverified',
+    }
+  }, [base, verifiedFingerprint])
 }

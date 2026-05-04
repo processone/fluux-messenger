@@ -113,7 +113,7 @@ describe('useConversationEncryptionState', () => {
     const { result } = renderHook(() =>
       useConversationEncryptionState('bob@example.com', 'chat'),
     )
-    expect(result.current).toEqual({ kind: 'encrypted', fingerprint: 'ABCD1234' })
+    expect(result.current).toEqual({ kind: 'encrypted', fingerprint: 'ABCD1234', trust: 'unverified' })
     // Fast path: no probe triggered.
     expect(plugin.probePeer).not.toHaveBeenCalled()
   })
@@ -136,7 +136,7 @@ describe('useConversationEncryptionState', () => {
     // Synchronously in 'checking' state while probe is in flight.
     expect(result.current.kind).toBe('checking')
     await waitFor(() => {
-      expect(result.current).toEqual({ kind: 'encrypted', fingerprint: fp })
+      expect(result.current).toEqual({ kind: 'encrypted', fingerprint: fp, trust: 'unverified' })
     })
     expect(plugin.probePeer).toHaveBeenCalledWith('bob@example.com')
   })
@@ -196,7 +196,7 @@ describe('useConversationEncryptionState', () => {
 
     // Switch to bob — immediate cache hit.
     rerender('bob@example.com')
-    expect(result.current).toEqual({ kind: 'encrypted', fingerprint: 'BOBFP' })
+    expect(result.current).toEqual({ kind: 'encrypted', fingerprint: 'BOBFP', trust: 'unverified' })
 
     // Now let the stale alice probe resolve. The hook's cancellation
     // flag must prevent this from overwriting the bob state.
@@ -204,6 +204,82 @@ describe('useConversationEncryptionState', () => {
       resolveAliceProbe({ supported: true })
       await new Promise((r) => setTimeout(r, 0))
     })
-    expect(result.current).toEqual({ kind: 'encrypted', fingerprint: 'BOBFP' })
+    expect(result.current).toEqual({ kind: 'encrypted', fingerprint: 'BOBFP', trust: 'unverified' })
+  })
+
+  describe('verification trust derivation', () => {
+    // Use the real verification store rather than re-mocking. The
+    // assertions below depend on the JID + fingerprint pair pinning,
+    // which is the whole point — mocking the store would let a bug
+    // in that pinning logic slip past.
+    const mod = '@/stores/verifiedPeerKeysStore'
+    type VerifiedStore = typeof import('@/stores/verifiedPeerKeysStore')
+    let store: VerifiedStore
+    beforeEach(async () => {
+      localStorage.clear()
+      store = (await import(mod)) as VerifiedStore
+      store.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
+    })
+    afterEach(() => {
+      store.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
+    })
+
+    it("returns trust='verified' when the cached fingerprint is in the store", () => {
+      store.useVerifiedPeerKeysStore
+        .getState()
+        .setVerified('bob@example.com', 'CAFE1234')
+      const plugin = makePlugin({
+        getPeerFingerprint: vi.fn().mockReturnValue('CAFE1234'),
+      })
+      wireMocks({ plugin })
+      const { result } = renderHook(() =>
+        useConversationEncryptionState('bob@example.com', 'chat'),
+      )
+      expect(result.current).toEqual({
+        kind: 'encrypted',
+        fingerprint: 'CAFE1234',
+        trust: 'verified',
+      })
+    })
+
+    it("auto-demotes to 'unverified' when the cached fingerprint differs from the verified one", () => {
+      // Pin to the OLD fingerprint, but the cache returns a NEW one —
+      // simulates a key rotation that hasn't been re-confirmed. The
+      // chip must drop back to BTBV trust until the user re-verifies.
+      store.useVerifiedPeerKeysStore
+        .getState()
+        .setVerified('bob@example.com', 'OLD_FP_VALUE')
+      const plugin = makePlugin({
+        getPeerFingerprint: vi.fn().mockReturnValue('NEW_FP_VALUE'),
+      })
+      wireMocks({ plugin })
+      const { result } = renderHook(() =>
+        useConversationEncryptionState('bob@example.com', 'chat'),
+      )
+      expect(result.current).toEqual({
+        kind: 'encrypted',
+        fingerprint: 'NEW_FP_VALUE',
+        trust: 'unverified',
+      })
+    })
+
+    it('flips to verified when the user verifies mid-render (store update reflows the hook)', () => {
+      const plugin = makePlugin({
+        getPeerFingerprint: vi.fn().mockReturnValue('FP'),
+      })
+      wireMocks({ plugin })
+      const { result } = renderHook(() =>
+        useConversationEncryptionState('bob@example.com', 'chat'),
+      )
+      // Pre-verify state.
+      expect(result.current).toMatchObject({ trust: 'unverified' })
+      // User confirms the fingerprint via the dialog — the hook's
+      // verifiedFingerprint subscription should pick the change up
+      // without needing a remount.
+      act(() => {
+        store.useVerifiedPeerKeysStore.getState().setVerified('bob@example.com', 'FP')
+      })
+      expect(result.current).toMatchObject({ trust: 'verified' })
+    })
   })
 })

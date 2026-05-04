@@ -1,4 +1,4 @@
-import { Lock, Loader2 } from 'lucide-react'
+import { Lock, Loader2, ShieldCheck } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 
@@ -6,6 +6,13 @@ interface EncryptionChipProps {
   state: ConversationEncryptionState
   /** Display name for the current peer, used in the "Encrypted to {name}" label. */
   peerName: string
+  /**
+   * Click handler invoked when the user clicks the chip in the
+   * `encrypted` state. Used to open the verify-peer dialog. Omitted
+   * when the chip should stay non-interactive (e.g. tests, or future
+   * read-only contexts).
+   */
+  onVerifyClick?: () => void
 }
 
 /**
@@ -21,9 +28,11 @@ interface EncryptionChipProps {
  *
  * For the `encrypted` state the chip's tooltip carries the peer's
  * full hex fingerprint, which is the fastest way to read it off during
- * interop testing without diving into the PEP tree.
+ * interop testing without diving into the PEP tree. The chip also
+ * becomes a button — clicking it opens the verify-peer dialog so the
+ * user can promote BTBV `unverified` to `verified`.
  */
-export function EncryptionChip({ state, peerName }: EncryptionChipProps) {
+export function EncryptionChip({ state, peerName, onVerifyClick }: EncryptionChipProps) {
   const { t } = useTranslation()
 
   if (state.kind === 'disabled' || state.kind === 'unsupported') return null
@@ -44,16 +53,42 @@ export function EncryptionChip({ state, peerName }: EncryptionChipProps) {
     )
   }
 
-  // encrypted
+  // encrypted — colour split on trust level. `verified` lifts the chip
+  // to the green palette that matches MessageBubble's verified-message
+  // lock; `unverified` stays in the muted palette so the eye learns
+  // "green ⇒ I confirmed this", not "green ⇒ encrypted".
+  const verified = state.trust === 'verified'
+  const palette = verified
+    ? 'text-green-600 dark:text-green-400 bg-green-500/10 hover:bg-green-500/15'
+    : 'text-fluux-muted bg-fluux-hover/40 hover:bg-fluux-hover'
+  const tooltip = `${verified ? t('chat.encryption.verifiedTooltip') : t('chat.encryption.openpgpTooltip')}\n${formatFingerprint(state.fingerprint)}`
+  const Icon = verified ? ShieldCheck : Lock
+
+  // Non-clickable form when no handler is supplied (tests, screenshots).
+  if (!onVerifyClick) {
+    return (
+      <div className={`${commonClasses} ${palette}`} title={tooltip} role="status">
+        <Icon className="w-3 h-3" />
+        <span>{t('chat.encryption.encryptedTo', { name: peerName })}</span>
+      </div>
+    )
+  }
+
   return (
-    <div
-      className={`${commonClasses} text-fluux-muted bg-fluux-hover/40`}
-      title={`OpenPGP\n${formatFingerprint(state.fingerprint)}`}
-      role="status"
+    <button
+      type="button"
+      onClick={onVerifyClick}
+      className={`${commonClasses} ${palette} cursor-pointer transition-colors`}
+      title={tooltip}
+      aria-label={
+        verified
+          ? t('chat.encryption.encryptedTo', { name: peerName })
+          : t('chat.verifyPeer.chipAriaLabel', { name: peerName })
+      }
     >
-      <Lock className="w-3 h-3" />
+      <Icon className="w-3 h-3" />
       <span>{t('chat.encryption.encryptedTo', { name: peerName })}</span>
-    </div>
+    </button>
   )
 }
 
