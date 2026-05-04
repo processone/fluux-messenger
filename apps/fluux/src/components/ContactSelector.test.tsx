@@ -23,9 +23,6 @@ vi.mock('@fluux/sdk', () => ({
   useRoster: () => ({
     contacts: mockContacts,
   }),
-  useChat: () => ({
-    conversations: mockConversations,
-  }),
   // JID utilities moved from app to SDK
   matchNameOrJid: (name: string, jid: string, query: string) => {
     const lowerQuery = query.toLowerCase()
@@ -38,6 +35,8 @@ vi.mock('@fluux/sdk', () => ({
 vi.mock('@fluux/sdk/react', () => ({
   useConnectionStore: (selector: (state: { status: string }) => unknown) =>
     selector({ status: 'online' }),
+  useChatStore: (selector: (state: { conversations: Map<string, unknown> }) => unknown) =>
+    selector({ conversations: new Map(mockConversations.map((c) => [c.id, c])) }),
   useContactTime: () => null, useLastActivity: vi.fn(),
 }))
 

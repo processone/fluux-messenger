@@ -21,9 +21,6 @@ vi.mock('@fluux/sdk', () => ({
   useRoster: () => ({
     contacts: mockContacts,
   }),
-  useChat: () => ({
-    conversations: [],
-  }),
   getAvailableAffiliations: (selfAff: RoomAffiliation, _targetAff: RoomAffiliation) => {
     if (selfAff === 'owner') return ['owner', 'admin', 'member', 'none', 'outcast']
     return []
@@ -37,6 +34,8 @@ vi.mock('@fluux/sdk', () => ({
 vi.mock('@fluux/sdk/react', () => ({
   useConnectionStore: (selector: (state: { status: string }) => unknown) =>
     selector({ status: 'online' }),
+  useChatStore: (selector: (state: { conversations: Map<string, unknown> }) => unknown) =>
+    selector({ conversations: new Map() }),
   useContactTime: () => null, useLastActivity: vi.fn(),
 }))
 

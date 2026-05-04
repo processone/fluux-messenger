@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, useLayoutEffect } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
-import { useRoster, useChat, matchNameOrJid } from '@fluux/sdk'
-import { useConnectionStore } from '@fluux/sdk/react'
+import { useRoster, matchNameOrJid } from '@fluux/sdk'
+import { useChatStore, useConnectionStore } from '@fluux/sdk/react'
 import { X } from 'lucide-react'
 import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS } from '@/constants/ui'
 
@@ -72,7 +73,9 @@ export function ContactSelector({
   const { contacts } = useRoster()
   const connectionStatus = useConnectionStore((s) => s.status)
   const forceOffline = connectionStatus !== 'online'
-  const { conversations } = useChat()
+  // Focused selector — useChat() would also pull in typing/draft Maps, MAM
+  // state, active conversation, etc., which this selector doesn't need.
+  const conversations = useChatStore(useShallow((s) => Array.from(s.conversations.values())))
   const [search, setSearch] = useState('')
   const [highlightedIndex, setHighlightedIndex] = useState(0)
   const [flipUp, setFlipUp] = useState(false)
