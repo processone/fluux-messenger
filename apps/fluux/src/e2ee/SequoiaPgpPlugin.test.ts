@@ -2698,6 +2698,85 @@ describe('SequoiaPgpPlugin', () => {
       expect(await alice.plugin.getPeerTrust('bob@example.com')).toBe('verified')
     })
 
+    it('acceptPeerKeyChange rolls back pin and preserves alert when the fetch fails', async () => {
+      // Regression guard for: acceptPeerKeyChange promoted the pin and
+      // cleared the alert BEFORE confirming the new key was cached. A
+      // network failure in refetchAndCachePeerKey left the old bundle in
+      // peerKeys (old fp) but the pin pointing at the new fp — no alert
+      // active — so the next send would silently re-encrypt to the old
+      // cert while appearing to the user as if the rotation was accepted.
+      const { alice } = await buildCrossPublishedPair(fake)
+      await alice.plugin.probePeer('bob@example.com')
+      const oldFp = alice.plugin.getPeerFingerprint('bob@example.com')!
+
+      const newBob = await simulateBobRotation(alice)
+
+      // Poison the XMPP transport so any re-fetch throws.
+      alice.ctx.xmpp.queryPEP = async () => {
+        throw new Error('remote-server-timeout')
+      }
+
+      let caught: unknown
+      try {
+        await alice.plugin.acceptPeerKeyChange('bob@example.com', false)
+      } catch (err) {
+        caught = err
+      }
+
+      // Method must propagate the failure.
+      expect(caught).toBeInstanceOf(Error)
+
+      // Pin must be rolled back — not left stranded at the unverified new fp.
+      expect(pinStore.getPinnedPrimaryFp('bob@example.com')).toBe(oldFp)
+
+      // Alert must still be present and coherent with the pin.
+      const alert = alertsStore.getKeyChangeAlert('bob@example.com')
+      expect(alert).not.toBeNull()
+      expect(alert!.previousFingerprint).toBe(oldFp)
+      expect(alert!.currentFingerprint).toBe(newBob.fingerprint)
+
+      // peerKeys still holds the old cert — outbound encryption stays blocked.
+      expect(alice.plugin.getPeerFingerprint('bob@example.com')).toBe(oldFp)
+    })
+
+    it('acceptPeerKeyChange clears original alert and opens a fresh one when server rotates again during fetch', async () => {
+      // Regression guard for: after promoting the pin to targetFp, the
+      // refetch itself can trigger a *second* rotation detection inside
+      // cachePeerKey, which overwrites the alert store with a new entry
+      // {previousFp: targetFp, currentFp: newerFp}. A naive unconditional
+      // clearKeyChangeAlert would erase that fresh alert, silently swallowing
+      // the second rotation.
+      const { alice } = await buildCrossPublishedPair(fake)
+      await alice.plugin.probePeer('bob@example.com')
+
+      // First rotation: alice sees alert(oldFp → newFp).
+      const newBob = await simulateBobRotation(alice)
+
+      // Second rotation races in while the user is clicking "Accept":
+      // rewire PEP to serve an even newer key.
+      fake.accounts.delete('bob@example.com')
+      const newerBob = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'bob@example.com',
+        userId: 'bob@example.com',
+      })
+      rewireBobPepFor(alice, newerBob)
+
+      // Accept with asVerified=true — should NOT record verification because
+      // the fetched fp (newerFp) ≠ targetFp (newFp).
+      await alice.plugin.acceptPeerKeyChange('bob@example.com', true)
+
+      // The original alert (oldFp → newFp) must be gone.
+      // A fresh alert (newFp → newerFp) must have taken its place.
+      const alert = alertsStore.getKeyChangeAlert('bob@example.com')
+      expect(alert).not.toBeNull()
+      expect(alert!.previousFingerprint).toBe(newBob.fingerprint)
+      expect(alert!.currentFingerprint).toBe(newerBob.fingerprint)
+
+      // Verification was NOT recorded — the key we fetched differs from
+      // the one the user was presented with in the verify dialog.
+      expect(verifiedStore.getVerifiedPeerFingerprint('bob@example.com')).toBeNull()
+    })
+
     it('does NOT record a key-change alert on first key cache for an unverified peer', async () => {
       // Caching the FIRST-ever key for a peer (no prior pin) is the
       // TOFU baseline — pin is set, no alert. A new alert here would

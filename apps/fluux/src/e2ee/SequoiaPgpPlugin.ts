@@ -1505,44 +1505,58 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
    * entry — the caller is expected to have driven the user through a
    * fingerprint-comparison dialog before taking that path.
    *
-   * No-op when there is no active alert for `peer`. Throws on a
-   * fundamental disagreement (e.g., the server stops advertising the
-   * fingerprint we just promoted to) — better to surface the failure
-   * than to leave the user in a half-resolved state.
+   * No-op when there is no active alert for `peer`. Throws when the
+   * network fetch fails — the pin is rolled back so the alert remains
+   * actionable and outbound encryption keeps blocking. If the server
+   * rotated again between the alert and acceptance, cachePeerKey opens
+   * a fresh alert and the original one is cleared as stale.
    */
   async acceptPeerKeyChange(peer: BareJID, asVerified: boolean): Promise<void> {
     const alert = getKeyChangeAlert(peer)
     if (!alert) return
     const targetFp = alert.currentFingerprint
+    const previousFp = alert.previousFingerprint
 
     // Drop the old verification (if any) — the user is moving the pin
     // to a new fp, so any verification statement against the old fp is
-    // no longer in scope. The verify-and-accept path immediately
-    // re-records verification below; the accept-without-verifying path
-    // leaves the peer at BTBV `trusted`.
+    // no longer in scope.
     clearPeerVerified(peer)
 
     // Promote the pin BEFORE re-probing so the cachePeerKey hop in
     // the fetch path takes the "pin matches" branch and admits the
     // new cert without opening another alert.
+    // The alert is NOT cleared here — it stays live until the fetch
+    // confirms the new key is in cache, keeping outbound encryption
+    // blocked if the fetch fails.
     setPinnedPrimaryFp(peer, targetFp)
-    clearKeyChangeAlert(peer)
 
     // Force-refresh via the cache-bypassing helper: probePeer's
     // fast-path would short-circuit on the still-present old bundle.
-    // If the server has rotated *again* between alert and
-    // acceptance, this will open a new alert on the fresh
-    // fingerprint — surfaced to the user as another banner cycle,
-    // which is the correct behaviour.
-    await this.refetchAndCachePeerKey(peer)
+    const result = await this.refetchAndCachePeerKey(peer)
+
+    if (!result.supported) {
+      // Network failure: new key not loaded. Roll the pin back so the
+      // alert remains coherent (pinnedFp == alert.previousFingerprint)
+      // and outbound encryption keeps blocking on the unresolved alert.
+      setPinnedPrimaryFp(peer, previousFp)
+      throw new Error(`acceptPeerKeyChange: failed to fetch new key for ${peer}; pin rolled back`)
+    }
+
+    // Clear the original alert — but only if it hasn't already been
+    // superseded by a new rotation detected during the fetch. When the
+    // server rotated again, cachePeerKey overwrote the store entry with
+    // {previousFp: targetFp, currentFp: newerFp}; that fresh alert must
+    // survive so the UI can surface the second rotation.
+    const postFetchAlert = getKeyChangeAlert(peer)
+    if (!postFetchAlert || postFetchAlert.previousFingerprint !== targetFp) {
+      clearKeyChangeAlert(peer)
+    }
 
     if (asVerified) {
-      // Pin must already match the freshly cached cert for the
-      // verification record to be meaningful. If the post-probe
-      // peerKeys fingerprint diverges (server moved again, or the
-      // probe failed) skip the verify write — better to leave the
-      // peer at `trusted` than to record a verification against a
-      // fingerprint we never actually loaded.
+      // Pin must match the freshly cached cert for the verification record
+      // to be meaningful. If the server rotated again, cached.fingerprint
+      // will differ from targetFp — skip the write rather than recording
+      // verification against a key we never fully loaded.
       const cached = this.peerKeys.get(peer)
       if (cached && cached.fingerprint === targetFp) {
         setPeerVerified(peer, targetFp)
