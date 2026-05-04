@@ -998,7 +998,8 @@ function MessageInput({
     clearDraft(conversationId)
 
     // Process link preview in background (don't block on it)
-    if (processLinkPreview && text) {
+    // Skip when encrypted — the fastening would leak URL/title/image in cleartext
+    if (processLinkPreview && text && encryptionState.kind !== 'encrypted') {
       processLinkPreview(messageId, text, conversationId, type).catch(console.error)
     }
 
