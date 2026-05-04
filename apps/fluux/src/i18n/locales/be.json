@@ -139,7 +139,17 @@
         "blockUser": "Заблакіраваць карыстальніка",
         "unblockUser": "Разблакіраваць карыстальніка",
         "block": "Заблакіраваць",
-        "blockConfirm": "Заблакіраваць {{name}}? Яны не змогуць звязацца з вамі."
+        "blockConfirm": "Заблакіраваць {{name}}? Яны не змогуць звязацца з вамі.",
+        "encryption": {
+            "sectionTitle": "Шыфраванне",
+            "trusted": "Зашыфравана (не праверана)",
+            "verified": "Праверана",
+            "fingerprintLabel": "Адбітак OpenPGP",
+            "verifyButton": "Праверыць адбітак",
+            "removeVerification": "Зняць праверку",
+            "removeVerificationConfirm": "Зняць праверку ключа {{name}}? Вам прыйдзецца пераправерыць праз другі канал.",
+            "removeVerificationSuccess": "Праверка знята"
+        }
     },
     "rooms": {
         "backToRooms": "Назад да пакояў",

@@ -140,7 +140,17 @@
         "blockUser": "Bloķēt lietotāju",
         "unblockUser": "Atbloķēt lietotāju",
         "block": "Bloķēt",
-        "blockConfirm": "Bloķēt {{name}}? Viņi nevarēs ar jums sazināties."
+        "blockConfirm": "Bloķēt {{name}}? Viņi nevarēs ar jums sazināties.",
+        "encryption": {
+            "sectionTitle": "Šifrēšana",
+            "trusted": "Šifrēts (nepārbaudīts)",
+            "verified": "Pārbaudīts",
+            "fingerprintLabel": "OpenPGP pirkstu nospiedums",
+            "verifyButton": "Pārbaudīt nospiedumu",
+            "removeVerification": "Noņemt verifikāciju",
+            "removeVerificationConfirm": "Noņemt verifikāciju {{name}} atslēgai? Jums būs atkārtoti jāverificē caur otru kanālu.",
+            "removeVerificationSuccess": "Verifikācija noņemta"
+        }
     },
     "rooms": {
         "backToRooms": "Atpakaļ pie istabām",

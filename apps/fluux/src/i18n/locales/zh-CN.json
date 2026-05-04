@@ -139,7 +139,17 @@
         "blockUser": "屏蔽用户",
         "unblockUser": "取消屏蔽用户",
         "block": "屏蔽",
-        "blockConfirm": "屏蔽 {{name}}？对方将无法联系到您。"
+        "blockConfirm": "屏蔽 {{name}}？对方将无法联系到您。",
+        "encryption": {
+            "sectionTitle": "加密",
+            "trusted": "已加密（未验证）",
+            "verified": "已验证",
+            "fingerprintLabel": "OpenPGP 指纹",
+            "verifyButton": "验证指纹",
+            "removeVerification": "移除验证",
+            "removeVerificationConfirm": "移除对 {{name}} 密钥的验证？您需要通过第二个渠道重新验证。",
+            "removeVerificationSuccess": "验证已移除"
+        }
     },
     "rooms": {
         "backToRooms": "返回房间列表",

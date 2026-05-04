@@ -139,7 +139,17 @@
         "blockUser": "Blokker bruker",
         "unblockUser": "Opphev blokkering",
         "block": "Blokker",
-        "blockConfirm": "Blokkere {{name}}? De vil ikke kunne kontakte deg."
+        "blockConfirm": "Blokkere {{name}}? De vil ikke kunne kontakte deg.",
+        "encryption": {
+            "sectionTitle": "Kryptering",
+            "trusted": "Kryptert (ikke bekreftet)",
+            "verified": "Bekreftet",
+            "fingerprintLabel": "OpenPGP-fingeravtrykk",
+            "verifyButton": "Bekreft fingeravtrykk",
+            "removeVerification": "Fjern bekreftelse",
+            "removeVerificationConfirm": "Fjerne bekreftelse for {{name}}s nøkkel? Du må bekrefte på nytt via en annen kanal.",
+            "removeVerificationSuccess": "Bekreftelse fjernet"
+        }
     },
     "rooms": {
         "backToRooms": "Tilbake til rom",

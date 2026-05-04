@@ -140,7 +140,17 @@
         "blockUser": "Αποκλεισμός χρήστη",
         "unblockUser": "Κατάργηση αποκλεισμού",
         "block": "Αποκλεισμός",
-        "blockConfirm": "Αποκλεισμός {{name}}; Δεν θα μπορούν να επικοινωνήσουν μαζί σας."
+        "blockConfirm": "Αποκλεισμός {{name}}; Δεν θα μπορούν να επικοινωνήσουν μαζί σας.",
+        "encryption": {
+            "sectionTitle": "Κρυπτογράφηση",
+            "trusted": "Κρυπτογραφημένο (μη επαληθευμένο)",
+            "verified": "Επαληθευμένο",
+            "fingerprintLabel": "Αποτύπωμα OpenPGP",
+            "verifyButton": "Επαλήθευση αποτυπώματος",
+            "removeVerification": "Αφαίρεση επαλήθευσης",
+            "removeVerificationConfirm": "Αφαίρεση επαλήθευσης για το κλειδί του {{name}}; Θα χρειαστεί να επαληθεύσετε εκ νέου μέσω δεύτερου καναλιού.",
+            "removeVerificationSuccess": "Η επαλήθευση αφαιρέθηκε"
+        }
     },
     "rooms": {
         "backToRooms": "Πίσω στα δωμάτια",

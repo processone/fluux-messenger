@@ -141,7 +141,17 @@
         "blockUser": "Blokeeri kasutaja",
         "unblockUser": "Deblokeeri kasutaja",
         "block": "Blokeeri",
-        "blockConfirm": "Blokeerida {{name}}? Nad ei saa sinuga ühendust võtta."
+        "blockConfirm": "Blokeerida {{name}}? Nad ei saa sinuga ühendust võtta.",
+        "encryption": {
+            "sectionTitle": "Krüptimine",
+            "trusted": "Krüptitud (kontrollimata)",
+            "verified": "Kontrollitud",
+            "fingerprintLabel": "OpenPGP sõrmejälg",
+            "verifyButton": "Kontrolli sõrmejälge",
+            "removeVerification": "Eemalda kinnitamine",
+            "removeVerificationConfirm": "Eemaldada {{name}} võtme kinnitamine? Peate uuesti kontrollima teise kanali kaudu.",
+            "removeVerificationSuccess": "Kinnitamine eemaldatud"
+        }
     },
     "rooms": {
         "backToRooms": "Tagasi tubade juurde",

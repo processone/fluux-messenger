@@ -141,7 +141,17 @@
         "blockUser": "Ibblokka l-utent",
         "unblockUser": "Neħħi l-blokk ta' l-utent",
         "block": "Ibblokka",
-        "blockConfirm": "Tibblokka {{name}}? Ma jkunux jistgħu jikkuntattjawk."
+        "blockConfirm": "Tibblokka {{name}}? Ma jkunux jistgħu jikkuntattjawk.",
+        "encryption": {
+            "sectionTitle": "Kriptaġġ",
+            "trusted": "Kriptat (mhux ivverifikat)",
+            "verified": "Ivverifikat",
+            "fingerprintLabel": "Impronta OpenPGP",
+            "verifyButton": "Ivverifika l-impronta",
+            "removeVerification": "Neħħi l-verifikazzjoni",
+            "removeVerificationConfirm": "Tneħħi l-verifikazzjoni tal-aħjar ta' {{name}}? Tkun trid tivverifika mill-ġdid permezz ta' kanal ieħor.",
+            "removeVerificationSuccess": "Verifikazzjoni mneħħija"
+        }
     },
     "rooms": {
         "backToRooms": "Lura għall-kmamar",

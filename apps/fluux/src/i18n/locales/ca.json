@@ -141,7 +141,17 @@
         "blockUser": "Bloquejar usuari",
         "unblockUser": "Desbloquejar usuari",
         "block": "Bloquejar",
-        "blockConfirm": "Bloquejar {{name}}? No podran contactar-te."
+        "blockConfirm": "Bloquejar {{name}}? No podran contactar-te.",
+        "encryption": {
+            "sectionTitle": "Xifratge",
+            "trusted": "Xifrat (no verificat)",
+            "verified": "Verificat",
+            "fingerprintLabel": "Empremta OpenPGP",
+            "verifyButton": "Verifica l'empremta",
+            "removeVerification": "Elimina la verificació",
+            "removeVerificationConfirm": "Eliminar la verificació per la clau de {{name}}? Haureu de verificar-la de nou per un segon canal.",
+            "removeVerificationSuccess": "Verificació eliminada"
+        }
     },
     "rooms": {
         "backToRooms": "Torna a les sales",

@@ -139,7 +139,17 @@
         "blockUser": "Blockera användare",
         "unblockUser": "Avblockera användare",
         "block": "Blockera",
-        "blockConfirm": "Blockera {{name}}? De kommer inte kunna kontakta dig."
+        "blockConfirm": "Blockera {{name}}? De kommer inte kunna kontakta dig.",
+        "encryption": {
+            "sectionTitle": "Kryptering",
+            "trusted": "Krypterat (ej verifierat)",
+            "verified": "Verifierat",
+            "fingerprintLabel": "OpenPGP-fingeravtryck",
+            "verifyButton": "Verifiera fingeravtryck",
+            "removeVerification": "Ta bort verifiering",
+            "removeVerificationConfirm": "Ta bort verifieringen för {{name}}s nyckel? Du måste verifiera igen via en annan kanal.",
+            "removeVerificationSuccess": "Verifiering borttagen"
+        }
     },
     "rooms": {
         "backToRooms": "Tillbaka till rum",

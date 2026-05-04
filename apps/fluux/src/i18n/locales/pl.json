@@ -141,7 +141,17 @@
         "blockUser": "Zablokuj użytkownika",
         "unblockUser": "Odblokuj użytkownika",
         "block": "Zablokuj",
-        "blockConfirm": "Zablokować {{name}}? Nie będą mogli się z Tobą skontaktować."
+        "blockConfirm": "Zablokować {{name}}? Nie będą mogli się z Tobą skontaktować.",
+        "encryption": {
+            "sectionTitle": "Szyfrowanie",
+            "trusted": "Zaszyfrowane (niezweryfikowane)",
+            "verified": "Zweryfikowane",
+            "fingerprintLabel": "Odcisk OpenPGP",
+            "verifyButton": "Weryfikuj odcisk",
+            "removeVerification": "Usuń weryfikację",
+            "removeVerificationConfirm": "Usunąć weryfikację klucza {{name}}? Musisz ponownie zweryfikować przez drugi kanał.",
+            "removeVerificationSuccess": "Weryfikacja usunięta"
+        }
     },
     "rooms": {
         "backToRooms": "Wróć do pokojów",

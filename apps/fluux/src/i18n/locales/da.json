@@ -139,7 +139,17 @@
         "blockUser": "Blokér bruger",
         "unblockUser": "Fjern blokering af bruger",
         "block": "Blokér",
-        "blockConfirm": "Blokér {{name}}? De vil ikke kunne kontakte dig."
+        "blockConfirm": "Blokér {{name}}? De vil ikke kunne kontakte dig.",
+        "encryption": {
+            "sectionTitle": "Kryptering",
+            "trusted": "Krypteret (ikke bekræftet)",
+            "verified": "Bekræftet",
+            "fingerprintLabel": "OpenPGP-aftryk",
+            "verifyButton": "Bekræft aftryk",
+            "removeVerification": "Fjern bekræftelse",
+            "removeVerificationConfirm": "Fjerne bekræftelse af {{name}}s nøgle? Du skal bekræfte igen via en anden kanal.",
+            "removeVerificationSuccess": "Bekræftelse fjernet"
+        }
     },
     "rooms": {
         "backToRooms": "Tilbage til rum",

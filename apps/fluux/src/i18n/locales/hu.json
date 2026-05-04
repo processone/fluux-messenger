@@ -139,7 +139,17 @@
         "blockUser": "Felhasználó tiltása",
         "unblockUser": "Felhasználó feloldása",
         "block": "Tiltás",
-        "blockConfirm": "{{name}} tiltása? Nem fognak tudni kapcsolatba lépni veled."
+        "blockConfirm": "{{name}} tiltása? Nem fognak tudni kapcsolatba lépni veled.",
+        "encryption": {
+            "sectionTitle": "Titkosítás",
+            "trusted": "Titkosított (nem ellenőrzött)",
+            "verified": "Ellenőrzött",
+            "fingerprintLabel": "OpenPGP-ujjlenyomat",
+            "verifyButton": "Ujjlenyomat ellenőrzése",
+            "removeVerification": "Ellenőrzés eltávolítása",
+            "removeVerificationConfirm": "Eltávolítja {{name}} kulcsának ellenőrzését? Újra kell ellenőriznie egy második csatornán keresztül.",
+            "removeVerificationSuccess": "Ellenőrzés eltávolítva"
+        }
     },
     "rooms": {
         "backToRooms": "Vissza a szobákhoz",

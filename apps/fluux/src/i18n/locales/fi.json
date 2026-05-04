@@ -139,7 +139,17 @@
         "blockUser": "Estä käyttäjä",
         "unblockUser": "Poista käyttäjän esto",
         "block": "Estä",
-        "blockConfirm": "Estetäänkö {{name}}? He eivät voi ottaa sinuun yhteyttä."
+        "blockConfirm": "Estetäänkö {{name}}? He eivät voi ottaa sinuun yhteyttä.",
+        "encryption": {
+            "sectionTitle": "Salaus",
+            "trusted": "Salattu (ei vahvistettu)",
+            "verified": "Vahvistettu",
+            "fingerprintLabel": "OpenPGP-sormenjälki",
+            "verifyButton": "Tarkista sormenjälki",
+            "removeVerification": "Poista vahvistus",
+            "removeVerificationConfirm": "Poistetaanko vahvistus {{name}}n avaimelta? Sinun täytyy vahvistaa uudelleen toisen kanavan kautta.",
+            "removeVerificationSuccess": "Vahvistus poistettu"
+        }
     },
     "rooms": {
         "backToRooms": "Takaisin huoneisiin",

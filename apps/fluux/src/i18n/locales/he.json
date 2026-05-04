@@ -139,7 +139,17 @@
         "addMoreContacts": "הוסף אנשי קשר נוספים...",
         "keyboardHint": "Tab/↑↓ לניווט, Enter לבחירה",
         "noContactsFound": "לא נמצאו אנשי קשר",
-        "pressEnterToAdd": "לחץ Enter להוספה"
+        "pressEnterToAdd": "לחץ Enter להוספה",
+        "encryption": {
+            "sectionTitle": "הצפנה",
+            "trusted": "מוצפן (לא מאומת)",
+            "verified": "מאומת",
+            "fingerprintLabel": "טביעת אצבע OpenPGP",
+            "verifyButton": "אמת טביעת אצבע",
+            "removeVerification": "הסר אימות",
+            "removeVerificationConfirm": "להסיר את האימות עבור המפתח של {{name}}? יהיה עליך לאמת מחדש דרך ערוץ שני.",
+            "removeVerificationSuccess": "האימות הוסר"
+        }
     },
     "rooms": {
         "backToRooms": "חזרה לחדרים",

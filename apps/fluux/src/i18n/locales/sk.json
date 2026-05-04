@@ -140,7 +140,17 @@
         "blockUser": "Zablokovať používateľa",
         "unblockUser": "Odblokovať používateľa",
         "block": "Zablokovať",
-        "blockConfirm": "Zablokovať {{name}}? Nebudú vás môcť kontaktovať."
+        "blockConfirm": "Zablokovať {{name}}? Nebudú vás môcť kontaktovať.",
+        "encryption": {
+            "sectionTitle": "Šifrovanie",
+            "trusted": "Šifrované (neoverené)",
+            "verified": "Overené",
+            "fingerprintLabel": "Odtlačok OpenPGP",
+            "verifyButton": "Overiť odtlačok",
+            "removeVerification": "Odstrániť overenie",
+            "removeVerificationConfirm": "Odstrániť overenie kľúča {{name}}? Budete musieť znova overiť prostredníctvom druhého kanála.",
+            "removeVerificationSuccess": "Overenie odstránené"
+        }
     },
     "rooms": {
         "backToRooms": "Späť do miestností",

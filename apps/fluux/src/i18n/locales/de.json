@@ -141,7 +141,17 @@
         "blockUser": "Benutzer blockieren",
         "unblockUser": "Benutzer freigeben",
         "block": "Blockieren",
-        "blockConfirm": "{{name}} blockieren? Sie können dich nicht mehr kontaktieren."
+        "blockConfirm": "{{name}} blockieren? Sie können dich nicht mehr kontaktieren.",
+        "encryption": {
+            "sectionTitle": "Verschlüsselung",
+            "trusted": "Verschlüsselt (nicht verifiziert)",
+            "verified": "Verifiziert",
+            "fingerprintLabel": "OpenPGP-Fingerabdruck",
+            "verifyButton": "Fingerabdruck prüfen",
+            "removeVerification": "Verifizierung entfernen",
+            "removeVerificationConfirm": "Verifizierung des Schlüssels von {{name}} entfernen? Sie müssen über einen zweiten Kanal erneut verifizieren.",
+            "removeVerificationSuccess": "Verifizierung entfernt"
+        }
     },
     "rooms": {
         "backToRooms": "Zurück zu Räumen",

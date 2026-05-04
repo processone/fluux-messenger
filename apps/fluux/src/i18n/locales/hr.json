@@ -139,7 +139,17 @@
         "blockUser": "Blokiraj korisnika",
         "unblockUser": "Odblokiraj korisnika",
         "block": "Blokiraj",
-        "blockConfirm": "Blokirati {{name}}? Neće vas moći kontaktirati."
+        "blockConfirm": "Blokirati {{name}}? Neće vas moći kontaktirati.",
+        "encryption": {
+            "sectionTitle": "Enkripcija",
+            "trusted": "Šifrirano (nije potvrđeno)",
+            "verified": "Potvrđeno",
+            "fingerprintLabel": "OpenPGP otisak",
+            "verifyButton": "Provjeri otisak",
+            "removeVerification": "Ukloni provjeru",
+            "removeVerificationConfirm": "Ukloniti provjeru za ključ od {{name}}? Morat ćete ga ponovo provjeriti putem drugog kanala.",
+            "removeVerificationSuccess": "Provjera uklonjena"
+        }
     },
     "rooms": {
         "backToRooms": "Natrag na sobe",

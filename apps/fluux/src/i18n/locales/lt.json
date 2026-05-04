@@ -139,7 +139,17 @@
         "blockUser": "Blokuoti naudotoją",
         "unblockUser": "Atblokuoti naudotoją",
         "block": "Blokuoti",
-        "blockConfirm": "Blokuoti {{name}}? Jie negalės su jumis susisiekti."
+        "blockConfirm": "Blokuoti {{name}}? Jie negalės su jumis susisiekti.",
+        "encryption": {
+            "sectionTitle": "Šifravimas",
+            "trusted": "Šifruota (nepatvirtinta)",
+            "verified": "Patvirtinta",
+            "fingerprintLabel": "OpenPGP pirštų atspaudas",
+            "verifyButton": "Patvirtinti pirštų atspaudą",
+            "removeVerification": "Pašalinti patvirtinimą",
+            "removeVerificationConfirm": "Pašalinti {{name}} rakto patvirtinimą? Turėsite iš naujo patvirtinti per antrą kanalą.",
+            "removeVerificationSuccess": "Patvirtinimas pašalintas"
+        }
     },
     "rooms": {
         "backToRooms": "Grįžti prie kambarių",

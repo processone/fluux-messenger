@@ -141,7 +141,17 @@
         "blockUser": "Zablokovat uživatele",
         "unblockUser": "Odblokovat uživatele",
         "block": "Zablokovat",
-        "blockConfirm": "Zablokovat {{name}}? Nebudou vás moci kontaktovat."
+        "blockConfirm": "Zablokovat {{name}}? Nebudou vás moci kontaktovat.",
+        "encryption": {
+            "sectionTitle": "Šifrování",
+            "trusted": "Šifrováno (neověřeno)",
+            "verified": "Ověřeno",
+            "fingerprintLabel": "Otisk OpenPGP",
+            "verifyButton": "Ověřit otisk",
+            "removeVerification": "Odebrat ověření",
+            "removeVerificationConfirm": "Odebrat ověření klíče {{name}}? Budete muset klíč znovu ověřit prostřednictvím druhého kanálu.",
+            "removeVerificationSuccess": "Ověření odebráno"
+        }
     },
     "rooms": {
         "backToRooms": "Zpět do místností",

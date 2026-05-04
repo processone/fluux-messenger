@@ -141,7 +141,17 @@
         "blockUser": "Blocca utente",
         "unblockUser": "Sblocca utente",
         "block": "Blocca",
-        "blockConfirm": "Bloccare {{name}}? Non potranno contattarti."
+        "blockConfirm": "Bloccare {{name}}? Non potranno contattarti.",
+        "encryption": {
+            "sectionTitle": "Cifratura",
+            "trusted": "Cifrato (non verificato)",
+            "verified": "Verificato",
+            "fingerprintLabel": "Impronta OpenPGP",
+            "verifyButton": "Verifica impronta",
+            "removeVerification": "Rimuovi verifica",
+            "removeVerificationConfirm": "Rimuovere la verifica della chiave di {{name}}? Sarà necessario verificare nuovamente tramite un secondo canale.",
+            "removeVerificationSuccess": "Verifica rimossa"
+        }
     },
     "rooms": {
         "backToRooms": "Torna alle stanze",

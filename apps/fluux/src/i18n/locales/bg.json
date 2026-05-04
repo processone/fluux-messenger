@@ -139,7 +139,17 @@
         "blockUser": "Блокиране на потребител",
         "unblockUser": "Отблокиране на потребител",
         "block": "Блокиране",
-        "blockConfirm": "Блокиране на {{name}}? Няма да могат да се свържат с вас."
+        "blockConfirm": "Блокиране на {{name}}? Няма да могат да се свържат с вас.",
+        "encryption": {
+            "sectionTitle": "Криптиране",
+            "trusted": "Шифровано (непотвърдено)",
+            "verified": "Потвърдено",
+            "fingerprintLabel": "OpenPGP отпечатък",
+            "verifyButton": "Потвърди отпечатък",
+            "removeVerification": "Премахни потвърждението",
+            "removeVerificationConfirm": "Да се премахне потвърждението за ключа на {{name}}? Ще трябва да го потвърдите отново чрез друг канал.",
+            "removeVerificationSuccess": "Потвърждението е премахнато"
+        }
     },
     "rooms": {
         "backToRooms": "Назад към стаите",

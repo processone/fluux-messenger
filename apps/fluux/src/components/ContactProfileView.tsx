@@ -1,15 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { MessageCircle, Trash2, Pencil, Monitor, Smartphone, Globe, ArrowLeft, Ban, UserPlus, Building2, Mail, MapPin, User } from 'lucide-react'
+import { MessageCircle, Trash2, Pencil, Monitor, Smartphone, Globe, ArrowLeft, Ban, UserPlus, Building2, Mail, MapPin, User, ShieldCheck, ShieldAlert, ShieldOff, Lock, Loader2 } from 'lucide-react'
 import { TextInput } from './ui/TextInput'
 import { Tooltip } from './Tooltip'
-import { type Contact, type VCardInfo, getClientType, useBlocking } from '@fluux/sdk'
+import { type Contact, type VCardInfo, getClientType, useBlocking, useXMPPContext } from '@fluux/sdk'
 import { useConnectionStore, useBlockingStore, useLastActivity } from '@fluux/sdk/react'
 import { Avatar } from './Avatar'
 import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS } from '@/constants/ui'
 import { getShowColor, getTranslatedShowText } from '@/utils/presence'
 import { getTranslatedStatusText } from '@/utils/statusText'
 import { useWindowDrag } from '@/hooks'
+import { useConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
+import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
+import { VerifyPeerDialog } from './VerifyPeerDialog'
 
 interface ContactProfileViewProps {
   contact: Contact
@@ -45,11 +48,19 @@ export function ContactProfileView({
   const [error, setError] = useState<string | null>(null)
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false)
   const [showBlockConfirm, setShowBlockConfirm] = useState(false)
+  const [showVerifyDialog, setShowVerifyDialog] = useState(false)
+  const [showRemoveVerifyConfirm, setShowRemoveVerifyConfirm] = useState(false)
   const [pepNickname, setPepNickname] = useState<string | null>(null)
   const [vcard, setVcard] = useState<VCardInfo | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const { blockJid, unblockJid } = useBlocking()
   const isBlocked = useBlockingStore((s) => s.blockedJids.has(contact.jid))
+  const { client } = useXMPPContext()
+  const encryptionState = useConversationEncryptionState(contact.jid, 'chat')
+  const setVerified = useVerifiedPeerKeysStore((s) => s.setVerified)
+  const clearVerified = useVerifiedPeerKeysStore((s) => s.clearVerified)
+  const plugin = client.e2ee?.getPlugin('openpgp') as { getOwnFingerprint?: () => string | null } | null | undefined
+  const ownFingerprint = plugin?.getOwnFingerprint?.() ?? null
 
   // Lazily query last activity for offline roster contacts
   useLastActivity(
@@ -74,6 +85,8 @@ export function ContactProfileView({
     setError(null)
     setShowRemoveConfirm(false)
     setShowBlockConfirm(false)
+    setShowVerifyDialog(false)
+    setShowRemoveVerifyConfirm(false)
     setPepNickname(null)
     setVcard(null)
   }, [contact.jid, contact.name])
@@ -155,6 +168,7 @@ export function ContactProfileView({
   }
 
   return (
+    <>
     <div className="h-full flex flex-col bg-fluux-chat">
       {/* Header */}
       <div className={`h-14 ${titleBarClass} px-4 flex items-center gap-2 border-b border-fluux-bg shadow-sm`} {...dragRegionProps}>
@@ -336,6 +350,97 @@ export function ContactProfileView({
             <div className="mb-4" />
           )}
 
+          {/* E2EE section — only when encryption state is meaningful */}
+          {(encryptionState.kind === 'encrypted' || encryptionState.kind === 'blocked' || encryptionState.kind === 'checking') && (
+            <div className="w-full max-w-xs mt-2 mb-4">
+              <h3 className="text-xs font-semibold text-fluux-muted uppercase tracking-wide mb-2">
+                {t('contacts.encryption.sectionTitle')}
+              </h3>
+
+              {encryptionState.kind === 'checking' && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-fluux-bg rounded-lg">
+                  <Loader2 className="w-4 h-4 text-fluux-muted animate-spin flex-shrink-0" />
+                  <span className="text-sm text-fluux-muted">{t('chat.encryption.checking')}</span>
+                </div>
+              )}
+
+              {encryptionState.kind === 'blocked' && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-yellow-500/10 rounded-lg">
+                  <ShieldAlert className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
+                  <span className="text-sm text-yellow-700 dark:text-yellow-400">{t('chat.encryption.blocked')}</span>
+                </div>
+              )}
+
+              {encryptionState.kind === 'encrypted' && (
+                <>
+                  <div className="flex items-center gap-2 px-3 py-2 bg-fluux-bg rounded-lg mb-3">
+                    {encryptionState.trust === 'verified' ? (
+                      <ShieldCheck className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0" />
+                    ) : (
+                      <Lock className="w-4 h-4 text-fluux-muted flex-shrink-0" />
+                    )}
+                    <span className="text-sm text-fluux-text">
+                      {encryptionState.trust === 'verified'
+                        ? t('contacts.encryption.verified')
+                        : t('contacts.encryption.trusted')}
+                    </span>
+                  </div>
+
+                  <label className="block text-xs text-fluux-muted mb-1 px-1">
+                    {t('contacts.encryption.fingerprintLabel')}
+                  </label>
+                  <div className="rounded-lg border border-fluux-hover bg-fluux-bg px-3 py-2 mb-3">
+                    <code className="block text-xs font-mono text-fluux-text break-all leading-relaxed">
+                      {formatFingerprint(encryptionState.fingerprint)}
+                    </code>
+                  </div>
+
+                  {encryptionState.trust === 'unverified' && (
+                    <button
+                      onClick={() => setShowVerifyDialog(true)}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-bg hover:bg-fluux-hover text-fluux-text border border-fluux-hover rounded-lg transition-colors text-sm"
+                    >
+                      <ShieldCheck className="w-4 h-4" />
+                      {t('contacts.encryption.verifyButton')}
+                    </button>
+                  )}
+
+                  {encryptionState.trust === 'verified' && (
+                    showRemoveVerifyConfirm ? (
+                      <div className="flex flex-col gap-2 p-3 bg-fluux-red/10 border border-fluux-red/30 rounded-lg">
+                        <p className="text-sm text-fluux-text text-center">
+                          {t('contacts.encryption.removeVerificationConfirm', { name: contact.name })}
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setShowRemoveVerifyConfirm(false)}
+                            className="flex-1 px-3 py-2 bg-fluux-bg hover:bg-fluux-hover text-fluux-text rounded transition-colors text-sm"
+                          >
+                            {t('common.cancel')}
+                          </button>
+                          <button
+                            onClick={() => { clearVerified(contact.jid); setShowRemoveVerifyConfirm(false) }}
+                            className="flex-1 px-3 py-2 bg-fluux-red hover:bg-fluux-red/80 text-white rounded transition-colors text-sm"
+                          >
+                            {t('contacts.encryption.removeVerification')}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setShowRemoveVerifyConfirm(true)}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-red/10 hover:bg-fluux-red/20 text-fluux-red border border-fluux-red rounded-lg transition-colors text-sm"
+                      >
+                        <ShieldOff className="w-4 h-4" />
+                        {t('contacts.encryption.removeVerification')}
+                      </button>
+                    )
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           {/* Action buttons */}
           <div className="flex flex-col gap-3 w-full max-w-xs">
             <button
@@ -428,5 +533,23 @@ export function ContactProfileView({
         </div>
       </div>
     </div>
+
+    {showVerifyDialog && encryptionState.kind === 'encrypted' && (
+      <VerifyPeerDialog
+        peerName={contact.name}
+        peerFingerprint={encryptionState.fingerprint}
+        ownFingerprint={ownFingerprint}
+        onConfirm={(fingerprint) => {
+          setVerified(contact.jid, fingerprint)
+          setShowVerifyDialog(false)
+        }}
+        onCancel={() => setShowVerifyDialog(false)}
+      />
+    )}
+    </>
   )
+}
+
+function formatFingerprint(fp: string): string {
+  return fp.match(/.{1,4}/g)?.join(' ') ?? fp
 }

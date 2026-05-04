@@ -139,7 +139,17 @@
         "addMoreContacts": "Add more contacts...",
         "keyboardHint": "Tab/↑↓ to navigate, Enter to select",
         "noContactsFound": "No contacts found",
-        "pressEnterToAdd": "Press Enter to add"
+        "pressEnterToAdd": "Press Enter to add",
+        "encryption": {
+            "sectionTitle": "Encryption",
+            "trusted": "Encrypted (not verified)",
+            "verified": "Verified",
+            "fingerprintLabel": "OpenPGP fingerprint",
+            "verifyButton": "Verify fingerprint",
+            "removeVerification": "Remove verification",
+            "removeVerificationConfirm": "Remove verification for {{name}}'s key? You'll need to re-verify via a second channel.",
+            "removeVerificationSuccess": "Verification removed"
+        }
     },
     "rooms": {
         "backToRooms": "Back to rooms",

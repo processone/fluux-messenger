@@ -139,7 +139,17 @@
         "blockUser": "Gebruiker blokkeren",
         "unblockUser": "Gebruiker deblokkeren",
         "block": "Blokkeren",
-        "blockConfirm": "{{name}} blokkeren? Ze kunnen geen contact meer met je opnemen."
+        "blockConfirm": "{{name}} blokkeren? Ze kunnen geen contact meer met je opnemen.",
+        "encryption": {
+            "sectionTitle": "Versleuteling",
+            "trusted": "Versleuteld (niet geverifieerd)",
+            "verified": "Geverifieerd",
+            "fingerprintLabel": "OpenPGP-vingerafdruk",
+            "verifyButton": "Vingerafdruk verifiëren",
+            "removeVerification": "Verificatie verwijderen",
+            "removeVerificationConfirm": "Verificatie voor de sleutel van {{name}} verwijderen? Je moet opnieuw verifiëren via een tweede kanaal.",
+            "removeVerificationSuccess": "Verificatie verwijderd"
+        }
     },
     "rooms": {
         "backToRooms": "Terug naar kamers",

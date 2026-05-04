@@ -139,7 +139,17 @@
         "blockUser": "Заблокировать пользователя",
         "unblockUser": "Разблокировать пользователя",
         "block": "Заблокировать",
-        "blockConfirm": "Заблокировать {{name}}? Они не смогут связаться с вами."
+        "blockConfirm": "Заблокировать {{name}}? Они не смогут связаться с вами.",
+        "encryption": {
+            "sectionTitle": "Шифрование",
+            "trusted": "Зашифровано (не проверено)",
+            "verified": "Подтверждено",
+            "fingerprintLabel": "Отпечаток OpenPGP",
+            "verifyButton": "Проверить отпечаток",
+            "removeVerification": "Удалить верификацию",
+            "removeVerificationConfirm": "Удалить верификацию ключа {{name}}? Вам потребуется повторить проверку через другой канал.",
+            "removeVerificationSuccess": "Верификация удалена"
+        }
     },
     "rooms": {
         "backToRooms": "Назад к комнатам",

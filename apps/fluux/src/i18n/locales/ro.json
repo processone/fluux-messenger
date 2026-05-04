@@ -141,7 +141,17 @@
         "blockUser": "Blochează utilizatorul",
         "unblockUser": "Deblochează utilizatorul",
         "block": "Blochează",
-        "blockConfirm": "Blochezi {{name}}? Nu te vor mai putea contacta."
+        "blockConfirm": "Blochezi {{name}}? Nu te vor mai putea contacta.",
+        "encryption": {
+            "sectionTitle": "Criptare",
+            "trusted": "Criptat (neverificat)",
+            "verified": "Verificat",
+            "fingerprintLabel": "Amprentă OpenPGP",
+            "verifyButton": "Verifică amprenta",
+            "removeVerification": "Elimină verificarea",
+            "removeVerificationConfirm": "Eliminați verificarea pentru cheia lui {{name}}? Va trebui să reverificați printr-un al doilea canal.",
+            "removeVerificationSuccess": "Verificare eliminată"
+        }
     },
     "rooms": {
         "backToRooms": "Înapoi la camere",

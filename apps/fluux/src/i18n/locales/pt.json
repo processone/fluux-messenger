@@ -141,7 +141,17 @@
         "blockUser": "Bloquear utilizador",
         "unblockUser": "Desbloquear utilizador",
         "block": "Bloquear",
-        "blockConfirm": "Bloquear {{name}}? Não poderão contactá-lo."
+        "blockConfirm": "Bloquear {{name}}? Não poderão contactá-lo.",
+        "encryption": {
+            "sectionTitle": "Encriptação",
+            "trusted": "Encriptado (não verificado)",
+            "verified": "Verificado",
+            "fingerprintLabel": "Impressão digital OpenPGP",
+            "verifyButton": "Verificar impressão digital",
+            "removeVerification": "Remover verificação",
+            "removeVerificationConfirm": "Remover a verificação da chave de {{name}}? Terá de verificar novamente através de um segundo canal.",
+            "removeVerificationSuccess": "Verificação removida"
+        }
     },
     "rooms": {
         "backToRooms": "Voltar às salas",

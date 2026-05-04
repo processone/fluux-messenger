@@ -139,7 +139,17 @@
         "blockUser": "Loka á notanda",
         "unblockUser": "Opna á notanda",
         "block": "Loka",
-        "blockConfirm": "Loka á {{name}}? Þeir munu ekki geta haft samband við þig."
+        "blockConfirm": "Loka á {{name}}? Þeir munu ekki geta haft samband við þig.",
+        "encryption": {
+            "sectionTitle": "Dulkóðun",
+            "trusted": "Dulkóðað (ekki staðfest)",
+            "verified": "Staðfest",
+            "fingerprintLabel": "OpenPGP fingrafar",
+            "verifyButton": "Staðfesta fingrafar",
+            "removeVerification": "Fjarlægja staðfestingu",
+            "removeVerificationConfirm": "Fjarlægja staðfestingu fyrir lykil {{name}}? Þú þarft að staðfesta aftur í gegnum annan rás.",
+            "removeVerificationSuccess": "Staðfesting fjarlægð"
+        }
     },
     "rooms": {
         "backToRooms": "Til baka í herbergi",

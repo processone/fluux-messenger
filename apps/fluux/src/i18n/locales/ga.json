@@ -139,7 +139,17 @@
         "blockUser": "Cuir bac ar úsáideoir",
         "unblockUser": "Bain bac d'úsáideoir",
         "block": "Cuir bac",
-        "blockConfirm": "Cuir bac ar {{name}}? Ní bheidh siad in ann teagmháil a dhéanamh leat."
+        "blockConfirm": "Cuir bac ar {{name}}? Ní bheidh siad in ann teagmháil a dhéanamh leat.",
+        "encryption": {
+            "sectionTitle": "Criptiú",
+            "trusted": "Criptithe (gan fíorú)",
+            "verified": "Fíoraithe",
+            "fingerprintLabel": "Méarloirg OpenPGP",
+            "verifyButton": "Fíoraigh méarloirg",
+            "removeVerification": "Bain an fíorú",
+            "removeVerificationConfirm": "An bhfuil tú ag iarraidh an fíorú a bhaint de eochair {{name}}? Beidh ort fíorú arís trí chainéal eile.",
+            "removeVerificationSuccess": "Fíorú bainte"
+        }
     },
     "rooms": {
         "backToRooms": "Ar ais go seomraí",
