@@ -11,10 +11,9 @@ import { getConsistentTextColor } from './Avatar'
 import { useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat } from '@/hooks'
 import { Upload, Loader2 } from 'lucide-react'
 import { MessageBubble, MessageList as MessageListComponent, shouldShowAvatar, buildReplyContext } from './conversation'
-import { EncryptionChip } from './conversation/EncryptionChip'
 import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
-import { useConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
+import { useConversationEncryptionState, type ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { ChristmasAnimation } from './ChristmasAnimation'
 import { ChatHeader } from './ChatHeader'
 import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment } from './MessageComposer'
@@ -241,6 +240,42 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, m
     }
   }
 
+  // E2EE: encryption status displayed as an icon in the chat header.
+  // Hooks must run before the early return below.
+  const encryptionState = useConversationEncryptionState(
+    activeConversation?.type === 'chat' ? (activeConversation.id ?? null) : null,
+    activeConversation?.type ?? 'chat',
+  )
+  const { client } = useXMPPContext()
+  const setPeerVerified = useVerifiedPeerKeysStore((s) => s.setVerified)
+  const addToast = useToastStore((s) => s.addToast)
+  const [verifyDialogState, setVerifyDialogState] = useState<
+    | { open: false }
+    | { open: true; peerJid: string; peerFingerprint: string; ownFingerprint: string | null }
+  >({ open: false })
+  const handleOpenVerify = useCallback(() => {
+    if (encryptionState.kind !== 'encrypted' || activeConversation?.type !== 'chat' || !activeConversation?.id) return
+    const plugin = client.e2ee?.getPlugin('openpgp') as
+      | { getOwnFingerprint?: () => string | null }
+      | null
+      | undefined
+    setVerifyDialogState({
+      open: true,
+      peerJid: activeConversation.id,
+      peerFingerprint: encryptionState.fingerprint,
+      ownFingerprint: plugin?.getOwnFingerprint?.() ?? null,
+    })
+  }, [client, activeConversation, encryptionState])
+  const handleVerifyConfirm = useCallback(
+    (fingerprint: string) => {
+      if (!verifyDialogState.open) return
+      setPeerVerified(verifyDialogState.peerJid, fingerprint)
+      setVerifyDialogState({ open: false })
+      addToast('success', t('chat.verifyPeer.confirmSuccess'))
+    },
+    [verifyDialogState, setPeerVerified, addToast, t],
+  )
+
   if (!activeConversation) return null
 
   // Get contact for 1:1 chats
@@ -271,6 +306,8 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, m
         jid={activeConversation.id}
         onBack={onBack}
         onSearchInConversation={handleSearchInConversation}
+        encryptionState={encryptionState}
+        onEncryptionClick={encryptionState.kind === 'encrypted' ? handleOpenVerify : undefined}
       />
 
       {/* Key-change alert banner — only shown for 1:1 chats where a
@@ -281,6 +318,18 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, m
         <KeyChangeBanner
           peerJid={activeConversation.id}
           peerName={activeConversation.name}
+        />
+      )}
+
+      {/* Verify-peer dialog — opened from the encryption icon in the header */}
+      {verifyDialogState.open && (
+        <VerifyPeerDialog
+          peerName={activeConversation.name}
+          peerFingerprint={verifyDialogState.peerFingerprint}
+          ownFingerprint={verifyDialogState.ownFingerprint}
+          alreadyVerified={encryptionState.kind === 'encrypted' && encryptionState.trust === 'verified'}
+          onConfirm={handleVerifyConfirm}
+          onCancel={() => setVerifyDialogState({ open: false })}
         />
       )}
 
@@ -384,6 +433,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, m
         processLinkPreview={processMessageForLinkPreview}
         isConnected={isConnected}
         onSwitchToMessages={onSwitchToMessages}
+        encryptionState={encryptionState}
       />
 
       {/* Easter egg animation */}
@@ -827,6 +877,7 @@ function MessageInput({
   processLinkPreview,
   onSwitchToMessages,
   onMessageIdSent,
+  encryptionState,
 }: {
   composerRef: React.RefObject<MessageComposerHandle | null>
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>
@@ -855,6 +906,7 @@ function MessageInput({
   onRemovePendingAttachment?: () => void
   processLinkPreview?: (messageId: string, body: string, to: string, type: 'chat' | 'groupchat') => Promise<void>
   onSwitchToMessages?: (conversationId: string) => void
+  encryptionState: ConversationEncryptionState
 }) {
   const { t } = useTranslation()
   const { sendMessage, sendChatState, isArchived, unarchiveConversation, setDraft, getDraft, clearDraft, clearFirstNewMessageId } = useChatActive()
@@ -963,73 +1015,8 @@ function MessageInput({
     void sendChatState(conversationId, state, type)
   }
 
-  // Status chip above the composer showing whether the next send will
-  // be end-to-end encrypted. Renders nothing when the master toggle is
-  // off, we're offline, or this is a MUC — so users who haven't opted
-  // into E2EE see no extra chrome. See [`useConversationEncryptionState`].
-  const encryptionState = useConversationEncryptionState(
-    type === 'chat' ? conversationId : null,
-    type,
-  )
-
-  // Verify-peer dialog state. Opens from the chip when state is
-  // `encrypted` so the user can promote BTBV `unverified` to `verified`.
-  // Own fingerprint is read at open time rather than subscribed because
-  // it changes only on key rotation / plugin restart, both of which the
-  // existing surface already remounts the chat view on.
-  const { client } = useXMPPContext()
-  const setPeerVerified = useVerifiedPeerKeysStore((s) => s.setVerified)
-  const addToast = useToastStore((s) => s.addToast)
-  const [verifyDialogState, setVerifyDialogState] = useState<
-    | { open: false }
-    | { open: true; peerJid: string; peerFingerprint: string; ownFingerprint: string | null }
-  >({ open: false })
-  const handleOpenVerify = useCallback(() => {
-    if (encryptionState.kind !== 'encrypted' || type !== 'chat') return
-    const plugin = client.e2ee?.getPlugin('openpgp') as
-      | { getOwnFingerprint?: () => string | null }
-      | null
-      | undefined
-    setVerifyDialogState({
-      open: true,
-      peerJid: conversationId,
-      peerFingerprint: encryptionState.fingerprint,
-      ownFingerprint: plugin?.getOwnFingerprint?.() ?? null,
-    })
-  }, [client, conversationId, type, encryptionState])
-  const handleVerifyConfirm = useCallback(
-    (fingerprint: string) => {
-      if (!verifyDialogState.open) return
-      setPeerVerified(verifyDialogState.peerJid, fingerprint)
-      setVerifyDialogState({ open: false })
-      addToast('success', t('chat.verifyPeer.confirmSuccess'))
-    },
-    [verifyDialogState, setPeerVerified, addToast, t],
-  )
-
   return (
     <>
-      {encryptionState.kind !== 'disabled' && (
-        <div className="px-3 pt-1">
-          <EncryptionChip
-            state={encryptionState}
-            peerName={conversationName}
-            onVerifyClick={
-              encryptionState.kind === 'encrypted' ? handleOpenVerify : undefined
-            }
-          />
-        </div>
-      )}
-      {verifyDialogState.open && (
-        <VerifyPeerDialog
-          peerName={conversationName}
-          peerFingerprint={verifyDialogState.peerFingerprint}
-          ownFingerprint={verifyDialogState.ownFingerprint}
-          alreadyVerified={encryptionState.kind === 'encrypted' && encryptionState.trust === 'verified'}
-          onConfirm={handleVerifyConfirm}
-          onCancel={() => setVerifyDialogState({ open: false })}
-        />
-      )}
       <MessageComposer
         ref={composerRef}
         textareaRef={textareaRef}

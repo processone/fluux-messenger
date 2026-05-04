@@ -11,7 +11,8 @@ import { Avatar } from './Avatar'
 import { useWindowDrag } from '@/hooks'
 import { getTranslatedStatusText } from '@/utils/statusText'
 import { Tooltip } from './Tooltip'
-import { ArrowLeft, Clock, Hash, Search } from 'lucide-react'
+import { ArrowLeft, Clock, Hash, Lock, Loader2, Search, ShieldAlert, ShieldCheck } from 'lucide-react'
+import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 
 export interface ChatHeaderProps {
   name: string
@@ -20,6 +21,8 @@ export interface ChatHeaderProps {
   jid: string
   onBack?: () => void
   onSearchInConversation?: () => void
+  encryptionState?: ConversationEncryptionState
+  onEncryptionClick?: () => void
 }
 
 export function ChatHeader({
@@ -29,6 +32,8 @@ export function ChatHeader({
   jid,
   onBack,
   onSearchInConversation,
+  encryptionState,
+  onEncryptionClick,
 }: ChatHeaderProps) {
   const { t } = useTranslation()
   const isGroupChat = type === 'groupchat'
@@ -89,6 +94,15 @@ export function ChatHeader({
         )}
       </div>
 
+      {/* Encryption status icon — only for 1:1 chats with active E2EE */}
+      {encryptionState && encryptionState.kind !== 'disabled' && encryptionState.kind !== 'unsupported' && (
+        <EncryptionIcon
+          state={encryptionState}
+          peerName={name}
+          onClick={onEncryptionClick}
+        />
+      )}
+
       {/* Search in conversation */}
       {onSearchInConversation && (
         <button
@@ -100,5 +114,87 @@ export function ChatHeader({
         </button>
       )}
     </header>
+  )
+}
+
+function formatFingerprint(fp: string): string {
+  return fp.match(/.{1,4}/g)?.join(' ') ?? fp
+}
+
+function EncryptionIcon({
+  state,
+  peerName,
+  onClick,
+}: {
+  state: ConversationEncryptionState
+  peerName: string
+  onClick?: () => void
+}) {
+  const { t } = useTranslation()
+  const btnClass = 'p-1.5 rounded transition-colors'
+
+  if (state.kind === 'checking') {
+    return (
+      <Tooltip content={t('chat.encryption.checking')} position="bottom">
+        <div className={`${btnClass} text-fluux-muted`} role="status" aria-live="polite">
+          <Loader2 className="w-4 h-4 animate-spin" />
+        </div>
+      </Tooltip>
+    )
+  }
+
+  if (state.kind === 'blocked') {
+    const tooltip = (
+      <div>
+        <div>{t('chat.encryption.blockedTooltip')}</div>
+        <div className="font-mono text-xs mt-0.5 opacity-75">{formatFingerprint(state.advertisedFingerprint)}</div>
+      </div>
+    )
+    return (
+      <Tooltip content={tooltip} position="bottom">
+        <div className={`${btnClass} text-yellow-500`} role="status">
+          <ShieldAlert className="w-4 h-4" />
+        </div>
+      </Tooltip>
+    )
+  }
+
+  // encrypted
+  const verified = state.kind === 'encrypted' && state.trust === 'verified'
+  const Icon = verified ? ShieldCheck : Lock
+  const colorClass = verified ? 'text-green-500' : 'text-fluux-muted hover:text-fluux-text'
+  const tooltip = (
+    <div>
+      <div>{verified ? t('chat.encryption.verifiedTooltip') : t('chat.encryption.openpgpTooltip')}</div>
+      {state.kind === 'encrypted' && (
+        <div className="font-mono text-xs mt-0.5 opacity-75">{formatFingerprint(state.fingerprint)}</div>
+      )}
+      {!verified && <div className="text-xs mt-1 opacity-60">{t('chat.verifyPeer.chipAriaLabel', { name: peerName })}</div>}
+    </div>
+  )
+
+  if (!onClick) {
+    return (
+      <Tooltip content={tooltip} position="bottom">
+        <div className={`${btnClass} ${colorClass}`} role="status">
+          <Icon className="w-4 h-4" />
+        </div>
+      </Tooltip>
+    )
+  }
+
+  return (
+    <Tooltip content={tooltip} position="bottom">
+      <button
+        type="button"
+        onClick={onClick}
+        className={`${btnClass} ${colorClass} cursor-pointer`}
+        aria-label={verified
+          ? t('chat.encryption.encryptedTo', { name: peerName })
+          : t('chat.verifyPeer.chipAriaLabel', { name: peerName })}
+      >
+        <Icon className="w-4 h-4" />
+      </button>
+    </Tooltip>
   )
 }
