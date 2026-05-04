@@ -5,6 +5,7 @@ import { useConnection, useXMPPContext } from '@fluux/sdk'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { registerE2EEPlugins, unregisterE2EEPlugins } from '@/e2ee/registerPlugins'
 import { useToastStore } from '@/stores/toastStore'
+import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { DeleteOpenpgpKeyDialog } from '@/components/DeleteOpenpgpKeyDialog'
 import { BackupPassphraseDialog } from '@/components/BackupPassphraseDialog'
 import { RestorePassphraseDialog } from '@/components/RestorePassphraseDialog'
@@ -52,6 +53,13 @@ export function EncryptionSettings() {
   const [generationFailed, setGenerationFailed] = useState(false)
   const [showBackupDialog, setShowBackupDialog] = useState(false)
   const [showRestoreDialog, setShowRestoreDialog] = useState(false)
+  // Surfaced when the user clicks "Back up to server" while a backup
+  // already lives on PEP for a fingerprint we don't have a local "this
+  // device backed it up" marker for. Overwriting that backup is what
+  // the user is asking for, but we want to confirm — the existing
+  // ciphertext belongs to whoever knows ITS passphrase, and replacing
+  // it makes that copy unrecoverable.
+  const [showBackupConflictConfirm, setShowBackupConflictConfirm] = useState(false)
   // null = not yet probed, true/false = known. Kept narrow so the UI
   // can show a "Checking…" placeholder without flickering a wrong state.
   const [remoteBackupExists, setRemoteBackupExists] = useState<boolean | null>(null)
@@ -310,6 +318,27 @@ export function EncryptionSettings() {
     [client, addToast, t],
   )
 
+  /**
+   * Entry point for the "Back up to server" button. If the server
+   * already holds a backup whose fingerprint we don't recognize as
+   * having been published from THIS device, gate the publish behind a
+   * confirmation step — overwriting silently would clobber whatever
+   * the existing backup belongs to (most likely a sibling device the
+   * user forgot about, possibly a now-stale copy of an earlier key).
+   * The buttons-row is only rendered when not-in-sync (inSync hides
+   * Back up entirely), so there's no need to guard the in-sync case.
+   */
+  const handleBackupRequest = useCallback(() => {
+    const conflict =
+      remoteBackupExists === true &&
+      (!backedUpFingerprint || backedUpFingerprint !== fingerprint)
+    if (conflict) {
+      setShowBackupConflictConfirm(true)
+    } else {
+      setShowBackupDialog(true)
+    }
+  }, [remoteBackupExists, backedUpFingerprint, fingerprint])
+
   const handleRestoreConfirm = useCallback(
     async (passphrase: string) => {
       const plugin = client.e2ee?.getPlugin('openpgp') as
@@ -538,7 +567,7 @@ export function EncryptionSettings() {
                   {!checking && !inSync && (
                     <div className="flex flex-wrap gap-2">
                       <button
-                        onClick={() => setShowBackupDialog(true)}
+                        onClick={handleBackupRequest}
                         className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
                       >
                         <CloudUpload className="w-3.5 h-3.5" />
@@ -590,6 +619,20 @@ export function EncryptionSettings() {
           onCancel={() => {
             if (!isDeleting) setShowDeleteConfirm(false)
           }}
+        />
+      )}
+
+      {showBackupConflictConfirm && (
+        <ConfirmDialog
+          title={t('settings.encryption.backupConflictTitle')}
+          message={t('settings.encryption.backupConflictMessage')}
+          confirmLabel={t('settings.encryption.backupConflictAction')}
+          variant="danger"
+          onConfirm={() => {
+            setShowBackupConflictConfirm(false)
+            setShowBackupDialog(true)
+          }}
+          onCancel={() => setShowBackupConflictConfirm(false)}
         />
       )}
 
