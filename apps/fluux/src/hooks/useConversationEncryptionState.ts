@@ -4,6 +4,7 @@ import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
 import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
 import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
+import { usePinnedPrimaryFingerprintsStore } from '@/stores/pinnedPrimaryFingerprintsStore'
 
 /**
  * Per-conversation encryption status surfaced to the composer chip.
@@ -122,6 +123,15 @@ export function useConversationEncryptionState(
     peerJid ? peerJid in s.plaintextJids : false,
   )
 
+  // TOFU pin for this peer. When the peer publishes their key for the first
+  // time while we're already in the conversation, cachePeerKey calls
+  // setPinnedPrimaryFp (TOFU), which updates this selector and triggers a
+  // re-render — causing the effect below to re-run and pick up the newly
+  // cached key without requiring the user to re-enter the conversation.
+  const pinnedFp = usePinnedPrimaryFingerprintsStore((s) =>
+    peerJid ? (s.pinnedFingerprintByJid[peerJid] ?? null) : null,
+  )
+
   // The base state is what the probe / cache produces — kind, peer
   // fingerprint, and so on. Trust is derived below from this plus the
   // verified-store snapshot, so a verify action re-renders without
@@ -209,7 +219,7 @@ export function useConversationEncryptionState(
     return () => {
       cancelled = true
     }
-  }, [peerJid, conversationType, openpgpEnabled, online, e2eeManager, isForcedPlaintext, verifiedFingerprint])
+  }, [peerJid, conversationType, openpgpEnabled, online, e2eeManager, isForcedPlaintext, verifiedFingerprint, pinnedFp])
 
   // Merge the verification trust + pin-mismatch alert into the
   // encrypted state. Precedence:
