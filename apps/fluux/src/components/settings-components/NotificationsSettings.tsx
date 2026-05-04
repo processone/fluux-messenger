@@ -49,13 +49,6 @@ async function openNotificationSettings(): Promise<void> {
   }
 }
 
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer)
-  let binary = ''
-  bytes.forEach((b) => (binary += String.fromCharCode(b)))
-  return btoa(binary)
-}
-
 async function disableWebPush(client: any): Promise<void> {
   try {
     const { webPushServices } = connectionStore.getState()
@@ -66,13 +59,12 @@ async function disableWebPush(client: any): Promise<void> {
     const subscription = await swReg.pushManager.getSubscription()
     if (!subscription) return
 
-    const p256dhKey = subscription.getKey('p256dh')
-    const authKey = subscription.getKey('auth')
-    if (!p256dhKey || !authKey) return
+    const json = subscription.toJSON()
+    const p256dh = json.keys?.p256dh
+    const auth = json.keys?.auth
+    if (!p256dh || !auth) return
 
-    const p256dh = arrayBufferToBase64(p256dhKey)
-    const auth = arrayBufferToBase64(authKey)
-    const notificationId = `${subscription.endpoint}#${p256dh}#${auth}`
+    const notificationId = `${json.endpoint ?? subscription.endpoint}#${p256dh}#${auth}`
 
     await client.webPush.disableSubscription(service.appId, 'webpush', notificationId)
     connectionStore.getState().setWebPushEnabled(false)
