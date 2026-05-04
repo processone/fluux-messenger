@@ -20,6 +20,7 @@ import { UserInfoPopover } from './UserInfoPopover'
 import { CollapsibleContent } from './CollapsibleContent'
 import { PollCard } from './PollCard'
 import { PollClosedCard } from './PollClosedCard'
+import { Tooltip } from '../Tooltip'
 
 export interface MessageBubbleProps {
   // Core message data (using BaseMessage interface)
@@ -399,19 +400,20 @@ export const MessageBubble = memo(function MessageBubble({
               {formatTime(message.timestamp)}
             </span>
             {message.securityContext && (
-              <span
-                className={`flex items-center ${
-                  message.securityContext.trust === 'verified'
-                    ? 'text-green-500'
-                    : message.securityContext.trust === 'untrusted'
-                    ? 'text-yellow-500'
-                    : 'text-fluux-muted'
-                }`}
-                title={formatSecurityTooltip(t, message.securityContext)}
-                aria-label={`Encrypted with ${message.securityContext.protocolId}, trust ${message.securityContext.trust}`}
-              >
-                <Lock className="w-3 h-3" />
-              </span>
+              <Tooltip content={formatSecurityTooltip(t, message.securityContext)} position="top">
+                <span
+                  className={`flex items-center ${
+                    message.securityContext.trust === 'verified'
+                      ? 'text-green-500'
+                      : message.securityContext.trust === 'untrusted'
+                      ? 'text-yellow-500'
+                      : 'text-fluux-muted'
+                  }`}
+                  aria-label={`Encrypted with ${message.securityContext.protocolId}, trust ${message.securityContext.trust}`}
+                >
+                  <Lock className="w-3 h-3" />
+                </span>
+              </Tooltip>
             )}
           </div>
         )}

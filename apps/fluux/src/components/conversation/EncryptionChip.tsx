@@ -1,6 +1,7 @@
 import { Lock, Loader2, ShieldCheck, ShieldAlert } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
+import { Tooltip } from '../Tooltip'
 
 interface EncryptionChipProps {
   state: ConversationEncryptionState
@@ -57,15 +58,22 @@ export function EncryptionChip({ state, peerName, onVerifyClick }: EncryptionChi
     // Yellow-warning palette mirrors the key-change banner sitting
     // above the messages, so the chip and the banner read as one
     // visual signal: encryption is paused, action required there.
-    return (
-      <div
-        className={`${commonClasses} text-yellow-700 dark:text-yellow-400 bg-yellow-500/15`}
-        title={`${t('chat.encryption.blockedTooltip')}\n${formatFingerprint(state.advertisedFingerprint)}`}
-        role="status"
-      >
-        <ShieldAlert className="w-3 h-3" />
-        <span>{t('chat.encryption.blocked')}</span>
+    const blockedTooltip = (
+      <div>
+        <div>{t('chat.encryption.blockedTooltip')}</div>
+        <div className="font-mono text-xs mt-0.5 opacity-75">{formatFingerprint(state.advertisedFingerprint)}</div>
       </div>
+    )
+    return (
+      <Tooltip content={blockedTooltip} position="top">
+        <div
+          className={`${commonClasses} text-yellow-700 dark:text-yellow-400 bg-yellow-500/15`}
+          role="status"
+        >
+          <ShieldAlert className="w-3 h-3" />
+          <span>{t('chat.encryption.blocked')}</span>
+        </div>
+      </Tooltip>
     )
   }
 
@@ -77,34 +85,42 @@ export function EncryptionChip({ state, peerName, onVerifyClick }: EncryptionChi
   const palette = verified
     ? 'text-green-600 dark:text-green-400 bg-green-500/10 hover:bg-green-500/15'
     : 'text-fluux-muted bg-fluux-hover/40 hover:bg-fluux-hover'
-  const tooltip = `${verified ? t('chat.encryption.verifiedTooltip') : t('chat.encryption.openpgpTooltip')}\n${formatFingerprint(state.fingerprint)}`
+  const tooltipContent = (
+    <div>
+      <div>{verified ? t('chat.encryption.verifiedTooltip') : t('chat.encryption.openpgpTooltip')}</div>
+      <div className="font-mono text-xs mt-0.5 opacity-75">{formatFingerprint(state.fingerprint)}</div>
+    </div>
+  )
   const Icon = verified ? ShieldCheck : Lock
 
   // Non-clickable form when no handler is supplied (tests, screenshots).
   if (!onVerifyClick) {
     return (
-      <div className={`${commonClasses} ${palette}`} title={tooltip} role="status">
-        <Icon className="w-3 h-3" />
-        <span>{t('chat.encryption.encryptedTo', { name: peerName })}</span>
-      </div>
+      <Tooltip content={tooltipContent} position="top">
+        <div className={`${commonClasses} ${palette}`} role="status">
+          <Icon className="w-3 h-3" />
+          <span>{t('chat.encryption.encryptedTo', { name: peerName })}</span>
+        </div>
+      </Tooltip>
     )
   }
 
   return (
-    <button
-      type="button"
-      onClick={onVerifyClick}
-      className={`${commonClasses} ${palette} cursor-pointer transition-colors`}
-      title={tooltip}
-      aria-label={
-        verified
-          ? t('chat.encryption.encryptedTo', { name: peerName })
-          : t('chat.verifyPeer.chipAriaLabel', { name: peerName })
-      }
-    >
-      <Icon className="w-3 h-3" />
-      <span>{t('chat.encryption.encryptedTo', { name: peerName })}</span>
-    </button>
+    <Tooltip content={tooltipContent} position="top">
+      <button
+        type="button"
+        onClick={onVerifyClick}
+        className={`${commonClasses} ${palette} cursor-pointer transition-colors`}
+        aria-label={
+          verified
+            ? t('chat.encryption.encryptedTo', { name: peerName })
+            : t('chat.verifyPeer.chipAriaLabel', { name: peerName })
+        }
+      >
+        <Icon className="w-3 h-3" />
+        <span>{t('chat.encryption.encryptedTo', { name: peerName })}</span>
+      </button>
+    </Tooltip>
   )
 }
 
