@@ -60,7 +60,7 @@ vi.mock('@fluux/sdk', async () => {
       unblockAll: vi.fn(),
       isBlocked: () => false,
     }),
-    useRoom: () => ({
+    useRoomActions: () => ({
       setAffiliation: vi.fn(),
       setRole: vi.fn(),
       queryAffiliationList: vi.fn(),

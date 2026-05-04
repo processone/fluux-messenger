@@ -145,8 +145,19 @@ function groupItemsByType(items: CommandItem[], t: (key: string) => string): Ite
 // Component
 // =============================================================================
 
-export function CommandPalette({
-  isOpen,
+/**
+ * Top-level wrapper. Returns null when closed so the heavy hooks inside
+ * `CommandPaletteContent` (`useChat`, `useRoom`, `useRoster`) are NOT
+ * subscribed when the palette isn't visible. The palette is always mounted
+ * by ChatLayout, so without this guard it would re-render on every chat /
+ * room store update during background MAM sync.
+ */
+export function CommandPalette(props: CommandPaletteProps) {
+  if (!props.isOpen) return null
+  return <CommandPaletteContent {...props} />
+}
+
+function CommandPaletteContent({
   onClose,
   onSidebarViewChange,
   onOpenSettings,
@@ -162,7 +173,7 @@ export function CommandPalette({
   const selectedIndexRef = useRef(0) // Ref for synchronous access in event handlers
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
-  const ignoreMouseRef = useRef(false)
+  const ignoreMouseRef = useRef(true) // start true; cleared after first paint to avoid stale-hover index changes
   const [isKeyboardNav, setIsKeyboardNav] = useState(false) // Track keyboard navigation mode
   const lastMousePosRef = useRef<{ x: number; y: number } | null>(null) // Track mouse position to detect real movement
 
@@ -401,29 +412,15 @@ export function CommandPalette({
   // Effects
   // =============================================================================
 
-  // Reset state synchronously when palette opens (before paint, before user can interact)
-  useLayoutEffect(() => {
-    if (isOpen) {
-      setQuery('')
-      setSelectedIndex(0)
-      selectedIndexRef.current = 0
-      setIsKeyboardNav(false)
-      lastMousePosRef.current = null
-      // Ignore mouse events briefly to prevent stale hover from setting wrong index
-      ignoreMouseRef.current = true
-    }
-  }, [isOpen])
-
-  // Focus input and re-enable mouse after paint
+  // Content mounts when the palette opens, so on-open setup runs in mount effects.
+  // useState initial values already reset query/index/keyboard-nav; we just need
+  // to suppress mouseEnter from any stale hover and focus the input.
   useEffect(() => {
-    if (isOpen) {
-      inputRef.current?.focus()
-      // Re-enable mouse after a frame to avoid stale hover events
-      requestAnimationFrame(() => {
-        ignoreMouseRef.current = false
-      })
-    }
-  }, [isOpen])
+    inputRef.current?.focus()
+    requestAnimationFrame(() => {
+      ignoreMouseRef.current = false
+    })
+  }, [])
 
   // Reset selection synchronously when query changes
   useLayoutEffect(() => {
@@ -499,8 +496,6 @@ export function CommandPalette({
   // =============================================================================
   // Render
   // =============================================================================
-
-  if (!isOpen) return null
 
   // Pre-compute a map from item id to flat index (avoids O(n²) findIndex in render)
   const indexById = new Map(flatItems.map((item, i) => [item.id, i]))

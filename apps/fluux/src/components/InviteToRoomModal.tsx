@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
-import { useRoom, type Room } from '@fluux/sdk'
+import { useRoomActions, type Room } from '@fluux/sdk'
 import { UserPlus, Send } from 'lucide-react'
 import { ContactSelector } from './ContactSelector'
 import { ModalShell } from './ModalShell'
@@ -21,21 +21,22 @@ interface InviteToRoomModalProps {
  * when bytes are sent. Server rejections arrive as separate async error
  * stanzas, handled via the `room:invite-error` SDK event and surfaced
  * through the toast system.
+ *
+ * The wrapper returns null when closed so the inner content (and its hooks)
+ * does not subscribe while the modal isn't visible. Always-mounted callers
+ * would otherwise re-render on every room store update.
  */
-export function InviteToRoomModal({ isOpen, onClose, room }: InviteToRoomModalProps) {
+export function InviteToRoomModal(props: InviteToRoomModalProps) {
+  if (!props.isOpen) return null
+  return <InviteToRoomModalContent {...props} />
+}
+
+function InviteToRoomModalContent({ onClose, room }: InviteToRoomModalProps) {
   const { t } = useTranslation()
-  const { inviteMultipleToRoom } = useRoom()
+  const { inviteMultipleToRoom } = useRoomActions()
   const addToast = useToastStore((s) => s.addToast)
   const [selectedContacts, setSelectedContacts] = useState<string[]>([])
   const [reason, setReason] = useState('')
-
-  // Reset state when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      setSelectedContacts([])
-      setReason('')
-    }
-  }, [isOpen])
 
   // Get list of JIDs already in the room (occupants)
   const occupantJids = Array.from(room.occupants.values())
@@ -55,8 +56,6 @@ export function InviteToRoomModal({ isOpen, onClose, room }: InviteToRoomModalPr
       addToast('error', t('rooms.inviteError'))
     }
   }
-
-  if (!isOpen) return null
 
   const title = (
     <span className="flex items-center gap-2">

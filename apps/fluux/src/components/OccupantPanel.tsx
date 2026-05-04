@@ -13,7 +13,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Room, RoomOccupant, Contact, PresenceShow, RoomAffiliation, RoomRole } from '@fluux/sdk'
 import { getPresenceFromShow, getBareJid, getBestPresenceShow, generateConsistentColorHexSync, canKick, canBan, getAvailableAffiliations, getAvailableRoles } from '@fluux/sdk'
-import { useRoom } from '@fluux/sdk'
+import { useRoomActions } from '@fluux/sdk'
 import { useConnectionStore, useIgnoreStore } from '@fluux/sdk/react'
 import { ignoreStore, type IgnoredUser } from '@fluux/sdk/stores'
 import { Avatar } from './Avatar'
@@ -121,7 +121,7 @@ export function OccupantPanel({
   }
 
   // Moderation actions
-  const { setAffiliation, setRole } = useRoom()
+  const { setAffiliation, setRole } = useRoomActions()
   const addToast = useToastStore((s) => s.addToast)
   const [moderationTarget, setModerationTarget] = useState<GroupedOccupant | null>(null)
 

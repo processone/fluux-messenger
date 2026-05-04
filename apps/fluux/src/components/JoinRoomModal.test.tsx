@@ -14,7 +14,7 @@ vi.mock('@fluux/sdk', () => ({
     jid: mockUserJid,
     ownNickname: mockOwnNickname,
   }),
-  useRoom: () => ({
+  useRoomActions: () => ({
     joinRoom: mockJoinRoom,
     setActiveRoom: mockSetActiveRoom,
   }),

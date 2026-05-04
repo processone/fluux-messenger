@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
-import { useConnection, useRoom } from '@fluux/sdk'
+import { useConnection, useRoomActions } from '@fluux/sdk'
 import { useChatStore } from '@fluux/sdk/react'
 import { useModalInput } from '@/hooks'
 import { ModalShell } from './ModalShell'
@@ -13,7 +13,7 @@ interface JoinRoomModalProps {
 export function JoinRoomModal({ onClose }: JoinRoomModalProps) {
   const { t } = useTranslation()
   const { jid: userJid, ownNickname } = useConnection()
-  const { joinRoom, setActiveRoom } = useRoom()
+  const { joinRoom, setActiveRoom } = useRoomActions()
   const setActiveConversation = useChatStore((s) => s.setActiveConversation)
   const [roomJid, setRoomJid] = useState('')
   const [nickname, setNickname] = useState('')
