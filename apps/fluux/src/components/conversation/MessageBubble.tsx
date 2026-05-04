@@ -400,7 +400,7 @@ export const MessageBubble = memo(function MessageBubble({
               {formatTime(message.timestamp)}
             </span>
             {message.securityContext && (
-              <Tooltip content={formatSecurityTooltip(t, message.securityContext)} position="top">
+              <Tooltip content={formatSecurityTooltip(t, message.securityContext)} position="top" triggerMode="click">
                 <span
                   className={`flex items-center ${
                     message.securityContext.trust === 'verified'

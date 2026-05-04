@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent, act } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { MessageBubble, buildReplyContext, type MessageBubbleProps } from './MessageBubble'
 import type { BaseMessage } from '@fluux/sdk'
 
@@ -307,8 +307,6 @@ describe('MessageBubble', () => {
       // The tooltip is built from `notes`, so a notes-only mutation must
       // invalidate the memo too — otherwise users see stale "sender key
       // not cached" text after the cache populated.
-      vi.useFakeTimers()
-
       const props = createDefaultProps({
         message: createTestMessage({
           securityContext: {
@@ -325,9 +323,8 @@ describe('MessageBubble', () => {
       const trigger = lockSpan?.parentElement
       expect(trigger).not.toBeNull()
 
-      // Hover to reveal the custom tooltip
-      fireEvent.mouseEnter(trigger!)
-      act(() => { vi.runAllTimers() })
+      // Click to reveal the tooltip (triggerMode="click")
+      fireEvent.click(trigger!)
 
       expect(screen.getByRole('tooltip').textContent).toContain('Sender key not cached')
 
@@ -346,8 +343,6 @@ describe('MessageBubble', () => {
 
       expect(screen.getByRole('tooltip').textContent).toContain('Signature did not verify')
       expect(screen.getByRole('tooltip').textContent).not.toContain('Sender key not cached')
-
-      vi.useRealTimers()
     })
 
     it('does not re-render when securityContext is referentially different but value-equal', () => {
