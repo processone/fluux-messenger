@@ -3638,13 +3638,19 @@ describe('XMPPClient Message — E2EE downgrade protection', () => {
     isVerified?: boolean
   }) {
     const policy = opts.policy ?? 'opportunistic'
+    const isVerified = opts.isVerified ?? false
     return {
       getSendPolicy: vi.fn().mockReturnValue(policy),
       encryptOutbound: vi.fn().mockImplementation(async () => {
         if (opts.encryptResult === 'throw') throw new Error('plugin boom')
         return opts.encryptResult ?? null
       }),
-      isPeerVerified: vi.fn().mockResolvedValue(opts.isVerified ?? false),
+      isPeerVerified: vi.fn().mockResolvedValue(isVerified),
+      isForcedPlaintext: vi.fn().mockReturnValue(false),
+      assertPlaintextPermitted: vi.fn().mockImplementation(async (target: { kind: string; peer: string }) => {
+        if (policy === 'strict') throw new E2EEEncryptionRequiredError(target as any)
+        if (isVerified) throw new E2EEEncryptionRequiredError(target as any)
+      }),
     }
   }
 
@@ -3690,6 +3696,31 @@ describe('XMPPClient Message — E2EE downgrade protection', () => {
     xmppClient.e2ee = makeE2EEManager({ encryptResult: 'throw', isVerified: false }) as any
 
     // Should fall through to plaintext — the plugin error is logged but not surfaced.
+    await expect(
+      xmppClient.chat.sendMessage('bob@example.com', 'hello', 'chat'),
+    ).resolves.not.toThrow()
+  })
+
+  it('allows plaintext for a verified peer when forcedPlaintext is set', async () => {
+    await connectClient()
+    // isVerified=true would normally block — but isForcedPlaintext overrides.
+    const mgr = makeE2EEManager({ isVerified: true })
+    mgr.isForcedPlaintext = vi.fn().mockReturnValue(true)
+    mgr.assertPlaintextPermitted = vi.fn().mockResolvedValue(undefined)
+    xmppClient.e2ee = mgr as any
+
+    await expect(
+      xmppClient.chat.sendMessage('bob@example.com', 'hello', 'chat'),
+    ).resolves.not.toThrow()
+  })
+
+  it('allows plaintext in strict mode when forcedPlaintext is set', async () => {
+    await connectClient()
+    const mgr = makeE2EEManager({ policy: 'strict', isVerified: false })
+    mgr.isForcedPlaintext = vi.fn().mockReturnValue(true)
+    mgr.assertPlaintextPermitted = vi.fn().mockResolvedValue(undefined)
+    xmppClient.e2ee = mgr as any
+
     await expect(
       xmppClient.chat.sendMessage('bob@example.com', 'hello', 'chat'),
     ).resolves.not.toThrow()

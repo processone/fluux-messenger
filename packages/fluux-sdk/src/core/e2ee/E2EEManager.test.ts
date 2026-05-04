@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { E2EEManager } from './E2EEManager'
+import { E2EEManager, E2EEEncryptionRequiredError } from './E2EEManager'
 import { DummyPlaintextPlugin } from './DummyPlaintextPlugin'
 import { InMemoryStorageBackend } from './PluginStorage'
 import type {
@@ -741,5 +741,53 @@ describe('E2EEManager — forced plaintext', () => {
     const fakeElement = { name: 'fake', attrs: { xmlns: 'urn:test:weak' }, children: [] }
     const result = await mgr.decryptInbound(fakeElement, target)
     expect(result).not.toBeNull()
+  })
+})
+
+describe('E2EEManager — assertPlaintextPermitted', () => {
+  const target: ConversationTarget = { kind: 'direct', peer: 'bob@example.com' }
+
+  it('allows plaintext when policy is opportunistic and peer is unverified', async () => {
+    const mgr = makeManager()
+    await expect(mgr.assertPlaintextPermitted(target)).resolves.toBeUndefined()
+  })
+
+  it('throws when policy is strict', async () => {
+    const mgr = makeManager()
+    mgr.setSendPolicy('strict')
+    await expect(mgr.assertPlaintextPermitted(target)).rejects.toThrow(E2EEEncryptionRequiredError)
+  })
+
+  it('throws when peer is verified (opportunistic global policy)', async () => {
+    const mgr = makeManager()
+    // Register a plugin that reports bob as verified.
+    const plugin = new FakePlugin(weakDescriptor, 'urn:test:weak')
+    vi.spyOn(plugin, 'getPeerTrust').mockResolvedValue('verified')
+    await mgr.register(plugin)
+
+    await expect(mgr.assertPlaintextPermitted(target)).rejects.toThrow(E2EEEncryptionRequiredError)
+  })
+
+  it('allows plaintext when forcedPlaintext is set, even for a verified peer', async () => {
+    const mgr = makeManager()
+    const plugin = new FakePlugin(weakDescriptor, 'urn:test:weak')
+    vi.spyOn(plugin, 'getPeerTrust').mockResolvedValue('verified')
+    await mgr.register(plugin)
+
+    mgr.setForcedPlaintext(target, true)
+    await expect(mgr.assertPlaintextPermitted(target)).resolves.toBeUndefined()
+  })
+
+  it('allows plaintext when forcedPlaintext is set, even in strict mode', async () => {
+    const mgr = makeManager()
+    mgr.setSendPolicy('strict')
+    mgr.setForcedPlaintext(target, true)
+    await expect(mgr.assertPlaintextPermitted(target)).resolves.toBeUndefined()
+  })
+
+  it('does not throw for group targets (verified-peer check only applies to direct)', async () => {
+    const mgr = makeManager()
+    const groupTarget: ConversationTarget = { kind: 'group', roomJid: 'room@muc.example.com' }
+    await expect(mgr.assertPlaintextPermitted(groupTarget)).resolves.toBeUndefined()
   })
 })

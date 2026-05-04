@@ -204,6 +204,31 @@ export class E2EEManager {
   }
 
   /**
+   * Assert that sending a plaintext message to `target` is permitted
+   * under the current policy.
+   *
+   * Called when encryption was not applied — either no plugin matched or
+   * the user forced plaintext. Returns without throwing when plaintext is
+   * allowed; throws {@link E2EEEncryptionRequiredError} otherwise.
+   *
+   * Priority order:
+   * 1. Forced-plaintext override always passes — explicit user consent.
+   * 2. Strict global send policy blocks all plaintext.
+   * 3. A verified direct peer blocks plaintext (implicit per-peer strict).
+   * 4. Opportunistic policy with an unverified peer → allowed.
+   */
+  async assertPlaintextPermitted(target: ConversationTarget): Promise<void> {
+    if (this.isForcedPlaintext(target)) return
+    if (this.sendPolicy === 'strict') {
+      throw new E2EEEncryptionRequiredError(target)
+    }
+    if (target.kind === 'direct') {
+      const verified = await this.isPeerVerified(target.peer).catch(() => false)
+      if (verified) throw new E2EEEncryptionRequiredError(target)
+    }
+  }
+
+  /**
    * Cheap "is encryption available for `target` right now?" probe. Used by
    * call sites that need to decide between two stanza shapes BEFORE
    * building children — e.g. reactions, where the legacy reply-quote
