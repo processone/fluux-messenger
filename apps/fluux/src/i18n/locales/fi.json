@@ -449,7 +449,9 @@
             "encryptedTo": "Salattu kohteelle {{name}}",
             "checking": "Tarkistetaan yhteyshenkilöä…",
             "openpgpTooltip": "OpenPGP",
-            "verifiedTooltip": "Vahvistettu OpenPGP-avain"
+            "verifiedTooltip": "Vahvistettu OpenPGP-avain",
+            "blocked": "Encryption paused",
+            "blockedTooltip": "Peer's key has changed — resolve to resume encryption"
         },
         "verifyPeer": {
             "chipAriaLabel": "Salattu vastaanottajalle {{name}} — napsauta vahvistaaksesi sormenjäljen",
@@ -466,7 +468,11 @@
             "title": "Käyttäjän {{name}} salausavain on vaihtunut",
             "body": "Vertaa uusi sormenjälki luotettavasta toissijaisesta kanavasta ennen kuin pidät tätä keskustelua taas vahvistettuna.",
             "reVerify": "Vahvista uudelleen",
-            "dismiss": "Hylkää"
+            "dismiss": "Hylkää",
+            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
+            "acceptWithoutVerifying": "Accept without verifying",
+            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
+            "acceptFailed": "Couldn't accept the new key — try again"
         }
     },
     "dates": {

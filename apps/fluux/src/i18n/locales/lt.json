@@ -449,7 +449,9 @@
             "encryptedTo": "Užšifruota gavėjui {{name}}",
             "checking": "Tikrinamas kontaktas…",
             "openpgpTooltip": "OpenPGP",
-            "verifiedTooltip": "Patvirtintas OpenPGP raktas"
+            "verifiedTooltip": "Patvirtintas OpenPGP raktas",
+            "blocked": "Encryption paused",
+            "blockedTooltip": "Peer's key has changed — resolve to resume encryption"
         },
         "verifyPeer": {
             "chipAriaLabel": "Užšifruota {{name}} — spustelėkite norėdami patvirtinti pirštų atspaudą",
@@ -466,7 +468,11 @@
             "title": "{{name}} šifravimo raktas pasikeitė",
             "body": "Palyginkite naują pirštų atspaudą per patikimą antrąjį kanalą prieš vėl laikydami šį pokalbį patvirtintu.",
             "reVerify": "Patvirtinti iš naujo",
-            "dismiss": "Atmesti"
+            "dismiss": "Atmesti",
+            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
+            "acceptWithoutVerifying": "Accept without verifying",
+            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
+            "acceptFailed": "Couldn't accept the new key — try again"
         }
     },
     "dates": {

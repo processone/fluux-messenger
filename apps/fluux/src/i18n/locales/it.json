@@ -451,7 +451,9 @@
             "encryptedTo": "Cifrato per {{name}}",
             "checking": "Controllo del contatto…",
             "openpgpTooltip": "OpenPGP",
-            "verifiedTooltip": "Chiave OpenPGP verificata"
+            "verifiedTooltip": "Chiave OpenPGP verificata",
+            "blocked": "Encryption paused",
+            "blockedTooltip": "Peer's key has changed — resolve to resume encryption"
         },
         "verifyPeer": {
             "chipAriaLabel": "Cifrato per {{name}} — fai clic per verificare l'impronta",
@@ -468,7 +470,11 @@
             "title": "La chiave di cifratura di {{name}} è cambiata",
             "body": "Confronta la nuova impronta tramite un secondo canale affidabile prima di considerare di nuovo questa conversazione come verificata.",
             "reVerify": "Verifica di nuovo",
-            "dismiss": "Ignora"
+            "dismiss": "Ignora",
+            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
+            "acceptWithoutVerifying": "Accept without verifying",
+            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
+            "acceptFailed": "Couldn't accept the new key — try again"
         }
     },
     "dates": {

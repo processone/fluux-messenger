@@ -1,12 +1,8 @@
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AlertTriangle, ShieldCheck, X } from 'lucide-react'
+import { AlertTriangle, ShieldCheck, ShieldAlert, X } from 'lucide-react'
 import { useXMPPContext } from '@fluux/sdk'
-import {
-  clearKeyChangeAlert,
-  useKeyChangeAlertsStore,
-} from '@/stores/keyChangeAlertsStore'
-import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
+import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
 import { useToastStore } from '@/stores/toastStore'
 import { VerifyPeerDialog } from './VerifyPeerDialog'
 
@@ -18,55 +14,93 @@ interface KeyChangeBannerProps {
 }
 
 /**
- * Slim warning strip rendered above the message list when the
- * conversation peer's OpenPGP fingerprint has rotated since the user
- * last verified it. Two exits:
+ * Persistent warning strip rendered above the message list when the
+ * conversation peer's OpenPGP primary fingerprint has rotated since
+ * the device pinned it. Outbound encryption is BLOCKED for the peer
+ * while this alert is live (the plugin's encrypt path refuses with a
+ * `pin-mismatch` error) — the user must explicitly resolve before
+ * sending an encrypted message resumes.
  *
- * - **Re-verify** opens {@link VerifyPeerDialog} prefilled with the
- *   peer's current fingerprint. On confirm, the verification store
- *   re-records the user's approval AND we clear the alert here so the
- *   banner disappears.
- * - **Dismiss** clears the alert without re-verifying. The trust
- *   level stays at BTBV `unverified` (chip stays muted) until the
- *   user verifies later.
+ * Three exits, in decreasing strength:
  *
- * Renders nothing when there is no active alert for `peerJid`. The
- * subscription selector returns the alert object directly so the
- * component re-renders precisely when this peer's alert changes —
- * unrelated alerts (e.g. a chat the user isn't viewing) don't cause
- * extra renders here.
+ * - **Verify and accept** — opens {@link VerifyPeerDialog} with the
+ *   NEW fingerprint. On confirm, the plugin re-pins, re-probes, and
+ *   records a verification entry. Chip flips green.
+ * - **Accept without verifying** — re-pin without verification (BTBV
+ *   re-anchor). For users who can't reach a second channel right now
+ *   but are confident the rotation is legitimate.
+ * - **Dismiss (X)** — clear the alert without re-pinning. Encryption
+ *   stays blocked because the pin still doesn't match the server's
+ *   advertised fingerprint; the alert simply hides until the next
+ *   probe re-detects it. Useful when the user wants to deal with it
+ *   later without taking a security-relevant action under pressure.
  */
 export function KeyChangeBanner({ peerJid, peerName }: KeyChangeBannerProps) {
   const { t } = useTranslation()
   const { client } = useXMPPContext()
-  const setPeerVerified = useVerifiedPeerKeysStore((s) => s.setVerified)
   const addToast = useToastStore((s) => s.addToast)
   const alert = useKeyChangeAlertsStore((s) => s.alertsByJid[peerJid])
 
   const [verifyOpen, setVerifyOpen] = useState(false)
   const [ownFingerprint, setOwnFingerprint] = useState<string | null>(null)
+  // Disables both action buttons while a re-probe + re-pin is in
+  // flight so the user can't double-click into a fresh alert race.
+  const [busy, setBusy] = useState(false)
 
-  const openVerify = useCallback(() => {
-    const plugin = client.e2ee?.getPlugin('openpgp') as
-      | { getOwnFingerprint?: () => string | null }
-      | null
-      | undefined
-    setOwnFingerprint(plugin?.getOwnFingerprint?.() ?? null)
-    setVerifyOpen(true)
-  }, [client])
-
-  const handleConfirm = useCallback(
-    (fingerprint: string) => {
-      setPeerVerified(peerJid, fingerprint)
-      clearKeyChangeAlert(peerJid)
-      setVerifyOpen(false)
-      addToast('success', t('chat.verifyPeer.confirmSuccess'))
-    },
-    [peerJid, setPeerVerified, addToast, t],
+  type AcceptingPlugin = {
+    getOwnFingerprint?: () => string | null
+    acceptPeerKeyChange?: (peer: string, asVerified: boolean) => Promise<void>
+  }
+  const getPlugin = useCallback(
+    (): AcceptingPlugin | null => (client.e2ee?.getPlugin('openpgp') as AcceptingPlugin | null) ?? null,
+    [client],
   )
 
+  const openVerify = useCallback(() => {
+    setOwnFingerprint(getPlugin()?.getOwnFingerprint?.() ?? null)
+    setVerifyOpen(true)
+  }, [getPlugin])
+
+  const runAccept = useCallback(
+    async (asVerified: boolean) => {
+      setBusy(true)
+      try {
+        await getPlugin()?.acceptPeerKeyChange?.(peerJid, asVerified)
+        addToast(
+          'success',
+          asVerified
+            ? t('chat.verifyPeer.confirmSuccess')
+            : t('chat.keyChangeBanner.acceptedWithoutVerifying'),
+        )
+      } catch (err) {
+        addToast('error', t('chat.keyChangeBanner.acceptFailed'))
+        console.error('[Fluux] acceptPeerKeyChange failed:', err)
+      } finally {
+        setBusy(false)
+      }
+    },
+    [getPlugin, peerJid, addToast, t],
+  )
+
+  const handleVerifyConfirm = useCallback(
+    (_fingerprint: string) => {
+      // Close the dialog immediately — the re-probe + re-pin run in
+      // the background. A failure surfaces via toast; success clears
+      // the alert via the store update, so the banner unmounts.
+      setVerifyOpen(false)
+      void runAccept(true)
+    },
+    [runAccept],
+  )
+
+  const handleAcceptWithoutVerifying = useCallback(() => {
+    void runAccept(false)
+  }, [runAccept])
+
   const handleDismiss = useCallback(() => {
-    clearKeyChangeAlert(peerJid)
+    // Clear only the alert. The pin stays on the OLD fp; the next
+    // probe will re-detect the mismatch and re-open the alert.
+    useKeyChangeAlertsStore.getState().clearAlert(peerJid)
   }, [peerJid])
 
   if (!alert) return null
@@ -85,27 +119,32 @@ export function KeyChangeBanner({ peerJid, peerName }: KeyChangeBannerProps) {
           <p className="text-xs text-fluux-muted leading-snug mt-0.5">
             {t('chat.keyChangeBanner.body')}
           </p>
+          <p className="text-xs text-yellow-700 dark:text-yellow-500 leading-snug mt-1 font-medium">
+            {t('chat.keyChangeBanner.encryptionBlocked')}
+          </p>
           <div className="flex flex-wrap gap-2 mt-2">
             <button
               onClick={openVerify}
-              className="flex items-center gap-1.5 px-3 py-1 text-xs font-medium bg-fluux-brand text-white hover:opacity-90 rounded transition-colors"
+              disabled={busy}
+              className="flex items-center gap-1.5 px-3 py-1 text-xs font-medium bg-fluux-brand text-white hover:opacity-90 rounded transition-colors disabled:opacity-50"
             >
               <ShieldCheck className="w-3.5 h-3.5" />
               {t('chat.keyChangeBanner.reVerify')}
             </button>
             <button
-              onClick={handleDismiss}
-              className="px-3 py-1 text-xs text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded transition-colors"
+              onClick={handleAcceptWithoutVerifying}
+              disabled={busy}
+              className="flex items-center gap-1.5 px-3 py-1 text-xs text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded transition-colors disabled:opacity-50"
             >
-              {t('chat.keyChangeBanner.dismiss')}
+              <ShieldAlert className="w-3.5 h-3.5" />
+              {t('chat.keyChangeBanner.acceptWithoutVerifying')}
             </button>
           </div>
         </div>
-        {/* Top-right close button is the same as Dismiss; provided for
-            users whose eye goes to the X first. */}
         <button
           onClick={handleDismiss}
-          className="flex-shrink-0 p-1 text-fluux-muted hover:text-fluux-text rounded hover:bg-fluux-hover transition-colors"
+          disabled={busy}
+          className="flex-shrink-0 p-1 text-fluux-muted hover:text-fluux-text rounded hover:bg-fluux-hover transition-colors disabled:opacity-50"
           aria-label={t('chat.keyChangeBanner.dismiss')}
           title={t('chat.keyChangeBanner.dismiss')}
         >
@@ -118,7 +157,7 @@ export function KeyChangeBanner({ peerJid, peerName }: KeyChangeBannerProps) {
           peerName={peerName}
           peerFingerprint={alert.currentFingerprint}
           ownFingerprint={ownFingerprint}
-          onConfirm={handleConfirm}
+          onConfirm={handleVerifyConfirm}
           onCancel={() => setVerifyOpen(false)}
         />
       )}

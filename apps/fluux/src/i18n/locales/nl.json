@@ -449,7 +449,9 @@
             "encryptedTo": "Versleuteld naar {{name}}",
             "checking": "Contact wordt gecontroleerd…",
             "openpgpTooltip": "OpenPGP",
-            "verifiedTooltip": "Geverifieerde OpenPGP-sleutel"
+            "verifiedTooltip": "Geverifieerde OpenPGP-sleutel",
+            "blocked": "Encryption paused",
+            "blockedTooltip": "Peer's key has changed — resolve to resume encryption"
         },
         "verifyPeer": {
             "chipAriaLabel": "Versleuteld naar {{name}} — klik om vingerafdruk te verifiëren",
@@ -466,7 +468,11 @@
             "title": "De versleutelingssleutel van {{name}} is veranderd",
             "body": "Vergelijk de nieuwe vingerafdruk via een vertrouwd tweede kanaal voordat je dit gesprek opnieuw als geverifieerd behandelt.",
             "reVerify": "Opnieuw verifiëren",
-            "dismiss": "Sluiten"
+            "dismiss": "Sluiten",
+            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
+            "acceptWithoutVerifying": "Accept without verifying",
+            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
+            "acceptFailed": "Couldn't accept the new key — try again"
         }
     },
     "dates": {

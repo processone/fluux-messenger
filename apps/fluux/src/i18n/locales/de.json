@@ -451,7 +451,9 @@
             "encryptedTo": "Verschlüsselt an {{name}}",
             "checking": "Prüfe Gegenstelle…",
             "openpgpTooltip": "OpenPGP",
-            "verifiedTooltip": "Verifizierter OpenPGP-Schlüssel"
+            "verifiedTooltip": "Verifizierter OpenPGP-Schlüssel",
+            "blocked": "Encryption paused",
+            "blockedTooltip": "Peer's key has changed — resolve to resume encryption"
         },
         "verifyPeer": {
             "chipAriaLabel": "Verschlüsselt an {{name}} — klicken, um Fingerabdruck zu verifizieren",
@@ -468,7 +470,11 @@
             "title": "Der Verschlüsselungsschlüssel von {{name}} hat sich geändert",
             "body": "Vergleiche den neuen Fingerabdruck über einen vertrauenswürdigen zweiten Kanal, bevor du diese Konversation wieder als verifiziert behandelst.",
             "reVerify": "Erneut verifizieren",
-            "dismiss": "Verwerfen"
+            "dismiss": "Verwerfen",
+            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
+            "acceptWithoutVerifying": "Accept without verifying",
+            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
+            "acceptFailed": "Couldn't accept the new key — try again"
         }
     },
     "dates": {

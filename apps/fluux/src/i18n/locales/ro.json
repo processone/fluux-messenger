@@ -451,7 +451,9 @@
             "encryptedTo": "Criptat pentru {{name}}",
             "checking": "Se verifică contactul…",
             "openpgpTooltip": "OpenPGP",
-            "verifiedTooltip": "Cheie OpenPGP verificată"
+            "verifiedTooltip": "Cheie OpenPGP verificată",
+            "blocked": "Encryption paused",
+            "blockedTooltip": "Peer's key has changed — resolve to resume encryption"
         },
         "verifyPeer": {
             "chipAriaLabel": "Criptat către {{name}} — faceți clic pentru a verifica amprenta",
@@ -468,7 +470,11 @@
             "title": "Cheia de criptare a lui {{name}} s-a schimbat",
             "body": "Comparați noua amprentă printr-un al doilea canal de încredere înainte de a considera din nou această conversație ca verificată.",
             "reVerify": "Reverifică",
-            "dismiss": "Respinge"
+            "dismiss": "Respinge",
+            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
+            "acceptWithoutVerifying": "Accept without verifying",
+            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
+            "acceptFailed": "Couldn't accept the new key — try again"
         }
     },
     "dates": {

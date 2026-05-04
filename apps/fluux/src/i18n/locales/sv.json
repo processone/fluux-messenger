@@ -449,7 +449,9 @@
             "encryptedTo": "Krypterat till {{name}}",
             "checking": "Kontrollerar kontakt…",
             "openpgpTooltip": "OpenPGP",
-            "verifiedTooltip": "Verifierad OpenPGP-nyckel"
+            "verifiedTooltip": "Verifierad OpenPGP-nyckel",
+            "blocked": "Encryption paused",
+            "blockedTooltip": "Peer's key has changed — resolve to resume encryption"
         },
         "verifyPeer": {
             "chipAriaLabel": "Krypterat till {{name}} — klicka för att verifiera fingeravtrycket",
@@ -466,7 +468,11 @@
             "title": "{{name}}s krypteringsnyckel har ändrats",
             "body": "Jämför det nya fingeravtrycket via en betrodd andra kanal innan du behandlar denna konversation som verifierad igen.",
             "reVerify": "Verifiera igen",
-            "dismiss": "Avfärda"
+            "dismiss": "Avfärda",
+            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
+            "acceptWithoutVerifying": "Accept without verifying",
+            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
+            "acceptFailed": "Couldn't accept the new key — try again"
         }
     },
     "dates": {

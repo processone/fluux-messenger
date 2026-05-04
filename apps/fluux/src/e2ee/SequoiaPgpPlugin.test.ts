@@ -425,7 +425,20 @@ describe('SequoiaPgpPlugin', () => {
   let fake: ReturnType<typeof makeFakeRust>
   let plugin: SequoiaPgpPlugin
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    // Reset every singleton store the plugin touches. Without this,
+    // pinnedPrimaryFingerprintsStore + verifiedPeerKeysStore +
+    // keyChangeAlertsStore leak between tests — a pin recorded by an
+    // earlier test would gate a later test's first probePeer against
+    // the wrong baseline, surfacing as "peer key is null" failures.
+    localStorage.clear()
+    const verifiedStore = await import('@/stores/verifiedPeerKeysStore')
+    const alertsStore = await import('@/stores/keyChangeAlertsStore')
+    const pinStore = await import('@/stores/pinnedPrimaryFingerprintsStore')
+    verifiedStore.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
+    alertsStore.useKeyChangeAlertsStore.setState({ alertsByJid: {} })
+    pinStore.usePinnedPrimaryFingerprintsStore.setState({ pinnedFingerprintByJid: {} })
+
     fake = makeFakeRust()
     plugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
   })
@@ -1041,10 +1054,15 @@ describe('SequoiaPgpPlugin', () => {
   })
 
   describe('onPeerKeysChanged', () => {
-    it('drops the cached peer key so the next probe re-fetches', async () => {
-      // Regression: without this, a peer rotating their OX key would be
-      // invisible to us — the positive cache from the first publish
-      // masks every subsequent fetch.
+    it('re-fetches the peer metadata even when peerKeys is hot', async () => {
+      // The pin gate model means peerKeys is no longer evicted on
+      // rotation — the cached cert stays in place until the user
+      // explicitly accepts a key change. What `onPeerKeysChanged`
+      // MUST still do is force a fresh network fetch so we observe
+      // any new fingerprint the server is now advertising; the
+      // previous "delete first" approach was just one way to achieve
+      // that. We verify the post-condition (queryPEP got called for
+      // the peer's metadata) directly.
       const built = makeContext('me@example.com')
       await plugin.init(built.ctx)
       const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
@@ -1056,11 +1074,30 @@ describe('SequoiaPgpPlugin', () => {
       await plugin.probePeer('bob@example.com')
       expect(plugin.getPeerFingerprint('bob@example.com')).toBe(bobBundle.fingerprint)
 
+      // Spy on queryPEP from this point forward.
+      const queries: Array<{ jid: string; node: string }> = []
+      const inner = built.ctx.xmpp.queryPEP
+      built.ctx.xmpp.queryPEP = async (jid, node) => {
+        queries.push({ jid, node })
+        return inner(jid, node)
+      }
+
       plugin.onPeerKeysChanged('bob@example.com')
-      expect(plugin.getPeerFingerprint('bob@example.com')).toBeNull()
+      // Allow the fire-and-forget refetch to settle.
+      await new Promise((r) => setTimeout(r, 0))
+
+      // Metadata node was queried — i.e. the cache fast-path was
+      // bypassed and we actually went to the wire.
+      const metadataHits = queries.filter(
+        (q) => q.jid === 'bob@example.com' && q.node === 'urn:xmpp:openpgp:0:public-keys',
+      )
+      expect(metadataHits.length).toBeGreaterThanOrEqual(1)
+      // And since the server still serves the same fingerprint, the
+      // pin gate accepts and peerKeys stays on the same fp.
+      expect(plugin.getPeerFingerprint('bob@example.com')).toBe(bobBundle.fingerprint)
     })
 
-    it('only evicts the targeted peer', async () => {
+    it('only refetches the targeted peer', async () => {
       const built = makeContext('me@example.com')
       await plugin.init(built.ctx)
       const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
@@ -1077,10 +1114,21 @@ describe('SequoiaPgpPlugin', () => {
       await plugin.probePeer('bob@example.com')
       await plugin.probePeer('carol@example.com')
 
-      plugin.onPeerKeysChanged('bob@example.com')
+      const queries: Array<{ jid: string; node: string }> = []
+      const inner = built.ctx.xmpp.queryPEP
+      built.ctx.xmpp.queryPEP = async (jid, node) => {
+        queries.push({ jid, node })
+        return inner(jid, node)
+      }
 
-      expect(plugin.getPeerFingerprint('bob@example.com')).toBeNull()
-      expect(plugin.getPeerFingerprint('carol@example.com')).toBe(carolBundle.fingerprint)
+      plugin.onPeerKeysChanged('bob@example.com')
+      await new Promise((r) => setTimeout(r, 0))
+
+      // bob's metadata was hit; carol's wasn't.
+      const carolHits = queries.filter((q) => q.jid === 'carol@example.com')
+      const bobHits = queries.filter((q) => q.jid === 'bob@example.com')
+      expect(bobHits.length).toBeGreaterThanOrEqual(1)
+      expect(carolHits).toHaveLength(0)
     })
   })
 
@@ -2373,24 +2421,29 @@ describe('SequoiaPgpPlugin', () => {
   })
 
   describe('verification trust', () => {
-    // Reuses the real verifiedPeerKeysStore + keyChangeAlertsStore —
-    // the plugin reads from / writes to them imperatively, and any
-    // regression in those paths should surface here rather than be
-    // hidden by mocks.
+    // Reuses the real verifiedPeerKeysStore + keyChangeAlertsStore +
+    // pinnedPrimaryFingerprintsStore — the plugin reads from / writes to
+    // them imperatively, and any regression in those paths should
+    // surface here rather than be hidden by mocks.
     type VerifiedStore = typeof import('@/stores/verifiedPeerKeysStore')
     type AlertsStore = typeof import('@/stores/keyChangeAlertsStore')
+    type PinStore = typeof import('@/stores/pinnedPrimaryFingerprintsStore')
     let verifiedStore: VerifiedStore
     let alertsStore: AlertsStore
+    let pinStore: PinStore
     beforeEach(async () => {
       localStorage.clear()
       verifiedStore = (await import('@/stores/verifiedPeerKeysStore')) as VerifiedStore
       alertsStore = (await import('@/stores/keyChangeAlertsStore')) as AlertsStore
+      pinStore = (await import('@/stores/pinnedPrimaryFingerprintsStore')) as PinStore
       verifiedStore.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
       alertsStore.useKeyChangeAlertsStore.setState({ alertsByJid: {} })
+      pinStore.usePinnedPrimaryFingerprintsStore.setState({ pinnedFingerprintByJid: {} })
     })
     afterEach(() => {
       verifiedStore.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
       alertsStore.useKeyChangeAlertsStore.setState({ alertsByJid: {} })
+      pinStore.usePinnedPrimaryFingerprintsStore.setState({ pinnedFingerprintByJid: {} })
     })
 
     it("getPeerTrust returns 'verified' when the cached fingerprint is in the store", async () => {
@@ -2441,39 +2494,17 @@ describe('SequoiaPgpPlugin', () => {
       expect(decrypted.securityContext.notes).toBeUndefined()
     })
 
-    it('clears the verification when probePeer caches a fresh fingerprint that differs', async () => {
-      // Simulate a key rotation: peer's cached fingerprint changes
-      // mid-session. The cachePeerKey path must drop the old
-      // verification so the chip auto-demotes to `unverified` until
-      // the user re-confirms the new fp.
-      const { alice } = await buildCrossPublishedPair(fake)
-      await alice.plugin.probePeer('bob@example.com')
-      const oldFp = alice.plugin.getPeerFingerprint('bob@example.com')!
-      verifiedStore.useVerifiedPeerKeysStore
-        .getState()
-        .setVerified('bob@example.com', oldFp)
-      expect(await alice.plugin.getPeerTrust('bob@example.com')).toBe('verified')
-
-      // Force a rotation: invalidate alice's cache for bob and have
-      // bob's PEP serve a different key.
-      alice.plugin.onPeerKeysChanged('bob@example.com')
-      // Generate a fresh bob key by spawning a NEW account for the
-      // same JID; the fake forgets and re-creates with a new fp.
-      fake.accounts.delete('bob@example.com')
-      const newBob = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
-        accountJid: 'bob@example.com',
-        userId: 'bob@example.com',
-      })
-      expect(newBob.fingerprint).not.toBe(oldFp)
-      // Re-publish bob's NEW key onto alice's view of the PEP tree.
-      const aliceCtx = alice.ctx as { xmpp: XMPPPrimitives } & {
-        peerPublish?: (peer: string, node: string, item: PEPItem) => void
-      }
-      void aliceCtx
-      // Use the helper's xmpp.queryPEP override path: replace queryPEP
-      // for this test to return the new bundle on the metadata + data
-      // nodes for bob.
-      const dataNode = `urn:xmpp:openpgp:0:public-keys:${newBob.fingerprint}`
+    /**
+     * Helper: rewire alice's PEP query so bob's metadata + data nodes
+     * serve `bundle` instead of whatever was cross-published at setup.
+     * Used by the rotation tests to simulate a server advertising a
+     * different cert under bob's JID.
+     */
+    function rewireBobPepFor(
+      alice: { ctx: PluginContext },
+      bundle: KeyBundle,
+    ) {
+      const dataNode = `urn:xmpp:openpgp:0:public-keys:${bundle.fingerprint}`
       alice.ctx.xmpp.queryPEP = async (jid, node) => {
         if (jid !== 'bob@example.com') return []
         if (node === 'urn:xmpp:openpgp:0:public-keys') {
@@ -2486,7 +2517,7 @@ describe('SequoiaPgpPlugin', () => {
                 children: [
                   {
                     name: 'pubkey-metadata',
-                    attrs: { 'v4-fingerprint': newBob.fingerprint, date: '2024-01-01T00:00:00Z' },
+                    attrs: { 'v4-fingerprint': bundle.fingerprint, date: '2024-01-01T00:00:00Z' },
                     children: [],
                   },
                 ],
@@ -2505,7 +2536,7 @@ describe('SequoiaPgpPlugin', () => {
                   {
                     name: 'data',
                     attrs: {},
-                    children: [btoa(unescape(encodeURIComponent(newBob.publicArmored)))],
+                    children: [btoa(unescape(encodeURIComponent(bundle.publicArmored)))],
                   },
                 ],
               },
@@ -2514,17 +2545,68 @@ describe('SequoiaPgpPlugin', () => {
         }
         return []
       }
+    }
 
-      // Re-probe — the plugin caches the new fingerprint AND clears the
-      // stale verification.
+    it('TOFU-pins the primary fingerprint on first cache', async () => {
+      // The pin is what makes server-tampering detectable later: with
+      // no pin, every key change is silent. Verify that probing a peer
+      // for the first time lands the fingerprint in the pin store.
+      const { alice } = await buildCrossPublishedPair(fake)
       await alice.plugin.probePeer('bob@example.com')
-      expect(alice.plugin.getPeerFingerprint('bob@example.com')).toBe(newBob.fingerprint)
-      expect(verifiedStore.getVerifiedPeerFingerprint('bob@example.com')).toBeNull()
-      expect(await alice.plugin.getPeerTrust('bob@example.com')).toBe('trusted')
+      const fp = alice.plugin.getPeerFingerprint('bob@example.com')!
+      expect(pinStore.getPinnedPrimaryFp('bob@example.com')).toBe(fp)
+    })
 
-      // …and the rotation must have left a key-change alert pointing
-      // at the new fingerprint, so the chat header banner can surface
-      // the change to the user.
+    /**
+     * Helper: run the full rotation simulation end-to-end and wait for
+     * the fire-and-forget refetch in `onPeerKeysChanged` to settle.
+     * Returns the fresh bob bundle so callers can assert on the new
+     * fingerprint. Order matters — the rewire MUST happen before
+     * `onPeerKeysChanged` fires its refetch, or the refetch sees the
+     * old PEP state and the pin gate sees no rotation.
+     */
+    async function simulateBobRotation(alice: { plugin: SequoiaPgpPlugin; ctx: PluginContext }) {
+      fake.accounts.delete('bob@example.com')
+      const newBob = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'bob@example.com',
+        userId: 'bob@example.com',
+      })
+      rewireBobPepFor(alice, newBob)
+      alice.plugin.onPeerKeysChanged('bob@example.com')
+      // The fetch is fire-and-forget; let microtasks drain so the
+      // pin-gate evaluation has run by the time the assertions
+      // execute.
+      await new Promise((r) => setTimeout(r, 5))
+      return newBob
+    }
+
+    it('refuses to update peerKeys on a pin-mismatched cache and records an alert', async () => {
+      // Server-tampering simulation: bob's PEP suddenly serves a
+      // different primary fp. The pin gate must keep the OLD cert in
+      // peerKeys (so ongoing crypto stays anchored to a key the user
+      // trusted) AND record a key-change alert (so the UI demands a
+      // user decision).
+      const { alice } = await buildCrossPublishedPair(fake)
+      await alice.plugin.probePeer('bob@example.com')
+      const oldFp = alice.plugin.getPeerFingerprint('bob@example.com')!
+      // User has verified the OLD cert out of band.
+      verifiedStore.useVerifiedPeerKeysStore
+        .getState()
+        .setVerified('bob@example.com', oldFp)
+
+      const newBob = await simulateBobRotation(alice)
+      expect(newBob.fingerprint).not.toBe(oldFp)
+
+      // peerKeys still serves the OLD cert — ongoing crypto stays
+      // anchored to the trusted material.
+      expect(alice.plugin.getPeerFingerprint('bob@example.com')).toBe(oldFp)
+      // Pin is unchanged — the new fp isn't trusted.
+      expect(pinStore.getPinnedPrimaryFp('bob@example.com')).toBe(oldFp)
+      // Verification stays valid (it was against the OLD cert, which
+      // is what we still cache).
+      expect(verifiedStore.getVerifiedPeerFingerprint('bob@example.com')).toBe(oldFp)
+      // …but a key-change alert must have been recorded so the UI
+      // surfaces the rotation to the user.
       const alerts = await import('@/stores/keyChangeAlertsStore')
       const alert = alerts.getKeyChangeAlert('bob@example.com')
       expect(alert).not.toBeNull()
@@ -2532,10 +2614,94 @@ describe('SequoiaPgpPlugin', () => {
       expect(alert!.currentFingerprint).toBe(newBob.fingerprint)
     })
 
+    it('encrypt throws pin-mismatch when an alert is active', async () => {
+      // The encrypt path is the security-sensitive surface that turns
+      // the silent block into an observable failure. A pin-mismatch
+      // alert MUST translate to a refusal — the alternative (silent
+      // continued encryption to the OLD cert that the rotated peer
+      // can no longer decrypt) is the worst of both worlds.
+      const { alice } = await buildCrossPublishedPair(fake)
+      await alice.plugin.probePeer('bob@example.com')
+      const oldFp = alice.plugin.getPeerFingerprint('bob@example.com')!
+
+      await simulateBobRotation(alice)
+      // Sanity: the alert was recorded and the cached fp stayed put.
+      const alerts = await import('@/stores/keyChangeAlertsStore')
+      expect(alerts.getKeyChangeAlert('bob@example.com')).not.toBeNull()
+      expect(alice.plugin.getPeerFingerprint('bob@example.com')).toBe(oldFp)
+
+      // Now try to encrypt. The plugin must refuse with a classified
+      // E2EEPluginError — host code keys on `code === 'pin-mismatch'`
+      // to render the appropriate fallback (no silent plaintext).
+      const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
+      let caught: unknown
+      try {
+        await alice.plugin.encrypt(handle, encodeBodyAsPayload('this should be blocked'))
+      } catch (err) {
+        caught = err
+      }
+      expect(isE2EEPluginError(caught)).toBe(true)
+      const e = caught as E2EEPluginError
+      expect(e.kind).toBe('permanent')
+      expect(e.code).toBe('pin-mismatch')
+    })
+
+    it('acceptPeerKeyChange (asVerified=false) re-pins and unblocks encryption without recording verification', async () => {
+      // BTBV re-anchor flow: user takes the 'Accept without verifying'
+      // button on the banner. Pin moves to the new fp, peerKeys is
+      // refreshed, alert clears, encryption resumes — but the peer
+      // ends up at `trusted`, not `verified`.
+      const { alice } = await buildCrossPublishedPair(fake)
+      await alice.plugin.probePeer('bob@example.com')
+      const oldFp = alice.plugin.getPeerFingerprint('bob@example.com')!
+      verifiedStore.useVerifiedPeerKeysStore
+        .getState()
+        .setVerified('bob@example.com', oldFp)
+
+      const newBob = await simulateBobRotation(alice)
+
+      // User accepts without verifying.
+      await alice.plugin.acceptPeerKeyChange('bob@example.com', false)
+
+      const alerts = await import('@/stores/keyChangeAlertsStore')
+      // Alert cleared.
+      expect(alerts.getKeyChangeAlert('bob@example.com')).toBeNull()
+      // Pin promoted to NEW fp.
+      expect(pinStore.getPinnedPrimaryFp('bob@example.com')).toBe(newBob.fingerprint)
+      // peerKeys refreshed.
+      expect(alice.plugin.getPeerFingerprint('bob@example.com')).toBe(newBob.fingerprint)
+      // Verification dropped — accept-without-verifying never lifts trust.
+      expect(verifiedStore.getVerifiedPeerFingerprint('bob@example.com')).toBeNull()
+      expect(await alice.plugin.getPeerTrust('bob@example.com')).toBe('trusted')
+
+      // Encryption is unblocked: a fresh encrypt call must succeed.
+      const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
+      const payload = await alice.plugin.encrypt(handle, encodeBodyAsPayload('post-accept'))
+      expect(payload.stanzaElement.name).toBe('openpgp')
+    })
+
+    it('acceptPeerKeyChange (asVerified=true) re-pins AND records verification', async () => {
+      // Verify-and-accept flow: user came through the verify dialog,
+      // which compares peer's NEW fp out of band. Pin moves AND
+      // verification is recorded, so the chip flips to green.
+      const { alice } = await buildCrossPublishedPair(fake)
+      await alice.plugin.probePeer('bob@example.com')
+
+      const newBob = await simulateBobRotation(alice)
+
+      await alice.plugin.acceptPeerKeyChange('bob@example.com', true)
+
+      // Pin + cached cert + verification all moved to NEW fp in lockstep.
+      expect(pinStore.getPinnedPrimaryFp('bob@example.com')).toBe(newBob.fingerprint)
+      expect(alice.plugin.getPeerFingerprint('bob@example.com')).toBe(newBob.fingerprint)
+      expect(verifiedStore.getVerifiedPeerFingerprint('bob@example.com')).toBe(newBob.fingerprint)
+      expect(await alice.plugin.getPeerTrust('bob@example.com')).toBe('verified')
+    })
+
     it('does NOT record a key-change alert on first key cache for an unverified peer', async () => {
-      // Caching the FIRST-ever key for a peer (no prior verification,
-      // no prior cached fp) must not trip the rotation guard. A new
-      // alert here would surface a banner on every fresh peer probe.
+      // Caching the FIRST-ever key for a peer (no prior pin) is the
+      // TOFU baseline — pin is set, no alert. A new alert here would
+      // surface a banner on every fresh peer probe.
       const { alice } = await buildCrossPublishedPair(fake)
       await alice.plugin.probePeer('bob@example.com')
       const alerts = await import('@/stores/keyChangeAlertsStore')

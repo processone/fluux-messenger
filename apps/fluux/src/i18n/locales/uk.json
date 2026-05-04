@@ -449,7 +449,9 @@
             "encryptedTo": "Зашифровано для {{name}}",
             "checking": "Перевірка співрозмовника…",
             "openpgpTooltip": "OpenPGP",
-            "verifiedTooltip": "Перевірений ключ OpenPGP"
+            "verifiedTooltip": "Перевірений ключ OpenPGP",
+            "blocked": "Encryption paused",
+            "blockedTooltip": "Peer's key has changed — resolve to resume encryption"
         },
         "verifyPeer": {
             "chipAriaLabel": "Зашифровано для {{name}} — клацніть, щоб перевірити відбиток",
@@ -466,7 +468,11 @@
             "title": "Ключ шифрування {{name}} змінився",
             "body": "Порівняйте новий відбиток через довірений другий канал, перш ніж знову вважати цю розмову перевіреною.",
             "reVerify": "Перевірити знову",
-            "dismiss": "Закрити"
+            "dismiss": "Закрити",
+            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
+            "acceptWithoutVerifying": "Accept without verifying",
+            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
+            "acceptFailed": "Couldn't accept the new key — try again"
         }
     },
     "dates": {

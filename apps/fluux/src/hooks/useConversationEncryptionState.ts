@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useConnection, useXMPPContext } from '@fluux/sdk'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
+import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
 
 /**
  * Per-conversation encryption status surfaced to the composer chip.
@@ -19,6 +20,13 @@ import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
  *                   `trust` reflects whether the user has confirmed
  *                   the fingerprint out-of-band — `verified` lifts
  *                   the chip to the green-trust palette.
+ * - `blocked`     — peer's pinned primary fingerprint differs from
+ *                   what their PEP currently advertises and the
+ *                   rotation hasn't been resolved by the user. The
+ *                   plugin's encrypt path refuses while in this
+ *                   state — the chip surfaces it so the user sees a
+ *                   reason (the key-change banner has the resolution
+ *                   buttons).
  * - `unsupported` — probe completed but the peer has no advertised
  *                   OpenPGP key. Composer falls back to plaintext.
  */
@@ -41,6 +49,7 @@ export type ConversationEncryptionState =
        */
       trust: 'verified' | 'unverified'
     }
+  | { kind: 'blocked'; pinnedFingerprint: string; advertisedFingerprint: string }
   | { kind: 'unsupported' }
 
 /**
@@ -87,6 +96,19 @@ export function useConversationEncryptionState(
   // changing in the verifications map don't trigger a re-render here.
   const verifiedFingerprint = useVerifiedPeerKeysStore((s) =>
     peerJid ? (s.verifiedFingerprintByJid[peerJid] ?? null) : null,
+  )
+
+  // Same pattern for the per-peer key-change alert: subscribe via a
+  // primitive selector so unrelated peers churning don't ripple here.
+  // Pulled out as two strings instead of the alert object so React's
+  // shallow compare on the selector return is meaningful (the alert
+  // object identity changes on every store write even when content
+  // is unchanged).
+  const alertCurrentFp = useKeyChangeAlertsStore((s) =>
+    peerJid ? (s.alertsByJid[peerJid]?.currentFingerprint ?? null) : null,
+  )
+  const alertPreviousFp = useKeyChangeAlertsStore((s) =>
+    peerJid ? (s.alertsByJid[peerJid]?.previousFingerprint ?? null) : null,
   )
 
   // The base state is what the probe / cache produces — kind, peer
@@ -154,15 +176,27 @@ export function useConversationEncryptionState(
     }
   }, [peerJid, conversationType, openpgpEnabled, online, e2eeManager])
 
-  // Merge the verification trust into the encrypted state. The
-  // identity check pins trust to a specific fingerprint: a key
-  // rotation auto-demotes to `unverified` until the user re-verifies.
+  // Merge the verification trust + pin-mismatch alert into the
+  // encrypted state. Precedence:
+  //
+  //   1. If a key-change alert is live for this peer, the conversation
+  //      is BLOCKED — outbound encryption refuses, surface the
+  //      `blocked` state regardless of the underlying cached cert.
+  //   2. Otherwise, fall through to the standard verified/unverified
+  //      derivation against the cached cert's fingerprint.
   return useMemo<ConversationEncryptionState>(() => {
     if (base.kind !== 'encrypted') return base
+    if (alertCurrentFp && alertPreviousFp) {
+      return {
+        kind: 'blocked',
+        pinnedFingerprint: alertPreviousFp,
+        advertisedFingerprint: alertCurrentFp,
+      }
+    }
     return {
       kind: 'encrypted',
       fingerprint: base.fingerprint,
       trust: verifiedFingerprint === base.fingerprint ? 'verified' : 'unverified',
     }
-  }, [base, verifiedFingerprint])
+  }, [base, verifiedFingerprint, alertCurrentFp, alertPreviousFp])
 }

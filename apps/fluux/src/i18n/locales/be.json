@@ -449,7 +449,9 @@
             "encryptedTo": "Зашыфравана для {{name}}",
             "checking": "Праверка суразмоўцы…",
             "openpgpTooltip": "OpenPGP",
-            "verifiedTooltip": "Правераны ключ OpenPGP"
+            "verifiedTooltip": "Правераны ключ OpenPGP",
+            "blocked": "Encryption paused",
+            "blockedTooltip": "Peer's key has changed — resolve to resume encryption"
         },
         "verifyPeer": {
             "chipAriaLabel": "Зашыфравана для {{name}} — націсніце, каб праверыць адбітак",
@@ -466,7 +468,11 @@
             "title": "Шыфравальны ключ карыстальніка {{name}} змяніўся",
             "body": "Параўнайце новы адбітак праз давераны другі канал, перш чым зноў лічыць гэту размову правераным.",
             "reVerify": "Праверыць зноў",
-            "dismiss": "Закрыць"
+            "dismiss": "Закрыць",
+            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
+            "acceptWithoutVerifying": "Accept without verifying",
+            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
+            "acceptFailed": "Couldn't accept the new key — try again"
         }
     },
     "dates": {

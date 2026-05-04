@@ -451,7 +451,9 @@
             "encryptedTo": "Zaszyfrowane do {{name}}",
             "checking": "Sprawdzanie kontaktu…",
             "openpgpTooltip": "OpenPGP",
-            "verifiedTooltip": "Zweryfikowany klucz OpenPGP"
+            "verifiedTooltip": "Zweryfikowany klucz OpenPGP",
+            "blocked": "Encryption paused",
+            "blockedTooltip": "Peer's key has changed — resolve to resume encryption"
         },
         "verifyPeer": {
             "chipAriaLabel": "Szyfrowane do {{name}} — kliknij, aby zweryfikować odcisk klucza",
@@ -468,7 +470,11 @@
             "title": "Klucz szyfrowania użytkownika {{name}} się zmienił",
             "body": "Porównaj nowy odcisk przez zaufany drugi kanał, zanim ponownie potraktujesz tę rozmowę jako zweryfikowaną.",
             "reVerify": "Zweryfikuj ponownie",
-            "dismiss": "Odrzuć"
+            "dismiss": "Odrzuć",
+            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
+            "acceptWithoutVerifying": "Accept without verifying",
+            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
+            "acceptFailed": "Couldn't accept the new key — try again"
         }
     },
     "dates": {

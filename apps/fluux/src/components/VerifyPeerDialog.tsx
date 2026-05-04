@@ -63,7 +63,7 @@ export function VerifyPeerDialog({
           {t('chat.verifyPeer.dialogTitle', { name: peerName })}
         </h3>
         <p className="text-sm text-fluux-muted mb-4">
-          {t('chat.verifyPeer.dialogBody')}
+          {t('chat.verifyPeer.dialogBody', { name: peerName })}
         </p>
 
         <div className="flex gap-2 p-3 mb-4 rounded-lg bg-yellow-500/10 text-xs text-fluux-muted leading-snug">

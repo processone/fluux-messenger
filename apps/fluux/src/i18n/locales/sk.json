@@ -450,7 +450,9 @@
             "encryptedTo": "Šifrované pre {{name}}",
             "checking": "Kontrola kontaktu…",
             "openpgpTooltip": "OpenPGP",
-            "verifiedTooltip": "Overený kľúč OpenPGP"
+            "verifiedTooltip": "Overený kľúč OpenPGP",
+            "blocked": "Encryption paused",
+            "blockedTooltip": "Peer's key has changed — resolve to resume encryption"
         },
         "verifyPeer": {
             "chipAriaLabel": "Šifrované pre {{name}} — kliknutím overíte odtlačok",
@@ -467,7 +469,11 @@
             "title": "Šifrovací kľúč používateľa {{name}} sa zmenil",
             "body": "Porovnajte nový odtlačok cez dôveryhodný druhý kanál, než budete túto konverzáciu znovu považovať za overenú.",
             "reVerify": "Znovu overiť",
-            "dismiss": "Zavrieť"
+            "dismiss": "Zavrieť",
+            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
+            "acceptWithoutVerifying": "Accept without verifying",
+            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
+            "acceptFailed": "Couldn't accept the new key — try again"
         }
     },
     "dates": {

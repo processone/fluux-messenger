@@ -449,7 +449,9 @@
             "encryptedTo": "加密发送给 {{name}}",
             "checking": "正在检查对方…",
             "openpgpTooltip": "OpenPGP",
-            "verifiedTooltip": "已验证的 OpenPGP 密钥"
+            "verifiedTooltip": "已验证的 OpenPGP 密钥",
+            "blocked": "Encryption paused",
+            "blockedTooltip": "Peer's key has changed — resolve to resume encryption"
         },
         "verifyPeer": {
             "chipAriaLabel": "已加密给 {{name}} — 点击验证指纹",
@@ -466,7 +468,11 @@
             "title": "{{name}} 的加密密钥已更改",
             "body": "在再次将此对话视为已验证之前,通过可信的第二渠道核对新指纹。",
             "reVerify": "重新验证",
-            "dismiss": "忽略"
+            "dismiss": "忽略",
+            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
+            "acceptWithoutVerifying": "Accept without verifying",
+            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
+            "acceptFailed": "Couldn't accept the new key — try again"
         }
     },
     "dates": {

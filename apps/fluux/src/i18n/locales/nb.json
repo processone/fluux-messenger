@@ -449,7 +449,9 @@
             "encryptedTo": "Kryptert til {{name}}",
             "checking": "Sjekker kontakt…",
             "openpgpTooltip": "OpenPGP",
-            "verifiedTooltip": "Verifisert OpenPGP-nøkkel"
+            "verifiedTooltip": "Verifisert OpenPGP-nøkkel",
+            "blocked": "Encryption paused",
+            "blockedTooltip": "Peer's key has changed — resolve to resume encryption"
         },
         "verifyPeer": {
             "chipAriaLabel": "Kryptert til {{name}} — klikk for å verifisere fingeravtrykket",
@@ -466,7 +468,11 @@
             "title": "{{name}}s krypteringsnøkkel har endret seg",
             "body": "Sammenlign det nye fingeravtrykket via en pålitelig andre kanal før du igjen behandler denne samtalen som verifisert.",
             "reVerify": "Verifiser på nytt",
-            "dismiss": "Avvis"
+            "dismiss": "Avvis",
+            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
+            "acceptWithoutVerifying": "Accept without verifying",
+            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
+            "acceptFailed": "Couldn't accept the new key — try again"
         }
     },
     "dates": {

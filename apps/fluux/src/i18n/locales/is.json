@@ -449,7 +449,9 @@
             "encryptedTo": "Dulkóðað til {{name}}",
             "checking": "Athuga viðmælanda…",
             "openpgpTooltip": "OpenPGP",
-            "verifiedTooltip": "Staðfestur OpenPGP-lykill"
+            "verifiedTooltip": "Staðfestur OpenPGP-lykill",
+            "blocked": "Encryption paused",
+            "blockedTooltip": "Peer's key has changed — resolve to resume encryption"
         },
         "verifyPeer": {
             "chipAriaLabel": "Dulritað til {{name}} — smelltu til að staðfesta fingrafarið",
@@ -466,7 +468,11 @@
             "title": "Dulritunarlykill {{name}} hefur breyst",
             "body": "Berðu nýja fingrafarið saman um trausta aðra rás áður en þú lítur á þetta samtal aftur sem staðfest.",
             "reVerify": "Staðfesta aftur",
-            "dismiss": "Hafna"
+            "dismiss": "Hafna",
+            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
+            "acceptWithoutVerifying": "Accept without verifying",
+            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
+            "acceptFailed": "Couldn't accept the new key — try again"
         }
     },
     "dates": {

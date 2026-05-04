@@ -450,7 +450,9 @@
             "encryptedTo": "Šifrēts adresātam {{name}}",
             "checking": "Pārbauda kontaktu…",
             "openpgpTooltip": "OpenPGP",
-            "verifiedTooltip": "Pārbaudīta OpenPGP atslēga"
+            "verifiedTooltip": "Pārbaudīta OpenPGP atslēga",
+            "blocked": "Encryption paused",
+            "blockedTooltip": "Peer's key has changed — resolve to resume encryption"
         },
         "verifyPeer": {
             "chipAriaLabel": "Šifrēts {{name}} — noklikšķiniet, lai pārbaudītu pirkstu nospiedumu",
@@ -467,7 +469,11 @@
             "title": "{{name}} šifrēšanas atslēga ir mainījusies",
             "body": "Salīdziniet jauno pirkstu nospiedumu uzticamā otrajā kanālā, pirms šo sarunu atkal uzskatāt par pārbaudītu.",
             "reVerify": "Pārbaudīt vēlreiz",
-            "dismiss": "Noraidīt"
+            "dismiss": "Noraidīt",
+            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
+            "acceptWithoutVerifying": "Accept without verifying",
+            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
+            "acceptFailed": "Couldn't accept the new key — try again"
         }
     },
     "dates": {

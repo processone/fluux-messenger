@@ -451,7 +451,9 @@
             "encryptedTo": "Ikkriptat għal {{name}}",
             "checking": "Qed nikkontrolla l-kuntatt…",
             "openpgpTooltip": "OpenPGP",
-            "verifiedTooltip": "Ċavetta OpenPGP verifikata"
+            "verifiedTooltip": "Ċavetta OpenPGP verifikata",
+            "blocked": "Encryption paused",
+            "blockedTooltip": "Peer's key has changed — resolve to resume encryption"
         },
         "verifyPeer": {
             "chipAriaLabel": "Ikkriptat lil {{name}} — ikklikkja biex tivverifika l-marka tas-saba'",
@@ -468,7 +470,11 @@
             "title": "Iċ-ċavetta tal-kriptaġġ ta' {{name}} inbidlet",
             "body": "Qabbel il-marka tas-saba' l-ġdida permezz ta' kanal sekondarju fdat qabel terġa' tittratta din il-konversazzjoni bħala verifikata.",
             "reVerify": "Erġa' vverifika",
-            "dismiss": "Warrab"
+            "dismiss": "Warrab",
+            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
+            "acceptWithoutVerifying": "Accept without verifying",
+            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
+            "acceptFailed": "Couldn't accept the new key — try again"
         }
     },
     "dates": {

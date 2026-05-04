@@ -449,7 +449,9 @@
             "encryptedTo": "Criptithe chuig {{name}}",
             "checking": "Ag seiceáil an teagmhálaí…",
             "openpgpTooltip": "OpenPGP",
-            "verifiedTooltip": "Eochair OpenPGP fíoraithe"
+            "verifiedTooltip": "Eochair OpenPGP fíoraithe",
+            "blocked": "Encryption paused",
+            "blockedTooltip": "Peer's key has changed — resolve to resume encryption"
         },
         "verifyPeer": {
             "chipAriaLabel": "Criptithe go {{name}} — cliceáil chun méarlorg a fhíorú",
@@ -466,7 +468,11 @@
             "title": "Tá eochair criptiúcháin {{name}} athraithe",
             "body": "Déan an méarlorg nua a chur i gcomparáid trí dhara cainéal iontaofa sula gcaitheann tú leis an gcomhrá seo arís mar fíoraithe.",
             "reVerify": "Athfhíoraigh",
-            "dismiss": "Cuir ar leataobh"
+            "dismiss": "Cuir ar leataobh",
+            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
+            "acceptWithoutVerifying": "Accept without verifying",
+            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
+            "acceptFailed": "Couldn't accept the new key — try again"
         }
     },
     "dates": {

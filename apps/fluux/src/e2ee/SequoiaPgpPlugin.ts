@@ -87,10 +87,18 @@ import {
 } from './backupMarker'
 import {
   clearPeerVerified,
-  getVerifiedPeerFingerprint,
   isPeerVerified,
+  setPeerVerified,
 } from '@/stores/verifiedPeerKeysStore'
-import { recordKeyChangeAlert } from '@/stores/keyChangeAlertsStore'
+import {
+  clearKeyChangeAlert,
+  getKeyChangeAlert,
+  recordKeyChangeAlert,
+} from '@/stores/keyChangeAlertsStore'
+import {
+  getPinnedPrimaryFp,
+  setPinnedPrimaryFp,
+} from '@/stores/pinnedPrimaryFingerprintsStore'
 
 /** XEP-0373 namespace for all PEP/message elements. */
 const OX_NAMESPACE = 'urn:xmpp:openpgp:0'
@@ -928,10 +936,24 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
    *   the next send retry.
    */
   async probePeer(peer: BareJID): Promise<PeerSupport> {
-    const ctx = this.requireCtx()
     if (this.peerKeys.has(peer)) {
       return { supported: true, ttl: PROBE_NEGATIVE_TTL_SECONDS }
     }
+    return this.refetchAndCachePeerKey(peer)
+  }
+
+  /**
+   * The metadata + per-fingerprint data fetch path that backs
+   * {@link probePeer}, factored out so server-tampering recovery flows
+   * (`onPeerKeysChanged`, `acceptPeerKeyChange`) can force a re-fetch
+   * WITHOUT first dropping `peerKeys`. The pin gate inside
+   * `cachePeerKey` is the source of truth for whether the fetched cert
+   * actually replaces the cached one — bypassing that gate by deleting
+   * upfront would leave us with no trusted material if the server is
+   * advertising a rotation we don't trust yet.
+   */
+  private async refetchAndCachePeerKey(peer: BareJID): Promise<PeerSupport> {
+    const ctx = this.requireCtx()
     try {
       const metadataItems = await ctx.xmpp.queryPEP(peer, PUBLIC_KEYS_METADATA_NODE)
       const fingerprints = parseAdvertisedFingerprints(metadataItems)
@@ -1035,6 +1057,22 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
     const peerBundle = this.peerKeys.get(peer)
     if (!peerBundle) {
       throw new Error(`SequoiaPgpPlugin: no cached public key for ${peer} — probe first`)
+    }
+    // Hard-block on an unresolved key rotation: the server is
+    // advertising a primary fingerprint that doesn't match the one
+    // Fluux pinned for this peer, and the user hasn't yet decided
+    // whether to accept the rotation. Encrypting to the OLD cert
+    // would be safe cryptographically, but the peer (who has rotated)
+    // can no longer decrypt it — silently sending unreadable
+    // ciphertext is the worst outcome. Refuse explicitly so the host
+    // can surface the failure (the chat-header banner has the
+    // resolution buttons).
+    if (getKeyChangeAlert(peer)) {
+      throw new E2EEPluginError(
+        'permanent',
+        'pin-mismatch',
+        `SequoiaPgpPlugin: ${peer}'s primary fingerprint has changed and the rotation hasn't been confirmed; user must verify or accept via the key-change banner before encryption resumes.`,
+      )
     }
 
     // Chat.ts hands us a serialized `<payload xmlns='jabber:client'>…</payload>`
@@ -1347,17 +1385,27 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
    * leaves the stash in place; the TTL will eventually clean it up.
    */
   onPeerKeysChanged(peer: BareJID): void {
-    this.peerKeys.delete(peer)
-    if (!this.pendingVerifications.get(peer)?.length) return
+    // Force a re-fetch through the metadata-data path. We deliberately
+    // do NOT clear `peerKeys` first: if the new fingerprint mismatches
+    // the pin, `cachePeerKey` refuses, and the OLD cert must remain in
+    // the cache so ongoing crypto stays anchored to a key the user
+    // trusted (the user resolves the rotation explicitly via
+    // `acceptPeerKeyChange`).
+    if (!this.pendingVerifications.get(peer)?.length) {
+      // Fire-and-forget refresh even when there's no stash, so a PEP
+      // headline can still trigger pin-mismatch alert recording.
+      void this.refetchAndCachePeerKey(peer).catch(() => {})
+      return
+    }
     // Fire-and-forget: the host's notifyPeerKeysChanged is sync, and we
     // don't want to block the PEP dispatch path on IPC. The caller
     // doesn't need the return value; errors are logged inside the drain.
     void (async () => {
       try {
-        await this.probePeer(peer)
+        await this.refetchAndCachePeerKey(peer)
       } catch (err) {
         this.ctx?.logger.debug(
-          `SequoiaPgpPlugin: probePeer after key rotation failed for ${peer}: ${formatError(err)}`,
+          `SequoiaPgpPlugin: refetchAndCache after key rotation failed for ${peer}: ${formatError(err)}`,
         )
       }
       await this.drainPendingVerifications(peer)
@@ -1406,21 +1454,100 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
   }
 
   /**
-   * Replace the cached peer key for `peer`. Demotes any stale
-   * verification: if the user previously verified a fingerprint that
-   * isn't the one we're caching, clear the verification AND record a
-   * key-change alert so the chat header can surface a banner. The
-   * banner is the user-visible signal for what is otherwise a
-   * security-relevant silent change. Used wherever we write to
-   * `peerKeys` so the demote-on-rotation invariant holds in one place.
+   * The single point that writes to `peerKeys`. Enforces the primary-
+   * fingerprint pin: a peer's first cache TOFU-pins the fingerprint we
+   * observed, and any subsequent cache attempt with a *different*
+   * primary fingerprint is REFUSED — `peerKeys` keeps the previously-
+   * trusted cert and a key-change alert is recorded so the chat-header
+   * banner can surface the change. Outbound encryption refuses while
+   * an alert is live (see {@link encrypt}).
+   *
+   * The user resolves via {@link acceptPeerKeyChange}, which is the
+   * only way the pin advances. Both paths through that method
+   * (verify-and-accept vs accept-without-verifying) eventually call
+   * back into `cachePeerKey` after the pin has been promoted, so the
+   * fp-matches-pin branch below admits the new bundle.
+   *
+   * This is the cryptographic anchor of Fluux's server-tampering
+   * defenses: an attacker who controls the user's PEP server can
+   * substitute a peer's advertised key but cannot make Fluux silently
+   * encrypt to it — a primary-fp change always requires explicit
+   * user action.
    */
   private cachePeerKey(peer: BareJID, bundle: KeyBundle): void {
-    const previouslyVerified = getVerifiedPeerFingerprint(peer)
-    if (previouslyVerified && previouslyVerified !== bundle.fingerprint) {
-      clearPeerVerified(peer)
-      recordKeyChangeAlert(peer, previouslyVerified, bundle.fingerprint)
+    const pinnedFp = getPinnedPrimaryFp(peer)
+    if (!pinnedFp) {
+      // First cache for this peer — TOFU pin.
+      setPinnedPrimaryFp(peer, bundle.fingerprint)
+      this.peerKeys.set(peer, bundle)
+      return
     }
-    this.peerKeys.set(peer, bundle)
+    if (pinnedFp === bundle.fingerprint) {
+      // Re-fetch of the trusted key (PEP push, periodic refresh,
+      // host-driven invalidation). Accept.
+      this.peerKeys.set(peer, bundle)
+      return
+    }
+    // Pin mismatch: server is advertising a different primary fp than
+    // the one Fluux trusts. Keep the old cert in `peerKeys` so
+    // ongoing crypto operations have a stable target, and record an
+    // alert so the UI can demand a user decision. Verification (if
+    // any) stays as-is — the user's confirmation still applies to the
+    // cached old cert.
+    recordKeyChangeAlert(peer, pinnedFp, bundle.fingerprint)
+  }
+
+  /**
+   * Resolve a key-change alert by promoting the rotation: re-pin the
+   * primary fingerprint to the value the server is now advertising,
+   * re-probe to refresh `peerKeys` with the new cert, and clear the
+   * alert. When `asVerified` is true, also record a verification
+   * entry — the caller is expected to have driven the user through a
+   * fingerprint-comparison dialog before taking that path.
+   *
+   * No-op when there is no active alert for `peer`. Throws on a
+   * fundamental disagreement (e.g., the server stops advertising the
+   * fingerprint we just promoted to) — better to surface the failure
+   * than to leave the user in a half-resolved state.
+   */
+  async acceptPeerKeyChange(peer: BareJID, asVerified: boolean): Promise<void> {
+    const alert = getKeyChangeAlert(peer)
+    if (!alert) return
+    const targetFp = alert.currentFingerprint
+
+    // Drop the old verification (if any) — the user is moving the pin
+    // to a new fp, so any verification statement against the old fp is
+    // no longer in scope. The verify-and-accept path immediately
+    // re-records verification below; the accept-without-verifying path
+    // leaves the peer at BTBV `trusted`.
+    clearPeerVerified(peer)
+
+    // Promote the pin BEFORE re-probing so the cachePeerKey hop in
+    // the fetch path takes the "pin matches" branch and admits the
+    // new cert without opening another alert.
+    setPinnedPrimaryFp(peer, targetFp)
+    clearKeyChangeAlert(peer)
+
+    // Force-refresh via the cache-bypassing helper: probePeer's
+    // fast-path would short-circuit on the still-present old bundle.
+    // If the server has rotated *again* between alert and
+    // acceptance, this will open a new alert on the fresh
+    // fingerprint — surfaced to the user as another banner cycle,
+    // which is the correct behaviour.
+    await this.refetchAndCachePeerKey(peer)
+
+    if (asVerified) {
+      // Pin must already match the freshly cached cert for the
+      // verification record to be meaningful. If the post-probe
+      // peerKeys fingerprint diverges (server moved again, or the
+      // probe failed) skip the verify write — better to leave the
+      // peer at `trusted` than to record a verification against a
+      // fingerprint we never actually loaded.
+      const cached = this.peerKeys.get(peer)
+      if (cached && cached.fingerprint === targetFp) {
+        setPeerVerified(peer, targetFp)
+      }
+    }
   }
 
   private requireCtx(): PluginContext {

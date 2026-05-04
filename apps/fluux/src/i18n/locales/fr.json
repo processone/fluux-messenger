@@ -450,7 +450,9 @@
             "encryptedTo": "Chiffré avec {{name}}",
             "checking": "Vérification du correspondant…",
             "openpgpTooltip": "OpenPGP",
-            "verifiedTooltip": "Clé OpenPGP vérifiée"
+            "verifiedTooltip": "Clé OpenPGP vérifiée",
+            "blocked": "Chiffrement suspendu",
+            "blockedTooltip": "La clé du correspondant a changé — résolvez pour reprendre le chiffrement"
         },
         "verifyPeer": {
             "chipAriaLabel": "Chiffré à destination de {{name}} — cliquez pour vérifier l'empreinte",
@@ -466,8 +468,12 @@
         "keyChangeBanner": {
             "title": "La clé de chiffrement de {{name}} a changé",
             "body": "Comparez la nouvelle empreinte via un second canal de confiance avant de considérer à nouveau cette conversation comme vérifiée.",
-            "reVerify": "Re-vérifier",
-            "dismiss": "Ignorer"
+            "reVerify": "Vérifier et accepter",
+            "dismiss": "Ignorer",
+            "encryptionBlocked": "Le chiffrement est suspendu pour cette conversation jusqu'à ce que vous résolviez le changement.",
+            "acceptWithoutVerifying": "Accepter sans vérifier",
+            "acceptedWithoutVerifying": "Nouvelle clé acceptée — correspondant non vérifié",
+            "acceptFailed": "Impossible d'accepter la nouvelle clé — réessayez"
         }
     },
     "dates": {

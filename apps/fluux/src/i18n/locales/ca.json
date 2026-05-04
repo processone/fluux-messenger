@@ -451,7 +451,9 @@
             "encryptedTo": "Xifrat per a {{name}}",
             "checking": "Comprovant el contacte…",
             "openpgpTooltip": "OpenPGP",
-            "verifiedTooltip": "Clau OpenPGP verificada"
+            "verifiedTooltip": "Clau OpenPGP verificada",
+            "blocked": "Encryption paused",
+            "blockedTooltip": "Peer's key has changed — resolve to resume encryption"
         },
         "verifyPeer": {
             "chipAriaLabel": "Xifrat per a {{name}} — fes clic per verificar l'empremta",
@@ -468,7 +470,11 @@
             "title": "La clau de xifratge de {{name}} ha canviat",
             "body": "Compara la nova empremta per un segon canal de confiança abans de tornar a tractar aquesta conversa com a verificada.",
             "reVerify": "Tornar a verificar",
-            "dismiss": "Descartar"
+            "dismiss": "Descartar",
+            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
+            "acceptWithoutVerifying": "Accept without verifying",
+            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
+            "acceptFailed": "Couldn't accept the new key — try again"
         }
     },
     "dates": {

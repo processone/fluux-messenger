@@ -449,7 +449,9 @@
             "encryptedTo": "مشفَّر إلى {{name}}",
             "checking": "يجري التحقق من المراسل…",
             "openpgpTooltip": "OpenPGP",
-            "verifiedTooltip": "مفتاح OpenPGP موثّق"
+            "verifiedTooltip": "مفتاح OpenPGP موثّق",
+            "blocked": "Encryption paused",
+            "blockedTooltip": "Peer's key has changed — resolve to resume encryption"
         },
         "verifyPeer": {
             "chipAriaLabel": "مشفّر إلى {{name}} — انقر للتحقق من البصمة",
@@ -466,7 +468,11 @@
             "title": "تغيّر مفتاح التشفير الخاص بـ {{name}}",
             "body": "قارن البصمة الجديدة عبر قناة ثانية موثوقة قبل اعتبار هذه المحادثة موثّقة من جديد.",
             "reVerify": "إعادة التحقق",
-            "dismiss": "تجاهل"
+            "dismiss": "تجاهل",
+            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
+            "acceptWithoutVerifying": "Accept without verifying",
+            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
+            "acceptFailed": "Couldn't accept the new key — try again"
         }
     },
     "dates": {

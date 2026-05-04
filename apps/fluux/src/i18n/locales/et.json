@@ -451,7 +451,9 @@
             "encryptedTo": "Krüpteeritud saajale {{name}}",
             "checking": "Kontaktikontroll…",
             "openpgpTooltip": "OpenPGP",
-            "verifiedTooltip": "Kinnitatud OpenPGP võti"
+            "verifiedTooltip": "Kinnitatud OpenPGP võti",
+            "blocked": "Encryption paused",
+            "blockedTooltip": "Peer's key has changed — resolve to resume encryption"
         },
         "verifyPeer": {
             "chipAriaLabel": "Krüpteeritud {{name}}-le — klõpsa sõrmejälje kinnitamiseks",
@@ -468,7 +470,11 @@
             "title": "{{name}} krüpteerimisvõti on muutunud",
             "body": "Võrdle uut sõrmejälge usaldusväärse teise kanali kaudu enne, kui käsitled seda vestlust taas kinnitatud olevana.",
             "reVerify": "Kinnita uuesti",
-            "dismiss": "Sulge"
+            "dismiss": "Sulge",
+            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
+            "acceptWithoutVerifying": "Accept without verifying",
+            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
+            "acceptFailed": "Couldn't accept the new key — try again"
         }
     },
     "dates": {

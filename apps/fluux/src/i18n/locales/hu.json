@@ -449,7 +449,9 @@
             "encryptedTo": "Titkosítva {{name}} részére",
             "checking": "Partner ellenőrzése…",
             "openpgpTooltip": "OpenPGP",
-            "verifiedTooltip": "Ellenőrzött OpenPGP-kulcs"
+            "verifiedTooltip": "Ellenőrzött OpenPGP-kulcs",
+            "blocked": "Encryption paused",
+            "blockedTooltip": "Peer's key has changed — resolve to resume encryption"
         },
         "verifyPeer": {
             "chipAriaLabel": "Titkosítva {{name}} számára — kattintson a ujjlenyomat ellenőrzéséhez",
@@ -466,7 +468,11 @@
             "title": "{{name}} titkosítási kulcsa megváltozott",
             "body": "Hasonlítsa össze az új ujjlenyomatot egy megbízható második csatornán keresztül, mielőtt újra ellenőrzöttként kezelné ezt a beszélgetést.",
             "reVerify": "Újraellenőrzés",
-            "dismiss": "Elvetés"
+            "dismiss": "Elvetés",
+            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
+            "acceptWithoutVerifying": "Accept without verifying",
+            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
+            "acceptFailed": "Couldn't accept the new key — try again"
         }
     },
     "dates": {

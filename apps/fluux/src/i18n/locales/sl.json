@@ -451,7 +451,9 @@
             "encryptedTo": "Šifrirano za {{name}}",
             "checking": "Preverjanje stika…",
             "openpgpTooltip": "OpenPGP",
-            "verifiedTooltip": "Preverjen ključ OpenPGP"
+            "verifiedTooltip": "Preverjen ključ OpenPGP",
+            "blocked": "Encryption paused",
+            "blockedTooltip": "Peer's key has changed — resolve to resume encryption"
         },
         "verifyPeer": {
             "chipAriaLabel": "Šifrirano za {{name}} — kliknite za preverjanje prstnega odtisa",
@@ -468,7 +470,11 @@
             "title": "Šifrirni ključ uporabnika {{name}} se je spremenil",
             "body": "Primerjajte nov prstni odtis prek zaupanja vrednega drugega kanala, preden ta pogovor znova obravnavate kot preverjen.",
             "reVerify": "Znova preveri",
-            "dismiss": "Zavrzi"
+            "dismiss": "Zavrzi",
+            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
+            "acceptWithoutVerifying": "Accept without verifying",
+            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
+            "acceptFailed": "Couldn't accept the new key — try again"
         }
     },
     "dates": {

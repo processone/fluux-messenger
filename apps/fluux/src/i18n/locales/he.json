@@ -449,7 +449,9 @@
             "encryptedTo": "מוצפן אל {{name}}",
             "checking": "בודק את איש הקשר…",
             "openpgpTooltip": "OpenPGP",
-            "verifiedTooltip": "מפתח OpenPGP מאומת"
+            "verifiedTooltip": "מפתח OpenPGP מאומת",
+            "blocked": "Encryption paused",
+            "blockedTooltip": "Peer's key has changed — resolve to resume encryption"
         },
         "verifyPeer": {
             "chipAriaLabel": "מוצפן ל-{{name}} — לחץ כדי לאמת את טביעת האצבע",
@@ -466,7 +468,11 @@
             "title": "מפתח ההצפנה של {{name}} השתנה",
             "body": "השווה את טביעת האצבע החדשה באמצעות ערוץ שני אמין לפני שתתייחס שוב לשיחה זו כמאומתת.",
             "reVerify": "אמת מחדש",
-            "dismiss": "בטל"
+            "dismiss": "בטל",
+            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
+            "acceptWithoutVerifying": "Accept without verifying",
+            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
+            "acceptFailed": "Couldn't accept the new key — try again"
         }
     },
     "dates": {

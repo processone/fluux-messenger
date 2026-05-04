@@ -1,4 +1,4 @@
-import { Lock, Loader2, ShieldCheck } from 'lucide-react'
+import { Lock, Loader2, ShieldCheck, ShieldAlert } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 
@@ -49,6 +49,22 @@ export function EncryptionChip({ state, peerName, onVerifyClick }: EncryptionChi
       >
         <Loader2 className="w-3 h-3 animate-spin" />
         <span>{t('chat.encryption.checking')}</span>
+      </div>
+    )
+  }
+
+  if (state.kind === 'blocked') {
+    // Yellow-warning palette mirrors the key-change banner sitting
+    // above the messages, so the chip and the banner read as one
+    // visual signal: encryption is paused, action required there.
+    return (
+      <div
+        className={`${commonClasses} text-yellow-700 dark:text-yellow-400 bg-yellow-500/15`}
+        title={`${t('chat.encryption.blockedTooltip')}\n${formatFingerprint(state.advertisedFingerprint)}`}
+        role="status"
+      >
+        <ShieldAlert className="w-3 h-3" />
+        <span>{t('chat.encryption.blocked')}</span>
       </div>
     )
   }

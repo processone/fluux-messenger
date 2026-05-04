@@ -449,7 +449,9 @@
             "encryptedTo": "Encrypted to {{name}}",
             "checking": "Checking peer…",
             "openpgpTooltip": "OpenPGP",
-            "verifiedTooltip": "Verified OpenPGP key"
+            "verifiedTooltip": "Verified OpenPGP key",
+            "blocked": "Encryption paused",
+            "blockedTooltip": "Peer's key has changed — resolve to resume encryption"
         },
         "verifyPeer": {
             "chipAriaLabel": "Encrypted to {{name}} — click to verify fingerprint",
@@ -465,7 +467,11 @@
         "keyChangeBanner": {
             "title": "{{name}}'s encryption key has changed",
             "body": "Compare the new fingerprint over a trusted second channel before treating this conversation as verified again.",
-            "reVerify": "Re-verify",
+            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
+            "reVerify": "Verify and accept",
+            "acceptWithoutVerifying": "Accept without verifying",
+            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
+            "acceptFailed": "Couldn't accept the new key — try again",
             "dismiss": "Dismiss"
         }
     },

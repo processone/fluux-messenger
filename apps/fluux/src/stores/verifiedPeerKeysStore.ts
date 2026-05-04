@@ -115,6 +115,15 @@ export function clearPeerVerified(jid: string): void {
 }
 
 /**
+ * Imperative setter parallel to {@link clearPeerVerified}. Used by the
+ * plugin's verify-and-accept-rotation flow, which writes a new
+ * verification under the just-promoted pin.
+ */
+export function setPeerVerified(jid: string, fingerprint: string): void {
+  useVerifiedPeerKeysStore.getState().setVerified(jid, fingerprint)
+}
+
+/**
  * Last fingerprint the user confirmed for `jid`, or `null` if none.
  * Used by the demote-on-rotation path so the plugin can compare the
  * incoming fingerprint against the stored one before evicting.
