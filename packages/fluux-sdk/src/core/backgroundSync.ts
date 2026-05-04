@@ -56,6 +56,43 @@ export function setupBackgroundSyncSideEffects(
   // Timer for delayed room catch-up (cleared on cleanup or disconnect)
   let roomCatchUpTimer: ReturnType<typeof setTimeout> | undefined
 
+  // --- E2EE capability warm-up ---
+
+  /**
+   * Probes E2EE capability for all known 1:1 conversations in the background.
+   * Called on every fresh session so the plugin's peer-key cache is warm before
+   * the user opens any chat. Runs concurrently with MAM sync (no serialization
+   * needed — these are independent PEP queries).
+   *
+   * Batched at 2 concurrent probes to avoid overwhelming the server. Aborts
+   * immediately if the connection drops. Probe errors are silently swallowed —
+   * the probe will be retried when the conversation is next opened.
+   */
+  function triggerE2EEWarmup(): void {
+    const manager = client.e2ee
+    if (!manager) return
+
+    const jids = [...chatStore.getState().conversationEntities.values()]
+      .filter(e => e.type === 'chat')
+      .map(e => e.id)
+
+    if (jids.length === 0) return
+
+    logInfo(`Background sync: warming E2EE cache for ${jids.length} conversations`)
+
+    const BATCH = 2
+    void (async () => {
+      for (let i = 0; i < jids.length; i += BATCH) {
+        if (!client.isConnected()) break
+        await Promise.all(
+          jids.slice(i, i + BATCH).map(jid =>
+            manager.canEncryptTo({ kind: 'direct', peer: jid }).catch(() => {}),
+          ),
+        )
+      }
+    })()
+  }
+
   // --- Daily archived check helpers ---
   const ARCHIVED_CHECK_KEY_BASE = 'fluux:lastArchivedPreviewCheck'
   const ONE_DAY_MS = 24 * 60 * 60 * 1000
@@ -191,6 +228,10 @@ export function setupBackgroundSyncSideEffects(
 
     // Discover MAM fulltext search capability (non-blocking, doesn't affect sync)
     void client.discovery.discoverMAMSearchCapability()
+
+    // Warm the E2EE plugin cache for all known conversations. Independent of
+    // MAM — these are PEP queries that don't require server-side MAM support.
+    triggerE2EEWarmup()
 
     // Check if MAM is already supported (cached serverInfo from previous session)
     const supportsMAM = connectionStore.getState().serverInfo?.features?.includes(NS_MAM) ?? false
