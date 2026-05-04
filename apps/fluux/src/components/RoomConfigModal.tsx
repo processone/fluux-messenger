@@ -5,11 +5,11 @@
  * with a subject field on top, and provides a danger zone for room
  * destruction (owner only).
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { TextInput } from './ui/TextInput'
 import type { Room, DataForm } from '@fluux/sdk'
-import { useAdmin } from '@fluux/sdk'
+import { useXMPP } from '@fluux/sdk'
 import { ModalShell } from './ModalShell'
 import { ConfirmDialog } from './ConfirmDialog'
 import { FormField, useDataFormState } from './DataFormFields'
@@ -31,7 +31,14 @@ export function RoomConfigModal({
   destroyRoom,
 }: RoomConfigModalProps) {
   const { t } = useTranslation()
-  const { getRoomOptions } = useAdmin()
+  // Direct call via the XMPP client — avoids useAdmin()'s ~15 admin store
+  // subscriptions (sessions, command lists, vhosts, pagination, etc.) when
+  // we only need this one fetch.
+  const { client } = useXMPP()
+  const getRoomOptions = useCallback(
+    (roomJid: string) => client.admin.fetchRoomOptions(roomJid),
+    [client]
+  )
 
   const [configForm, setConfigForm] = useState<DataForm | null>(null)
   const [loading, setLoading] = useState(true)

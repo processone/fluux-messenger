@@ -3,18 +3,7 @@ import { adminStore } from '../stores'
 import { useAdminStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
 import type { AdminCommand, AdminCommandCategory, AdminCategory, RSMRequest } from '../core/types'
-
-// Commands that operate on a specific user JID
-const USER_COMMANDS = new Set([
-  'http://jabber.org/protocol/admin#delete-user',
-  'http://jabber.org/protocol/admin#disable-user',
-  'http://jabber.org/protocol/admin#reenable-user',
-  'http://jabber.org/protocol/admin#end-user-session',
-  'http://jabber.org/protocol/admin#change-user-password',
-  'http://jabber.org/protocol/admin#get-user-roster',
-  'http://jabber.org/protocol/admin#get-user-lastlogin',
-  'http://jabber.org/protocol/admin#user-stats',
-])
+import { USER_COMMANDS } from './adminCommands'
 
 /**
  * Hook for server administration via XEP-0050 Ad-Hoc Commands.

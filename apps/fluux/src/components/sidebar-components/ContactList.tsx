@@ -1,7 +1,7 @@
 import React, { useState, useRef, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useContextMenu, useTypeToFocus, useListKeyboardNav } from '@/hooks'
-import { useRoster, useAdmin, type Contact } from '@fluux/sdk'
+import { useRoster, useAdminPermissions, type Contact } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { Avatar } from '../Avatar'
 import { RenameContactModal } from '../RenameContactModal'
@@ -263,7 +263,11 @@ const ContactItem = memo(function ContactItem({
   const { t } = useTranslation()
   const menu = useContextMenu()
   const [showRenameModal, setShowRenameModal] = useState(false)
-  const { isAdmin, hasUserCommands, canManageUser } = useAdmin()
+  // Focused permission hook — useAdmin() subscribes to ~15 admin store
+  // values; ContactItem only needs these three. Each ContactItem instance
+  // gets its own subscription, so narrower selectors mean fewer rows
+  // re-render on unrelated admin store updates.
+  const { isAdmin, hasUserCommands, canManageUser } = useAdminPermissions()
 
   // Check if admin can manage this specific user (based on vhost rights)
   const showManageOption = isAdmin && hasUserCommands && onManageUser && canManageUser(contact.jid)
