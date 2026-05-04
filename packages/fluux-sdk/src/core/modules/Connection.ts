@@ -1421,6 +1421,13 @@ export class Connection extends BaseModule {
     const domain = getDomain(jid)
     const username = getLocalPart(jid)
 
+    // When SASL2+bind2 is used, SM is enabled inline inside <authenticate>/<success>.
+    // ejabberd then sends a post-auth <stream:features> that still contains <sm>,
+    // causing xmpp.js's setupStreamFeature to send a duplicate <enable> (server rejects
+    // it with <failed> and the catch block disables sm.enabled). We suppress this by
+    // removing <sm> from the features stanza before the middleware sees it.
+    let bind2SmEnabling = false
+
     const xmppClient = client({
       service: wsUrl,
       domain,
@@ -1490,6 +1497,11 @@ export class Connection extends BaseModule {
         const userAgent = buildUserAgentElement()
         const saslStart = Date.now()
         let saslTimeoutId: ReturnType<typeof setTimeout> | undefined
+        // SASL2 path: bind2 will negotiate SM inline. Mark that the post-auth
+        // <stream:features> with <sm> should be suppressed.
+        if (fast !== undefined) {
+          bind2SmEnabling = true
+        }
         await Promise.race([
           Promise.resolve(authenticate(creds, mechanism, userAgent)).then(() => {
             clearTimeout(saslTimeoutId)
@@ -1548,6 +1560,23 @@ export class Connection extends BaseModule {
 
       patchSmAckDebounce(this.smPatchState, xmppClient)
       patchSmAckQueue(sm)
+    }
+
+    // Intercept <stream:features> before middleware to strip <sm> when bind2 inline
+    // SM negotiation is in flight. Without this, setupStreamFeature sends a duplicate
+    // <enable>, the server rejects it, and the catch block clears sm.enabled.
+    const NS_JABBER_STREAM = 'http://etherx.jabber.org/streams'
+    const NS_SM = 'urn:xmpp:sm:3'
+    if (typeof (xmppClient as any).prependListener === 'function') {
+      ;(xmppClient as any).prependListener('element', (element: Element) => {
+        if (bind2SmEnabling && element.is('features', NS_JABBER_STREAM)) {
+          bind2SmEnabling = false
+          const smFeature = element.getChild('sm', NS_SM)
+          if (smFeature) {
+            ;(element as any).children = (element as any).children.filter((c: unknown) => c !== smFeature)
+          }
+        }
+      })
     }
 
     return xmppClient
@@ -1634,6 +1663,42 @@ export class Connection extends BaseModule {
           this.stores.console.addEvent(`SM stanza send failed: ${stanzaStr}`, 'sm')
         }
         // Note: xmpp.js will fall back to new session and emit 'online'
+      })
+
+      // SASL2 inline SM resumption: the <resumed> is embedded inside <success> so xmpp.js
+      // never emits a top-level 'nonza' for it. The SM module fires sm.emit("resumed") instead.
+      // For traditional stream-feature resumption, the nonza handler fires first (registered
+      // earlier) and sets resolved=true, making this a no-op there.
+      sm.on('resumed', () => {
+        if (resolved) return
+        const smLive = this.xmpp?.streamManagement as any
+        const previd = smLive?.id || ''
+        const inbound = smLive ? (smLive.inbound || 0) : 0
+        const outbound = smLive
+          ? (smLive.outbound || 0) + (Array.isArray(smLive.outbound_q) ? smLive.outbound_q.length : 0)
+          : 0
+        if (previd) {
+          this.stores.console.addEvent(
+            `Stream Management session resumed via SASL2 inline (id: ${previd.slice(0, 8)}...)`,
+            'sm'
+          )
+          logInfo(`SM session resumed via SASL2 inline (id: ${previd.slice(0, 8)}..., h: ${inbound}, out: ${outbound})`)
+          this.smResumeCompleted = true
+          this.smPersistence.updateCache(previd, inbound, outbound)
+          if (this.credentials?.jid) {
+            void this.smPersistence.persist(this.credentials.jid, this.credentials.resource || '')
+          }
+          setTimeout(() => {
+            const smObj = this.xmpp?.streamManagement as any
+            if (smObj) {
+              smObj.id = previd
+              smObj.enabled = true
+              smObj.inbound = inbound
+            }
+          }, 0)
+        }
+        logInfo(`Connection handshake complete: SM resumed via SASL2 inline (resolved=${resolved})`)
+        handleResult(true)
       })
     }
 

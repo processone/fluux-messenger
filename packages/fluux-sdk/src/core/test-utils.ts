@@ -248,6 +248,10 @@ export const createMockXmppClient = () => {
         }
       }),
     },
+    // prependListener support — captures handlers for tests that verify the
+    // element interceptor used to strip <sm> from post-auth <stream:features>.
+    // The real xmpp.js client inherits this from Node's EventEmitter.
+    prependListener: vi.fn(),
     // Remove all event listeners — called by forceDestroyClient() during cleanup.
     // Must actually clear handlers so destroyed clients cannot emit stale events
     // into the Connection module (e.g., a belated 'online' after timeout).
