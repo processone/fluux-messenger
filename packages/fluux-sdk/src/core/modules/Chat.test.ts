@@ -7,6 +7,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { XMPPClient } from '../XMPPClient'
+import { E2EEEncryptionRequiredError } from '../e2ee'
 import {
   createMockXmppClient,
   createMockStores,
@@ -3587,5 +3588,110 @@ describe('XMPPClient Message', () => {
         // No reactions update since no voter data
         expect(updates.reactions).toBeUndefined()
       })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Downgrade-protection tests for applyE2EEToOutboundChat
+//
+// These tests verify that a peer the user has verified out-of-band never
+// silently receives plaintext — regardless of the global send policy —
+// when the E2EE encryption step fails or finds no matching plugin.
+//
+// Strategy: after connectClient(), replace xmppClient.e2ee with a minimal
+// duck-typed mock so we can control encryptOutbound / getSendPolicy /
+// isPeerVerified without the full Tauri Rust back-end.
+// ---------------------------------------------------------------------------
+describe('XMPPClient Message — E2EE downgrade protection', () => {
+  let xmppClient: XMPPClient
+  let mockStores: MockStoreBindings
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    mockXmppClientInstance = createMockXmppClient()
+    vi.mocked(xmppClientFactory).mockReturnValue(mockXmppClientInstance as any)
+    mockStores = createMockStores()
+    xmppClient = new XMPPClient({ debug: false })
+    xmppClient.bindStores(mockStores)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.clearAllMocks()
+  })
+
+  async function connectClient() {
+    const p = xmppClient.connect({
+      jid: 'user@example.com',
+      password: 'secret',
+      server: 'example.com',
+      skipDiscovery: true,
+    })
+    mockXmppClientInstance._emit('online')
+    await p
+    vi.clearAllMocks()
+  }
+
+  function makeE2EEManager(opts: {
+    policy?: 'opportunistic' | 'strict'
+    encryptResult?: object | null | 'throw'
+    isVerified?: boolean
+  }) {
+    const policy = opts.policy ?? 'opportunistic'
+    return {
+      getSendPolicy: vi.fn().mockReturnValue(policy),
+      encryptOutbound: vi.fn().mockImplementation(async () => {
+        if (opts.encryptResult === 'throw') throw new Error('plugin boom')
+        return opts.encryptResult ?? null
+      }),
+      isPeerVerified: vi.fn().mockResolvedValue(opts.isVerified ?? false),
+    }
+  }
+
+  it('sends plaintext when policy is opportunistic, peer is unverified, and no plugin matches', async () => {
+    await connectClient()
+    xmppClient.e2ee = makeE2EEManager({ isVerified: false }) as any
+
+    // Should not throw — opportunistic + unverified = silent plaintext fallback.
+    await expect(
+      xmppClient.chat.sendMessage('bob@example.com', 'hello', 'chat'),
+    ).resolves.not.toThrow()
+  })
+
+  it('throws E2EEEncryptionRequiredError when policy is opportunistic but peer is verified and no plugin matches', async () => {
+    await connectClient()
+    xmppClient.e2ee = makeE2EEManager({ isVerified: true }) as any
+
+    await expect(
+      xmppClient.chat.sendMessage('bob@example.com', 'hello', 'chat'),
+    ).rejects.toThrow(E2EEEncryptionRequiredError)
+  })
+
+  it('throws E2EEEncryptionRequiredError in strict mode regardless of verification status', async () => {
+    await connectClient()
+    xmppClient.e2ee = makeE2EEManager({ policy: 'strict', isVerified: false }) as any
+
+    await expect(
+      xmppClient.chat.sendMessage('bob@example.com', 'hello', 'chat'),
+    ).rejects.toThrow(E2EEEncryptionRequiredError)
+  })
+
+  it('throws E2EEEncryptionRequiredError when encrypt() throws mid-flight for a verified peer', async () => {
+    await connectClient()
+    xmppClient.e2ee = makeE2EEManager({ encryptResult: 'throw', isVerified: true }) as any
+
+    await expect(
+      xmppClient.chat.sendMessage('bob@example.com', 'hello', 'chat'),
+    ).rejects.toThrow(E2EEEncryptionRequiredError)
+  })
+
+  it('sends plaintext (logs warning) when encrypt() throws for an unverified peer in opportunistic mode', async () => {
+    await connectClient()
+    xmppClient.e2ee = makeE2EEManager({ encryptResult: 'throw', isVerified: false }) as any
+
+    // Should fall through to plaintext — the plugin error is logged but not surfaced.
+    await expect(
+      xmppClient.chat.sendMessage('bob@example.com', 'hello', 'chat'),
+    ).resolves.not.toThrow()
   })
 })

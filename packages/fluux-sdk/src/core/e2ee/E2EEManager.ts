@@ -84,6 +84,7 @@ export class E2EEManager {
   private readonly logger: Logger
   private sendPolicy: E2EESendPolicy = 'opportunistic'
   private readonly securityContextListeners = new Set<SecurityContextUpdateListener>()
+  private readonly forcedPlaintextConversations = new Set<string>()
 
   constructor(options: E2EEManagerOptions) {
     this.storage = options.storage
@@ -144,6 +145,18 @@ export class E2EEManager {
     return this.plugins.get(id) ?? null
   }
 
+  /** Force all outbound sends to this target to skip encryption entirely. Inbound decryption is unaffected. */
+  setForcedPlaintext(target: ConversationTarget, forced: boolean): void {
+    const key = targetKey(target)
+    if (forced) this.forcedPlaintextConversations.add(key)
+    else this.forcedPlaintextConversations.delete(key)
+  }
+
+  /** Returns true if encryption has been explicitly disabled for this target. */
+  isForcedPlaintext(target: ConversationTarget): boolean {
+    return this.forcedPlaintextConversations.has(targetKey(target))
+  }
+
   /** Pin a conversation to a specific plugin (or clear with `null`). */
   setPinnedStrategy(target: ConversationTarget, pin: PinnedStrategy): void {
     const key = targetKey(target)
@@ -170,6 +183,27 @@ export class E2EEManager {
   }
 
   /**
+   * Returns true if any registered plugin reports this peer as `'verified'`.
+   * Used by the send path to enforce per-peer strict policy: a peer the user
+   * has verified out-of-band must never silently receive plaintext, even when
+   * the global send policy is `'opportunistic'`.
+   *
+   * Plugin trust-check errors are treated as non-verified (fail-open) so a
+   * transient plugin fault never permanently blocks the send path.
+   */
+  async isPeerVerified(peer: BareJID): Promise<boolean> {
+    for (const plugin of this.plugins.values()) {
+      try {
+        const trust = await plugin.getPeerTrust(peer)
+        if (trust === 'verified') return true
+      } catch {
+        // Plugin trust check failed — cannot confirm verified, continue
+      }
+    }
+    return false
+  }
+
+  /**
    * Cheap "is encryption available for `target` right now?" probe. Used by
    * call sites that need to decide between two stanza shapes BEFORE
    * building children — e.g. reactions, where the legacy reply-quote
@@ -192,6 +226,7 @@ export class E2EEManager {
    *    fallback; the host must surface that in the UI).
    */
   async selectStrategy(target: ConversationTarget): Promise<E2EEPlugin | null> {
+    if (this.isForcedPlaintext(target)) return null
     const pin = this.getPinnedStrategy(target)
     if (pin) {
       const pinned = this.plugins.get(pin)
@@ -392,6 +427,7 @@ export class E2EEManager {
     this.pins.clear()
     this.capabilityCache.clear()
     this.securityContextListeners.clear()
+    this.forcedPlaintextConversations.clear()
   }
 }
 

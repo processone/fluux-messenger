@@ -282,4 +282,135 @@ describe('useConversationEncryptionState', () => {
       expect(result.current).toMatchObject({ trust: 'verified' })
     })
   })
+
+  // ---------------------------------------------------------------------------
+  // Reconnect fast-path tests
+  //
+  // After a reconnect the plugin cache is cold (getPeerFingerprint → null).
+  // For a peer the user has already verified the hook must return 'encrypted'
+  // immediately from the persisted fingerprint — no 'checking' flash — and
+  // fire a background probe to warm the plugin cache.
+  // ---------------------------------------------------------------------------
+  describe('reconnect fast path for verified peers', () => {
+    const mod = '@/stores/verifiedPeerKeysStore'
+    type VerifiedStore = typeof import('@/stores/verifiedPeerKeysStore')
+    let store: VerifiedStore
+
+    beforeEach(async () => {
+      localStorage.clear()
+      store = (await import(mod)) as VerifiedStore
+      store.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
+    })
+
+    afterEach(() => {
+      store.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
+    })
+
+    it("returns 'encrypted' immediately from the stored fingerprint when plugin cache is cold", () => {
+      // Peer has a verified fingerprint persisted from a previous session, but
+      // the plugin cache is empty (simulates cold start or post-reconnect state).
+      store.useVerifiedPeerKeysStore
+        .getState()
+        .setVerified('bob@example.com', 'STORED_FP')
+
+      const plugin = makePlugin({
+        // Cache miss — plugin hasn't seen this peer yet this session.
+        getPeerFingerprint: vi.fn().mockReturnValue(null),
+        // Probe resolves eventually but the hook must NOT wait for it.
+        probePeer: vi.fn().mockResolvedValue({ supported: true }),
+      })
+      wireMocks({ plugin })
+
+      const { result } = renderHook(() =>
+        useConversationEncryptionState('bob@example.com', 'chat'),
+      )
+
+      // Must be synchronously 'encrypted' — no 'checking' flash.
+      expect(result.current).toEqual({
+        kind: 'encrypted',
+        fingerprint: 'STORED_FP',
+        trust: 'verified',
+      })
+    })
+
+    it('fires a background probe to warm the plugin cache even when fast-path applies', async () => {
+      store.useVerifiedPeerKeysStore
+        .getState()
+        .setVerified('bob@example.com', 'STORED_FP')
+
+      const plugin = makePlugin({
+        getPeerFingerprint: vi.fn().mockReturnValue(null),
+        probePeer: vi.fn().mockResolvedValue({ supported: true }),
+      })
+      wireMocks({ plugin })
+
+      renderHook(() => useConversationEncryptionState('bob@example.com', 'chat'))
+
+      // Flush the background microtask queue.
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 0))
+      })
+
+      expect(plugin.probePeer).toHaveBeenCalledWith('bob@example.com')
+    })
+
+    it('keeps showing encrypted when the background probe fails (transient error)', async () => {
+      store.useVerifiedPeerKeysStore
+        .getState()
+        .setVerified('bob@example.com', 'STORED_FP')
+
+      const plugin = makePlugin({
+        getPeerFingerprint: vi.fn().mockReturnValue(null),
+        // Network hiccup — probe throws.
+        probePeer: vi.fn().mockRejectedValue(new Error('timeout')),
+      })
+      wireMocks({ plugin })
+
+      const { result } = renderHook(() =>
+        useConversationEncryptionState('bob@example.com', 'chat'),
+      )
+
+      // Flush the rejected promise.
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 0))
+      })
+
+      // Must NOT fall to 'unsupported' — the stored fingerprint is authoritative.
+      expect(result.current).toEqual({
+        kind: 'encrypted',
+        fingerprint: 'STORED_FP',
+        trust: 'verified',
+      })
+    })
+
+    it("goes through 'checking' normally for an unverified peer with cold cache", async () => {
+      // No verified fingerprint stored → should behave as before: 'checking'
+      // then 'encrypted' after the probe resolves.
+      const fp = 'FRESH_FP'
+      let cacheHit = false
+      const plugin = makePlugin({
+        getPeerFingerprint: vi.fn().mockImplementation(() => (cacheHit ? fp : null)),
+        probePeer: vi.fn().mockImplementation(async () => {
+          cacheHit = true
+          return { supported: true }
+        }),
+      })
+      wireMocks({ plugin })
+
+      const { result } = renderHook(() =>
+        useConversationEncryptionState('bob@example.com', 'chat'),
+      )
+
+      // No stored fingerprint → should show 'checking' while probe runs.
+      expect(result.current.kind).toBe('checking')
+
+      await waitFor(() => {
+        expect(result.current).toEqual({
+          kind: 'encrypted',
+          fingerprint: fp,
+          trust: 'unverified',
+        })
+      })
+    })
+  })
 })

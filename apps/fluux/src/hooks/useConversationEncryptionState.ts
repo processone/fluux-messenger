@@ -3,6 +3,7 @@ import { useConnection, useXMPPContext } from '@fluux/sdk'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
 import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
+import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
 
 /**
  * Per-conversation encryption status surfaced to the composer chip.
@@ -20,19 +21,23 @@ import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
  *                   `trust` reflects whether the user has confirmed
  *                   the fingerprint out-of-band — `verified` lifts
  *                   the chip to the green-trust palette.
- * - `blocked`     — peer's pinned primary fingerprint differs from
- *                   what their PEP currently advertises and the
- *                   rotation hasn't been resolved by the user. The
- *                   plugin's encrypt path refuses while in this
- *                   state — the chip surfaces it so the user sees a
- *                   reason (the key-change banner has the resolution
- *                   buttons).
- * - `unsupported` — probe completed but the peer has no advertised
- *                   OpenPGP key. Composer falls back to plaintext.
+ * - `blocked`       — peer's pinned primary fingerprint differs from
+ *                     what their PEP currently advertises and the
+ *                     rotation hasn't been resolved by the user. The
+ *                     plugin's encrypt path refuses while in this
+ *                     state — the chip surfaces it so the user sees a
+ *                     reason (the key-change banner has the resolution
+ *                     buttons).
+ * - `unsupported`   — probe completed but the peer has no advertised
+ *                     OpenPGP key. Composer falls back to plaintext.
+ * - `plaintextForced` — user has explicitly disabled encryption for
+ *                     this conversation. Messages are sent in plaintext
+ *                     even if the peer has a published key.
  */
 export type ConversationEncryptionState =
   | { kind: 'disabled' }
   | { kind: 'checking' }
+  | { kind: 'plaintextForced' }
   | {
       kind: 'encrypted'
       fingerprint: string
@@ -111,6 +116,12 @@ export function useConversationEncryptionState(
     peerJid ? (s.alertsByJid[peerJid]?.previousFingerprint ?? null) : null,
   )
 
+  // Per-conversation plaintext override. Uses a per-JID primitive selector
+  // so unrelated JID changes don't trigger a re-render here.
+  const isForcedPlaintext = useConversationPlaintextOverrideStore((s) =>
+    peerJid ? peerJid in s.plaintextJids : false,
+  )
+
   // The base state is what the probe / cache produces — kind, peer
   // fingerprint, and so on. Trust is derived below from this plus the
   // verified-store snapshot, so a verify action re-renders without
@@ -129,6 +140,12 @@ export function useConversationEncryptionState(
       return
     }
 
+    // Per-conversation plaintext override: skip probe entirely, no icon needed.
+    if (isForcedPlaintext) {
+      setBase({ kind: 'disabled' })
+      return
+    }
+
     const plugin = e2eeManager?.getPlugin('openpgp') as
       | OpenpgpPluginShape
       | null
@@ -142,12 +159,30 @@ export function useConversationEncryptionState(
       return
     }
 
-    // Fast path: already-cached peer key. Avoids a pointless probe
+    // Fast path 1: already-cached peer key. Avoids a pointless probe
     // call + wipes any stale `checking` display when re-entering a
     // conversation we've encrypted to before.
     const cachedFp = plugin.getPeerFingerprint?.(peerJid) ?? null
     if (cachedFp) {
       setBase({ kind: 'encrypted', fingerprint: cachedFp })
+      return
+    }
+
+    // Fast path 2: persisted verified fingerprint (warm-start after reconnect).
+    // When the plugin cache is cold (just reconnected), show 'encrypted'
+    // immediately from the stored fingerprint so the chip never flashes
+    // 'checking' for a contact the user already verified. Fire a background
+    // probe to repopulate the plugin cache so the actual send path works
+    // without an extra round-trip. Transient probe errors do NOT downgrade
+    // the chip — the verified fingerprint IS the authoritative state; the
+    // key-change alert path handles real rotations independently.
+    if (verifiedFingerprint) {
+      setBase({ kind: 'encrypted', fingerprint: verifiedFingerprint })
+      void plugin.probePeer?.(peerJid)?.catch(() => {
+        // Transient error: plugin cache stays cold but chip state is
+        // correct (the stored fingerprint). Next probe (conversation
+        // re-enter or reconnect) will retry.
+      })
       return
     }
 
@@ -174,7 +209,7 @@ export function useConversationEncryptionState(
     return () => {
       cancelled = true
     }
-  }, [peerJid, conversationType, openpgpEnabled, online, e2eeManager])
+  }, [peerJid, conversationType, openpgpEnabled, online, e2eeManager, isForcedPlaintext])
 
   // Merge the verification trust + pin-mismatch alert into the
   // encrypted state. Precedence:
@@ -185,6 +220,11 @@ export function useConversationEncryptionState(
   //   2. Otherwise, fall through to the standard verified/unverified
   //      derivation against the cached cert's fingerprint.
   return useMemo<ConversationEncryptionState>(() => {
+    // Per-conversation override takes precedence over everything else.
+    // The effect already sets base to 'disabled' to skip the probe, but
+    // the memo is the single authoritative output — check here so a toggle
+    // triggers a re-render without waiting for the next effect run.
+    if (isForcedPlaintext) return { kind: 'plaintextForced' }
     if (base.kind !== 'encrypted') return base
     if (alertCurrentFp && alertPreviousFp) {
       return {
@@ -198,5 +238,5 @@ export function useConversationEncryptionState(
       fingerprint: base.fingerprint,
       trust: verifiedFingerprint === base.fingerprint ? 'verified' : 'unverified',
     }
-  }, [base, verifiedFingerprint, alertCurrentFp, alertPreviousFp])
+  }, [base, isForcedPlaintext, verifiedFingerprint, alertCurrentFp, alertPreviousFp])
 }

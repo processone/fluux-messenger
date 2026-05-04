@@ -613,3 +613,61 @@ describe('E2EEManager — shutdown', () => {
     expect(mgr.listPlugins()).toEqual([])
   })
 })
+
+describe('E2EEManager — isPeerVerified', () => {
+  it('returns false when no plugins are registered', async () => {
+    const mgr = makeManager()
+    await expect(mgr.isPeerVerified('bob@example.com')).resolves.toBe(false)
+  })
+
+  it("returns false when all plugins report 'unknown' trust", async () => {
+    // FakePlugin.getPeerTrust() returns 'unknown' by default.
+    const mgr = makeManager()
+    await mgr.register(new FakePlugin(weakDescriptor, 'urn:test:weak'))
+    await mgr.register(new FakePlugin(strongDescriptor, 'urn:test:strong'))
+    await expect(mgr.isPeerVerified('bob@example.com')).resolves.toBe(false)
+  })
+
+  it("returns false for 'trusted' and 'untrusted' — only 'verified' qualifies", async () => {
+    const mgr = makeManager()
+    const plugin = new FakePlugin(weakDescriptor, 'urn:test:weak')
+    vi.spyOn(plugin, 'getPeerTrust').mockResolvedValue('trusted' as never)
+    await mgr.register(plugin)
+    await expect(mgr.isPeerVerified('bob@example.com')).resolves.toBe(false)
+  })
+
+  it("returns true as soon as any plugin reports 'verified'", async () => {
+    const mgr = makeManager()
+    const notVerified = new FakePlugin(weakDescriptor, 'urn:test:weak')
+    const verified = new FakePlugin(strongDescriptor, 'urn:test:strong')
+    vi.spyOn(notVerified, 'getPeerTrust').mockResolvedValue('untrusted' as never)
+    vi.spyOn(verified, 'getPeerTrust').mockResolvedValue('verified' as never)
+    await mgr.register(notVerified)
+    await mgr.register(verified)
+    await expect(mgr.isPeerVerified('bob@example.com')).resolves.toBe(true)
+  })
+
+  it('returns false (not throws) when a plugin trust check throws', async () => {
+    const mgr = makeManager()
+    const broken = new FakePlugin(weakDescriptor, 'urn:test:weak')
+    vi.spyOn(broken, 'getPeerTrust').mockRejectedValue(new Error('plugin error'))
+    await mgr.register(broken)
+    await expect(mgr.isPeerVerified('bob@example.com')).resolves.toBe(false)
+  })
+
+  it('stops iterating after the first verified plugin', async () => {
+    const mgr = makeManager()
+    const first = new FakePlugin(weakDescriptor, 'urn:test:weak')
+    const second = new FakePlugin(strongDescriptor, 'urn:test:strong')
+    const firstSpy = vi.spyOn(first, 'getPeerTrust').mockResolvedValue('verified' as never)
+    const secondSpy = vi.spyOn(second, 'getPeerTrust')
+    await mgr.register(first)
+    await mgr.register(second)
+
+    const result = await mgr.isPeerVerified('bob@example.com')
+    expect(result).toBe(true)
+    expect(firstSpy).toHaveBeenCalledTimes(1)
+    // Short-circuits — second plugin should not be queried.
+    expect(secondSpy).not.toHaveBeenCalled()
+  })
+})

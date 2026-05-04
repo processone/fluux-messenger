@@ -512,11 +512,23 @@ export class Chat extends BaseModule {
           trust: 'trusted',
         }
       }
-      if (manager.getSendPolicy() === 'strict') {
+      // No plugin matched. Enforce strict policy globally, or per-peer when
+      // the user has verified this contact out-of-band — a verified peer must
+      // never silently receive plaintext regardless of the global setting.
+      if (
+        manager.getSendPolicy() === 'strict' ||
+        (await manager.isPeerVerified(recipient))
+      ) {
         throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
       }
     } catch (err) {
       if (err instanceof E2EEEncryptionRequiredError) throw err
+      // Plugin was selected but encrypt() threw mid-flight. Still block
+      // plaintext for verified peers — an encryption error is not consent
+      // to downgrade.
+      if (await manager.isPeerVerified(recipient).catch(() => false)) {
+        throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
+      }
       logWarn(
         `E2EE encrypt failed for ${recipient}, sending plaintext: ${err instanceof Error ? err.message : String(err)}`,
       )
