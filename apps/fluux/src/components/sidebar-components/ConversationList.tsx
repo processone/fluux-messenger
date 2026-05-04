@@ -1,12 +1,12 @@
-import React, { useState, useRef, memo } from 'react'
+import React, { useState, useRef, memo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useListKeyboardNav, useRouteSync } from '@/hooks'
 import { detectRenderLoop, trackSelectorChange } from '@/utils/renderLoopDetector'
 import {
   useChat,
   useRoster,
-  useRoom,
   chatStore,
+  roomStore,
   generateConsistentColorHexSync,
   formatMessagePreview,
   type Conversation,
@@ -46,7 +46,19 @@ export function ConversationList() {
     deleteConversation,
     archiveConversation,
   } = useChat()
-  const { setActiveRoom, getRoom } = useRoom()
+  // Direct store access — avoids subscribing to all room state (activeRoom, activeMessages,
+  // allRooms, roomsWithUnreadCount, etc.) that useRoom() would pull in. During sync,
+  // rapid room updates would cause 500+ renders/second through useRoom().
+  const setActiveRoom = useCallback(async (roomJid: string | null) => {
+    if (roomJid) {
+      await roomStore.getState().loadMessagesFromCache(roomJid, { limit: 100 })
+    }
+    roomStore.getState().setActiveRoom(roomJid)
+  }, [])
+  const getRoom = useCallback(
+    (roomJid: string) => roomStore.getState().rooms.get(roomJid),
+    []
+  )
   const { contacts } = useRoster()
   const { navigateToMessages } = useRouteSync()
   const listRef = useRef<HTMLDivElement>(null)
@@ -130,7 +142,16 @@ export function ArchiveList() {
     deleteConversation,
     unarchiveConversation,
   } = useChat()
-  const { setActiveRoom, getRoom } = useRoom()
+  const setActiveRoom = useCallback(async (roomJid: string | null) => {
+    if (roomJid) {
+      await roomStore.getState().loadMessagesFromCache(roomJid, { limit: 100 })
+    }
+    roomStore.getState().setActiveRoom(roomJid)
+  }, [])
+  const getRoom = useCallback(
+    (roomJid: string) => roomStore.getState().rooms.get(roomJid),
+    []
+  )
   const { contacts } = useRoster()
   const { navigateToArchive } = useRouteSync()
   const listRef = useRef<HTMLDivElement>(null)
