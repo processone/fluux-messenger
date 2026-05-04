@@ -4,6 +4,7 @@
  * Displays contact avatar, name, and presence status.
  * Also supports group chat mode with a hash icon.
  */
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ContactIdentity } from '@fluux/sdk'
 import { useRosterStore, useContactTime, useLastActivity } from '@fluux/sdk/react'
@@ -11,7 +12,7 @@ import { Avatar } from './Avatar'
 import { useWindowDrag } from '@/hooks'
 import { getTranslatedStatusText } from '@/utils/statusText'
 import { Tooltip } from './Tooltip'
-import { ArrowLeft, Clock, Hash, Lock, Loader2, Search, ShieldAlert, ShieldCheck } from 'lucide-react'
+import { ArrowLeft, Clock, Hash, Lock, LockOpen, Loader2, Search, ShieldAlert, ShieldCheck, ShieldOff } from 'lucide-react'
 import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 
 export interface ChatHeaderProps {
@@ -23,6 +24,8 @@ export interface ChatHeaderProps {
   onSearchInConversation?: () => void
   encryptionState?: ConversationEncryptionState
   onEncryptionClick?: () => void
+  onDisableEncryptionClick?: () => void
+  onEnableEncryptionClick?: () => void
 }
 
 export function ChatHeader({
@@ -34,6 +37,8 @@ export function ChatHeader({
   onSearchInConversation,
   encryptionState,
   onEncryptionClick,
+  onDisableEncryptionClick,
+  onEnableEncryptionClick,
 }: ChatHeaderProps) {
   const { t } = useTranslation()
   const isGroupChat = type === 'groupchat'
@@ -99,7 +104,9 @@ export function ChatHeader({
         <EncryptionIcon
           state={encryptionState}
           peerName={name}
-          onClick={onEncryptionClick}
+          onVerifyClick={onEncryptionClick}
+          onDisableClick={onDisableEncryptionClick}
+          onEnableClick={onEnableEncryptionClick}
         />
       )}
 
@@ -124,15 +131,33 @@ function formatFingerprint(fp: string): string {
 function EncryptionIcon({
   state,
   peerName,
-  onClick,
+  onVerifyClick,
+  onDisableClick,
+  onEnableClick,
 }: {
   state: ConversationEncryptionState
   peerName: string
-  onClick?: () => void
+  onVerifyClick?: () => void
+  onDisableClick?: () => void
+  onEnableClick?: () => void
 }) {
   const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
   const btnClass = 'p-1.5 rounded transition-colors'
 
+  useEffect(() => {
+    if (!open) return
+    function handleOutsideClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleOutsideClick)
+    return () => document.removeEventListener('mousedown', handleOutsideClick)
+  }, [open])
+
+  // Non-interactive states — no popover.
   if (state.kind === 'checking') {
     return (
       <Tooltip content={t('chat.encryption.checking')} position="bottom">
@@ -159,21 +184,54 @@ function EncryptionIcon({
     )
   }
 
-  // encrypted
+  // plaintextForced — open lock icon + popover to re-enable.
+  if (state.kind === 'plaintextForced') {
+    return (
+      <div ref={containerRef} className="relative">
+        <Tooltip content={t('chat.encryption.plaintextForcedTooltip')} position="bottom" disabled={open}>
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className={`${btnClass} text-fluux-muted hover:text-fluux-text cursor-pointer`}
+            aria-label={t('chat.encryption.plaintextForced')}
+            aria-expanded={open}
+          >
+            <LockOpen className="w-4 h-4" />
+          </button>
+        </Tooltip>
+        {open && (
+          <div className="absolute right-0 top-full mt-1 w-56 rounded-lg border border-fluux-border bg-fluux-panel shadow-lg z-50 py-1">
+            {onEnableClick && (
+              <button
+                type="button"
+                className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-fluux-text hover:bg-fluux-hover transition-colors"
+                onClick={() => { setOpen(false); onEnableClick() }}
+              >
+                <Lock className="w-4 h-4 flex-shrink-0 text-fluux-muted" />
+                {t('chat.encryption.enableEncryption')}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // encrypted — shield/lock icon + popover with verify + disable options.
   const verified = state.kind === 'encrypted' && state.trust === 'verified'
   const Icon = verified ? ShieldCheck : Lock
   const colorClass = verified ? 'text-green-500' : 'text-fluux-muted hover:text-fluux-text'
-  const tooltip = (
-    <div>
-      <div>{verified ? t('chat.encryption.verifiedTooltip') : t('chat.encryption.openpgpTooltip')}</div>
-      {state.kind === 'encrypted' && (
-        <div className="font-mono text-xs mt-0.5 opacity-75">{formatFingerprint(state.fingerprint)}</div>
-      )}
-      {!verified && <div className="text-xs mt-1 opacity-60">{t('chat.verifyPeer.chipAriaLabel', { name: peerName })}</div>}
-    </div>
-  )
+  const hasActions = onVerifyClick || onDisableClick
 
-  if (!onClick) {
+  if (!hasActions) {
+    const tooltip = (
+      <div>
+        <div>{verified ? t('chat.encryption.verifiedTooltip') : t('chat.encryption.openpgpTooltip')}</div>
+        {state.kind === 'encrypted' && (
+          <div className="font-mono text-xs mt-0.5 opacity-75">{formatFingerprint(state.fingerprint)}</div>
+        )}
+      </div>
+    )
     return (
       <Tooltip content={tooltip} position="bottom">
         <div className={`${btnClass} ${colorClass}`} role="status">
@@ -183,18 +241,56 @@ function EncryptionIcon({
     )
   }
 
+  const ariaLabel = verified
+    ? t('chat.encryption.encryptedTo', { name: peerName })
+    : t('chat.verifyPeer.chipAriaLabel', { name: peerName })
+
   return (
-    <Tooltip content={tooltip} position="bottom">
-      <button
-        type="button"
-        onClick={onClick}
-        className={`${btnClass} ${colorClass} cursor-pointer`}
-        aria-label={verified
-          ? t('chat.encryption.encryptedTo', { name: peerName })
-          : t('chat.verifyPeer.chipAriaLabel', { name: peerName })}
+    <div ref={containerRef} className="relative">
+      <Tooltip
+        content={state.kind === 'encrypted' ? (
+          <div>
+            <div>{verified ? t('chat.encryption.verifiedTooltip') : t('chat.encryption.openpgpTooltip')}</div>
+            <div className="font-mono text-xs mt-0.5 opacity-75">{formatFingerprint(state.fingerprint)}</div>
+          </div>
+        ) : null}
+        position="bottom"
+        disabled={open}
       >
-        <Icon className="w-4 h-4" />
-      </button>
-    </Tooltip>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className={`${btnClass} ${colorClass} cursor-pointer`}
+          aria-label={ariaLabel}
+          aria-expanded={open}
+        >
+          <Icon className="w-4 h-4" />
+        </button>
+      </Tooltip>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 w-56 rounded-lg border border-fluux-border bg-fluux-panel shadow-lg z-50 py-1">
+          {onVerifyClick && (
+            <button
+              type="button"
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-fluux-text hover:bg-fluux-hover transition-colors"
+              onClick={() => { setOpen(false); onVerifyClick() }}
+            >
+              <ShieldCheck className="w-4 h-4 flex-shrink-0 text-fluux-muted" />
+              {t('chat.verifyPeer.dialogTitle', { name: peerName })}
+            </button>
+          )}
+          {onDisableClick && (
+            <button
+              type="button"
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-fluux-text hover:bg-fluux-hover transition-colors"
+              onClick={() => { setOpen(false); onDisableClick() }}
+            >
+              <ShieldOff className="w-4 h-4 flex-shrink-0 text-fluux-muted" />
+              {t('chat.encryption.disableEncryption')}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   )
 }

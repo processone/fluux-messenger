@@ -291,6 +291,150 @@ describe('useConversationEncryptionState', () => {
   // immediately from the persisted fingerprint — no 'checking' flash — and
   // fire a background probe to warm the plugin cache.
   // ---------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // Forced-plaintext override tests
+  //
+  // When the user has explicitly disabled encryption for a conversation, the
+  // hook must return `plaintextForced` regardless of what the plugin cache or
+  // probe reports — including when the peer has a verified fingerprint.
+  // ---------------------------------------------------------------------------
+  describe('forced-plaintext override', () => {
+    const overrideMod = '@/stores/conversationPlaintextOverrideStore'
+    type OverrideStore = typeof import('@/stores/conversationPlaintextOverrideStore')
+    let overrideStore: OverrideStore
+
+    beforeEach(async () => {
+      localStorage.clear()
+      overrideStore = (await import(overrideMod)) as OverrideStore
+      overrideStore.useConversationPlaintextOverrideStore.setState({ plaintextJids: {} })
+    })
+
+    afterEach(() => {
+      overrideStore.useConversationPlaintextOverrideStore.setState({ plaintextJids: {} })
+    })
+
+    it("returns 'plaintextForced' when the override store has the peer JID", () => {
+      const plugin = makePlugin({
+        getPeerFingerprint: vi.fn().mockReturnValue(null),
+        probePeer: vi.fn().mockResolvedValue({ supported: false }),
+      })
+      wireMocks({ plugin })
+
+      act(() => {
+        overrideStore.useConversationPlaintextOverrideStore
+          .getState()
+          .setForcedPlaintext('bob@example.com', true)
+      })
+
+      const { result } = renderHook(() =>
+        useConversationEncryptionState('bob@example.com', 'chat'),
+      )
+      expect(result.current).toEqual({ kind: 'plaintextForced' })
+    })
+
+    it("returns 'plaintextForced' even when the plugin cache has a fingerprint", () => {
+      // Override takes precedence over the cached key — memo is authoritative.
+      const plugin = makePlugin({
+        getPeerFingerprint: vi.fn().mockReturnValue('ABCD1234'),
+      })
+      wireMocks({ plugin })
+
+      act(() => {
+        overrideStore.useConversationPlaintextOverrideStore
+          .getState()
+          .setForcedPlaintext('bob@example.com', true)
+      })
+
+      const { result } = renderHook(() =>
+        useConversationEncryptionState('bob@example.com', 'chat'),
+      )
+      expect(result.current).toEqual({ kind: 'plaintextForced' })
+    })
+
+    it('does not trigger a probe when forced plaintext (effect short-circuits)', async () => {
+      const plugin = makePlugin({
+        getPeerFingerprint: vi.fn().mockReturnValue(null),
+        probePeer: vi.fn().mockResolvedValue({ supported: true }),
+      })
+      wireMocks({ plugin })
+
+      act(() => {
+        overrideStore.useConversationPlaintextOverrideStore
+          .getState()
+          .setForcedPlaintext('bob@example.com', true)
+      })
+
+      renderHook(() => useConversationEncryptionState('bob@example.com', 'chat'))
+
+      // Flush microtasks to confirm no probe was triggered.
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 0))
+      })
+
+      expect(plugin.probePeer).not.toHaveBeenCalled()
+    })
+
+    it('returns to normal probe behavior once the override is removed', async () => {
+      const fp = 'CAFE5678'
+      let cacheHit = false
+      const plugin = makePlugin({
+        getPeerFingerprint: vi.fn().mockImplementation(() => (cacheHit ? fp : null)),
+        probePeer: vi.fn().mockImplementation(async () => {
+          cacheHit = true
+          return { supported: true }
+        }),
+      })
+      wireMocks({ plugin })
+
+      act(() => {
+        overrideStore.useConversationPlaintextOverrideStore
+          .getState()
+          .setForcedPlaintext('bob@example.com', true)
+      })
+
+      const { result } = renderHook(() =>
+        useConversationEncryptionState('bob@example.com', 'chat'),
+      )
+      expect(result.current).toEqual({ kind: 'plaintextForced' })
+
+      // User re-enables encryption.
+      act(() => {
+        overrideStore.useConversationPlaintextOverrideStore
+          .getState()
+          .setForcedPlaintext('bob@example.com', false)
+      })
+
+      // Hook transitions back through 'checking' then 'encrypted'.
+      await waitFor(() => {
+        expect(result.current).toEqual({ kind: 'encrypted', fingerprint: fp, trust: 'unverified' })
+      })
+    })
+
+    it("'plaintextForced' applies only to the targeted JID, not to other peers", () => {
+      const plugin = makePlugin({
+        getPeerFingerprint: vi.fn().mockImplementation((peer: string) =>
+          peer === 'alice@example.com' ? 'ALICE_FP' : null,
+        ),
+      })
+      wireMocks({ plugin })
+
+      act(() => {
+        overrideStore.useConversationPlaintextOverrideStore
+          .getState()
+          .setForcedPlaintext('bob@example.com', true)
+      })
+
+      const { result: aliceResult } = renderHook(() =>
+        useConversationEncryptionState('alice@example.com', 'chat'),
+      )
+      expect(aliceResult.current).toEqual({
+        kind: 'encrypted',
+        fingerprint: 'ALICE_FP',
+        trust: 'unverified',
+      })
+    })
+  })
+
   describe('reconnect fast path for verified peers', () => {
     const mod = '@/stores/verifiedPeerKeysStore'
     type VerifiedStore = typeof import('@/stores/verifiedPeerKeysStore')

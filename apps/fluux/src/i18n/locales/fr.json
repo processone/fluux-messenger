@@ -462,7 +462,12 @@
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Clé OpenPGP vérifiée",
             "blocked": "Chiffrement suspendu",
-            "blockedTooltip": "La clé du correspondant a changé — résolvez pour reprendre le chiffrement"
+            "blockedTooltip": "La clé du correspondant a changé — résolvez pour reprendre le chiffrement",
+            "plaintextForced": "Chiffrement désactivé",
+            "plaintextForcedTooltip": "Vous avez désactivé le chiffrement pour cette conversation — les messages sont envoyés en clair",
+            "disableEncryption": "Désactiver le chiffrement pour cette conversation",
+            "enableEncryption": "Réactiver le chiffrement",
+            "attachmentKeyWouldLeak": "Message non envoyé — la pièce jointe est chiffrée mais le chiffrement de bout en bout n'est pas disponible. L'envoi exposerait la clé du fichier."
         },
         "verifyPeer": {
             "chipAriaLabel": "Chiffré à destination de {{name}} — cliquez pour vérifier l'empreinte",

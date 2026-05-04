@@ -14,6 +14,7 @@
 import type { XMPPClient } from '@fluux/sdk/core'
 import { isTauri } from '../utils/tauri'
 import { isOpenpgpEnabled } from '../stores/encryptionSettingsStore'
+import { useConversationPlaintextOverrideStore } from '../stores/conversationPlaintextOverrideStore'
 import { SequoiaPgpPlugin } from './SequoiaPgpPlugin'
 
 /**
@@ -44,6 +45,14 @@ export async function registerE2EEPlugins(client: XMPPClient): Promise<void> {
     // means plaintext. Strict mode would turn every keyless peer into
     // a send failure, which is the wrong trade-off while OpenPGP
     // adoption is sparse.
+
+    // Re-apply per-conversation plaintext overrides persisted from a
+    // previous session. The E2EEManager is rebuilt on each login so
+    // in-memory state is lost; restore it from the persistent store.
+    const { plaintextJids } = useConversationPlaintextOverrideStore.getState()
+    for (const jid of Object.keys(plaintextJids)) {
+      manager.setForcedPlaintext({ kind: 'direct', peer: jid }, true)
+    }
   } catch (err) {
     // Log but don't throw — E2EE plugin failure should never take down
     // the chat path. The UI drops to cleartext with the lock icon absent.

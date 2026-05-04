@@ -462,7 +462,12 @@
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Overený kľúč OpenPGP",
             "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed — resolve to resume encryption"
+            "blockedTooltip": "Peer's key has changed — resolve to resume encryption",
+            "attachmentKeyWouldLeak": "Message not sent — the attachment is encrypted but end-to-end encryption is unavailable. Sending would expose the file key.",
+            "plaintextForced": "Encryption disabled",
+            "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
+            "disableEncryption": "Disable encryption for this conversation",
+            "enableEncryption": "Re-enable encryption"
         },
         "verifyPeer": {
             "chipAriaLabel": "Šifrované pre {{name}} — kliknutím overíte odtlačok",

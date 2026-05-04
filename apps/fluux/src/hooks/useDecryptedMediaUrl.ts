@@ -55,7 +55,7 @@ export function useDecryptedMediaUrl(
       return await resp.arrayBuffer()
     }
 
-    ;(async () => {
+    void (async () => {
       try {
         const buf = await fetchFn(url)
         if (cancelled) return

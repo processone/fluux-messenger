@@ -671,3 +671,75 @@ describe('E2EEManager — isPeerVerified', () => {
     expect(secondSpy).not.toHaveBeenCalled()
   })
 })
+
+describe('E2EEManager — forced plaintext', () => {
+  it('setForcedPlaintext(true) makes selectStrategy return null even when a plugin supports the peer', async () => {
+    const mgr = makeManager()
+    await mgr.register(new FakePlugin(weakDescriptor, 'urn:test:weak'))
+    const target: ConversationTarget = { kind: 'direct', peer: 'bob@example.com' }
+
+    // Without override: plugin supports bob → strategy found.
+    expect(await mgr.selectStrategy(target)).not.toBeNull()
+
+    mgr.setForcedPlaintext(target, true)
+    expect(await mgr.selectStrategy(target)).toBeNull()
+  })
+
+  it('setForcedPlaintext(false) restores normal strategy selection', async () => {
+    const mgr = makeManager()
+    await mgr.register(new FakePlugin(weakDescriptor, 'urn:test:weak'))
+    const target: ConversationTarget = { kind: 'direct', peer: 'bob@example.com' }
+
+    mgr.setForcedPlaintext(target, true)
+    expect(await mgr.selectStrategy(target)).toBeNull()
+
+    mgr.setForcedPlaintext(target, false)
+    expect(await mgr.selectStrategy(target)).not.toBeNull()
+  })
+
+  it('isForcedPlaintext reflects set/clear correctly', () => {
+    const mgr = makeManager()
+    const target: ConversationTarget = { kind: 'direct', peer: 'bob@example.com' }
+    const other: ConversationTarget = { kind: 'direct', peer: 'alice@example.com' }
+
+    expect(mgr.isForcedPlaintext(target)).toBe(false)
+    mgr.setForcedPlaintext(target, true)
+    expect(mgr.isForcedPlaintext(target)).toBe(true)
+    expect(mgr.isForcedPlaintext(other)).toBe(false)
+    mgr.setForcedPlaintext(target, false)
+    expect(mgr.isForcedPlaintext(target)).toBe(false)
+  })
+
+  it('canEncryptTo returns false when forced plaintext', async () => {
+    const mgr = makeManager()
+    await mgr.register(new FakePlugin(weakDescriptor, 'urn:test:weak'))
+    const target: ConversationTarget = { kind: 'direct', peer: 'bob@example.com' }
+
+    expect(await mgr.canEncryptTo(target)).toBe(true)
+    mgr.setForcedPlaintext(target, true)
+    expect(await mgr.canEncryptTo(target)).toBe(false)
+  })
+
+  it('shutdown clears all forced-plaintext overrides', async () => {
+    const mgr = makeManager()
+    const target: ConversationTarget = { kind: 'direct', peer: 'bob@example.com' }
+    mgr.setForcedPlaintext(target, true)
+    expect(mgr.isForcedPlaintext(target)).toBe(true)
+
+    await mgr.shutdown()
+    expect(mgr.isForcedPlaintext(target)).toBe(false)
+  })
+
+  it('forced plaintext does not block inbound decryption', async () => {
+    const mgr = makeManager()
+    const plugin = new FakePlugin(weakDescriptor, 'urn:test:weak')
+    await mgr.register(plugin)
+    const target: ConversationTarget = { kind: 'direct', peer: 'bob@example.com' }
+    mgr.setForcedPlaintext(target, true)
+
+    // Build a fake inbound element that the plugin can claim.
+    const fakeElement = { name: 'fake', attrs: { xmlns: 'urn:test:weak' }, children: [] }
+    const result = await mgr.decryptInbound(fakeElement, target)
+    expect(result).not.toBeNull()
+  })
+})

@@ -4,6 +4,7 @@ import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { useChatActive, useContactIdentities, createMessageLookup, getBareJid, getLocalPart, getMyReactions, useXMPPContext, type Message, type ContactIdentity } from '@fluux/sdk'
 import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
 import { useToastStore } from '@/stores/toastStore'
+import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
 import { VerifyPeerDialog } from './VerifyPeerDialog'
 import { KeyChangeBanner } from './KeyChangeBanner'
 import { useConnectionStore } from '@fluux/sdk/react'
@@ -249,6 +250,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, m
   const { client } = useXMPPContext()
   const setPeerVerified = useVerifiedPeerKeysStore((s) => s.setVerified)
   const addToast = useToastStore((s) => s.addToast)
+  const setForcedPlaintext = useConversationPlaintextOverrideStore((s) => s.setForcedPlaintext)
   const [verifyDialogState, setVerifyDialogState] = useState<
     | { open: false }
     | { open: true; peerJid: string; peerFingerprint: string; ownFingerprint: string | null }
@@ -275,6 +277,21 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, m
     },
     [verifyDialogState, setPeerVerified, addToast, t],
   )
+
+  const handleDisableEncryption = useCallback(() => {
+    if (activeConversation?.type !== 'chat' || !activeConversation?.id) return
+    const jid = activeConversation.id
+    setForcedPlaintext(jid, true)
+    client.e2ee?.setForcedPlaintext({ kind: 'direct', peer: jid }, true)
+  }, [activeConversation, setForcedPlaintext, client])
+
+  const handleEnableEncryption = useCallback(() => {
+    if (activeConversation?.type !== 'chat' || !activeConversation?.id) return
+    const jid = activeConversation.id
+    setForcedPlaintext(jid, false)
+    client.e2ee?.setForcedPlaintext({ kind: 'direct', peer: jid }, false)
+    client.e2ee?.invalidateCapability(jid)
+  }, [activeConversation, setForcedPlaintext, client])
 
   if (!activeConversation) return null
 
@@ -308,6 +325,8 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, m
         onSearchInConversation={handleSearchInConversation}
         encryptionState={encryptionState}
         onEncryptionClick={encryptionState.kind === 'encrypted' ? handleOpenVerify : undefined}
+        onDisableEncryptionClick={encryptionState.kind === 'encrypted' ? handleDisableEncryption : undefined}
+        onEnableEncryptionClick={encryptionState.kind === 'plaintextForced' ? handleEnableEncryption : undefined}
       />
 
       {/* Key-change alert banner — only shown for 1:1 chats where a

@@ -209,7 +209,7 @@ export function useConversationEncryptionState(
     return () => {
       cancelled = true
     }
-  }, [peerJid, conversationType, openpgpEnabled, online, e2eeManager, isForcedPlaintext])
+  }, [peerJid, conversationType, openpgpEnabled, online, e2eeManager, isForcedPlaintext, verifiedFingerprint])
 
   // Merge the verification trust + pin-mismatch alert into the
   // encrypted state. Precedence:

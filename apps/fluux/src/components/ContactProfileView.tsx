@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { MessageCircle, Trash2, Pencil, Monitor, Smartphone, Globe, ArrowLeft, Ban, UserPlus, Building2, Mail, MapPin, User, ShieldCheck, ShieldAlert, ShieldOff, Lock, Loader2 } from 'lucide-react'
+import { MessageCircle, Trash2, Pencil, Monitor, Smartphone, Globe, ArrowLeft, Ban, UserPlus, Building2, Mail, MapPin, User, ShieldCheck, ShieldAlert, ShieldOff, Lock, LockOpen, Loader2 } from 'lucide-react'
 import { TextInput } from './ui/TextInput'
 import { Tooltip } from './Tooltip'
 import { type Contact, type VCardInfo, getClientType, useBlocking, useXMPPContext } from '@fluux/sdk'
@@ -12,6 +12,7 @@ import { getTranslatedStatusText } from '@/utils/statusText'
 import { useWindowDrag } from '@/hooks'
 import { useConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
+import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
 import { VerifyPeerDialog } from './VerifyPeerDialog'
 
 interface ContactProfileViewProps {
@@ -59,9 +60,9 @@ export function ContactProfileView({
   const encryptionState = useConversationEncryptionState(contact.jid, 'chat')
   const setVerified = useVerifiedPeerKeysStore((s) => s.setVerified)
   const clearVerified = useVerifiedPeerKeysStore((s) => s.clearVerified)
+  const setForcedPlaintext = useConversationPlaintextOverrideStore((s) => s.setForcedPlaintext)
   const plugin = client.e2ee?.getPlugin('openpgp') as { getOwnFingerprint?: () => string | null } | null | undefined
   const ownFingerprint = plugin?.getOwnFingerprint?.() ?? null
-
   // Lazily query last activity for offline roster contacts
   useLastActivity(
     isInRoster && !forceOffline && contact.presence === 'offline' ? contact.jid : null
@@ -121,6 +122,17 @@ export function ContactProfileView({
       })
     return () => { cancelled = true }
   }, [contact.jid, onFetchVCard])
+
+  const handleDisableEncryption = () => {
+    setForcedPlaintext(contact.jid, true)
+    client.e2ee?.setForcedPlaintext({ kind: 'direct', peer: contact.jid }, true)
+  }
+
+  const handleEnableEncryption = () => {
+    setForcedPlaintext(contact.jid, false)
+    client.e2ee?.setForcedPlaintext({ kind: 'direct', peer: contact.jid }, false)
+    client.e2ee?.invalidateCapability(contact.jid)
+  }
 
   const handleStartEdit = () => {
     setEditName(contact.name)
@@ -351,7 +363,7 @@ export function ContactProfileView({
           )}
 
           {/* E2EE section — only when encryption state is meaningful */}
-          {(encryptionState.kind === 'encrypted' || encryptionState.kind === 'blocked' || encryptionState.kind === 'checking') && (
+          {(encryptionState.kind === 'encrypted' || encryptionState.kind === 'blocked' || encryptionState.kind === 'checking' || encryptionState.kind === 'plaintextForced') && (
             <div className="w-full max-w-xs mt-2 mb-4">
               <h3 className="text-xs font-semibold text-fluux-muted uppercase tracking-wide mb-2">
                 {t('contacts.encryption.sectionTitle')}
@@ -369,6 +381,22 @@ export function ContactProfileView({
                   <ShieldAlert className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
                   <span className="text-sm text-yellow-700 dark:text-yellow-400">{t('chat.encryption.blocked')}</span>
                 </div>
+              )}
+
+              {encryptionState.kind === 'plaintextForced' && (
+                <>
+                  <div className="flex items-center gap-2 px-3 py-2 bg-fluux-bg rounded-lg mb-3">
+                    <LockOpen className="w-4 h-4 text-fluux-muted flex-shrink-0" />
+                    <span className="text-sm text-fluux-muted">{t('chat.encryption.plaintextForced')}</span>
+                  </div>
+                  <button
+                    onClick={handleEnableEncryption}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-bg hover:bg-fluux-hover text-fluux-text border border-fluux-hover rounded-lg transition-colors text-sm"
+                  >
+                    <Lock className="w-4 h-4" />
+                    {t('chat.encryption.enableEncryption')}
+                  </button>
+                </>
               )}
 
               {encryptionState.kind === 'encrypted' && (
@@ -398,7 +426,7 @@ export function ContactProfileView({
                   {encryptionState.trust === 'unverified' && (
                     <button
                       onClick={() => setShowVerifyDialog(true)}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-bg hover:bg-fluux-hover text-fluux-text border border-fluux-hover rounded-lg transition-colors text-sm"
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-bg hover:bg-fluux-hover text-fluux-text border border-fluux-hover rounded-lg transition-colors text-sm mb-2"
                     >
                       <ShieldCheck className="w-4 h-4" />
                       {t('contacts.encryption.verifyButton')}
@@ -407,7 +435,7 @@ export function ContactProfileView({
 
                   {encryptionState.trust === 'verified' && (
                     showRemoveVerifyConfirm ? (
-                      <div className="flex flex-col gap-2 p-3 bg-fluux-red/10 border border-fluux-red/30 rounded-lg">
+                      <div className="flex flex-col gap-2 p-3 bg-fluux-red/10 border border-fluux-red/30 rounded-lg mb-2">
                         <p className="text-sm text-fluux-text text-center">
                           {t('contacts.encryption.removeVerificationConfirm', { name: contact.name })}
                         </p>
@@ -429,13 +457,21 @@ export function ContactProfileView({
                     ) : (
                       <button
                         onClick={() => setShowRemoveVerifyConfirm(true)}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-red/10 hover:bg-fluux-red/20 text-fluux-red border border-fluux-red rounded-lg transition-colors text-sm"
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-red/10 hover:bg-fluux-red/20 text-fluux-red border border-fluux-red rounded-lg transition-colors text-sm mb-2"
                       >
                         <ShieldOff className="w-4 h-4" />
                         {t('contacts.encryption.removeVerification')}
                       </button>
                     )
                   )}
+
+                  <button
+                    onClick={handleDisableEncryption}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-bg hover:bg-fluux-hover text-fluux-muted border border-fluux-hover rounded-lg transition-colors text-sm"
+                  >
+                    <ShieldOff className="w-4 h-4" />
+                    {t('chat.encryption.disableEncryption')}
+                  </button>
                 </>
               )}
             </div>
