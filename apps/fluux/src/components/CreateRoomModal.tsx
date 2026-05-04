@@ -7,8 +7,8 @@
 import { useState, useEffect } from 'react'
 import { TextInput, TextArea } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
-import { useRoom } from '@fluux/sdk'
-import { useConnectionStore } from '@fluux/sdk/react'
+import { useRoomActions } from '@fluux/sdk'
+import { useAdminStore, useConnectionStore } from '@fluux/sdk/react'
 import { getLocalPart } from '@fluux/sdk'
 import { ModalShell } from './ModalShell'
 import { Loader2, AlertCircle, Lock, Globe, EyeOff, HelpCircle } from 'lucide-react'
@@ -28,7 +28,8 @@ interface CreateRoomModalProps {
 
 export function CreateRoomModal({ onClose }: CreateRoomModalProps) {
   const { t } = useTranslation()
-  const { createRoom, mucServiceJid, setActiveRoom, roomExists } = useRoom()
+  const { createRoom, setActiveRoom, roomExists } = useRoomActions()
+  const mucServiceJid = useAdminStore((s) => s.mucServiceJid)
   const jid = useConnectionStore((s) => s.jid)
   const ownNickname = useConnectionStore((s) => s.ownNickname)
 

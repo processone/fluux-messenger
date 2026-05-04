@@ -1,10 +1,14 @@
-import { useChat, useRoster, type PresenceStatus } from '@fluux/sdk'
+import { useChatActive, useRoster, type PresenceStatus } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { Avatar } from './Avatar'
 import { UserInfoPopover } from './conversation/UserInfoPopover'
 
 export function MemberList() {
-  const { activeConversation } = useChat()
+  // useChatActive subscribes only to the active conversation, not the full conversation
+  // list / typingStates / drafts that useChat() pulls in. MemberList is always mounted
+  // in ChatLayout, so over-subscription here re-renders the right sidebar on every
+  // chat store update during sync.
+  const { activeConversation } = useChatActive()
   const { sortedContacts } = useRoster()
   const connectionStatus = useConnectionStore((s) => s.status)
   const forceOffline = connectionStatus !== 'online'

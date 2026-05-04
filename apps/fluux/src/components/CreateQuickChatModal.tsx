@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
 import { Zap } from 'lucide-react'
-import { useConnection, useRoom } from '@fluux/sdk'
+import { useConnection, useRoomActions } from '@fluux/sdk'
 import { useChatStore } from '@fluux/sdk/react'
 import { useModalInput } from '@/hooks'
 import { ModalShell } from './ModalShell'
@@ -15,7 +15,7 @@ interface CreateQuickChatModalProps {
 export function CreateQuickChatModal({ onClose }: CreateQuickChatModalProps) {
   const { t } = useTranslation()
   const { jid: userJid, ownNickname } = useConnection()
-  const { createQuickChat, setActiveRoom } = useRoom()
+  const { createQuickChat, setActiveRoom } = useRoomActions()
   // NOTE: Use direct store subscription to avoid re-renders from activeMessages changes
   const setActiveConversation = useChatStore((s) => s.setActiveConversation)
   const [topic, setTopic] = useState('')

@@ -1,14 +1,15 @@
 import React, { useState, useRef, memo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useShallow } from 'zustand/react/shallow'
 import { useContextMenu, useListKeyboardNav, useRouteSync } from '@/hooks'
 import {
-  useRoom,
+  useRoomActions,
   roomStore,
   generateConsistentColorHexSync,
   formatMessagePreview,
   type Room,
 } from '@fluux/sdk'
-import { useChatStore } from '@fluux/sdk/react'
+import { useChatStore, useRoomStore } from '@fluux/sdk/react'
 import { EditBookmarkModal } from '../EditBookmarkModal'
 import { Tooltip } from '../Tooltip'
 import { useSidebarZone } from './types'
@@ -30,8 +31,15 @@ import {
 
 export function RoomsList() {
   const { t } = useTranslation()
-  const { allRooms: rooms, joinRoom, leaveRoom, setBookmark, removeBookmark, activeRoomJid, setActiveRoom, drafts } = useRoom()
-  // NOTE: Use direct store subscription to avoid re-renders from activeMessages changes
+  // Focused subscriptions — avoid useRoom() which subscribes to ~15 values
+  // (activeRoom, activeMessages, totalUnreadCount, etc.) that this list-level
+  // component doesn't need. RoomsList is always mounted in the Sidebar, so each
+  // unrelated subscription would re-render the whole list during sync.
+  // drafts is intentionally NOT subscribed here — each RoomItem subscribes to
+  // its own draft entry to avoid full-list re-renders on per-room keystrokes.
+  const rooms = useRoomStore(useShallow((s) => s.allRooms()))
+  const activeRoomJid = useRoomStore((s) => s.activeRoomJid)
+  const { joinRoom, leaveRoom, setBookmark, removeBookmark, setActiveRoom } = useRoomActions()
   const setActiveConversation = useChatStore((s) => s.setActiveConversation)
   const { navigateToRooms } = useRouteSync()
   const [editingRoom, setEditingRoom] = useState<Room | null>(null)
@@ -146,7 +154,6 @@ export function RoomsList() {
           <div className="space-y-0.5">
             {quickChats.map((room) => {
               const flatIndex = jidToIndex.get(room.jid) ?? -1
-              const draft = drafts.get(room.jid)
               return (
                 <RoomItem
                   key={room.jid}
@@ -154,7 +161,6 @@ export function RoomsList() {
                   isActive={room.jid === activeRoomJid}
                   isSelected={flatIndex === selectedIndex}
                   isKeyboardNav={isKeyboardNav}
-                  draft={draft}
                   onClick={() => handleRoomClick(room.jid, true)}
                   onDoubleClick={() => handleRoomDoubleClick(room.jid, true, room.nickname)}
                   onJoin={() => joinRoom(room.jid, room.nickname)}
@@ -184,7 +190,6 @@ export function RoomsList() {
           <div className="space-y-0.5">
             {joinedRooms.map((room) => {
               const flatIndex = jidToIndex.get(room.jid) ?? -1
-              const draft = drafts.get(room.jid)
               return (
                 <RoomItem
                   key={room.jid}
@@ -192,7 +197,6 @@ export function RoomsList() {
                   isActive={room.jid === activeRoomJid}
                   isSelected={flatIndex === selectedIndex}
                   isKeyboardNav={isKeyboardNav}
-                  draft={draft}
                   onClick={() => handleRoomClick(room.jid, true)}
                   onDoubleClick={() => handleRoomDoubleClick(room.jid, true, room.nickname)}
                   onJoin={() => joinRoom(room.jid, room.nickname)}
@@ -225,7 +229,6 @@ export function RoomsList() {
           <div className="space-y-0.5">
           {bookmarkedNotJoined.map((room) => {
             const flatIndex = jidToIndex.get(room.jid) ?? -1
-            const draft = drafts.get(room.jid)
             return (
               <RoomItem
                 key={room.jid}
@@ -233,7 +236,6 @@ export function RoomsList() {
                 isActive={room.jid === activeRoomJid}
                 isSelected={flatIndex === selectedIndex}
                 isKeyboardNav={isKeyboardNav}
-                draft={draft}
                 onClick={() => handleRoomClick(room.jid, false)}
                 onDoubleClick={() => handleRoomDoubleClick(room.jid, false, room.nickname)}
                 onJoin={() => joinRoom(room.jid, room.nickname)}
@@ -279,7 +281,6 @@ interface RoomItemProps {
   isActive: boolean
   isSelected?: boolean
   isKeyboardNav?: boolean
-  draft?: string
   onClick: () => void
   onDoubleClick: () => void
   onJoin: () => void
@@ -299,7 +300,6 @@ const RoomItem = memo(function RoomItem({
   isActive,
   isSelected,
   isKeyboardNav,
-  draft,
   onClick,
   onDoubleClick,
   onJoin,
@@ -317,6 +317,9 @@ const RoomItem = memo(function RoomItem({
   const menu = useContextMenu()
   const currentLang = i18n.language.split('-')[0]
   const timeFormat = useSettingsStore((s) => s.timeFormat)
+  // Per-item subscription: only this row re-renders when ITS draft changes,
+  // not the whole list when any room's draft changes.
+  const draft = useRoomStore((s) => s.drafts.get(room.jid))
 
   // Get last message for preview (uses pre-computed lastMessage from metadata for better performance)
   const lastMessage = room.lastMessage ?? null

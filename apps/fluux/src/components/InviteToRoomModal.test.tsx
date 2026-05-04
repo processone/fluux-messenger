@@ -61,7 +61,7 @@ vi.mock('./ContactSelector', () => ({
 
 // Mock SDK hooks
 vi.mock('@fluux/sdk', () => ({
-  useRoom: () => ({
+  useRoomActions: () => ({
     inviteMultipleToRoom: mockInviteMultipleToRoom,
   }),
   // JID utilities used by ContactSelector
