@@ -472,6 +472,8 @@
             "ownFingerprintLabel": "بصمتك",
             "ownFingerprintUnavailable": "بصمتك غير متاحة بعد — أغلق النافذة وأعد المحاولة بعد لحظة.",
             "confirmAction": "البصمات متطابقة — تحقّق",
+            "reconfirmAction": "بصمات الأصابع متطابقة — إعادة التحقق",
+            "alreadyVerifiedBanner": "تم التحقق من هذا المفتاح مسبقاً. يمكنك إعادة التحقق إذا كان لديك أي شك.",
             "confirmSuccess": "تم التحقق من البصمة"
         },
         "keyChangeBanner": {

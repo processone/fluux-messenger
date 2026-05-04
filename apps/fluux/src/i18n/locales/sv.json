@@ -472,6 +472,8 @@
             "ownFingerprintLabel": "Ditt fingeravtryck",
             "ownFingerprintUnavailable": "Ditt fingeravtryck är inte tillgängligt ännu — stäng dialogen och försök igen om en stund.",
             "confirmAction": "Fingeravtrycken matchar — verifiera",
+            "reconfirmAction": "Fingeravtrycken stämmer — reverifiering",
+            "alreadyVerifiedBanner": "Denna nyckel har redan verifierats. Du kan reverifiera om du har tvivel.",
             "confirmSuccess": "Fingeravtryck verifierat"
         },
         "keyChangeBanner": {

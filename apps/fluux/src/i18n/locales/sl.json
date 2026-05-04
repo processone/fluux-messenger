@@ -474,6 +474,8 @@
             "ownFingerprintLabel": "Vaš prstni odtis",
             "ownFingerprintUnavailable": "Vaš prstni odtis še ni na voljo — zaprite pogovorno okno in poskusite čez trenutek znova.",
             "confirmAction": "Prstna odtisa se ujemata — preveri",
+            "reconfirmAction": "Prstni odtisi se ujemajo — ponovna preveritev",
+            "alreadyVerifiedBanner": "Ta ključ je že preverjen. Preverite lahko znova, če imate dvome.",
             "confirmSuccess": "Prstni odtis preverjen"
         },
         "keyChangeBanner": {

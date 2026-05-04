@@ -472,6 +472,8 @@
             "ownFingerprintLabel": "Vaš otisak",
             "ownFingerprintUnavailable": "Vaš otisak još nije dostupan — zatvorite dijalog i pokušajte za trenutak.",
             "confirmAction": "Otisci se podudaraju — provjeri",
+            "reconfirmAction": "Otisci prstiju se podudaraju — ponovna provjera",
+            "alreadyVerifiedBanner": "Ovaj ključ je već provjeren. Možete ga ponovo provjeriti ako imate sumnje.",
             "confirmSuccess": "Otisak provjeren"
         },
         "keyChangeBanner": {

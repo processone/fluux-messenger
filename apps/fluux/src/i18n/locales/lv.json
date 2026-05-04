@@ -473,6 +473,8 @@
             "ownFingerprintLabel": "Jūsu pirkstu nospiedums",
             "ownFingerprintUnavailable": "Jūsu pirkstu nospiedums vēl nav pieejams — aizveriet dialoglogu un mēģiniet pēc brīža vēlreiz.",
             "confirmAction": "Pirkstu nospiedumi sakrīt — pārbaudīt",
+            "reconfirmAction": "Pirkstu nospiedumi sakrīt — atkārtoti verificēt",
+            "alreadyVerifiedBanner": "Šī atslēga jau ir verificēta. Varat to verificēt atkārtoti, ja jums ir šaubas.",
             "confirmSuccess": "Pirkstu nospiedums pārbaudīts"
         },
         "keyChangeBanner": {

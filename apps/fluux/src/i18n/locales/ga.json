@@ -472,6 +472,8 @@
             "ownFingerprintLabel": "Do mhéarlorg féin",
             "ownFingerprintUnavailable": "Níl do mhéarlorg ar fáil fós — dún an dialóg agus bain triail eile as i gceann nóiméid.",
             "confirmAction": "Comhoiriúnaíonn na méarloirg — fíoraigh",
+            "reconfirmAction": "Meaitseálann na méarloirg — ath-fhíorú",
+            "alreadyVerifiedBanner": "Tá an eochair seo fíoraithe cheana féin. Is féidir leat é a ath-fhíorú má tá amhras ort.",
             "confirmSuccess": "Méarlorg fíoraithe"
         },
         "keyChangeBanner": {

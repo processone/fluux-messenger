@@ -472,6 +472,8 @@
             "ownFingerprintLabel": "טביעת האצבע שלך",
             "ownFingerprintUnavailable": "טביעת האצבע שלך עדיין אינה זמינה — סגור את הדיאלוג ונסה שוב בעוד רגע.",
             "confirmAction": "טביעות האצבע תואמות — אמת",
+            "reconfirmAction": "טביעות האצבע תואמות — אימות מחדש",
+            "alreadyVerifiedBanner": "מפתח זה כבר אומת. ניתן לאמת מחדש אם יש לך ספקות.",
             "confirmSuccess": "טביעת אצבע אומתה"
         },
         "keyChangeBanner": {

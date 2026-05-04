@@ -472,6 +472,8 @@
             "ownFingerprintLabel": "Az Ön ujjlenyomata",
             "ownFingerprintUnavailable": "Az Ön ujjlenyomata még nem érhető el — zárja be a párbeszédpanelt, és próbálja újra egy pillanat múlva.",
             "confirmAction": "Az ujjlenyomatok egyeznek — ellenőrzés",
+            "reconfirmAction": "Az ujjlenyomatok egyeznek — újra ellenőrzés",
+            "alreadyVerifiedBanner": "Ez a kulcs már ellenőrizve van. Újra ellenőrizheti, ha kétségei vannak.",
             "confirmSuccess": "Ujjlenyomat ellenőrizve"
         },
         "keyChangeBanner": {

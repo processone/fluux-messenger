@@ -474,6 +474,8 @@
             "ownFingerprintLabel": "La teva empremta",
             "ownFingerprintUnavailable": "La teva empremta encara no està disponible — tanca el diàleg i torna-ho a provar d'aquí a un moment.",
             "confirmAction": "Les empremtes coincideixen — verificar",
+            "reconfirmAction": "Les empremtes coincideixen — tornar a verificar",
+            "alreadyVerifiedBanner": "Aquesta clau ja ha estat verificada. Podeu tornar a verificar-la si teniu dubtes.",
             "confirmSuccess": "Empremta verificada"
         },
         "keyChangeBanner": {

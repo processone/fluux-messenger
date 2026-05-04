@@ -474,6 +474,8 @@
             "ownFingerprintLabel": "A tua impressão digital",
             "ownFingerprintUnavailable": "A tua impressão digital ainda não está disponível — fecha o diálogo e tenta novamente daqui a um momento.",
             "confirmAction": "As impressões coincidem — verificar",
+            "reconfirmAction": "As impressões coincidem — reverificar",
+            "alreadyVerifiedBanner": "Esta chave já foi verificada. Podes verificar novamente se tiveres alguma dúvida.",
             "confirmSuccess": "Impressão digital verificada"
         },
         "keyChangeBanner": {

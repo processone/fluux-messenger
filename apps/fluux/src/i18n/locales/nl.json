@@ -472,6 +472,8 @@
             "ownFingerprintLabel": "Jouw vingerafdruk",
             "ownFingerprintUnavailable": "Jouw vingerafdruk is nog niet beschikbaar — sluit het venster en probeer het zo nog eens.",
             "confirmAction": "Vingerafdrukken komen overeen — verifiëren",
+            "reconfirmAction": "Vingerafdrukken komen overeen — herverifiëren",
+            "alreadyVerifiedBanner": "Deze sleutel is al geverifieerd. U kunt opnieuw verifiëren als u twijfels heeft.",
             "confirmSuccess": "Vingerafdruk geverifieerd"
         },
         "keyChangeBanner": {

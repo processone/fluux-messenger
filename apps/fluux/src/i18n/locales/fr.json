@@ -473,6 +473,8 @@
             "ownFingerprintLabel": "Votre empreinte",
             "ownFingerprintUnavailable": "Votre empreinte n'est pas encore disponible — fermez la fenêtre et réessayez dans un instant.",
             "confirmAction": "Empreintes identiques — vérifier",
+            "reconfirmAction": "Empreintes identiques — re-vérifier",
+            "alreadyVerifiedBanner": "Cette clé a déjà été vérifiée. Vous pouvez re-vérifier si vous avez un doute.",
             "confirmSuccess": "Empreinte vérifiée"
         },
         "keyChangeBanner": {

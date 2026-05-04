@@ -472,6 +472,8 @@
             "ownFingerprintLabel": "Ваш відбиток",
             "ownFingerprintUnavailable": "Ваш відбиток ще недоступний — закрийте діалог і спробуйте за мить.",
             "confirmAction": "Відбитки збігаються — перевірити",
+            "reconfirmAction": "Відбитки збігаються — повторна верифікація",
+            "alreadyVerifiedBanner": "Цей ключ вже було верифіковано. Ви можете верифікувати повторно, якщо є сумніви.",
             "confirmSuccess": "Відбиток перевірено"
         },
         "keyChangeBanner": {

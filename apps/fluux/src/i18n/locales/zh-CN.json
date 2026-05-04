@@ -472,6 +472,8 @@
             "ownFingerprintLabel": "你的指纹",
             "ownFingerprintUnavailable": "你的指纹尚不可用 — 关闭对话框稍后再试。",
             "confirmAction": "指纹一致 — 验证",
+            "reconfirmAction": "指纹匹配 — 重新验证",
+            "alreadyVerifiedBanner": "此密钥已经过验证。如有疑虑，您可以重新验证。",
             "confirmSuccess": "指纹已验证"
         },
         "keyChangeBanner": {

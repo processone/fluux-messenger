@@ -474,6 +474,8 @@
             "ownFingerprintLabel": "Amprenta dvs.",
             "ownFingerprintUnavailable": "Amprenta dvs. nu este încă disponibilă — închideți dialogul și încercați din nou într-un moment.",
             "confirmAction": "Amprentele se potrivesc — verifică",
+            "reconfirmAction": "Amprentele se potrivesc — reverificați",
+            "alreadyVerifiedBanner": "Această cheie a fost deja verificată. Puteți reverifica dacă aveți îndoieli.",
             "confirmSuccess": "Amprentă verificată"
         },
         "keyChangeBanner": {

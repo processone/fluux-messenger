@@ -472,6 +472,8 @@
             "ownFingerprintLabel": "Dit fingeraftryk",
             "ownFingerprintUnavailable": "Dit fingeraftryk er ikke tilgængeligt endnu — luk dialogen og prøv igen om et øjeblik.",
             "confirmAction": "Fingeraftrykkene matcher — verificer",
+            "reconfirmAction": "Fingeraftryk stemmer overens — genbekræft",
+            "alreadyVerifiedBanner": "Denne nøgle er allerede verificeret. Du kan verificere igen, hvis du er i tvil.",
             "confirmSuccess": "Fingeraftryk verificeret"
         },
         "keyChangeBanner": {

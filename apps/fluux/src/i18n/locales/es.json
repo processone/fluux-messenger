@@ -474,6 +474,8 @@
             "ownFingerprintLabel": "Tu huella",
             "ownFingerprintUnavailable": "Tu huella aún no está disponible — cierra el diálogo e inténtalo de nuevo en un momento.",
             "confirmAction": "Las huellas coinciden — verificar",
+            "reconfirmAction": "Las huellas coinciden — volver a verificar",
+            "alreadyVerifiedBanner": "Esta clave ya ha sido verificada. Puedes volver a verificarla si tienes alguna duda.",
             "confirmSuccess": "Huella verificada"
         },
         "keyChangeBanner": {

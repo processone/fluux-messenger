@@ -472,6 +472,8 @@
             "ownFingerprintLabel": "Þitt fingrafar",
             "ownFingerprintUnavailable": "Þitt fingrafar er ekki tiltækt enn — lokaðu glugganum og reyndu aftur eftir augnablik.",
             "confirmAction": "Fingraförin passa — staðfesta",
+            "reconfirmAction": "Fingrafar stemma — endurstaðfesta",
+            "alreadyVerifiedBanner": "Þessi lykill hefur þegar verið staðfestur. Þú getur endurstaðfest ef þig grunar eitthvað.",
             "confirmSuccess": "Fingrafar staðfest"
         },
         "keyChangeBanner": {

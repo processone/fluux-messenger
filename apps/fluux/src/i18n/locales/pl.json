@@ -474,6 +474,8 @@
             "ownFingerprintLabel": "Twój odcisk",
             "ownFingerprintUnavailable": "Twój odcisk nie jest jeszcze dostępny — zamknij okno i spróbuj za chwilę.",
             "confirmAction": "Odciski się zgadzają — zweryfikuj",
+            "reconfirmAction": "Odciski palców pasują — zweryfikuj ponownie",
+            "alreadyVerifiedBanner": "Ten klucz został już zweryfikowany. Możesz zweryfikować ponownie, jeśli masz wątpliwości.",
             "confirmSuccess": "Odcisk zweryfikowany"
         },
         "keyChangeBanner": {

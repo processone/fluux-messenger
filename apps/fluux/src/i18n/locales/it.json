@@ -474,6 +474,8 @@
             "ownFingerprintLabel": "La tua impronta",
             "ownFingerprintUnavailable": "La tua impronta non è ancora disponibile — chiudi la finestra e riprova tra un momento.",
             "confirmAction": "Le impronte corrispondono — verifica",
+            "reconfirmAction": "Le impronte corrispondono — riverifica",
+            "alreadyVerifiedBanner": "Questa chiave è già stata verificata. Puoi riverificarla se hai dubbi.",
             "confirmSuccess": "Impronta verificata"
         },
         "keyChangeBanner": {

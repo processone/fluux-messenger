@@ -472,6 +472,8 @@
             "ownFingerprintLabel": "Sinun sormenjälkesi",
             "ownFingerprintUnavailable": "Sormenjälkesi ei ole vielä saatavilla — sulje ikkuna ja yritä hetken kuluttua uudelleen.",
             "confirmAction": "Sormenjäljet täsmäävät — vahvista",
+            "reconfirmAction": "Sormenjäljet täsmäävät — vahvista uudelleen",
+            "alreadyVerifiedBanner": "Tämä avain on jo vahvistettu. Voit vahvistaa sen uudelleen, jos sinulla on epäilyksiä.",
             "confirmSuccess": "Sormenjälki vahvistettu"
         },
         "keyChangeBanner": {

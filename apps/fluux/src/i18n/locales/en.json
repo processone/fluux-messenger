@@ -472,6 +472,8 @@
             "ownFingerprintLabel": "Your fingerprint",
             "ownFingerprintUnavailable": "Your fingerprint isn't available yet — close the dialog and try again in a moment.",
             "confirmAction": "Fingerprints match — verify",
+            "reconfirmAction": "Fingerprints match — re-verify",
+            "alreadyVerifiedBanner": "This key has already been verified. You can re-verify if you have any doubts.",
             "confirmSuccess": "Fingerprint verified"
         },
         "keyChangeBanner": {

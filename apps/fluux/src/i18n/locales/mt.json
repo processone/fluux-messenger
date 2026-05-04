@@ -474,6 +474,8 @@
             "ownFingerprintLabel": "Il-marka tas-saba' tiegħek",
             "ownFingerprintUnavailable": "Il-marka tas-saba' tiegħek għadha mhux disponibbli — agħlaq id-djalogu u erġa' pprova fi ftit żmien.",
             "confirmAction": "Il-marki jaqblu — ivverifika",
+            "reconfirmAction": "Il-fingerprints jaqblu — riverifika",
+            "alreadyVerifiedBanner": "Din il-ċavetta diġà ġiet ivverifikata. Tista' riverifika jekk għandek xi dubji.",
             "confirmSuccess": "Marka tas-saba' verifikata"
         },
         "keyChangeBanner": {

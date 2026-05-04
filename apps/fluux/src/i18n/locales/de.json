@@ -474,6 +474,8 @@
             "ownFingerprintLabel": "Dein Fingerabdruck",
             "ownFingerprintUnavailable": "Dein Fingerabdruck ist noch nicht verfügbar — schließe den Dialog und versuche es gleich noch einmal.",
             "confirmAction": "Fingerabdrücke stimmen überein — verifizieren",
+            "reconfirmAction": "Fingerabdrücke stimmen überein — neu verifizieren",
+            "alreadyVerifiedBanner": "Dieser Schlüssel wurde bereits verifiziert. Sie können ihn erneut verifizieren, wenn Sie Zweifel haben.",
             "confirmSuccess": "Fingerabdruck verifiziert"
         },
         "keyChangeBanner": {

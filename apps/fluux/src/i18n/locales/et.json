@@ -474,6 +474,8 @@
             "ownFingerprintLabel": "Sinu sõrmejälg",
             "ownFingerprintUnavailable": "Sinu sõrmejälg pole veel saadaval — sulge dialoog ja proovi hetke pärast uuesti.",
             "confirmAction": "Sõrmejäljed langevad kokku — kinnita",
+            "reconfirmAction": "Sõrmejäljed kattuvad — kinnita uuesti",
+            "alreadyVerifiedBanner": "See võti on juba kinnitatud. Saate selle uuesti kinnitada, kui teil on kahtlusi.",
             "confirmSuccess": "Sõrmejälg kinnitatud"
         },
         "keyChangeBanner": {

@@ -472,6 +472,8 @@
             "ownFingerprintLabel": "Jūsų pirštų atspaudas",
             "ownFingerprintUnavailable": "Jūsų pirštų atspaudas dar nepasiekiamas — uždarykite dialogo langą ir bandykite po akimirkos.",
             "confirmAction": "Pirštų atspaudai sutampa — patvirtinti",
+            "reconfirmAction": "Pirštų atspaudai sutampa — patvirtinti iš naujo",
+            "alreadyVerifiedBanner": "Šis raktas jau buvo patvirtintas. Galite patvirtinti iš naujo, jei kyla abejonių.",
             "confirmSuccess": "Pirštų atspaudas patvirtintas"
         },
         "keyChangeBanner": {

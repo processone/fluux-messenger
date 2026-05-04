@@ -1025,6 +1025,7 @@ function MessageInput({
           peerName={conversationName}
           peerFingerprint={verifyDialogState.peerFingerprint}
           ownFingerprint={verifyDialogState.ownFingerprint}
+          alreadyVerified={encryptionState.kind === 'encrypted' && encryptionState.trust === 'verified'}
           onConfirm={handleVerifyConfirm}
           onCancel={() => setVerifyDialogState({ open: false })}
         />

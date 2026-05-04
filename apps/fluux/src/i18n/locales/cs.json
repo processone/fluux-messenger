@@ -474,6 +474,8 @@
             "ownFingerprintLabel": "Váš otisk",
             "ownFingerprintUnavailable": "Váš otisk zatím není k dispozici — zavřete dialog a zkuste to za chvíli znovu.",
             "confirmAction": "Otisky se shodují — ověřit",
+            "reconfirmAction": "Otisky souhlasí — znovu ověřit",
+            "alreadyVerifiedBanner": "Tento klíč již byl ověřen. Můžete jej znovu ověřit, pokud máte pochybnosti.",
             "confirmSuccess": "Otisk ověřen"
         },
         "keyChangeBanner": {
