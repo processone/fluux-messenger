@@ -599,8 +599,6 @@
             "toggleFailed": "Nastavenie šifrovania sa nepodarilo zmeniť",
             "probeFailed": "Nepodarilo sa kontaktovať server na overenie existujúcej zálohy. Skúste to znova — nič sa nezmenilo.",
             "limitationsTitle": "Aktuálne obmedzenia",
-            "limitationVerification": "Odtlačky kontaktov zatiaľ nie sú overené — ikony zámku odrážajú iba dôveru pri prvom použití.",
-            "limitationDeviceBound": "Tento kľúč existuje iba na tomto zariadení — zatiaľ žiadna synchronizácia medzi zariadeniami ani šifrovaná záloha; strata zariadenia znamená stratu identity.",
             "limitationBackend": "Používa experimentálny kryptografický backend v čistom Ruste; nie je spevnený pre scenáre s vysokými bezpečnostnými požiadavkami.",
             "dangerZone": "Nebezpečná zóna",
             "deleteKey": "Odstrániť môj kľúč OpenPGP",

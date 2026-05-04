@@ -508,11 +508,7 @@ export function EncryptionSettings() {
             <p className="font-medium text-fluux-text">
               {t('settings.encryption.limitationsTitle')}
             </p>
-            <ul className="mt-1 space-y-1 list-disc list-inside">
-              <li>{t('settings.encryption.limitationVerification')}</li>
-              <li>{t('settings.encryption.limitationDeviceBound')}</li>
-              <li>{t('settings.encryption.limitationBackend')}</li>
-            </ul>
+            <p className="mt-1">{t('settings.encryption.limitationBackend')}</p>
           </div>
         </div>
 

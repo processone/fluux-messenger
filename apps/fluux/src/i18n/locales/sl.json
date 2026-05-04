@@ -600,8 +600,6 @@
             "toggleFailed": "Nastavitve šifriranja ni bilo mogoče spremeniti",
             "probeFailed": "Ni bilo mogoče vzpostaviti stika s strežnikom za preverjanje obstoječe varnostne kopije. Poskusite znova — nič ni bilo spremenjeno.",
             "limitationsTitle": "Trenutne omejitve",
-            "limitationVerification": "Prstni odtisi stikov še niso preverjeni — ikone ključavnice prikazujejo samo zaupanje ob prvi uporabi.",
-            "limitationDeviceBound": "Ta ključ obstaja samo na tej napravi — še ni sinhronizacije med napravami ali šifrirane varnostne kopije; izguba naprave pomeni izgubo identitete.",
             "limitationBackend": "Uporablja eksperimentalen kriptografski backend v čistem Rustu; ni utrjen za scenarije z visokimi varnostnimi zahtevami.",
             "dangerZone": "Nevarno območje",
             "deleteKey": "Izbriši moj ključ OpenPGP",

@@ -598,8 +598,6 @@
             "toggleFailed": "Kunne ikke ændre krypteringsindstillingen",
             "probeFailed": "Kunne ikke nå serveren for at tjekke for en eksisterende sikkerhedskopi. Prøv igen — intet er ændret.",
             "limitationsTitle": "Nuværende begrænsninger",
-            "limitationVerification": "Kontakters fingeraftryk verificeres endnu ikke — låseikoner viser kun tillid ved første brug.",
-            "limitationDeviceBound": "Denne nøgle findes kun på denne enhed — ingen synkronisering mellem enheder eller krypteret sikkerhedskopi endnu; at miste enheden betyder at miste identiteten.",
             "limitationBackend": "Bruger en eksperimentel ren-Rust-kryptobackend; ikke hærdet til scenarier med høje sikkerhedskrav.",
             "dangerZone": "Farezone",
             "deleteKey": "Slet min OpenPGP-nøgle",

@@ -598,8 +598,6 @@
             "toggleFailed": "Ekki tókst að breyta dulkóðunarstillingunni",
             "probeFailed": "Ekki tókst að ná í þjóninn til að athuga fyrirliggjandi öryggisafrit. Reyndu aftur — engu var breytt.",
             "limitationsTitle": "Núverandi takmarkanir",
-            "limitationVerification": "Fingraför tengiliða eru ekki enn sannreynd — lásatáknin sýna aðeins traust við fyrstu notkun.",
-            "limitationDeviceBound": "Þessi lykill er aðeins til á þessu tæki — engin samstilling milli tækja eða dulkóðuð öryggisafritun enn; ef tækið tapast tapast sjálfsmyndin.",
             "limitationBackend": "Notar tilraunakennt dulmálsbakendi í hreinum Rust; ekki styrkt fyrir atburðarásir með háar öryggiskröfur.",
             "dangerZone": "Hættusvæði",
             "deleteKey": "Eyða OpenPGP-lyklinum mínum",

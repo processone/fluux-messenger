@@ -600,8 +600,6 @@
             "toggleFailed": "Verschlüsselungseinstellung konnte nicht geändert werden",
             "probeFailed": "Server konnte nicht erreicht werden, um nach einem vorhandenen Backup zu suchen. Versuche es erneut — nichts wurde geändert.",
             "limitationsTitle": "Aktuelle Einschränkungen",
-            "limitationVerification": "Kontakt-Fingerabdrücke werden noch nicht verifiziert — Schloss-Symbole zeigen nur Vertrauen bei erster Nutzung.",
-            "limitationDeviceBound": "Dieser Schlüssel existiert nur auf diesem Gerät — noch keine Geräte-Synchronisierung oder verschlüsseltes Backup; Verlust des Geräts bedeutet Verlust der Identität.",
             "limitationBackend": "Nutzt ein experimentelles Krypto-Backend in reinem Rust; nicht für Hochsicherheitsszenarien gehärtet.",
             "dangerZone": "Gefahrenbereich",
             "deleteKey": "Meinen OpenPGP-Schlüssel löschen",

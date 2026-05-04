@@ -600,8 +600,6 @@
             "toggleFailed": "Nie udało się zmienić ustawienia szyfrowania",
             "probeFailed": "Nie udało się skontaktować z serwerem, aby sprawdzić istniejącą kopię zapasową. Spróbuj ponownie — nic nie zostało zmienione.",
             "limitationsTitle": "Obecne ograniczenia",
-            "limitationVerification": "Odciski kontaktów nie są jeszcze weryfikowane — ikony kłódki oznaczają jedynie zaufanie przy pierwszym użyciu.",
-            "limitationDeviceBound": "Ten klucz istnieje tylko na tym urządzeniu — brak synchronizacji między urządzeniami i zaszyfrowanej kopii zapasowej; utrata urządzenia oznacza utratę tożsamości.",
             "limitationBackend": "Używa eksperymentalnego backendu kryptograficznego w czystym Ruście; nie jest utwardzony do scenariuszy o wysokich wymaganiach bezpieczeństwa.",
             "dangerZone": "Strefa zagrożenia",
             "deleteKey": "Usuń mój klucz OpenPGP",

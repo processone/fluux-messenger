@@ -598,8 +598,6 @@
             "toggleFailed": "无法更改加密设置",
             "probeFailed": "无法连接服务器以检查现有备份。请重试 — 未做任何更改。",
             "limitationsTitle": "当前限制",
-            "limitationVerification": "联系人指纹尚未经过验证 — 锁图标仅表示首次使用信任。",
-            "limitationDeviceBound": "此密钥仅存在于本设备上 — 尚无多设备同步或加密备份；设备丢失即意味着身份丢失。",
             "limitationBackend": "使用纯 Rust 实验性加密后端；未加固以应对高安全场景。",
             "dangerZone": "危险区域",
             "deleteKey": "删除我的 OpenPGP 密钥",
