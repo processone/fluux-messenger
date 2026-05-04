@@ -5,7 +5,7 @@
  * decrypt, claim — without any Tauri runtime.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import type { InvokeFn } from './SequoiaPgpPlugin'
 import { SequoiaPgpPlugin } from './SequoiaPgpPlugin'
 import {
@@ -2373,18 +2373,24 @@ describe('SequoiaPgpPlugin', () => {
   })
 
   describe('verification trust', () => {
-    // Reuses the real verifiedPeerKeysStore — the plugin reads from it
-    // imperatively and we want any regression in that lookup path to
-    // surface here, not be hidden by a mock.
+    // Reuses the real verifiedPeerKeysStore + keyChangeAlertsStore —
+    // the plugin reads from / writes to them imperatively, and any
+    // regression in those paths should surface here rather than be
+    // hidden by mocks.
     type VerifiedStore = typeof import('@/stores/verifiedPeerKeysStore')
+    type AlertsStore = typeof import('@/stores/keyChangeAlertsStore')
     let verifiedStore: VerifiedStore
+    let alertsStore: AlertsStore
     beforeEach(async () => {
       localStorage.clear()
       verifiedStore = (await import('@/stores/verifiedPeerKeysStore')) as VerifiedStore
+      alertsStore = (await import('@/stores/keyChangeAlertsStore')) as AlertsStore
       verifiedStore.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
+      alertsStore.useKeyChangeAlertsStore.setState({ alertsByJid: {} })
     })
     afterEach(() => {
       verifiedStore.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
+      alertsStore.useKeyChangeAlertsStore.setState({ alertsByJid: {} })
     })
 
     it("getPeerTrust returns 'verified' when the cached fingerprint is in the store", async () => {
@@ -2515,6 +2521,25 @@ describe('SequoiaPgpPlugin', () => {
       expect(alice.plugin.getPeerFingerprint('bob@example.com')).toBe(newBob.fingerprint)
       expect(verifiedStore.getVerifiedPeerFingerprint('bob@example.com')).toBeNull()
       expect(await alice.plugin.getPeerTrust('bob@example.com')).toBe('trusted')
+
+      // …and the rotation must have left a key-change alert pointing
+      // at the new fingerprint, so the chat header banner can surface
+      // the change to the user.
+      const alerts = await import('@/stores/keyChangeAlertsStore')
+      const alert = alerts.getKeyChangeAlert('bob@example.com')
+      expect(alert).not.toBeNull()
+      expect(alert!.previousFingerprint).toBe(oldFp)
+      expect(alert!.currentFingerprint).toBe(newBob.fingerprint)
+    })
+
+    it('does NOT record a key-change alert on first key cache for an unverified peer', async () => {
+      // Caching the FIRST-ever key for a peer (no prior verification,
+      // no prior cached fp) must not trip the rotation guard. A new
+      // alert here would surface a banner on every fresh peer probe.
+      const { alice } = await buildCrossPublishedPair(fake)
+      await alice.plugin.probePeer('bob@example.com')
+      const alerts = await import('@/stores/keyChangeAlertsStore')
+      expect(alerts.getKeyChangeAlert('bob@example.com')).toBeNull()
     })
   })
 })

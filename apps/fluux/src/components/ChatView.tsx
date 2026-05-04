@@ -5,6 +5,7 @@ import { useChatActive, useContactIdentities, createMessageLookup, getBareJid, g
 import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
 import { useToastStore } from '@/stores/toastStore'
 import { VerifyPeerDialog } from './VerifyPeerDialog'
+import { KeyChangeBanner } from './KeyChangeBanner'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { getConsistentTextColor } from './Avatar'
 import { useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat } from '@/hooks'
@@ -271,6 +272,17 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, m
         onBack={onBack}
         onSearchInConversation={handleSearchInConversation}
       />
+
+      {/* Key-change alert banner — only shown for 1:1 chats where a
+          previously-verified peer has rotated to a new fingerprint.
+          Self-renders nothing when there is no active alert, so the
+          unconditional mount is fine for the UI tree's stability. */}
+      {activeConversation.type === 'chat' && (
+        <KeyChangeBanner
+          peerJid={activeConversation.id}
+          peerName={activeConversation.name}
+        />
+      )}
 
       {/* Messages - focusable zone for Tab cycling */}
       <div

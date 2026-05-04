@@ -90,6 +90,7 @@ import {
   getVerifiedPeerFingerprint,
   isPeerVerified,
 } from '@/stores/verifiedPeerKeysStore'
+import { recordKeyChangeAlert } from '@/stores/keyChangeAlertsStore'
 
 /** XEP-0373 namespace for all PEP/message elements. */
 const OX_NAMESPACE = 'urn:xmpp:openpgp:0'
@@ -1407,15 +1408,17 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
   /**
    * Replace the cached peer key for `peer`. Demotes any stale
    * verification: if the user previously verified a fingerprint that
-   * isn't the one we're caching, clear the verification — the new key
-   * needs explicit re-confirmation before the chip turns green again.
-   * Used wherever we write to `peerKeys` so the demote-on-rotation
-   * invariant holds in one place.
+   * isn't the one we're caching, clear the verification AND record a
+   * key-change alert so the chat header can surface a banner. The
+   * banner is the user-visible signal for what is otherwise a
+   * security-relevant silent change. Used wherever we write to
+   * `peerKeys` so the demote-on-rotation invariant holds in one place.
    */
   private cachePeerKey(peer: BareJID, bundle: KeyBundle): void {
     const previouslyVerified = getVerifiedPeerFingerprint(peer)
     if (previouslyVerified && previouslyVerified !== bundle.fingerprint) {
       clearPeerVerified(peer)
+      recordKeyChangeAlert(peer, previouslyVerified, bundle.fingerprint)
     }
     this.peerKeys.set(peer, bundle)
   }

@@ -462,6 +462,12 @@
             "ownFingerprintUnavailable": "Votre empreinte n'est pas encore disponible — fermez la fenêtre et réessayez dans un instant.",
             "confirmAction": "Empreintes identiques — vérifier",
             "confirmSuccess": "Empreinte vérifiée"
+        },
+        "keyChangeBanner": {
+            "title": "La clé de chiffrement de {{name}} a changé",
+            "body": "Comparez la nouvelle empreinte via un second canal de confiance avant de considérer à nouveau cette conversation comme vérifiée.",
+            "reVerify": "Re-vérifier",
+            "dismiss": "Ignorer"
         }
     },
     "dates": {

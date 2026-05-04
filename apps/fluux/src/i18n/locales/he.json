@@ -461,6 +461,12 @@
             "ownFingerprintUnavailable": "Your fingerprint isn't available yet — close the dialog and try again in a moment.",
             "confirmAction": "Fingerprints match — verify",
             "confirmSuccess": "Fingerprint verified"
+        },
+        "keyChangeBanner": {
+            "title": "{{name}}'s encryption key has changed",
+            "body": "Compare the new fingerprint over a trusted second channel before treating this conversation as verified again.",
+            "reVerify": "Re-verify",
+            "dismiss": "Dismiss"
         }
     },
     "dates": {
