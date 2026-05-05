@@ -426,7 +426,7 @@ export function ProfileSettings() {
                   <button
                     key={key}
                     onClick={() => handleAddVCardField(key)}
-                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-fluux-text hover:bg-fluux-hover transition-colors"
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-fluux-text hover:bg-fluux-active transition-colors"
                   >
                     <Icon className="w-4 h-4 text-fluux-muted" />
                     {label}

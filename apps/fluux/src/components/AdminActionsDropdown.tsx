@@ -90,7 +90,7 @@ export function AdminActionsDropdown({
             <button
               key={cmd.node}
               onClick={() => handleSelect(cmd.node)}
-              className="w-full px-3 py-2 text-start text-sm text-fluux-text hover:bg-fluux-hover
+              className="w-full px-3 py-2 text-start text-sm text-fluux-text hover:bg-fluux-active
                          transition-colors flex items-center gap-2"
             >
               <span>{cmd.name || humanizeCommandNode(cmd.node)}</span>

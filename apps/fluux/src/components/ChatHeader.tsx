@@ -228,7 +228,7 @@ function EncryptionIcon({
           </button>
         </Tooltip>
         {open && (
-          <div className="absolute right-0 top-full mt-1 w-56 rounded-lg border border-fluux-border bg-fluux-surface shadow-lg z-50 py-1 overflow-hidden">
+          <div className="absolute right-0 top-full mt-1 w-56 rounded-lg border border-fluux-hover bg-fluux-bg shadow-lg z-50 py-1 overflow-hidden">
             {onEnableClick && (
               <button
                 type="button"
@@ -296,7 +296,7 @@ function EncryptionIcon({
         </button>
       </Tooltip>
       {open && (
-        <div className="absolute right-0 top-full mt-1 w-56 rounded-lg border border-fluux-border bg-fluux-surface shadow-lg z-50 py-1 overflow-hidden">
+        <div className="absolute right-0 top-full mt-1 w-56 rounded-lg border border-fluux-hover bg-fluux-bg shadow-lg z-50 py-1 overflow-hidden">
           {onVerifyClick && (
             <button
               type="button"

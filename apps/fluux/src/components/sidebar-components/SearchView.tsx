@@ -132,7 +132,7 @@ export function SearchView() {
 
           {/* in: prefix autocomplete dropdown */}
           {isInPrefixActive && inPrefixSuggestions.length > 0 && (
-            <div className="absolute inset-x-0 top-full mt-1 bg-fluux-surface border border-fluux-border rounded-md shadow-lg z-50 max-h-48 overflow-y-auto">
+            <div className="absolute inset-x-0 top-full mt-1 bg-fluux-bg border border-fluux-hover rounded-md shadow-lg z-50 max-h-48 overflow-y-auto">
               {inPrefixSuggestions.map((s, i) => (
                 <button
                   key={s.id}

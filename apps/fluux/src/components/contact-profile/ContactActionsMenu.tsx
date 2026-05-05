@@ -84,7 +84,7 @@ export function ContactActionsMenu({
               role="menuitem"
               type="button"
               onClick={onClick}
-              className={`w-full flex items-center gap-2 px-3 py-2.5 text-start text-sm transition-colors hover:bg-fluux-hover ${danger ? 'text-fluux-red' : 'text-fluux-text'}`}
+              className={`w-full flex items-center gap-2 px-3 py-2.5 text-start text-sm transition-colors hover:bg-fluux-active ${danger ? 'text-fluux-red' : 'text-fluux-text'}`}
             >
               <Icon className="w-4 h-4 flex-shrink-0" />
               <span>{label}</span>
