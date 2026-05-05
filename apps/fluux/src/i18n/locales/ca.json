@@ -150,7 +150,14 @@
             "verifyButton": "Verifica l'empremta",
             "removeVerification": "Elimina la verificació",
             "removeVerificationConfirm": "Eliminar la verificació per la clau de {{name}}? Haureu de verificar-la de nou per un segon canal.",
-            "removeVerificationSuccess": "Verificació eliminada"
+            "removeVerificationSuccess": "Verificació eliminada",
+            "disableForContact": "Desactiva el xifratge per a aquest contacte",
+            "notAvailableTitle": "Xifratge no disponible",
+            "notAvailableDescription": "Aquest contacte no ha publicat cap clau OpenPGP. Els missatges s’enviaran en text pla.",
+            "disabledByYouTitle": "Xifratge desactivat",
+            "disabledByYouDescription": "Has desactivat el xifratge per a aquest contacte. Els missatges s’enviaran en text pla.",
+            "unavailableNowTitle": "Xifratge no disponible actualment",
+            "unavailableNowDescription": "Torneu a connectar-vos o activeu el xifratge a la configuració."
         },
         "tabs": {
             "profile": "Perfil",

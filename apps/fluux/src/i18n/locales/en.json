@@ -148,7 +148,14 @@
             "verifyButton": "Verify fingerprint",
             "removeVerification": "Remove verification",
             "removeVerificationConfirm": "Remove verification for {{name}}'s key? You'll need to re-verify via a second channel.",
-            "removeVerificationSuccess": "Verification removed"
+            "removeVerificationSuccess": "Verification removed",
+            "disableForContact": "Disable encryption for this contact",
+            "notAvailableTitle": "Encryption not available",
+            "notAvailableDescription": "This contact has not published an OpenPGP key. Messages will be sent in plaintext.",
+            "disabledByYouTitle": "Encryption disabled",
+            "disabledByYouDescription": "You disabled encryption for this contact. Messages will be sent in plaintext.",
+            "unavailableNowTitle": "Encryption currently unavailable",
+            "unavailableNowDescription": "Reconnect or enable encryption in settings."
         },
         "tabs": {
             "profile": "Profile",

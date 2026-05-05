@@ -150,7 +150,14 @@
             "verifyButton": "Fingerabdruck prüfen",
             "removeVerification": "Verifizierung entfernen",
             "removeVerificationConfirm": "Verifizierung des Schlüssels von {{name}} entfernen? Sie müssen über einen zweiten Kanal erneut verifizieren.",
-            "removeVerificationSuccess": "Verifizierung entfernt"
+            "removeVerificationSuccess": "Verifizierung entfernt",
+            "disableForContact": "Verschlüsselung für diesen Kontakt deaktivieren",
+            "notAvailableTitle": "Verschlüsselung nicht verfügbar",
+            "notAvailableDescription": "Dieser Kontakt hat keinen OpenPGP-Schlüssel veröffentlicht. Nachrichten werden im Klartext gesendet.",
+            "disabledByYouTitle": "Verschlüsselung deaktiviert",
+            "disabledByYouDescription": "Du hast die Verschlüsselung für diesen Kontakt deaktiviert. Nachrichten werden im Klartext gesendet.",
+            "unavailableNowTitle": "Verschlüsselung derzeit nicht verfügbar",
+            "unavailableNowDescription": "Verbinde dich erneut oder aktiviere die Verschlüsselung in den Einstellungen."
         },
         "tabs": {
             "profile": "Profil",

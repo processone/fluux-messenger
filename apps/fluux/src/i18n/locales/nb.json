@@ -148,7 +148,14 @@
             "verifyButton": "Bekreft fingeravtrykk",
             "removeVerification": "Fjern bekreftelse",
             "removeVerificationConfirm": "Fjerne bekreftelse for {{name}}s nøkkel? Du må bekrefte på nytt via en annen kanal.",
-            "removeVerificationSuccess": "Bekreftelse fjernet"
+            "removeVerificationSuccess": "Bekreftelse fjernet",
+            "disableForContact": "Deaktiver kryptering for denne kontakten",
+            "notAvailableTitle": "Kryptering er ikke tilgjengelig",
+            "notAvailableDescription": "Denne kontakten har ikke publisert en OpenPGP-nøkkel. Meldinger sendes i klartekst.",
+            "disabledByYouTitle": "Kryptering er deaktivert",
+            "disabledByYouDescription": "Du har deaktivert kryptering for denne kontakten. Meldinger sendes i klartekst.",
+            "unavailableNowTitle": "Kryptering er ikke tilgjengelig nå",
+            "unavailableNowDescription": "Koble til på nytt eller aktiver kryptering i innstillinger."
         },
         "tabs": {
             "profile": "Profil",

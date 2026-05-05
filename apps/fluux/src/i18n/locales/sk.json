@@ -149,7 +149,14 @@
             "verifyButton": "Overiť odtlačok",
             "removeVerification": "Odstrániť overenie",
             "removeVerificationConfirm": "Odstrániť overenie kľúča {{name}}? Budete musieť znova overiť prostredníctvom druhého kanála.",
-            "removeVerificationSuccess": "Overenie odstránené"
+            "removeVerificationSuccess": "Overenie odstránené",
+            "disableForContact": "Zakázať šifrovanie pre tento kontakt",
+            "notAvailableTitle": "Šifrovanie nie je k dispozícii",
+            "notAvailableDescription": "Tento kontakt nezverejnil OpenPGP kľúč. Správy sa odošlú v čistom texte.",
+            "disabledByYouTitle": "Šifrovanie je zakázané",
+            "disabledByYouDescription": "Pre tento kontakt ste šifrovanie vypli. Správy sa odošlú v čistom texte.",
+            "unavailableNowTitle": "Šifrovanie momentálne nie je k dispozícii",
+            "unavailableNowDescription": "Znova sa pripojte alebo povoľte šifrovanie v nastaveniach."
         },
         "tabs": {
             "profile": "Profil",

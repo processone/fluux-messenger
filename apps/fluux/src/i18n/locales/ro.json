@@ -150,7 +150,14 @@
             "verifyButton": "Verifică amprenta",
             "removeVerification": "Elimină verificarea",
             "removeVerificationConfirm": "Eliminați verificarea pentru cheia lui {{name}}? Va trebui să reverificați printr-un al doilea canal.",
-            "removeVerificationSuccess": "Verificare eliminată"
+            "removeVerificationSuccess": "Verificare eliminată",
+            "disableForContact": "Dezactivează criptarea pentru acest contact",
+            "notAvailableTitle": "Criptarea nu este disponibilă",
+            "notAvailableDescription": "Acest contact nu a publicat o cheie OpenPGP. Mesajele vor fi trimise în text simplu.",
+            "disabledByYouTitle": "Criptarea este dezactivată",
+            "disabledByYouDescription": "Ai dezactivat criptarea pentru acest contact. Mesajele vor fi trimise în text simplu.",
+            "unavailableNowTitle": "Criptarea este momentan indisponibilă",
+            "unavailableNowDescription": "Reconectează-te sau activează criptarea din setări."
         },
         "tabs": {
             "profile": "Profil",

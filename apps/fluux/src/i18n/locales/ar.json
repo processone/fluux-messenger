@@ -148,7 +148,14 @@
             "verifyButton": "التحقق من البصمة",
             "removeVerification": "إزالة التوثيق",
             "removeVerificationConfirm": "إزالة التوثيق لمفتاح {{name}}؟ ستحتاج إلى إعادة التوثيق عبر قناة ثانية.",
-            "removeVerificationSuccess": "تمت إزالة التوثيق"
+            "removeVerificationSuccess": "تمت إزالة التوثيق",
+            "disableForContact": "تعطيل التشفير لجهة الاتصال هذه",
+            "notAvailableTitle": "التشفير غير متاح",
+            "notAvailableDescription": "لم ينشر جهة الاتصال هذه مفتاح OpenPGP. ستُرسل الرسائل بنص عادي.",
+            "disabledByYouTitle": "تم تعطيل التشفير",
+            "disabledByYouDescription": "قمتَ بتعطيل التشفير لجهة الاتصال هذه. ستُرسل الرسائل بنص عادي.",
+            "unavailableNowTitle": "التشفير غير متاح حاليًا",
+            "unavailableNowDescription": "أعد الاتصال أو فعّل التشفير في الإعدادات."
         },
         "tabs": {
             "profile": "الملف الشخصي",

@@ -149,7 +149,14 @@
             "verifyButton": "Vérifier l'empreinte",
             "removeVerification": "Retirer la vérification",
             "removeVerificationConfirm": "Retirer la vérification de la clé de {{name}} ? Vous devrez la re-vérifier via un second canal.",
-            "removeVerificationSuccess": "Vérification retirée"
+            "removeVerificationSuccess": "Vérification retirée",
+            "disableForContact": "Désactiver le chiffrement pour ce contact",
+            "notAvailableTitle": "Chiffrement non disponible",
+            "notAvailableDescription": "Ce contact n’a pas publié de clé OpenPGP. Les messages seront envoyés en clair.",
+            "disabledByYouTitle": "Chiffrement désactivé",
+            "disabledByYouDescription": "Vous avez désactivé le chiffrement pour ce contact. Les messages seront envoyés en clair.",
+            "unavailableNowTitle": "Chiffrement actuellement indisponible",
+            "unavailableNowDescription": "Reconnectez-vous ou activez le chiffrement dans les paramètres."
         },
         "tabs": {
             "profile": "Profil",

@@ -148,7 +148,14 @@
             "verifyButton": "Ujjlenyomat ellenőrzése",
             "removeVerification": "Ellenőrzés eltávolítása",
             "removeVerificationConfirm": "Eltávolítja {{name}} kulcsának ellenőrzését? Újra kell ellenőriznie egy második csatornán keresztül.",
-            "removeVerificationSuccess": "Ellenőrzés eltávolítva"
+            "removeVerificationSuccess": "Ellenőrzés eltávolítva",
+            "disableForContact": "Titkosítás letiltása ennek a partnernek",
+            "notAvailableTitle": "A titkosítás nem érhető el",
+            "notAvailableDescription": "Ez a partner nem tett közzé OpenPGP-kulcsot. Az üzenetek titkosítatlanul kerülnek elküldésre.",
+            "disabledByYouTitle": "A titkosítás letiltva",
+            "disabledByYouDescription": "Letiltottad a titkosítást ennél a partnernél. Az üzenetek titkosítatlanul kerülnek elküldésre.",
+            "unavailableNowTitle": "A titkosítás jelenleg nem érhető el",
+            "unavailableNowDescription": "Kapcsolódj újra, vagy engedélyezd a titkosítást a beállításokban."
         },
         "tabs": {
             "profile": "Profil",

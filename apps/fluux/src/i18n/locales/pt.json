@@ -150,7 +150,14 @@
             "verifyButton": "Verificar impressão digital",
             "removeVerification": "Remover verificação",
             "removeVerificationConfirm": "Remover a verificação da chave de {{name}}? Terá de verificar novamente através de um segundo canal.",
-            "removeVerificationSuccess": "Verificação removida"
+            "removeVerificationSuccess": "Verificação removida",
+            "disableForContact": "Desativar a encriptação para este contacto",
+            "notAvailableTitle": "Encriptação indisponível",
+            "notAvailableDescription": "Este contacto não publicou uma chave OpenPGP. As mensagens serão enviadas em texto simples.",
+            "disabledByYouTitle": "Encriptação desativada",
+            "disabledByYouDescription": "Desativaste a encriptação para este contacto. As mensagens serão enviadas em texto simples.",
+            "unavailableNowTitle": "Encriptação atualmente indisponível",
+            "unavailableNowDescription": "Volta a ligar-te ou ativa a encriptação nas definições."
         },
         "tabs": {
             "profile": "Perfil",

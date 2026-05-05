@@ -23,26 +23,36 @@ export function SecurityTab({
     <div className="px-4 py-4 md:px-6 md:py-5">
       <div className="space-y-3 max-w-md mx-auto">
         {state.kind === 'checking' && (
-          <StatusRow
-            icon={<Loader2 className="w-4 h-4 text-fluux-muted animate-spin flex-shrink-0" />}
-            text={t('chat.encryption.checking')}
+          <ExplanationPanel
+            icon={<Loader2 className="w-5 h-5 text-fluux-muted animate-spin flex-shrink-0" />}
+            title={t('chat.encryption.checking')}
             tone="neutral"
           />
         )}
 
         {state.kind === 'blocked' && (
-          <StatusRow
-            icon={<ShieldAlert className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />}
-            text={t('chat.encryption.blocked')}
+          <ExplanationPanel
+            icon={<ShieldAlert className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />}
+            title={t('chat.encryption.blocked')}
             tone="warning"
+          />
+        )}
+
+        {state.kind === 'unsupported' && (
+          <ExplanationPanel
+            icon={<LockOpen className="w-5 h-5 text-fluux-muted flex-shrink-0" />}
+            title={t('contacts.encryption.notAvailableTitle')}
+            description={t('contacts.encryption.notAvailableDescription')}
+            tone="neutral"
           />
         )}
 
         {state.kind === 'plaintextForced' && (
           <>
-            <StatusRow
-              icon={<LockOpen className="w-4 h-4 text-fluux-muted flex-shrink-0" />}
-              text={t('chat.encryption.plaintextForced')}
+            <ExplanationPanel
+              icon={<LockOpen className="w-5 h-5 text-fluux-muted flex-shrink-0" />}
+              title={t('contacts.encryption.disabledByYouTitle')}
+              description={t('contacts.encryption.disabledByYouDescription')}
               tone="neutral"
             />
             <button
@@ -56,31 +66,26 @@ export function SecurityTab({
           </>
         )}
 
-        {state.kind === 'unsupported' && (
-          <StatusRow
-            icon={<LockOpen className="w-4 h-4 text-fluux-muted flex-shrink-0" />}
-            text={t('chat.encryption.plaintextForced')}
+        {state.kind === 'disabled' && (
+          <ExplanationPanel
+            icon={<LockOpen className="w-5 h-5 text-fluux-muted flex-shrink-0" />}
+            title={t('contacts.encryption.unavailableNowTitle')}
+            description={t('contacts.encryption.unavailableNowDescription')}
             tone="neutral"
           />
         )}
 
-        {state.kind === 'disabled' && (
-          <p className="text-sm text-fluux-muted text-center px-2">
-            {t('contacts.encryption.sectionTitle')}
-          </p>
-        )}
-
         {state.kind === 'encrypted' && (
           <>
-            <StatusRow
+            <ExplanationPanel
               icon={
                 state.trust === 'verified' ? (
-                  <ShieldCheck className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0" />
+                  <ShieldCheck className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0" />
                 ) : (
-                  <Lock className="w-4 h-4 text-fluux-muted flex-shrink-0" />
+                  <Lock className="w-5 h-5 text-fluux-muted flex-shrink-0" />
                 )
               }
-              text={
+              title={
                 state.trust === 'verified'
                   ? t('contacts.encryption.verified')
                   : t('contacts.encryption.trusted')
@@ -92,7 +97,7 @@ export function SecurityTab({
               <label className="block text-xs text-fluux-muted mb-1 px-1">
                 {t('contacts.encryption.fingerprintLabel')}
               </label>
-              <div className="rounded-lg border border-fluux-hover bg-fluux-bg px-3 py-2">
+              <div className="rounded-lg bg-fluux-bg/40 px-3 py-2">
                 <code className="block text-xs font-mono text-fluux-text break-all leading-relaxed">
                   {formatFingerprint(state.fingerprint)}
                 </code>
@@ -127,7 +132,7 @@ export function SecurityTab({
               className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-bg hover:bg-fluux-hover text-fluux-muted border border-fluux-hover rounded-lg transition-colors text-sm min-h-[44px]"
             >
               <ShieldOff className="w-4 h-4" />
-              {t('chat.encryption.disableEncryption')}
+              {t('contacts.encryption.disableForContact')}
             </button>
           </>
         )}
@@ -136,29 +141,31 @@ export function SecurityTab({
   )
 }
 
-function StatusRow({
-  icon,
-  text,
-  tone,
-}: {
+interface ExplanationPanelProps {
   icon: React.ReactNode
-  text: string
+  title: string
+  description?: string
   tone: 'success' | 'neutral' | 'warning'
-}) {
+}
+
+function ExplanationPanel({ icon, title, description, tone }: ExplanationPanelProps) {
   const bg =
     tone === 'success'
       ? 'bg-green-500/10'
       : tone === 'warning'
         ? 'bg-yellow-500/10'
-        : 'bg-fluux-bg'
-  const textColor =
-    tone === 'warning'
-      ? 'text-yellow-700 dark:text-yellow-400'
-      : 'text-fluux-text'
+        : 'bg-fluux-bg/40'
+  const titleColor =
+    tone === 'warning' ? 'text-yellow-700 dark:text-yellow-400' : 'text-fluux-text'
   return (
-    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${bg}`}>
-      {icon}
-      <span className={`text-sm ${textColor}`}>{text}</span>
+    <div className={`flex items-start gap-3 px-3 py-3 rounded-lg ${bg}`}>
+      <div className="mt-0.5">{icon}</div>
+      <div className="flex-1 min-w-0">
+        <div className={`text-sm font-medium ${titleColor}`}>{title}</div>
+        {description && (
+          <p className="text-xs text-fluux-muted mt-1 leading-relaxed">{description}</p>
+        )}
+      </div>
     </div>
   )
 }

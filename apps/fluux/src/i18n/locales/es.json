@@ -150,7 +150,14 @@
             "verifyButton": "Verificar huella",
             "removeVerification": "Eliminar verificación",
             "removeVerificationConfirm": "¿Eliminar la verificación de la clave de {{name}}? Deberás volver a verificar a través de un segundo canal.",
-            "removeVerificationSuccess": "Verificación eliminada"
+            "removeVerificationSuccess": "Verificación eliminada",
+            "disableForContact": "Desactivar el cifrado para este contacto",
+            "notAvailableTitle": "Cifrado no disponible",
+            "notAvailableDescription": "Este contacto no ha publicado una clave OpenPGP. Los mensajes se enviarán en texto plano.",
+            "disabledByYouTitle": "Cifrado desactivado",
+            "disabledByYouDescription": "Has desactivado el cifrado para este contacto. Los mensajes se enviarán en texto plano.",
+            "unavailableNowTitle": "Cifrado actualmente no disponible",
+            "unavailableNowDescription": "Vuelve a conectarte o activa el cifrado en los ajustes."
         },
         "tabs": {
             "profile": "Perfil",

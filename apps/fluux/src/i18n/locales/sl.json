@@ -150,7 +150,14 @@
             "verifyButton": "Preveri prstni odtis",
             "removeVerification": "Odstrani preverjanje",
             "removeVerificationConfirm": "Odstraniti preverjanje za ključ {{name}}? Ključ boste morali znova preveriti prek drugega kanala.",
-            "removeVerificationSuccess": "Preverjanje odstranjeno"
+            "removeVerificationSuccess": "Preverjanje odstranjeno",
+            "disableForContact": "Onemogoči šifriranje za ta stik",
+            "notAvailableTitle": "Šifriranje ni na voljo",
+            "notAvailableDescription": "Ta stik ni objavil ključa OpenPGP. Sporočila bodo poslana v navadnem besedilu.",
+            "disabledByYouTitle": "Šifriranje je onemogočeno",
+            "disabledByYouDescription": "Onemogočili ste šifriranje za ta stik. Sporočila bodo poslana v navadnem besedilu.",
+            "unavailableNowTitle": "Šifriranje trenutno ni na voljo",
+            "unavailableNowDescription": "Znova se povežite ali omogočite šifriranje v nastavitvah."
         },
         "tabs": {
             "profile": "Profil",

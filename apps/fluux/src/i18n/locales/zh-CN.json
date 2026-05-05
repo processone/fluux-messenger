@@ -148,7 +148,14 @@
             "verifyButton": "验证指纹",
             "removeVerification": "移除验证",
             "removeVerificationConfirm": "移除对 {{name}} 密钥的验证？您需要通过第二个渠道重新验证。",
-            "removeVerificationSuccess": "验证已移除"
+            "removeVerificationSuccess": "验证已移除",
+            "disableForContact": "为此联系人禁用加密",
+            "notAvailableTitle": "加密不可用",
+            "notAvailableDescription": "该联系人尚未发布 OpenPGP 密钥。消息将以明文形式发送。",
+            "disabledByYouTitle": "加密已禁用",
+            "disabledByYouDescription": "您已为此联系人禁用加密。消息将以明文形式发送。",
+            "unavailableNowTitle": "加密当前不可用",
+            "unavailableNowDescription": "请重新连接或在设置中启用加密。"
         },
         "tabs": {
             "profile": "个人资料",

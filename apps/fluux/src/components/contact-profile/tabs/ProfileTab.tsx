@@ -27,7 +27,7 @@ export function ProfileTab({ contact, vcard, forceOffline }: ProfileTabProps) {
     <div className="px-4 py-4 md:px-6 md:py-5 space-y-5">
       {/* vCard */}
       {hasVcard && vcard && (
-        <section className="rounded-lg border border-fluux-hover bg-fluux-bg/40 divide-y divide-fluux-hover/60">
+        <section className="rounded-lg bg-fluux-bg/40 py-1">
           {vcard.fullName && (
             <InfoRow icon={User} label={vcard.fullName} />
           )}

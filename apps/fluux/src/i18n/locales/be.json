@@ -148,7 +148,14 @@
             "verifyButton": "Праверыць адбітак",
             "removeVerification": "Зняць праверку",
             "removeVerificationConfirm": "Зняць праверку ключа {{name}}? Вам прыйдзецца пераправерыць праз другі канал.",
-            "removeVerificationSuccess": "Праверка знята"
+            "removeVerificationSuccess": "Праверка знята",
+            "disableForContact": "Адключыць шыфраванне для гэтага кантакту",
+            "notAvailableTitle": "Шыфраванне недаступнае",
+            "notAvailableDescription": "Гэты кантакт не апублікаваў ключ OpenPGP. Паведамленні будуць адпраўлены ў адкрытым выглядзе.",
+            "disabledByYouTitle": "Шыфраванне адключана",
+            "disabledByYouDescription": "Вы адключылі шыфраванне для гэтага кантакту. Паведамленні будуць адпраўлены ў адкрытым выглядзе.",
+            "unavailableNowTitle": "Шыфраванне зараз недаступнае",
+            "unavailableNowDescription": "Перападключыцеся або ўключыце шыфраванне ў наладах."
         },
         "tabs": {
             "profile": "Профіль",

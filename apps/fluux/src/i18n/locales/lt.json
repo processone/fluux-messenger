@@ -148,7 +148,14 @@
             "verifyButton": "Patvirtinti pirštų atspaudą",
             "removeVerification": "Pašalinti patvirtinimą",
             "removeVerificationConfirm": "Pašalinti {{name}} rakto patvirtinimą? Turėsite iš naujo patvirtinti per antrą kanalą.",
-            "removeVerificationSuccess": "Patvirtinimas pašalintas"
+            "removeVerificationSuccess": "Patvirtinimas pašalintas",
+            "disableForContact": "Išjungti šifravimą šiam kontaktui",
+            "notAvailableTitle": "Šifravimas neprieinamas",
+            "notAvailableDescription": "Šis kontaktas nepaskelbė OpenPGP rakto. Pranešimai bus siunčiami atviru tekstu.",
+            "disabledByYouTitle": "Šifravimas išjungtas",
+            "disabledByYouDescription": "Išjungėte šifravimą šiam kontaktui. Pranešimai bus siunčiami atviru tekstu.",
+            "unavailableNowTitle": "Šifravimas šiuo metu neprieinamas",
+            "unavailableNowDescription": "Iš naujo prisijunkite arba įjunkite šifravimą nustatymuose."
         },
         "tabs": {
             "profile": "Profilis",

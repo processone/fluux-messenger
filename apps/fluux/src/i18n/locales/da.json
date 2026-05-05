@@ -148,7 +148,14 @@
             "verifyButton": "Bekræft aftryk",
             "removeVerification": "Fjern bekræftelse",
             "removeVerificationConfirm": "Fjerne bekræftelse af {{name}}s nøgle? Du skal bekræfte igen via en anden kanal.",
-            "removeVerificationSuccess": "Bekræftelse fjernet"
+            "removeVerificationSuccess": "Bekræftelse fjernet",
+            "disableForContact": "Deaktiver kryptering for denne kontakt",
+            "notAvailableTitle": "Kryptering ikke tilgængelig",
+            "notAvailableDescription": "Denne kontakt har ikke offentliggjort en OpenPGP-nøgle. Beskeder sendes i klartekst.",
+            "disabledByYouTitle": "Kryptering deaktiveret",
+            "disabledByYouDescription": "Du har deaktiveret kryptering for denne kontakt. Beskeder sendes i klartekst.",
+            "unavailableNowTitle": "Kryptering er ikke tilgængelig lige nu",
+            "unavailableNowDescription": "Genopret forbindelse, eller aktivér kryptering i indstillingerne."
         },
         "tabs": {
             "profile": "Profil",

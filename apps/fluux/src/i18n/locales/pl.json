@@ -150,7 +150,14 @@
             "verifyButton": "Weryfikuj odcisk",
             "removeVerification": "Usuń weryfikację",
             "removeVerificationConfirm": "Usunąć weryfikację klucza {{name}}? Musisz ponownie zweryfikować przez drugi kanał.",
-            "removeVerificationSuccess": "Weryfikacja usunięta"
+            "removeVerificationSuccess": "Weryfikacja usunięta",
+            "disableForContact": "Wyłącz szyfrowanie dla tego kontaktu",
+            "notAvailableTitle": "Szyfrowanie niedostępne",
+            "notAvailableDescription": "Ten kontakt nie opublikował klucza OpenPGP. Wiadomości będą wysyłane jawnym tekstem.",
+            "disabledByYouTitle": "Szyfrowanie wyłączone",
+            "disabledByYouDescription": "Wyłączyłeś szyfrowanie dla tego kontaktu. Wiadomości będą wysyłane jawnym tekstem.",
+            "unavailableNowTitle": "Szyfrowanie obecnie niedostępne",
+            "unavailableNowDescription": "Połącz się ponownie lub włącz szyfrowanie w ustawieniach."
         },
         "tabs": {
             "profile": "Profil",

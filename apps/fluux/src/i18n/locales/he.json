@@ -148,7 +148,14 @@
             "verifyButton": "אמת טביעת אצבע",
             "removeVerification": "הסר אימות",
             "removeVerificationConfirm": "להסיר את האימות עבור המפתח של {{name}}? יהיה עליך לאמת מחדש דרך ערוץ שני.",
-            "removeVerificationSuccess": "האימות הוסר"
+            "removeVerificationSuccess": "האימות הוסר",
+            "disableForContact": "השבתת ההצפנה עבור איש קשר זה",
+            "notAvailableTitle": "הצפנה אינה זמינה",
+            "notAvailableDescription": "איש קשר זה לא פרסם מפתח OpenPGP. ההודעות יישלחו ללא הצפנה.",
+            "disabledByYouTitle": "ההצפנה הושבתה",
+            "disabledByYouDescription": "השבתת את ההצפנה עבור איש קשר זה. ההודעות יישלחו ללא הצפנה.",
+            "unavailableNowTitle": "ההצפנה אינה זמינה כרגע",
+            "unavailableNowDescription": "התחבר/י מחדש או הפעל/י את ההצפנה בהגדרות."
         },
         "tabs": {
             "profile": "פרופיל",

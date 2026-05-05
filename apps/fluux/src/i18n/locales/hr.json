@@ -148,7 +148,14 @@
             "verifyButton": "Provjeri otisak",
             "removeVerification": "Ukloni provjeru",
             "removeVerificationConfirm": "Ukloniti provjeru za ključ od {{name}}? Morat ćete ga ponovo provjeriti putem drugog kanala.",
-            "removeVerificationSuccess": "Provjera uklonjena"
+            "removeVerificationSuccess": "Provjera uklonjena",
+            "disableForContact": "Onemogući šifriranje za ovaj kontakt",
+            "notAvailableTitle": "Šifriranje nije dostupno",
+            "notAvailableDescription": "Ovaj kontakt nije objavio OpenPGP ključ. Poruke će se slati u običnom tekstu.",
+            "disabledByYouTitle": "Šifriranje je onemogućeno",
+            "disabledByYouDescription": "Onemogućili ste šifriranje za ovaj kontakt. Poruke će se slati u običnom tekstu.",
+            "unavailableNowTitle": "Šifriranje trenutačno nije dostupno",
+            "unavailableNowDescription": "Ponovo se povežite ili omogućite šifriranje u postavkama."
         },
         "tabs": {
             "profile": "Profil",

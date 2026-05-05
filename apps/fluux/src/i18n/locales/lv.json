@@ -149,7 +149,14 @@
             "verifyButton": "Pārbaudīt nospiedumu",
             "removeVerification": "Noņemt verifikāciju",
             "removeVerificationConfirm": "Noņemt verifikāciju {{name}} atslēgai? Jums būs atkārtoti jāverificē caur otru kanālu.",
-            "removeVerificationSuccess": "Verifikācija noņemta"
+            "removeVerificationSuccess": "Verifikācija noņemta",
+            "disableForContact": "Atspējot šifrēšanu šim kontaktam",
+            "notAvailableTitle": "Šifrēšana nav pieejama",
+            "notAvailableDescription": "Šis kontakts nav publicējis OpenPGP atslēgu. Ziņojumi tiks sūtīti atklātā tekstā.",
+            "disabledByYouTitle": "Šifrēšana ir atspējota",
+            "disabledByYouDescription": "Jūs atspējojāt šifrēšanu šim kontaktam. Ziņojumi tiks sūtīti atklātā tekstā.",
+            "unavailableNowTitle": "Šifrēšana šobrīd nav pieejama",
+            "unavailableNowDescription": "Pieslēdzieties no jauna vai iespējojiet šifrēšanu iestatījumos."
         },
         "tabs": {
             "profile": "Profils",

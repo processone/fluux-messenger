@@ -148,7 +148,14 @@
             "verifyButton": "Потвърди отпечатък",
             "removeVerification": "Премахни потвърждението",
             "removeVerificationConfirm": "Да се премахне потвърждението за ключа на {{name}}? Ще трябва да го потвърдите отново чрез друг канал.",
-            "removeVerificationSuccess": "Потвърждението е премахнато"
+            "removeVerificationSuccess": "Потвърждението е премахнато",
+            "disableForContact": "Изключване на шифроването за този контакт",
+            "notAvailableTitle": "Шифроването не е налично",
+            "notAvailableDescription": "Този контакт не е публикувал OpenPGP ключ. Съобщенията ще бъдат изпратени в чист текст.",
+            "disabledByYouTitle": "Шифроването е изключено",
+            "disabledByYouDescription": "Изключихте шифроването за този контакт. Съобщенията ще бъдат изпратени в чист текст.",
+            "unavailableNowTitle": "Шифроването в момента не е налично",
+            "unavailableNowDescription": "Свържете се отново или активирайте шифроването в настройките."
         },
         "tabs": {
             "profile": "Профил",

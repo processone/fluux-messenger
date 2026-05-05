@@ -150,7 +150,14 @@
             "verifyButton": "Kontrolli sõrmejälge",
             "removeVerification": "Eemalda kinnitamine",
             "removeVerificationConfirm": "Eemaldada {{name}} võtme kinnitamine? Peate uuesti kontrollima teise kanali kaudu.",
-            "removeVerificationSuccess": "Kinnitamine eemaldatud"
+            "removeVerificationSuccess": "Kinnitamine eemaldatud",
+            "disableForContact": "Keela krüpteerimine selle kontakti jaoks",
+            "notAvailableTitle": "Krüpteerimine pole saadaval",
+            "notAvailableDescription": "See kontakt pole avaldanud OpenPGP võtit. Sõnumid saadetakse selgelt loetavana.",
+            "disabledByYouTitle": "Krüpteerimine on keelatud",
+            "disabledByYouDescription": "Keelasid selle kontakti jaoks krüpteerimise. Sõnumid saadetakse selgelt loetavana.",
+            "unavailableNowTitle": "Krüpteerimine pole praegu saadaval",
+            "unavailableNowDescription": "Loo uuesti ühendus või luba krüpteerimine seadetes."
         },
         "tabs": {
             "profile": "Profiil",

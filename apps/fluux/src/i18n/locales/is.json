@@ -148,7 +148,14 @@
             "verifyButton": "Staðfesta fingrafar",
             "removeVerification": "Fjarlægja staðfestingu",
             "removeVerificationConfirm": "Fjarlægja staðfestingu fyrir lykil {{name}}? Þú þarft að staðfesta aftur í gegnum annan rás.",
-            "removeVerificationSuccess": "Staðfesting fjarlægð"
+            "removeVerificationSuccess": "Staðfesting fjarlægð",
+            "disableForContact": "Slökkva á dulritun fyrir þennan tengilið",
+            "notAvailableTitle": "Dulritun ekki tiltæk",
+            "notAvailableDescription": "Þessi tengiliður hefur ekki birt OpenPGP-lykil. Skilaboð verða send ódulrituð.",
+            "disabledByYouTitle": "Dulritun er óvirk",
+            "disabledByYouDescription": "Þú slökktir á dulritun fyrir þennan tengilið. Skilaboð verða send ódulrituð.",
+            "unavailableNowTitle": "Dulritun er ekki tiltæk núna",
+            "unavailableNowDescription": "Tengstu aftur eða kveiktu á dulritun í stillingum."
         },
         "tabs": {
             "profile": "Notandasnið",

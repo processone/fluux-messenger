@@ -148,7 +148,14 @@
             "verifyButton": "Fíoraigh méarloirg",
             "removeVerification": "Bain an fíorú",
             "removeVerificationConfirm": "An bhfuil tú ag iarraidh an fíorú a bhaint de eochair {{name}}? Beidh ort fíorú arís trí chainéal eile.",
-            "removeVerificationSuccess": "Fíorú bainte"
+            "removeVerificationSuccess": "Fíorú bainte",
+            "disableForContact": "Díchumasaigh criptiú don teagmháil seo",
+            "notAvailableTitle": "Níl criptiú ar fáil",
+            "notAvailableDescription": "Níor fhoilsigh an teagmháil seo eochair OpenPGP. Cuirfear teachtaireachtaí sa ghnáth-théacs.",
+            "disabledByYouTitle": "Tá criptiú díchumasaithe",
+            "disabledByYouDescription": "Dhíchumasaigh tú criptiú don teagmháil seo. Cuirfear teachtaireachtaí sa ghnáth-théacs.",
+            "unavailableNowTitle": "Níl criptiú ar fáil faoi láthair",
+            "unavailableNowDescription": "Athcheangail nó cumasaigh criptiú sna socruithe."
         },
         "tabs": {
             "profile": "Próifíl",

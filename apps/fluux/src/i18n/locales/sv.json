@@ -148,7 +148,14 @@
             "verifyButton": "Verifiera fingeravtryck",
             "removeVerification": "Ta bort verifiering",
             "removeVerificationConfirm": "Ta bort verifieringen för {{name}}s nyckel? Du måste verifiera igen via en annan kanal.",
-            "removeVerificationSuccess": "Verifiering borttagen"
+            "removeVerificationSuccess": "Verifiering borttagen",
+            "disableForContact": "Inaktivera kryptering för denna kontakt",
+            "notAvailableTitle": "Kryptering inte tillgänglig",
+            "notAvailableDescription": "Den här kontakten har inte publicerat någon OpenPGP-nyckel. Meddelanden skickas i klartext.",
+            "disabledByYouTitle": "Kryptering inaktiverad",
+            "disabledByYouDescription": "Du har inaktiverat krypteringen för den här kontakten. Meddelanden skickas i klartext.",
+            "unavailableNowTitle": "Kryptering är inte tillgänglig just nu",
+            "unavailableNowDescription": "Återanslut eller aktivera kryptering i inställningarna."
         },
         "tabs": {
             "profile": "Profil",

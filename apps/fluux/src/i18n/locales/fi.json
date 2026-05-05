@@ -148,7 +148,14 @@
             "verifyButton": "Tarkista sormenjälki",
             "removeVerification": "Poista vahvistus",
             "removeVerificationConfirm": "Poistetaanko vahvistus {{name}}n avaimelta? Sinun täytyy vahvistaa uudelleen toisen kanavan kautta.",
-            "removeVerificationSuccess": "Vahvistus poistettu"
+            "removeVerificationSuccess": "Vahvistus poistettu",
+            "disableForContact": "Poista salaus käytöstä tälle yhteystiedolle",
+            "notAvailableTitle": "Salaus ei käytettävissä",
+            "notAvailableDescription": "Tämä yhteystieto ei ole julkaissut OpenPGP-avainta. Viestit lähetetään selkokielisinä.",
+            "disabledByYouTitle": "Salaus on poistettu käytöstä",
+            "disabledByYouDescription": "Olet poistanut salauksen käytöstä tälle yhteystiedolle. Viestit lähetetään selkokielisinä.",
+            "unavailableNowTitle": "Salaus ei ole tällä hetkellä käytettävissä",
+            "unavailableNowDescription": "Yhdistä uudelleen tai ota salaus käyttöön asetuksista."
         },
         "tabs": {
             "profile": "Profiili",

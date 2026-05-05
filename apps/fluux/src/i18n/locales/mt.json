@@ -150,7 +150,14 @@
             "verifyButton": "Ivverifika l-impronta",
             "removeVerification": "Neħħi l-verifikazzjoni",
             "removeVerificationConfirm": "Tneħħi l-verifikazzjoni tal-aħjar ta' {{name}}? Tkun trid tivverifika mill-ġdid permezz ta' kanal ieħor.",
-            "removeVerificationSuccess": "Verifikazzjoni mneħħija"
+            "removeVerificationSuccess": "Verifikazzjoni mneħħija",
+            "disableForContact": "Itfi l-kriptaġġ għal dan il-kuntatt",
+            "notAvailableTitle": "Il-kriptaġġ mhux disponibbli",
+            "notAvailableDescription": "Dan il-kuntatt ma ppubblikax ċavetta OpenPGP. Il-messaġġi se jintbagħtu f’test ċar.",
+            "disabledByYouTitle": "Il-kriptaġġ ġie diżattivat",
+            "disabledByYouDescription": "Inti tfajt il-kriptaġġ għal dan il-kuntatt. Il-messaġġi se jintbagħtu f’test ċar.",
+            "unavailableNowTitle": "Il-kriptaġġ bħalissa mhux disponibbli",
+            "unavailableNowDescription": "Erġa’ qabbad jew attiva l-kriptaġġ fis-settings."
         },
         "tabs": {
             "profile": "Profil",

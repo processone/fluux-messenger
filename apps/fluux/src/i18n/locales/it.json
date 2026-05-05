@@ -150,7 +150,14 @@
             "verifyButton": "Verifica impronta",
             "removeVerification": "Rimuovi verifica",
             "removeVerificationConfirm": "Rimuovere la verifica della chiave di {{name}}? Sarà necessario verificare nuovamente tramite un secondo canale.",
-            "removeVerificationSuccess": "Verifica rimossa"
+            "removeVerificationSuccess": "Verifica rimossa",
+            "disableForContact": "Disattiva la crittografia per questo contatto",
+            "notAvailableTitle": "Crittografia non disponibile",
+            "notAvailableDescription": "Questo contatto non ha pubblicato una chiave OpenPGP. I messaggi verranno inviati in chiaro.",
+            "disabledByYouTitle": "Crittografia disattivata",
+            "disabledByYouDescription": "Hai disattivato la crittografia per questo contatto. I messaggi verranno inviati in chiaro.",
+            "unavailableNowTitle": "Crittografia momentaneamente non disponibile",
+            "unavailableNowDescription": "Riconnettiti o attiva la crittografia nelle impostazioni."
         },
         "tabs": {
             "profile": "Profilo",

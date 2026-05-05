@@ -148,7 +148,14 @@
             "verifyButton": "Vingerafdruk verifiëren",
             "removeVerification": "Verificatie verwijderen",
             "removeVerificationConfirm": "Verificatie voor de sleutel van {{name}} verwijderen? Je moet opnieuw verifiëren via een tweede kanaal.",
-            "removeVerificationSuccess": "Verificatie verwijderd"
+            "removeVerificationSuccess": "Verificatie verwijderd",
+            "disableForContact": "Versleuteling voor dit contact uitschakelen",
+            "notAvailableTitle": "Versleuteling niet beschikbaar",
+            "notAvailableDescription": "Dit contact heeft geen OpenPGP-sleutel gepubliceerd. Berichten worden in platte tekst verzonden.",
+            "disabledByYouTitle": "Versleuteling uitgeschakeld",
+            "disabledByYouDescription": "Je hebt de versleuteling voor dit contact uitgeschakeld. Berichten worden in platte tekst verzonden.",
+            "unavailableNowTitle": "Versleuteling momenteel niet beschikbaar",
+            "unavailableNowDescription": "Maak opnieuw verbinding of schakel versleuteling in via de instellingen."
         },
         "tabs": {
             "profile": "Profiel",

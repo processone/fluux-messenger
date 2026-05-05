@@ -148,7 +148,14 @@
             "verifyButton": "Проверить отпечаток",
             "removeVerification": "Удалить верификацию",
             "removeVerificationConfirm": "Удалить верификацию ключа {{name}}? Вам потребуется повторить проверку через другой канал.",
-            "removeVerificationSuccess": "Верификация удалена"
+            "removeVerificationSuccess": "Верификация удалена",
+            "disableForContact": "Отключить шифрование для этого контакта",
+            "notAvailableTitle": "Шифрование недоступно",
+            "notAvailableDescription": "Этот контакт не опубликовал ключ OpenPGP. Сообщения будут отправлены в открытом виде.",
+            "disabledByYouTitle": "Шифрование отключено",
+            "disabledByYouDescription": "Вы отключили шифрование для этого контакта. Сообщения будут отправлены в открытом виде.",
+            "unavailableNowTitle": "Шифрование сейчас недоступно",
+            "unavailableNowDescription": "Переподключитесь или включите шифрование в настройках."
         },
         "tabs": {
             "profile": "Профиль",
