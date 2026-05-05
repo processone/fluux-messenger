@@ -74,6 +74,7 @@
 
 ### Privacy & Security
 - **Self-hostable** - Connect to any XMPP server, no vendor lock-in, no third-party dependency
+- **End-to-End Encryption** - OpenPGP (OX-IM) for 1:1 and group chats; automatic key discovery, peer verification, and cross-device verification sync
 - **FAST Authentication** - Modern SASL2 with token-based reconnection for instant, password-less session resumption
 - **Contact Blocking** - Full block/unblock support with a dedicated management screen
 - **In-Band Password Change** - Change your account password without leaving the app
@@ -94,7 +95,7 @@
 
 ### Developer-Friendly
 - **Headless SDK** - Reusable `@fluux/sdk` package for building custom XMPP clients or bots
-- **50+ XEPs Implemented** - MAM, MUC, Stream Management, Message Carbons, HTTP File Upload, Reactions, FAST, and many more
+- **50+ XEPs Implemented** - MAM, MUC, Stream Management, Message Carbons, HTTP File Upload, Reactions, OpenPGP (OX-IM), FAST, and many more
 - **Open Source** - AGPL-3.0 licensed
 
 ## Quick Start
@@ -207,7 +208,7 @@ The **web** version requires WebSocket on your server, with [CORS](https://devel
 
 #### Does Fluux Messenger support end-to-end encryption?
 
-Not yet, but it's on our roadmap. We're currently prototyping **OpenPGP** support (see the [`openpgp`](https://github.com/processone/fluux-messenger/tree/openpgp) branch if you're curious). **OMEMO** will probably come later: beyond the implementation work, it raises licensing questions we want to address properly. We're also watching **MLS** as an option for group chats.
+Yes — **OpenPGP (OX-IM, XEP-0373/0374)** is fully implemented. Messages in 1:1 and group chats are encrypted and signed using each participant's published OpenPGP key. Features include automatic key discovery, peer verification with cross-device sync, secret key backup, and MAM history decryption. **OMEMO** may follow: beyond the implementation work it raises licensing questions we want to address properly. We're also watching **MLS** as an option for large-scale group chats.
 
 #### When will voice and video calls be available?
 
