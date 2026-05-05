@@ -685,7 +685,17 @@
             "enableBackupFoundUseFresh": "Démarrer à neuf",
             "backupConflictTitle": "Remplacer la sauvegarde existante ?",
             "backupConflictMessage": "Une sauvegarde est déjà stockée sur ce serveur, mais elle n'a pas été créée depuis cet appareil. La remplacer rendra l'ancienne sauvegarde irrécupérable — toute personne ne disposant que de l'ancienne phrase secrète ne pourra plus la restaurer. Continuez seulement si vous êtes sûr de ne plus avoir besoin de cette copie.",
-            "backupConflictAction": "Remplacer la sauvegarde"
+            "backupConflictAction": "Remplacer la sauvegarde",
+            "rotateLabel": "Rotation de la clé de chiffrement",
+            "rotateDescription": "Génère une nouvelle sous-clé de chiffrement. Votre identité (empreinte) reste la même — vos contacts n'auront pas besoin de vous re-vérifier. Les anciens messages restent lisibles sur cet appareil. Les nouveaux messages utiliseront la nouvelle sous-clé.",
+            "rotateAction": "Faire la rotation maintenant",
+            "rotateConfirmTitle": "Faire la rotation de votre sous-clé de chiffrement ?",
+            "rotateConfirmMessage": "Une nouvelle sous-clé de chiffrement sera générée et publiée. Votre identité reste la même. Les anciens messages chiffrés restent lisibles sur cet appareil.",
+            "rotateConfirmMessageWithBackup": "Une nouvelle sous-clé de chiffrement sera générée et publiée. Votre sauvegarde serveur sera ré-chiffrée avec une nouvelle phrase de passe — l'ancienne ne fonctionnera plus. Les anciens messages chiffrés restent lisibles sur cet appareil.",
+            "rotateConfirmAction": "Faire la rotation",
+            "rotateSuccess": "Clé de chiffrement renouvelée",
+            "rotateFailed": "Impossible de faire la rotation. Réessayez.",
+            "rotatePluginUnavailable": "Le module OpenPGP n'est pas disponible"
         }
     },
     "update": {

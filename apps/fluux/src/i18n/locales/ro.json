@@ -686,7 +686,17 @@
             "enableBackupFoundUseFresh": "Începe de la zero",
             "backupConflictTitle": "Înlocuiți copia de rezervă existentă?",
             "backupConflictMessage": "Pe acest server este deja stocată o copie de rezervă, dar nu a fost creată de pe acest dispozitiv. Înlocuirea ei face vechea copie de neînlocuit — cine are doar fraza ei nu va mai putea restaura din ea. Continuați doar dacă sunteți sigur că nu mai aveți nevoie de acea copie.",
-            "backupConflictAction": "Înlocuiește copia"
+            "backupConflictAction": "Înlocuiește copia",
+            "rotateLabel": "Rotește cheia de criptare",
+            "rotateDescription": "Generează o nouă subcheie de criptare. Identitatea ta (amprenta) rămâne aceeași — contactele nu vor trebui să te verifice din nou. Mesajele vechi rămân lizibile pe acest dispozitiv. Mesajele noi vor folosi noua subcheie.",
+            "rotateAction": "Rotește cheia acum",
+            "rotateConfirmTitle": "Rotești subcheia ta de criptare?",
+            "rotateConfirmMessage": "Va fi generată și publicată o nouă subcheie de criptare. Identitatea ta rămâne aceeași. Mesajele criptate vechi rămân lizibile pe acest dispozitiv.",
+            "rotateConfirmMessageWithBackup": "Va fi generată și publicată o nouă subcheie de criptare. Copia ta de rezervă de pe server va fi recriptată cu o nouă frază de acces — cea veche nu va mai funcționa. Mesajele criptate vechi rămân lizibile pe acest dispozitiv.",
+            "rotateConfirmAction": "Rotește cheia",
+            "rotateSuccess": "Cheie de criptare rotită",
+            "rotateFailed": "Cheia nu a putut fi rotită. Încearcă din nou.",
+            "rotatePluginUnavailable": "Modulul OpenPGP indisponibil"
         }
     },
     "update": {

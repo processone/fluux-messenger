@@ -600,7 +600,17 @@
             "enableBackupFoundUseFresh": "Start fresh",
             "backupConflictTitle": "Replace the existing backup?",
             "backupConflictMessage": "A backup is already stored on this server, but it wasn't created from this device. Replacing it makes the old backup unrecoverable — anyone holding only its passphrase will no longer be able to restore from it. Continue if you're sure you don't need that copy any more.",
-            "backupConflictAction": "Replace backup"
+            "backupConflictAction": "Replace backup",
+            "rotateLabel": "Rotate encryption key",
+            "rotateDescription": "Generates a fresh encryption subkey. Your identity (fingerprint) stays the same — contacts won't need to re-verify you. Past messages remain readable on this device. New messages will use the new subkey.",
+            "rotateAction": "Rotate key now",
+            "rotateConfirmTitle": "Rotate your encryption subkey?",
+            "rotateConfirmMessage": "A new encryption subkey will be generated and published. Your identity stays the same. Past encrypted messages remain readable on this device.",
+            "rotateConfirmMessageWithBackup": "A new encryption subkey will be generated and published. Your server backup will be re-encrypted with a new passphrase — the old passphrase will no longer work. Past encrypted messages remain readable on this device.",
+            "rotateConfirmAction": "Rotate key",
+            "rotateSuccess": "Encryption key rotated",
+            "rotateFailed": "Couldn't rotate the key. Try again.",
+            "rotatePluginUnavailable": "OpenPGP plugin not available"
         },
         "blocked": {
             "title": "Blocked Users",

@@ -684,7 +684,17 @@
             "enableBackupFoundUseFresh": "Pradėti iš naujo",
             "backupConflictTitle": "Pakeisti esamą atsarginę kopiją?",
             "backupConflictMessage": "Šiame serveryje jau saugoma atsarginė kopija, bet ji nebuvo sukurta iš šio įrenginio. Jos pakeitimas padarys senąją kopiją neatkuriama — kas turi tik jos slaptažodinę frazę, nebegalės iš jos atkurti. Tęskite tik tada, jei tikrai nebereikia tos kopijos.",
-            "backupConflictAction": "Pakeisti kopiją"
+            "backupConflictAction": "Pakeisti kopiją",
+            "rotateLabel": "Pakeisti šifravimo raktą",
+            "rotateDescription": "Sukuria naują šifravimo poraktį. Jūsų tapatybė (atspaudas) lieka tokia pati — kontaktams nereikės jūsų patvirtinti iš naujo. Senos žinutės šiame įrenginyje liks įskaitomos. Naujos žinutės naudos naują poraktį.",
+            "rotateAction": "Pakeisti raktą dabar",
+            "rotateConfirmTitle": "Pakeisti jūsų šifravimo poraktį?",
+            "rotateConfirmMessage": "Bus sukurtas ir paskelbtas naujas šifravimo poraktis. Jūsų tapatybė lieka tokia pati. Senos užšifruotos žinutės šiame įrenginyje liks įskaitomos.",
+            "rotateConfirmMessageWithBackup": "Bus sukurtas ir paskelbtas naujas šifravimo poraktis. Jūsų atsarginė kopija serveryje bus iš naujo užšifruota nauju slaptažodžio fraze — senoji nebeveiks. Senos užšifruotos žinutės šiame įrenginyje liks įskaitomos.",
+            "rotateConfirmAction": "Pakeisti raktą",
+            "rotateSuccess": "Šifravimo raktas pakeistas",
+            "rotateFailed": "Nepavyko pakeisti rakto. Bandykite dar kartą.",
+            "rotatePluginUnavailable": "OpenPGP modulis nepasiekiamas"
         }
     },
     "update": {

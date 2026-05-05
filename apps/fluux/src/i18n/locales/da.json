@@ -684,7 +684,17 @@
             "enableBackupFoundUseFresh": "Start forfra",
             "backupConflictTitle": "Erstatte den eksisterende sikkerhedskopi?",
             "backupConflictMessage": "Der er allerede gemt en sikkerhedskopi på denne server, men den blev ikke oprettet fra denne enhed. At erstatte den gør den gamle sikkerhedskopi ugendannelig — den, der kun har dens adgangssætning, vil ikke længere kunne gendanne fra den. Fortsæt kun, hvis du er sikker på, at du ikke længere har brug for den kopi.",
-            "backupConflictAction": "Erstat sikkerhedskopi"
+            "backupConflictAction": "Erstat sikkerhedskopi",
+            "rotateLabel": "Rotér krypteringsnøgle",
+            "rotateDescription": "Genererer en ny kryptering-undernøgle. Din identitet (fingeraftryk) forbliver den samme — kontakter behøver ikke at verificere dig igen. Gamle beskeder forbliver læsbare på denne enhed. Nye beskeder vil bruge den nye undernøgle.",
+            "rotateAction": "Rotér nøgle nu",
+            "rotateConfirmTitle": "Rotér din kryptering-undernøgle?",
+            "rotateConfirmMessage": "En ny kryptering-undernøgle bliver genereret og offentliggjort. Din identitet forbliver den samme. Gamle krypterede beskeder forbliver læsbare på denne enhed.",
+            "rotateConfirmMessageWithBackup": "En ny kryptering-undernøgle bliver genereret og offentliggjort. Din serverbackup bliver krypteret igen med en ny adgangssætning — den gamle vil ikke længere virke. Gamle krypterede beskeder forbliver læsbare på denne enhed.",
+            "rotateConfirmAction": "Rotér nøgle",
+            "rotateSuccess": "Krypteringsnøgle roteret",
+            "rotateFailed": "Kunne ikke rotere nøglen. Prøv igen.",
+            "rotatePluginUnavailable": "OpenPGP-modul ikke tilgængeligt"
         }
     },
     "update": {

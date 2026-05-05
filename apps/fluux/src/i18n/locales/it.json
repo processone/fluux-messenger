@@ -686,7 +686,17 @@
             "enableBackupFoundUseFresh": "Ricomincia da zero",
             "backupConflictTitle": "Sostituire il backup esistente?",
             "backupConflictMessage": "Su questo server è già presente un backup, ma non è stato creato da questo dispositivo. Sostituirlo renderà il vecchio backup non recuperabile — chi possiede solo la sua passphrase non potrà più ripristinare da esso. Continua solo se sei sicuro di non aver più bisogno di quella copia.",
-            "backupConflictAction": "Sostituisci backup"
+            "backupConflictAction": "Sostituisci backup",
+            "rotateLabel": "Ruota la chiave di cifratura",
+            "rotateDescription": "Genera una nuova sottochiave di cifratura. La tua identità (impronta) rimane la stessa — i contatti non avranno bisogno di verificarti di nuovo. I messaggi passati restano leggibili su questo dispositivo. I nuovi messaggi useranno la nuova sottochiave.",
+            "rotateAction": "Ruota la chiave ora",
+            "rotateConfirmTitle": "Ruotare la sottochiave di cifratura?",
+            "rotateConfirmMessage": "Verrà generata e pubblicata una nuova sottochiave di cifratura. La tua identità rimane la stessa. I messaggi cifrati passati restano leggibili su questo dispositivo.",
+            "rotateConfirmMessageWithBackup": "Verrà generata e pubblicata una nuova sottochiave di cifratura. Il tuo backup sul server sarà ri-cifrato con una nuova passphrase — la vecchia non funzionerà più. I messaggi cifrati passati restano leggibili su questo dispositivo.",
+            "rotateConfirmAction": "Ruota la chiave",
+            "rotateSuccess": "Chiave di cifratura ruotata",
+            "rotateFailed": "Impossibile ruotare la chiave. Riprova.",
+            "rotatePluginUnavailable": "Modulo OpenPGP non disponibile"
         }
     },
     "update": {

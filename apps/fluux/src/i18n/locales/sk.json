@@ -685,7 +685,17 @@
             "enableBackupFoundUseFresh": "Začať odznova",
             "backupConflictTitle": "Nahradiť existujúcu zálohu?",
             "backupConflictMessage": "Na tomto serveri je už uložená záloha, ale nebola vytvorená z tohto zariadenia. Jej nahradenie znamená, že stará záloha bude neobnoviteľná — kto má iba jej heslo, už z nej nebude môcť obnoviť. Pokračujte iba ak ste si istí, že túto kópiu už nepotrebujete.",
-            "backupConflictAction": "Nahradiť zálohu"
+            "backupConflictAction": "Nahradiť zálohu",
+            "rotateLabel": "Rotovať šifrovací kľúč",
+            "rotateDescription": "Vygeneruje nový šifrovací podkľúč. Vaša identita (odtlačok) zostáva rovnaká — kontakty vás nebudú musieť znova overovať. Staršie správy zostanú na tomto zariadení čitateľné. Nové správy budú používať nový podkľúč.",
+            "rotateAction": "Rotovať kľúč teraz",
+            "rotateConfirmTitle": "Rotovať váš šifrovací podkľúč?",
+            "rotateConfirmMessage": "Bude vygenerovaný a zverejnený nový šifrovací podkľúč. Vaša identita zostáva rovnaká. Staršie šifrované správy zostanú na tomto zariadení čitateľné.",
+            "rotateConfirmMessageWithBackup": "Bude vygenerovaný a zverejnený nový šifrovací podkľúč. Vaša serverová záloha bude znovu zašifrovaná novým heslom — staré heslo už nebude fungovať. Staršie šifrované správy zostanú na tomto zariadení čitateľné.",
+            "rotateConfirmAction": "Rotovať kľúč",
+            "rotateSuccess": "Šifrovací kľúč rotovaný",
+            "rotateFailed": "Nepodarilo sa rotovať kľúč. Skúste znova.",
+            "rotatePluginUnavailable": "Modul OpenPGP nie je k dispozícii"
         }
     },
     "update": {

@@ -686,7 +686,17 @@
             "enableBackupFoundUseFresh": "Neu beginnen",
             "backupConflictTitle": "Vorhandenes Backup ersetzen?",
             "backupConflictMessage": "Auf diesem Server ist bereits ein Backup gespeichert, das aber nicht von diesem Gerät erstellt wurde. Es zu ersetzen macht das alte Backup unwiederherstellbar — wer nur dessen Passphrase besitzt, kann nicht mehr daraus wiederherstellen. Fahre nur fort, wenn du sicher bist, dass du diese Kopie nicht mehr brauchst.",
-            "backupConflictAction": "Backup ersetzen"
+            "backupConflictAction": "Backup ersetzen",
+            "rotateLabel": "Verschlüsselungsschlüssel rotieren",
+            "rotateDescription": "Erzeugt einen neuen Verschlüsselungs-Unterschlüssel. Ihre Identität (Fingerabdruck) bleibt gleich — Kontakte müssen Sie nicht erneut verifizieren. Frühere Nachrichten bleiben auf diesem Gerät lesbar. Neue Nachrichten verwenden den neuen Unterschlüssel.",
+            "rotateAction": "Schlüssel jetzt rotieren",
+            "rotateConfirmTitle": "Verschlüsselungs-Unterschlüssel rotieren?",
+            "rotateConfirmMessage": "Ein neuer Verschlüsselungs-Unterschlüssel wird erzeugt und veröffentlicht. Ihre Identität bleibt gleich. Frühere verschlüsselte Nachrichten bleiben auf diesem Gerät lesbar.",
+            "rotateConfirmMessageWithBackup": "Ein neuer Verschlüsselungs-Unterschlüssel wird erzeugt und veröffentlicht. Ihr Server-Backup wird mit einem neuen Passwort neu verschlüsselt — das alte Passwort funktioniert nicht mehr. Frühere verschlüsselte Nachrichten bleiben auf diesem Gerät lesbar.",
+            "rotateConfirmAction": "Schlüssel rotieren",
+            "rotateSuccess": "Verschlüsselungsschlüssel rotiert",
+            "rotateFailed": "Schlüssel konnte nicht rotiert werden. Versuchen Sie es erneut.",
+            "rotatePluginUnavailable": "OpenPGP-Modul nicht verfügbar"
         }
     },
     "update": {

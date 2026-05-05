@@ -684,7 +684,17 @@
             "enableBackupFoundUseFresh": "Opnieuw beginnen",
             "backupConflictTitle": "Bestaande back-up vervangen?",
             "backupConflictMessage": "Op deze server staat al een back-up, maar die is niet vanaf dit apparaat gemaakt. Hem vervangen maakt de oude back-up onherstelbaar — wie alleen de bijbehorende wachtwoordzin heeft, kan er niet meer mee herstellen. Ga alleen door als je zeker weet dat je die kopie niet meer nodig hebt.",
-            "backupConflictAction": "Back-up vervangen"
+            "backupConflictAction": "Back-up vervangen",
+            "rotateLabel": "Versleutelingssleutel roteren",
+            "rotateDescription": "Genereert een nieuwe versleutelings-subsleutel. Je identiteit (vingerafdruk) blijft hetzelfde — contacten hoeven je niet opnieuw te verifiëren. Oudere berichten blijven leesbaar op dit apparaat. Nieuwe berichten gebruiken de nieuwe subsleutel.",
+            "rotateAction": "Sleutel nu roteren",
+            "rotateConfirmTitle": "Versleutelings-subsleutel roteren?",
+            "rotateConfirmMessage": "Er wordt een nieuwe versleutelings-subsleutel gegenereerd en gepubliceerd. Je identiteit blijft hetzelfde. Eerder versleutelde berichten blijven leesbaar op dit apparaat.",
+            "rotateConfirmMessageWithBackup": "Er wordt een nieuwe versleutelings-subsleutel gegenereerd en gepubliceerd. Je serverback-up wordt opnieuw versleuteld met een nieuw wachtwoord — het oude wachtwoord werkt niet meer. Eerder versleutelde berichten blijven leesbaar op dit apparaat.",
+            "rotateConfirmAction": "Sleutel roteren",
+            "rotateSuccess": "Versleutelingssleutel geroteerd",
+            "rotateFailed": "Sleutel kon niet worden geroteerd. Probeer opnieuw.",
+            "rotatePluginUnavailable": "OpenPGP-module niet beschikbaar"
         }
     },
     "update": {

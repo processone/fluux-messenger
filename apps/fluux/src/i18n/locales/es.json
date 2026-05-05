@@ -686,7 +686,17 @@
             "enableBackupFoundUseFresh": "Empezar de cero",
             "backupConflictTitle": "¿Reemplazar la copia de seguridad existente?",
             "backupConflictMessage": "Ya hay una copia de seguridad almacenada en este servidor, pero no se creó desde este dispositivo. Reemplazarla hará que la antigua no se pueda recuperar — quien tenga solo su frase de contraseña ya no podrá restaurar a partir de ella. Continúa solo si estás seguro de que ya no necesitas esa copia.",
-            "backupConflictAction": "Reemplazar copia"
+            "backupConflictAction": "Reemplazar copia",
+            "rotateLabel": "Rotar la clave de cifrado",
+            "rotateDescription": "Genera una nueva subclave de cifrado. Tu identidad (huella) sigue siendo la misma — los contactos no necesitarán verificarte de nuevo. Los mensajes anteriores siguen siendo legibles en este dispositivo. Los nuevos mensajes usarán la nueva subclave.",
+            "rotateAction": "Rotar la clave ahora",
+            "rotateConfirmTitle": "¿Rotar tu subclave de cifrado?",
+            "rotateConfirmMessage": "Se generará y publicará una nueva subclave de cifrado. Tu identidad permanece igual. Los mensajes cifrados anteriores siguen siendo legibles en este dispositivo.",
+            "rotateConfirmMessageWithBackup": "Se generará y publicará una nueva subclave de cifrado. Tu copia de seguridad del servidor se volverá a cifrar con una nueva contraseña — la anterior dejará de funcionar. Los mensajes cifrados anteriores siguen siendo legibles en este dispositivo.",
+            "rotateConfirmAction": "Rotar la clave",
+            "rotateSuccess": "Clave de cifrado rotada",
+            "rotateFailed": "No se pudo rotar la clave. Inténtalo de nuevo.",
+            "rotatePluginUnavailable": "Módulo OpenPGP no disponible"
         }
     },
     "update": {

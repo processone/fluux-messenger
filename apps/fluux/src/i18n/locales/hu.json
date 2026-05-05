@@ -684,7 +684,17 @@
             "enableBackupFoundUseFresh": "Kezdés előlről",
             "backupConflictTitle": "Lecseréli a meglévő biztonsági mentést?",
             "backupConflictMessage": "Ezen a kiszolgálón már van tárolva biztonsági mentés, de nem ezzel az eszközzel készült. Lecserélése visszaállíthatatlanná teszi a régi mentést — aki csak annak jelmondatát birtokolja, többé nem tud belőle visszaállítani. Csak akkor folytassa, ha biztos abban, hogy nincs többé szüksége arra a másolatra.",
-            "backupConflictAction": "Mentés lecserélése"
+            "backupConflictAction": "Mentés lecserélése",
+            "rotateLabel": "Titkosítási kulcs cseréje",
+            "rotateDescription": "Új titkosítási alkulcsot generál. Az Ön személyazonossága (ujjlenyomat) változatlan marad — a partnereinek nem kell újra ellenőrizniük Önt. A régi üzenetek olvashatók maradnak ezen a készüléken. Az új üzenetek az új alkulcsot használják.",
+            "rotateAction": "Kulcs cseréje most",
+            "rotateConfirmTitle": "Cseréljük le a titkosítási alkulcsát?",
+            "rotateConfirmMessage": "Új titkosítási alkulcs jön létre és kerül közzétételre. A személyazonossága változatlan marad. A régi titkosított üzenetek olvashatók maradnak ezen a készüléken.",
+            "rotateConfirmMessageWithBackup": "Új titkosítási alkulcs jön létre és kerül közzétételre. A kiszolgálón lévő biztonsági másolat új jelmondattal lesz újra titkosítva — a régi már nem fog működni. A régi titkosított üzenetek olvashatók maradnak ezen a készüléken.",
+            "rotateConfirmAction": "Kulcs cseréje",
+            "rotateSuccess": "A titkosítási kulcs lecserélve",
+            "rotateFailed": "A kulcsot nem sikerült lecserélni. Próbálja újra.",
+            "rotatePluginUnavailable": "Az OpenPGP modul nem érhető el"
         }
     },
     "update": {

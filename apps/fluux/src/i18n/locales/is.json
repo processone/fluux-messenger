@@ -684,7 +684,17 @@
             "enableBackupFoundUseFresh": "Byrja upp á nýtt",
             "backupConflictTitle": "Skipta út núverandi öryggisafriti?",
             "backupConflictMessage": "Öryggisafrit er þegar geymt á þessum þjóni, en það var ekki búið til frá þessu tæki. Að skipta því út gerir gamla afritið óendurheimtanlegt — sá sem aðeins hefur aðgangsorð þess mun ekki lengur geta endurheimt frá því. Haltu áfram aðeins ef þú ert viss um að þú þurfir ekki lengur á því eintaki að halda.",
-            "backupConflictAction": "Skipta um afrit"
+            "backupConflictAction": "Skipta um afrit",
+            "rotateLabel": "Skipta um dulkóðunarlykil",
+            "rotateDescription": "Býr til nýjan dulkóðunar undirlykil. Auðkenni þitt (fingrafar) helst óbreytt — tengiliðir þurfa ekki að staðfesta þig aftur. Eldri skilaboð verða áfram læsileg á þessu tæki. Ný skilaboð munu nota nýja undirlykilinn.",
+            "rotateAction": "Skipta um lykil núna",
+            "rotateConfirmTitle": "Skipta um dulkóðunar undirlykil?",
+            "rotateConfirmMessage": "Nýr dulkóðunar undirlykill verður búinn til og birtur. Auðkenni þitt helst óbreytt. Eldri dulkóðuð skilaboð verða áfram læsileg á þessu tæki.",
+            "rotateConfirmMessageWithBackup": "Nýr dulkóðunar undirlykill verður búinn til og birtur. Afritið þitt á netþjóninum verður endurkóðað með nýrri lykilssetningu — sú gamla virkar ekki lengur. Eldri dulkóðuð skilaboð verða áfram læsileg á þessu tæki.",
+            "rotateConfirmAction": "Skipta um lykil",
+            "rotateSuccess": "Dulkóðunarlykli skipt",
+            "rotateFailed": "Ekki tókst að skipta um lykil. Reyndu aftur.",
+            "rotatePluginUnavailable": "OpenPGP-eining ekki tiltæk"
         }
     },
     "update": {

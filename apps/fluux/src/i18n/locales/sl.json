@@ -686,7 +686,17 @@
             "enableBackupFoundUseFresh": "Začni znova",
             "backupConflictTitle": "Zamenjati obstoječo varnostno kopijo?",
             "backupConflictMessage": "Na tem strežniku je že shranjena varnostna kopija, vendar ni bila ustvarjena s te naprave. Z zamenjavo postane stara kopija neobnovljiva — kdor ima samo njeno geslo, je iz nje ne bo več mogel obnoviti. Nadaljujte le, če ste prepričani, da te kopije ne potrebujete več.",
-            "backupConflictAction": "Zamenjaj kopijo"
+            "backupConflictAction": "Zamenjaj kopijo",
+            "rotateLabel": "Zamenjaj šifrirni ključ",
+            "rotateDescription": "Ustvari nov šifrirni podključ. Vaša identiteta (prstni odtis) ostane enaka — stiki vas ne bodo morali znova preveriti. Stara sporočila ostanejo na tej napravi berljiva. Nova sporočila bodo uporabljala nov podključ.",
+            "rotateAction": "Zamenjaj ključ zdaj",
+            "rotateConfirmTitle": "Zamenjati vaš šifrirni podključ?",
+            "rotateConfirmMessage": "Ustvarjen in objavljen bo nov šifrirni podključ. Vaša identiteta ostane enaka. Stara šifrirana sporočila ostanejo na tej napravi berljiva.",
+            "rotateConfirmMessageWithBackup": "Ustvarjen in objavljen bo nov šifrirni podključ. Vaša varnostna kopija na strežniku bo znova šifrirana z novo geslovno frazo — stara ne bo več delovala. Stara šifrirana sporočila ostanejo na tej napravi berljiva.",
+            "rotateConfirmAction": "Zamenjaj ključ",
+            "rotateSuccess": "Šifrirni ključ zamenjan",
+            "rotateFailed": "Ključa ni bilo mogoče zamenjati. Poskusite znova.",
+            "rotatePluginUnavailable": "Modul OpenPGP ni na voljo"
         }
     },
     "update": {

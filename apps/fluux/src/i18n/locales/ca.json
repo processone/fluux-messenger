@@ -686,7 +686,17 @@
             "enableBackupFoundUseFresh": "Comença de zero",
             "backupConflictTitle": "Substituir la còpia de seguretat existent?",
             "backupConflictMessage": "Ja hi ha una còpia de seguretat desada en aquest servidor, però no es va crear des d'aquest dispositiu. Substituir-la farà que l'antiga no es pugui recuperar — qui tingui només la seva frase de pas ja no podrà restaurar-la. Continua només si estàs segur que ja no necessites aquesta còpia.",
-            "backupConflictAction": "Substitueix la còpia"
+            "backupConflictAction": "Substitueix la còpia",
+            "rotateLabel": "Rotar la clau de xifratge",
+            "rotateDescription": "Genera una nova subclau de xifratge. La vostra identitat (empremta) es manté igual — els contactes no us hauran de tornar a verificar. Els missatges antics segueixen sent llegibles en aquest dispositiu. Els missatges nous utilitzaran la nova subclau.",
+            "rotateAction": "Rotar clau ara",
+            "rotateConfirmTitle": "Rotar la vostra subclau de xifratge?",
+            "rotateConfirmMessage": "Es generarà i publicarà una nova subclau de xifratge. La vostra identitat es manté igual. Els missatges xifrats antics segueixen sent llegibles en aquest dispositiu.",
+            "rotateConfirmMessageWithBackup": "Es generarà i publicarà una nova subclau de xifratge. La vostra còpia al servidor es tornarà a xifrar amb una nova frase de pas — l'antiga deixarà de funcionar. Els missatges xifrats antics segueixen sent llegibles en aquest dispositiu.",
+            "rotateConfirmAction": "Rotar clau",
+            "rotateSuccess": "Clau de xifratge rotada",
+            "rotateFailed": "No s'ha pogut rotar la clau. Torneu-ho a provar.",
+            "rotatePluginUnavailable": "Mòdul OpenPGP no disponible"
         }
     },
     "update": {

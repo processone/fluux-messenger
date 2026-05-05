@@ -684,7 +684,17 @@
             "enableBackupFoundUseFresh": "Tosaigh as an nua",
             "backupConflictTitle": "Cuir in ionad an chúltaca atá ann?",
             "backupConflictMessage": "Tá cúltaca stóráilte cheana féin ar an bhfreastalaí seo, ach níor cruthaíodh é ón ngléas seo. Má chuirtear in ionad é, ní féidir an seancúltaca a aischur — duine a bhfuil ach an pasfhrása aige ní bheidh sé in ann aischur uaidh níos mó. Lean ar aghaidh ach má tá tú cinnte nach bhfuil an chóip sin uait níos mó.",
-            "backupConflictAction": "Cuir in ionad cúltaca"
+            "backupConflictAction": "Cuir in ionad cúltaca",
+            "rotateLabel": "Rothlaigh an eochair criptithe",
+            "rotateDescription": "Gineann fo-eochair criptithe nua. Fanann d'aitheantas (méarlorg) mar an gcéanna — ní bheidh ar do theagmhálaithe tú a fhíorú arís. Fanann seanteachtaireachtaí inléite ar an ngléas seo. Úsáidfidh teachtaireachtaí nua an fo-eochair nua.",
+            "rotateAction": "Rothlaigh an eochair anois",
+            "rotateConfirmTitle": "An bhfuil tú ag iarraidh do fho-eochair criptithe a rothlú?",
+            "rotateConfirmMessage": "Gintear agus foilseofar fo-eochair criptithe nua. Fanann d'aitheantas mar an gcéanna. Fanann seanteachtaireachtaí criptithe inléite ar an ngléas seo.",
+            "rotateConfirmMessageWithBackup": "Gintear agus foilseofar fo-eochair criptithe nua. Athchriptítear do chúltaca freastalaí le frása-pasfhocail nua — ní oibreoidh an seancheann a thuilleadh. Fanann seanteachtaireachtaí criptithe inléite ar an ngléas seo.",
+            "rotateConfirmAction": "Rothlaigh an eochair",
+            "rotateSuccess": "Rinneadh an eochair criptithe a rothlú",
+            "rotateFailed": "Níorbh fhéidir an eochair a rothlú. Bain triail eile as.",
+            "rotatePluginUnavailable": "Níl modúl OpenPGP ar fáil"
         }
     },
     "update": {

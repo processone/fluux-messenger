@@ -684,7 +684,17 @@
             "enableBackupFoundUseFresh": "Start på nytt",
             "backupConflictTitle": "Erstatte den eksisterende sikkerhetskopien?",
             "backupConflictMessage": "En sikkerhetskopi er allerede lagret på denne serveren, men den ble ikke opprettet fra denne enheten. Å erstatte den gjør den gamle sikkerhetskopien ugjenopprettelig — den som bare har dens passordsetning, kan ikke lenger gjenopprette fra den. Fortsett bare hvis du er sikker på at du ikke lenger trenger den kopien.",
-            "backupConflictAction": "Erstatt sikkerhetskopi"
+            "backupConflictAction": "Erstatt sikkerhetskopi",
+            "rotateLabel": "Rotér krypteringsnøkkelen",
+            "rotateDescription": "Genererer en ny krypterings-undernøkkel. Identiteten din (fingeravtrykk) forblir den samme — kontaktene trenger ikke å verifisere deg på nytt. Gamle meldinger forblir lesbare på denne enheten. Nye meldinger vil bruke den nye undernøkkelen.",
+            "rotateAction": "Rotér nøkkel nå",
+            "rotateConfirmTitle": "Rotér krypterings-undernøkkelen din?",
+            "rotateConfirmMessage": "En ny krypterings-undernøkkel blir generert og publisert. Identiteten din forblir den samme. Gamle krypterte meldinger forblir lesbare på denne enheten.",
+            "rotateConfirmMessageWithBackup": "En ny krypterings-undernøkkel blir generert og publisert. Sikkerhetskopien din på serveren blir kryptert på nytt med en ny passordsetning — den gamle vil ikke lenger fungere. Gamle krypterte meldinger forblir lesbare på denne enheten.",
+            "rotateConfirmAction": "Rotér nøkkel",
+            "rotateSuccess": "Krypteringsnøkkel rotert",
+            "rotateFailed": "Kunne ikke rotere nøkkelen. Prøv igjen.",
+            "rotatePluginUnavailable": "OpenPGP-modul ikke tilgjengelig"
         }
     },
     "update": {

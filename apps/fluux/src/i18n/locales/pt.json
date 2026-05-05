@@ -686,7 +686,17 @@
             "enableBackupFoundUseFresh": "Começar do zero",
             "backupConflictTitle": "Substituir a cópia de segurança existente?",
             "backupConflictMessage": "Já existe uma cópia de segurança guardada neste servidor, mas não foi criada a partir deste dispositivo. Substituí-la torna a antiga não recuperável — quem tiver apenas a sua frase-passe deixará de poder restaurá-la. Continua apenas se tens a certeza de que já não precisas dessa cópia.",
-            "backupConflictAction": "Substituir cópia"
+            "backupConflictAction": "Substituir cópia",
+            "rotateLabel": "Rodar a chave de criptografia",
+            "rotateDescription": "Gera uma nova subchave de criptografia. A sua identidade (impressão digital) permanece a mesma — os contactos não precisarão de o verificar novamente. As mensagens antigas continuam legíveis neste dispositivo. As novas mensagens usarão a nova subchave.",
+            "rotateAction": "Rodar chave agora",
+            "rotateConfirmTitle": "Rodar a sua subchave de criptografia?",
+            "rotateConfirmMessage": "Uma nova subchave de criptografia será gerada e publicada. A sua identidade permanece a mesma. As mensagens criptografadas antigas continuam legíveis neste dispositivo.",
+            "rotateConfirmMessageWithBackup": "Uma nova subchave de criptografia será gerada e publicada. A sua cópia de segurança no servidor será re-criptografada com uma nova frase-passe — a antiga deixará de funcionar. As mensagens criptografadas antigas continuam legíveis neste dispositivo.",
+            "rotateConfirmAction": "Rodar chave",
+            "rotateSuccess": "Chave de criptografia rodada",
+            "rotateFailed": "Não foi possível rodar a chave. Tente novamente.",
+            "rotatePluginUnavailable": "Módulo OpenPGP indisponível"
         }
     },
     "update": {

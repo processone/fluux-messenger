@@ -686,7 +686,17 @@
             "enableBackupFoundUseFresh": "Zacznij od nowa",
             "backupConflictTitle": "Zastąpić istniejącą kopię zapasową?",
             "backupConflictMessage": "Na tym serwerze przechowywana jest już kopia zapasowa, ale nie została utworzona z tego urządzenia. Zastąpienie jej sprawi, że stara kopia będzie nie do odzyskania — kto ma tylko jej hasło, nie będzie już mógł z niej przywrócić. Kontynuuj tylko jeśli masz pewność, że już nie potrzebujesz tej kopii.",
-            "backupConflictAction": "Zastąp kopię"
+            "backupConflictAction": "Zastąp kopię",
+            "rotateLabel": "Zmień klucz szyfrowania",
+            "rotateDescription": "Generuje nowy podklucz szyfrowania. Twoja tożsamość (odcisk) pozostaje taka sama — kontakty nie będą musiały Cię ponownie weryfikować. Stare wiadomości pozostają czytelne na tym urządzeniu. Nowe wiadomości będą używać nowego podklucza.",
+            "rotateAction": "Zmień klucz teraz",
+            "rotateConfirmTitle": "Zmienić podklucz szyfrowania?",
+            "rotateConfirmMessage": "Zostanie wygenerowany i opublikowany nowy podklucz szyfrowania. Twoja tożsamość pozostaje taka sama. Stare zaszyfrowane wiadomości pozostają czytelne na tym urządzeniu.",
+            "rotateConfirmMessageWithBackup": "Zostanie wygenerowany i opublikowany nowy podklucz szyfrowania. Twoja kopia zapasowa na serwerze zostanie ponownie zaszyfrowana nowym hasłem — stare nie będzie już działać. Stare zaszyfrowane wiadomości pozostają czytelne na tym urządzeniu.",
+            "rotateConfirmAction": "Zmień klucz",
+            "rotateSuccess": "Klucz szyfrowania zmieniony",
+            "rotateFailed": "Nie udało się zmienić klucza. Spróbuj ponownie.",
+            "rotatePluginUnavailable": "Moduł OpenPGP niedostępny"
         }
     },
     "update": {

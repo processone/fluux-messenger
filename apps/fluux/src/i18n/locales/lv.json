@@ -685,7 +685,17 @@
             "enableBackupFoundUseFresh": "Sākt no jauna",
             "backupConflictTitle": "Aizstāt esošo rezerves kopiju?",
             "backupConflictMessage": "Šajā serverī jau ir saglabāta rezerves kopija, bet tā nav izveidota no šīs ierīces. Tās aizstāšana padara veco rezerves kopiju neatjaunojamu — tas, kuram ir tikai tās paroles frāze, vairs nevarēs no tās atjaunot. Turpiniet tikai tad, ja esat pārliecināts, ka šī kopija jums vairs nav vajadzīga.",
-            "backupConflictAction": "Aizstāt kopiju"
+            "backupConflictAction": "Aizstāt kopiju",
+            "rotateLabel": "Rotēt šifrēšanas atslēgu",
+            "rotateDescription": "Izveido jaunu šifrēšanas apakšatslēgu. Jūsu identitāte (pirkstu nospiedums) paliek nemainīga — kontaktiem nebūs nepieciešams jūs verificēt no jauna. Vecās ziņas šajā ierīcē paliks lasāmas. Jaunas ziņas izmantos jauno apakšatslēgu.",
+            "rotateAction": "Rotēt atslēgu tagad",
+            "rotateConfirmTitle": "Rotēt jūsu šifrēšanas apakšatslēgu?",
+            "rotateConfirmMessage": "Tiks izveidota un publicēta jauna šifrēšanas apakšatslēga. Jūsu identitāte paliks nemainīga. Vecās šifrētās ziņas šajā ierīcē paliks lasāmas.",
+            "rotateConfirmMessageWithBackup": "Tiks izveidota un publicēta jauna šifrēšanas apakšatslēga. Jūsu servera dublējums tiks atkārtoti šifrēts ar jaunu paroles frāzi — vecā vairs nedarbosies. Vecās šifrētās ziņas šajā ierīcē paliks lasāmas.",
+            "rotateConfirmAction": "Rotēt atslēgu",
+            "rotateSuccess": "Šifrēšanas atslēga rotēta",
+            "rotateFailed": "Neizdevās rotēt atslēgu. Mēģiniet vēlreiz.",
+            "rotatePluginUnavailable": "OpenPGP modulis nav pieejams"
         }
     },
     "update": {

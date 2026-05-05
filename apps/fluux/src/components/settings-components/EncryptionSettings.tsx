@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Copy, Check, Lock, AlertTriangle, Trash2, CloudUpload, CloudDownload } from 'lucide-react'
+import { Copy, Check, Lock, AlertTriangle, Trash2, CloudUpload, CloudDownload, RefreshCw } from 'lucide-react'
 import { useConnection, useXMPPContext } from '@fluux/sdk'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { registerE2EEPlugins, unregisterE2EEPlugins } from '@/e2ee/registerPlugins'
@@ -53,6 +53,9 @@ export function EncryptionSettings() {
   const [generationFailed, setGenerationFailed] = useState(false)
   const [showBackupDialog, setShowBackupDialog] = useState(false)
   const [showRestoreDialog, setShowRestoreDialog] = useState(false)
+  const [showRotateConfirm, setShowRotateConfirm] = useState(false)
+  const [showRotatePassphraseDialog, setShowRotatePassphraseDialog] = useState(false)
+  const [isRotating, setIsRotating] = useState(false)
   // Surfaced when the user clicks "Back up to server" while a backup
   // already lives on PEP for a fingerprint we don't have a local "this
   // device backed it up" marker for. Overwriting that backup is what
@@ -362,6 +365,77 @@ export function EncryptionSettings() {
     [client, addToast, t],
   )
 
+  /**
+   * Rotate the encryption subkey. The primary key (and therefore the
+   * fingerprint peers verified) is unchanged — trust survives without a
+   * re-verification ceremony. Past messages remain decryptable on this
+   * device because the retired [E] is kept in the local cert.
+   *
+   * When a server backup is in sync with this device's current
+   * fingerprint, we re-wrap the backup with a freshly-generated
+   * passphrase as part of the same operation: leaving the server copy
+   * stale would let the user click "Restore" and recover a key that
+   * doesn't include the new subkey.
+   *
+   * Throws on failure. The two callers handle errors differently: the
+   * passphrase-dialog path lets the dialog catch and surface the error
+   * inline; the no-backup path catches and toasts.
+   */
+  const doRotate = useCallback(
+    async (passphrase: string | undefined) => {
+      const plugin = client.e2ee?.getPlugin('openpgp') as
+        | { rotateEncryptionKey?: (pp?: string) => Promise<{ fingerprint: string }> }
+        | null
+        | undefined
+      if (!plugin?.rotateEncryptionKey) {
+        throw new Error(t('settings.encryption.rotatePluginUnavailable'))
+      }
+      await plugin.rotateEncryptionKey(passphrase)
+      // Re-probe so the backup status reflects the freshly-published
+      // ciphertext (or the fact that we now diverge from the server).
+      setBackupProbeNonce((n) => n + 1)
+      addToast('success', t('settings.encryption.rotateSuccess'))
+    },
+    [client, addToast, t],
+  )
+
+  const handleRotateRequest = useCallback(() => {
+    setShowRotateConfirm(true)
+  }, [])
+
+  const handleRotateConfirm = useCallback(() => {
+    setShowRotateConfirm(false)
+    const inSync =
+      remoteBackupExists === true &&
+      !!fingerprint &&
+      backedUpFingerprint === fingerprint
+    if (inSync) {
+      // Generate a new backup passphrase and re-publish atomically.
+      // The dialog drives its own loading + error UI from now on.
+      setShowRotatePassphraseDialog(true)
+    } else {
+      // No backup or out-of-sync: rotate directly. Spinner on the
+      // button + toast on success/failure.
+      setIsRotating(true)
+      doRotate(undefined)
+        .catch((err) => {
+          console.error('[Fluux] E2EE rotate failed:', err)
+          addToast('error', t('settings.encryption.rotateFailed'))
+        })
+        .finally(() => setIsRotating(false))
+    }
+  }, [remoteBackupExists, backedUpFingerprint, fingerprint, doRotate, addToast, t])
+
+  const handleRotatePassphraseConfirm = useCallback(
+    async (passphrase: string) => {
+      // Let the dialog handle the loading + error state — it already
+      // does for the regular backup flow.
+      await doRotate(passphrase)
+      setShowRotatePassphraseDialog(false)
+    },
+    [doRotate],
+  )
+
   const handleDeleteKey = useCallback(
     async ({ deleteBackup }: { deleteBackup: boolean }) => {
       setIsDeleting(true)
@@ -586,6 +660,28 @@ export function EncryptionSettings() {
           </div>
         )}
 
+        {/* Rotation — primary fingerprint stays stable so peer trust survives. */}
+        {pluginStatus === 'ready' && (
+          <div className="space-y-2 pt-2 border-t border-fluux-hover">
+            <label className="text-sm font-medium text-fluux-text">
+              {t('settings.encryption.rotateLabel')}
+            </label>
+            <p className="text-xs text-fluux-muted leading-snug">
+              {t('settings.encryption.rotateDescription')}
+            </p>
+            <button
+              onClick={handleRotateRequest}
+              disabled={isRotating}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors disabled:opacity-50 disabled:cursor-wait"
+            >
+              <RefreshCw
+                className={`w-3.5 h-3.5 ${isRotating ? 'animate-spin' : ''}`}
+              />
+              {t('settings.encryption.rotateAction')}
+            </button>
+          </div>
+        )}
+
         {/* Destructive action — only when a key actually exists to delete. */}
         {pluginStatus === 'ready' && (
           <div className="space-y-2 pt-2 border-t border-fluux-hover">
@@ -643,6 +739,30 @@ export function EncryptionSettings() {
         <RestorePassphraseDialog
           onConfirm={handleRestoreConfirm}
           onCancel={() => setShowRestoreDialog(false)}
+        />
+      )}
+
+      {showRotateConfirm && (
+        <ConfirmDialog
+          title={t('settings.encryption.rotateConfirmTitle')}
+          message={
+            remoteBackupExists === true && backedUpFingerprint === fingerprint
+              ? t('settings.encryption.rotateConfirmMessageWithBackup')
+              : t('settings.encryption.rotateConfirmMessage')
+          }
+          confirmLabel={t('settings.encryption.rotateConfirmAction')}
+          variant="warning"
+          onConfirm={handleRotateConfirm}
+          onCancel={() => setShowRotateConfirm(false)}
+        />
+      )}
+
+      {showRotatePassphraseDialog && (
+        <BackupPassphraseDialog
+          onConfirm={handleRotatePassphraseConfirm}
+          onCancel={() => {
+            if (!isRotating) setShowRotatePassphraseDialog(false)
+          }}
         />
       )}
 

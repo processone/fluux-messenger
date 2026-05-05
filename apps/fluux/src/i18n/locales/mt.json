@@ -686,7 +686,17 @@
             "enableBackupFoundUseFresh": "Ibda mill-ġdid",
             "backupConflictTitle": "Tibdel il-backup eżistenti?",
             "backupConflictMessage": "Diġà hemm backup maħżun fuq dan is-server, iżda ma nħoloqx minn dan it-tagħmir. Li tibdlu jagħmel il-backup il-qadim irripristinabbli — min għandu biss il-frażi tagħha mhux se jkun jista' jirripristina minnha aktar. Ipproċedi biss jekk tkun ċert li ma għadekx teħtieġ dik il-kopja.",
-            "backupConflictAction": "Ibdel il-backup"
+            "backupConflictAction": "Ibdel il-backup",
+            "rotateLabel": "Irrota ċ-ċavetta tal-kriptaġġ",
+            "rotateDescription": "Tiġġenera sotto-ċavetta ġdida tal-kriptaġġ. L-identità tiegħek (marka tas-swaba') tibqa' l-istess — il-kuntatti ma jkollhomx għalfejn jivverifikawk mill-ġdid. Il-messaġġi qodma jibqgħu jistgħu jinqraw f'dan it-tagħmir. Il-messaġġi ġodda jużaw is-sotto-ċavetta l-ġdida.",
+            "rotateAction": "Irrota ċ-ċavetta issa",
+            "rotateConfirmTitle": "Tirrota s-sotto-ċavetta tal-kriptaġġ tiegħek?",
+            "rotateConfirmMessage": "Tiġi ġġenerata u ppubblikata sotto-ċavetta ġdida tal-kriptaġġ. L-identità tiegħek tibqa' l-istess. Il-messaġġi kriptati qodma jibqgħu jistgħu jinqraw f'dan it-tagħmir.",
+            "rotateConfirmMessageWithBackup": "Tiġi ġġenerata u ppubblikata sotto-ċavetta ġdida tal-kriptaġġ. Il-kopja ta' riżerva fuq is-server tiġi kkriptata mill-ġdid b'kelma sigrieta ġdida — il-qadima ma taħdimx aktar. Il-messaġġi kriptati qodma jibqgħu jistgħu jinqraw f'dan it-tagħmir.",
+            "rotateConfirmAction": "Irrota ċ-ċavetta",
+            "rotateSuccess": "Ċ-ċavetta tal-kriptaġġ ġiet irrotata",
+            "rotateFailed": "Ma rnexxiex jiġi rrotat iċ-ċavetta. Erġa' pprova.",
+            "rotatePluginUnavailable": "Il-modulu OpenPGP mhux disponibbli"
         }
     },
     "update": {

@@ -684,7 +684,17 @@
             "enableBackupFoundUseFresh": "Aloita alusta",
             "backupConflictTitle": "Korvataanko olemassa oleva varmuuskopio?",
             "backupConflictMessage": "Tällä palvelimella on jo varmuuskopio, mutta sitä ei luotu tältä laitteelta. Sen korvaaminen tekee vanhasta varmuuskopiosta palautumiskelvottoman — ne, joilla on vain sen tunnuslause, eivät enää pysty palauttamaan siitä. Jatka vain, jos olet varma, ettet enää tarvitse tuota kopiota.",
-            "backupConflictAction": "Korvaa varmuuskopio"
+            "backupConflictAction": "Korvaa varmuuskopio",
+            "rotateLabel": "Vaihda salausavain",
+            "rotateDescription": "Luo uuden salauksen aliavaimen. Henkilöllisyytesi (sormenjälki) pysyy samana — kontaktien ei tarvitse vahvistaa sinua uudelleen. Vanhat viestit pysyvät luettavissa tällä laitteella. Uudet viestit käyttävät uutta aliavainta.",
+            "rotateAction": "Vaihda avain nyt",
+            "rotateConfirmTitle": "Vaihdetaanko salauksen aliavain?",
+            "rotateConfirmMessage": "Uusi salauksen aliavain luodaan ja julkaistaan. Henkilöllisyytesi pysyy samana. Vanhat salatut viestit pysyvät luettavissa tällä laitteella.",
+            "rotateConfirmMessageWithBackup": "Uusi salauksen aliavain luodaan ja julkaistaan. Palvelimella oleva varmuuskopio salataan uudella tunnuslauseella — vanha ei enää toimi. Vanhat salatut viestit pysyvät luettavissa tällä laitteella.",
+            "rotateConfirmAction": "Vaihda avain",
+            "rotateSuccess": "Salausavain vaihdettu",
+            "rotateFailed": "Avaimen vaihto epäonnistui. Yritä uudelleen.",
+            "rotatePluginUnavailable": "OpenPGP-moduuli ei saatavilla"
         }
     },
     "update": {

@@ -684,7 +684,17 @@
             "enableBackupFoundUseFresh": "重新开始",
             "backupConflictTitle": "替换现有备份?",
             "backupConflictMessage": "此服务器上已有备份,但不是从此设备创建的。替换会使旧备份不可恢复 — 仅持有其口令短语的人将无法再从中恢复。仅当你确信不再需要那份副本时才继续。",
-            "backupConflictAction": "替换备份"
+            "backupConflictAction": "替换备份",
+            "rotateLabel": "轮换加密密钥",
+            "rotateDescription": "生成新的加密子密钥。你的身份（指纹）保持不变——联系人无需重新验证你。旧消息在此设备上仍可阅读。新消息将使用新的子密钥。",
+            "rotateAction": "立即轮换密钥",
+            "rotateConfirmTitle": "轮换加密子密钥？",
+            "rotateConfirmMessage": "将生成并发布新的加密子密钥。你的身份保持不变。已加密的旧消息在此设备上仍可阅读。",
+            "rotateConfirmMessageWithBackup": "将生成并发布新的加密子密钥。你的服务器备份将使用新密码短语重新加密——旧密码短语将无法使用。已加密的旧消息在此设备上仍可阅读。",
+            "rotateConfirmAction": "轮换密钥",
+            "rotateSuccess": "加密密钥已轮换",
+            "rotateFailed": "无法轮换密钥，请重试。",
+            "rotatePluginUnavailable": "OpenPGP 模块不可用"
         }
     },
     "update": {
