@@ -87,6 +87,9 @@ export function useConversationEncryptionState(
   const { status } = useConnection()
   const { client } = useXMPPContext()
   const openpgpEnabled = useEncryptionSettingsStore((s) => s.openpgpEnabled)
+  // Changes when a plugin finishes registering. Makes the probe effect re-run
+  // after async plugin init so we never stay stuck at `disabled`.
+  const pluginRegisteredAt = useEncryptionSettingsStore((s) => s.pluginRegisteredAt)
   const online = status === 'online'
 
   // Narrow dep from `client` (which some consumers re-create per render,
@@ -219,7 +222,7 @@ export function useConversationEncryptionState(
     return () => {
       cancelled = true
     }
-  }, [peerJid, conversationType, openpgpEnabled, online, e2eeManager, isForcedPlaintext, verifiedFingerprint, pinnedFp])
+  }, [peerJid, conversationType, openpgpEnabled, online, e2eeManager, isForcedPlaintext, verifiedFingerprint, pinnedFp, pluginRegisteredAt])
 
   // Merge the verification trust + pin-mismatch alert into the
   // encrypted state. Precedence:

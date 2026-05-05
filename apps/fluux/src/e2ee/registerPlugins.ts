@@ -13,7 +13,7 @@
 
 import type { XMPPClient } from '@fluux/sdk/core'
 import { isTauri } from '../utils/tauri'
-import { isOpenpgpEnabled } from '../stores/encryptionSettingsStore'
+import { isOpenpgpEnabled, useEncryptionSettingsStore } from '../stores/encryptionSettingsStore'
 import { useConversationPlaintextOverrideStore } from '../stores/conversationPlaintextOverrideStore'
 import { SequoiaPgpPlugin } from './SequoiaPgpPlugin'
 
@@ -38,6 +38,10 @@ export async function registerE2EEPlugins(client: XMPPClient): Promise<void> {
     const { invoke } = await import('@tauri-apps/api/core')
     const plugin = new SequoiaPgpPlugin({ invoke })
     await manager.register(plugin)
+    // Signal React that the plugin is now ready. `useConversationEncryptionState`
+    // subscribes to this counter so the probe effect re-runs reliably — without
+    // this, the effect races against plugin init and may stay `disabled`.
+    useEncryptionSettingsStore.getState().notifyPluginRegistered()
     // Stay on the SDK default (`opportunistic`): encrypt when the peer
     // has a published key, send plaintext otherwise. The composer's
     // encryption chip is the user-facing signal — if it reads

@@ -1,25 +1,25 @@
 import { useState, useEffect } from 'react'
-import { decryptFile, type FileEncryption } from '@fluux/sdk'
+import { type FileEncryption } from '@fluux/sdk'
 import { isTauri } from '@/utils/tauri'
+import { resolveEncryptedMediaUrl, resolveWebEncryptedMediaUrl } from '@/utils/mediaCache'
 
 interface DecryptedUrlState {
-  /** Object URL for the decrypted bytes, or null while loading/on error. */
+  /** Asset or blob URL for the decrypted bytes, or null while loading/on error. */
   url: string | null
-  /** True while fetching + decrypting. */
+  /** True while fetching + decrypting (first access only; cache hits are instant). */
   isLoading: boolean
   /** Populated when fetch or AES-GCM auth-tag verification failed. */
   error: string | null
 }
 
 /**
- * Fetches ciphertext from `url`, decrypts it with the supplied AES-GCM
- * key/IV, and returns a short-lived object URL for use as an img/video
- * source. Rejects on any AEAD failure — tampered bytes never reach the
- * renderer.
+ * Resolves an encrypted attachment to a playable URL.
  *
- * Use only when `encryption` is present on the attachment. Plaintext
- * rendering should stay on the existing `useProxiedUrl` path so we keep
- * all the platform-specific caching behaviour it has.
+ * On first access: downloads ciphertext, AES-GCM decrypts, and writes the
+ * plaintext to the platform cache (filesystem on Tauri, Cache API on web).
+ * On subsequent accesses: returns the cached URL instantly — no keys needed.
+ *
+ * Rejects on any AEAD failure so tampered bytes never reach the renderer.
  */
 export function useDecryptedMediaUrl(
   url: string | undefined,
@@ -38,50 +38,24 @@ export function useDecryptedMediaUrl(
       return
     }
     let cancelled = false
-    let objectUrl: string | null = null
     setState({ url: null, isLoading: true, error: null })
 
-    const fetchFn = async (target: string): Promise<ArrayBuffer> => {
-      // Tauri fetch bypasses CORS restrictions; fall back to web fetch
-      // for the browser build.
-      if (isTauri()) {
-        const { fetch } = await import('@tauri-apps/plugin-http')
-        const resp = await fetch(target)
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-        return await resp.arrayBuffer()
-      }
-      const resp = await fetch(target)
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-      return await resp.arrayBuffer()
-    }
+    const resolve = isTauri() ? resolveEncryptedMediaUrl : resolveWebEncryptedMediaUrl
 
-    void (async () => {
-      try {
-        const buf = await fetchFn(url)
-        if (cancelled) return
-        const plaintext = await decryptFile(
-          new Uint8Array(buf),
-          encryption.key,
-          encryption.iv,
-        )
-        if (cancelled) return
-        const blob = new Blob([plaintext as BlobPart])
-        objectUrl = URL.createObjectURL(blob)
-        setState({ url: objectUrl, isLoading: false, error: null })
-      } catch (err) {
-        if (cancelled) return
-        setState({
+    void resolve(url, encryption).then(
+      resolvedUrl => {
+        if (!cancelled) setState({ url: resolvedUrl, isLoading: false, error: null })
+      },
+      err => {
+        if (!cancelled) setState({
           url: null,
           isLoading: false,
           error: err instanceof Error ? err.message : 'decrypt failed',
         })
-      }
-    })()
+      },
+    )
 
-    return () => {
-      cancelled = true
-      if (objectUrl) URL.revokeObjectURL(objectUrl)
-    }
+    return () => { cancelled = true }
   }, [url, encryption, enabled])
 
   return state

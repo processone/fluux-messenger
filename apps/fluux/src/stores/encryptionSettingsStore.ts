@@ -21,6 +21,14 @@ import { create } from 'zustand'
 interface EncryptionSettingsState {
   openpgpEnabled: boolean
   setOpenpgpEnabled: (enabled: boolean) => void
+  /**
+   * Incremented each time a plugin finishes registering. Used as a reactive
+   * dependency in `useConversationEncryptionState` so the probe effect
+   * re-runs reliably after async plugin init — avoiding the race between
+   * `status === 'online'` and `registerE2EEPlugins` completing.
+   */
+  pluginRegisteredAt: number
+  notifyPluginRegistered: () => void
 }
 
 const OPENPGP_ENABLED_KEY = 'fluux-e2ee-openpgp-enabled'
@@ -44,6 +52,8 @@ export const useEncryptionSettingsStore = create<EncryptionSettingsState>((set) 
     }
     set({ openpgpEnabled: enabled })
   },
+  pluginRegisteredAt: 0,
+  notifyPluginRegistered: () => set((s) => ({ pluginRegisteredAt: s.pluginRegisteredAt + 1 })),
 }))
 
 /**

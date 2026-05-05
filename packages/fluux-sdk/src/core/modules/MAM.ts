@@ -353,16 +353,11 @@ export class MAM extends BaseModule {
 
         const collectedMessages: RoomMessage[] = []
         const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
+        const rawEntries: RawArchiveEntry[] = []
 
+        // Collector only buffers; decrypt + parse happen in the async drain below.
         const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, archiveId) => {
-          // Check for modifications first (keep full JID for room messages)
-          const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
-          if (this.collectModification(messageEl, modifications, (from) => from, forwardedTimestamp)) {
-            return
-          }
-
-          const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
-          if (msg) collectedMessages.push(msg)
+          rawEntries.push({ forwarded, messageEl, archiveId })
         })
 
         // Use the collector registry if available, otherwise fall back to direct listeners
@@ -381,6 +376,17 @@ export class MAM extends BaseModule {
           }
           const response = await this.deps.sendIQ(iq)
           const { complete, rsm } = this.parseMAMResponse(response)
+
+          // Drain buffer: modification detection + opportunistic E2EE decrypt, then parse.
+          for (const { forwarded, messageEl, archiveId } of rawEntries) {
+            const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
+            if (this.collectModification(messageEl, modifications, (from) => from, forwardedTimestamp)) {
+              continue
+            }
+            await this.decryptArchiveEntryIfNeeded(messageEl, roomJid)
+            const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
+            if (msg) collectedMessages.push(msg)
+          }
 
           // Apply modifications to collected messages (full JID comparison for rooms)
           // normalizeReactor extracts nick from full MUC JID for consistent reactor identifiers
@@ -540,14 +546,11 @@ export class MAM extends BaseModule {
 
     const collectedMessages: RoomMessage[] = []
     const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
+    const rawEntries: RawArchiveEntry[] = []
 
+    // Collector only buffers; decrypt + parse happen in the async drain below.
     const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, archiveId) => {
-      const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
-      if (this.collectModification(messageEl, modifications, (from) => from, forwardedTimestamp)) {
-        return
-      }
-      const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
-      if (msg) collectedMessages.push(msg)
+      rawEntries.push({ forwarded, messageEl, archiveId })
     })
 
     let unregister: () => void
@@ -563,6 +566,16 @@ export class MAM extends BaseModule {
       logInfo(`Room MAM search: query="${query}", room=${roomJid}, max=${max}`)
       const response = await this.deps.sendIQ(iq)
       const { complete, rsm } = this.parseMAMResponse(response)
+
+      for (const { forwarded, messageEl, archiveId } of rawEntries) {
+        const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
+        if (this.collectModification(messageEl, modifications, (from) => from, forwardedTimestamp)) {
+          continue
+        }
+        await this.decryptArchiveEntryIfNeeded(messageEl, roomJid)
+        const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
+        if (msg) collectedMessages.push(msg)
+      }
 
       this.applyModifications(collectedMessages, modifications, (msg, from) => msg.from === from)
 
@@ -1842,10 +1855,9 @@ export class MAM extends BaseModule {
 
     const iq = this.buildMAMQuery(queryId, formFields, 1, undefined, roomJid)
 
-    let result: RoomMessage | null = null
-    const collectMessage = this.createMessageCollector(queryId, (forwarded, _messageEl, archiveId) => {
-      const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
-      if (msg) result = msg
+    let rawEntry: RawArchiveEntry | null = null
+    const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, archiveId) => {
+      rawEntry = { forwarded, messageEl, archiveId }
     })
 
     let unregister: () => void
@@ -1864,6 +1876,13 @@ export class MAM extends BaseModule {
       return null
     } finally {
       unregister!()
+    }
+
+    let result: RoomMessage | null = null
+    if (rawEntry) {
+      const { forwarded, messageEl, archiveId } = rawEntry as RawArchiveEntry
+      await this.decryptArchiveEntryIfNeeded(messageEl, roomJid)
+      result = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
     }
 
     // If found, add to the store so subsequent lookups don't need MAM
