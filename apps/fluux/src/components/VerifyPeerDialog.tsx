@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ShieldCheck, AlertTriangle } from 'lucide-react'
+import { ShieldCheck, ShieldOff, AlertTriangle } from 'lucide-react'
 
 interface VerifyPeerDialogProps {
   /** Display name of the peer (the "Are you talking to {name}?" subject). */
@@ -20,6 +20,9 @@ interface VerifyPeerDialogProps {
   /** Called with `peerFingerprint` when the user confirms the match. */
   onConfirm: (fingerprint: string) => void
   onCancel: () => void
+  /** Called when the user explicitly removes the existing verification.
+   *  Only shown when `alreadyVerified` is true. */
+  onRevoke?: () => void
 }
 
 /**
@@ -39,6 +42,7 @@ export function VerifyPeerDialog({
   alreadyVerified = false,
   onConfirm,
   onCancel,
+  onRevoke,
 }: VerifyPeerDialogProps) {
   const { t } = useTranslation()
   const mouseDownTargetRef = useRef<EventTarget | null>(null)
@@ -115,20 +119,31 @@ export function VerifyPeerDialog({
           )}
         </div>
 
-        <div className="flex gap-2 justify-end">
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors"
-          >
-            {t('common.cancel')}
-          </button>
-          <button
-            onClick={() => onConfirm(peerFingerprint)}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-fluux-brand hover:opacity-90 rounded-lg transition-colors"
-          >
-            <ShieldCheck className="w-3.5 h-3.5" />
-            {t(alreadyVerified ? 'chat.verifyPeer.reconfirmAction' : 'chat.verifyPeer.confirmAction')}
-          </button>
+        <div className={`flex gap-2 ${alreadyVerified && onRevoke ? 'justify-between' : 'justify-end'}`}>
+          {alreadyVerified && onRevoke && (
+            <button
+              onClick={onRevoke}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm text-fluux-red border border-fluux-red/50 hover:bg-fluux-red/10 rounded-lg transition-colors"
+            >
+              <ShieldOff className="w-3.5 h-3.5" />
+              {t('chat.verifyPeer.revokeAction')}
+            </button>
+          )}
+          <div className="flex gap-2">
+            <button
+              onClick={onCancel}
+              className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors"
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              onClick={() => onConfirm(peerFingerprint)}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-fluux-brand hover:opacity-90 rounded-lg transition-colors"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              {t(alreadyVerified ? 'chat.verifyPeer.reconfirmAction' : 'chat.verifyPeer.confirmAction')}
+            </button>
+          </div>
         </div>
       </div>
     </div>

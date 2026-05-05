@@ -479,7 +479,8 @@
             "confirmAction": "Fingerprints match — verify",
             "reconfirmAction": "Fingerprints match — re-verify",
             "alreadyVerifiedBanner": "This key has already been verified. You can re-verify if you have any doubts.",
-            "confirmSuccess": "Fingerprint verified"
+            "confirmSuccess": "Fingerprint verified",
+            "revokeAction": "Remove verification"
         },
         "keyChangeBanner": {
             "title": "{{name}}'s encryption key has changed",

@@ -249,6 +249,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, m
   )
   const { client } = useXMPPContext()
   const setPeerVerified = useVerifiedPeerKeysStore((s) => s.setVerified)
+  const clearPeerVerified = useVerifiedPeerKeysStore((s) => s.clearVerified)
   const addToast = useToastStore((s) => s.addToast)
   const setForcedPlaintext = useConversationPlaintextOverrideStore((s) => s.setForcedPlaintext)
   const [verifyDialogState, setVerifyDialogState] = useState<
@@ -349,6 +350,12 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, m
           alreadyVerified={encryptionState.kind === 'encrypted' && encryptionState.trust === 'verified'}
           onConfirm={handleVerifyConfirm}
           onCancel={() => setVerifyDialogState({ open: false })}
+          onRevoke={() => {
+            if (!verifyDialogState.open) return
+            clearPeerVerified(verifyDialogState.peerJid)
+            setVerifyDialogState({ open: false })
+            addToast('success', t('contacts.encryption.removeVerificationSuccess'))
+          }}
         />
       )}
 

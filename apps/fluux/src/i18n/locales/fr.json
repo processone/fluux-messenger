@@ -480,7 +480,8 @@
             "confirmAction": "Empreintes identiques — vérifier",
             "reconfirmAction": "Empreintes identiques — re-vérifier",
             "alreadyVerifiedBanner": "Cette clé a déjà été vérifiée. Vous pouvez re-vérifier si vous avez un doute.",
-            "confirmSuccess": "Empreinte vérifiée"
+            "confirmSuccess": "Empreinte vérifiée",
+            "revokeAction": "Retirer la vérification"
         },
         "keyChangeBanner": {
             "title": "La clé de chiffrement de {{name}} a changé",
