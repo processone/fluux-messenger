@@ -11,6 +11,7 @@ import type {
   EncryptedPayload,
   PeerSupport,
   PluginContext,
+  TrustState,
   VerificationFlow,
   XMLElementData,
   XMPPPrimitives,
@@ -98,11 +99,11 @@ class FakePlugin implements E2EEPlugin {
   async startVerification(): Promise<VerificationFlow> {
     throw new Error('unused')
   }
-  async getPeerTrust() {
-    return 'unknown' as const
+  async getPeerTrust(): Promise<TrustState> {
+    return 'unknown'
   }
-  async getDeviceTrust() {
-    return 'unknown' as const
+  async getDeviceTrust(): Promise<TrustState> {
+    return 'unknown'
   }
 
   tryClaimInbound(stanzaChild: XMLElementData): EncryptedPayload | null {
@@ -787,7 +788,11 @@ describe('E2EEManager — assertPlaintextPermitted', () => {
 
   it('does not throw for group targets (verified-peer check only applies to direct)', async () => {
     const mgr = makeManager()
-    const groupTarget: ConversationTarget = { kind: 'group', roomJid: 'room@muc.example.com' }
+    const groupTarget: ConversationTarget = {
+      kind: 'muc',
+      room: 'room@muc.example.com',
+      participants: [],
+    }
     await expect(mgr.assertPlaintextPermitted(groupTarget)).resolves.toBeUndefined()
   })
 })
