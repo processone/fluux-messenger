@@ -509,7 +509,7 @@ export class Chat extends BaseModule {
         children.push(xml('store', { xmlns: NS_HINTS }))
         return {
           protocolId: result.plugin.descriptor.id,
-          trust: 'trusted',
+          trust: 'verified',
         }
       }
       // No plugin matched — delegate the policy decision to the manager so

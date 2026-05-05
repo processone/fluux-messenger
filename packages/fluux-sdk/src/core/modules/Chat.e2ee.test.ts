@@ -428,7 +428,7 @@ describe('Chat E2EE wiring', () => {
       expect(chatMessageEvent).toBeDefined()
       expect(chatMessageEvent!.payload.message.securityContext).toEqual({
         protocolId: 'dummy-plaintext',
-        trust: 'trusted',
+        trust: 'verified',
       })
     })
 
