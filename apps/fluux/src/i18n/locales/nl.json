@@ -151,10 +151,10 @@
             "removeVerificationSuccess": "Verificatie verwijderd"
         },
         "tabs": {
-            "profile": "Profile",
-            "security": "Security"
+            "profile": "Profiel",
+            "security": "Beveiliging"
         },
-        "actionsMenu": "More actions"
+        "actionsMenu": "Meer acties"
     },
     "rooms": {
         "backToRooms": "Terug naar kamers",
@@ -485,7 +485,7 @@
             "reconfirmAction": "Vingerafdrukken komen overeen — herverifiëren",
             "alreadyVerifiedBanner": "Deze sleutel is al geverifieerd. U kunt opnieuw verifiëren als u twijfels heeft.",
             "confirmSuccess": "Vingerafdruk geverifieerd",
-            "revokeAction": "Remove verification"
+            "revokeAction": "Verificatie verwijderen"
         },
         "keyChangeBanner": {
             "title": "De versleutelingssleutel van {{name}} is veranderd",

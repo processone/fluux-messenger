@@ -151,10 +151,10 @@
             "removeVerificationSuccess": "Верифікацію видалено"
         },
         "tabs": {
-            "profile": "Profile",
-            "security": "Security"
+            "profile": "Профіль",
+            "security": "Безпека"
         },
-        "actionsMenu": "More actions"
+        "actionsMenu": "Інші дії"
     },
     "rooms": {
         "backToRooms": "Назад до кімнат",
@@ -485,7 +485,7 @@
             "reconfirmAction": "Відбитки збігаються — повторна верифікація",
             "alreadyVerifiedBanner": "Цей ключ вже було верифіковано. Ви можете верифікувати повторно, якщо є сумніви.",
             "confirmSuccess": "Відбиток перевірено",
-            "revokeAction": "Remove verification"
+            "revokeAction": "Скасувати підтвердження"
         },
         "keyChangeBanner": {
             "title": "Ключ шифрування {{name}} змінився",

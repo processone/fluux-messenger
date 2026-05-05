@@ -151,10 +151,10 @@
             "removeVerificationSuccess": "Верификация удалена"
         },
         "tabs": {
-            "profile": "Profile",
-            "security": "Security"
+            "profile": "Профиль",
+            "security": "Безопасность"
         },
-        "actionsMenu": "More actions"
+        "actionsMenu": "Другие действия"
     },
     "rooms": {
         "backToRooms": "Назад к комнатам",
@@ -485,7 +485,7 @@
             "reconfirmAction": "Отпечатки совпадают — повторная верификация",
             "alreadyVerifiedBanner": "Этот ключ уже был верифицирован. Вы можете верифицировать повторно, если есть сомнения.",
             "confirmSuccess": "Отпечаток проверен",
-            "revokeAction": "Remove verification"
+            "revokeAction": "Снять подтверждение"
         },
         "keyChangeBanner": {
             "title": "Ключ шифрования {{name}} изменился",

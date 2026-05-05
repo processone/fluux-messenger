@@ -151,10 +151,10 @@
             "removeVerificationSuccess": "Staðfesting fjarlægð"
         },
         "tabs": {
-            "profile": "Profile",
-            "security": "Security"
+            "profile": "Notandasnið",
+            "security": "Öryggi"
         },
-        "actionsMenu": "More actions"
+        "actionsMenu": "Fleiri aðgerðir"
     },
     "rooms": {
         "backToRooms": "Til baka í herbergi",
@@ -485,7 +485,7 @@
             "reconfirmAction": "Fingrafar stemma — endurstaðfesta",
             "alreadyVerifiedBanner": "Þessi lykill hefur þegar verið staðfestur. Þú getur endurstaðfest ef þig grunar eitthvað.",
             "confirmSuccess": "Fingrafar staðfest",
-            "revokeAction": "Remove verification"
+            "revokeAction": "Fjarlægja staðfestingu"
         },
         "keyChangeBanner": {
             "title": "Dulritunarlykill {{name}} hefur breyst",

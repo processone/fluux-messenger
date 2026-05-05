@@ -151,10 +151,10 @@
             "removeVerificationSuccess": "Fíorú bainte"
         },
         "tabs": {
-            "profile": "Profile",
-            "security": "Security"
+            "profile": "Próifíl",
+            "security": "Slándáil"
         },
-        "actionsMenu": "More actions"
+        "actionsMenu": "Tuilleadh gníomhartha"
     },
     "rooms": {
         "backToRooms": "Ar ais go seomraí",
@@ -485,7 +485,7 @@
             "reconfirmAction": "Meaitseálann na méarloirg — ath-fhíorú",
             "alreadyVerifiedBanner": "Tá an eochair seo fíoraithe cheana féin. Is féidir leat é a ath-fhíorú má tá amhras ort.",
             "confirmSuccess": "Méarlorg fíoraithe",
-            "revokeAction": "Remove verification"
+            "revokeAction": "Bain an fíorú"
         },
         "keyChangeBanner": {
             "title": "Tá eochair criptiúcháin {{name}} athraithe",

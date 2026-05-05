@@ -153,10 +153,10 @@
             "removeVerificationSuccess": "Weryfikacja usunięta"
         },
         "tabs": {
-            "profile": "Profile",
-            "security": "Security"
+            "profile": "Profil",
+            "security": "Bezpieczeństwo"
         },
-        "actionsMenu": "More actions"
+        "actionsMenu": "Więcej akcji"
     },
     "rooms": {
         "backToRooms": "Wróć do pokojów",
@@ -487,7 +487,7 @@
             "reconfirmAction": "Odciski palców pasują — zweryfikuj ponownie",
             "alreadyVerifiedBanner": "Ten klucz został już zweryfikowany. Możesz zweryfikować ponownie, jeśli masz wątpliwości.",
             "confirmSuccess": "Odcisk zweryfikowany",
-            "revokeAction": "Remove verification"
+            "revokeAction": "Usuń weryfikację"
         },
         "keyChangeBanner": {
             "title": "Klucz szyfrowania użytkownika {{name}} się zmienił",

@@ -152,10 +152,10 @@
             "removeVerificationSuccess": "Η επαλήθευση αφαιρέθηκε"
         },
         "tabs": {
-            "profile": "Profile",
-            "security": "Security"
+            "profile": "Προφίλ",
+            "security": "Ασφάλεια"
         },
-        "actionsMenu": "More actions"
+        "actionsMenu": "Περισσότερες ενέργειες"
     },
     "rooms": {
         "backToRooms": "Πίσω στα δωμάτια",
@@ -486,7 +486,7 @@
             "reconfirmAction": "Τα αποτυπώματα ταιριάζουν — επανεπαλήθευση",
             "alreadyVerifiedBanner": "Αυτό το κλειδί έχει ήδη επαληθευτεί. Μπορείτε να το επαληθεύσετε ξανά αν έχετε αμφιβολίες.",
             "confirmSuccess": "Το αποτύπωμα επαληθεύτηκε",
-            "revokeAction": "Remove verification"
+            "revokeAction": "Κατάργηση επαλήθευσης"
         },
         "keyChangeBanner": {
             "title": "Το κλειδί κρυπτογράφησης του χρήστη {{name}} έχει αλλάξει",

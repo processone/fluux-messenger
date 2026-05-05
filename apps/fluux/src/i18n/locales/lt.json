@@ -151,10 +151,10 @@
             "removeVerificationSuccess": "Patvirtinimas pašalintas"
         },
         "tabs": {
-            "profile": "Profile",
-            "security": "Security"
+            "profile": "Profilis",
+            "security": "Saugumas"
         },
-        "actionsMenu": "More actions"
+        "actionsMenu": "Daugiau veiksmų"
     },
     "rooms": {
         "backToRooms": "Grįžti prie kambarių",
@@ -485,7 +485,7 @@
             "reconfirmAction": "Pirštų atspaudai sutampa — patvirtinti iš naujo",
             "alreadyVerifiedBanner": "Šis raktas jau buvo patvirtintas. Galite patvirtinti iš naujo, jei kyla abejonių.",
             "confirmSuccess": "Pirštų atspaudas patvirtintas",
-            "revokeAction": "Remove verification"
+            "revokeAction": "Pašalinti patvirtinimą"
         },
         "keyChangeBanner": {
             "title": "{{name}} šifravimo raktas pasikeitė",

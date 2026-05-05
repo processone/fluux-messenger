@@ -153,10 +153,10 @@
             "removeVerificationSuccess": "Verificació eliminada"
         },
         "tabs": {
-            "profile": "Profile",
-            "security": "Security"
+            "profile": "Perfil",
+            "security": "Seguretat"
         },
-        "actionsMenu": "More actions"
+        "actionsMenu": "Més accions"
     },
     "rooms": {
         "backToRooms": "Torna a les sales",
@@ -487,7 +487,7 @@
             "reconfirmAction": "Les empremtes coincideixen — tornar a verificar",
             "alreadyVerifiedBanner": "Aquesta clau ja ha estat verificada. Podeu tornar a verificar-la si teniu dubtes.",
             "confirmSuccess": "Empremta verificada",
-            "revokeAction": "Remove verification"
+            "revokeAction": "Elimina la verificació"
         },
         "keyChangeBanner": {
             "title": "La clau de xifratge de {{name}} ha canviat",

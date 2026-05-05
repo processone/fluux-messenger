@@ -153,10 +153,10 @@
             "removeVerificationSuccess": "Preverjanje odstranjeno"
         },
         "tabs": {
-            "profile": "Profile",
-            "security": "Security"
+            "profile": "Profil",
+            "security": "Varnost"
         },
-        "actionsMenu": "More actions"
+        "actionsMenu": "Več dejanj"
     },
     "rooms": {
         "backToRooms": "Nazaj na sobe",
@@ -487,7 +487,7 @@
             "reconfirmAction": "Prstni odtisi se ujemajo — ponovna preveritev",
             "alreadyVerifiedBanner": "Ta ključ je že preverjen. Preverite lahko znova, če imate dvome.",
             "confirmSuccess": "Prstni odtis preverjen",
-            "revokeAction": "Remove verification"
+            "revokeAction": "Odstrani preverjanje"
         },
         "keyChangeBanner": {
             "title": "Šifrirni ključ uporabnika {{name}} se je spremenil",

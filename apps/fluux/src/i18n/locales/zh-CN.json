@@ -151,10 +151,10 @@
             "removeVerificationSuccess": "验证已移除"
         },
         "tabs": {
-            "profile": "Profile",
-            "security": "Security"
+            "profile": "个人资料",
+            "security": "安全"
         },
-        "actionsMenu": "More actions"
+        "actionsMenu": "更多操作"
     },
     "rooms": {
         "backToRooms": "返回房间列表",
@@ -485,7 +485,7 @@
             "reconfirmAction": "指纹匹配 — 重新验证",
             "alreadyVerifiedBanner": "此密钥已经过验证。如有疑虑，您可以重新验证。",
             "confirmSuccess": "指纹已验证",
-            "revokeAction": "Remove verification"
+            "revokeAction": "移除验证"
         },
         "keyChangeBanner": {
             "title": "{{name}} 的加密密钥已更改",
