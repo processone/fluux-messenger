@@ -478,7 +478,18 @@
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
             "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption"
+            "enableEncryption": "Re-enable encryption",
+            "tooltip": {
+                "header": "Šifrirano",
+                "protocol": {
+                    "openpgp": "OpenPGP"
+                },
+                "trust": {
+                    "verified": "provjereno",
+                    "trusted": "povjerljivo",
+                    "untrusted": "nije provjereno"
+                }
+            }
         },
         "verifyPeer": {
             "chipAriaLabel": "Šifrirano za {{name}} — kliknite za provjeru otiska",

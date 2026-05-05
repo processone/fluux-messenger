@@ -478,7 +478,18 @@
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
             "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption"
+            "enableEncryption": "Re-enable encryption",
+            "tooltip": {
+                "header": "已加密",
+                "protocol": {
+                    "openpgp": "OpenPGP"
+                },
+                "trust": {
+                    "verified": "已验证",
+                    "trusted": "可信",
+                    "untrusted": "未验证"
+                }
+            }
         },
         "verifyPeer": {
             "chipAriaLabel": "已加密给 {{name}} — 点击验证指纹",

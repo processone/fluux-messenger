@@ -478,7 +478,18 @@
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
             "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption"
+            "enableEncryption": "Re-enable encryption",
+            "tooltip": {
+                "header": "Kryptert",
+                "protocol": {
+                    "openpgp": "OpenPGP"
+                },
+                "trust": {
+                    "verified": "verifisert",
+                    "trusted": "betrodd",
+                    "untrusted": "uverifisert"
+                }
+            }
         },
         "verifyPeer": {
             "chipAriaLabel": "Kryptert til {{name}} — klikk for å verifisere fingeravtrykket",

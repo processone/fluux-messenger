@@ -478,7 +478,18 @@
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
             "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption"
+            "enableEncryption": "Re-enable encryption",
+            "tooltip": {
+                "header": "Versleuteld",
+                "protocol": {
+                    "openpgp": "OpenPGP"
+                },
+                "trust": {
+                    "verified": "geverifieerd",
+                    "trusted": "vertrouwd",
+                    "untrusted": "niet geverifieerd"
+                }
+            }
         },
         "verifyPeer": {
             "chipAriaLabel": "Versleuteld naar {{name}} — klik om vingerafdruk te verifiëren",

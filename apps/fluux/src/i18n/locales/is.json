@@ -478,7 +478,18 @@
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
             "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption"
+            "enableEncryption": "Re-enable encryption",
+            "tooltip": {
+                "header": "Dulkóðað",
+                "protocol": {
+                    "openpgp": "OpenPGP"
+                },
+                "trust": {
+                    "verified": "staðfest",
+                    "trusted": "treyst",
+                    "untrusted": "óstaðfest"
+                }
+            }
         },
         "verifyPeer": {
             "chipAriaLabel": "Dulritað til {{name}} — smelltu til að staðfesta fingrafarið",

@@ -480,7 +480,18 @@
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
             "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption"
+            "enableEncryption": "Re-enable encryption",
+            "tooltip": {
+                "header": "Cifrato",
+                "protocol": {
+                    "openpgp": "OpenPGP"
+                },
+                "trust": {
+                    "verified": "verificato",
+                    "trusted": "attendibile",
+                    "untrusted": "non verificato"
+                }
+            }
         },
         "verifyPeer": {
             "chipAriaLabel": "Cifrato per {{name}} — fai clic per verificare l'impronta",

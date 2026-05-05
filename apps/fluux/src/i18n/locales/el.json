@@ -479,7 +479,18 @@
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
             "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption"
+            "enableEncryption": "Re-enable encryption",
+            "tooltip": {
+                "header": "Κρυπτογραφημένο",
+                "protocol": {
+                    "openpgp": "OpenPGP"
+                },
+                "trust": {
+                    "verified": "επαληθεύτηκε",
+                    "trusted": "έμπιστο",
+                    "untrusted": "μη επαληθευμένο"
+                }
+            }
         },
         "verifyPeer": {
             "chipAriaLabel": "Κρυπτογραφημένο προς {{name}} — κάντε κλικ για επαλήθευση του αποτυπώματος",

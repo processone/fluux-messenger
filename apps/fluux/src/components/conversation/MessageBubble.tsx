@@ -560,11 +560,12 @@ function formatSecurityTooltip(
   t: (key: string, opts?: Record<string, unknown>) => string,
   ctx: NonNullable<BaseMessage['securityContext']>,
 ): string {
-  const head = t('chat.encryptedMessage', {
-    protocol: ctx.protocolId,
-    trust: ctx.trust,
-    defaultValue: 'Encrypted · {{protocol}} · {{trust}}',
+  const header = t('chat.encryption.tooltip.header')
+  const protocol = t(`chat.encryption.tooltip.protocol.${ctx.protocolId}`, {
+    defaultValue: ctx.protocolId,
   })
+  const trust = t(`chat.encryption.tooltip.trust.${ctx.trust}`)
+  const head = `${header} · ${protocol} · ${trust}`
   if (!ctx.notes || ctx.notes.length === 0) return head
   return [head, ...ctx.notes].join('\n')
 }

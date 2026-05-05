@@ -478,7 +478,18 @@
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
             "disableEncryption": "Disable encryption for this conversation",
             "enableEncryption": "Re-enable encryption",
-            "attachmentKeyWouldLeak": "Message not sent — the attachment is encrypted but end-to-end encryption is unavailable. Sending would expose the file key."
+            "attachmentKeyWouldLeak": "Message not sent — the attachment is encrypted but end-to-end encryption is unavailable. Sending would expose the file key.",
+            "tooltip": {
+                "header": "Encrypted",
+                "protocol": {
+                    "openpgp": "OpenPGP"
+                },
+                "trust": {
+                    "verified": "verified",
+                    "trusted": "trusted",
+                    "untrusted": "unverified"
+                }
+            }
         },
         "verifyPeer": {
             "chipAriaLabel": "Encrypted to {{name}} — click to verify fingerprint",

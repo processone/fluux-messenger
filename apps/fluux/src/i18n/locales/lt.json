@@ -478,7 +478,18 @@
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
             "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption"
+            "enableEncryption": "Re-enable encryption",
+            "tooltip": {
+                "header": "Šifruota",
+                "protocol": {
+                    "openpgp": "OpenPGP"
+                },
+                "trust": {
+                    "verified": "patvirtinta",
+                    "trusted": "patikima",
+                    "untrusted": "nepatikrinta"
+                }
+            }
         },
         "verifyPeer": {
             "chipAriaLabel": "Užšifruota {{name}} — spustelėkite norėdami patvirtinti pirštų atspaudą",
