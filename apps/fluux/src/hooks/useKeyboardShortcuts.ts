@@ -462,14 +462,14 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
     },
     {
       key: 'ArrowUp',
-      modifiers: ['alt'],
+      modifiers: ['meta', 'alt'],
       description: 'shortcuts.previousItem',
       category: 'navigation',
       action: goToPreviousItem,
     },
     {
       key: 'ArrowDown',
-      modifiers: ['alt'],
+      modifiers: ['meta', 'alt'],
       description: 'shortcuts.nextItem',
       category: 'navigation',
       action: goToNextItem,
