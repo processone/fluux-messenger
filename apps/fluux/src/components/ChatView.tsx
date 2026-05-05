@@ -349,10 +349,12 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
       )}
 
       {/* Verify-peer dialog — opened from the encryption icon in the header */}
-      {verifyDialogState.open && (
+      {verifyDialogState.open && jid && (
         <VerifyPeerDialog
           peerName={activeConversation.name}
+          peerJid={verifyDialogState.peerJid}
           peerFingerprint={verifyDialogState.peerFingerprint}
+          ownJid={jid}
           ownFingerprint={verifyDialogState.ownFingerprint}
           alreadyVerified={encryptionState.kind === 'encrypted' && encryptionState.trust === 'verified'}
           onConfirm={handleVerifyConfirm}

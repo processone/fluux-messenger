@@ -45,6 +45,7 @@ export function ContactProfileView({
 }: ContactProfileViewProps) {
   const { t } = useTranslation()
   const connectionStatus = useConnectionStore((s) => s.status)
+  const ownJid = useConnectionStore((s) => s.jid)
   const forceOffline = connectionStatus !== 'online'
   const { titleBarClass, dragRegionProps } = useWindowDrag()
 
@@ -287,10 +288,12 @@ export function ContactProfileView({
         />
       )}
 
-      {showVerifyDialog && encryptionState.kind === 'encrypted' && (
+      {showVerifyDialog && encryptionState.kind === 'encrypted' && ownJid && (
         <VerifyPeerDialog
           peerName={contact.name}
+          peerJid={contact.jid}
           peerFingerprint={encryptionState.fingerprint}
+          ownJid={ownJid}
           ownFingerprint={ownFingerprint}
           onConfirm={(fingerprint) => {
             setVerified(contact.jid, fingerprint)

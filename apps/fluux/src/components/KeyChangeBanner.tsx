@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AlertTriangle, ShieldCheck, ShieldAlert, X } from 'lucide-react'
 import { useXMPPContext } from '@fluux/sdk'
+import { useConnectionStore } from '@fluux/sdk/react'
 import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
 import { useToastStore } from '@/stores/toastStore'
 import { VerifyPeerDialog } from './VerifyPeerDialog'
@@ -39,6 +40,7 @@ export function KeyChangeBanner({ peerJid, peerName }: KeyChangeBannerProps) {
   const { t } = useTranslation()
   const { client } = useXMPPContext()
   const addToast = useToastStore((s) => s.addToast)
+  const ownJid = useConnectionStore((s) => s.jid)
   const alert = useKeyChangeAlertsStore((s) => s.alertsByJid[peerJid])
 
   const [verifyOpen, setVerifyOpen] = useState(false)
@@ -152,10 +154,12 @@ export function KeyChangeBanner({ peerJid, peerName }: KeyChangeBannerProps) {
         </button>
       </div>
 
-      {verifyOpen && (
+      {verifyOpen && ownJid && (
         <VerifyPeerDialog
           peerName={peerName}
+          peerJid={peerJid}
           peerFingerprint={alert.currentFingerprint}
+          ownJid={ownJid}
           ownFingerprint={ownFingerprint}
           onConfirm={handleVerifyConfirm}
           onCancel={() => setVerifyOpen(false)}

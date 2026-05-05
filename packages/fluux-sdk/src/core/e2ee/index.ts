@@ -66,5 +66,6 @@ export {
   SigncryptEnvelopeError,
   type SigncryptEnvelope,
 } from './payloadEnvelope'
+export { deriveSas, splitSas } from './sas'
 // DummyPlaintextPlugin is intentionally not re-exported here — see its file
 // for the rationale. Tests import it via relative path.

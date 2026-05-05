@@ -394,6 +394,8 @@ export {
   wrapForSigncrypt,
   unwrapSigncrypt,
   SigncryptEnvelopeError,
+  deriveSas,
+  splitSas,
 } from './core/e2ee'
 export type { SigncryptEnvelope } from './core/e2ee'
 export type {
