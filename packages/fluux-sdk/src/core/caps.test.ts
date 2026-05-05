@@ -48,6 +48,12 @@ describe('caps (XEP-0115)', () => {
       expect(CLIENT_FEATURES).toContain('urn:xmpp:openpgp:0:public-keys+notify')
     })
 
+    it('should include Fluux verifications cross-device sync +notify', () => {
+      // Without this, the server will not push PEP headlines when another
+      // device of the same account publishes an updated verification list.
+      expect(CLIENT_FEATURES).toContain('urn:xmpp:fluux:verifications:0+notify')
+    })
+
     it('should include XEP-0374 OX-IM discovery feature', () => {
       // XEP-0374 §5 mandates this so a peer can tell whether to wrap a
       // message in a signcrypt envelope or send plaintext. A peer that

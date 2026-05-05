@@ -133,6 +133,13 @@ export const NS_OPENPGP_PUBLIC_KEYS_NOTIFY = 'urn:xmpp:openpgp:0:public-keys+not
 // tell whether to encrypt or send plaintext.
 export const NS_OPENPGP_IM = 'urn:xmpp:openpgp:im:0'
 
+// Fluux-private PEP node for cross-device peer-verification sync.
+// accessModel='whitelist' so only the owning account can read it.
+// The +notify variant is advertised in caps so the server pushes
+// headlines when another device of the same account publishes.
+export const NS_FLUUX_VERIFICATIONS = 'urn:xmpp:fluux:verifications:0'
+export const NS_FLUUX_VERIFICATIONS_NOTIFY = 'urn:xmpp:fluux:verifications:0+notify'
+
 // XEP-0422: Message Fastening
 export const NS_FASTEN = 'urn:xmpp:fasten:0'
 

@@ -89,7 +89,14 @@ import {
   clearPeerVerified,
   isPeerVerified,
   setPeerVerified,
+  useVerifiedPeerKeysStore,
 } from '@/stores/verifiedPeerKeysStore'
+import {
+  VERIFICATIONS_NODE,
+  fetchVerificationsFromServer,
+  mergeVerifications,
+  publishVerificationsToServer,
+} from './verificationSync'
 import {
   clearKeyChangeAlert,
   getKeyChangeAlert,
@@ -361,6 +368,13 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
   /** Test seam — overridable clock. Production: `Date.now`. */
   private now: () => number = () => Date.now()
 
+  // --- Cross-device verification sync ---
+  private _verificationStoreUnsub: (() => void) | null = null
+  /** Count of in-flight remote PEP syncs. >0 prevents the Zustand subscription
+   *  from triggering a redundant publish (handles concurrent calls correctly). */
+  private _syncingFromRemoteCount = 0
+  private _publishVerificationTimeout: ReturnType<typeof setTimeout> | null = null
+
   constructor(options: SequoiaPgpPluginOptions) {
     this.invoke = options.invoke
   }
@@ -371,6 +385,20 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
       throw new Error('SequoiaPgpPlugin requires a logged-in account JID')
     }
     await this.ensureIdentity()
+    void this.syncVerificationsFromServer()
+    ctx.xmpp.subscribePEP(ctx.account.jid, VERIFICATIONS_NODE, () => {
+      void this.syncVerificationsFromServer()
+    })
+    this._verificationStoreUnsub = useVerifiedPeerKeysStore.subscribe(
+      (state, prev) => {
+        if (
+          state.verifiedFingerprintByJid !== prev.verifiedFingerprintByJid &&
+          this._syncingFromRemoteCount === 0
+        ) {
+          this.scheduleVerificationsPublish(state.verifiedFingerprintByJid)
+        }
+      },
+    )
   }
 
   async shutdown(): Promise<void> {
@@ -381,6 +409,12 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
     // for the rest of the session, rather than silently cycling the user's
     // fingerprint on every toggle. An explicit "delete key" action in the
     // settings UI is the right place to call `openpgp_forget_account`.
+    if (this._publishVerificationTimeout !== null) {
+      clearTimeout(this._publishVerificationTimeout)
+      this._publishVerificationTimeout = null
+    }
+    this._verificationStoreUnsub?.()
+    this._verificationStoreUnsub = null
     this.ownBundle = null
     this.peerKeys.clear()
     this.pendingVerifications.clear()
@@ -692,6 +726,51 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
     }
 
     return { fingerprint: bundle.fingerprint }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Cross-device verification sync
+  // ---------------------------------------------------------------------------
+
+  private async syncVerificationsFromServer(): Promise<void> {
+    if (!this.ownBundle || !this.ctx) return
+    this._syncingFromRemoteCount++
+    try {
+      const remote = await fetchVerificationsFromServer(
+        this.ctx,
+        this.invoke,
+        this.ctx.account.jid,
+        this.ownBundle.publicArmored,
+      )
+      if (!remote) return
+      const local = useVerifiedPeerKeysStore.getState().verifiedFingerprintByJid
+      const { hasNewEntries, merged } = mergeVerifications(remote, local)
+      if (!hasNewEntries) return
+      for (const [jid, fp] of Object.entries(merged)) {
+        if (!local[jid]) setPeerVerified(jid, fp)
+      }
+    } catch {
+      // Non-blocking — local store is always the source of truth.
+    } finally {
+      this._syncingFromRemoteCount--
+    }
+  }
+
+  private scheduleVerificationsPublish(verifications: Record<string, string>): void {
+    if (this._publishVerificationTimeout !== null) {
+      clearTimeout(this._publishVerificationTimeout)
+    }
+    this._publishVerificationTimeout = setTimeout(() => {
+      this._publishVerificationTimeout = null
+      if (!this.ownBundle || !this.ctx) return
+      void publishVerificationsToServer(
+        this.ctx,
+        this.invoke,
+        this.ctx.account.jid,
+        this.ownBundle.publicArmored,
+        verifications,
+      ).catch(() => {})
+    }, 500)
   }
 
   /**

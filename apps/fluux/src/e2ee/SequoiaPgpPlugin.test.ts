@@ -2787,4 +2787,155 @@ describe('SequoiaPgpPlugin', () => {
       expect(alerts.getKeyChangeAlert('bob@example.com')).toBeNull()
     })
   })
+
+  describe('cross-device verification sync', () => {
+    const VERIFICATIONS_NODE = 'urn:xmpp:fluux:verifications:0'
+    const VERIFICATIONS_XMLNS = VERIFICATIONS_NODE
+
+    // Build a PEP item that looks exactly like one publishVerificationsToServer
+    // would produce: base64(OPENPGP-STUB ciphertext) inside verifications-data.
+    function buildVerificationsPepItem(
+      ownFp: string,
+      verifications: Record<string, string>,
+    ): PEPItem {
+      const json = JSON.stringify({ v: 1, ts: 1000, verifications })
+      const encoded = btoa(unescape(encodeURIComponent(json)))
+      const armored = `OPENPGP-STUB:${ownFp}:${ownFp}:${encoded}`
+      const b64Armored = btoa(unescape(encodeURIComponent(armored)))
+      return {
+        id: 'current',
+        payload: {
+          name: 'verifications-data',
+          attrs: { xmlns: VERIFICATIONS_XMLNS },
+          children: [{ name: 'data', attrs: {}, children: [b64Armored] }],
+        },
+      }
+    }
+
+    it('seeds the local verified-peers store from the server node on init', async () => {
+      const { ctx, peerPublish } = makeContext('me@example.com')
+      // Pre-seed so we know the fingerprint before init.
+      const fp = 'FP_SYNC_TEST'
+      fake.accounts.set('me@example.com', {
+        fingerprint: fp,
+        publicArmored: `-----BEGIN PGP PUBLIC KEY BLOCK (STUB)-----\nFingerprint: ${fp}\nUID: me@example.com\nKind: public\n-----END PGP PUBLIC KEY BLOCK (STUB)-----`,
+        keychainBacked: true,
+      })
+      peerPublish(
+        'me@example.com',
+        VERIFICATIONS_NODE,
+        buildVerificationsPepItem(fp, { 'alice@example.com': 'ALICE_FP' }),
+      )
+      await plugin.init(ctx)
+      // syncVerificationsFromServer is fire-and-forget; let promises settle.
+      await new Promise((r) => setTimeout(r, 0))
+
+      const { isPeerVerified: isVerified } = await import('@/stores/verifiedPeerKeysStore')
+      expect(isVerified('alice@example.com', 'ALICE_FP')).toBe(true)
+    })
+
+    it('publishes the verifications PEP node after a local verification is added', async () => {
+      vi.useFakeTimers()
+      try {
+        const { ctx, published } = makeContext('me@example.com')
+        await plugin.init(ctx)
+
+        const { setPeerVerified: setVerified } = await import('@/stores/verifiedPeerKeysStore')
+        setVerified('carol@example.com', 'CAROL_FP')
+
+        // Advance past the 500 ms debounce.
+        await vi.advanceTimersByTimeAsync(600)
+
+        const verNodes = published.filter((p) => p.node === VERIFICATIONS_NODE)
+        expect(verNodes.length).toBeGreaterThanOrEqual(1)
+        const last = verNodes[verNodes.length - 1]
+        expect(last.options?.accessModel).toBe('whitelist')
+        // The payload should be an encrypted blob (b64 data child exists).
+        const dataChild = last.item.payload.children.find(
+          (c) => typeof c !== 'string' && c.name === 'data',
+        )
+        expect(dataChild).toBeTruthy()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('merges remote verifications into the local store when a PEP headline arrives', async () => {
+      // Capture the subscribePEP callback for the verifications node.
+      let verificationsCb: ((item: PEPItem) => void) | null = null
+      const { ctx, peerPublish } = makeContext('me@example.com')
+      ctx.xmpp.subscribePEP = (_jid, node, cb) => {
+        if (node === VERIFICATIONS_NODE) verificationsCb = cb
+        return { unsubscribe: () => {} }
+      }
+
+      const fp = 'FP_MERGE_TEST'
+      fake.accounts.set('me@example.com', {
+        fingerprint: fp,
+        publicArmored: `-----BEGIN PGP PUBLIC KEY BLOCK (STUB)-----\nFingerprint: ${fp}\nUID: me@example.com\nKind: public\n-----END PGP PUBLIC KEY BLOCK (STUB)-----`,
+        keychainBacked: true,
+      })
+      await plugin.init(ctx)
+      expect(verificationsCb).not.toBeNull()
+
+      // Another device has published { 'dave@example.com': 'DAVE_FP' }.
+      peerPublish(
+        'me@example.com',
+        VERIFICATIONS_NODE,
+        buildVerificationsPepItem(fp, { 'dave@example.com': 'DAVE_FP' }),
+      )
+
+      verificationsCb!({ id: 'current', payload: { name: '', attrs: {}, children: [] } })
+      await new Promise((r) => setTimeout(r, 0))
+
+      const { isPeerVerified: isVerified } = await import('@/stores/verifiedPeerKeysStore')
+      expect(isVerified('dave@example.com', 'DAVE_FP')).toBe(true)
+    })
+
+    it('_syncingFromRemote guard prevents a re-publish when a remote update is processed', async () => {
+      vi.useFakeTimers()
+      try {
+        let verificationsCb: ((item: PEPItem) => void) | null = null
+        const { ctx, published, peerPublish } = makeContext('me@example.com')
+        ctx.xmpp.subscribePEP = (_jid, node, cb) => {
+          if (node === VERIFICATIONS_NODE) verificationsCb = cb
+          return { unsubscribe: () => {} }
+        }
+        const fp = 'FP_GUARD_TEST'
+        fake.accounts.set('me@example.com', {
+          fingerprint: fp,
+          publicArmored: `-----BEGIN PGP PUBLIC KEY BLOCK (STUB)-----\nFingerprint: ${fp}\nUID: me@example.com\nKind: public\n-----END PGP PUBLIC KEY BLOCK (STUB)-----`,
+          keychainBacked: true,
+        })
+        await plugin.init(ctx)
+
+        // Put a remote verifications item.
+        peerPublish(
+          'me@example.com',
+          VERIFICATIONS_NODE,
+          buildVerificationsPepItem(fp, { 'eve@example.com': 'EVE_FP' }),
+        )
+
+        const publishCountBefore = published.filter(
+          (p) => p.node === VERIFICATIONS_NODE,
+        ).length
+
+        // Fire the PEP notification callback and let it settle.
+        // Cannot use setTimeout here (fake timers active); flush microtasks instead —
+        // syncVerificationsFromServer awaits only mocked Promises that resolve immediately.
+        verificationsCb!({ id: 'current', payload: { name: '', attrs: {}, children: [] } })
+        for (let i = 0; i < 10; i++) await Promise.resolve()
+        // Advance timers to check no debounced publish fires.
+        await vi.advanceTimersByTimeAsync(600)
+
+        const publishCountAfter = published.filter(
+          (p) => p.node === VERIFICATIONS_NODE,
+        ).length
+        // Remote-triggered store write must not schedule an additional publish.
+        expect(publishCountAfter).toBe(publishCountBefore)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+  })
 })
