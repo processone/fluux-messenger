@@ -727,7 +727,7 @@ function ChatLayoutContent() {
           ) : activeRoomJid ? (
             <RoomView onBack={handleRoomBack} mainContentRef={focusZoneRefs.mainContent} composerRef={focusZoneRefs.composer} showOccupants={showRoomOccupants} onShowOccupantsChange={setShowRoomOccupants} onStartChat={handleStartChatWithJid} onShowProfile={handleShowProfileFromRoom} findOnPageRef={findOnPageRef} onSearchInConversation={handleSearchInConversation} />
           ) : activeConversationId ? (
-            <ChatView onBack={handleChatBack} onSwitchToMessages={(conversationId) => navigateToMessages(conversationId)} mainContentRef={focusZoneRefs.mainContent} composerRef={focusZoneRefs.composer} findOnPageRef={findOnPageRef} onSearchInConversation={handleSearchInConversation} />
+            <ChatView onBack={handleChatBack} onSwitchToMessages={(conversationId) => navigateToMessages(conversationId)} mainContentRef={focusZoneRefs.mainContent} composerRef={focusZoneRefs.composer} findOnPageRef={findOnPageRef} onSearchInConversation={handleSearchInConversation} onShowProfile={handleShowProfileFromRoom} />
           ) : selectedContact ? (
             <Suspense fallback={<ViewLoadingFallback />}>
               <ContactProfileView

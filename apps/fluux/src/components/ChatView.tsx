@@ -26,6 +26,8 @@ interface ChatViewProps {
   onBack?: () => void
   onSwitchToMessages?: (conversationId: string) => void
   onSearchInConversation?: (conversationId: string) => void
+  /** Open the contact management screen for the given JID. 1:1 chats only. */
+  onShowProfile?: (jid: string) => void
   // Focus zone refs for Tab cycling
   mainContentRef?: RefObject<HTMLElement | null>
   composerRef?: RefObject<HTMLElement | null>
@@ -33,7 +35,7 @@ interface ChatViewProps {
   findOnPageRef?: RefObject<FindOnPageHandle | null>
 }
 
-export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, mainContentRef, composerRef, findOnPageRef }: ChatViewProps) {
+export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, onShowProfile, mainContentRef, composerRef, findOnPageRef }: ChatViewProps) {
   detectRenderLoop('ChatView')
   const { t } = useTranslation()
   // Use useChatActive instead of useChat to avoid subscribing to the conversation list.
@@ -328,6 +330,11 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, m
         onEncryptionClick={encryptionState.kind === 'encrypted' ? handleOpenVerify : undefined}
         onDisableEncryptionClick={encryptionState.kind === 'encrypted' ? handleDisableEncryption : undefined}
         onEnableEncryptionClick={encryptionState.kind === 'plaintextForced' ? handleEnableEncryption : undefined}
+        onShowProfile={
+          activeConversation.type === 'chat' && onShowProfile
+            ? () => onShowProfile(activeConversation.id)
+            : undefined
+        }
       />
 
       {/* Key-change alert banner — only shown for 1:1 chats where a
