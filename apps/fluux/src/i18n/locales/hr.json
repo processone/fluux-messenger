@@ -694,7 +694,22 @@
             "rotateConfirmAction": "Rotiraj ključ",
             "rotateSuccess": "Ključ za šifriranje rotiran",
             "rotateFailed": "Ključ se nije mogao rotirati. Pokušajte ponovno.",
-            "rotatePluginUnavailable": "OpenPGP modul nije dostupan"
+            "rotatePluginUnavailable": "OpenPGP modul nije dostupan",
+            "ownKeyConflict": {
+                "primaryMismatchTitle": "Vaš objavljeni ključ je promijenjen",
+                "primaryMismatchBody": "Ključ koji server oglašava za vaš račun ne odgovara ključu na ovom uređaju. To može značiti da je server bio neovlašteno izmijenjen, ili da je drugi uređaj generirao novi ključ.",
+                "subkeyMismatchTitle": "Vaš ključ je ažuriran na drugom uređaju",
+                "subkeyMismatchBody": "Server ima noviju verziju vašeg ključa — drugi uređaj je rotirao podključ za šifriranje. Uvezite sigurnosnu kopiju za korištenje najnovije verzije ovdje, ili zadržite ključ ovog uređaja ako to preferirate.",
+                "encryptionBlocked": "Šifriranje je pauzirano dok ne riješite ovaj sukob.",
+                "localFingerprintLabel": "Ovaj uređaj",
+                "serverFingerprintLabel": "Server",
+                "publishedDateLabel": "Objavljeno",
+                "overwriteServer": "Zadrži ključ ovog uređaja",
+                "importFromServer": "Uvezi s poslužitelja",
+                "overwriteSuccess": "Vaš ključ je ponovo objavljen na serveru.",
+                "overwriteFailed": "Nije moguće ponovo objaviti vaš ključ. Pokušajte ponovno.",
+                "importSuccess": "Ključ je obnavljan iz sigurnosne kopije na serveru."
+            }
         }
     },
     "update": {

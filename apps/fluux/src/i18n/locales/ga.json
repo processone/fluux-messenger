@@ -694,7 +694,22 @@
             "rotateConfirmAction": "Rothlaigh an eochair",
             "rotateSuccess": "Rinneadh an eochair criptithe a rothlú",
             "rotateFailed": "Níorbh fhéidir an eochair a rothlú. Bain triail eile as.",
-            "rotatePluginUnavailable": "Níl modúl OpenPGP ar fáil"
+            "rotatePluginUnavailable": "Níl modúl OpenPGP ar fáil",
+            "ownKeyConflict": {
+                "primaryMismatchTitle": "Tá d'eochair fhoilsithe athraithe",
+                "primaryMismatchBody": "Ní hionann an eochair atá á fógairt ag an bhfreastalaí do do chuntas agus an eochair ar an ngléas seo. D'fhéadfadh sé seo a chialló go ndearnadh cur isteach ar an bhfreastalaí, nó go ndearna gléas eile eochair nua.",
+                "subkeyMismatchTitle": "Nuashonraíodh d'eochair ar ghléas eile",
+                "subkeyMismatchBody": "Tá leagan níos nuaí de d'eochair ag an bhfreastalaí — rinne gléas eile an fo-eochair criptithe a rothlú. Iompórtáil an cúltaca chun an leagan is déanaí a úsáid anseo, nó coinnigh eochair an ghléis seo más fearr leat.",
+                "encryptionBlocked": "Tá an criptiú ar sos go dtí go réiteoidh tú an coinbhleacht seo.",
+                "localFingerprintLabel": "An gléas seo",
+                "serverFingerprintLabel": "Freastalaí",
+                "publishedDateLabel": "Foilsithe",
+                "overwriteServer": "Coinnigh eochair an ghléis seo",
+                "importFromServer": "Iompórtáil ón bhfreastalaí",
+                "overwriteSuccess": "Foilsíodh d'eochair arís ar an bhfreastalaí.",
+                "overwriteFailed": "Níorbh fhéidir d'eochair a fhoilsiú arís. Bain triail eile as.",
+                "importSuccess": "Eochair aisghafa ó chúltaca an fhreastalaí."
+            }
         }
     },
     "update": {

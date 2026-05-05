@@ -696,7 +696,22 @@
             "rotateConfirmAction": "Schlüssel rotieren",
             "rotateSuccess": "Verschlüsselungsschlüssel rotiert",
             "rotateFailed": "Schlüssel konnte nicht rotiert werden. Versuchen Sie es erneut.",
-            "rotatePluginUnavailable": "OpenPGP-Modul nicht verfügbar"
+            "rotatePluginUnavailable": "OpenPGP-Modul nicht verfügbar",
+            "ownKeyConflict": {
+                "primaryMismatchTitle": "Ihr veröffentlichter Schlüssel hat sich geändert",
+                "primaryMismatchBody": "Der Schlüssel, den der Server für Ihr Konto ankündigt, stimmt nicht mit dem auf diesem Gerät überein. Dies könnte bedeuten, dass der Server manipuliert wurde, oder ein anderes Gerät einen neuen Schlüssel generiert hat.",
+                "subkeyMismatchTitle": "Ihr Schlüssel wurde auf einem anderen Gerät aktualisiert",
+                "subkeyMismatchBody": "Der Server verfügt über eine neuere Version Ihres Schlüssels — ein anderes Gerät hat den Verschlüsselungs-Unterschlüssel rotiert. Importieren Sie die Sicherung, um hier die neueste Version zu verwenden, oder behalten Sie den Schlüssel dieses Geräts, wenn Sie das bevorzugen.",
+                "encryptionBlocked": "Die Verschlüsselung ist unterbrochen, bis Sie diesen Konflikt lösen.",
+                "localFingerprintLabel": "Dieses Gerät",
+                "serverFingerprintLabel": "Server",
+                "publishedDateLabel": "Veröffentlicht",
+                "overwriteServer": "Schlüssel dieses Geräts behalten",
+                "importFromServer": "Vom Server importieren",
+                "overwriteSuccess": "Ihr Schlüssel wurde erneut auf dem Server veröffentlicht.",
+                "overwriteFailed": "Ihr Schlüssel konnte nicht erneut veröffentlicht werden. Versuchen Sie es erneut.",
+                "importSuccess": "Schlüssel aus der Serversicherung wiederhergestellt."
+            }
         }
     },
     "update": {

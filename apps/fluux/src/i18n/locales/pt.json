@@ -696,7 +696,22 @@
             "rotateConfirmAction": "Rodar chave",
             "rotateSuccess": "Chave de criptografia rodada",
             "rotateFailed": "Não foi possível rodar a chave. Tente novamente.",
-            "rotatePluginUnavailable": "Módulo OpenPGP indisponível"
+            "rotatePluginUnavailable": "Módulo OpenPGP indisponível",
+            "ownKeyConflict": {
+                "primaryMismatchTitle": "A sua chave publicada foi alterada",
+                "primaryMismatchBody": "A chave que o servidor anuncia para a sua conta não corresponde à chave neste dispositivo. Isso pode significar que o servidor foi adulterado, ou que outro dispositivo gerou uma nova chave.",
+                "subkeyMismatchTitle": "A sua chave foi atualizada noutro dispositivo",
+                "subkeyMismatchBody": "O servidor tem uma versão mais recente da sua chave — outro dispositivo rodou a subchave de cifragem. Importe a cópia de segurança para usar a versão mais recente aqui, ou mantenha a chave deste dispositivo se preferir.",
+                "encryptionBlocked": "A cifragem está em pausa até resolver este conflito.",
+                "localFingerprintLabel": "Este dispositivo",
+                "serverFingerprintLabel": "Servidor",
+                "publishedDateLabel": "Publicado",
+                "overwriteServer": "Manter a chave deste dispositivo",
+                "importFromServer": "Importar do servidor",
+                "overwriteSuccess": "A sua chave foi republicada no servidor.",
+                "overwriteFailed": "Não foi possível republicar a sua chave. Tente novamente.",
+                "importSuccess": "Chave restaurada a partir da cópia de segurança do servidor."
+            }
         }
     },
     "update": {

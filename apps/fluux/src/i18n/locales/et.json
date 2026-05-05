@@ -696,7 +696,22 @@
             "rotateConfirmAction": "Roteeri võti",
             "rotateSuccess": "Krüpteerimisvõti roteeritud",
             "rotateFailed": "Võtit ei õnnestunud roteerida. Proovige uuesti.",
-            "rotatePluginUnavailable": "OpenPGP moodul pole saadaval"
+            "rotatePluginUnavailable": "OpenPGP moodul pole saadaval",
+            "ownKeyConflict": {
+                "primaryMismatchTitle": "Teie avaldatud võti on muutunud",
+                "primaryMismatchBody": "Võti, mida server teie konto jaoks reklaamib, ei ühti sellel seadmel oleva võtmega. See võib tähendada, et serverit on muudetud, või teine seade lõi uue võtme.",
+                "subkeyMismatchTitle": "Teie võtit uuendati teisel seadmel",
+                "subkeyMismatchBody": "Serveril on teie võtme uuem versioon — teine seade tegi krüpteerimisvõtme allvõtme roteerimise. Importige varukoopia, et kasutada siin uusimat versiooni, või säilitage selle seadme võti, kui eelistate.",
+                "encryptionBlocked": "Krüpteerimine on peatatud, kuni lahendad selle konflikti.",
+                "localFingerprintLabel": "See seade",
+                "serverFingerprintLabel": "Server",
+                "publishedDateLabel": "Avaldatud",
+                "overwriteServer": "Selle seadme võtme säilitamine",
+                "importFromServer": "Impordi serverist",
+                "overwriteSuccess": "Teie võti on serveris uuesti avaldatud.",
+                "overwriteFailed": "Teie võtme uuesti avaldamine ebaõnnestus. Proovige uuesti.",
+                "importSuccess": "Võti taastatud serveri varukoopiast."
+            }
         }
     },
     "update": {

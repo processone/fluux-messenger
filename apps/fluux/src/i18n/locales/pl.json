@@ -696,7 +696,22 @@
             "rotateConfirmAction": "Zmień klucz",
             "rotateSuccess": "Klucz szyfrowania zmieniony",
             "rotateFailed": "Nie udało się zmienić klucza. Spróbuj ponownie.",
-            "rotatePluginUnavailable": "Moduł OpenPGP niedostępny"
+            "rotatePluginUnavailable": "Moduł OpenPGP niedostępny",
+            "ownKeyConflict": {
+                "primaryMismatchTitle": "Twój opublikowany klucz uległ zmianie",
+                "primaryMismatchBody": "Klucz reklamowany przez serwer dla Twojego konta nie odpowiada kluczowi na tym urządzeniu. Może to oznaczać, że serwer został zmodyfikowany, lub inne urządzenie wygenerowało nowy klucz.",
+                "subkeyMismatchTitle": "Twój klucz został zaktualizowany na innym urządzeniu",
+                "subkeyMismatchBody": "Serwer ma nowszą wersję Twojego klucza — inne urządzenie zrotowało podklucz szyfrowania. Zaimportuj kopię zapasową, aby używać najnowszej wersji tutaj, lub zachowaj klucz tego urządzenia, jeśli wolisz.",
+                "encryptionBlocked": "Szyfrowanie jest wstrzymane do czasu rozwiązania tego konfliktu.",
+                "localFingerprintLabel": "To urządzenie",
+                "serverFingerprintLabel": "Serwer",
+                "publishedDateLabel": "Opublikowano",
+                "overwriteServer": "Zachowaj klucz tego urządzenia",
+                "importFromServer": "Importuj z serwera",
+                "overwriteSuccess": "Twój klucz został ponownie opublikowany na serwerze.",
+                "overwriteFailed": "Nie udało się ponownie opublikować klucza. Spróbuj ponownie.",
+                "importSuccess": "Klucz przywrócony z kopii zapasowej serwera."
+            }
         }
     },
     "update": {

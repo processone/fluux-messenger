@@ -610,7 +610,22 @@
             "rotateConfirmAction": "Rotate key",
             "rotateSuccess": "Encryption key rotated",
             "rotateFailed": "Couldn't rotate the key. Try again.",
-            "rotatePluginUnavailable": "OpenPGP plugin not available"
+            "rotatePluginUnavailable": "OpenPGP plugin not available",
+            "ownKeyConflict": {
+                "primaryMismatchTitle": "Your published key has changed",
+                "primaryMismatchBody": "The key the server is advertising for your account doesn't match the one on this device. This could mean the server was tampered with, or another device generated a new key.",
+                "subkeyMismatchTitle": "Your key was updated on another device",
+                "subkeyMismatchBody": "The server has a newer version of your key — another device rotated the encryption subkey. Import the backup to use the latest version here, or keep this device's key if you prefer.",
+                "encryptionBlocked": "Encryption is paused until you resolve this conflict.",
+                "localFingerprintLabel": "This device",
+                "serverFingerprintLabel": "Server",
+                "publishedDateLabel": "Published",
+                "overwriteServer": "Keep this device's key",
+                "importFromServer": "Import from server",
+                "overwriteSuccess": "Your key has been re-published to the server.",
+                "overwriteFailed": "Couldn't re-publish your key. Try again.",
+                "importSuccess": "Key restored from server backup."
+            }
         },
         "blocked": {
             "title": "Blocked Users",

@@ -694,7 +694,22 @@
             "rotateConfirmAction": "Vaihda avain",
             "rotateSuccess": "Salausavain vaihdettu",
             "rotateFailed": "Avaimen vaihto epäonnistui. Yritä uudelleen.",
-            "rotatePluginUnavailable": "OpenPGP-moduuli ei saatavilla"
+            "rotatePluginUnavailable": "OpenPGP-moduuli ei saatavilla",
+            "ownKeyConflict": {
+                "primaryMismatchTitle": "Julkaistu avaimesi on muuttunut",
+                "primaryMismatchBody": "Avain, jota palvelin mainostaa tilillesi, ei vastaa tällä laitteella olevaa avainta. Tämä voi tarkoittaa, että palvelimeen on kajottu, tai toinen laite on luonut uuden avaimen.",
+                "subkeyMismatchTitle": "Avaimesi päivitettiin toisella laitteella",
+                "subkeyMismatchBody": "Palvelimella on uudempi versio avaimestasi — toinen laite kierrätti salauksen aliavaimen. Tuo varmuuskopio käyttääksesi uusinta versiota täällä, tai säilytä tämän laitteen avain, jos niin haluat.",
+                "encryptionBlocked": "Salaus on tauolla, kunnes ratkaiset tämän ristiriidan.",
+                "localFingerprintLabel": "Tämä laite",
+                "serverFingerprintLabel": "Palvelin",
+                "publishedDateLabel": "Julkaistu",
+                "overwriteServer": "Säilytä tämän laitteen avain",
+                "importFromServer": "Tuo palvelimelta",
+                "overwriteSuccess": "Avaimesi on julkaistu uudelleen palvelimelle.",
+                "overwriteFailed": "Avainta ei voitu julkaista uudelleen. Yritä uudelleen.",
+                "importSuccess": "Avain palautettu palvelimen varmuuskopiosta."
+            }
         }
     },
     "update": {

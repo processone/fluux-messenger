@@ -696,7 +696,22 @@
             "rotateConfirmAction": "Irrota ċ-ċavetta",
             "rotateSuccess": "Ċ-ċavetta tal-kriptaġġ ġiet irrotata",
             "rotateFailed": "Ma rnexxiex jiġi rrotat iċ-ċavetta. Erġa' pprova.",
-            "rotatePluginUnavailable": "Il-modulu OpenPGP mhux disponibbli"
+            "rotatePluginUnavailable": "Il-modulu OpenPGP mhux disponibbli",
+            "ownKeyConflict": {
+                "primaryMismatchTitle": "Il-ċavetta ppubblikata tiegħek inbidlet",
+                "primaryMismatchBody": "Iċ-ċavetta li l-server qed jirrikmanda għall-kont tiegħek ma taqbilx maċ-ċavetta fuq dan l-apparat. Dan jista' jfisser li s-server kien manipolat, jew apparat ieħor ġenera ċavetta ġdida.",
+                "subkeyMismatchTitle": "Iċ-ċavetta tiegħek ġiet aġġornata fuq apparat ieħor",
+                "subkeyMismatchBody": "Is-server għandu verżjoni aktar reċenti taċ-ċavetta tiegħek — apparat ieħor rota s-subċavetta tal-kriptaġġ. Importa l-backup biex tuża l-aħħar verżjoni hawn, jew żomm iċ-ċavetta ta' dan l-apparat jekk tippreferi.",
+                "encryptionBlocked": "Il-kriptaġġ huwa sospiż sakemm ma tirriżolvix dan il-kunflitt.",
+                "localFingerprintLabel": "Dan l-apparat",
+                "serverFingerprintLabel": "Server",
+                "publishedDateLabel": "Ippubblikat",
+                "overwriteServer": "Żomm iċ-ċavetta ta' dan l-apparat",
+                "importFromServer": "Importa mis-server",
+                "overwriteSuccess": "Iċ-ċavetta tiegħek ġiet ippubblikata mill-ġdid fuq is-server.",
+                "overwriteFailed": "Ma rnexxiex jiġi ppubblikat mill-ġdid iċ-ċavetta tiegħek. Erġa' pprova.",
+                "importSuccess": "Ċavetta rrestawrata mill-backup tas-server."
+            }
         }
     },
     "update": {

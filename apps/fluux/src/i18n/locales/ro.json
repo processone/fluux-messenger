@@ -696,7 +696,22 @@
             "rotateConfirmAction": "Rotește cheia",
             "rotateSuccess": "Cheie de criptare rotită",
             "rotateFailed": "Cheia nu a putut fi rotită. Încearcă din nou.",
-            "rotatePluginUnavailable": "Modulul OpenPGP indisponibil"
+            "rotatePluginUnavailable": "Modulul OpenPGP indisponibil",
+            "ownKeyConflict": {
+                "primaryMismatchTitle": "Cheia ta publicată s-a schimbat",
+                "primaryMismatchBody": "Cheia pe care serverul o anunță pentru contul tău nu corespunde cu cea de pe acest dispozitiv. Aceasta ar putea însemna că serverul a fost manipulat, sau că un alt dispozitiv a generat o cheie nouă.",
+                "subkeyMismatchTitle": "Cheia ta a fost actualizată pe alt dispozitiv",
+                "subkeyMismatchBody": "Serverul are o versiune mai recentă a cheii tale — un alt dispozitiv a rotat subcheia de criptare. Importă copia de rezervă pentru a folosi versiunea cea mai recentă aici, sau păstrează cheia acestui dispozitiv dacă preferi.",
+                "encryptionBlocked": "Criptarea este în pauză până când rezolvi acest conflict.",
+                "localFingerprintLabel": "Acest dispozitiv",
+                "serverFingerprintLabel": "Server",
+                "publishedDateLabel": "Publicat",
+                "overwriteServer": "Păstrează cheia acestui dispozitiv",
+                "importFromServer": "Importă de pe server",
+                "overwriteSuccess": "Cheia ta a fost republicată pe server.",
+                "overwriteFailed": "Nu s-a putut republica cheia ta. Încearcă din nou.",
+                "importSuccess": "Cheie restaurată din copia de rezervă a serverului."
+            }
         }
     },
     "update": {

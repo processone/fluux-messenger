@@ -696,7 +696,22 @@
             "rotateConfirmAction": "Rotar la clave",
             "rotateSuccess": "Clave de cifrado rotada",
             "rotateFailed": "No se pudo rotar la clave. Inténtalo de nuevo.",
-            "rotatePluginUnavailable": "Módulo OpenPGP no disponible"
+            "rotatePluginUnavailable": "Módulo OpenPGP no disponible",
+            "ownKeyConflict": {
+                "primaryMismatchTitle": "Tu clave publicada ha cambiado",
+                "primaryMismatchBody": "La clave que el servidor anuncia para tu cuenta no coincide con la de este dispositivo. Esto podría significar que el servidor fue manipulado, o que otro dispositivo generó una clave nueva.",
+                "subkeyMismatchTitle": "Tu clave fue actualizada en otro dispositivo",
+                "subkeyMismatchBody": "El servidor tiene una versión más reciente de tu clave — otro dispositivo rotó la subclave de cifrado. Importa la copia de seguridad para usar la versión más reciente aquí, o conserva la clave de este dispositivo si lo prefieres.",
+                "encryptionBlocked": "El cifrado está en pausa hasta que resuelvas este conflicto.",
+                "localFingerprintLabel": "Este dispositivo",
+                "serverFingerprintLabel": "Servidor",
+                "publishedDateLabel": "Publicado",
+                "overwriteServer": "Conservar la clave de este dispositivo",
+                "importFromServer": "Importar desde el servidor",
+                "overwriteSuccess": "Tu clave ha sido republicada en el servidor.",
+                "overwriteFailed": "No se pudo republicar tu clave. Inténtalo de nuevo.",
+                "importSuccess": "Clave restaurada desde la copia de seguridad del servidor."
+            }
         }
     },
     "update": {

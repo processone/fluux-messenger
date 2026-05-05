@@ -695,7 +695,22 @@
             "rotateConfirmAction": "Rotovať kľúč",
             "rotateSuccess": "Šifrovací kľúč rotovaný",
             "rotateFailed": "Nepodarilo sa rotovať kľúč. Skúste znova.",
-            "rotatePluginUnavailable": "Modul OpenPGP nie je k dispozícii"
+            "rotatePluginUnavailable": "Modul OpenPGP nie je k dispozícii",
+            "ownKeyConflict": {
+                "primaryMismatchTitle": "Váš zverejnený kľúč sa zmenil",
+                "primaryMismatchBody": "Kľúč, ktorý server inzeruje pre váš účet, nezodpovedá kľúču na tomto zariadení. Môže to znamenať, že server bol pozmenený, alebo iné zariadenie vygenerovalo nový kľúč.",
+                "subkeyMismatchTitle": "Váš kľúč bol aktualizovaný na inom zariadení",
+                "subkeyMismatchBody": "Server má novšiu verziu vášho kľúča — iné zariadenie vykonalo rotáciu šifrovacieho podkľúča. Importujte zálohu, aby ste tu použili najnovšiu verziu, alebo si ponechajte kľúč tohto zariadenia, ak chcete.",
+                "encryptionBlocked": "Šifrovanie je pozastavené, kým nevyriešite tento konflikt.",
+                "localFingerprintLabel": "Toto zariadenie",
+                "serverFingerprintLabel": "Server",
+                "publishedDateLabel": "Zverejnené",
+                "overwriteServer": "Ponechať kľúč tohto zariadenia",
+                "importFromServer": "Importovať zo servera",
+                "overwriteSuccess": "Váš kľúč bol znovu zverejnený na serveri.",
+                "overwriteFailed": "Nepodarilo sa znovu zverejniť váš kľúč. Skúste znova.",
+                "importSuccess": "Kľúč obnovený zo zálohy na serveri."
+            }
         }
     },
     "update": {

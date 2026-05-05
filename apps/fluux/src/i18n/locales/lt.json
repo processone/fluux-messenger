@@ -694,7 +694,22 @@
             "rotateConfirmAction": "Pakeisti raktą",
             "rotateSuccess": "Šifravimo raktas pakeistas",
             "rotateFailed": "Nepavyko pakeisti rakto. Bandykite dar kartą.",
-            "rotatePluginUnavailable": "OpenPGP modulis nepasiekiamas"
+            "rotatePluginUnavailable": "OpenPGP modulis nepasiekiamas",
+            "ownKeyConflict": {
+                "primaryMismatchTitle": "Jūsų paskelbtas raktas pasikeitė",
+                "primaryMismatchBody": "Raktas, kurį serveris skelbia jūsų paskyrai, neatitinka rakto šiame įrenginyje. Tai gali reikšti, kad serveris buvo sugadintas, arba kitas įrenginys sugeneravo naują raktą.",
+                "subkeyMismatchTitle": "Jūsų raktas buvo atnaujintas kitame įrenginyje",
+                "subkeyMismatchBody": "Serveryje yra naujesnė jūsų rakto versija — kitas įrenginys pakeitė šifravimo subraktą. Importuokite atsarginę kopiją, kad čia naudotumėte naujausią versiją, arba palikite šio įrenginio raktą, jei pageidaujate.",
+                "encryptionBlocked": "Šifravimas sustabdytas, kol išspręsite šį konfliktą.",
+                "localFingerprintLabel": "Šis įrenginys",
+                "serverFingerprintLabel": "Serveris",
+                "publishedDateLabel": "Paskelbta",
+                "overwriteServer": "Palikti šio įrenginio raktą",
+                "importFromServer": "Importuoti iš serverio",
+                "overwriteSuccess": "Jūsų raktas buvo iš naujo paskelbtas serveryje.",
+                "overwriteFailed": "Nepavyko iš naujo paskelbti jūsų rakto. Bandykite dar kartą.",
+                "importSuccess": "Raktas atkurtas iš serverio atsarginės kopijos."
+            }
         }
     },
     "update": {

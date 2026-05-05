@@ -694,7 +694,22 @@
             "rotateConfirmAction": "Sleutel roteren",
             "rotateSuccess": "Versleutelingssleutel geroteerd",
             "rotateFailed": "Sleutel kon niet worden geroteerd. Probeer opnieuw.",
-            "rotatePluginUnavailable": "OpenPGP-module niet beschikbaar"
+            "rotatePluginUnavailable": "OpenPGP-module niet beschikbaar",
+            "ownKeyConflict": {
+                "primaryMismatchTitle": "Uw gepubliceerde sleutel is gewijzigd",
+                "primaryMismatchBody": "De sleutel die de server adverteert voor uw account komt niet overeen met de sleutel op dit apparaat. Dit kan betekenen dat de server is gemanipuleerd, of dat een ander apparaat een nieuwe sleutel heeft gegenereerd.",
+                "subkeyMismatchTitle": "Uw sleutel is bijgewerkt op een ander apparaat",
+                "subkeyMismatchBody": "De server heeft een nieuwere versie van uw sleutel — een ander apparaat heeft de versleutelingssubsleutel geroteerd. Importeer de back-up om de nieuwste versie hier te gebruiken, of bewaar de sleutel van dit apparaat als u dat wilt.",
+                "encryptionBlocked": "Versleuteling is gepauzeerd totdat u dit conflict oplost.",
+                "localFingerprintLabel": "Dit apparaat",
+                "serverFingerprintLabel": "Server",
+                "publishedDateLabel": "Gepubliceerd",
+                "overwriteServer": "Sleutel van dit apparaat behouden",
+                "importFromServer": "Importeren van server",
+                "overwriteSuccess": "Uw sleutel is opnieuw gepubliceerd naar de server.",
+                "overwriteFailed": "Uw sleutel kon niet opnieuw worden gepubliceerd. Probeer opnieuw.",
+                "importSuccess": "Sleutel hersteld van server back-up."
+            }
         }
     },
     "update": {

@@ -695,7 +695,22 @@
             "rotateConfirmAction": "Rotēt atslēgu",
             "rotateSuccess": "Šifrēšanas atslēga rotēta",
             "rotateFailed": "Neizdevās rotēt atslēgu. Mēģiniet vēlreiz.",
-            "rotatePluginUnavailable": "OpenPGP modulis nav pieejams"
+            "rotatePluginUnavailable": "OpenPGP modulis nav pieejams",
+            "ownKeyConflict": {
+                "primaryMismatchTitle": "Jūsu publicētā atslēga ir mainījusies",
+                "primaryMismatchBody": "Atslēga, ko serveris reklamē jūsu kontam, neatbilst atslēgai šajā ierīcē. Tas var nozīmēt, ka serveris ir ticis manipulēts, vai cita ierīce ir ģenerējusi jaunu atslēgu.",
+                "subkeyMismatchTitle": "Jūsu atslēga tika atjaunināta citā ierīcē",
+                "subkeyMismatchBody": "Serverī ir jaunāka jūsu atslēgas versija — cita ierīce rotēja šifrēšanas apakšatslēgu. Importējiet dublējumu, lai šeit izmantotu jaunāko versiju, vai saglabājiet šīs ierīces atslēgu, ja vēlaties.",
+                "encryptionBlocked": "Šifrēšana ir apturēta, līdz jūs atrisināt šo konfliktu.",
+                "localFingerprintLabel": "Šī ierīce",
+                "serverFingerprintLabel": "Serveris",
+                "publishedDateLabel": "Publicēts",
+                "overwriteServer": "Saglabāt šīs ierīces atslēgu",
+                "importFromServer": "Importēt no servera",
+                "overwriteSuccess": "Jūsu atslēga ir atkārtoti publicēta serverī.",
+                "overwriteFailed": "Neizdevās atkārtoti publicēt jūsu atslēgu. Mēģiniet vēlreiz.",
+                "importSuccess": "Atslēga atjaunota no servera dublējuma."
+            }
         }
     },
     "update": {

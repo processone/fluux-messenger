@@ -695,7 +695,22 @@
             "rotateConfirmAction": "Faire la rotation",
             "rotateSuccess": "Clé de chiffrement renouvelée",
             "rotateFailed": "Impossible de faire la rotation. Réessayez.",
-            "rotatePluginUnavailable": "Le module OpenPGP n'est pas disponible"
+            "rotatePluginUnavailable": "Le module OpenPGP n'est pas disponible",
+            "ownKeyConflict": {
+                "primaryMismatchTitle": "Votre clé publiée a changé",
+                "primaryMismatchBody": "La clé que le serveur annonce pour votre compte ne correspond pas à celle de cet appareil. Cela pourrait signifier que le serveur a été altéré, ou qu'un autre appareil a généré une nouvelle clé.",
+                "subkeyMismatchTitle": "Votre clé a été mise à jour sur un autre appareil",
+                "subkeyMismatchBody": "Le serveur dispose d'une version plus récente de votre clé — un autre appareil a fait tourner la sous-clé de chiffrement. Importez la sauvegarde pour utiliser la dernière version ici, ou conservez la clé de cet appareil si vous préférez.",
+                "encryptionBlocked": "Le chiffrement est suspendu jusqu'à ce que vous résolviez ce conflit.",
+                "localFingerprintLabel": "Cet appareil",
+                "serverFingerprintLabel": "Serveur",
+                "publishedDateLabel": "Publié le",
+                "overwriteServer": "Conserver la clé de cet appareil",
+                "importFromServer": "Importer depuis le serveur",
+                "overwriteSuccess": "Votre clé a été republiée sur le serveur.",
+                "overwriteFailed": "Impossible de republier votre clé. Réessayez.",
+                "importSuccess": "Clé restaurée depuis la sauvegarde du serveur."
+            }
         }
     },
     "update": {

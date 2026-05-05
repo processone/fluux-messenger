@@ -696,7 +696,22 @@
             "rotateConfirmAction": "Zamenjaj ključ",
             "rotateSuccess": "Šifrirni ključ zamenjan",
             "rotateFailed": "Ključa ni bilo mogoče zamenjati. Poskusite znova.",
-            "rotatePluginUnavailable": "Modul OpenPGP ni na voljo"
+            "rotatePluginUnavailable": "Modul OpenPGP ni na voljo",
+            "ownKeyConflict": {
+                "primaryMismatchTitle": "Vaš objavljeni ključ se je spremenil",
+                "primaryMismatchBody": "Ključ, ki ga strežnik oglašuje za vaš račun, se ne ujema s ključem na tej napravi. To lahko pomeni, da je bil strežnik nedovoljeno spremenjen, ali pa je druga naprava ustvarila nov ključ.",
+                "subkeyMismatchTitle": "Vaš ključ je bil posodobljen na drugi napravi",
+                "subkeyMismatchBody": "Strežnik ima novejšo različico vašega ključa — druga naprava je zasukala podključ za šifriranje. Uvozite varnostno kopijo za uporabo najnovejše različice tukaj, ali obdržite ključ te naprave, če imate raje to.",
+                "encryptionBlocked": "Šifriranje je zaustavljeno, dokler ne razrešite tega konflikta.",
+                "localFingerprintLabel": "Ta naprava",
+                "serverFingerprintLabel": "Strežnik",
+                "publishedDateLabel": "Objavljeno",
+                "overwriteServer": "Ohrani ključ te naprave",
+                "importFromServer": "Uvozi s strežnika",
+                "overwriteSuccess": "Vaš ključ je bil znova objavljen na strežniku.",
+                "overwriteFailed": "Ključa ni bilo mogoče znova objaviti. Poskusite znova.",
+                "importSuccess": "Ključ obnovljen iz varnostne kopije na strežniku."
+            }
         }
     },
     "update": {

@@ -694,7 +694,22 @@
             "rotateConfirmAction": "Kulcs cseréje",
             "rotateSuccess": "A titkosítási kulcs lecserélve",
             "rotateFailed": "A kulcsot nem sikerült lecserélni. Próbálja újra.",
-            "rotatePluginUnavailable": "Az OpenPGP modul nem érhető el"
+            "rotatePluginUnavailable": "Az OpenPGP modul nem érhető el",
+            "ownKeyConflict": {
+                "primaryMismatchTitle": "A közzétett kulcsa megváltozott",
+                "primaryMismatchBody": "A szerver által a fiókjához hirdetett kulcs nem egyezik az ezen az eszközön lévővel. Ez azt jelentheti, hogy a szervert megváltoztatták, vagy egy másik eszköz új kulcsot generált.",
+                "subkeyMismatchTitle": "A kulcsát egy másik eszközön frissítették",
+                "subkeyMismatchBody": "A szerveren újabb verzió van a kulcsából — egy másik eszköz lecserélte a titkosítási alkulcsot. Importálja a biztonsági mentést a legújabb verzió használatához, vagy tartsa meg az eszköz kulcsát, ha azt preferálja.",
+                "encryptionBlocked": "A titkosítás szünetel, amíg meg nem oldja ezt az ütközést.",
+                "localFingerprintLabel": "Ez az eszköz",
+                "serverFingerprintLabel": "Szerver",
+                "publishedDateLabel": "Közzétéve",
+                "overwriteServer": "Az eszköz kulcsának megtartása",
+                "importFromServer": "Importálás a szerverről",
+                "overwriteSuccess": "A kulcsát újra közzétettük a szerveren.",
+                "overwriteFailed": "Nem sikerült újra közzétenni a kulcsát. Próbálja újra.",
+                "importSuccess": "A kulcs visszaállítva a szerver biztonsági mentéséből."
+            }
         }
     },
     "update": {

@@ -10,6 +10,7 @@ import { DeleteOpenpgpKeyDialog } from '@/components/DeleteOpenpgpKeyDialog'
 import { BackupPassphraseDialog } from '@/components/BackupPassphraseDialog'
 import { RestorePassphraseDialog } from '@/components/RestorePassphraseDialog'
 import { EnableWithBackupDialog } from '@/components/EnableWithBackupDialog'
+import { OwnKeyConflictBanner } from '@/components/OwnKeyConflictBanner'
 import { probeRemoteSecretKeyBackup, SecretKeyBackupProbeError } from '@/e2ee/secretKeyProbe'
 import { isTauri } from '@/utils/tauri'
 
@@ -523,6 +524,10 @@ export function EncryptionSettings() {
             </button>
           </div>
         </div>
+
+        {/* Own-key conflict banner — shown above status when init detects a
+            mismatch between the local key and what the server advertises */}
+        {openpgpEnabled && <OwnKeyConflictBanner />}
 
         {/* Status + fingerprint block — only when enabled */}
         {openpgpEnabled && (

@@ -694,7 +694,22 @@
             "rotateConfirmAction": "Skipta um lykil",
             "rotateSuccess": "Dulkóðunarlykli skipt",
             "rotateFailed": "Ekki tókst að skipta um lykil. Reyndu aftur.",
-            "rotatePluginUnavailable": "OpenPGP-eining ekki tiltæk"
+            "rotatePluginUnavailable": "OpenPGP-eining ekki tiltæk",
+            "ownKeyConflict": {
+                "primaryMismatchTitle": "Birtur lykill þinn hefur breyst",
+                "primaryMismatchBody": "Lykillinn sem þjónninn auglýsir fyrir reikninginn þinn passar ekki við lykilinn á þessum tæki. Þetta gæti þýtt að þjónninn hafi verið áhrif á, eða annað tæki hafi búið til nýjan lykil.",
+                "subkeyMismatchTitle": "Lykillinn þinn var uppfærður á öðru tæki",
+                "subkeyMismatchBody": "Þjónninn er með nýrri útgáfu af lykli þínum — annað tæki sneri dulkóðunarundirlykilinn. Flyttu inn öryggisafritið til að nota nýjustu útgáfuna hér, eða haltu lykli þessa tækis ef þú kýst.",
+                "encryptionBlocked": "Dulkóðun er í bið þar til þú leystu þennan ágreining.",
+                "localFingerprintLabel": "Þetta tæki",
+                "serverFingerprintLabel": "Þjónn",
+                "publishedDateLabel": "Birt",
+                "overwriteServer": "Halda lykli þessa tækis",
+                "importFromServer": "Flytja inn af þjóni",
+                "overwriteSuccess": "Lykillinn þinn hefur verið endurbirtinn á þjóninum.",
+                "overwriteFailed": "Tókst ekki að endurbirta lykilinn þinn. Reyndu aftur.",
+                "importSuccess": "Lykill endurheimtur úr öryggisafritinu á þjóninum."
+            }
         }
     },
     "update": {

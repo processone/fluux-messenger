@@ -694,7 +694,22 @@
             "rotateConfirmAction": "تدوير المفتاح",
             "rotateSuccess": "تم تدوير مفتاح التشفير",
             "rotateFailed": "تعذّر تدوير المفتاح. حاول مجددًا.",
-            "rotatePluginUnavailable": "وحدة OpenPGP غير متاحة"
+            "rotatePluginUnavailable": "وحدة OpenPGP غير متاحة",
+            "ownKeyConflict": {
+                "primaryMismatchTitle": "تغيّر مفتاحك المنشور",
+                "primaryMismatchBody": "المفتاح الذي يُعلن عنه الخادم لحسابك لا يطابق المفتاح الموجود على هذا الجهاز. قد يعني ذلك أن الخادم قد تم التلاعب به، أو أن جهازاً آخر أنشأ مفتاحاً جديداً.",
+                "subkeyMismatchTitle": "تم تحديث مفتاحك على جهاز آخر",
+                "subkeyMismatchBody": "يمتلك الخادم نسخة أحدث من مفتاحك — قام جهاز آخر بتدوير مفتاح التشفير الفرعي. استورد النسخة الاحتياطية لاستخدام الإصدار الأحدث هنا، أو احتفظ بمفتاح هذا الجهاز إذا كنت تفضل ذلك.",
+                "encryptionBlocked": "التشفير متوقف مؤقتاً حتى تحل هذا التعارض.",
+                "localFingerprintLabel": "هذا الجهاز",
+                "serverFingerprintLabel": "الخادم",
+                "publishedDateLabel": "تاريخ النشر",
+                "overwriteServer": "الاحتفاظ بمفتاح هذا الجهاز",
+                "importFromServer": "استيراد من الخادم",
+                "overwriteSuccess": "تمت إعادة نشر مفتاحك على الخادم.",
+                "overwriteFailed": "تعذّرت إعادة نشر مفتاحك. حاول مرة أخرى.",
+                "importSuccess": "تمت استعادة المفتاح من النسخة الاحتياطية على الخادم."
+            }
         }
     },
     "update": {

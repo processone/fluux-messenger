@@ -694,7 +694,22 @@
             "rotateConfirmAction": "Rotér nøkkel",
             "rotateSuccess": "Krypteringsnøkkel rotert",
             "rotateFailed": "Kunne ikke rotere nøkkelen. Prøv igjen.",
-            "rotatePluginUnavailable": "OpenPGP-modul ikke tilgjengelig"
+            "rotatePluginUnavailable": "OpenPGP-modul ikke tilgjengelig",
+            "ownKeyConflict": {
+                "primaryMismatchTitle": "Den publiserte nøkkelen din har endret seg",
+                "primaryMismatchBody": "Nøkkelen serveren annonserer for kontoen din stemmer ikke overens med den på denne enheten. Dette kan bety at serveren er blitt manipulert, eller at en annen enhet har generert en ny nøkkel.",
+                "subkeyMismatchTitle": "Nøkkelen din ble oppdatert på en annen enhet",
+                "subkeyMismatchBody": "Serveren har en nyere versjon av nøkkelen din — en annen enhet roterte krypteringsundernøkkelen. Importer sikkerhetskopien for å bruke den nyeste versjonen her, eller behold denne enhetens nøkkel hvis du foretrekker det.",
+                "encryptionBlocked": "Kryptering er satt på pause til du løser denne konflikten.",
+                "localFingerprintLabel": "Denne enheten",
+                "serverFingerprintLabel": "Server",
+                "publishedDateLabel": "Publisert",
+                "overwriteServer": "Behold denne enhetens nøkkel",
+                "importFromServer": "Importer fra server",
+                "overwriteSuccess": "Nøkkelen din er publisert på nytt til serveren.",
+                "overwriteFailed": "Kunne ikke publisere nøkkelen din på nytt. Prøv igjen.",
+                "importSuccess": "Nøkkel gjenopprettet fra sikkerhetskopi på serveren."
+            }
         }
     },
     "update": {

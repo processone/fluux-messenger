@@ -694,7 +694,22 @@
             "rotateConfirmAction": "החלף מפתח",
             "rotateSuccess": "מפתח ההצפנה הוחלף",
             "rotateFailed": "לא ניתן להחליף את המפתח. נסה שוב.",
-            "rotatePluginUnavailable": "מודול OpenPGP אינו זמין"
+            "rotatePluginUnavailable": "מודול OpenPGP אינו זמין",
+            "ownKeyConflict": {
+                "primaryMismatchTitle": "המפתח המפורסם שלך השתנה",
+                "primaryMismatchBody": "המפתח שהשרת מפרסם עבור חשבונך אינו תואם למפתח שבמכשיר זה. ייתכן שהשרת נפגע, או שמכשיר אחר יצר מפתח חדש.",
+                "subkeyMismatchTitle": "המפתח שלך עודכן במכשיר אחר",
+                "subkeyMismatchBody": "לשרת יש גרסה חדשה יותר של המפתח שלך — מכשיר אחר סובב את מפתח ההצפנה המשני. ייבא את הגיבוי כדי להשתמש בגרסה העדכנית כאן, או שמור את המפתח של מכשיר זה אם אתה מעדיף.",
+                "encryptionBlocked": "ההצפנה מושהית עד שתפתור את הסתירה הזו.",
+                "localFingerprintLabel": "מכשיר זה",
+                "serverFingerprintLabel": "שרת",
+                "publishedDateLabel": "פורסם",
+                "overwriteServer": "שמור את המפתח של מכשיר זה",
+                "importFromServer": "ייבא מהשרת",
+                "overwriteSuccess": "המפתח שלך פורסם מחדש בשרת.",
+                "overwriteFailed": "לא ניתן לפרסם מחדש את המפתח שלך. נסה שוב.",
+                "importSuccess": "המפתח שוחזר מגיבוי השרת."
+            }
         }
     },
     "update": {

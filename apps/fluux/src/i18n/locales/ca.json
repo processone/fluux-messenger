@@ -696,7 +696,22 @@
             "rotateConfirmAction": "Rotar clau",
             "rotateSuccess": "Clau de xifratge rotada",
             "rotateFailed": "No s'ha pogut rotar la clau. Torneu-ho a provar.",
-            "rotatePluginUnavailable": "Mòdul OpenPGP no disponible"
+            "rotatePluginUnavailable": "Mòdul OpenPGP no disponible",
+            "ownKeyConflict": {
+                "primaryMismatchTitle": "La vostra clau publicada ha canviat",
+                "primaryMismatchBody": "La clau que el servidor anuncia per al vostre compte no coincideix amb la d'aquest dispositiu. Això podria significar que el servidor ha estat manipulat, o que un altre dispositiu ha generat una clau nova.",
+                "subkeyMismatchTitle": "La vostra clau s'ha actualitzat en un altre dispositiu",
+                "subkeyMismatchBody": "El servidor té una versió més nova de la vostra clau — un altre dispositiu ha rotat la subclau de xifrat. Importeu la còpia de seguretat per utilitzar la versió més recent aquí, o conserveu la clau d'aquest dispositiu si ho preferiu.",
+                "encryptionBlocked": "El xifrat està pausat fins que resolgueu aquest conflicte.",
+                "localFingerprintLabel": "Aquest dispositiu",
+                "serverFingerprintLabel": "Servidor",
+                "publishedDateLabel": "Publicat",
+                "overwriteServer": "Conserva la clau d'aquest dispositiu",
+                "importFromServer": "Importa des del servidor",
+                "overwriteSuccess": "La vostra clau ha estat tornada a publicar al servidor.",
+                "overwriteFailed": "No s'ha pogut tornar a publicar la vostra clau. Torneu-ho a intentar.",
+                "importSuccess": "Clau restaurada des de la còpia de seguretat del servidor."
+            }
         }
     },
     "update": {

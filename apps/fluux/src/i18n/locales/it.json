@@ -696,7 +696,22 @@
             "rotateConfirmAction": "Ruota la chiave",
             "rotateSuccess": "Chiave di cifratura ruotata",
             "rotateFailed": "Impossibile ruotare la chiave. Riprova.",
-            "rotatePluginUnavailable": "Modulo OpenPGP non disponibile"
+            "rotatePluginUnavailable": "Modulo OpenPGP non disponibile",
+            "ownKeyConflict": {
+                "primaryMismatchTitle": "La tua chiave pubblicata è cambiata",
+                "primaryMismatchBody": "La chiave che il server pubblicizza per il tuo account non corrisponde a quella su questo dispositivo. Potrebbe significare che il server è stato manomesso, o che un altro dispositivo ha generato una nuova chiave.",
+                "subkeyMismatchTitle": "La tua chiave è stata aggiornata su un altro dispositivo",
+                "subkeyMismatchBody": "Il server ha una versione più recente della tua chiave — un altro dispositivo ha ruotato la sottochiave di cifratura. Importa il backup per usare la versione più recente qui, o mantieni la chiave di questo dispositivo se preferisci.",
+                "encryptionBlocked": "La cifratura è in pausa finché non risolvi questo conflitto.",
+                "localFingerprintLabel": "Questo dispositivo",
+                "serverFingerprintLabel": "Server",
+                "publishedDateLabel": "Pubblicato",
+                "overwriteServer": "Mantieni la chiave di questo dispositivo",
+                "importFromServer": "Importa dal server",
+                "overwriteSuccess": "La tua chiave è stata ripubblicata sul server.",
+                "overwriteFailed": "Impossibile ripubblicare la tua chiave. Riprova.",
+                "importSuccess": "Chiave ripristinata dal backup del server."
+            }
         }
     },
     "update": {
