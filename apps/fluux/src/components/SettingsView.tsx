@@ -83,11 +83,14 @@ export function SettingsView({ onBack }: SettingsViewProps) {
         <h2 className="font-semibold text-fluux-text">{categoryLabel}</h2>
       </div>
 
-      {/* Content - centered like ProfileView */}
+      {/* Content. Profile uses edge-to-edge hero (handles its own padding);
+          other categories center a narrow column inside p-6. */}
       <div className="flex-1 overflow-y-auto">
-        <div className="p-6 flex flex-col items-center">
-          {renderContent()}
-        </div>
+        {activeCategory === 'profile' ? (
+          <div className="py-6">{renderContent()}</div>
+        ) : (
+          <div className="p-6 flex flex-col items-center">{renderContent()}</div>
+        )}
       </div>
     </div>
   )
