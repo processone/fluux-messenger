@@ -8,6 +8,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import type { InvokeFn } from './SequoiaPgpPlugin'
 import { SequoiaPgpPlugin } from './SequoiaPgpPlugin'
+import { getOwnKeyConflict } from '@/stores/ownKeyConflictStore'
 import {
   E2EEPluginError,
   InMemoryStorageBackend,
@@ -428,16 +429,16 @@ describe('SequoiaPgpPlugin', () => {
   beforeEach(async () => {
     // Reset every singleton store the plugin touches. Without this,
     // pinnedPrimaryFingerprintsStore + verifiedPeerKeysStore +
-    // keyChangeAlertsStore leak between tests — a pin recorded by an
-    // earlier test would gate a later test's first probePeer against
-    // the wrong baseline, surfacing as "peer key is null" failures.
+    // keyChangeAlertsStore + ownKeyConflictStore leak between tests.
     localStorage.clear()
     const verifiedStore = await import('@/stores/verifiedPeerKeysStore')
     const alertsStore = await import('@/stores/keyChangeAlertsStore')
     const pinStore = await import('@/stores/pinnedPrimaryFingerprintsStore')
+    const ownConflictStore = await import('@/stores/ownKeyConflictStore')
     verifiedStore.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
     alertsStore.useKeyChangeAlertsStore.setState({ alertsByJid: {} })
     pinStore.usePinnedPrimaryFingerprintsStore.setState({ pinnedFingerprintByJid: {} })
+    ownConflictStore.useOwnKeyConflictStore.setState({ conflict: null })
 
     fake = makeFakeRust()
     plugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
@@ -661,6 +662,236 @@ describe('SequoiaPgpPlugin', () => {
       // node's pair ran.
       expect(deletedNodes).toHaveLength(1)
       expect(calls).toBe(2)
+    })
+
+    // --- Own-key consistency checks ---
+
+    it('publishes normally when no key is on the server yet (first publish)', async () => {
+      const { ctx, published } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      expect(getOwnKeyConflict()).toBeNull()
+      expect(published).toHaveLength(2)
+    })
+
+    it('publishes normally when own published key matches the local key', async () => {
+      const built = makeContext('me@example.com')
+      // Pre-load key so we know its fingerprint and armored before init.
+      const bundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'me@example.com',
+        userId: 'me@example.com',
+      })
+      // Simulate a server that already has our key (e.g. previous session).
+      publishKeyAsXep0373(built, 'me@example.com', bundle)
+      await plugin.init(built.ctx)
+      expect(getOwnKeyConflict()).toBeNull()
+      // Two publishes: the check sees consistency, so normal publish proceeds.
+      expect(built.published).toHaveLength(2)
+    })
+
+    it('records a primary-mismatch conflict and skips publish when server has a different primary key', async () => {
+      const { ctx, peerPublish, published } = makeContext('me@example.com')
+      // Server has a completely different key fingerprint (tampering or new device).
+      peerPublish('me@example.com', METADATA_NODE, {
+        id: 'current',
+        payload: {
+          name: 'public-keys-list',
+          attrs: { xmlns: OX_NS },
+          children: [
+            {
+              name: 'pubkey-metadata',
+              attrs: {
+                'v4-fingerprint': 'TAMPEREDFP000000',
+                'v6-fingerprint': 'TAMPEREDFP000000',
+                date: '2024-01-01T00:00:00Z',
+              },
+              children: [],
+            },
+          ],
+        },
+      })
+      await plugin.init(ctx)
+      const conflict = getOwnKeyConflict()
+      expect(conflict).not.toBeNull()
+      expect(conflict!.kind).toBe('primary-mismatch')
+      expect(conflict!.publishedFingerprint).toBe('TAMPEREDFP000000')
+      expect(conflict!.publishedDate).toBe('2024-01-01T00:00:00Z')
+      // No publish: the user must decide before we overwrite the server.
+      expect(published).toHaveLength(0)
+    })
+
+    it('records a subkey-mismatch conflict when primary FP matches but data node differs (rotation on another device)', async () => {
+      const { ctx, peerPublish, published } = makeContext('me@example.com')
+      // Get the key that openpgp_ensure_key will return for this device.
+      const bundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'me@example.com',
+        userId: 'me@example.com',
+      })
+      // Simulate what another device published after running rotateEncryptionKey():
+      // same primary fingerprint, but different armored content. We build the
+      // "rotated" armored by appending a rotation marker WITHOUT calling
+      // openpgp_rotate_encryption_subkey — that would update the Rust-side
+      // cache and make init see the rotated key locally, defeating the test.
+      const serverArmoredAfterRotation = bundle.publicArmored + '\nRotation: 1'
+
+      // Metadata matches our local fingerprint — no primary mismatch.
+      peerPublish('me@example.com', METADATA_NODE, {
+        id: 'current',
+        payload: {
+          name: 'public-keys-list',
+          attrs: { xmlns: OX_NS },
+          children: [
+            {
+              name: 'pubkey-metadata',
+              attrs: {
+                'v4-fingerprint': bundle.fingerprint,
+                'v6-fingerprint': bundle.fingerprint,
+                date: '2024-06-01T00:00:00Z',
+              },
+              children: [],
+            },
+          ],
+        },
+      })
+      // Data node has the rotated armored (what another device published).
+      peerPublish('me@example.com', dataNodeFor(bundle.fingerprint), {
+        id: 'current',
+        payload: {
+          name: 'pubkey',
+          attrs: { xmlns: OX_NS },
+          children: [
+            {
+              name: 'data',
+              attrs: {},
+              children: [btoa(unescape(encodeURIComponent(serverArmoredAfterRotation)))],
+            },
+          ],
+        },
+      })
+      await plugin.init(ctx)
+      const conflict = getOwnKeyConflict()
+      expect(conflict).not.toBeNull()
+      expect(conflict!.kind).toBe('subkey-mismatch')
+      expect(conflict!.localFingerprint).toBe(bundle.fingerprint)
+      expect(conflict!.publishedDate).toBe('2024-06-01T00:00:00Z')
+      expect(published).toHaveLength(0)
+    })
+
+    it('blocks encrypt() while an own-key conflict is live', async () => {
+      const { ctx, peerPublish } = makeContext('me@example.com')
+      // Inject a primary-mismatch so init records a conflict.
+      peerPublish('me@example.com', METADATA_NODE, {
+        id: 'current',
+        payload: {
+          name: 'public-keys-list',
+          attrs: { xmlns: OX_NS },
+          children: [
+            {
+              name: 'pubkey-metadata',
+              attrs: {
+                'v4-fingerprint': 'TAMPEREDFP000000',
+                'v6-fingerprint': 'TAMPEREDFP000000',
+                date: '2024-01-01T00:00:00Z',
+              },
+              children: [],
+            },
+          ],
+        },
+      })
+      await plugin.init(ctx)
+      expect(getOwnKeyConflict()).not.toBeNull()
+      const handle = await plugin.openConversation({
+        kind: 'direct',
+        peer: 'bob@example.com',
+      })
+      await expect(plugin.encrypt(handle, new Uint8Array([1, 2, 3]))).rejects.toMatchObject({
+        code: 'own-key-conflict',
+      })
+    })
+  })
+
+  describe('resolveOwnKeyConflict', () => {
+    it('overwriteServer re-publishes local key and clears the conflict', async () => {
+      const { ctx, peerPublish, published } = makeContext('me@example.com')
+      peerPublish('me@example.com', METADATA_NODE, {
+        id: 'current',
+        payload: {
+          name: 'public-keys-list',
+          attrs: { xmlns: OX_NS },
+          children: [
+            {
+              name: 'pubkey-metadata',
+              attrs: {
+                'v4-fingerprint': 'TAMPEREDFP000000',
+                'v6-fingerprint': 'TAMPEREDFP000000',
+                date: '2024-01-01T00:00:00Z',
+              },
+              children: [],
+            },
+          ],
+        },
+      })
+      await plugin.init(ctx)
+      expect(getOwnKeyConflict()).not.toBeNull()
+      expect(published).toHaveLength(0)
+
+      await plugin.resolveOwnKeyConflict_overwriteServer()
+
+      expect(getOwnKeyConflict()).toBeNull()
+      // Two publishes: data node then metadata node.
+      expect(published).toHaveLength(2)
+    })
+
+    it('importFromServer restores backup and clears the conflict', async () => {
+      // Set up: init produces a conflict (tampered primary).
+      const { ctx, peerPublish } = makeContext('me@example.com')
+      peerPublish('me@example.com', METADATA_NODE, {
+        id: 'current',
+        payload: {
+          name: 'public-keys-list',
+          attrs: { xmlns: OX_NS },
+          children: [
+            {
+              name: 'pubkey-metadata',
+              attrs: {
+                'v4-fingerprint': 'TAMPEREDFP000000',
+                'v6-fingerprint': 'TAMPEREDFP000000',
+                date: '2024-01-01T00:00:00Z',
+              },
+              children: [],
+            },
+          ],
+        },
+      })
+      await plugin.init(ctx)
+      expect(getOwnKeyConflict()).not.toBeNull()
+
+      // Publish a secret-key backup so restoreSecretKey finds it.
+      const fp = plugin.getOwnFingerprint()!
+      const backupArmored = await fake.invoke<string>('openpgp_backup_encrypt', {
+        accountJid: 'me@example.com',
+        passphrase: 'hunter2',
+      })
+      await ctx.xmpp.publishPEP(
+        'urn:xmpp:openpgp:0:secret-key',
+        {
+          id: 'current',
+          payload: {
+            name: 'secretkey',
+            attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+            children: [
+              {
+                name: 'data',
+                attrs: {},
+                children: [btoa(unescape(encodeURIComponent(backupArmored)))],
+              },
+            ],
+          },
+        },
+      )
+
+      const info = await plugin.resolveOwnKeyConflict_importFromServer('hunter2')
+      expect(getOwnKeyConflict()).toBeNull()
+      expect(info.fingerprint).toBe(fp)
     })
   })
 
