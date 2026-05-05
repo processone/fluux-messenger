@@ -58,9 +58,6 @@ export function RoomsList() {
   // Full list of rooms for plain arrow navigation (all rooms)
   const flatRooms = [...quickChats, ...joinedRooms, ...bookmarkedNotJoined]
 
-  // Active rooms only for Alt+arrow navigation (quick chats + joined, excludes bookmarked-not-joined)
-  const activeRooms = [...quickChats, ...joinedRooms]
-
   // Map from jid to flat index for quick lookup
   const jidToIndex = new Map(flatRooms.map((r, i) => [r.jid, i]))
 
@@ -103,19 +100,20 @@ export function RoomsList() {
   }
 
   // Keyboard navigation:
-  // - Plain arrows: highlight rooms (all rooms including bookmarked)
-  // - Alt+arrows: navigate AND switch to active rooms only (excludes bookmarked)
+  // - Plain arrows: highlight rooms (all rooms including bookmarked) — does not activate
   // - Enter: select highlighted room
+  // - Alt+arrows: handled by the global shortcut (useKeyboardShortcuts.goToNextItem)
+  //   which navigates joined rooms only. The list reacts via `activeItemId` so
+  //   the active room is scrolled into view.
   const { selectedIndex, isKeyboardNav, getItemProps, getItemAttribute, getContainerProps } = useListKeyboardNav({
     items: flatRooms,
-    altKeyItems: activeRooms, // Alt+arrow navigates only active rooms (excludes bookmarked)
     onSelect: handleRoomSelect,
     listRef,
     getItemId: (room) => room.jid,
     itemAttribute: 'data-room-jid',
     zoneRef,
     enableBounce: true,
-    activateOnAltNav: true, // Alt+arrow switches to the room, plain arrow only highlights
+    activeItemId: activeRoomJid,
   })
 
   if (rooms.length === 0) {

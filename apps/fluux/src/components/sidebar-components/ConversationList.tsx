@@ -84,6 +84,9 @@ export function ConversationList() {
   }
 
   // Keyboard navigation
+  // Alt+Arrow navigation is owned by the global handler in useKeyboardShortcuts
+  // (goToPreviousItem / goToNextItem). The list reacts via `activeItemId` so the
+  // active conversation is scrolled into view regardless of where focus lives.
   const { selectedIndex, isKeyboardNav, getItemProps, getItemAttribute, getContainerProps } = useListKeyboardNav({
     items: conversations,
     onSelect: (conv) => handleConversationClick(conv.id),
@@ -92,7 +95,7 @@ export function ConversationList() {
     itemAttribute: 'data-conv-id',
     zoneRef,
     enableBounce: true,
-    activateOnAltNav: true,
+    activeItemId: activeConversationId,
   })
 
   if (conversations.length === 0) {
@@ -174,7 +177,7 @@ export function ArchiveList() {
     itemAttribute: 'data-conv-id',
     zoneRef,
     enableBounce: true,
-    activateOnAltNav: true,
+    activeItemId: activeConversationId,
   })
 
   if (archivedConversations.length === 0) {
