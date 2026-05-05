@@ -281,9 +281,9 @@ export const ConversationItem = memo(function ConversationItem({
         onClick={handleClick}
         onMouseEnter={onMouseEnter}
         onMouseMove={onMouseMove}
-        className={`w-full px-2 py-1.5 rounded border flex items-center gap-3 text-start cursor-pointer
+        className={`w-full relative px-2 py-1.5 rounded border flex items-center gap-3 text-start cursor-pointer
                     transition-colors ${isActive
-                      ? 'bg-fluux-active text-fluux-text border-transparent'
+                      ? "bg-fluux-sidebar-item-active text-fluux-text border-transparent before:content-[''] before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r-full before:bg-fluux-sidebar-item-active-accent"
                       : isSelected
                         ? 'bg-fluux-hover text-fluux-text border-fluux-brand'
                         : isKeyboardNav

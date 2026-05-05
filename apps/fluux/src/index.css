@@ -186,6 +186,7 @@
   --fluux-sidebar-text-muted: var(--fluux-text-muted);
   --fluux-sidebar-item-hover: var(--fluux-bg-hover);
   --fluux-sidebar-item-active: var(--fluux-bg-active);
+  --fluux-sidebar-item-active-accent: var(--fluux-bg-accent);
   --fluux-sidebar-border: var(--fluux-divider-color);
 
   /* Icon rail */
