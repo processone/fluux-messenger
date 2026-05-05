@@ -357,7 +357,10 @@ function ChatLayoutContent() {
     // Only run once when we're online, on messages view, with conversations available
     if (status !== 'online' || hasAutoSelectedRef.current) return
     if (sidebarView !== 'messages') return
-    if (activeConversationId || activeRoomJid || selectedContactJid) return
+    // Only check the value owned by this tab — cross-tab clearing is handled by
+    // useViewNavigation. A stale activeRoomJid/selectedContactJid from another tab
+    // shouldn't block Messages auto-select.
+    if (activeConversationId) return
     if (conversationCount === 0) return
 
     // Skip auto-selection on mobile web - let user choose from sidebar
@@ -388,7 +391,37 @@ function ChatLayoutContent() {
       setActiveConversation(firstConversation.id)
       navigateToMessages(firstConversation.id)
     }
-  }, [status, sidebarView, activeConversationId, activeRoomJid, selectedContactJid, conversationCount, setActiveConversation, navigateToMessages])
+  }, [status, sidebarView, activeConversationId, conversationCount, setActiveConversation, navigateToMessages])
+
+  // Auto-select first joined room on initial connection if none selected.
+  // Mirrors the messages auto-select above. Required because navigateToView('rooms')
+  // can fire before joinedRooms is populated, leaving activeRoomJid null with no retry.
+  const hasAutoSelectedRoomRef = useRef(false)
+  // Subscribe to a stable count rather than the rooms Map to avoid re-renders during
+  // background sync (presence updates, MAM, etc.).
+  const roomCount = useRoomStore((s) => s.rooms?.size ?? 0)
+
+  useEffect(() => {
+    if (status !== 'online' || hasAutoSelectedRoomRef.current) return
+    if (sidebarView !== 'rooms') return
+    if (activeRoomJid) return
+    if (roomCount === 0) return
+
+    if (isMobileWeb()) {
+      hasAutoSelectedRoomRef.current = true
+      return
+    }
+
+    const roomState = roomStore.getState()
+    const allRooms = typeof roomState.allRooms === 'function' ? roomState.allRooms() : []
+    const joined = allRooms.filter(r => r.joined || r.isJoining)
+    const firstRoom = joined[0]
+    if (firstRoom) {
+      hasAutoSelectedRoomRef.current = true
+      setActiveRoom(firstRoom.jid)
+      navigateToRooms(firstRoom.jid)
+    }
+  }, [status, sidebarView, activeRoomJid, roomCount, setActiveRoom, navigateToRooms])
 
   // Ensure container has focus for keyboard shortcuts on mount and when window becomes visible
   useEffect(() => {
