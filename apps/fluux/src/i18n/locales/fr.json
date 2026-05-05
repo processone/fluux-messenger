@@ -150,7 +150,12 @@
             "removeVerification": "Retirer la vérification",
             "removeVerificationConfirm": "Retirer la vérification de la clé de {{name}} ? Vous devrez la re-vérifier via un second canal.",
             "removeVerificationSuccess": "Vérification retirée"
-        }
+        },
+        "tabs": {
+            "profile": "Profil",
+            "security": "Sécurité"
+        },
+        "actionsMenu": "Plus d'actions"
     },
     "rooms": {
         "backToRooms": "Retour aux salons",

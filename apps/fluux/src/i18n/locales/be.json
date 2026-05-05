@@ -149,7 +149,12 @@
             "removeVerification": "Зняць праверку",
             "removeVerificationConfirm": "Зняць праверку ключа {{name}}? Вам прыйдзецца пераправерыць праз другі канал.",
             "removeVerificationSuccess": "Праверка знята"
-        }
+        },
+        "tabs": {
+            "profile": "Profile",
+            "security": "Security"
+        },
+        "actionsMenu": "More actions"
     },
     "rooms": {
         "backToRooms": "Назад да пакояў",
@@ -479,7 +484,8 @@
             "confirmAction": "Адбіткі супадаюць — праверыць",
             "reconfirmAction": "Адбіткі пальцаў супадаюць — паўторна верыфікаваць",
             "alreadyVerifiedBanner": "Гэты ключ ужо быў верыфікаваны. Вы можаце паўторна верыфікаваць, калі ёсць сумненні.",
-            "confirmSuccess": "Адбітак правераны"
+            "confirmSuccess": "Адбітак правераны",
+            "revokeAction": "Remove verification"
         },
         "keyChangeBanner": {
             "title": "Шыфравальны ключ карыстальніка {{name}} змяніўся",

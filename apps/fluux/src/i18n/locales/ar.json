@@ -149,7 +149,12 @@
             "removeVerification": "إزالة التوثيق",
             "removeVerificationConfirm": "إزالة التوثيق لمفتاح {{name}}؟ ستحتاج إلى إعادة التوثيق عبر قناة ثانية.",
             "removeVerificationSuccess": "تمت إزالة التوثيق"
-        }
+        },
+        "tabs": {
+            "profile": "Profile",
+            "security": "Security"
+        },
+        "actionsMenu": "More actions"
     },
     "rooms": {
         "backToRooms": "العودة إلى الغرف",
@@ -479,7 +484,8 @@
             "confirmAction": "البصمات متطابقة — تحقّق",
             "reconfirmAction": "بصمات الأصابع متطابقة — إعادة التحقق",
             "alreadyVerifiedBanner": "تم التحقق من هذا المفتاح مسبقاً. يمكنك إعادة التحقق إذا كان لديك أي شك.",
-            "confirmSuccess": "تم التحقق من البصمة"
+            "confirmSuccess": "تم التحقق من البصمة",
+            "revokeAction": "Remove verification"
         },
         "keyChangeBanner": {
             "title": "تغيّر مفتاح التشفير الخاص بـ {{name}}",

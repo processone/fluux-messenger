@@ -150,7 +150,12 @@
             "removeVerification": "Odstrániť overenie",
             "removeVerificationConfirm": "Odstrániť overenie kľúča {{name}}? Budete musieť znova overiť prostredníctvom druhého kanála.",
             "removeVerificationSuccess": "Overenie odstránené"
-        }
+        },
+        "tabs": {
+            "profile": "Profile",
+            "security": "Security"
+        },
+        "actionsMenu": "More actions"
     },
     "rooms": {
         "backToRooms": "Späť do miestností",
@@ -480,7 +485,8 @@
             "confirmAction": "Odtlačky sa zhodujú — overiť",
             "reconfirmAction": "Odtlačky prstov súhlasia — znova overiť",
             "alreadyVerifiedBanner": "Tento kľúč už bol overený. Môžete ho znova overiť, ak máte pochybnosti.",
-            "confirmSuccess": "Odtlačok overený"
+            "confirmSuccess": "Odtlačok overený",
+            "revokeAction": "Remove verification"
         },
         "keyChangeBanner": {
             "title": "Šifrovací kľúč používateľa {{name}} sa zmenil",

@@ -151,7 +151,12 @@
             "removeVerification": "Remover verificação",
             "removeVerificationConfirm": "Remover a verificação da chave de {{name}}? Terá de verificar novamente através de um segundo canal.",
             "removeVerificationSuccess": "Verificação removida"
-        }
+        },
+        "tabs": {
+            "profile": "Profile",
+            "security": "Security"
+        },
+        "actionsMenu": "More actions"
     },
     "rooms": {
         "backToRooms": "Voltar às salas",
@@ -481,7 +486,8 @@
             "confirmAction": "As impressões coincidem — verificar",
             "reconfirmAction": "As impressões coincidem — reverificar",
             "alreadyVerifiedBanner": "Esta chave já foi verificada. Podes verificar novamente se tiveres alguma dúvida.",
-            "confirmSuccess": "Impressão digital verificada"
+            "confirmSuccess": "Impressão digital verificada",
+            "revokeAction": "Remove verification"
         },
         "keyChangeBanner": {
             "title": "A chave de cifragem de {{name}} mudou",

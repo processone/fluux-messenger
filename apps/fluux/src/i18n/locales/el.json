@@ -150,7 +150,12 @@
             "removeVerification": "Αφαίρεση επαλήθευσης",
             "removeVerificationConfirm": "Αφαίρεση επαλήθευσης για το κλειδί του {{name}}; Θα χρειαστεί να επαληθεύσετε εκ νέου μέσω δεύτερου καναλιού.",
             "removeVerificationSuccess": "Η επαλήθευση αφαιρέθηκε"
-        }
+        },
+        "tabs": {
+            "profile": "Profile",
+            "security": "Security"
+        },
+        "actionsMenu": "More actions"
     },
     "rooms": {
         "backToRooms": "Πίσω στα δωμάτια",
@@ -480,7 +485,8 @@
             "confirmAction": "Τα αποτυπώματα ταιριάζουν — επαλήθευση",
             "reconfirmAction": "Τα αποτυπώματα ταιριάζουν — επανεπαλήθευση",
             "alreadyVerifiedBanner": "Αυτό το κλειδί έχει ήδη επαληθευτεί. Μπορείτε να το επαληθεύσετε ξανά αν έχετε αμφιβολίες.",
-            "confirmSuccess": "Το αποτύπωμα επαληθεύτηκε"
+            "confirmSuccess": "Το αποτύπωμα επαληθεύτηκε",
+            "revokeAction": "Remove verification"
         },
         "keyChangeBanner": {
             "title": "Το κλειδί κρυπτογράφησης του χρήστη {{name}} έχει αλλάξει",

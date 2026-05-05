@@ -151,7 +151,12 @@
             "removeVerification": "Neħħi l-verifikazzjoni",
             "removeVerificationConfirm": "Tneħħi l-verifikazzjoni tal-aħjar ta' {{name}}? Tkun trid tivverifika mill-ġdid permezz ta' kanal ieħor.",
             "removeVerificationSuccess": "Verifikazzjoni mneħħija"
-        }
+        },
+        "tabs": {
+            "profile": "Profile",
+            "security": "Security"
+        },
+        "actionsMenu": "More actions"
     },
     "rooms": {
         "backToRooms": "Lura għall-kmamar",
@@ -481,7 +486,8 @@
             "confirmAction": "Il-marki jaqblu — ivverifika",
             "reconfirmAction": "Il-fingerprints jaqblu — riverifika",
             "alreadyVerifiedBanner": "Din il-ċavetta diġà ġiet ivverifikata. Tista' riverifika jekk għandek xi dubji.",
-            "confirmSuccess": "Marka tas-saba' verifikata"
+            "confirmSuccess": "Marka tas-saba' verifikata",
+            "revokeAction": "Remove verification"
         },
         "keyChangeBanner": {
             "title": "Iċ-ċavetta tal-kriptaġġ ta' {{name}} inbidlet",

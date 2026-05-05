@@ -149,7 +149,12 @@
             "removeVerification": "Видалити верифікацію",
             "removeVerificationConfirm": "Видалити верифікацію ключа {{name}}? Вам потрібно буде повторно перевірити через інший канал.",
             "removeVerificationSuccess": "Верифікацію видалено"
-        }
+        },
+        "tabs": {
+            "profile": "Profile",
+            "security": "Security"
+        },
+        "actionsMenu": "More actions"
     },
     "rooms": {
         "backToRooms": "Назад до кімнат",
@@ -479,7 +484,8 @@
             "confirmAction": "Відбитки збігаються — перевірити",
             "reconfirmAction": "Відбитки збігаються — повторна верифікація",
             "alreadyVerifiedBanner": "Цей ключ вже було верифіковано. Ви можете верифікувати повторно, якщо є сумніви.",
-            "confirmSuccess": "Відбиток перевірено"
+            "confirmSuccess": "Відбиток перевірено",
+            "revokeAction": "Remove verification"
         },
         "keyChangeBanner": {
             "title": "Ключ шифрування {{name}} змінився",

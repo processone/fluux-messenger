@@ -149,7 +149,12 @@
             "removeVerification": "Ellenőrzés eltávolítása",
             "removeVerificationConfirm": "Eltávolítja {{name}} kulcsának ellenőrzését? Újra kell ellenőriznie egy második csatornán keresztül.",
             "removeVerificationSuccess": "Ellenőrzés eltávolítva"
-        }
+        },
+        "tabs": {
+            "profile": "Profile",
+            "security": "Security"
+        },
+        "actionsMenu": "More actions"
     },
     "rooms": {
         "backToRooms": "Vissza a szobákhoz",
@@ -479,7 +484,8 @@
             "confirmAction": "Az ujjlenyomatok egyeznek — ellenőrzés",
             "reconfirmAction": "Az ujjlenyomatok egyeznek — újra ellenőrzés",
             "alreadyVerifiedBanner": "Ez a kulcs már ellenőrizve van. Újra ellenőrizheti, ha kétségei vannak.",
-            "confirmSuccess": "Ujjlenyomat ellenőrizve"
+            "confirmSuccess": "Ujjlenyomat ellenőrizve",
+            "revokeAction": "Remove verification"
         },
         "keyChangeBanner": {
             "title": "{{name}} titkosítási kulcsa megváltozott",

@@ -149,7 +149,12 @@
             "removeVerification": "Премахни потвърждението",
             "removeVerificationConfirm": "Да се премахне потвърждението за ключа на {{name}}? Ще трябва да го потвърдите отново чрез друг канал.",
             "removeVerificationSuccess": "Потвърждението е премахнато"
-        }
+        },
+        "tabs": {
+            "profile": "Profile",
+            "security": "Security"
+        },
+        "actionsMenu": "More actions"
     },
     "rooms": {
         "backToRooms": "Назад към стаите",
@@ -479,7 +484,8 @@
             "confirmAction": "Отпечатъците съвпадат — провери",
             "reconfirmAction": "Отпечатъците съвпадат — повторна верификация",
             "alreadyVerifiedBanner": "Този ключ вече е верифициран. Можете да го верифицирате отново, ако имате съмнения.",
-            "confirmSuccess": "Отпечатъкът е проверен"
+            "confirmSuccess": "Отпечатъкът е проверен",
+            "revokeAction": "Remove verification"
         },
         "keyChangeBanner": {
             "title": "Шифровъчният ключ на {{name}} се промени",

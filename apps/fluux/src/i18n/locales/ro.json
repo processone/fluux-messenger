@@ -151,7 +151,12 @@
             "removeVerification": "Elimină verificarea",
             "removeVerificationConfirm": "Eliminați verificarea pentru cheia lui {{name}}? Va trebui să reverificați printr-un al doilea canal.",
             "removeVerificationSuccess": "Verificare eliminată"
-        }
+        },
+        "tabs": {
+            "profile": "Profile",
+            "security": "Security"
+        },
+        "actionsMenu": "More actions"
     },
     "rooms": {
         "backToRooms": "Înapoi la camere",
@@ -481,7 +486,8 @@
             "confirmAction": "Amprentele se potrivesc — verifică",
             "reconfirmAction": "Amprentele se potrivesc — reverificați",
             "alreadyVerifiedBanner": "Această cheie a fost deja verificată. Puteți reverifica dacă aveți îndoieli.",
-            "confirmSuccess": "Amprentă verificată"
+            "confirmSuccess": "Amprentă verificată",
+            "revokeAction": "Remove verification"
         },
         "keyChangeBanner": {
             "title": "Cheia de criptare a lui {{name}} s-a schimbat",

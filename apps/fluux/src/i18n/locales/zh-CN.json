@@ -149,7 +149,12 @@
             "removeVerification": "移除验证",
             "removeVerificationConfirm": "移除对 {{name}} 密钥的验证？您需要通过第二个渠道重新验证。",
             "removeVerificationSuccess": "验证已移除"
-        }
+        },
+        "tabs": {
+            "profile": "Profile",
+            "security": "Security"
+        },
+        "actionsMenu": "More actions"
     },
     "rooms": {
         "backToRooms": "返回房间列表",
@@ -479,7 +484,8 @@
             "confirmAction": "指纹一致 — 验证",
             "reconfirmAction": "指纹匹配 — 重新验证",
             "alreadyVerifiedBanner": "此密钥已经过验证。如有疑虑，您可以重新验证。",
-            "confirmSuccess": "指纹已验证"
+            "confirmSuccess": "指纹已验证",
+            "revokeAction": "Remove verification"
         },
         "keyChangeBanner": {
             "title": "{{name}} 的加密密钥已更改",

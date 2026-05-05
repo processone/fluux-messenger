@@ -149,7 +149,12 @@
             "removeVerification": "Pašalinti patvirtinimą",
             "removeVerificationConfirm": "Pašalinti {{name}} rakto patvirtinimą? Turėsite iš naujo patvirtinti per antrą kanalą.",
             "removeVerificationSuccess": "Patvirtinimas pašalintas"
-        }
+        },
+        "tabs": {
+            "profile": "Profile",
+            "security": "Security"
+        },
+        "actionsMenu": "More actions"
     },
     "rooms": {
         "backToRooms": "Grįžti prie kambarių",
@@ -479,7 +484,8 @@
             "confirmAction": "Pirštų atspaudai sutampa — patvirtinti",
             "reconfirmAction": "Pirštų atspaudai sutampa — patvirtinti iš naujo",
             "alreadyVerifiedBanner": "Šis raktas jau buvo patvirtintas. Galite patvirtinti iš naujo, jei kyla abejonių.",
-            "confirmSuccess": "Pirštų atspaudas patvirtintas"
+            "confirmSuccess": "Pirštų atspaudas patvirtintas",
+            "revokeAction": "Remove verification"
         },
         "keyChangeBanner": {
             "title": "{{name}} šifravimo raktas pasikeitė",

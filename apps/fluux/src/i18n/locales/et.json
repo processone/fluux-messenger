@@ -151,7 +151,12 @@
             "removeVerification": "Eemalda kinnitamine",
             "removeVerificationConfirm": "Eemaldada {{name}} võtme kinnitamine? Peate uuesti kontrollima teise kanali kaudu.",
             "removeVerificationSuccess": "Kinnitamine eemaldatud"
-        }
+        },
+        "tabs": {
+            "profile": "Profile",
+            "security": "Security"
+        },
+        "actionsMenu": "More actions"
     },
     "rooms": {
         "backToRooms": "Tagasi tubade juurde",
@@ -481,7 +486,8 @@
             "confirmAction": "Sõrmejäljed langevad kokku — kinnita",
             "reconfirmAction": "Sõrmejäljed kattuvad — kinnita uuesti",
             "alreadyVerifiedBanner": "See võti on juba kinnitatud. Saate selle uuesti kinnitada, kui teil on kahtlusi.",
-            "confirmSuccess": "Sõrmejälg kinnitatud"
+            "confirmSuccess": "Sõrmejälg kinnitatud",
+            "revokeAction": "Remove verification"
         },
         "keyChangeBanner": {
             "title": "{{name}} krüpteerimisvõti on muutunud",

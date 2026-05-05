@@ -149,7 +149,12 @@
             "removeVerification": "Fjern bekræftelse",
             "removeVerificationConfirm": "Fjerne bekræftelse af {{name}}s nøgle? Du skal bekræfte igen via en anden kanal.",
             "removeVerificationSuccess": "Bekræftelse fjernet"
-        }
+        },
+        "tabs": {
+            "profile": "Profile",
+            "security": "Security"
+        },
+        "actionsMenu": "More actions"
     },
     "rooms": {
         "backToRooms": "Tilbage til rum",
@@ -479,7 +484,8 @@
             "confirmAction": "Fingeraftrykkene matcher — verificer",
             "reconfirmAction": "Fingeraftryk stemmer overens — genbekræft",
             "alreadyVerifiedBanner": "Denne nøgle er allerede verificeret. Du kan verificere igen, hvis du er i tvil.",
-            "confirmSuccess": "Fingeraftryk verificeret"
+            "confirmSuccess": "Fingeraftryk verificeret",
+            "revokeAction": "Remove verification"
         },
         "keyChangeBanner": {
             "title": "{{name}}s krypteringsnøgle er ændret",

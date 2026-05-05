@@ -149,7 +149,12 @@
             "removeVerification": "Ta bort verifiering",
             "removeVerificationConfirm": "Ta bort verifieringen för {{name}}s nyckel? Du måste verifiera igen via en annan kanal.",
             "removeVerificationSuccess": "Verifiering borttagen"
-        }
+        },
+        "tabs": {
+            "profile": "Profile",
+            "security": "Security"
+        },
+        "actionsMenu": "More actions"
     },
     "rooms": {
         "backToRooms": "Tillbaka till rum",
@@ -479,7 +484,8 @@
             "confirmAction": "Fingeravtrycken matchar — verifiera",
             "reconfirmAction": "Fingeravtrycken stämmer — reverifiering",
             "alreadyVerifiedBanner": "Denna nyckel har redan verifierats. Du kan reverifiera om du har tvivel.",
-            "confirmSuccess": "Fingeravtryck verifierat"
+            "confirmSuccess": "Fingeravtryck verifierat",
+            "revokeAction": "Remove verification"
         },
         "keyChangeBanner": {
             "title": "{{name}}s krypteringsnyckel har ändrats",

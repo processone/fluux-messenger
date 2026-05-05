@@ -151,7 +151,12 @@
             "removeVerification": "Verifizierung entfernen",
             "removeVerificationConfirm": "Verifizierung des Schlüssels von {{name}} entfernen? Sie müssen über einen zweiten Kanal erneut verifizieren.",
             "removeVerificationSuccess": "Verifizierung entfernt"
-        }
+        },
+        "tabs": {
+            "profile": "Profile",
+            "security": "Security"
+        },
+        "actionsMenu": "More actions"
     },
     "rooms": {
         "backToRooms": "Zurück zu Räumen",
@@ -481,7 +486,8 @@
             "confirmAction": "Fingerabdrücke stimmen überein — verifizieren",
             "reconfirmAction": "Fingerabdrücke stimmen überein — neu verifizieren",
             "alreadyVerifiedBanner": "Dieser Schlüssel wurde bereits verifiziert. Sie können ihn erneut verifizieren, wenn Sie Zweifel haben.",
-            "confirmSuccess": "Fingerabdruck verifiziert"
+            "confirmSuccess": "Fingerabdruck verifiziert",
+            "revokeAction": "Remove verification"
         },
         "keyChangeBanner": {
             "title": "Der Verschlüsselungsschlüssel von {{name}} hat sich geändert",

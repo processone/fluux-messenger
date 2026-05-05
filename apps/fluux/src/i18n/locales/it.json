@@ -151,7 +151,12 @@
             "removeVerification": "Rimuovi verifica",
             "removeVerificationConfirm": "Rimuovere la verifica della chiave di {{name}}? Sarà necessario verificare nuovamente tramite un secondo canale.",
             "removeVerificationSuccess": "Verifica rimossa"
-        }
+        },
+        "tabs": {
+            "profile": "Profile",
+            "security": "Security"
+        },
+        "actionsMenu": "More actions"
     },
     "rooms": {
         "backToRooms": "Torna alle stanze",
@@ -481,7 +486,8 @@
             "confirmAction": "Le impronte corrispondono — verifica",
             "reconfirmAction": "Le impronte corrispondono — riverifica",
             "alreadyVerifiedBanner": "Questa chiave è già stata verificata. Puoi riverificarla se hai dubbi.",
-            "confirmSuccess": "Impronta verificata"
+            "confirmSuccess": "Impronta verificata",
+            "revokeAction": "Remove verification"
         },
         "keyChangeBanner": {
             "title": "La chiave di cifratura di {{name}} è cambiata",

@@ -149,7 +149,12 @@
             "removeVerification": "Poista vahvistus",
             "removeVerificationConfirm": "Poistetaanko vahvistus {{name}}n avaimelta? Sinun täytyy vahvistaa uudelleen toisen kanavan kautta.",
             "removeVerificationSuccess": "Vahvistus poistettu"
-        }
+        },
+        "tabs": {
+            "profile": "Profile",
+            "security": "Security"
+        },
+        "actionsMenu": "More actions"
     },
     "rooms": {
         "backToRooms": "Takaisin huoneisiin",
@@ -479,7 +484,8 @@
             "confirmAction": "Sormenjäljet täsmäävät — vahvista",
             "reconfirmAction": "Sormenjäljet täsmäävät — vahvista uudelleen",
             "alreadyVerifiedBanner": "Tämä avain on jo vahvistettu. Voit vahvistaa sen uudelleen, jos sinulla on epäilyksiä.",
-            "confirmSuccess": "Sormenjälki vahvistettu"
+            "confirmSuccess": "Sormenjälki vahvistettu",
+            "revokeAction": "Remove verification"
         },
         "keyChangeBanner": {
             "title": "Käyttäjän {{name}} salausavain on vaihtunut",

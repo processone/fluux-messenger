@@ -149,7 +149,12 @@
             "removeVerification": "Fjern bekreftelse",
             "removeVerificationConfirm": "Fjerne bekreftelse for {{name}}s nøkkel? Du må bekrefte på nytt via en annen kanal.",
             "removeVerificationSuccess": "Bekreftelse fjernet"
-        }
+        },
+        "tabs": {
+            "profile": "Profile",
+            "security": "Security"
+        },
+        "actionsMenu": "More actions"
     },
     "rooms": {
         "backToRooms": "Tilbake til rom",
@@ -479,7 +484,8 @@
             "confirmAction": "Fingeravtrykkene stemmer — verifiser",
             "reconfirmAction": "Fingeravtrykk stemmer — bekreft på nytt",
             "alreadyVerifiedBanner": "Denne nøkkelen er allerede verifisert. Du kan verifisere på nytt hvis du er i tvil.",
-            "confirmSuccess": "Fingeravtrykk verifisert"
+            "confirmSuccess": "Fingeravtrykk verifisert",
+            "revokeAction": "Remove verification"
         },
         "keyChangeBanner": {
             "title": "{{name}}s krypteringsnøkkel har endret seg",

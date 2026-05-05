@@ -149,7 +149,12 @@
             "removeVerification": "Fjarlægja staðfestingu",
             "removeVerificationConfirm": "Fjarlægja staðfestingu fyrir lykil {{name}}? Þú þarft að staðfesta aftur í gegnum annan rás.",
             "removeVerificationSuccess": "Staðfesting fjarlægð"
-        }
+        },
+        "tabs": {
+            "profile": "Profile",
+            "security": "Security"
+        },
+        "actionsMenu": "More actions"
     },
     "rooms": {
         "backToRooms": "Til baka í herbergi",
@@ -479,7 +484,8 @@
             "confirmAction": "Fingraförin passa — staðfesta",
             "reconfirmAction": "Fingrafar stemma — endurstaðfesta",
             "alreadyVerifiedBanner": "Þessi lykill hefur þegar verið staðfestur. Þú getur endurstaðfest ef þig grunar eitthvað.",
-            "confirmSuccess": "Fingrafar staðfest"
+            "confirmSuccess": "Fingrafar staðfest",
+            "revokeAction": "Remove verification"
         },
         "keyChangeBanner": {
             "title": "Dulritunarlykill {{name}} hefur breyst",

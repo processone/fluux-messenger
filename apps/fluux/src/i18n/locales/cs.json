@@ -151,7 +151,12 @@
             "removeVerification": "Odebrat ověření",
             "removeVerificationConfirm": "Odebrat ověření klíče {{name}}? Budete muset klíč znovu ověřit prostřednictvím druhého kanálu.",
             "removeVerificationSuccess": "Ověření odebráno"
-        }
+        },
+        "tabs": {
+            "profile": "Profile",
+            "security": "Security"
+        },
+        "actionsMenu": "More actions"
     },
     "rooms": {
         "backToRooms": "Zpět do místností",
@@ -481,7 +486,8 @@
             "confirmAction": "Otisky se shodují — ověřit",
             "reconfirmAction": "Otisky souhlasí — znovu ověřit",
             "alreadyVerifiedBanner": "Tento klíč již byl ověřen. Můžete jej znovu ověřit, pokud máte pochybnosti.",
-            "confirmSuccess": "Otisk ověřen"
+            "confirmSuccess": "Otisk ověřen",
+            "revokeAction": "Remove verification"
         },
         "keyChangeBanner": {
             "title": "Šifrovací klíč uživatele {{name}} se změnil",

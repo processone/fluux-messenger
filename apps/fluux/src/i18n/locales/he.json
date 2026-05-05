@@ -149,7 +149,12 @@
             "removeVerification": "הסר אימות",
             "removeVerificationConfirm": "להסיר את האימות עבור המפתח של {{name}}? יהיה עליך לאמת מחדש דרך ערוץ שני.",
             "removeVerificationSuccess": "האימות הוסר"
-        }
+        },
+        "tabs": {
+            "profile": "Profile",
+            "security": "Security"
+        },
+        "actionsMenu": "More actions"
     },
     "rooms": {
         "backToRooms": "חזרה לחדרים",
@@ -479,7 +484,8 @@
             "confirmAction": "טביעות האצבע תואמות — אמת",
             "reconfirmAction": "טביעות האצבע תואמות — אימות מחדש",
             "alreadyVerifiedBanner": "מפתח זה כבר אומת. ניתן לאמת מחדש אם יש לך ספקות.",
-            "confirmSuccess": "טביעת אצבע אומתה"
+            "confirmSuccess": "טביעת אצבע אומתה",
+            "revokeAction": "Remove verification"
         },
         "keyChangeBanner": {
             "title": "מפתח ההצפנה של {{name}} השתנה",

@@ -150,7 +150,12 @@
             "removeVerification": "Noņemt verifikāciju",
             "removeVerificationConfirm": "Noņemt verifikāciju {{name}} atslēgai? Jums būs atkārtoti jāverificē caur otru kanālu.",
             "removeVerificationSuccess": "Verifikācija noņemta"
-        }
+        },
+        "tabs": {
+            "profile": "Profile",
+            "security": "Security"
+        },
+        "actionsMenu": "More actions"
     },
     "rooms": {
         "backToRooms": "Atpakaļ pie istabām",
@@ -480,7 +485,8 @@
             "confirmAction": "Pirkstu nospiedumi sakrīt — pārbaudīt",
             "reconfirmAction": "Pirkstu nospiedumi sakrīt — atkārtoti verificēt",
             "alreadyVerifiedBanner": "Šī atslēga jau ir verificēta. Varat to verificēt atkārtoti, ja jums ir šaubas.",
-            "confirmSuccess": "Pirkstu nospiedums pārbaudīts"
+            "confirmSuccess": "Pirkstu nospiedums pārbaudīts",
+            "revokeAction": "Remove verification"
         },
         "keyChangeBanner": {
             "title": "{{name}} šifrēšanas atslēga ir mainījusies",

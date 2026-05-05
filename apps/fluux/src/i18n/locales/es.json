@@ -151,7 +151,12 @@
             "removeVerification": "Eliminar verificación",
             "removeVerificationConfirm": "¿Eliminar la verificación de la clave de {{name}}? Deberás volver a verificar a través de un segundo canal.",
             "removeVerificationSuccess": "Verificación eliminada"
-        }
+        },
+        "tabs": {
+            "profile": "Profile",
+            "security": "Security"
+        },
+        "actionsMenu": "More actions"
     },
     "rooms": {
         "backToRooms": "Volver a salas",
@@ -481,7 +486,8 @@
             "confirmAction": "Las huellas coinciden — verificar",
             "reconfirmAction": "Las huellas coinciden — volver a verificar",
             "alreadyVerifiedBanner": "Esta clave ya ha sido verificada. Puedes volver a verificarla si tienes alguna duda.",
-            "confirmSuccess": "Huella verificada"
+            "confirmSuccess": "Huella verificada",
+            "revokeAction": "Remove verification"
         },
         "keyChangeBanner": {
             "title": "La clave de cifrado de {{name}} ha cambiado",

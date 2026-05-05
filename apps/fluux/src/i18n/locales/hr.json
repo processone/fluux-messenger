@@ -149,7 +149,12 @@
             "removeVerification": "Ukloni provjeru",
             "removeVerificationConfirm": "Ukloniti provjeru za ključ od {{name}}? Morat ćete ga ponovo provjeriti putem drugog kanala.",
             "removeVerificationSuccess": "Provjera uklonjena"
-        }
+        },
+        "tabs": {
+            "profile": "Profile",
+            "security": "Security"
+        },
+        "actionsMenu": "More actions"
     },
     "rooms": {
         "backToRooms": "Natrag na sobe",
@@ -479,7 +484,8 @@
             "confirmAction": "Otisci se podudaraju — provjeri",
             "reconfirmAction": "Otisci prstiju se podudaraju — ponovna provjera",
             "alreadyVerifiedBanner": "Ovaj ključ je već provjeren. Možete ga ponovo provjeriti ako imate sumnje.",
-            "confirmSuccess": "Otisak provjeren"
+            "confirmSuccess": "Otisak provjeren",
+            "revokeAction": "Remove verification"
         },
         "keyChangeBanner": {
             "title": "Šifrirajući ključ korisnika {{name}} je promijenjen",
