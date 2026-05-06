@@ -39,7 +39,7 @@ use openpgp::{
     cert::{amalgamation::ValidateAmalgamation, Cert, CertBuilder},
     crypto::SessionKey,
     packet::{
-        key::{self, Key6},
+        key::{self, Key4, Key6},
         signature::SignatureBuilder,
         Key, Packet, PKESK, SKESK,
     },
@@ -350,6 +350,7 @@ impl OpenpgpState {
             crate::openpgp_backup::encrypt_tsk_with_passphrase(
                 &bundle.secret_armored,
                 &passphrase,
+                USE_V6_KEYS,
             )
             .map_err(anyhow_to_string)
         })
@@ -728,17 +729,21 @@ pub async fn openpgp_rotate_encryption_subkey(
 // Sequoia-backed primitives
 // ---------------------------------------------------------------------------
 
+/// Switch to `true` to generate RFC 9580 v6 keys (64-char SHA-256
+/// fingerprints, Argon2id at rest). Set to `false` for RFC 4880 v4 keys
+/// (40-char SHA-1 fingerprints, classic S2K) which interoperate with
+/// Gajim and other current XEP-0373 implementations.
+const USE_V6_KEYS: bool = false;
+
 /// Generate a fresh general-purpose cert for `user_id`. Kept separate
 /// from [`bundle_from_cert`] so [`OpenpgpState::ensure_key`] can reuse
 /// the serialization path for certs loaded from disk.
 ///
-/// The cert is emitted under the RFC 9580 profile (v6 keys). That's a
-/// prerequisite for protecting the secret packets with Argon2id S2K +
-/// AEAD at rest (RFC 9580 §3.7 restricts Argon2 to v6 keys), and aligns
-/// the project with the modern OpenPGP wire format going forward. We
-/// never generate v4 keys on this branch; the on-disk storage still
-/// knows how to decrypt any stray v4 cert a user might carry over from
-/// a pre-v6 install.
+/// The key version is controlled by [`USE_V6_KEYS`]:
+/// - `true`  → RFC 9580 profile (v6 keys, Argon2id S2K + AEAD at rest)
+/// - `false` → RFC 4880 profile (v4 keys, classic S2K, broad interop)
+///
+/// The on-disk storage handles both versions transparently.
 ///
 /// # Key structure
 ///
@@ -755,9 +760,14 @@ pub async fn openpgp_rotate_encryption_subkey(
 ///   picks only the new one while retained subkeys stay decryption-capable
 ///   for historical MAM replay.
 fn generate_cert(user_id: &str) -> Result<Cert> {
+    let profile = if USE_V6_KEYS {
+        openpgp::Profile::RFC9580
+    } else {
+        openpgp::Profile::RFC4880
+    };
     let (cert, _revocation) = CertBuilder::general_purpose(Some(user_id))
-        .set_profile(openpgp::Profile::RFC9580)
-        .context("select RFC 9580 / v6 key profile")?
+        .set_profile(profile)
+        .context("select OpenPGP key profile")?
         .generate()
         .context("generate OpenPGP cert")?;
     Ok(cert)
@@ -863,11 +873,15 @@ fn rotate_encryption_subkey(cert: Cert) -> Result<Cert> {
         rotation_packets.push(expired_binding.into());
     }
 
-    // Generate the new [E] subkey. v6 X25519 matches the RFC 9580 profile
-    // `general_purpose` emits for freshly generated certs.
-    let new_subkey: Key<_, key::SubordinateRole> = Key6::generate_x25519()
-        .context("generate new X25519 encryption subkey")?
-        .into();
+    let new_subkey: Key<_, key::SubordinateRole> = if USE_V6_KEYS {
+        Key6::generate_x25519()
+            .context("generate new v6 X25519 encryption subkey")?
+            .into()
+    } else {
+        Key4::generate_x25519()
+            .context("generate new v4 X25519 encryption subkey")?
+            .into()
+    };
 
     let new_builder = SignatureBuilder::new(SignatureType::SubkeyBinding)
         .set_signature_creation_time(now)
@@ -1197,10 +1211,8 @@ mod tests {
             .unwrap();
         let fp = fingerprint_of(&bundle.public_armored).unwrap();
         assert_eq!(fp, bundle.fingerprint);
-        // v6 fingerprints (RFC 9580) are SHA-256 truncation → 32 bytes
-        // → 64 hex chars. v4 keys used 20 bytes → 40 hex chars; we
-        // switched to v6 as part of the Argon2id-at-rest upgrade.
-        assert_eq!(bundle.fingerprint.len(), 64);
+        let expected_fp_len = if super::USE_V6_KEYS { 64 } else { 40 };
+        assert_eq!(bundle.fingerprint.len(), expected_fp_len);
         // Tests use the filesystem fallback; production tests live in
         // the storage module. Surfacing the flag on the bundle is what
         // the TS side reads, so worth asserting here.
@@ -1534,7 +1546,8 @@ mod tests {
             .ensure_key("alice@example.com".into(), "Alice".into())
             .await
             .unwrap();
-        assert_eq!(bundle.fingerprint.len(), 64);
+        let expected_fp_len = if super::USE_V6_KEYS { 64 } else { 40 };
+        assert_eq!(bundle.fingerprint.len(), expected_fp_len);
         assert_eq!(
             state.blocking_run_count(),
             1,
@@ -1632,9 +1645,11 @@ mod tests {
         let cert = Cert::from_bytes(bundle.secret_armored.as_bytes()).unwrap();
 
         // Primary certifies (that's what a cert's fingerprint identifies).
-        assert!(
-            cert.primary_key().key().version() == 6,
-            "rotation expects a v6 primary (RFC 9580 profile)"
+        let expected_version = if super::USE_V6_KEYS { 6 } else { 4 };
+        assert_eq!(
+            cert.primary_key().key().version(),
+            expected_version,
+            "key version must match USE_V6_KEYS flag"
         );
 
         // Exactly one alive encryption subkey before rotation.
@@ -1987,11 +2002,10 @@ mod tests {
             .unwrap();
         assert_ne!(
             generated.fingerprint,
-            // Just assert it's a valid v6 fingerprint; we can't compare
-            // to the "correct" one because device_b never saw it.
             String::new(),
             "fresh generation must still succeed after a failed import"
         );
-        assert_eq!(generated.fingerprint.len(), 64);
+        let expected_fp_len = if super::USE_V6_KEYS { 64 } else { 40 };
+        assert_eq!(generated.fingerprint.len(), expected_fp_len);
     }
 }

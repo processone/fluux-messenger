@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Copy, Check, AlertTriangle, Loader2, RefreshCw } from 'lucide-react'
-import { generateBackupPassphrase } from '@/e2ee/passphraseGenerator'
+import { generateBackupPassphrase, generateBackupCode, USE_V6_KEYS } from '@/e2ee/passphraseGenerator'
 
 // Draw a fresh passphrase in the user's UI language. 8 words ×
 // 11 bits (BIP-39) = 88 bits, which matches the acceptability gate
@@ -64,7 +64,10 @@ export function BackupPassphraseDialog({
   useEffect(() => {
     let cancelled = false
     setPassphrase(null)
-    generateBackupPassphrase(BACKUP_WORD_COUNT, i18n.language)
+    const generate = USE_V6_KEYS
+      ? generateBackupPassphrase(BACKUP_WORD_COUNT, i18n.language)
+      : Promise.resolve(generateBackupCode())
+    generate
       .then((pp) => {
         if (!cancelled) setPassphrase(pp)
       })
@@ -90,7 +93,9 @@ export function BackupPassphraseDialog({
     setIsCopied(false)
     setPassphrase(null)
     try {
-      const pp = await generateBackupPassphrase(BACKUP_WORD_COUNT, i18n.language)
+      const pp = USE_V6_KEYS
+        ? await generateBackupPassphrase(BACKUP_WORD_COUNT, i18n.language)
+        : generateBackupCode()
       setPassphrase(pp)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -124,10 +129,11 @@ export function BackupPassphraseDialog({
     }
   }, [onConfirm, passphrase])
 
+  const isBackupCode = !USE_V6_KEYS
   // Group the space-separated words into a grid of three columns so
   // long passphrases wrap cleanly and each word is readable on its
   // own — transcription onto a second device is the main use case.
-  const wordGroups = useMemo(() => (passphrase ? passphrase.split(' ') : []), [passphrase])
+  const wordGroups = useMemo(() => (passphrase && !isBackupCode ? passphrase.split(' ') : []), [passphrase, isBackupCode])
 
   return (
     <div
@@ -162,19 +168,22 @@ export function BackupPassphraseDialog({
         {/* Passphrase display */}
         <div className="rounded-lg border border-fluux-hover bg-fluux-bg p-3 mb-2 min-h-[3.5rem] flex items-center justify-center">
           {passphrase ? (
-            <div className="grid grid-cols-3 gap-2 w-full">
-              {wordGroups.map((word, i) => (
-                <code
-                  // Word positions are stable within a single passphrase instance;
-                  // React key is the index, which is fine because the list is
-                  // never reordered, only replaced on regenerate.
-                  key={i}
-                  className="text-sm font-mono text-fluux-text text-center py-1 rounded bg-fluux-hover/50"
-                >
-                  {word}
-                </code>
-              ))}
-            </div>
+            isBackupCode ? (
+              <code className="text-base font-mono text-fluux-text tracking-wider select-all">
+                {passphrase}
+              </code>
+            ) : (
+              <div className="grid grid-cols-3 gap-2 w-full">
+                {wordGroups.map((word, i) => (
+                  <code
+                    key={i}
+                    className="text-sm font-mono text-fluux-text text-center py-1 rounded bg-fluux-hover/50"
+                  >
+                    {word}
+                  </code>
+                ))}
+              </div>
+            )
           ) : (
             <Loader2 className="w-4 h-4 animate-spin text-fluux-muted" />
           )}

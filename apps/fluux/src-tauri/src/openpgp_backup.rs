@@ -73,12 +73,21 @@ fn normalize_passphrase(raw: &str) -> String {
 /// Encrypt an armored TSK to `passphrase`, returning an armored OpenPGP
 /// message ready for publication on the XEP-0373 §5 secret-key node.
 ///
+/// When `use_aead` is true the message uses SEIPD v2 (AES-256 + OCB)
+/// with Argon2id S2K (RFC 9580). When false it falls back to SEIPD v1
+/// (AES-256 + CFB) with iterated-salted S2K (RFC 4880), which
+/// interoperates with Gajim and other current XEP-0373 implementations.
+///
 /// The caller is expected to pass a TSK whose secret packets are
 /// *unencrypted at the packet level* — typically the `secret_armored`
 /// out of an `OpenpgpState::KeyBundle`, where `storage::load` has
 /// already undone the at-rest Argon2id wrap. The backup's only
 /// protection is the outer symmetric encryption.
-pub fn encrypt_tsk_with_passphrase(tsk_armored: &str, passphrase: &str) -> Result<String> {
+pub fn encrypt_tsk_with_passphrase(
+    tsk_armored: &str,
+    passphrase: &str,
+    use_aead: bool,
+) -> Result<String> {
     let cert = Cert::from_bytes(tsk_armored.as_bytes()).context("parse TSK to back up")?;
     if !cert.is_tsk() {
         return Err(anyhow!(
@@ -106,11 +115,15 @@ pub fn encrypt_tsk_with_passphrase(tsk_armored: &str, passphrase: &str) -> Resul
             .kind(openpgp::armor::Kind::Message)
             .build()
             .context("build armorer")?;
-        let message = Encryptor::with_passwords(message, vec![password])
-            .symmetric_algo(SymmetricAlgorithm::AES256)
-            .aead_algo(AEADAlgorithm::OCB)
-            .build()
-            .context("build encryptor")?;
+        let enc = Encryptor::with_passwords(message, vec![password])
+            .symmetric_algo(SymmetricAlgorithm::AES256);
+        let message = if use_aead {
+            enc.aead_algo(AEADAlgorithm::OCB)
+                .build()
+                .context("build AEAD encryptor")?
+        } else {
+            enc.build().context("build CFB encryptor")?
+        };
         let mut literal = LiteralWriter::new(message)
             .build()
             .context("build literal writer")?;
@@ -211,7 +224,7 @@ mod tests {
     fn round_trip_preserves_fingerprint() {
         let tsk = fresh_tsk();
         let original_fp = Cert::from_bytes(tsk.as_bytes()).unwrap().fingerprint().to_hex();
-        let backup = encrypt_tsk_with_passphrase(&tsk, "correct-horse-battery-staple").unwrap();
+        let backup = encrypt_tsk_with_passphrase(&tsk, "correct-horse-battery-staple", true).unwrap();
         assert!(
             backup.contains("BEGIN PGP MESSAGE"),
             "output must be an armored OpenPGP message, got: {backup}"
@@ -228,7 +241,7 @@ mod tests {
     #[test]
     fn recovered_tsk_carries_secret_packets() {
         let tsk = fresh_tsk();
-        let backup = encrypt_tsk_with_passphrase(&tsk, "pp").unwrap();
+        let backup = encrypt_tsk_with_passphrase(&tsk, "pp", true).unwrap();
         let recovered = decrypt_tsk_with_passphrase(&backup, "pp").unwrap();
         let cert = Cert::from_bytes(recovered.as_bytes()).unwrap();
         assert!(
@@ -240,7 +253,7 @@ mod tests {
     #[test]
     fn wrong_passphrase_does_not_yield_tsk() {
         let tsk = fresh_tsk();
-        let backup = encrypt_tsk_with_passphrase(&tsk, "right").unwrap();
+        let backup = encrypt_tsk_with_passphrase(&tsk, "right", true).unwrap();
         let err = decrypt_tsk_with_passphrase(&backup, "wrong")
             .expect_err("decrypting with the wrong passphrase must fail");
         // Error surface is whatever Sequoia says on SKESK mismatch; the
@@ -258,7 +271,7 @@ mod tests {
             .generate()
             .unwrap();
         let public_armored = String::from_utf8(cert.armored().to_vec().unwrap()).unwrap();
-        let err = encrypt_tsk_with_passphrase(&public_armored, "pp")
+        let err = encrypt_tsk_with_passphrase(&public_armored, "pp", true)
             .expect_err("public-only input must be rejected");
         assert!(
             format!("{err:#}").contains("public key"),
@@ -320,7 +333,7 @@ mod tests {
         // to encrypt rather than produce a backup that unlocks on any
         // whitespace-only guess.
         let tsk = fresh_tsk();
-        let err = encrypt_tsk_with_passphrase(&tsk, "   \t\n  ")
+        let err = encrypt_tsk_with_passphrase(&tsk, "   \t\n  ", true)
             .expect_err("whitespace-only passphrase must be rejected");
         assert!(format!("{err:#}").contains("empty"));
     }
@@ -333,7 +346,7 @@ mod tests {
         let tsk = fresh_tsk();
         let nfc_pp = "caf\u{00E9} soleil"; // é precomposed
         let nfd_pp = "cafe\u{0301} soleil"; // é decomposed
-        let backup = encrypt_tsk_with_passphrase(&tsk, nfc_pp).unwrap();
+        let backup = encrypt_tsk_with_passphrase(&tsk, nfc_pp, true).unwrap();
         let recovered = decrypt_tsk_with_passphrase(&backup, nfd_pp)
             .expect("NFD input must unlock an NFC-encrypted backup");
         assert!(Cert::from_bytes(recovered.as_bytes()).unwrap().is_tsk());
@@ -346,7 +359,7 @@ mod tests {
         let tsk = fresh_tsk();
         let generated = "able bacon chair daisy eagle";
         let typed = "  ABLE  bacon\tchair  daisy eagle  ";
-        let backup = encrypt_tsk_with_passphrase(&tsk, generated).unwrap();
+        let backup = encrypt_tsk_with_passphrase(&tsk, generated, true).unwrap();
         let recovered = decrypt_tsk_with_passphrase(&backup, typed)
             .expect("whitespace/case variants must unlock");
         assert!(Cert::from_bytes(recovered.as_bytes()).unwrap().is_tsk());
@@ -359,12 +372,27 @@ mod tests {
         // round-trip still preserves fingerprint-plus-secret, the recovered
         // TSK is fit to persist via openpgp_storage::KeyStorage::save.
         let tsk = fresh_tsk();
-        let first = encrypt_tsk_with_passphrase(&tsk, "one").unwrap();
+        let first = encrypt_tsk_with_passphrase(&tsk, "one", true).unwrap();
         let once = decrypt_tsk_with_passphrase(&first, "one").unwrap();
-        let second = encrypt_tsk_with_passphrase(&once, "two").unwrap();
+        let second = encrypt_tsk_with_passphrase(&once, "two", true).unwrap();
         let twice = decrypt_tsk_with_passphrase(&second, "two").unwrap();
         let original_fp = Cert::from_bytes(tsk.as_bytes()).unwrap().fingerprint().to_hex();
         let twice_fp = Cert::from_bytes(twice.as_bytes()).unwrap().fingerprint().to_hex();
         assert_eq!(twice_fp, original_fp);
+    }
+
+    #[test]
+    fn round_trip_without_aead_uses_cfb() {
+        let tsk = fresh_tsk();
+        let original_fp = Cert::from_bytes(tsk.as_bytes()).unwrap().fingerprint().to_hex();
+        let backup = encrypt_tsk_with_passphrase(&tsk, "v4-compat-test", false).unwrap();
+        assert!(backup.contains("BEGIN PGP MESSAGE"));
+        let recovered = decrypt_tsk_with_passphrase(&backup, "v4-compat-test")
+            .expect("non-AEAD round-trip must succeed");
+        let recovered_fp = Cert::from_bytes(recovered.as_bytes())
+            .unwrap()
+            .fingerprint()
+            .to_hex();
+        assert_eq!(recovered_fp, original_fp);
     }
 }

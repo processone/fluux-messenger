@@ -8,9 +8,8 @@
  *
  * # Key model
  *
- * - One ECC Curve25519 v4 key per account. v4 fingerprints are 40 hex chars;
- *   the base class emits both `v4-fingerprint` and `v6-fingerprint` attributes
- *   so Sequoia v6-key readers also pick up web-generated keys.
+ * - One ECC Curve25519 key per account. The key version (v4 or v6) is
+ *   controlled by {@link USE_V6_KEYS} — see the matching flag in openpgp.rs.
  * - The private key is stored encrypted-under-passphrase in IndexedDB
  *   (via the plugin's namespaced {@link StorageBackend}).
  * - The decrypted private key is held in module memory for the session;
@@ -28,6 +27,7 @@ import type { PrivateKey } from 'openpgp'
 import { E2EEPluginError } from '@fluux/sdk'
 import { OpenPGPPluginBase, type DecryptOutput, type KeyBundle } from './OpenPGPPluginBase'
 import { clearSessionPassphrase, getSessionPassphrase, setSessionPassphrase } from './webPassphraseStore'
+import { USE_V6_KEYS } from './passphraseGenerator'
 
 const PRIVATE_KEY_STORAGE_KEY = 'private-key'
 
@@ -330,7 +330,7 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
     const { generateKey, encryptKey } = await import('openpgp')
     const { privateKey } = await generateKey({
       type: 'ecc',
-      curve: 'curve25519Legacy',
+      curve: (USE_V6_KEYS ? 'curve25519' : 'curve25519Legacy') as 'curve25519Legacy',
       userIDs: [{ name: `xmpp:${accountJid}` }],
       format: 'object',
     })

@@ -1,21 +1,23 @@
 /**
  * Backup-passphrase generator for the XEP-0373 §5 secret-key flow.
  *
- * Produces a space-separated BIP-39 passphrase from one of the
- * official per-language 2048-word lists. Each language ships as its
- * own dynamic-imported chunk so the bundle only pays for the list
- * the user's UI locale actually needs, and the file stays cached
- * across releases because the wordlist content is immutable.
+ * Two formats are supported, controlled by {@link USE_V6_KEYS}:
  *
- * Each word contributes exactly 11 bits of entropy. At the default
- * eight words, the generated passphrase carries 88 bits, which
- * combined with Argon2id at the SKESK layer (memory-hard KDF, no
- * throughput shortcut) gives durable margin for the 10–20-year
- * lifetime of the OpenPGP identity key this passphrase protects.
- * Users who want more headroom can request a longer passphrase via
- * `wordCount`; 12 words matches the BIP-39 wallet-seed convention
- * at 132 bits.
+ * - **v4 (default)**: XEP-0373 §5.4 backup code — 24 upper-case chars
+ *   from "123456789ABCDEFGHIJKLMNPQRSTUVWXYZ" (no O or 0), grouped
+ *   into 4-char chunks with dashes. ~121 bits of entropy. Interoperates
+ *   with Gajim and other current XEP-0373 implementations.
+ *
+ * - **v6**: BIP-39 word passphrase — 8 words from a per-language
+ *   2048-word list (88 bits), combined with Argon2id at the SKESK
+ *   layer for memory-hard key derivation.
  */
+
+/**
+ * Match the Rust-side `USE_V6_KEYS` in openpgp.rs. Controls key
+ * version, backup code format, and SKESK encryption mode.
+ */
+export const USE_V6_KEYS = false
 
 const DEFAULT_WORD_COUNT = 8
 
@@ -162,6 +164,47 @@ export const MIN_ACCEPTABLE_ENTROPY_BITS = DEFAULT_WORD_COUNT * BITS_PER_WORD
 
 export function isPassphraseAcceptable(passphrase: string): boolean {
   return estimatePassphraseEntropyBits(passphrase) >= MIN_ACCEPTABLE_ENTROPY_BITS
+}
+
+// ---------------------------------------------------------------------------
+// XEP-0373 §5.4 backup code generator
+// ---------------------------------------------------------------------------
+
+const BACKUP_CODE_ALPHABET = '123456789ABCDEFGHIJKLMNPQRSTUVWXYZ'
+const BACKUP_CODE_CHAR_COUNT = 24
+const BACKUP_CODE_CHUNK_SIZE = 4
+
+/**
+ * Generate a backup code per XEP-0373 §5.4:
+ *
+ *   24 upper-case characters from "123456789ABCDEFGHIJKLMNPQRSTUVWXYZ"
+ *   (no O or 0) grouped into 4-character chunks with dashes.
+ *   Example: TWNK-KD5Y-MT3T-E1GS-DRDB-KVTW
+ *
+ * The 33-character alphabet yields ~5.04 bits per character × 24 = ~121
+ * bits of entropy. The full 29-character string (including dashes) is
+ * used as the SKESK passphrase per the spec.
+ */
+export function generateBackupCode(): string {
+  const alphabetLen = BACKUP_CODE_ALPHABET.length // 33
+  const bytes = getRandomBytes(BACKUP_CODE_CHAR_COUNT)
+  const chars: string[] = []
+  for (let i = 0; i < BACKUP_CODE_CHAR_COUNT; i++) {
+    // Rejection sampling: draw from [0, 255] and reject values that
+    // would bias the distribution. 255 / 33 ≈ 7.7, so values ≥ 231
+    // (33 * 7 = 231) must be redrawn to keep uniform distribution.
+    let value = bytes[i]
+    const limit = 256 - (256 % alphabetLen) // 231
+    while (value >= limit) {
+      value = getRandomBytes(1)[0]
+    }
+    chars.push(BACKUP_CODE_ALPHABET[value % alphabetLen])
+  }
+  const chunks: string[] = []
+  for (let i = 0; i < chars.length; i += BACKUP_CODE_CHUNK_SIZE) {
+    chunks.push(chars.slice(i, i + BACKUP_CODE_CHUNK_SIZE).join(''))
+  }
+  return chunks.join('-')
 }
 
 function getRandomBytes(n: number): Uint8Array {
