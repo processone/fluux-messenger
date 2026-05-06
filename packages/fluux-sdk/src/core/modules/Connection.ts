@@ -2268,6 +2268,20 @@ export class Connection extends BaseModule {
       return
     }
 
+    // Preflight: if there is no viable authentication credential (no password
+    // and no valid FAST token in localStorage), opening a connection would only
+    // fail during SASL negotiation. Fail immediately so the machine transitions
+    // to terminal.authFailed and the UI shows the login screen without burning
+    // a reconnect attempt on a WebSocket round-trip.
+    const hasPassword = !!this.credentials.password
+    const hasFastToken = fetchFastToken(getBareJid(this.credentials.jid)) !== null
+    if (!hasPassword && !hasFastToken) {
+      logInfo('attemptReconnect: no viable credentials (no password, no FAST token), transitioning to auth failure')
+      this.stores.console.addEvent('Reconnect aborted: no credentials available', 'error')
+      this.sendMachineEvent({ type: 'AUTH_ERROR' }, 'attemptReconnect:no-credentials-preflight')
+      return
+    }
+
     // Wait for network availability after wake-from-sleep.
     // The OS network stack may need several seconds to reinitialize after wake.
     // Without this gate, WebSocket connect fails immediately with ECONNERROR,
