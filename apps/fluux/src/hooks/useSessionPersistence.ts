@@ -481,6 +481,7 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
   const addRoom = useRoomStore((s) => s.addRoom)
   const autoReconnectCheckedRef = useRef(false)
   const isResumptionRef = useRef(false)
+  const keychainRetryAttempted = useRef(false)
 
   const connect = useCallback(async (
     jid: string,
@@ -721,6 +722,40 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
       isResumptionRef.current = false
     }
   }, [status])
+
+  // Tauri: when auth fails during a FAST-token reconnect that had no password in
+  // memory (e.g. keychain was locked at startup), try reading the keychain now
+  // that the user may have unlocked it. One retry per failure episode; the ref
+  // resets when the connection leaves the error state.
+  useEffect(() => {
+    if (!isTauri() || !hasSavedCredentials() || status !== 'error') {
+      if (status !== 'error') keychainRetryAttempted.current = false
+      return
+    }
+    if (keychainRetryAttempted.current) return
+
+    const savedJid = localStorage.getItem('xmpp-last-jid')
+    const savedServer = localStorage.getItem('xmpp-last-server')
+    if (!savedJid) return
+
+    keychainRetryAttempted.current = true
+    const effectiveServer = savedServer || savedJid.split('@')[1]
+
+    const retryWithKeychain = async () => {
+      try {
+        const creds = await getCredentials()
+        if (!creds || getBareJid(creds.jid) !== getBareJid(savedJid)) return
+        console.log('[Auth] Auth failure on Tauri: retrying with keychain credentials')
+        const resource = getResource()
+        await connect(savedJid, creds.password, effectiveServer, undefined, resource, i18n.language, false, true, true)
+        saveSession(savedJid, creds.password, effectiveServer)
+      } catch (err) {
+        console.log('[Auth] Keychain retry after auth failure failed:', err instanceof Error ? err.message : err)
+      }
+    }
+
+    void retryWithKeychain()
+  }, [status, connect, i18n.language])
 
   // Persistence of SM-resumable state (rooms, roster, server info, own
   // profile, own resources) is handled inside the SDK via StateSnapshot:
