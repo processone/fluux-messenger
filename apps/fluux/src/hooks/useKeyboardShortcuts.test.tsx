@@ -39,6 +39,11 @@ vi.mock('@fluux/sdk', () => ({
   roomStore: {
     getState: () => ({
       joinedRooms: () => mockState.joinedRooms,
+      // The Alt+Up/Down navigation path reads `allRooms()` and filters by
+      // `joined`. Test fixtures populate `mockState.joinedRooms` and don't
+      // model unjoined rooms, so injecting `joined: true` here matches the
+      // semantic the fixture represents.
+      allRooms: () => mockState.joinedRooms.map(r => ({ ...r, joined: true })),
       activeRoomJid: mockState.activeRoomJid,
     }),
   },
