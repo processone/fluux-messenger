@@ -157,7 +157,9 @@
             "disabledByYouTitle": "Crittografia disattivata",
             "disabledByYouDescription": "Hai disattivato la crittografia per questo contatto. I messaggi verranno inviati in chiaro.",
             "unavailableNowTitle": "Crittografia momentaneamente non disponibile",
-            "unavailableNowDescription": "Riconnettiti o attiva la crittografia nelle impostazioni."
+            "unavailableNowDescription": "Riconnettiti o attiva la crittografia nelle impostazioni.",
+            "rejectedTitle": "Certificato non valido",
+            "rejectedDescription": "Questo contatto ha pubblicato una chiave OpenPGP, ma la convalida è fallita. I messaggi verranno inviati in chiaro."
         },
         "tabs": {
             "profile": "Profilo",
@@ -479,6 +481,14 @@
             "attachmentKeyWouldLeak": "Message not sent — the attachment is encrypted but end-to-end encryption is unavailable. Sending would expose the file key.",
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
+            "rejected": "Certificato rifiutato",
+            "rejectedTooltip": "Il certificato OpenPGP dell'interlocutore non è valido — clicca per i dettagli",
+            "rejectedTitle": "Certificato rifiutato",
+            "rejectionCode": {
+                "validation_failed": "Impossibile analizzare il certificato",
+                "fingerprint_mismatch": "L'impronta non corrisponde al valore dichiarato",
+                "uid_mismatch": "L'identità del certificato non corrisponde all'indirizzo dell'interlocutore"
+            },
             "disableEncryption": "Disable encryption for this conversation",
             "enableEncryption": "Re-enable encryption",
             "tooltip": {

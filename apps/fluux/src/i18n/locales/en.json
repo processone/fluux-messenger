@@ -155,7 +155,9 @@
             "disabledByYouTitle": "Encryption disabled",
             "disabledByYouDescription": "You disabled encryption for this contact. Messages will be sent in plaintext.",
             "unavailableNowTitle": "Encryption currently unavailable",
-            "unavailableNowDescription": "Reconnect or enable encryption in settings."
+            "unavailableNowDescription": "Reconnect or enable encryption in settings.",
+            "rejectedTitle": "Invalid certificate",
+            "rejectedDescription": "This contact has published an OpenPGP key, but it failed validation. Messages will be sent in plaintext."
         },
         "tabs": {
             "profile": "Profile",
@@ -476,6 +478,14 @@
             "blockedTooltip": "Peer's key has changed — resolve to resume encryption",
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
+            "rejected": "Certificate rejected",
+            "rejectedTooltip": "Peer's OpenPGP certificate is invalid — click for details",
+            "rejectedTitle": "Certificate rejected",
+            "rejectionCode": {
+                "validation_failed": "Certificate could not be parsed",
+                "fingerprint_mismatch": "Fingerprint does not match advertised value",
+                "uid_mismatch": "Certificate identity does not match peer's address"
+            },
             "disableEncryption": "Disable encryption for this conversation",
             "enableEncryption": "Re-enable encryption",
             "attachmentKeyWouldLeak": "Message not sent — the attachment is encrypted but end-to-end encryption is unavailable. Sending would expose the file key.",

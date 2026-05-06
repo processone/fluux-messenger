@@ -156,7 +156,9 @@
             "disabledByYouTitle": "Η κρυπτογράφηση απενεργοποιήθηκε",
             "disabledByYouDescription": "Απενεργοποιήσατε την κρυπτογράφηση για αυτή την επαφή. Τα μηνύματα θα σταλούν σε απλό κείμενο.",
             "unavailableNowTitle": "Η κρυπτογράφηση δεν είναι προς το παρόν διαθέσιμη",
-            "unavailableNowDescription": "Συνδεθείτε ξανά ή ενεργοποιήστε την κρυπτογράφηση στις ρυθμίσεις."
+            "unavailableNowDescription": "Συνδεθείτε ξανά ή ενεργοποιήστε την κρυπτογράφηση στις ρυθμίσεις.",
+            "rejectedTitle": "Μη έγκυρο πιστοποιητικό",
+            "rejectedDescription": "Αυτή η επαφή έχει δημοσιεύσει ένα κλειδί OpenPGP, αλλά η επικύρωσή του απέτυχε. Τα μηνύματα θα αποσταλούν ως απλό κείμενο."
         },
         "tabs": {
             "profile": "Προφίλ",
@@ -478,6 +480,14 @@
             "attachmentKeyWouldLeak": "Message not sent — the attachment is encrypted but end-to-end encryption is unavailable. Sending would expose the file key.",
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
+            "rejected": "Πιστοποιητικό απορρίφθηκε",
+            "rejectedTooltip": "Το πιστοποιητικό OpenPGP του συνομιλητή δεν είναι έγκυρο — κάντε κλικ για λεπτομέρειες",
+            "rejectedTitle": "Πιστοποιητικό απορρίφθηκε",
+            "rejectionCode": {
+                "validation_failed": "Δεν ήταν δυνατή η ανάλυση του πιστοποιητικού",
+                "fingerprint_mismatch": "Το αποτύπωμα δεν ταιριάζει με τη δηλωμένη τιμή",
+                "uid_mismatch": "Η ταυτότητα του πιστοποιητικού δεν ταιριάζει με τη διεύθυνση του συνομιλητή"
+            },
             "disableEncryption": "Disable encryption for this conversation",
             "enableEncryption": "Re-enable encryption",
             "tooltip": {

@@ -155,7 +155,9 @@
             "disabledByYouTitle": "Versleuteling uitgeschakeld",
             "disabledByYouDescription": "Je hebt de versleuteling voor dit contact uitgeschakeld. Berichten worden in platte tekst verzonden.",
             "unavailableNowTitle": "Versleuteling momenteel niet beschikbaar",
-            "unavailableNowDescription": "Maak opnieuw verbinding of schakel versleuteling in via de instellingen."
+            "unavailableNowDescription": "Maak opnieuw verbinding of schakel versleuteling in via de instellingen.",
+            "rejectedTitle": "Ongeldig certificaat",
+            "rejectedDescription": "Dit contact heeft een OpenPGP-sleutel gepubliceerd, maar de validatie is mislukt. Berichten worden in platte tekst verzonden."
         },
         "tabs": {
             "profile": "Profiel",
@@ -477,6 +479,14 @@
             "attachmentKeyWouldLeak": "Message not sent — the attachment is encrypted but end-to-end encryption is unavailable. Sending would expose the file key.",
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
+            "rejected": "Certificaat geweigerd",
+            "rejectedTooltip": "Het OpenPGP-certificaat van de gesprekspartner is ongeldig — klik voor details",
+            "rejectedTitle": "Certificaat geweigerd",
+            "rejectionCode": {
+                "validation_failed": "Certificaat kon niet worden gelezen",
+                "fingerprint_mismatch": "Vingerafdruk komt niet overeen met de opgegeven waarde",
+                "uid_mismatch": "Certificaatidentiteit komt niet overeen met het adres van de gesprekspartner"
+            },
             "disableEncryption": "Disable encryption for this conversation",
             "enableEncryption": "Re-enable encryption",
             "tooltip": {

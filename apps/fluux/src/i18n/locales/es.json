@@ -157,7 +157,9 @@
             "disabledByYouTitle": "Cifrado desactivado",
             "disabledByYouDescription": "Has desactivado el cifrado para este contacto. Los mensajes se enviarán en texto plano.",
             "unavailableNowTitle": "Cifrado actualmente no disponible",
-            "unavailableNowDescription": "Vuelve a conectarte o activa el cifrado en los ajustes."
+            "unavailableNowDescription": "Vuelve a conectarte o activa el cifrado en los ajustes.",
+            "rejectedTitle": "Certificado no válido",
+            "rejectedDescription": "Este contacto ha publicado una clave OpenPGP, pero no superó la validación. Los mensajes se enviarán en texto plano."
         },
         "tabs": {
             "profile": "Perfil",
@@ -479,6 +481,14 @@
             "attachmentKeyWouldLeak": "Message not sent — the attachment is encrypted but end-to-end encryption is unavailable. Sending would expose the file key.",
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
+            "rejected": "Certificado rechazado",
+            "rejectedTooltip": "El certificado OpenPGP del contacto no es válido — haz clic para más detalles",
+            "rejectedTitle": "Certificado rechazado",
+            "rejectionCode": {
+                "validation_failed": "No se pudo analizar el certificado",
+                "fingerprint_mismatch": "La huella digital no coincide con el valor anunciado",
+                "uid_mismatch": "La identidad del certificado no coincide con la dirección del contacto"
+            },
             "disableEncryption": "Disable encryption for this conversation",
             "enableEncryption": "Re-enable encryption",
             "tooltip": {

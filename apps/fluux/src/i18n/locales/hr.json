@@ -155,7 +155,9 @@
             "disabledByYouTitle": "Šifriranje je onemogućeno",
             "disabledByYouDescription": "Onemogućili ste šifriranje za ovaj kontakt. Poruke će se slati u običnom tekstu.",
             "unavailableNowTitle": "Šifriranje trenutačno nije dostupno",
-            "unavailableNowDescription": "Ponovo se povežite ili omogućite šifriranje u postavkama."
+            "unavailableNowDescription": "Ponovo se povežite ili omogućite šifriranje u postavkama.",
+            "rejectedTitle": "Nevažeći certifikat",
+            "rejectedDescription": "Ovaj kontakt je objavio OpenPGP ključ, ali provjera valjanosti nije uspjela. Poruke će se slati u običnom tekstu."
         },
         "tabs": {
             "profile": "Profil",
@@ -477,6 +479,14 @@
             "attachmentKeyWouldLeak": "Message not sent — the attachment is encrypted but end-to-end encryption is unavailable. Sending would expose the file key.",
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
+            "rejected": "Certifikat odbijen",
+            "rejectedTooltip": "OpenPGP certifikat sugovornika nije valjan — kliknite za pojedinosti",
+            "rejectedTitle": "Certifikat odbijen",
+            "rejectionCode": {
+                "validation_failed": "Certifikat se nije mogao analizirati",
+                "fingerprint_mismatch": "Otisak ne odgovara objavljenoj vrijednosti",
+                "uid_mismatch": "Identitet certifikata ne odgovara adresi sugovornika"
+            },
             "disableEncryption": "Disable encryption for this conversation",
             "enableEncryption": "Re-enable encryption",
             "tooltip": {

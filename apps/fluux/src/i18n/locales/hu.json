@@ -155,7 +155,9 @@
             "disabledByYouTitle": "A titkosítás letiltva",
             "disabledByYouDescription": "Letiltottad a titkosítást ennél a partnernél. Az üzenetek titkosítatlanul kerülnek elküldésre.",
             "unavailableNowTitle": "A titkosítás jelenleg nem érhető el",
-            "unavailableNowDescription": "Kapcsolódj újra, vagy engedélyezd a titkosítást a beállításokban."
+            "unavailableNowDescription": "Kapcsolódj újra, vagy engedélyezd a titkosítást a beállításokban.",
+            "rejectedTitle": "Érvénytelen tanúsítvány",
+            "rejectedDescription": "Ez a partner közzétett egy OpenPGP kulcsot, de az érvényesítés sikertelen volt. Az üzenetek titkosítatlanul kerülnek elküldésre."
         },
         "tabs": {
             "profile": "Profil",
@@ -477,6 +479,14 @@
             "attachmentKeyWouldLeak": "Message not sent — the attachment is encrypted but end-to-end encryption is unavailable. Sending would expose the file key.",
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
+            "rejected": "Tanúsítvány elutasítva",
+            "rejectedTooltip": "A partner OpenPGP tanúsítványa érvénytelen — kattints a részletekért",
+            "rejectedTitle": "Tanúsítvány elutasítva",
+            "rejectionCode": {
+                "validation_failed": "A tanúsítvány nem volt feldolgozható",
+                "fingerprint_mismatch": "Az ujjlenyomat nem egyezik a meghirdetett értékkel",
+                "uid_mismatch": "A tanúsítvány azonosítója nem egyezik a partner címével"
+            },
             "disableEncryption": "Disable encryption for this conversation",
             "enableEncryption": "Re-enable encryption",
             "tooltip": {

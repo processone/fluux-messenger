@@ -155,7 +155,9 @@
             "disabledByYouTitle": "Dulritun er óvirk",
             "disabledByYouDescription": "Þú slökktir á dulritun fyrir þennan tengilið. Skilaboð verða send ódulrituð.",
             "unavailableNowTitle": "Dulritun er ekki tiltæk núna",
-            "unavailableNowDescription": "Tengstu aftur eða kveiktu á dulritun í stillingum."
+            "unavailableNowDescription": "Tengstu aftur eða kveiktu á dulritun í stillingum.",
+            "rejectedTitle": "Ógilt vottorð",
+            "rejectedDescription": "Þessi tengiliður hefur birt OpenPGP-lykil, en staðfesting mistókst. Skilaboð verða send ódulrituð."
         },
         "tabs": {
             "profile": "Notandasnið",
@@ -477,6 +479,14 @@
             "attachmentKeyWouldLeak": "Message not sent — the attachment is encrypted but end-to-end encryption is unavailable. Sending would expose the file key.",
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
+            "rejected": "Vottorði hafnað",
+            "rejectedTooltip": "OpenPGP-vottorð viðmælanda er ógilt — smelltu fyrir nánari upplýsingar",
+            "rejectedTitle": "Vottorði hafnað",
+            "rejectionCode": {
+                "validation_failed": "Ekki tókst að þátta vottorðið",
+                "fingerprint_mismatch": "Fingrafar stemmir ekki við uppgefið gildi",
+                "uid_mismatch": "Auðkenni vottorðs stemmir ekki við netfang viðmælanda"
+            },
             "disableEncryption": "Disable encryption for this conversation",
             "enableEncryption": "Re-enable encryption",
             "tooltip": {

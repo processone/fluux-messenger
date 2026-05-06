@@ -155,7 +155,9 @@
             "disabledByYouTitle": "Salaus on poistettu käytöstä",
             "disabledByYouDescription": "Olet poistanut salauksen käytöstä tälle yhteystiedolle. Viestit lähetetään selkokielisinä.",
             "unavailableNowTitle": "Salaus ei ole tällä hetkellä käytettävissä",
-            "unavailableNowDescription": "Yhdistä uudelleen tai ota salaus käyttöön asetuksista."
+            "unavailableNowDescription": "Yhdistä uudelleen tai ota salaus käyttöön asetuksista.",
+            "rejectedTitle": "Virheellinen varmenne",
+            "rejectedDescription": "Tämä yhteystieto on julkaissut OpenPGP-avaimen, mutta sen vahvistus epäonnistui. Viestit lähetetään selkokielisinä."
         },
         "tabs": {
             "profile": "Profiili",
@@ -477,6 +479,14 @@
             "attachmentKeyWouldLeak": "Message not sent — the attachment is encrypted but end-to-end encryption is unavailable. Sending would expose the file key.",
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
+            "rejected": "Varmenne hylätty",
+            "rejectedTooltip": "Keskustelukumppanin OpenPGP-varmenne on virheellinen — napsauta nähdäksesi lisätietoja",
+            "rejectedTitle": "Varmenne hylätty",
+            "rejectionCode": {
+                "validation_failed": "Varmennetta ei voitu jäsentää",
+                "fingerprint_mismatch": "Sormenjälki ei vastaa ilmoitettua arvoa",
+                "uid_mismatch": "Varmenteen identiteetti ei vastaa keskustelukumppanin osoitetta"
+            },
             "disableEncryption": "Disable encryption for this conversation",
             "enableEncryption": "Re-enable encryption",
             "tooltip": {

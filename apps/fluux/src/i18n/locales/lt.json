@@ -155,7 +155,9 @@
             "disabledByYouTitle": "Šifravimas išjungtas",
             "disabledByYouDescription": "Išjungėte šifravimą šiam kontaktui. Pranešimai bus siunčiami atviru tekstu.",
             "unavailableNowTitle": "Šifravimas šiuo metu neprieinamas",
-            "unavailableNowDescription": "Iš naujo prisijunkite arba įjunkite šifravimą nustatymuose."
+            "unavailableNowDescription": "Iš naujo prisijunkite arba įjunkite šifravimą nustatymuose.",
+            "rejectedTitle": "Negaliojantis sertifikatas",
+            "rejectedDescription": "Šis kontaktas paskelbė OpenPGP raktą, tačiau jo patvirtinimas nepavyko. Pranešimai bus siunčiami atviru tekstu."
         },
         "tabs": {
             "profile": "Profilis",
@@ -477,6 +479,14 @@
             "attachmentKeyWouldLeak": "Message not sent — the attachment is encrypted but end-to-end encryption is unavailable. Sending would expose the file key.",
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
+            "rejected": "Sertifikatas atmestas",
+            "rejectedTooltip": "Pašnekovo OpenPGP sertifikatas yra negaliojantis — spustelėkite norėdami sužinoti daugiau",
+            "rejectedTitle": "Sertifikatas atmestas",
+            "rejectionCode": {
+                "validation_failed": "Nepavyko apdoroti sertifikato",
+                "fingerprint_mismatch": "Piršto antspaudas neatitinka skelbiamos reikšmės",
+                "uid_mismatch": "Sertifikato tapatybė neatitinka pašnekovo adreso"
+            },
             "disableEncryption": "Disable encryption for this conversation",
             "enableEncryption": "Re-enable encryption",
             "tooltip": {

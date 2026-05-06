@@ -156,7 +156,9 @@
             "disabledByYouTitle": "Chiffrement désactivé",
             "disabledByYouDescription": "Vous avez désactivé le chiffrement pour ce contact. Les messages seront envoyés en clair.",
             "unavailableNowTitle": "Chiffrement actuellement indisponible",
-            "unavailableNowDescription": "Reconnectez-vous ou activez le chiffrement dans les paramètres."
+            "unavailableNowDescription": "Reconnectez-vous ou activez le chiffrement dans les paramètres.",
+            "rejectedTitle": "Certificat invalide",
+            "rejectedDescription": "Ce contact a publié une clé OpenPGP, mais la validation a échoué. Les messages seront envoyés en clair."
         },
         "tabs": {
             "profile": "Profil",
@@ -477,6 +479,14 @@
             "blockedTooltip": "La clé du correspondant a changé — résolvez pour reprendre le chiffrement",
             "plaintextForced": "Chiffrement désactivé",
             "plaintextForcedTooltip": "Vous avez désactivé le chiffrement pour cette conversation — les messages sont envoyés en clair",
+            "rejected": "Certificat rejeté",
+            "rejectedTooltip": "Le certificat OpenPGP du correspondant est invalide — cliquez pour plus de détails",
+            "rejectedTitle": "Certificat rejeté",
+            "rejectionCode": {
+                "validation_failed": "Le certificat n'a pas pu être analysé",
+                "fingerprint_mismatch": "L'empreinte ne correspond pas à la valeur annoncée",
+                "uid_mismatch": "L'identité du certificat ne correspond pas à l'adresse du correspondant"
+            },
             "disableEncryption": "Désactiver le chiffrement pour cette conversation",
             "enableEncryption": "Réactiver le chiffrement",
             "attachmentKeyWouldLeak": "Message non envoyé — la pièce jointe est chiffrée mais le chiffrement de bout en bout n'est pas disponible. L'envoi exposerait la clé du fichier.",

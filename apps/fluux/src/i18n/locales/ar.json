@@ -155,7 +155,9 @@
             "disabledByYouTitle": "تم تعطيل التشفير",
             "disabledByYouDescription": "قمتَ بتعطيل التشفير لجهة الاتصال هذه. ستُرسل الرسائل بنص عادي.",
             "unavailableNowTitle": "التشفير غير متاح حاليًا",
-            "unavailableNowDescription": "أعد الاتصال أو فعّل التشفير في الإعدادات."
+            "unavailableNowDescription": "أعد الاتصال أو فعّل التشفير في الإعدادات.",
+            "rejectedTitle": "شهادة غير صالحة",
+            "rejectedDescription": "نشرت جهة الاتصال هذه مفتاح OpenPGP، لكنه فشل في التحقق. ستُرسل الرسائل بنص عادي."
         },
         "tabs": {
             "profile": "الملف الشخصي",
@@ -477,6 +479,14 @@
             "attachmentKeyWouldLeak": "Message not sent — the attachment is encrypted but end-to-end encryption is unavailable. Sending would expose the file key.",
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
+            "rejected": "الشهادة مرفوضة",
+            "rejectedTooltip": "شهادة OpenPGP الخاصة بالطرف الآخر غير صالحة — انقر للتفاصيل",
+            "rejectedTitle": "الشهادة مرفوضة",
+            "rejectionCode": {
+                "validation_failed": "تعذّر تحليل الشهادة",
+                "fingerprint_mismatch": "البصمة لا تتطابق مع القيمة المُعلَنة",
+                "uid_mismatch": "هوية الشهادة لا تتطابق مع عنوان الطرف الآخر"
+            },
             "disableEncryption": "Disable encryption for this conversation",
             "enableEncryption": "Re-enable encryption",
             "tooltip": {

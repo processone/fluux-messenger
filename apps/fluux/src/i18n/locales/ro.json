@@ -157,7 +157,9 @@
             "disabledByYouTitle": "Criptarea este dezactivată",
             "disabledByYouDescription": "Ai dezactivat criptarea pentru acest contact. Mesajele vor fi trimise în text simplu.",
             "unavailableNowTitle": "Criptarea este momentan indisponibilă",
-            "unavailableNowDescription": "Reconectează-te sau activează criptarea din setări."
+            "unavailableNowDescription": "Reconectează-te sau activează criptarea din setări.",
+            "rejectedTitle": "Certificat nevalid",
+            "rejectedDescription": "Acest contact a publicat o cheie OpenPGP, dar validarea a eșuat. Mesajele vor fi trimise în text simplu."
         },
         "tabs": {
             "profile": "Profil",
@@ -479,6 +481,14 @@
             "attachmentKeyWouldLeak": "Message not sent — the attachment is encrypted but end-to-end encryption is unavailable. Sending would expose the file key.",
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
+            "rejected": "Certificat respins",
+            "rejectedTooltip": "Certificatul OpenPGP al interlocutorului este invalid — apasă pentru detalii",
+            "rejectedTitle": "Certificat respins",
+            "rejectionCode": {
+                "validation_failed": "Certificatul nu a putut fi analizat",
+                "fingerprint_mismatch": "Amprenta nu corespunde valorii anunțate",
+                "uid_mismatch": "Identitatea certificatului nu corespunde adresei interlocutorului"
+            },
             "disableEncryption": "Disable encryption for this conversation",
             "enableEncryption": "Re-enable encryption",
             "tooltip": {

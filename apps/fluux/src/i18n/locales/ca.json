@@ -157,7 +157,9 @@
             "disabledByYouTitle": "Xifratge desactivat",
             "disabledByYouDescription": "Has desactivat el xifratge per a aquest contacte. Els missatges s’enviaran en text pla.",
             "unavailableNowTitle": "Xifratge no disponible actualment",
-            "unavailableNowDescription": "Torneu a connectar-vos o activeu el xifratge a la configuració."
+            "unavailableNowDescription": "Torneu a connectar-vos o activeu el xifratge a la configuració.",
+            "rejectedTitle": "Certificat no vàlid",
+            "rejectedDescription": "Aquest contacte ha publicat una clau OpenPGP, però no ha superat la validació. Els missatges s'enviaran en text pla."
         },
         "tabs": {
             "profile": "Perfil",
@@ -479,6 +481,14 @@
             "attachmentKeyWouldLeak": "Message not sent — the attachment is encrypted but end-to-end encryption is unavailable. Sending would expose the file key.",
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
+            "rejected": "Certificat rebutjat",
+            "rejectedTooltip": "El certificat OpenPGP del contacte no és vàlid — feu clic per veure'n els detalls",
+            "rejectedTitle": "Certificat rebutjat",
+            "rejectionCode": {
+                "validation_failed": "No s'ha pogut analitzar el certificat",
+                "fingerprint_mismatch": "L'empremta digital no coincideix amb el valor anunciat",
+                "uid_mismatch": "La identitat del certificat no coincideix amb l'adreça del contacte"
+            },
             "disableEncryption": "Disable encryption for this conversation",
             "enableEncryption": "Re-enable encryption",
             "tooltip": {

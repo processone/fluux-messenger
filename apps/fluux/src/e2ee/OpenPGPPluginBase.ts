@@ -96,6 +96,11 @@ import {
   getPinnedPrimaryFp,
   setPinnedPrimaryFp,
 } from '@/stores/pinnedPrimaryFingerprintsStore'
+import {
+  clearCertRejections,
+  recordCertRejections,
+  type CertRejection,
+} from '@/stores/certRejectionStore'
 
 // ---------------------------------------------------------------------------
 // XEP-0373 constants
@@ -913,15 +918,23 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       const metadataItems = await ctx.xmpp.queryPEP(peer, PUBLIC_KEYS_METADATA_NODE)
       const fingerprints = parseAdvertisedFingerprints(metadataItems)
       if (fingerprints.length === 0) {
+        clearCertRejections(peer)
         return { supported: false, ttl: PROBE_NEGATIVE_TTL_SECONDS }
       }
 
+      const rejections: CertRejection[] = []
       for (const fingerprint of fingerprints) {
-        const bundle = await this.fetchAdvertisedKey(peer, fingerprint)
+        const bundle = await this.fetchAdvertisedKey(peer, fingerprint, rejections)
         if (bundle) {
+          clearCertRejections(peer)
           this.cachePeerKey(peer, bundle)
           return { supported: true, ttl: PROBE_NEGATIVE_TTL_SECONDS }
         }
+      }
+      if (rejections.length > 0) {
+        recordCertRejections(peer, rejections)
+      } else {
+        clearCertRejections(peer)
       }
       return { supported: false, ttl: PROBE_NEGATIVE_TTL_SECONDS }
     } catch (err) {
@@ -939,8 +952,10 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   private async fetchAdvertisedKey(
     peer: BareJID,
     fingerprint: string,
+    rejections: CertRejection[],
   ): Promise<KeyBundle | null> {
     const ctx = this.requireCtx()
+    const now = new Date().toISOString()
     try {
       const items = await ctx.xmpp.queryPEP(peer, publicKeyDataNodeFor(fingerprint))
       for (const item of items) {
@@ -950,15 +965,19 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         try {
           validation = await this.validateCert(armored)
         } catch (err) {
+          const detail = formatError(err)
           ctx.logger.warn(
-            `${this.pluginName()}: validateCert for ${peer}/${fingerprint} failed: ${formatError(err)}`,
+            `${this.pluginName()}: validateCert for ${peer}/${fingerprint} failed: ${detail}`,
           )
+          rejections.push({ fingerprint, code: 'validation_failed', detail, observedAt: now })
           continue
         }
         if (!fingerprintsEqual(validation.fingerprint, fingerprint)) {
+          const detail = `advertised ${fingerprint}, served ${validation.fingerprint}`
           ctx.logger.warn(
-            `${this.pluginName()}: ${peer} advertised ${fingerprint} but served key with ${validation.fingerprint}; discarding`,
+            `${this.pluginName()}: ${peer} ${detail}; discarding`,
           )
+          rejections.push({ fingerprint, code: 'fingerprint_mismatch', detail, observedAt: now })
           continue
         }
         const expectedUid = `xmpp:${peer}`
@@ -966,9 +985,11 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
           (uid) => uid.toLowerCase() === expectedUid.toLowerCase(),
         )
         if (!uidMatch) {
+          const detail = `expected ${expectedUid}, got [${validation.userIDs.join(', ')}]`
           ctx.logger.warn(
-            `${this.pluginName()}: ${peer} key ${fingerprint} has no matching UID (expected ${expectedUid}, got [${validation.userIDs.join(', ')}]); discarding`,
+            `${this.pluginName()}: ${peer} key ${fingerprint} has no matching UID (${detail}); discarding`,
           )
+          rejections.push({ fingerprint, code: 'uid_mismatch', detail, observedAt: now })
           continue
         }
         return {

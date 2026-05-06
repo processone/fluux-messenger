@@ -155,7 +155,9 @@
             "disabledByYouTitle": "Tá criptiú díchumasaithe",
             "disabledByYouDescription": "Dhíchumasaigh tú criptiú don teagmháil seo. Cuirfear teachtaireachtaí sa ghnáth-théacs.",
             "unavailableNowTitle": "Níl criptiú ar fáil faoi láthair",
-            "unavailableNowDescription": "Athcheangail nó cumasaigh criptiú sna socruithe."
+            "unavailableNowDescription": "Athcheangail nó cumasaigh criptiú sna socruithe.",
+            "rejectedTitle": "Teastas neamhbhailí",
+            "rejectedDescription": "D'fhoilsigh an teagmháil seo eochair OpenPGP, ach theip ar a bhailíochtú. Seolfar teachtaireachtaí i ngnáth-théacs."
         },
         "tabs": {
             "profile": "Próifíl",
@@ -477,6 +479,14 @@
             "attachmentKeyWouldLeak": "Message not sent — the attachment is encrypted but end-to-end encryption is unavailable. Sending would expose the file key.",
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
+            "rejected": "Teastas diúltaithe",
+            "rejectedTooltip": "Tá teastas OpenPGP an chomhpháirtí neamhbhailí — cliceáil le haghaidh sonraí",
+            "rejectedTitle": "Teastas diúltaithe",
+            "rejectionCode": {
+                "validation_failed": "Níorbh fhéidir an teastas a pharsáil",
+                "fingerprint_mismatch": "Ní mheaitseálann an méarlorg leis an luach fógartha",
+                "uid_mismatch": "Ní mheaitseálann céannacht an teastais le seoladh an chomhpháirtí"
+            },
             "disableEncryption": "Disable encryption for this conversation",
             "enableEncryption": "Re-enable encryption",
             "tooltip": {

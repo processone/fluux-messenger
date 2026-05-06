@@ -155,7 +155,9 @@
             "disabledByYouTitle": "Шыфраванне адключана",
             "disabledByYouDescription": "Вы адключылі шыфраванне для гэтага кантакту. Паведамленні будуць адпраўлены ў адкрытым выглядзе.",
             "unavailableNowTitle": "Шыфраванне зараз недаступнае",
-            "unavailableNowDescription": "Перападключыцеся або ўключыце шыфраванне ў наладах."
+            "unavailableNowDescription": "Перападключыцеся або ўключыце шыфраванне ў наладах.",
+            "rejectedTitle": "Несапраўдны сертыфікат",
+            "rejectedDescription": "Гэты кантакт апублікаваў ключ OpenPGP, але ён не прайшоў праверку. Паведамленні будуць адпраўлены адкрытым тэкстам."
         },
         "tabs": {
             "profile": "Профіль",
@@ -477,6 +479,14 @@
             "attachmentKeyWouldLeak": "Message not sent — the attachment is encrypted but end-to-end encryption is unavailable. Sending would expose the file key.",
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
+            "rejected": "Сертыфікат адхілены",
+            "rejectedTooltip": "Сертыфікат OpenPGP суразмоўцы несапраўдны — націсніце для падрабязнасцей",
+            "rejectedTitle": "Сертыфікат адхілены",
+            "rejectionCode": {
+                "validation_failed": "Не ўдалося разабраць сертыфікат",
+                "fingerprint_mismatch": "Адбітак не супадае з абвешчаным значэннем",
+                "uid_mismatch": "Ідэнтычнасць сертыфіката не супадае з адрасам суразмоўцы"
+            },
             "disableEncryption": "Disable encryption for this conversation",
             "enableEncryption": "Re-enable encryption",
             "tooltip": {

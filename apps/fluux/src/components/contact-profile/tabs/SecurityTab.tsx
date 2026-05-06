@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { Loader2, Lock, LockOpen, ShieldAlert, ShieldCheck, ShieldOff } from 'lucide-react'
+import { Loader2, Lock, LockOpen, ShieldAlert, ShieldCheck, ShieldOff, ShieldX } from 'lucide-react'
 import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 
 interface SecurityTabProps {
@@ -36,6 +36,29 @@ export function SecurityTab({
             title={t('chat.encryption.blocked')}
             tone="warning"
           />
+        )}
+
+        {state.kind === 'rejected' && (
+          <>
+            <ExplanationPanel
+              icon={<ShieldX className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0" />}
+              title={t('contacts.encryption.rejectedTitle')}
+              description={t('contacts.encryption.rejectedDescription')}
+              tone="danger"
+            />
+            <div className="space-y-2">
+              {state.reasons.map((r, i) => (
+                <div key={i} className="rounded-lg bg-fluux-bg/40 px-3 py-2">
+                  <div className="text-xs font-medium text-fluux-text">
+                    {t(`chat.encryption.rejectionCode.${r.code}`)}
+                  </div>
+                  <code className="block text-xs font-mono text-fluux-muted mt-0.5 break-all">
+                    {r.detail}
+                  </code>
+                </div>
+              ))}
+            </div>
+          </>
         )}
 
         {state.kind === 'unsupported' && (
@@ -145,18 +168,24 @@ interface ExplanationPanelProps {
   icon: React.ReactNode
   title: string
   description?: string
-  tone: 'success' | 'neutral' | 'warning'
+  tone: 'success' | 'neutral' | 'warning' | 'danger'
 }
 
 function ExplanationPanel({ icon, title, description, tone }: ExplanationPanelProps) {
   const bg =
     tone === 'success'
       ? 'bg-green-500/10'
-      : tone === 'warning'
-        ? 'bg-yellow-500/10'
-        : 'bg-fluux-bg/40'
+      : tone === 'danger'
+        ? 'bg-red-500/10'
+        : tone === 'warning'
+          ? 'bg-yellow-500/10'
+          : 'bg-fluux-bg/40'
   const titleColor =
-    tone === 'warning' ? 'text-yellow-700 dark:text-yellow-400' : 'text-fluux-text'
+    tone === 'danger'
+      ? 'text-red-700 dark:text-red-400'
+      : tone === 'warning'
+        ? 'text-yellow-700 dark:text-yellow-400'
+        : 'text-fluux-text'
   return (
     <div className={`flex items-start gap-3 px-3 py-3 rounded-lg ${bg}`}>
       <div className="mt-0.5">{icon}</div>

@@ -12,7 +12,7 @@ import { Avatar } from './Avatar'
 import { useWindowDrag } from '@/hooks'
 import { getTranslatedStatusText } from '@/utils/statusText'
 import { Tooltip } from './Tooltip'
-import { ArrowLeft, Clock, Hash, Lock, LockOpen, Loader2, Search, ShieldAlert, ShieldCheck, ShieldOff } from 'lucide-react'
+import { ArrowLeft, Clock, Hash, Lock, LockOpen, Loader2, Search, ShieldAlert, ShieldCheck, ShieldOff, ShieldX } from 'lucide-react'
 import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 
 export interface ChatHeaderProps {
@@ -209,6 +209,45 @@ function EncryptionIcon({
           <ShieldAlert className="w-4 h-4" />
         </div>
       </Tooltip>
+    )
+  }
+
+  if (state.kind === 'rejected') {
+    return (
+      <div ref={containerRef} className="relative">
+        <Tooltip content={t('chat.encryption.rejectedTooltip')} position="bottom" disabled={open}>
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className={`${btnClass} text-red-500 hover:text-red-600 cursor-pointer`}
+            aria-label={t('chat.encryption.rejected')}
+            aria-expanded={open}
+          >
+            <ShieldX className="w-4 h-4" />
+          </button>
+        </Tooltip>
+        {open && (
+          <div className="absolute right-0 top-full mt-1 w-72 rounded-lg border border-fluux-hover bg-fluux-bg shadow-lg z-50 py-2 px-3 overflow-hidden">
+            <div className="text-sm font-medium text-red-600 dark:text-red-400 mb-1.5">
+              {t('chat.encryption.rejectedTitle')}
+            </div>
+            <ul className="space-y-1.5">
+              {state.reasons.map((r, i) => (
+                <li key={i} className="text-xs text-fluux-muted">
+                  <span className="font-medium text-fluux-text">
+                    {t(`chat.encryption.rejectionCode.${r.code}`)}
+                  </span>
+                  {r.detail && (
+                    <span className="block text-xs text-fluux-muted mt-0.5 font-mono break-all">
+                      {r.detail}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
     )
   }
 

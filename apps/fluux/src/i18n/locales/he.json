@@ -155,7 +155,9 @@
             "disabledByYouTitle": "ההצפנה הושבתה",
             "disabledByYouDescription": "השבתת את ההצפנה עבור איש קשר זה. ההודעות יישלחו ללא הצפנה.",
             "unavailableNowTitle": "ההצפנה אינה זמינה כרגע",
-            "unavailableNowDescription": "התחבר/י מחדש או הפעל/י את ההצפנה בהגדרות."
+            "unavailableNowDescription": "התחבר/י מחדש או הפעל/י את ההצפנה בהגדרות.",
+            "rejectedTitle": "אישור לא תקף",
+            "rejectedDescription": "איש קשר זה פרסם מפתח OpenPGP, אך האימות נכשל. ההודעות יישלחו ללא הצפנה."
         },
         "tabs": {
             "profile": "פרופיל",
@@ -477,6 +479,14 @@
             "attachmentKeyWouldLeak": "Message not sent — the attachment is encrypted but end-to-end encryption is unavailable. Sending would expose the file key.",
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
+            "rejected": "אישור נדחה",
+            "rejectedTooltip": "אישור ה-OpenPGP של הצד השני אינו תקף — לחץ/י לפרטים",
+            "rejectedTitle": "אישור נדחה",
+            "rejectionCode": {
+                "validation_failed": "לא ניתן לנתח את האישור",
+                "fingerprint_mismatch": "טביעת האצבע אינה תואמת לערך המוצהר",
+                "uid_mismatch": "זהות האישור אינה תואמת לכתובת הצד השני"
+            },
             "disableEncryption": "Disable encryption for this conversation",
             "enableEncryption": "Re-enable encryption",
             "tooltip": {

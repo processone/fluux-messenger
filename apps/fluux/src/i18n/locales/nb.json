@@ -155,7 +155,9 @@
             "disabledByYouTitle": "Kryptering er deaktivert",
             "disabledByYouDescription": "Du har deaktivert kryptering for denne kontakten. Meldinger sendes i klartekst.",
             "unavailableNowTitle": "Kryptering er ikke tilgjengelig nå",
-            "unavailableNowDescription": "Koble til på nytt eller aktiver kryptering i innstillinger."
+            "unavailableNowDescription": "Koble til på nytt eller aktiver kryptering i innstillinger.",
+            "rejectedTitle": "Ugyldig sertifikat",
+            "rejectedDescription": "Denne kontakten har publisert en OpenPGP-nøkkel, men valideringen mislyktes. Meldinger sendes i klartekst."
         },
         "tabs": {
             "profile": "Profil",
@@ -477,6 +479,14 @@
             "attachmentKeyWouldLeak": "Message not sent — the attachment is encrypted but end-to-end encryption is unavailable. Sending would expose the file key.",
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
+            "rejected": "Sertifikat avvist",
+            "rejectedTooltip": "Samtalepartnerens OpenPGP-sertifikat er ugyldig — klikk for detaljer",
+            "rejectedTitle": "Sertifikat avvist",
+            "rejectionCode": {
+                "validation_failed": "Sertifikatet kunne ikke analyseres",
+                "fingerprint_mismatch": "Fingeravtrykket samsvarer ikke med den oppgitte verdien",
+                "uid_mismatch": "Sertifikatets identitet samsvarer ikke med samtalepartnerens adresse"
+            },
             "disableEncryption": "Disable encryption for this conversation",
             "enableEncryption": "Re-enable encryption",
             "tooltip": {

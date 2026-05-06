@@ -5,6 +5,7 @@ import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
 import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
 import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
 import { usePinnedPrimaryFingerprintsStore } from '@/stores/pinnedPrimaryFingerprintsStore'
+import { useCertRejectionStore, type CertRejection } from '@/stores/certRejectionStore'
 
 /**
  * Per-conversation encryption status surfaced to the composer chip.
@@ -31,6 +32,11 @@ import { usePinnedPrimaryFingerprintsStore } from '@/stores/pinnedPrimaryFingerp
  *                     buttons).
  * - `unsupported`   — probe completed but the peer has no advertised
  *                     OpenPGP key. Composer falls back to plaintext.
+ * - `rejected`      — peer has advertised OpenPGP key(s) but every
+ *                     certificate was rejected during validation (bad
+ *                     UID, fingerprint mismatch, corrupt cert, etc.).
+ *                     `reasons` carries one entry per rejected
+ *                     fingerprint so the UI can explain what's wrong.
  * - `plaintextForced` — user has explicitly disabled encryption for
  *                     this conversation. Messages are sent in plaintext
  *                     even if the peer has a published key.
@@ -57,6 +63,7 @@ export type ConversationEncryptionState =
     }
   | { kind: 'blocked'; pinnedFingerprint: string; advertisedFingerprint: string }
   | { kind: 'unsupported' }
+  | { kind: 'rejected'; reasons: CertRejection[] }
 
 /**
  * Minimal structural type for the pieces of `SequoiaPgpPlugin` this
@@ -133,6 +140,13 @@ export function useConversationEncryptionState(
   // cached key without requiring the user to re-enter the conversation.
   const pinnedFp = usePinnedPrimaryFingerprintsStore((s) =>
     peerJid ? (s.pinnedFingerprintByJid[peerJid] ?? null) : null,
+  )
+
+  const certRejectionCount = useCertRejectionStore((s) =>
+    peerJid ? (s.rejectionsByJid[peerJid]?.length ?? 0) : 0,
+  )
+  const certRejections = useCertRejectionStore((s) =>
+    peerJid ? (s.rejectionsByJid[peerJid] ?? null) : null,
   )
 
   // The base state is what the probe / cache produces — kind, peer
@@ -238,6 +252,9 @@ export function useConversationEncryptionState(
     // the memo is the single authoritative output — check here so a toggle
     // triggers a re-render without waiting for the next effect run.
     if (isForcedPlaintext) return { kind: 'plaintextForced' }
+    if (base.kind === 'unsupported' && certRejections && certRejections.length > 0) {
+      return { kind: 'rejected', reasons: certRejections }
+    }
     if (base.kind !== 'encrypted') return base
     if (alertCurrentFp && alertPreviousFp) {
       return {
@@ -251,5 +268,5 @@ export function useConversationEncryptionState(
       fingerprint: base.fingerprint,
       trust: verifiedFingerprint === base.fingerprint ? 'verified' : 'unverified',
     }
-  }, [base, isForcedPlaintext, verifiedFingerprint, alertCurrentFp, alertPreviousFp])
+  }, [base, isForcedPlaintext, verifiedFingerprint, alertCurrentFp, alertPreviousFp, certRejections, certRejectionCount])
 }

@@ -155,7 +155,9 @@
             "disabledByYouTitle": "Шифрование отключено",
             "disabledByYouDescription": "Вы отключили шифрование для этого контакта. Сообщения будут отправлены в открытом виде.",
             "unavailableNowTitle": "Шифрование сейчас недоступно",
-            "unavailableNowDescription": "Переподключитесь или включите шифрование в настройках."
+            "unavailableNowDescription": "Переподключитесь или включите шифрование в настройках.",
+            "rejectedTitle": "Недействительный сертификат",
+            "rejectedDescription": "Этот контакт опубликовал ключ OpenPGP, но проверка не пройдена. Сообщения будут отправлены в открытом виде."
         },
         "tabs": {
             "profile": "Профиль",
@@ -477,6 +479,14 @@
             "attachmentKeyWouldLeak": "Message not sent — the attachment is encrypted but end-to-end encryption is unavailable. Sending would expose the file key.",
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
+            "rejected": "Сертификат отклонён",
+            "rejectedTooltip": "Сертификат OpenPGP собеседника недействителен — нажмите для подробностей",
+            "rejectedTitle": "Сертификат отклонён",
+            "rejectionCode": {
+                "validation_failed": "Не удалось разобрать сертификат",
+                "fingerprint_mismatch": "Отпечаток не совпадает с заявленным значением",
+                "uid_mismatch": "Удостоверение сертификата не совпадает с адресом собеседника"
+            },
             "disableEncryption": "Disable encryption for this conversation",
             "enableEncryption": "Re-enable encryption",
             "tooltip": {

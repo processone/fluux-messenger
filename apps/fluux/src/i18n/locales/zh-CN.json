@@ -155,7 +155,9 @@
             "disabledByYouTitle": "加密已禁用",
             "disabledByYouDescription": "您已为此联系人禁用加密。消息将以明文形式发送。",
             "unavailableNowTitle": "加密当前不可用",
-            "unavailableNowDescription": "请重新连接或在设置中启用加密。"
+            "unavailableNowDescription": "请重新连接或在设置中启用加密。",
+            "rejectedTitle": "证书无效",
+            "rejectedDescription": "此联系人已发布 OpenPGP 密钥，但验证失败。消息将以明文形式发送。"
         },
         "tabs": {
             "profile": "个人资料",
@@ -477,6 +479,14 @@
             "attachmentKeyWouldLeak": "Message not sent — the attachment is encrypted but end-to-end encryption is unavailable. Sending would expose the file key.",
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
+            "rejected": "证书被拒绝",
+            "rejectedTooltip": "对方的 OpenPGP 证书无效 — 点击查看详情",
+            "rejectedTitle": "证书被拒绝",
+            "rejectionCode": {
+                "validation_failed": "无法解析证书",
+                "fingerprint_mismatch": "指纹与公布的值不匹配",
+                "uid_mismatch": "证书身份与对方地址不匹配"
+            },
             "disableEncryption": "Disable encryption for this conversation",
             "enableEncryption": "Re-enable encryption",
             "tooltip": {

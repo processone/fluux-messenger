@@ -156,7 +156,9 @@
             "disabledByYouTitle": "Šifrēšana ir atspējota",
             "disabledByYouDescription": "Jūs atspējojāt šifrēšanu šim kontaktam. Ziņojumi tiks sūtīti atklātā tekstā.",
             "unavailableNowTitle": "Šifrēšana šobrīd nav pieejama",
-            "unavailableNowDescription": "Pieslēdzieties no jauna vai iespējojiet šifrēšanu iestatījumos."
+            "unavailableNowDescription": "Pieslēdzieties no jauna vai iespējojiet šifrēšanu iestatījumos.",
+            "rejectedTitle": "Nederīgs sertifikāts",
+            "rejectedDescription": "Šis kontakts ir publicējis OpenPGP atslēgu, bet tās validācija neizdevās. Ziņojumi tiks sūtīti atklātā tekstā."
         },
         "tabs": {
             "profile": "Profils",
@@ -478,6 +480,14 @@
             "attachmentKeyWouldLeak": "Message not sent — the attachment is encrypted but end-to-end encryption is unavailable. Sending would expose the file key.",
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
+            "rejected": "Sertifikāts noraidīts",
+            "rejectedTooltip": "Sarunu biedra OpenPGP sertifikāts nav derīgs — noklikšķiniet, lai uzzinātu vairāk",
+            "rejectedTitle": "Sertifikāts noraidīts",
+            "rejectionCode": {
+                "validation_failed": "Sertifikātu neizdevās nolasīt",
+                "fingerprint_mismatch": "Pirkstu nospiedums neatbilst norādītajai vērtībai",
+                "uid_mismatch": "Sertifikāta identitāte neatbilst sarunu biedra adresei"
+            },
             "disableEncryption": "Disable encryption for this conversation",
             "enableEncryption": "Re-enable encryption",
             "tooltip": {

@@ -156,7 +156,9 @@
             "disabledByYouTitle": "Šifrovanie je zakázané",
             "disabledByYouDescription": "Pre tento kontakt ste šifrovanie vypli. Správy sa odošlú v čistom texte.",
             "unavailableNowTitle": "Šifrovanie momentálne nie je k dispozícii",
-            "unavailableNowDescription": "Znova sa pripojte alebo povoľte šifrovanie v nastaveniach."
+            "unavailableNowDescription": "Znova sa pripojte alebo povoľte šifrovanie v nastaveniach.",
+            "rejectedTitle": "Neplatný certifikát",
+            "rejectedDescription": "Tento kontakt zverejnil kľúč OpenPGP, ale jeho overenie zlyhalo. Správy sa odošlú v čistom texte."
         },
         "tabs": {
             "profile": "Profil",
@@ -478,6 +480,14 @@
             "attachmentKeyWouldLeak": "Message not sent — the attachment is encrypted but end-to-end encryption is unavailable. Sending would expose the file key.",
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
+            "rejected": "Certifikát zamietnutý",
+            "rejectedTooltip": "OpenPGP certifikát partnera je neplatný — kliknite pre podrobnosti",
+            "rejectedTitle": "Certifikát zamietnutý",
+            "rejectionCode": {
+                "validation_failed": "Certifikát sa nepodarilo spracovať",
+                "fingerprint_mismatch": "Odtlačok sa nezhoduje s deklarovanou hodnotou",
+                "uid_mismatch": "Identita certifikátu sa nezhoduje s adresou partnera"
+            },
             "disableEncryption": "Disable encryption for this conversation",
             "enableEncryption": "Re-enable encryption",
             "tooltip": {

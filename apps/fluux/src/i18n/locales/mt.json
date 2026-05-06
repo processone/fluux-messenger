@@ -157,7 +157,9 @@
             "disabledByYouTitle": "Il-kriptaġġ ġie diżattivat",
             "disabledByYouDescription": "Inti tfajt il-kriptaġġ għal dan il-kuntatt. Il-messaġġi se jintbagħtu f’test ċar.",
             "unavailableNowTitle": "Il-kriptaġġ bħalissa mhux disponibbli",
-            "unavailableNowDescription": "Erġa’ qabbad jew attiva l-kriptaġġ fis-settings."
+            "unavailableNowDescription": "Erġa’ qabbad jew attiva l-kriptaġġ fis-settings.",
+            "rejectedTitle": "Ċertifikat mhux validu",
+            "rejectedDescription": "Dan il-kuntatt ippubblika ċavetta OpenPGP, iżda l-validazzjoni fallit. Il-messaġġi se jintbagħtu f’test ċar."
         },
         "tabs": {
             "profile": "Profil",
@@ -479,6 +481,14 @@
             "attachmentKeyWouldLeak": "Message not sent — the attachment is encrypted but end-to-end encryption is unavailable. Sending would expose the file key.",
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
+            "rejected": "Iċ-ċertifikat ġie rrifjutat",
+            "rejectedTooltip": "Iċ-ċertifikat OpenPGP tal-persuna l-oħra mhux validu — ikklikkja għad-dettalji",
+            "rejectedTitle": "Iċ-ċertifikat ġie rrifjutat",
+            "rejectionCode": {
+                "validation_failed": "Iċ-ċertifikat ma setax jiġi analizzat",
+                "fingerprint_mismatch": "Il-fingerprint ma jaqbilx mal-valur iddikkjarat",
+                "uid_mismatch": "L-identità taċ-ċertifikat ma taqbilx mal-indirizz tal-persuna l-oħra"
+            },
             "disableEncryption": "Disable encryption for this conversation",
             "enableEncryption": "Re-enable encryption",
             "tooltip": {

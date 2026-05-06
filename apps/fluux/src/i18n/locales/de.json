@@ -157,7 +157,9 @@
             "disabledByYouTitle": "Verschlüsselung deaktiviert",
             "disabledByYouDescription": "Du hast die Verschlüsselung für diesen Kontakt deaktiviert. Nachrichten werden im Klartext gesendet.",
             "unavailableNowTitle": "Verschlüsselung derzeit nicht verfügbar",
-            "unavailableNowDescription": "Verbinde dich erneut oder aktiviere die Verschlüsselung in den Einstellungen."
+            "unavailableNowDescription": "Verbinde dich erneut oder aktiviere die Verschlüsselung in den Einstellungen.",
+            "rejectedTitle": "Ungültiges Zertifikat",
+            "rejectedDescription": "Dieser Kontakt hat einen OpenPGP-Schlüssel veröffentlicht, aber die Überprüfung ist fehlgeschlagen. Nachrichten werden im Klartext gesendet."
         },
         "tabs": {
             "profile": "Profil",
@@ -479,6 +481,14 @@
             "attachmentKeyWouldLeak": "Message not sent — the attachment is encrypted but end-to-end encryption is unavailable. Sending would expose the file key.",
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
+            "rejected": "Zertifikat abgelehnt",
+            "rejectedTooltip": "Das OpenPGP-Zertifikat des Gesprächspartners ist ungültig — klicke für Details",
+            "rejectedTitle": "Zertifikat abgelehnt",
+            "rejectionCode": {
+                "validation_failed": "Zertifikat konnte nicht gelesen werden",
+                "fingerprint_mismatch": "Fingerabdruck stimmt nicht mit dem angegebenen Wert überein",
+                "uid_mismatch": "Zertifikatsidentität stimmt nicht mit der Adresse des Gesprächspartners überein"
+            },
             "disableEncryption": "Disable encryption for this conversation",
             "enableEncryption": "Re-enable encryption",
             "tooltip": {

@@ -157,7 +157,9 @@
             "disabledByYouTitle": "Krüpteerimine on keelatud",
             "disabledByYouDescription": "Keelasid selle kontakti jaoks krüpteerimise. Sõnumid saadetakse selgelt loetavana.",
             "unavailableNowTitle": "Krüpteerimine pole praegu saadaval",
-            "unavailableNowDescription": "Loo uuesti ühendus või luba krüpteerimine seadetes."
+            "unavailableNowDescription": "Loo uuesti ühendus või luba krüpteerimine seadetes.",
+            "rejectedTitle": "Kehtetu sertifikaat",
+            "rejectedDescription": "See kontakt on avaldanud OpenPGP võtme, kuid selle valideerimine ebaõnnestus. Sõnumid saadetakse selgelt loetavana."
         },
         "tabs": {
             "profile": "Profiil",
@@ -479,6 +481,14 @@
             "attachmentKeyWouldLeak": "Message not sent — the attachment is encrypted but end-to-end encryption is unavailable. Sending would expose the file key.",
             "plaintextForced": "Encryption disabled",
             "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
+            "rejected": "Sertifikaat tagasi lükatud",
+            "rejectedTooltip": "Vestluspartneri OpenPGP sertifikaat on kehtetu — klõpsa üksikasjade jaoks",
+            "rejectedTitle": "Sertifikaat tagasi lükatud",
+            "rejectionCode": {
+                "validation_failed": "Sertifikaati ei saanud analüüsida",
+                "fingerprint_mismatch": "Sõrmejälg ei ühti reklaamitud väärtusega",
+                "uid_mismatch": "Sertifikaadi identiteet ei ühti vestluspartneri aadressiga"
+            },
             "disableEncryption": "Disable encryption for this conversation",
             "enableEncryption": "Re-enable encryption",
             "tooltip": {
