@@ -143,15 +143,13 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
 
   protected async validateCert(
     publicArmored: string,
-  ): Promise<{ fingerprint: string; encryptionSubkeyCount: number }> {
+  ): Promise<{ fingerprint: string; encryptionSubkeyCount: number; userIDs: string[] }> {
     const { readKey } = await import('openpgp')
     const key = await readKey({ armoredKey: publicArmored })
     const fingerprint = key.getFingerprint()
-    // Count subkeys that could be used for encryption (we accept any subkey
-    // as a proxy — the encryption capability flag check is complex and
-    // the validate path is only used to confirm the advertised fingerprint).
     const encryptionSubkeyCount = key.subkeys.length
-    return { fingerprint, encryptionSubkeyCount }
+    const userIDs = key.getUserIDs()
+    return { fingerprint, encryptionSubkeyCount, userIDs }
   }
 
   protected async rotateKeyMaterial(_accountJid: string): Promise<KeyBundle> {

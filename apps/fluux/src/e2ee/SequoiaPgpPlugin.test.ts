@@ -80,6 +80,14 @@ function makeFakeRust() {
     return null
   }
 
+  const UID_TAG = 'UID:'
+  const extractUID = (armored: string): string | null => {
+    for (const line of armored.split('\n')) {
+      if (line.startsWith(UID_TAG)) return line.slice(UID_TAG.length).trim()
+    }
+    return null
+  }
+
   const invoke: InvokeFn = async <T>(cmd: string, args?: Record<string, unknown>) => {
     switch (cmd) {
       case 'openpgp_ensure_key': {
@@ -167,8 +175,8 @@ function makeFakeRust() {
       case 'openpgp_validate_cert': {
         const fp = extractFingerprint(args!.publicArmored as string)
         if (!fp) throw new Error('not a recognizable OpenPGP public key')
-        // Fake certs always have one encryption subkey.
-        return { fingerprint: fp, encryptionSubkeyCount: 1 } as T
+        const uid = extractUID(args!.publicArmored as string)
+        return { fingerprint: fp, encryptionSubkeyCount: 1, userIDs: uid ? [uid] : [] } as T
       }
       case 'openpgp_has_persisted_key': {
         const jid = args!.accountJid as string
@@ -202,7 +210,7 @@ function makeFakeRust() {
             '-----BEGIN PGP PUBLIC KEY BLOCK (STUB)-----',
             '-----END PGP PUBLIC KEY BLOCK (STUB)-----',
             current.fingerprint,
-            jid,
+            `xmpp:${jid}`,
             'public',
           )}\nRotation: ${prevRotation + 1}`,
         }
@@ -228,7 +236,7 @@ function makeFakeRust() {
             '-----BEGIN PGP PUBLIC KEY BLOCK (STUB)-----',
             '-----END PGP PUBLIC KEY BLOCK (STUB)-----',
             fp,
-            jid,
+            `xmpp:${jid}`,
             'public',
           ),
           keychainBacked: true,
@@ -316,11 +324,11 @@ async function buildCrossPublishedPair(fake: ReturnType<typeof makeFakeRust>): P
 
   const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
     accountJid: 'bob@example.com',
-    userId: 'bob@example.com',
+    userId: 'xmpp:bob@example.com',
   })
   const aliceBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
     accountJid: 'alice@example.com',
-    userId: 'alice@example.com',
+    userId: 'xmpp:alice@example.com',
   })
   publishKeyAsXep0373(aliceBuilt, 'bob@example.com', bobBundle)
   publishKeyAsXep0373(bobBuilt, 'alice@example.com', aliceBundle)
@@ -684,7 +692,7 @@ describe('SequoiaPgpPlugin', () => {
       // Pre-load key so we know its fingerprint and armored before init.
       const bundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'me@example.com',
-        userId: 'me@example.com',
+        userId: 'xmpp:me@example.com',
       })
       // Simulate a server that already has our key (e.g. previous session).
       publishKeyAsXep0373(built, 'me@example.com', bundle)
@@ -730,7 +738,7 @@ describe('SequoiaPgpPlugin', () => {
       // Get the key that openpgp_ensure_key will return for this device.
       const bundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'me@example.com',
-        userId: 'me@example.com',
+        userId: 'xmpp:me@example.com',
       })
       // Simulate what another device published after running rotateEncryptionKey():
       // same primary fingerprint, but different armored content. We build the
@@ -909,7 +917,7 @@ describe('SequoiaPgpPlugin', () => {
       // Simulate bob publishing a spec-compliant XEP-0373 identity.
       const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'bob@example.com',
-        userId: 'Bob',
+        userId: 'xmpp:bob@example.com',
       })
       publishKeyAsXep0373(built, 'bob@example.com', bobBundle)
 
@@ -965,7 +973,7 @@ describe('SequoiaPgpPlugin', () => {
 
       const realBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'impostor@example.com',
-        userId: 'impostor',
+        userId: 'xmpp:impostor@example.com',
       })
       built.peerPublish('suspect@example.com', METADATA_NODE, {
         id: 'current',
@@ -1006,7 +1014,7 @@ describe('SequoiaPgpPlugin', () => {
       await plugin.init(built.ctx)
       const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'bob@example.com',
-        userId: 'Bob',
+        userId: 'xmpp:bob@example.com',
       })
       publishKeyAsXep0373(built, 'bob@example.com', bobBundle)
 
@@ -1027,7 +1035,7 @@ describe('SequoiaPgpPlugin', () => {
       await plugin.init(built.ctx)
       const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'bob@example.com',
-        userId: 'Bob',
+        userId: 'xmpp:bob@example.com',
       })
       built.peerPublish('bob@example.com', METADATA_NODE, {
         id: 'current',
@@ -1103,16 +1111,17 @@ describe('SequoiaPgpPlugin', () => {
       ) => {
         if (cmd === 'openpgp_validate_cert') {
           const armored = args!.publicArmored as string
+          let fp: string | null = null
+          const uids: string[] = []
           for (const line of armored.split('\n')) {
             if (line.startsWith('Comment:')) {
               const candidate = line.slice('Comment:'.length).trim()
-              // Crude hex-only filter so the "bob@example.com" Comment
-              // line doesn't accidentally register as a fingerprint.
-              if (/^[0-9A-Z]+$/i.test(candidate))
-                return { fingerprint: candidate, encryptionSubkeyCount: 1 } as T
+              if (/^[0-9A-Z]+$/i.test(candidate)) fp = candidate
+              else if (candidate.includes('@')) uids.push(`xmpp:${candidate}`)
             }
           }
-          throw new Error('not a recognizable OpenPGP public key')
+          if (!fp) throw new Error('not a recognizable OpenPGP public key')
+          return { fingerprint: fp, encryptionSubkeyCount: 1, userIDs: uids } as T
         }
         return fake.invoke<T>(cmd, args)
       }
@@ -1163,7 +1172,7 @@ describe('SequoiaPgpPlugin', () => {
       await plugin.init(built.ctx)
       const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'bob@example.com',
-        userId: 'Bob',
+        userId: 'xmpp:bob@example.com',
       })
 
       const upperFp = bobBundle.fingerprint.toUpperCase()
@@ -1225,7 +1234,7 @@ describe('SequoiaPgpPlugin', () => {
 
       const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'bob@example.com',
-        userId: 'Bob',
+        userId: 'xmpp:bob@example.com',
       })
       publishKeyAsXep0373(built, 'bob@example.com', bobBundle)
 
@@ -1255,7 +1264,7 @@ describe('SequoiaPgpPlugin', () => {
 
       const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'bob@example.com',
-        userId: 'Bob',
+        userId: 'xmpp:bob@example.com',
       })
       publishKeyAsXep0373(built, 'bob@example.com', bobBundle)
 
@@ -1276,7 +1285,7 @@ describe('SequoiaPgpPlugin', () => {
       await plugin.init(built.ctx)
       const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'bob@example.com',
-        userId: 'Bob',
+        userId: 'xmpp:bob@example.com',
       })
       const V4_DECOY = 'DECOY0000000000000000000000000000000000'
       built.peerPublish('bob@example.com', METADATA_NODE, {
@@ -1335,7 +1344,7 @@ describe('SequoiaPgpPlugin', () => {
       await plugin.init(built.ctx)
       const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'bob@example.com',
-        userId: 'Bob',
+        userId: 'xmpp:bob@example.com',
       })
       publishKeyAsXep0373(built, 'bob@example.com', bobBundle)
 
@@ -1370,11 +1379,11 @@ describe('SequoiaPgpPlugin', () => {
       await plugin.init(built.ctx)
       const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'bob@example.com',
-        userId: 'Bob',
+        userId: 'xmpp:bob@example.com',
       })
       const carolBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'carol@example.com',
-        userId: 'Carol',
+        userId: 'xmpp:carol@example.com',
       })
       publishKeyAsXep0373(built, 'bob@example.com', bobBundle)
       publishKeyAsXep0373(built, 'carol@example.com', carolBundle)
@@ -1436,11 +1445,11 @@ describe('SequoiaPgpPlugin', () => {
 
       const aliceBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'alice@example.com',
-        userId: 'alice@example.com',
+        userId: 'xmpp:alice@example.com',
       })
       const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'bob@example.com',
-        userId: 'bob@example.com',
+        userId: 'xmpp:bob@example.com',
       })
       // Alice needs bob's key cached to encrypt to him.
       publishKeyAsXep0373(aliceBuilt, 'bob@example.com', bobBundle)
@@ -1484,11 +1493,11 @@ describe('SequoiaPgpPlugin', () => {
 
       const aliceBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'alice@example.com',
-        userId: 'alice',
+        userId: 'xmpp:alice@example.com',
       })
       const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'bob@example.com',
-        userId: 'bob',
+        userId: 'xmpp:bob@example.com',
       })
       publishKeyAsXep0373(aliceBuilt, 'bob@example.com', bobBundle)
       publishKeyAsXep0373(bobBuilt, 'alice@example.com', aliceBundle)
@@ -1526,7 +1535,7 @@ describe('SequoiaPgpPlugin', () => {
       await bobPlugin.init(bobBuilt.ctx)
       const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'bob@example.com',
-        userId: 'bob@example.com',
+        userId: 'xmpp:bob@example.com',
       })
       publishKeyAsXep0373(aliceBuilt, 'bob@example.com', bobBundle)
       await alicePlugin.probePeer('bob@example.com')
@@ -1543,9 +1552,11 @@ describe('SequoiaPgpPlugin', () => {
       await decryptWithoutPeerKey(bobPlugin, payload.stanzaElement, 'm-mismatch')
 
       // Bob later sees eve's key advertised as alice (misconfigured server).
+      // Eve forged the UID to claim alice's JID, but the crypto signature
+      // won't match alice's actual signing key.
       const eveBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'eve@example.com',
-        userId: 'eve@example.com',
+        userId: 'xmpp:alice@example.com',
       })
       publishKeyAsXep0373(bobBuilt, 'alice@example.com', eveBundle)
 
@@ -1567,11 +1578,11 @@ describe('SequoiaPgpPlugin', () => {
       await bobPlugin.init(bobBuilt.ctx)
       const aliceBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'alice@example.com',
-        userId: 'alice',
+        userId: 'xmpp:alice@example.com',
       })
       const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'bob@example.com',
-        userId: 'bob',
+        userId: 'xmpp:bob@example.com',
       })
       publishKeyAsXep0373(aliceBuilt, 'bob@example.com', bobBundle)
       await alicePlugin.probePeer('bob@example.com')
@@ -1620,11 +1631,11 @@ describe('SequoiaPgpPlugin', () => {
 
       const aliceBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'alice@example.com',
-        userId: 'alice',
+        userId: 'xmpp:alice@example.com',
       })
       const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'bob@example.com',
-        userId: 'bob',
+        userId: 'xmpp:bob@example.com',
       })
       publishKeyAsXep0373(aliceBuilt, 'bob@example.com', bobBundle)
       await alicePlugin.probePeer('bob@example.com')
@@ -1664,11 +1675,11 @@ describe('SequoiaPgpPlugin', () => {
       await bobPlugin.init(bobBuilt.ctx)
       const aliceBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'alice@example.com',
-        userId: 'alice',
+        userId: 'xmpp:alice@example.com',
       })
       const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'bob@example.com',
-        userId: 'bob',
+        userId: 'xmpp:bob@example.com',
       })
       publishKeyAsXep0373(aliceBuilt, 'bob@example.com', bobBundle)
       await alicePlugin.probePeer('bob@example.com')
@@ -1707,11 +1718,11 @@ describe('SequoiaPgpPlugin', () => {
       await carolPlugin.init(carolBuilt.ctx)
       const aliceBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'alice@example.com',
-        userId: 'alice',
+        userId: 'xmpp:alice@example.com',
       })
       const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'bob@example.com',
-        userId: 'bob',
+        userId: 'xmpp:bob@example.com',
       })
       publishKeyAsXep0373(aliceBuilt, 'bob@example.com', bobBundle)
       publishKeyAsXep0373(carolBuilt, 'bob@example.com', bobBundle)
@@ -1798,7 +1809,7 @@ describe('SequoiaPgpPlugin', () => {
       // the signature mismatch against what was actually signed.
       const evePubkey = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'eve@example.com',
-        userId: 'eve@example.com',
+        userId: 'xmpp:alice@example.com',
       })
       bob.ctx.xmpp.queryPEP = async (_jid, node) => {
         if (node === METADATA_NODE) {
@@ -2901,7 +2912,7 @@ describe('SequoiaPgpPlugin', () => {
       fake.accounts.delete('bob@example.com')
       const newBob = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'bob@example.com',
-        userId: 'bob@example.com',
+        userId: 'xmpp:bob@example.com',
       })
       rewireBobPepFor(alice, newBob)
       alice.plugin.onPeerKeysChanged('bob@example.com')
@@ -3089,7 +3100,7 @@ describe('SequoiaPgpPlugin', () => {
       fake.accounts.delete('bob@example.com')
       const newerBob = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid: 'bob@example.com',
-        userId: 'bob@example.com',
+        userId: 'xmpp:bob@example.com',
       })
       rewireBobPepFor(alice, newerBob)
 

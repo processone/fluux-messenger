@@ -280,7 +280,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    */
   protected abstract validateCert(
     publicArmored: string,
-  ): Promise<{ fingerprint: string; encryptionSubkeyCount: number }>
+  ): Promise<{ fingerprint: string; encryptionSubkeyCount: number; userIDs: string[] }>
 
   /**
    * Rotate the encryption subkey while keeping the primary key (and
@@ -946,7 +946,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       for (const item of items) {
         const armored = parsePublicKeyDataItem(item.payload)
         if (!armored) continue
-        let validation: { fingerprint: string; encryptionSubkeyCount: number }
+        let validation: { fingerprint: string; encryptionSubkeyCount: number; userIDs: string[] }
         try {
           validation = await this.validateCert(armored)
         } catch (err) {
@@ -958,6 +958,16 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         if (!fingerprintsEqual(validation.fingerprint, fingerprint)) {
           ctx.logger.warn(
             `${this.pluginName()}: ${peer} advertised ${fingerprint} but served key with ${validation.fingerprint}; discarding`,
+          )
+          continue
+        }
+        const expectedUid = `xmpp:${peer}`
+        const uidMatch = validation.userIDs.some(
+          (uid) => uid.toLowerCase() === expectedUid.toLowerCase(),
+        )
+        if (!uidMatch) {
+          ctx.logger.warn(
+            `${this.pluginName()}: ${peer} key ${fingerprint} has no matching UID (expected ${expectedUid}, got [${validation.userIDs.join(', ')}]); discarding`,
           )
           continue
         }

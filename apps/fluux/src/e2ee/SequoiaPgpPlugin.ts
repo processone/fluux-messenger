@@ -92,8 +92,8 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
 
   protected async validateCert(
     publicArmored: string,
-  ): Promise<{ fingerprint: string; encryptionSubkeyCount: number }> {
-    return this.invoke<{ fingerprint: string; encryptionSubkeyCount: number }>(
+  ): Promise<{ fingerprint: string; encryptionSubkeyCount: number; userIDs: string[] }> {
+    return this.invoke<{ fingerprint: string; encryptionSubkeyCount: number; userIDs: string[] }>(
       'openpgp_validate_cert',
       { publicArmored },
     )

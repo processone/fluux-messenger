@@ -544,6 +544,8 @@ pub struct CertValidation {
     /// Number of encryption-capable subkeys that pass [`StandardPolicy`]:
     /// alive, not revoked, supported, and with a valid binding signature.
     pub encryption_subkey_count: u32,
+    /// Raw User ID strings from the certificate (e.g. `"xmpp:user@domain"`).
+    pub user_ids: Vec<String>,
 }
 
 /// Validate a PGP public key and return its structural metrics.
@@ -577,9 +579,15 @@ pub fn validate_cert(public_armored: &str) -> Result<CertValidation> {
         ));
     }
 
+    let user_ids: Vec<String> = cert
+        .userids()
+        .map(|ua| String::from_utf8_lossy(ua.userid().value()).into_owned())
+        .collect();
+
     Ok(CertValidation {
         fingerprint: cert.fingerprint().to_hex(),
         encryption_subkey_count,
+        user_ids,
     })
 }
 
