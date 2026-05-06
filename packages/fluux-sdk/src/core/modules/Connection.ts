@@ -2474,9 +2474,18 @@ export class Connection extends BaseModule {
       logError('Reconnect failed:', err)
       this.stores.console.addEvent(`Reconnect attempt failed: ${errorMsg}`, 'error')
       logErr(`Reconnect failed: ${errorMsg}`)
-      // Signal machine: reconnect failed → back to waiting (attempt/delay are
-      // saturated by the state machine once the backoff ceiling is reached).
-      this.sendMachineEvent({ type: 'CONNECTION_ERROR', error: errorMsg }, 'attemptReconnect:error')
+      // "No credentials available" means there is nothing to retry with (FAST
+      // token gone, no password fallback). Treat as auth failure so the machine
+      // transitions to terminal.authFailed and the UI shows the login screen
+      // instead of looping forever with no chance of success.
+      const isNoCredentials = err instanceof Error && err.message.startsWith('No credentials available')
+      if (isNoCredentials) {
+        this.sendMachineEvent({ type: 'AUTH_ERROR' }, 'attemptReconnect:no-credentials')
+      } else {
+        // Signal machine: reconnect failed → back to waiting (attempt/delay are
+        // saturated by the state machine once the backoff ceiling is reached).
+        this.sendMachineEvent({ type: 'CONNECTION_ERROR', error: errorMsg }, 'attemptReconnect:error')
+      }
     }
   }
 
