@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Copy, Check, Lock, AlertTriangle, Trash2, CloudUpload, CloudDownload, RefreshCw } from 'lucide-react'
+import { Copy, Check, Lock, AlertTriangle, Trash2, CloudUpload, CloudDownload, RefreshCw, X, Info, ChevronDown, ChevronRight } from 'lucide-react'
 import { useConnection, useXMPPContext } from '@fluux/sdk'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { registerE2EEPlugins, unregisterE2EEPlugins } from '@/e2ee/registerPlugins'
@@ -80,6 +80,18 @@ export function EncryptionSettings() {
     accountJid: string
     backupMessage: string
   } | null>(null)
+
+  const [limitationsDismissed, setLimitationsDismissed] = useState(
+    () => localStorage.getItem('enc-limitations-dismissed') === '1'
+  )
+  const [backupDescVisible, setBackupDescVisible] = useState(false)
+  const [rotateDescVisible, setRotateDescVisible] = useState(false)
+  const [dangerZoneExpanded, setDangerZoneExpanded] = useState(false)
+
+  const handleDismissLimitations = () => {
+    localStorage.setItem('enc-limitations-dismissed', '1')
+    setLimitationsDismissed(true)
+  }
 
   const online = status === 'online'
   const pluginStatus: PluginStatus = !openpgpEnabled
@@ -580,26 +592,46 @@ export function EncryptionSettings() {
           </div>
         )}
 
-        {/* Limitations callout */}
-        <div className="flex gap-2 p-3 rounded-lg bg-yellow-500/10 text-xs text-fluux-muted leading-snug">
-          <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="font-medium text-fluux-text">
-              {t('settings.encryption.limitationsTitle')}
-            </p>
-            <p className="mt-1">{t('settings.encryption.limitationBackend')}</p>
+        {/* Limitations callout — dismissible */}
+        {!limitationsDismissed && (
+          <div className="flex gap-2 p-3 rounded-lg bg-yellow-500/10 text-xs text-fluux-muted leading-snug">
+            <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-medium text-fluux-text">
+                {t('settings.encryption.limitationsTitle')}
+              </p>
+              <p className="mt-1">{t('settings.encryption.limitationBackend')}</p>
+            </div>
+            <button
+              onClick={handleDismissLimitations}
+              aria-label={t('common.close')}
+              className="flex-shrink-0 p-0.5 text-fluux-muted hover:text-fluux-text rounded transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
           </div>
-        </div>
+        )}
 
         {/* Backup to server — only when a key actually exists to back up. */}
         {pluginStatus === 'ready' && (
           <div className="space-y-2">
-            <label className="text-sm font-medium text-fluux-text">
-              {t('settings.encryption.backupLabel')}
-            </label>
-            <p className="text-xs text-fluux-muted leading-snug">
-              {t('settings.encryption.backupDescription')}
-            </p>
+            <div className="flex items-center gap-1.5">
+              <label className="text-sm font-medium text-fluux-text">
+                {t('settings.encryption.backupLabel')}
+              </label>
+              <button
+                onClick={() => setBackupDescVisible((v) => !v)}
+                aria-label={t('settings.encryption.backupLabel')}
+                className="text-fluux-muted hover:text-fluux-text transition-colors"
+              >
+                <Info className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            {backupDescVisible && (
+              <p className="text-xs text-fluux-muted leading-snug">
+                {t('settings.encryption.backupDescription')}
+              </p>
+            )}
             {(() => {
               // Three visible states:
               //   checking  → pre-probe transient
@@ -668,12 +700,23 @@ export function EncryptionSettings() {
         {/* Rotation — primary fingerprint stays stable so peer trust survives. */}
         {pluginStatus === 'ready' && (
           <div className="space-y-2 pt-2 border-t border-fluux-hover">
-            <label className="text-sm font-medium text-fluux-text">
-              {t('settings.encryption.rotateLabel')}
-            </label>
-            <p className="text-xs text-fluux-muted leading-snug">
-              {t('settings.encryption.rotateDescription')}
-            </p>
+            <div className="flex items-center gap-1.5">
+              <label className="text-sm font-medium text-fluux-text">
+                {t('settings.encryption.rotateLabel')}
+              </label>
+              <button
+                onClick={() => setRotateDescVisible((v) => !v)}
+                aria-label={t('settings.encryption.rotateLabel')}
+                className="text-fluux-muted hover:text-fluux-text transition-colors"
+              >
+                <Info className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            {rotateDescVisible && (
+              <p className="text-xs text-fluux-muted leading-snug">
+                {t('settings.encryption.rotateDescription')}
+              </p>
+            )}
             <button
               onClick={handleRotateRequest}
               disabled={isRotating}
@@ -689,21 +732,36 @@ export function EncryptionSettings() {
 
         {/* Destructive action — only when a key actually exists to delete. */}
         {pluginStatus === 'ready' && (
-          <div className="space-y-2 pt-2 border-t border-fluux-hover">
-            <label className="text-sm font-medium text-fluux-text">
-              {t('settings.encryption.dangerZone')}
-            </label>
-            <p className="text-xs text-fluux-muted leading-snug">
-              {t('settings.encryption.deleteKeyDescription')}
-            </p>
+          <div className="pt-2 border-t border-fluux-hover">
             <button
-              onClick={() => setShowDeleteConfirm(true)}
-              disabled={isDeleting}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-red-500/10 hover:bg-red-500/20 text-red-500 dark:text-red-400 rounded transition-colors disabled:opacity-50 disabled:cursor-wait"
+              onClick={() => setDangerZoneExpanded((v) => !v)}
+              aria-expanded={dangerZoneExpanded}
+              className="flex items-center gap-1.5 w-full text-left"
             >
-              <Trash2 className="w-3.5 h-3.5" />
-              {t('settings.encryption.deleteKey')}
+              {dangerZoneExpanded ? (
+                <ChevronDown className="w-3.5 h-3.5 text-fluux-muted flex-shrink-0" />
+              ) : (
+                <ChevronRight className="w-3.5 h-3.5 text-fluux-muted flex-shrink-0" />
+              )}
+              <span className="text-sm font-medium text-fluux-text">
+                {t('settings.encryption.dangerZone')}
+              </span>
             </button>
+            {dangerZoneExpanded && (
+              <div className="space-y-2 mt-2">
+                <p className="text-xs text-fluux-muted leading-snug">
+                  {t('settings.encryption.deleteKeyDescription')}
+                </p>
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  disabled={isDeleting}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-red-500/10 hover:bg-red-500/20 text-red-500 dark:text-red-400 rounded transition-colors disabled:opacity-50 disabled:cursor-wait"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  {t('settings.encryption.deleteKey')}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
