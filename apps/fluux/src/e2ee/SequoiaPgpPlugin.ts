@@ -1251,25 +1251,26 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
       for (const item of items) {
         const armored = parsePublicKeyDataItem(item.payload)
         if (!armored) continue
-        let parsedFingerprint: string
+        let validation: { fingerprint: string; encryptionSubkeyCount: number }
         try {
-          parsedFingerprint = await this.invoke<string>('openpgp_fingerprint', {
-            publicArmored: armored,
-          })
+          validation = await this.invoke<{ fingerprint: string; encryptionSubkeyCount: number }>(
+            'openpgp_validate_cert',
+            { publicArmored: armored },
+          )
         } catch (err) {
-          ctx.logger.debug(
-            `SequoiaPgpPlugin: openpgp_fingerprint for ${peer}/${fingerprint} failed: ${formatError(err)}`,
+          ctx.logger.warn(
+            `SequoiaPgpPlugin: openpgp_validate_cert for ${peer}/${fingerprint} failed: ${formatError(err)}`,
           )
           continue
         }
-        if (!fingerprintsEqual(parsedFingerprint, fingerprint)) {
+        if (!fingerprintsEqual(validation.fingerprint, fingerprint)) {
           ctx.logger.warn(
-            `SequoiaPgpPlugin: ${peer} advertised ${fingerprint} but served key with ${parsedFingerprint}; discarding`,
+            `SequoiaPgpPlugin: ${peer} advertised ${fingerprint} but served key with ${validation.fingerprint}; discarding`,
           )
           continue
         }
         return {
-          fingerprint: parsedFingerprint,
+          fingerprint: validation.fingerprint,
           publicArmored: armored,
           // Flag only meaningful on our own identity — peers always `false`.
           keychainBacked: false,

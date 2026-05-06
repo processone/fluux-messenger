@@ -534,6 +534,54 @@ pub fn fingerprint_of(public_armored: &str) -> Result<String, String> {
     Ok(cert.fingerprint().to_hex())
 }
 
+/// Structural metrics returned by [`openpgp_validate_cert`].
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CertValidation {
+    /// Upper-case hex fingerprint of the primary key.
+    pub fingerprint: String,
+    /// Number of encryption-capable subkeys that pass [`StandardPolicy`]:
+    /// alive, not revoked, supported, and with a valid binding signature.
+    pub encryption_subkey_count: u32,
+}
+
+/// Validate a PGP public key and return its structural metrics.
+///
+/// Applies [`StandardPolicy`] to every key component, which verifies
+/// subkey binding signatures and rejects subkeys that fail. Returns an
+/// error when the cert is unparseable, or when no encryption subkey
+/// passes the policy — i.e., when [`encrypt_and_sign`] would immediately
+/// fail with "no usable recipients".
+///
+/// Callers use this at key-fetch time so a cert with bad bindings is
+/// rejected before it enters the peer cache, rather than surfacing the
+/// failure as a cryptic "no recipients" error at message-send time.
+pub fn validate_cert(public_armored: &str) -> Result<CertValidation> {
+    let policy = StandardPolicy::new();
+    let cert = Cert::from_bytes(public_armored.as_bytes())
+        .context("not a recognizable OpenPGP public key")?;
+
+    let encryption_subkey_count = cert
+        .keys()
+        .with_policy(&policy, None)
+        .supported()
+        .alive()
+        .revoked(false)
+        .for_transport_encryption()
+        .count() as u32;
+
+    if encryption_subkey_count == 0 {
+        return Err(anyhow!(
+            "certificate has no usable encryption subkey with a valid binding signature"
+        ));
+    }
+
+    Ok(CertValidation {
+        fingerprint: cert.fingerprint().to_hex(),
+        encryption_subkey_count,
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Tauri command shims
 // ---------------------------------------------------------------------------
@@ -599,6 +647,11 @@ pub fn openpgp_decrypt(
 #[tauri::command]
 pub fn openpgp_fingerprint(public_armored: String) -> Result<String, String> {
     fingerprint_of(&public_armored)
+}
+
+#[tauri::command]
+pub fn openpgp_validate_cert(public_armored: String) -> Result<CertValidation, String> {
+    validate_cert(&public_armored).map_err(anyhow_to_string)
 }
 
 #[tauri::command]

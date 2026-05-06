@@ -1105,6 +1105,7 @@ fn main() {
             openpgp::openpgp_encrypt,
             openpgp::openpgp_decrypt,
             openpgp::openpgp_fingerprint,
+            openpgp::openpgp_validate_cert,
             openpgp::openpgp_forget_account,
             openpgp::openpgp_has_persisted_key,
             openpgp::openpgp_backup_encrypt,

@@ -164,6 +164,12 @@ function makeFakeRust() {
         if (!fp) throw new Error('no fingerprint')
         return fp as T
       }
+      case 'openpgp_validate_cert': {
+        const fp = extractFingerprint(args!.publicArmored as string)
+        if (!fp) throw new Error('not a recognizable OpenPGP public key')
+        // Fake certs always have one encryption subkey.
+        return { fingerprint: fp, encryptionSubkeyCount: 1 } as T
+      }
       case 'openpgp_has_persisted_key': {
         const jid = args!.accountJid as string
         return accounts.has(jid) as T
@@ -1089,23 +1095,24 @@ describe('SequoiaPgpPlugin', () => {
         '-----END PGP PUBLIC KEY BLOCK-----',
       ].join('\n')
 
-      // Wrap the fake invoke so `openpgp_fingerprint` teaches it about
+      // Wrap the fake invoke so `openpgp_validate_cert` teaches it about
       // the Comment-style header — mirrors the Rust side's reality.
       const wrappedInvoke: InvokeFn = async <T>(
         cmd: string,
         args?: Record<string, unknown>,
       ) => {
-        if (cmd === 'openpgp_fingerprint') {
+        if (cmd === 'openpgp_validate_cert') {
           const armored = args!.publicArmored as string
           for (const line of armored.split('\n')) {
             if (line.startsWith('Comment:')) {
               const candidate = line.slice('Comment:'.length).trim()
               // Crude hex-only filter so the "bob@example.com" Comment
               // line doesn't accidentally register as a fingerprint.
-              if (/^[0-9A-Z]+$/i.test(candidate)) return candidate as T
+              if (/^[0-9A-Z]+$/i.test(candidate))
+                return { fingerprint: candidate, encryptionSubkeyCount: 1 } as T
             }
           }
-          throw new Error('no fingerprint')
+          throw new Error('not a recognizable OpenPGP public key')
         }
         return fake.invoke<T>(cmd, args)
       }
@@ -1198,7 +1205,7 @@ describe('SequoiaPgpPlugin', () => {
       expect(support.supported).toBe(true)
     })
 
-    it('silently skips a key when openpgp_fingerprint throws', async () => {
+    it('silently skips a key when openpgp_validate_cert throws (unparseable cert)', async () => {
       // Rust can refuse an armor (corrupt body, unsupported key version,
       // etc.). That's an unsupported key, not a crash-worthy error. The
       // probe should swallow the failure and return unsupported, just
@@ -1208,8 +1215,38 @@ describe('SequoiaPgpPlugin', () => {
         cmd: string,
         args?: Record<string, unknown>,
       ) => {
-        if (cmd === 'openpgp_fingerprint') {
+        if (cmd === 'openpgp_validate_cert') {
           throw new Error('Rust: not a recognizable OpenPGP public key')
+        }
+        return fake.invoke<T>(cmd, args)
+      }
+      const pluginUnderTest = new SequoiaPgpPlugin({ invoke: wrappedInvoke })
+      await pluginUnderTest.init(built.ctx)
+
+      const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'bob@example.com',
+        userId: 'Bob',
+      })
+      publishKeyAsXep0373(built, 'bob@example.com', bobBundle)
+
+      const support = await pluginUnderTest.probePeer('bob@example.com')
+      expect(support.supported).toBe(false)
+      expect(pluginUnderTest.getPeerFingerprint('bob@example.com')).toBeNull()
+    })
+
+    it('silently skips a key when openpgp_validate_cert reports no usable encryption subkeys', async () => {
+      // A cert that parses OK but has no encryption subkeys with valid
+      // binding signatures should be rejected at cache time — not accepted
+      // and later discovered at send time with a cryptic "no recipients" error.
+      const built = makeContext('me@example.com')
+      const wrappedInvoke: InvokeFn = async <T>(
+        cmd: string,
+        args?: Record<string, unknown>,
+      ) => {
+        if (cmd === 'openpgp_validate_cert') {
+          throw new Error(
+            'certificate has no usable encryption subkey with a valid binding signature',
+          )
         }
         return fake.invoke<T>(cmd, args)
       }
