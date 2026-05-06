@@ -331,7 +331,7 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
     const { privateKey } = await generateKey({
       type: 'ecc',
       curve: 'curve25519Legacy',
-      userIDs: [{ name: accountJid, email: accountJid }],
+      userIDs: [{ name: `xmpp:${accountJid}` }],
       format: 'object',
     })
     const encrypted = await encryptKey({ privateKey, passphrase })

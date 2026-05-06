@@ -1197,7 +1197,8 @@ fn main() {
                     Ok(j) => j,
                     Err(_) => return, // NoEntry or access failure — quiet no-op
                 };
-                prewarm_state.prewarm_if_persisted(jid.clone(), jid);
+                let user_id = format!("xmpp:{jid}");
+                prewarm_state.prewarm_if_persisted(jid, user_id);
             });
 
             // Handle --clear-storage CLI flag (useful for debugging connection issues)

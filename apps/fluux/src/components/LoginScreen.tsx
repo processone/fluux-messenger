@@ -44,7 +44,7 @@ async function prewarmOpenpgpUnlock(jid: string): Promise<void> {
       // user_id doubles as the OpenPGP User ID when a fresh key is
       // generated; the JID is the right value for both historically
       // (mirrors SequoiaPgpPlugin.ensureIdentity's arguments).
-      userId: bareJid,
+      userId: `xmpp:${bareJid}`,
     })
   } catch (err) {
     console.warn('[Fluux] openpgp_prewarm failed (will unlock lazily):', err)

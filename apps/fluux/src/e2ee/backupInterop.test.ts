@@ -168,7 +168,7 @@ describe('backup interop: WebOpenPGPPlugin produces a Sequoia-compatible wire fo
     const { privateKey: tsk } = await openpgp.generateKey({
       type: 'ecc',
       curve: 'curve25519Legacy',
-      userIDs: [{ name: 'alice@example.com', email: 'alice@example.com' }],
+      userIDs: [{ name: 'xmpp:alice@example.com' }],
       format: 'object',
     })
     const tskArmored = tsk.armor()
@@ -203,7 +203,7 @@ describe('backup interop: WebOpenPGPPlugin produces a Sequoia-compatible wire fo
     const { privateKey: tsk } = await openpgp.generateKey({
       type: 'ecc',
       curve: 'curve25519Legacy',
-      userIDs: [{ name: 'alice@example.com', email: 'alice@example.com' }],
+      userIDs: [{ name: 'xmpp:alice@example.com' }],
       format: 'object',
     })
     const fixture = (await openpgp.encrypt({

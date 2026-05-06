@@ -53,7 +53,7 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
     try {
       return await this.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid,
-        userId: accountJid,
+        userId: `xmpp:${accountJid}`,
       })
     } catch (err) {
       throw this.toPluginError('ensureKeyMaterial', err)
