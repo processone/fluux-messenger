@@ -718,7 +718,18 @@
             "importFileDialogTitle": "从文件导入 OpenPGP 密钥",
             "importFileDialogBody": "输入导出此密钥文件时使用的密码短语。导入的密钥将替换当前的本地密钥。",
             "importFileSuccess": "密钥已从文件导入",
-            "importFileFailed": "无法读取所选文件"
+            "importFileFailed": "无法读取所选文件",
+            "unlockDialogTitle": "解锁端对端加密",
+            "unlockDialogBody": "请输入密码以解密您本次会话的加密密钥。",
+            "unlockDialogSetupTitle": "设置端对端加密",
+            "unlockDialogSetupBody": "选择一个密码来保护您的加密密钥。每次登录时都需要输入。",
+            "unlockAction": "解锁",
+            "unlockSetupAction": "设置",
+            "unlockSkip": "跳过 — 不加密发送",
+            "unlockPassphraseMismatch": "两次密码不一致",
+            "unlockPassphraseTooShort": "密码至少需要 8 个字符",
+            "lockedBannerBody": "您的加密密钥已锁定。请输入密码以在本次会话中启用加密。",
+            "rotateNotSupportedWeb": "密钥轮换在 Web 上不可用 — 请使用桌面应用。"
         }
     },
     "update": {

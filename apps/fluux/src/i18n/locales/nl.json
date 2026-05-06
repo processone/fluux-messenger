@@ -718,7 +718,18 @@
             "importFileDialogTitle": "OpenPGP-sleutel importeren uit bestand",
             "importFileDialogBody": "Voer de wachtwoordzin in die werd gebruikt bij het exporteren van dit sleutelbestand. De geïmporteerde sleutel vervangt de huidige lokale sleutel.",
             "importFileSuccess": "Sleutel geïmporteerd uit bestand",
-            "importFileFailed": "Het geselecteerde bestand kon niet worden gelezen"
+            "importFileFailed": "Het geselecteerde bestand kon niet worden gelezen",
+            "unlockDialogTitle": "End-to-end-versleuteling ontgrendelen",
+            "unlockDialogBody": "Voer je wachtwoordzin in om je sleutel voor deze sessie te ontsleutelen.",
+            "unlockDialogSetupTitle": "End-to-end-versleuteling instellen",
+            "unlockDialogSetupBody": "Kies een wachtwoordzin om je versleutelingssleutel te beschermen. Je hebt hem nodig bij elke aanmelding.",
+            "unlockAction": "Ontgrendelen",
+            "unlockSetupAction": "Instellen",
+            "unlockSkip": "Overslaan — verzenden zonder versleuteling",
+            "unlockPassphraseMismatch": "Wachtwoordzinnen komen niet overeen",
+            "unlockPassphraseTooShort": "De wachtwoordzin moet minimaal 8 tekens bevatten",
+            "lockedBannerBody": "Je versleutelingssleutel is vergrendeld. Voer je wachtwoordzin in om versleuteling voor deze sessie te activeren.",
+            "rotateNotSupportedWeb": "Sleutelrotatie is niet beschikbaar op het web — gebruik de desktopapp."
         }
     },
     "update": {

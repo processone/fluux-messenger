@@ -6,10 +6,9 @@
  * to the user's own OpenPGP key. Other devices of the same account receive
  * a PEP headline, fetch the node, decrypt it, and merge the entries.
  *
- * This reuses the existing `openpgp_encrypt` / `openpgp_decrypt` Tauri
- * commands — no new Rust code is required. The OpenPGP ciphertext wraps
- * raw JSON (not an XMPP signcrypt envelope), which works because Sequoia's
- * `encrypt_and_sign` writes arbitrary bytes into a `LiteralWriter`.
+ * Crypto is abstracted behind {@link EncryptFn}/{@link DecryptFn} so this
+ * module works with both the Sequoia/Tauri backend and the openpgp.js web
+ * backend without modification.
  *
  * Merge strategy: **union**. Remote entries absent from local are added;
  * no deletions are propagated across devices (revocations remain
@@ -18,11 +17,17 @@
 
 import type { PluginContext, XMLElementData } from '@fluux/sdk'
 
-type InvokeFn = <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>
+/** Encrypt `plaintext` to `recipientPublicArmored`. Returns armored ciphertext. */
+export type EncryptFn = (
+  plaintext: string,
+  recipientPublicArmored: string,
+) => Promise<string>
 
-interface DecryptResult {
-  plaintext: string
-}
+/** Decrypt `ciphertext` (encrypted to us). Returns `{ plaintext }`. */
+export type DecryptFn = (
+  ciphertext: string,
+  senderPublicArmored: string,
+) => Promise<{ plaintext: string }>
 
 export const VERIFICATIONS_NODE = 'urn:xmpp:fluux:verifications:0'
 const VERIFICATIONS_XMLNS = VERIFICATIONS_NODE
@@ -85,8 +90,7 @@ function b64Decode(encoded: string): string {
  */
 export async function publishVerificationsToServer(
   ctx: PluginContext,
-  invoke: InvokeFn,
-  ownJid: string,
+  encryptFn: EncryptFn,
   ownPublicArmored: string,
   verifications: Record<string, string>,
 ): Promise<void> {
@@ -94,11 +98,7 @@ export async function publishVerificationsToServer(
 
   const json = JSON.stringify({ v: 1, ts: Date.now(), verifications } satisfies VerificationPayload)
 
-  const armored = await invoke<string>('openpgp_encrypt', {
-    senderAccountJid: ownJid,
-    recipientPublicArmored: ownPublicArmored,
-    plaintext: json,
-  })
+  const armored = await encryptFn(json, ownPublicArmored)
 
   await ctx.xmpp.publishPEP(
     VERIFICATIONS_NODE,
@@ -113,7 +113,7 @@ export async function publishVerificationsToServer(
  */
 export async function fetchVerificationsFromServer(
   ctx: PluginContext,
-  invoke: InvokeFn,
+  decryptFn: DecryptFn,
   ownJid: string,
   ownPublicArmored: string,
 ): Promise<Record<string, string> | null> {
@@ -130,19 +130,15 @@ export async function fetchVerificationsFromServer(
 
   const armored = b64Decode(base64Ciphertext)
 
-  let rust: DecryptResult
+  let decrypted: { plaintext: string }
   try {
-    rust = await invoke<DecryptResult>('openpgp_decrypt', {
-      accountJid: ownJid,
-      ciphertext: armored,
-      senderPublicArmored: ownPublicArmored,
-    })
+    decrypted = await decryptFn(armored, ownPublicArmored)
   } catch {
     return null
   }
 
   try {
-    const payload = JSON.parse(rust.plaintext) as unknown
+    const payload = JSON.parse(decrypted.plaintext) as unknown
     if (
       !payload ||
       typeof payload !== 'object' ||

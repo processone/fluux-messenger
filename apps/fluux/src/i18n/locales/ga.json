@@ -718,7 +718,18 @@
             "importFileDialogTitle": "Iompórtáil eochair OpenPGP ó chomhad",
             "importFileDialogBody": "Iontráil an frása focal faire a úsáideadh agus an comhad eochaire seo á easpórtáil. Cuirfidh an eochair iompórtáilte an eochair áitiúil reatha ina háit.",
             "importFileSuccess": "Iompórtáladh an eochair ó chomhad",
-            "importFileFailed": "Níorbh fhéidir an comhad roghnaithe a léamh"
+            "importFileFailed": "Níorbh fhéidir an comhad roghnaithe a léamh",
+            "unlockDialogTitle": "Díghlasáil criptiú céim ar chéim",
+            "unlockDialogBody": "Cuir isteach do phasfhrása chun do eochair a dhíchriptiú don seisiún seo.",
+            "unlockDialogSetupTitle": "Cumraigh criptiú céim ar chéim",
+            "unlockDialogSetupBody": "Roghnaigh pasfhrása chun d'eochair criptiúcháin a chosaint. Beidh sé uait gach uair a logálann tú isteach.",
+            "unlockAction": "Díghlasáil",
+            "unlockSetupAction": "Cumraigh",
+            "unlockSkip": "Scip — seol gan criptiú",
+            "unlockPassphraseMismatch": "Ní hionann na pasfhrásaí",
+            "unlockPassphraseTooShort": "Caithfidh an pasfhrása a bheith ar a laghad 8 gcarachtar",
+            "lockedBannerBody": "Tá d'eochair criptiúcháin glasáilte. Cuir isteach do phasfhrása chun criptiú a chumasú don seisiún seo.",
+            "rotateNotSupportedWeb": "Níl rothlú eochrach ar fáil ar an ngréasán — úsáid an aip deisce."
         }
     },
     "update": {

@@ -718,7 +718,18 @@
             "importFileDialogTitle": "Importer OpenPGP-nøkkel fra fil",
             "importFileDialogBody": "Skriv inn passordfrasen som ble brukt ved eksport av denne nøkkelfilen. Den importerte nøkkelen erstatter den gjeldende lokale nøkkelen.",
             "importFileSuccess": "Nøkkel importert fra fil",
-            "importFileFailed": "Kunne ikke lese den valgte filen"
+            "importFileFailed": "Kunne ikke lese den valgte filen",
+            "unlockDialogTitle": "Lås opp ende-til-ende-kryptering",
+            "unlockDialogBody": "Oppgi passfrasen din for å dekryptere nøkkelen din for denne økt.",
+            "unlockDialogSetupTitle": "Konfigurer ende-til-ende-kryptering",
+            "unlockDialogSetupBody": "Velg en passfrase for å beskytte krypteringsnøkkelen din. Du trenger den hver gang du logger inn.",
+            "unlockAction": "Lås opp",
+            "unlockSetupAction": "Konfigurer",
+            "unlockSkip": "Hopp over — send uten kryptering",
+            "unlockPassphraseMismatch": "Passfrasene stemmer ikke overens",
+            "unlockPassphraseTooShort": "Passfrasen må være minst 8 tegn",
+            "lockedBannerBody": "Krypteringsnøkkelen din er låst. Oppgi passfrasen din for å aktivere kryptering for denne økt.",
+            "rotateNotSupportedWeb": "Nøkkelrotering er ikke tilgjengelig på nettet — bruk skrivebordsappen."
         }
     },
     "update": {

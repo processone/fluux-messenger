@@ -720,7 +720,18 @@
             "importFileDialogTitle": "Impordi OpenPGP võti failist",
             "importFileDialogBody": "Sisestage paroolilause, mida kasutati selle võtmefaili eksportimisel. Imporditud võti asendab praeguse kohaliku võtme.",
             "importFileSuccess": "Võti imporditi failist",
-            "importFileFailed": "Valitud faili ei õnnestunud lugeda"
+            "importFileFailed": "Valitud faili ei õnnestunud lugeda",
+            "unlockDialogTitle": "Ava otsast lõpuni krüpteerimine",
+            "unlockDialogBody": "Sisesta parool oma võtme dekrüpteerimiseks selle seansi jaoks.",
+            "unlockDialogSetupTitle": "Seadista otsast lõpuni krüpteerimine",
+            "unlockDialogSetupBody": "Vali parool oma krüpteerimisvõtme kaitsmiseks. Vajad seda iga kord sisselogimisel.",
+            "unlockAction": "Ava",
+            "unlockSetupAction": "Seadista",
+            "unlockSkip": "Jäta vahele — saada ilma krüpteerimiseta",
+            "unlockPassphraseMismatch": "Paroolid ei ühti",
+            "unlockPassphraseTooShort": "Parool peab olema vähemalt 8 märki pikk",
+            "lockedBannerBody": "Sinu krüpteerimisvõti on lukustatud. Sisesta parool krüpteerimise aktiveerimiseks selle seansi jaoks.",
+            "rotateNotSupportedWeb": "Võtme rotatsioon ei ole veebis saadaval — kasuta lauaarvutirakendust."
         }
     },
     "update": {

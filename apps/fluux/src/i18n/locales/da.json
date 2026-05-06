@@ -718,7 +718,18 @@
             "importFileDialogTitle": "Importer OpenPGP-nøgle fra fil",
             "importFileDialogBody": "Indtast den adgangskode, der blev brugt ved eksport af denne nøglefil. Den importerede nøgle erstatter den aktuelle lokale nøgle.",
             "importFileSuccess": "Nøgle importeret fra fil",
-            "importFileFailed": "Kunne ikke læse den valgte fil"
+            "importFileFailed": "Kunne ikke læse den valgte fil",
+            "unlockDialogTitle": "Lås end-to-end-kryptering op",
+            "unlockDialogBody": "Indtast din adgangskode for at dekryptere din nøgle til denne session.",
+            "unlockDialogSetupTitle": "Konfigurer end-to-end-kryptering",
+            "unlockDialogSetupBody": "Vælg en adgangskode for at beskytte din krypteringsnøgle. Du skal bruge den hver gang du logger ind.",
+            "unlockAction": "Lås op",
+            "unlockSetupAction": "Konfigurer",
+            "unlockSkip": "Spring over — send uden kryptering",
+            "unlockPassphraseMismatch": "Adgangskoderne stemmer ikke overens",
+            "unlockPassphraseTooShort": "Adgangskoden skal være mindst 8 tegn",
+            "lockedBannerBody": "Din krypteringsnøgle er låst. Indtast din adgangskode for at aktivere kryptering for denne session.",
+            "rotateNotSupportedWeb": "Nøglerotation er ikke tilgængelig på webbet — brug desktopappen."
         }
     },
     "update": {

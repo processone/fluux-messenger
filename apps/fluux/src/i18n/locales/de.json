@@ -720,7 +720,18 @@
             "importFileDialogTitle": "OpenPGP-Schlüssel aus Datei importieren",
             "importFileDialogBody": "Geben Sie die Passphrase ein, die beim Exportieren dieser Schlüsseldatei verwendet wurde. Der importierte Schlüssel ersetzt den aktuellen lokalen Schlüssel.",
             "importFileSuccess": "Schlüssel aus Datei importiert",
-            "importFileFailed": "Die ausgewählte Datei konnte nicht gelesen werden"
+            "importFileFailed": "Die ausgewählte Datei konnte nicht gelesen werden",
+            "unlockDialogTitle": "Ende-zu-Ende-Verschlüsselung entsperren",
+            "unlockDialogBody": "Gib deine Passphrase ein, um deinen Schlüssel für diese Sitzung zu entschlüsseln.",
+            "unlockDialogSetupTitle": "Ende-zu-Ende-Verschlüsselung einrichten",
+            "unlockDialogSetupBody": "Wähle eine Passphrase zum Schutz deines Verschlüsselungsschlüssels. Du benötigst sie bei jeder Anmeldung.",
+            "unlockAction": "Entsperren",
+            "unlockSetupAction": "Einrichten",
+            "unlockSkip": "Überspringen — ohne Verschlüsselung senden",
+            "unlockPassphraseMismatch": "Passphrasen stimmen nicht überein",
+            "unlockPassphraseTooShort": "Die Passphrase muss mindestens 8 Zeichen lang sein",
+            "lockedBannerBody": "Dein Verschlüsselungsschlüssel ist gesperrt. Gib deine Passphrase ein, um die Verschlüsselung für diese Sitzung zu aktivieren.",
+            "rotateNotSupportedWeb": "Schlüsselrotation ist im Web nicht verfügbar — verwende die Desktop-App."
         }
     },
     "update": {

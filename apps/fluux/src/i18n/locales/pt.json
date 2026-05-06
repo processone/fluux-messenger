@@ -720,7 +720,18 @@
             "importFileDialogTitle": "Importar chave OpenPGP de ficheiro",
             "importFileDialogBody": "Introduza a frase de acesso utilizada ao exportar este ficheiro de chave. A chave importada substituirá a chave local atual.",
             "importFileSuccess": "Chave importada de ficheiro",
-            "importFileFailed": "Não foi possível ler o ficheiro selecionado"
+            "importFileFailed": "Não foi possível ler o ficheiro selecionado",
+            "unlockDialogTitle": "Desbloquear criptografia de ponta a ponta",
+            "unlockDialogBody": "Insira a sua frase-passe para desencriptar a sua chave para esta sessão.",
+            "unlockDialogSetupTitle": "Configurar criptografia de ponta a ponta",
+            "unlockDialogSetupBody": "Escolha uma frase-passe para proteger a sua chave de criptografia. Precisará dela a cada sessão.",
+            "unlockAction": "Desbloquear",
+            "unlockSetupAction": "Configurar",
+            "unlockSkip": "Ignorar — enviar sem criptografia",
+            "unlockPassphraseMismatch": "As frases-passe não coincidem",
+            "unlockPassphraseTooShort": "A frase-passe deve ter pelo menos 8 caracteres",
+            "lockedBannerBody": "A sua chave de criptografia está bloqueada. Insira a frase-passe para ativar a criptografia para esta sessão.",
+            "rotateNotSupportedWeb": "A rotação de chaves não está disponível na web — use a aplicação de secretária."
         }
     },
     "update": {

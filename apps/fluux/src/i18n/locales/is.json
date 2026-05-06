@@ -718,7 +718,18 @@
             "importFileDialogTitle": "Flytja OpenPGP-lykil inn úr skrá",
             "importFileDialogBody": "Sláðu inn lykilorðssetninguna sem var notuð við útflutning þessarar lyklaskrár. Innfluttur lykill mun koma í stað núverandi staðbundins lykils.",
             "importFileSuccess": "Lykill fluttur inn úr skrá",
-            "importFileFailed": "Tókst ekki að lesa valda skrá"
+            "importFileFailed": "Tókst ekki að lesa valda skrá",
+            "unlockDialogTitle": "Opna enda-til-enda dulkóðun",
+            "unlockDialogBody": "Sláðu inn aðgangsorð til að afkóða lykilinn þinn fyrir þessa lotu.",
+            "unlockDialogSetupTitle": "Setja upp enda-til-enda dulkóðun",
+            "unlockDialogSetupBody": "Veldu aðgangsorð til að vernda dulkóðunarlykil þinn. Þú þarft það í hvert skipti sem þú skráir þig inn.",
+            "unlockAction": "Opna",
+            "unlockSetupAction": "Setja upp",
+            "unlockSkip": "Sleppa — senda án dulkóðunar",
+            "unlockPassphraseMismatch": "Aðgangsorðin stemma ekki",
+            "unlockPassphraseTooShort": "Aðgangsorðið verður að vera að minnsta kosti 8 stafir",
+            "lockedBannerBody": "Dulkóðunarlykillinn þinn er læstur. Sláðu inn aðgangsorð til að virkja dulkóðun fyrir þessa lotu.",
+            "rotateNotSupportedWeb": "Lyklaskipti eru ekki tiltæk á vefnum — notaðu skjáborðsforritið."
         }
     },
     "update": {

@@ -720,7 +720,18 @@
             "importFileDialogTitle": "Importa ċ-ċavetta OpenPGP minn fajl",
             "importFileDialogBody": "Daħħal il-frażi ta' password użata meta esportajt dan il-fajl taċ-ċavetta. Iċ-ċavetta importata se tissostitwixxi ċ-ċavetta lokali attwali.",
             "importFileSuccess": "Ċavetta importata minn fajl",
-            "importFileFailed": "Ma setax jinqara l-fajl magħżul"
+            "importFileFailed": "Ma setax jinqara l-fajl magħżul",
+            "unlockDialogTitle": "Iftaħ il-kriptaġġ minn tarf għal tarf",
+            "unlockDialogBody": "Daħħal il-passphrase tiegħek biex tiddeċifra ċ-ċavetta tiegħek għal din is-sessjoni.",
+            "unlockDialogSetupTitle": "Issettja l-kriptaġġ minn tarf għal tarf",
+            "unlockDialogSetupBody": "Agħżel passphrase biex tipproteġi ċ-ċavetta tal-kriptaġġ tiegħek. Teħtieġha kull darba li tidħol.",
+            "unlockAction": "Iftaħ",
+            "unlockSetupAction": "Issettja",
+            "unlockSkip": "Aqbeż — ibgħat mingħajr kriptaġġ",
+            "unlockPassphraseMismatch": "Il-passphrase ma jaqblux",
+            "unlockPassphraseTooShort": "Il-passphrase għandu jkollu mill-inqas 8 karattri",
+            "lockedBannerBody": "Iċ-ċavetta tal-kriptaġġ tiegħek hija msakkar. Daħħal il-passphrase biex tattiva l-kriptaġġ għal din is-sessjoni.",
+            "rotateNotSupportedWeb": "Ir-rotazzjoni taċ-ċavetta mhix disponibbli fuq il-web — uża l-applikazzjoni tal-desktop."
         }
     },
     "update": {

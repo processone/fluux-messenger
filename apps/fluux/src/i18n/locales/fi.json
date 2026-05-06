@@ -718,7 +718,18 @@
             "importFileDialogTitle": "Tuo OpenPGP-avain tiedostosta",
             "importFileDialogBody": "Syötä salasana, jota käytettiin tämän avaintiedoston viennissä. Tuotu avain korvaa nykyisen paikallisen avaimen.",
             "importFileSuccess": "Avain tuotu tiedostosta",
-            "importFileFailed": "Valittua tiedostoa ei voitu lukea"
+            "importFileFailed": "Valittua tiedostoa ei voitu lukea",
+            "unlockDialogTitle": "Avaa päästä päähän -salaus",
+            "unlockDialogBody": "Syötä salasana avataksesi salausavaimesi tätä istuntoa varten.",
+            "unlockDialogSetupTitle": "Asenna päästä päähän -salaus",
+            "unlockDialogSetupBody": "Valitse salasana salausavaimesi suojaamiseksi. Tarvitset sen joka kerta kirjautuessasi.",
+            "unlockAction": "Avaa lukitus",
+            "unlockSetupAction": "Asenna",
+            "unlockSkip": "Ohita — lähetä ilman salausta",
+            "unlockPassphraseMismatch": "Salasanat eivät täsmää",
+            "unlockPassphraseTooShort": "Salasanassa on oltava vähintään 8 merkkiä",
+            "lockedBannerBody": "Salausavaimesi on lukittu. Syötä salasana ottaaksesi salauksen käyttöön tässä istunnossa.",
+            "rotateNotSupportedWeb": "Avaimen kierto ei ole käytettävissä verkossa — käytä työpöytäsovellusta."
         }
     },
     "update": {

@@ -1548,6 +1548,21 @@ export class XMPPClient {
   }
 
   /**
+   * Replace the E2EE storage backend. Call this before registering any
+   * plugins — typically in the `online` event handler, before calling
+   * `registerE2EEPlugins`. The active manager (if any) is also updated so
+   * subsequent plugin registrations use the new backend.
+   *
+   * The primary use case is injecting a persistent IndexedDB backend on web
+   * (where the default InMemoryStorageBackend would lose key material on
+   * page reload).
+   */
+  setE2EEStorageBackend(backend: StorageBackend): void {
+    this.e2eeStorageBackend = backend
+    this.e2ee?.setStorage(backend)
+  }
+
+  /**
    * Build the E2EEManager if it doesn't yet exist, or if the previous
    * manager was bound to a different JID. On a plain reconnect/SM-resume
    * for the same identity this is a no-op and existing plugins stay

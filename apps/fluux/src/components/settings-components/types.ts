@@ -31,7 +31,7 @@ export const SETTINGS_CATEGORIES: SettingsCategoryConfig[] = [
   { id: 'notifications', labelKey: 'settings.categories.notifications', icon: Bell },
   { id: 'blocked', labelKey: 'settings.categories.blocked', icon: Ban },
   { id: 'storage', labelKey: 'settings.categories.storage', icon: HardDrive, tauriOnly: true },
-  { id: 'encryption', labelKey: 'settings.categories.encryption', icon: Lock, tauriOnly: true },
+  { id: 'encryption', labelKey: 'settings.categories.encryption', icon: Lock },
   { id: 'updates', labelKey: 'settings.categories.updates', icon: Download, updaterOnly: true },
 ]
 

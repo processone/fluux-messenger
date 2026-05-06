@@ -720,7 +720,18 @@
             "importFileDialogTitle": "Uvozi ključ OpenPGP iz datoteke",
             "importFileDialogBody": "Vnesite geslo, ki ste ga uporabili pri izvozu te datoteke ključa. Uvoženi ključ bo nadomestil trenutni lokalni ključ.",
             "importFileSuccess": "Ključ je bil uvožen iz datoteke",
-            "importFileFailed": "Izbrane datoteke ni bilo mogoče prebrati"
+            "importFileFailed": "Izbrane datoteke ni bilo mogoče prebrati",
+            "unlockDialogTitle": "Odklenite šifriranje od konca do konca",
+            "unlockDialogBody": "Vnesite geslo za dešifriranje ključa za to sejo.",
+            "unlockDialogSetupTitle": "Nastavi šifriranje od konca do konca",
+            "unlockDialogSetupBody": "Izberite geslo za zaščito šifrirnega ključa. Potrebovali ga boste ob vsakem prijavi.",
+            "unlockAction": "Odkleni",
+            "unlockSetupAction": "Nastavi",
+            "unlockSkip": "Preskoči — pošlji brez šifriranja",
+            "unlockPassphraseMismatch": "Gesli se ne ujemata",
+            "unlockPassphraseTooShort": "Geslo mora imeti vsaj 8 znakov",
+            "lockedBannerBody": "Šifrirni ključ je zaklenjen. Vnesite geslo za aktivacijo šifriranja za to sejo.",
+            "rotateNotSupportedWeb": "Rotacija ključev v spletu ni na voljo — uporabite namizno aplikacijo."
         }
     },
     "update": {

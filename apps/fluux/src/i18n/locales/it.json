@@ -720,7 +720,18 @@
             "importFileDialogTitle": "Importa la chiave OpenPGP da un file",
             "importFileDialogBody": "Inserire la passphrase usata durante l'esportazione di questo file di chiave. La chiave importata sostituirà la chiave locale corrente.",
             "importFileSuccess": "Chiave importata dal file",
-            "importFileFailed": "Impossibile leggere il file selezionato"
+            "importFileFailed": "Impossibile leggere il file selezionato",
+            "unlockDialogTitle": "Sblocca la crittografia end-to-end",
+            "unlockDialogBody": "Inserisci la tua passphrase per decifrare la tua chiave per questa sessione.",
+            "unlockDialogSetupTitle": "Configura la crittografia end-to-end",
+            "unlockDialogSetupBody": "Scegli una passphrase per proteggere la tua chiave di crittografia. Ne avrai bisogno ad ogni accesso.",
+            "unlockAction": "Sblocca",
+            "unlockSetupAction": "Configura",
+            "unlockSkip": "Salta — invia senza crittografia",
+            "unlockPassphraseMismatch": "Le passphrase non corrispondono",
+            "unlockPassphraseTooShort": "La passphrase deve avere almeno 8 caratteri",
+            "lockedBannerBody": "La tua chiave di crittografia è bloccata. Inserisci la tua passphrase per attivare la crittografia per questa sessione.",
+            "rotateNotSupportedWeb": "La rotazione delle chiavi non è disponibile sul web — usa l'app desktop."
         }
     },
     "update": {

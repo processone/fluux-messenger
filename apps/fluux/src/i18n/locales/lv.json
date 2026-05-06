@@ -719,7 +719,18 @@
             "importFileDialogTitle": "Importēt OpenPGP atslēgu no faila",
             "importFileDialogBody": "Ievadiet ieejas frāzi, kas tika izmantota šī atslēgas faila eksportēšanas laikā. Importētā atslēga aizstās pašreizējo lokālo atslēgu.",
             "importFileSuccess": "Atslēga importēta no faila",
-            "importFileFailed": "Neizdevās nolasīt izvēlēto failu"
+            "importFileFailed": "Neizdevās nolasīt izvēlēto failu",
+            "unlockDialogTitle": "Atslēgt pilnīgu šifrēšanu",
+            "unlockDialogBody": "Ievadiet paroli, lai atšifrētu atslēgu šai sesijai.",
+            "unlockDialogSetupTitle": "Iestatīt pilnīgu šifrēšanu",
+            "unlockDialogSetupBody": "Izvēlieties paroli šifrēšanas atslēgas aizsardzībai. Tā būs nepieciešama katru reizi piesakoties.",
+            "unlockAction": "Atslēgt",
+            "unlockSetupAction": "Iestatīt",
+            "unlockSkip": "Izlaist — sūtīt bez šifrēšanas",
+            "unlockPassphraseMismatch": "Paroles nesakrīt",
+            "unlockPassphraseTooShort": "Parole jābūt vismaz 8 rakstzīmēm",
+            "lockedBannerBody": "Jūsu šifrēšanas atslēga ir bloķēta. Ievadiet paroli, lai aktivizētu šifrēšanu šai sesijai.",
+            "rotateNotSupportedWeb": "Atslēgas rotācija nav pieejama tīmeklī — izmantojiet darbvirsmas lietotni."
         }
     },
     "update": {

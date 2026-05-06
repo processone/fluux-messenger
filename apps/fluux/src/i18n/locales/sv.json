@@ -718,7 +718,18 @@
             "importFileDialogTitle": "Importera OpenPGP-nyckel från fil",
             "importFileDialogBody": "Ange lösenfrasen som användes vid export av den här nyckelfilen. Den importerade nyckeln ersätter den aktuella lokala nyckeln.",
             "importFileSuccess": "Nyckel importerad från fil",
-            "importFileFailed": "Det gick inte att läsa den valda filen"
+            "importFileFailed": "Det gick inte att läsa den valda filen",
+            "unlockDialogTitle": "Lås upp ände-till-ände-kryptering",
+            "unlockDialogBody": "Ange din lösenfras för att dekryptera din nyckel för den här sessionen.",
+            "unlockDialogSetupTitle": "Konfigurera ände-till-ände-kryptering",
+            "unlockDialogSetupBody": "Välj en lösenfras för att skydda din krypteringsnyckel. Du behöver den varje gång du loggar in.",
+            "unlockAction": "Lås upp",
+            "unlockSetupAction": "Konfigurera",
+            "unlockSkip": "Hoppa över — skicka utan kryptering",
+            "unlockPassphraseMismatch": "Lösenfraser matchar inte",
+            "unlockPassphraseTooShort": "Lösenfrasen måste vara minst 8 tecken",
+            "lockedBannerBody": "Din krypteringsnyckel är låst. Ange lösenfrasen för att aktivera kryptering för den här sessionen.",
+            "rotateNotSupportedWeb": "Nyckelrotering är inte tillgänglig på webben — använd skrivbordsappen."
         }
     },
     "update": {

@@ -718,7 +718,18 @@
             "importFileDialogTitle": "Importuoti OpenPGP raktą iš failo",
             "importFileDialogBody": "Įveskite slaptažodžio frazę, naudotą eksportuojant šį rakto failą. Importuotas raktas pakeis dabartinį vietinį raktą.",
             "importFileSuccess": "Raktas importuotas iš failo",
-            "importFileFailed": "Nepavyko perskaityti pasirinkto failo"
+            "importFileFailed": "Nepavyko perskaityti pasirinkto failo",
+            "unlockDialogTitle": "Atrakinti vienpusio šifravimo apsaugą",
+            "unlockDialogBody": "Įveskite slaptažodį, kad iššifruotumėte raktą šiai sesijai.",
+            "unlockDialogSetupTitle": "Nustatyti vienpusio šifravimo apsaugą",
+            "unlockDialogSetupBody": "Pasirinkite slaptažodį, kad apsaugotumėte šifravimo raktą. Jo reikės kiekvieną kartą prisijungiant.",
+            "unlockAction": "Atrakinti",
+            "unlockSetupAction": "Nustatyti",
+            "unlockSkip": "Praleisti — siųsti be šifravimo",
+            "unlockPassphraseMismatch": "Slaptažodžiai nesutampa",
+            "unlockPassphraseTooShort": "Slaptažodį turi sudaryti ne mažiau kaip 8 simboliai",
+            "lockedBannerBody": "Šifravimo raktas užrakintas. Įveskite slaptažodį, kad įjungtumėte šifravimą šiai sesijai.",
+            "rotateNotSupportedWeb": "Rakto rotacija internete negalima — naudokite darbalaukio programą."
         }
     },
     "update": {

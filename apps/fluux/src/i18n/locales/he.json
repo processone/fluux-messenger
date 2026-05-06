@@ -718,7 +718,18 @@
             "importFileDialogTitle": "ייבוא מפתח OpenPGP מקובץ",
             "importFileDialogBody": "הזינו את ביטוי הסיסמה שנוצר בעת ייצוא קובץ המפתח הזה. המפתח המיובא יחליף את המפתח המקומי הנוכחי.",
             "importFileSuccess": "המפתח יובא מהקובץ",
-            "importFileFailed": "לא ניתן היה לקרוא את הקובץ שנבחר"
+            "importFileFailed": "לא ניתן היה לקרוא את הקובץ שנבחר",
+            "unlockDialogTitle": "בטל נעילת הצפנה מקצה לקצה",
+            "unlockDialogBody": "הזן את ביטוי הסיסמה שלך כדי לפענח את המפתח שלך לסשן זה.",
+            "unlockDialogSetupTitle": "הגדר הצפנה מקצה לקצה",
+            "unlockDialogSetupBody": "בחר ביטוי סיסמה להגנה על מפתח ההצפנה שלך. תזדקק לו בכל פעם שתיכנס.",
+            "unlockAction": "בטל נעילה",
+            "unlockSetupAction": "הגדר",
+            "unlockSkip": "דלג — שלח ללא הצפנה",
+            "unlockPassphraseMismatch": "ביטויי הסיסמה אינם תואמים",
+            "unlockPassphraseTooShort": "ביטוי הסיסמה חייב להכיל לפחות 8 תווים",
+            "lockedBannerBody": "מפתח ההצפנה שלך נעול. הזן את ביטוי הסיסמה כדי לאפשר הצפנה לסשן זה.",
+            "rotateNotSupportedWeb": "סיבוב מפתחות אינו זמין באינטרנט — השתמש ביישום שולחן העבודה."
         }
     },
     "update": {

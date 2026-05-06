@@ -78,7 +78,7 @@ export class E2EEManager {
   private readonly plugins = new Map<string, E2EEPlugin>()
   private readonly pins = new Map<string, PinnedStrategy>()
   private readonly capabilityCache: CapabilityCache
-  private readonly storage: StorageBackend
+  private storage: StorageBackend
   private readonly xmpp: XMPPPrimitives
   private readonly account: AccountInfo
   private readonly logger: Logger
@@ -101,6 +101,19 @@ export class E2EEManager {
    */
   getAccountJid(): BareJID {
     return this.account.jid
+  }
+
+  /**
+   * Replace the storage backend. Must be called before any plugins are
+   * registered — plugins receive a namespaced view of the backend at
+   * {@link register} time and are not affected by later changes.
+   *
+   * The primary use case is injecting a persistent backend (e.g.
+   * IndexedDB on web) after the manager has been constructed but before
+   * plugins are wired in.
+   */
+  setStorage(backend: StorageBackend): void {
+    this.storage = backend
   }
 
   /**

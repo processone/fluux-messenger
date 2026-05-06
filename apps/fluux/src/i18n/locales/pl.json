@@ -720,7 +720,18 @@
             "importFileDialogTitle": "Importuj klucz OpenPGP z pliku",
             "importFileDialogBody": "Podaj hasło użyte podczas eksportowania tego pliku klucza. Importowany klucz zastąpi bieżący klucz lokalny.",
             "importFileSuccess": "Klucz zaimportowany z pliku",
-            "importFileFailed": "Nie można odczytać wybranego pliku"
+            "importFileFailed": "Nie można odczytać wybranego pliku",
+            "unlockDialogTitle": "Odblokuj szyfrowanie końcowe",
+            "unlockDialogBody": "Wprowadź hasło, aby odszyfrować klucz na tę sesję.",
+            "unlockDialogSetupTitle": "Skonfiguruj szyfrowanie końcowe",
+            "unlockDialogSetupBody": "Wybierz hasło, aby chronić klucz szyfrowania. Będzie potrzebne przy każdym logowaniu.",
+            "unlockAction": "Odblokuj",
+            "unlockSetupAction": "Skonfiguruj",
+            "unlockSkip": "Pomiń — wyślij bez szyfrowania",
+            "unlockPassphraseMismatch": "Hasła nie pasują do siebie",
+            "unlockPassphraseTooShort": "Hasło musi mieć co najmniej 8 znaków",
+            "lockedBannerBody": "Klucz szyfrowania jest zablokowany. Wprowadź hasło, aby aktywować szyfrowanie na tę sesję.",
+            "rotateNotSupportedWeb": "Rotacja klucza nie jest dostępna w przeglądarce — użyj aplikacji desktopowej."
         }
     },
     "update": {

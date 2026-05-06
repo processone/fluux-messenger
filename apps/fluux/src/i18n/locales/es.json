@@ -720,7 +720,18 @@
             "importFileDialogTitle": "Importar clave OpenPGP desde archivo",
             "importFileDialogBody": "Introduzca la frase de contraseña usada al exportar este archivo de clave. La clave importada reemplazará la clave local actual.",
             "importFileSuccess": "Clave importada desde archivo",
-            "importFileFailed": "No se pudo leer el archivo seleccionado"
+            "importFileFailed": "No se pudo leer el archivo seleccionado",
+            "unlockDialogTitle": "Desbloquear cifrado de extremo a extremo",
+            "unlockDialogBody": "Introduce tu contraseña para descifrar tu clave en esta sesión.",
+            "unlockDialogSetupTitle": "Configurar cifrado de extremo a extremo",
+            "unlockDialogSetupBody": "Elige una contraseña para proteger tu clave de cifrado. La necesitarás cada vez que inicies sesión.",
+            "unlockAction": "Desbloquear",
+            "unlockSetupAction": "Configurar",
+            "unlockSkip": "Omitir — enviar sin cifrado",
+            "unlockPassphraseMismatch": "Las contraseñas no coinciden",
+            "unlockPassphraseTooShort": "La contraseña debe tener al menos 8 caracteres",
+            "lockedBannerBody": "Tu clave de cifrado está bloqueada. Introduce tu contraseña para activar el cifrado en esta sesión.",
+            "rotateNotSupportedWeb": "La rotación de claves no está disponible en la web — usa la aplicación de escritorio."
         }
     },
     "update": {

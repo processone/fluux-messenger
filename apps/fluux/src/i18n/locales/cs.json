@@ -720,7 +720,18 @@
             "importFileDialogTitle": "Importovat klíč OpenPGP ze souboru",
             "importFileDialogBody": "Zadejte přístupovou frázi použitou při exportu tohoto souboru s klíčem. Importovaný klíč nahradí aktuální místní klíč.",
             "importFileSuccess": "Klíč byl importován ze souboru",
-            "importFileFailed": "Nepodařilo se přečíst vybraný soubor"
+            "importFileFailed": "Nepodařilo se přečíst vybraný soubor",
+            "unlockDialogTitle": "Odemknout end-to-end šifrování",
+            "unlockDialogBody": "Zadej heslo pro dešifrování klíče pro toto sezení.",
+            "unlockDialogSetupTitle": "Nastavit end-to-end šifrování",
+            "unlockDialogSetupBody": "Zvolte heslo pro ochranu šifrovacího klíče. Budete ho potřebovat při každém přihlášení.",
+            "unlockAction": "Odemknout",
+            "unlockSetupAction": "Nastavit",
+            "unlockSkip": "Přeskočit — odeslat bez šifrování",
+            "unlockPassphraseMismatch": "Hesla se neshodují",
+            "unlockPassphraseTooShort": "Heslo musí mít alespoň 8 znaků",
+            "lockedBannerBody": "Šifrovací klíč je uzamčen. Zadej heslo pro aktivaci šifrování pro toto sezení.",
+            "rotateNotSupportedWeb": "Rotace klíče není na webu dostupná — použij desktopovou aplikaci."
         }
     },
     "update": {

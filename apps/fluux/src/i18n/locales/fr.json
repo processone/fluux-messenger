@@ -719,7 +719,18 @@
             "importFileDialogTitle": "Importer une clé OpenPGP depuis un fichier",
             "importFileDialogBody": "Saisissez la phrase de passe utilisée lors de l'exportation de ce fichier de clé. La clé importée remplacera la clé locale actuelle.",
             "importFileSuccess": "Clé importée depuis le fichier",
-            "importFileFailed": "Impossible de lire le fichier sélectionné"
+            "importFileFailed": "Impossible de lire le fichier sélectionné",
+            "unlockDialogTitle": "Déverrouiller le chiffrement de bout en bout",
+            "unlockDialogBody": "Saisissez votre phrase de passe pour déchiffrer votre clé pour cette session.",
+            "unlockDialogSetupTitle": "Configurer le chiffrement de bout en bout",
+            "unlockDialogSetupBody": "Choisissez une phrase de passe pour protéger votre clé de chiffrement. Vous en aurez besoin à chaque connexion.",
+            "unlockAction": "Déverrouiller",
+            "unlockSetupAction": "Configurer",
+            "unlockSkip": "Ignorer — envoyer sans chiffrement",
+            "unlockPassphraseMismatch": "Les phrases de passe ne correspondent pas",
+            "unlockPassphraseTooShort": "La phrase de passe doit comporter au moins 8 caractères",
+            "lockedBannerBody": "Votre clé de chiffrement est verrouillée. Saisissez votre phrase de passe pour activer le chiffrement pour cette session.",
+            "rotateNotSupportedWeb": "La rotation de clé n'est pas disponible sur le web — utilisez l'application de bureau."
         }
     },
     "update": {

@@ -720,7 +720,18 @@
             "importFileDialogTitle": "Importă cheia OpenPGP dintr-un fișier",
             "importFileDialogBody": "Introduceți fraza de acces utilizată la exportarea acestui fișier de cheie. Cheia importată o va înlocui pe cea locală curentă.",
             "importFileSuccess": "Cheia a fost importată din fișier",
-            "importFileFailed": "Fișierul selectat nu a putut fi citit"
+            "importFileFailed": "Fișierul selectat nu a putut fi citit",
+            "unlockDialogTitle": "Deblochează criptarea end-to-end",
+            "unlockDialogBody": "Introdu parola pentru a decripta cheia ta pentru această sesiune.",
+            "unlockDialogSetupTitle": "Configurează criptarea end-to-end",
+            "unlockDialogSetupBody": "Alege o parolă pentru a proteja cheia de criptare. Vei avea nevoie de ea la fiecare autentificare.",
+            "unlockAction": "Deblochează",
+            "unlockSetupAction": "Configurează",
+            "unlockSkip": "Omite — trimite fără criptare",
+            "unlockPassphraseMismatch": "Parolele nu se potrivesc",
+            "unlockPassphraseTooShort": "Parola trebuie să aibă cel puțin 8 caractere",
+            "lockedBannerBody": "Cheia de criptare este blocată. Introdu parola pentru a activa criptarea pentru această sesiune.",
+            "rotateNotSupportedWeb": "Rotația cheii nu este disponibilă pe web — folosește aplicația desktop."
         }
     },
     "update": {

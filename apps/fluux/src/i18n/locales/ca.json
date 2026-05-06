@@ -720,7 +720,18 @@
             "importFileDialogTitle": "Importa la clau OpenPGP des d'un fitxer",
             "importFileDialogBody": "Introduïu la frase de contrasenya que es va fer servir en exportar aquest fitxer de clau. La clau importada substituirà la clau local actual.",
             "importFileSuccess": "Clau importada des del fitxer",
-            "importFileFailed": "No s'ha pogut llegir el fitxer seleccionat"
+            "importFileFailed": "No s'ha pogut llegir el fitxer seleccionat",
+            "unlockDialogTitle": "Desbloqueja el xifratge extrem a extrem",
+            "unlockDialogBody": "Introdueix la contrasenya per desxifrar la teva clau per a aquesta sessió.",
+            "unlockDialogSetupTitle": "Configura el xifratge extrem a extrem",
+            "unlockDialogSetupBody": "Tria una contrasenya per protegir la teva clau de xifratge. La necessitaràs cada vegada que iniciïs sessió.",
+            "unlockAction": "Desbloqueja",
+            "unlockSetupAction": "Configura",
+            "unlockSkip": "Ometre — envia sense xifratge",
+            "unlockPassphraseMismatch": "Les contrasenyes no coincideixen",
+            "unlockPassphraseTooShort": "La contrasenya ha de tenir almenys 8 caràcters",
+            "lockedBannerBody": "La teva clau de xifratge està bloquejada. Introdueix la contrasenya per activar el xifratge per a aquesta sessió.",
+            "rotateNotSupportedWeb": "La rotació de claus no està disponible al web — utilitza l'aplicació d'escriptori."
         }
     },
     "update": {

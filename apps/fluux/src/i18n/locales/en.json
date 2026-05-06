@@ -634,7 +634,18 @@
             "importFileDialogTitle": "Import OpenPGP key from file",
             "importFileDialogBody": "Enter the passphrase used when exporting this key file. The imported key will replace the one currently stored on this device.",
             "importFileSuccess": "Key imported from file",
-            "importFileFailed": "Could not read the selected file"
+            "importFileFailed": "Could not read the selected file",
+            "unlockDialogTitle": "Unlock End-to-End Encryption",
+            "unlockDialogBody": "Enter your passphrase to decrypt your encryption key for this session.",
+            "unlockDialogSetupTitle": "Set up End-to-End Encryption",
+            "unlockDialogSetupBody": "Choose a passphrase to protect your encryption key. You will need it each time you sign in.",
+            "unlockAction": "Unlock",
+            "unlockSetupAction": "Set up",
+            "unlockSkip": "Skip — send without encryption",
+            "unlockPassphraseMismatch": "Passphrases don’t match",
+            "unlockPassphraseTooShort": "Passphrase must be at least 8 characters",
+            "lockedBannerBody": "Your encryption key is locked. Enter your passphrase to enable encryption for this session.",
+            "rotateNotSupportedWeb": "Key rotation is not available on the web — use the desktop app."
         },
         "blocked": {
             "title": "Blocked Users",

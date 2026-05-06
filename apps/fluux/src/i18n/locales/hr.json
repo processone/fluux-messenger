@@ -718,7 +718,18 @@
             "importFileDialogTitle": "Uvezi OpenPGP ključ iz datoteke",
             "importFileDialogBody": "Unesite lozinku korištenu pri izvozu ove datoteke ključa. Uvezeni ključ zamijenit će trenutni lokalni ključ.",
             "importFileSuccess": "Ključ je uvezen iz datoteke",
-            "importFileFailed": "Nije moguće pročitati odabranu datoteku"
+            "importFileFailed": "Nije moguće pročitati odabranu datoteku",
+            "unlockDialogTitle": "Otključaj end-to-end enkripciju",
+            "unlockDialogBody": "Unesi lozinku kako bi dešifrirao/la svoj ključ za ovu sesiju.",
+            "unlockDialogSetupTitle": "Postavi end-to-end enkripciju",
+            "unlockDialogSetupBody": "Odaberi lozinku za zaštitu svog ključa za enkripciju. Trebat će ti pri svakoj prijavi.",
+            "unlockAction": "Otključaj",
+            "unlockSetupAction": "Postavi",
+            "unlockSkip": "Preskoči — pošalji bez enkripcije",
+            "unlockPassphraseMismatch": "Lozinke se ne podudaraju",
+            "unlockPassphraseTooShort": "Lozinka mora imati najmanje 8 znakova",
+            "lockedBannerBody": "Tvoj ključ za enkripciju je zaključan. Unesi lozinku za aktivaciju enkripcije za ovu sesiju.",
+            "rotateNotSupportedWeb": "Rotacija ključa nije dostupna na webu — koristi aplikaciju za stolna računala."
         }
     },
     "update": {

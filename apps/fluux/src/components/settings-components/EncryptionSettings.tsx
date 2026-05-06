@@ -11,7 +11,9 @@ import { BackupPassphraseDialog } from '@/components/BackupPassphraseDialog'
 import { RestorePassphraseDialog } from '@/components/RestorePassphraseDialog'
 import { EnableWithBackupDialog } from '@/components/EnableWithBackupDialog'
 import { OwnKeyConflictBanner } from '@/components/OwnKeyConflictBanner'
+import { UnlockEncryptionDialog } from '@/components/UnlockEncryptionDialog'
 import { probeRemoteSecretKeyBackup, SecretKeyBackupProbeError } from '@/e2ee/secretKeyProbe'
+import { isKeyLocked } from '@/e2ee/webPassphraseStore'
 import { isTauri } from '@/utils/tauri'
 
 type PluginStatus =
@@ -90,6 +92,7 @@ export function EncryptionSettings() {
   const [showExportFileDialog, setShowExportFileDialog] = useState(false)
   const [showImportFileDialog, setShowImportFileDialog] = useState(false)
   const [pendingImportFileArmored, setPendingImportFileArmored] = useState<string | null>(null)
+  const [showUnlockDialog, setShowUnlockDialog] = useState(false)
 
   const handleDismissLimitations = () => {
     localStorage.setItem('enc-limitations-dismissed', '1')
@@ -97,6 +100,7 @@ export function EncryptionSettings() {
   }
 
   const online = status === 'online'
+  const webLocked = !isTauri() && openpgpEnabled && isKeyLocked()
   const pluginStatus: PluginStatus = !openpgpEnabled
     ? 'disabled'
     : !online
@@ -177,10 +181,17 @@ export function EncryptionSettings() {
         return
       }
       const bareJid = jid ? jid.split('/')[0] : null
-      if (!bareJid || !isTauri()) {
-        // Web (no Tauri backend) or unknown JID: the probe pre-step
-        // doesn't apply — just register, which is a no-op on web and
-        // generates fresh on desktop.
+      if (!isTauri()) {
+        // Web: register first (may end up in locked state if no passphrase set yet),
+        // then prompt the user to unlock / set up their passphrase.
+        await registerE2EEPlugins(client)
+        if (isKeyLocked()) {
+          setShowUnlockDialog(true)
+        }
+        return
+      }
+      if (!bareJid) {
+        // Unknown JID on desktop: just register.
         await registerE2EEPlugins(client)
         return
       }
@@ -599,6 +610,21 @@ export function EncryptionSettings() {
             mismatch between the local key and what the server advertises */}
         {openpgpEnabled && <OwnKeyConflictBanner />}
 
+        {/* Web locked banner — shown when key exists but no session passphrase */}
+        {webLocked && (
+          <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+            <p className="text-xs text-fluux-text leading-snug flex-1">
+              {t('settings.encryption.lockedBannerBody')}
+            </p>
+            <button
+              onClick={() => setShowUnlockDialog(true)}
+              className="flex-shrink-0 px-3 py-1.5 text-sm text-white bg-fluux-brand hover:opacity-90 rounded-lg transition-colors"
+            >
+              {t('settings.encryption.unlockAction')}
+            </button>
+          </div>
+        )}
+
         {/* Status + fingerprint block — only when enabled */}
         {openpgpEnabled && (
           <div className="space-y-3">
@@ -771,8 +797,9 @@ export function EncryptionSettings() {
           </div>
         )}
 
-        {/* Rotation — primary fingerprint stays stable so peer trust survives. */}
-        {pluginStatus === 'ready' && (
+        {/* Rotation — primary fingerprint stays stable so peer trust survives.
+            Not available on web (openpgp.js v6 key rotation is MVP-deferred). */}
+        {pluginStatus === 'ready' && isTauri() && (
           <div className="space-y-2 pt-2 border-t border-fluux-hover">
             <div className="flex items-center gap-1.5">
               <label className="text-sm font-medium text-fluux-text">
@@ -801,6 +828,13 @@ export function EncryptionSettings() {
               />
               {t('settings.encryption.rotateAction')}
             </button>
+          </div>
+        )}
+        {pluginStatus === 'ready' && !isTauri() && (
+          <div className="pt-2 border-t border-fluux-hover">
+            <p className="text-xs text-fluux-muted leading-snug">
+              {t('settings.encryption.rotateNotSupportedWeb')}
+            </p>
           </div>
         )}
 
@@ -931,6 +965,13 @@ export function EncryptionSettings() {
             setShowImportFileDialog(false)
             setPendingImportFileArmored(null)
           }}
+        />
+      )}
+
+      {showUnlockDialog && (
+        <UnlockEncryptionDialog
+          client={client}
+          onClose={() => setShowUnlockDialog(false)}
         />
       )}
     </section>
