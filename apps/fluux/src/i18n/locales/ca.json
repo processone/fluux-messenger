@@ -711,7 +711,16 @@
                 "overwriteSuccess": "La vostra clau ha estat tornada a publicar al servidor.",
                 "overwriteFailed": "No s'ha pogut tornar a publicar la vostra clau. Torneu-ho a intentar.",
                 "importSuccess": "Clau restaurada des de la còpia de seguretat del servidor."
-            }
+            },
+            "exportFileAction": "Exporta a fitxer",
+            "exportFileDialogTitle": "Exporta la clau OpenPGP a un fitxer",
+            "exportFileDialogBody": "Una frase de contrasenya protegirà el fitxer de clau exportat. Apunteu-la o guardeu-la en un gestor de contrasenyes — la necessitareu en importar la clau en un altre dispositiu.",
+            "exportFileSuccess": "Clau exportada al fitxer",
+            "importFileAction": "Importa des de fitxer",
+            "importFileDialogTitle": "Importa la clau OpenPGP des d'un fitxer",
+            "importFileDialogBody": "Introduïu la frase de contrasenya que es va fer servir en exportar aquest fitxer de clau. La clau importada substituirà la clau local actual.",
+            "importFileSuccess": "Clau importada des del fitxer",
+            "importFileFailed": "No s'ha pogut llegir el fitxer seleccionat"
         }
     },
     "update": {

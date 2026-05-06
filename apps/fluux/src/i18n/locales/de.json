@@ -711,7 +711,16 @@
                 "overwriteSuccess": "Ihr Schlüssel wurde erneut auf dem Server veröffentlicht.",
                 "overwriteFailed": "Ihr Schlüssel konnte nicht erneut veröffentlicht werden. Versuchen Sie es erneut.",
                 "importSuccess": "Schlüssel aus der Serversicherung wiederhergestellt."
-            }
+            },
+            "exportFileAction": "In Datei exportieren",
+            "exportFileDialogTitle": "OpenPGP-Schlüssel in Datei exportieren",
+            "exportFileDialogBody": "Eine Passphrase schützt die exportierte Schlüsseldatei. Notieren Sie sie oder speichern Sie sie in einem Passwortmanager — Sie benötigen sie beim Importieren des Schlüssels auf einem anderen Gerät.",
+            "exportFileSuccess": "Schlüssel in Datei exportiert",
+            "importFileAction": "Aus Datei importieren",
+            "importFileDialogTitle": "OpenPGP-Schlüssel aus Datei importieren",
+            "importFileDialogBody": "Geben Sie die Passphrase ein, die beim Exportieren dieser Schlüsseldatei verwendet wurde. Der importierte Schlüssel ersetzt den aktuellen lokalen Schlüssel.",
+            "importFileSuccess": "Schlüssel aus Datei importiert",
+            "importFileFailed": "Die ausgewählte Datei konnte nicht gelesen werden"
         }
     },
     "update": {

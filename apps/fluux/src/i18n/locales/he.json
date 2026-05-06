@@ -709,7 +709,16 @@
                 "overwriteSuccess": "המפתח שלך פורסם מחדש בשרת.",
                 "overwriteFailed": "לא ניתן לפרסם מחדש את המפתח שלך. נסה שוב.",
                 "importSuccess": "המפתח שוחזר מגיבוי השרת."
-            }
+            },
+            "exportFileAction": "ייצוא לקובץ",
+            "exportFileDialogTitle": "ייצוא מפתח OpenPGP לקובץ",
+            "exportFileDialogBody": "ביטוי סיסמה יגן על קובץ המפתח המיוצא. רשמו אותו או שמרו אותו במנהל סיסמאות — תזדקקו לו בעת ייבוא המפתח למכשיר אחר.",
+            "exportFileSuccess": "המפתח יוצא לקובץ",
+            "importFileAction": "ייבוא מקובץ",
+            "importFileDialogTitle": "ייבוא מפתח OpenPGP מקובץ",
+            "importFileDialogBody": "הזינו את ביטוי הסיסמה שנוצר בעת ייצוא קובץ המפתח הזה. המפתח המיובא יחליף את המפתח המקומי הנוכחי.",
+            "importFileSuccess": "המפתח יובא מהקובץ",
+            "importFileFailed": "לא ניתן היה לקרוא את הקובץ שנבחר"
         }
     },
     "update": {

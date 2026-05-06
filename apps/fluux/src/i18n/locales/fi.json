@@ -709,7 +709,16 @@
                 "overwriteSuccess": "Avaimesi on julkaistu uudelleen palvelimelle.",
                 "overwriteFailed": "Avainta ei voitu julkaista uudelleen. Yritä uudelleen.",
                 "importSuccess": "Avain palautettu palvelimen varmuuskopiosta."
-            }
+            },
+            "exportFileAction": "Vie tiedostoon",
+            "exportFileDialogTitle": "Vie OpenPGP-avain tiedostoon",
+            "exportFileDialogBody": "Salasana suojaa viedyn avaintiedoston. Kirjoita se muistiin tai tallenna salasanahallintaan — tarvitset sitä tuodessasi avaimen toiselle laitteelle.",
+            "exportFileSuccess": "Avain viety tiedostoon",
+            "importFileAction": "Tuo tiedostosta",
+            "importFileDialogTitle": "Tuo OpenPGP-avain tiedostosta",
+            "importFileDialogBody": "Syötä salasana, jota käytettiin tämän avaintiedoston viennissä. Tuotu avain korvaa nykyisen paikallisen avaimen.",
+            "importFileSuccess": "Avain tuotu tiedostosta",
+            "importFileFailed": "Valittua tiedostoa ei voitu lukea"
         }
     },
     "update": {

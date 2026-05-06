@@ -709,7 +709,16 @@
                 "overwriteSuccess": "Uw sleutel is opnieuw gepubliceerd naar de server.",
                 "overwriteFailed": "Uw sleutel kon niet opnieuw worden gepubliceerd. Probeer opnieuw.",
                 "importSuccess": "Sleutel hersteld van server back-up."
-            }
+            },
+            "exportFileAction": "Exporteren naar bestand",
+            "exportFileDialogTitle": "OpenPGP-sleutel exporteren naar bestand",
+            "exportFileDialogBody": "Een wachtwoordzin beschermt het geëxporteerde sleutelbestand. Schrijf deze op of sla deze op in een wachtwoordmanager — u hebt deze nodig bij het importeren van de sleutel op een ander apparaat.",
+            "exportFileSuccess": "Sleutel geëxporteerd naar bestand",
+            "importFileAction": "Importeren uit bestand",
+            "importFileDialogTitle": "OpenPGP-sleutel importeren uit bestand",
+            "importFileDialogBody": "Voer de wachtwoordzin in die werd gebruikt bij het exporteren van dit sleutelbestand. De geïmporteerde sleutel vervangt de huidige lokale sleutel.",
+            "importFileSuccess": "Sleutel geïmporteerd uit bestand",
+            "importFileFailed": "Het geselecteerde bestand kon niet worden gelezen"
         }
     },
     "update": {

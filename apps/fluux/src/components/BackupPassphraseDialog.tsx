@@ -10,9 +10,15 @@ import { generateBackupPassphrase } from '@/e2ee/passphraseGenerator'
 const BACKUP_WORD_COUNT = 8
 
 interface BackupPassphraseDialogProps {
-  /** Called with the user-confirmed passphrase when they click "Back up". */
+  /** Called with the user-confirmed passphrase when they click the confirm button. */
   onConfirm: (passphrase: string) => Promise<void>
   onCancel: () => void
+  /** Override the dialog title. Defaults to the server-backup title. */
+  title?: string
+  /** Override the dialog body. Defaults to the server-backup body. */
+  body?: string
+  /** Override the confirm button label. Defaults to "Back up". */
+  confirmLabel?: string
 }
 
 /**
@@ -34,6 +40,9 @@ interface BackupPassphraseDialogProps {
 export function BackupPassphraseDialog({
   onConfirm,
   onCancel,
+  title,
+  body,
+  confirmLabel,
 }: BackupPassphraseDialogProps) {
   const { t, i18n } = useTranslation()
   const mouseDownTargetRef = useRef<EventTarget | null>(null)
@@ -136,10 +145,10 @@ export function BackupPassphraseDialog({
     >
       <div className="bg-fluux-sidebar rounded-lg p-5 max-w-md w-full mx-4 shadow-xl">
         <h3 className="text-lg font-semibold text-fluux-text mb-1">
-          {t('settings.encryption.backupDialogTitle')}
+          {title ?? t('settings.encryption.backupDialogTitle')}
         </h3>
         <p className="text-sm text-fluux-muted mb-4">
-          {t('settings.encryption.backupDialogBody')}
+          {body ?? t('settings.encryption.backupDialogBody')}
         </p>
 
         {/* Warning callout — the single most important information in this dialog. */}
@@ -231,7 +240,7 @@ export function BackupPassphraseDialog({
             className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-fluux-brand hover:opacity-90 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isPublishing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-            {t('settings.encryption.backupPublish')}
+            {confirmLabel ?? t('settings.encryption.backupPublish')}
           </button>
         </div>
       </div>

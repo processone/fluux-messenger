@@ -709,7 +709,16 @@
                 "overwriteSuccess": "您的密钥已重新发布到服务器。",
                 "overwriteFailed": "无法重新发布您的密钥，请重试。",
                 "importSuccess": "密钥已从服务器备份恢复。"
-            }
+            },
+            "exportFileAction": "导出到文件",
+            "exportFileDialogTitle": "将 OpenPGP 密钥导出到文件",
+            "exportFileDialogBody": "密码短语将保护导出的密钥文件。请将其记下或存储在密码管理器中——在其他设备上导入密钥时需要用到它。",
+            "exportFileSuccess": "密钥已导出到文件",
+            "importFileAction": "从文件导入",
+            "importFileDialogTitle": "从文件导入 OpenPGP 密钥",
+            "importFileDialogBody": "输入导出此密钥文件时使用的密码短语。导入的密钥将替换当前的本地密钥。",
+            "importFileSuccess": "密钥已从文件导入",
+            "importFileFailed": "无法读取所选文件"
         }
     },
     "update": {

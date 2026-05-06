@@ -711,7 +711,16 @@
                 "overwriteSuccess": "Cheia ta a fost republicată pe server.",
                 "overwriteFailed": "Nu s-a putut republica cheia ta. Încearcă din nou.",
                 "importSuccess": "Cheie restaurată din copia de rezervă a serverului."
-            }
+            },
+            "exportFileAction": "Exportă în fișier",
+            "exportFileDialogTitle": "Exportă cheia OpenPGP într-un fișier",
+            "exportFileDialogBody": "O frază de acces va proteja fișierul cheii exportate. Notați-o sau salvați-o într-un manager de parole — veți avea nevoie de ea la importarea cheii pe un alt dispozitiv.",
+            "exportFileSuccess": "Cheia a fost exportată în fișier",
+            "importFileAction": "Importă din fișier",
+            "importFileDialogTitle": "Importă cheia OpenPGP dintr-un fișier",
+            "importFileDialogBody": "Introduceți fraza de acces utilizată la exportarea acestui fișier de cheie. Cheia importată o va înlocui pe cea locală curentă.",
+            "importFileSuccess": "Cheia a fost importată din fișier",
+            "importFileFailed": "Fișierul selectat nu a putut fi citit"
         }
     },
     "update": {

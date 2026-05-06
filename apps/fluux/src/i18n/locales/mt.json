@@ -711,7 +711,16 @@
                 "overwriteSuccess": "Iċ-ċavetta tiegħek ġiet ippubblikata mill-ġdid fuq is-server.",
                 "overwriteFailed": "Ma rnexxiex jiġi ppubblikat mill-ġdid iċ-ċavetta tiegħek. Erġa' pprova.",
                 "importSuccess": "Ċavetta rrestawrata mill-backup tas-server."
-            }
+            },
+            "exportFileAction": "Esporta f'fajl",
+            "exportFileDialogTitle": "Esporta ċ-ċavetta OpenPGP f'fajl",
+            "exportFileDialogBody": "Frażi ta' password se tipproteġi l-fajl taċ-ċavetta esportata. Iktibha jew oħżinha f'maniġer ta' passwords — se tkun teħtieġha meta timporta ċ-ċavetta fuq apparat ieħor.",
+            "exportFileSuccess": "Ċavetta esportata f'fajl",
+            "importFileAction": "Importa minn fajl",
+            "importFileDialogTitle": "Importa ċ-ċavetta OpenPGP minn fajl",
+            "importFileDialogBody": "Daħħal il-frażi ta' password użata meta esportajt dan il-fajl taċ-ċavetta. Iċ-ċavetta importata se tissostitwixxi ċ-ċavetta lokali attwali.",
+            "importFileSuccess": "Ċavetta importata minn fajl",
+            "importFileFailed": "Ma setax jinqara l-fajl magħżul"
         }
     },
     "update": {

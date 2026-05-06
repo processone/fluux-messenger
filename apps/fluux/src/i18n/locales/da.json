@@ -709,7 +709,16 @@
                 "overwriteSuccess": "Din nøgle er genudgivet til serveren.",
                 "overwriteFailed": "Kunne ikke genudgive din nøgle. Prøv igen.",
                 "importSuccess": "Nøgle gendannet fra sikkerhedskopi på serveren."
-            }
+            },
+            "exportFileAction": "Eksporter til fil",
+            "exportFileDialogTitle": "Eksporter OpenPGP-nøgle til fil",
+            "exportFileDialogBody": "En adgangskode beskytter den eksporterede nøglefil. Skriv den ned eller gem den i en adgangskodeadministrator — du får brug for den, når du importerer nøglen på en anden enhed.",
+            "exportFileSuccess": "Nøgle eksporteret til fil",
+            "importFileAction": "Importer fra fil",
+            "importFileDialogTitle": "Importer OpenPGP-nøgle fra fil",
+            "importFileDialogBody": "Indtast den adgangskode, der blev brugt ved eksport af denne nøglefil. Den importerede nøgle erstatter den aktuelle lokale nøgle.",
+            "importFileSuccess": "Nøgle importeret fra fil",
+            "importFileFailed": "Kunne ikke læse den valgte fil"
         }
     },
     "update": {

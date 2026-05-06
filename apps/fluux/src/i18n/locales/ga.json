@@ -709,7 +709,16 @@
                 "overwriteSuccess": "Foilsíodh d'eochair arís ar an bhfreastalaí.",
                 "overwriteFailed": "Níorbh fhéidir d'eochair a fhoilsiú arís. Bain triail eile as.",
                 "importSuccess": "Eochair aisghafa ó chúltaca an fhreastalaí."
-            }
+            },
+            "exportFileAction": "Easpórtáil go comhad",
+            "exportFileDialogTitle": "Easpórtáil eochair OpenPGP go comhad",
+            "exportFileDialogBody": "Cosnaíonn frása focal faire an comhad eochaire easpórtáilte. Scríobh síos é nó sábháil i mbainisteoir focal faire é — beidh gá agat leis nuair a iompórtálann tú an eochair ar ghléas eile.",
+            "exportFileSuccess": "Easpórtáladh an eochair go comhad",
+            "importFileAction": "Iompórtáil ó chomhad",
+            "importFileDialogTitle": "Iompórtáil eochair OpenPGP ó chomhad",
+            "importFileDialogBody": "Iontráil an frása focal faire a úsáideadh agus an comhad eochaire seo á easpórtáil. Cuirfidh an eochair iompórtáilte an eochair áitiúil reatha ina háit.",
+            "importFileSuccess": "Iompórtáladh an eochair ó chomhad",
+            "importFileFailed": "Níorbh fhéidir an comhad roghnaithe a léamh"
         }
     },
     "update": {

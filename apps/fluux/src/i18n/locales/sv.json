@@ -709,7 +709,16 @@
                 "overwriteSuccess": "Din nyckel har publicerats om på servern.",
                 "overwriteFailed": "Det gick inte att publicera om din nyckel. Försök igen.",
                 "importSuccess": "Nyckel återställd från serversäkerhetskopian."
-            }
+            },
+            "exportFileAction": "Exportera till fil",
+            "exportFileDialogTitle": "Exportera OpenPGP-nyckel till fil",
+            "exportFileDialogBody": "En lösenfras skyddar den exporterade nyckelfilen. Skriv ned den eller spara den i en lösenordshanterare — du behöver den när du importerar nyckeln på en annan enhet.",
+            "exportFileSuccess": "Nyckel exporterad till fil",
+            "importFileAction": "Importera från fil",
+            "importFileDialogTitle": "Importera OpenPGP-nyckel från fil",
+            "importFileDialogBody": "Ange lösenfrasen som användes vid export av den här nyckelfilen. Den importerade nyckeln ersätter den aktuella lokala nyckeln.",
+            "importFileSuccess": "Nyckel importerad från fil",
+            "importFileFailed": "Det gick inte att läsa den valda filen"
         }
     },
     "update": {

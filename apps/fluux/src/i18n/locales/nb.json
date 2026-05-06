@@ -709,7 +709,16 @@
                 "overwriteSuccess": "Nøkkelen din er publisert på nytt til serveren.",
                 "overwriteFailed": "Kunne ikke publisere nøkkelen din på nytt. Prøv igjen.",
                 "importSuccess": "Nøkkel gjenopprettet fra sikkerhetskopi på serveren."
-            }
+            },
+            "exportFileAction": "Eksporter til fil",
+            "exportFileDialogTitle": "Eksporter OpenPGP-nøkkel til fil",
+            "exportFileDialogBody": "En passordfrase beskytter den eksporterte nøkkelfilen. Skriv den ned eller lagre den i en passordbehandler — du trenger den når du importerer nøkkelen på en annen enhet.",
+            "exportFileSuccess": "Nøkkel eksportert til fil",
+            "importFileAction": "Importer fra fil",
+            "importFileDialogTitle": "Importer OpenPGP-nøkkel fra fil",
+            "importFileDialogBody": "Skriv inn passordfrasen som ble brukt ved eksport av denne nøkkelfilen. Den importerte nøkkelen erstatter den gjeldende lokale nøkkelen.",
+            "importFileSuccess": "Nøkkel importert fra fil",
+            "importFileFailed": "Kunne ikke lese den valgte filen"
         }
     },
     "update": {

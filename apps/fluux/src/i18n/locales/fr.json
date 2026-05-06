@@ -710,7 +710,16 @@
                 "overwriteSuccess": "Votre clé a été republiée sur le serveur.",
                 "overwriteFailed": "Impossible de republier votre clé. Réessayez.",
                 "importSuccess": "Clé restaurée depuis la sauvegarde du serveur."
-            }
+            },
+            "exportFileAction": "Exporter vers un fichier",
+            "exportFileDialogTitle": "Exporter la clé OpenPGP vers un fichier",
+            "exportFileDialogBody": "Une phrase de passe protégera le fichier de clé exporté. Notez-la ou enregistrez-la dans un gestionnaire de mots de passe — vous en aurez besoin pour importer la clé sur un autre appareil.",
+            "exportFileSuccess": "Clé exportée dans le fichier",
+            "importFileAction": "Importer depuis un fichier",
+            "importFileDialogTitle": "Importer une clé OpenPGP depuis un fichier",
+            "importFileDialogBody": "Saisissez la phrase de passe utilisée lors de l'exportation de ce fichier de clé. La clé importée remplacera la clé locale actuelle.",
+            "importFileSuccess": "Clé importée depuis le fichier",
+            "importFileFailed": "Impossible de lire le fichier sélectionné"
         }
     },
     "update": {

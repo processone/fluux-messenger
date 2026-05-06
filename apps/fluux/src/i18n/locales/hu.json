@@ -709,7 +709,16 @@
                 "overwriteSuccess": "A kulcsát újra közzétettük a szerveren.",
                 "overwriteFailed": "Nem sikerült újra közzétenni a kulcsát. Próbálja újra.",
                 "importSuccess": "A kulcs visszaállítva a szerver biztonsági mentéséből."
-            }
+            },
+            "exportFileAction": "Exportálás fájlba",
+            "exportFileDialogTitle": "OpenPGP-kulcs exportálása fájlba",
+            "exportFileDialogBody": "Egy jelszófrázis védi az exportált kulcsfájlt. Jegyezze fel vagy tárolja jelszókezelőben — szüksége lesz rá, ha a kulcsot egy másik eszközre importálja.",
+            "exportFileSuccess": "A kulcs fájlba lett exportálva",
+            "importFileAction": "Importálás fájlból",
+            "importFileDialogTitle": "OpenPGP-kulcs importálása fájlból",
+            "importFileDialogBody": "Adja meg a kulcsfájl exportálásakor használt jelszófrázist. Az importált kulcs felváltja a jelenlegi helyi kulcsot.",
+            "importFileSuccess": "A kulcs fájlból lett importálva",
+            "importFileFailed": "A kiválasztott fájl nem olvasható"
         }
     },
     "update": {

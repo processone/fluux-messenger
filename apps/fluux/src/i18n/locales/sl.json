@@ -711,7 +711,16 @@
                 "overwriteSuccess": "Vaš ključ je bil znova objavljen na strežniku.",
                 "overwriteFailed": "Ključa ni bilo mogoče znova objaviti. Poskusite znova.",
                 "importSuccess": "Ključ obnovljen iz varnostne kopije na strežniku."
-            }
+            },
+            "exportFileAction": "Izvozi v datoteko",
+            "exportFileDialogTitle": "Izvozi ključ OpenPGP v datoteko",
+            "exportFileDialogBody": "Geslo bo zaščitilo izvoženo datoteko ključa. Zapišite ga ali shranite v upravitelja gesel — potrebovali ga boste pri uvozu ključa v drugo napravo.",
+            "exportFileSuccess": "Ključ je bil izvožen v datoteko",
+            "importFileAction": "Uvozi iz datoteke",
+            "importFileDialogTitle": "Uvozi ključ OpenPGP iz datoteke",
+            "importFileDialogBody": "Vnesite geslo, ki ste ga uporabili pri izvozu te datoteke ključa. Uvoženi ključ bo nadomestil trenutni lokalni ključ.",
+            "importFileSuccess": "Ključ je bil uvožen iz datoteke",
+            "importFileFailed": "Izbrane datoteke ni bilo mogoče prebrati"
         }
     },
     "update": {

@@ -711,7 +711,16 @@
                 "overwriteSuccess": "Teie võti on serveris uuesti avaldatud.",
                 "overwriteFailed": "Teie võtme uuesti avaldamine ebaõnnestus. Proovige uuesti.",
                 "importSuccess": "Võti taastatud serveri varukoopiast."
-            }
+            },
+            "exportFileAction": "Ekspordi faili",
+            "exportFileDialogTitle": "Ekspordi OpenPGP võti faili",
+            "exportFileDialogBody": "Paroolilause kaitseb eksporditud võtmefaili. Kirjutage see üles või salvestage paroolihaldurisse — vajate seda teisele seadmele võtme importimisel.",
+            "exportFileSuccess": "Võti eksporditi faili",
+            "importFileAction": "Impordi failist",
+            "importFileDialogTitle": "Impordi OpenPGP võti failist",
+            "importFileDialogBody": "Sisestage paroolilause, mida kasutati selle võtmefaili eksportimisel. Imporditud võti asendab praeguse kohaliku võtme.",
+            "importFileSuccess": "Võti imporditi failist",
+            "importFileFailed": "Valitud faili ei õnnestunud lugeda"
         }
     },
     "update": {

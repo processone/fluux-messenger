@@ -711,7 +711,16 @@
                 "overwriteSuccess": "Twój klucz został ponownie opublikowany na serwerze.",
                 "overwriteFailed": "Nie udało się ponownie opublikować klucza. Spróbuj ponownie.",
                 "importSuccess": "Klucz przywrócony z kopii zapasowej serwera."
-            }
+            },
+            "exportFileAction": "Eksportuj do pliku",
+            "exportFileDialogTitle": "Eksportuj klucz OpenPGP do pliku",
+            "exportFileDialogBody": "Hasło ochroni wyeksportowany plik klucza. Zapisz je lub przechowaj w menedżerze haseł — będziesz go potrzebować podczas importowania klucza na innym urządzeniu.",
+            "exportFileSuccess": "Klucz wyeksportowany do pliku",
+            "importFileAction": "Importuj z pliku",
+            "importFileDialogTitle": "Importuj klucz OpenPGP z pliku",
+            "importFileDialogBody": "Podaj hasło użyte podczas eksportowania tego pliku klucza. Importowany klucz zastąpi bieżący klucz lokalny.",
+            "importFileSuccess": "Klucz zaimportowany z pliku",
+            "importFileFailed": "Nie można odczytać wybranego pliku"
         }
     },
     "update": {

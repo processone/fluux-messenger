@@ -709,7 +709,16 @@
                 "overwriteSuccess": "Lykillinn þinn hefur verið endurbirtinn á þjóninum.",
                 "overwriteFailed": "Tókst ekki að endurbirta lykilinn þinn. Reyndu aftur.",
                 "importSuccess": "Lykill endurheimtur úr öryggisafritinu á þjóninum."
-            }
+            },
+            "exportFileAction": "Flytja út í skrá",
+            "exportFileDialogTitle": "Flytja OpenPGP-lykil út í skrá",
+            "exportFileDialogBody": "Lykilorðssetning verndar útflutta lyklaskrá. Skrifaðu hana niður eða geymdu í lykilorðastjóra — þú þarft hana til að flytja lykilinn inn á annað tæki.",
+            "exportFileSuccess": "Lykill fluttur út í skrá",
+            "importFileAction": "Flytja inn úr skrá",
+            "importFileDialogTitle": "Flytja OpenPGP-lykil inn úr skrá",
+            "importFileDialogBody": "Sláðu inn lykilorðssetninguna sem var notuð við útflutning þessarar lyklaskrár. Innfluttur lykill mun koma í stað núverandi staðbundins lykils.",
+            "importFileSuccess": "Lykill fluttur inn úr skrá",
+            "importFileFailed": "Tókst ekki að lesa valda skrá"
         }
     },
     "update": {

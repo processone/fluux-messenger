@@ -711,7 +711,16 @@
                 "overwriteSuccess": "Tu clave ha sido republicada en el servidor.",
                 "overwriteFailed": "No se pudo republicar tu clave. Inténtalo de nuevo.",
                 "importSuccess": "Clave restaurada desde la copia de seguridad del servidor."
-            }
+            },
+            "exportFileAction": "Exportar a archivo",
+            "exportFileDialogTitle": "Exportar clave OpenPGP a archivo",
+            "exportFileDialogBody": "Una frase de contraseña protegerá el archivo de clave exportado. Anótela o guárdela en un gestor de contraseñas — la necesitará al importar la clave en otro dispositivo.",
+            "exportFileSuccess": "Clave exportada al archivo",
+            "importFileAction": "Importar desde archivo",
+            "importFileDialogTitle": "Importar clave OpenPGP desde archivo",
+            "importFileDialogBody": "Introduzca la frase de contraseña usada al exportar este archivo de clave. La clave importada reemplazará la clave local actual.",
+            "importFileSuccess": "Clave importada desde archivo",
+            "importFileFailed": "No se pudo leer el archivo seleccionado"
         }
     },
     "update": {

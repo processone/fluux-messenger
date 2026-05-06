@@ -711,7 +711,16 @@
                 "overwriteSuccess": "La tua chiave è stata ripubblicata sul server.",
                 "overwriteFailed": "Impossibile ripubblicare la tua chiave. Riprova.",
                 "importSuccess": "Chiave ripristinata dal backup del server."
-            }
+            },
+            "exportFileAction": "Esporta in file",
+            "exportFileDialogTitle": "Esporta la chiave OpenPGP in un file",
+            "exportFileDialogBody": "Una passphrase proteggerà il file della chiave esportata. Annotarla o salvarla in un gestore di password — sarà necessaria per importare la chiave su un altro dispositivo.",
+            "exportFileSuccess": "Chiave esportata nel file",
+            "importFileAction": "Importa da file",
+            "importFileDialogTitle": "Importa la chiave OpenPGP da un file",
+            "importFileDialogBody": "Inserire la passphrase usata durante l'esportazione di questo file di chiave. La chiave importata sostituirà la chiave locale corrente.",
+            "importFileSuccess": "Chiave importata dal file",
+            "importFileFailed": "Impossibile leggere il file selezionato"
         }
     },
     "update": {

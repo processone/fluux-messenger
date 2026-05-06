@@ -710,7 +710,16 @@
                 "overwriteSuccess": "Váš kľúč bol znovu zverejnený na serveri.",
                 "overwriteFailed": "Nepodarilo sa znovu zverejniť váš kľúč. Skúste znova.",
                 "importSuccess": "Kľúč obnovený zo zálohy na serveri."
-            }
+            },
+            "exportFileAction": "Exportovať do súboru",
+            "exportFileDialogTitle": "Exportovať kľúč OpenPGP do súboru",
+            "exportFileDialogBody": "Prístupová fráza chráni exportovaný súbor s kľúčom. Zapíšte si ju alebo uložte do správcu hesiel — budete ju potrebovať pri importe kľúča na iné zariadenie.",
+            "exportFileSuccess": "Kľúč bol exportovaný do súboru",
+            "importFileAction": "Importovať zo súboru",
+            "importFileDialogTitle": "Importovať kľúč OpenPGP zo súboru",
+            "importFileDialogBody": "Zadajte prístupovú frázu použitú pri exporte tohto súboru s kľúčom. Importovaný kľúč nahradí aktuálny miestny kľúč.",
+            "importFileSuccess": "Kľúč bol importovaný zo súboru",
+            "importFileFailed": "Nepodarilo sa načítať vybraný súbor"
         }
     },
     "update": {

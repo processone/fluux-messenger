@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Copy, Check, Lock, AlertTriangle, Trash2, CloudUpload, CloudDownload, RefreshCw, X, Info, ChevronDown, ChevronRight } from 'lucide-react'
+import { Copy, Check, Lock, AlertTriangle, Trash2, CloudUpload, CloudDownload, RefreshCw, X, Info, ChevronDown, ChevronRight, FileDown, FileUp } from 'lucide-react'
 import { useConnection, useXMPPContext } from '@fluux/sdk'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { registerE2EEPlugins, unregisterE2EEPlugins } from '@/e2ee/registerPlugins'
@@ -87,6 +87,9 @@ export function EncryptionSettings() {
   const [backupDescVisible, setBackupDescVisible] = useState(false)
   const [rotateDescVisible, setRotateDescVisible] = useState(false)
   const [dangerZoneExpanded, setDangerZoneExpanded] = useState(false)
+  const [showExportFileDialog, setShowExportFileDialog] = useState(false)
+  const [showImportFileDialog, setShowImportFileDialog] = useState(false)
+  const [pendingImportFileArmored, setPendingImportFileArmored] = useState<string | null>(null)
 
   const handleDismissLimitations = () => {
     localStorage.setItem('enc-limitations-dismissed', '1')
@@ -495,6 +498,61 @@ export function EncryptionSettings() {
     [client, setOpenpgpEnabled, addToast, t],
   )
 
+  const handleExportFileConfirm = useCallback(
+    async (passphrase: string) => {
+      const plugin = client.e2ee?.getPlugin('openpgp') as
+        | { exportKeyToFile?: (pp: string) => Promise<boolean> }
+        | null
+        | undefined
+      if (!plugin?.exportKeyToFile) {
+        throw new Error(t('settings.encryption.backupPluginUnavailable'))
+      }
+      const saved = await plugin.exportKeyToFile(passphrase)
+      setShowExportFileDialog(false)
+      if (saved) {
+        addToast('success', t('settings.encryption.exportFileSuccess'))
+      }
+    },
+    [client, addToast, t],
+  )
+
+  const handleImportFileRequest = useCallback(async () => {
+    const plugin = client.e2ee?.getPlugin('openpgp') as
+      | { pickKeyFile?: () => Promise<string | null> }
+      | null
+      | undefined
+    if (!plugin?.pickKeyFile) return
+    try {
+      const content = await plugin.pickKeyFile()
+      if (!content) return
+      setPendingImportFileArmored(content)
+      setShowImportFileDialog(true)
+    } catch (err) {
+      console.error('[Fluux] E2EE file pick failed:', err)
+      addToast('error', t('settings.encryption.importFileFailed'))
+    }
+  }, [client, addToast, t])
+
+  const handleImportFileConfirm = useCallback(
+    async (passphrase: string) => {
+      if (!pendingImportFileArmored) return
+      const plugin = client.e2ee?.getPlugin('openpgp') as
+        | { importKeyFromFile?: (armored: string, pp: string) => Promise<{ fingerprint: string }> }
+        | null
+        | undefined
+      if (!plugin?.importKeyFromFile) {
+        throw new Error(t('settings.encryption.backupPluginUnavailable'))
+      }
+      const info = await plugin.importKeyFromFile(pendingImportFileArmored, passphrase)
+      setFingerprint(info.fingerprint)
+      setShowImportFileDialog(false)
+      setPendingImportFileArmored(null)
+      setBackupProbeNonce((n) => n + 1)
+      addToast('success', t('settings.encryption.importFileSuccess'))
+    },
+    [pendingImportFileArmored, client, addToast, t],
+  )
+
   return (
     <section className="max-w-md w-full">
       <h3 className="text-xs font-semibold text-fluux-muted uppercase tracking-wide mb-4">
@@ -691,6 +749,22 @@ export function EncryptionSettings() {
                       )}
                     </div>
                   )}
+                  <div className="flex flex-wrap gap-2 pt-2 border-t border-fluux-hover/60">
+                    <button
+                      onClick={() => setShowExportFileDialog(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
+                    >
+                      <FileDown className="w-3.5 h-3.5" />
+                      {t('settings.encryption.exportFileAction')}
+                    </button>
+                    <button
+                      onClick={() => { void handleImportFileRequest() }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
+                    >
+                      <FileUp className="w-3.5 h-3.5" />
+                      {t('settings.encryption.importFileAction')}
+                    </button>
+                  </div>
                 </>
               )
             })()}
@@ -834,6 +908,29 @@ export function EncryptionSettings() {
           onRestore={handleEnableRestore}
           onUseFresh={handleEnableUseFresh}
           onCancel={handleEnableCancel}
+        />
+      )}
+
+      {showExportFileDialog && (
+        <BackupPassphraseDialog
+          title={t('settings.encryption.exportFileDialogTitle')}
+          body={t('settings.encryption.exportFileDialogBody')}
+          confirmLabel={t('settings.encryption.exportFileAction')}
+          onConfirm={handleExportFileConfirm}
+          onCancel={() => setShowExportFileDialog(false)}
+        />
+      )}
+
+      {showImportFileDialog && pendingImportFileArmored && (
+        <RestorePassphraseDialog
+          title={t('settings.encryption.importFileDialogTitle')}
+          body={t('settings.encryption.importFileDialogBody')}
+          confirmLabel={t('settings.encryption.importFileAction')}
+          onConfirm={handleImportFileConfirm}
+          onCancel={() => {
+            setShowImportFileDialog(false)
+            setPendingImportFileArmored(null)
+          }}
         />
       )}
     </section>

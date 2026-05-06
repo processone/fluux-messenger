@@ -710,7 +710,16 @@
                 "overwriteSuccess": "Jūsu atslēga ir atkārtoti publicēta serverī.",
                 "overwriteFailed": "Neizdevās atkārtoti publicēt jūsu atslēgu. Mēģiniet vēlreiz.",
                 "importSuccess": "Atslēga atjaunota no servera dublējuma."
-            }
+            },
+            "exportFileAction": "Eksportēt failā",
+            "exportFileDialogTitle": "Eksportēt OpenPGP atslēgu failā",
+            "exportFileDialogBody": "Ieejas frāze aizsargās eksportēto atslēgas failu. Pierakstiet to vai saglabājiet paroļu pārvaldniekā — tas būs nepieciešams, importējot atslēgu citā ierīcē.",
+            "exportFileSuccess": "Atslēga eksportēta failā",
+            "importFileAction": "Importēt no faila",
+            "importFileDialogTitle": "Importēt OpenPGP atslēgu no faila",
+            "importFileDialogBody": "Ievadiet ieejas frāzi, kas tika izmantota šī atslēgas faila eksportēšanas laikā. Importētā atslēga aizstās pašreizējo lokālo atslēgu.",
+            "importFileSuccess": "Atslēga importēta no faila",
+            "importFileFailed": "Neizdevās nolasīt izvēlēto failu"
         }
     },
     "update": {

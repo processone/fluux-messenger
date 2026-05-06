@@ -709,7 +709,16 @@
                 "overwriteSuccess": "Jūsų raktas buvo iš naujo paskelbtas serveryje.",
                 "overwriteFailed": "Nepavyko iš naujo paskelbti jūsų rakto. Bandykite dar kartą.",
                 "importSuccess": "Raktas atkurtas iš serverio atsarginės kopijos."
-            }
+            },
+            "exportFileAction": "Eksportuoti į failą",
+            "exportFileDialogTitle": "Eksportuoti OpenPGP raktą į failą",
+            "exportFileDialogBody": "Slaptažodžio frazė apsaugos eksportuotą rakto failą. Užsirašykite ją arba išsaugokite slaptažodžių tvarkytuvėje — jos prireiks importuojant raktą kitame įrenginyje.",
+            "exportFileSuccess": "Raktas eksportuotas į failą",
+            "importFileAction": "Importuoti iš failo",
+            "importFileDialogTitle": "Importuoti OpenPGP raktą iš failo",
+            "importFileDialogBody": "Įveskite slaptažodžio frazę, naudotą eksportuojant šį rakto failą. Importuotas raktas pakeis dabartinį vietinį raktą.",
+            "importFileSuccess": "Raktas importuotas iš failo",
+            "importFileFailed": "Nepavyko perskaityti pasirinkto failo"
         }
     },
     "update": {
