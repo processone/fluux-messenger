@@ -144,7 +144,7 @@
         "blockConfirm": "Bloccare {{name}}? Non potranno contattarti.",
         "encryption": {
             "sectionTitle": "Cifratura",
-            "trusted": "Cifrato (non verificato)",
+            "tofu": "Cifrato (non verificato)",
             "verified": "Verificato",
             "fingerprintLabel": "Impronta OpenPGP",
             "verifyButton": "Verifica impronta",
@@ -488,7 +488,8 @@
                 },
                 "trust": {
                     "verified": "verificato",
-                    "trusted": "attendibile",
+                    "tofu": "attendibile",
+                    "introduced": "presentato",
                     "untrusted": "non verificato"
                 }
             }

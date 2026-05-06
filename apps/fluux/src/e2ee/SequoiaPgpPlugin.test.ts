@@ -1470,7 +1470,7 @@ describe('SequoiaPgpPlugin', () => {
       expect(bobBuilt.securityUpdates[0]).toMatchObject({
         peer: 'alice@example.com',
         messageId: 'm-upgrade',
-        securityContext: { protocolId: 'openpgp', trust: 'trusted' },
+        securityContext: { protocolId: 'openpgp', trust: 'tofu' },
       })
     })
 
@@ -1505,7 +1505,7 @@ describe('SequoiaPgpPlugin', () => {
       )
 
       const decrypted = await decryptWithoutPeerKey(bobPlugin, payload.stanzaElement, 'm-verified')
-      expect(decrypted.securityContext.trust).toBe('trusted')
+      expect(decrypted.securityContext.trust).toBe('tofu')
 
       // Firing the key-change hook with an empty buffer must be a no-op:
       // no re-verify invokes, no upgrades reported.
@@ -1762,7 +1762,7 @@ describe('SequoiaPgpPlugin', () => {
       const decrypted = await bob.plugin.decrypt(bobHandle, claim!)
       expect(decodeBodyFromPayload(decrypted.plaintext)).toBe('hello bob')
       expect(decrypted.securityContext.protocolId).toBe('openpgp')
-      expect(decrypted.securityContext.trust).toBe('trusted')
+      expect(decrypted.securityContext.trust).toBe('tofu')
       expect(decrypted.securityContext.notes).toBeUndefined()
       expect(decrypted.senderDevice.deviceId).toBe(alice.plugin.getOwnFingerprint())
     })
@@ -2552,7 +2552,7 @@ describe('SequoiaPgpPlugin', () => {
       )
       const result = await pair.bob.plugin.decrypt(bobHandle, payload)
       expect(decodeBodyFromPayload(result.plaintext)).toBe('post-rotation greeting')
-      expect(result.securityContext.trust).toBe('trusted')
+      expect(result.securityContext.trust).toBe('tofu')
     })
   })
 
@@ -2726,9 +2726,9 @@ describe('SequoiaPgpPlugin', () => {
       expect(trust).toBe('verified')
     })
 
-    it("getPeerTrust stays 'trusted' when the verified fingerprint is for a different peer", async () => {
+    it("getPeerTrust stays 'tofu' when the verified fingerprint is for a different peer", async () => {
       // Pin verification for charlie, but ask about bob — the lookup
-      // should miss and bob stays at BTBV `trusted`.
+      // should miss and bob stays at TOFU.
       const { alice } = await buildCrossPublishedPair(fake)
       await alice.plugin.probePeer('bob@example.com')
       verifiedStore.useVerifiedPeerKeysStore
@@ -2736,7 +2736,7 @@ describe('SequoiaPgpPlugin', () => {
         .setVerified('charlie@example.com', 'unrelated-fp')
 
       const trust = await alice.plugin.getPeerTrust('bob@example.com')
-      expect(trust).toBe('trusted')
+      expect(trust).toBe('tofu')
     })
 
     it("decrypt produces 'verified' security context when the sender is verified", async () => {
@@ -2940,7 +2940,7 @@ describe('SequoiaPgpPlugin', () => {
       expect(alice.plugin.getPeerFingerprint('bob@example.com')).toBe(newBob.fingerprint)
       // Verification dropped — accept-without-verifying never lifts trust.
       expect(verifiedStore.getVerifiedPeerFingerprint('bob@example.com')).toBeNull()
-      expect(await alice.plugin.getPeerTrust('bob@example.com')).toBe('trusted')
+      expect(await alice.plugin.getPeerTrust('bob@example.com')).toBe('tofu')
 
       // Encryption is unblocked: a fresh encrypt call must succeed.
       const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })

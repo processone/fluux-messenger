@@ -142,7 +142,7 @@
         "blockConfirm": "Заблакіраваць {{name}}? Яны не змогуць звязацца з вамі.",
         "encryption": {
             "sectionTitle": "Шыфраванне",
-            "trusted": "Зашыфравана (не праверана)",
+            "tofu": "Зашыфравана (не праверана)",
             "verified": "Праверана",
             "fingerprintLabel": "Адбітак OpenPGP",
             "verifyButton": "Праверыць адбітак",
@@ -486,7 +486,8 @@
                 },
                 "trust": {
                     "verified": "праверана",
-                    "trusted": "давераная",
+                    "tofu": "давераная",
+                    "introduced": "рэкамендаваны",
                     "untrusted": "неправерана"
                 }
             }

@@ -726,7 +726,7 @@ describe('Chat E2EE wiring', () => {
       captureCtx.reportSecurityContextUpdate({
         peer: 'bob@example.com',
         messageId: 'm-up',
-        securityContext: { protocolId: 'capture', trust: 'trusted' },
+        securityContext: { protocolId: 'capture', trust: 'tofu' },
       })
 
       const evt = rxBuilt.sdkEmitted.find(
@@ -744,7 +744,7 @@ describe('Chat E2EE wiring', () => {
       expect(evt!.payload).toEqual({
         conversationId: 'bob@example.com',
         messageId: 'm-up',
-        securityContext: { protocolId: 'capture', trust: 'trusted' },
+        securityContext: { protocolId: 'capture', trust: 'tofu' },
       })
     })
   })

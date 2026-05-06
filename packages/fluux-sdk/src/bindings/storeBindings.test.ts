@@ -144,7 +144,7 @@ describe('createStoreBindings', () => {
     it('should handle message:security-updated by patching securityContext', () => {
       const securityContext = {
         protocolId: 'openpgp',
-        trust: 'trusted' as const,
+        trust: 'tofu' as const,
       }
       mockClient.emit('message:security-updated', {
         conversationId: 'bob@example.com',

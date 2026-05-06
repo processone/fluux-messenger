@@ -290,13 +290,13 @@ describe('MessageBubble', () => {
         <MessageBubble
           {...props}
           message={createTestMessage({
-            securityContext: { protocolId: 'openpgp', trust: 'trusted' },
+            securityContext: { protocolId: 'openpgp', trust: 'tofu' },
           })}
         />,
       )
 
       expect(
-        container.querySelector('[aria-label="Encrypted with openpgp, trust trusted"]'),
+        container.querySelector('[aria-label="Encrypted with openpgp, trust tofu"]'),
       ).not.toBeNull()
       expect(
         container.querySelector('[aria-label="Encrypted with openpgp, trust untrusted"]'),
@@ -356,13 +356,13 @@ describe('MessageBubble', () => {
       const onReply = vi.fn()
       const props = createDefaultProps({
         message: createTestMessage({
-          securityContext: { protocolId: 'openpgp', trust: 'trusted' },
+          securityContext: { protocolId: 'openpgp', trust: 'tofu' },
         }),
         onReply,
       })
       const { rerender, container } = render(<MessageBubble {...props} />)
       const firstNode = container.querySelector(
-        '[aria-label="Encrypted with openpgp, trust trusted"]',
+        '[aria-label="Encrypted with openpgp, trust tofu"]',
       )
 
       rerender(
@@ -370,14 +370,14 @@ describe('MessageBubble', () => {
           {...props}
           message={createTestMessage({
             // New object reference, identical contents.
-            securityContext: { protocolId: 'openpgp', trust: 'trusted' },
+            securityContext: { protocolId: 'openpgp', trust: 'tofu' },
           })}
           onReply={vi.fn()}
         />,
       )
 
       const secondNode = container.querySelector(
-        '[aria-label="Encrypted with openpgp, trust trusted"]',
+        '[aria-label="Encrypted with openpgp, trust tofu"]',
       )
       // Same DOM node retained → memo correctly skipped the render.
       expect(secondNode).toBe(firstNode)

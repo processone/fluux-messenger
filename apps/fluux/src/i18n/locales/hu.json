@@ -142,7 +142,7 @@
         "blockConfirm": "{{name}} tiltása? Nem fognak tudni kapcsolatba lépni veled.",
         "encryption": {
             "sectionTitle": "Titkosítás",
-            "trusted": "Titkosított (nem ellenőrzött)",
+            "tofu": "Titkosított (nem ellenőrzött)",
             "verified": "Ellenőrzött",
             "fingerprintLabel": "OpenPGP-ujjlenyomat",
             "verifyButton": "Ujjlenyomat ellenőrzése",
@@ -486,7 +486,8 @@
                 },
                 "trust": {
                     "verified": "hitelesítve",
-                    "trusted": "megbízható",
+                    "tofu": "megbízható",
+                    "introduced": "bemutatott",
                     "untrusted": "nem hitelesítve"
                 }
             }

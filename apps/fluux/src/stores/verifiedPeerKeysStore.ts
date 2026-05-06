@@ -96,7 +96,7 @@ export const useVerifiedPeerKeysStore = create<VerifiedPeerKeysState>((set) => (
 /**
  * `true` when the user has confirmed `fingerprint` for `jid` out-of-band.
  * Use this in trust-decision paths (`getPeerTrust`,
- * `buildInboundSecurityContext`) to lift `trusted` → `verified`.
+ * `buildInboundSecurityContext`) to lift `tofu` → `verified`.
  */
 export function isPeerVerified(jid: string, fingerprint: string): boolean {
   return (

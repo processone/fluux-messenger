@@ -46,7 +46,7 @@ export const AVA_MESSAGES: Message[] = [
     type: 'chat', id: 'demo-ava-9', from: SELF_JID, body: 'OMEMO (XEP-0384) is on the list — it\'s well-specified and we have a good crypto library ready. Should be feasible in Q2.',
     timestamp: hoursAgo(4.5), isOutgoing: true, conversationId: conv,
     reactions: { '🔐': [conv], '🙌': [conv] } as Record<string, string[]>,
-    securityContext: { protocolId: 'openpgp', trust: 'trusted' },
+    securityContext: { protocolId: 'openpgp', trust: 'tofu' },
   },
   {
     type: 'chat', id: 'demo-ava-10', from: conv, body: 'Heads up — a new device is on my account. I haven\'t verified its fingerprint yet.',
@@ -59,7 +59,7 @@ export const AVA_MESSAGES: Message[] = [
   {
     type: 'chat', id: 'demo-ava-11', from: conv, body: 'Following up on search — I\'ll put together a proper rollout plan this week.',
     timestamp: minutesAgo(4), isOutgoing: false, conversationId: conv,
-    securityContext: { protocolId: 'openpgp', trust: 'trusted' },
+    securityContext: { protocolId: 'openpgp', trust: 'tofu' },
   },
   {
     type: 'chat', id: 'demo-ava-12', from: conv, body: '…and just noting that this reply is from my laptop — haven\'t verified its key from phone yet.',
@@ -69,7 +69,7 @@ export const AVA_MESSAGES: Message[] = [
   {
     type: 'chat', id: 'demo-ava-13', from: conv, body: 'Back on the main device now.',
     timestamp: minutesAgo(2), isOutgoing: false, conversationId: conv,
-    securityContext: { protocolId: 'openpgp', trust: 'trusted' },
+    securityContext: { protocolId: 'openpgp', trust: 'tofu' },
   },
   // Example of a signature that failed to verify — the lock stays yellow
   // but the tooltip now reads "Signature did not verify" so the user can
@@ -89,7 +89,7 @@ export const AVA_MESSAGES: Message[] = [
   {
     type: 'chat', id: 'demo-ava-14b', from: SELF_JID, body: 'Let me take a look.',
     timestamp: minutesAgo(1), isOutgoing: true, conversationId: conv,
-    securityContext: { protocolId: 'openpgp', trust: 'trusted' },
+    securityContext: { protocolId: 'openpgp', trust: 'tofu' },
   },
   // Example of the decrypt-failure fallback path: the sender-supplied
   // fallback body surfaces with a yellow lock whose tooltip reads

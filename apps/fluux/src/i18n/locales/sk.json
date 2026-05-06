@@ -143,7 +143,7 @@
         "blockConfirm": "Zablokovať {{name}}? Nebudú vás môcť kontaktovať.",
         "encryption": {
             "sectionTitle": "Šifrovanie",
-            "trusted": "Šifrované (neoverené)",
+            "tofu": "Šifrované (neoverené)",
             "verified": "Overené",
             "fingerprintLabel": "Odtlačok OpenPGP",
             "verifyButton": "Overiť odtlačok",
@@ -487,7 +487,8 @@
                 },
                 "trust": {
                     "verified": "overené",
-                    "trusted": "dôveryhodné",
+                    "tofu": "dôveryhodné",
+                    "introduced": "predstavený",
                     "untrusted": "neoverené"
                 }
             }

@@ -142,7 +142,7 @@
         "blockConfirm": "Blokirati {{name}}? Neće vas moći kontaktirati.",
         "encryption": {
             "sectionTitle": "Enkripcija",
-            "trusted": "Šifrirano (nije potvrđeno)",
+            "tofu": "Šifrirano (nije potvrđeno)",
             "verified": "Potvrđeno",
             "fingerprintLabel": "OpenPGP otisak",
             "verifyButton": "Provjeri otisak",
@@ -486,7 +486,8 @@
                 },
                 "trust": {
                     "verified": "provjereno",
-                    "trusted": "povjerljivo",
+                    "tofu": "povjerljivo",
+                    "introduced": "uveden",
                     "untrusted": "nije provjereno"
                 }
             }

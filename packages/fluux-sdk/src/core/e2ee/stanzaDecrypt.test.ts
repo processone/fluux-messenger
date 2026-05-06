@@ -92,7 +92,7 @@ class FakeE2EEPlugin implements E2EEPlugin {
   ): Promise<DecryptResult> {
     const securityContext: SecurityContext = {
       protocolId: TEST_PROTOCOL_ID,
-      trust: 'trusted',
+      trust: 'tofu',
     }
     // Emit a shape-valid payload envelope so stanzaDecrypt's unwrap path
     // runs without falling back to the legacy body-string flow.
@@ -115,10 +115,10 @@ class FakeE2EEPlugin implements E2EEPlugin {
     throw new Error('not supported')
   }
   async getPeerTrust(_p: string): Promise<TrustState> {
-    return 'trusted'
+    return 'tofu'
   }
   async getDeviceTrust(_p: string, _d: string): Promise<TrustState> {
-    return 'trusted'
+    return 'tofu'
   }
 }
 

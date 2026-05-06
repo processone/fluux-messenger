@@ -35,7 +35,7 @@ describe('ContactProfileTabs', () => {
 
   it('shows the trusted badge when the peer is unverified', () => {
     setup({ kind: 'encrypted', fingerprint: 'ABCDEF', trust: 'unverified' })
-    expect(screen.getByLabelText('contacts.encryption.trusted')).toBeInTheDocument()
+    expect(screen.getByLabelText('contacts.encryption.tofu')).toBeInTheDocument()
   })
 
   it('shows the plaintext badge when encryption is forced off', () => {

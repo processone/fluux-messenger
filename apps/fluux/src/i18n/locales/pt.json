@@ -144,7 +144,7 @@
         "blockConfirm": "Bloquear {{name}}? Não poderão contactá-lo.",
         "encryption": {
             "sectionTitle": "Encriptação",
-            "trusted": "Encriptado (não verificado)",
+            "tofu": "Encriptado (não verificado)",
             "verified": "Verificado",
             "fingerprintLabel": "Impressão digital OpenPGP",
             "verifyButton": "Verificar impressão digital",
@@ -488,7 +488,8 @@
                 },
                 "trust": {
                     "verified": "verificado",
-                    "trusted": "de confiança",
+                    "tofu": "de confiança",
+                    "introduced": "apresentado",
                     "untrusted": "não verificado"
                 }
             }

@@ -142,7 +142,7 @@
         "blockConfirm": "Cuir bac ar {{name}}? Ní bheidh siad in ann teagmháil a dhéanamh leat.",
         "encryption": {
             "sectionTitle": "Criptiú",
-            "trusted": "Criptithe (gan fíorú)",
+            "tofu": "Criptithe (gan fíorú)",
             "verified": "Fíoraithe",
             "fingerprintLabel": "Méarloirg OpenPGP",
             "verifyButton": "Fíoraigh méarloirg",
@@ -486,7 +486,8 @@
                 },
                 "trust": {
                     "verified": "fíoraithe",
-                    "trusted": "iontaofa",
+                    "tofu": "iontaofa",
+                    "introduced": "tugtha isteach",
                     "untrusted": "gan fíorú"
                 }
             }

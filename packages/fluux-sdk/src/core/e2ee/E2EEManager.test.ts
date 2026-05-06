@@ -89,7 +89,7 @@ class FakePlugin implements E2EEPlugin {
     return {
       plaintext: new Uint8Array([0x42]),
       senderDevice: { jid: 'sender@example.com', deviceId: 'd1' },
-      securityContext: { protocolId: payload.protocolId, trust: 'trusted' as const },
+      securityContext: { protocolId: payload.protocolId, trust: 'tofu' as const },
     }
   }
 
@@ -338,13 +338,13 @@ describe('E2EEManager — security context updates', () => {
     captured!.reportSecurityContextUpdate({
       peer: 'bob@example.com',
       messageId: 'm-42',
-      securityContext: { protocolId: strongDescriptor.id, trust: 'trusted' },
+      securityContext: { protocolId: strongDescriptor.id, trust: 'tofu' },
     })
 
     expect(a).toHaveBeenCalledWith({
       peer: 'bob@example.com',
       messageId: 'm-42',
-      securityContext: { protocolId: strongDescriptor.id, trust: 'trusted' },
+      securityContext: { protocolId: strongDescriptor.id, trust: 'tofu' },
     })
     expect(b).toHaveBeenCalledWith(expect.objectContaining({ messageId: 'm-42' }))
   })
@@ -365,7 +365,7 @@ describe('E2EEManager — security context updates', () => {
     captured!.reportSecurityContextUpdate({
       peer: 'bob@example.com',
       messageId: 'm-1',
-      securityContext: { protocolId: strongDescriptor.id, trust: 'trusted' },
+      securityContext: { protocolId: strongDescriptor.id, trust: 'tofu' },
     })
     expect(listener).not.toHaveBeenCalled()
   })
@@ -388,7 +388,7 @@ describe('E2EEManager — security context updates', () => {
     captured!.reportSecurityContextUpdate({
       peer: 'bob@example.com',
       messageId: 'm-1',
-      securityContext: { protocolId: strongDescriptor.id, trust: 'trusted' },
+      securityContext: { protocolId: strongDescriptor.id, trust: 'tofu' },
     })
     expect(survivor).toHaveBeenCalled()
   })
@@ -433,7 +433,7 @@ describe('E2EEManager — security context updates', () => {
     ctxSnapshot.reportSecurityContextUpdate({
       peer: 'bob@example.com',
       messageId: 'm-1',
-      securityContext: { protocolId: strongDescriptor.id, trust: 'trusted' },
+      securityContext: { protocolId: strongDescriptor.id, trust: 'tofu' },
     })
     expect(listener).not.toHaveBeenCalled()
   })
@@ -548,7 +548,7 @@ describe('E2EEManager — dispatch', () => {
     const archiveSpy = vi.fn(async () => ({
       plaintext: new Uint8Array([0xAA]),
       senderDevice: { jid: 'sender@example.com', deviceId: 'archive-d' },
-      securityContext: { protocolId: strongDescriptor.id, trust: 'trusted' as const },
+      securityContext: { protocolId: strongDescriptor.id, trust: 'tofu' as const },
     }))
     ;(plugin as unknown as { decryptArchive: typeof archiveSpy }).decryptArchive = archiveSpy
     const liveSpy = vi.spyOn(plugin, 'decrypt')
@@ -629,10 +629,10 @@ describe('E2EEManager — isPeerVerified', () => {
     await expect(mgr.isPeerVerified('bob@example.com')).resolves.toBe(false)
   })
 
-  it("returns false for 'trusted' and 'untrusted' — only 'verified' qualifies", async () => {
+  it("returns false for 'tofu', 'introduced', and 'untrusted' — only 'verified' qualifies", async () => {
     const mgr = makeManager()
     const plugin = new FakePlugin(weakDescriptor, 'urn:test:weak')
-    vi.spyOn(plugin, 'getPeerTrust').mockResolvedValue('trusted' as never)
+    vi.spyOn(plugin, 'getPeerTrust').mockResolvedValue('tofu' as never)
     await mgr.register(plugin)
     await expect(mgr.isPeerVerified('bob@example.com')).resolves.toBe(false)
   })

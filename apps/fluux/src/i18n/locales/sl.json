@@ -144,7 +144,7 @@
         "blockConfirm": "Blokiraj {{name}}? Ne bodo mogli stopiti v stik s tabo.",
         "encryption": {
             "sectionTitle": "Šifriranje",
-            "trusted": "Šifrirano (ni preverjeno)",
+            "tofu": "Šifrirano (ni preverjeno)",
             "verified": "Preverjeno",
             "fingerprintLabel": "Prstni odtis OpenPGP",
             "verifyButton": "Preveri prstni odtis",
@@ -488,7 +488,8 @@
                 },
                 "trust": {
                     "verified": "preverjeno",
-                    "trusted": "zaupanja vredno",
+                    "tofu": "zaupanja vredno",
+                    "introduced": "predstavljen",
                     "untrusted": "nepreverjeno"
                 }
             }

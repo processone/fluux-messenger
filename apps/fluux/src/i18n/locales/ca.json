@@ -144,7 +144,7 @@
         "blockConfirm": "Bloquejar {{name}}? No podran contactar-te.",
         "encryption": {
             "sectionTitle": "Xifratge",
-            "trusted": "Xifrat (no verificat)",
+            "tofu": "Xifrat (no verificat)",
             "verified": "Verificat",
             "fingerprintLabel": "Empremta OpenPGP",
             "verifyButton": "Verifica l'empremta",
@@ -488,7 +488,8 @@
                 },
                 "trust": {
                     "verified": "verificat",
-                    "trusted": "de confiança",
+                    "tofu": "de confiança",
+                    "introduced": "presentat",
                     "untrusted": "no verificat"
                 }
             }

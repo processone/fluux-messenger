@@ -142,7 +142,7 @@
         "blockConfirm": "Loka á {{name}}? Þeir munu ekki geta haft samband við þig.",
         "encryption": {
             "sectionTitle": "Dulkóðun",
-            "trusted": "Dulkóðað (ekki staðfest)",
+            "tofu": "Dulkóðað (ekki staðfest)",
             "verified": "Staðfest",
             "fingerprintLabel": "OpenPGP fingrafar",
             "verifyButton": "Staðfesta fingrafar",
@@ -486,7 +486,8 @@
                 },
                 "trust": {
                     "verified": "staðfest",
-                    "trusted": "treyst",
+                    "tofu": "treyst",
+                    "introduced": "kynnt",
                     "untrusted": "óstaðfest"
                 }
             }

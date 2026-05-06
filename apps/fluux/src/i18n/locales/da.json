@@ -142,7 +142,7 @@
         "blockConfirm": "Blokér {{name}}? De vil ikke kunne kontakte dig.",
         "encryption": {
             "sectionTitle": "Kryptering",
-            "trusted": "Krypteret (ikke bekræftet)",
+            "tofu": "Krypteret (ikke bekræftet)",
             "verified": "Bekræftet",
             "fingerprintLabel": "OpenPGP-aftryk",
             "verifyButton": "Bekræft aftryk",
@@ -486,7 +486,8 @@
                 },
                 "trust": {
                     "verified": "verificeret",
-                    "trusted": "betroet",
+                    "tofu": "betroet",
+                    "introduced": "introduceret",
                     "untrusted": "uverificeret"
                 }
             }

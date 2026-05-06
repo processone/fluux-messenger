@@ -143,7 +143,7 @@
         "blockConfirm": "Bloķēt {{name}}? Viņi nevarēs ar jums sazināties.",
         "encryption": {
             "sectionTitle": "Šifrēšana",
-            "trusted": "Šifrēts (nepārbaudīts)",
+            "tofu": "Šifrēts (nepārbaudīts)",
             "verified": "Pārbaudīts",
             "fingerprintLabel": "OpenPGP pirkstu nospiedums",
             "verifyButton": "Pārbaudīt nospiedumu",
@@ -487,7 +487,8 @@
                 },
                 "trust": {
                     "verified": "pārbaudīts",
-                    "trusted": "uzticams",
+                    "tofu": "uzticams",
+                    "introduced": "iepazīstināts",
                     "untrusted": "nepārbaudīts"
                 }
             }

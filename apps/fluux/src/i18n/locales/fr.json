@@ -143,7 +143,7 @@
         "pressEnterToAdd": "Appuyez sur Entrée pour ajouter",
         "encryption": {
             "sectionTitle": "Chiffrement",
-            "trusted": "Chiffré (non vérifié)",
+            "tofu": "Chiffré (non vérifié)",
             "verified": "Vérifié",
             "fingerprintLabel": "Empreinte OpenPGP",
             "verifyButton": "Vérifier l'empreinte",
@@ -487,7 +487,8 @@
                 },
                 "trust": {
                     "verified": "vérifié",
-                    "trusted": "approuvé",
+                    "tofu": "approuvé",
+                    "introduced": "présenté",
                     "untrusted": "non vérifié"
                 }
             }

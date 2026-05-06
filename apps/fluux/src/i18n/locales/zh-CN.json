@@ -142,7 +142,7 @@
         "blockConfirm": "屏蔽 {{name}}？对方将无法联系到您。",
         "encryption": {
             "sectionTitle": "加密",
-            "trusted": "已加密（未验证）",
+            "tofu": "已加密（未验证）",
             "verified": "已验证",
             "fingerprintLabel": "OpenPGP 指纹",
             "verifyButton": "验证指纹",
@@ -486,7 +486,8 @@
                 },
                 "trust": {
                     "verified": "已验证",
-                    "trusted": "可信",
+                    "tofu": "可信",
+                    "introduced": "已介绍",
                     "untrusted": "未验证"
                 }
             }

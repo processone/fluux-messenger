@@ -15,7 +15,7 @@ export function isActionMessage(body: string | undefined): boolean {
  */
 interface GroupingSecurityContext {
   protocolId: string
-  trust: 'verified' | 'trusted' | 'untrusted'
+  trust: 'verified' | 'introduced' | 'tofu' | 'untrusted'
 }
 
 /**

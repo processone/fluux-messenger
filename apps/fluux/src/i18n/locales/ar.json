@@ -142,7 +142,7 @@
         "pressEnterToAdd": "اضغط Enter للإضافة",
         "encryption": {
             "sectionTitle": "التشفير",
-            "trusted": "مشفّر (غير موثّق)",
+            "tofu": "مشفّر (غير موثّق)",
             "verified": "موثّق",
             "fingerprintLabel": "بصمة OpenPGP",
             "verifyButton": "التحقق من البصمة",
@@ -486,7 +486,8 @@
                 },
                 "trust": {
                     "verified": "تم التحقق",
-                    "trusted": "موثوق",
+                    "tofu": "موثوق",
+                    "introduced": "مُعرَّف",
                     "untrusted": "غير مُتحقَّق"
                 }
             }

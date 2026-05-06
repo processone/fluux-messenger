@@ -142,7 +142,7 @@
         "blockConfirm": "Заблокировать {{name}}? Они не смогут связаться с вами.",
         "encryption": {
             "sectionTitle": "Шифрование",
-            "trusted": "Зашифровано (не проверено)",
+            "tofu": "Зашифровано (не проверено)",
             "verified": "Подтверждено",
             "fingerprintLabel": "Отпечаток OpenPGP",
             "verifyButton": "Проверить отпечаток",
@@ -486,7 +486,8 @@
                 },
                 "trust": {
                     "verified": "проверено",
-                    "trusted": "доверенный",
+                    "tofu": "доверенный",
+                    "introduced": "представлен",
                     "untrusted": "не проверено"
                 }
             }

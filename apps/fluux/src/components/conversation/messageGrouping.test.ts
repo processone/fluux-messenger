@@ -181,7 +181,7 @@ describe('shouldShowAvatar', () => {
       const messages = [
         {
           id: '1', timestamp: new Date('2024-01-15T10:00:00'), from: 'alice',
-          securityContext: { protocolId: 'openpgp', trust: 'trusted' as const },
+          securityContext: { protocolId: 'openpgp', trust: 'tofu' as const },
         },
         {
           id: '2', timestamp: new Date('2024-01-15T10:01:00'), from: 'alice',
@@ -196,11 +196,11 @@ describe('shouldShowAvatar', () => {
       const messages = [
         {
           id: '1', timestamp: new Date('2024-01-15T10:00:00'), from: 'alice',
-          securityContext: { protocolId: 'openpgp', trust: 'trusted' as const },
+          securityContext: { protocolId: 'openpgp', trust: 'tofu' as const },
         },
         {
           id: '2', timestamp: new Date('2024-01-15T10:01:00'), from: 'alice',
-          securityContext: { protocolId: 'omemo:2', trust: 'trusted' as const },
+          securityContext: { protocolId: 'omemo:2', trust: 'tofu' as const },
         },
       ]
 
@@ -212,7 +212,7 @@ describe('shouldShowAvatar', () => {
         { id: '1', timestamp: new Date('2024-01-15T10:00:00'), from: 'alice' },
         {
           id: '2', timestamp: new Date('2024-01-15T10:01:00'), from: 'alice',
-          securityContext: { protocolId: 'openpgp', trust: 'trusted' as const },
+          securityContext: { protocolId: 'openpgp', trust: 'tofu' as const },
         },
       ]
 
@@ -223,7 +223,7 @@ describe('shouldShowAvatar', () => {
       const messages = [
         {
           id: '1', timestamp: new Date('2024-01-15T10:00:00'), from: 'alice',
-          securityContext: { protocolId: 'openpgp', trust: 'trusted' as const },
+          securityContext: { protocolId: 'openpgp', trust: 'tofu' as const },
         },
         { id: '2', timestamp: new Date('2024-01-15T10:01:00'), from: 'alice' },
       ]
@@ -232,7 +232,7 @@ describe('shouldShowAvatar', () => {
     })
 
     it('keeps the group when security context is identical', () => {
-      const ctx = { protocolId: 'openpgp', trust: 'trusted' as const }
+      const ctx = { protocolId: 'openpgp', trust: 'tofu' as const }
       const messages = [
         { id: '1', timestamp: new Date('2024-01-15T10:00:00'), from: 'alice', securityContext: ctx },
         { id: '2', timestamp: new Date('2024-01-15T10:01:00'), from: 'alice', securityContext: ctx },

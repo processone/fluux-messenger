@@ -733,6 +733,105 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
     return { fingerprint: bundle.fingerprint }
   }
 
+  // ---- Local file export / import ------------------------------------
+
+  /**
+   * Encrypt the in-memory TSK under `passphrase` and save it to a
+   * user-selected file via the OS save dialog. The produced file is an
+   * armored OpenPGP message identical in format to the server backup
+   * (XEP-0373 §5), so it can be re-imported by {@link importKeyFromFile}
+   * or any standards-compliant OpenPGP tool.
+   *
+   * Returns `true` when the file was written, `false` when the user
+   * dismissed the save dialog without choosing a path.
+   */
+  async exportKeyToFile(passphrase: string): Promise<boolean> {
+    const ctx = this.requireCtx()
+    if (!this.ownBundle) {
+      throw new E2EEPluginError(
+        'permanent',
+        'no-identity',
+        'SequoiaPgpPlugin: no identity to export — call ensureIdentity first',
+      )
+    }
+    let armoredMessage: string
+    try {
+      armoredMessage = await this.invoke<string>('openpgp_backup_encrypt', {
+        accountJid: ctx.account.jid,
+        passphrase,
+      })
+    } catch (err) {
+      throw toPluginError('exportKeyToFile', err)
+    }
+    const { save } = await import('@tauri-apps/plugin-dialog')
+    const filePath = await save({
+      defaultPath: 'openpgp-backup.asc',
+      filters: [{ name: 'OpenPGP Armor', extensions: ['asc', 'pgp', 'gpg'] }],
+    })
+    if (!filePath) return false
+    const { writeTextFile } = await import('@tauri-apps/plugin-fs')
+    await writeTextFile(filePath, armoredMessage)
+    return true
+  }
+
+  /**
+   * Open the OS file picker and read the selected file's content.
+   * Returns the armored text of the chosen file, or `null` when the
+   * user cancels the picker without selecting a file. The caller is
+   * responsible for prompting for the passphrase and passing both to
+   * {@link importKeyFromFile}.
+   */
+  async pickKeyFile(): Promise<string | null> {
+    const { open } = await import('@tauri-apps/plugin-dialog')
+    const result = await open({
+      multiple: false,
+      filters: [{ name: 'OpenPGP Armor', extensions: ['asc', 'pgp', 'gpg'] }],
+    })
+    if (!result) return null
+    const filePath = typeof result === 'string' ? result : result[0]
+    if (!filePath) return null
+    const { readTextFile } = await import('@tauri-apps/plugin-fs')
+    return readTextFile(filePath)
+  }
+
+  /**
+   * Decrypt `armoredMessage` (previously produced by {@link exportKeyToFile}
+   * or any XEP-0373 §5-compatible tool) with `passphrase`, persist the
+   * recovered TSK locally, and re-advertise the public key to PEP so
+   * peers can encrypt to the imported identity.
+   *
+   * Unlike {@link restoreSecretKey}, this method does NOT mark the
+   * server backup as in-sync — the file and the PEP backup node may
+   * hold different keys. The caller should refresh the backup probe
+   * after this returns.
+   */
+  async importKeyFromFile(
+    armoredMessage: string,
+    passphrase: string,
+  ): Promise<IdentityInfo> {
+    const ctx = this.requireCtx()
+    let bundle: KeyBundle
+    try {
+      bundle = await this.invoke<KeyBundle>('openpgp_backup_import', {
+        accountJid: ctx.account.jid,
+        backupMessage: armoredMessage,
+        passphrase,
+      })
+    } catch (err) {
+      throw toPluginError('importKeyFromFile', err)
+    }
+    this.ownBundle = bundle
+    try {
+      await this.publishOwnPublicKeyData(bundle)
+      await this.publishOwnPublicKeyMetadata(bundle)
+    } catch (err) {
+      ctx.logger.warn(
+        `SequoiaPgpPlugin: public key publish after file import failed: ${formatError(err)}`,
+      )
+    }
+    return { fingerprint: bundle.fingerprint }
+  }
+
   /**
    * Resolve an own-key conflict by re-publishing the locally-held key to
    * PEP, replacing whatever the server currently advertises. Use this when
@@ -1577,7 +1676,7 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
       // already pins to `(peer, fp)` so a key rotation auto-demotes;
       // re-checking here keeps the invariant local to the trust
       // decision rather than relying on the cache-write path alone.
-      trust = isPeerVerified(peer, cached.fingerprint) ? 'verified' : 'trusted'
+      trust = isPeerVerified(peer, cached.fingerprint) ? 'verified' : 'tofu'
     } else {
       trust = 'untrusted'
     }
@@ -1695,12 +1794,12 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
   /**
    * Trust ladder:
    *   - `unknown`   — we have never cached a key for this peer.
-   *   - `trusted`   — BTBV: we've seen a key (from PEP), can encrypt
+   *   - `tofu`      — TOFU: we've seen a key (from PEP), can encrypt
    *                   to it, but the user has not confirmed the
    *                   fingerprint out-of-band.
    *   - `verified`  — the user explicitly confirmed the cached
    *                   fingerprint via the verify-peer dialog. A later
-   *                   key rotation drops back to `trusted` because the
+   *                   key rotation drops back to `tofu` because the
    *                   verification store keys on `(peer, fingerprint)`
    *                   AND `cachePeerKey` clears stale entries on
    *                   mismatch — both layers fail safe.
@@ -1708,7 +1807,7 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
   private async evaluatePeerTrust(peer: BareJID): Promise<TrustState> {
     const cached = this.peerKeys.get(peer)
     if (!cached) return 'unknown'
-    return isPeerVerified(peer, cached.fingerprint) ? 'verified' : 'trusted'
+    return isPeerVerified(peer, cached.fingerprint) ? 'verified' : 'tofu'
   }
 
   /**

@@ -144,7 +144,7 @@
         "blockConfirm": "Blokeerida {{name}}? Nad ei saa sinuga ühendust võtta.",
         "encryption": {
             "sectionTitle": "Krüptimine",
-            "trusted": "Krüptitud (kontrollimata)",
+            "tofu": "Krüptitud (kontrollimata)",
             "verified": "Kontrollitud",
             "fingerprintLabel": "OpenPGP sõrmejälg",
             "verifyButton": "Kontrolli sõrmejälge",
@@ -488,7 +488,8 @@
                 },
                 "trust": {
                     "verified": "kontrollitud",
-                    "trusted": "usaldatud",
+                    "tofu": "usaldatud",
+                    "introduced": "tutvustatud",
                     "untrusted": "kontrollimata"
                 }
             }

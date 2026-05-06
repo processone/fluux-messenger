@@ -31,7 +31,7 @@ function getSecurityBadge(
         : {
             icon: Lock,
             className: 'text-fluux-muted',
-            ariaLabel: t('contacts.encryption.trusted'),
+            ariaLabel: t('contacts.encryption.tofu'),
           }
     case 'plaintextForced':
       return {

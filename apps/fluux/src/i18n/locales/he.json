@@ -142,7 +142,7 @@
         "pressEnterToAdd": "לחץ Enter להוספה",
         "encryption": {
             "sectionTitle": "הצפנה",
-            "trusted": "מוצפן (לא מאומת)",
+            "tofu": "מוצפן (לא מאומת)",
             "verified": "מאומת",
             "fingerprintLabel": "טביעת אצבע OpenPGP",
             "verifyButton": "אמת טביעת אצבע",
@@ -486,7 +486,8 @@
                 },
                 "trust": {
                     "verified": "מאומת",
-                    "trusted": "מהימן",
+                    "tofu": "מהימן",
+                    "introduced": "הוצג",
                     "untrusted": "לא מאומת"
                 }
             }

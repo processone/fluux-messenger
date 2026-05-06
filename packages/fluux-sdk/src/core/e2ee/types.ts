@@ -117,12 +117,13 @@ export interface EncryptedPayload {
 export interface SecurityContext {
   protocolId: string
   /**
-   * Whether this message is considered trusted based on the plugin's trust model.
-   * `verified` — fingerprint explicitly verified.
-   * `trusted` — accepted (e.g. BTBV) but not verified.
-   * `untrusted` — sender identity not trusted.
+   * Trust level assigned to this message by the plugin.
+   * `verified`    — fingerprint confirmed out-of-band by the local user.
+   * `introduced`  — a verified contact has signed this peer's key (web-of-trust hint; not first-person verified).
+   * `tofu`        — key seen before and accepted via Trust-On-First-Use; no explicit verification.
+   * `untrusted`   — key is new, has changed, or decryption failed.
    */
-  trust: 'verified' | 'trusted' | 'untrusted'
+  trust: 'verified' | 'introduced' | 'tofu' | 'untrusted'
   /** Optional free-form notes (e.g. "subkey 3 days old"). */
   notes?: string[]
 }
@@ -190,8 +191,15 @@ export interface SecurityContextUpdate {
   securityContext: SecurityContext
 }
 
-/** Trust state for a peer or one of their devices. */
-export type TrustState = 'verified' | 'trusted' | 'untrusted' | 'unknown'
+/**
+ * Trust state for a peer or one of their devices.
+ * `verified`   — fingerprint confirmed out-of-band by the local user.
+ * `introduced` — a verified contact signed this peer's key (web-of-trust hint).
+ * `tofu`       — key accepted via Trust-On-First-Use; not explicitly verified.
+ * `untrusted`  — key is new, has changed, or failed verification.
+ * `unknown`    — no trust record stored yet.
+ */
+export type TrustState = 'verified' | 'introduced' | 'tofu' | 'untrusted' | 'unknown'
 
 /** A verification flow a plugin supports. */
 export interface VerificationMethod {

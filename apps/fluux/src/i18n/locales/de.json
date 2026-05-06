@@ -144,7 +144,7 @@
         "blockConfirm": "{{name}} blockieren? Sie können dich nicht mehr kontaktieren.",
         "encryption": {
             "sectionTitle": "Verschlüsselung",
-            "trusted": "Verschlüsselt (nicht verifiziert)",
+            "tofu": "Verschlüsselt (nicht verifiziert)",
             "verified": "Verifiziert",
             "fingerprintLabel": "OpenPGP-Fingerabdruck",
             "verifyButton": "Fingerabdruck prüfen",
@@ -488,7 +488,8 @@
                 },
                 "trust": {
                     "verified": "verifiziert",
-                    "trusted": "vertraut",
+                    "tofu": "vertraut",
+                    "introduced": "eingeführt",
                     "untrusted": "nicht verifiziert"
                 }
             }

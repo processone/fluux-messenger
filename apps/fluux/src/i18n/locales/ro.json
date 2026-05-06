@@ -144,7 +144,7 @@
         "blockConfirm": "Blochezi {{name}}? Nu te vor mai putea contacta.",
         "encryption": {
             "sectionTitle": "Criptare",
-            "trusted": "Criptat (neverificat)",
+            "tofu": "Criptat (neverificat)",
             "verified": "Verificat",
             "fingerprintLabel": "Amprentă OpenPGP",
             "verifyButton": "Verifică amprenta",
@@ -488,7 +488,8 @@
                 },
                 "trust": {
                     "verified": "verificat",
-                    "trusted": "de încredere",
+                    "tofu": "de încredere",
+                    "introduced": "prezentat",
                     "untrusted": "neverificat"
                 }
             }

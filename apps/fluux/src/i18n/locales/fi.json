@@ -142,7 +142,7 @@
         "blockConfirm": "Estetäänkö {{name}}? He eivät voi ottaa sinuun yhteyttä.",
         "encryption": {
             "sectionTitle": "Salaus",
-            "trusted": "Salattu (ei vahvistettu)",
+            "tofu": "Salattu (ei vahvistettu)",
             "verified": "Vahvistettu",
             "fingerprintLabel": "OpenPGP-sormenjälki",
             "verifyButton": "Tarkista sormenjälki",
@@ -486,7 +486,8 @@
                 },
                 "trust": {
                     "verified": "vahvistettu",
-                    "trusted": "luotettu",
+                    "tofu": "luotettu",
+                    "introduced": "esitelty",
                     "untrusted": "vahvistamaton"
                 }
             }

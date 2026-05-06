@@ -142,7 +142,7 @@
         "blockConfirm": "Blockera {{name}}? De kommer inte kunna kontakta dig.",
         "encryption": {
             "sectionTitle": "Kryptering",
-            "trusted": "Krypterat (ej verifierat)",
+            "tofu": "Krypterat (ej verifierat)",
             "verified": "Verifierat",
             "fingerprintLabel": "OpenPGP-fingeravtryck",
             "verifyButton": "Verifiera fingeravtryck",
@@ -486,7 +486,8 @@
                 },
                 "trust": {
                     "verified": "verifierat",
-                    "trusted": "betrott",
+                    "tofu": "betrott",
+                    "introduced": "introducerad",
                     "untrusted": "overifierat"
                 }
             }

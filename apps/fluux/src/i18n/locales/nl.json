@@ -142,7 +142,7 @@
         "blockConfirm": "{{name}} blokkeren? Ze kunnen geen contact meer met je opnemen.",
         "encryption": {
             "sectionTitle": "Versleuteling",
-            "trusted": "Versleuteld (niet geverifieerd)",
+            "tofu": "Versleuteld (niet geverifieerd)",
             "verified": "Geverifieerd",
             "fingerprintLabel": "OpenPGP-vingerafdruk",
             "verifyButton": "Vingerafdruk verifiëren",
@@ -486,7 +486,8 @@
                 },
                 "trust": {
                     "verified": "geverifieerd",
-                    "trusted": "vertrouwd",
+                    "tofu": "vertrouwd",
+                    "introduced": "geïntroduceerd",
                     "untrusted": "niet geverifieerd"
                 }
             }

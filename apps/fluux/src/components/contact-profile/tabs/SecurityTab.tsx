@@ -88,7 +88,7 @@ export function SecurityTab({
               title={
                 state.trust === 'verified'
                   ? t('contacts.encryption.verified')
-                  : t('contacts.encryption.trusted')
+                  : t('contacts.encryption.tofu')
               }
               tone={state.trust === 'verified' ? 'success' : 'neutral'}
             />

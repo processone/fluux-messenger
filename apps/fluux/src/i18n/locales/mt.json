@@ -144,7 +144,7 @@
         "blockConfirm": "Tibblokka {{name}}? Ma jkunux jistgħu jikkuntattjawk.",
         "encryption": {
             "sectionTitle": "Kriptaġġ",
-            "trusted": "Kriptat (mhux ivverifikat)",
+            "tofu": "Kriptat (mhux ivverifikat)",
             "verified": "Ivverifikat",
             "fingerprintLabel": "Impronta OpenPGP",
             "verifyButton": "Ivverifika l-impronta",
@@ -488,7 +488,8 @@
                 },
                 "trust": {
                     "verified": "verifikat",
-                    "trusted": "fdat",
+                    "tofu": "fdat",
+                    "introduced": "introdott",
                     "untrusted": "mhux verifikat"
                 }
             }
