@@ -698,6 +698,10 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
         'SequoiaPgpPlugin: no secret-key backup found on server',
       )
     }
+    // Snapshot the FP we're about to replace so we can clean up its now-
+    // orphan PEP data node after the restored key lands. Captured BEFORE
+    // the Rust import call swaps ownBundle.
+    const previousFingerprint = this.ownBundle?.fingerprint
     let bundle: KeyBundle
     try {
       bundle = await this.invoke<KeyBundle>('openpgp_backup_import', {
@@ -724,6 +728,9 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
     try {
       await this.publishOwnPublicKeyData(bundle)
       await this.publishOwnPublicKeyMetadata(bundle)
+      if (previousFingerprint) {
+        await this.retractStalePublicKeyDataNode(previousFingerprint, bundle.fingerprint)
+      }
     } catch (err) {
       ctx.logger.warn(
         `SequoiaPgpPlugin: public key publish after restore failed: ${formatError(err)}`,
@@ -810,6 +817,10 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
     passphrase: string,
   ): Promise<IdentityInfo> {
     const ctx = this.requireCtx()
+    // Snapshot the FP we're about to replace so we can clean up its now-
+    // orphan PEP data node after the new key lands. Captured BEFORE the
+    // Rust import call swaps ownBundle.
+    const previousFingerprint = this.ownBundle?.fingerprint
     let bundle: KeyBundle
     try {
       bundle = await this.invoke<KeyBundle>('openpgp_backup_import', {
@@ -824,6 +835,9 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
     try {
       await this.publishOwnPublicKeyData(bundle)
       await this.publishOwnPublicKeyMetadata(bundle)
+      if (previousFingerprint) {
+        await this.retractStalePublicKeyDataNode(previousFingerprint, bundle.fingerprint)
+      }
     } catch (err) {
       ctx.logger.warn(
         `SequoiaPgpPlugin: public key publish after file import failed: ${formatError(err)}`,
@@ -1156,6 +1170,47 @@ export class SequoiaPgpPlugin implements E2EEPlugin {
    * contacts. `maxItems=1` and `persistItems=true` make this a stable
    * current-value node: rotating the key just overwrites the slot.
    */
+  /**
+   * Delete the per-fingerprint public-key data node for `oldFingerprint`
+   * after the primary key has been replaced. Without this cleanup, every
+   * primary-key rotation/import/restore would leave an orphan
+   * `urn:xmpp:openpgp:0:public-keys:<oldFp>` node sitting on the server
+   * forever, even though the metadata no longer references it.
+   *
+   * Two safety properties:
+   *
+   * - **No-op when fingerprints match.** Re-importing the same key (so
+   *   `oldFingerprint === newFingerprint`) would otherwise delete the
+   *   live node we just republished. Skip the delete in that case.
+   *
+   * - **Best-effort.** A missing node, a server that doesn't tolerate
+   *   `delete-node` from the owner, or a `forbidden` reply must not
+   *   block the import/restore success path — the user's local key is
+   *   already swapped and the new public key is already published.
+   */
+  private async retractStalePublicKeyDataNode(
+    oldFingerprint: string,
+    newFingerprint: string,
+  ): Promise<void> {
+    if (oldFingerprint === newFingerprint) return
+    const ctx = this.requireCtx()
+    const node = publicKeyDataNodeFor(oldFingerprint)
+    try {
+      await ctx.xmpp.deletePEP(node)
+      ctx.logger.debug(
+        `SequoiaPgpPlugin: deleted stale public-key data node ${node}`,
+      )
+    } catch (err) {
+      // `item-not-found` (already gone), `forbidden` (server policy),
+      // and transport hiccups all fall here. None are fatal — the
+      // metadata already points at the new fingerprint, so peers won't
+      // touch the orphan even if it lingers.
+      ctx.logger.debug(
+        `SequoiaPgpPlugin: stale data-node delete for ${oldFingerprint} failed (best-effort): ${formatError(err)}`,
+      )
+    }
+  }
+
   private async publishOwnPublicKeyData(bundle: KeyBundle): Promise<void> {
     const payload: XMLElementData = {
       name: 'pubkey',

@@ -2282,6 +2282,70 @@ describe('SequoiaPgpPlugin', () => {
       // device A context.
       void publishedA
     })
+
+    it('restoreSecretKey deletes the stale per-fingerprint data node when the primary FP changes', async () => {
+      // Same shape as the round-trip test above, but assert that the
+      // orphan `urn:xmpp:openpgp:0:public-keys:<fpBbefore>` node is
+      // explicitly deleted from the server after the restore lands.
+      // Without this cleanup, every primary-key replacement would leave
+      // an unreferenced data node sitting on PEP indefinitely.
+      const { ctx: ctxA } = makeContext('me@example.com')
+      await plugin.init(ctxA)
+      const fpA = plugin.getOwnFingerprint()
+      await plugin.backupSecretKey('shared-pp')
+      const backup = await plugin.fetchSecretKeyBackup()
+
+      fake.accounts.clear()
+      const pluginB = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const { ctx: ctxB, deletedNodes: deletedB } = makeContext('me@example.com')
+      await pluginB.init(ctxB)
+      const fpBbefore = pluginB.getOwnFingerprint()
+      expect(fpBbefore).not.toBe(fpA)
+
+      ctxB.xmpp.publishPEP(SECRET_KEY_NODE, {
+        id: 'current',
+        payload: {
+          name: 'secretkey',
+          attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+          children: [
+            { name: 'data', attrs: {}, children: [btoa(unescape(encodeURIComponent(backup!)))] },
+          ],
+        },
+      })
+
+      await pluginB.restoreSecretKey('shared-pp')
+
+      const orphanNode = `urn:xmpp:openpgp:0:public-keys:${fpBbefore}`
+      expect(deletedB).toContain(orphanNode)
+      // The freshly-restored data node must NOT have been deleted.
+      const liveNode = `urn:xmpp:openpgp:0:public-keys:${fpA}`
+      expect(deletedB).not.toContain(liveNode)
+    })
+
+    it('restoreSecretKey does NOT delete the data node when the restored key matches the local key', async () => {
+      // Re-restoring the same key (identical FP) must be a no-op for the
+      // orphan-cleanup path. Otherwise we'd delete the live node we just
+      // republished, leaving the metadata pointing at a 404.
+      const { ctx, deletedNodes } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      const fp = plugin.getOwnFingerprint()
+      await plugin.backupSecretKey('shared-pp')
+
+      // Same plugin, same context, same TSK on the Rust side — the
+      // restore decrypts the backup we just published and observes that
+      // the recovered FP matches the in-memory FP, so the orphan-cleanup
+      // helper must short-circuit.
+      await plugin.restoreSecretKey('shared-pp')
+
+      expect(plugin.getOwnFingerprint()).toBe(fp)
+      // No public-keys:<FP> deletion at all — the live node must stay
+      // intact.
+      const liveNode = `urn:xmpp:openpgp:0:public-keys:${fp}`
+      expect(deletedNodes).not.toContain(liveNode)
+      expect(
+        deletedNodes.filter((n) => n.startsWith('urn:xmpp:openpgp:0:public-keys:')),
+      ).toHaveLength(0)
+    })
   })
 
   describe('backup sync marker (getBackedUpFingerprint)', () => {
