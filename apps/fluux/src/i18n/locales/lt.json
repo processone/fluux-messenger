@@ -516,9 +516,8 @@
         },
         "keyChangeBanner": {
             "title": "{{name}} šifravimo raktas pasikeitė",
-            "body": "Palyginkite naują pirštų atspaudą per patikimą antrąjį kanalą prieš vėl laikydami šį pokalbį patvirtintu.",
+            "body": "Atrodo, kad šis kontaktas pakeitė savo šifravimo raktą. Patvirtinkite naują pirštų atspaudą, kad atgautumėte visišką pasitikėjimą, arba atmeskite, kad tęstumėte su pagrindiniu pasitikėjimu.",
             "reVerify": "Patvirtinti iš naujo",
-            "dismiss": "Atmesti",
             "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
             "acceptWithoutVerifying": "Accept without verifying",
             "acceptedWithoutVerifying": "New key accepted — peer is unverified",

@@ -518,9 +518,8 @@
         },
         "keyChangeBanner": {
             "title": "{{name}} krüpteerimisvõti on muutunud",
-            "body": "Võrdle uut sõrmejälge usaldusväärse teise kanali kaudu enne, kui käsitled seda vestlust taas kinnitatud olevana.",
+            "body": "Tundub, et see kontakt on oma krüpteerimisvõtme vahetanud. Kinnita uus sõrmejälg täieliku usalduse taastamiseks või sulge, et jätkata põhilise usaldusega.",
             "reVerify": "Kinnita uuesti",
-            "dismiss": "Sulge",
             "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
             "acceptWithoutVerifying": "Accept without verifying",
             "acceptedWithoutVerifying": "New key accepted — peer is unverified",

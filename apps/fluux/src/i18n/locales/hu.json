@@ -516,9 +516,8 @@
         },
         "keyChangeBanner": {
             "title": "{{name}} titkosítási kulcsa megváltozott",
-            "body": "Hasonlítsa össze az új ujjlenyomatot egy megbízható második csatornán keresztül, mielőtt újra ellenőrzöttként kezelné ezt a beszélgetést.",
+            "body": "Úgy tűnik, ez a névjegy lecserélte a titkosítási kulcsát. Ellenőrizze az új ujjlenyomatot a teljes bizalom visszaállításához, vagy vesse el az alapszintű bizalommal való folytatáshoz.",
             "reVerify": "Újraellenőrzés",
-            "dismiss": "Elvetés",
             "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
             "acceptWithoutVerifying": "Accept without verifying",
             "acceptedWithoutVerifying": "New key accepted — peer is unverified",

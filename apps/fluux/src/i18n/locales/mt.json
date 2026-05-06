@@ -518,9 +518,8 @@
         },
         "keyChangeBanner": {
             "title": "Iċ-ċavetta tal-kriptaġġ ta' {{name}} inbidlet",
-            "body": "Qabbel il-marka tas-saba' l-ġdida permezz ta' kanal sekondarju fdat qabel terġa' tittratta din il-konversazzjoni bħala verifikata.",
+            "body": "Jidher li dan il-kuntatt rotta ċ-ċavetta tal-kriptaġġ tiegħu. Ivverifika l-marka tas-saba' l-ġdida biex treġġa' lura l-fiduċja sħiħa, jew warrab biex tkompli b'fiduċja bażika.",
             "reVerify": "Erġa' vverifika",
-            "dismiss": "Warrab",
             "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
             "acceptWithoutVerifying": "Accept without verifying",
             "acceptedWithoutVerifying": "New key accepted — peer is unverified",

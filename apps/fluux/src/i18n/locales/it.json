@@ -518,9 +518,8 @@
         },
         "keyChangeBanner": {
             "title": "La chiave di cifratura di {{name}} è cambiata",
-            "body": "Confronta la nuova impronta tramite un secondo canale affidabile prima di considerare di nuovo questa conversazione come verificata.",
+            "body": "Sembra che questo contatto abbia rinnovato la propria chiave di cifratura. Verifica la nuova impronta per ripristinare la piena fiducia, o ignora per continuare con fiducia di base.",
             "reVerify": "Verifica di nuovo",
-            "dismiss": "Ignora",
             "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
             "acceptWithoutVerifying": "Accept without verifying",
             "acceptedWithoutVerifying": "New key accepted — peer is unverified",

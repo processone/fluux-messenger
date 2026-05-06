@@ -516,9 +516,8 @@
         },
         "keyChangeBanner": {
             "title": "מפתח ההצפנה של {{name}} השתנה",
-            "body": "השווה את טביעת האצבע החדשה באמצעות ערוץ שני אמין לפני שתתייחס שוב לשיחה זו כמאומתת.",
+            "body": "נראה שאיש קשר זה החליף את מפתח ההצפנה שלו. אמת את טביעת האצבע החדשה כדי לשחזר אמון מלא, או בטל כדי להמשיך עם אמון בסיסי.",
             "reVerify": "אמת מחדש",
-            "dismiss": "בטל",
             "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
             "acceptWithoutVerifying": "Accept without verifying",
             "acceptedWithoutVerifying": "New key accepted — peer is unverified",

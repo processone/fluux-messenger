@@ -516,9 +516,8 @@
         },
         "keyChangeBanner": {
             "title": "Käyttäjän {{name}} salausavain on vaihtunut",
-            "body": "Vertaa uusi sormenjälki luotettavasta toissijaisesta kanavasta ennen kuin pidät tätä keskustelua taas vahvistettuna.",
+            "body": "Näyttää siltä, että tämä yhteystieto on vaihtanut salausavaimensa. Vahvista uusi sormenjälki täyden luottamuksen palauttamiseksi tai hylkää jatkaaksesi perusluottamuksella.",
             "reVerify": "Vahvista uudelleen",
-            "dismiss": "Hylkää",
             "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
             "acceptWithoutVerifying": "Accept without verifying",
             "acceptedWithoutVerifying": "New key accepted — peer is unverified",

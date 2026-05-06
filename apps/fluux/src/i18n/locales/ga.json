@@ -516,9 +516,8 @@
         },
         "keyChangeBanner": {
             "title": "Tá eochair criptiúcháin {{name}} athraithe",
-            "body": "Déan an méarlorg nua a chur i gcomparáid trí dhara cainéal iontaofa sula gcaitheann tú leis an gcomhrá seo arís mar fíoraithe.",
+            "body": "Is cosúil go bhfuil an teagmhálaí seo tar éis a eochairghráin criptiúcháin a athrú. Fíoraigh an méarlorg nua chun iontaoibh iomlán a chur ar ais, nó cuir ar leataobh le leanúint ar aghaidh le hiontaoibh bhunúsach.",
             "reVerify": "Athfhíoraigh",
-            "dismiss": "Cuir ar leataobh",
             "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
             "acceptWithoutVerifying": "Accept without verifying",
             "acceptedWithoutVerifying": "New key accepted — peer is unverified",

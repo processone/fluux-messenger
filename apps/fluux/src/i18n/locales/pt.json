@@ -518,9 +518,8 @@
         },
         "keyChangeBanner": {
             "title": "A chave de cifragem de {{name}} mudou",
-            "body": "Compara a nova impressão digital por um segundo canal de confiança antes de tratar esta conversa novamente como verificada.",
+            "body": "Parece que este contacto rodou a sua chave de cifragem. Verifica a nova impressão digital para restaurar a confiança total, ou dispensa para continuar com confiança básica.",
             "reVerify": "Verificar novamente",
-            "dismiss": "Dispensar",
             "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
             "acceptWithoutVerifying": "Accept without verifying",
             "acceptedWithoutVerifying": "New key accepted — peer is unverified",

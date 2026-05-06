@@ -516,9 +516,8 @@
         },
         "keyChangeBanner": {
             "title": "De versleutelingssleutel van {{name}} is veranderd",
-            "body": "Vergelijk de nieuwe vingerafdruk via een vertrouwd tweede kanaal voordat je dit gesprek opnieuw als geverifieerd behandelt.",
+            "body": "Het lijkt erop dat dit contact zijn versleutelingssleutel heeft geroteerd. Verifieer de nieuwe vingerafdruk om het volledige vertrouwen te herstellen, of sluit om door te gaan met basisvertrouwen.",
             "reVerify": "Opnieuw verifiëren",
-            "dismiss": "Sluiten",
             "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
             "acceptWithoutVerifying": "Accept without verifying",
             "acceptedWithoutVerifying": "New key accepted — peer is unverified",

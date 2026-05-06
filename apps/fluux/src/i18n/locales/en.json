@@ -516,13 +516,12 @@
         },
         "keyChangeBanner": {
             "title": "{{name}}'s encryption key has changed",
-            "body": "Compare the new fingerprint over a trusted second channel before treating this conversation as verified again.",
+            "body": "This contact appears to have rotated their encryption key. Verify the new fingerprint to restore full trust, or dismiss to continue with basic trust.",
             "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
             "reVerify": "Verify and accept",
             "acceptWithoutVerifying": "Accept without verifying",
             "acceptedWithoutVerifying": "New key accepted — peer is unverified",
-            "acceptFailed": "Couldn't accept the new key — try again",
-            "dismiss": "Dismiss"
+            "acceptFailed": "Couldn't accept the new key — try again"
         }
     },
     "dates": {

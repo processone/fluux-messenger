@@ -517,9 +517,8 @@
         },
         "keyChangeBanner": {
             "title": "{{name}} šifrēšanas atslēga ir mainījusies",
-            "body": "Salīdziniet jauno pirkstu nospiedumu uzticamā otrajā kanālā, pirms šo sarunu atkal uzskatāt par pārbaudītu.",
+            "body": "Šķiet, ka šis kontakts ir mainījis savu šifrēšanas atslēgu. Verificējiet jauno pirkstu nospiedumu, lai atjaunotu pilnīgu uzticību, vai noraidiet, lai turpinātu ar pamata uzticību.",
             "reVerify": "Pārbaudīt vēlreiz",
-            "dismiss": "Noraidīt",
             "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
             "acceptWithoutVerifying": "Accept without verifying",
             "acceptedWithoutVerifying": "New key accepted — peer is unverified",

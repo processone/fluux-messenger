@@ -518,9 +518,8 @@
         },
         "keyChangeBanner": {
             "title": "La clave de cifrado de {{name}} ha cambiado",
-            "body": "Compara la nueva huella por un segundo canal de confianza antes de volver a tratar esta conversación como verificada.",
+            "body": "Parece que este contacto ha rotado su clave de cifrado. Verifica la nueva huella para restaurar la confianza plena, o descarta para continuar con confianza básica.",
             "reVerify": "Volver a verificar",
-            "dismiss": "Descartar",
             "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
             "acceptWithoutVerifying": "Accept without verifying",
             "acceptedWithoutVerifying": "New key accepted — peer is unverified",

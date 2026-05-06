@@ -516,9 +516,8 @@
         },
         "keyChangeBanner": {
             "title": "Ключ шифрования {{name}} изменился",
-            "body": "Сравните новый отпечаток через доверенный второй канал, прежде чем снова считать эту беседу проверенной.",
+            "body": "Похоже, этот контакт сменил свой ключ шифрования. Подтвердите новый отпечаток для восстановления полного доверия или закройте, чтобы продолжить с базовым доверием.",
             "reVerify": "Проверить заново",
-            "dismiss": "Закрыть",
             "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
             "acceptWithoutVerifying": "Accept without verifying",
             "acceptedWithoutVerifying": "New key accepted — peer is unverified",

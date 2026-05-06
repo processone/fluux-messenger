@@ -517,9 +517,8 @@
         },
         "keyChangeBanner": {
             "title": "Šifrovací kľúč používateľa {{name}} sa zmenil",
-            "body": "Porovnajte nový odtlačok cez dôveryhodný druhý kanál, než budete túto konverzáciu znovu považovať za overenú.",
+            "body": "Zdá sa, že tento kontakt vymenil svoj šifrovací kľúč. Overte nový odtlačok na obnovenie plnej dôvery alebo zavrieť a pokračovať so základnou dôverou.",
             "reVerify": "Znovu overiť",
-            "dismiss": "Zavrieť",
             "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
             "acceptWithoutVerifying": "Accept without verifying",
             "acceptedWithoutVerifying": "New key accepted — peer is unverified",

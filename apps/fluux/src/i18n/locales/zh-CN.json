@@ -516,9 +516,8 @@
         },
         "keyChangeBanner": {
             "title": "{{name}} 的加密密钥已更改",
-            "body": "在再次将此对话视为已验证之前,通过可信的第二渠道核对新指纹。",
+            "body": "此联系人似乎已轮换了其加密密钥。验证新指纹以恢复完全信任，或忽略以继续使用基本信任。",
             "reVerify": "重新验证",
-            "dismiss": "忽略",
             "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
             "acceptWithoutVerifying": "Accept without verifying",
             "acceptedWithoutVerifying": "New key accepted — peer is unverified",

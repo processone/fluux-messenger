@@ -518,9 +518,8 @@
         },
         "keyChangeBanner": {
             "title": "Klucz szyfrowania użytkownika {{name}} się zmienił",
-            "body": "Porównaj nowy odcisk przez zaufany drugi kanał, zanim ponownie potraktujesz tę rozmowę jako zweryfikowaną.",
+            "body": "Wygląda na to, że ten kontakt wymienił swój klucz szyfrowania. Zweryfikuj nowy odcisk, aby przywrócić pełne zaufanie, lub odrzuć, aby kontynuować z podstawowym zaufaniem.",
             "reVerify": "Zweryfikuj ponownie",
-            "dismiss": "Odrzuć",
             "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
             "acceptWithoutVerifying": "Accept without verifying",
             "acceptedWithoutVerifying": "New key accepted — peer is unverified",

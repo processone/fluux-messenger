@@ -518,9 +518,8 @@
         },
         "keyChangeBanner": {
             "title": "La clau de xifratge de {{name}} ha canviat",
-            "body": "Compara la nova empremta per un segon canal de confiança abans de tornar a tractar aquesta conversa com a verificada.",
+            "body": "Sembla que aquest contacte ha rotat la seva clau de xifratge. Verifica la nova empremta per restaurar la confiança plena, o descarta per continuar amb confiança bàsica.",
             "reVerify": "Tornar a verificar",
-            "dismiss": "Descartar",
             "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
             "acceptWithoutVerifying": "Accept without verifying",
             "acceptedWithoutVerifying": "New key accepted — peer is unverified",

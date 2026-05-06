@@ -517,9 +517,8 @@
         },
         "keyChangeBanner": {
             "title": "Το κλειδί κρυπτογράφησης του χρήστη {{name}} έχει αλλάξει",
-            "body": "Συγκρίνετε το νέο αποτύπωμα μέσω ενός αξιόπιστου δευτερεύοντος καναλιού πριν θεωρήσετε αυτή τη συνομιλία ξανά επαληθευμένη.",
+            "body": "Φαίνεται ότι αυτή η επαφή έχει αλλάξει το κλειδί κρυπτογράφησής της. Επαληθεύστε το νέο αποτύπωμα για αποκατάσταση πλήρους εμπιστοσύνης, ή απορρίψτε για να συνεχίσετε με βασική εμπιστοσύνη.",
             "reVerify": "Επανεπαλήθευση",
-            "dismiss": "Απόρριψη",
             "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
             "acceptWithoutVerifying": "Accept without verifying",
             "acceptedWithoutVerifying": "New key accepted — peer is unverified",

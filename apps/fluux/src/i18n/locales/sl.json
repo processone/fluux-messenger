@@ -518,9 +518,8 @@
         },
         "keyChangeBanner": {
             "title": "Šifrirni ključ uporabnika {{name}} se je spremenil",
-            "body": "Primerjajte nov prstni odtis prek zaupanja vrednega drugega kanala, preden ta pogovor znova obravnavate kot preverjen.",
+            "body": "Zdi se, da je ta stik zamenjal svoj šifrirni ključ. Preverite novi prstni odtis za obnovitev polnega zaupanja ali zavrzite za nadaljevanje z osnovnim zaupanjem.",
             "reVerify": "Znova preveri",
-            "dismiss": "Zavrzi",
             "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
             "acceptWithoutVerifying": "Accept without verifying",
             "acceptedWithoutVerifying": "New key accepted — peer is unverified",

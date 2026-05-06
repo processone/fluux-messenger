@@ -516,9 +516,8 @@
         },
         "keyChangeBanner": {
             "title": "{{name}}s krypteringsnyckel har ändrats",
-            "body": "Jämför det nya fingeravtrycket via en betrodd andra kanal innan du behandlar denna konversation som verifierad igen.",
+            "body": "Det verkar som att denna kontakt har roterat sin krypteringsnyckel. Verifiera det nya fingeravtrycket för att återställa fullt förtroende, eller avfärda för att fortsätta med grundläggande förtroende.",
             "reVerify": "Verifiera igen",
-            "dismiss": "Avfärda",
             "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
             "acceptWithoutVerifying": "Accept without verifying",
             "acceptedWithoutVerifying": "New key accepted — peer is unverified",

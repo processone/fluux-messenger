@@ -518,9 +518,8 @@
         },
         "keyChangeBanner": {
             "title": "Cheia de criptare a lui {{name}} s-a schimbat",
-            "body": "Comparați noua amprentă printr-un al doilea canal de încredere înainte de a considera din nou această conversație ca verificată.",
+            "body": "Se pare că acest contact și-a rotit cheia de criptare. Verificați noua amprentă pentru a restabili încrederea deplină sau respingeți pentru a continua cu încredere de bază.",
             "reVerify": "Reverifică",
-            "dismiss": "Respinge",
             "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
             "acceptWithoutVerifying": "Accept without verifying",
             "acceptedWithoutVerifying": "New key accepted — peer is unverified",

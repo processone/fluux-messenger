@@ -516,9 +516,8 @@
         },
         "keyChangeBanner": {
             "title": "Dulritunarlykill {{name}} hefur breyst",
-            "body": "Berðu nýja fingrafarið saman um trausta aðra rás áður en þú lítur á þetta samtal aftur sem staðfest.",
+            "body": "Þessi tengiliður virðist hafa skipt um dulkóðunarlykil. Staðfestu nýja fingrafarið til að endurheimta fulla traust, eða hafnaðu til að halda áfram með grunntraust.",
             "reVerify": "Staðfesta aftur",
-            "dismiss": "Hafna",
             "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
             "acceptWithoutVerifying": "Accept without verifying",
             "acceptedWithoutVerifying": "New key accepted — peer is unverified",

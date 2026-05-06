@@ -516,9 +516,8 @@
         },
         "keyChangeBanner": {
             "title": "Шыфравальны ключ карыстальніка {{name}} змяніўся",
-            "body": "Параўнайце новы адбітак праз давераны другі канал, перш чым зноў лічыць гэту размову правераным.",
+            "body": "Здаецца, гэты кантакт змяніў свой ключ шыфравання. Праверце новы адбітак, каб аднавіць поўны давер, або закрыйце, каб працягнуць з базавым даверам.",
             "reVerify": "Праверыць зноў",
-            "dismiss": "Закрыць",
             "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
             "acceptWithoutVerifying": "Accept without verifying",
             "acceptedWithoutVerifying": "New key accepted — peer is unverified",

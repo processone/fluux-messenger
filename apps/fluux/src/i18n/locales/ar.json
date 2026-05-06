@@ -516,9 +516,8 @@
         },
         "keyChangeBanner": {
             "title": "تغيّر مفتاح التشفير الخاص بـ {{name}}",
-            "body": "قارن البصمة الجديدة عبر قناة ثانية موثوقة قبل اعتبار هذه المحادثة موثّقة من جديد.",
+            "body": "يبدو أن هذا المستخدم قد غيّر مفتاح تشفيره. تحقق من البصمة الجديدة لاستعادة الثقة الكاملة، أو تجاهل للاستمرار بثقة أساسية.",
             "reVerify": "إعادة التحقق",
-            "dismiss": "تجاهل",
             "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
             "acceptWithoutVerifying": "Accept without verifying",
             "acceptedWithoutVerifying": "New key accepted — peer is unverified",

@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AlertTriangle, ShieldCheck, ShieldAlert, X } from 'lucide-react'
+import { AlertTriangle, ShieldCheck, X } from 'lucide-react'
 import { useXMPPContext } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
@@ -22,19 +22,15 @@ interface KeyChangeBannerProps {
  * `pin-mismatch` error) — the user must explicitly resolve before
  * sending an encrypted message resumes.
  *
- * Three exits, in decreasing strength:
+ * Two exits:
  *
  * - **Verify and accept** — opens {@link VerifyPeerDialog} with the
  *   NEW fingerprint. On confirm, the plugin re-pins, re-probes, and
- *   records a verification entry. Chip flips green.
- * - **Accept without verifying** — re-pin without verification (BTBV
- *   re-anchor). For users who can't reach a second channel right now
- *   but are confident the rotation is legitimate.
- * - **Dismiss (X)** — clear the alert without re-pinning. Encryption
- *   stays blocked because the pin still doesn't match the server's
- *   advertised fingerprint; the alert simply hides until the next
- *   probe re-detects it. Useful when the user wants to deal with it
- *   later without taking a security-relevant action under pressure.
+ *   records a verification entry. Trust stays / becomes `verified`.
+ * - **Dismiss (X)** — re-pin without verification (BTBV re-anchor).
+ *   Trust drops back to `trusted`; encryption unblocks. Use when
+ *   the rotation looks legitimate but a second-channel check isn't
+ *   practical right now.
  */
 export function KeyChangeBanner({ peerJid, peerName }: KeyChangeBannerProps) {
   const { t } = useTranslation()
@@ -95,15 +91,9 @@ export function KeyChangeBanner({ peerJid, peerName }: KeyChangeBannerProps) {
     [runAccept],
   )
 
-  const handleAcceptWithoutVerifying = useCallback(() => {
+  const handleDismiss = useCallback(() => {
     void runAccept(false)
   }, [runAccept])
-
-  const handleDismiss = useCallback(() => {
-    // Clear only the alert. The pin stays on the OLD fp; the next
-    // probe will re-detect the mismatch and re-open the alert.
-    useKeyChangeAlertsStore.getState().clearAlert(peerJid)
-  }, [peerJid])
 
   if (!alert) return null
 
@@ -133,22 +123,14 @@ export function KeyChangeBanner({ peerJid, peerName }: KeyChangeBannerProps) {
               <ShieldCheck className="w-3.5 h-3.5" />
               {t('chat.keyChangeBanner.reVerify')}
             </button>
-            <button
-              onClick={handleAcceptWithoutVerifying}
-              disabled={busy}
-              className="flex items-center gap-1.5 px-3 py-1 text-xs text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded transition-colors disabled:opacity-50"
-            >
-              <ShieldAlert className="w-3.5 h-3.5" />
-              {t('chat.keyChangeBanner.acceptWithoutVerifying')}
-            </button>
           </div>
         </div>
         <button
           onClick={handleDismiss}
           disabled={busy}
           className="flex-shrink-0 p-1 text-fluux-muted hover:text-fluux-text rounded hover:bg-fluux-hover transition-colors disabled:opacity-50"
-          aria-label={t('chat.keyChangeBanner.dismiss')}
-          title={t('chat.keyChangeBanner.dismiss')}
+          aria-label={t('chat.keyChangeBanner.acceptWithoutVerifying')}
+          title={t('chat.keyChangeBanner.acceptWithoutVerifying')}
         >
           <X className="w-3.5 h-3.5" />
         </button>
