@@ -299,8 +299,11 @@ export interface XMPPPrimitives {
    * error, delete, then retry the publish.
    */
   deletePEP(node: string): Promise<void>
-  /** Fetch items from a remote PEP node. */
-  queryPEP(jid: BareJID, node: string): Promise<PEPItem[]>
+  /**
+   * Fetch items from a remote PEP node. `maxItems` maps to PubSub's
+   * `max_items` attribute and lets callers request only the latest item.
+   */
+  queryPEP(jid: BareJID, node: string, maxItems?: number): Promise<PEPItem[]>
   /** Subscribe to PEP notifications from a remote JID for a given node. */
   subscribePEP(jid: BareJID, node: string, cb: (item: PEPItem) => void): Subscription
 }

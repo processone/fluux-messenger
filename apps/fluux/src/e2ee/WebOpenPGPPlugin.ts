@@ -17,10 +17,9 @@
  *
  * # Backup compatibility with Sequoia/desktop
  *
- * Both backup and restore use the XEP-0373 §5 format: an armored OpenPGP
- * MESSAGE (SKESK) that wraps the raw TSK armor. This matches what the Rust
- * side (`openpgp_backup_encrypt` / `openpgp_backup_import`) produces and
- * consumes, enabling cross-platform backup/restore.
+ * Both backup and restore use the same internal format as desktop: an
+ * armored OpenPGP MESSAGE (SKESK) that wraps the raw TSK armor. The shared
+ * base class converts that armor to the XEP-0373 §5 PEP payload.
  */
 
 import type { PrivateKey } from 'openpgp'

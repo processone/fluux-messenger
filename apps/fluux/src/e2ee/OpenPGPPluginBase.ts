@@ -296,7 +296,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
 
   /**
    * Encrypt the TSK (transfer secret key) under `passphrase` and return
-   * an armored OpenPGP message suitable for the XEP-0373 §5 backup node.
+   * an armored OpenPGP message. The XEP-0373 boundary converts it to raw
+   * OpenPGP bytes encoded as Base64 before publishing.
    */
   protected abstract backupEncrypt(accountJid: string, passphrase: string): Promise<string>
 
@@ -541,13 +542,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const payload: XMLElementData = {
       name: 'secretkey',
       attrs: { xmlns: OX_NAMESPACE },
-      children: [
-        {
-          name: 'data',
-          attrs: {},
-          children: [base64Encode(armoredMessage)],
-        },
-      ],
+      children: [base64EncodeOpenPgpBlock(armoredMessage)],
     }
     await ctx.xmpp.publishPEP(
       SECRET_KEY_NODE,
@@ -560,7 +555,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   async fetchSecretKeyBackup(): Promise<string | null> {
     const ctx = this.requireCtx()
     try {
-      const items = await ctx.xmpp.queryPEP(ctx.account.jid, SECRET_KEY_NODE)
+      const items = await ctx.xmpp.queryPEP(ctx.account.jid, SECRET_KEY_NODE, 1)
       for (const item of items) {
         const armored = parseSecretKeyBackupItem(item.payload)
         if (armored) return armored
@@ -740,7 +735,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
 
     let metadataItems: PEPItem[]
     try {
-      metadataItems = await ctx.xmpp.queryPEP(ctx.account.jid, PUBLIC_KEYS_METADATA_NODE)
+      metadataItems = await ctx.xmpp.queryPEP(ctx.account.jid, PUBLIC_KEYS_METADATA_NODE, 1)
     } catch {
       clearOwnKeyConflict()
       return
@@ -786,6 +781,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       dataItems = await ctx.xmpp.queryPEP(
         ctx.account.jid,
         publicKeyDataNodeFor(bundle.fingerprint),
+        1,
       )
     } catch {
       clearOwnKeyConflict()
@@ -915,7 +911,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   private async refetchAndCachePeerKey(peer: BareJID): Promise<PeerSupport> {
     const ctx = this.requireCtx()
     try {
-      const metadataItems = await ctx.xmpp.queryPEP(peer, PUBLIC_KEYS_METADATA_NODE)
+      const metadataItems = await ctx.xmpp.queryPEP(peer, PUBLIC_KEYS_METADATA_NODE, 1)
       const fingerprints = parseAdvertisedFingerprints(metadataItems)
       if (fingerprints.length === 0) {
         clearCertRejections(peer)
@@ -957,7 +953,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const ctx = this.requireCtx()
     const now = new Date().toISOString()
     try {
-      const items = await ctx.xmpp.queryPEP(peer, publicKeyDataNodeFor(fingerprint))
+      const items = await ctx.xmpp.queryPEP(peer, publicKeyDataNodeFor(fingerprint), 1)
       for (const item of items) {
         const armored = parsePublicKeyDataItem(item.payload)
         if (!armored) continue
@@ -1437,13 +1433,8 @@ function parsePublicKeyDataItem(payload: XMLElementData): string | null {
 
 function parseSecretKeyBackupItem(payload: XMLElementData): string | null {
   if (payload.name !== 'secretkey' || payload.attrs?.xmlns !== OX_NAMESPACE) return null
-  for (const child of payload.children) {
-    if (typeof child === 'string') continue
-    if (child.name !== 'data') continue
-    const encoded = firstText(child)
-    if (encoded) return base64Decode(encoded)
-  }
-  return null
+  const encoded = firstText(payload)
+  return encoded ? base64DecodeOpenPgpBlock(encoded, 'PGP MESSAGE') : null
 }
 
 function fingerprintsEqual(a: string, b: string): boolean {
@@ -1465,14 +1456,6 @@ function firstAttr(
 function firstText(el: XMLElementData): string | null {
   const child = el.children[0]
   return typeof child === 'string' ? child : null
-}
-
-function base64Encode(input: string): string {
-  return bytesToBase64(new TextEncoder().encode(input))
-}
-
-function base64Decode(encoded: string): string {
-  return new TextDecoder().decode(base64ToBytes(encoded))
 }
 
 /**
@@ -1532,6 +1515,9 @@ function armorOpenPgpBlock(raw: Uint8Array, blockType: string): string {
 
 function base64ToBytes(encoded: string): Uint8Array {
   const clean = encoded.replace(/\s+/g, '')
+  if (clean.length === 0 || clean.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(clean)) {
+    throw new Error('invalid base64 OpenPGP payload')
+  }
   if (typeof Buffer !== 'undefined') return new Uint8Array(Buffer.from(clean, 'base64'))
   const binary = atob(clean)
   const bytes = new Uint8Array(binary.length)

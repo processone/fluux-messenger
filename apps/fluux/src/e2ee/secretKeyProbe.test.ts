@@ -21,42 +21,100 @@ const OX_NS = 'urn:xmpp:openpgp:0'
  * the probe touches. The mock is typed via `unknown` cast — building a
  * full XMPPClient stub is overkill for testing one function.
  */
-function makeClient(query: (jid: string, node: string) => Promise<PEPItem[]>): XMPPClient {
+function makeClient(
+  query: (jid: string, node: string, maxItems?: number) => Promise<PEPItem[]>,
+): XMPPClient {
   return {
     pubsub: { query },
   } as unknown as XMPPClient
 }
 
-/** Convenience: encode a string the way the production probe will decode. */
-function encodeArmored(armored: string): string {
-  return btoa(unescape(encodeURIComponent(armored)))
+function bytesToBinaryString(bytes: Uint8Array): string {
+  const chunks: string[] = []
+  const chunkSize = 0x8000
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    chunks.push(String.fromCharCode(...bytes.subarray(i, i + chunkSize)))
+  }
+  return chunks.join('')
+}
+
+function base64EncodeBytes(bytes: Uint8Array): string {
+  return btoa(bytesToBinaryString(bytes))
+}
+
+function base64DecodeBytes(encoded: string): Uint8Array {
+  const binary = atob(encoded.replace(/\s+/g, ''))
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return bytes
+}
+
+function wrapBase64(input: string): string {
+  const lines: string[] = []
+  for (let i = 0; i < input.length; i += 64) lines.push(input.slice(i, i + 64))
+  return lines.join('\n')
+}
+
+function makeOpenPgpArmor(blockType: string, raw: string | Uint8Array): string {
+  const bytes = typeof raw === 'string' ? new TextEncoder().encode(raw) : raw
+  return `-----BEGIN ${blockType}-----\n\n${wrapBase64(base64EncodeBytes(bytes))}\n-----END ${blockType}-----`
+}
+
+function dearmorOpenPgpBlockForTest(armored: string): Uint8Array | null {
+  const lines = armored.replace(/\r\n/g, '\n').split('\n')
+  const begin = lines.findIndex((line) => /^-----BEGIN PGP [^-]+-----$/.test(line.trim()))
+  if (begin < 0) return null
+  const end = lines.findIndex(
+    (line, index) => index > begin && /^-----END PGP [^-]+-----$/.test(line.trim()),
+  )
+  if (end < 0) return null
+  const body: string[] = []
+  let afterHeaders = false
+  for (let i = begin + 1; i < end; i++) {
+    const line = lines[i].trim()
+    if (!afterHeaders) {
+      if (line === '') afterHeaders = true
+      continue
+    }
+    if (line === '' || line.startsWith('=')) continue
+    body.push(line)
+  }
+  return body.length > 0 ? base64DecodeBytes(body.join('')) : null
+}
+
+function readOpenPgpArmorPayloadForTest(armored: string): string {
+  const raw = dearmorOpenPgpBlockForTest(armored)
+  return raw ? new TextDecoder().decode(raw) : armored
+}
+
+function encodeOpenPgpArmorForXep0373(armored: string): string {
+  const raw = dearmorOpenPgpBlockForTest(armored)
+  if (!raw) throw new Error('test helper expected ASCII-armored OpenPGP block')
+  return base64EncodeBytes(raw)
 }
 
 describe('probeRemoteSecretKeyBackup', () => {
   it('returns the decoded armored backup when one is published', async () => {
-    const armored = '-----BEGIN PGP MESSAGE-----\nfake-backup\n-----END PGP MESSAGE-----'
-    const client = makeClient(async (jid, node) => {
+    const armored = makeOpenPgpArmor('PGP MESSAGE', 'fake-backup')
+    const client = makeClient(async (jid, node, maxItems) => {
       expect(jid).toBe(ALICE)
       expect(node).toBe(SECRET_KEY_NODE)
+      expect(maxItems).toBe(1)
       return [
         {
           id: 'current',
           payload: {
             name: 'secretkey',
             attrs: { xmlns: OX_NS },
-            children: [
-              {
-                name: 'data',
-                attrs: {},
-                children: [encodeArmored(armored)],
-              },
-            ],
+            children: [encodeOpenPgpArmorForXep0373(armored)],
           },
         },
       ]
     })
 
-    await expect(probeRemoteSecretKeyBackup(client, ALICE)).resolves.toBe(armored)
+    const recovered = await probeRemoteSecretKeyBackup(client, ALICE)
+    expect(recovered).toContain('BEGIN PGP MESSAGE')
+    expect(readOpenPgpArmorPayloadForTest(recovered!)).toBe('fake-backup')
   })
 
   it('returns null when the server reports item-not-found', async () => {
@@ -121,24 +179,17 @@ describe('probeRemoteSecretKeyBackup', () => {
   })
 
   it('throws when a recognized item has undecodable base64 data', async () => {
-    // The server returned a `<secretkey><data>...</data></secretkey>`
-    // shape — there's *something* there, we just can't read it. Auto-
-    // generating a fresh key would still clobber the existing backup,
-    // so refuse to silently treat as null.
+    // The server returned a spec-shaped `<secretkey>...</secretkey>` item
+    // — there's *something* there, we just can't read it. Auto-generating
+    // a fresh key would still clobber the existing backup, so refuse to
+    // silently treat as null.
     const client = makeClient(async () => [
       {
         id: 'current',
         payload: {
           name: 'secretkey',
           attrs: { xmlns: OX_NS },
-          children: [
-            {
-              name: 'data',
-              attrs: {},
-              // `!!` is not in the base64 alphabet — atob will throw.
-              children: ['!!not-valid-base64!!'],
-            },
-          ],
+          children: ['!!not-valid-base64!!'],
         },
       },
     ])
@@ -176,5 +227,27 @@ describe('probeRemoteSecretKeyBackup', () => {
     const client = makeClient(query)
     await probeRemoteSecretKeyBackup(client, ALICE)
     expect(query).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores the legacy Fluux <data/> backup shape', async () => {
+    const armored = makeOpenPgpArmor('PGP MESSAGE', 'legacy-backup')
+    const client = makeClient(async () => [
+      {
+        id: 'current',
+        payload: {
+          name: 'secretkey',
+          attrs: { xmlns: OX_NS },
+          children: [
+            {
+              name: 'data',
+              attrs: {},
+              children: [base64EncodeBytes(new TextEncoder().encode(armored))],
+            },
+          ],
+        },
+      },
+    ])
+
+    await expect(probeRemoteSecretKeyBackup(client, ALICE)).resolves.toBeNull()
   })
 })

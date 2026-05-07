@@ -263,7 +263,7 @@ function makeFakeRust() {
         // that came out was encrypted with THAT passphrase for THAT
         // account" without a real KDF.
         const marker = `BACKUP:${bundle.fingerprint}:${btoa(unescape(encodeURIComponent(passphrase)))}`
-        return `-----BEGIN PGP MESSAGE (STUB)-----\n${marker}\n-----END PGP MESSAGE (STUB)-----` as T
+        return makeOpenPgpArmor('PGP MESSAGE', marker) as T
       }
       case 'openpgp_rotate_encryption_subkey': {
         const jid = args!.accountJid as string
@@ -291,7 +291,8 @@ function makeFakeRust() {
         const jid = args!.accountJid as string
         const message = args!.backupMessage as string
         const passphrase = args!.passphrase as string
-        const match = message.match(/BACKUP:(FP\d+):([^\n]+)/)
+        const decodedMessage = readOpenPgpArmorPayloadForTest(message)
+        const match = decodedMessage.match(/BACKUP:(FP\d+):([^\n]+)/)
         if (!match) throw new Error('malformed backup')
         const [, fp, encodedPass] = match
         const embeddedPass = decodeURIComponent(escape(atob(encodedPass)))
@@ -479,7 +480,10 @@ function makeContext(accountJid: string): {
       const selfKey = `${accountJid}\u0000${node}`
       peerNodes.delete(selfKey)
     },
-    queryPEP: async (jid, node) => peerNodes.get(`${jid}\u0000${node}`) ?? [],
+    queryPEP: async (jid, node, maxItems) => {
+      const items = peerNodes.get(`${jid}\u0000${node}`) ?? []
+      return maxItems ? items.slice(0, maxItems) : items
+    },
     subscribePEP: () => ({ unsubscribe: () => {} }),
   }
   const ctx: PluginContext = {
@@ -964,13 +968,7 @@ describe('SequoiaPgpPlugin', () => {
           payload: {
             name: 'secretkey',
             attrs: { xmlns: 'urn:xmpp:openpgp:0' },
-            children: [
-              {
-                name: 'data',
-                attrs: {},
-                children: [btoa(unescape(encodeURIComponent(backupArmored)))],
-              },
-            ],
+            children: [encodeOpenPgpArmorForXep0373(backupArmored)],
           },
         },
       )
@@ -993,10 +991,27 @@ describe('SequoiaPgpPlugin', () => {
       })
       publishKeyAsXep0373(built, 'bob@example.com', bobBundle)
 
+      const queries: Array<{ jid: string; node: string; maxItems?: number }> = []
+      const innerQueryPEP = built.ctx.xmpp.queryPEP
+      built.ctx.xmpp.queryPEP = async (jid, node, maxItems) => {
+        queries.push({ jid, node, maxItems })
+        return innerQueryPEP(jid, node, maxItems)
+      }
+
       const support = await plugin.probePeer('bob@example.com')
       expect(support.supported).toBe(true)
       expect(support.ttl).toBeGreaterThan(0)
       expect(plugin.getPeerFingerprint('bob@example.com')).toBe(bobBundle.fingerprint)
+      expect(queries).toContainEqual({
+        jid: 'bob@example.com',
+        node: METADATA_NODE,
+        maxItems: 1,
+      })
+      expect(queries).toContainEqual({
+        jid: 'bob@example.com',
+        node: dataNodeFor(bobBundle.fingerprint),
+        maxItems: 1,
+      })
     })
 
     it('returns supported=false when the peer has no metadata node', async () => {
@@ -1447,9 +1462,9 @@ describe('SequoiaPgpPlugin', () => {
       // Spy on queryPEP from this point forward.
       const queries: Array<{ jid: string; node: string }> = []
       const inner = built.ctx.xmpp.queryPEP
-      built.ctx.xmpp.queryPEP = async (jid, node) => {
+      built.ctx.xmpp.queryPEP = async (jid, node, maxItems) => {
         queries.push({ jid, node })
-        return inner(jid, node)
+        return inner(jid, node, maxItems)
       }
 
       plugin.onPeerKeysChanged('bob@example.com')
@@ -1486,9 +1501,9 @@ describe('SequoiaPgpPlugin', () => {
 
       const queries: Array<{ jid: string; node: string }> = []
       const inner = built.ctx.xmpp.queryPEP
-      built.ctx.xmpp.queryPEP = async (jid, node) => {
+      built.ctx.xmpp.queryPEP = async (jid, node, maxItems) => {
         queries.push({ jid, node })
-        return inner(jid, node)
+        return inner(jid, node, maxItems)
       }
 
       plugin.onPeerKeysChanged('bob@example.com')
@@ -1904,7 +1919,7 @@ describe('SequoiaPgpPlugin', () => {
         accountJid: 'eve@example.com',
         userId: 'xmpp:alice@example.com',
       })
-      bob.ctx.xmpp.queryPEP = async (_jid, node) => {
+      bob.ctx.xmpp.queryPEP = async (_jid, node, _maxItems) => {
         if (node === METADATA_NODE) {
           return [
             {
@@ -2261,8 +2276,12 @@ describe('SequoiaPgpPlugin', () => {
       expect(backup.item.id).toBe('current')
       expect(backup.item.payload.name).toBe('secretkey')
       expect(backup.item.payload.attrs.xmlns).toBe('urn:xmpp:openpgp:0')
-      const dataChild = findChild(backup.item.payload, 'data')
-      expect(dataChild).toBeDefined()
+      const encoded = backup.item.payload.children[0]
+      expect(typeof encoded).toBe('string')
+      expect(findChild(backup.item.payload, 'data')).toBeUndefined()
+      const raw = new TextDecoder().decode(base64DecodeBytes(encoded as string))
+      expect(raw).toContain('BACKUP:')
+      expect(raw).not.toContain('BEGIN PGP MESSAGE')
       expect(backup.options?.accessModel).toBe('whitelist')
       expect(backup.options?.maxItems).toBe(1)
     })
@@ -2282,8 +2301,19 @@ describe('SequoiaPgpPlugin', () => {
     it('fetchSecretKeyBackup returns null when the node is empty', async () => {
       const { ctx } = makeContext('me@example.com')
       await plugin.init(ctx)
+      const queries: Array<{ jid: string; node: string; maxItems?: number }> = []
+      const innerQueryPEP = ctx.xmpp.queryPEP
+      ctx.xmpp.queryPEP = async (jid, node, maxItems) => {
+        queries.push({ jid, node, maxItems })
+        return innerQueryPEP(jid, node, maxItems)
+      }
       const backup = await plugin.fetchSecretKeyBackup()
       expect(backup).toBeNull()
+      expect(queries).toContainEqual({
+        jid: 'me@example.com',
+        node: SECRET_KEY_NODE,
+        maxItems: 1,
+      })
     })
 
     it('hasSecretKeyBackup reflects whether a backup has been published', async () => {
@@ -2300,10 +2330,9 @@ describe('SequoiaPgpPlugin', () => {
       await plugin.backupSecretKey('pp')
       const recovered = await plugin.fetchSecretKeyBackup()
       expect(recovered).toBeTruthy()
-      // The stub Rust wraps the ciphertext in PGP MESSAGE headers; no
-      // matter what we emit, what comes back out of the wire must be
-      // the exact armored string — the `<data>` element is just base64
-      // transport and any distortion would break Rust import.
+      // The stub Rust wraps the ciphertext in PGP MESSAGE headers. The
+      // XEP-0373 wire payload carries raw OpenPGP bytes, but the plugin
+      // re-armors them before handing the backup to Rust import.
       expect(recovered).toContain('BEGIN PGP MESSAGE')
       expect(recovered).toContain('END PGP MESSAGE')
     })
@@ -2364,9 +2393,7 @@ describe('SequoiaPgpPlugin', () => {
         payload: {
           name: 'secretkey',
           attrs: { xmlns: 'urn:xmpp:openpgp:0' },
-          children: [
-            { name: 'data', attrs: {}, children: [btoa(unescape(encodeURIComponent(backup!)))] },
-          ],
+          children: [encodeOpenPgpArmorForXep0373(backup!)],
         },
       })
 
@@ -2413,9 +2440,7 @@ describe('SequoiaPgpPlugin', () => {
         payload: {
           name: 'secretkey',
           attrs: { xmlns: 'urn:xmpp:openpgp:0' },
-          children: [
-            { name: 'data', attrs: {}, children: [btoa(unescape(encodeURIComponent(backup!)))] },
-          ],
+          children: [encodeOpenPgpArmorForXep0373(backup!)],
         },
       })
 
@@ -2520,13 +2545,7 @@ describe('SequoiaPgpPlugin', () => {
         payload: {
           name: 'secretkey',
           attrs: { xmlns: 'urn:xmpp:openpgp:0' },
-          children: [
-            {
-              name: 'data',
-              attrs: {},
-              children: [btoa(unescape(encodeURIComponent(backup!)))],
-            },
-          ],
+          children: [encodeOpenPgpArmorForXep0373(backup!)],
         },
       })
 
@@ -2943,7 +2962,7 @@ describe('SequoiaPgpPlugin', () => {
       bundle: KeyBundle,
     ) {
       const dataNode = `urn:xmpp:openpgp:0:public-keys:${bundle.fingerprint}`
-      alice.ctx.xmpp.queryPEP = async (jid, node) => {
+      alice.ctx.xmpp.queryPEP = async (jid, node, _maxItems) => {
         if (jid !== 'bob@example.com') return []
         if (node === 'urn:xmpp:openpgp:0:public-keys') {
           return [

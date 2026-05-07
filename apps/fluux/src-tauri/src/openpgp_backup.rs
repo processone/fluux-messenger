@@ -10,8 +10,9 @@
 //!
 //! A standard OpenPGP message — an SKESK packet carrying the session key
 //! under the passphrase, followed by an authenticated-encrypted payload
-//! whose plaintext is the binary TSK (Transferable Secret Key). Armored
-//! for transport since PEP values are XML text nodes.
+//! whose plaintext is the binary TSK (Transferable Secret Key). The Rust
+//! boundary returns ASCII armor for IPC; the TypeScript XEP-0373 publisher
+//! strips that armor and stores Base64-encoded raw OpenPGP bytes in PEP.
 //!
 //! # Passphrase protection
 //!
@@ -71,7 +72,8 @@ fn normalize_passphrase(raw: &str) -> String {
 }
 
 /// Encrypt an armored TSK to `passphrase`, returning an armored OpenPGP
-/// message ready for publication on the XEP-0373 §5 secret-key node.
+/// message. The TypeScript XEP-0373 boundary converts it to raw OpenPGP
+/// bytes encoded as Base64 before publishing to the secret-key node.
 ///
 /// When `use_aead` is true the message uses SEIPD v2 (AES-256 + OCB)
 /// with Argon2id S2K (RFC 9580). When false it falls back to SEIPD v1

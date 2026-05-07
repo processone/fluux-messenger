@@ -1640,8 +1640,8 @@ export class XMPPClient {
       deletePEP: async (node) => {
         await this.pubsub.deleteNode(node)
       },
-      queryPEP: async (jid, node) => {
-        return this.pubsub.query(jid, node)
+      queryPEP: async (jid, node, maxItems) => {
+        return this.pubsub.query(jid, node, maxItems)
       },
       subscribePEP: (jid, node, cb) => {
         return this.pubsub.subscribe(jid, node, cb)

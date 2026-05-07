@@ -684,8 +684,8 @@ pub fn openpgp_has_persisted_key(
 }
 
 /// Encrypt the in-memory TSK for `account_jid` under `passphrase`. The
-/// returned armored OpenPGP message is what the TS side publishes to
-/// `urn:xmpp:openpgp:0:secret-key` (XEP-0373 §5).
+/// returned armored OpenPGP message is converted by the TS side to the
+/// XEP-0373 §5 PEP payload: Base64 raw OpenPGP bytes in `<secretkey/>`.
 #[tauri::command]
 pub async fn openpgp_backup_encrypt(
     account_jid: String,

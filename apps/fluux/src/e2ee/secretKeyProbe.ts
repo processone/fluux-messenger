@@ -60,7 +60,7 @@ export async function probeRemoteSecretKeyBackup(
 ): Promise<string | null> {
   let items: Awaited<ReturnType<XMPPClient['pubsub']['query']>>
   try {
-    items = await client.pubsub.query(bareJid, SECRET_KEY_NODE)
+    items = await client.pubsub.query(bareJid, SECRET_KEY_NODE, 1)
   } catch (err) {
     // `item-not-found` is the only error condition that means "the
     // user has never published a backup" — every server we care about
@@ -75,21 +75,16 @@ export async function probeRemoteSecretKeyBackup(
     const p = item.payload
     if (!p || typeof p === 'string') continue
     if (p.name !== 'secretkey' || p.attrs?.xmlns !== OX_NAMESPACE) continue
-    for (const child of p.children) {
-      if (typeof child === 'string') continue
-      if (child.name !== 'data') continue
-      const text = child.children[0]
-      if (typeof text !== 'string') continue
-      try {
-        return base64Decode(text)
-      } catch (err) {
-        // We *did* find a `<secretkey><data>...</data></secretkey>`
-        // shaped item — there's something on the server. We just
-        // can't decode it. Surfacing as "no backup" would let the
-        // settings flow overwrite that something with a fresh key;
-        // surface the failure instead so the user can retry.
-        throw new SecretKeyBackupProbeError(err)
-      }
+    const text = p.children[0]
+    if (typeof text !== 'string') continue
+    try {
+      return base64DecodeOpenPgpBlock(text, 'PGP MESSAGE')
+    } catch (err) {
+      // We *did* find a `<secretkey>...</secretkey>` item — there's
+      // something on the server. We just can't decode it. Surfacing as
+      // "no backup" would let the settings flow overwrite that something
+      // with a fresh key; surface the failure instead so the user can retry.
+      throw new SecretKeyBackupProbeError(err)
     }
   }
   return null
@@ -107,7 +102,62 @@ function isItemNotFoundError(err: unknown): boolean {
   return message.includes('item-not-found')
 }
 
-function base64Decode(encoded: string): string {
-  if (typeof atob === 'function') return decodeURIComponent(escape(atob(encoded)))
-  return Buffer.from(encoded, 'base64').toString('utf-8')
+function base64DecodeOpenPgpBlock(encoded: string, blockType: string): string {
+  return armorOpenPgpBlock(base64ToBytes(encoded), blockType)
+}
+
+function armorOpenPgpBlock(raw: Uint8Array, blockType: string): string {
+  const body = wrapBase64(bytesToBase64(raw))
+  return `-----BEGIN ${blockType}-----\n\n${body}\n=${crc24Base64(raw)}\n-----END ${blockType}-----`
+}
+
+function base64ToBytes(encoded: string): Uint8Array {
+  const clean = encoded.replace(/\s+/g, '')
+  if (clean.length === 0 || clean.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(clean)) {
+    throw new Error('invalid base64 OpenPGP payload')
+  }
+  if (typeof atob === 'function') {
+    const binary = atob(clean)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+    return bytes
+  }
+  return new Uint8Array(Buffer.from(clean, 'base64'))
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  if (typeof btoa === 'function') return btoa(bytesToBinaryString(bytes))
+  return Buffer.from(bytes).toString('base64')
+}
+
+function bytesToBinaryString(bytes: Uint8Array): string {
+  const chunks: string[] = []
+  const chunkSize = 0x8000
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    chunks.push(String.fromCharCode(...bytes.subarray(i, i + chunkSize)))
+  }
+  return chunks.join('')
+}
+
+function wrapBase64(input: string): string {
+  const lines: string[] = []
+  for (let i = 0; i < input.length; i += 64) lines.push(input.slice(i, i + 64))
+  return lines.join('\n')
+}
+
+function crc24Base64(bytes: Uint8Array): string {
+  const crc = crc24(bytes)
+  return bytesToBase64(new Uint8Array([(crc >> 16) & 0xff, (crc >> 8) & 0xff, crc & 0xff]))
+}
+
+function crc24(bytes: Uint8Array): number {
+  let crc = 0xb704ce
+  for (const byte of bytes) {
+    crc ^= byte << 16
+    for (let i = 0; i < 8; i++) {
+      crc <<= 1
+      if ((crc & 0x1000000) !== 0) crc ^= 0x1864cfb
+    }
+  }
+  return crc & 0xffffff
 }
