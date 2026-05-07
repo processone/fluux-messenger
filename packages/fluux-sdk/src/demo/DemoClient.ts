@@ -254,6 +254,15 @@ export class DemoClient extends XMPPClient {
       connectionStore.getState().setOwnAvatar(data.self.avatar)
     }
 
+    // Own resources (other connected devices)
+    if (data.ownResources) {
+      for (const res of data.ownResources) {
+        connectionStore.getState().updateOwnResource(
+          res.resource, res.show, res.priority, res.status, new Date(), res.client,
+        )
+      }
+    }
+
     // Store contacts for IQ response generation (vCard, PubSub)
     for (const contact of data.contacts) {
       this.seededContacts.set(contact.jid, contact)
