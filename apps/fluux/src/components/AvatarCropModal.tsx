@@ -359,7 +359,7 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-      <div className="bg-fluux-sidebar rounded-lg shadow-xl w-full max-w-md mx-4">
+      <div className="bg-fluux-sidebar rounded-lg shadow-xl w-full max-w-md mx-4 max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-fluux-bg">
           <h2 className="text-lg font-semibold text-fluux-text">{t('avatar.uploadTitle')}</h2>
@@ -374,7 +374,7 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
         </div>
 
         {/* Content */}
-        <div className="p-4">
+        <div className="flex-1 overflow-y-auto min-h-0 p-4">
           {webcamMode ? (
             // Webcam capture mode
             <div className="flex flex-col items-center gap-4">
