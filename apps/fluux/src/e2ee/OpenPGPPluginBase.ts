@@ -902,8 +902,13 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   // ---------------------------------------------------------------------------
 
   async probePeer(peer: BareJID): Promise<PeerSupport> {
-    if (this.peerKeys.has(peer)) {
-      return { supported: true, ttl: PROBE_NEGATIVE_TTL_SECONDS }
+    const cached = this.peerKeys.get(peer)
+    if (cached) {
+      return {
+        supported: true,
+        ttl: PROBE_NEGATIVE_TTL_SECONDS,
+        fingerprint: cached.fingerprint,
+      }
     }
     return this.refetchAndCachePeerKey(peer)
   }
@@ -924,7 +929,11 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         if (bundle) {
           clearCertRejections(peer)
           this.cachePeerKey(peer, bundle)
-          return { supported: true, ttl: PROBE_NEGATIVE_TTL_SECONDS }
+          return {
+            supported: true,
+            ttl: PROBE_NEGATIVE_TTL_SECONDS,
+            fingerprint: bundle.fingerprint,
+          }
         }
       }
       if (rejections.length > 0) {

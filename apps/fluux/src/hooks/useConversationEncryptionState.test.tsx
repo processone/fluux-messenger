@@ -141,6 +141,27 @@ describe('useConversationEncryptionState', () => {
     expect(plugin.probePeer).toHaveBeenCalledWith('bob@example.com')
   })
 
+  it("uses the probe's discovered fingerprint when the plugin cache is not readable yet", async () => {
+    const plugin = makePlugin({
+      getPeerFingerprint: vi.fn().mockReturnValue(null),
+      probePeer: vi.fn().mockResolvedValue({
+        supported: true,
+        fingerprint: 'D94E599C93F7EB648D2880D8829C29E7F50FD65F',
+      }),
+    })
+    wireMocks({ plugin })
+    const { result } = renderHook(() =>
+      useConversationEncryptionState('lovetox@hydrant.one', 'chat'),
+    )
+    await waitFor(() => {
+      expect(result.current).toEqual({
+        kind: 'encrypted',
+        fingerprint: 'D94E599C93F7EB648D2880D8829C29E7F50FD65F',
+        trust: 'unverified',
+      })
+    })
+  })
+
   it("falls to 'unsupported' when the probe returns supported=false", async () => {
     const plugin = makePlugin({
       probePeer: vi.fn().mockResolvedValue({ supported: false }),
@@ -280,6 +301,45 @@ describe('useConversationEncryptionState', () => {
         store.useVerifiedPeerKeysStore.getState().setVerified('bob@example.com', 'FP')
       })
       expect(result.current).toMatchObject({ trust: 'verified' })
+    })
+  })
+
+  describe('key-change alerts', () => {
+    const mod = '@/stores/keyChangeAlertsStore'
+    type KeyChangeStore = typeof import('@/stores/keyChangeAlertsStore')
+    let store: KeyChangeStore
+
+    beforeEach(async () => {
+      localStorage.clear()
+      store = (await import(mod)) as KeyChangeStore
+      store.useKeyChangeAlertsStore.setState({ alertsByJid: {} })
+    })
+
+    afterEach(() => {
+      store.useKeyChangeAlertsStore.setState({ alertsByJid: {} })
+    })
+
+    it("returns 'blocked' when a probe observes a pin mismatch but leaves the plugin cache cold", async () => {
+      const plugin = makePlugin({
+        getPeerFingerprint: vi.fn().mockReturnValue(null),
+        probePeer: vi.fn().mockImplementation(async () => {
+          store.recordKeyChangeAlert('bob@example.com', 'OLD_FP', 'NEW_FP')
+          return { supported: true }
+        }),
+      })
+      wireMocks({ plugin })
+
+      const { result } = renderHook(() =>
+        useConversationEncryptionState('bob@example.com', 'chat'),
+      )
+
+      await waitFor(() => {
+        expect(result.current).toEqual({
+          kind: 'blocked',
+          pinnedFingerprint: 'OLD_FP',
+          advertisedFingerprint: 'NEW_FP',
+        })
+      })
     })
   })
 

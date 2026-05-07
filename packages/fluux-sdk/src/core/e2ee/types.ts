@@ -72,6 +72,8 @@ export interface PeerSupport {
   ttl: number
   /** Optional protocol variant (e.g. `omemo:2` vs `omemo:1`). */
   variant?: string
+  /** Optional peer identity fingerprint discovered during the probe. */
+  fingerprint?: string
 }
 
 /** Identity material the plugin has ensured exists locally + published. */

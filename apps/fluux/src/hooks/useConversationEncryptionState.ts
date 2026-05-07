@@ -73,7 +73,7 @@ export type ConversationEncryptionState =
  */
 interface OpenpgpPluginShape {
   getPeerFingerprint?: (peer: string) => string | null
-  probePeer?: (peer: string) => Promise<{ supported: boolean }>
+  probePeer?: (peer: string) => Promise<{ supported: boolean; fingerprint?: string }>
 }
 
 /**
@@ -142,9 +142,6 @@ export function useConversationEncryptionState(
     peerJid ? (s.pinnedFingerprintByJid[peerJid] ?? null) : null,
   )
 
-  const certRejectionCount = useCertRejectionStore((s) =>
-    peerJid ? (s.rejectionsByJid[peerJid]?.length ?? 0) : 0,
-  )
   const certRejections = useCertRejectionStore((s) =>
     peerJid ? (s.rejectionsByJid[peerJid] ?? null) : null,
   )
@@ -219,7 +216,7 @@ export function useConversationEncryptionState(
       try {
         const support = await plugin.probePeer?.(peerJid)
         if (cancelled) return
-        const fp = plugin.getPeerFingerprint?.(peerJid) ?? null
+        const fp = plugin.getPeerFingerprint?.(peerJid) ?? support?.fingerprint ?? null
         if (support?.supported && fp) {
           setBase({ kind: 'encrypted', fingerprint: fp })
         } else {
@@ -252,21 +249,25 @@ export function useConversationEncryptionState(
     // the memo is the single authoritative output — check here so a toggle
     // triggers a re-render without waiting for the next effect run.
     if (isForcedPlaintext) return { kind: 'plaintextForced' }
-    if (base.kind === 'unsupported' && certRejections && certRejections.length > 0) {
-      return { kind: 'rejected', reasons: certRejections }
-    }
-    if (base.kind !== 'encrypted') return base
     if (alertCurrentFp && alertPreviousFp) {
+      // A pin mismatch intentionally leaves the new cert out of the plugin's
+      // send cache until the user accepts it. Surface the alert even when the
+      // base probe has no cached fingerprint to promote to `encrypted`.
+      if (base.kind === 'disabled') return base
       return {
         kind: 'blocked',
         pinnedFingerprint: alertPreviousFp,
         advertisedFingerprint: alertCurrentFp,
       }
     }
+    if (base.kind === 'unsupported' && certRejections && certRejections.length > 0) {
+      return { kind: 'rejected', reasons: certRejections }
+    }
+    if (base.kind !== 'encrypted') return base
     return {
       kind: 'encrypted',
       fingerprint: base.fingerprint,
       trust: verifiedFingerprint === base.fingerprint ? 'verified' : 'unverified',
     }
-  }, [base, isForcedPlaintext, verifiedFingerprint, alertCurrentFp, alertPreviousFp, certRejections, certRejectionCount])
+  }, [base, isForcedPlaintext, verifiedFingerprint, alertCurrentFp, alertPreviousFp, certRejections])
 }
