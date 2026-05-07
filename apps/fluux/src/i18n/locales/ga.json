@@ -527,12 +527,12 @@
         },
         "keyChangeBanner": {
             "title": "Tá eochair criptiúcháin {{name}} athraithe",
-            "body": "Is cosúil go bhfuil an teagmhálaí seo tar éis a eochairghráin criptiúcháin a athrú. Fíoraigh an méarlorg nua chun iontaoibh iomlán a chur ar ais, nó cuir ar leataobh le leanúint ar aghaidh le hiontaoibh bhunúsach.",
+            "body": "Is cosúil go bhfuil an teagmhálaí seo tar éis a eochair chriptiúcháin a rothlú. Is féidir leat an méarlorg nua a fhíorú chun iontaoibh iomlán a athbhunú, nó glacadh leis gan fíorú chun leanúint ar aghaidh le hiontaoibh bhunúsach.",
             "reVerify": "Athfhíoraigh",
-            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
-            "acceptWithoutVerifying": "Accept without verifying",
-            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
-            "acceptFailed": "Couldn't accept the new key — try again"
+            "encryptionBlocked": "Tá an criptiúchán ar fionraí sa chomhrá seo go dtí go réitíonn tú an t-athrú.",
+            "acceptWithoutVerifying": "Glac leis gan fíorú",
+            "acceptedWithoutVerifying": "Glacadh leis an eochair nua — níl an piara fíoraithe",
+            "acceptFailed": "Níorbh fhéidir glacadh leis an eochair nua — bain triail eile as"
         }
     },
     "dates": {

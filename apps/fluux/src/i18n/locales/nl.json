@@ -527,12 +527,12 @@
         },
         "keyChangeBanner": {
             "title": "De versleutelingssleutel van {{name}} is veranderd",
-            "body": "Het lijkt erop dat dit contact zijn versleutelingssleutel heeft geroteerd. Verifieer de nieuwe vingerafdruk om het volledige vertrouwen te herstellen, of sluit om door te gaan met basisvertrouwen.",
+            "body": "Het lijkt erop dat dit contact zijn versleutelingssleutel heeft geroteerd. Je kunt de nieuwe vingerafdruk verifiëren om het volledige vertrouwen te herstellen, of accepteren zonder te verifiëren om door te gaan met basisvertrouwen.",
             "reVerify": "Opnieuw verifiëren",
-            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
-            "acceptWithoutVerifying": "Accept without verifying",
-            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
-            "acceptFailed": "Couldn't accept the new key — try again"
+            "encryptionBlocked": "Versleuteling is gepauzeerd voor dit gesprek totdat je de wijziging oplost.",
+            "acceptWithoutVerifying": "Accepteren zonder te verifiëren",
+            "acceptedWithoutVerifying": "Nieuwe sleutel geaccepteerd — contact is niet geverifieerd",
+            "acceptFailed": "Kon de nieuwe sleutel niet accepteren — probeer opnieuw"
         }
     },
     "dates": {

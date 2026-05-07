@@ -527,12 +527,12 @@
         },
         "keyChangeBanner": {
             "title": "מפתח ההצפנה של {{name}} השתנה",
-            "body": "נראה שאיש קשר זה החליף את מפתח ההצפנה שלו. אמת את טביעת האצבע החדשה כדי לשחזר אמון מלא, או בטל כדי להמשיך עם אמון בסיסי.",
+            "body": "נראה שאיש קשר זה החליף את מפתח ההצפנה שלו. באפשרותך לאמת את טביעת האצבע החדשה כדי לשחזר אמון מלא, או לקבל אותה ללא אימות כדי להמשיך עם אמון בסיסי.",
             "reVerify": "אמת מחדש",
-            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
-            "acceptWithoutVerifying": "Accept without verifying",
-            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
-            "acceptFailed": "Couldn't accept the new key — try again"
+            "encryptionBlocked": "ההצפנה מושהית בשיחה זו עד שתטפל בשינוי.",
+            "acceptWithoutVerifying": "קבל ללא אימות",
+            "acceptedWithoutVerifying": "המפתח החדש התקבל — העמית לא אומת",
+            "acceptFailed": "לא ניתן לקבל את המפתח החדש — נסה שוב"
         }
     },
     "dates": {

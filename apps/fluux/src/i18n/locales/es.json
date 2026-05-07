@@ -529,12 +529,12 @@
         },
         "keyChangeBanner": {
             "title": "La clave de cifrado de {{name}} ha cambiado",
-            "body": "Parece que este contacto ha rotado su clave de cifrado. Verifica la nueva huella para restaurar la confianza plena, o descarta para continuar con confianza básica.",
+            "body": "Parece que este contacto ha rotado su clave de cifrado. Puedes verificar la nueva huella para restaurar la confianza plena, o aceptarla sin verificar para continuar con confianza básica.",
             "reVerify": "Volver a verificar",
-            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
-            "acceptWithoutVerifying": "Accept without verifying",
-            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
-            "acceptFailed": "Couldn't accept the new key — try again"
+            "encryptionBlocked": "El cifrado está en pausa para esta conversación hasta que resuelvas el cambio.",
+            "acceptWithoutVerifying": "Aceptar sin verificar",
+            "acceptedWithoutVerifying": "Clave nueva aceptada — el contacto no está verificado",
+            "acceptFailed": "No se pudo aceptar la clave nueva — inténtalo de nuevo"
         }
     },
     "dates": {

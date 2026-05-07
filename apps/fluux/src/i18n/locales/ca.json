@@ -529,12 +529,12 @@
         },
         "keyChangeBanner": {
             "title": "La clau de xifratge de {{name}} ha canviat",
-            "body": "Sembla que aquest contacte ha rotat la seva clau de xifratge. Verifica la nova empremta per restaurar la confiança plena, o descarta per continuar amb confiança bàsica.",
+            "body": "Sembla que aquest contacte ha rotat la seva clau de xifratge. Pots verificar la nova empremta per restaurar la confiança plena, o acceptar-la sense verificar per continuar amb confiança bàsica.",
             "reVerify": "Tornar a verificar",
-            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
-            "acceptWithoutVerifying": "Accept without verifying",
-            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
-            "acceptFailed": "Couldn't accept the new key — try again"
+            "encryptionBlocked": "El xifratge està en pausa per a aquesta conversa fins que resolguis el canvi.",
+            "acceptWithoutVerifying": "Acceptar sense verificar",
+            "acceptedWithoutVerifying": "Clau nova acceptada — el contacte no està verificat",
+            "acceptFailed": "No s'ha pogut acceptar la clau nova — torna-ho a provar"
         }
     },
     "dates": {

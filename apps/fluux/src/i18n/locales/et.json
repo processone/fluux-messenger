@@ -529,12 +529,12 @@
         },
         "keyChangeBanner": {
             "title": "{{name}} krüpteerimisvõti on muutunud",
-            "body": "Tundub, et see kontakt on oma krüpteerimisvõtme vahetanud. Kinnita uus sõrmejälg täieliku usalduse taastamiseks või sulge, et jätkata põhilise usaldusega.",
+            "body": "Tundub, et see kontakt on oma krüpteerimisvõtme vahetanud. Saad uue sõrmejälje kinnitada täieliku usalduse taastamiseks või selle ilma kinnitamata vastu võtta, et jätkata põhilise usaldusega.",
             "reVerify": "Kinnita uuesti",
-            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
-            "acceptWithoutVerifying": "Accept without verifying",
-            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
-            "acceptFailed": "Couldn't accept the new key — try again"
+            "encryptionBlocked": "Krüpteerimine on selle vestluse jaoks peatatud, kuni muudatuse lahendad.",
+            "acceptWithoutVerifying": "Võta vastu ilma kinnitamata",
+            "acceptedWithoutVerifying": "Uus võti vastu võetud — kontakt on kinnitamata",
+            "acceptFailed": "Uue võtme vastuvõtmine ebaõnnestus — proovi uuesti"
         }
     },
     "dates": {

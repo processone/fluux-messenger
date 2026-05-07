@@ -528,12 +528,12 @@
         },
         "keyChangeBanner": {
             "title": "{{name}} šifrēšanas atslēga ir mainījusies",
-            "body": "Šķiet, ka šis kontakts ir mainījis savu šifrēšanas atslēgu. Verificējiet jauno pirkstu nospiedumu, lai atjaunotu pilnīgu uzticību, vai noraidiet, lai turpinātu ar pamata uzticību.",
+            "body": "Šķiet, ka šis kontakts ir nomainījis savu šifrēšanas atslēgu. Varat verificēt jauno pirkstu nospiedumu, lai atjaunotu pilnīgu uzticību, vai pieņemt to bez verificēšanas, lai turpinātu ar pamata uzticību.",
             "reVerify": "Pārbaudīt vēlreiz",
-            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
-            "acceptWithoutVerifying": "Accept without verifying",
-            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
-            "acceptFailed": "Couldn't accept the new key — try again"
+            "encryptionBlocked": "Šifrēšana ir apturēta šai sarunai, līdz atrisināsiet izmaiņu.",
+            "acceptWithoutVerifying": "Pieņemt bez verificēšanas",
+            "acceptedWithoutVerifying": "Jaunā atslēga pieņemta — partneris nav verificēts",
+            "acceptFailed": "Neizdevās pieņemt jauno atslēgu — mēģiniet vēlreiz"
         }
     },
     "dates": {

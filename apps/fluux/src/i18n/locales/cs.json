@@ -529,12 +529,12 @@
         },
         "keyChangeBanner": {
             "title": "Šifrovací klíč uživatele {{name}} se změnil",
-            "body": "Zdá se, že tento kontakt obměnil svůj šifrovací klíč. Ověřte nový otisk pro obnovení plné důvěry, nebo zamítněte a pokračujte se základní důvěrou.",
+            "body": "Zdá se, že tento kontakt obměnil svůj šifrovací klíč. Můžete ověřit nový otisk pro obnovení plné důvěry, nebo jej přijmout bez ověření a pokračovat se základní důvěrou.",
             "reVerify": "Znovu ověřit",
-            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
-            "acceptWithoutVerifying": "Accept without verifying",
-            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
-            "acceptFailed": "Couldn't accept the new key — try again"
+            "encryptionBlocked": "Šifrování je pro tuto konverzaci pozastaveno, dokud změnu nevyřešíte.",
+            "acceptWithoutVerifying": "Přijmout bez ověření",
+            "acceptedWithoutVerifying": "Nový klíč přijat — kontakt není ověřen",
+            "acceptFailed": "Nepodařilo se přijmout nový klíč — zkuste to znovu"
         }
     },
     "dates": {

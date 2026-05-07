@@ -529,12 +529,12 @@
         },
         "keyChangeBanner": {
             "title": "Cheia de criptare a lui {{name}} s-a schimbat",
-            "body": "Se pare că acest contact și-a rotit cheia de criptare. Verificați noua amprentă pentru a restabili încrederea deplină sau respingeți pentru a continua cu încredere de bază.",
+            "body": "Se pare că acest contact și-a rotit cheia de criptare. Poți verifica noua amprentă pentru a restabili încrederea deplină sau o poți accepta fără verificare pentru a continua cu încredere de bază.",
             "reVerify": "Reverifică",
-            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
-            "acceptWithoutVerifying": "Accept without verifying",
-            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
-            "acceptFailed": "Couldn't accept the new key — try again"
+            "encryptionBlocked": "Criptarea este suspendată pentru această conversație până când rezolvi modificarea.",
+            "acceptWithoutVerifying": "Acceptă fără verificare",
+            "acceptedWithoutVerifying": "Cheie nouă acceptată — contactul nu este verificat",
+            "acceptFailed": "Nu s-a putut accepta noua cheie — încearcă din nou"
         }
     },
     "dates": {

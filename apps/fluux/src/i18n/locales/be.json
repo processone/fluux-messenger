@@ -527,12 +527,12 @@
         },
         "keyChangeBanner": {
             "title": "Шыфравальны ключ карыстальніка {{name}} змяніўся",
-            "body": "Здаецца, гэты кантакт змяніў свой ключ шыфравання. Праверце новы адбітак, каб аднавіць поўны давер, або закрыйце, каб працягнуць з базавым даверам.",
+            "body": "Падобна, што гэты кантакт абнавіў свой ключ шыфравання. Вы можаце праверыць новы адбітак, каб аднавіць поўны давер, або прыняць яго без праверкі, каб працягнуць з базавым даверам.",
             "reVerify": "Праверыць зноў",
-            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
-            "acceptWithoutVerifying": "Accept without verifying",
-            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
-            "acceptFailed": "Couldn't accept the new key — try again"
+            "encryptionBlocked": "Шыфраванне прыпынена для гэтай размовы, пакуль вы не вырашыце праблему са зменай ключа.",
+            "acceptWithoutVerifying": "Прыняць без праверкі",
+            "acceptedWithoutVerifying": "Новы ключ прыняты — кантакт не правераны",
+            "acceptFailed": "Не ўдалося прыняць новы ключ — паспрабуйце зноў"
         }
     },
     "dates": {

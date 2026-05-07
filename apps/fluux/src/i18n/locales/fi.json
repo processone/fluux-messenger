@@ -527,12 +527,12 @@
         },
         "keyChangeBanner": {
             "title": "Käyttäjän {{name}} salausavain on vaihtunut",
-            "body": "Näyttää siltä, että tämä yhteystieto on vaihtanut salausavaimensa. Vahvista uusi sormenjälki täyden luottamuksen palauttamiseksi tai hylkää jatkaaksesi perusluottamuksella.",
+            "body": "Tämä yhteystieto näyttää vaihtaneen salausavaimensa. Voit vahvistaa uuden sormenjäljen palauttaaksesi täyden luottamuksen tai hyväksyä sen vahvistamatta jatkaaksesi perusluottamuksella.",
             "reVerify": "Vahvista uudelleen",
-            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
-            "acceptWithoutVerifying": "Accept without verifying",
-            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
-            "acceptFailed": "Couldn't accept the new key — try again"
+            "encryptionBlocked": "Salaus on keskeytetty tässä keskustelussa, kunnes ratkaiset muutoksen.",
+            "acceptWithoutVerifying": "Hyväksy vahvistamatta",
+            "acceptedWithoutVerifying": "Uusi avain hyväksytty — vertaista ei ole vahvistettu",
+            "acceptFailed": "Uuden avaimen hyväksyminen epäonnistui — yritä uudelleen"
         }
     },
     "dates": {

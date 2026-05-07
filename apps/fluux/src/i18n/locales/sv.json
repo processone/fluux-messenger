@@ -527,12 +527,12 @@
         },
         "keyChangeBanner": {
             "title": "{{name}}s krypteringsnyckel har ändrats",
-            "body": "Det verkar som att denna kontakt har roterat sin krypteringsnyckel. Verifiera det nya fingeravtrycket för att återställa fullt förtroende, eller avfärda för att fortsätta med grundläggande förtroende.",
+            "body": "Det verkar som att denna kontakt har roterat sin krypteringsnyckel. Du kan verifiera det nya fingeravtrycket för att återställa fullt förtroende, eller acceptera det utan verifiering för att fortsätta med grundläggande förtroende.",
             "reVerify": "Verifiera igen",
-            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
-            "acceptWithoutVerifying": "Accept without verifying",
-            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
-            "acceptFailed": "Couldn't accept the new key — try again"
+            "encryptionBlocked": "Kryptering är pausad för den här konversationen tills du löser ändringen.",
+            "acceptWithoutVerifying": "Acceptera utan verifiering",
+            "acceptedWithoutVerifying": "Ny nyckel accepterad — motparten är overifierad",
+            "acceptFailed": "Kunde inte acceptera den nya nyckeln — försök igen"
         }
     },
     "dates": {

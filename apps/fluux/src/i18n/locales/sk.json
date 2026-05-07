@@ -528,12 +528,12 @@
         },
         "keyChangeBanner": {
             "title": "Šifrovací kľúč používateľa {{name}} sa zmenil",
-            "body": "Zdá sa, že tento kontakt vymenil svoj šifrovací kľúč. Overte nový odtlačok na obnovenie plnej dôvery alebo zavrieť a pokračovať so základnou dôverou.",
+            "body": "Zdá sa, že tento kontakt vymenil svoj šifrovací kľúč. Môžete overiť nový odtlačok na obnovenie plnej dôvery alebo ho prijať bez overenia a pokračovať so základnou dôverou.",
             "reVerify": "Znovu overiť",
-            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
-            "acceptWithoutVerifying": "Accept without verifying",
-            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
-            "acceptFailed": "Couldn't accept the new key — try again"
+            "encryptionBlocked": "Šifrovanie je pozastavené pre túto konverzáciu, kým nevyriešite zmenu.",
+            "acceptWithoutVerifying": "Prijať bez overenia",
+            "acceptedWithoutVerifying": "Nový kľúč prijatý — kontakt nie je overený",
+            "acceptFailed": "Nepodarilo sa prijať nový kľúč — skúste znova"
         }
     },
     "dates": {

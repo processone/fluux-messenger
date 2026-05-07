@@ -529,12 +529,12 @@
         },
         "keyChangeBanner": {
             "title": "Klucz szyfrowania użytkownika {{name}} się zmienił",
-            "body": "Wygląda na to, że ten kontakt wymienił swój klucz szyfrowania. Zweryfikuj nowy odcisk, aby przywrócić pełne zaufanie, lub odrzuć, aby kontynuować z podstawowym zaufaniem.",
+            "body": "Wygląda na to, że ten kontakt wymienił swój klucz szyfrowania. Możesz zweryfikować nowy odcisk, aby przywrócić pełne zaufanie, lub zaakceptować go bez weryfikacji, aby kontynuować z podstawowym zaufaniem.",
             "reVerify": "Zweryfikuj ponownie",
-            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
-            "acceptWithoutVerifying": "Accept without verifying",
-            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
-            "acceptFailed": "Couldn't accept the new key — try again"
+            "encryptionBlocked": "Szyfrowanie jest wstrzymane dla tej rozmowy do momentu rozwiązania zmiany.",
+            "acceptWithoutVerifying": "Zaakceptuj bez weryfikacji",
+            "acceptedWithoutVerifying": "Nowy klucz zaakceptowany — rozmówca niezweryfikowany",
+            "acceptFailed": "Nie udało się zaakceptować nowego klucza — spróbuj ponownie"
         }
     },
     "dates": {

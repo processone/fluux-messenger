@@ -527,12 +527,12 @@
         },
         "keyChangeBanner": {
             "title": "Dulritunarlykill {{name}} hefur breyst",
-            "body": "Þessi tengiliður virðist hafa skipt um dulkóðunarlykil. Staðfestu nýja fingrafarið til að endurheimta fulla traust, eða hafnaðu til að halda áfram með grunntraust.",
+            "body": "Þessi tengiliður virðist hafa skipt um dulkóðunarlykil sinn. Þú getur staðfest nýja fingrafarið til að endurheimta fullt traust, eða samþykkt það án staðfestingar til að halda áfram með grunntraust.",
             "reVerify": "Staðfesta aftur",
-            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
-            "acceptWithoutVerifying": "Accept without verifying",
-            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
-            "acceptFailed": "Couldn't accept the new key — try again"
+            "encryptionBlocked": "Dulkóðun er í bið fyrir þessa samræðu þar til þú leysir breytinguna.",
+            "acceptWithoutVerifying": "Samþykkja án staðfestingar",
+            "acceptedWithoutVerifying": "Nýr lykill samþykktur — jafningi er óstaðfestur",
+            "acceptFailed": "Ekki tókst að samþykkja nýja lykilinn — reyndu aftur"
         }
     },
     "dates": {

@@ -528,12 +528,12 @@
         },
         "keyChangeBanner": {
             "title": "Το κλειδί κρυπτογράφησης του χρήστη {{name}} έχει αλλάξει",
-            "body": "Φαίνεται ότι αυτή η επαφή έχει αλλάξει το κλειδί κρυπτογράφησής της. Επαληθεύστε το νέο αποτύπωμα για αποκατάσταση πλήρους εμπιστοσύνης, ή απορρίψτε για να συνεχίσετε με βασική εμπιστοσύνη.",
+            "body": "Φαίνεται ότι αυτή η επαφή έχει αλλάξει το κλειδί κρυπτογράφησής της. Μπορείτε να επαληθεύσετε το νέο αποτύπωμα για αποκατάσταση πλήρους εμπιστοσύνης, ή να το αποδεχτείτε χωρίς επαλήθευση για να συνεχίσετε με βασική εμπιστοσύνη.",
             "reVerify": "Επανεπαλήθευση",
-            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
-            "acceptWithoutVerifying": "Accept without verifying",
-            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
-            "acceptFailed": "Couldn't accept the new key — try again"
+            "encryptionBlocked": "Η κρυπτογράφηση είναι σε παύση για αυτήν τη συνομιλία μέχρι να επιλύσετε την αλλαγή.",
+            "acceptWithoutVerifying": "Αποδοχή χωρίς επαλήθευση",
+            "acceptedWithoutVerifying": "Το νέο κλειδί έγινε αποδεκτό — η επαφή δεν είναι επαληθευμένη",
+            "acceptFailed": "Δεν ήταν δυνατή η αποδοχή του νέου κλειδιού — δοκιμάστε ξανά"
         }
     },
     "dates": {

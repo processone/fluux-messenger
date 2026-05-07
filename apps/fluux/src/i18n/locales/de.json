@@ -529,12 +529,12 @@
         },
         "keyChangeBanner": {
             "title": "Der Verschlüsselungsschlüssel von {{name}} hat sich geändert",
-            "body": "Dieser Kontakt scheint seinen Verschlüsselungsschlüssel gewechselt zu haben. Verifiziere den neuen Fingerabdruck, um das volle Vertrauen wiederherzustellen, oder verwerfe, um mit grundlegendem Vertrauen fortzufahren.",
+            "body": "Dieser Kontakt scheint seinen Verschlüsselungsschlüssel gewechselt zu haben. Du kannst den neuen Fingerabdruck verifizieren, um das volle Vertrauen wiederherzustellen, oder ihn ohne Verifizierung akzeptieren, um mit grundlegendem Vertrauen fortzufahren.",
             "reVerify": "Erneut verifizieren",
-            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
-            "acceptWithoutVerifying": "Accept without verifying",
-            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
-            "acceptFailed": "Couldn't accept the new key — try again"
+            "encryptionBlocked": "Die Verschlüsselung ist für diese Unterhaltung pausiert, bis du die Änderung geklärt hast.",
+            "acceptWithoutVerifying": "Ohne Verifizierung akzeptieren",
+            "acceptedWithoutVerifying": "Neuer Schlüssel akzeptiert — Kontakt ist nicht verifiziert",
+            "acceptFailed": "Der neue Schlüssel konnte nicht akzeptiert werden — versuche es erneut"
         }
     },
     "dates": {

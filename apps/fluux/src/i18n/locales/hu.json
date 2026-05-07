@@ -527,12 +527,12 @@
         },
         "keyChangeBanner": {
             "title": "{{name}} titkosítási kulcsa megváltozott",
-            "body": "Úgy tűnik, ez a névjegy lecserélte a titkosítási kulcsát. Ellenőrizze az új ujjlenyomatot a teljes bizalom visszaállításához, vagy vesse el az alapszintű bizalommal való folytatáshoz.",
+            "body": "Úgy tűnik, ez a partner lecserélte a titkosítási kulcsát. Ellenőrizheti az új ujjlenyomatot a teljes bizalom visszaállításához, vagy elfogadhatja ellenőrzés nélkül az alapszintű bizalommal való folytatáshoz.",
             "reVerify": "Újraellenőrzés",
-            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
-            "acceptWithoutVerifying": "Accept without verifying",
-            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
-            "acceptFailed": "Couldn't accept the new key — try again"
+            "encryptionBlocked": "A titkosítás szünetel ebben a beszélgetésben, amíg meg nem oldja a változást.",
+            "acceptWithoutVerifying": "Elfogadás ellenőrzés nélkül",
+            "acceptedWithoutVerifying": "Új kulcs elfogadva — a partner nincs ellenőrizve",
+            "acceptFailed": "Nem sikerült elfogadni az új kulcsot — próbálja újra"
         }
     },
     "dates": {

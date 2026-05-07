@@ -527,12 +527,12 @@
         },
         "keyChangeBanner": {
             "title": "Шифровъчният ключ на {{name}} се промени",
-            "body": "Изглежда, че този контакт е сменил ключа си за шифроване. Потвърдете новия отпечатък, за да възстановите пълното доверие, или затворете, за да продължите с базово доверие.",
+            "body": "Изглежда, че този контакт е сменил ключа си за шифроване. Можете да потвърдите новия отпечатък, за да възстановите пълното доверие, или да го приемете без проверка, за да продължите с базово доверие.",
             "reVerify": "Провери отново",
-            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
-            "acceptWithoutVerifying": "Accept without verifying",
-            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
-            "acceptFailed": "Couldn't accept the new key — try again"
+            "encryptionBlocked": "Шифроването е спряно за този разговор, докато не разрешите промяната.",
+            "acceptWithoutVerifying": "Приемане без проверка",
+            "acceptedWithoutVerifying": "Новият ключ е приет — контактът не е потвърден",
+            "acceptFailed": "Неуспешно приемане на новия ключ — опитайте отново"
         }
     },
     "dates": {

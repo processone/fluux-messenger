@@ -528,7 +528,7 @@
         },
         "keyChangeBanner": {
             "title": "La clé de chiffrement de {{name}} a changé",
-            "body": "Ce contact semble avoir renouvelé sa clé de chiffrement. Vérifiez la nouvelle empreinte pour restaurer la confiance totale, ou ignorez pour continuer avec une confiance de base.",
+            "body": "Ce contact semble avoir renouvelé sa clé de chiffrement. Vous pouvez vérifier la nouvelle empreinte pour restaurer la confiance totale, ou l'accepter sans vérifier pour continuer avec une confiance de base.",
             "reVerify": "Vérifier et accepter",
             "encryptionBlocked": "Le chiffrement est suspendu pour cette conversation jusqu'à ce que vous résolviez le changement.",
             "acceptWithoutVerifying": "Accepter sans vérifier",

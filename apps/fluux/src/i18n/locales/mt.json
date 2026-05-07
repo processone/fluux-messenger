@@ -529,12 +529,12 @@
         },
         "keyChangeBanner": {
             "title": "Iċ-ċavetta tal-kriptaġġ ta' {{name}} inbidlet",
-            "body": "Jidher li dan il-kuntatt rotta ċ-ċavetta tal-kriptaġġ tiegħu. Ivverifika l-marka tas-saba' l-ġdida biex treġġa' lura l-fiduċja sħiħa, jew warrab biex tkompli b'fiduċja bażika.",
+            "body": "Jidher li dan il-kuntatt biddel iċ-ċavetta tal-kriptaġġ tiegħu. Tista' tivverifika l-marka tas-saba' il-ġdida biex terġa' tistabbilixxi l-fiduċja sħiħa, jew taċċettaha mingħajr ma tivverifika biex tkompli b'fiduċja bażika.",
             "reVerify": "Erġa' vverifika",
-            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
-            "acceptWithoutVerifying": "Accept without verifying",
-            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
-            "acceptFailed": "Couldn't accept the new key — try again"
+            "encryptionBlocked": "Il-kriptaġġ huwa sospiż għal din il-konversazzjoni sakemm tissolva l-bidla.",
+            "acceptWithoutVerifying": "Aċċetta mingħajr verifika",
+            "acceptedWithoutVerifying": "Iċ-ċavetta l-ġdida ġiet aċċettata — il-parti l-oħra mhix ivverifikata",
+            "acceptFailed": "Ma stajtx taċċetta ċ-ċavetta l-ġdida — erġa' pprova"
         }
     },
     "dates": {

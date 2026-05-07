@@ -527,12 +527,12 @@
         },
         "keyChangeBanner": {
             "title": "{{name}}s krypteringsnøgle er ændret",
-            "body": "Det ser ud til, at denne kontakt har roteret sin krypteringsnøgle. Bekræft det nye fingeraftryk for at gendanne fuld tillid, eller afvis for at fortsætte med basistillid.",
+            "body": "Det ser ud til, at denne kontakt har roteret sin krypteringsnøgle. Du kan verificere det nye fingeraftryk for at gendanne fuld tillid, eller acceptere det uden verificering for at fortsætte med basistillid.",
             "reVerify": "Verificer igen",
-            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
-            "acceptWithoutVerifying": "Accept without verifying",
-            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
-            "acceptFailed": "Couldn't accept the new key — try again"
+            "encryptionBlocked": "Kryptering er sat på pause for denne samtale, indtil du løser ændringen.",
+            "acceptWithoutVerifying": "Accepter uden verificering",
+            "acceptedWithoutVerifying": "Ny nøgle accepteret — kontakten er ikke verificeret",
+            "acceptFailed": "Kunne ikke acceptere den nye nøgle — prøv igen"
         }
     },
     "dates": {

@@ -527,12 +527,12 @@
         },
         "keyChangeBanner": {
             "title": "{{name}} 的加密密钥已更改",
-            "body": "此联系人似乎已轮换了其加密密钥。验证新指纹以恢复完全信任，或忽略以继续使用基本信任。",
+            "body": "此联系人似乎已轮换了其加密密钥。您可以验证新指纹以恢复完全信任，或在不验证的情况下接受以继续使用基本信任。",
             "reVerify": "重新验证",
-            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
-            "acceptWithoutVerifying": "Accept without verifying",
-            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
-            "acceptFailed": "Couldn't accept the new key — try again"
+            "encryptionBlocked": "此对话的加密已暂停，直到您处理此更改。",
+            "acceptWithoutVerifying": "不验证直接接受",
+            "acceptedWithoutVerifying": "新密钥已接受 - 对方未验证",
+            "acceptFailed": "无法接受新密钥 - 请重试"
         }
     },
     "dates": {

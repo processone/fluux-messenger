@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AlertTriangle, ShieldCheck, X } from 'lucide-react'
+import { AlertTriangle, ShieldAlert, ShieldCheck } from 'lucide-react'
 import { useXMPPContext } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
@@ -27,10 +27,8 @@ interface KeyChangeBannerProps {
  * - **Verify and accept** — opens {@link VerifyPeerDialog} with the
  *   NEW fingerprint. On confirm, the plugin re-pins, re-probes, and
  *   records a verification entry. Trust stays / becomes `verified`.
- * - **Dismiss (X)** — re-pin without verification (BTBV re-anchor).
- *   Trust drops back to `trusted`; encryption unblocks. Use when
- *   the rotation looks legitimate but a second-channel check isn't
- *   practical right now.
+ * - **Accept without verifying** — re-pin without verification (BTBV
+ *   re-anchor). Trust drops back to `tofu`; encryption unblocks.
  */
 export function KeyChangeBanner({ peerJid, peerName }: KeyChangeBannerProps) {
   const { t } = useTranslation()
@@ -123,17 +121,16 @@ export function KeyChangeBanner({ peerJid, peerName }: KeyChangeBannerProps) {
               <ShieldCheck className="w-3.5 h-3.5" />
               {t('chat.keyChangeBanner.reVerify')}
             </button>
+            <button
+              onClick={handleDismiss}
+              disabled={busy}
+              className="flex items-center gap-1.5 px-3 py-1 text-xs font-medium bg-fluux-hover text-fluux-text hover:bg-fluux-active rounded transition-colors disabled:opacity-50"
+            >
+              <ShieldAlert className="w-3.5 h-3.5" />
+              {t('chat.keyChangeBanner.acceptWithoutVerifying')}
+            </button>
           </div>
         </div>
-        <button
-          onClick={handleDismiss}
-          disabled={busy}
-          className="flex-shrink-0 p-1 text-fluux-muted hover:text-fluux-text rounded hover:bg-fluux-hover transition-colors disabled:opacity-50"
-          aria-label={t('chat.keyChangeBanner.acceptWithoutVerifying')}
-          title={t('chat.keyChangeBanner.acceptWithoutVerifying')}
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
       </div>
 
       {verifyOpen && ownJid && (

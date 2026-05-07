@@ -529,12 +529,12 @@
         },
         "keyChangeBanner": {
             "title": "La chiave di cifratura di {{name}} è cambiata",
-            "body": "Sembra che questo contatto abbia rinnovato la propria chiave di cifratura. Verifica la nuova impronta per ripristinare la piena fiducia, o ignora per continuare con fiducia di base.",
+            "body": "Questo contatto sembra aver ruotato la propria chiave di cifratura. Puoi verificare la nuova impronta per ripristinare la piena fiducia, oppure accettarla senza verificare per continuare con fiducia di base.",
             "reVerify": "Verifica di nuovo",
-            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
-            "acceptWithoutVerifying": "Accept without verifying",
-            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
-            "acceptFailed": "Couldn't accept the new key — try again"
+            "encryptionBlocked": "La cifratura è sospesa per questa conversazione finché non risolvi la modifica.",
+            "acceptWithoutVerifying": "Accetta senza verificare",
+            "acceptedWithoutVerifying": "Nuova chiave accettata — il contatto non è verificato",
+            "acceptFailed": "Impossibile accettare la nuova chiave — riprova"
         }
     },
     "dates": {

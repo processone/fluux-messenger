@@ -529,12 +529,12 @@
         },
         "keyChangeBanner": {
             "title": "Šifrirni ključ uporabnika {{name}} se je spremenil",
-            "body": "Zdi se, da je ta stik zamenjal svoj šifrirni ključ. Preverite novi prstni odtis za obnovitev polnega zaupanja ali zavrzite za nadaljevanje z osnovnim zaupanjem.",
+            "body": "Zdi se, da je ta stik zamenjal svoj šifrirni ključ. Novi prstni odtis lahko preverite za obnovitev polnega zaupanja ali ga sprejmete brez preverjanja za nadaljevanje z osnovnim zaupanjem.",
             "reVerify": "Znova preveri",
-            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
-            "acceptWithoutVerifying": "Accept without verifying",
-            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
-            "acceptFailed": "Couldn't accept the new key — try again"
+            "encryptionBlocked": "Šifriranje je zaustavljeno za ta pogovor, dokler ne razrešite spremembe.",
+            "acceptWithoutVerifying": "Sprejmi brez preverjanja",
+            "acceptedWithoutVerifying": "Nov ključ sprejet — sogovornik ni preverjen",
+            "acceptFailed": "Novega ključa ni bilo mogoče sprejeti — poskusite znova"
         }
     },
     "dates": {

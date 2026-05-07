@@ -529,12 +529,12 @@
         },
         "keyChangeBanner": {
             "title": "A chave de cifragem de {{name}} mudou",
-            "body": "Parece que este contacto rodou a sua chave de cifragem. Verifica a nova impressão digital para restaurar a confiança total, ou dispensa para continuar com confiança básica.",
+            "body": "Parece que este contacto rodou a sua chave de cifragem. Podes verificar a nova impressão digital para restaurar a confiança total, ou aceitar sem verificar para continuar com confiança básica.",
             "reVerify": "Verificar novamente",
-            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
-            "acceptWithoutVerifying": "Accept without verifying",
-            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
-            "acceptFailed": "Couldn't accept the new key — try again"
+            "encryptionBlocked": "A cifragem está pausada para esta conversa até resolveres a alteração.",
+            "acceptWithoutVerifying": "Aceitar sem verificar",
+            "acceptedWithoutVerifying": "Nova chave aceite — contacto não verificado",
+            "acceptFailed": "Não foi possível aceitar a nova chave — tenta novamente"
         }
     },
     "dates": {

@@ -527,12 +527,12 @@
         },
         "keyChangeBanner": {
             "title": "Ключ шифрования {{name}} изменился",
-            "body": "Похоже, этот контакт сменил свой ключ шифрования. Подтвердите новый отпечаток для восстановления полного доверия или закройте, чтобы продолжить с базовым доверием.",
+            "body": "Похоже, этот контакт сменил свой ключ шифрования. Вы можете проверить новый отпечаток для восстановления полного доверия или принять его без проверки, чтобы продолжить с базовым доверием.",
             "reVerify": "Проверить заново",
-            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
-            "acceptWithoutVerifying": "Accept without verifying",
-            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
-            "acceptFailed": "Couldn't accept the new key — try again"
+            "encryptionBlocked": "Шифрование приостановлено для этой беседы, пока вы не разрешите изменение.",
+            "acceptWithoutVerifying": "Принять без проверки",
+            "acceptedWithoutVerifying": "Новый ключ принят — собеседник не проверен",
+            "acceptFailed": "Не удалось принять новый ключ — попробуйте снова"
         }
     },
     "dates": {

@@ -527,7 +527,7 @@
         },
         "keyChangeBanner": {
             "title": "{{name}}'s encryption key has changed",
-            "body": "This contact appears to have rotated their encryption key. Verify the new fingerprint to restore full trust, or dismiss to continue with basic trust.",
+            "body": "This contact appears to have rotated their encryption key. You can verify the new fingerprint to restore full trust, or accept it without verifying to continue with basic trust.",
             "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
             "reVerify": "Verify and accept",
             "acceptWithoutVerifying": "Accept without verifying",

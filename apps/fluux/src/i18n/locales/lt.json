@@ -527,12 +527,12 @@
         },
         "keyChangeBanner": {
             "title": "{{name}} šifravimo raktas pasikeitė",
-            "body": "Atrodo, kad šis kontaktas pakeitė savo šifravimo raktą. Patvirtinkite naują pirštų atspaudą, kad atgautumėte visišką pasitikėjimą, arba atmeskite, kad tęstumėte su pagrindiniu pasitikėjimu.",
+            "body": "Atrodo, kad šis kontaktas pakeitė savo šifravimo raktą. Galite patvirtinti naują pirštų atspaudą, kad atkurtumėte visišką pasitikėjimą, arba priimti jį nepatvirtinus, kad tęstumėte su pagrindiniu pasitikėjimu.",
             "reVerify": "Patvirtinti iš naujo",
-            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
-            "acceptWithoutVerifying": "Accept without verifying",
-            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
-            "acceptFailed": "Couldn't accept the new key — try again"
+            "encryptionBlocked": "Šifravimas pristabdytas šiam pokalbiui, kol neišspręsite pakeitimo.",
+            "acceptWithoutVerifying": "Priimti nepatvirtinus",
+            "acceptedWithoutVerifying": "Naujas raktas priimtas — kontaktas nepatvirtintas",
+            "acceptFailed": "Nepavyko priimti naujo rakto — bandykite dar kartą"
         }
     },
     "dates": {

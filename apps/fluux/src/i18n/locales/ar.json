@@ -527,12 +527,12 @@
         },
         "keyChangeBanner": {
             "title": "تغيّر مفتاح التشفير الخاص بـ {{name}}",
-            "body": "يبدو أن هذا المستخدم قد غيّر مفتاح تشفيره. تحقق من البصمة الجديدة لاستعادة الثقة الكاملة، أو تجاهل للاستمرار بثقة أساسية.",
+            "body": "يبدو أن جهة الاتصال هذه قد قامت بتدوير مفتاح التشفير الخاص بها. يمكنك التحقق من البصمة الجديدة لاستعادة الثقة الكاملة، أو قبولها دون التحقق للاستمرار بثقة أساسية.",
             "reVerify": "إعادة التحقق",
-            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
-            "acceptWithoutVerifying": "Accept without verifying",
-            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
-            "acceptFailed": "Couldn't accept the new key — try again"
+            "encryptionBlocked": "التشفير متوقف مؤقتًا لهذه المحادثة حتى تقوم بحل التغيير.",
+            "acceptWithoutVerifying": "قبول بدون تحقق",
+            "acceptedWithoutVerifying": "تم قبول المفتاح الجديد — الطرف الآخر غير موثّق",
+            "acceptFailed": "تعذّر قبول المفتاح الجديد — حاول مرة أخرى"
         }
     },
     "dates": {

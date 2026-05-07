@@ -527,12 +527,12 @@
         },
         "keyChangeBanner": {
             "title": "Šifrirajući ključ korisnika {{name}} je promijenjen",
-            "body": "Čini se da je ovaj kontakt zamijenio svoj ključ za šifriranje. Potvrdite novi otisak za obnavljanje potpunog povjerenja ili odbacite kako biste nastavili s osnovnim povjerenjem.",
+            "body": "Čini se da je ovaj kontakt rotirao svoj ključ za šifriranje. Možete potvrditi novi otisak kako biste vratili potpuno povjerenje ili ga prihvatiti bez provjere kako biste nastavili s osnovnim povjerenjem.",
             "reVerify": "Ponovno provjeri",
-            "encryptionBlocked": "Encryption is paused for this conversation until you resolve the change.",
-            "acceptWithoutVerifying": "Accept without verifying",
-            "acceptedWithoutVerifying": "New key accepted — peer is unverified",
-            "acceptFailed": "Couldn't accept the new key — try again"
+            "encryptionBlocked": "Šifriranje je pauzirano za ovaj razgovor dok ne riješite promjenu.",
+            "acceptWithoutVerifying": "Prihvati bez provjere",
+            "acceptedWithoutVerifying": "Novi ključ prihvaćen — sugovornik nije provjeren",
+            "acceptFailed": "Nije moguće prihvatiti novi ključ — pokušajte ponovno"
         }
     },
     "dates": {
