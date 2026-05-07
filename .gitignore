@@ -60,6 +60,7 @@ server/
 .aider/
 .cursor/
 .codeium/
+AGENTS.md
 
 # Gas Town (added by gt)
 .runtime/
