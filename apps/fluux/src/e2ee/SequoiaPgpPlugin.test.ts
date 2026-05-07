@@ -51,6 +51,70 @@ function decodeBodyFromPayload(plaintext: Uint8Array): string {
   return body?.text() ?? ''
 }
 
+function bytesToBinaryString(bytes: Uint8Array): string {
+  const chunks: string[] = []
+  const chunkSize = 0x8000
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    chunks.push(String.fromCharCode(...bytes.subarray(i, i + chunkSize)))
+  }
+  return chunks.join('')
+}
+
+function base64EncodeBytes(bytes: Uint8Array): string {
+  return btoa(bytesToBinaryString(bytes))
+}
+
+function base64DecodeBytes(encoded: string): Uint8Array {
+  const binary = atob(encoded.replace(/\s+/g, ''))
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return bytes
+}
+
+function wrapBase64(input: string): string {
+  const lines: string[] = []
+  for (let i = 0; i < input.length; i += 64) lines.push(input.slice(i, i + 64))
+  return lines.join('\n')
+}
+
+function makeOpenPgpArmor(blockType: string, raw: string | Uint8Array): string {
+  const bytes = typeof raw === 'string' ? new TextEncoder().encode(raw) : raw
+  return `-----BEGIN ${blockType}-----\n\n${wrapBase64(base64EncodeBytes(bytes))}\n-----END ${blockType}-----`
+}
+
+function dearmorOpenPgpBlockForTest(armored: string): Uint8Array | null {
+  const lines = armored.replace(/\r\n/g, '\n').split('\n')
+  const begin = lines.findIndex((line) => /^-----BEGIN PGP [^-]+-----$/.test(line.trim()))
+  if (begin < 0) return null
+  const end = lines.findIndex(
+    (line, index) => index > begin && /^-----END PGP [^-]+-----$/.test(line.trim()),
+  )
+  if (end < 0) return null
+  const body: string[] = []
+  let afterHeaders = false
+  for (let i = begin + 1; i < end; i++) {
+    const line = lines[i].trim()
+    if (!afterHeaders) {
+      if (line === '') afterHeaders = true
+      continue
+    }
+    if (line === '' || line.startsWith('=')) continue
+    body.push(line)
+  }
+  return body.length > 0 ? base64DecodeBytes(body.join('')) : null
+}
+
+function readOpenPgpArmorPayloadForTest(armored: string): string {
+  const raw = dearmorOpenPgpBlockForTest(armored)
+  return raw ? new TextDecoder().decode(raw) : armored
+}
+
+function encodeOpenPgpArmorForXep0373(armored: string): string {
+  const raw = dearmorOpenPgpBlockForTest(armored)
+  if (!raw) throw new Error('test helper expected ASCII-armored OpenPGP block')
+  return base64EncodeBytes(raw)
+}
+
 // Mirrors the Rust-side `PublicKeyInfo` IPC DTO — the secret-key armor
 // stays in the Rust process and never crosses the Tauri boundary.
 interface KeyBundle {
@@ -70,11 +134,15 @@ function makeFakeRust() {
   let nextFingerprint = 1
   const accounts = new Map<string, KeyBundle>()
 
-  const makeArmored = (header: string, footer: string, fp: string, uid: string, kind: string) =>
-    `${header}\n${FINGERPRINT_TAG} ${fp}\nUID: ${uid}\nKind: ${kind}\n${footer}`
+  const makeArmored = (fp: string, uid: string, kind: string, rotation = 0) =>
+    makeOpenPgpArmor(
+      'PGP PUBLIC KEY BLOCK',
+      `${FINGERPRINT_TAG} ${fp}\nUID: ${uid}\nKind: ${kind}\nRotation: ${rotation}\n`,
+    )
 
   const extractFingerprint = (armored: string): string | null => {
-    for (const line of armored.split('\n')) {
+    const payload = readOpenPgpArmorPayloadForTest(armored)
+    for (const line of payload.split('\n')) {
       if (line.startsWith(FINGERPRINT_TAG)) return line.slice(FINGERPRINT_TAG.length).trim()
     }
     return null
@@ -82,10 +150,16 @@ function makeFakeRust() {
 
   const UID_TAG = 'UID:'
   const extractUID = (armored: string): string | null => {
-    for (const line of armored.split('\n')) {
+    const payload = readOpenPgpArmorPayloadForTest(armored)
+    for (const line of payload.split('\n')) {
       if (line.startsWith(UID_TAG)) return line.slice(UID_TAG.length).trim()
     }
     return null
+  }
+
+  const extractRotation = (armored: string): number => {
+    const payload = readOpenPgpArmorPayloadForTest(armored)
+    return Number(payload.match(/Rotation: (\d+)/)?.[1] ?? 0)
   }
 
   const invoke: InvokeFn = async <T>(cmd: string, args?: Record<string, unknown>) => {
@@ -97,13 +171,7 @@ function makeFakeRust() {
         const userId = args!.userId as string
         const bundle: KeyBundle = {
           fingerprint: fp,
-          publicArmored: makeArmored(
-            '-----BEGIN PGP PUBLIC KEY BLOCK (STUB)-----',
-            '-----END PGP PUBLIC KEY BLOCK (STUB)-----',
-            fp,
-            userId,
-            'public',
-          ),
+          publicArmored: makeArmored(fp, userId, 'public'),
           // Mock the happy path — the real Rust impl surfaces `false` when
           // the keychain is unavailable. Individual tests that want to
           // exercise the fallback warning path can override.
@@ -121,13 +189,16 @@ function makeFakeRust() {
         const encoded = btoa(unescape(encodeURIComponent(args!.plaintext as string)))
         // Embed both fingerprints so decrypt can simulate signcrypt:
         //   OPENPGP-STUB:<recipientFp>:<senderFp>:<base64-plaintext>
-        return `${STUB_ENCRYPT_PREFIX}${recipientFp}:${senderBundle.fingerprint}:${encoded}` as T
+        return makeOpenPgpArmor(
+          'PGP MESSAGE',
+          `${STUB_ENCRYPT_PREFIX}${recipientFp}:${senderBundle.fingerprint}:${encoded}`,
+        ) as T
       }
       case 'openpgp_decrypt': {
         const jid = args!.accountJid as string
         const bundle = accounts.get(jid)
         if (!bundle) throw new Error(`no key for ${jid}`)
-        const ciphertext = args!.ciphertext as string
+        const ciphertext = readOpenPgpArmorPayloadForTest(args!.ciphertext as string)
         if (!ciphertext.startsWith(STUB_ENCRYPT_PREFIX)) throw new Error('not a stub ciphertext')
         const parts = ciphertext.slice(STUB_ENCRYPT_PREFIX.length).split(':')
         if (parts.length !== 3) {
@@ -203,16 +274,15 @@ function makeFakeRust() {
         // differs (a real rotation adds a fresh [E] subkey packet + a
         // new binding signature), so we regenerate the placeholder with
         // a rotation counter the tests can inspect.
-        const prevRotation = Number(current.publicArmored.match(/Rotation: (\d+)/)?.[1] ?? 0)
+        const prevRotation = extractRotation(current.publicArmored)
         const rotated: KeyBundle = {
           ...current,
-          publicArmored: `${makeArmored(
-            '-----BEGIN PGP PUBLIC KEY BLOCK (STUB)-----',
-            '-----END PGP PUBLIC KEY BLOCK (STUB)-----',
+          publicArmored: makeArmored(
             current.fingerprint,
             `xmpp:${jid}`,
             'public',
-          )}\nRotation: ${prevRotation + 1}`,
+            prevRotation + 1,
+          ),
         }
         accounts.set(jid, rotated)
         return rotated as T
@@ -232,13 +302,7 @@ function makeFakeRust() {
         // this JID with the imported one.
         const bundle: KeyBundle = {
           fingerprint: fp,
-          publicArmored: makeArmored(
-            '-----BEGIN PGP PUBLIC KEY BLOCK (STUB)-----',
-            '-----END PGP PUBLIC KEY BLOCK (STUB)-----',
-            fp,
-            `xmpp:${jid}`,
-            'public',
-          ),
+          publicArmored: makeArmored(fp, `xmpp:${jid}`, 'public'),
           keychainBacked: true,
         }
         accounts.set(jid, bundle)
@@ -281,7 +345,7 @@ function publishKeyAsXep0373(
         {
           name: 'data',
           attrs: {},
-          children: [btoa(unescape(encodeURIComponent(bundle.publicArmored)))],
+          children: [encodeOpenPgpArmorForXep0373(bundle.publicArmored)],
         },
       ],
     },
@@ -481,6 +545,11 @@ describe('SequoiaPgpPlugin', () => {
       // what XEP-0373 §4.1.2.1 mandates (the original slice was missing it).
       const dataChild = findChild(dataPub.item.payload, 'data')
       expect(dataChild).toBeDefined()
+      const encodedPublicKey = dataChild!.children[0]
+      expect(typeof encodedPublicKey).toBe('string')
+      const rawPublicKey = new TextDecoder().decode(base64DecodeBytes(encodedPublicKey as string))
+      expect(rawPublicKey).toContain(`Fingerprint: ${fp}`)
+      expect(rawPublicKey).not.toContain('-----BEGIN PGP PUBLIC KEY BLOCK-----')
 
       expect(metaPub.node).toBe('urn:xmpp:openpgp:0:public-keys')
       expect(metaPub.item.id).toBe('current')
@@ -741,11 +810,14 @@ describe('SequoiaPgpPlugin', () => {
         userId: 'xmpp:me@example.com',
       })
       // Simulate what another device published after running rotateEncryptionKey():
-      // same primary fingerprint, but different armored content. We build the
-      // "rotated" armored by appending a rotation marker WITHOUT calling
-      // openpgp_rotate_encryption_subkey — that would update the Rust-side
-      // cache and make init see the rotated key locally, defeating the test.
-      const serverArmoredAfterRotation = bundle.publicArmored + '\nRotation: 1'
+      // same primary fingerprint, but different raw key packets. We build the
+      // "rotated" armor WITHOUT calling openpgp_rotate_encryption_subkey — that
+      // would update the Rust-side cache and make init see the rotated key
+      // locally, defeating the test.
+      const serverArmoredAfterRotation = makeOpenPgpArmor(
+        'PGP PUBLIC KEY BLOCK',
+        readOpenPgpArmorPayloadForTest(bundle.publicArmored).replace('Rotation: 0', 'Rotation: 1'),
+      )
 
       // Metadata matches our local fingerprint — no primary mismatch.
       peerPublish('me@example.com', METADATA_NODE, {
@@ -776,7 +848,7 @@ describe('SequoiaPgpPlugin', () => {
             {
               name: 'data',
               attrs: {},
-              children: [btoa(unescape(encodeURIComponent(serverArmoredAfterRotation)))],
+              children: [encodeOpenPgpArmorForXep0373(serverArmoredAfterRotation)],
             },
           ],
         },
@@ -999,7 +1071,7 @@ describe('SequoiaPgpPlugin', () => {
             {
               name: 'data',
               attrs: {},
-              children: [btoa(unescape(encodeURIComponent(realBundle.publicArmored)))],
+              children: [encodeOpenPgpArmorForXep0373(realBundle.publicArmored)],
             },
           ],
         },
@@ -1064,7 +1136,7 @@ describe('SequoiaPgpPlugin', () => {
             {
               name: 'data',
               attrs: {},
-              children: [btoa(unescape(encodeURIComponent(bobBundle.publicArmored)))],
+              children: [encodeOpenPgpArmorForXep0373(bobBundle.publicArmored)],
             },
           ],
         },
@@ -1075,53 +1147,29 @@ describe('SequoiaPgpPlugin', () => {
       expect(plugin.getPeerFingerprint('bob@example.com')).toBe(bobBundle.fingerprint)
     })
 
-    it('does not parse the armor in JS — delegates fingerprint extraction to Rust', async () => {
-      // Regression: the plugin used to read the fingerprint from a
-      // `Fingerprint:` line in the armor. That worked for our own
-      // generated keys but silently failed for peers whose armor carries
-      // the fingerprint in a `Comment:` header instead (what real
-      // Sequoia-produced RFC 9580 v6 keys emit). Result: probe returned
-      // `unsupported` for keys we could actually use, and the composer
-      // chip never surfaced the peer's OpenPGP support.
-      //
-      // The fix routes fingerprint extraction through
-      // `openpgp_fingerprint` so Sequoia — which parses any valid armor
-      // flavor — is the sole authority. Pin that contract: publish a
-      // peer armor that has NO `Fingerprint:` line, wire Rust to
-      // recognize the armor via its `Comment:` header, and verify probe
-      // resolves successfully.
+    it('accepts XEP-0373 raw public-key bytes from the data node', async () => {
+      // Regression guard for Gajim/Dino interop: the data node carries
+      // Base64(raw OpenPGP packets), not Base64(ASCII armor). The plugin
+      // must re-armor those bytes before handing them to the crypto backend.
       const built = makeContext('me@example.com')
       await plugin.init(built.ctx)
 
-      const COMMENT_FP = 'COMMENTFPFORREALSEQUOIAKEY0000000000'
-      const commentStyleArmor = [
-        '-----BEGIN PGP PUBLIC KEY BLOCK-----',
-        `Comment: ${COMMENT_FP}`,
-        'Comment: bob@example.com',
-        '',
-        'xioGfakebase64body==',
-        '-----END PGP PUBLIC KEY BLOCK-----',
-      ].join('\n')
+      const RAW_FP = 'RAWPACKETFPFORGajimInterop0000000000'
+      const rawOpenPgpPacket = new Uint8Array([0xc6, 0x33, 0x04, 0x69, 0xee, 0x37, 0xd2])
 
-      // Wrap the fake invoke so `openpgp_validate_cert` teaches it about
-      // the Comment-style header — mirrors the Rust side's reality.
       const wrappedInvoke: InvokeFn = async <T>(
         cmd: string,
         args?: Record<string, unknown>,
       ) => {
         if (cmd === 'openpgp_validate_cert') {
           const armored = args!.publicArmored as string
-          let fp: string | null = null
-          const uids: string[] = []
-          for (const line of armored.split('\n')) {
-            if (line.startsWith('Comment:')) {
-              const candidate = line.slice('Comment:'.length).trim()
-              if (/^[0-9A-Z]+$/i.test(candidate)) fp = candidate
-              else if (candidate.includes('@')) uids.push(`xmpp:${candidate}`)
-            }
-          }
-          if (!fp) throw new Error('not a recognizable OpenPGP public key')
-          return { fingerprint: fp, encryptionSubkeyCount: 1, userIDs: uids } as T
+          expect(armored).toMatch(/^-----BEGIN PGP PUBLIC KEY BLOCK-----/)
+          expect(dearmorOpenPgpBlockForTest(armored)).toEqual(rawOpenPgpPacket)
+          return {
+            fingerprint: RAW_FP,
+            encryptionSubkeyCount: 1,
+            userIDs: ['xmpp:bob@example.com'],
+          } as T
         }
         return fake.invoke<T>(cmd, args)
       }
@@ -1136,13 +1184,13 @@ describe('SequoiaPgpPlugin', () => {
           children: [
             {
               name: 'pubkey-metadata',
-              attrs: { 'v4-fingerprint': COMMENT_FP, date: '2024-01-01T00:00:00Z' },
+              attrs: { 'v4-fingerprint': RAW_FP, date: '2024-01-01T00:00:00Z' },
               children: [],
             },
           ],
         },
       })
-      built.peerPublish('bob@example.com', dataNodeFor(COMMENT_FP), {
+      built.peerPublish('bob@example.com', dataNodeFor(RAW_FP), {
         id: 'current',
         payload: {
           name: 'pubkey',
@@ -1151,7 +1199,7 @@ describe('SequoiaPgpPlugin', () => {
             {
               name: 'data',
               attrs: {},
-              children: [btoa(unescape(encodeURIComponent(commentStyleArmor)))],
+              children: [base64EncodeBytes(rawOpenPgpPacket)],
             },
           ],
         },
@@ -1159,7 +1207,52 @@ describe('SequoiaPgpPlugin', () => {
 
       const support = await pluginUnderTest.probePeer('bob@example.com')
       expect(support.supported).toBe(true)
-      expect(pluginUnderTest.getPeerFingerprint('bob@example.com')).toBe(COMMENT_FP)
+      expect(pluginUnderTest.getPeerFingerprint('bob@example.com')).toBe(RAW_FP)
+    })
+
+    it('rejects the legacy Fluux public-key data shape', async () => {
+      // We intentionally no longer accept Base64(ASCII armor) in the
+      // XEP-0373 public-key data node. Keeping this unsupported avoids
+      // papering over non-compliant publishes and makes interop failures
+      // obvious during testing.
+      const built = makeContext('me@example.com')
+      await plugin.init(built.ctx)
+      const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'bob@example.com',
+        userId: 'xmpp:bob@example.com',
+      })
+      built.peerPublish('bob@example.com', METADATA_NODE, {
+        id: 'current',
+        payload: {
+          name: 'public-keys-list',
+          attrs: { xmlns: OX_NS },
+          children: [
+            {
+              name: 'pubkey-metadata',
+              attrs: { 'v4-fingerprint': bobBundle.fingerprint, date: '2024-01-01T00:00:00Z' },
+              children: [],
+            },
+          ],
+        },
+      })
+      built.peerPublish('bob@example.com', dataNodeFor(bobBundle.fingerprint), {
+        id: 'current',
+        payload: {
+          name: 'pubkey',
+          attrs: { xmlns: OX_NS },
+          children: [
+            {
+              name: 'data',
+              attrs: {},
+              children: [btoa(unescape(encodeURIComponent(bobBundle.publicArmored)))],
+            },
+          ],
+        },
+      })
+
+      const support = await plugin.probePeer('bob@example.com')
+      expect(support.supported).toBe(false)
+      expect(plugin.getPeerFingerprint('bob@example.com')).toBeNull()
     })
 
     it('matches fingerprints case-insensitively across advertised-vs-Rust', async () => {
@@ -1204,7 +1297,7 @@ describe('SequoiaPgpPlugin', () => {
               // The body's `Fingerprint:` line still carries the
               // original (fake-lowercase) casing — forcing the match
               // check to normalize.
-              children: [btoa(unescape(encodeURIComponent(bobBundle.publicArmored)))],
+              children: [encodeOpenPgpArmorForXep0373(bobBundle.publicArmored)],
             },
           ],
         },
@@ -1318,7 +1411,7 @@ describe('SequoiaPgpPlugin', () => {
             {
               name: 'data',
               attrs: {},
-              children: [btoa(unescape(encodeURIComponent(bobBundle.publicArmored)))],
+              children: [encodeOpenPgpArmorForXep0373(bobBundle.publicArmored)],
             },
           ],
         },
@@ -1841,7 +1934,7 @@ describe('SequoiaPgpPlugin', () => {
                   {
                     name: 'data',
                     attrs: {},
-                    children: [btoa(unescape(encodeURIComponent(evePubkey.publicArmored)))],
+                    children: [encodeOpenPgpArmorForXep0373(evePubkey.publicArmored)],
                   },
                 ],
               },
@@ -1880,6 +1973,8 @@ describe('SequoiaPgpPlugin', () => {
       // exact plaintext Alice handed to Rust.
       const encoded = payload.stanzaElement.children[0] as string
       const ciphertext = decodeURIComponent(escape(atob(encoded)))
+      expect(ciphertext).toMatch(/^OPENPGP-STUB:/)
+      expect(ciphertext).not.toContain('-----BEGIN PGP MESSAGE-----')
       // Stub shape: `OPENPGP-STUB:<recipientFp>:<senderFp>:<base64-of-envelope>`
       const envelopeB64 = ciphertext.split(':').slice(3).join(':')
       const envelope = decodeURIComponent(escape(atob(envelopeB64)))
@@ -2879,7 +2974,7 @@ describe('SequoiaPgpPlugin', () => {
                   {
                     name: 'data',
                     attrs: {},
-                    children: [btoa(unescape(encodeURIComponent(bundle.publicArmored)))],
+                    children: [encodeOpenPgpArmorForXep0373(bundle.publicArmored)],
                   },
                 ],
               },
@@ -3161,7 +3256,10 @@ describe('SequoiaPgpPlugin', () => {
       const fp = 'FP_SYNC_TEST'
       fake.accounts.set('me@example.com', {
         fingerprint: fp,
-        publicArmored: `-----BEGIN PGP PUBLIC KEY BLOCK (STUB)-----\nFingerprint: ${fp}\nUID: me@example.com\nKind: public\n-----END PGP PUBLIC KEY BLOCK (STUB)-----`,
+        publicArmored: makeOpenPgpArmor(
+          'PGP PUBLIC KEY BLOCK',
+          `Fingerprint: ${fp}\nUID: xmpp:me@example.com\nKind: public\nRotation: 0\n`,
+        ),
         keychainBacked: true,
       })
       peerPublish(
@@ -3215,7 +3313,10 @@ describe('SequoiaPgpPlugin', () => {
       const fp = 'FP_MERGE_TEST'
       fake.accounts.set('me@example.com', {
         fingerprint: fp,
-        publicArmored: `-----BEGIN PGP PUBLIC KEY BLOCK (STUB)-----\nFingerprint: ${fp}\nUID: me@example.com\nKind: public\n-----END PGP PUBLIC KEY BLOCK (STUB)-----`,
+        publicArmored: makeOpenPgpArmor(
+          'PGP PUBLIC KEY BLOCK',
+          `Fingerprint: ${fp}\nUID: xmpp:me@example.com\nKind: public\nRotation: 0\n`,
+        ),
         keychainBacked: true,
       })
       await plugin.init(ctx)
@@ -3247,7 +3348,10 @@ describe('SequoiaPgpPlugin', () => {
         const fp = 'FP_GUARD_TEST'
         fake.accounts.set('me@example.com', {
           fingerprint: fp,
-          publicArmored: `-----BEGIN PGP PUBLIC KEY BLOCK (STUB)-----\nFingerprint: ${fp}\nUID: me@example.com\nKind: public\n-----END PGP PUBLIC KEY BLOCK (STUB)-----`,
+          publicArmored: makeOpenPgpArmor(
+            'PGP PUBLIC KEY BLOCK',
+            `Fingerprint: ${fp}\nUID: xmpp:me@example.com\nKind: public\nRotation: 0\n`,
+          ),
           keychainBacked: true,
         })
         await plugin.init(ctx)

@@ -1478,20 +1478,16 @@ function base64Decode(encoded: string): string {
 /**
  * XEP-0373 carries raw OpenPGP packet bytes in XML as Base64, not ASCII armor.
  * Our crypto backends still exchange armored strings internally, so this is
- * the boundary adapter in both directions. It also accepts the old Fluux wire
- * shape (Base64 of armor) so historical messages and published keys remain
- * readable while new output is spec-compliant.
+ * the boundary adapter in both directions.
  */
-function base64EncodeOpenPgpBlock(armoredOrLegacyText: string): string {
-  const raw = dearmorOpenPgpBlock(armoredOrLegacyText)
-  return bytesToBase64(raw ?? new TextEncoder().encode(armoredOrLegacyText))
+function base64EncodeOpenPgpBlock(armored: string): string {
+  const raw = dearmorOpenPgpBlock(armored)
+  if (!raw) throw new Error('Expected an ASCII-armored OpenPGP block')
+  return bytesToBase64(raw)
 }
 
 function base64DecodeOpenPgpBlock(encoded: string, blockType: string): string {
   const raw = base64ToBytes(encoded)
-  const text = decodeUtf8Strict(raw)
-  if (text !== null && text.startsWith('-----BEGIN PGP ')) return text
-  if (text !== null && !looksLikeOpenPgpPacket(raw)) return text
   return armorOpenPgpBlock(raw, blockType)
 }
 
@@ -1532,18 +1528,6 @@ function dearmorOpenPgpBlock(armored: string): Uint8Array | null {
 function armorOpenPgpBlock(raw: Uint8Array, blockType: string): string {
   const body = wrapBase64(bytesToBase64(raw))
   return `-----BEGIN ${blockType}-----\n\n${body}\n=${crc24Base64(raw)}\n-----END ${blockType}-----`
-}
-
-function looksLikeOpenPgpPacket(bytes: Uint8Array): boolean {
-  return bytes.length > 0 && (bytes[0] & 0x80) !== 0
-}
-
-function decodeUtf8Strict(bytes: Uint8Array): string | null {
-  try {
-    return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
-  } catch {
-    return null
-  }
 }
 
 function base64ToBytes(encoded: string): Uint8Array {
