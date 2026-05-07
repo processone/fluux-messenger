@@ -1181,12 +1181,10 @@ fn main() {
             // the disk check avoids speculatively GENERATING a new key
             // for users who never opted into E2EE.
             //
-            // This runs on tokio's blocking pool to keep setup()
+            // This runs on Tauri's blocking pool to keep setup()
             // non-blocking. `prewarm_if_persisted` itself is cheap (just
             // a file-exists check); the Argon2id work it spawns runs on
-            // tokio's blocking pool too. Must run inside a tokio runtime
-            // context because `prewarm` calls `tokio::spawn` internally —
-            // a raw `std::thread::spawn` panics with "no reactor running".
+            // Tauri's blocking pool too.
             let prewarm_state = Arc::clone(&openpgp_state);
             tauri::async_runtime::spawn_blocking(move || {
                 let entry = match keyring::Entry::new(KEYRING_SERVICE, "last_user") {

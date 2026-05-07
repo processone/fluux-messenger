@@ -142,7 +142,7 @@ pub struct DecryptOutput {
 ///
 /// The CPU-bound part of [`Self::ensure_key`] (Argon2id key-derivation,
 /// one call per secret packet — ~500 ms total on M-series hardware) runs
-/// on [`tokio::task::spawn_blocking`] so the Tauri IPC thread stays
+/// on [`tauri::async_runtime::spawn_blocking`] so the Tauri IPC thread stays
 /// responsive while we unlock. The async `ensure_key` Tauri command is
 /// what surfaces that; the sync commands (`encrypt`, `decrypt`, etc.)
 /// only do cheap in-memory lookups against the already-populated cell.
@@ -223,13 +223,13 @@ impl OpenpgpState {
             .get_or_init(|| async move {
                 #[cfg(test)]
                 counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                tokio::task::spawn_blocking(move || {
+                tauri::async_runtime::spawn_blocking(move || {
                     Self::run_blocking(&storage, &jid_for_task, &user_id_for_task)
                 })
                 .await
                 .unwrap_or_else(|join_err| {
                     // A panic on the blocking thread maps to a clean
-                    // error here rather than bubbling up as a JoinError.
+                    // error here rather than bubbling up as a join error.
                     Err(format!("openpgp unlock task panicked: {join_err}"))
                 })
             })
@@ -277,7 +277,7 @@ impl OpenpgpState {
             }
         }
         let this = Arc::clone(self);
-        tokio::spawn(async move {
+        tauri::async_runtime::spawn(async move {
             match this.ensure_key(account_jid.clone(), user_id).await {
                 Ok(bundle) => tracing::info!(
                     "openpgp prewarm: key ready for {} ({})",
@@ -346,7 +346,7 @@ impl OpenpgpState {
         passphrase: String,
     ) -> Result<String, String> {
         let bundle = self.read_cached_bundle(&account_jid, "account")?;
-        tokio::task::spawn_blocking(move || {
+        tauri::async_runtime::spawn_blocking(move || {
             crate::openpgp_backup::encrypt_tsk_with_passphrase(
                 &bundle.secret_armored,
                 &passphrase,
@@ -374,7 +374,7 @@ impl OpenpgpState {
         passphrase: String,
     ) -> Result<KeyBundle, String> {
         let this = Arc::clone(self);
-        tokio::task::spawn_blocking(move || {
+        tauri::async_runtime::spawn_blocking(move || {
             let tsk_armored = crate::openpgp_backup::decrypt_tsk_with_passphrase(
                 &backup_message,
                 &passphrase,
@@ -422,7 +422,7 @@ impl OpenpgpState {
     ) -> Result<KeyBundle, String> {
         let bundle = self.read_cached_bundle(&account_jid, "account")?;
         let this = Arc::clone(self);
-        tokio::task::spawn_blocking(move || {
+        tauri::async_runtime::spawn_blocking(move || {
             let current = Cert::from_bytes(bundle.secret_armored.as_bytes())
                 .map_err(|e| format!("parse current cert for rotation: {e}"))?;
             let rotated = rotate_encryption_subkey(current).map_err(anyhow_to_string)?;
@@ -484,7 +484,7 @@ impl OpenpgpState {
     }
 
     /// The actual CPU-bound work: load-or-generate + persist. Pulled
-    /// out of the method body so [`tokio::task::spawn_blocking`] can
+    /// out of the method body so [`tauri::async_runtime::spawn_blocking`] can
     /// run it on a dedicated worker thread without capturing `&self`.
     fn run_blocking(storage: &KeyStorage, jid: &str, user_id: &str) -> Result<KeyBundle, String> {
         if let Some(persisted) = storage.load(jid).map_err(anyhow_to_string)? {
@@ -619,10 +619,8 @@ pub async fn openpgp_ensure_key(
 /// already-warm cache. Typically invoked the moment the user submits
 /// the login form, overlapping the KDF with XMPP handshake round-trips.
 ///
-/// `async fn` (not `fn`) so Tauri dispatches the body on
-/// `tauri::async_runtime` — `OpenpgpState::prewarm` calls
-/// `tokio::spawn` internally, and a sync command would run on the main
-/// thread where that panics with "there is no reactor running".
+/// `OpenpgpState::prewarm` schedules work through Tauri's async
+/// runtime so callers do not need to be inside a current Tokio reactor.
 #[tauri::command]
 pub async fn openpgp_prewarm(
     account_jid: String,
@@ -1560,6 +1558,28 @@ mod tests {
             state.blocking_run_count(),
             1,
             "prewarm + ensure_key must coalesce"
+        );
+    }
+
+    /// Boot setup can call prewarm from a blocking thread, where there
+    /// is no current Tokio reactor. The state should still schedule on
+    /// Tauri's global async runtime instead of panicking.
+    #[test]
+    fn prewarm_can_start_without_current_tokio_reactor() {
+        let state = Arc::new(OpenpgpState::for_testing(fresh_tmp_dir()));
+
+        state.prewarm("alice@example.com".into(), "Alice".into());
+
+        let bundle = tauri::async_runtime::block_on(
+            state.ensure_key("alice@example.com".into(), "Alice".into()),
+        )
+        .unwrap();
+        let expected_fp_len = if super::USE_V6_KEYS { 64 } else { 40 };
+        assert_eq!(bundle.fingerprint.len(), expected_fp_len);
+        assert_eq!(
+            state.blocking_run_count(),
+            1,
+            "prewarm + ensure_key must coalesce outside a current reactor"
         );
     }
 
