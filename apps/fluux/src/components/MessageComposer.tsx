@@ -827,8 +827,8 @@ export function MessageComposer({
             <Send className="rtl-mirror w-5 h-5" />
             {encryptionState?.kind === 'encrypted' && (
               encryptionState.trust === 'verified'
-                ? <ShieldCheck className="absolute bottom-1.5 end-1.5 w-2.5 h-2.5 text-green-500" />
-                : <Lock className="absolute bottom-1.5 end-1.5 w-2.5 h-2.5 text-fluux-muted" />
+                ? <ShieldCheck className="absolute bottom-2 end-2 w-2.5 h-2.5 text-green-500" />
+                : <Lock className="absolute bottom-2 end-2 w-2.5 h-2.5 text-fluux-muted" />
             )}
           </button>
         </Tooltip>
