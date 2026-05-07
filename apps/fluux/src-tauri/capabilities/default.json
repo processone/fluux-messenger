@@ -45,8 +45,13 @@
       "identifier": "fs:allow-read-file",
       "allow": [{ "path": "**/*" }]
     },
+    {
+      "identifier": "fs:allow-write-file",
+      "allow": [{ "path": "$HOME/**" }]
+    },
     "clipboard-manager:allow-read-image",
     "deep-link:default",
+    "dialog:allow-open",
     "dialog:allow-save",
     "updater:default",
     "process:allow-restart",

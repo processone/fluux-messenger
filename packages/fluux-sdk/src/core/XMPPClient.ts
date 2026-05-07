@@ -107,10 +107,13 @@ import { EntityTime } from './modules/EntityTime'
 import { LastActivity } from './modules/LastActivity'
 import { MAM } from './modules/MAM'
 import { Poll } from './modules/Poll'
+import { E2EEManager, InMemoryStorageBackend, type StorageBackend, type XMPPPrimitives } from './e2ee'
+import { dataToElement } from './e2ee/stanzaAdapter'
 import { NS_CARBONS, NS_MAM, NS_P1_PUSH_WEBPUSH } from './namespaces'
 import { createDefaultStoreBindings, type DefaultStoreBindingsOptions } from './defaultStoreBindings'
 import { logInfo } from './logger'
 import { SDK_VERSION } from '../version'
+import { initSearchIndex, backfillFromMessageCache } from '../utils/searchIndex'
 
 /**
  * Core XMPP client with namespace-based module API.
@@ -179,6 +182,7 @@ import { SDK_VERSION } from '../version'
 export class XMPPClient {
   protected currentJid: string | null = null
   private storageAdapter?: StorageAdapter
+  private e2eeStorageBackend: StorageBackend = new InMemoryStorageBackend()
   private proxyAdapter?: ProxyAdapter
   private privacyOptions?: PrivacyOptions
   private stateSnapshot?: StateSnapshot
@@ -194,6 +198,19 @@ export class XMPPClient {
    * Handles messages, reactions, chat states, corrections, and MAM queries.
    */
   public chat!: Chat
+
+  /**
+   * End-to-end encryption plugin host. `null` before the first successful
+   * connection — the manager is tied to a logged-in identity and is
+   * constructed in {@link XMPPClient.handleConnectionSuccess} when the JID
+   * becomes known. Torn down on explicit disconnect.
+   *
+   * Apps register {@link E2EEPlugin} implementations here after the client
+   * is `online`; the Chat module consults the manager when sending and
+   * receiving messages. No plugins are registered by default — messages
+   * flow in cleartext until the app opts in by calling `e2ee.register()`.
+   */
+  public e2ee: E2EEManager | null = null
 
   /**
    * Roster management module.
@@ -568,6 +585,11 @@ export class XMPPClient {
 
     this.stores = stores
 
+    // E2EEManager is NOT constructed here — it's tied to a logged-in
+    // identity. See `ensureE2EEManager` (called from handleConnectionSuccess)
+    // and `tearDownE2EEManager` (called on disconnect). Modules access it
+    // via `moduleDeps.getE2EEManager()`, which returns `null` before login.
+
     const moduleDeps = {
       stores: this.stores,
       sendStanza: (stanza: Element) => this.sendStanza(stanza),
@@ -580,6 +602,7 @@ export class XMPPClient {
       proxyAdapter: this.proxyAdapter,
       registerMAMCollector: (queryId: string, collector: (stanza: Element) => void) => this.registerMAMCollector(queryId, collector),
       privacyOptions: this.privacyOptions,
+      getE2EEManager: () => this.e2ee,
     }
 
     this.connection = new Connection(moduleDeps)
@@ -608,6 +631,11 @@ export class XMPPClient {
     // Set up disconnect handler to transition presence machine
     this.connection.setDisconnectHandler(() => {
       this.presenceActor.send({ type: 'DISCONNECT' })
+      // Tear down the E2EEManager when the user disconnects — the manager
+      // is tied to a logged-in identity. If they reconnect (same JID or
+      // different), we rebuild fresh in handleConnectionSuccess so there's
+      // no stale account state.
+      void this.tearDownE2EEManager()
     })
 
     // Set up stanza router - Connection will call this for each incoming stanza
@@ -912,10 +940,14 @@ export class XMPPClient {
     }
 
     // Open the search index DB and backfill from message cache if needed (one-time migration)
-    void import('../utils/searchIndex').then(async (m) => {
-      await m.initSearchIndex(scopedJid)
-      await m.backfillFromMessageCache()
-    }).catch(() => {})
+    void (async () => {
+      try {
+        await initSearchIndex(scopedJid)
+        await backfillFromMessageCache()
+      } catch {
+        // Ignore — search index is non-critical for connection
+      }
+    })()
 
     this.currentJid = options.jid
     this.stores?.connection.setJid(options.jid)
@@ -1487,6 +1519,13 @@ export class XMPPClient {
     // Track session type for guards (e.g., skip MAM preview on mucJoined during SM replay)
     this.isSmResumedSession = isResumption
 
+    // The E2EEManager is tied to a logged-in identity. Construct it the
+    // first time we reach `online` (account JID now known), or rebuild it
+    // if the previous manager was for a different identity. On a plain
+    // SM-resume/reconnect with the same JID we reuse the existing manager
+    // so registered plugins stay registered.
+    this.ensureE2EEManager()
+
     if (isResumption) {
       await this.handleSmResumption(generation, previouslyJoinedRooms, disconnectDurationMs)
     } else {
@@ -1506,6 +1545,108 @@ export class XMPPClient {
 
     // Always re-discover admin commands (lightweight, no MAM)
     this.admin.discoverAdminCommands().catch(() => {})
+  }
+
+  /**
+   * Replace the E2EE storage backend. Call this before registering any
+   * plugins — typically in the `online` event handler, before calling
+   * `registerE2EEPlugins`. The active manager (if any) is also updated so
+   * subsequent plugin registrations use the new backend.
+   *
+   * The primary use case is injecting a persistent IndexedDB backend on web
+   * (where the default InMemoryStorageBackend would lose key material on
+   * page reload).
+   */
+  setE2EEStorageBackend(backend: StorageBackend): void {
+    this.e2eeStorageBackend = backend
+    this.e2ee?.setStorage(backend)
+  }
+
+  /**
+   * Build the E2EEManager if it doesn't yet exist, or if the previous
+   * manager was bound to a different JID. On a plain reconnect/SM-resume
+   * for the same identity this is a no-op and existing plugins stay
+   * registered.
+   *
+   * @internal
+   */
+  private ensureE2EEManager(): void {
+    if (!this.currentJid) return
+    const bareJid = getBareJid(this.currentJid)
+    if (this.e2ee) {
+      // Already built for this identity — leave it alone.
+      if (this.e2ee.getAccountJid() === bareJid) return
+      // Different JID: tear down and rebuild. Fire-and-forget shutdown
+      // since we don't want to block the connect path on plugin cleanup.
+      void this.e2ee.shutdown().catch(() => {})
+      this.e2ee = null
+    }
+
+    this.e2ee = new E2EEManager({
+      storage: this.e2eeStorageBackend,
+      xmpp: this.buildE2EEPrimitives(),
+      account: { jid: bareJid },
+    })
+    // Route plugin-reported security upgrades (e.g. a late-arriving
+    // sender key flipping a previously-untrusted message to trusted)
+    // onto the SDK event surface so store bindings can patch messages
+    // in place. Stays alive for the lifetime of this manager; a shutdown
+    // in tearDownE2EEManager releases the manager and with it the listener.
+    this.e2ee.onSecurityContextUpdated(({ peer, messageId, securityContext }) => {
+      this.emitSDK('message:security-updated', {
+        conversationId: peer,
+        messageId,
+        securityContext,
+      })
+    })
+  }
+
+  /**
+   * Tear down the E2EEManager on disconnect. Existing plugin state on the
+   * native side (e.g. Sequoia keys cached in Rust) is not affected — this
+   * only releases the host-side object so a subsequent reconnect starts
+   * from a clean slate.
+   *
+   * @internal
+   */
+  private async tearDownE2EEManager(): Promise<void> {
+    const manager = this.e2ee
+    if (!manager) return
+    this.e2ee = null
+    await manager.shutdown().catch(() => {})
+  }
+
+  /**
+   * Build the XMPPPrimitives adapter that plugins use to publish/fetch via
+   * PEP and probe peers via disco. Extracted from the construction site so
+   * `ensureE2EEManager` stays readable.
+   *
+   * @internal
+   */
+  private buildE2EEPrimitives(): XMPPPrimitives {
+    return {
+      sendStanza: async (data) => {
+        await this.sendStanza(dataToElement(data))
+      },
+      queryDisco: async (jid) => {
+        return this.discovery.queryInfo(jid)
+      },
+      publishPEP: async (node, item, options) => {
+        await this.pubsub.publish(node, item, options)
+      },
+      retractPEP: async (node, itemId) => {
+        await this.pubsub.retract(node, itemId)
+      },
+      deletePEP: async (node) => {
+        await this.pubsub.deleteNode(node)
+      },
+      queryPEP: async (jid, node, maxItems) => {
+        return this.pubsub.query(jid, node, maxItems)
+      },
+      subscribePEP: (jid, node, cb) => {
+        return this.pubsub.subscribe(jid, node, cb)
+      },
+    }
   }
 
   /**

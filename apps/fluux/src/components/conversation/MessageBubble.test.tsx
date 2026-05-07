@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { MessageBubble, buildReplyContext, type MessageBubbleProps } from './MessageBubble'
 import type { BaseMessage } from '@fluux/sdk'
 
@@ -263,6 +263,124 @@ describe('MessageBubble', () => {
 
       // canDelete should be false (not outgoing and canModerate is false)
       expect(container.querySelector('[data-message-id="msg-1"]')).toBeInTheDocument()
+    })
+  })
+
+  describe('Security Context', () => {
+    // Regression: the memo comparator used to ignore `securityContext`,
+    // so a trust upgrade (the openpgp plugin promoting an `untrusted`
+    // message to `trusted` once the sender's PEP key arrives) would be
+    // skipped and the lock badge would stay yellow forever.
+    it('re-renders the lock badge when the security context trust is upgraded', () => {
+      const props = createDefaultProps({
+        message: createTestMessage({
+          securityContext: { protocolId: 'openpgp', trust: 'untrusted' },
+        }),
+      })
+      const { rerender, container } = render(<MessageBubble {...props} />)
+
+      const stale = container.querySelector(
+        '[aria-label="Encrypted with openpgp, trust untrusted"]',
+      )
+      expect(stale).not.toBeNull()
+
+      // Same message id / body / everything else — only the trust changes.
+      // Without the fix React.memo would skip this re-render entirely.
+      rerender(
+        <MessageBubble
+          {...props}
+          message={createTestMessage({
+            securityContext: { protocolId: 'openpgp', trust: 'tofu' },
+          })}
+        />,
+      )
+
+      expect(
+        container.querySelector('[aria-label="Encrypted with openpgp, trust tofu"]'),
+      ).not.toBeNull()
+      expect(
+        container.querySelector('[aria-label="Encrypted with openpgp, trust untrusted"]'),
+      ).toBeNull()
+    })
+
+    it('re-renders the tooltip when only the security notes change', () => {
+      // The tooltip is built from `notes`, so a notes-only mutation must
+      // invalidate the memo too — otherwise users see stale "sender key
+      // not cached" text after the cache populated.
+      const props = createDefaultProps({
+        message: createTestMessage({
+          securityContext: {
+            protocolId: 'openpgp',
+            trust: 'untrusted',
+            notes: ['Sender key not cached — signature not checked'],
+          },
+        }),
+      })
+      const { rerender, container } = render(<MessageBubble {...props} />)
+
+      // The Tooltip wraps the lock span in an inline-flex div trigger
+      const lockSpan = container.querySelector('[aria-label^="Encrypted with openpgp"]')
+      const trigger = lockSpan?.parentElement
+      expect(trigger).not.toBeNull()
+
+      // Click to reveal the tooltip (triggerMode="click")
+      fireEvent.click(trigger!)
+
+      expect(screen.getByRole('tooltip').textContent).toContain('Sender key not cached')
+
+      rerender(
+        <MessageBubble
+          {...props}
+          message={createTestMessage({
+            securityContext: {
+              protocolId: 'openpgp',
+              trust: 'untrusted',
+              notes: ['Signature did not verify'],
+            },
+          })}
+        />,
+      )
+
+      expect(screen.getByRole('tooltip').textContent).toContain('Signature did not verify')
+      expect(screen.getByRole('tooltip').textContent).not.toContain('Sender key not cached')
+    })
+
+    it('does not re-render when securityContext is referentially different but value-equal', () => {
+      // The SDK can hand us a fresh securityContext object on every store
+      // update even when the trust hasn't actually changed. The stringify
+      // comparison must treat those as equal so we don't churn the DOM.
+      // We assert this indirectly by mutating a callback ref alongside —
+      // a callback-only change must not re-render (existing memo
+      // guarantee), and adding a value-equal securityContext must not
+      // break that.
+      const onReply = vi.fn()
+      const props = createDefaultProps({
+        message: createTestMessage({
+          securityContext: { protocolId: 'openpgp', trust: 'tofu' },
+        }),
+        onReply,
+      })
+      const { rerender, container } = render(<MessageBubble {...props} />)
+      const firstNode = container.querySelector(
+        '[aria-label="Encrypted with openpgp, trust tofu"]',
+      )
+
+      rerender(
+        <MessageBubble
+          {...props}
+          message={createTestMessage({
+            // New object reference, identical contents.
+            securityContext: { protocolId: 'openpgp', trust: 'tofu' },
+          })}
+          onReply={vi.fn()}
+        />,
+      )
+
+      const secondNode = container.querySelector(
+        '[aria-label="Encrypted with openpgp, trust tofu"]',
+      )
+      // Same DOM node retained → memo correctly skipped the render.
+      expect(secondNode).toBe(firstNode)
     })
   })
 

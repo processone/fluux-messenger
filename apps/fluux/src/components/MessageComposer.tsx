@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, Suspense, lazy, type ReactNode, type RefObject, type Ref, useImperativeHandle } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { Send, Smile, Paperclip, Reply, X, Pencil, Loader2, Image, FileText, Trash2, BarChart3, Plus } from 'lucide-react'
+import { Send, Smile, Paperclip, Reply, X, Pencil, Loader2, Image, FileText, Trash2, BarChart3, Plus, Lock, ShieldCheck } from 'lucide-react'
 import { useClickOutside, useSlashCommands } from '@/hooks'
 import { Tooltip } from './Tooltip'
 import { TextArea } from './ui/TextInput'
@@ -9,7 +9,10 @@ import { TextArea } from './ui/TextInput'
 // Lazy-load emoji picker — keeps ~150KB of emoji data out of the main bundle
 const emojiPickerImport = () => import('./EmojiPicker').then(m => ({ default: m.EmojiPicker }))
 const EmojiPicker = lazy(emojiPickerImport)
+import { E2EEEncryptionRequiredError } from '@fluux/sdk'
 import type { FileAttachment } from '@fluux/sdk'
+import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
+import { useToastStore } from '@/stores/toastStore'
 
 // Format file size for display
 function formatFileSize(bytes: number): string {
@@ -134,6 +137,8 @@ interface MessageComposerProps {
   disabled?: boolean
   /** Callback when Up arrow is pressed in empty field (to edit last message) */
   onEditLastMessage?: () => void
+  /** Encryption state for the current conversation (badge on send button) */
+  encryptionState?: ConversationEncryptionState
 }
 
 export function MessageComposer({
@@ -164,10 +169,12 @@ export function MessageComposer({
   onRemovePendingAttachment,
   disabled = false,
   onEditLastMessage,
+  encryptionState,
   ref,
 }: MessageComposerProps & { ref?: Ref<MessageComposerHandle> }) {
   detectRenderLoop('MessageComposer')
   const { t } = useTranslation()
+  const addToast = useToastStore((s) => s.addToast)
   // Internal state for uncontrolled mode
   const [internalText, setInternalText] = useState('')
   const text = controlledValue !== undefined ? controlledValue : internalText
@@ -403,7 +410,11 @@ export function MessageComposer({
         }
       }
     } catch (err) {
-      console.error('Failed to send message:', err)
+      if (err instanceof E2EEEncryptionRequiredError) {
+        addToast('error', t('chat.encryption.attachmentKeyWouldLeak'))
+      } else {
+        console.error('Failed to send message:', err)
+      }
     } finally {
       setSending(false)
     }
@@ -723,7 +734,7 @@ export function MessageComposer({
           )}
 
           {showAttachMenu && (
-            <div className="absolute bottom-full start-0 mb-2 z-50 bg-fluux-surface border border-fluux-border rounded-lg shadow-lg py-1 min-w-[180px]">
+            <div className="absolute bottom-full start-0 mb-2 z-50 bg-fluux-bg border border-fluux-hover rounded-lg shadow-lg py-1 min-w-[180px]">
               <button
                 type="button"
                 onClick={() => {
@@ -800,14 +811,27 @@ export function MessageComposer({
         </div>
 
         {/* Send button */}
-        <button
-          type="submit"
-          disabled={(!text.trim() && !pendingAttachment) || sending || disabled}
-          className="p-3 text-fluux-brand hover:text-fluux-brand-hover
-                     disabled:text-fluux-muted disabled:cursor-not-allowed transition-colors"
+        <Tooltip
+          content={encryptionState?.kind === 'encrypted'
+            ? t(encryptionState.trust === 'verified' ? 'chat.encryption.verifiedTooltip' : 'chat.encryption.openpgpTooltip')
+            : ''}
+          position="top"
+          disabled={encryptionState?.kind !== 'encrypted'}
         >
-          <Send className="rtl-mirror w-5 h-5" />
-        </button>
+          <button
+            type="submit"
+            disabled={(!text.trim() && !pendingAttachment) || sending || disabled}
+            className="p-3 text-fluux-brand hover:text-fluux-brand-hover
+                       disabled:text-fluux-muted disabled:cursor-not-allowed transition-colors relative"
+          >
+            <Send className="rtl-mirror w-5 h-5" />
+            {encryptionState?.kind === 'encrypted' && (
+              encryptionState.trust === 'verified'
+                ? <ShieldCheck className="absolute bottom-2 end-2 w-2.5 h-2.5 text-green-500" />
+                : <Lock className="absolute bottom-2 end-2 w-2.5 h-2.5 text-fluux-muted" />
+            )}
+          </button>
+        </Tooltip>
       </div>
     </form>
   )

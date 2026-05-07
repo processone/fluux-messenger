@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Music, Film, FileText, Archive, File, Download, BookOpen, Loader2, ImageOff, FileX } from 'lucide-react'
 import { Tooltip } from './Tooltip'
 import { ImageLightbox } from './ImageLightbox'
-import { formatBytes, useProxiedUrl } from '@/hooks'
+import { formatBytes, useAttachmentUrl } from '@/hooks'
 import { isPdfMimeType, isDocumentMimeType, isArchiveMimeType, isEbookMimeType, getFileTypeLabel } from '@/utils/thumbnail'
 import type { FileAttachment } from '@fluux/sdk'
 
@@ -34,14 +34,27 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
   const isImage = attachment.mediaType?.startsWith('image/') ?? false
   const [lightboxOpen, setLightboxOpen] = useState(false)
 
-  // Use thumbnail if available, otherwise fall back to main URL
+  // Use thumbnail if available, otherwise fall back to main URL. Encryption
+  // params track the chosen source: if we picked the thumbnail URL we need
+  // the thumbnail's encryption params (they use distinct keys from the main
+  // file), not the main file's.
+  const hasThumbnail = Boolean(attachment.thumbnail?.uri)
   const originalImageSrc = attachment.thumbnail?.uri || attachment.url
+  const originalEncryption = hasThumbnail
+    ? attachment.thumbnail?.encryption
+    : attachment.encryption
 
   // Check if this URL previously failed - initialize state from cache
   const [loadError, setLoadError] = useState(() => failedUrlCache.has(originalImageSrc))
 
-  // Fetch via Tauri HTTP plugin to bypass CORS (only when it's an image)
-  const { url: proxiedImageSrc, isLoading, error } = useProxiedUrl(originalImageSrc, isImage)
+  // Fetch + decrypt if encrypted (XEP-0454), or proxy through the platform
+  // cache for plaintext. Branches internal to the hook; renderer is
+  // unaware.
+  const { url: proxiedImageSrc, isLoading, error } = useAttachmentUrl(
+    originalImageSrc,
+    originalEncryption,
+    isImage,
+  )
 
   // Early return after hooks
   if (!isImage) {
@@ -145,6 +158,7 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
           placeholderSrc={proxiedImageSrc ?? undefined}
           alt={attachment.name || 'Image attachment'}
           downloadUrl={attachment.url}
+          encryption={attachment.encryption}
           filename={attachment.name}
           onClose={() => setLightboxOpen(false)}
         />
@@ -164,10 +178,19 @@ export const VideoAttachment = memo(function VideoAttachment({ attachment, onLoa
   // Check if this URL previously failed - initialize state from cache
   const [loadError, setLoadError] = useState(() => failedUrlCache.has(attachment.url))
 
-  // Resolve URL for video playback (only when it's a video)
-  const { url: proxiedVideoUrl, isLoading, error } = useProxiedUrl(attachment.url, isVideo)
-  // Also fetch poster/thumbnail if available
-  const { url: proxiedPosterUrl } = useProxiedUrl(attachment.thumbnail?.uri, isVideo && !!attachment.thumbnail?.uri)
+  // Resolve URL for video playback (only when it's a video). Both main
+  // file and poster/thumbnail go through useAttachmentUrl so the
+  // encrypted path is handled transparently.
+  const { url: proxiedVideoUrl, isLoading, error } = useAttachmentUrl(
+    attachment.url,
+    attachment.encryption,
+    isVideo,
+  )
+  const { url: proxiedPosterUrl } = useAttachmentUrl(
+    attachment.thumbnail?.uri,
+    attachment.thumbnail?.encryption,
+    isVideo && !!attachment.thumbnail?.uri,
+  )
 
   // Early return after hooks
   if (!isVideo) {
@@ -280,8 +303,13 @@ export function AudioAttachment({ attachment }: AttachmentProps) {
   // Check if this URL previously failed - initialize state from cache
   const [loadError, setLoadError] = useState(() => failedUrlCache.has(attachment.url))
 
-  // Resolve URL for audio playback (only when it's audio)
-  const { url: proxiedAudioUrl, isLoading, error } = useProxiedUrl(attachment.url, isAudio)
+  // Resolve URL for audio playback (only when it's audio). Encrypted
+  // audio is transparently fetched + decrypted.
+  const { url: proxiedAudioUrl, isLoading, error } = useAttachmentUrl(
+    attachment.url,
+    attachment.encryption,
+    isAudio,
+  )
 
   // Early return after hooks
   if (!isAudio) {

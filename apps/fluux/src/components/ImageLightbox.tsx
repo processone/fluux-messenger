@@ -6,27 +6,30 @@ import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Download, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { useProxiedUrl } from '@/hooks'
+import type { FileEncryption } from '@fluux/sdk'
+import { useAttachmentUrl } from '@/hooks'
 
 interface ImageLightboxProps {
-  /** Original full-resolution image URL (proxied internally for display) */
+  /** Original full-resolution image URL (proxied/decrypted internally for display) */
   src: string
   /** Alt text for the image */
   alt?: string
-  /** Original URL for downloading */
+  /** Original URL for downloading (same as src; encryption handled internally) */
   downloadUrl: string
   /** Original filename */
   filename?: string
+  /** Encryption params when the image is AES-GCM encrypted (aesgcm:// upload) */
+  encryption?: FileEncryption
   /** Optional preview URL (e.g. already-proxied thumbnail) shown while the full-size image loads */
   placeholderSrc?: string
   /** Close handler */
   onClose: () => void
 }
 
-export function ImageLightbox({ src, alt, downloadUrl, filename, placeholderSrc, onClose }: ImageLightboxProps) {
+export function ImageLightbox({ src, alt, downloadUrl, filename, encryption, placeholderSrc, onClose }: ImageLightboxProps) {
   const { t } = useTranslation()
   const mouseDownTargetRef = useRef<EventTarget | null>(null)
-  const { url: proxiedSrc, isLoading } = useProxiedUrl(src)
+  const { url: proxiedSrc, isLoading } = useAttachmentUrl(src, encryption)
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -49,7 +52,7 @@ export function ImageLightbox({ src, alt, downloadUrl, filename, placeholderSrc,
       {/* Top-right controls */}
       <div className="absolute top-4 end-4 flex items-center gap-2">
         <a
-          href={downloadUrl}
+          href={proxiedSrc ?? downloadUrl}
           download={filename || 'image'}
           className="p-2 text-white/70 hover:text-white rounded-full hover:bg-white/10 transition-colors"
           title={t('common.download')}

@@ -7,6 +7,7 @@
  *   Previously-viewed media survives page reloads without re-fetching from the server.
  */
 
+import { decryptFile, type FileEncryption } from '@fluux/sdk'
 import { isTauri } from './tauri'
 
 /** In-memory index: original URL → local URL (asset.localhost or blob:) */
@@ -156,6 +157,89 @@ async function doResolve(originalUrl: string): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
+// Encrypted media cache (Tauri + web)
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the filesystem path used to cache the decrypted content of an
+ * encrypted attachment. Uses a `.dec` extension so the lookup is deterministic
+ * regardless of the server-side MIME type.
+ */
+async function getDecryptedCacheFilePath(httpsUrl: string): Promise<string> {
+  const { join } = await import('@tauri-apps/api/path')
+  const mediaDir = await getMediaDir()
+  const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(httpsUrl))
+  const hex = Array.from(new Uint8Array(hashBuffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('')
+  return join(mediaDir, `${hex}.dec`)
+}
+
+/**
+ * Resolve an encrypted attachment URL for Tauri desktop.
+ *
+ * Downloads ciphertext from `httpsUrl`, AES-GCM decrypts it, and writes the
+ * plaintext to `{appCacheDir}/media/{sha256}.dec`. Subsequent calls return
+ * the cached `asset://localhost` URL without re-downloading or re-decrypting.
+ *
+ * Storing the decrypted content means no AES key needs to be persisted
+ * across sessions — the key is only required on the first download.
+ */
+export async function resolveEncryptedMediaUrl(
+  httpsUrl: string,
+  encryption: FileEncryption,
+): Promise<string> {
+  const cacheKey = `enc:${httpsUrl}`
+
+  const cached = urlCache.get(cacheKey)
+  if (cached) return cached
+
+  const existing = inflight.get(cacheKey)
+  if (existing) return existing
+
+  const promise = doResolveEncrypted(httpsUrl, encryption, cacheKey)
+  inflight.set(cacheKey, promise)
+
+  try {
+    return await promise
+  } finally {
+    inflight.delete(cacheKey)
+  }
+}
+
+async function doResolveEncrypted(
+  httpsUrl: string,
+  encryption: FileEncryption,
+  cacheKey: string,
+): Promise<string> {
+  const { convertFileSrc } = await import('@tauri-apps/api/core')
+  const { exists, writeFile } = await import('@tauri-apps/plugin-fs')
+
+  const filePath = await getDecryptedCacheFilePath(httpsUrl)
+
+  if (await exists(filePath)) {
+    const assetUrl = convertFileSrc(filePath)
+    urlCache.set(cacheKey, assetUrl)
+    return assetUrl
+  }
+
+  const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http')
+  const response = await tauriFetch(httpsUrl, { method: 'GET' })
+  if (!response.ok) {
+    throw new Error(`Fetch failed: ${response.status} ${response.statusText}`)
+  }
+
+  const ciphertext = new Uint8Array(await response.arrayBuffer())
+  const plaintext = await decryptFile(ciphertext, encryption.key, encryption.iv)
+
+  await writeFile(filePath, new Uint8Array(plaintext))
+
+  const assetUrl = convertFileSrc(filePath)
+  urlCache.set(cacheKey, assetUrl)
+  return assetUrl
+}
+
+// ---------------------------------------------------------------------------
 // Web Cache API backend
 // ---------------------------------------------------------------------------
 
@@ -223,6 +307,72 @@ async function doResolveWeb(originalUrl: string): Promise<string> {
   return blobUrl
 }
 
+const WEB_DECRYPTED_CACHE_NAME = 'fluux-media-decrypted'
+
+/**
+ * Resolve an encrypted attachment URL for web browser.
+ *
+ * Downloads ciphertext from `httpsUrl`, AES-GCM decrypts it, stores the
+ * plaintext in the browser Cache API under a dedicated cache, and returns
+ * a blob URL. Subsequent calls return a fresh blob URL from the cached
+ * plaintext without re-downloading or re-decrypting.
+ */
+export async function resolveWebEncryptedMediaUrl(
+  httpsUrl: string,
+  encryption: FileEncryption,
+): Promise<string> {
+  const cacheKey = `enc:${httpsUrl}`
+
+  const cached = urlCache.get(cacheKey)
+  if (cached) return cached
+
+  const existing = inflight.get(cacheKey)
+  if (existing) return existing
+
+  const promise = doResolveWebEncrypted(httpsUrl, encryption, cacheKey)
+  inflight.set(cacheKey, promise)
+
+  try {
+    return await promise
+  } finally {
+    inflight.delete(cacheKey)
+  }
+}
+
+async function doResolveWebEncrypted(
+  httpsUrl: string,
+  encryption: FileEncryption,
+  cacheKey: string,
+): Promise<string> {
+  const webCacheKey = `decrypted:${httpsUrl}`
+  const cache = await caches.open(WEB_DECRYPTED_CACHE_NAME)
+
+  const cachedResponse = await cache.match(webCacheKey)
+  if (cachedResponse) {
+    const blob = await cachedResponse.blob()
+    const blobUrl = URL.createObjectURL(blob)
+    urlCache.set(cacheKey, blobUrl)
+    webBlobUrls.set(cacheKey, blobUrl)
+    return blobUrl
+  }
+
+  const response = await fetch(httpsUrl)
+  if (!response.ok) {
+    throw new Error(`Fetch failed: ${response.status} ${response.statusText}`)
+  }
+
+  const ciphertext = new Uint8Array(await response.arrayBuffer())
+  const plaintext = await decryptFile(ciphertext, encryption.key, encryption.iv)
+  const plaintextBytes = new Uint8Array(plaintext)
+
+  await cache.put(webCacheKey, new Response(new Blob([plaintextBytes])))
+
+  const blobUrl = URL.createObjectURL(new Blob([plaintextBytes]))
+  urlCache.set(cacheKey, blobUrl)
+  webBlobUrls.set(cacheKey, blobUrl)
+  return blobUrl
+}
+
 // ---------------------------------------------------------------------------
 // Shared cleanup
 // ---------------------------------------------------------------------------
@@ -239,10 +389,11 @@ export async function clearMediaCache(): Promise<void> {
   }
   webBlobUrls.clear()
 
-  // Clear web Cache API
+  // Clear web Cache API (both plaintext and decrypted caches)
   if (typeof caches !== 'undefined') {
     try {
       await caches.delete(WEB_CACHE_NAME)
+      await caches.delete(WEB_DECRYPTED_CACHE_NAME)
     } catch (error) {
       console.warn('[MediaCache] Failed to clear web cache:', error)
     }

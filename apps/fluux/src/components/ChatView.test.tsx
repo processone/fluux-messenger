@@ -41,6 +41,10 @@ const mockRetractMessage = vi.fn()
 const mockFetchHistory = vi.fn()
 const mockClearFirstNewMessageId = vi.fn()
 const mockClearAnimation = vi.fn()
+const mockProcessMessageForLinkPreview = vi.fn().mockResolvedValue(undefined)
+
+// Mutable encryption state — set per test
+let mockEncryptionState: { kind: string; fingerprint?: string; trust?: string } = { kind: 'disabled' }
 
 // Mock SDK hooks
 vi.mock('@fluux/sdk', () => ({
@@ -141,6 +145,13 @@ vi.mock('@fluux/sdk', () => ({
     isConnected: () => false,
     getJid: () => null,
   }),
+  // Consumed by useConversationEncryptionState. Returning a client
+  // without an e2ee manager puts the hook into the `disabled` branch,
+  // so the EncryptionChip renders nothing and these tests stay
+  // unaffected by E2EE UX changes.
+  useXMPPContext: () => ({
+    client: { e2ee: null },
+  }),
 }))
 
 // Mock React store hooks (from @fluux/sdk/react)
@@ -172,7 +183,7 @@ vi.mock('@/hooks', () => ({
     isSupported: true,
   }),
   useLinkPreview: () => ({
-    processMessageForLinkPreview: vi.fn(),
+    processMessageForLinkPreview: mockProcessMessageForLinkPreview,
   }),
   useTypeToFocus: () => {},
   useMessageCopy: () => ({ handleCopy: vi.fn() }),
@@ -302,6 +313,8 @@ vi.mock('lucide-react', () => ({
   Loader2: () => <span data-testid="icon-loader">Loading</span>,
   ChevronUp: () => <span data-testid="icon-chevron-up">Up</span>,
   ChevronDown: () => <span data-testid="icon-chevron-down">Down</span>,
+  Lock: () => <span data-testid="icon-lock">Lock</span>,
+  ShieldCheck: () => <span data-testid="icon-shield-check">ShieldCheck</span>,
 }))
 
 // Create hoisted mock for MessageComposer (React 19: ref is a regular prop)
@@ -349,6 +362,10 @@ vi.mock('./Avatar', () => ({
   getConsistentTextColor: () => '#000000',
 }))
 
+vi.mock('@/hooks/useConversationEncryptionState', () => ({
+  useConversationEncryptionState: () => mockEncryptionState,
+}))
+
 describe('ChatView', () => {
   beforeEach(() => {
     // Reset mock state
@@ -358,6 +375,7 @@ describe('ChatView', () => {
     mockContacts = []
     mockSupportsMAM = true
     mockActiveMAMState = { hasQueried: true, isLoading: false }
+    mockEncryptionState = { kind: 'disabled' }
 
     // Reset mock functions
     vi.clearAllMocks()
@@ -721,6 +739,48 @@ describe('ChatView', () => {
        * and useDragAndDrop.test.tsx (file staging behavior)
        */
       expect(true).toBe(true) // Documentation test - behavior verified in other test files
+    })
+  })
+
+  describe('Link preview suppression in encrypted conversations', () => {
+    beforeEach(() => {
+      mockActiveConversation = {
+        id: 'alice@example.com',
+        name: 'Alice Smith',
+        type: 'chat',
+        unreadCount: 0,
+      }
+      mockContacts = [createContact()]
+    })
+
+    beforeEach(() => {
+      // jsdom doesn't implement scrollTo — stub it so the post-send scroll doesn't throw
+      window.HTMLElement.prototype.scrollTo = vi.fn()
+    })
+
+    it('calls processMessageForLinkPreview when conversation is not encrypted', async () => {
+      mockEncryptionState = { kind: 'disabled' }
+      render(<ChatView />)
+
+      fireEvent.click(screen.getByTestId('send-button'))
+
+      await waitFor(() => {
+        expect(mockProcessMessageForLinkPreview).toHaveBeenCalled()
+      })
+    })
+
+    it('suppresses processMessageForLinkPreview when conversation is encrypted', async () => {
+      mockEncryptionState = { kind: 'encrypted', fingerprint: 'abc123', trust: 'tofu' }
+      render(<ChatView />)
+
+      fireEvent.click(screen.getByTestId('send-button'))
+
+      // Wait for sendMessage to confirm handleSend ran to completion
+      await waitFor(() => {
+        expect(mockSendMessage).toHaveBeenCalled()
+      })
+
+      expect(mockProcessMessageForLinkPreview).not.toHaveBeenCalled()
     })
   })
 

@@ -220,6 +220,7 @@ export type {
 
   // Base message type (shared between chat and room messages)
   BaseMessage,
+  MessageSecurityContext,
 
   // Chat types
   Message,
@@ -263,8 +264,9 @@ export type {
   WebPushRegistration,
   WebPushStatus,
 
-  // File attachment types (XEP-0066, XEP-0264)
+  // File attachment types (XEP-0066, XEP-0264, XEP-0454)
   FileAttachment,
+  FileEncryption,
   ThumbnailInfo,
   OobInfo,
 
@@ -330,6 +332,19 @@ export type {
 export { EventHook } from './core/EventHook'
 export { ActivityLogHook } from './core/eventHooks'
 
+// Media encryption helpers (XEP-0454-style encrypted file attachments).
+// Apps wrap HTTP Upload bytes in AES-256-GCM and carry the key/IV in the
+// FileAttachment; Chat.sendMessage moves the resulting OOB URL inside the
+// OpenPGP `<payload/>`. See docs/ENCRYPTION.md §Media sharing.
+export { encryptFile, decryptFile } from './core/modules/MediaEncryption'
+export type { EncryptedFile } from './core/modules/MediaEncryption'
+export {
+  buildAesgcmUri,
+  parseAesgcmUri,
+  isAesgcmUri,
+} from './core'
+export type { AesgcmUriParts } from './core/modules/AesgcmUri'
+
 // SDK Events (for event-based decoupling)
 export type {
   SDKEvents,
@@ -353,6 +368,72 @@ export { isChatMessage, isRoomMessage } from './core/types'
 // Re-export xml builder for stanza construction
 export { xml } from '@xmpp/client'
 export type { Element } from '@xmpp/client'
+
+// =============================================================================
+// E2EE PLUGIN ARCHITECTURE
+// =============================================================================
+
+// Host, plugin trait, and supporting types. See core/e2ee/index.ts for details.
+// Consumers register E2EEPlugin implementations with an E2EEManager; the
+// manager handles strategy selection and dispatch. Integration with the
+// message send/receive path is intentionally not wired in this slice.
+// Note: DummyPlaintextPlugin is intentionally NOT re-exported. It is an
+// internal validation tool; pinning it from an app would send plaintext
+// while the UI suggests encryption. Tests import it via relative path.
+export {
+  E2EEManager,
+  E2EEEncryptionRequiredError,
+  E2EEPluginError,
+  isE2EEPluginError,
+  CapabilityCache,
+  InMemoryStorageBackend,
+  createPluginStorage,
+  serializePayloadEnvelope,
+  parsePayloadEnvelope,
+  isPayloadEnvelope,
+  wrapForSigncrypt,
+  unwrapSigncrypt,
+  SigncryptEnvelopeError,
+  deriveSas,
+  splitSas,
+} from './core/e2ee'
+export type { SigncryptEnvelope } from './core/e2ee'
+export type {
+  AccountInfo,
+  BareJID,
+  CapabilityCacheOptions,
+  ConversationHandle,
+  ConversationTarget,
+  DecryptResult,
+  DeviceIdentifier,
+  DiscoFeature,
+  DiscoResult,
+  E2EEErrorKind,
+  E2EEManagerOptions,
+  E2EEPlugin,
+  E2EEProtocolDescriptor,
+  EncryptedPayload,
+  IdentityInfo,
+  InboundDecryptContext,
+  InboundSource,
+  Logger as E2EELogger,
+  PEPItem,
+  PeerSupport,
+  PinnedStrategy,
+  PluginContext,
+  PluginStorage,
+  ProtocolFeatures,
+  SecurityContext,
+  SecurityContextUpdate,
+  SecurityContextUpdateListener,
+  StorageBackend,
+  Subscription as E2EESubscription,
+  TrustState,
+  VerificationFlow,
+  VerificationMethod,
+  XMLElementData,
+  XMPPPrimitives,
+} from './core/e2ee'
 
 // =============================================================================
 // UTILITIES
@@ -630,5 +711,5 @@ export {
 // =============================================================================
 
 export { DemoClient } from './demo/DemoClient'
-export type { DemoData, DemoSelf, DemoPresence, DemoRoomData, DemoAnimationStep } from './demo/types'
+export type { DemoData, DemoSelf, DemoPresence, DemoOwnResource, DemoRoomData, DemoAnimationStep } from './demo/types'
 export { minutesAgo, hoursAgo, daysAgo } from './demo/timeHelpers'

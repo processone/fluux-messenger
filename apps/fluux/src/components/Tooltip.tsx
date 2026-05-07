@@ -21,6 +21,8 @@ interface TooltipProps {
   maxWidth?: number
   /** Whether to show tooltip on mobile devices (default: false - tooltips are intrusive on touch) */
   showOnMobile?: boolean
+  /** Trigger mode: 'hover' shows on hover/focus (default), 'click' shows on click/tap (works on mobile) */
+  triggerMode?: 'hover' | 'click'
 }
 
 /**
@@ -52,9 +54,11 @@ export function Tooltip({
   disabled = false,
   maxWidth = 250,
   showOnMobile = false,
+  triggerMode = 'hover',
 }: TooltipProps) {
   const isMobile = useIsMobileWeb()
-  const effectiveDisabled = disabled || (isMobile && !showOnMobile)
+  // click mode always works on mobile
+  const effectiveDisabled = disabled || (isMobile && !showOnMobile && triggerMode !== 'click')
   const [isVisible, setIsVisible] = useState(false)
   const [coords, setCoords] = useState({ x: 0, y: 0 })
   const [actualPosition, setActualPosition] = useState(position)
@@ -80,6 +84,11 @@ export function Tooltip({
     }
     setIsVisible(false)
   }, [])
+
+  const toggleTooltip = () => {
+    if (effectiveDisabled) return
+    setIsVisible(v => !v)
+  }
 
   // Hide tooltip on scroll, window blur, or any pointer down — these events
   // can cause the trigger to move or disappear without firing mouseLeave.
@@ -204,11 +213,13 @@ export function Tooltip({
     <>
       <div
         ref={triggerRef}
-        onMouseEnter={showTooltip}
-        onMouseLeave={hideTooltip}
-        onFocus={showTooltip}
-        onBlur={hideTooltip}
-        className={className || 'inline-flex'}
+        onMouseEnter={triggerMode === 'hover' ? showTooltip : undefined}
+        onMouseLeave={triggerMode === 'hover' ? hideTooltip : undefined}
+        onFocus={triggerMode === 'hover' ? showTooltip : undefined}
+        onBlur={triggerMode === 'hover' ? hideTooltip : undefined}
+        onClick={triggerMode === 'click' ? toggleTooltip : undefined}
+        onPointerDown={triggerMode === 'click' ? (e) => e.stopPropagation() : undefined}
+        className={`${className || 'inline-flex'}${triggerMode === 'click' ? ' cursor-pointer' : ''}`}
       >
         {children}
       </div>

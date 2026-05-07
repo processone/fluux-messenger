@@ -391,6 +391,74 @@ describe('messagingUtils', () => {
       expect(result?.mediaType).toBe('video/mp4') // Falls back to URL extension
     })
 
+    it('should parse aesgcm:// thumbnail URI into HTTPS URL and encryption params', () => {
+      // Regression: thumbnail aesgcm:// URIs were stored raw, so useAttachmentUrl
+      // received no encryption params and fell back to useProxiedUrl which can't
+      // decode them — encrypted thumbnails never rendered.
+      const iv = 'aabbccddeeff001122334455' // 24 hex = 12 bytes
+      const key = '0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20' // 64 hex = 32 bytes
+      const aesgcmThumbUri = `aesgcm://upload.example.com/thumb.bin#${iv}${key}`
+      const stanza = createMockElement('message', { id: 'msg-1' }, [
+        {
+          name: 'x',
+          attrs: { xmlns: 'jabber:x:oob' },
+          children: [
+            { name: 'url', text: 'https://upload.example.com/image.bin' },
+            {
+              name: 'thumbnail',
+              attrs: {
+                xmlns: 'urn:xmpp:thumbs:1',
+                uri: aesgcmThumbUri,
+                'media-type': 'image/jpeg',
+                width: '320',
+                height: '240',
+              },
+            },
+          ],
+        },
+      ])
+
+      const result = parseOobData(stanza)
+
+      expect(result?.thumbnail).toBeDefined()
+      // URI must be the HTTPS URL — never the raw aesgcm:// URI
+      expect(result?.thumbnail?.uri).toBe('https://upload.example.com/thumb.bin')
+      // Encryption params must be populated so the UI can decrypt
+      expect(result?.thumbnail?.encryption).toBeDefined()
+      expect(result?.thumbnail?.encryption?.cipher).toBe('aes-256-gcm')
+      expect(result?.thumbnail?.encryption?.iv).toBeInstanceOf(Uint8Array)
+      expect(result?.thumbnail?.encryption?.key).toBeInstanceOf(Uint8Array)
+      expect(result?.thumbnail?.encryption?.iv.length).toBe(12)
+      expect(result?.thumbnail?.encryption?.key.length).toBe(32)
+    })
+
+    it('should not set encryption on plain HTTPS thumbnail URI', () => {
+      const stanza = createMockElement('message', { id: 'msg-1' }, [
+        {
+          name: 'x',
+          attrs: { xmlns: 'jabber:x:oob' },
+          children: [
+            { name: 'url', text: 'https://upload.example.com/image.jpg' },
+            {
+              name: 'thumbnail',
+              attrs: {
+                xmlns: 'urn:xmpp:thumbs:1',
+                uri: 'https://upload.example.com/thumb.jpg',
+                'media-type': 'image/jpeg',
+                width: '320',
+                height: '240',
+              },
+            },
+          ],
+        },
+      ])
+
+      const result = parseOobData(stanza)
+
+      expect(result?.thumbnail?.uri).toBe('https://upload.example.com/thumb.jpg')
+      expect(result?.thumbnail?.encryption).toBeUndefined()
+    })
+
     it('should handle Prosody http_file_share URL with & and = in path', () => {
       const url = 'https://upload.isacloud.im:5281/file_share/019c54ed-91f2-7434-b717-6fdd8296c5b3/uuid=51B2BBEE-EAA7-4738-BEB6-F32AC33B16A2&code=001&library=1&type=3&mode=2&loc=true&cap=true.mov'
       const stanza = createMockElement('message', { id: 'msg-1' }, [
@@ -492,6 +560,62 @@ describe('messagingUtils', () => {
       const result = parseMessageContent({ messageEl, body: 'Hello' })
 
       expect(result.originId).toBeUndefined()
+    })
+  })
+
+  describe('parseMessageContent - authoredAt (E2EE envelope timestamp)', () => {
+    it('uses authoredAt when supplied, overriding <delay/> and default-to-now', () => {
+      // A hostile server could rewrite <delay/> on MAM replay. The
+      // in-envelope timestamp, signed by the sender, is authoritative.
+      // This test pins that authoredAt wins over <delay/>.
+      const serverDelayStamp = '2025-01-01T00:00:00Z'
+      const senderAuthored = new Date('2026-03-15T12:34:56Z')
+      const messageEl = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'body', text: 'Hello' },
+        {
+          name: 'delay',
+          attrs: { xmlns: 'urn:xmpp:delay', stamp: serverDelayStamp },
+        },
+      ])
+
+      const result = parseMessageContent({
+        messageEl,
+        body: 'Hello',
+        authoredAt: senderAuthored,
+      })
+
+      expect(result.timestamp.toISOString()).toBe(senderAuthored.toISOString())
+      // Still marked delayed — a live MAM catch-up message is historical
+      // from the receiver's POV even when the authored time is signed.
+      expect(result.isDelayed).toBe(true)
+    })
+
+    it('falls back to <delay/> when no authoredAt is supplied', () => {
+      const stamp = '2025-01-01T00:00:00Z'
+      const messageEl = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'body', text: 'Hello' },
+        { name: 'delay', attrs: { xmlns: 'urn:xmpp:delay', stamp } },
+      ])
+
+      const result = parseMessageContent({ messageEl, body: 'Hello' })
+
+      expect(result.timestamp.toISOString()).toBe(new Date(stamp).toISOString())
+      expect(result.isDelayed).toBe(true)
+    })
+
+    it('uses authoredAt even when no <delay/> is present', () => {
+      const senderAuthored = new Date('2026-03-15T12:34:56Z')
+      const messageEl = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'body', text: 'Hello' },
+      ])
+
+      const result = parseMessageContent({
+        messageEl,
+        body: 'Hello',
+        authoredAt: senderAuthored,
+      })
+
+      expect(result.timestamp.toISOString()).toBe(senderAuthored.toISOString())
     })
   })
 

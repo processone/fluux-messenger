@@ -5,6 +5,7 @@ node_modules/
 dist/
 ts-docs/
 *.tsbuildinfo
+target/
 
 # Tauri
 **/src-tauri/target/
@@ -59,6 +60,7 @@ server/
 .aider/
 .cursor/
 .codeium/
+AGENTS.md
 
 # Gas Town (added by gt)
 .runtime/

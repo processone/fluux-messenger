@@ -34,6 +34,13 @@ interface UseListKeyboardNavOptions<T> {
    * Useful for: Alt+Arrow = navigate AND switch view, Plain Arrow = just highlight.
    */
   activateOnAltNav?: boolean
+  /**
+   * ID of the externally-controlled active item. When provided, `selectedIndex`
+   * is kept in sync with this ID so the auto-scroll effect brings the active
+   * item into view whenever it changes (clicks, global shortcuts, programmatic
+   * navigation). Pass when activation is owned by code outside this hook.
+   */
+  activeItemId?: string | null
 }
 
 /**
@@ -106,6 +113,7 @@ export function useListKeyboardNav<T>({
   zoneRef,
   enableBounce = false,
   activateOnAltNav = false,
+  activeItemId,
 }: UseListKeyboardNavOptions<T>): UseListKeyboardNavReturn {
   const [selectedIndex, setSelectedIndex] = useState(-1)
   // Track if we're in keyboard navigation mode (suppresses mouse hover updates)
@@ -151,6 +159,19 @@ export function useListKeyboardNav<T>({
     setSelectedIndex(-1)
     selectedItemIdRef.current = null
   }, [itemsKey])
+
+  // Sync selectedIndex with externally-controlled active item.
+  // When the parent owns activation (clicks, global keyboard shortcuts, programmatic
+  // navigation), pass `activeItemId` so the list scrolls the active item into view
+  // via the existing auto-scroll effect.
+  useEffect(() => {
+    if (activeItemId == null) return
+    const newIndex = itemIdToIndexRef.current.get(activeItemId)
+    if (newIndex !== undefined) {
+      setSelectedIndex(newIndex)
+      selectedItemIdRef.current = activeItemId
+    }
+  }, [activeItemId, itemsKey])
 
   // Keyboard event handler — stored in a ref so the effect listener is stable
   const handleKeyDownRef = useRef<(e: KeyboardEvent) => void>(() => {})

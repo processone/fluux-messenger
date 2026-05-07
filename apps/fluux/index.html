@@ -24,7 +24,7 @@
   </head>
   <body>
     <!-- process.nextTick shim for browserify-era SCRAM-SHA-1 crypto deps -->
-    <script src="process-shim.js"></script>
+    <script>globalThis.process=globalThis.process||{};process.nextTick=process.nextTick||(function(cb){var a=Array.prototype.slice.call(arguments,1);queueMicrotask(function(){cb.apply(null,a)})});</script>
     <div id="root"></div>
     <script type="module" src="src/main.tsx"></script>
   </body>

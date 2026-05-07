@@ -84,6 +84,9 @@ export function ConversationList() {
   }
 
   // Keyboard navigation
+  // Alt+Arrow navigation is owned by the global handler in useKeyboardShortcuts
+  // (goToPreviousItem / goToNextItem). The list reacts via `activeItemId` so the
+  // active conversation is scrolled into view regardless of where focus lives.
   const { selectedIndex, isKeyboardNav, getItemProps, getItemAttribute, getContainerProps } = useListKeyboardNav({
     items: conversations,
     onSelect: (conv) => handleConversationClick(conv.id),
@@ -92,7 +95,7 @@ export function ConversationList() {
     itemAttribute: 'data-conv-id',
     zoneRef,
     enableBounce: true,
-    activateOnAltNav: true,
+    activeItemId: activeConversationId,
   })
 
   if (conversations.length === 0) {
@@ -174,7 +177,7 @@ export function ArchiveList() {
     itemAttribute: 'data-conv-id',
     zoneRef,
     enableBounce: true,
-    activateOnAltNav: true,
+    activeItemId: activeConversationId,
   })
 
   if (archivedConversations.length === 0) {
@@ -281,9 +284,9 @@ export const ConversationItem = memo(function ConversationItem({
         onClick={handleClick}
         onMouseEnter={onMouseEnter}
         onMouseMove={onMouseMove}
-        className={`w-full px-2 py-1.5 rounded border flex items-center gap-3 text-start cursor-pointer
+        className={`w-full relative px-2 py-1.5 rounded border flex items-center gap-3 text-start cursor-pointer
                     transition-colors ${isActive
-                      ? 'bg-fluux-active text-fluux-text border-transparent'
+                      ? "bg-fluux-sidebar-item-active text-fluux-text border-transparent before:content-[''] before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r-full before:bg-fluux-sidebar-item-active-accent"
                       : isSelected
                         ? 'bg-fluux-hover text-fluux-text border-fluux-brand'
                         : isKeyboardNav

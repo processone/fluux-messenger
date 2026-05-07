@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useConnection, useXMPPContext, hasFastToken } from '@fluux/sdk'
+import { registerE2EEPlugins } from './e2ee/registerPlugins'
+import { isKeyLocked } from './e2ee/webPassphraseStore'
+import { isOpenpgpEnabled } from './stores/encryptionSettingsStore'
+import { UnlockEncryptionDialog } from './components/UnlockEncryptionDialog'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { LoginScreen } from './components/LoginScreen'
 import { ChatLayout } from './components/ChatLayout'
@@ -143,6 +147,8 @@ function App() {
   // Used to distinguish initial page load reconnect from wake-from-sleep reconnect
   const [hasBeenOnline, setHasBeenOnline] = useState(false)
 
+  const [showWebUnlockDialog, setShowWebUnlockDialog] = useState(false)
+
   // Auto-reconnect on page reload if session exists
   useSessionPersistence(tabCoordination.claimConnection)
 
@@ -157,6 +163,15 @@ function App() {
       // Uses '__wry_' prefix so clearLocalData() won't remove it (it only
       // clears 'fluux:' prefixed keys).
       sessionStorage.setItem('__wry_was_online', '1')
+      // Register E2EE plugins now that the account JID is available.
+      // Fire-and-forget: a failure must not block the chat path.
+      // On web, after registration the key may be in locked state — show the
+      // unlock dialog so the user can supply the session passphrase.
+      void registerE2EEPlugins(client).then(() => {
+        if (!isTauri && isOpenpgpEnabled() && isKeyLocked()) {
+          setShowWebUnlockDialog(true)
+        }
+      })
     } else if (status !== 'connecting') {
       // For any non-online, non-connecting status (error, disconnected, reconnecting),
       // check if session was cleared — if so, stop showing the reconnecting spinner
@@ -165,7 +180,7 @@ function App() {
         setIsAutoReconnecting(false)
       }
     }
-  }, [status])
+  }, [status, client])
 
   // Check if we have a stored session (for reconnect scenarios)
   const hasSession = getSession() !== null
@@ -244,6 +259,12 @@ function App() {
           onDownload={update.downloadAndInstall}
           onRelaunch={update.relaunchApp}
           onDismiss={handleUpdateDismiss}
+        />
+      )}
+      {showWebUnlockDialog && (
+        <UnlockEncryptionDialog
+          client={client}
+          onClose={() => setShowWebUnlockDialog(false)}
         />
       )}
     </>

@@ -64,6 +64,14 @@ export interface DemoAnimationStep {
  *
  * Construct this at startup so relative timestamps are fresh.
  */
+export interface DemoOwnResource {
+  resource: string
+  show: 'chat' | 'away' | 'xa' | 'dnd' | null
+  priority: number
+  status?: string
+  client?: string
+}
+
 export interface DemoData {
   self: DemoSelf
   contacts: Contact[]
@@ -72,4 +80,5 @@ export interface DemoData {
   messages: Map<string, Message[]>
   rooms: DemoRoomData[]
   activityEvents: ActivityEventInput[]
+  ownResources?: DemoOwnResource[]
 }

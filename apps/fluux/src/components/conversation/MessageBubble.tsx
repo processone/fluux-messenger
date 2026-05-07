@@ -6,7 +6,7 @@
  */
 import { useState, useMemo, memo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { CornerUpRight, AlertCircle, RefreshCw } from 'lucide-react'
+import { CornerUpRight, AlertCircle, RefreshCw, Lock } from 'lucide-react'
 import { formatMessagePreview, formatXMPPError, type BaseMessage, type MentionReference, type Contact, type ContactIdentity, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
 import { Avatar } from '../Avatar'
 import { AvatarLightbox } from '../AvatarLightbox'
@@ -20,6 +20,7 @@ import { UserInfoPopover } from './UserInfoPopover'
 import { CollapsibleContent } from './CollapsibleContent'
 import { PollCard } from './PollCard'
 import { PollClosedCard } from './PollClosedCard'
+import { Tooltip } from '../Tooltip'
 
 export interface MessageBubbleProps {
   // Core message data (using BaseMessage interface)
@@ -139,6 +140,16 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps): bool
   const prevReactions = JSON.stringify(prev.message.reactions ?? {})
   const nextReactions = JSON.stringify(next.message.reactions ?? {})
   if (prevReactions !== nextReactions) return false
+
+  // Security context — drives the lock/trust indicator. The SDK can mutate
+  // this AFTER the message first arrives (e.g. the openpgp plugin upgrades
+  // a previously-untrusted message to trusted once the sender's PEP key
+  // finishes fetching). Without comparing it here React skips the render
+  // and the lock badge stays at its stale value forever. Stringify mirrors
+  // the reactions pattern above and is fine for a tiny three-field object.
+  const prevSec = JSON.stringify(prev.message.securityContext ?? null)
+  const nextSec = JSON.stringify(next.message.securityContext ?? null)
+  if (prevSec !== nextSec) return false
 
   // My reactions array
   if (prev.myReactions.length !== next.myReactions.length) return false
@@ -388,6 +399,22 @@ export const MessageBubble = memo(function MessageBubble({
             <span className="text-xs text-fluux-muted">
               {formatTime(message.timestamp)}
             </span>
+            {message.securityContext && (
+              <Tooltip content={formatSecurityTooltip(t, message.securityContext)} position="top" triggerMode="click">
+                <span
+                  className={`flex items-center ${
+                    message.securityContext.trust === 'verified'
+                      ? 'text-green-500'
+                      : message.securityContext.trust === 'untrusted'
+                      ? 'text-yellow-500'
+                      : 'text-fluux-muted'
+                  }`}
+                  aria-label={`Encrypted with ${message.securityContext.protocolId}, trust ${message.securityContext.trust}`}
+                >
+                  <Lock className="w-3 h-3" />
+                </span>
+              </Tooltip>
+            )}
           </div>
         )}
 
@@ -521,6 +548,27 @@ export const MessageBubble = memo(function MessageBubble({
     </div>
   )
 }, arePropsEqual)
+
+/**
+ * Build the tooltip shown on hover of the per-message lock indicator.
+ * Base line is protocol + trust; plugin-supplied `notes` are appended on
+ * subsequent lines so the user can tell apart e.g. "signature did not
+ * verify" (alarming) from "sender key not cached — signature not
+ * checked" (benign, resolves after the peer is probed).
+ */
+function formatSecurityTooltip(
+  t: (key: string, opts?: Record<string, unknown>) => string,
+  ctx: NonNullable<BaseMessage['securityContext']>,
+): string {
+  const header = t('chat.encryption.tooltip.header')
+  const protocol = t(`chat.encryption.tooltip.protocol.${ctx.protocolId}`, {
+    defaultValue: ctx.protocolId,
+  })
+  const trust = t(`chat.encryption.tooltip.trust.${ctx.trust}`)
+  const head = `${header} · ${protocol} · ${trust}`
+  if (!ctx.notes || ctx.notes.length === 0) return head
+  return [head, ...ctx.notes].join('\n')
+}
 
 /**
  * Helper to build reply context from a message and lookup functions.

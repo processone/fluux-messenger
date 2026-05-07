@@ -10,6 +10,7 @@ import { hasSavedCredentials, getCredentials, saveCredentials, deleteCredentials
 import { isTauri } from '@/utils/tauri'
 import { getDomainFromJid, getWebsocketUrlForDomain } from '@/config/wellKnownServers'
 import { useWindowDrag } from '@/hooks'
+import { isOpenpgpEnabled } from '@/stores/encryptionSettingsStore'
 
 const STORAGE_KEY_JID = 'xmpp-last-jid'
 const STORAGE_KEY_SERVER = 'xmpp-last-server'
@@ -19,6 +20,35 @@ const STORAGE_KEY_REMEMBER = 'xmpp-remember-me'
 function isAuthError(error: string): boolean {
   const lower = error.toLowerCase()
   return lower.includes('not-authorized') || lower.includes('authentication failed')
+}
+
+/**
+ * Kick off the Argon2id secret-key unlock on the Rust side so the KDF
+ * runs in parallel with the XMPP login handshake. No-op on web and
+ * when encryption is disabled; fire-and-forget in every other case —
+ * the Rust command spawns a background task and returns immediately.
+ *
+ * If this errors we fall back to the lazy path: `SequoiaPgpPlugin.init`
+ * on the `online` event will run the unlock itself (the same KDF, just
+ * with visible latency). So we log and move on; never block the user.
+ */
+async function prewarmOpenpgpUnlock(jid: string): Promise<void> {
+  if (!isTauri()) return
+  if (!isOpenpgpEnabled()) return
+  const bareJid = jid.split('/')[0]
+  if (!bareJid || !bareJid.includes('@')) return
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    await invoke('openpgp_prewarm', {
+      accountJid: bareJid,
+      // user_id doubles as the OpenPGP User ID when a fresh key is
+      // generated; the JID is the right value for both historically
+      // (mirrors SequoiaPgpPlugin.ensureIdentity's arguments).
+      userId: `xmpp:${bareJid}`,
+    })
+  } catch (err) {
+    console.warn('[Fluux] openpgp_prewarm failed (will unlock lazily):', err)
+  }
 }
 
 /**
@@ -232,6 +262,10 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
       try {
         // Check if another tab already holds this JID
         if (claimConnection && !(await claimConnection(jid))) return
+        // Start the Argon2id unlock (~500 ms) now so it overlaps with
+        // the XMPP login round-trip instead of blocking the user's
+        // first fingerprint / encrypted send after `online`.
+        void prewarmOpenpgpUnlock(jid)
         const resource = getResource()
         await connect(jid, password, actualServer, undefined, resource, i18n.language, isTauri(), true)
         // Save session for auto-reconnect on page reload
@@ -286,6 +320,9 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
     try {
       // Check if another tab already holds this JID
       if (claimConnection && !(await claimConnection(jid))) return
+      // Kick off the Argon2id unlock before the socket connects so the
+      // KDF (~500 ms) overlaps with the TCP/TLS/XMPP handshake.
+      void prewarmOpenpgpUnlock(jid)
       const resource = getResource()
       await connect(jid, password, actualServer, undefined, resource, i18n.language, isTauri(), rememberMe)
       // Save session for auto-reconnect on page reload

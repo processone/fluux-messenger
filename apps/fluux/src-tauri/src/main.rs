@@ -48,6 +48,9 @@ use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_opener::OpenerExt;
 
 mod xmpp_proxy;
+mod openpgp;
+mod openpgp_backup;
+mod openpgp_storage;
 
 #[cfg(target_os = "macos")]
 mod idle {
@@ -1096,7 +1099,18 @@ fn main() {
             fetch_url_metadata,
             start_xmpp_proxy,
             stop_xmpp_proxy,
-            log_to_terminal
+            log_to_terminal,
+            openpgp::openpgp_ensure_key,
+            openpgp::openpgp_prewarm,
+            openpgp::openpgp_encrypt,
+            openpgp::openpgp_decrypt,
+            openpgp::openpgp_fingerprint,
+            openpgp::openpgp_validate_cert,
+            openpgp::openpgp_forget_account,
+            openpgp::openpgp_has_persisted_key,
+            openpgp::openpgp_backup_encrypt,
+            openpgp::openpgp_backup_import,
+            openpgp::openpgp_rotate_encryption_subkey
         ])
         .on_page_load(move |webview, payload| {
             // Always inject console-forwarding script so SDK diagnostic logs
@@ -1136,6 +1150,55 @@ fn main() {
             }
         })
         .setup(move |app| {
+            // OpenPGP key storage needs the per-user app data dir. Resolve
+            // it here (inside setup, where `app.path()` is available) and
+            // hand the state to the Tauri managed-state system. Falling
+            // back to the OS tmp dir keeps the app bootable even if the
+            // path resolver fails — the user would just lose their key
+            // across the next restart, which is still better than a
+            // startup crash.
+            let openpgp_data_dir = match app.path().app_data_dir() {
+                Ok(dir) => dir,
+                Err(e) => {
+                    tracing::warn!(
+                        "openpgp: could not resolve app data dir ({e}); persisted keys will not survive restart"
+                    );
+                    std::env::temp_dir().join("fluux-openpgp-ephemeral")
+                }
+            };
+            // Wrap in Arc so the async `openpgp_ensure_key` command and
+            // the detached prewarm task can each hold an owned reference
+            // across thread boundaries without borrowing the Tauri
+            // `State<'_>`. (Tauri's State guard is tied to the command's
+            // stack frame — we can't move it into a `'static` task.)
+            let openpgp_state = Arc::new(openpgp::OpenpgpState::new(openpgp_data_dir));
+            app.manage(Arc::clone(&openpgp_state));
+
+            // Boot-time prewarm: if `last_user` is stashed in the keychain
+            // AND we have an encrypted TSK on disk for that JID, start the
+            // unlock now so it overlaps with Tauri window creation, React
+            // boot, and the XMPP handshake. Both preconditions matter —
+            // the disk check avoids speculatively GENERATING a new key
+            // for users who never opted into E2EE.
+            //
+            // This runs on Tauri's blocking pool to keep setup()
+            // non-blocking. `prewarm_if_persisted` itself is cheap (just
+            // a file-exists check); the Argon2id work it spawns runs on
+            // Tauri's blocking pool too.
+            let prewarm_state = Arc::clone(&openpgp_state);
+            tauri::async_runtime::spawn_blocking(move || {
+                let entry = match keyring::Entry::new(KEYRING_SERVICE, "last_user") {
+                    Ok(e) => e,
+                    Err(_) => return,
+                };
+                let jid = match entry.get_password() {
+                    Ok(j) => j,
+                    Err(_) => return, // NoEntry or access failure — quiet no-op
+                };
+                let user_id = format!("xmpp:{jid}");
+                prewarm_state.prewarm_if_persisted(jid, user_id);
+            });
+
             // Handle --clear-storage CLI flag (useful for debugging connection issues)
             if clear_storage {
                 tracing::info!("CLI: --clear-storage flag detected, will clear local data on startup");

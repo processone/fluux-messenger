@@ -58,9 +58,6 @@ export function RoomsList() {
   // Full list of rooms for plain arrow navigation (all rooms)
   const flatRooms = [...quickChats, ...joinedRooms, ...bookmarkedNotJoined]
 
-  // Active rooms only for Alt+arrow navigation (quick chats + joined, excludes bookmarked-not-joined)
-  const activeRooms = [...quickChats, ...joinedRooms]
-
   // Map from jid to flat index for quick lookup
   const jidToIndex = new Map(flatRooms.map((r, i) => [r.jid, i]))
 
@@ -103,19 +100,20 @@ export function RoomsList() {
   }
 
   // Keyboard navigation:
-  // - Plain arrows: highlight rooms (all rooms including bookmarked)
-  // - Alt+arrows: navigate AND switch to active rooms only (excludes bookmarked)
+  // - Plain arrows: highlight rooms (all rooms including bookmarked) — does not activate
   // - Enter: select highlighted room
+  // - Alt+arrows: handled by the global shortcut (useKeyboardShortcuts.goToNextItem)
+  //   which navigates joined rooms only. The list reacts via `activeItemId` so
+  //   the active room is scrolled into view.
   const { selectedIndex, isKeyboardNav, getItemProps, getItemAttribute, getContainerProps } = useListKeyboardNav({
     items: flatRooms,
-    altKeyItems: activeRooms, // Alt+arrow navigates only active rooms (excludes bookmarked)
     onSelect: handleRoomSelect,
     listRef,
     getItemId: (room) => room.jid,
     itemAttribute: 'data-room-jid',
     zoneRef,
     enableBounce: true,
-    activateOnAltNav: true, // Alt+arrow switches to the room, plain arrow only highlights
+    activeItemId: activeRoomJid,
   })
 
   if (rooms.length === 0) {
@@ -368,7 +366,7 @@ const RoomItem = memo(function RoomItem({
           onTouchMove={menu.handleTouchEnd}
           onMouseEnter={onMouseEnter}
           onMouseMove={onMouseMove}
-          className={`w-full px-2 py-1.5 rounded border flex items-center gap-3
+          className={`w-full relative px-2 py-1.5 rounded border flex items-center gap-3
                    transition-colors cursor-pointer group
                    ${room.isJoining
                      ? isSelected
@@ -378,14 +376,14 @@ const RoomItem = memo(function RoomItem({
                          : 'text-fluux-muted border-transparent hover:bg-fluux-hover hover:text-fluux-text opacity-70'
                      : room.joined
                        ? isActive
-                         ? 'bg-fluux-active text-fluux-text border-transparent'
+                         ? "bg-fluux-sidebar-item-active text-fluux-text border-transparent before:content-[''] before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r-full before:bg-fluux-sidebar-item-active-accent"
                          : isSelected
                            ? 'bg-fluux-hover text-fluux-text border-fluux-brand'
                            : isKeyboardNav
                              ? 'text-fluux-muted border-transparent'
                              : 'text-fluux-muted border-transparent hover:bg-fluux-hover hover:text-fluux-text'
                        : isActive
-                         ? 'bg-fluux-active text-fluux-text border-transparent opacity-80'
+                         ? "bg-fluux-sidebar-item-active text-fluux-text border-transparent opacity-80 before:content-[''] before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r-full before:bg-fluux-sidebar-item-active-accent"
                          : isSelected
                            ? 'bg-fluux-hover text-fluux-text border-fluux-brand opacity-80'
                            : isKeyboardNav

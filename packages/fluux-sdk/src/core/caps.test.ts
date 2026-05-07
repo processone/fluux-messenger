@@ -40,6 +40,27 @@ describe('caps (XEP-0115)', () => {
     it('should include XEP-0153 vCard avatar updates', () => {
       expect(CLIENT_FEATURES).toContain('vcard-temp:x:update')
     })
+
+    it('should include XEP-0373 OpenPGP public-keys +notify', () => {
+      // Without this, ejabberd will not push PEP headlines when a peer
+      // publishes or rotates their OX key — the client would keep a
+      // stale negative cache and silently fall back to plaintext.
+      expect(CLIENT_FEATURES).toContain('urn:xmpp:openpgp:0:public-keys+notify')
+    })
+
+    it('should include Fluux verifications cross-device sync +notify', () => {
+      // Without this, the server will not push PEP headlines when another
+      // device of the same account publishes an updated verification list.
+      expect(CLIENT_FEATURES).toContain('urn:xmpp:fluux:verifications:0+notify')
+    })
+
+    it('should include XEP-0374 OX-IM discovery feature', () => {
+      // XEP-0374 §5 mandates this so a peer can tell whether to wrap a
+      // message in a signcrypt envelope or send plaintext. A peer that
+      // does not see this feature on our caps will (correctly) refuse
+      // to encrypt to us.
+      expect(CLIENT_FEATURES).toContain('urn:xmpp:openpgp:im:0')
+    })
   })
 
   describe('getClientIdentity', () => {

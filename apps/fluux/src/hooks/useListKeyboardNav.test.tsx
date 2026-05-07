@@ -916,6 +916,110 @@ describe('useListKeyboardNav', () => {
     })
   })
 
+  describe('activeItemId synchronization', () => {
+    function createActiveItemWrapper() {
+      return ({ items, activeItemId }: { items: TestItem[]; activeItemId: string | null | undefined }) => {
+        const listRef = useRef<HTMLDivElement>(null)
+        return useListKeyboardNav({
+          items,
+          onSelect: mockOnSelect,
+          listRef,
+          getItemId: (item: TestItem) => item.id,
+          activeItemId,
+        })
+      }
+    }
+
+    it('initializes selectedIndex to the active item index on mount', () => {
+      const { result } = renderHook(createActiveItemWrapper(), {
+        initialProps: { items: mockItems, activeItemId: '2' },
+      })
+
+      expect(result.current.selectedIndex).toBe(1)
+    })
+
+    it('syncs selectedIndex when activeItemId changes', () => {
+      const { result, rerender } = renderHook(createActiveItemWrapper(), {
+        initialProps: { items: mockItems, activeItemId: '1' as string | null | undefined },
+      })
+
+      expect(result.current.selectedIndex).toBe(0)
+
+      rerender({ items: mockItems, activeItemId: '3' })
+      expect(result.current.selectedIndex).toBe(2)
+
+      rerender({ items: mockItems, activeItemId: '2' })
+      expect(result.current.selectedIndex).toBe(1)
+    })
+
+    it('does not change selectedIndex when activeItemId points to a missing item', () => {
+      const { result, rerender } = renderHook(createActiveItemWrapper(), {
+        initialProps: { items: mockItems, activeItemId: '2' as string | null | undefined },
+      })
+
+      expect(result.current.selectedIndex).toBe(1)
+
+      rerender({ items: mockItems, activeItemId: 'unknown-id' })
+      // Selection is preserved (no-op when ID isn't in the list)
+      expect(result.current.selectedIndex).toBe(1)
+    })
+
+    it('does not interfere with internal selection when activeItemId is null', () => {
+      const { result } = renderHook(createActiveItemWrapper(), {
+        initialProps: { items: mockItems, activeItemId: null },
+      })
+
+      // Hook can still drive selection itself (e.g., plain Arrow keys)
+      act(() => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+      })
+      expect(result.current.selectedIndex).toBe(0)
+
+      act(() => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+      })
+      expect(result.current.selectedIndex).toBe(1)
+    })
+
+    it('preserves selection when items change while activeItemId is stable', () => {
+      const { result, rerender } = renderHook(createActiveItemWrapper(), {
+        initialProps: { items: mockItems, activeItemId: '2' as string | null | undefined },
+      })
+
+      expect(result.current.selectedIndex).toBe(1)
+
+      // New array reference, same item IDs (e.g., re-render from store update)
+      const sameItems: TestItem[] = [
+        { id: '1', name: 'Alice' },
+        { id: '2', name: 'Bob' },
+        { id: '3', name: 'Charlie' },
+      ]
+      rerender({ items: sameItems, activeItemId: '2' })
+      expect(result.current.selectedIndex).toBe(1)
+
+      // Item list grows; activeItemId stable — selection should still point to item 2
+      const grownItems: TestItem[] = [
+        ...sameItems,
+        { id: '4', name: 'Dave' },
+      ]
+      rerender({ items: grownItems, activeItemId: '2' })
+      expect(result.current.selectedIndex).toBe(1)
+    })
+
+    it('re-syncs selectedIndex when an item appears in the list', () => {
+      const { result, rerender } = renderHook(createActiveItemWrapper(), {
+        initialProps: { items: mockItems.slice(0, 2), activeItemId: '3' as string | null | undefined },
+      })
+
+      // '3' is not in the initial list — no sync, selectedIndex stays at -1
+      expect(result.current.selectedIndex).toBe(-1)
+
+      // Now '3' appears
+      rerender({ items: mockItems, activeItemId: '3' })
+      expect(result.current.selectedIndex).toBe(2)
+    })
+  })
+
   describe('getContainerProps (mouse leave handling)', () => {
     it('provides getContainerProps function', () => {
       const { result } = renderHook(createWrapper(mockItems, mockOnSelect))

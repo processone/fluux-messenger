@@ -78,42 +78,53 @@ const localStorageMock = (() => {
   }
 })()
 
-Object.defineProperty(window, 'localStorage', {
-  value: localStorageMock,
-})
+// jsdom-only mocks. A handful of tests opt into the `node` environment
+// (e.g. openpgp.js crypto round-trips that fail under jsdom's realm
+// boundary) — for those, `window` is undefined and we skip the DOM
+// shims entirely.
+if (typeof window === 'undefined') {
+  // Node-environment tests still touch zustand stores that read from
+  // localStorage; provide a minimal in-memory shim on globalThis so
+  // they don't crash on `localStorage.getItem` etc.
+  ;(globalThis as { localStorage?: Storage }).localStorage = localStorageMock as unknown as Storage
+} else {
+  Object.defineProperty(window, 'localStorage', {
+    value: localStorageMock,
+  })
 
-// Mock ResizeObserver for jsdom (not available in jsdom by default)
-class ResizeObserverMock {
-  observe = vi.fn()
-  unobserve = vi.fn()
-  disconnect = vi.fn()
+  // Mock ResizeObserver for jsdom (not available in jsdom by default)
+  class ResizeObserverMock {
+    observe = vi.fn()
+    unobserve = vi.fn()
+    disconnect = vi.fn()
+  }
+  globalThis.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver
+
+  // Mock IntersectionObserver for jsdom (used by useViewportObserver)
+  class IntersectionObserverMock {
+    observe = vi.fn()
+    unobserve = vi.fn()
+    disconnect = vi.fn()
+    constructor(_callback: IntersectionObserverCallback, _options?: IntersectionObserverInit) {}
+  }
+  globalThis.IntersectionObserver = IntersectionObserverMock as unknown as typeof IntersectionObserver
+
+  // Mock matchMedia for jsdom (not available by default)
+  // Returns desktop (non-mobile) by default - tests can override in specific files
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches: false, // Default to desktop/non-mobile
+      media: query,
+      onchange: null,
+      addListener: vi.fn(), // Deprecated
+      removeListener: vi.fn(), // Deprecated
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  })
 }
-globalThis.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver
-
-// Mock IntersectionObserver for jsdom (used by useViewportObserver)
-class IntersectionObserverMock {
-  observe = vi.fn()
-  unobserve = vi.fn()
-  disconnect = vi.fn()
-  constructor(_callback: IntersectionObserverCallback, _options?: IntersectionObserverInit) {}
-}
-globalThis.IntersectionObserver = IntersectionObserverMock as unknown as typeof IntersectionObserver
-
-// Mock matchMedia for jsdom (not available by default)
-// Returns desktop (non-mobile) by default - tests can override in specific files
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: vi.fn().mockImplementation((query: string) => ({
-    matches: false, // Default to desktop/non-mobile
-    media: query,
-    onchange: null,
-    addListener: vi.fn(), // Deprecated
-    removeListener: vi.fn(), // Deprecated
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  })),
-})
 
 // Provide default vanilla store mocks for @fluux/sdk
 // Tests that need specific store behavior should override these in their own vi.mock('@fluux/sdk')

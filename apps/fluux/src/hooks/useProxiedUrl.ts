@@ -26,6 +26,10 @@ interface ProxiedUrlState {
 export function sanitizeMediaUrl(url: string): string {
   try {
     const parsed = new URL(url)
+    // Non-special schemes (e.g. aesgcm://) have origin="null" per WHATWG URL spec.
+    // Returning `"null" + pathname` would produce a broken relative URL, so we
+    // return the original URL unchanged — it cannot be sanitized here.
+    if (parsed.origin === 'null') return url
     const encodedPath = parsed.pathname
       .split('/')
       .map(segment => {

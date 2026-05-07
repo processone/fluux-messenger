@@ -16,6 +16,7 @@
 import { openDB, type IDBPDatabase, type DBSchema } from 'idb'
 import type { Message, RoomMessage } from '../core/types'
 import { getStorageScopeJid } from './storageScope'
+import * as messageCache from './messageCache'
 
 const DB_NAME = 'fluux-search-index'
 const DB_VERSION = 2
@@ -618,9 +619,6 @@ export async function backfillFromMessageCache(): Promise<void> {
 
   if (await isBackfillComplete()) return
 
-  // Dynamic import to avoid circular dependency and keep lazy loading possible
-  const messageCache = await import('./messageCache')
-
   let chatCount = 0
   let roomCount = 0
 
@@ -674,7 +672,6 @@ export async function rebuildSearchIndex(
   await tx.done
 
   // Count total messages for progress reporting
-  const messageCache = await import('./messageCache')
   const totalMessages =
     (await messageCache.getTotalMessageCount()) +
     (await messageCache.getTotalRoomMessageCount())

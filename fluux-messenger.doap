@@ -524,6 +524,33 @@
       </xmpp:SupportedXep>
     </implements>
 
+    <!-- XEP-0373: OpenPGP for XMPP (OX) -->
+    <implements>
+      <xmpp:SupportedXep>
+        <xmpp:xep rdf:resource="https://xmpp.org/extensions/xep-0373.html"/>
+        <xmpp:status>complete</xmpp:status>
+        <xmpp:note>Public key publication and retrieval via PEP, secret key backup, key pinning, peer key change detection</xmpp:note>
+      </xmpp:SupportedXep>
+    </implements>
+
+    <!-- XEP-0374: OpenPGP for XMPP Instant Messaging (OX-IM) -->
+    <implements>
+      <xmpp:SupportedXep>
+        <xmpp:xep rdf:resource="https://xmpp.org/extensions/xep-0374.html"/>
+        <xmpp:status>complete</xmpp:status>
+        <xmpp:note>signcrypt envelope for 1:1 and MUC messages, send-policy negotiation, MAM history decryption</xmpp:note>
+      </xmpp:SupportedXep>
+    </implements>
+
+    <!-- XEP-0380: Explicit Message Encryption -->
+    <implements>
+      <xmpp:SupportedXep>
+        <xmpp:xep rdf:resource="https://xmpp.org/extensions/xep-0380.html"/>
+        <xmpp:status>complete</xmpp:status>
+        <xmpp:note>encryption element appended to outgoing encrypted messages for legacy client fallback</xmpp:note>
+      </xmpp:SupportedXep>
+    </implements>
+
     <!-- Planned XEPs -->
 
     <!-- XEP-0184: Message Delivery Receipts -->

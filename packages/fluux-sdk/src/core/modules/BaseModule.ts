@@ -1,5 +1,6 @@
 import type { Element } from '@xmpp/client'
 import type { StoreBindings, XMPPClientEvents, SDKEvents, StorageAdapter, ProxyAdapter, PrivacyOptions } from '../types'
+import type { E2EEManager } from '../e2ee'
 
 /**
  * Dependencies injected into each module by XMPPClient.
@@ -46,6 +47,14 @@ export interface ModuleDependencies {
    * Used by Profile module to control avatar fetching behavior.
    */
   privacyOptions?: PrivacyOptions
+  /**
+   * Accessor for the end-to-end encryption plugin host. Chat consults it
+   * on the send and receive paths to decide whether to encrypt/decrypt.
+   * Returns `null` before login (manager is tied to a logged-in identity);
+   * once `online` the manager is live even with no plugins registered, in
+   * which case messages simply flow in cleartext.
+   */
+  getE2EEManager?: () => E2EEManager | null
 }
 
 /**

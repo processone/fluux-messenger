@@ -141,6 +141,21 @@ describe('createStoreBindings', () => {
       )
     })
 
+    it('should handle message:security-updated by patching securityContext', () => {
+      const securityContext = {
+        protocolId: 'openpgp',
+        trust: 'tofu' as const,
+      }
+      mockClient.emit('message:security-updated', {
+        conversationId: 'bob@example.com',
+        messageId: 'msg-late',
+        securityContext,
+      })
+      expect(mockStores.chat.updateMessage).toHaveBeenCalledWith(
+        'bob@example.com', 'msg-late', { securityContext }
+      )
+    })
+
     it('should handle chat:animation', () => {
       mockClient.emit('chat:animation', { conversationId: 'bob@example.com', animation: 'shake' })
       expect(mockStores.chat.triggerAnimation).toHaveBeenCalledWith('bob@example.com', 'shake')

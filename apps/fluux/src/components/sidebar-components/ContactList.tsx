@@ -78,8 +78,10 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
     activateOnAltNav: true, // Alt+arrow opens the contact profile
   })
 
-  // Get selected contact JID for highlighting (keyboard selection takes precedence for navigation)
-  const selectedJid = selectedIndex >= 0 ? (flatContactList[selectedIndex]?.jid ?? null) : (activeContactJid ?? null)
+  // Active contact gets the marker-bar treatment (parity with Messages/Rooms).
+  // Keyboard-nav highlight is a separate, transient state that can coexist with active.
+  const activeJid = activeContactJid ?? null
+  const selectedJid = selectedIndex >= 0 ? (flatContactList[selectedIndex]?.jid ?? null) : null
 
   return (
     <div className="flex flex-col h-full">
@@ -118,6 +120,7 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
               <ContactGroup
                 title={`${t('contacts.online')} — ${online.length}`}
                 contacts={online}
+                activeJid={activeJid}
                 selectedJid={selectedJid}
                 isKeyboardNav={isKeyboardNav}
                 jidToIndex={jidToIndex}
@@ -134,6 +137,7 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
               <ContactGroup
                 title={`${t('contacts.offline')} — ${offline.length}`}
                 contacts={offline}
+                activeJid={activeJid}
                 selectedJid={selectedJid}
                 isKeyboardNav={isKeyboardNav}
                 jidToIndex={jidToIndex}
@@ -150,6 +154,7 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
               <ContactGroup
                 title={`${t('contacts.error')} — ${errored.length}`}
                 contacts={errored}
+                activeJid={activeJid}
                 selectedJid={selectedJid}
                 isKeyboardNav={isKeyboardNav}
                 jidToIndex={jidToIndex}
@@ -172,6 +177,7 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
 interface ContactGroupProps {
   title: string
   contacts: Contact[]
+  activeJid: string | null
   selectedJid: string | null
   isKeyboardNav: boolean
   jidToIndex: Map<string, number>
@@ -191,6 +197,7 @@ interface ContactGroupProps {
 function ContactGroup({
   title,
   contacts,
+  activeJid,
   selectedJid,
   isKeyboardNav,
   jidToIndex,
@@ -215,6 +222,7 @@ function ContactGroup({
             <ContactItem
               key={contact.jid}
               contact={contact}
+              isActive={contact.jid === activeJid}
               isSelected={contact.jid === selectedJid}
               isKeyboardNav={isKeyboardNav}
               onSelect={() => onSelect(contact)}
@@ -235,6 +243,7 @@ function ContactGroup({
 
 interface ContactItemProps {
   contact: Contact
+  isActive?: boolean
   isSelected?: boolean
   isKeyboardNav?: boolean
   onSelect: () => void
@@ -249,6 +258,7 @@ interface ContactItemProps {
 
 const ContactItem = memo(function ContactItem({
   contact,
+  isActive,
   isSelected,
   isKeyboardNav,
   onSelect,
@@ -317,13 +327,15 @@ const ContactItem = memo(function ContactItem({
           onTouchMove={menu.handleTouchEnd}
           onMouseEnter={onMouseEnter}
           onMouseMove={onMouseMove}
-          className={`w-full px-2 py-1.5 rounded border flex items-center gap-3 text-start
+          className={`w-full relative px-2 py-1.5 rounded border flex items-center gap-3 text-start
                      transition-colors cursor-pointer ${
-                       isSelected
-                         ? 'bg-fluux-hover text-fluux-text border-fluux-brand'
-                         : isKeyboardNav
-                           ? 'text-fluux-muted border-transparent'
-                           : 'text-fluux-muted border-transparent hover:bg-fluux-hover hover:text-fluux-text'
+                       isActive
+                         ? "bg-fluux-sidebar-item-active text-fluux-text border-transparent before:content-[''] before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r-full before:bg-fluux-sidebar-item-active-accent"
+                         : isSelected
+                           ? 'bg-fluux-hover text-fluux-text border-fluux-brand'
+                           : isKeyboardNav
+                             ? 'text-fluux-muted border-transparent'
+                             : 'text-fluux-muted border-transparent hover:bg-fluux-hover hover:text-fluux-text'
                      }`}
         >
           {/* Avatar with presence indicator */}

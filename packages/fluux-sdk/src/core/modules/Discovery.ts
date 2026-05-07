@@ -46,6 +46,36 @@ export class Discovery extends BaseModule {
   }
 
   /**
+   * Query a JID's supported features and identities via disco#info (XEP-0030).
+   *
+   * General-purpose version of {@link Discovery.fetchServerInfo} — returns
+   * the parsed result instead of publishing it to the connection store.
+   * Used by plugins (e.g. E2EE capability probing) that need to test for
+   * a specific feature on an arbitrary peer or service.
+   */
+  async queryInfo(jid: string): Promise<{ features: Array<{ var: string }>; identities: Array<{ category: string; type: string; name?: string }> }> {
+    const iq = xml(
+      'iq',
+      { type: 'get', to: jid, id: `disco_info_${generateUUID()}` },
+      xml('query', { xmlns: NS_DISCO_INFO }),
+    )
+    const result = await this.deps.sendIQ(iq)
+    const query = result.getChild('query', NS_DISCO_INFO)
+    if (!query) return { features: [], identities: [] }
+
+    const identities = query.getChildren('identity').map((identity: Element) => ({
+      category: identity.attrs.category || '',
+      type: identity.attrs.type || '',
+      ...(identity.attrs.name && { name: identity.attrs.name }),
+    }))
+    const features = query.getChildren('feature')
+      .map((feature: Element) => ({ var: (feature.attrs.var as string) || '' }))
+      .filter((f) => f.var)
+
+    return { features, identities }
+  }
+
+  /**
    * Fetch server features via disco#info (XEP-0030).
    * Queries the server domain to discover supported features and identities.
    */

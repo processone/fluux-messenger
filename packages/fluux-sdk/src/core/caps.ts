@@ -11,7 +11,10 @@ import {
   NS_AVATAR_METADATA_NOTIFY,
   NS_BOOKMARKS_NOTIFY,
   NS_CARBONS,
+  NS_FLUUX_VERIFICATIONS_NOTIFY,
   NS_IDLE,
+  NS_OPENPGP_IM,
+  NS_OPENPGP_PUBLIC_KEYS_NOTIFY,
   NS_PING,
   NS_REACTIONS,
   NS_TIME,
@@ -62,6 +65,9 @@ export const CLIENT_FEATURES = [
   NS_BOOKMARKS_NOTIFY,      // XEP-0402 PEP notify (bookmarks)
   NS_CARBONS,               // XEP-0280 Message Carbons
   NS_IDLE,                  // XEP-0319 Last User Interaction
+  NS_FLUUX_VERIFICATIONS_NOTIFY, // Fluux private PEP notify (cross-device verification sync)
+  NS_OPENPGP_IM,            // XEP-0374 OpenPGP for XMPP Instant Messaging (OX-IM)
+  NS_OPENPGP_PUBLIC_KEYS_NOTIFY, // XEP-0373 PEP notify (OpenPGP public keys)
   NS_PING,                  // XEP-0199 XMPP Ping
   NS_TIME,                  // XEP-0202 Entity Time
   NS_REACTIONS,             // XEP-0444 Message Reactions

@@ -72,7 +72,25 @@ import type {
 import { parseMessageContent, parseOgpFastening, applyRetraction, applyCorrection, parseStanzaId } from './messagingUtils'
 import { getDomain } from '../jid'
 import { logInfo, logError as logErr } from '../logger'
+import {
+  decryptStanzaInPlace,
+  readStashedAuthoredAt,
+  readStashedSecurityContext,
+} from '../e2ee/stanzaDecrypt'
+import type { MessageSecurityContext } from '../types'
 import { parseSearchQuery, tokenize } from '../../utils/searchIndex'
+
+/**
+ * Raw MAM result buffered by {@link MAM.createMessageCollector} and drained
+ * after the enclosing IQ resolves. The two-phase shape exists so the drain
+ * loop can `await` per-entry async work (E2EE decrypt) without blocking the
+ * synchronous stanza listener.
+ */
+interface RawArchiveEntry {
+  forwarded: Element
+  messageEl: Element
+  archiveId?: string
+}
 
 /**
  * Internal type for collected modifications during MAM query
@@ -188,16 +206,13 @@ export class MAM extends BaseModule {
 
         const collectedMessages: Message[] = []
         const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
+        const rawEntries: RawArchiveEntry[] = []
 
+        // Collector runs synchronously as stanzas arrive; it just buffers raw
+        // elements. The actual parse/decrypt pass happens after `sendIQ`
+        // resolves so we can await the E2EE pipeline per entry.
         const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, archiveId) => {
-          // Check for modifications first
-          const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
-          if (this.collectModification(messageEl, modifications, (from) => getBareJid(from), forwardedTimestamp)) {
-            return
-          }
-
-          const msg = this.parseArchiveMessage(forwarded, conversationId, archiveId)
-          if (msg) collectedMessages.push(msg)
+          rawEntries.push({ forwarded, messageEl, archiveId })
         })
 
         // Use the collector registry if available, otherwise fall back to direct listeners
@@ -217,6 +232,18 @@ export class MAM extends BaseModule {
           }
           const response = await this.deps.sendIQ(iq)
           const { complete, rsm } = this.parseMAMResponse(response)
+
+          // Drain the buffer: run modification detection + opportunistic
+          // E2EE decrypt, then parse into Message objects.
+          for (const { forwarded, messageEl, archiveId } of rawEntries) {
+            const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
+            if (this.collectModification(messageEl, modifications, (from) => getBareJid(from), forwardedTimestamp)) {
+              continue
+            }
+            await this.decryptArchiveEntryIfNeeded(messageEl, conversationId)
+            const msg = this.parseArchiveMessage(forwarded, conversationId, archiveId)
+            if (msg) collectedMessages.push(msg)
+          }
 
           // Apply modifications to collected messages
           const unresolved = this.applyModifications(collectedMessages, modifications, (msg, from) => msg.from === from)
@@ -326,16 +353,11 @@ export class MAM extends BaseModule {
 
         const collectedMessages: RoomMessage[] = []
         const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
+        const rawEntries: RawArchiveEntry[] = []
 
+        // Collector only buffers; decrypt + parse happen in the async drain below.
         const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, archiveId) => {
-          // Check for modifications first (keep full JID for room messages)
-          const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
-          if (this.collectModification(messageEl, modifications, (from) => from, forwardedTimestamp)) {
-            return
-          }
-
-          const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
-          if (msg) collectedMessages.push(msg)
+          rawEntries.push({ forwarded, messageEl, archiveId })
         })
 
         // Use the collector registry if available, otherwise fall back to direct listeners
@@ -354,6 +376,17 @@ export class MAM extends BaseModule {
           }
           const response = await this.deps.sendIQ(iq)
           const { complete, rsm } = this.parseMAMResponse(response)
+
+          // Drain buffer: modification detection + opportunistic E2EE decrypt, then parse.
+          for (const { forwarded, messageEl, archiveId } of rawEntries) {
+            const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
+            if (this.collectModification(messageEl, modifications, (from) => from, forwardedTimestamp)) {
+              continue
+            }
+            await this.decryptArchiveEntryIfNeeded(messageEl, roomJid)
+            const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
+            if (msg) collectedMessages.push(msg)
+          }
 
           // Apply modifications to collected messages (full JID comparison for rooms)
           // normalizeReactor extracts nick from full MUC JID for consistent reactor identifiers
@@ -446,21 +479,10 @@ export class MAM extends BaseModule {
 
     const collectedMessages: Message[] = []
     const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
+    const rawEntries: RawArchiveEntry[] = []
 
     const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, archiveId) => {
-      const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
-      if (this.collectModification(messageEl, modifications, (from) => getBareJid(from), forwardedTimestamp)) {
-        return
-      }
-      // Derive conversationId from the message's from/to
-      const currentJid = this.deps.getCurrentJid()
-      const from = getBareJid(messageEl.attrs.from || '')
-      const to = getBareJid(messageEl.attrs.to || '')
-      const ownBareJid = currentJid ? getBareJid(currentJid) : ''
-      const conversationId = from === ownBareJid ? to : from
-
-      const msg = this.parseArchiveMessage(forwarded, conversationId, archiveId)
-      if (msg) collectedMessages.push(msg)
+      rawEntries.push({ forwarded, messageEl, archiveId })
     })
 
     let unregister: () => void
@@ -476,6 +498,22 @@ export class MAM extends BaseModule {
       logInfo(`MAM search: query="${query}"${withJid ? `, with=${getBareJid(withJid)}` : ''}, max=${max}`)
       const response = await this.deps.sendIQ(iq)
       const { complete, rsm } = this.parseMAMResponse(response)
+
+      const currentJid = this.deps.getCurrentJid()
+      const ownBareJid = currentJid ? getBareJid(currentJid) : ''
+      for (const { forwarded, messageEl, archiveId } of rawEntries) {
+        const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
+        if (this.collectModification(messageEl, modifications, (from) => getBareJid(from), forwardedTimestamp)) {
+          continue
+        }
+        // Derive conversationId from the message's from/to
+        const from = getBareJid(messageEl.attrs.from || '')
+        const to = getBareJid(messageEl.attrs.to || '')
+        const conversationId = from === ownBareJid ? to : from
+        await this.decryptArchiveEntryIfNeeded(messageEl, conversationId)
+        const msg = this.parseArchiveMessage(forwarded, conversationId, archiveId)
+        if (msg) collectedMessages.push(msg)
+      }
 
       this.applyModifications(collectedMessages, modifications, (msg, from) => msg.from === from)
 
@@ -508,14 +546,11 @@ export class MAM extends BaseModule {
 
     const collectedMessages: RoomMessage[] = []
     const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
+    const rawEntries: RawArchiveEntry[] = []
 
+    // Collector only buffers; decrypt + parse happen in the async drain below.
     const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, archiveId) => {
-      const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
-      if (this.collectModification(messageEl, modifications, (from) => from, forwardedTimestamp)) {
-        return
-      }
-      const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
-      if (msg) collectedMessages.push(msg)
+      rawEntries.push({ forwarded, messageEl, archiveId })
     })
 
     let unregister: () => void
@@ -531,6 +566,16 @@ export class MAM extends BaseModule {
       logInfo(`Room MAM search: query="${query}", room=${roomJid}, max=${max}`)
       const response = await this.deps.sendIQ(iq)
       const { complete, rsm } = this.parseMAMResponse(response)
+
+      for (const { forwarded, messageEl, archiveId } of rawEntries) {
+        const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
+        if (this.collectModification(messageEl, modifications, (from) => from, forwardedTimestamp)) {
+          continue
+        }
+        await this.decryptArchiveEntryIfNeeded(messageEl, roomJid)
+        const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
+        if (msg) collectedMessages.push(msg)
+      }
 
       this.applyModifications(collectedMessages, modifications, (msg, from) => msg.from === from)
 
@@ -1607,6 +1652,45 @@ export class MAM extends BaseModule {
   }
 
   /**
+   * Opportunistically decrypt a 1:1 archive entry in place.
+   *
+   * Mirrors the live-path hook in {@link Chat.tryHandleEncrypted}: if a
+   * registered E2EE plugin claims one of the message's children, the
+   * stanza is decrypted, the encrypted element is stripped, the hint
+   * `<body>` is replaced with plaintext, and a security context is
+   * stashed for {@link parseArchiveMessage} to read.
+   *
+   * Self-outgoing entries are decrypted just like inbound ones: outbound
+   * ciphertexts are encrypted to our own key as well as the peer's, so
+   * MAM replay on this device (and on any other device we log in from)
+   * can recover the plaintext.
+   */
+  private async decryptArchiveEntryIfNeeded(
+    messageEl: Element,
+    peer: string,
+  ): Promise<void> {
+    const manager = this.deps.getE2EEManager?.()
+    if (!manager) return
+    await decryptStanzaInPlace(messageEl, manager, peer, 'archive')
+  }
+
+  /**
+   * Extract a {@link MessageSecurityContext} from a decrypted archive
+   * message, or `undefined` if the entry was cleartext. Mirrors the shape
+   * narrowing done in Chat so downstream consumers don't depend on the
+   * e2ee module's SecurityContext type.
+   */
+  private archiveSecurityContext(messageEl: Element): MessageSecurityContext | undefined {
+    const stash = readStashedSecurityContext(messageEl)
+    if (!stash) return undefined
+    return {
+      protocolId: stash.protocolId,
+      trust: stash.trust,
+      ...(stash.notes && { notes: stash.notes }),
+    }
+  }
+
+  /**
    * Parse a single archived message for 1:1 conversations.
    */
   private parseArchiveMessage(forwarded: Element, conversationId: string, archiveId?: string): Message | null {
@@ -1629,13 +1713,22 @@ export class MAM extends BaseModule {
 
     const bareFrom = getBareJid(from)
     const isOutgoing = bareFrom === getBareJid(this.deps.getCurrentJid() ?? '')
-    const parsed = parseMessageContent({ messageEl, body: body || '', delayEl, forceDelayed: true })
+    const authoredAt = readStashedAuthoredAt(messageEl)
+    const parsed = parseMessageContent({
+      messageEl,
+      body: body || '',
+      delayEl,
+      forceDelayed: true,
+      ...(authoredAt && { authoredAt }),
+    })
 
     // Use stanza-id from message element, or fall back to MAM archive ID (they're equivalent)
     const stanzaId = parsed.stanzaId || archiveId
 
     // For message ID: prefer message id attr, then generate stable ID from content
     const messageId = messageEl.attrs.id || generateStableMessageId(from, parsed.timestamp, body || '')
+
+    const securityContext = this.archiveSecurityContext(messageEl)
 
     return {
       type: 'chat',
@@ -1651,6 +1744,7 @@ export class MAM extends BaseModule {
       ...(parsed.noStyling && { noStyling: parsed.noStyling }),
       ...(parsed.replyTo && { replyTo: parsed.replyTo }),
       ...(parsed.attachment && { attachment: parsed.attachment }),
+      ...(securityContext && { securityContext }),
     }
   }
 
@@ -1680,7 +1774,16 @@ export class MAM extends BaseModule {
     const nick = getResource(from) || ''
     // Case-insensitive nickname comparison - some servers may change case
     const isOutgoing = nick.toLowerCase() === myNickname.toLowerCase()
-    const parsed = parseMessageContent({ messageEl, body: body || '', delayEl, forceDelayed: true, preserveFullReplyToJid: true, messageContext: 'room' })
+    const roomAuthoredAt = readStashedAuthoredAt(messageEl)
+    const parsed = parseMessageContent({
+      messageEl,
+      body: body || '',
+      delayEl,
+      forceDelayed: true,
+      preserveFullReplyToJid: true,
+      messageContext: 'room',
+      ...(roomAuthoredAt && { authoredAt: roomAuthoredAt }),
+    })
 
     // Use stanza-id from message element, or fall back to MAM archive ID (they're equivalent)
     const stanzaId = parsed.stanzaId || archiveId
@@ -1752,10 +1855,9 @@ export class MAM extends BaseModule {
 
     const iq = this.buildMAMQuery(queryId, formFields, 1, undefined, roomJid)
 
-    let result: RoomMessage | null = null
-    const collectMessage = this.createMessageCollector(queryId, (forwarded, _messageEl, archiveId) => {
-      const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
-      if (msg) result = msg
+    let rawEntry: RawArchiveEntry | null = null
+    const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, archiveId) => {
+      rawEntry = { forwarded, messageEl, archiveId }
     })
 
     let unregister: () => void
@@ -1774,6 +1876,13 @@ export class MAM extends BaseModule {
       return null
     } finally {
       unregister!()
+    }
+
+    let result: RoomMessage | null = null
+    if (rawEntry) {
+      const { forwarded, messageEl, archiveId } = rawEntry as RawArchiveEntry
+      await this.decryptArchiveEntryIfNeeded(messageEl, roomJid)
+      result = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
     }
 
     // If found, add to the store so subsequent lookups don't need MAM

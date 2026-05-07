@@ -577,3 +577,157 @@ describe('setupBackgroundSyncSideEffects', () => {
     })
   })
 })
+
+// ---------------------------------------------------------------------------
+// E2EE capability warm-up tests
+// ---------------------------------------------------------------------------
+describe('E2EE capability warm-up on fresh session', () => {
+  let mockClient: ReturnType<typeof createMockClient>
+  let cleanup: () => void
+
+  function makeE2EEManager(canEncryptTo = vi.fn().mockResolvedValue(true)) {
+    return { canEncryptTo }
+  }
+
+  function seedConversations(entries: { id: string; type: 'chat' | 'groupchat' }[]) {
+    chatStore.setState({
+      conversationEntities: new Map(
+        entries.map(e => [e.id, { id: e.id, name: e.id, type: e.type }]),
+      ),
+    })
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    _resetStorageScopeForTesting()
+    connectionStore.getState().reset()
+    chatStore.getState().reset()
+    mockClient = createMockClient()
+    localStorageMock.clear()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    cleanup?.()
+    chatStore.getState().reset()
+  })
+
+  it('probes all 1:1 conversation JIDs on fresh session', async () => {
+    seedConversations([
+      { id: 'alice@example.com', type: 'chat' },
+      { id: 'bob@example.com', type: 'chat' },
+    ])
+    const canEncryptTo = vi.fn().mockResolvedValue(true)
+    mockClient.e2ee = makeE2EEManager(canEncryptTo) as any
+
+    cleanup = setupBackgroundSyncSideEffects(mockClient)
+    simulateFreshSession(mockClient)
+    await vi.runAllTimersAsync()
+
+    expect(canEncryptTo).toHaveBeenCalledWith({ kind: 'direct', peer: 'alice@example.com' })
+    expect(canEncryptTo).toHaveBeenCalledWith({ kind: 'direct', peer: 'bob@example.com' })
+    expect(canEncryptTo).toHaveBeenCalledTimes(2)
+  })
+
+  it('does NOT probe groupchat conversations', async () => {
+    seedConversations([
+      { id: 'alice@example.com', type: 'chat' },
+      { id: 'room@conference.example.com', type: 'groupchat' },
+    ])
+    const canEncryptTo = vi.fn().mockResolvedValue(false)
+    mockClient.e2ee = makeE2EEManager(canEncryptTo) as any
+
+    cleanup = setupBackgroundSyncSideEffects(mockClient)
+    simulateFreshSession(mockClient)
+    await vi.runAllTimersAsync()
+
+    expect(canEncryptTo).toHaveBeenCalledTimes(1)
+    expect(canEncryptTo).toHaveBeenCalledWith({ kind: 'direct', peer: 'alice@example.com' })
+    expect(canEncryptTo).not.toHaveBeenCalledWith(
+      expect.objectContaining({ peer: 'room@conference.example.com' }),
+    )
+  })
+
+  it('does NOT probe during SM resumption', async () => {
+    seedConversations([{ id: 'alice@example.com', type: 'chat' }])
+    const canEncryptTo = vi.fn().mockResolvedValue(true)
+    mockClient.e2ee = makeE2EEManager(canEncryptTo) as any
+
+    cleanup = setupBackgroundSyncSideEffects(mockClient)
+    // SM resumption fires 'resumed', not 'online'
+    connectionStore.getState().setStatus('online')
+    mockClient._emit('resumed')
+    await vi.runAllTimersAsync()
+
+    expect(canEncryptTo).not.toHaveBeenCalled()
+  })
+
+  it('stops probing when disconnected mid-warmup', async () => {
+    seedConversations([
+      { id: 'alice@example.com', type: 'chat' },
+      { id: 'bob@example.com', type: 'chat' },
+      { id: 'carol@example.com', type: 'chat' },
+      { id: 'dave@example.com', type: 'chat' },
+    ])
+    // Disconnect after the first batch (2 probes)
+    mockClient.isConnected
+      .mockReturnValueOnce(true)  // batch 1 guard — proceed
+      .mockReturnValue(false)     // batch 2 guard — abort
+
+    const canEncryptTo = vi.fn().mockResolvedValue(true)
+    mockClient.e2ee = makeE2EEManager(canEncryptTo) as any
+
+    cleanup = setupBackgroundSyncSideEffects(mockClient)
+    simulateFreshSession(mockClient)
+    await vi.runAllTimersAsync()
+
+    // Only first batch of 2 should have been probed
+    expect(canEncryptTo).toHaveBeenCalledTimes(2)
+  })
+
+  it('silently ignores probe errors and continues remaining batches', async () => {
+    seedConversations([
+      { id: 'alice@example.com', type: 'chat' },
+      { id: 'bob@example.com', type: 'chat' },
+    ])
+    const canEncryptTo = vi.fn().mockRejectedValue(new Error('PEP timeout'))
+    mockClient.e2ee = makeE2EEManager(canEncryptTo) as any
+
+    cleanup = setupBackgroundSyncSideEffects(mockClient)
+    // Should not throw despite every probe failing
+    await expect(
+      (async () => {
+        simulateFreshSession(mockClient)
+        await vi.runAllTimersAsync()
+      })(),
+    ).resolves.not.toThrow()
+
+    expect(canEncryptTo).toHaveBeenCalledTimes(2)
+  })
+
+  it('skips warm-up when no E2EE manager is registered', async () => {
+    seedConversations([{ id: 'alice@example.com', type: 'chat' }])
+    mockClient.e2ee = null as any
+
+    cleanup = setupBackgroundSyncSideEffects(mockClient)
+    // Should not throw when e2ee is null
+    await expect(
+      (async () => {
+        simulateFreshSession(mockClient)
+        await vi.runAllTimersAsync()
+      })(),
+    ).resolves.not.toThrow()
+  })
+
+  it('skips warm-up when there are no conversations', async () => {
+    // conversationEntities is empty (reset() above)
+    const canEncryptTo = vi.fn().mockResolvedValue(true)
+    mockClient.e2ee = makeE2EEManager(canEncryptTo) as any
+
+    cleanup = setupBackgroundSyncSideEffects(mockClient)
+    simulateFreshSession(mockClient)
+    await vi.runAllTimersAsync()
+
+    expect(canEncryptTo).not.toHaveBeenCalled()
+  })
+})

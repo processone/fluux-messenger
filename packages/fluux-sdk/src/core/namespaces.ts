@@ -117,6 +117,29 @@ export const NS_CONVERSATIONS = 'urn:xmpp:fluux:conversations:0'
 // XEP-0334: Message Processing Hints
 export const NS_HINTS = 'urn:xmpp:hints'
 
+// XEP-0380: Explicit Message Encryption
+export const NS_EME = 'urn:xmpp:eme:0'
+
+// XEP-0373: OpenPGP for XMPP ("OX") — public-keys metadata PEP node.
+// The `+notify` variant is what we advertise in caps so the server
+// pushes PEP headlines whenever a peer publishes or rotates their key.
+export const NS_OPENPGP_PUBLIC_KEYS = 'urn:xmpp:openpgp:0:public-keys'
+export const NS_OPENPGP_PUBLIC_KEYS_NOTIFY = 'urn:xmpp:openpgp:0:public-keys+notify'
+
+// XEP-0374: OpenPGP for XMPP Instant Messaging ("OX-IM") — the discovery
+// feature clients advertise to signal "I can decrypt `<openpgp>` elements
+// wrapped in a `<signcrypt>` envelope on `<message>` stanzas". XEP-0374 §5
+// makes this a MUST for any OX-IM-capable client; without it a peer cannot
+// tell whether to encrypt or send plaintext.
+export const NS_OPENPGP_IM = 'urn:xmpp:openpgp:im:0'
+
+// Fluux-private PEP node for cross-device peer-verification sync.
+// accessModel='whitelist' so only the owning account can read it.
+// The +notify variant is advertised in caps so the server pushes
+// headlines when another device of the same account publishes.
+export const NS_FLUUX_VERIFICATIONS = 'urn:xmpp:fluux:verifications:0'
+export const NS_FLUUX_VERIFICATIONS_NOTIFY = 'urn:xmpp:fluux:verifications:0+notify'
+
 // XEP-0422: Message Fastening
 export const NS_FASTEN = 'urn:xmpp:fasten:0'
 

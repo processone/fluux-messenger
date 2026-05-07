@@ -55,6 +55,7 @@ export function createMockClient() {
       discoverMAMSearchCapability: vi.fn().mockResolvedValue(undefined),
     },
     isConnected: vi.fn().mockReturnValue(true),
+    e2ee: null as any,
     on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       if (!handlers.has(event)) handlers.set(event, new Set())
       handlers.get(event)!.add(handler)

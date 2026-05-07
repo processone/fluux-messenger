@@ -68,7 +68,7 @@
     ],
     "macOS": {
       "minimumSystemVersion": "10.13",
-      "bundleVersion": "2b1e0c6",
+      "bundleVersion": "201a389",
       "entitlements": "Entitlements.plist",
       "signingIdentity": null
     },

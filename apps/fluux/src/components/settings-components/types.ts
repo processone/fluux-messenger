@@ -1,8 +1,16 @@
 import type { LucideIcon } from 'lucide-react'
-import { User, Palette, Globe, Bell, Download, Ban, HardDrive } from 'lucide-react'
+import { User, Palette, Globe, Bell, Download, Ban, HardDrive, Lock } from 'lucide-react'
 import { isTauri, isUpdaterEnabled } from '@/utils/tauri'
 
-export type SettingsCategory = 'profile' | 'appearance' | 'language' | 'notifications' | 'updates' | 'blocked' | 'storage'
+export type SettingsCategory =
+  | 'profile'
+  | 'appearance'
+  | 'language'
+  | 'notifications'
+  | 'updates'
+  | 'blocked'
+  | 'storage'
+  | 'encryption'
 
 export interface SettingsCategoryConfig {
   id: SettingsCategory
@@ -23,6 +31,7 @@ export const SETTINGS_CATEGORIES: SettingsCategoryConfig[] = [
   { id: 'notifications', labelKey: 'settings.categories.notifications', icon: Bell },
   { id: 'blocked', labelKey: 'settings.categories.blocked', icon: Ban },
   { id: 'storage', labelKey: 'settings.categories.storage', icon: HardDrive, tauriOnly: true },
+  { id: 'encryption', labelKey: 'settings.categories.encryption', icon: Lock },
   { id: 'updates', labelKey: 'settings.categories.updates', icon: Download, updaterOnly: true },
 ]
 

@@ -203,6 +203,11 @@ export function createStoreBindings(
     stores.chat.updateMessage(conversationId, messageId, updates)
   })
 
+  on('message:security-updated', ({ conversationId, messageId, securityContext }) => {
+    const stores = getStores()
+    stores.chat.updateMessage(conversationId, messageId, { securityContext })
+  })
+
   on('chat:message-error', ({ conversationId, messageId, error }) => {
     const stores = getStores()
     stores.chat.updateMessage(conversationId, messageId, { deliveryError: error })

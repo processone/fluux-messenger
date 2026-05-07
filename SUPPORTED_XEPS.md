@@ -97,6 +97,14 @@ This document lists the XMPP Extension Protocols (XEPs) and related RFCs impleme
 | [XEP-0402](https://xmpp.org/extensions/xep-0402.html) | PEP Native Bookmarks        | ✅ Implemented | Room bookmarks with autojoin, custom extensions for notification preferences                                |
 | [XEP-0421](https://xmpp.org/extensions/xep-0421.html) | Anonymous Unique Occupant Identifiers | ✅ Implemented | Stable occupant identifiers for anonymous MUC rooms                                             |
 
+## End-to-End Encryption
+
+| XEP                                                   | Name                                          | Status        | Notes                                                                                                                                                |
+|-------------------------------------------------------|-----------------------------------------------|---------------|------------------------------------------------------------------------------------------------------------------------------------------------------|
+| [XEP-0373](https://xmpp.org/extensions/xep-0373.html) | OpenPGP for XMPP (OX)                        | ✅ Implemented | Public key publication and retrieval via PEP node (`urn:xmpp:openpgp:0:public-keys`), secret key backup (XEP-0223 private node), key pinning, peer key change detection |
+| [XEP-0374](https://xmpp.org/extensions/xep-0374.html) | OpenPGP for XMPP Instant Messaging (OX-IM)   | ✅ Implemented | `<signcrypt>` envelope for 1:1 and MUC messages; send-policy negotiation; MAM history decryption; capability discovery via caps (`urn:xmpp:openpgp:im:0`) |
+| [XEP-0380](https://xmpp.org/extensions/xep-0380.html) | Explicit Message Encryption                   | ✅ Implemented | `<encryption>` element appended to outgoing encrypted messages so legacy clients display a meaningful fallback                                        |
+
 ## Administration
 
 | XEP                                                   | Name                   | Status        | Notes                                                        |
@@ -138,6 +146,7 @@ Fluux uses custom extensions across several namespaces:
 | `urn:xmpp:fluux:appearance:0`        | Theme and appearance settings sync across devices                                                                  |
 | `urn:xmpp:fluux:conversations:0`     | Conversation list sync (active and archived 1:1 conversations) with debounced publishing and merge-on-reconnect    |
 | `urn:xmpp:fluux:ignored-users:0`     | Per-room ignored users list, stored as one PEP item per room                                                       |
+| `urn:xmpp:fluux:verifications:0`     | Cross-device sync of peer-verification records; private PEP node (`accessModel=whitelist`), encrypted to own key   |
 
 ### Other
 

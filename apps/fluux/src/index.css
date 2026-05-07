@@ -185,7 +185,8 @@
   --fluux-sidebar-text: var(--fluux-text-normal);
   --fluux-sidebar-text-muted: var(--fluux-text-muted);
   --fluux-sidebar-item-hover: var(--fluux-bg-hover);
-  --fluux-sidebar-item-active: var(--fluux-bg-active);
+  --fluux-sidebar-item-active: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.18);
+  --fluux-sidebar-item-active-accent: var(--fluux-bg-accent);
   --fluux-sidebar-border: var(--fluux-divider-color);
 
   /* Icon rail */
@@ -302,6 +303,7 @@
 
   /* Semantic overrides where cascade from foundation isn't sufficient */
   --fluux-bg-secondary: #d8dadf;
+  --fluux-sidebar-item-active: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.14);
   --fluux-border-color: rgba(0, 0, 0, 0.15);
   --fluux-selection-bg: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.15);
   --fluux-search-highlight-bg: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.25);

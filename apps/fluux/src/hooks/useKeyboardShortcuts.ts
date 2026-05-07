@@ -220,7 +220,8 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
       setActiveConversation(conversations[currentIndex - 1].id)
     } else if (sidebarView === 'rooms') {
       // Read current state without subscribing
-      const joinedRooms = roomStore.getState().joinedRooms()
+      // Use allRooms() (sorted by lastInteractedAt) filtered to joined — matches sidebar visual order
+      const joinedRooms = roomStore.getState().allRooms().filter(r => r.joined)
       const activeRoomJid = roomStore.getState().activeRoomJid
 
       // Navigate through joined rooms - stop at top
@@ -260,7 +261,8 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
       // At bottom: do nothing
     } else if (sidebarView === 'rooms') {
       // Read current state without subscribing
-      const joinedRooms = roomStore.getState().joinedRooms()
+      // Use allRooms() (sorted by lastInteractedAt) filtered to joined — matches sidebar visual order
+      const joinedRooms = roomStore.getState().allRooms().filter(r => r.joined)
       const activeRoomJid = roomStore.getState().activeRoomJid
 
       // Navigate through joined rooms - stop at bottom
@@ -462,14 +464,14 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
     },
     {
       key: 'ArrowUp',
-      modifiers: ['alt'],
+      modifiers: ['meta', 'alt'],
       description: 'shortcuts.previousItem',
       category: 'navigation',
       action: goToPreviousItem,
     },
     {
       key: 'ArrowDown',
-      modifiers: ['alt'],
+      modifiers: ['meta', 'alt'],
       description: 'shortcuts.nextItem',
       category: 'navigation',
       action: goToNextItem,

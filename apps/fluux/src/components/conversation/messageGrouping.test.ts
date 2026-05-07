@@ -175,6 +175,81 @@ describe('shouldShowAvatar', () => {
     expect(shouldShowAvatar(messages, 3)).toBe(false) // same sender, within 5 min
     expect(shouldShowAvatar(messages, 4)).toBe(true)  // same sender, but > 5 min gap
   })
+
+  describe('security context grouping', () => {
+    it('breaks the group when trust level changes', () => {
+      const messages = [
+        {
+          id: '1', timestamp: new Date('2024-01-15T10:00:00'), from: 'alice',
+          securityContext: { protocolId: 'openpgp', trust: 'tofu' as const },
+        },
+        {
+          id: '2', timestamp: new Date('2024-01-15T10:01:00'), from: 'alice',
+          securityContext: { protocolId: 'openpgp', trust: 'untrusted' as const },
+        },
+      ]
+
+      expect(shouldShowAvatar(messages, 1)).toBe(true)
+    })
+
+    it('breaks the group when protocol changes', () => {
+      const messages = [
+        {
+          id: '1', timestamp: new Date('2024-01-15T10:00:00'), from: 'alice',
+          securityContext: { protocolId: 'openpgp', trust: 'tofu' as const },
+        },
+        {
+          id: '2', timestamp: new Date('2024-01-15T10:01:00'), from: 'alice',
+          securityContext: { protocolId: 'omemo:2', trust: 'tofu' as const },
+        },
+      ]
+
+      expect(shouldShowAvatar(messages, 1)).toBe(true)
+    })
+
+    it('breaks the group when encryption appears', () => {
+      const messages = [
+        { id: '1', timestamp: new Date('2024-01-15T10:00:00'), from: 'alice' },
+        {
+          id: '2', timestamp: new Date('2024-01-15T10:01:00'), from: 'alice',
+          securityContext: { protocolId: 'openpgp', trust: 'tofu' as const },
+        },
+      ]
+
+      expect(shouldShowAvatar(messages, 1)).toBe(true)
+    })
+
+    it('breaks the group when encryption drops', () => {
+      const messages = [
+        {
+          id: '1', timestamp: new Date('2024-01-15T10:00:00'), from: 'alice',
+          securityContext: { protocolId: 'openpgp', trust: 'tofu' as const },
+        },
+        { id: '2', timestamp: new Date('2024-01-15T10:01:00'), from: 'alice' },
+      ]
+
+      expect(shouldShowAvatar(messages, 1)).toBe(true)
+    })
+
+    it('keeps the group when security context is identical', () => {
+      const ctx = { protocolId: 'openpgp', trust: 'tofu' as const }
+      const messages = [
+        { id: '1', timestamp: new Date('2024-01-15T10:00:00'), from: 'alice', securityContext: ctx },
+        { id: '2', timestamp: new Date('2024-01-15T10:01:00'), from: 'alice', securityContext: ctx },
+      ]
+
+      expect(shouldShowAvatar(messages, 1)).toBe(false)
+    })
+
+    it('keeps the group when both messages are cleartext', () => {
+      const messages = [
+        { id: '1', timestamp: new Date('2024-01-15T10:00:00'), from: 'alice' },
+        { id: '2', timestamp: new Date('2024-01-15T10:01:00'), from: 'alice' },
+      ]
+
+      expect(shouldShowAvatar(messages, 1)).toBe(false)
+    })
+  })
 })
 
 describe('scrollToMessage', () => {

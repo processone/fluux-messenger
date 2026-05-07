@@ -1,4 +1,5 @@
-import { xml, Element } from '@xmpp/client'
+import { xml } from '@xmpp/client'
+import type { Element } from '@xmpp/client'
 import { BaseModule, type ModuleDependencies } from './BaseModule'
 import { getBareJid, getLocalPart, getResource, isQuickChatJid } from '../jid'
 import { isMucJid } from '../../utils/xmppUri'
@@ -22,12 +23,24 @@ import {
   NS_REFERENCE,
   NS_MENTION_ALL,
   NS_HINTS,
+  NS_EME,
   NS_FLUUX,
   NS_OCCUPANT_ID,
   NS_MESSAGE_MODERATE,
   NS_POLL,
   NS_DELAY,
 } from '../namespaces'
+import { dataToElement } from '../e2ee/stanzaAdapter'
+import type { E2EEManager } from '../e2ee'
+import { E2EEEncryptionRequiredError } from '../e2ee'
+import {
+  decryptStanzaInPlace,
+  readStashedAuthoredAt,
+  readStashedSecurityContext,
+  stanzaHasE2EEClaim,
+} from '../e2ee/stanzaDecrypt'
+import { serialize as serializePayloadEnvelope } from '../e2ee/payloadEnvelope'
+import { build as buildAesgcmUri } from './AesgcmUri'
 import type {
   Message,
   MentionReference,
@@ -35,6 +48,7 @@ import type {
   ChatStateNotification,
   MAMQueryOptions,
   MAMResult,
+  MessageSecurityContext,
   RoomMessage,
   RoomMAMQueryOptions,
   RoomMAMResult,
@@ -147,6 +161,15 @@ export class Chat extends BaseModule {
       if (forwardedMessage) {
         return this.handleMessageInternal(forwardedMessage, true, !!carbonSent)
       }
+      return { handled: true }
+    }
+
+    // E2EE decrypt hook: if a registered plugin claims one of the stanza's
+    // children, decrypt asynchronously, then re-enter this method with the
+    // plaintext body in place of the encrypted element. Returning
+    // `{ handled: true }` here prevents other modules from also processing
+    // the encrypted stanza.
+    if (this.tryHandleEncrypted(stanza, isCarbonCopy, isSentCarbon)) {
       return { handled: true }
     }
 
@@ -301,6 +324,228 @@ export class Chat extends BaseModule {
     return { handled: false }
   }
 
+  /**
+   * Look for an E2EE-plugin-claimed element in this stanza. If found, kick
+   * off the async decrypt-and-reprocess flow and return true. Returns false
+   * if no manager is available, no plugin claims a child, or the stanza
+   * has already been decrypted in a previous pass (guarded by a marker).
+   *
+   * The actual decrypt step lives in {@link decryptStanzaInPlace} and is
+   * shared with the MAM module so archived encrypted messages go through
+   * the exact same pipeline.
+   */
+  private tryHandleEncrypted(
+    stanza: Element,
+    isCarbonCopy: boolean,
+    isSentCarbon: boolean,
+  ): boolean {
+    const manager = this.deps.getE2EEManager?.()
+    if (!manager) return false
+    if (!stanzaHasE2EEClaim(stanza, manager)) return false
+    void this.decryptAndReprocess(manager, stanza, isCarbonCopy, isSentCarbon)
+    return true
+  }
+
+  private async decryptAndReprocess(
+    manager: E2EEManager,
+    stanza: Element,
+    isCarbonCopy: boolean,
+    isSentCarbon: boolean,
+  ): Promise<void> {
+    const from = stanza.attrs.from
+    const bareFrom = from ? getBareJid(from) : ''
+    await decryptStanzaInPlace(stanza, manager, bareFrom, 'live')
+    this.handleMessageInternal(stanza, isCarbonCopy, isSentCarbon)
+  }
+
+  /**
+   * Read back the security context stashed on a stanza by
+   * {@link decryptStanzaInPlace}. Returns `undefined` for stanzas that were
+   * never claimed by a plugin (cleartext messages). The shape matches
+   * {@link MessageSecurityContext} exactly; we narrow it here so downstream
+   * consumers don't need to import from the e2ee module.
+   */
+  private readMessageSecurityContext(stanza: Element): MessageSecurityContext | undefined {
+    const stash = readStashedSecurityContext(stanza)
+    if (!stash) return undefined
+    return {
+      protocolId: stash.protocolId,
+      trust: stash.trust,
+      ...(stash.notes && { notes: stash.notes }),
+    }
+  }
+
+  /**
+   * Wrap an outbound 1:1 chat stanza with E2EE if a plugin can encrypt to
+   * `recipient`. Mutates `children` in place: the existing `<body>` (if any)
+   * is replaced with the plugin-supplied fallback string, and the encrypted
+   * element + EME (XEP-0380) + MAM `<store>` hint (XEP-0334) are appended.
+   *
+   * Returns the {@link MessageSecurityContext} when encryption succeeded so
+   * the caller can stamp it on the local store entry; returns `undefined`
+   * when no manager is registered or no plugin matches the peer.
+   *
+   * Strict-mode contract: when a manager exists but no plugin can reach the
+   * peer, throws {@link E2EEEncryptionRequiredError} instead of silently
+   * letting the caller send plaintext. The UI is the only layer that can
+   * legitimately decide to retry or to send unencrypted as a one-off, so
+   * the error has to surface there. Other failures (probe errors, plugin
+   * exceptions) are logged and treated as permissive — the caller's stanza
+   * goes out as built.
+   *
+   * Centralizing this here is a security-critical invariant: every chat-like
+   * outbound path (send, resend, correction, reaction reply-fallback) must
+   * route through one helper, otherwise a code path can build cleartext
+   * children and reach the wire without the E2EE rewrite. Adding a new
+   * outgoing chat-like primitive? Call this helper before `sendStanza`.
+   */
+  /**
+   * Wire-format URL for an encrypted file attachment: `aesgcm://…#IV+Key`.
+   * Returns the attachment's plain HTTPS URL when `encryption` is absent.
+   * Used for both the main OOB `<url/>` and the thumbnail `uri` attribute —
+   * both live inside `<payload/>` when E2EE is active, so the key stays
+   * protected end-to-end.
+   */
+  private attachmentWireUrl(
+    httpsUrl: string,
+    encryption: FileAttachment['encryption'] | undefined,
+  ): string {
+    if (!encryption) return httpsUrl
+    return buildAesgcmUri({ httpsUrl, key: encryption.key, iv: encryption.iv })
+  }
+
+  private async applyE2EEToOutboundChat(
+    recipient: string,
+    plaintextBody: string,
+    children: Element[],
+    protectedChildKeys?: ReadonlySet<string>,
+  ): Promise<MessageSecurityContext | undefined> {
+    const manager = this.deps.getE2EEManager?.()
+    if (!manager) return undefined
+
+    try {
+      // Build the payload envelope: a `<payload xmlns='jabber:client'>`
+      // carrying `<body/>` plus any stanza extensions the caller opted into
+      // (via `protectedChildKeys`, each key formatted as "name|xmlns"). The
+      // serialized form is the plaintext the plugin encrypts — wire format
+      // is a minimal XEP-0373 payload subset per the XEP-0420 §9-aligned
+      // policy (see docs/ENCRYPTION.md).
+      //
+      // Elements that MUST stay at stanza root (XEP-0334 hints, XEP-0359
+      // stanza ids, routing) are NOT in `protectedChildKeys`: only keys in
+      // that set move into the envelope. Unknown/new elements stay outside
+      // by default — fail-safe for server-processed extensions.
+      //
+      // We compute which children would move but DON'T splice yet: if
+      // encryption ends up not happening (no manager match, plugin error,
+      // permissive policy) we want the outgoing stanza to look exactly
+      // like the plaintext path would have built. Only commit the splice
+      // after a successful encrypt.
+      const protectedChildren: Element[] = [xml('body', {}, plaintextBody)]
+      const protectedIndices: number[] = []
+      if (protectedChildKeys && protectedChildKeys.size > 0) {
+        for (let i = 0; i < children.length; i++) {
+          const c = children[i]
+          if (typeof c === 'string') continue
+          const el = c as Element
+          const key = `${el.name}|${el.attrs?.xmlns ?? ''}`
+          if (protectedChildKeys.has(key)) {
+            protectedChildren.push(el)
+            protectedIndices.push(i)
+          }
+        }
+      }
+      const plaintext = serializePayloadEnvelope(protectedChildren)
+
+      const result = await manager.encryptOutbound(
+        { kind: 'direct', peer: recipient },
+        new TextEncoder().encode(plaintext),
+      )
+      if (result) {
+        // Commit: remove the now-encrypted children from the stanza root,
+        // walking in reverse so earlier indices stay valid.
+        for (let i = protectedIndices.length - 1; i >= 0; i--) {
+          children.splice(protectedIndices[i], 1)
+        }
+        // Remove <fallback for="NS_OOB"> (and any other fallback whose feature
+        // just moved into the encrypted payload). Leaving them would let the
+        // XMPP server infer that an attachment was sent — the `for` attribute
+        // names the feature namespace, which is now confidential.
+        if (protectedIndices.length > 0 && protectedChildKeys) {
+          const protectedNamespaces = new Set(
+            [...protectedChildKeys].map(key => key.split('|')[1]).filter(ns => ns.length > 0),
+          )
+          for (let i = children.length - 1; i >= 0; i--) {
+            const c = children[i]
+            if (typeof c === 'string') continue
+            const el = c as Element
+            if (
+              el.name === 'fallback' &&
+              el.attrs?.xmlns === NS_FALLBACK &&
+              protectedNamespaces.has(el.attrs?.for)
+            ) {
+              children.splice(i, 1)
+            }
+          }
+        }
+        const bodyIdx = children.findIndex(
+          (c): c is Element =>
+            typeof c !== 'string' && (c as { name?: string }).name === 'body',
+        )
+        const fallbackBody = result.payload.fallbackBody ?? '[encrypted message]'
+        if (bodyIdx >= 0) {
+          children[bodyIdx] = xml('body', {}, fallbackBody)
+        } else {
+          children.unshift(xml('body', {}, fallbackBody))
+        }
+        children.push(dataToElement(result.payload.stanzaElement))
+        children.push(
+          xml('encryption', {
+            xmlns: NS_EME,
+            namespace:
+              result.payload.stanzaElement.attrs.xmlns ?? result.payload.protocolId,
+          }),
+        )
+        children.push(xml('store', { xmlns: NS_HINTS }))
+        return {
+          protocolId: result.plugin.descriptor.id,
+          trust: 'verified',
+        }
+      }
+      // No plugin matched — delegate the policy decision to the manager so
+      // all rules (strict mode, verified-peer, forced-plaintext override)
+      // live in one place.
+      await manager.assertPlaintextPermitted({ kind: 'direct', peer: recipient })
+    } catch (err) {
+      if (err instanceof E2EEEncryptionRequiredError) throw err
+      // Plugin was selected but encrypt() threw mid-flight — same policy
+      // check: block unless the user explicitly overrode to plaintext.
+      await manager.assertPlaintextPermitted({ kind: 'direct', peer: recipient })
+      logWarn(
+        `E2EE encrypt failed for ${recipient}, sending plaintext: ${err instanceof Error ? err.message : String(err)}`,
+      )
+    }
+    return undefined
+  }
+
+  /**
+   * Keys of stanza extension children that should ride inside the OpenPGP
+   * `<payload/>` when E2EE is on, per the XEP-0420 §9-aligned policy
+   * documented in docs/ENCRYPTION.md. Each key is `"<name>|<xmlns>"` so
+   * element names ambiguous across namespaces (like `<x/>`) resolve
+   * precisely. Kept as a tight allowlist so new extensions default to
+   * "outside the envelope" until explicitly added — fail-safe for
+   * server-processed elements (XEP-0334 hints, XEP-0359 stanza ids).
+   *
+   * Current scope: XEP-0066 OOB + XEP-0446 file-metadata — both of which
+   * carry file URL / filename / size / mimetype that would otherwise leak
+   * to the XMPP server. Chat states, receipts/markers, LMC, reactions,
+   * reply are the planned follow-ups; add them here without other code
+   * changes when those PRs land.
+   */
+  private static readonly E2EE_PROTECTED_CHILD_KEYS: ReadonlySet<string> =
+    new Set([`x|${NS_OOB}`, `file|${NS_FILE_METADATA}`])
+
   // --- Chat Methods (Outgoing) ---
 
   /**
@@ -404,11 +649,16 @@ export class Chat extends BaseModule {
     }
 
     if (attachment) {
-      const oobChildren = [xml('url', {}, attachment.url)]
+      const oobUrl = this.attachmentWireUrl(attachment.url, attachment.encryption)
+      const oobChildren = [xml('url', {}, oobUrl)]
       if (attachment.thumbnail) {
+        const thumbUri = this.attachmentWireUrl(
+          attachment.thumbnail.uri,
+          attachment.thumbnail.encryption,
+        )
         oobChildren.push(xml('thumbnail', {
           xmlns: NS_THUMBS,
-          uri: attachment.thumbnail.uri,
+          uri: thumbUri,
           'media-type': attachment.thumbnail.mediaType,
           width: String(attachment.thumbnail.width),
           height: String(attachment.thumbnail.height),
@@ -445,6 +695,28 @@ export class Chat extends BaseModule {
     // XEP-0359: Include origin-id for echo deduplication
     children.push(createOriginIdElement(id))
 
+    // E2EE hook: for 1:1 recipients, attempt to encrypt and rewrite the
+    // outgoing children. MUC encryption is a later phase. Pass the
+    // allowlist so XEP-0066 OOB + XEP-0446 file-metadata move inside the
+    // encrypted `<payload/>` when E2EE is active (XEP-0420 §9-aligned
+    // policy).
+    const outgoingSecurityContext =
+      type === 'chat'
+        ? await this.applyE2EEToOutboundChat(
+            recipient,
+            fullBody,
+            children,
+            Chat.E2EE_PROTECTED_CHILD_KEYS,
+          )
+        : undefined
+
+    // Guard: an encrypted attachment's aesgcm:// OOB URL carries the AES
+    // key. If stanza-level E2EE didn't move that element into the payload,
+    // the key reaches the server in cleartext — abort rather than leak.
+    if (attachment?.encryption && !outgoingSecurityContext) {
+      throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
+    }
+
     const message = xml('message', { to: recipient, type, id }, ...children)
     await this.deps.sendStanza(message)
 
@@ -464,6 +736,7 @@ export class Chat extends BaseModule {
         isOutgoing: true,
         ...(replyTo && { replyTo: { id: replyTo.id, to: replyTo.to } }),
         ...(attachment && { attachment }),
+        ...(outgoingSecurityContext && { securityContext: outgoingSecurityContext }),
       }
       this.deps.emitSDK('chat:message', { message })
     }
@@ -513,11 +786,16 @@ export class Chat extends BaseModule {
     ]
 
     if (attachment) {
-      const oobChildren = [xml('url', {}, attachment.url)]
+      const oobUrl = this.attachmentWireUrl(attachment.url, attachment.encryption)
+      const oobChildren = [xml('url', {}, oobUrl)]
       if (attachment.thumbnail) {
+        const thumbUri = this.attachmentWireUrl(
+          attachment.thumbnail.uri,
+          attachment.thumbnail.encryption,
+        )
         oobChildren.push(xml('thumbnail', {
           xmlns: NS_THUMBS,
-          uri: attachment.thumbnail.uri,
+          uri: thumbUri,
           'media-type': attachment.thumbnail.mediaType,
           width: String(attachment.thumbnail.width),
           height: String(attachment.thumbnail.height),
@@ -530,6 +808,20 @@ export class Chat extends BaseModule {
     }
 
     children.push(createOriginIdElement(messageId))
+
+    // Same E2EE rewrite as the original sendMessage path. Without this a
+    // failed encrypted send would retry as plaintext, leaking the body to
+    // the server and onward to the recipient. Strict mode bubbles the
+    // E2EEEncryptionRequiredError so the UI can decide what to do.
+    const resendSecurityContext = await this.applyE2EEToOutboundChat(
+      recipient,
+      fullBody,
+      children,
+      Chat.E2EE_PROTECTED_CHILD_KEYS,
+    )
+    if (attachment?.encryption && !resendSecurityContext) {
+      throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
+    }
 
     const message = xml('message', { to: recipient, type: 'chat', id: messageId }, ...children)
     await this.deps.sendStanza(message)
@@ -613,7 +905,29 @@ export class Chat extends BaseModule {
       ? this.deps.stores?.room.getMessage(to, messageId)
       : this.deps.stores?.chat.getMessage(to, messageId)
 
-    if (originalMsg?.body && emojis.length > 0) {
+    // The reply-quote fallback embeds the *decrypted* original body in
+    // cleartext for legacy reactions-blind clients. For 1:1 chats with
+    // E2EE active that branch would publish the original plaintext to
+    // the server — far worse than the reaction itself leaking. Skip the
+    // entire fallback block whenever encryption is available; an E2EE-
+    // capable peer is by definition modern enough to handle <reactions>
+    // natively. In strict mode we additionally refuse to send the
+    // reply-quote fallback even when the peer is currently unreachable
+    // over E2EE — better to throw than silently downgrade.
+    const manager = this.deps.getE2EEManager?.()
+    let suppressReplyFallback = false
+    if (type === 'chat' && manager) {
+      const peerCanEncrypt = await manager
+        .canEncryptTo({ kind: 'direct', peer: recipient })
+        .catch(() => false)
+      if (peerCanEncrypt) {
+        suppressReplyFallback = true
+      } else if (manager.getSendPolicy() === 'strict') {
+        throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
+      }
+    }
+
+    if (originalMsg?.body && emojis.length > 0 && !suppressReplyFallback) {
       // Build full stanza with fallback for backward compatibility:
       // - Reactions-capable clients: handle <reactions>, ignore body (reactions fallback)
       // - Reply-capable clients (no reactions): show quoted reply with emoji body
@@ -639,7 +953,9 @@ export class Chat extends BaseModule {
       )
       children.push(xml('store', { xmlns: NS_HINTS }))
     } else {
-      // No original message or removing reactions — simple stanza without fallback body
+      // No original message, removing reactions, or suppressing the
+      // cleartext reply-quote because the peer can be encrypted to —
+      // simple stanza without fallback body.
       children.push(xml('reactions', { xmlns: NS_REACTIONS, id: referenceId }, ...reactionElements))
     }
 
@@ -724,10 +1040,15 @@ export class Chat extends BaseModule {
     ]
 
     if (attachment) {
-      const oobChildren = [xml('url', {}, attachment.url)]
+      const oobUrl = this.attachmentWireUrl(attachment.url, attachment.encryption)
+      const oobChildren = [xml('url', {}, oobUrl)]
       if (attachment.thumbnail) {
+        const thumbUri = this.attachmentWireUrl(
+          attachment.thumbnail.uri,
+          attachment.thumbnail.encryption,
+        )
         oobChildren.push(xml('thumbnail', {
-          xmlns: NS_THUMBS, uri: attachment.thumbnail.uri, 'media-type': attachment.thumbnail.mediaType,
+          xmlns: NS_THUMBS, uri: thumbUri, 'media-type': attachment.thumbnail.mediaType,
           width: String(attachment.thumbnail.width), height: String(attachment.thumbnail.height)
         }))
       }
@@ -751,6 +1072,23 @@ export class Chat extends BaseModule {
 
     const correctionStanzaId = generateUUID()
     children.push(createOriginIdElement(correctionStanzaId))
+
+    // Encrypt the corrected body for 1:1 chats. Without this an edit on
+    // an encrypted conversation would push the plaintext correction to
+    // the server. The cleartext "[Corrected] " prefix only mattered to
+    // legacy clients that don't know <replace>; E2EE peers handle the
+    // edit natively. MUC encryption is a later phase.
+    const correctionSecurityContext = type === 'chat'
+      ? await this.applyE2EEToOutboundChat(
+          recipient,
+          bodyText,
+          children,
+          Chat.E2EE_PROTECTED_CHILD_KEYS,
+        )
+      : undefined
+    if (attachment?.encryption && !correctionSecurityContext) {
+      throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
+    }
 
     await this.deps.sendStanza(xml('message', { to: recipient, type, id: correctionStanzaId }, ...children))
 
@@ -1306,7 +1644,12 @@ export class Chat extends BaseModule {
       this.deps.emitSDK('chat:typing', { conversationId, jid: bareFrom, isTyping: false })
     }
 
-    const parsed = parseMessageContent({ messageEl: stanza, body })
+    const authoredAt = readStashedAuthoredAt(stanza)
+    const parsed = parseMessageContent({
+      messageEl: stanza,
+      body,
+      ...(authoredAt && { authoredAt }),
+    })
     const isCorrection = !!stanza.getChild('replace', NS_CORRECTION)
 
     // For corrections whose target isn't in store: use the replace target ID
@@ -1315,6 +1658,7 @@ export class Chat extends BaseModule {
     // Use stable ID for messages without ID (e.g., from IRC bridges) to enable deduplication
     const messageId = replaceTargetId || stanza.attrs.id || generateStableMessageId(bareFrom, parsed.timestamp, body)
 
+    const securityContext = this.readMessageSecurityContext(stanza)
     const message: Message = {
       type: 'chat',
       id: messageId,
@@ -1330,6 +1674,7 @@ export class Chat extends BaseModule {
       ...(parsed.replyTo && { replyTo: parsed.replyTo }),
       ...(parsed.attachment && { attachment: parsed.attachment }),
       ...(isCorrection && { isEdited: true }),
+      ...(securityContext && { securityContext }),
     }
 
     if (!isOutgoing && this.deps.stores) {
@@ -1360,7 +1705,14 @@ export class Chat extends BaseModule {
 
     // Case-insensitive nickname comparison - some servers may change case
     const isOutgoing = isSentCarbon || (room.nickname.toLowerCase() === nick.toLowerCase())
-    const parsed = parseMessageContent({ messageEl: stanza, body, preserveFullReplyToJid: true, messageContext: 'room' })
+    const roomAuthoredAt = readStashedAuthoredAt(stanza)
+    const parsed = parseMessageContent({
+      messageEl: stanza,
+      body,
+      preserveFullReplyToJid: true,
+      messageContext: 'room',
+      ...(roomAuthoredAt && { authoredAt: roomAuthoredAt }),
+    })
     const isCorrection = !!stanza.getChild('replace', NS_CORRECTION)
 
     // For corrections whose target isn't in store: use the replace target ID
@@ -1372,6 +1724,7 @@ export class Chat extends BaseModule {
     // XEP-0421: Anonymous Unique Occupant Identifiers
     const occupantId = stanza.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id
 
+    const securityContext = this.readMessageSecurityContext(stanza)
     const message: RoomMessage = {
       type: 'groupchat',
       id: messageId,
@@ -1389,6 +1742,7 @@ export class Chat extends BaseModule {
       ...(parsed.attachment && { attachment: parsed.attachment }),
       ...(isCorrection && { isEdited: true }),
       ...(occupantId && { occupantId }),
+      ...(securityContext && { securityContext }),
     }
 
     // Poll detection: check for <poll> or <poll-closed> elements

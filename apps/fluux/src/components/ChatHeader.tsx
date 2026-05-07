@@ -4,6 +4,7 @@
  * Displays contact avatar, name, and presence status.
  * Also supports group chat mode with a hash icon.
  */
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ContactIdentity } from '@fluux/sdk'
 import { useRosterStore, useContactTime, useLastActivity } from '@fluux/sdk/react'
@@ -11,7 +12,8 @@ import { Avatar } from './Avatar'
 import { useWindowDrag } from '@/hooks'
 import { getTranslatedStatusText } from '@/utils/statusText'
 import { Tooltip } from './Tooltip'
-import { ArrowLeft, Clock, Hash, Search } from 'lucide-react'
+import { ArrowLeft, Clock, Hash, Lock, LockOpen, Loader2, Search, ShieldAlert, ShieldCheck, ShieldOff, ShieldX } from 'lucide-react'
+import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 
 export interface ChatHeaderProps {
   name: string
@@ -20,6 +22,12 @@ export interface ChatHeaderProps {
   jid: string
   onBack?: () => void
   onSearchInConversation?: () => void
+  encryptionState?: ConversationEncryptionState
+  onEncryptionClick?: () => void
+  onDisableEncryptionClick?: () => void
+  onEnableEncryptionClick?: () => void
+  /** Open the contact profile / management screen. 1:1 chats only. */
+  onShowProfile?: () => void
 }
 
 export function ChatHeader({
@@ -29,6 +37,11 @@ export function ChatHeader({
   jid,
   onBack,
   onSearchInConversation,
+  encryptionState,
+  onEncryptionClick,
+  onDisableEncryptionClick,
+  onEnableEncryptionClick,
+  onShowProfile,
 }: ChatHeaderProps) {
   const { t } = useTranslation()
   const isGroupChat = type === 'groupchat'
@@ -72,22 +85,58 @@ export function ChatHeader({
 
       {/* Name and status */}
       <div className="flex-1 min-w-0">
-        <h2 className="font-semibold text-fluux-text truncate leading-tight">{name}</h2>
-        {!isGroupChat && (
-          <div className="flex items-center gap-1.5">
-            <p className="text-xs text-fluux-muted truncate">
-              {fullContact ? getTranslatedStatusText(fullContact, t) : jid}
-            </p>
-            {contactTime && (
-              <Tooltip content={t('presence.localTime')} position="bottom" className="inline-flex items-center">
-                <span className="text-xs text-fluux-muted flex-shrink-0 flex items-center gap-1">
-                  · <Clock className="w-3 h-3" />{contactTime}
-                </span>
-              </Tooltip>
+        {!isGroupChat && onShowProfile ? (
+          <button
+            type="button"
+            onClick={onShowProfile}
+            className="block w-full text-start -mx-1 px-1 py-0.5 rounded hover:bg-fluux-hover transition-colors cursor-pointer"
+            aria-label={t('sidebar.viewProfile')}
+          >
+            <h2 className="font-semibold text-fluux-text truncate leading-tight">{name}</h2>
+            <div className="flex items-center gap-1.5">
+              <p className="text-xs text-fluux-muted truncate">
+                {fullContact ? getTranslatedStatusText(fullContact, t) : jid}
+              </p>
+              {contactTime && (
+                <Tooltip content={t('presence.localTime')} position="bottom" className="inline-flex items-center">
+                  <span className="text-xs text-fluux-muted flex-shrink-0 flex items-center gap-1">
+                    · <Clock className="w-3 h-3" />{contactTime}
+                  </span>
+                </Tooltip>
+              )}
+            </div>
+          </button>
+        ) : (
+          <>
+            <h2 className="font-semibold text-fluux-text truncate leading-tight">{name}</h2>
+            {!isGroupChat && (
+              <div className="flex items-center gap-1.5">
+                <p className="text-xs text-fluux-muted truncate">
+                  {fullContact ? getTranslatedStatusText(fullContact, t) : jid}
+                </p>
+                {contactTime && (
+                  <Tooltip content={t('presence.localTime')} position="bottom" className="inline-flex items-center">
+                    <span className="text-xs text-fluux-muted flex-shrink-0 flex items-center gap-1">
+                      · <Clock className="w-3 h-3" />{contactTime}
+                    </span>
+                  </Tooltip>
+                )}
+              </div>
             )}
-          </div>
+          </>
         )}
       </div>
+
+      {/* Encryption status icon — only for 1:1 chats with active E2EE */}
+      {encryptionState && encryptionState.kind !== 'disabled' && encryptionState.kind !== 'unsupported' && (
+        <EncryptionIcon
+          state={encryptionState}
+          peerName={name}
+          onVerifyClick={onEncryptionClick}
+          onDisableClick={onDisableEncryptionClick}
+          onEnableClick={onEnableEncryptionClick}
+        />
+      )}
 
       {/* Search in conversation */}
       {onSearchInConversation && (
@@ -100,5 +149,215 @@ export function ChatHeader({
         </button>
       )}
     </header>
+  )
+}
+
+function formatFingerprint(fp: string): string {
+  return fp.match(/.{1,4}/g)?.join(' ') ?? fp
+}
+
+function EncryptionIcon({
+  state,
+  peerName,
+  onVerifyClick,
+  onDisableClick,
+  onEnableClick,
+}: {
+  state: ConversationEncryptionState
+  peerName: string
+  onVerifyClick?: () => void
+  onDisableClick?: () => void
+  onEnableClick?: () => void
+}) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const btnClass = 'p-1.5 rounded transition-colors'
+
+  useEffect(() => {
+    if (!open) return
+    function handleOutsideClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleOutsideClick)
+    return () => document.removeEventListener('mousedown', handleOutsideClick)
+  }, [open])
+
+  // Non-interactive states — no popover.
+  if (state.kind === 'checking') {
+    return (
+      <Tooltip content={t('chat.encryption.checking')} position="bottom">
+        <div className={`${btnClass} text-fluux-muted`} role="status" aria-live="polite">
+          <Loader2 className="w-4 h-4 animate-spin" />
+        </div>
+      </Tooltip>
+    )
+  }
+
+  if (state.kind === 'blocked') {
+    const tooltip = (
+      <div>
+        <div>{t('chat.encryption.blockedTooltip')}</div>
+        <div className="font-mono text-xs mt-0.5 opacity-75">{formatFingerprint(state.advertisedFingerprint)}</div>
+      </div>
+    )
+    return (
+      <Tooltip content={tooltip} position="bottom">
+        <div className={`${btnClass} text-yellow-500`} role="status">
+          <ShieldAlert className="w-4 h-4" />
+        </div>
+      </Tooltip>
+    )
+  }
+
+  if (state.kind === 'rejected') {
+    return (
+      <div ref={containerRef} className="relative">
+        <Tooltip content={t('chat.encryption.rejectedTooltip')} position="bottom" disabled={open}>
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className={`${btnClass} text-red-500 hover:text-red-600 cursor-pointer`}
+            aria-label={t('chat.encryption.rejected')}
+            aria-expanded={open}
+          >
+            <ShieldX className="w-4 h-4" />
+          </button>
+        </Tooltip>
+        {open && (
+          <div className="absolute right-0 top-full mt-1 w-72 rounded-lg border border-fluux-hover bg-fluux-bg shadow-lg z-50 py-2 px-3 overflow-hidden">
+            <div className="text-sm font-medium text-red-600 dark:text-red-400 mb-1.5">
+              {t('chat.encryption.rejectedTitle')}
+            </div>
+            <ul className="space-y-1.5">
+              {state.reasons.map((r, i) => (
+                <li key={i} className="text-xs text-fluux-muted">
+                  <span className="font-medium text-fluux-text">
+                    {t(`chat.encryption.rejectionCode.${r.code}`)}
+                  </span>
+                  {r.detail && (
+                    <span className="block text-xs text-fluux-muted mt-0.5 font-mono break-all">
+                      {r.detail}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // plaintextForced — open lock icon + popover to re-enable.
+  if (state.kind === 'plaintextForced') {
+    return (
+      <div ref={containerRef} className="relative">
+        <Tooltip content={t('chat.encryption.plaintextForcedTooltip')} position="bottom" disabled={open}>
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className={`${btnClass} text-fluux-muted hover:text-fluux-text cursor-pointer`}
+            aria-label={t('chat.encryption.plaintextForced')}
+            aria-expanded={open}
+          >
+            <LockOpen className="w-4 h-4" />
+          </button>
+        </Tooltip>
+        {open && (
+          <div className="absolute right-0 top-full mt-1 w-56 rounded-lg border border-fluux-hover bg-fluux-bg shadow-lg z-50 py-1 overflow-hidden">
+            {onEnableClick && (
+              <button
+                type="button"
+                className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-fluux-text hover:bg-fluux-hover transition-colors"
+                onClick={() => { setOpen(false); onEnableClick() }}
+              >
+                <Lock className="w-4 h-4 flex-shrink-0 text-fluux-muted" />
+                {t('chat.encryption.enableEncryption')}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // encrypted — shield/lock icon + popover with verify + disable options.
+  const verified = state.kind === 'encrypted' && state.trust === 'verified'
+  const Icon = verified ? ShieldCheck : Lock
+  const colorClass = verified ? 'text-green-500' : 'text-fluux-muted hover:text-fluux-text'
+  const hasActions = onVerifyClick || onDisableClick
+
+  if (!hasActions) {
+    const tooltip = (
+      <div>
+        <div>{verified ? t('chat.encryption.verifiedTooltip') : t('chat.encryption.openpgpTooltip')}</div>
+        {state.kind === 'encrypted' && (
+          <div className="font-mono text-xs mt-0.5 opacity-75">{formatFingerprint(state.fingerprint)}</div>
+        )}
+      </div>
+    )
+    return (
+      <Tooltip content={tooltip} position="bottom">
+        <div className={`${btnClass} ${colorClass}`} role="status">
+          <Icon className="w-4 h-4" />
+        </div>
+      </Tooltip>
+    )
+  }
+
+  const ariaLabel = verified
+    ? t('chat.encryption.encryptedTo', { name: peerName })
+    : t('chat.verifyPeer.chipAriaLabel', { name: peerName })
+
+  return (
+    <div ref={containerRef} className="relative">
+      <Tooltip
+        content={state.kind === 'encrypted' ? (
+          <div>
+            <div>{verified ? t('chat.encryption.verifiedTooltip') : t('chat.encryption.openpgpTooltip')}</div>
+            <div className="font-mono text-xs mt-0.5 opacity-75">{formatFingerprint(state.fingerprint)}</div>
+          </div>
+        ) : null}
+        position="bottom"
+        disabled={open}
+      >
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className={`${btnClass} ${colorClass} cursor-pointer`}
+          aria-label={ariaLabel}
+          aria-expanded={open}
+        >
+          <Icon className="w-4 h-4" />
+        </button>
+      </Tooltip>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 w-56 rounded-lg border border-fluux-hover bg-fluux-bg shadow-lg z-50 py-1 overflow-hidden">
+          {onVerifyClick && (
+            <button
+              type="button"
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-fluux-text hover:bg-fluux-hover transition-colors"
+              onClick={() => { setOpen(false); onVerifyClick() }}
+            >
+              <ShieldCheck className="w-4 h-4 flex-shrink-0 text-fluux-muted" />
+              {t('chat.verifyPeer.dialogTitle', { name: peerName })}
+            </button>
+          )}
+          {onDisableClick && (
+            <button
+              type="button"
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-fluux-text hover:bg-fluux-hover transition-colors"
+              onClick={() => { setOpen(false); onDisableClick() }}
+            >
+              <ShieldOff className="w-4 h-4 flex-shrink-0 text-fluux-muted" />
+              {t('chat.encryption.disableEncryption')}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   )
 }

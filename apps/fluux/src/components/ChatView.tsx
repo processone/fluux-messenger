@@ -1,7 +1,12 @@
-import React, { useState, useRef, useEffect, useImperativeHandle, memo, type RefObject } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useImperativeHandle, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useChatActive, useContactIdentities, createMessageLookup, getBareJid, getLocalPart, getMyReactions, type Message, type ContactIdentity } from '@fluux/sdk'
+import { useChatActive, useContactIdentities, createMessageLookup, getBareJid, getLocalPart, getMyReactions, useXMPPContext, type Message, type ContactIdentity } from '@fluux/sdk'
+import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
+import { useToastStore } from '@/stores/toastStore'
+import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
+import { VerifyPeerDialog } from './VerifyPeerDialog'
+import { KeyChangeBanner } from './KeyChangeBanner'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { getConsistentTextColor } from './Avatar'
 import { useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat } from '@/hooks'
@@ -9,6 +14,7 @@ import { Upload, Loader2 } from 'lucide-react'
 import { MessageBubble, MessageList as MessageListComponent, shouldShowAvatar, buildReplyContext } from './conversation'
 import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
+import { useConversationEncryptionState, type ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { ChristmasAnimation } from './ChristmasAnimation'
 import { ChatHeader } from './ChatHeader'
 import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment } from './MessageComposer'
@@ -20,6 +26,8 @@ interface ChatViewProps {
   onBack?: () => void
   onSwitchToMessages?: (conversationId: string) => void
   onSearchInConversation?: (conversationId: string) => void
+  /** Open the contact management screen for the given JID. 1:1 chats only. */
+  onShowProfile?: (jid: string) => void
   // Focus zone refs for Tab cycling
   mainContentRef?: RefObject<HTMLElement | null>
   composerRef?: RefObject<HTMLElement | null>
@@ -27,7 +35,7 @@ interface ChatViewProps {
   findOnPageRef?: RefObject<FindOnPageHandle | null>
 }
 
-export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, mainContentRef, composerRef, findOnPageRef }: ChatViewProps) {
+export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, onShowProfile, mainContentRef, composerRef, findOnPageRef }: ChatViewProps) {
   detectRenderLoop('ChatView')
   const { t } = useTranslation()
   // Use useChatActive instead of useChat to avoid subscribing to the conversation list.
@@ -235,6 +243,59 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, m
     }
   }
 
+  // E2EE: encryption status displayed as an icon in the chat header.
+  // Hooks must run before the early return below.
+  const encryptionState = useConversationEncryptionState(
+    activeConversation?.type === 'chat' ? (activeConversation.id ?? null) : null,
+    activeConversation?.type ?? 'chat',
+  )
+  const { client } = useXMPPContext()
+  const setPeerVerified = useVerifiedPeerKeysStore((s) => s.setVerified)
+  const clearPeerVerified = useVerifiedPeerKeysStore((s) => s.clearVerified)
+  const addToast = useToastStore((s) => s.addToast)
+  const setForcedPlaintext = useConversationPlaintextOverrideStore((s) => s.setForcedPlaintext)
+  const [verifyDialogState, setVerifyDialogState] = useState<
+    | { open: false }
+    | { open: true; peerJid: string; peerFingerprint: string; ownFingerprint: string | null }
+  >({ open: false })
+  const handleOpenVerify = useCallback(() => {
+    if (encryptionState.kind !== 'encrypted' || activeConversation?.type !== 'chat' || !activeConversation?.id) return
+    const plugin = client.e2ee?.getPlugin('openpgp') as
+      | { getOwnFingerprint?: () => string | null }
+      | null
+      | undefined
+    setVerifyDialogState({
+      open: true,
+      peerJid: activeConversation.id,
+      peerFingerprint: encryptionState.fingerprint,
+      ownFingerprint: plugin?.getOwnFingerprint?.() ?? null,
+    })
+  }, [client, activeConversation, encryptionState])
+  const handleVerifyConfirm = useCallback(
+    (fingerprint: string) => {
+      if (!verifyDialogState.open) return
+      setPeerVerified(verifyDialogState.peerJid, fingerprint)
+      setVerifyDialogState({ open: false })
+      addToast('success', t('chat.verifyPeer.confirmSuccess'))
+    },
+    [verifyDialogState, setPeerVerified, addToast, t],
+  )
+
+  const handleDisableEncryption = useCallback(() => {
+    if (activeConversation?.type !== 'chat' || !activeConversation?.id) return
+    const jid = activeConversation.id
+    setForcedPlaintext(jid, true)
+    client.e2ee?.setForcedPlaintext({ kind: 'direct', peer: jid }, true)
+  }, [activeConversation, setForcedPlaintext, client])
+
+  const handleEnableEncryption = useCallback(() => {
+    if (activeConversation?.type !== 'chat' || !activeConversation?.id) return
+    const jid = activeConversation.id
+    setForcedPlaintext(jid, false)
+    client.e2ee?.setForcedPlaintext({ kind: 'direct', peer: jid }, false)
+    client.e2ee?.invalidateCapability(jid)
+  }, [activeConversation, setForcedPlaintext, client])
+
   if (!activeConversation) return null
 
   // Get contact for 1:1 chats
@@ -265,7 +326,47 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, m
         jid={activeConversation.id}
         onBack={onBack}
         onSearchInConversation={handleSearchInConversation}
+        encryptionState={encryptionState}
+        onEncryptionClick={encryptionState.kind === 'encrypted' ? handleOpenVerify : undefined}
+        onDisableEncryptionClick={encryptionState.kind === 'encrypted' ? handleDisableEncryption : undefined}
+        onEnableEncryptionClick={encryptionState.kind === 'plaintextForced' ? handleEnableEncryption : undefined}
+        onShowProfile={
+          activeConversation.type === 'chat' && onShowProfile
+            ? () => onShowProfile(activeConversation.id)
+            : undefined
+        }
       />
+
+      {/* Key-change alert banner — only shown for 1:1 chats where a
+          previously-verified peer has rotated to a new fingerprint.
+          Self-renders nothing when there is no active alert, so the
+          unconditional mount is fine for the UI tree's stability. */}
+      {activeConversation.type === 'chat' && (
+        <KeyChangeBanner
+          peerJid={activeConversation.id}
+          peerName={activeConversation.name}
+        />
+      )}
+
+      {/* Verify-peer dialog — opened from the encryption icon in the header */}
+      {verifyDialogState.open && jid && (
+        <VerifyPeerDialog
+          peerName={activeConversation.name}
+          peerJid={verifyDialogState.peerJid}
+          peerFingerprint={verifyDialogState.peerFingerprint}
+          ownJid={jid}
+          ownFingerprint={verifyDialogState.ownFingerprint}
+          alreadyVerified={encryptionState.kind === 'encrypted' && encryptionState.trust === 'verified'}
+          onConfirm={handleVerifyConfirm}
+          onCancel={() => setVerifyDialogState({ open: false })}
+          onRevoke={() => {
+            if (!verifyDialogState.open) return
+            clearPeerVerified(verifyDialogState.peerJid)
+            setVerifyDialogState({ open: false })
+            addToast('success', t('contacts.encryption.removeVerificationSuccess'))
+          }}
+        />
+      )}
 
       {/* Messages - focusable zone for Tab cycling */}
       <div
@@ -367,6 +468,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, m
         processLinkPreview={processMessageForLinkPreview}
         isConnected={isConnected}
         onSwitchToMessages={onSwitchToMessages}
+        encryptionState={encryptionState}
       />
 
       {/* Easter egg animation */}
@@ -810,6 +912,7 @@ function MessageInput({
   processLinkPreview,
   onSwitchToMessages,
   onMessageIdSent,
+  encryptionState,
 }: {
   composerRef: React.RefObject<MessageComposerHandle | null>
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>
@@ -833,11 +936,12 @@ function MessageInput({
   uploadState?: { isUploading: boolean; progress: number; error: string | null; clearError: () => void }
   isUploadSupported?: boolean
   onFileSelect?: (file: File) => void
-  uploadFile?: (file: File) => Promise<import('@fluux/sdk').FileAttachment | null>
+  uploadFile?: (file: File, options?: { encrypt?: boolean }) => Promise<import('@fluux/sdk').FileAttachment | null>
   pendingAttachment?: PendingAttachment | null
   onRemovePendingAttachment?: () => void
   processLinkPreview?: (messageId: string, body: string, to: string, type: 'chat' | 'groupchat') => Promise<void>
   onSwitchToMessages?: (conversationId: string) => void
+  encryptionState: ConversationEncryptionState
 }) {
   const { t } = useTranslation()
   const { sendMessage, sendChatState, isArchived, unarchiveConversation, setDraft, getDraft, clearDraft, clearFirstNewMessageId } = useChatActive()
@@ -898,10 +1002,15 @@ function MessageInput({
       }
     }
 
-    // If there's a pending attachment, upload it first (privacy: only upload when user explicitly sends)
+    // If there's a pending attachment, upload it first (privacy: only upload when user explicitly sends).
+    // When the conversation is E2EE-active we encrypt the file bytes
+    // client-side with a fresh AES-256-GCM key before upload; the key/IV
+    // then ride inside the OpenPGP `<payload/>` via the SDK's stanza
+    // assembly, so the HTTP Upload server stores only ciphertext.
     let attachment: import('@fluux/sdk').FileAttachment | null | undefined
     if (pendingAttachment && uploadFile) {
-      attachment = await uploadFile(pendingAttachment.file)
+      const encryptAttachment = encryptionState.kind === 'encrypted'
+      attachment = await uploadFile(pendingAttachment.file, { encrypt: encryptAttachment })
       if (!attachment) {
         // Upload failed - don't send the message
         return false
@@ -924,7 +1033,8 @@ function MessageInput({
     clearDraft(conversationId)
 
     // Process link preview in background (don't block on it)
-    if (processLinkPreview && text) {
+    // Skip when encrypted — the fastening would leak URL/title/image in cleartext
+    if (processLinkPreview && text && encryptionState.kind !== 'encrypted') {
       processLinkPreview(messageId, text, conversationId, type).catch(console.error)
     }
 
@@ -942,32 +1052,35 @@ function MessageInput({
   }
 
   return (
-    <MessageComposer
-      ref={composerRef}
-      textareaRef={textareaRef}
-      placeholder={t('chat.messageTo', { name: conversationName })}
-      replyingTo={replyInfo}
-      onCancelReply={onCancelReply}
-      editingMessage={editInfo}
-      onCancelEdit={onCancelEdit}
-      onSendCorrection={handleCorrection}
-      onRetractMessage={handleRetract}
-      onComposingChange={onComposingChange}
-      onInputResize={onInputResize}
-      onSend={handleSend}
-      onSendEasterEgg={(animation) => sendEasterEgg(conversationId, type, animation)}
-      onSendTypingState={handleTypingState}
-      typingNotificationsEnabled={true}
-      onFileSelect={onFileSelect}
-      uploadState={uploadState}
-      isUploadSupported={isUploadSupported}
-      pendingAttachment={pendingAttachment}
-      onRemovePendingAttachment={onRemovePendingAttachment}
-      disabled={!isConnected}
-      value={text}
-      onValueChange={setText}
-      onEditLastMessage={onEditLastMessage}
-    />
+    <>
+      <MessageComposer
+        ref={composerRef}
+        textareaRef={textareaRef}
+        placeholder={t('chat.messageTo', { name: conversationName })}
+        replyingTo={replyInfo}
+        onCancelReply={onCancelReply}
+        editingMessage={editInfo}
+        onCancelEdit={onCancelEdit}
+        onSendCorrection={handleCorrection}
+        onRetractMessage={handleRetract}
+        onComposingChange={onComposingChange}
+        onInputResize={onInputResize}
+        onSend={handleSend}
+        onSendEasterEgg={(animation) => sendEasterEgg(conversationId, type, animation)}
+        onSendTypingState={handleTypingState}
+        typingNotificationsEnabled={true}
+        onFileSelect={onFileSelect}
+        uploadState={uploadState}
+        isUploadSupported={isUploadSupported}
+        pendingAttachment={pendingAttachment}
+        onRemovePendingAttachment={onRemovePendingAttachment}
+        disabled={!isConnected}
+        value={text}
+        onValueChange={setText}
+        onEditLastMessage={onEditLastMessage}
+        encryptionState={encryptionState}
+      />
+    </>
   )
 }
 
