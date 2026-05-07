@@ -33,6 +33,15 @@ export interface SequoiaPgpPluginOptions {
   invoke: InvokeFn
 }
 
+interface RustCertValidation {
+  fingerprint: string
+  encryptionSubkeyCount: number
+  /** Current Rust serde camelCase output for `user_ids`. */
+  userIds?: string[]
+  /** Backward-compatible/test shape used by the shared plugin contract. */
+  userIDs?: string[]
+}
+
 export class SequoiaPgpPlugin extends OpenPGPPluginBase {
   private readonly invoke: InvokeFn
 
@@ -93,10 +102,15 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
   protected async validateCert(
     publicArmored: string,
   ): Promise<{ fingerprint: string; encryptionSubkeyCount: number; userIDs: string[] }> {
-    return this.invoke<{ fingerprint: string; encryptionSubkeyCount: number; userIDs: string[] }>(
+    const validation = await this.invoke<RustCertValidation>(
       'openpgp_validate_cert',
       { publicArmored },
     )
+    return {
+      fingerprint: validation.fingerprint,
+      encryptionSubkeyCount: validation.encryptionSubkeyCount,
+      userIDs: validation.userIDs ?? validation.userIds ?? [],
+    }
   }
 
   protected async rotateKeyMaterial(accountJid: string): Promise<KeyBundle> {

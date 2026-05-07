@@ -1014,6 +1014,31 @@ describe('SequoiaPgpPlugin', () => {
       })
     })
 
+    it('accepts the Rust IPC userIds field when validating a peer cert', async () => {
+      const invoke: InvokeFn = async <T>(cmd: string, args?: Record<string, unknown>) => {
+        const result = await fake.invoke<Record<string, unknown>>(cmd, args)
+        if (cmd !== 'openpgp_validate_cert') return result as T
+        const { userIDs, ...rest } = result
+        return { ...rest, userIds: userIDs } as T
+      }
+      const pluginUnderTest = new SequoiaPgpPlugin({ invoke })
+      const built = makeContext('me@example.com')
+      await pluginUnderTest.init(built.ctx)
+
+      const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'bob@example.com',
+        userId: 'xmpp:bob@example.com',
+      })
+      publishKeyAsXep0373(built, 'bob@example.com', bobBundle)
+
+      const support = await pluginUnderTest.probePeer('bob@example.com')
+      expect(support).toMatchObject({
+        supported: true,
+        fingerprint: bobBundle.fingerprint,
+      })
+      expect(pluginUnderTest.getPeerFingerprint('bob@example.com')).toBe(bobBundle.fingerprint)
+    })
+
     it('returns supported=false when the peer has no metadata node', async () => {
       const { ctx } = makeContext('me@example.com')
       await plugin.init(ctx)
