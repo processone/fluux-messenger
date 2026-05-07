@@ -1327,7 +1327,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   private buildInboundSecurityContext(peer: BareJID, output: DecryptOutput): SecurityContext {
     const cached = this.peerKeys.get(peer)
     const fingerprintMatches =
-      cached && output.signerFingerprint && cached.fingerprint === output.signerFingerprint
+      cached && output.signerFingerprint && fingerprintsEqual(cached.fingerprint, output.signerFingerprint)
     let trust: SecurityContext['trust']
     if (output.signatureVerified && fingerprintMatches) {
       trust = isPeerVerified(peer, cached.fingerprint) ? 'verified' : 'tofu'

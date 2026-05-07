@@ -1,0 +1,6 @@
+{
+  "aliceFingerprint": "178bc9ebad57738b7480351dbeca9e2fe88a715c",
+  "bobFingerprint": "c6c88081f6c484b1dac75f7d788ff3da2d14b8aa",
+  "plaintext": "Hello from openpgp.js — cross-library interop test",
+  "backupPassphrase": "TWNK-KD5Y-MT3T-E1GS-DRDB-KVTW"
+}

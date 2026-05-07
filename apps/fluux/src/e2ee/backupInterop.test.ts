@@ -133,24 +133,18 @@ describe('backup interop: WebOpenPGPPlugin produces a Sequoia-compatible wire fo
     const backupPp = 'long-and-strong-passphrase'
     const backup = await plugin.callBackupEncrypt('alice@example.com', backupPp)
 
-    // Decrypt the outer container and pull out the literal payload as a
-    // string. This mirrors what Sequoia does on the Rust side
-    // (`std::io::copy` from the decryptor into `tsk_bytes`, then
-    // `Cert::from_bytes`). The recovered armor must contain SECRET KEY
-    // BLOCK markers — Rust explicitly rejects any payload whose Cert is
-    // not a TSK.
+    // Decrypt the outer container as binary — this mirrors what Sequoia
+    // does on the Rust side (`std::io::copy` from the decryptor into
+    // `tsk_bytes`, then `Cert::from_bytes`). The payload is raw OpenPGP
+    // packets (not ASCII armor), matching Sequoia's format.
     const openpgp = await import('openpgp')
     const message = await openpgp.readMessage({ armoredMessage: backup })
-    const { data } = await openpgp.decrypt({ message, passwords: [backupPp] })
+    const { data } = await openpgp.decrypt({ message, passwords: [backupPp], format: 'binary' })
+    const tskBytes = data as Uint8Array
 
-    const tskArmored = typeof data === 'string' ? data : await streamToString(data)
-
-    expect(tskArmored).toContain('-----BEGIN PGP PRIVATE KEY BLOCK-----')
-    expect(tskArmored).toContain('-----END PGP PRIVATE KEY BLOCK-----')
-
-    // Parse the recovered TSK and assert it really carries a secret key —
-    // not a stripped public key (which Rust's `cert.is_tsk()` would reject).
-    const recoveredKey = await openpgp.readPrivateKey({ armoredKey: tskArmored })
+    // Parse the recovered binary TSK — Rust's `cert.is_tsk()` rejects
+    // public-only certs, and `readPrivateKey` does the same.
+    const recoveredKey = await openpgp.readPrivateKey({ binaryKey: tskBytes })
     expect(recoveredKey.isPrivate()).toBe(true)
   })
 
@@ -238,18 +232,17 @@ describe('backup interop: WebOpenPGPPlugin produces a Sequoia-compatible wire fo
     const first = await plugin.callBackupEncrypt('alice@example.com', 'pp-one')
 
     // Decrypt with pp-one, re-encrypt with pp-two — the Rust rotation
-    // path does exactly this dance.
+    // path does exactly this dance. Payload is binary TSK packets.
     const openpgp = await import('openpgp')
     const decrypted = await openpgp.decrypt({
       message: await openpgp.readMessage({ armoredMessage: first }),
       passwords: ['pp-one'],
+      format: 'binary',
     })
-    const tskArmored = typeof decrypted.data === 'string'
-      ? decrypted.data
-      : await streamToString(decrypted.data)
+    const tskBytes = decrypted.data as Uint8Array
 
     const second = (await openpgp.encrypt({
-      message: await openpgp.createMessage({ text: tskArmored }),
+      message: await openpgp.createMessage({ binary: tskBytes }),
       passwords: ['pp-two'],
     })) as string
 
@@ -266,20 +259,3 @@ describe('backup interop: WebOpenPGPPlugin produces a Sequoia-compatible wire fo
     expect(restored.fingerprint).toBe(originalFp)
   })
 })
-
-async function streamToString(stream: unknown): Promise<string> {
-  // openpgp.js's decrypt returns either a string (when text format) or
-  // a stream. We always pass `text` so the string branch is the common
-  // path; this fallback is defensive for cases where the lib hands us
-  // a stream-like object instead.
-  const reader = (stream as { getReader?: () => ReadableStreamDefaultReader }).getReader?.()
-  if (!reader) return String(stream)
-  const decoder = new TextDecoder()
-  let out = ''
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    out += typeof value === 'string' ? value : decoder.decode(value)
-  }
-  return out
-}

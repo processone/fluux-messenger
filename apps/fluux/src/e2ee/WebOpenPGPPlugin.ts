@@ -35,6 +35,14 @@ import { USE_V6_KEYS } from './passphraseGenerator'
 
 const PRIVATE_KEY_STORAGE_KEY = 'private-key'
 
+/**
+ * Normalize a backup passphrase to match Rust's `normalize_passphrase`:
+ * NFKD → lowercase → collapse whitespace to single ASCII space.
+ */
+function normalizeBackupPassphrase(raw: string): string {
+  return raw.normalize('NFKD').toLowerCase().split(/\s+/).filter(Boolean).join(' ')
+}
+
 export class WebOpenPGPPlugin extends OpenPGPPluginBase {
   /** In-memory decrypted private key. Cleared on shutdown / page reload. */
   private ownPrivateKey: PrivateKey | null = null
@@ -95,10 +103,11 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
     await this.requireUnlocked()
     const { createMessage, readKey, encrypt } = await import('openpgp')
     const recipientKey = await readKey({ armoredKey: recipientPublicArmored })
+    const senderPublicKey = this.ownPrivateKey!.toPublic()
     const message = await createMessage({ text: plaintext })
     const encrypted = await encrypt({
       message,
-      encryptionKeys: recipientKey,
+      encryptionKeys: [recipientKey, senderPublicKey],
       signingKeys: this.ownPrivateKey!,
     })
     return encrypted as string
@@ -131,7 +140,10 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
       try {
         await signatures[0].verified
         signatureVerified = true
-        signerFingerprint = signatures[0].keyID.toHex()
+        // Return the primary cert fingerprint (40 hex chars for v4) to
+        // match Sequoia's behavior. keyID.toHex() only gives the 8-byte
+        // key ID (16 chars), which would never match the cached peer FP.
+        signerFingerprint = verificationKeys[0].getFingerprint()
       } catch {
         signatureVerified = false
       }
@@ -151,7 +163,13 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
     const { readKey } = await import('openpgp')
     const key = await readKey({ armoredKey: publicArmored })
     const fingerprint = key.getFingerprint()
-    const encryptionSubkeyCount = key.subkeys.length
+    let encryptionSubkeyCount = 0
+    try {
+      await key.getEncryptionKey()
+      encryptionSubkeyCount = 1
+    } catch {
+      // No usable encryption-capable subkey (expired, revoked, or absent).
+    }
     const userIds = key.getUserIDs()
     return { fingerprint, encryptionSubkeyCount, userIds }
   }
@@ -170,12 +188,10 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
   protected async backupEncrypt(_accountJid: string, passphrase: string): Promise<string> {
     await this.requireUnlocked()
     const { createMessage, encrypt } = await import('openpgp')
-    // Produce an OpenPGP MESSAGE (SKESK) wrapping the raw TSK armor.
-    // This is the same format as Sequoia's `openpgp_backup_encrypt`, enabling
-    // cross-platform backup restore.
-    const tskArmored = this.ownPrivateKey!.armor()
-    const message = await createMessage({ text: tskArmored })
-    const encrypted = await encrypt({ message, passwords: [passphrase] })
+    // Wrap binary TSK packets (not armored text) to match Sequoia's format.
+    const tskBinary = this.ownPrivateKey!.write() as Uint8Array
+    const message = await createMessage({ binary: tskBinary })
+    const encrypted = await encrypt({ message, passwords: [normalizeBackupPassphrase(passphrase)] })
     return encrypted as string
   }
 
@@ -186,12 +202,14 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
   ): Promise<KeyBundle> {
     const { readMessage, decrypt, readPrivateKey, encryptKey } = await import('openpgp')
 
-    // Decrypt the backup message
+    // Decrypt the backup message. Use format:'binary' to handle both
+    // Sequoia-generated backups (binary TSK) and legacy web backups
+    // (armored TSK text) uniformly.
     const message = await readMessage({ armoredMessage: backupMessage })
-    let tskArmored: string
+    let tskBytes: Uint8Array
     try {
-      const { data } = await decrypt({ message, passwords: [passphrase] })
-      tskArmored = data as string
+      const { data } = await decrypt({ message, passwords: [normalizeBackupPassphrase(passphrase)], format: 'binary' })
+      tskBytes = data as Uint8Array
     } catch (err) {
       throw new E2EEPluginError(
         'permanent',
@@ -201,8 +219,14 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
       )
     }
 
-    // Parse the recovered private key
-    const privateKey = await readPrivateKey({ armoredKey: tskArmored })
+    // Parse the recovered private key — try binary first (Sequoia format),
+    // fall back to armored (legacy web format).
+    let privateKey
+    try {
+      privateKey = await readPrivateKey({ binaryKey: tskBytes })
+    } catch {
+      privateKey = await readPrivateKey({ armoredKey: new TextDecoder().decode(tskBytes) })
+    }
 
     // Store encrypted with the backup passphrase (which becomes the session passphrase)
     const encrypted = await encryptKey({ privateKey, passphrase })

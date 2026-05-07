@@ -338,6 +338,155 @@ describe('WebOpenPGPPlugin', () => {
     })
   })
 
+  describe('encrypt-to-self', () => {
+    it('sender can decrypt their own outgoing ciphertext', async () => {
+      // Alice and Bob each get their own plugin/key.
+      const alice = new TestableWebOpenPGPPlugin()
+      const aliceCtx = makeCtx('alice@example.com').ctx
+      setSessionPassphrase('alice-pp')
+      await alice.init(aliceCtx)
+      const aliceBundle = await alice.callEnsureKeyMaterial('alice@example.com')
+
+      clearSessionPassphrase()
+      const bob = new TestableWebOpenPGPPlugin()
+      const bobCtx = makeCtx('bob@example.com').ctx
+      setSessionPassphrase('bob-pp')
+      await bob.init(bobCtx)
+      const bobBundle = await bob.callEnsureKeyMaterial('bob@example.com')
+
+      // Alice encrypts to Bob → should also be decryptable by Alice (encrypt-to-self).
+      setSessionPassphrase('alice-pp')
+      const ciphertext = await alice.callEncryptToRecipient(
+        'alice@example.com',
+        bobBundle.publicArmored,
+        'hello bob',
+      )
+
+      // Alice decrypts her own outgoing message (MAM replay scenario).
+      const selfDecrypted = await alice.callDecryptWithOwnKey(
+        'alice@example.com',
+        ciphertext,
+        aliceBundle.publicArmored,
+      )
+      expect(selfDecrypted.plaintext).toBe('hello bob')
+
+      // Bob also decrypts normally.
+      setSessionPassphrase('bob-pp')
+      const bobDecrypted = await bob.callDecryptWithOwnKey(
+        'bob@example.com',
+        ciphertext,
+        aliceBundle.publicArmored,
+      )
+      expect(bobDecrypted.plaintext).toBe('hello bob')
+    })
+  })
+
+  describe('signer fingerprint format', () => {
+    it('returns the full primary cert fingerprint, not a short key ID', async () => {
+      const alice = new TestableWebOpenPGPPlugin()
+      const aliceCtx = makeCtx('alice@example.com').ctx
+      setSessionPassphrase('alice-pp')
+      await alice.init(aliceCtx)
+      const aliceBundle = await alice.callEnsureKeyMaterial('alice@example.com')
+
+      clearSessionPassphrase()
+      const bob = new TestableWebOpenPGPPlugin()
+      const bobCtx = makeCtx('bob@example.com').ctx
+      setSessionPassphrase('bob-pp')
+      await bob.init(bobCtx)
+      const bobBundle = await bob.callEnsureKeyMaterial('bob@example.com')
+
+      setSessionPassphrase('alice-pp')
+      const ciphertext = await alice.callEncryptToRecipient(
+        'alice@example.com',
+        bobBundle.publicArmored,
+        'signed message',
+      )
+
+      setSessionPassphrase('bob-pp')
+      const decrypted = await bob.callDecryptWithOwnKey(
+        'bob@example.com',
+        ciphertext,
+        aliceBundle.publicArmored,
+      )
+
+      expect(decrypted.signatureVerified).toBe(true)
+      // Must be the full 40-char v4 fingerprint, matching Alice's primary FP.
+      expect(decrypted.signerFingerprint).toMatch(/^[a-f0-9]{40}$/)
+      expect(decrypted.signerFingerprint!.toLowerCase()).toBe(
+        aliceBundle.fingerprint.toLowerCase(),
+      )
+    })
+  })
+
+  describe('backup passphrase normalization', () => {
+    it('normalizes case so uppercase and lowercase codes are equivalent', async () => {
+      const source = new TestableWebOpenPGPPlugin()
+      const sourceCtx = makeCtx('alice@example.com').ctx
+      setSessionPassphrase('session-pp')
+      await source.init(sourceCtx)
+      await source.callEnsureKeyMaterial('alice@example.com')
+
+      // Encrypt with uppercase backup code.
+      const backupMessage = await source.callBackupEncrypt(
+        'alice@example.com',
+        'TWNK-KD5Y-MT3T-E1GS-DRDB-KVTW',
+      )
+
+      // Import with lowercase version — must succeed due to normalization.
+      clearSessionPassphrase()
+      const dest = new TestableWebOpenPGPPlugin()
+      const destCtx = makeCtx('alice@example.com').ctx
+      await dest.init(destCtx)
+      const restored = await dest.callBackupImport(
+        'alice@example.com',
+        backupMessage,
+        'twnk-kd5y-mt3t-e1gs-drdb-kvtw',
+      )
+      expect(restored.fingerprint).toBeTruthy()
+    })
+
+    it('normalizes whitespace variants', async () => {
+      const source = new TestableWebOpenPGPPlugin()
+      const sourceCtx = makeCtx('alice@example.com').ctx
+      setSessionPassphrase('session-pp')
+      await source.init(sourceCtx)
+      await source.callEnsureKeyMaterial('alice@example.com')
+
+      const backupMessage = await source.callBackupEncrypt(
+        'alice@example.com',
+        'correct horse battery staple',
+      )
+
+      // Import with extra spaces and trailing newline — must work.
+      clearSessionPassphrase()
+      const dest = new TestableWebOpenPGPPlugin()
+      const destCtx = makeCtx('alice@example.com').ctx
+      await dest.init(destCtx)
+      const restored = await dest.callBackupImport(
+        'alice@example.com',
+        backupMessage,
+        '  correct   horse  battery   staple  \n',
+      )
+      expect(restored.fingerprint).toBeTruthy()
+    })
+  })
+
+  describe('validateCert filtering', () => {
+    it('counts only encryption-capable subkeys', async () => {
+      const plugin = new TestableWebOpenPGPPlugin()
+      const { ctx } = makeCtx('alice@example.com')
+      setSessionPassphrase('session-pp')
+      await plugin.init(ctx)
+
+      const bundle = await plugin.callEnsureKeyMaterial('alice@example.com')
+      const info = await plugin.callValidateCert(bundle.publicArmored)
+
+      // A freshly generated ECC key has exactly one encryption subkey.
+      expect(info.encryptionSubkeyCount).toBe(1)
+    })
+  })
+
   describe('unlock', () => {
     it('sets the session passphrase and decrypts the stored key', async () => {
       const backend = new InMemoryStorageBackend()
