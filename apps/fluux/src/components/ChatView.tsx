@@ -1078,6 +1078,7 @@ function MessageInput({
         value={text}
         onValueChange={setText}
         onEditLastMessage={onEditLastMessage}
+        encryptionState={encryptionState}
       />
     </>
   )
