@@ -798,7 +798,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     }
 
     const publishedArmored = parsePublicKeyDataItem(dataItems[0].payload)
-    if (publishedArmored !== null && publishedArmored.trim() !== bundle.publicArmored.trim()) {
+    if (publishedArmored !== null && !openPgpBlocksEqual(publishedArmored, bundle.publicArmored)) {
       recordOwnKeyConflict({
         kind: 'subkey-mismatch',
         localFingerprint: bundle.fingerprint,
@@ -819,7 +819,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         {
           name: 'data',
           attrs: {},
-          children: [base64Encode(bundle.publicArmored)],
+          children: [base64EncodeOpenPgpBlock(bundle.publicArmored)],
         },
       ],
     }
@@ -1101,7 +1101,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const stanzaElement: XMLElementData = {
       name: 'openpgp',
       attrs: { xmlns: OX_NAMESPACE },
-      children: [base64Encode(ciphertext)],
+      children: [base64EncodeOpenPgpBlock(ciphertext)],
     }
     return {
       protocolId: OPENPGP_DESCRIPTOR.id,
@@ -1123,7 +1123,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     if (!encodedCiphertext) {
       throw new Error(`${this.pluginName()}: encrypted element has no payload`)
     }
-    const ciphertext = base64Decode(encodedCiphertext)
+    const ciphertext = base64DecodeOpenPgpBlock(encodedCiphertext, 'PGP MESSAGE')
 
     const peer = extractPeer(handle)
     const senderPublicArmored = this.peerKeys.get(peer)?.publicArmored ?? null
@@ -1430,7 +1430,7 @@ function parsePublicKeyDataItem(payload: XMLElementData): string | null {
     if (typeof child === 'string') continue
     if (child.name !== 'data') continue
     const encoded = firstText(child)
-    if (encoded) return base64Decode(encoded)
+    if (encoded) return base64DecodeOpenPgpBlock(encoded, 'PGP PUBLIC KEY BLOCK')
   }
   return null
 }
@@ -1468,13 +1468,138 @@ function firstText(el: XMLElementData): string | null {
 }
 
 function base64Encode(input: string): string {
-  if (typeof btoa === 'function') return btoa(unescape(encodeURIComponent(input)))
-  return Buffer.from(input, 'utf-8').toString('base64')
+  return bytesToBase64(new TextEncoder().encode(input))
 }
 
 function base64Decode(encoded: string): string {
-  if (typeof atob === 'function') return decodeURIComponent(escape(atob(encoded)))
-  return Buffer.from(encoded, 'base64').toString('utf-8')
+  return new TextDecoder().decode(base64ToBytes(encoded))
+}
+
+/**
+ * XEP-0373 carries raw OpenPGP packet bytes in XML as Base64, not ASCII armor.
+ * Our crypto backends still exchange armored strings internally, so this is
+ * the boundary adapter in both directions. It also accepts the old Fluux wire
+ * shape (Base64 of armor) so historical messages and published keys remain
+ * readable while new output is spec-compliant.
+ */
+function base64EncodeOpenPgpBlock(armoredOrLegacyText: string): string {
+  const raw = dearmorOpenPgpBlock(armoredOrLegacyText)
+  return bytesToBase64(raw ?? new TextEncoder().encode(armoredOrLegacyText))
+}
+
+function base64DecodeOpenPgpBlock(encoded: string, blockType: string): string {
+  const raw = base64ToBytes(encoded)
+  const text = decodeUtf8Strict(raw)
+  if (text !== null && text.startsWith('-----BEGIN PGP ')) return text
+  if (text !== null && !looksLikeOpenPgpPacket(raw)) return text
+  return armorOpenPgpBlock(raw, blockType)
+}
+
+function openPgpBlocksEqual(a: string, b: string): boolean {
+  const aRaw = dearmorOpenPgpBlock(a)
+  const bRaw = dearmorOpenPgpBlock(b)
+  if (aRaw && bRaw) return bytesEqual(aRaw, bRaw)
+  return a.trim() === b.trim()
+}
+
+function dearmorOpenPgpBlock(armored: string): Uint8Array | null {
+  const normalized = armored.replace(/\r\n/g, '\n')
+  const lines = normalized.split('\n')
+  const beginIndex = lines.findIndex((line) => /^-----BEGIN PGP [^-]+-----$/.test(line.trim()))
+  if (beginIndex < 0) return null
+  const endIndex = lines.findIndex(
+    (line, index) => index > beginIndex && /^-----END PGP [^-]+-----$/.test(line.trim()),
+  )
+  if (endIndex < 0) return null
+
+  const body: string[] = []
+  let afterHeaders = false
+  for (let i = beginIndex + 1; i < endIndex; i++) {
+    const line = lines[i].trim()
+    if (!afterHeaders) {
+      if (line === '') afterHeaders = true
+      continue
+    }
+    if (line === '') continue
+    if (line.startsWith('=')) break
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(line)) return null
+    body.push(line)
+  }
+  if (body.length === 0) return null
+  return base64ToBytes(body.join(''))
+}
+
+function armorOpenPgpBlock(raw: Uint8Array, blockType: string): string {
+  const body = wrapBase64(bytesToBase64(raw))
+  return `-----BEGIN ${blockType}-----\n\n${body}\n=${crc24Base64(raw)}\n-----END ${blockType}-----`
+}
+
+function looksLikeOpenPgpPacket(bytes: Uint8Array): boolean {
+  return bytes.length > 0 && (bytes[0] & 0x80) !== 0
+}
+
+function decodeUtf8Strict(bytes: Uint8Array): string | null {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    return null
+  }
+}
+
+function base64ToBytes(encoded: string): Uint8Array {
+  const clean = encoded.replace(/\s+/g, '')
+  if (typeof Buffer !== 'undefined') return new Uint8Array(Buffer.from(clean, 'base64'))
+  const binary = atob(clean)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return bytes
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  if (typeof Buffer !== 'undefined') return Buffer.from(bytes).toString('base64')
+  return btoa(bytesToBinaryString(bytes))
+}
+
+function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false
+  }
+  return true
+}
+
+function bytesToBinaryString(bytes: Uint8Array): string {
+  const chunks: string[] = []
+  const chunkSize = 0x8000
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    chunks.push(String.fromCharCode(...bytes.subarray(i, i + chunkSize)))
+  }
+  return chunks.join('')
+}
+
+function wrapBase64(input: string): string {
+  const lines: string[] = []
+  for (let i = 0; i < input.length; i += 64) lines.push(input.slice(i, i + 64))
+  return lines.join('\n')
+}
+
+function crc24Base64(bytes: Uint8Array): string {
+  const crc = crc24(bytes)
+  return bytesToBase64(
+    new Uint8Array([(crc >> 16) & 0xff, (crc >> 8) & 0xff, crc & 0xff]),
+  )
+}
+
+function crc24(bytes: Uint8Array): number {
+  let crc = 0xb704ce
+  for (const byte of bytes) {
+    crc ^= byte << 16
+    for (let i = 0; i < 8; i++) {
+      crc <<= 1
+      if ((crc & 0x1000000) !== 0) crc ^= 0x1864cfb
+    }
+  }
+  return crc & 0xffffff
 }
 
 function formatError(err: unknown): string {
