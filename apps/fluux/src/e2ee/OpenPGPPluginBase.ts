@@ -142,6 +142,12 @@ export interface DecryptOutput {
   signaturePresent: boolean
 }
 
+export interface CertValidation {
+  fingerprint: string
+  encryptionSubkeyCount: number
+  userIds: string[]
+}
+
 interface PendingVerification {
   messageId: string
   ciphertext: string
@@ -285,7 +291,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    */
   protected abstract validateCert(
     publicArmored: string,
-  ): Promise<{ fingerprint: string; encryptionSubkeyCount: number; userIDs: string[] }>
+  ): Promise<CertValidation>
 
   /**
    * Rotate the encryption subkey while keeping the primary key (and
@@ -966,7 +972,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       for (const item of items) {
         const armored = parsePublicKeyDataItem(item.payload)
         if (!armored) continue
-        let validation: { fingerprint: string; encryptionSubkeyCount: number; userIDs: string[] }
+        let validation: CertValidation
         try {
           validation = await this.validateCert(armored)
         } catch (err) {
@@ -986,11 +992,11 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
           continue
         }
         const expectedUid = `xmpp:${peer}`
-        const uidMatch = validation.userIDs.some(
+        const uidMatch = validation.userIds.some(
           (uid) => uid.toLowerCase() === expectedUid.toLowerCase(),
         )
         if (!uidMatch) {
-          const detail = `expected ${expectedUid}, got [${validation.userIDs.join(', ')}]`
+          const detail = `expected ${expectedUid}, got [${validation.userIds.join(', ')}]`
           ctx.logger.warn(
             `${this.pluginName()}: ${peer} key ${fingerprint} has no matching UID (${detail}); discarding`,
           )

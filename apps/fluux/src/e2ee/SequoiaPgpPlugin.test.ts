@@ -247,7 +247,7 @@ function makeFakeRust() {
         const fp = extractFingerprint(args!.publicArmored as string)
         if (!fp) throw new Error('not a recognizable OpenPGP public key')
         const uid = extractUID(args!.publicArmored as string)
-        return { fingerprint: fp, encryptionSubkeyCount: 1, userIDs: uid ? [uid] : [] } as T
+        return { fingerprint: fp, encryptionSubkeyCount: 1, userIds: uid ? [uid] : [] } as T
       }
       case 'openpgp_has_persisted_key': {
         const jid = args!.accountJid as string
@@ -1014,31 +1014,6 @@ describe('SequoiaPgpPlugin', () => {
       })
     })
 
-    it('accepts the Rust IPC userIds field when validating a peer cert', async () => {
-      const invoke: InvokeFn = async <T>(cmd: string, args?: Record<string, unknown>) => {
-        const result = await fake.invoke<Record<string, unknown>>(cmd, args)
-        if (cmd !== 'openpgp_validate_cert') return result as T
-        const { userIDs, ...rest } = result
-        return { ...rest, userIds: userIDs } as T
-      }
-      const pluginUnderTest = new SequoiaPgpPlugin({ invoke })
-      const built = makeContext('me@example.com')
-      await pluginUnderTest.init(built.ctx)
-
-      const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
-        accountJid: 'bob@example.com',
-        userId: 'xmpp:bob@example.com',
-      })
-      publishKeyAsXep0373(built, 'bob@example.com', bobBundle)
-
-      const support = await pluginUnderTest.probePeer('bob@example.com')
-      expect(support).toMatchObject({
-        supported: true,
-        fingerprint: bobBundle.fingerprint,
-      })
-      expect(pluginUnderTest.getPeerFingerprint('bob@example.com')).toBe(bobBundle.fingerprint)
-    })
-
     it('returns supported=false when the peer has no metadata node', async () => {
       const { ctx } = makeContext('me@example.com')
       await plugin.init(ctx)
@@ -1208,7 +1183,7 @@ describe('SequoiaPgpPlugin', () => {
           return {
             fingerprint: RAW_FP,
             encryptionSubkeyCount: 1,
-            userIDs: ['xmpp:bob@example.com'],
+            userIds: ['xmpp:bob@example.com'],
           } as T
         }
         return fake.invoke<T>(cmd, args)

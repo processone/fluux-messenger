@@ -24,7 +24,12 @@
 
 import type { PrivateKey } from 'openpgp'
 import { E2EEPluginError } from '@fluux/sdk'
-import { OpenPGPPluginBase, type DecryptOutput, type KeyBundle } from './OpenPGPPluginBase'
+import {
+  OpenPGPPluginBase,
+  type CertValidation,
+  type DecryptOutput,
+  type KeyBundle,
+} from './OpenPGPPluginBase'
 import { clearSessionPassphrase, getSessionPassphrase, setSessionPassphrase } from './webPassphraseStore'
 import { USE_V6_KEYS } from './passphraseGenerator'
 
@@ -142,13 +147,13 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
 
   protected async validateCert(
     publicArmored: string,
-  ): Promise<{ fingerprint: string; encryptionSubkeyCount: number; userIDs: string[] }> {
+  ): Promise<CertValidation> {
     const { readKey } = await import('openpgp')
     const key = await readKey({ armoredKey: publicArmored })
     const fingerprint = key.getFingerprint()
     const encryptionSubkeyCount = key.subkeys.length
-    const userIDs = key.getUserIDs()
-    return { fingerprint, encryptionSubkeyCount, userIDs }
+    const userIds = key.getUserIDs()
+    return { fingerprint, encryptionSubkeyCount, userIds }
   }
 
   protected async rotateKeyMaterial(_accountJid: string): Promise<KeyBundle> {

@@ -231,6 +231,7 @@ describe('WebOpenPGPPlugin', () => {
       expect(info.fingerprint.toUpperCase()).toBe(bundle.fingerprint.toUpperCase())
       // ECC keys generate with one encryption subkey by default.
       expect(info.encryptionSubkeyCount).toBeGreaterThanOrEqual(1)
+      expect(info.userIds).toContain('xmpp:alice@example.com')
     })
   })
 

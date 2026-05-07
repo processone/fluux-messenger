@@ -17,6 +17,7 @@
 import { E2EEPluginError } from '@fluux/sdk'
 import {
   OpenPGPPluginBase,
+  type CertValidation,
   type DecryptOutput,
   type KeyBundle,
   classifyBoundaryError,
@@ -31,15 +32,6 @@ export type InvokeFn = <T>(cmd: string, args?: Record<string, unknown>) => Promi
 export interface SequoiaPgpPluginOptions {
   /** Tauri command dispatcher. Tests pass a mock; app code passes the real one. */
   invoke: InvokeFn
-}
-
-interface RustCertValidation {
-  fingerprint: string
-  encryptionSubkeyCount: number
-  /** Current Rust serde camelCase output for `user_ids`. */
-  userIds?: string[]
-  /** Backward-compatible/test shape used by the shared plugin contract. */
-  userIDs?: string[]
 }
 
 export class SequoiaPgpPlugin extends OpenPGPPluginBase {
@@ -101,16 +93,11 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
 
   protected async validateCert(
     publicArmored: string,
-  ): Promise<{ fingerprint: string; encryptionSubkeyCount: number; userIDs: string[] }> {
-    const validation = await this.invoke<RustCertValidation>(
+  ): Promise<CertValidation> {
+    return this.invoke<CertValidation>(
       'openpgp_validate_cert',
       { publicArmored },
     )
-    return {
-      fingerprint: validation.fingerprint,
-      encryptionSubkeyCount: validation.encryptionSubkeyCount,
-      userIDs: validation.userIDs ?? validation.userIds ?? [],
-    }
   }
 
   protected async rotateKeyMaterial(accountJid: string): Promise<KeyBundle> {
