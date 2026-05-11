@@ -41,6 +41,7 @@ import {
 } from '../stores'
 import { detectPlatform, getCachedPlatform } from './platform'
 import { isDeadSocketError } from './modules/connectionUtils'
+import { parseOobData } from './modules/messagingUtils'
 import {
   FRESH_SESSION_IQ_TIMEOUT_MS,
   FRESH_SESSION_SETUP_TIMEOUT_MS,
@@ -114,7 +115,7 @@ import { dataToElement } from './e2ee/stanzaAdapter'
 import { decryptStanzaInPlace } from './e2ee/stanzaDecrypt'
 import { NS_CARBONS, NS_MAM, NS_P1_PUSH_WEBPUSH } from './namespaces'
 import { createDefaultStoreBindings, type DefaultStoreBindingsOptions } from './defaultStoreBindings'
-import { logInfo, logWarn } from './logger'
+import { logDebug, logInfo, logWarn } from './logger'
 import { SDK_VERSION } from '../version'
 import { initSearchIndex, backfillFromMessageCache } from '../utils/searchIndex'
 
@@ -1691,16 +1692,16 @@ export class XMPPClient {
       const body = stanza.getChildText('body')
       if (!body) return null
 
-      // Extract attachment if present (XEP-0066 OOB)
-      const oobEl = stanza.getChild('x', 'jabber:x:oob')
-      let attachment: FileAttachment | undefined
-      if (oobEl) {
-        const url = oobEl.getChildText('url')
-        if (url) {
-          attachment = { url }
-          const desc = oobEl.getChildText('desc')
-          if (desc) attachment.name = desc
-        }
+      // Extract attachment if present — parseOobData handles aesgcm:// URI
+      // parsing (XEP-0454 key/IV extraction), XEP-0446 file metadata, and
+      // XEP-0264 thumbnails, which the previous inline parser was missing.
+      const attachment = parseOobData(stanza)
+      if (attachment) {
+        logDebug(
+          `E2EE deferred decrypt: attachment from ${senderJid} — ` +
+          `url=${attachment.url.slice(0, 40)}… mediaType=${attachment.mediaType ?? 'none'} ` +
+          `encrypted=${!!attachment.encryption} name=${attachment.name ?? 'none'}`,
+        )
       }
 
       // Map SecurityContext to MessageSecurityContext
