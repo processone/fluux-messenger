@@ -176,7 +176,7 @@ export function XmppConsole() {
   const [searchQuery, setSearchQuery] = useState('')
   const [showServerInfo, setShowServerInfo] = useState(false)
   const [enabledTypes, setEnabledTypes] = useState<Set<FilterType>>(
-    new Set(['message', 'iq', 'sm', 'event'])
+    new Set(['message', 'iq', 'event'])
   )
   const [directionFilter, setDirectionFilter] = useState<DirectionFilter>('all')
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null)
