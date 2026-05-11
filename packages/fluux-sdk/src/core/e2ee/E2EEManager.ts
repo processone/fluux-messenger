@@ -85,6 +85,7 @@ export class E2EEManager {
   private sendPolicy: E2EESendPolicy = 'opportunistic'
   private readonly securityContextListeners = new Set<SecurityContextUpdateListener>()
   private readonly forcedPlaintextConversations = new Set<string>()
+  private pluginRegisteredCallback: ((pluginId: string) => void) | null = null
 
   constructor(options: E2EEManagerOptions) {
     this.storage = options.storage
@@ -135,6 +136,7 @@ export class E2EEManager {
     await plugin.init(ctx)
     this.plugins.set(id, plugin)
     this.logger.info(`E2EE plugin registered: ${id}`)
+    this.pluginRegisteredCallback?.(id)
   }
 
   /** Shut down and remove a plugin. Safe to call with an unknown id. */
@@ -156,6 +158,16 @@ export class E2EEManager {
   /** Get a specific plugin by id, or `null`. */
   getPlugin(id: string): E2EEPlugin | null {
     return this.plugins.get(id) ?? null
+  }
+
+  /** True when at least one plugin is registered. */
+  hasPlugins(): boolean {
+    return this.plugins.size > 0
+  }
+
+  /** Set a callback invoked whenever a plugin is registered. */
+  onPluginRegistered(cb: (pluginId: string) => void): void {
+    this.pluginRegisteredCallback = cb
   }
 
   /** Force all outbound sends to this target to skip encryption entirely. Inbound decryption is unaffected. */

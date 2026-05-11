@@ -287,11 +287,30 @@ export function setupBackgroundSyncSideEffects(
     }
   )
 
+  // --- Deferred E2EE decryption triggers ---
+  // When an E2EE plugin registers (e.g. OpenPGP plugin loaded after
+  // background sync already fetched MAM messages), re-decrypt any messages
+  // that have a stashed encrypted payload.
+  const unsubscribePluginRegistered = client.subscribe('e2ee:plugin-registered', ({ pluginId }) => {
+    logInfo(`Background sync: E2EE plugin "${pluginId}" registered — retrying pending decrypts`)
+    void client.retryPendingDecrypts()
+  })
+
+  // When the user unlocks the E2EE private key (e.g. web passphrase entered
+  // after initial connect), re-decrypt messages that failed because the key
+  // was locked at receive time.
+  const unsubscribeKeyUnlocked = client.subscribe('e2ee:key-unlocked', () => {
+    logInfo('Background sync: E2EE key unlocked — retrying pending decrypts')
+    void client.retryPendingDecrypts()
+  })
+
   return () => {
     unsubscribeOnline()
     unsubscribeResumed()
     unsubscribeConnection()
     unsubscribeServerInfo()
+    unsubscribePluginRegistered()
+    unsubscribeKeyUnlocked()
     if (roomCatchUpTimer) {
       clearTimeout(roomCatchUpTimer)
       roomCatchUpTimer = undefined

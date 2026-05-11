@@ -75,6 +75,7 @@ import { logInfo, logError as logErr } from '../logger'
 import {
   decryptStanzaInPlace,
   readStashedAuthoredAt,
+  readStashedEncryptedPayload,
   readStashedSecurityContext,
 } from '../e2ee/stanzaDecrypt'
 import type { MessageSecurityContext } from '../types'
@@ -233,14 +234,14 @@ export class MAM extends BaseModule {
           const response = await this.deps.sendIQ(iq)
           const { complete, rsm } = this.parseMAMResponse(response)
 
-          // Drain the buffer: run modification detection + opportunistic
-          // E2EE decrypt, then parse into Message objects.
+          // Drain the buffer: E2EE decrypt first (so modification bodies are
+          // plaintext, not fallback hints), then modification detection, then parse.
           for (const { forwarded, messageEl, archiveId } of rawEntries) {
             const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
+            await this.decryptArchiveEntryIfNeeded(messageEl, conversationId)
             if (this.collectModification(messageEl, modifications, (from) => getBareJid(from), forwardedTimestamp)) {
               continue
             }
-            await this.decryptArchiveEntryIfNeeded(messageEl, conversationId)
             const msg = this.parseArchiveMessage(forwarded, conversationId, archiveId)
             if (msg) collectedMessages.push(msg)
           }
@@ -377,13 +378,13 @@ export class MAM extends BaseModule {
           const response = await this.deps.sendIQ(iq)
           const { complete, rsm } = this.parseMAMResponse(response)
 
-          // Drain buffer: modification detection + opportunistic E2EE decrypt, then parse.
+          // Drain buffer: E2EE decrypt first, then modification detection, then parse.
           for (const { forwarded, messageEl, archiveId } of rawEntries) {
             const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
+            await this.decryptArchiveEntryIfNeeded(messageEl, roomJid)
             if (this.collectModification(messageEl, modifications, (from) => from, forwardedTimestamp)) {
               continue
             }
-            await this.decryptArchiveEntryIfNeeded(messageEl, roomJid)
             const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
             if (msg) collectedMessages.push(msg)
           }
@@ -503,14 +504,14 @@ export class MAM extends BaseModule {
       const ownBareJid = currentJid ? getBareJid(currentJid) : ''
       for (const { forwarded, messageEl, archiveId } of rawEntries) {
         const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
-        if (this.collectModification(messageEl, modifications, (from) => getBareJid(from), forwardedTimestamp)) {
-          continue
-        }
         // Derive conversationId from the message's from/to
         const from = getBareJid(messageEl.attrs.from || '')
         const to = getBareJid(messageEl.attrs.to || '')
         const conversationId = from === ownBareJid ? to : from
         await this.decryptArchiveEntryIfNeeded(messageEl, conversationId)
+        if (this.collectModification(messageEl, modifications, (from) => getBareJid(from), forwardedTimestamp)) {
+          continue
+        }
         const msg = this.parseArchiveMessage(forwarded, conversationId, archiveId)
         if (msg) collectedMessages.push(msg)
       }
@@ -569,10 +570,10 @@ export class MAM extends BaseModule {
 
       for (const { forwarded, messageEl, archiveId } of rawEntries) {
         const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
+        await this.decryptArchiveEntryIfNeeded(messageEl, roomJid)
         if (this.collectModification(messageEl, modifications, (from) => from, forwardedTimestamp)) {
           continue
         }
-        await this.decryptArchiveEntryIfNeeded(messageEl, roomJid)
         const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
         if (msg) collectedMessages.push(msg)
       }
@@ -1729,6 +1730,7 @@ export class MAM extends BaseModule {
     const messageId = messageEl.attrs.id || generateStableMessageId(from, parsed.timestamp, body || '')
 
     const securityContext = this.archiveSecurityContext(messageEl)
+    const encryptedPayload = readStashedEncryptedPayload(messageEl)
 
     return {
       type: 'chat',
@@ -1745,6 +1747,7 @@ export class MAM extends BaseModule {
       ...(parsed.replyTo && { replyTo: parsed.replyTo }),
       ...(parsed.attachment && { attachment: parsed.attachment }),
       ...(securityContext && { securityContext }),
+      ...(encryptedPayload && { encryptedPayload }),
     }
   }
 
@@ -1794,6 +1797,9 @@ export class MAM extends BaseModule {
     // XEP-0421: Anonymous Unique Occupant Identifiers
     const occupantId = messageEl.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id
 
+    const roomSecurityContext = this.archiveSecurityContext(messageEl)
+    const roomEncryptedPayload = readStashedEncryptedPayload(messageEl)
+
     const message: RoomMessage = {
       type: 'groupchat',
       id: messageId,
@@ -1810,6 +1816,8 @@ export class MAM extends BaseModule {
       ...(parsed.replyTo && { replyTo: parsed.replyTo }),
       ...(parsed.attachment && { attachment: parsed.attachment }),
       ...(occupantId && { occupantId }),
+      ...(roomSecurityContext && { securityContext: roomSecurityContext }),
+      ...(roomEncryptedPayload && { encryptedPayload: roomEncryptedPayload }),
     }
 
     // Poll detection: parse <poll> or <poll-closed> elements from archived messages
