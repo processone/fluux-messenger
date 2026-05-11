@@ -95,7 +95,8 @@
 
 ### Developer-Friendly
 - **Headless SDK** - Reusable `@fluux/sdk` package for building custom XMPP clients or bots
-- **50+ XEPs Implemented** - MAM, MUC, Stream Management, Message Carbons, HTTP File Upload, Reactions, OpenPGP (OX-IM), FAST, and many more
+- **50+ XEPs Implemented** - MAM, MUC, Stream Management, Message Carbons, HTTP File Upload, Reactions, OpenPGP (OX-IM), FAST, and [many more](./SUPPORTED_XEPS.md).
+- **Compatible** - see [Compliance of Fluux](https://xmpp.org/software/fluux-messenger/).
 - **Open Source** - AGPL-3.0 licensed
 
 ## Quick Start
