@@ -749,6 +749,78 @@ describe('Chat E2EE wiring', () => {
     })
   })
 
+  describe('deferred decrypt — EME without plugin', () => {
+    /**
+     * Helper: build deps with no E2EE manager at all (getE2EEManager returns null).
+     */
+    function makeDepsNoManager(jid: string) {
+      const emitted: unknown[] = []
+      const sdkEmitted: unknown[] = []
+      const deps: ModuleDependencies = {
+        stores: null,
+        sendStanza: async () => {},
+        sendIQ: async () => xml('iq', {}) as Element,
+        getCurrentJid: () => jid,
+        emit: (event, ...args) => {
+          emitted.push({ event, args })
+        },
+        emitSDK: (event, payload) => {
+          sdkEmitted.push({ event, payload })
+        },
+        getXmpp: () => null,
+        getE2EEManager: () => null,
+      }
+      return { deps, emitted, sdkEmitted }
+    }
+
+    it('sets encryptedPayload when EME hint is present but no plugin claims', async () => {
+      const built = makeDepsNoManager('me@example.com')
+      const noManagerChat = new Chat(built.deps, stubMAM())
+
+      const inbound = xml(
+        'message',
+        { from: 'bob@example.com/r', to: 'me@example.com', type: 'chat', id: 'm-deferred-1' },
+        xml('body', {}, '[OpenPGP-encrypted message]'),
+        xml('openpgp', { xmlns: 'urn:xmpp:openpgp:0' }, 'base64ciphertext'),
+        xml('encryption', { xmlns: 'urn:xmpp:eme:0', namespace: 'urn:xmpp:openpgp:0', name: 'OpenPGP' }),
+      )
+
+      noManagerChat.handle(inbound)
+      await new Promise((r) => setTimeout(r, 0))
+
+      const chatMessageEvent = built.sdkEmitted.find(
+        (e) => (e as { event: string }).event === 'chat:message',
+      ) as { payload: { message: { body: string; encryptedPayload?: string } } } | undefined
+
+      expect(chatMessageEvent).toBeDefined()
+      expect(chatMessageEvent!.payload.message.encryptedPayload).toBeDefined()
+      expect(chatMessageEvent!.payload.message.encryptedPayload).toContain('urn:xmpp:openpgp:0')
+      expect(chatMessageEvent!.payload.message.body).toBe('[OpenPGP-encrypted message]')
+    })
+
+    it('does not set encryptedPayload on a plain message without EME', async () => {
+      const built = makeDepsNoManager('me@example.com')
+      const noManagerChat = new Chat(built.deps, stubMAM())
+
+      const inbound = xml(
+        'message',
+        { from: 'bob@example.com/r', to: 'me@example.com', type: 'chat', id: 'm-deferred-2' },
+        xml('body', {}, 'Hello'),
+      )
+
+      noManagerChat.handle(inbound)
+      await new Promise((r) => setTimeout(r, 0))
+
+      const chatMessageEvent = built.sdkEmitted.find(
+        (e) => (e as { event: string }).event === 'chat:message',
+      ) as { payload: { message: { body: string; encryptedPayload?: string } } } | undefined
+
+      expect(chatMessageEvent).toBeDefined()
+      expect(chatMessageEvent!.payload.message.encryptedPayload).toBeUndefined()
+      expect(chatMessageEvent!.payload.message.body).toBe('Hello')
+    })
+  })
+
   // -------------------------------------------------------------------
   // Regression: every chat-like outbound primitive must route through the
   // E2EE wrap. A leak in any of these paths (resend a failed encrypted

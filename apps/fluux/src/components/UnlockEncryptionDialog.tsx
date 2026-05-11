@@ -80,6 +80,10 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
         throw new Error(t('settings.encryption.backupPluginUnavailable'))
       }
       await plugin.unlock(passphrase)
+      // Trigger deferred decryption of messages that arrived while the
+      // key was locked (e.g. MAM catch-up messages fetched before the
+      // user entered the passphrase).
+      client.notifyE2EEKeyUnlocked()
       onClose(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))

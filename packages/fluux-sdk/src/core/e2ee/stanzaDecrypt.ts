@@ -23,11 +23,13 @@ import { elementToData } from './stanzaAdapter'
 import { parse as parsePayloadEnvelope } from './payloadEnvelope'
 import type { E2EEManager, SecurityContext } from './index'
 import type { InboundSource } from './types'
-import { logWarn } from '../logger'
+import { logWarn, logInfo } from '../logger'
+import { NS_EME } from '../namespaces'
 
 const DECRYPTED_MARKER = '__e2eeDecrypted'
 const SECURITY_CONTEXT_STASH = '__securityContext'
 const AUTHORED_AT_STASH = '__authoredAt'
+const ENCRYPTED_PAYLOAD_STASH = '__encryptedPayload'
 
 /**
  * Result of {@link decryptStanzaInPlace}. `attempted` is true whenever a
@@ -45,6 +47,14 @@ export interface DecryptInPlaceResult {
    * should prefer this over the stanza's `<delay/>` or arrival time.
    */
   authoredAt?: Date
+  /**
+   * Serialized XML of the encrypted child element, present only when
+   * decryption was attempted but failed (key locked, unsupported protocol)
+   * or when an EME hint was detected but no plugin claimed the stanza.
+   * Callers should store this on the resulting {@link Message} so that
+   * {@link XMPPClient.retryPendingDecrypts} can re-attempt later.
+   */
+  encryptedPayloadXml?: string
 }
 
 /**
@@ -100,8 +110,18 @@ export async function decryptStanzaInPlace(
     }
   }
   if (!claim || !encryptedChild) {
-    return { attempted: false }
+    // No plugin claimed — check if this is still an encrypted message via
+    // XEP-0380 EME (Explicit Message Encryption). This happens when no
+    // plugin is registered yet (race at startup) or the message uses a
+    // protocol this client doesn't support. Stash the encrypted element
+    // so retryPendingDecrypts() can re-attempt when a plugin is available.
+    const payloadXml = stashEncryptedPayloadViaEME(stanza)
+    return { attempted: false, ...(payloadXml && { encryptedPayloadXml: payloadXml }) }
   }
+
+  // Serialize the encrypted element BEFORE any mutation — the element
+  // will be stripped below regardless of success/failure.
+  const encryptedChildXml = encryptedChild.toString()
 
   let plaintext: string | null = null
   let securityContext: SecurityContext | null = null
@@ -136,6 +156,9 @@ export async function decryptStanzaInPlace(
 
   if (failureReason !== null) {
     logWarn(`E2EE decrypt failed for message from ${senderPeer}: ${failureReason}`)
+    // Stash the serialized encrypted element for deferred decryption.
+    // retryPendingDecrypts() will re-attempt when the key is unlocked.
+    stashPayload(stanza, encryptedChildXml)
     // XEP-0373: a well-behaved sender inserted a fallback <body> for
     // clients that cannot decrypt. Leave it alone. Synthesize a minimal
     // placeholder only when none was provided, so the message still
@@ -196,7 +219,44 @@ export async function decryptStanzaInPlace(
     attempted: true,
     ...(securityContext && { securityContext }),
     ...(authoredAt && { authoredAt }),
+    ...(failureReason !== null && { encryptedPayloadXml: encryptedChildXml }),
   }
+}
+
+// ---------------------------------------------------------------------------
+// Stanza stash helpers
+// ---------------------------------------------------------------------------
+
+/** Stash a serialized encrypted element on a stanza for deferred decrypt. */
+function stashPayload(stanza: Element, payloadXml: string): void {
+  ;(stanza as unknown as { [ENCRYPTED_PAYLOAD_STASH]?: string })[
+    ENCRYPTED_PAYLOAD_STASH
+  ] = payloadXml
+}
+
+/**
+ * EME-based fallback: when no plugin claimed the stanza, look for an
+ * XEP-0380 `<encryption>` hint. If found, locate the encrypted child by
+ * matching its namespace to the EME `namespace` attribute, serialize it,
+ * and stash it on the stanza. Returns the serialized XML or `undefined`.
+ */
+function stashEncryptedPayloadViaEME(stanza: Element): string | undefined {
+  const emeEl = stanza.getChild('encryption', NS_EME)
+  if (!emeEl) return undefined
+  const emeNamespace = emeEl.attrs.namespace
+  if (!emeNamespace) return undefined
+
+  for (const child of stanza.children) {
+    if (typeof child === 'string') continue
+    const childEl = child as Element
+    if (childEl.attrs.xmlns === emeNamespace) {
+      const payloadXml = childEl.toString()
+      stashPayload(stanza, payloadXml)
+      logInfo(`E2EE: stashed encrypted payload via EME (ns=${emeNamespace}) for deferred decrypt`)
+      return payloadXml
+    }
+  }
+  return undefined
 }
 
 /**
@@ -223,6 +283,17 @@ export function readStashedAuthoredAt(stanza: Element): Date | undefined {
 }
 
 /**
+ * Read back the serialized encrypted payload that was stashed on a stanza
+ * because decryption failed or no plugin was available. Returns `undefined`
+ * for cleartext messages or successfully-decrypted messages.
+ */
+export function readStashedEncryptedPayload(stanza: Element): string | undefined {
+  return (stanza as unknown as { [ENCRYPTED_PAYLOAD_STASH]?: string })[
+    ENCRYPTED_PAYLOAD_STASH
+  ]
+}
+
+/**
  * Fast synchronous probe: does any child of this stanza look like something
  * a registered E2EE plugin would claim? Used by the live path to decide
  * whether to short-circuit normal processing in favour of the async
@@ -240,4 +311,15 @@ export function stanzaHasE2EEClaim(
     if (manager.claimInbound(elementToData(child as Element))) return true
   }
   return false
+}
+
+/**
+ * Fast synchronous check: does this stanza carry an XEP-0380 EME hint
+ * indicating it's encrypted, regardless of whether any plugin is registered?
+ * Used by the live path when no E2EE manager or plugin is available to
+ * detect messages that should carry an {@link encryptedPayload} for deferred
+ * decryption.
+ */
+export function stanzaHasEMEHint(stanza: Element): boolean {
+  return !!stanza.getChild('encryption', NS_EME)
 }

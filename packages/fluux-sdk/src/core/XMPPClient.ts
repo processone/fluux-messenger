@@ -11,6 +11,8 @@ import type {
   StorageAdapter,
   ProxyAdapter,
   PrivacyOptions,
+  FileAttachment,
+  MessageSecurityContext,
 } from './types'
 import {
   presenceMachine,
@@ -109,9 +111,10 @@ import { MAM } from './modules/MAM'
 import { Poll } from './modules/Poll'
 import { E2EEManager, InMemoryStorageBackend, type StorageBackend, type XMPPPrimitives } from './e2ee'
 import { dataToElement } from './e2ee/stanzaAdapter'
+import { decryptStanzaInPlace } from './e2ee/stanzaDecrypt'
 import { NS_CARBONS, NS_MAM, NS_P1_PUSH_WEBPUSH } from './namespaces'
 import { createDefaultStoreBindings, type DefaultStoreBindingsOptions } from './defaultStoreBindings'
-import { logInfo } from './logger'
+import { logInfo, logWarn } from './logger'
 import { SDK_VERSION } from '../version'
 import { initSearchIndex, backfillFromMessageCache } from '../utils/searchIndex'
 
@@ -374,6 +377,14 @@ export class XMPPClient {
    * @internal
    */
   private isSmResumedSession = false
+
+  /**
+   * Guard flag for {@link retryPendingDecrypts}. Prevents concurrent
+   * retry loops when multiple triggers (plugin-registered, key-unlocked)
+   * fire close together.
+   * @internal
+   */
+  private isRetryingDecrypts = false
 
   /**
    * Monotonically increasing session generation counter.
@@ -1563,6 +1574,153 @@ export class XMPPClient {
   }
 
   /**
+   * Signal that the E2EE private key has been unlocked (e.g. web passphrase
+   * entered). Triggers an automatic retry of all pending decryptions.
+   */
+  notifyE2EEKeyUnlocked(): void {
+    this.emitSDK('e2ee:key-unlocked', undefined)
+    void this.retryPendingDecrypts()
+  }
+
+  /**
+   * Re-decrypt all stored messages that carry an {@link encryptedPayload}
+   * because decryption failed at receive time (no plugin registered, key
+   * locked, etc.).
+   *
+   * Iterates both chat and room stores, reconstructs a minimal stanza from
+   * the serialized XML, and re-runs {@link decryptStanzaInPlace}. On success
+   * the message body + securityContext are updated in-place via
+   * `store.updateMessage()`, and the `encryptedPayload` is cleared.
+   *
+   * Protected by a flag to prevent concurrent retry loops when multiple
+   * triggers fire close together.
+   *
+   * @returns the number of messages successfully decrypted
+   */
+  async retryPendingDecrypts(): Promise<number> {
+    if (this.isRetryingDecrypts) return 0
+    const manager = this.e2ee
+    if (!manager || !manager.hasPlugins()) return 0
+    if (!this.stores) return 0
+
+    this.isRetryingDecrypts = true
+    let decryptedCount = 0
+
+    try {
+      const chatBindings = this.stores.chat
+      const roomBindings = this.stores.room
+
+      // --- 1:1 chat messages ---
+      // Read state from the imported Zustand stores (getState), mutate
+      // through StoreBindings so the abstract API contract is honoured.
+      const chatMessages = chatStore.getState().messages
+      for (const [conversationId, messages] of chatMessages) {
+        for (const msg of messages) {
+          if (!msg.encryptedPayload) continue
+          const result = await this.retryDecryptSingle(
+            manager, msg.encryptedPayload, msg.from, conversationId,
+          )
+          if (result) {
+            chatBindings.updateMessage(conversationId, msg.id, {
+              body: result.body,
+              ...(result.securityContext && { securityContext: result.securityContext }),
+              ...(result.attachment && { attachment: result.attachment }),
+              encryptedPayload: undefined,
+            })
+            decryptedCount++
+          }
+        }
+      }
+
+      // --- Room messages ---
+      const roomRuntimes = roomStore.getState().roomRuntime
+      for (const [roomJid, runtime] of roomRuntimes) {
+        for (const msg of runtime.messages) {
+          if (!msg.encryptedPayload) continue
+          const result = await this.retryDecryptSingle(
+            manager, msg.encryptedPayload, msg.from, roomJid,
+          )
+          if (result) {
+            roomBindings.updateMessage(roomJid, msg.id, {
+              body: result.body,
+              ...(result.securityContext && { securityContext: result.securityContext }),
+              ...(result.attachment && { attachment: result.attachment }),
+              encryptedPayload: undefined,
+            })
+            decryptedCount++
+          }
+        }
+      }
+
+      if (decryptedCount > 0) {
+        logInfo(`E2EE deferred decrypt: successfully decrypted ${decryptedCount} message(s)`)
+      }
+    } finally {
+      this.isRetryingDecrypts = false
+    }
+
+    return decryptedCount
+  }
+
+  /**
+   * Attempt to decrypt a single serialized encrypted payload.
+   * @returns Decrypted content or `null` if decryption still fails.
+   * @internal
+   */
+  private async retryDecryptSingle(
+    manager: E2EEManager,
+    encryptedPayloadXml: string,
+    senderJid: string,
+    peer: string,
+  ): Promise<{ body: string; securityContext?: MessageSecurityContext; attachment?: FileAttachment } | null> {
+    try {
+      // Parse the serialized encrypted element back into an Element
+      const ltx = await import('ltx')
+      const encryptedEl = ltx.parse(encryptedPayloadXml) as unknown as Element
+
+      // Build a minimal stanza wrapper for decryptStanzaInPlace
+      const stanza = xml('message', { from: senderJid }, encryptedEl)
+
+      const result = await decryptStanzaInPlace(stanza, manager, peer, 'archive')
+      if (!result.attempted || result.encryptedPayloadXml) {
+        // Still can't decrypt
+        return null
+      }
+
+      // Extract the decrypted body
+      const body = stanza.getChildText('body')
+      if (!body) return null
+
+      // Extract attachment if present (XEP-0066 OOB)
+      const oobEl = stanza.getChild('x', 'jabber:x:oob')
+      let attachment: FileAttachment | undefined
+      if (oobEl) {
+        const url = oobEl.getChildText('url')
+        if (url) {
+          attachment = { url }
+          const desc = oobEl.getChildText('desc')
+          if (desc) attachment.name = desc
+        }
+      }
+
+      // Map SecurityContext to MessageSecurityContext
+      let securityContext: MessageSecurityContext | undefined
+      if (result.securityContext) {
+        securityContext = {
+          protocolId: result.securityContext.protocolId,
+          trust: result.securityContext.trust,
+          ...(result.securityContext.notes && { notes: result.securityContext.notes }),
+        }
+      }
+
+      return { body, securityContext, attachment }
+    } catch (err) {
+      logWarn(`E2EE deferred decrypt failed for message from ${senderJid}: ${err instanceof Error ? err.message : String(err)}`)
+      return null
+    }
+  }
+
+  /**
    * Build the E2EEManager if it doesn't yet exist, or if the previous
    * manager was bound to a different JID. On a plain reconnect/SM-resume
    * for the same identity this is a no-op and existing plugins stay
@@ -1598,6 +1756,12 @@ export class XMPPClient {
         messageId,
         securityContext,
       })
+    })
+    // When a plugin registers, emit a SDK event so backgroundSync (and other
+    // listeners) can trigger deferred decryption of messages that arrived
+    // before the plugin was available.
+    this.e2ee.onPluginRegistered((pluginId) => {
+      this.emitSDK('e2ee:plugin-registered', { pluginId })
     })
   }
 

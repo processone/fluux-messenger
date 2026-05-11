@@ -16,6 +16,7 @@ export default defineConfig({
     silent: true,
     setupFiles: ['./src/test-setup.ts'],
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    exclude: ['src/**/*.manual.test.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],

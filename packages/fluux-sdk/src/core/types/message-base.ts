@@ -184,6 +184,21 @@ export interface BaseMessage {
    * state, protocol badge).
    */
   securityContext?: MessageSecurityContext
+  /**
+   * Serialized encrypted stanza element XML for deferred decryption.
+   *
+   * Present when an E2EE-tagged message could not be decrypted at receive
+   * time — either because no plugin was registered yet (race at startup)
+   * or because the private key was locked (web passphrase not entered).
+   *
+   * {@link XMPPClient.retryPendingDecrypts} iterates messages carrying this
+   * field, reconstructs a minimal stanza, and re-attempts decryption.  On
+   * success the field is cleared and `body` / `securityContext` are updated.
+   *
+   * Persisted in IndexedDB so deferred decrypt survives page navigations
+   * within the same session.
+   */
+  encryptedPayload?: string
 }
 
 /**

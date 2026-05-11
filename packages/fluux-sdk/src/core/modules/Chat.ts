@@ -36,8 +36,10 @@ import { E2EEEncryptionRequiredError } from '../e2ee'
 import {
   decryptStanzaInPlace,
   readStashedAuthoredAt,
+  readStashedEncryptedPayload,
   readStashedSecurityContext,
   stanzaHasE2EEClaim,
+  stanzaHasEMEHint,
 } from '../e2ee/stanzaDecrypt'
 import { serialize as serializePayloadEnvelope } from '../e2ee/payloadEnvelope'
 import { build as buildAesgcmUri } from './AesgcmUri'
@@ -171,6 +173,15 @@ export class Chat extends BaseModule {
     // the encrypted stanza.
     if (this.tryHandleEncrypted(stanza, isCarbonCopy, isSentCarbon)) {
       return { handled: true }
+    }
+
+    // Deferred decrypt: when tryHandleEncrypted returned false (no plugin
+    // registered or no manager), detect encrypted messages via EME hint and
+    // stash the encrypted payload for later retry. decryptStanzaInPlace
+    // handles the case where a manager exists but no plugin claims; this
+    // covers the case where no manager exists at all.
+    if (!readStashedEncryptedPayload(stanza) && stanzaHasEMEHint(stanza)) {
+      this.stashEncryptedPayloadForDeferredDecrypt(stanza)
     }
 
     const from = stanza.attrs.from
@@ -356,6 +367,30 @@ export class Chat extends BaseModule {
     const bareFrom = from ? getBareJid(from) : ''
     await decryptStanzaInPlace(stanza, manager, bareFrom, 'live')
     this.handleMessageInternal(stanza, isCarbonCopy, isSentCarbon)
+  }
+
+  /**
+   * Stash the encrypted child element on a stanza for deferred decryption
+   * when no E2EE manager or plugin is available. Uses the XEP-0380 EME hint
+   * to locate the encrypted child by namespace.
+   */
+  private stashEncryptedPayloadForDeferredDecrypt(stanza: Element): void {
+    const emeEl = stanza.getChild('encryption', NS_EME)
+    if (!emeEl) return
+    const emeNamespace = emeEl.attrs.namespace
+    if (!emeNamespace) return
+    for (const child of stanza.children) {
+      if (typeof child === 'string') continue
+      const childEl = child as Element
+      if (childEl.attrs.xmlns === emeNamespace) {
+        // Stash the serialized element for later retry — reuse the same
+        // stanza-level stash that decryptStanzaInPlace uses so downstream
+        // readers (processChatMessage) see it via readStashedEncryptedPayload.
+        const STASH = '__encryptedPayload'
+        ;(stanza as unknown as Record<string, string>)[STASH] = childEl.toString()
+        return
+      }
+    }
   }
 
   /**
@@ -1659,6 +1694,7 @@ export class Chat extends BaseModule {
     const messageId = replaceTargetId || stanza.attrs.id || generateStableMessageId(bareFrom, parsed.timestamp, body)
 
     const securityContext = this.readMessageSecurityContext(stanza)
+    const encryptedPayload = readStashedEncryptedPayload(stanza)
     const message: Message = {
       type: 'chat',
       id: messageId,
@@ -1675,6 +1711,7 @@ export class Chat extends BaseModule {
       ...(parsed.attachment && { attachment: parsed.attachment }),
       ...(isCorrection && { isEdited: true }),
       ...(securityContext && { securityContext }),
+      ...(encryptedPayload && { encryptedPayload }),
     }
 
     if (!isOutgoing && this.deps.stores) {
@@ -1725,6 +1762,7 @@ export class Chat extends BaseModule {
     const occupantId = stanza.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id
 
     const securityContext = this.readMessageSecurityContext(stanza)
+    const encryptedPayload = readStashedEncryptedPayload(stanza)
     const message: RoomMessage = {
       type: 'groupchat',
       id: messageId,
@@ -1743,6 +1781,7 @@ export class Chat extends BaseModule {
       ...(isCorrection && { isEdited: true }),
       ...(occupantId && { occupantId }),
       ...(securityContext && { securityContext }),
+      ...(encryptedPayload && { encryptedPayload }),
     }
 
     // Poll detection: check for <poll> or <poll-closed> elements

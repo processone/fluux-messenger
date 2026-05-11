@@ -5,8 +5,11 @@
  * This test writes fixture files that the Rust test
  * `consume_web_golden_vectors` reads and decrypts with Sequoia-PGP.
  *
- * Run with:
- *   npx vitest run src/e2ee/generateWebVectors.test.ts
+ * Excluded from `npm test` (`.manual.test.ts`) because it regenerates
+ * fixture files with fresh keys on every run. Run explicitly when you
+ * need to update the vectors:
+ *
+ *   npx vitest run src/e2ee/generateWebVectors.manual.test.ts
  *
  * Then run the Rust consumer:
  *   cd apps/fluux/src-tauri && cargo test consume_web_golden_vectors -- --ignored --nocapture

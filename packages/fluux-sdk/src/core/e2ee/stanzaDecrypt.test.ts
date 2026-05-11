@@ -12,6 +12,8 @@ import {
   decryptStanzaInPlace,
   readStashedAuthoredAt,
   readStashedSecurityContext,
+  readStashedEncryptedPayload,
+  stanzaHasEMEHint,
 } from './stanzaDecrypt'
 import { E2EEManager, InMemoryStorageBackend, type XMPPPrimitives } from './index'
 import { serialize as serializePayloadEnvelope } from './payloadEnvelope'
@@ -188,5 +190,141 @@ describe('stanzaDecrypt authoredAt stash', () => {
 
     expect(first.authoredAt?.toISOString()).toBe(authored.toISOString())
     expect(second.authoredAt?.toISOString()).toBe(authored.toISOString())
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Failing plugin: claims the encrypted child but throws on decrypt
+// ---------------------------------------------------------------------------
+
+class FailingE2EEPlugin extends FakeE2EEPlugin {
+  constructor() {
+    super(undefined)
+  }
+
+  override async decrypt(): Promise<DecryptResult> {
+    throw new Error('key locked')
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helper: create a manager with no plugins registered
+// ---------------------------------------------------------------------------
+
+function makeEmptyManager(): E2EEManager {
+  return new E2EEManager({
+    storage: new InMemoryStorageBackend(),
+    xmpp: stubXmppPrimitives(),
+    account: { jid: 'me@example.com' },
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Deferred decryption: encrypted payload stash on failure
+// ---------------------------------------------------------------------------
+
+describe('stanzaDecrypt encrypted payload stash on failure', () => {
+  it('stashes serialized encrypted XML when plugin decrypt fails', async () => {
+    const manager = await makeManager(new FailingE2EEPlugin())
+    const stanza = buildStanza()
+
+    const result = await decryptStanzaInPlace(stanza, manager, 'peer@example.com')
+
+    expect(result.attempted).toBe(true)
+    expect(result.encryptedPayloadXml).toBeDefined()
+    expect(result.encryptedPayloadXml).toContain(TEST_NAMESPACE)
+    expect(readStashedEncryptedPayload(stanza)).toBe(result.encryptedPayloadXml)
+  })
+
+  it('does not stash payload on successful decrypt', async () => {
+    const manager = await makeManager(new FakeE2EEPlugin(undefined))
+    const stanza = buildStanza()
+
+    const result = await decryptStanzaInPlace(stanza, manager, 'peer@example.com')
+
+    expect(result.attempted).toBe(true)
+    expect(result.encryptedPayloadXml).toBeUndefined()
+    expect(readStashedEncryptedPayload(stanza)).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Deferred decryption: EME-based stash without plugin
+// ---------------------------------------------------------------------------
+
+describe('stanzaDecrypt EME-based stash without plugin', () => {
+  it('stashes encrypted child via EME when no plugin claims', async () => {
+    const manager = makeEmptyManager()
+    const stanza = xml(
+      'message',
+      { from: 'peer@example.com/resource', id: 'm2', type: 'chat' },
+      xml('body', {}, 'This message is encrypted'),
+      xml('encryption', { xmlns: 'urn:xmpp:eme:0', namespace: 'urn:xmpp:openpgp:0' }),
+      xml('openpgp', { xmlns: 'urn:xmpp:openpgp:0' }, 'ciphertext'),
+    ) as Element
+
+    const result = await decryptStanzaInPlace(stanza, manager, 'peer@example.com')
+
+    expect(result.attempted).toBe(false)
+    expect(result.encryptedPayloadXml).toBeDefined()
+    expect(result.encryptedPayloadXml).toContain('urn:xmpp:openpgp:0')
+    expect(readStashedEncryptedPayload(stanza)).toBe(result.encryptedPayloadXml)
+  })
+
+  it('does not stash when there is no EME hint and no plugin claims', async () => {
+    const manager = makeEmptyManager()
+    const stanza = xml(
+      'message',
+      { from: 'peer@example.com/resource', id: 'm3', type: 'chat' },
+      xml('body', {}, 'Hello, plain text'),
+    ) as Element
+
+    const result = await decryptStanzaInPlace(stanza, manager, 'peer@example.com')
+
+    expect(result.attempted).toBe(false)
+    expect(result.encryptedPayloadXml).toBeUndefined()
+    expect(readStashedEncryptedPayload(stanza)).toBeUndefined()
+  })
+
+  it('does not stash when EME namespace attr is missing', async () => {
+    const manager = makeEmptyManager()
+    const stanza = xml(
+      'message',
+      { from: 'peer@example.com/resource', id: 'm4', type: 'chat' },
+      xml('body', {}, 'Encrypted without namespace hint'),
+      xml('encryption', { xmlns: 'urn:xmpp:eme:0' }),
+    ) as Element
+
+    const result = await decryptStanzaInPlace(stanza, manager, 'peer@example.com')
+
+    expect(result.attempted).toBe(false)
+    expect(result.encryptedPayloadXml).toBeUndefined()
+    expect(readStashedEncryptedPayload(stanza)).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// stanzaHasEMEHint
+// ---------------------------------------------------------------------------
+
+describe('stanzaHasEMEHint', () => {
+  it('returns true when EME element is present', () => {
+    const stanza = xml(
+      'message',
+      { from: 'peer@example.com/resource', id: 'm5', type: 'chat' },
+      xml('encryption', { xmlns: 'urn:xmpp:eme:0', namespace: 'urn:xmpp:openpgp:0' }),
+    ) as Element
+
+    expect(stanzaHasEMEHint(stanza)).toBe(true)
+  })
+
+  it('returns false when no EME element', () => {
+    const stanza = xml(
+      'message',
+      { from: 'peer@example.com/resource', id: 'm6', type: 'chat' },
+      xml('body', {}, 'plain text message'),
+    ) as Element
+
+    expect(stanzaHasEMEHint(stanza)).toBe(false)
   })
 })

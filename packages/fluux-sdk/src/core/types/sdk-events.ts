@@ -191,6 +191,20 @@ export interface ChatEvents {
     messageId: string
     securityContext: import('./message-base').MessageSecurityContext
   }
+
+  /**
+   * Fired when an E2EE plugin is successfully registered on the manager.
+   * Used by background sync to trigger deferred decryption of messages
+   * that arrived before the plugin was available.
+   */
+  'e2ee:plugin-registered': { pluginId: string }
+
+  /**
+   * Fired when the E2EE private key is unlocked (e.g. web passphrase
+   * entered). Triggers deferred decryption of messages that failed because
+   * the key was locked at receive time.
+   */
+  'e2ee:key-unlocked': undefined
 }
 
 // ============================================================================
