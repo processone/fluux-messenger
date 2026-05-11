@@ -121,6 +121,7 @@ interface KeyBundle {
   fingerprint: string
   publicArmored: string
   keychainBacked: boolean
+  createdAt?: string
 }
 
 /**
@@ -308,6 +309,49 @@ function makeFakeRust() {
         }
         accounts.set(jid, bundle)
         return bundle as T
+      }
+      case 'openpgp_backup_import_all': {
+        const message = args!.backupMessage as string
+        const passphrase = args!.passphrase as string
+        const decodedMessage = readOpenPgpArmorPayloadForTest(message)
+        const match = decodedMessage.match(/BACKUP:(FP\d+(?:,FP\d+)*):([^\n]+)/)
+        if (!match) throw new Error('malformed backup')
+        const [, fpList, encodedPass] = match
+        const embeddedPass = decodeURIComponent(escape(atob(encodedPass)))
+        if (embeddedPass !== passphrase) {
+          throw new Error('no SKESK matched the supplied passphrase')
+        }
+        const fps = fpList.split(',')
+        return fps.map((fp, i) => ({
+          fingerprint: fp,
+          publicArmored: makeArmored(fp, 'xmpp:unknown', 'public'),
+          keychainBacked: false,
+          createdAt: new Date(Date.now() - i * 86400000).toISOString(),
+        })) as T
+      }
+      case 'openpgp_backup_import_selected': {
+        const jid = args!.accountJid as string
+        const message = args!.backupMessage as string
+        const passphrase = args!.passphrase as string
+        const selectedFp = args!.selectedFingerprint as string
+        const decodedMessage = readOpenPgpArmorPayloadForTest(message)
+        const match = decodedMessage.match(/BACKUP:(FP\d+(?:,FP\d+)*):([^\n]+)/)
+        if (!match) throw new Error('malformed backup')
+        const [, fpList, encodedPass] = match
+        const embeddedPass = decodeURIComponent(escape(atob(encodedPass)))
+        if (embeddedPass !== passphrase) {
+          throw new Error('no SKESK matched the supplied passphrase')
+        }
+        if (!fpList.split(',').includes(selectedFp)) {
+          throw new Error(`fingerprint ${selectedFp} not found in backup`)
+        }
+        const selectedBundle: KeyBundle = {
+          fingerprint: selectedFp,
+          publicArmored: makeArmored(selectedFp, `xmpp:${jid}`, 'public'),
+          keychainBacked: true,
+        }
+        accounts.set(jid, selectedBundle)
+        return selectedBundle as T
       }
       default:
         throw new Error(`unknown command: ${cmd}`)

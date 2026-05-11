@@ -690,6 +690,13 @@
             "restorePassphrasePlaceholder": "Introdueix la frase de pas de la còpia de seguretat",
             "restoreSuccess": "Clau restaurada des del servidor",
             "restoreFailed": "No s'ha pogut restaurar — frase de pas incorrecta?",
+            "keyPicker": {
+                "title": "S'han trobat diverses claus",
+                "body": "La còpia de seguretat conté diverses claus. Selecciona la que vols utilitzar.",
+                "recommended": "Recomanada",
+                "created": "Creada",
+                "confirm": "Utilitza aquesta clau"
+            },
             "enableBackupFoundTitle": "S'ha trobat una còpia de seguretat en aquest servidor",
             "enableBackupFoundBody": "Hi ha una còpia de seguretat d'una clau OpenPGP desada per a aquest compte. Introdueix la frase de pas que vas desar per restaurar la teva identitat existent, o comença de zero per generar una clau nova (que substituirà la part pública de la còpia).",
             "enableBackupFoundWarning": "Només la frase de pas desada quan es va crear la còpia pot restaurar-la. Si l'has perdut, comença de zero i fes una còpia de la nova clau després.",

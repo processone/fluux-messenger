@@ -12,6 +12,8 @@ import { RestorePassphraseDialog } from '@/components/RestorePassphraseDialog'
 import { EnableWithBackupDialog } from '@/components/EnableWithBackupDialog'
 import { OwnKeyConflictBanner } from '@/components/OwnKeyConflictBanner'
 import { UnlockEncryptionDialog } from '@/components/UnlockEncryptionDialog'
+import { KeyPickerDialog } from '@/components/KeyPickerDialog'
+import type { KeyBundle } from '@/e2ee/OpenPGPPluginBase'
 import { probeRemoteSecretKeyBackup, SecretKeyBackupProbeError } from '@/e2ee/secretKeyProbe'
 import { isKeyLocked } from '@/e2ee/webPassphraseStore'
 import { isTauri } from '@/utils/tauri'
@@ -93,6 +95,11 @@ export function EncryptionSettings() {
   const [showImportFileDialog, setShowImportFileDialog] = useState(false)
   const [pendingImportFileArmored, setPendingImportFileArmored] = useState<string | null>(null)
   const [showUnlockDialog, setShowUnlockDialog] = useState(false)
+  const [pendingKeyPicker, setPendingKeyPicker] = useState<{
+    candidates: KeyBundle[]
+    backupMessage: string
+    passphrase: string
+  } | null>(null)
 
   const handleDismissLimitations = () => {
     localStorage.setItem('enc-limitations-dismissed', '1')
@@ -372,24 +379,61 @@ export function EncryptionSettings() {
   const handleRestoreConfirm = useCallback(
     async (passphrase: string) => {
       const plugin = client.e2ee?.getPlugin('openpgp') as
-        | { restoreSecretKey?: (pp: string) => Promise<{ fingerprint: string }> }
+        | {
+            restoreSecretKey?: (pp: string) => Promise<
+              { fingerprint: string } | { needsPicker: true; candidates: KeyBundle[]; backupContext: { message: string; passphrase: string } }
+            >
+            getBackedUpFingerprint?: () => string | null
+          }
         | null
         | undefined
       if (!plugin?.restoreSecretKey) {
         throw new Error(t('settings.encryption.backupPluginUnavailable'))
       }
-      const info = await plugin.restoreSecretKey(passphrase)
-      // Surface the restored fingerprint immediately so the user sees
-      // the effect without waiting for the next polling tick.
-      setFingerprint(info.fingerprint)
+      const result = await plugin.restoreSecretKey(passphrase)
+      if ('needsPicker' in result) {
+        setPendingKeyPicker({
+          candidates: result.candidates,
+          backupMessage: result.backupContext.message,
+          passphrase: result.backupContext.passphrase,
+        })
+        setShowRestoreDialog(false)
+        return
+      }
+      setFingerprint(result.fingerprint)
       setShowRestoreDialog(false)
-      // Re-read the local marker (restore wrote it) so the status
-      // flips to "in sync" without waiting for the next render.
-      setBackedUpFingerprint((plugin as { getBackedUpFingerprint?: () => string | null })
-        .getBackedUpFingerprint?.() ?? info.fingerprint)
+      setBackedUpFingerprint(plugin.getBackedUpFingerprint?.() ?? result.fingerprint)
       addToast('success', t('settings.encryption.restoreSuccess'))
     },
     [client, addToast, t],
+  )
+
+  const handleKeyPickerConfirm = useCallback(
+    async (selectedFingerprint: string) => {
+      if (!pendingKeyPicker) return
+      const plugin = client.e2ee?.getPlugin('openpgp') as
+        | {
+            installSelectedKey?: (msg: string, pp: string, fp: string) => Promise<{ fingerprint: string }>
+            getBackedUpFingerprint?: () => string | null
+          }
+        | null
+        | undefined
+      if (!plugin?.installSelectedKey) {
+        throw new Error(t('settings.encryption.backupPluginUnavailable'))
+      }
+      const info = await plugin.installSelectedKey(
+        pendingKeyPicker.backupMessage,
+        pendingKeyPicker.passphrase,
+        selectedFingerprint,
+      )
+      setFingerprint(info.fingerprint)
+      setPendingKeyPicker(null)
+      setPendingImportFileArmored(null)
+      setBackedUpFingerprint(plugin.getBackedUpFingerprint?.() ?? info.fingerprint)
+      setBackupProbeNonce((n) => n + 1)
+      addToast('success', t('settings.encryption.restoreSuccess'))
+    },
+    [pendingKeyPicker, client, addToast, t],
   )
 
   /**
@@ -548,14 +592,27 @@ export function EncryptionSettings() {
     async (passphrase: string) => {
       if (!pendingImportFileArmored) return
       const plugin = client.e2ee?.getPlugin('openpgp') as
-        | { importKeyFromFile?: (armored: string, pp: string) => Promise<{ fingerprint: string }> }
+        | {
+            importKeyFromFile?: (armored: string, pp: string) => Promise<
+              { fingerprint: string } | { needsPicker: true; candidates: KeyBundle[]; backupContext: { message: string; passphrase: string } }
+            >
+          }
         | null
         | undefined
       if (!plugin?.importKeyFromFile) {
         throw new Error(t('settings.encryption.backupPluginUnavailable'))
       }
-      const info = await plugin.importKeyFromFile(pendingImportFileArmored, passphrase)
-      setFingerprint(info.fingerprint)
+      const result = await plugin.importKeyFromFile(pendingImportFileArmored, passphrase)
+      if ('needsPicker' in result) {
+        setPendingKeyPicker({
+          candidates: result.candidates,
+          backupMessage: result.backupContext.message,
+          passphrase: result.backupContext.passphrase,
+        })
+        setShowImportFileDialog(false)
+        return
+      }
+      setFingerprint(result.fingerprint)
       setShowImportFileDialog(false)
       setPendingImportFileArmored(null)
       setBackupProbeNonce((n) => n + 1)
@@ -972,6 +1029,14 @@ export function EncryptionSettings() {
         <UnlockEncryptionDialog
           client={client}
           onClose={() => setShowUnlockDialog(false)}
+        />
+      )}
+
+      {pendingKeyPicker && (
+        <KeyPickerDialog
+          candidates={pendingKeyPicker.candidates}
+          onConfirm={handleKeyPickerConfirm}
+          onCancel={() => setPendingKeyPicker(null)}
         />
       )}
     </section>

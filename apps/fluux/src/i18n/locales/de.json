@@ -690,6 +690,13 @@
             "restorePassphrasePlaceholder": "Backup-Passphrase eingeben",
             "restoreSuccess": "Schlüssel vom Server wiederhergestellt",
             "restoreFailed": "Wiederherstellen fehlgeschlagen — falsche Passphrase?",
+            "keyPicker": {
+                "title": "Mehrere Schlüssel gefunden",
+                "body": "Das Backup enthält mehrere Schlüssel. Wähle den aus, den du verwenden möchtest.",
+                "recommended": "Empfohlen",
+                "created": "Erstellt",
+                "confirm": "Diesen Schlüssel verwenden"
+            },
             "enableBackupFoundTitle": "Backup auf diesem Server gefunden",
             "enableBackupFoundBody": "Für dieses Konto ist ein Backup eines OpenPGP-Schlüssels gespeichert. Gib die gespeicherte Passphrase ein, um deine bestehende Identität wiederherzustellen, oder beginne neu, um einen neuen Schlüssel zu generieren (der den öffentlichen Teil des Backups ersetzt).",
             "enableBackupFoundWarning": "Nur die beim Erstellen des Backups gespeicherte Passphrase kann es wiederherstellen. Wenn du sie verloren hast, beginne neu und sichere den neuen Schlüssel anschließend.",

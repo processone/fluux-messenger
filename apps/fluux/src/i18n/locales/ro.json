@@ -690,6 +690,13 @@
             "restorePassphrasePlaceholder": "Introduceți fraza de acces a copiei",
             "restoreSuccess": "Cheia restaurată de pe server",
             "restoreFailed": "Restaurarea a eșuat — frază greșită?",
+            "keyPicker": {
+                "title": "Au fost găsite mai multe chei",
+                "body": "Copia de rezervă conține mai multe chei. Selectează-o pe cea pe care vrei să o folosești.",
+                "recommended": "Recomandată",
+                "created": "Creată",
+                "confirm": "Folosește această cheie"
+            },
             "enableBackupFoundTitle": "Copie de rezervă găsită pe acest server",
             "enableBackupFoundBody": "Pentru acest cont este stocată o copie de rezervă a unei chei OpenPGP. Introduceți fraza de acces salvată pentru a vă restaura identitatea existentă, sau începeți de la zero pentru a genera o cheie nouă (care va înlocui partea publică a copiei).",
             "enableBackupFoundWarning": "Doar fraza de acces salvată la crearea copiei poate să o restaureze. Dacă ați pierdut-o, începeți de la zero și creați o nouă copie de rezervă a noii chei după aceea.",

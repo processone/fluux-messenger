@@ -690,6 +690,13 @@
             "restorePassphrasePlaceholder": "Wprowadź hasło kopii zapasowej",
             "restoreSuccess": "Klucz przywrócony z serwera",
             "restoreFailed": "Nie udało się przywrócić — błędne hasło?",
+            "keyPicker": {
+                "title": "Znaleziono wiele kluczy",
+                "body": "Kopia zapasowa zawiera wiele kluczy. Wybierz ten, którego chcesz użyć.",
+                "recommended": "Zalecany",
+                "created": "Utworzony",
+                "confirm": "Użyj tego klucza"
+            },
             "enableBackupFoundTitle": "Znaleziono kopię zapasową na tym serwerze",
             "enableBackupFoundBody": "Dla tego konta przechowywana jest kopia zapasowa klucza OpenPGP. Wprowadź zapisane hasło, aby przywrócić istniejącą tożsamość, lub zacznij od nowa, aby wygenerować nowy klucz (który zastąpi część publiczną kopii zapasowej).",
             "enableBackupFoundWarning": "Tylko hasło zapisane przy tworzeniu kopii może ją przywrócić. Jeśli je straciłeś, zacznij od nowa i potem zrób kopię nowego klucza.",

@@ -688,6 +688,13 @@
             "restorePassphrasePlaceholder": "Ange säkerhetskopians lösenfras",
             "restoreSuccess": "Nyckel återställd från server",
             "restoreFailed": "Kunde inte återställa — fel lösenfras?",
+            "keyPicker": {
+                "title": "Flera nycklar hittades",
+                "body": "Säkerhetskopian innehåller flera nycklar. Välj den du vill använda.",
+                "recommended": "Rekommenderad",
+                "created": "Skapad",
+                "confirm": "Använd denna nyckel"
+            },
             "enableBackupFoundTitle": "Säkerhetskopia hittades på denna server",
             "enableBackupFoundBody": "En säkerhetskopia av en OpenPGP-nyckel är lagrad för detta konto. Ange den sparade lösenfrasen för att återställa din befintliga identitet, eller börja om för att generera en ny nyckel (som ersätter säkerhetskopians publika del).",
             "enableBackupFoundWarning": "Endast lösenfrasen som sparades när säkerhetskopian skapades kan återställa den. Om du har tappat bort den, börja om och säkerhetskopiera den nya nyckeln efteråt.",

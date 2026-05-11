@@ -690,6 +690,13 @@
             "restorePassphrasePlaceholder": "Vnesite geslo varnostne kopije",
             "restoreSuccess": "Ključ obnovljen s strežnika",
             "restoreFailed": "Obnova ni uspela — napačno geslo?",
+            "keyPicker": {
+                "title": "Najdenih več ključev",
+                "body": "Varnostna kopija vsebuje več ključev. Izberite tistega, ki ga želite uporabiti.",
+                "recommended": "Priporočeno",
+                "created": "Ustvarjeno",
+                "confirm": "Uporabi ta ključ"
+            },
             "enableBackupFoundTitle": "Na tem strežniku je najdena varnostna kopija",
             "enableBackupFoundBody": "Za ta račun je shranjena varnostna kopija ključa OpenPGP. Vnesite shranjeno geslo, da obnovite obstoječo identiteto, ali začnite znova in ustvarite nov ključ (ki bo nadomestil javni del varnostne kopije).",
             "enableBackupFoundWarning": "Varnostno kopijo lahko obnovi le geslo, shranjeno ob njenem ustvarjanju. Če ste ga izgubili, začnite znova in nato varnostno kopirajte novi ključ.",

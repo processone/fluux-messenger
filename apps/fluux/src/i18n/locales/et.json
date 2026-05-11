@@ -690,6 +690,13 @@
             "restorePassphrasePlaceholder": "Sisesta varukoopia paroolifraas",
             "restoreSuccess": "Võti taastatud serverist",
             "restoreFailed": "Taastamine ebaõnnestus — vale paroolifraas?",
+            "keyPicker": {
+                "title": "Leiti mitu võtit",
+                "body": "Varukoopia sisaldab mitut võtit. Vali see, mida soovid kasutada.",
+                "recommended": "Soovitatud",
+                "created": "Loodud",
+                "confirm": "Kasuta seda võtit"
+            },
             "enableBackupFoundTitle": "Selles serveris leiti varukoopia",
             "enableBackupFoundBody": "Selle konto jaoks on salvestatud OpenPGP võtme varukoopia. Sisesta salvestatud paroolifraas, et taastada oma olemasolev identiteet, või alusta otsast peale, et genereerida uus võti (mis asendab varukoopia avaliku osa).",
             "enableBackupFoundWarning": "Ainult varukoopia loomisel salvestatud paroolifraas saab seda taastada. Kui oled selle kaotanud, alusta otsast peale ja varunda uus võti pärast.",

@@ -688,6 +688,13 @@
             "restorePassphrasePlaceholder": "Sláðu inn aðgangsorð öryggisafritsins",
             "restoreSuccess": "Lykill endurheimtur frá þjóni",
             "restoreFailed": "Ekki tókst að endurheimta — rangt aðgangsorð?",
+            "keyPicker": {
+                "title": "Margir lyklar fundnir",
+                "body": "Öryggisafritið inniheldur marga lykla. Veldu þann sem þú vilt nota.",
+                "recommended": "Mælt með",
+                "created": "Búinn til",
+                "confirm": "Nota þennan lykil"
+            },
             "enableBackupFoundTitle": "Öryggisafrit fundið á þessum þjóni",
             "enableBackupFoundBody": "Öryggisafrit af OpenPGP-lykli er geymt fyrir þennan reikning. Sláðu inn geymda aðgangsorðið til að endurheimta núverandi auðkennið þitt, eða byrjaðu upp á nýtt til að búa til nýjan lykil (sem kemur í stað opinberu hliðar afritsins).",
             "enableBackupFoundWarning": "Aðeins aðgangsorðið sem var geymt þegar öryggisafritið var búið til getur endurheimt það. Ef þú hefur týnt því, byrjaðu upp á nýtt og afritaðu nýja lykilinn á eftir.",

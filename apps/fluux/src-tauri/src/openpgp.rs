@@ -101,6 +101,8 @@ pub struct PublicKeyInfo {
     /// keychain; `false` when we fell through to a 0600-permissioned
     /// file. Surfaced so the UI can nudge the user to fix their setup.
     pub keychain_backed: bool,
+    /// ISO 8601 primary-key creation time (populated by backup-import).
+    pub created_at: Option<String>,
 }
 
 impl From<&KeyBundle> for PublicKeyInfo {
@@ -109,6 +111,7 @@ impl From<&KeyBundle> for PublicKeyInfo {
             fingerprint: bundle.fingerprint.clone(),
             public_armored: bundle.public_armored.clone(),
             keychain_backed: bundle.keychain_backed,
+            created_at: None,
         }
     }
 }
@@ -392,6 +395,100 @@ impl OpenpgpState {
             // the imported bundle. This method is user-initiated and runs
             // exclusively after an explicit "restore from backup" choice,
             // so we don't need to coordinate with concurrent unlockers.
+            let mut entries = this.entries.lock().unwrap();
+            let cell = Arc::new(AsyncOnceCell::new());
+            let _ = cell.set(Ok(bundle.clone()));
+            entries.insert(account_jid, cell);
+
+            Ok(bundle)
+        })
+        .await
+        .unwrap_or_else(|join_err| Err(format!("backup import task panicked: {join_err}")))
+    }
+
+    /// Parse all TSKs from a backup blob without persisting anything.
+    /// Returns metadata (fingerprint, public armor, creation time) for
+    /// each certificate found. The secret material stays in Rust — the
+    /// webview only receives `PublicKeyInfo` so an XSS cannot exfiltrate
+    /// key material during the selection step.
+    pub async fn import_backup_all(
+        self: &Arc<Self>,
+        backup_message: String,
+        passphrase: String,
+    ) -> Result<Vec<PublicKeyInfo>, String> {
+        tauri::async_runtime::spawn_blocking(move || {
+            let tsks = crate::openpgp_backup::decrypt_all_tsks_with_passphrase(
+                &backup_message,
+                &passphrase,
+            )
+            .map_err(anyhow_to_string)?;
+
+            let mut infos: Vec<PublicKeyInfo> = Vec::with_capacity(tsks.len());
+            for tsk_armored in &tsks {
+                let cert = Cert::from_bytes(tsk_armored.as_bytes())
+                    .map_err(|e| format!("parse recovered TSK: {e}"))?;
+                let created_at = cert
+                    .primary_key()
+                    .key()
+                    .creation_time()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .ok()
+                    .map(|d| format_iso8601(d.as_secs()));
+                let public_armored =
+                    armored_string(&published_cert(&cert), KeyExport::Public)
+                        .map_err(anyhow_to_string)?;
+                infos.push(PublicKeyInfo {
+                    fingerprint: cert.fingerprint().to_hex(),
+                    public_armored,
+                    keychain_backed: false,
+                    created_at,
+                });
+            }
+            Ok(infos)
+        })
+        .await
+        .unwrap_or_else(|join_err| Err(format!("backup parse task panicked: {join_err}")))
+    }
+
+    /// Decrypt a backup, find the TSK matching `selected_fingerprint`,
+    /// persist it, and populate the in-memory cache — same as
+    /// [`Self::import_backup`] but targeting a specific key when the
+    /// blob contains multiple certificates.
+    pub async fn import_backup_selected(
+        self: &Arc<Self>,
+        account_jid: String,
+        backup_message: String,
+        passphrase: String,
+        selected_fingerprint: String,
+    ) -> Result<KeyBundle, String> {
+        let this = Arc::clone(self);
+        tauri::async_runtime::spawn_blocking(move || {
+            let tsks = crate::openpgp_backup::decrypt_all_tsks_with_passphrase(
+                &backup_message,
+                &passphrase,
+            )
+            .map_err(anyhow_to_string)?;
+
+            let target_fp = selected_fingerprint.to_uppercase();
+            let tsk_armored = tsks
+                .iter()
+                .find(|a| {
+                    Cert::from_bytes(a.as_bytes())
+                        .map(|c| c.fingerprint().to_hex() == target_fp)
+                        .unwrap_or(false)
+                })
+                .ok_or_else(|| {
+                    format!("no TSK in backup matches fingerprint {selected_fingerprint}")
+                })?;
+
+            let cert = Cert::from_bytes(tsk_armored.as_bytes())
+                .map_err(|e| format!("parse selected TSK: {e}"))?;
+            let backing = this
+                .storage
+                .save(&account_jid, &cert)
+                .map_err(anyhow_to_string)?;
+            let bundle = bundle_from_cert(&cert, backing).map_err(anyhow_to_string)?;
+
             let mut entries = this.entries.lock().unwrap();
             let cell = Arc::new(AsyncOnceCell::new());
             let _ = cell.set(Ok(bundle.clone()));
@@ -712,6 +809,36 @@ pub async fn openpgp_backup_import(
         .map(|bundle| PublicKeyInfo::from(&bundle))
 }
 
+/// Parse all TSKs from a backup blob and return metadata for each.
+/// Does not persist anything — the caller picks one and then uses
+/// [`openpgp_backup_import_selected`] to install it.
+#[tauri::command]
+pub async fn openpgp_backup_import_all(
+    backup_message: String,
+    passphrase: String,
+    state: State<'_, Arc<OpenpgpState>>,
+) -> Result<Vec<PublicKeyInfo>, String> {
+    Arc::clone(&state)
+        .import_backup_all(backup_message, passphrase)
+        .await
+}
+
+/// Decrypt a backup, find the TSK matching `selected_fingerprint`,
+/// persist it, and populate the in-memory cache.
+#[tauri::command]
+pub async fn openpgp_backup_import_selected(
+    account_jid: String,
+    backup_message: String,
+    passphrase: String,
+    selected_fingerprint: String,
+    state: State<'_, Arc<OpenpgpState>>,
+) -> Result<PublicKeyInfo, String> {
+    Arc::clone(&state)
+        .import_backup_selected(account_jid, backup_message, passphrase, selected_fingerprint)
+        .await
+        .map(|bundle| PublicKeyInfo::from(&bundle))
+}
+
 /// Rotate the encryption subkey for `account_jid`. The primary
 /// fingerprint — which is what peers verify and what PEP metadata
 /// advertises — is unchanged, so no re-verification is needed. The
@@ -945,6 +1072,28 @@ fn armored_string(cert: &Cert, kind: KeyExport) -> Result<String> {
             .context("serialize secret key to armor")?,
     };
     String::from_utf8(bytes).context("armored OpenPGP block is not UTF-8")
+}
+
+fn format_iso8601(epoch_secs: u64) -> String {
+    let s = epoch_secs;
+    let days = s / 86400;
+    let time_of_day = s % 86400;
+    let h = time_of_day / 3600;
+    let m = (time_of_day % 3600) / 60;
+    let sec = time_of_day % 60;
+
+    // Civil date from day count (algorithm by Howard Hinnant).
+    let z = days as i64 + 719468;
+    let era = if z >= 0 { z } else { z - 146096 } / 146097;
+    let doe = (z - era * 146097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let mon = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if mon <= 2 { y + 1 } else { y };
+    format!("{y:04}-{mon:02}-{d:02}T{h:02}:{m:02}:{sec:02}Z")
 }
 
 fn encrypt_and_sign(

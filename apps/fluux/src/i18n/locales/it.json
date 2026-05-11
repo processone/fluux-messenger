@@ -690,6 +690,13 @@
             "restorePassphrasePlaceholder": "Inserisci la passphrase del backup",
             "restoreSuccess": "Chiave ripristinata dal server",
             "restoreFailed": "Impossibile ripristinare — passphrase errata?",
+            "keyPicker": {
+                "title": "Trovate più chiavi",
+                "body": "Il backup contiene più chiavi. Seleziona quella che vuoi utilizzare.",
+                "recommended": "Consigliata",
+                "created": "Creata",
+                "confirm": "Usa questa chiave"
+            },
             "enableBackupFoundTitle": "Backup trovato su questo server",
             "enableBackupFoundBody": "Per questo account è memorizzato un backup di una chiave OpenPGP. Inserisci la passphrase salvata per ripristinare la tua identità esistente, oppure ricomincia da zero per generare una nuova chiave (che sostituirà la parte pubblica del backup).",
             "enableBackupFoundWarning": "Solo la passphrase salvata al momento della creazione del backup permette di ripristinarlo. Se l'hai persa, ricomincia da zero e fai un nuovo backup della chiave dopo.",

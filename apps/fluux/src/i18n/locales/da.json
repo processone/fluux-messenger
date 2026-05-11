@@ -688,6 +688,13 @@
             "restorePassphrasePlaceholder": "Indtast sikkerhedskopiens adgangssætning",
             "restoreSuccess": "Nøgle gendannet fra server",
             "restoreFailed": "Kunne ikke gendanne — forkert adgangssætning?",
+            "keyPicker": {
+                "title": "Flere nøgler fundet",
+                "body": "Sikkerhedskopien indeholder flere nøgler. Vælg den, du vil bruge.",
+                "recommended": "Anbefalet",
+                "created": "Oprettet",
+                "confirm": "Brug denne nøgle"
+            },
             "enableBackupFoundTitle": "Sikkerhedskopi fundet på denne server",
             "enableBackupFoundBody": "En sikkerhedskopi af en OpenPGP-nøgle er gemt for denne konto. Indtast den gemte adgangssætning for at gendanne din eksisterende identitet, eller start forfra for at generere en ny nøgle (som erstatter sikkerhedskopiens offentlige del).",
             "enableBackupFoundWarning": "Kun adgangssætningen, der blev gemt, da sikkerhedskopien blev oprettet, kan gendanne den. Hvis du har mistet den, så start forfra og sikkerhedskopier den nye nøgle bagefter.",

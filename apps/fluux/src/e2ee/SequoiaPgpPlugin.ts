@@ -120,6 +120,31 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
     })
   }
 
+  protected async backupImportAll(
+    _accountJid: string,
+    backupMessage: string,
+    passphrase: string,
+  ): Promise<KeyBundle[]> {
+    return this.invoke<KeyBundle[]>('openpgp_backup_import_all', {
+      backupMessage,
+      passphrase,
+    })
+  }
+
+  protected async backupImportSelected(
+    accountJid: string,
+    backupMessage: string,
+    passphrase: string,
+    selectedFingerprint: string,
+  ): Promise<KeyBundle> {
+    return this.invoke<KeyBundle>('openpgp_backup_import_selected', {
+      accountJid,
+      backupMessage,
+      passphrase,
+      selectedFingerprint,
+    })
+  }
+
   protected async forgetAccount(accountJid: string): Promise<void> {
     await this.invoke<void>('openpgp_forget_account', { accountJid })
   }

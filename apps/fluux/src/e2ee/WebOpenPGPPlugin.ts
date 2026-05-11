@@ -47,6 +47,9 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
   /** In-memory decrypted private key. Cleared on shutdown / page reload. */
   private ownPrivateKey: PrivateKey | null = null
 
+  /** Transient cache of parsed keys from backupImportAll, keyed by fingerprint. */
+  private pendingImportKeys: Map<string, PrivateKey> = new Map()
+
   protected pluginName(): string {
     return 'WebOpenPGPPlugin'
   }
@@ -240,10 +243,90 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
     return this.bundleFromKey(privateKey)
   }
 
+  protected async backupImportAll(
+    _accountJid: string,
+    backupMessage: string,
+    passphrase: string,
+  ): Promise<KeyBundle[]> {
+    const { readMessage, decrypt, readPrivateKeys } = await import('openpgp')
+
+    const message = await readMessage({ armoredMessage: backupMessage })
+    let tskBytes: Uint8Array
+    try {
+      const { data } = await decrypt({
+        message,
+        passwords: [normalizeBackupPassphrase(passphrase)],
+        format: 'binary',
+      })
+      tskBytes = data as Uint8Array
+    } catch (err) {
+      throw new E2EEPluginError(
+        'permanent',
+        'wrong-passphrase',
+        'WebOpenPGPPlugin: backup decryption failed — wrong passphrase',
+        err,
+      )
+    }
+
+    let keys: PrivateKey[]
+    try {
+      keys = await readPrivateKeys({ binaryKeys: tskBytes })
+    } catch {
+      keys = await readPrivateKeys({
+        armoredKeys: new TextDecoder().decode(tskBytes),
+      })
+    }
+
+    this.pendingImportKeys.clear()
+    for (const key of keys) {
+      this.pendingImportKeys.set(key.getFingerprint(), key)
+    }
+
+    return keys.map((k) => ({
+      fingerprint: k.getFingerprint(),
+      publicArmored: k.toPublic().armor(),
+      keychainBacked: false,
+      createdAt: k.getCreationTime().toISOString(),
+    }))
+  }
+
+  protected async backupImportSelected(
+    _accountJid: string,
+    _backupMessage: string,
+    passphrase: string,
+    selectedFingerprint: string,
+  ): Promise<KeyBundle> {
+    const { encryptKey } = await import('openpgp')
+
+    const privateKey = this.pendingImportKeys.get(selectedFingerprint)
+    if (!privateKey) {
+      this.pendingImportKeys.clear()
+      throw new E2EEPluginError(
+        'permanent',
+        'not-found',
+        `WebOpenPGPPlugin: no pending import key for fingerprint ${selectedFingerprint}`,
+      )
+    }
+
+    const encrypted = await encryptKey({ privateKey, passphrase })
+    const ctx = this.requireCtx()
+    await ctx.storage.put(PRIVATE_KEY_STORAGE_KEY, new TextEncoder().encode(encrypted.armor()))
+
+    setSessionPassphrase(passphrase)
+    this.ownPrivateKey = privateKey
+    this.pendingImportKeys.clear()
+
+    return {
+      ...this.bundleFromKey(privateKey),
+      createdAt: privateKey.getCreationTime().toISOString(),
+    }
+  }
+
   protected async forgetAccount(_accountJid: string): Promise<void> {
     const ctx = this.requireCtx()
     await ctx.storage.delete(PRIVATE_KEY_STORAGE_KEY).catch(() => {})
     this.ownPrivateKey = null
+    this.pendingImportKeys.clear()
   }
 
   // ---------------------------------------------------------------------------

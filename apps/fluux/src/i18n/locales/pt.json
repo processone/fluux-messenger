@@ -690,6 +690,13 @@
             "restorePassphrasePlaceholder": "Introduz a frase-passe da cópia de segurança",
             "restoreSuccess": "Chave restaurada a partir do servidor",
             "restoreFailed": "Não foi possível restaurar — frase-passe incorreta?",
+            "keyPicker": {
+                "title": "Encontradas várias chaves",
+                "body": "A cópia de segurança contém várias chaves. Seleciona a que pretendes utilizar.",
+                "recommended": "Recomendada",
+                "created": "Criada",
+                "confirm": "Usar esta chave"
+            },
             "enableBackupFoundTitle": "Cópia de segurança encontrada neste servidor",
             "enableBackupFoundBody": "Há uma cópia de segurança de uma chave OpenPGP guardada para esta conta. Introduz a frase-passe que guardaste para restaurar a tua identidade existente, ou começa do zero para gerar uma nova chave (que substituirá a parte pública da cópia).",
             "enableBackupFoundWarning": "Apenas a frase-passe guardada ao criar a cópia pode restaurá-la. Se a perdeste, começa do zero e faz cópia de segurança da nova chave depois.",

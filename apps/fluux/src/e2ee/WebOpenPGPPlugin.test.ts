@@ -19,6 +19,7 @@ import {
 } from '@fluux/sdk'
 import { WebOpenPGPPlugin } from './WebOpenPGPPlugin'
 import { clearSessionPassphrase, setSessionPassphrase } from './webPassphraseStore'
+import type { KeyBundle } from './OpenPGPPluginBase'
 
 // Expose the crypto-layer protected methods so we can round-trip
 // without going through the full XEP-0373 envelope handling.
@@ -43,6 +44,15 @@ class TestableWebOpenPGPPlugin extends WebOpenPGPPlugin {
   }
   callForgetAccount(jid: string) {
     return this.forgetAccount(jid)
+  }
+  callBackupImportAll(jid: string, msg: string, passphrase: string) {
+    return this.backupImportAll(jid, msg, passphrase)
+  }
+  callBackupImportSelected(jid: string, msg: string, passphrase: string, fp: string) {
+    return this.backupImportSelected(jid, msg, passphrase, fp)
+  }
+  callSelectKeyFromBackup(bundles: KeyBundle[]) {
+    return this.selectKeyFromBackup(bundles)
   }
 }
 
@@ -533,6 +543,273 @@ describe('WebOpenPGPPlugin', () => {
       // so the locked state is preserved (no half-unlocked plugin).
       const { isKeyLocked } = await import('./webPassphraseStore')
       expect(isKeyLocked()).toBe(true)
+    })
+  })
+
+  describe('multi-TSK backup (backupImportAll / backupImportSelected)', () => {
+    it('backupImportAll returns a single-element array for a single-key backup', async () => {
+      const source = new TestableWebOpenPGPPlugin()
+      const sourceCtx = makeCtx('alice@example.com').ctx
+      setSessionPassphrase('session-pp')
+      await source.init(sourceCtx)
+      const original = await source.callEnsureKeyMaterial('alice@example.com')
+
+      const backupMessage = await source.callBackupEncrypt('alice@example.com', 'backup-pp')
+
+      clearSessionPassphrase()
+      const dest = new TestableWebOpenPGPPlugin()
+      const destCtx = makeCtx('alice@example.com').ctx
+      await dest.init(destCtx)
+
+      const bundles = await dest.callBackupImportAll('alice@example.com', backupMessage, 'backup-pp')
+
+      expect(bundles).toHaveLength(1)
+      expect(bundles[0].fingerprint).toBe(original.fingerprint)
+      expect(bundles[0].publicArmored).toContain('BEGIN PGP PUBLIC KEY BLOCK')
+      expect(bundles[0].createdAt).toBeTruthy()
+    })
+
+    it('backupImportSelected installs the chosen key and enables decryption', async () => {
+      const source = new TestableWebOpenPGPPlugin()
+      const sourceCtx = makeCtx('alice@example.com').ctx
+      setSessionPassphrase('session-pp')
+      await source.init(sourceCtx)
+      const original = await source.callEnsureKeyMaterial('alice@example.com')
+
+      const backupMessage = await source.callBackupEncrypt('alice@example.com', 'backup-pp')
+
+      // Encrypt a message that the restored key must be able to decrypt.
+      const ciphertext = await source.callEncryptToRecipient(
+        'alice@example.com',
+        original.publicArmored,
+        'round-trip via importSelected',
+      )
+
+      clearSessionPassphrase()
+      const dest = new TestableWebOpenPGPPlugin()
+      const destCtx = makeCtx('alice@example.com').ctx
+      await dest.init(destCtx)
+
+      const bundles = await dest.callBackupImportAll('alice@example.com', backupMessage, 'backup-pp')
+      const installed = await dest.callBackupImportSelected(
+        'alice@example.com',
+        backupMessage,
+        'backup-pp',
+        bundles[0].fingerprint,
+      )
+
+      expect(installed.fingerprint).toBe(original.fingerprint)
+
+      const decrypted = await dest.callDecryptWithOwnKey(
+        'alice@example.com',
+        ciphertext,
+        original.publicArmored,
+      )
+      expect(decrypted.plaintext).toBe('round-trip via importSelected')
+    })
+
+    it('backupImportAll rejects a wrong passphrase', async () => {
+      const source = new TestableWebOpenPGPPlugin()
+      const sourceCtx = makeCtx('alice@example.com').ctx
+      setSessionPassphrase('session-pp')
+      await source.init(sourceCtx)
+      await source.callEnsureKeyMaterial('alice@example.com')
+
+      const backupMessage = await source.callBackupEncrypt('alice@example.com', 'right-pp')
+
+      const dest = new TestableWebOpenPGPPlugin()
+      const destCtx = makeCtx('alice@example.com').ctx
+      await dest.init(destCtx)
+
+      await expect(
+        dest.callBackupImportAll('alice@example.com', backupMessage, 'wrong-pp'),
+      ).rejects.toMatchObject({ code: 'wrong-passphrase' })
+    })
+
+    it('backupImportSelected rejects an unknown fingerprint', async () => {
+      const source = new TestableWebOpenPGPPlugin()
+      const sourceCtx = makeCtx('alice@example.com').ctx
+      setSessionPassphrase('session-pp')
+      await source.init(sourceCtx)
+      await source.callEnsureKeyMaterial('alice@example.com')
+
+      const backupMessage = await source.callBackupEncrypt('alice@example.com', 'backup-pp')
+
+      clearSessionPassphrase()
+      const dest = new TestableWebOpenPGPPlugin()
+      const destCtx = makeCtx('alice@example.com').ctx
+      await dest.init(destCtx)
+
+      await dest.callBackupImportAll('alice@example.com', backupMessage, 'backup-pp')
+
+      await expect(
+        dest.callBackupImportSelected(
+          'alice@example.com',
+          backupMessage,
+          'backup-pp',
+          'nonexistent0000000000000000000000000000',
+        ),
+      ).rejects.toMatchObject({ code: 'not-found' })
+    })
+
+    it('multi-key backup: importAll returns both keys with distinct fingerprints', async () => {
+      // Generate two independent keys and concatenate their binary TSKs
+      // into a single backup blob, simulating Gajim-style multi-TSK backups.
+      const { generateKey, createMessage, encrypt } = await import('openpgp')
+
+      const { privateKey: keyA } = await generateKey({
+        type: 'ecc',
+        curve: 'curve25519Legacy' as const,
+        userIDs: [{ name: 'xmpp:alice@example.com' }],
+        format: 'object',
+      })
+      const { privateKey: keyB } = await generateKey({
+        type: 'ecc',
+        curve: 'curve25519Legacy' as const,
+        userIDs: [{ name: 'xmpp:alice@example.com' }],
+        format: 'object',
+      })
+
+      // Concatenate binary TSK packets (same format as Sequoia multi-TSK backup).
+      const binaryA = keyA.write() as Uint8Array
+      const binaryB = keyB.write() as Uint8Array
+      const combined = new Uint8Array(binaryA.length + binaryB.length)
+      combined.set(binaryA, 0)
+      combined.set(binaryB, binaryA.length)
+
+      const message = await createMessage({ binary: combined })
+      const backupMessage = await encrypt({ message, passwords: ['multi-pp'] }) as string
+
+      const dest = new TestableWebOpenPGPPlugin()
+      const destCtx = makeCtx('alice@example.com').ctx
+      await dest.init(destCtx)
+
+      const bundles = await dest.callBackupImportAll('alice@example.com', backupMessage, 'multi-pp')
+
+      expect(bundles).toHaveLength(2)
+      expect(bundles[0].fingerprint).not.toBe(bundles[1].fingerprint)
+      expect(bundles[0].createdAt).toBeTruthy()
+      expect(bundles[1].createdAt).toBeTruthy()
+
+      // Select the second key and verify it's usable for decryption.
+      const installed = await dest.callBackupImportSelected(
+        'alice@example.com',
+        backupMessage,
+        'multi-pp',
+        bundles[1].fingerprint,
+      )
+      expect(installed.fingerprint).toBe(bundles[1].fingerprint)
+
+      // The installed key should be able to decrypt a message encrypted to it.
+      const { encrypt: enc2, readKey, createMessage: cm2 } = await import('openpgp')
+      const pubKey = await readKey({ armoredKey: installed.publicArmored })
+      const ct = await enc2({
+        message: await cm2({ text: 'hello from multi-tsk' }),
+        encryptionKeys: pubKey,
+      }) as string
+
+      const decrypted = await dest.callDecryptWithOwnKey('alice@example.com', ct, null)
+      expect(decrypted.plaintext).toBe('hello from multi-tsk')
+    })
+  })
+
+  describe('selectKeyFromBackup heuristic', () => {
+    it('returns null for an empty bundle array', async () => {
+      const plugin = new TestableWebOpenPGPPlugin()
+      const { ctx } = makeCtx('alice@example.com')
+      setSessionPassphrase('session-pp')
+      await plugin.init(ctx)
+
+      const result = await plugin.callSelectKeyFromBackup([])
+      expect(result).toBeNull()
+    })
+
+    it('auto-selects (needsPicker=false) when there is exactly one key', async () => {
+      const plugin = new TestableWebOpenPGPPlugin()
+      const { ctx } = makeCtx('alice@example.com')
+      setSessionPassphrase('session-pp')
+      await plugin.init(ctx)
+
+      const bundle: KeyBundle = {
+        fingerprint: 'aabbccdd',
+        publicArmored: 'armored-key',
+        keychainBacked: false,
+      }
+      const result = await plugin.callSelectKeyFromBackup([bundle])
+
+      expect(result).not.toBeNull()
+      expect(result!.needsPicker).toBe(false)
+      expect(result!.selected.fingerprint).toBe('aabbccdd')
+    })
+
+    it('auto-selects via metadata match when published FP matches a candidate', async () => {
+      const metadataFp = 'AABBCCDD11223344'
+      const plugin = new TestableWebOpenPGPPlugin()
+      const { ctx } = makeCtx('alice@example.com')
+      ctx.xmpp.queryPEP = async (_jid: string, node: string): Promise<PEPItem[]> => {
+        if (node === 'urn:xmpp:openpgp:0:public-keys') {
+          return [{
+            id: 'current',
+            payload: {
+              name: 'public-keys-list',
+              attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+              children: [{
+                name: 'pubkey-metadata',
+                attrs: { 'v4-fingerprint': metadataFp, date: '2025-01-01T00:00:00Z' },
+                children: [],
+              }],
+            },
+          }]
+        }
+        return []
+      }
+      setSessionPassphrase('session-pp')
+      await plugin.init(ctx)
+
+      const bundles: KeyBundle[] = [
+        { fingerprint: 'OTHER000', publicArmored: 'a', keychainBacked: false, createdAt: '2025-06-01T00:00:00Z' },
+        { fingerprint: metadataFp, publicArmored: 'b', keychainBacked: false, createdAt: '2024-01-01T00:00:00Z' },
+      ]
+      const result = await plugin.callSelectKeyFromBackup(bundles)
+
+      expect(result).not.toBeNull()
+      expect(result!.needsPicker).toBe(false)
+      expect(result!.selected.fingerprint).toBe(metadataFp)
+    })
+
+    it('falls back to newest key with needsPicker=true when no metadata matches', async () => {
+      const plugin = new TestableWebOpenPGPPlugin()
+      const { ctx } = makeCtx('alice@example.com')
+      setSessionPassphrase('session-pp')
+      await plugin.init(ctx)
+
+      const bundles: KeyBundle[] = [
+        { fingerprint: 'OLDER000', publicArmored: 'a', keychainBacked: false, createdAt: '2024-01-01T00:00:00Z' },
+        { fingerprint: 'NEWER000', publicArmored: 'b', keychainBacked: false, createdAt: '2025-06-01T00:00:00Z' },
+      ]
+      const result = await plugin.callSelectKeyFromBackup(bundles)
+
+      expect(result).not.toBeNull()
+      expect(result!.needsPicker).toBe(true)
+      expect(result!.selected.fingerprint).toBe('NEWER000')
+    })
+
+    it('falls back to newest key when metadata query fails', async () => {
+      const plugin = new TestableWebOpenPGPPlugin()
+      const { ctx } = makeCtx('alice@example.com')
+      ctx.xmpp.queryPEP = async () => { throw new Error('item-not-found') }
+      setSessionPassphrase('session-pp')
+      await plugin.init(ctx)
+
+      const bundles: KeyBundle[] = [
+        { fingerprint: 'KEY_A', publicArmored: 'a', keychainBacked: false, createdAt: '2025-03-01T00:00:00Z' },
+        { fingerprint: 'KEY_B', publicArmored: 'b', keychainBacked: false, createdAt: '2025-06-01T00:00:00Z' },
+      ]
+      const result = await plugin.callSelectKeyFromBackup(bundles)
+
+      expect(result).not.toBeNull()
+      expect(result!.needsPicker).toBe(true)
+      expect(result!.selected.fingerprint).toBe('KEY_B')
     })
   })
 })

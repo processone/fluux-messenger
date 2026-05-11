@@ -27,7 +27,7 @@ use sequoia_openpgp as openpgp;
 use unicode_normalization::UnicodeNormalization;
 
 use openpgp::{
-    cert::Cert,
+    cert::{Cert, CertParser},
     crypto::{Password, SessionKey},
     packet::{PKESK, SKESK},
     parse::{
@@ -166,6 +166,50 @@ pub fn decrypt_tsk_with_passphrase(message_armored: &str, passphrase: &str) -> R
         .to_vec()
         .context("re-armor recovered TSK")?;
     String::from_utf8(armored).context("recovered TSK armor is not UTF-8")
+}
+
+/// Decrypt a backup and return **all** TSKs found inside. A well-behaved
+/// client publishes exactly one, but inter-op with Gajim or Profanity may
+/// produce backups that bundle multiple certificates. Callers should
+/// auto-select the right one (e.g. match against published metadata) or
+/// present a picker UI.
+pub fn decrypt_all_tsks_with_passphrase(
+    message_armored: &str,
+    passphrase: &str,
+) -> Result<Vec<String>> {
+    let policy = StandardPolicy::new();
+    let password = Password::from(normalize_passphrase(passphrase));
+    let helper = BackupHelper {
+        password: &password,
+    };
+    let mut decryptor = DecryptorBuilder::from_bytes(message_armored.as_bytes())
+        .context("parse backup ciphertext")?
+        .with_policy(&policy, None, helper)
+        .context("open backup decryptor (wrong passphrase?)")?;
+
+    let mut tsk_bytes: Vec<u8> = Vec::new();
+    std::io::copy(&mut decryptor, &mut tsk_bytes).context("read decrypted backup")?;
+
+    let mut tsks: Vec<String> = Vec::new();
+    for cert_result in CertParser::from_bytes(&tsk_bytes)? {
+        let cert = cert_result.context("parse cert from backup")?;
+        if !cert.is_tsk() {
+            continue;
+        }
+        let armored = cert
+            .as_tsk()
+            .armored()
+            .to_vec()
+            .context("re-armor recovered TSK")?;
+        tsks.push(String::from_utf8(armored).context("recovered TSK armor is not UTF-8")?);
+    }
+
+    if tsks.is_empty() {
+        return Err(anyhow!(
+            "recovered payload does not contain any secret key packets"
+        ));
+    }
+    Ok(tsks)
 }
 
 struct BackupHelper<'a> {
@@ -396,5 +440,79 @@ mod tests {
             .fingerprint()
             .to_hex();
         assert_eq!(recovered_fp, original_fp);
+    }
+
+    // ---------- multi-TSK backup ----------
+
+    fn encrypt_multi_tsk_backup(tsks: &[&str], passphrase: &str) -> String {
+        let mut combined_bytes: Vec<u8> = Vec::new();
+        for tsk in tsks {
+            let cert = Cert::from_bytes(tsk.as_bytes()).unwrap();
+            assert!(cert.is_tsk());
+            cert.as_tsk().serialize(&mut combined_bytes).unwrap();
+        }
+        let normalized = normalize_passphrase(passphrase);
+        let password = Password::from(normalized);
+        let mut sink: Vec<u8> = Vec::new();
+        {
+            let message = Message::new(&mut sink);
+            let message = Armorer::new(message)
+                .kind(openpgp::armor::Kind::Message)
+                .build()
+                .unwrap();
+            let message = Encryptor::with_passwords(message, vec![password])
+                .symmetric_algo(SymmetricAlgorithm::AES256)
+                .aead_algo(AEADAlgorithm::OCB)
+                .build()
+                .unwrap();
+            let mut literal = LiteralWriter::new(message).build().unwrap();
+            literal.write_all(&combined_bytes).unwrap();
+            literal.finalize().unwrap();
+        }
+        String::from_utf8(sink).unwrap()
+    }
+
+    #[test]
+    fn multi_tsk_round_trip() {
+        let tsk_a = fresh_tsk();
+        let tsk_b = fresh_tsk();
+        let fp_a = Cert::from_bytes(tsk_a.as_bytes()).unwrap().fingerprint().to_hex();
+        let fp_b = Cert::from_bytes(tsk_b.as_bytes()).unwrap().fingerprint().to_hex();
+        assert_ne!(fp_a, fp_b, "test certs must differ");
+
+        let backup = encrypt_multi_tsk_backup(&[&tsk_a, &tsk_b], "multi");
+        let recovered = decrypt_all_tsks_with_passphrase(&backup, "multi")
+            .expect("multi-TSK decrypt must succeed");
+        assert_eq!(recovered.len(), 2, "must recover both TSKs");
+
+        let recovered_fps: Vec<String> = recovered
+            .iter()
+            .map(|a| Cert::from_bytes(a.as_bytes()).unwrap().fingerprint().to_hex())
+            .collect();
+        assert!(recovered_fps.contains(&fp_a), "must contain first key");
+        assert!(recovered_fps.contains(&fp_b), "must contain second key");
+    }
+
+    #[test]
+    fn single_tsk_via_decrypt_all_returns_one() {
+        let tsk = fresh_tsk();
+        let original_fp = Cert::from_bytes(tsk.as_bytes()).unwrap().fingerprint().to_hex();
+        let backup = encrypt_tsk_with_passphrase(&tsk, "single", true).unwrap();
+        let recovered = decrypt_all_tsks_with_passphrase(&backup, "single")
+            .expect("single-TSK via decrypt_all must succeed");
+        assert_eq!(recovered.len(), 1);
+        let fp = Cert::from_bytes(recovered[0].as_bytes())
+            .unwrap()
+            .fingerprint()
+            .to_hex();
+        assert_eq!(fp, original_fp);
+    }
+
+    #[test]
+    fn decrypt_all_with_wrong_passphrase_fails() {
+        let tsk = fresh_tsk();
+        let backup = encrypt_tsk_with_passphrase(&tsk, "right", true).unwrap();
+        decrypt_all_tsks_with_passphrase(&backup, "wrong")
+            .expect_err("wrong passphrase must fail");
     }
 }

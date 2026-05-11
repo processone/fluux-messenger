@@ -689,6 +689,13 @@
             "restorePassphrasePlaceholder": "Ievadiet rezerves kopijas paroles frāzi",
             "restoreSuccess": "Atslēga atjaunota no servera",
             "restoreFailed": "Atjaunot neizdevās — nepareiza paroles frāze?",
+            "keyPicker": {
+                "title": "Atrasti vairāki atslēgas",
+                "body": "Rezerves kopija satur vairākas atslēgas. Izvēlieties to, kuru vēlaties izmantot.",
+                "recommended": "Ieteicama",
+                "created": "Izveidota",
+                "confirm": "Izmantot šo atslēgu"
+            },
             "enableBackupFoundTitle": "Šajā serverī atrasta rezerves kopija",
             "enableBackupFoundBody": "Šim kontam ir saglabāta OpenPGP atslēgas rezerves kopija. Ievadiet saglabāto paroles frāzi, lai atjaunotu esošo identitāti, vai sāciet no jauna, lai ģenerētu jaunu atslēgu (kas aizstās rezerves kopijas publisko daļu).",
             "enableBackupFoundWarning": "Rezerves kopiju var atjaunot tikai paroles frāze, kas saglabāta tās izveides laikā. Ja esat to pazaudējis, sāciet no jauna un pēc tam izveidojiet jaunās atslēgas rezerves kopiju.",
