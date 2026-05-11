@@ -15,18 +15,18 @@ function createEvent(payload: ActivityEvent['payload'], overrides: Partial<Activ
 }
 
 describe('getNavigationTarget', () => {
-  it('should return conversation target for subscription-request', () => {
+  it('should return contact target for subscription-request', () => {
     const event = createEvent({ type: 'subscription-request', from: 'alice@example.com' })
     const target = getNavigationTarget(event)
 
-    expect(target).toEqual({ type: 'conversation', jid: 'alice@example.com' })
+    expect(target).toEqual({ type: 'contact', jid: 'alice@example.com' })
   })
 
-  it('should return conversation target for subscription-accepted', () => {
+  it('should return contact target for subscription-accepted', () => {
     const event = createEvent({ type: 'subscription-accepted', from: 'bob@example.com/res' })
     const target = getNavigationTarget(event)
 
-    expect(target).toEqual({ type: 'conversation', jid: 'bob@example.com' })
+    expect(target).toEqual({ type: 'contact', jid: 'bob@example.com' })
   })
 
   it('should return null for subscription-denied', () => {
@@ -114,6 +114,6 @@ describe('getNavigationTarget', () => {
     const event = createEvent({ type: 'subscription-request', from: 'alice@example.com/mobile' })
     const target = getNavigationTarget(event)
 
-    expect(target).toEqual({ type: 'conversation', jid: 'alice@example.com' })
+    expect(target).toEqual({ type: 'contact', jid: 'alice@example.com' })
   })
 })

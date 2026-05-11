@@ -94,7 +94,7 @@ export function ActivityLogView() {
     setPreviewEvent,
   } = useActivityLog()
   const { pendingCount } = useEvents()
-  const { navigateToConversation, navigateToRoom } = useNavigateToTarget()
+  const { navigateToConversation, navigateToContact, navigateToRoom } = useNavigateToTarget()
   // Read room existence imperatively — subscribing via selector would return
   // a new closure on every store update, causing an infinite render loop.
   const hasRoom = useCallback((jid: string) => roomStore.getState().rooms.has(jid), [])
@@ -109,7 +109,9 @@ export function ActivityLogView() {
     const target = getNavigationTarget(event)
     if (!target) return
 
-    if (target.type === 'room') {
+    if (target.type === 'contact') {
+      navigateToContact(target.jid)
+    } else if (target.type === 'room') {
       navigateToRoom(target.jid, target.messageId)
     } else if (target.type === 'conversation') {
       navigateToConversation(target.jid, target.messageId)
@@ -121,7 +123,7 @@ export function ActivityLogView() {
         navigateToConversation(target.jid, target.messageId)
       }
     }
-  }, [navigateToConversation, navigateToRoom, hasRoom, setPreviewEvent])
+  }, [navigateToConversation, navigateToContact, navigateToRoom, hasRoom, setPreviewEvent])
 
   const groupedEvents = useMemo(() => groupEventsByDate(events), [events])
 

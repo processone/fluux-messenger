@@ -2,7 +2,7 @@ import type { ActivityEvent } from '@fluux/sdk'
 import { getBareJid } from '@fluux/sdk'
 
 export interface NavigationTarget {
-  type: 'conversation' | 'room' | 'auto'
+  type: 'conversation' | 'room' | 'contact' | 'auto'
   jid: string
   messageId?: string
 }
@@ -20,7 +20,7 @@ export function getNavigationTarget(event: ActivityEvent): NavigationTarget | nu
       return { type: 'auto', jid: p.conversationId, messageId: p.messageId }
     case 'subscription-request':
     case 'subscription-accepted':
-      return { type: 'conversation', jid: getBareJid(p.from) }
+      return { type: 'contact', jid: getBareJid(p.from) }
     case 'muc-invitation':
       return { type: 'room', jid: p.roomJid }
     case 'stranger-message':

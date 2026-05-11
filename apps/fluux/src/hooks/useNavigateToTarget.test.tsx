@@ -169,6 +169,34 @@ describe('useNavigateToTarget', () => {
     })
   })
 
+  describe('navigateToContact', () => {
+    it('should navigate to contacts URL with encoded JID', () => {
+      const { result } = renderHook(() => useNavigateToTarget(), {
+        wrapper: createWrapper('/events'),
+      })
+
+      act(() => {
+        result.current.navigateToContact('alice@example.com')
+      })
+
+      expect(currentLocation.current.pathname).toBe('/contacts/alice%40example.com')
+    })
+
+    it('should clear active conversation and room', () => {
+      const { result } = renderHook(() => useNavigateToTarget(), {
+        wrapper: createWrapper('/messages'),
+      })
+
+      act(() => {
+        result.current.navigateToContact('bob@example.com')
+      })
+
+      expect(mockState.setActiveConversation).toHaveBeenCalledWith(null)
+      expect(mockState.setActiveRoom).toHaveBeenCalledWith(null)
+      expect(currentLocation.current.pathname).toBe('/contacts/bob%40example.com')
+    })
+  })
+
   describe('navigateToConversation with messageId', () => {
     it('should set targetMessageId in chat store when messageId is provided', () => {
       const { result } = renderHook(() => useNavigateToTarget(), {
