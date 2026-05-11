@@ -688,6 +688,13 @@
             "restorePassphrasePlaceholder": "Anna varmuuskopion tunnuslause",
             "restoreSuccess": "Avain palautettu palvelimelta",
             "restoreFailed": "Palautus epäonnistui — väärä tunnuslause?",
+            "keyPicker": {
+                "title": "Löytyi useita avaimia",
+                "body": "Varmuuskopio sisältää useita avaimia. Valitse se, jota haluat käyttää.",
+                "recommended": "Suositeltu",
+                "created": "Luotu",
+                "confirm": "Käytä tätä avainta"
+            },
             "enableBackupFoundTitle": "Tällä palvelimella löytyi varmuuskopio",
             "enableBackupFoundBody": "Tälle tilille on tallennettu OpenPGP-avaimen varmuuskopio. Anna tallentamasi tunnuslause palauttaaksesi olemassa olevan identiteettisi tai aloita alusta luodaksesi uuden avaimen (joka korvaa varmuuskopion julkisen osan).",
             "enableBackupFoundWarning": "Vain varmuuskopiota luotaessa tallennettu tunnuslause voi palauttaa sen. Jos olet kadottanut sen, aloita alusta ja varmuuskopioi uusi avain jälkeenpäin.",

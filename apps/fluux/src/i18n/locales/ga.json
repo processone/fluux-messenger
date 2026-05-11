@@ -688,6 +688,13 @@
             "restorePassphrasePlaceholder": "Iontráil pasfhrása an chúltaca",
             "restoreSuccess": "Eochair aischurtha ón bhfreastalaí",
             "restoreFailed": "Theip ar an aischur — pasfhrása mícheart?",
+            "keyPicker": {
+                "title": "Aimsíodh eochracha iolracha",
+                "body": "Tá eochracha iolracha sa chúltaca. Roghnaigh an ceann is mian leat a úsáid.",
+                "recommended": "Molta",
+                "created": "Cruthaithe",
+                "confirm": "Úsáid an eochair seo"
+            },
             "enableBackupFoundTitle": "Aimsíodh cúltaca ar an bhfreastalaí seo",
             "enableBackupFoundBody": "Tá cúltaca d'eochair OpenPGP stóráilte don chuntas seo. Iontráil an pasfhrása sábháilte chun do aitheantas atá ann a aischur, nó tosaigh as an nua chun eochair nua a ghiniúint (a chuirfidh in ionad pháirt phoiblí an chúltaca).",
             "enableBackupFoundWarning": "Ní féidir leis an gcúltaca ach pasfhrása a sábháileadh nuair a cruthaíodh é a aischur. Má chaill tú é, tosaigh as an nua agus déan cúltaca den eochair nua ina dhiaidh sin.",

@@ -689,6 +689,13 @@
             "restorePassphrasePlaceholder": "Zadajte heslo zálohy",
             "restoreSuccess": "Kľúč obnovený zo servera",
             "restoreFailed": "Obnova zlyhala — nesprávne heslo?",
+            "keyPicker": {
+                "title": "Nájdených viacero kľúčov",
+                "body": "Záloha obsahuje viacero kľúčov. Vyberte ten, ktorý chcete použiť.",
+                "recommended": "Odporúčaný",
+                "created": "Vytvorený",
+                "confirm": "Použiť tento kľúč"
+            },
             "enableBackupFoundTitle": "Na tomto serveri nájdená záloha",
             "enableBackupFoundBody": "Pre tento účet je uložená záloha kľúča OpenPGP. Zadajte uložené heslo na obnovu existujúcej identity, alebo začnite odznova na vygenerovanie nového kľúča (ktorý nahradí verejnú časť zálohy).",
             "enableBackupFoundWarning": "Zálohu môže obnoviť iba heslo uložené pri jej vytvorení. Ak ste ho stratili, začnite odznova a potom nový kľúč zálohujte.",

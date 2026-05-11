@@ -1110,6 +1110,8 @@ fn main() {
             openpgp::openpgp_has_persisted_key,
             openpgp::openpgp_backup_encrypt,
             openpgp::openpgp_backup_import,
+            openpgp::openpgp_backup_import_all,
+            openpgp::openpgp_backup_import_selected,
             openpgp::openpgp_rotate_encryption_subkey
         ])
         .on_page_load(move |webview, payload| {

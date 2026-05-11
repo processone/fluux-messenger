@@ -132,7 +132,24 @@ export interface KeyBundle {
   publicArmored: string
   /** True when the private key is protected by the OS keychain (Tauri only). */
   keychainBacked: boolean
+  /** ISO 8601 primary-key creation time (present in backup-import results). */
+  createdAt?: string
 }
+
+/**
+ * Discriminated union returned by {@link restoreSecretKey} /
+ * {@link importKeyFromFile}. When the backup contains a single key
+ * (or auto-selection succeeds), the caller receives an `IdentityInfo`.
+ * When multiple keys exist and no heuristic can confidently pick one,
+ * the caller receives the candidates so a picker UI can be shown.
+ */
+export type RestoreResult =
+  | IdentityInfo
+  | {
+      needsPicker: true
+      candidates: KeyBundle[]
+      backupContext: { message: string; passphrase: string }
+    }
 
 /** Decryption result returned by the crypto backend. */
 export interface DecryptOutput {
@@ -315,6 +332,28 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     accountJid: string,
     backupMessage: string,
     passphrase: string,
+  ): Promise<KeyBundle>
+
+  /**
+   * Decrypt a backup message and return metadata for ALL TSKs found
+   * inside. Does NOT persist anything — the caller picks one and
+   * then calls {@link backupImportSelected} to install it.
+   */
+  protected abstract backupImportAll(
+    accountJid: string,
+    backupMessage: string,
+    passphrase: string,
+  ): Promise<KeyBundle[]>
+
+  /**
+   * Decrypt a backup, find the TSK matching `selectedFingerprint`,
+   * persist it, and return the public bundle for the installed key.
+   */
+  protected abstract backupImportSelected(
+    accountJid: string,
+    backupMessage: string,
+    passphrase: string,
+    selectedFingerprint: string,
   ): Promise<KeyBundle>
 
   /**
@@ -578,7 +617,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     return (await this.fetchSecretKeyBackup()) !== null
   }
 
-  async restoreSecretKey(passphrase: string): Promise<IdentityInfo> {
+  async restoreSecretKey(passphrase: string): Promise<RestoreResult> {
     const ctx = this.requireCtx()
     const armoredMessage = await this.fetchSecretKeyBackup()
     if (!armoredMessage) {
@@ -588,12 +627,115 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         `${this.pluginName()}: no secret-key backup found on server`,
       )
     }
+
+    let bundles: KeyBundle[]
+    try {
+      bundles = await this.backupImportAll(ctx.account.jid, armoredMessage, passphrase)
+    } catch (err) {
+      throw this.toPluginError('restoreSecretKey', err)
+    }
+
+    const selection = await this.selectKeyFromBackup(bundles)
+    if (!selection) {
+      throw new E2EEPluginError(
+        'permanent',
+        'no-backup',
+        `${this.pluginName()}: backup contained no usable keys`,
+      )
+    }
+
+    if (!selection.needsPicker) {
+      return this.doInstallKey(armoredMessage, passphrase, selection.selected.fingerprint)
+    }
+
+    return {
+      needsPicker: true,
+      candidates: bundles,
+      backupContext: { message: armoredMessage, passphrase },
+    }
+  }
+
+  async importKeyFromFile(armoredMessage: string, passphrase: string): Promise<RestoreResult> {
+    const ctx = this.requireCtx()
+
+    let bundles: KeyBundle[]
+    try {
+      bundles = await this.backupImportAll(ctx.account.jid, armoredMessage, passphrase)
+    } catch (err) {
+      throw this.toPluginError('importKeyFromFile', err)
+    }
+
+    const selection = await this.selectKeyFromBackup(bundles)
+    if (!selection) {
+      throw new E2EEPluginError(
+        'permanent',
+        'malformed-data',
+        `${this.pluginName()}: imported file contained no usable keys`,
+      )
+    }
+
+    if (!selection.needsPicker) {
+      return this.doInstallKey(armoredMessage, passphrase, selection.selected.fingerprint)
+    }
+
+    return {
+      needsPicker: true,
+      candidates: bundles,
+      backupContext: { message: armoredMessage, passphrase },
+    }
+  }
+
+  async installSelectedKey(
+    backupMessage: string,
+    passphrase: string,
+    fingerprint: string,
+  ): Promise<IdentityInfo> {
+    return this.doInstallKey(backupMessage, passphrase, fingerprint)
+  }
+
+  protected async selectKeyFromBackup(
+    bundles: KeyBundle[],
+  ): Promise<{ selected: KeyBundle; needsPicker: boolean } | null> {
+    if (bundles.length === 0) return null
+    if (bundles.length === 1) return { selected: bundles[0], needsPicker: false }
+
+    const ctx = this.requireCtx()
+    try {
+      const items = await ctx.xmpp.queryPEP(ctx.account.jid, PUBLIC_KEYS_METADATA_NODE, 1)
+      const advertised = parseAdvertisedFingerprints(items)
+      const match = bundles.find((b) =>
+        advertised.some((fp) => fingerprintsEqual(fp, b.fingerprint)),
+      )
+      if (match) return { selected: match, needsPicker: false }
+    } catch {
+      // Metadata unavailable — fall through to date heuristic
+    }
+
+    const sorted = [...bundles].sort((a, b) => {
+      const da = a.createdAt ? new Date(a.createdAt).getTime() : 0
+      const db = b.createdAt ? new Date(b.createdAt).getTime() : 0
+      return db - da
+    })
+    return { selected: sorted[0], needsPicker: true }
+  }
+
+  private async doInstallKey(
+    backupMessage: string,
+    passphrase: string,
+    fingerprint: string,
+  ): Promise<IdentityInfo> {
+    const ctx = this.requireCtx()
     const previousFingerprint = this.ownBundle?.fingerprint
     let bundle: KeyBundle
     try {
-      bundle = await this.backupImport(ctx.account.jid, armoredMessage, passphrase)
+      bundle = await this.backupImportSelected(
+        ctx.account.jid,
+        backupMessage,
+        passphrase,
+        fingerprint,
+      )
     } catch (err) {
-      throw this.toPluginError('restoreSecretKey', err)
+      throw this.toPluginError('installKey', err)
     }
     this.ownBundle = bundle
     writeBackedUpFingerprint(ctx.account.jid, bundle.fingerprint)
@@ -606,34 +748,10 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       }
     } catch (err) {
       ctx.logger.warn(
-        `${this.pluginName()}: public key publish after restore failed: ${formatError(err)}`,
+        `${this.pluginName()}: public key publish after install failed: ${formatError(err)}`,
       )
     }
 
-    return { fingerprint: bundle.fingerprint }
-  }
-
-  async importKeyFromFile(armoredMessage: string, passphrase: string): Promise<IdentityInfo> {
-    const ctx = this.requireCtx()
-    const previousFingerprint = this.ownBundle?.fingerprint
-    let bundle: KeyBundle
-    try {
-      bundle = await this.backupImport(ctx.account.jid, armoredMessage, passphrase)
-    } catch (err) {
-      throw this.toPluginError('importKeyFromFile', err)
-    }
-    this.ownBundle = bundle
-    try {
-      await this.publishOwnPublicKeyData(bundle)
-      await this.publishOwnPublicKeyMetadata(bundle)
-      if (previousFingerprint) {
-        await this.retractStalePublicKeyDataNode(previousFingerprint, bundle.fingerprint)
-      }
-    } catch (err) {
-      ctx.logger.warn(
-        `${this.pluginName()}: public key publish after file import failed: ${formatError(err)}`,
-      )
-    }
     return { fingerprint: bundle.fingerprint }
   }
 
@@ -651,9 +769,24 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   }
 
   async resolveOwnKeyConflict_importFromServer(passphrase: string): Promise<IdentityInfo> {
-    const info = await this.restoreSecretKey(passphrase)
+    const result = await this.restoreSecretKey(passphrase)
+    if ('needsPicker' in result) {
+      // Conflict resolution always picks the newest key — no picker UI.
+      const sorted = [...result.candidates].sort((a, b) => {
+        const da = a.createdAt ? new Date(a.createdAt).getTime() : 0
+        const db = b.createdAt ? new Date(b.createdAt).getTime() : 0
+        return db - da
+      })
+      const info = await this.doInstallKey(
+        result.backupContext.message,
+        result.backupContext.passphrase,
+        sorted[0].fingerprint,
+      )
+      clearOwnKeyConflict()
+      return info
+    }
     clearOwnKeyConflict()
-    return info
+    return result
   }
 
   // ---------------------------------------------------------------------------

@@ -688,6 +688,13 @@
             "restorePassphrasePlaceholder": "输入备份的口令短语",
             "restoreSuccess": "已从服务器恢复密钥",
             "restoreFailed": "无法恢复 — 口令短语错误?",
+            "keyPicker": {
+                "title": "找到多个密钥",
+                "body": "备份包含多个密钥。请选择你要使用的密钥。",
+                "recommended": "推荐",
+                "created": "创建时间",
+                "confirm": "使用此密钥"
+            },
             "enableBackupFoundTitle": "此服务器上找到备份",
             "enableBackupFoundBody": "此账户已存有 OpenPGP 密钥的备份。输入保存的口令短语以恢复你的现有身份,或重新开始以生成新密钥(它将替换备份的公开部分)。",
             "enableBackupFoundWarning": "只有创建备份时保存的口令短语才能恢复它。如果丢失,请重新开始,然后再备份新密钥。",

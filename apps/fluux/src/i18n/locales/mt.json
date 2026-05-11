@@ -690,6 +690,13 @@
             "restorePassphrasePlaceholder": "Daħħal il-frażi sigrieta tal-backup",
             "restoreSuccess": "Iċ-ċavetta ġiet irripristinata mis-server",
             "restoreFailed": "Ma stajtx nirripristina — frażi żbaljata?",
+            "keyPicker": {
+                "title": "Instabu diversi ċwievet",
+                "body": "Il-backup fih diversi ċwievet. Agħżel dik li trid tuża.",
+                "recommended": "Rakkomandat",
+                "created": "Maħluq",
+                "confirm": "Uża din iċ-ċavetta"
+            },
             "enableBackupFoundTitle": "Instab backup fuq dan is-server",
             "enableBackupFoundBody": "Hemm backup ta' ċavetta OpenPGP maħżun għal dan il-kont. Daħħal il-frażi sigrieta li sejvjajt biex tirripristina l-identità eżistenti tiegħek, jew ibda mill-ġdid biex tiġġenera ċavetta ġdida (li tieħu l-post tal-parti pubblika tal-backup).",
             "enableBackupFoundWarning": "Tista' tirripristina l-backup biss bil-frażi sigrieta li sejvjajt meta nħoloq. Jekk tlift, ibda mill-ġdid u sejvja ċ-ċavetta l-ġdida wara.",

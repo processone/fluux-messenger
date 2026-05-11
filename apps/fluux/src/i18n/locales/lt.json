@@ -688,6 +688,13 @@
             "restorePassphrasePlaceholder": "Įveskite atsarginės kopijos slaptažodinę frazę",
             "restoreSuccess": "Raktas atkurtas iš serverio",
             "restoreFailed": "Atkurti nepavyko — neteisinga slaptažodinė frazė?",
+            "keyPicker": {
+                "title": "Rasta keletas raktų",
+                "body": "Atsarginė kopija turi kelis raktus. Pasirinkite tą, kurį norite naudoti.",
+                "recommended": "Rekomenduojamas",
+                "created": "Sukurtas",
+                "confirm": "Naudoti šį raktą"
+            },
             "enableBackupFoundTitle": "Šiame serveryje rasta atsarginė kopija",
             "enableBackupFoundBody": "Šiai paskyrai saugoma OpenPGP rakto atsarginė kopija. Įveskite išsaugotą slaptažodinę frazę, kad atkurtumėte esamą tapatybę, arba pradėkite iš naujo, kad sugeneruotumėte naują raktą (kuris pakeis atsarginės kopijos viešąją dalį).",
             "enableBackupFoundWarning": "Tik atsarginės kopijos kūrimo metu išsaugota slaptažodinė frazė gali ją atkurti. Jei pametėte ją, pradėkite iš naujo ir vėliau išsaugokite naują raktą.",
