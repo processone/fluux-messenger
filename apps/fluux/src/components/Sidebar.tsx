@@ -472,12 +472,12 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
 
         {/* User Panel - avatar spans both rows */}
         <div className="px-2 py-2 bg-fluux-sidebar border-t border-fluux-bg">
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
             {/* Large avatar - clickable for profile settings */}
             <Tooltip content={t('sidebar.viewProfile')} position="top">
               <div
                 onClick={() => { modalActions.close('presenceMenu'); navigateToSettings('profile') }}
-                className="flex-shrink-0 rounded-full hover:ring-2 hover:ring-fluux-muted/30 transition-all cursor-pointer"
+                className="flex-shrink-0 me-1 rounded-full hover:ring-2 hover:ring-fluux-muted/30 transition-all cursor-pointer"
               >
                 <Avatar
                   identifier={jid || ''}

@@ -55,7 +55,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
 
   return (
     <>
-      <div className="relative" ref={menuRef}>
+      <div className="relative flex-shrink-0" ref={menuRef}>
         <Tooltip content={t('common.options')} position="top" disabled={isOpen}>
           <button
             onClick={() => setIsOpen(!isOpen)}
