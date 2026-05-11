@@ -80,6 +80,18 @@ export function useNavigateToTarget() {
   }
 
   /**
+   * Navigate to a contact's profile.
+   * Uses URL-based navigation (/contacts/:jid) and clears active conversation/room.
+   * Clears all active notifications.
+   */
+  const navigateToContact = (jid: string) => {
+    void setActiveConversationRef.current(null)
+    void setActiveRoomRef.current(null)
+    void navigateRef.current(`/contacts/${encodeURIComponent(jid)}`)
+    void clearAllNotifications()
+  }
+
+  /**
    * Navigate to a MUC room.
    * Uses URL-based navigation (/rooms/:jid) and sets active room.
    * Optionally scrolls to a specific message.
@@ -96,5 +108,5 @@ export function useNavigateToTarget() {
     void clearAllNotifications()
   }
 
-  return { navigateToConversation, navigateToRoom }
+  return { navigateToConversation, navigateToContact, navigateToRoom }
 }
