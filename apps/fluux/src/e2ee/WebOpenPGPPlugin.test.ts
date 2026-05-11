@@ -659,13 +659,13 @@ describe('WebOpenPGPPlugin', () => {
 
       const { privateKey: keyA } = await generateKey({
         type: 'ecc',
-        curve: 'curve25519Legacy' as 'curve25519Legacy',
+        curve: 'curve25519Legacy' as const,
         userIDs: [{ name: 'xmpp:alice@example.com' }],
         format: 'object',
       })
       const { privateKey: keyB } = await generateKey({
         type: 'ecc',
-        curve: 'curve25519Legacy' as 'curve25519Legacy',
+        curve: 'curve25519Legacy' as const,
         userIDs: [{ name: 'xmpp:alice@example.com' }],
         format: 'object',
       })
