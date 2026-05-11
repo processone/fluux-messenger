@@ -796,3 +796,27 @@ describe('E2EEManager — assertPlaintextPermitted', () => {
     await expect(mgr.assertPlaintextPermitted(groupTarget)).resolves.toBeUndefined()
   })
 })
+
+describe('E2EEManager — deferred decrypt support', () => {
+  it('hasPlugins returns false when no plugins are registered', () => {
+    const mgr = makeManager()
+    expect(mgr.hasPlugins()).toBe(false)
+  })
+
+  it('hasPlugins returns true after registering a plugin', async () => {
+    const mgr = makeManager()
+    await mgr.register(new FakePlugin(weakDescriptor, 'urn:test:weak'))
+    expect(mgr.hasPlugins()).toBe(true)
+  })
+
+  it('onPluginRegistered fires callback with the plugin id', async () => {
+    const mgr = makeManager()
+    const cb = vi.fn()
+    mgr.onPluginRegistered(cb)
+
+    await mgr.register(new FakePlugin(weakDescriptor, 'urn:test:weak'))
+
+    expect(cb).toHaveBeenCalledTimes(1)
+    expect(cb).toHaveBeenCalledWith('openpgp')
+  })
+})

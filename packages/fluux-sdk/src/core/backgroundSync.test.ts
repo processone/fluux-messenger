@@ -731,3 +731,38 @@ describe('E2EE capability warm-up on fresh session', () => {
     expect(canEncryptTo).not.toHaveBeenCalled()
   })
 })
+
+// ---------------------------------------------------------------------------
+// Deferred E2EE decryption triggers
+// ---------------------------------------------------------------------------
+describe('deferred E2EE decryption triggers', () => {
+  let mockClient: ReturnType<typeof createMockClient>
+  let cleanup: () => void
+
+  beforeEach(() => {
+    _resetStorageScopeForTesting()
+    connectionStore.getState().reset()
+    mockClient = createMockClient()
+    localStorageMock.clear()
+  })
+
+  afterEach(() => {
+    cleanup?.()
+  })
+
+  it('calls retryPendingDecrypts when e2ee:plugin-registered fires', () => {
+    cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+    mockClient._emitSDK('e2ee:plugin-registered', { pluginId: 'openpgp' })
+
+    expect(mockClient.retryPendingDecrypts).toHaveBeenCalledTimes(1)
+  })
+
+  it('calls retryPendingDecrypts when e2ee:key-unlocked fires', () => {
+    cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+    mockClient._emitSDK('e2ee:key-unlocked', undefined)
+
+    expect(mockClient.retryPendingDecrypts).toHaveBeenCalledTimes(1)
+  })
+})
