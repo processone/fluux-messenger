@@ -231,7 +231,7 @@ jobs:
 
       - name: Sign Windows executables with Azure Trusted Signing
         continue-on-error: true  # Temporarily non-blocking - Azure identity validation suspended
-        uses: azure/trusted-signing-action@v1.2.0
+        uses: azure/trusted-signing-action@v2.0.0
         with:
           azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}

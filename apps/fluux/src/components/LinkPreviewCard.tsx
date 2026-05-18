@@ -15,7 +15,7 @@ export function LinkPreviewCard({ preview, onLoad }: LinkPreviewCardProps) {
   const [imageError, setImageError] = useState(false)
 
   // Extract domain from URL for display
-  let domain = ''
+  let domain: string
   try {
     const url = new URL(preview.url)
     domain = url.hostname.replace(/^www\./, '')
