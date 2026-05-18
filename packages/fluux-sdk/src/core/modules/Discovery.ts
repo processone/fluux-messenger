@@ -343,7 +343,7 @@ export class Discovery extends BaseModule {
       if (err instanceof Error) {
         throw err
       }
-      throw new Error('Failed to request upload slot')
+      throw new Error('Failed to request upload slot', { cause: err })
     }
   }
 }
