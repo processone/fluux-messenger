@@ -432,6 +432,8 @@ html, body {
   position: relative;
   padding-left: 1.25rem;
   padding-right: 0.5rem;
+  padding-top: 0.2rem;
+  padding-bottom: 0.5rem;
   margin-block: 0.125rem;
 }
 .blockquote-decorated::before {
