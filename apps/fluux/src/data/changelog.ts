@@ -14,6 +14,41 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '0.16.0',
+    date: '2026-05-18',
+    sections: [
+      {
+        type: 'added',
+        items: [
+          'OpenPGP end-to-end encryption (XEP-0373 / XEP-0374) — encrypted 1:1 messaging with passphrase-protected key storage and secret-key backup/restore',
+          'OpenPGP end-to-end encryption support in web version',
+          'Multi-TSK (Transferable Secret Key) handling in the XEP-0373 backup restore flow for accounts with multiple OpenPGP keys',
+        ],
+      },
+      {
+        type: 'changed',
+        items: [
+          'XMPP Console hides Stream Management packets by default for less noise (toggle remains available)',
+          'Significant render-performance pass: cut store over-subscription in ConversationList, CommandPalette, RoomConfig, ContactSelector, ContactItem, and room modals',
+          'Simplified Chinese translation updated',
+        ],
+      },
+      {
+        type: 'fixed',
+        items: [
+          'SASL2 inline Stream Management resumption handled correctly; duplicate <enable/> suppressed',
+          'Proxy/auth: forward <open/> from= attribute so SASL2/FAST works through the desktop proxy, plus keychain fallback',
+          'SDK: client-side FAST token cleared on logout to prevent silent re-authentication',
+          'Wake and reconnect resilience: stale-timer detection, DarkWake handling, reload cooldown, and settle-time scaling',
+          'Activity log: subscription events now navigate to the contact profile',
+          'Sidebar user panel: prevent status label truncation',
+          'RTL sidebar lists: truncate Latin names at the end instead of the start',
+          'Blockquote decorative quote marks no longer clipped at the edge',
+        ],
+      },
+    ],
+  },
+  {
     version: '0.15.2',
     date: '2026-04-21',
     sections: [
