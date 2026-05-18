@@ -1,4 +1,4 @@
-fluux-messenger (0.15.2-1) unstable; urgency=medium
+fluux-messenger (0.16.0-1) unstable; urgency=medium
 
   * MUC room creation, configuration, destruction, and user management
   * XEP-0425 Message Moderation support

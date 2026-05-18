@@ -1,43 +1,27 @@
-## What's New in v0.15.2
+## What's New in v0.16.0
 
 ### Added
 
-- Right-to-left (RTL) layout support for RTL languages
-- Arabic and Hebrew translations (beta quality, please report any error or issue to help improve them)
-- Decorative quotation marks for blockquotes
+- OpenPGP end-to-end encryption (XEP-0373 / XEP-0374) — encrypted 1:1 messaging with passphrase-protected key storage and secret-key backup/restore
+- OpenPGP end-to-end encryption support in web version
+- Multi-TSK (Transferable Secret Key) handling in the XEP-0373 backup restore flow for accounts with multiple OpenPGP keys
 
 ### Changed
 
-- SASL2 user-agent identifier and server-side FAST token invalidation on logout
-- Faster reconnection: skip redundant MAM queries on stream-management resume
-- Perf: Per-conversation typing and draft subscriptions for smoother list rendering during background sync
-- Security updates for several dependencies (brace-expansion, rustls-webpki, tar, rand, serialize-javascript; trust-dns-resolver migrated to hickory-resolver)
+- XMPP Console hides Stream Management packets by default for less noise (toggle remains available)
+- Significant render-performance pass: cut store over-subscription in ConversationList, CommandPalette, RoomConfig, ContactSelector, ContactItem, and room modals
+- Simplified Chinese translation updated
 
 ### Fixed
 
-- Preserve MUC room state across stream-management resume and interrupted fresh sessions
-- Prevent reconnection loops and UI freezes after system sleep/wake
-- Keep FAST token rotation working across page-reload reconnect
-- Retry FAST token authentication when the server field was initially empty
-- Suppress spurious FAST token deletion log message on first login
-- Set websocket stream "from" attribute so SASL2 is accepted on compliant servers
-- Hydrate outbound stream-management state on resume to avoid ackQueue crash
-- Recover Tauri reconnect stalls via native keepalive with proxy fallback
-- fetchBookmarks no longer wipes stored room messages on reconnect
-- Write live room messages directly to IndexedDB to prevent loss on reconnect
-- Restore saved rooms through the connect call so history loads after SM resume
-- Skip unnecessary webview reload when the app was hidden but the machine stayed awake
-- Lightbox displays the full-resolution original without upscaling past its natural size
-- Run discovery calls before the serial session-setup chain
-- Recover when post-wake auto-connect stalls after SASL
-- Handle superseded connection attempts with a dedicated error class
-- Grow reconnect attempt counter past the backoff ceiling
-- Probe runtime before reloading on dynamic import failure; auto-reload otherwise
-- Fall back to direct URL when the web image cache fetch fails
-- Display upload errors in the UI and allow HTTP upload URLs
-- Use inert instead of aria-hidden on the scroll-to-bottom FAB (accessibility)
-- Use ServiceWorker.showNotification() on web for reliable notifications
-- Fix vertical alignment of the message toolbar "more" menu button
+- SASL2 inline Stream Management resumption handled correctly; duplicate <enable/> suppressed
+- Proxy/auth: forward <open/> from= attribute so SASL2/FAST works through the desktop proxy, plus keychain fallback
+- SDK: client-side FAST token cleared on logout to prevent silent re-authentication
+- Wake and reconnect resilience: stale-timer detection, DarkWake handling, reload cooldown, and settle-time scaling
+- Activity log: subscription events now navigate to the contact profile
+- Sidebar user panel: prevent status label truncation
+- RTL sidebar lists: truncate Latin names at the end instead of the start
+- Blockquote decorative quote marks no longer clipped at the edge
 
 ---
 [Full Changelog](https://github.com/processone/fluux-messenger/blob/main/CHANGELOG.md)

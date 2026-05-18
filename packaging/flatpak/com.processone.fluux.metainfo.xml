@@ -90,7 +90,12 @@
   </content_rating>
 
   <releases>
-    <release version="0.15.2" date="2026-04-21">
+    <release version="0.16.0" date="2026-05-18">
+      <description>
+        <p>See release notes for details.</p>
+      </description>
+    </release>
+        <release version="0.15.2" date="2026-04-21">
       <description>
         <p>See release notes for details.</p>
       </description>
