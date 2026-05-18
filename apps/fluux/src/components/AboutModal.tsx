@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Github, Copy, Check } from 'lucide-react'
+import { Code, Copy, Check } from 'lucide-react'
 import { Tooltip } from './Tooltip'
 import { ModalShell } from './ModalShell'
 
@@ -64,7 +64,7 @@ export function AboutModal({ onClose }: AboutModalProps) {
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1.5 text-fluux-muted text-xs hover:text-fluux-brand mb-4"
         >
-          <Github className="w-3.5 h-3.5" />
+          <Code className="w-3.5 h-3.5" />
           {t('about.viewOnGithub')}
         </a>
         <p className="text-fluux-muted text-xs mb-3">
