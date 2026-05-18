@@ -457,6 +457,9 @@
         "moderateReasonPlaceholder": "Perché viene rimosso questo messaggio?",
         "moderateAndBan": "Bandisci anche questo utente dalla stanza",
         "imageUnavailable": "Immagine non più disponibile",
+        "copyImageUrl": "Copia link immagine",
+        "openInBrowser": "Apri nel browser",
+        "saveImage": "Salva immagine",
         "videoUnavailable": "Video non più disponibile",
         "audioUnavailable": "Audio non più disponibile",
         "typing": {

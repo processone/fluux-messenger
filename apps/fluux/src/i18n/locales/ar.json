@@ -455,6 +455,9 @@
         "moderateReasonPlaceholder": "لماذا تتم إزالة هذه الرسالة؟",
         "moderateAndBan": "حظر هذا المستخدم أيضًا من الغرفة",
         "imageUnavailable": "الصورة لم تعد متاحة",
+        "copyImageUrl": "نسخ رابط الصورة",
+        "openInBrowser": "فتح في المتصفح",
+        "saveImage": "حفظ الصورة",
         "videoUnavailable": "الفيديو لم يعد متاحًا",
         "audioUnavailable": "الصوت لم يعد متاحًا",
         "typing": {

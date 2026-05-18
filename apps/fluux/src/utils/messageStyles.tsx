@@ -329,19 +329,7 @@ function renderSegment(segment: StyledSegment, index: number, isDarkMode?: boole
   }
 }
 
-/** Copy text to clipboard with fallback for older browsers */
-async function copyToClipboard(text: string): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(text)
-  } catch {
-    const textarea = document.createElement('textarea')
-    textarea.value = text
-    document.body.appendChild(textarea)
-    textarea.select()
-    document.execCommand('copy')
-    document.body.removeChild(textarea)
-  }
-}
+import { copyToClipboard } from './clipboard'
 
 /** Copy button with checkmark feedback */
 function CopyButton({ text, className = '' }: { text: string; className?: string }) {

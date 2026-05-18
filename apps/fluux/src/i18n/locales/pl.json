@@ -457,6 +457,9 @@
         "moderateReasonPlaceholder": "Dlaczego ta wiadomość jest usuwana?",
         "moderateAndBan": "Również zbanuj tego użytkownika z pokoju",
         "imageUnavailable": "Obraz już niedostępny",
+        "copyImageUrl": "Kopiuj link obrazu",
+        "openInBrowser": "Otwórz w przeglądarce",
+        "saveImage": "Zapisz obraz",
         "videoUnavailable": "Film już niedostępny",
         "audioUnavailable": "Audio już niedostępne",
         "typing": {

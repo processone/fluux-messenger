@@ -456,6 +456,9 @@
         "moderateReasonPlaceholder": "Prečo sa táto správa odstraňuje?",
         "moderateAndBan": "Tiež zakázať tohto používateľa v miestnosti",
         "imageUnavailable": "Obrázok už nie je dostupný",
+        "copyImageUrl": "Kopírovať odkaz obrázka",
+        "openInBrowser": "Otvoriť v prehliadači",
+        "saveImage": "Uložiť obrázok",
         "videoUnavailable": "Video už nie je dostupné",
         "audioUnavailable": "Zvuk už nie je dostupný",
         "typing": {

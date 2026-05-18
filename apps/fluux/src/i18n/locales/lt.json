@@ -455,6 +455,9 @@
         "moderateReasonPlaceholder": "Kodėl ši žinutė šalinama?",
         "moderateAndBan": "Taip pat uždrausti šiam naudotojui prieigą prie kambario",
         "imageUnavailable": "Paveikslėlis nebepasiekiamas",
+        "copyImageUrl": "Kopijuoti vaizdo nuorodą",
+        "openInBrowser": "Atidaryti naršyklėje",
+        "saveImage": "Išsaugoti vaizdą",
         "videoUnavailable": "Vaizdo įrašas nebepasiekiamas",
         "audioUnavailable": "Garso įrašas nebepasiekiamas",
         "typing": {

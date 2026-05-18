@@ -455,6 +455,9 @@
         "moderateReasonPlaceholder": "Почему это сообщение удаляется?",
         "moderateAndBan": "Также забанить этого пользователя в комнате",
         "imageUnavailable": "Изображение больше недоступно",
+        "copyImageUrl": "Копировать ссылку на изображение",
+        "openInBrowser": "Открыть в браузере",
+        "saveImage": "Сохранить изображение",
         "videoUnavailable": "Видео больше недоступно",
         "audioUnavailable": "Аудио больше недоступно",
         "typing": {

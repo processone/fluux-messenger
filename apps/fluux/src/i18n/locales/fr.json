@@ -456,6 +456,9 @@
         "moderateReasonPlaceholder": "Pourquoi ce message est-il supprimé ?",
         "moderateAndBan": "Bannir également cet utilisateur du salon",
         "imageUnavailable": "Image non disponible",
+        "copyImageUrl": "Copier le lien de l'image",
+        "openInBrowser": "Ouvrir dans le navigateur",
+        "saveImage": "Enregistrer l'image",
         "videoUnavailable": "Vidéo non disponible",
         "audioUnavailable": "Audio non disponible",
         "typing": {

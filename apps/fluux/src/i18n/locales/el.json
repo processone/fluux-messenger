@@ -456,6 +456,9 @@
         "moderateReasonPlaceholder": "Γιατί αφαιρείται αυτό το μήνυμα;",
         "moderateAndBan": "Αποκλεισμός αυτού του χρήστη από το δωμάτιο",
         "imageUnavailable": "Η εικόνα δεν είναι πλέον διαθέσιμη",
+        "copyImageUrl": "Αντιγραφή συνδέσμου εικόνας",
+        "openInBrowser": "Άνοιγμα στο πρόγραμμα περιήγησης",
+        "saveImage": "Αποθήκευση εικόνας",
         "videoUnavailable": "Το βίντεο δεν είναι πλέον διαθέσιμο",
         "audioUnavailable": "Ο ήχος δεν είναι πλέον διαθέσιμος",
         "typing": {

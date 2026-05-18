@@ -455,6 +455,9 @@
         "moderateReasonPlaceholder": "Hvers vegna eru þessi skilaboð fjarlægð?",
         "moderateAndBan": "Banna einnig þennan notanda úr herberginu",
         "imageUnavailable": "Mynd ekki lengur tiltæk",
+        "copyImageUrl": "Afrita myndatengil",
+        "openInBrowser": "Opna í vafra",
+        "saveImage": "Vista mynd",
         "videoUnavailable": "Myndband ekki lengur tiltækt",
         "audioUnavailable": "Hljóð ekki lengur tiltækt",
         "typing": {

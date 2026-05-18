@@ -455,6 +455,9 @@
         "moderateReasonPlaceholder": "为什么要移除此消息？",
         "moderateAndBan": "同时将此用户从房间中封禁",
         "imageUnavailable": "图片不再可用",
+        "copyImageUrl": "复制图片链接",
+        "openInBrowser": "在浏览器中打开",
+        "saveImage": "保存图片",
         "videoUnavailable": "视频不再可用",
         "audioUnavailable": "音频不再可用",
         "typing": {

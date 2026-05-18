@@ -457,6 +457,9 @@
         "moderateReasonPlaceholder": "Zakaj se to sporočilo odstranjuje?",
         "moderateAndBan": "Tudi prepovej tega uporabnika iz sobe",
         "imageUnavailable": "Slika ni več na voljo",
+        "copyImageUrl": "Kopiraj povezavo slike",
+        "openInBrowser": "Odpri v brskalniku",
+        "saveImage": "Shrani sliko",
         "videoUnavailable": "Video ni več na voljo",
         "audioUnavailable": "Zvok ni več na voljo",
         "typing": {

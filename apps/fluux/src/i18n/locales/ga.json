@@ -455,6 +455,9 @@
         "moderateReasonPlaceholder": "Cén fáth a bhfuil an teachtaireacht seo á baint?",
         "moderateAndBan": "Coisc an t-úsáideoir seo ón seomra freisin",
         "imageUnavailable": "Níl an íomhá ar fáil a thuilleadh",
+        "copyImageUrl": "Cóipeáil nasc íomhá",
+        "openInBrowser": "Oscail sa bhrabhsálaí",
+        "saveImage": "Sábháil íomhá",
         "videoUnavailable": "Níl an físeán ar fáil a thuilleadh",
         "audioUnavailable": "Níl an fhuaim ar fáil a thuilleadh",
         "typing": {

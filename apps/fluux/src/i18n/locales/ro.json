@@ -457,6 +457,9 @@
         "moderateReasonPlaceholder": "De ce este eliminat acest mesaj?",
         "moderateAndBan": "De asemenea, interzice acestui utilizator accesul în cameră",
         "imageUnavailable": "Imaginea nu mai este disponibilă",
+        "copyImageUrl": "Copiază linkul imaginii",
+        "openInBrowser": "Deschide în browser",
+        "saveImage": "Salvează imaginea",
         "videoUnavailable": "Videoclipul nu mai este disponibil",
         "audioUnavailable": "Fișierul audio nu mai este disponibil",
         "typing": {

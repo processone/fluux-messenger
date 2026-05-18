@@ -455,6 +455,9 @@
         "moderateReasonPlaceholder": "Why is this message being removed?",
         "moderateAndBan": "Also ban this user from the room",
         "imageUnavailable": "Image no longer available",
+        "copyImageUrl": "Copy image URL",
+        "openInBrowser": "Open in browser",
+        "saveImage": "Save image",
         "videoUnavailable": "Video no longer available",
         "audioUnavailable": "Audio no longer available",
         "typing": {

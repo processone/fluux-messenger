@@ -3,7 +3,9 @@ import { useTranslation } from 'react-i18next'
 import { Music, Film, FileText, Archive, File, Download, BookOpen, Loader2, ImageOff, FileX } from 'lucide-react'
 import { Tooltip } from './Tooltip'
 import { ImageLightbox } from './ImageLightbox'
+import { ImageContextMenu } from './ImageContextMenu'
 import { formatBytes, useAttachmentUrl } from '@/hooks'
+import { useContextMenu } from '@/hooks/useContextMenu'
 import { isPdfMimeType, isDocumentMimeType, isArchiveMimeType, isEbookMimeType, getFileTypeLabel } from '@/utils/thumbnail'
 import type { FileAttachment } from '@fluux/sdk'
 
@@ -33,6 +35,7 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
   const { t } = useTranslation()
   const isImage = attachment.mediaType?.startsWith('image/') ?? false
   const [lightboxOpen, setLightboxOpen] = useState(false)
+  const imageMenu = useContextMenu()
 
   // Use thumbnail if available, otherwise fall back to main URL. Encryption
   // params track the chosen source: if we picked the thumbnail URL we need
@@ -127,7 +130,14 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
     <>
       <button
         type="button"
-        onClick={() => setLightboxOpen(true)}
+        onClick={() => {
+          if (imageMenu.isOpen || imageMenu.longPressTriggered.current) return
+          setLightboxOpen(true)
+        }}
+        onContextMenu={imageMenu.handleContextMenu}
+        onTouchStart={imageMenu.handleTouchStart}
+        onTouchEnd={imageMenu.handleTouchEnd}
+        onTouchMove={imageMenu.handleTouchEnd}
         className="block pt-2 rounded-lg overflow-hidden hover:opacity-90 transition-opacity cursor-pointer text-start"
         style={{ maxWidth: `${maxWidthPx}px` }}
         tabIndex={-1}
@@ -139,9 +149,7 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
           height={height}
           className="max-w-full rounded-lg object-contain"
           style={{
-            // Always reserve space using aspect ratio to prevent layout shift
             aspectRatio: aspectRatio,
-            // Max height for reasonable sizing
             maxHeight: '300px',
           }}
           loading="lazy"
@@ -152,6 +160,12 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
           }}
         />
       </button>
+      <ImageContextMenu
+        originalUrl={attachment.url}
+        proxiedUrl={proxiedImageSrc}
+        filename={attachment.name}
+        menu={imageMenu}
+      />
       {lightboxOpen && (
         <ImageLightbox
           src={attachment.url}

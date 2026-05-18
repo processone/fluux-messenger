@@ -455,6 +455,9 @@
         "moderateReasonPlaceholder": "Чаму гэта паведамленне выдаляецца?",
         "moderateAndBan": "Таксама забараніць гэтага карыстальніка ў пакоі",
         "imageUnavailable": "Выява больш недаступная",
+        "copyImageUrl": "Капіяваць спасылку на выяву",
+        "openInBrowser": "Адкрыць у браўзеры",
+        "saveImage": "Захаваць выяву",
         "videoUnavailable": "Відэа больш недаступнае",
         "audioUnavailable": "Аўдыё больш недаступнае",
         "typing": {

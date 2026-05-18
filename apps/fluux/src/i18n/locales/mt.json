@@ -457,6 +457,9 @@
         "moderateReasonPlaceholder": "Għaliex qed jitneħħa dan il-messaġġ?",
         "moderateAndBan": "Ipprojbixxi wkoll dan l-utent mill-kamra",
         "imageUnavailable": "L-immaġni m'għadhiex disponibbli",
+        "copyImageUrl": "Ikkopja l-link tal-istampa",
+        "openInBrowser": "Iftaħ fil-browser",
+        "saveImage": "Issejvja l-istampa",
         "videoUnavailable": "Il-vidjo m'għadux disponibbli",
         "audioUnavailable": "L-awdjo m'għadux disponibbli",
         "typing": {

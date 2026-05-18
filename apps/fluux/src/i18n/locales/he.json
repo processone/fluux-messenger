@@ -455,6 +455,9 @@
         "moderateReasonPlaceholder": "מדוע ההודעה מוסרת?",
         "moderateAndBan": "גם חסום את המשתמש מהחדר",
         "imageUnavailable": "התמונה אינה זמינה יותר",
+        "copyImageUrl": "העתקת קישור תמונה",
+        "openInBrowser": "פתיחה בדפדפן",
+        "saveImage": "שמירת תמונה",
         "videoUnavailable": "הסרטון אינו זמין יותר",
         "audioUnavailable": "השמע אינו זמין יותר",
         "typing": {

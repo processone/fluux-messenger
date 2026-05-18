@@ -455,6 +455,9 @@
         "moderateReasonPlaceholder": "Miksi tämä viesti poistetaan?",
         "moderateAndBan": "Estä myös tämä käyttäjä huoneesta",
         "imageUnavailable": "Kuva ei ole enää saatavilla",
+        "copyImageUrl": "Kopioi kuvan linkki",
+        "openInBrowser": "Avaa selaimessa",
+        "saveImage": "Tallenna kuva",
         "videoUnavailable": "Video ei ole enää saatavilla",
         "audioUnavailable": "Ääni ei ole enää saatavilla",
         "typing": {

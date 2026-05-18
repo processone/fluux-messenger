@@ -455,6 +455,9 @@
         "moderateReasonPlaceholder": "Защо това съобщение се премахва?",
         "moderateAndBan": "Също забрани този потребител от стаята",
         "imageUnavailable": "Изображението вече не е налично",
+        "copyImageUrl": "Копиране на връзката към изображението",
+        "openInBrowser": "Отваряне в браузъра",
+        "saveImage": "Запазване на изображението",
         "videoUnavailable": "Видеото вече не е налично",
         "audioUnavailable": "Аудиото вече не е налично",
         "typing": {

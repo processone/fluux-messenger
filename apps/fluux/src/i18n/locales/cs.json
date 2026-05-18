@@ -457,6 +457,9 @@
         "moderateReasonPlaceholder": "Proč je tato zpráva odstraňována?",
         "moderateAndBan": "Také zakázat tohoto uživatele v místnosti",
         "imageUnavailable": "Obrázek již není k dispozici",
+        "copyImageUrl": "Kopírovat odkaz obrázku",
+        "openInBrowser": "Otevřít v prohlížeči",
+        "saveImage": "Uložit obrázek",
         "videoUnavailable": "Video již není k dispozici",
         "audioUnavailable": "Zvuk již není k dispozici",
         "typing": {

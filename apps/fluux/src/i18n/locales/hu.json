@@ -455,6 +455,9 @@
         "moderateReasonPlaceholder": "Miért kerül eltávolításra ez az üzenet?",
         "moderateAndBan": "A felhasználó kitiltása is a szobából",
         "imageUnavailable": "A kép már nem érhető el",
+        "copyImageUrl": "Kép linkjének másolása",
+        "openInBrowser": "Megnyitás böngészőben",
+        "saveImage": "Kép mentése",
         "videoUnavailable": "A videó már nem érhető el",
         "audioUnavailable": "A hang már nem érhető el",
         "typing": {
