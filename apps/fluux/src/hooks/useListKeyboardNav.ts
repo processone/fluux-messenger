@@ -124,6 +124,10 @@ export function useListKeyboardNav<T>({
   // When scrollIntoView shifts the list, the browser fires mousemove on items passing under the
   // stationary cursor — we must ignore those.
   const lastMousePosRef = useRef<{ x: number; y: number } | null>(null)
+  // Track why selectedIndex changed so the auto-scroll effect only fires for
+  // keyboard and external (activeItemId) sources — not mouse hover, which would
+  // fight touchpad momentum scrolling.
+  const selectionSourceRef = useRef<'keyboard' | 'mouse' | 'external' | 'reset'>('reset')
 
   // Trigger bounce animation at list boundaries
   const triggerBounce = (direction: 'top' | 'bottom') => {
@@ -152,10 +156,12 @@ export function useListKeyboardNav<T>({
     if (prevId) {
       const newIndex = itemIdToIndexRef.current.get(prevId)
       if (newIndex !== undefined) {
+        selectionSourceRef.current = 'reset'
         setSelectedIndex(newIndex)
         return
       }
     }
+    selectionSourceRef.current = 'reset'
     setSelectedIndex(-1)
     selectedItemIdRef.current = null
   }, [itemsKey])
@@ -168,6 +174,7 @@ export function useListKeyboardNav<T>({
     if (activeItemId == null) return
     const newIndex = itemIdToIndexRef.current.get(activeItemId)
     if (newIndex !== undefined) {
+      selectionSourceRef.current = 'external'
       setSelectedIndex(newIndex)
       selectedItemIdRef.current = activeItemId
     }
@@ -286,6 +293,7 @@ export function useListKeyboardNav<T>({
         const { newIndex, bounced } = calculateNewIndex(selectedIndex)
 
         // Update state and track selected item ID for preservation across list changes
+        selectionSourceRef.current = 'keyboard'
         setSelectedIndex(newIndex)
         selectedItemIdRef.current = newIndex >= 0 && newIndex < items.length ? getItemId(items[newIndex]) : null
 
@@ -313,8 +321,10 @@ export function useListKeyboardNav<T>({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [enabled, handleKeyDown])
 
-  // Auto-scroll selected item into view
+  // Auto-scroll selected item into view (keyboard and external sources only —
+  // mouse hover must not trigger scrollIntoView or it fights touchpad momentum).
   useEffect(() => {
+    if (selectionSourceRef.current === 'mouse') return
     if (selectedIndex < 0 || !listRef.current || !items[selectedIndex]) return
 
     const itemId = getItemId(items[selectedIndex])
@@ -336,6 +346,7 @@ export function useListKeyboardNav<T>({
         const y = e.clientY
         if (prev && prev.x === x && prev.y === y) return
         lastMousePosRef.current = { x, y }
+        selectionSourceRef.current = 'mouse'
         setSelectedIndex(index)
       },
       onMouseMove: (e: React.MouseEvent) => {
@@ -364,6 +375,7 @@ export function useListKeyboardNav<T>({
     onMouseLeave: () => {
       // Clear hover highlight when mouse leaves the list (unless in keyboard nav mode)
       if (!isKeyboardNav) {
+        selectionSourceRef.current = 'mouse'
         setSelectedIndex(-1)
       }
     },
