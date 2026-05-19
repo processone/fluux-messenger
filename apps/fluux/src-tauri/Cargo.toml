@@ -29,7 +29,7 @@ serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
 tokio-tungstenite = "0.29"
 futures-util = "0.3"
-quick-xml = "0.39"
+quick-xml = "0.40"
 tokio-rustls = "0.26"
 rustls = { version = "0.23", features = ["ring"] }
 rustls-native-certs = "0.8"
@@ -71,7 +71,7 @@ tauri-plugin-updater = "2"
 serde_json = "1"
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 reqwest = { version = "0.13", features = ["blocking"] }
-scraper = "0.26"
+scraper = "0.27"
 
 # user-idle for Windows (macOS uses ioreg, Linux uses direct X11 calls)
 [target.'cfg(target_os = "windows")'.dependencies]
@@ -79,7 +79,7 @@ user-idle = "0.6"
 
 # ctor for Linux to set env vars before main() - required for WebKitGTK workaround
 [target.'cfg(target_os = "linux")'.dependencies]
-ctor = "0.8"
+ctor = "1.0"
 x11 = { version = "2", features = ["xlib", "xss"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]

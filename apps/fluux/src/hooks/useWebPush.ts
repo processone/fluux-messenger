@@ -61,16 +61,14 @@ async function registerPush(
       console.log('[WebPush] New subscription created, endpoint:', subscription.endpoint)
     }
 
-    const endpoint = subscription.endpoint
-    const p256dhKey = subscription.getKey('p256dh')
-    const authKey = subscription.getKey('auth')
-    if (!p256dhKey || !authKey) {
+    const json = subscription.toJSON()
+    const endpoint = json.endpoint ?? subscription.endpoint
+    const p256dh = json.keys?.p256dh
+    const auth = json.keys?.auth
+    if (!p256dh || !auth) {
       console.error('[WebPush] Missing subscription keys')
       return
     }
-
-    const p256dh = arrayBufferToBase64(p256dhKey)
-    const auth = arrayBufferToBase64(authKey)
 
     console.log('[WebPush] Registering with XMPP server, endpoint:', endpoint)
     await client.webPush.registerSubscription(endpoint, p256dh, auth, service.appId)
@@ -150,11 +148,4 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
   const rawData = atob(base64)
   return Uint8Array.from(rawData, (char) => char.charCodeAt(0))
-}
-
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer)
-  let binary = ''
-  bytes.forEach((b) => (binary += String.fromCharCode(b)))
-  return btoa(binary)
 }
