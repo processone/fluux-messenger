@@ -9,7 +9,6 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { DeleteOpenpgpKeyDialog } from '@/components/DeleteOpenpgpKeyDialog'
 import { BackupPassphraseDialog } from '@/components/BackupPassphraseDialog'
 import { RestorePassphraseDialog } from '@/components/RestorePassphraseDialog'
-import { EnableWithBackupDialog } from '@/components/EnableWithBackupDialog'
 import { IdentityChoiceDialog } from '@/components/IdentityChoiceDialog'
 import { OwnKeyConflictBanner } from '@/components/OwnKeyConflictBanner'
 import { UnlockEncryptionDialog } from '@/components/UnlockEncryptionDialog'
@@ -80,14 +79,6 @@ export function EncryptionSettings() {
   // a remote backup exists, local and server are known to be in sync
   // and the backup/restore buttons are redundant.
   const [backedUpFingerprint, setBackedUpFingerprint] = useState<string | null>(null)
-  // Non-null only while the "we found a backup on enable — restore or
-  // start fresh?" dialog is open. Holds the armored backup ciphertext
-  // the probe pulled from PEP so the restore handler doesn't need to
-  // re-fetch it.
-  const [pendingEnableBackup, setPendingEnableBackup] = useState<{
-    accountJid: string
-    backupMessage: string
-  } | null>(null)
   // Set whenever the toggle (or auto-init) detected an existing server-
   // side OpenPGP identity but this device has no local key. The user must
   // resolve via the IdentityChoiceDialog — silent generation is refused
@@ -307,42 +298,7 @@ export function EncryptionSettings() {
     }
   }, [openpgpEnabled, online, client, jid, setOpenpgpEnabled, addToast, t])
 
-  const handleEnableRestore = useCallback(
-    async (passphrase: string) => {
-      if (!pendingEnableBackup) return
-      const { invoke } = await import('@tauri-apps/api/core')
-      await invoke('openpgp_backup_import', {
-        accountJid: pendingEnableBackup.accountJid,
-        backupMessage: pendingEnableBackup.backupMessage,
-        passphrase,
-      })
-      // The import persisted the TSK on disk; register now so the
-      // plugin's init loads (not generates) and the identity the user
-      // picked is the one advertised.
-      await registerE2EEPlugins(client)
-      setPendingEnableBackup(null)
-      addToast('success', t('settings.encryption.restoreSuccess'))
-    },
-    [pendingEnableBackup, client, addToast, t],
-  )
-
-  const handleEnableUseFresh = useCallback(async () => {
-    // User declined the backup — register without touching the
-    // secret-key node. Generation produces a new identity that will
-    // overwrite the server-side public-keys metadata, which is what
-    // the user has explicitly chosen.
-    await registerE2EEPlugins(client)
-    setPendingEnableBackup(null)
-  }, [client])
-
-  const handleEnableCancel = useCallback(() => {
-    // Revert the toggle: neither register nor generate. The user
-    // isn't ready to decide yet; leave the server backup untouched.
-    setPendingEnableBackup(null)
-    setOpenpgpEnabled(false)
-  }, [setOpenpgpEnabled])
-
-  // --- Identity choice dialog handlers (web silent-fork prevention) ---
+  // --- Identity choice dialog handlers (silent-fork prevention) ---
   // Each handler resolves the `pendingIdentityChoice` state with one of
   // the three explicit recovery paths. All three end by clearing the
   // pending state and routing through the rest of the toggle flow so the
@@ -423,9 +379,8 @@ export function EncryptionSettings() {
   }, [client, t, addToast])
 
   const handleIdentityChoiceCancel = useCallback(() => {
-    // Same semantics as `handleEnableCancel`: the user opted out, so
-    // turn the toggle back off rather than leaving them in a half-
-    // registered state where the plugin sits idle.
+    // User opted out — turn the toggle back off rather than leaving
+    // them in a half-registered state where the plugin sits idle.
     setPendingIdentityChoice(null)
     setOpenpgpEnabled(false)
   }, [setOpenpgpEnabled])
@@ -1140,14 +1095,6 @@ export function EncryptionSettings() {
           onCancel={() => {
             if (!isRotating) setShowRotatePassphraseDialog(false)
           }}
-        />
-      )}
-
-      {pendingEnableBackup && (
-        <EnableWithBackupDialog
-          onRestore={handleEnableRestore}
-          onUseFresh={handleEnableUseFresh}
-          onCancel={handleEnableCancel}
         />
       )}
 

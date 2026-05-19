@@ -700,10 +700,6 @@
                 "created": "Creada",
                 "confirm": "Utilitza aquesta clau"
             },
-            "enableBackupFoundTitle": "S'ha trobat una còpia de seguretat en aquest servidor",
-            "enableBackupFoundBody": "Hi ha una còpia de seguretat d'una clau OpenPGP desada per a aquest compte. Introdueix la frase de pas que vas desar per restaurar la teva identitat existent, o comença de zero per generar una clau nova (que substituirà la part pública de la còpia).",
-            "enableBackupFoundWarning": "Només la frase de pas desada quan es va crear la còpia pot restaurar-la. Si l'has perdut, comença de zero i fes una còpia de la nova clau després.",
-            "enableBackupFoundUseFresh": "Comença de zero",
             "backupConflictTitle": "Substituir la còpia de seguretat existent?",
             "backupConflictMessage": "Ja hi ha una còpia de seguretat desada en aquest servidor, però no es va crear des d'aquest dispositiu. Substituir-la farà que l'antiga no es pugui recuperar — qui tingui només la seva frase de pas ja no podrà restaurar-la. Continua només si estàs segur que ja no necessites aquesta còpia.",
             "backupConflictAction": "Substitueix la còpia",

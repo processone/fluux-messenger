@@ -698,10 +698,6 @@
                 "created": "Skapad",
                 "confirm": "Använd denna nyckel"
             },
-            "enableBackupFoundTitle": "Säkerhetskopia hittades på denna server",
-            "enableBackupFoundBody": "En säkerhetskopia av en OpenPGP-nyckel är lagrad för detta konto. Ange den sparade lösenfrasen för att återställa din befintliga identitet, eller börja om för att generera en ny nyckel (som ersätter säkerhetskopians publika del).",
-            "enableBackupFoundWarning": "Endast lösenfrasen som sparades när säkerhetskopian skapades kan återställa den. Om du har tappat bort den, börja om och säkerhetskopiera den nya nyckeln efteråt.",
-            "enableBackupFoundUseFresh": "Börja om",
             "backupConflictTitle": "Ersätta den befintliga säkerhetskopian?",
             "backupConflictMessage": "En säkerhetskopia är redan lagrad på denna server, men den skapades inte från denna enhet. Att ersätta den gör den gamla säkerhetskopian oåterställbar — den som bara har dess lösenfras kan inte längre återställa från den. Fortsätt endast om du är säker på att du inte längre behöver den kopian.",
             "backupConflictAction": "Ersätt säkerhetskopia",

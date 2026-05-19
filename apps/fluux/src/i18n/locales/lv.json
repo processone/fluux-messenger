@@ -699,10 +699,6 @@
                 "created": "Izveidota",
                 "confirm": "Izmantot šo atslēgu"
             },
-            "enableBackupFoundTitle": "Šajā serverī atrasta rezerves kopija",
-            "enableBackupFoundBody": "Šim kontam ir saglabāta OpenPGP atslēgas rezerves kopija. Ievadiet saglabāto paroles frāzi, lai atjaunotu esošo identitāti, vai sāciet no jauna, lai ģenerētu jaunu atslēgu (kas aizstās rezerves kopijas publisko daļu).",
-            "enableBackupFoundWarning": "Rezerves kopiju var atjaunot tikai paroles frāze, kas saglabāta tās izveides laikā. Ja esat to pazaudējis, sāciet no jauna un pēc tam izveidojiet jaunās atslēgas rezerves kopiju.",
-            "enableBackupFoundUseFresh": "Sākt no jauna",
             "backupConflictTitle": "Aizstāt esošo rezerves kopiju?",
             "backupConflictMessage": "Šajā serverī jau ir saglabāta rezerves kopija, bet tā nav izveidota no šīs ierīces. Tās aizstāšana padara veco rezerves kopiju neatjaunojamu — tas, kuram ir tikai tās paroles frāze, vairs nevarēs no tās atjaunot. Turpiniet tikai tad, ja esat pārliecināts, ka šī kopija jums vairs nav vajadzīga.",
             "backupConflictAction": "Aizstāt kopiju",

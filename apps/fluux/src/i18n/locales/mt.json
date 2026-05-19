@@ -700,10 +700,6 @@
                 "created": "Maħluq",
                 "confirm": "Uża din iċ-ċavetta"
             },
-            "enableBackupFoundTitle": "Instab backup fuq dan is-server",
-            "enableBackupFoundBody": "Hemm backup ta' ċavetta OpenPGP maħżun għal dan il-kont. Daħħal il-frażi sigrieta li sejvjajt biex tirripristina l-identità eżistenti tiegħek, jew ibda mill-ġdid biex tiġġenera ċavetta ġdida (li tieħu l-post tal-parti pubblika tal-backup).",
-            "enableBackupFoundWarning": "Tista' tirripristina l-backup biss bil-frażi sigrieta li sejvjajt meta nħoloq. Jekk tlift, ibda mill-ġdid u sejvja ċ-ċavetta l-ġdida wara.",
-            "enableBackupFoundUseFresh": "Ibda mill-ġdid",
             "backupConflictTitle": "Tibdel il-backup eżistenti?",
             "backupConflictMessage": "Diġà hemm backup maħżun fuq dan is-server, iżda ma nħoloqx minn dan it-tagħmir. Li tibdlu jagħmel il-backup il-qadim irripristinabbli — min għandu biss il-frażi tagħha mhux se jkun jista' jirripristina minnha aktar. Ipproċedi biss jekk tkun ċert li ma għadekx teħtieġ dik il-kopja.",
             "backupConflictAction": "Ibdel il-backup",

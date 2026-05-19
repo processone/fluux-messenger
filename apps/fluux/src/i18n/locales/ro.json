@@ -700,10 +700,6 @@
                 "created": "Creată",
                 "confirm": "Folosește această cheie"
             },
-            "enableBackupFoundTitle": "Copie de rezervă găsită pe acest server",
-            "enableBackupFoundBody": "Pentru acest cont este stocată o copie de rezervă a unei chei OpenPGP. Introduceți fraza de acces salvată pentru a vă restaura identitatea existentă, sau începeți de la zero pentru a genera o cheie nouă (care va înlocui partea publică a copiei).",
-            "enableBackupFoundWarning": "Doar fraza de acces salvată la crearea copiei poate să o restaureze. Dacă ați pierdut-o, începeți de la zero și creați o nouă copie de rezervă a noii chei după aceea.",
-            "enableBackupFoundUseFresh": "Începe de la zero",
             "backupConflictTitle": "Înlocuiți copia de rezervă existentă?",
             "backupConflictMessage": "Pe acest server este deja stocată o copie de rezervă, dar nu a fost creată de pe acest dispozitiv. Înlocuirea ei face vechea copie de neînlocuit — cine are doar fraza ei nu va mai putea restaura din ea. Continuați doar dacă sunteți sigur că nu mai aveți nevoie de acea copie.",
             "backupConflictAction": "Înlocuiește copia",

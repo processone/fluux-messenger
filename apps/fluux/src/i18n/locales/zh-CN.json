@@ -698,10 +698,6 @@
                 "created": "创建时间",
                 "confirm": "使用此密钥"
             },
-            "enableBackupFoundTitle": "此服务器上找到备份",
-            "enableBackupFoundBody": "此账号已存储 OpenPGP 密钥备份。输入保存的密码短语以恢复您的现有身份，或重新开始生成新密钥（新密钥将替换备份中的公钥部分）。",
-            "enableBackupFoundWarning": "只有创建备份时保存的密码短语才能恢复它。如果密码短语丢失，请重新开始，并在之后备份新密钥。",
-            "enableBackupFoundUseFresh": "重新开始",
             "backupConflictTitle": "替换现有备份?",
             "backupConflictMessage": "此服务器上已存储有一份备份，但该备份并非从此设备创建。替换会使旧备份不可恢复 — 任何仅持有其密码短语的人都将无法再从中恢复。如果您确定不再需要该副本，请继续操作。",
             "backupConflictAction": "替换备份",

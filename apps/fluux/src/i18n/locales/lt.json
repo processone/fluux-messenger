@@ -698,10 +698,6 @@
                 "created": "Sukurtas",
                 "confirm": "Naudoti šį raktą"
             },
-            "enableBackupFoundTitle": "Šiame serveryje rasta atsarginė kopija",
-            "enableBackupFoundBody": "Šiai paskyrai saugoma OpenPGP rakto atsarginė kopija. Įveskite išsaugotą slaptažodinę frazę, kad atkurtumėte esamą tapatybę, arba pradėkite iš naujo, kad sugeneruotumėte naują raktą (kuris pakeis atsarginės kopijos viešąją dalį).",
-            "enableBackupFoundWarning": "Tik atsarginės kopijos kūrimo metu išsaugota slaptažodinė frazė gali ją atkurti. Jei pametėte ją, pradėkite iš naujo ir vėliau išsaugokite naują raktą.",
-            "enableBackupFoundUseFresh": "Pradėti iš naujo",
             "backupConflictTitle": "Pakeisti esamą atsarginę kopiją?",
             "backupConflictMessage": "Šiame serveryje jau saugoma atsarginė kopija, bet ji nebuvo sukurta iš šio įrenginio. Jos pakeitimas padarys senąją kopiją neatkuriama — kas turi tik jos slaptažodinę frazę, nebegalės iš jos atkurti. Tęskite tik tada, jei tikrai nebereikia tos kopijos.",
             "backupConflictAction": "Pakeisti kopiją",

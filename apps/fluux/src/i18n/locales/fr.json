@@ -699,10 +699,6 @@
                 "created": "Créée",
                 "confirm": "Utiliser cette clé"
             },
-            "enableBackupFoundTitle": "Sauvegarde trouvée sur ce serveur",
-            "enableBackupFoundBody": "Une sauvegarde d'une clé OpenPGP est stockée pour ce compte. Saisissez la phrase secrète enregistrée pour restaurer votre identité existante, ou démarrez avec une nouvelle clé (la partie publique de la sauvegarde sera remplacée).",
-            "enableBackupFoundWarning": "Seule la phrase secrète enregistrée lors de la création de la sauvegarde permet de la restaurer. Si vous l'avez perdue, démarrez à neuf et sauvegardez la nouvelle clé ensuite.",
-            "enableBackupFoundUseFresh": "Démarrer à neuf",
             "backupConflictTitle": "Remplacer la sauvegarde existante ?",
             "backupConflictMessage": "Une sauvegarde est déjà stockée sur ce serveur, mais elle n'a pas été créée depuis cet appareil. La remplacer rendra l'ancienne sauvegarde irrécupérable — toute personne ne disposant que de l'ancienne phrase secrète ne pourra plus la restaurer. Continuez seulement si vous êtes sûr de ne plus avoir besoin de cette copie.",
             "backupConflictAction": "Remplacer la sauvegarde",

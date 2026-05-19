@@ -614,10 +614,6 @@
                 "created": "Created",
                 "confirm": "Use this key"
             },
-            "enableBackupFoundTitle": "Backup found on this server",
-            "enableBackupFoundBody": "A backup of an OpenPGP key is stored for this account. Enter the passphrase you saved to restore your existing identity, or start fresh to generate a new key (which will replace the backup's public half).",
-            "enableBackupFoundWarning": "Only the passphrase saved when the backup was created can restore it. If you've lost it, start fresh and back up the new key afterwards.",
-            "enableBackupFoundUseFresh": "Start fresh",
             "backupConflictTitle": "Replace the existing backup?",
             "backupConflictMessage": "A backup is already stored on this server, but it wasn't created from this device. Replacing it makes the old backup unrecoverable — anyone holding only its passphrase will no longer be able to restore from it. Continue if you're sure you don't need that copy any more.",
             "backupConflictAction": "Replace backup",

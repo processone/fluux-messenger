@@ -699,10 +699,6 @@
                 "created": "Vytvorený",
                 "confirm": "Použiť tento kľúč"
             },
-            "enableBackupFoundTitle": "Na tomto serveri nájdená záloha",
-            "enableBackupFoundBody": "Pre tento účet je uložená záloha kľúča OpenPGP. Zadajte uložené heslo na obnovu existujúcej identity, alebo začnite odznova na vygenerovanie nového kľúča (ktorý nahradí verejnú časť zálohy).",
-            "enableBackupFoundWarning": "Zálohu môže obnoviť iba heslo uložené pri jej vytvorení. Ak ste ho stratili, začnite odznova a potom nový kľúč zálohujte.",
-            "enableBackupFoundUseFresh": "Začať odznova",
             "backupConflictTitle": "Nahradiť existujúcu zálohu?",
             "backupConflictMessage": "Na tomto serveri je už uložená záloha, ale nebola vytvorená z tohto zariadenia. Jej nahradenie znamená, že stará záloha bude neobnoviteľná — kto má iba jej heslo, už z nej nebude môcť obnoviť. Pokračujte iba ak ste si istí, že túto kópiu už nepotrebujete.",
             "backupConflictAction": "Nahradiť zálohu",

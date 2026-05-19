@@ -700,10 +700,6 @@
                 "created": "Utworzony",
                 "confirm": "Użyj tego klucza"
             },
-            "enableBackupFoundTitle": "Znaleziono kopię zapasową na tym serwerze",
-            "enableBackupFoundBody": "Dla tego konta przechowywana jest kopia zapasowa klucza OpenPGP. Wprowadź zapisane hasło, aby przywrócić istniejącą tożsamość, lub zacznij od nowa, aby wygenerować nowy klucz (który zastąpi część publiczną kopii zapasowej).",
-            "enableBackupFoundWarning": "Tylko hasło zapisane przy tworzeniu kopii może ją przywrócić. Jeśli je straciłeś, zacznij od nowa i potem zrób kopię nowego klucza.",
-            "enableBackupFoundUseFresh": "Zacznij od nowa",
             "backupConflictTitle": "Zastąpić istniejącą kopię zapasową?",
             "backupConflictMessage": "Na tym serwerze przechowywana jest już kopia zapasowa, ale nie została utworzona z tego urządzenia. Zastąpienie jej sprawi, że stara kopia będzie nie do odzyskania — kto ma tylko jej hasło, nie będzie już mógł z niej przywrócić. Kontynuuj tylko jeśli masz pewność, że już nie potrzebujesz tej kopii.",
             "backupConflictAction": "Zastąp kopię",

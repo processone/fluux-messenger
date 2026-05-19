@@ -698,10 +698,6 @@
                 "created": "Stvoreno",
                 "confirm": "Koristi ovaj ključ"
             },
-            "enableBackupFoundTitle": "Sigurnosna kopija pronađena na ovom poslužitelju",
-            "enableBackupFoundBody": "Za ovaj račun spremljena je sigurnosna kopija OpenPGP ključa. Unesite spremljenu lozinku da obnovite postojeći identitet, ili počnite ispočetka za generiranje novog ključa (koji će zamijeniti javni dio sigurnosne kopije).",
-            "enableBackupFoundWarning": "Sigurnosnu kopiju može obnoviti samo lozinka spremljena pri njenom stvaranju. Ako ste je izgubili, počnite ispočetka i zatim sigurnosno kopirajte novi ključ.",
-            "enableBackupFoundUseFresh": "Počni ispočetka",
             "backupConflictTitle": "Zamijeniti postojeću sigurnosnu kopiju?",
             "backupConflictMessage": "Na ovom poslužitelju već je spremljena sigurnosna kopija, ali nije stvorena s ovog uređaja. Zamjena je čini neobnovljivom — onaj tko ima samo njenu lozinku više neće moći obnoviti iz nje. Nastavite samo ako ste sigurni da vam ta kopija više nije potrebna.",
             "backupConflictAction": "Zamijeni kopiju",

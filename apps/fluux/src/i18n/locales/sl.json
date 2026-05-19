@@ -700,10 +700,6 @@
                 "created": "Ustvarjeno",
                 "confirm": "Uporabi ta ključ"
             },
-            "enableBackupFoundTitle": "Na tem strežniku je najdena varnostna kopija",
-            "enableBackupFoundBody": "Za ta račun je shranjena varnostna kopija ključa OpenPGP. Vnesite shranjeno geslo, da obnovite obstoječo identiteto, ali začnite znova in ustvarite nov ključ (ki bo nadomestil javni del varnostne kopije).",
-            "enableBackupFoundWarning": "Varnostno kopijo lahko obnovi le geslo, shranjeno ob njenem ustvarjanju. Če ste ga izgubili, začnite znova in nato varnostno kopirajte novi ključ.",
-            "enableBackupFoundUseFresh": "Začni znova",
             "backupConflictTitle": "Zamenjati obstoječo varnostno kopijo?",
             "backupConflictMessage": "Na tem strežniku je že shranjena varnostna kopija, vendar ni bila ustvarjena s te naprave. Z zamenjavo postane stara kopija neobnovljiva — kdor ima samo njeno geslo, je iz nje ne bo več mogel obnoviti. Nadaljujte le, če ste prepričani, da te kopije ne potrebujete več.",
             "backupConflictAction": "Zamenjaj kopijo",

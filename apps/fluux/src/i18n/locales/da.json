@@ -698,10 +698,6 @@
                 "created": "Oprettet",
                 "confirm": "Brug denne nøgle"
             },
-            "enableBackupFoundTitle": "Sikkerhedskopi fundet på denne server",
-            "enableBackupFoundBody": "En sikkerhedskopi af en OpenPGP-nøgle er gemt for denne konto. Indtast den gemte adgangssætning for at gendanne din eksisterende identitet, eller start forfra for at generere en ny nøgle (som erstatter sikkerhedskopiens offentlige del).",
-            "enableBackupFoundWarning": "Kun adgangssætningen, der blev gemt, da sikkerhedskopien blev oprettet, kan gendanne den. Hvis du har mistet den, så start forfra og sikkerhedskopier den nye nøgle bagefter.",
-            "enableBackupFoundUseFresh": "Start forfra",
             "backupConflictTitle": "Erstatte den eksisterende sikkerhedskopi?",
             "backupConflictMessage": "Der er allerede gemt en sikkerhedskopi på denne server, men den blev ikke oprettet fra denne enhed. At erstatte den gør den gamle sikkerhedskopi ugendannelig — den, der kun har dens adgangssætning, vil ikke længere kunne gendanne fra den. Fortsæt kun, hvis du er sikker på, at du ikke længere har brug for den kopi.",
             "backupConflictAction": "Erstat sikkerhedskopi",

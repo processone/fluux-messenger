@@ -698,10 +698,6 @@
                 "created": "Létrehozva",
                 "confirm": "Ennek a kulcsnak a használata"
             },
-            "enableBackupFoundTitle": "Biztonsági mentés található ezen a kiszolgálón",
-            "enableBackupFoundBody": "Ehhez a fiókhoz egy OpenPGP-kulcs biztonsági mentése van tárolva. Adja meg az elmentett jelmondatot a meglévő személyazonosság visszaállításához, vagy kezdje előlről, hogy új kulcsot hozzon létre (amely felülírja a biztonsági mentés nyilvános részét).",
-            "enableBackupFoundWarning": "Csak a biztonsági mentés létrehozásakor mentett jelmondat tudja visszaállítani azt. Ha elvesztette, kezdje előlről, és utána mentse el az új kulcsot.",
-            "enableBackupFoundUseFresh": "Kezdés előlről",
             "backupConflictTitle": "Lecseréli a meglévő biztonsági mentést?",
             "backupConflictMessage": "Ezen a kiszolgálón már van tárolva biztonsági mentés, de nem ezzel az eszközzel készült. Lecserélése visszaállíthatatlanná teszi a régi mentést — aki csak annak jelmondatát birtokolja, többé nem tud belőle visszaállítani. Csak akkor folytassa, ha biztos abban, hogy nincs többé szüksége arra a másolatra.",
             "backupConflictAction": "Mentés lecserélése",

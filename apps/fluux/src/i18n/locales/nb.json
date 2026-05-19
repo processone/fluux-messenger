@@ -698,10 +698,6 @@
                 "created": "Opprettet",
                 "confirm": "Bruk denne nøkkelen"
             },
-            "enableBackupFoundTitle": "Sikkerhetskopi funnet på denne serveren",
-            "enableBackupFoundBody": "En sikkerhetskopi av en OpenPGP-nøkkel er lagret for denne kontoen. Skriv inn den lagrede passordsetningen for å gjenopprette din eksisterende identitet, eller start på nytt for å generere en ny nøkkel (som erstatter sikkerhetskopiens offentlige del).",
-            "enableBackupFoundWarning": "Bare passordsetningen som ble lagret da sikkerhetskopien ble opprettet, kan gjenopprette den. Hvis du har mistet den, start på nytt og sikkerhetskopier den nye nøkkelen etterpå.",
-            "enableBackupFoundUseFresh": "Start på nytt",
             "backupConflictTitle": "Erstatte den eksisterende sikkerhetskopien?",
             "backupConflictMessage": "En sikkerhetskopi er allerede lagret på denne serveren, men den ble ikke opprettet fra denne enheten. Å erstatte den gjør den gamle sikkerhetskopien ugjenopprettelig — den som bare har dens passordsetning, kan ikke lenger gjenopprette fra den. Fortsett bare hvis du er sikker på at du ikke lenger trenger den kopien.",
             "backupConflictAction": "Erstatt sikkerhetskopi",

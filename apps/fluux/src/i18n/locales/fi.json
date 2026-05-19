@@ -698,10 +698,6 @@
                 "created": "Luotu",
                 "confirm": "Käytä tätä avainta"
             },
-            "enableBackupFoundTitle": "Tällä palvelimella löytyi varmuuskopio",
-            "enableBackupFoundBody": "Tälle tilille on tallennettu OpenPGP-avaimen varmuuskopio. Anna tallentamasi tunnuslause palauttaaksesi olemassa olevan identiteettisi tai aloita alusta luodaksesi uuden avaimen (joka korvaa varmuuskopion julkisen osan).",
-            "enableBackupFoundWarning": "Vain varmuuskopiota luotaessa tallennettu tunnuslause voi palauttaa sen. Jos olet kadottanut sen, aloita alusta ja varmuuskopioi uusi avain jälkeenpäin.",
-            "enableBackupFoundUseFresh": "Aloita alusta",
             "backupConflictTitle": "Korvataanko olemassa oleva varmuuskopio?",
             "backupConflictMessage": "Tällä palvelimella on jo varmuuskopio, mutta sitä ei luotu tältä laitteelta. Sen korvaaminen tekee vanhasta varmuuskopiosta palautumiskelvottoman — ne, joilla on vain sen tunnuslause, eivät enää pysty palauttamaan siitä. Jatka vain, jos olet varma, ettet enää tarvitse tuota kopiota.",
             "backupConflictAction": "Korvaa varmuuskopio",

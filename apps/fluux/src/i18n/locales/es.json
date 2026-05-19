@@ -700,10 +700,6 @@
                 "created": "Creada",
                 "confirm": "Usar esta clave"
             },
-            "enableBackupFoundTitle": "Copia de seguridad encontrada en este servidor",
-            "enableBackupFoundBody": "Hay una copia de seguridad de una clave OpenPGP almacenada para esta cuenta. Introduce la frase de contraseña que guardaste para restaurar tu identidad existente, o empieza de cero para generar una clave nueva (que reemplazará la parte pública de la copia).",
-            "enableBackupFoundWarning": "Solo la frase de contraseña que guardaste al crear la copia puede restaurarla. Si la has perdido, empieza de cero y haz una nueva copia después.",
-            "enableBackupFoundUseFresh": "Empezar de cero",
             "backupConflictTitle": "¿Reemplazar la copia de seguridad existente?",
             "backupConflictMessage": "Ya hay una copia de seguridad almacenada en este servidor, pero no se creó desde este dispositivo. Reemplazarla hará que la antigua no se pueda recuperar — quien tenga solo su frase de contraseña ya no podrá restaurar a partir de ella. Continúa solo si estás seguro de que ya no necesitas esa copia.",
             "backupConflictAction": "Reemplazar copia",

@@ -700,10 +700,6 @@
                 "created": "Loodud",
                 "confirm": "Kasuta seda võtit"
             },
-            "enableBackupFoundTitle": "Selles serveris leiti varukoopia",
-            "enableBackupFoundBody": "Selle konto jaoks on salvestatud OpenPGP võtme varukoopia. Sisesta salvestatud paroolifraas, et taastada oma olemasolev identiteet, või alusta otsast peale, et genereerida uus võti (mis asendab varukoopia avaliku osa).",
-            "enableBackupFoundWarning": "Ainult varukoopia loomisel salvestatud paroolifraas saab seda taastada. Kui oled selle kaotanud, alusta otsast peale ja varunda uus võti pärast.",
-            "enableBackupFoundUseFresh": "Alusta otsast peale",
             "backupConflictTitle": "Asendada olemasolev varukoopia?",
             "backupConflictMessage": "Selles serveris on juba salvestatud varukoopia, kuid seda pole loodud sellest seadmest. Selle asendamine muudab vana varukoopia taastamatuks — kellel on ainult selle paroolifraas, ei saa enam sellest taastada. Jätka ainult siis, kui oled kindel, et sa enam ei vaja seda koopiat.",
             "backupConflictAction": "Asenda varukoopia",

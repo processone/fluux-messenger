@@ -700,10 +700,6 @@
                 "created": "Erstellt",
                 "confirm": "Diesen Schlüssel verwenden"
             },
-            "enableBackupFoundTitle": "Backup auf diesem Server gefunden",
-            "enableBackupFoundBody": "Für dieses Konto ist ein Backup eines OpenPGP-Schlüssels gespeichert. Gib die gespeicherte Passphrase ein, um deine bestehende Identität wiederherzustellen, oder beginne neu, um einen neuen Schlüssel zu generieren (der den öffentlichen Teil des Backups ersetzt).",
-            "enableBackupFoundWarning": "Nur die beim Erstellen des Backups gespeicherte Passphrase kann es wiederherstellen. Wenn du sie verloren hast, beginne neu und sichere den neuen Schlüssel anschließend.",
-            "enableBackupFoundUseFresh": "Neu beginnen",
             "backupConflictTitle": "Vorhandenes Backup ersetzen?",
             "backupConflictMessage": "Auf diesem Server ist bereits ein Backup gespeichert, das aber nicht von diesem Gerät erstellt wurde. Es zu ersetzen macht das alte Backup unwiederherstellbar — wer nur dessen Passphrase besitzt, kann nicht mehr daraus wiederherstellen. Fahre nur fort, wenn du sicher bist, dass du diese Kopie nicht mehr brauchst.",
             "backupConflictAction": "Backup ersetzen",
