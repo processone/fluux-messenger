@@ -5,14 +5,22 @@
     "schedule:daily",
     "group:allNonMajor"
   ],
-  "baseBranchPatterns": [
-    "devel"
-  ],
   "labels": ["dependencies"],
   "packageRules": [
     {
       "matchUpdateTypes": ["minor", "patch"],
       "automerge": true
+    },
+    {
+      "description": "Disable known-broken major bumps that need manual migration work",
+      "matchPackageNames": [
+        "zod-validation-error",
+        "typescript",
+        "keyring",
+        "tailwindcss"
+      ],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
     },
     {
       "groupName": "Rust crates",
