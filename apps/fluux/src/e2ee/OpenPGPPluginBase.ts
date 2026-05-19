@@ -71,7 +71,11 @@ import {
   readBackedUpFingerprint,
   writeBackedUpFingerprint,
 } from './backupMarker'
-import { probeRemotePublishedFingerprints } from './secretKeyProbe'
+import {
+  probeRemoteIdentityState,
+  probeRemotePublishedFingerprints,
+  SecretKeyBackupProbeError,
+} from './secretKeyProbe'
 import {
   clearPeerVerified,
   isPeerVerified,
@@ -646,6 +650,56 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     clearOwnKeyConflict()
 
     return { fingerprint: bundle.fingerprint }
+  }
+
+  /**
+   * Shared "silent-fork" safety guard, called by both subclasses' key-
+   * generation paths before they create new key material. Refuses
+   * generation when the server already holds OpenPGP identity material
+   * for this account — either a published public key OR a secret-key
+   * backup. The bug this prevents: a fresh device that silently
+   * generates a key, publishes its fingerprint to PEP, and overwrites
+   * the metadata peers had pinned, leaving any sibling device that
+   * still holds the matching private key (or any peer whose pinning
+   * has not refreshed) unable to deliver / decrypt.
+   *
+   * Bypassable via the {@link _allowSilentRegenerate} flag, which
+   * {@link retireAndGenerateIdentity} sets during its
+   * user-authorised replacement (it retracted the published identity
+   * itself; propagation timing would otherwise re-trip the guard).
+   */
+  protected async assertSilentGenerationAllowed(accountJid: string): Promise<void> {
+    if (this._allowSilentRegenerate) return
+    let identityState
+    try {
+      identityState = await probeRemoteIdentityState(
+        this.makePepProbeAdapter(),
+        accountJid,
+      )
+    } catch (err) {
+      if (err instanceof SecretKeyBackupProbeError) {
+        throw new E2EEPluginError(
+          'transient',
+          'identity-probe-failed',
+          `${this.pluginName()}: could not probe server for existing identity before key generation: ${err.message}`,
+          err,
+        )
+      }
+      throw err
+    }
+    if (identityState.hasServerIdentity) {
+      const reason =
+        identityState.publishedFingerprints.length > 0
+          ? `public key advertised (${identityState.publishedFingerprints[0]})`
+          : 'backup present'
+      throw new E2EEPluginError(
+        'permanent',
+        'needs-identity-decision',
+        `${this.pluginName()}: server already holds an OpenPGP identity for ${accountJid} (${reason}). ` +
+          `Silent generation would fork this identity. The user must import the matching private key ` +
+          `(from the server backup or a file) or explicitly retire the published identity.`,
+      )
+    }
   }
 
   /**

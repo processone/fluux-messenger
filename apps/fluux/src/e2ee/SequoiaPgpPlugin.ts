@@ -51,6 +51,22 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
   // ---------------------------------------------------------------------------
 
   protected async ensureKeyMaterial(accountJid: string): Promise<KeyBundle> {
+    // Defence in depth (mirrors WebOpenPGPPlugin): refuse silent
+    // generation when the server already holds an OpenPGP identity for
+    // this account AND we have no local key on disk. Without this
+    // guard, `openpgp_ensure_key` would generate a fresh key and the
+    // base class would then publish it, overwriting whatever metadata
+    // is on the server — silently forking the identity for any
+    // sibling device (other desktop, web browser) that still holds
+    // the matching private key.
+    //
+    // The probe runs only when no local key is persisted, so the
+    // common case (returning user, key on disk) pays no extra IPC.
+    // `_allowSilentRegenerate` (set by retireAndGenerateIdentity)
+    // skips both the local-key check and the probe.
+    if (!this._allowSilentRegenerate && (await this.hasNoLocalKey())) {
+      await this.assertSilentGenerationAllowed(accountJid)
+    }
     try {
       return await this.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid,
@@ -59,6 +75,17 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
     } catch (err) {
       throw this.toPluginError('ensureKeyMaterial', err)
     }
+  }
+
+  /**
+   * Inverse of {@link hasPersistedKey}, exposed for parity with the web
+   * subclass so consumers (App.tsx auto-init, EncryptionSettings
+   * toggle handler, the identity-choice dialog router) can probe with
+   * a uniform method name regardless of platform. Returns `true` when
+   * the OS keychain / on-disk store has no key for this account.
+   */
+  async hasNoLocalKey(): Promise<boolean> {
+    return !(await this.hasPersistedKey())
   }
 
   protected async encryptToRecipient(

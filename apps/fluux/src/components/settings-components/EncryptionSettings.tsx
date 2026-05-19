@@ -17,7 +17,6 @@ import { KeyPickerDialog } from '@/components/KeyPickerDialog'
 import type { KeyBundle } from '@/e2ee/OpenPGPPluginBase'
 import {
   probeRemoteIdentityState,
-  probeRemoteSecretKeyBackup,
   SecretKeyBackupProbeError,
 } from '@/e2ee/secretKeyProbe'
 import { isKeyLocked } from '@/e2ee/webPassphraseStore'
@@ -250,30 +249,45 @@ export function EncryptionSettings() {
         return
       }
 
-      const { invoke } = await import('@tauri-apps/api/core')
-      const hasLocal = await invoke<boolean>('openpgp_has_persisted_key', {
+      // Desktop: register first. Since the silent-fork guard now also
+      // lives in SequoiaPgpPlugin.ensureKeyMaterial, registration is
+      // safe even when the server has an existing identity — init
+      // swallows `needs-identity-decision` and the plugin stays
+      // registered without generating. After register, three states
+      // are possible:
+      //
+      //   - hasNoLocal=false → key was loaded from the OS keychain
+      //     (returning device) or generated fresh (clean account).
+      //     Nothing more to do; the toggle is on and the plugin is
+      //     ready.
+      //
+      //   - hasNoLocal=true → the guard fired. The server has an
+      //     OpenPGP identity for this account but the device has no
+      //     matching private key. Probe to enumerate the published
+      //     fingerprints + backup state for the dialog, then route
+      //     the user through IdentityChoiceDialog.
+      //
+      // The probe runs only in the second case; the common path
+      // (returning device) pays no extra IQ.
+      await registerE2EEPlugins(client)
+      const plugin = client.e2ee?.getPlugin('openpgp') as
+        | { hasNoLocalKey?: () => Promise<boolean> }
+        | null
+        | undefined
+      const hasNoLocal = plugin?.hasNoLocalKey
+        ? await plugin.hasNoLocalKey()
+        : false
+      if (!hasNoLocal) return
+      const state = await probeRemoteIdentityState(client, bareJid)
+      // The guard wouldn't have fired without server identity, but
+      // re-check defensively — the server's PEP could have changed
+      // between init's probe and ours.
+      if (!state.hasServerIdentity) return
+      setPendingIdentityChoice({
         accountJid: bareJid,
+        hasBackup: state.backupMessage !== null,
+        publishedFingerprints: state.publishedFingerprints,
       })
-      if (hasLocal) {
-        // Existing identity on this device — the normal register path
-        // loads it from disk. No server-side probe needed.
-        await registerE2EEPlugins(client)
-        return
-      }
-
-      // No local key; check the server before generating.
-      const backupMessage = await probeRemoteSecretKeyBackup(client, bareJid)
-      if (!backupMessage) {
-        // No backup, no local key — fresh generation is the only path.
-        await registerE2EEPlugins(client)
-        return
-      }
-
-      // Backup exists AND no local key: defer registration and hand
-      // the decision to the user. The dialog's handlers will either
-      // restore + register, generate fresh + register, or cancel the
-      // whole toggle.
-      setPendingEnableBackup({ accountJid: bareJid, backupMessage })
     } catch (err) {
       // A probe failure is structurally different from a generic toggle
       // failure: nothing was registered, nothing was generated, nothing

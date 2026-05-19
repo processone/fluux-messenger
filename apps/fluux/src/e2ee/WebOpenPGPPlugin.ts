@@ -32,7 +32,6 @@ import {
 } from './OpenPGPPluginBase'
 import { clearSessionPassphrase, getSessionPassphrase, setSessionPassphrase } from './webPassphraseStore'
 import { USE_V6_KEYS } from './passphraseGenerator'
-import { probeRemoteIdentityState, SecretKeyBackupProbeError } from './secretKeyProbe'
 
 const PRIVATE_KEY_STORAGE_KEY = 'private-key'
 
@@ -95,56 +94,12 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
       }
     }
 
-    // SAFETY GUARD — never silent-generate when the server already holds
-    // any OpenPGP identity material for this account. Doing so would
-    // (a) overwrite the published metadata, leaving a sibling device that
-    // still holds the matching private key unable to receive new messages,
-    // and (b) clobber any existing backup the user could otherwise restore
-    // from. Either condition demands user intent: import the matching
-    // private key (from the server backup or a file) OR explicitly retire
-    // the published identity. We surface a structured error and let the
-    // host UI route the resolution.
-    //
-    // `_allowSilentRegenerate` is the bypass used by
-    // `retireAndGenerateIdentity` on the base class — that path has just
-    // retracted the server's identity material on user request, so the
-    // guard would otherwise misfire on retract-propagation timing.
-    if (!this._allowSilentRegenerate) {
-      let identityState
-      try {
-        identityState = await probeRemoteIdentityState(
-          this.makePepProbeAdapter(),
-          accountJid,
-        )
-      } catch (err) {
-        if (err instanceof SecretKeyBackupProbeError) {
-          // Same reasoning as the toggle handler: a partial probe answer
-          // (network blip, server timeout, permission error) cannot safely
-          // be collapsed to "no identity". Bail out as transient so the
-          // caller can retry without forking the user's identity.
-          throw new E2EEPluginError(
-            'transient',
-            'identity-probe-failed',
-            `${this.pluginName()}: could not probe server for existing identity before key generation: ${err.message}`,
-            err,
-          )
-        }
-        throw err
-      }
-      if (identityState.hasServerIdentity) {
-        const reason =
-          identityState.publishedFingerprints.length > 0
-            ? `public key advertised (${identityState.publishedFingerprints[0]})`
-            : 'backup present'
-        throw new E2EEPluginError(
-          'permanent',
-          'needs-identity-decision',
-          `${this.pluginName()}: server already holds an OpenPGP identity for ${accountJid} (${reason}). ` +
-            `Silent generation would fork this identity. The user must import the matching private key ` +
-            `(from the server backup or a file) or explicitly retire the published identity.`,
-        )
-      }
-    }
+    // Defence in depth: refuse to silent-generate when the server
+    // already holds OpenPGP identity material for this account. See
+    // {@link OpenPGPPluginBase.assertSilentGenerationAllowed} for the
+    // full rationale. Bypassable via `_allowSilentRegenerate` set by
+    // `retireAndGenerateIdentity`.
+    await this.assertSilentGenerationAllowed(accountJid)
 
     // Truly fresh account, OR explicit retire+regenerate. Safe to generate.
     return this.generateAndStoreKey(accountJid, passphrase, ctx.storage)
