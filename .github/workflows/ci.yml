@@ -128,8 +128,11 @@ jobs:
 
       - name: Run tests
         working-directory: apps/fluux/src-tauri
-        run: cargo test
+        run: cargo test --locked
 
       - name: Clippy
         working-directory: apps/fluux/src-tauri
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --locked -- -D warnings
+
+      - name: Check generated files are up to date
+        run: git diff --exit-code apps/fluux/src-tauri/gen/
