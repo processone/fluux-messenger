@@ -11,6 +11,7 @@
 - XMPP Console hides Stream Management packets by default for less noise (toggle remains available)
 - Significant render-performance pass: cut store over-subscription in ConversationList, CommandPalette, RoomConfig, ContactSelector, ContactItem, and room modals
 - Simplified Chinese translation updated
+- Updated dependencies
 
 ### Fixed
 
