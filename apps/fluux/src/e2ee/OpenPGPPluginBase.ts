@@ -394,6 +394,17 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         // after the user unlocks via unlock().
         return
       }
+      if (err instanceof E2EEPluginError && err.code === 'needs-identity-decision') {
+        // Web plugin: no local key AND server already advertises an
+        // OpenPGP identity for this account. Silent generation would
+        // fork the identity, so the safety guard in `ensureKeyMaterial`
+        // bailed out. The plugin stays registered in a "needs decision"
+        // state — the host should detect this (via the unlock dialog or
+        // the encryption-settings toggle flow) and route the user to a
+        // resolution: import the matching private key, or explicitly
+        // retire the published identity.
+        return
+      }
       throw err
     }
     this.activateSubscriptions()

@@ -8,12 +8,18 @@
  */
 
 import { describe, it, expect, vi } from 'vitest'
-import { probeRemoteSecretKeyBackup, SecretKeyBackupProbeError } from './secretKeyProbe'
+import {
+  probeRemoteSecretKeyBackup,
+  probeRemotePublishedFingerprints,
+  probeRemoteIdentityState,
+  SecretKeyBackupProbeError,
+} from './secretKeyProbe'
 import type { XMPPClient } from '@fluux/sdk/core'
 import type { PEPItem } from '@fluux/sdk'
 
 const ALICE = 'alice@example.com'
 const SECRET_KEY_NODE = 'urn:xmpp:openpgp:0:secret-key'
+const PUBLIC_KEYS_METADATA_NODE = 'urn:xmpp:openpgp:0:public-keys'
 const OX_NS = 'urn:xmpp:openpgp:0'
 
 /**
@@ -249,5 +255,327 @@ describe('probeRemoteSecretKeyBackup', () => {
     ])
 
     await expect(probeRemoteSecretKeyBackup(client, ALICE)).resolves.toBeNull()
+  })
+})
+
+describe('probeRemotePublishedFingerprints', () => {
+  it('returns the fingerprints listed in the metadata node', async () => {
+    const client = makeClient(async (jid, node, maxItems) => {
+      expect(jid).toBe(ALICE)
+      expect(node).toBe(PUBLIC_KEYS_METADATA_NODE)
+      expect(maxItems).toBe(1)
+      return [
+        {
+          id: 'current',
+          payload: {
+            name: 'public-keys-list',
+            attrs: { xmlns: OX_NS },
+            children: [
+              {
+                name: 'pubkey-metadata',
+                attrs: {
+                  'v4-fingerprint': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+                  'v6-fingerprint': 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+                  date: '2026-05-11T20:21:19.969Z',
+                },
+                children: [],
+              },
+            ],
+          },
+        },
+      ]
+    })
+    const fps = await probeRemotePublishedFingerprints(client, ALICE)
+    expect(fps).toEqual([
+      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    ])
+  })
+
+  it('returns multiple fingerprints when several pubkey-metadata entries are present', async () => {
+    // Multi-device or rotation history: the metadata can list more than
+    // one published key. The probe surfaces them all so callers can detect
+    // a non-empty server-side identity regardless of count.
+    const client = makeClient(async () => [
+      {
+        id: 'current',
+        payload: {
+          name: 'public-keys-list',
+          attrs: { xmlns: OX_NS },
+          children: [
+            {
+              name: 'pubkey-metadata',
+              attrs: { 'v4-fingerprint': '11'.repeat(20) },
+              children: [],
+            },
+            {
+              name: 'pubkey-metadata',
+              attrs: { 'v4-fingerprint': '22'.repeat(20) },
+              children: [],
+            },
+          ],
+        },
+      },
+    ])
+    const fps = await probeRemotePublishedFingerprints(client, ALICE)
+    expect(fps).toEqual(['11'.repeat(20), '22'.repeat(20)])
+  })
+
+  it('deduplicates v4 and v6 fingerprints that are identical', async () => {
+    // openpgp.js currently advertises both attrs with the same value when
+    // generating v4 keys (RFC 9580 v6 should differ — that's a separate
+    // bug). The probe normalizes so callers don't double-count.
+    const client = makeClient(async () => [
+      {
+        id: 'current',
+        payload: {
+          name: 'public-keys-list',
+          attrs: { xmlns: OX_NS },
+          children: [
+            {
+              name: 'pubkey-metadata',
+              attrs: {
+                'v4-fingerprint': 'cc'.repeat(20),
+                'v6-fingerprint': 'cc'.repeat(20),
+              },
+              children: [],
+            },
+          ],
+        },
+      },
+    ])
+    const fps = await probeRemotePublishedFingerprints(client, ALICE)
+    expect(fps).toEqual(['cc'.repeat(20)])
+  })
+
+  it('returns empty array when the server reports item-not-found', async () => {
+    // The canonical "no public key has ever been published" outcome. Safe
+    // to proceed to fresh-key generation in this case.
+    const client = makeClient(async () => {
+      throw new Error('item-not-found')
+    })
+    await expect(probeRemotePublishedFingerprints(client, ALICE)).resolves.toEqual([])
+  })
+
+  it('returns empty array when the node exists but has no public-keys-list item', async () => {
+    const client = makeClient(async () => [
+      {
+        id: 'current',
+        payload: {
+          name: 'unrelated',
+          attrs: { xmlns: 'urn:other' },
+          children: [],
+        },
+      },
+    ])
+    await expect(probeRemotePublishedFingerprints(client, ALICE)).resolves.toEqual([])
+  })
+
+  it('returns empty array when the list is empty', async () => {
+    const client = makeClient(async () => [
+      {
+        id: 'current',
+        payload: {
+          name: 'public-keys-list',
+          attrs: { xmlns: OX_NS },
+          children: [],
+        },
+      },
+    ])
+    await expect(probeRemotePublishedFingerprints(client, ALICE)).resolves.toEqual([])
+  })
+
+  it('throws SecretKeyBackupProbeError on transport failure', async () => {
+    // Mirrors the secret-key probe's behaviour: a network blip must NOT
+    // collapse to "no published key", because the silent-fork bug downstream
+    // is exactly the same — generating a fresh key would publish a fingerprint
+    // that competes with whatever is actually on the server.
+    const client = makeClient(async () => {
+      throw new Error('Not connected')
+    })
+    await expect(probeRemotePublishedFingerprints(client, ALICE)).rejects.toBeInstanceOf(
+      SecretKeyBackupProbeError,
+    )
+  })
+
+  it('throws on permission errors and timeouts', async () => {
+    const forbiddenClient = makeClient(async () => {
+      throw new Error('forbidden')
+    })
+    await expect(probeRemotePublishedFingerprints(forbiddenClient, ALICE)).rejects.toBeInstanceOf(
+      SecretKeyBackupProbeError,
+    )
+    const timeoutClient = makeClient(async () => {
+      throw new Error('IQ timeout after 30000ms')
+    })
+    await expect(probeRemotePublishedFingerprints(timeoutClient, ALICE)).rejects.toBeInstanceOf(
+      SecretKeyBackupProbeError,
+    )
+  })
+
+  it('does not query more than once per probe', async () => {
+    const query = vi.fn(async () => {
+      throw new Error('item-not-found')
+    })
+    const client = makeClient(query)
+    await probeRemotePublishedFingerprints(client, ALICE)
+    expect(query).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores pubkey-metadata entries that lack any fingerprint attribute', async () => {
+    // Malformed entry — no v4 or v6 attribute. Skip silently rather than
+    // throw: the user clearly has nothing to lose if we treat this entry as
+    // absent. The OTHER entries (if any) are still surfaced.
+    const client = makeClient(async () => [
+      {
+        id: 'current',
+        payload: {
+          name: 'public-keys-list',
+          attrs: { xmlns: OX_NS },
+          children: [
+            { name: 'pubkey-metadata', attrs: { date: '2026-05-11' } as Record<string, string>, children: [] },
+            { name: 'pubkey-metadata', attrs: { 'v4-fingerprint': 'dd'.repeat(20) } as Record<string, string>, children: [] },
+          ],
+        },
+      },
+    ])
+    const fps = await probeRemotePublishedFingerprints(client, ALICE)
+    expect(fps).toEqual(['dd'.repeat(20)])
+  })
+})
+
+describe('probeRemoteIdentityState', () => {
+  it('returns both backup absence and published fingerprints in a single call', async () => {
+    // The composed probe is what the toggle and auto-init flows use — they
+    // need the unified state to decide whether silent generation is safe.
+    const armored = makeOpenPgpArmor('PGP MESSAGE', 'fake-backup')
+    const calls: string[] = []
+    const client = makeClient(async (_jid, node) => {
+      calls.push(node)
+      if (node === SECRET_KEY_NODE) {
+        return [
+          {
+            id: 'current',
+            payload: {
+              name: 'secretkey',
+              attrs: { xmlns: OX_NS },
+              children: [encodeOpenPgpArmorForXep0373(armored)],
+            },
+          },
+        ]
+      }
+      if (node === PUBLIC_KEYS_METADATA_NODE) {
+        return [
+          {
+            id: 'current',
+            payload: {
+              name: 'public-keys-list',
+              attrs: { xmlns: OX_NS },
+              children: [
+                {
+                  name: 'pubkey-metadata',
+                  attrs: { 'v4-fingerprint': 'ee'.repeat(20) },
+                  children: [],
+                },
+              ],
+            },
+          },
+        ]
+      }
+      throw new Error(`unexpected node: ${node}`)
+    })
+
+    const state = await probeRemoteIdentityState(client, ALICE)
+    expect(state.backupMessage).toContain('BEGIN PGP MESSAGE')
+    expect(state.publishedFingerprints).toEqual(['ee'.repeat(20)])
+    expect(state.hasServerIdentity).toBe(true)
+    expect(calls).toEqual(
+      expect.arrayContaining([SECRET_KEY_NODE, PUBLIC_KEYS_METADATA_NODE]),
+    )
+  })
+
+  it('reports no server-side identity when both nodes are absent', async () => {
+    const client = makeClient(async () => {
+      throw new Error('item-not-found')
+    })
+    const state = await probeRemoteIdentityState(client, ALICE)
+    expect(state.backupMessage).toBeNull()
+    expect(state.publishedFingerprints).toEqual([])
+    expect(state.hasServerIdentity).toBe(false)
+  })
+
+  it('flags server identity when only a public key is published (no backup)', async () => {
+    // EXACTLY the scenario that bit Adrien: PEP has a published fingerprint
+    // but no backup. Silent fresh generation would overwrite the published
+    // metadata and leave the existing private-key holder (another device)
+    // unable to receive messages. hasServerIdentity must be true so the
+    // guard upstream refuses to generate.
+    const client = makeClient(async (_jid, node) => {
+      if (node === SECRET_KEY_NODE) throw new Error('item-not-found')
+      if (node === PUBLIC_KEYS_METADATA_NODE) {
+        return [
+          {
+            id: 'current',
+            payload: {
+              name: 'public-keys-list',
+              attrs: { xmlns: OX_NS },
+              children: [
+                {
+                  name: 'pubkey-metadata',
+                  attrs: { 'v4-fingerprint': 'ff'.repeat(20) },
+                  children: [],
+                },
+              ],
+            },
+          },
+        ]
+      }
+      throw new Error(`unexpected node: ${node}`)
+    })
+
+    const state = await probeRemoteIdentityState(client, ALICE)
+    expect(state.backupMessage).toBeNull()
+    expect(state.publishedFingerprints).toEqual(['ff'.repeat(20)])
+    expect(state.hasServerIdentity).toBe(true)
+  })
+
+  it('flags server identity when only a backup exists (no published public key)', async () => {
+    // Edge case but plausible: a node retract for the public key while the
+    // secret-key backup persists. Still NOT safe to silent-generate, because
+    // restoring the backup is a legitimate recovery path.
+    const armored = makeOpenPgpArmor('PGP MESSAGE', 'orphan-backup')
+    const client = makeClient(async (_jid, node) => {
+      if (node === SECRET_KEY_NODE) {
+        return [
+          {
+            id: 'current',
+            payload: {
+              name: 'secretkey',
+              attrs: { xmlns: OX_NS },
+              children: [encodeOpenPgpArmorForXep0373(armored)],
+            },
+          },
+        ]
+      }
+      if (node === PUBLIC_KEYS_METADATA_NODE) throw new Error('item-not-found')
+      throw new Error(`unexpected node: ${node}`)
+    })
+
+    const state = await probeRemoteIdentityState(client, ALICE)
+    expect(state.backupMessage).toContain('BEGIN PGP MESSAGE')
+    expect(state.publishedFingerprints).toEqual([])
+    expect(state.hasServerIdentity).toBe(true)
+  })
+
+  it('propagates SecretKeyBackupProbeError if either sub-probe throws', async () => {
+    // Don't silently degrade: a transient failure on either node means we
+    // can't make a safe decision, so the upstream MUST surface a retry.
+    const client = makeClient(async (_jid, node) => {
+      if (node === SECRET_KEY_NODE) throw new Error('item-not-found')
+      throw new Error('Not connected')
+    })
+    await expect(probeRemoteIdentityState(client, ALICE)).rejects.toBeInstanceOf(
+      SecretKeyBackupProbeError,
+    )
   })
 })
