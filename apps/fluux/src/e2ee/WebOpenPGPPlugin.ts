@@ -23,7 +23,6 @@
  */
 
 import type { PrivateKey } from 'openpgp'
-import type { XMPPClient } from '@fluux/sdk/core'
 import { E2EEPluginError } from '@fluux/sdk'
 import {
   OpenPGPPluginBase,
@@ -106,49 +105,48 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
     // the published identity. We surface a structured error and let the
     // host UI route the resolution.
     //
-    // The probe runs against the same `ctx.xmpp.queryPEP` the rest of the
-    // plugin uses; we wrap it in a minimal adapter so the shared probe
-    // utility (which takes an XMPPClient) stays surface-agnostic.
-    const probeAdapter = {
-      pubsub: {
-        query: (jid: string, node: string, max?: number) =>
-          ctx.xmpp.queryPEP(jid, node, max),
-      },
-    } as unknown as XMPPClient
-    let identityState
-    try {
-      identityState = await probeRemoteIdentityState(probeAdapter, accountJid)
-    } catch (err) {
-      if (err instanceof SecretKeyBackupProbeError) {
-        // Same reasoning as the toggle handler: a partial probe answer
-        // (network blip, server timeout, permission error) cannot safely
-        // be collapsed to "no identity". Bail out as transient so the
-        // caller can retry without forking the user's identity.
+    // `_allowSilentRegenerate` is the bypass used by
+    // `retireAndGenerateIdentity` on the base class — that path has just
+    // retracted the server's identity material on user request, so the
+    // guard would otherwise misfire on retract-propagation timing.
+    if (!this._allowSilentRegenerate) {
+      let identityState
+      try {
+        identityState = await probeRemoteIdentityState(
+          this.makePepProbeAdapter(),
+          accountJid,
+        )
+      } catch (err) {
+        if (err instanceof SecretKeyBackupProbeError) {
+          // Same reasoning as the toggle handler: a partial probe answer
+          // (network blip, server timeout, permission error) cannot safely
+          // be collapsed to "no identity". Bail out as transient so the
+          // caller can retry without forking the user's identity.
+          throw new E2EEPluginError(
+            'transient',
+            'identity-probe-failed',
+            `${this.pluginName()}: could not probe server for existing identity before key generation: ${err.message}`,
+            err,
+          )
+        }
+        throw err
+      }
+      if (identityState.hasServerIdentity) {
+        const reason =
+          identityState.publishedFingerprints.length > 0
+            ? `public key advertised (${identityState.publishedFingerprints[0]})`
+            : 'backup present'
         throw new E2EEPluginError(
-          'transient',
-          'identity-probe-failed',
-          `${this.pluginName()}: could not probe server for existing identity before key generation: ${err.message}`,
-          err,
+          'permanent',
+          'needs-identity-decision',
+          `${this.pluginName()}: server already holds an OpenPGP identity for ${accountJid} (${reason}). ` +
+            `Silent generation would fork this identity. The user must import the matching private key ` +
+            `(from the server backup or a file) or explicitly retire the published identity.`,
         )
       }
-      throw err
-    }
-    if (identityState.hasServerIdentity) {
-      const reason =
-        identityState.publishedFingerprints.length > 0
-          ? `public key advertised (${identityState.publishedFingerprints[0]})`
-          : 'backup present'
-      throw new E2EEPluginError(
-        'permanent',
-        'needs-identity-decision',
-        `${this.pluginName()}: server already holds an OpenPGP identity for ${accountJid} (${reason}). ` +
-          `Silent generation would fork this identity. The user must import the matching private key ` +
-          `(from the server backup or a file) or explicitly retire the published identity.`,
-      )
     }
 
-    // Truly fresh account — no local key, no server-side identity. Safe
-    // to generate.
+    // Truly fresh account, OR explicit retire+regenerate. Safe to generate.
     return this.generateAndStoreKey(accountJid, passphrase, ctx.storage)
   }
 

@@ -65,11 +65,13 @@ import {
   type E2EEErrorKind,
 } from '@fluux/sdk'
 import { getBareJid } from '@fluux/sdk'
+import type { XMPPClient } from '@fluux/sdk/core'
 import {
   clearBackedUpFingerprint,
   readBackedUpFingerprint,
   writeBackedUpFingerprint,
 } from './backupMarker'
+import { probeRemotePublishedFingerprints } from './secretKeyProbe'
 import {
   clearPeerVerified,
   isPeerVerified,
@@ -269,6 +271,19 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   private _verificationStoreUnsub: (() => void) | null = null
   private _syncingFromRemoteCount = 0
   private _publishVerificationTimeout: ReturnType<typeof setTimeout> | null = null
+
+  /**
+   * Cross-cutting bypass for the WebOpenPGPPlugin's silent-fork guard
+   * inside {@link ensureKeyMaterial}. Set by {@link retireAndGenerateIdentity}
+   * around its own explicit regeneration so the guard — which exists to
+   * catch ACCIDENTAL silent generation — doesn't block the
+   * user-authorised replacement. Read by the subclass's guard.
+   *
+   * Lives on the base because both subclasses share this concern: even
+   * desktop (Sequoia) will inherit the same guard in a follow-up to fix
+   * the symmetrical desktop bug. Always reset in a `finally`.
+   */
+  protected _allowSilentRegenerate = false
 
   // ---------------------------------------------------------------------------
   // Abstract crypto methods — implemented by each platform subclass
@@ -543,6 +558,109 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     }
 
     return { fingerprint: bundle.fingerprint }
+  }
+
+  /**
+   * Explicit, user-driven invalidation + replacement of the published
+   * OpenPGP identity. The third option of the IdentityChoiceDialog —
+   * for users who cannot recover the matching private key (no backup,
+   * no file) and accept that:
+   *   - peers must re-pin (key change alert on their side);
+   *   - past messages encrypted to the retired key are unrecoverable
+   *     from this device.
+   *
+   * Distinct from {@link rotateEncryptionKey} (rotates the encryption
+   * subkey within the same primary cert — keeps the published identity
+   * stable) and from {@link restoreSecretKey} / {@link importKeyFromFile}
+   * (imports a key whose fingerprint already matches the published one).
+   *
+   * Steps:
+   *   1. Enumerate every published fingerprint via the lightweight PEP
+   *      probe so we retract historical data nodes too, not just the
+   *      one this device happens to know about.
+   *   2. Retract metadata + each data node. Best-effort — a retract
+   *      failure must not block step 4 because the new publication
+   *      overwrites the metadata regardless.
+   *   3. Clear local key material so the regenerate branch fires.
+   *   4. Generate a fresh keypair. The {@link _allowSilentRegenerate}
+   *      flag bypasses the web subclass's safety guard (which exists
+   *      to catch ACCIDENTAL forks; this is an authorised replacement).
+   *   5. Publish the new public key (data, then metadata, mirroring
+   *      {@link ensureIdentity}'s ordering).
+   *   6. Clear the own-key-conflict banner: server and local are now
+   *      back in sync.
+   */
+  async retireAndGenerateIdentity(): Promise<IdentityInfo> {
+    const ctx = this.requireCtx()
+
+    let publishedFingerprints: string[] = []
+    try {
+      publishedFingerprints = await probeRemotePublishedFingerprints(
+        this.makePepProbeAdapter(),
+        ctx.account.jid,
+      )
+    } catch (err) {
+      ctx.logger.debug(
+        `${this.pluginName()}: enumerate published fingerprints during retire failed: ${formatError(err)}`,
+      )
+    }
+
+    await ctx.xmpp
+      .retractPEP(PUBLIC_KEYS_METADATA_NODE, CURRENT_ITEM_ID)
+      .catch((err) => {
+        ctx.logger.debug(
+          `${this.pluginName()}: retract metadata during retire failed: ${formatError(err)}`,
+        )
+      })
+    for (const fp of publishedFingerprints) {
+      await ctx.xmpp
+        .retractPEP(publicKeyDataNodeFor(fp), CURRENT_ITEM_ID)
+        .catch((err) => {
+          ctx.logger.debug(
+            `${this.pluginName()}: retract data node ${fp} during retire failed: ${formatError(err)}`,
+          )
+        })
+    }
+
+    await this.forgetAccount(ctx.account.jid).catch(() => {})
+    this.ownBundle = null
+
+    this._allowSilentRegenerate = true
+    let bundle: KeyBundle
+    try {
+      bundle = await this.ensureKeyMaterial(ctx.account.jid)
+    } finally {
+      this._allowSilentRegenerate = false
+    }
+    this.ownBundle = bundle
+
+    try {
+      await this.publishOwnPublicKeyData(bundle)
+      await this.publishOwnPublicKeyMetadata(bundle)
+    } catch (err) {
+      ctx.logger.warn(
+        `${this.pluginName()}: retire publish failed: ${formatError(err)}`,
+      )
+    }
+
+    clearOwnKeyConflict()
+
+    return { fingerprint: bundle.fingerprint }
+  }
+
+  /**
+   * Adapter that lets the standalone PEP probe helpers (which take an
+   * XMPPClient) run against this plugin's `ctx.xmpp.queryPEP`. The
+   * shape match is exact for the one call site they touch (`pubsub.query`).
+   */
+  protected makePepProbeAdapter(): XMPPClient {
+    const ctx = this.requireCtx()
+    return {
+      pubsub: {
+        query: (jid: string, node: string, max?: number) =>
+          ctx.xmpp.queryPEP(jid, node, max),
+      },
+    } as unknown as XMPPClient
   }
 
   async retractPublicKeys(): Promise<void> {

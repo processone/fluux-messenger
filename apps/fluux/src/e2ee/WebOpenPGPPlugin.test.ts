@@ -971,4 +971,173 @@ describe('WebOpenPGPPlugin', () => {
       expect(result!.selected.fingerprint).toBe('KEY_B')
     })
   })
+
+  describe('retireAndGenerateIdentity', () => {
+    it('retracts every published fingerprint and generates a fresh key', async () => {
+      // The user-driven "I can't recover the published key — replace it"
+      // path of the identity choice dialog. Must:
+      //   1. enumerate published fingerprints and retract each data node,
+      //   2. retract the metadata node,
+      //   3. clear the local key material,
+      //   4. generate a fresh keypair (bypassing the silent-fork guard
+      //      because the user explicitly authorised the replacement),
+      //   5. publish the new data + metadata nodes.
+      const oldFp1 = 'aa'.repeat(20)
+      const oldFp2 = 'bb'.repeat(20)
+      const retractCalls: Array<{ node: string; itemId: string }> = []
+      const publishCalls: Array<{ node: string; itemId: string }> = []
+      const xmpp: XMPPPrimitives = {
+        sendStanza: async () => {},
+        queryDisco: async () => ({
+          features: [{ var: 'http://jabber.org/protocol/pubsub' }],
+          identities: [{ category: 'pubsub', type: 'pep' }],
+        }),
+        publishPEP: async (node, item) => {
+          publishCalls.push({ node, itemId: item.id })
+        },
+        retractPEP: async (node, itemId) => {
+          retractCalls.push({ node, itemId })
+        },
+        deletePEP: async () => {},
+        queryPEP: async (jid, node): Promise<PEPItem[]> => {
+          if (jid !== 'alice@example.com') return []
+          if (node === 'urn:xmpp:openpgp:0:public-keys') {
+            return [
+              {
+                id: 'current',
+                payload: {
+                  name: 'public-keys-list',
+                  attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+                  children: [
+                    {
+                      name: 'pubkey-metadata',
+                      attrs: { 'v4-fingerprint': oldFp1 },
+                      children: [],
+                    },
+                    {
+                      name: 'pubkey-metadata',
+                      attrs: { 'v4-fingerprint': oldFp2 },
+                      children: [],
+                    },
+                  ],
+                },
+              },
+            ]
+          }
+          return []
+        },
+        subscribePEP: () => ({ unsubscribe: () => {} }),
+      }
+      const ctx: PluginContext = {
+        storage: createPluginStorage(new InMemoryStorageBackend(), 'openpgp-test'),
+        xmpp,
+        logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
+        account: { jid: 'alice@example.com' },
+        reportSecurityContextUpdate: () => {},
+      }
+      const plugin = new TestableWebOpenPGPPlugin()
+      setSessionPassphrase('strong-test-passphrase-123')
+      await plugin.init(ctx) // init swallows needs-identity-decision
+
+      const result = await plugin.retireAndGenerateIdentity()
+
+      // Step 1+2: each published fingerprint and the metadata node were retracted.
+      const retractedNodes = retractCalls.map((c) => c.node)
+      expect(retractedNodes).toContain('urn:xmpp:openpgp:0:public-keys')
+      expect(retractedNodes).toContain(`urn:xmpp:openpgp:0:public-keys:${oldFp1}`)
+      expect(retractedNodes).toContain(`urn:xmpp:openpgp:0:public-keys:${oldFp2}`)
+
+      // Step 4: a fresh fingerprint was generated.
+      expect(result.fingerprint).toMatch(/^[a-f0-9]{40}$/)
+      expect(result.fingerprint).not.toBe(oldFp1)
+      expect(result.fingerprint).not.toBe(oldFp2)
+
+      // Step 5: the new public key was published — both data and metadata nodes.
+      const publishedNodes = publishCalls.map((c) => c.node)
+      expect(publishedNodes).toContain(`urn:xmpp:openpgp:0:public-keys:${result.fingerprint}`)
+      expect(publishedNodes).toContain('urn:xmpp:openpgp:0:public-keys')
+    })
+
+    it('clears the own-key-conflict alert after a successful retire', async () => {
+      // Before retire, init recorded a conflict (server fp != local key
+      // would conflict if we had one). After retire, server == local and
+      // the conflict banner must come down on its own.
+      const { ctx } = makeCtxWithPublishedFingerprint('alice@example.com', 'cc'.repeat(20))
+      const plugin = new TestableWebOpenPGPPlugin()
+      setSessionPassphrase('strong-test-passphrase-123')
+      await plugin.init(ctx)
+
+      const { useOwnKeyConflictStore, recordOwnKeyConflict } = await import(
+        '@/stores/ownKeyConflictStore'
+      )
+      // Simulate the conflict that the post-replace flow should clear.
+      recordOwnKeyConflict({
+        kind: 'primary-mismatch',
+        localFingerprint: 'dd'.repeat(20),
+        publishedFingerprint: 'cc'.repeat(20),
+        publishedDate: '2026-05-11T00:00:00Z',
+      })
+      expect(useOwnKeyConflictStore.getState().conflict).not.toBeNull()
+
+      await plugin.retireAndGenerateIdentity()
+      expect(useOwnKeyConflictStore.getState().conflict).toBeNull()
+    })
+
+    it('continues to publish even when retract fails (best-effort)', async () => {
+      // PEP retract can fail for many transient reasons; the new
+      // publication will overwrite the metadata regardless, so a retract
+      // failure must NOT block regeneration.
+      let publishedNew = false
+      const xmpp: XMPPPrimitives = {
+        sendStanza: async () => {},
+        queryDisco: async () => ({
+          features: [{ var: 'http://jabber.org/protocol/pubsub' }],
+          identities: [{ category: 'pubsub', type: 'pep' }],
+        }),
+        publishPEP: async (node) => {
+          if (node === 'urn:xmpp:openpgp:0:public-keys') publishedNew = true
+        },
+        retractPEP: async () => {
+          throw new Error('item-not-found')
+        },
+        deletePEP: async () => {},
+        queryPEP: async (_jid, node): Promise<PEPItem[]> => {
+          if (node === 'urn:xmpp:openpgp:0:public-keys') {
+            return [
+              {
+                id: 'current',
+                payload: {
+                  name: 'public-keys-list',
+                  attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+                  children: [
+                    {
+                      name: 'pubkey-metadata',
+                      attrs: { 'v4-fingerprint': 'ee'.repeat(20) },
+                      children: [],
+                    },
+                  ],
+                },
+              },
+            ]
+          }
+          return []
+        },
+        subscribePEP: () => ({ unsubscribe: () => {} }),
+      }
+      const ctx: PluginContext = {
+        storage: createPluginStorage(new InMemoryStorageBackend(), 'openpgp-test'),
+        xmpp,
+        logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
+        account: { jid: 'alice@example.com' },
+        reportSecurityContextUpdate: () => {},
+      }
+      const plugin = new TestableWebOpenPGPPlugin()
+      setSessionPassphrase('strong-test-passphrase-123')
+      await plugin.init(ctx)
+
+      const result = await plugin.retireAndGenerateIdentity()
+      expect(result.fingerprint).toMatch(/^[a-f0-9]{40}$/)
+      expect(publishedNew).toBe(true)
+    })
+  })
 })
