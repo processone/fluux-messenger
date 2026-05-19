@@ -56,6 +56,60 @@ class TestableWebOpenPGPPlugin extends WebOpenPGPPlugin {
   }
 }
 
+/**
+ * Build a PluginContext whose PEP layer mimics a server holding a single
+ * published OpenPGP public key fingerprint for the account. Used by the
+ * silent-generation guard tests where we need ensureKeyMaterial to see a
+ * non-empty server identity without committing to a real cert payload.
+ */
+function makeCtxWithPublishedFingerprint(
+  accountJid: string,
+  fingerprint: string,
+): { ctx: PluginContext; backend: InMemoryStorageBackend } {
+  const backend = new InMemoryStorageBackend()
+  const xmpp: XMPPPrimitives = {
+    sendStanza: async () => {},
+    queryDisco: async () => ({
+      features: [{ var: 'http://jabber.org/protocol/pubsub' }],
+      identities: [{ category: 'pubsub', type: 'pep' }],
+    }),
+    publishPEP: async () => {},
+    retractPEP: async () => {},
+    deletePEP: async () => {},
+    queryPEP: async (jid, node): Promise<PEPItem[]> => {
+      if (jid !== accountJid) return []
+      if (node === 'urn:xmpp:openpgp:0:public-keys') {
+        return [
+          {
+            id: 'current',
+            payload: {
+              name: 'public-keys-list',
+              attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+              children: [
+                {
+                  name: 'pubkey-metadata',
+                  attrs: { 'v4-fingerprint': fingerprint },
+                  children: [],
+                },
+              ],
+            },
+          },
+        ]
+      }
+      return []
+    },
+    subscribePEP: () => ({ unsubscribe: () => {} }),
+  }
+  const ctx: PluginContext = {
+    storage: createPluginStorage(backend, 'openpgp-test'),
+    xmpp,
+    logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
+    account: { jid: accountJid },
+    reportSecurityContextUpdate: () => {},
+  }
+  return { ctx, backend }
+}
+
 function makeCtx(accountJid: string, sharedBackend?: InMemoryStorageBackend): {
   ctx: PluginContext
   backend: InMemoryStorageBackend
@@ -170,6 +224,111 @@ describe('WebOpenPGPPlugin', () => {
       await expect(second.init(ctx2)).rejects.toMatchObject({
         code: 'wrong-passphrase',
       })
+    })
+
+    it('refuses to silent-generate when the server already advertises a public key', async () => {
+      // EXACTLY Adrien's scenario. A fresh browser (empty IndexedDB) connects
+      // to an account whose PEP already lists a public key (published from
+      // another device). Silent generation would publish a competing key
+      // fingerprint and leave any peer who encrypts to the existing one
+      // unable to deliver — and the device that holds the matching private
+      // key still talking to a now-stale published metadata.
+      //
+      // ensureKeyMaterial MUST throw `needs-identity-decision`. The caller
+      // (init / unlock / dialog handlers) decides how to surface it; init
+      // itself swallows the error so the plugin stays registered for the
+      // user-driven resolution path (see dedicated test below).
+      const { ctx } = makeCtxWithPublishedFingerprint('alice@example.com', 'a1'.repeat(20))
+      const plugin = new TestableWebOpenPGPPlugin()
+      // Do NOT call init() — we want to reach ensureKeyMaterial directly
+      // to assert the guard's behaviour without depending on the init
+      // wrapper's error-swallowing policy.
+      // Instead, populate ctx manually via init() and capture the swallow.
+      setSessionPassphrase('strong-test-passphrase-123')
+      await plugin.init(ctx)
+      // After init, calling ensureKeyMaterial directly must still fail —
+      // the guard is what protects the user from later code paths that
+      // might bypass init (e.g. a manual retry).
+      await expect(
+        plugin.callEnsureKeyMaterial('alice@example.com'),
+      ).rejects.toMatchObject({
+        code: 'needs-identity-decision',
+      })
+    })
+
+    it('init swallows needs-identity-decision so the plugin stays registered for recovery', async () => {
+      // The host expects the plugin to remain available even when it
+      // refuses to silent-generate: the user needs to call
+      // `restoreSecretKey` / `importKeyFromFile` (or future
+      // `retireAndGenerateIdentity`) through the registered plugin. If
+      // init propagated, every subsequent call would have to re-register.
+      const { ctx } = makeCtxWithPublishedFingerprint('alice@example.com', 'b2'.repeat(20))
+      const plugin = new TestableWebOpenPGPPlugin()
+      setSessionPassphrase('strong-test-passphrase-123')
+      // No throw expected — the guard fires inside ensureIdentity, init
+      // recognises the error code and swallows it (same shape as the
+      // key-locked path).
+      await expect(plugin.init(ctx)).resolves.toBeUndefined()
+    })
+
+    it('refuses to silent-generate when the server holds a backup (no public key)', async () => {
+      // Symmetric edge case: the public-keys node was retracted but the
+      // secret-key backup persists. Generating a fresh key here would
+      // overwrite the backup the user could otherwise recover from.
+      const dearmored = atob('ZmFrZS1iYWNrdXAtcGF5bG9hZA==')
+      const reencoded = btoa(dearmored)
+      const xmpp: XMPPPrimitives = {
+        sendStanza: async () => {},
+        queryDisco: async () => ({
+          features: [{ var: 'http://jabber.org/protocol/pubsub' }],
+          identities: [{ category: 'pubsub', type: 'pep' }],
+        }),
+        publishPEP: async () => {},
+        retractPEP: async () => {},
+        deletePEP: async () => {},
+        queryPEP: async (_jid, node) => {
+          if (node === 'urn:xmpp:openpgp:0:secret-key') {
+            return [
+              {
+                id: 'current',
+                payload: {
+                  name: 'secretkey',
+                  attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+                  children: [reencoded],
+                },
+              },
+            ]
+          }
+          return []
+        },
+        subscribePEP: () => ({ unsubscribe: () => {} }),
+      }
+      const ctx: PluginContext = {
+        storage: createPluginStorage(new InMemoryStorageBackend(), 'openpgp-test'),
+        xmpp,
+        logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
+        account: { jid: 'alice@example.com' },
+        reportSecurityContextUpdate: () => {},
+      }
+      const plugin = new TestableWebOpenPGPPlugin()
+      setSessionPassphrase('strong-test-passphrase-123')
+      await plugin.init(ctx)
+      await expect(
+        plugin.callEnsureKeyMaterial('alice@example.com'),
+      ).rejects.toMatchObject({
+        code: 'needs-identity-decision',
+      })
+    })
+
+    it('still generates silently when neither a backup nor a public key exists', async () => {
+      // Truly fresh account — first-ever setup. The user has nothing to
+      // lose by generating; the existing flow is the right path.
+      const plugin = new TestableWebOpenPGPPlugin()
+      const { ctx } = makeCtx('alice@example.com')
+      setSessionPassphrase('strong-test-passphrase-123')
+      await plugin.init(ctx)
+      const bundle = await plugin.callEnsureKeyMaterial('alice@example.com')
+      expect(bundle.fingerprint).toMatch(/^[a-f0-9]{40,}$/)
     })
   })
 
@@ -810,6 +969,175 @@ describe('WebOpenPGPPlugin', () => {
       expect(result).not.toBeNull()
       expect(result!.needsPicker).toBe(true)
       expect(result!.selected.fingerprint).toBe('KEY_B')
+    })
+  })
+
+  describe('retireAndGenerateIdentity', () => {
+    it('retracts every published fingerprint and generates a fresh key', async () => {
+      // The user-driven "I can't recover the published key — replace it"
+      // path of the identity choice dialog. Must:
+      //   1. enumerate published fingerprints and retract each data node,
+      //   2. retract the metadata node,
+      //   3. clear the local key material,
+      //   4. generate a fresh keypair (bypassing the silent-fork guard
+      //      because the user explicitly authorised the replacement),
+      //   5. publish the new data + metadata nodes.
+      const oldFp1 = 'aa'.repeat(20)
+      const oldFp2 = 'bb'.repeat(20)
+      const retractCalls: Array<{ node: string; itemId: string }> = []
+      const publishCalls: Array<{ node: string; itemId: string }> = []
+      const xmpp: XMPPPrimitives = {
+        sendStanza: async () => {},
+        queryDisco: async () => ({
+          features: [{ var: 'http://jabber.org/protocol/pubsub' }],
+          identities: [{ category: 'pubsub', type: 'pep' }],
+        }),
+        publishPEP: async (node, item) => {
+          publishCalls.push({ node, itemId: item.id })
+        },
+        retractPEP: async (node, itemId) => {
+          retractCalls.push({ node, itemId })
+        },
+        deletePEP: async () => {},
+        queryPEP: async (jid, node): Promise<PEPItem[]> => {
+          if (jid !== 'alice@example.com') return []
+          if (node === 'urn:xmpp:openpgp:0:public-keys') {
+            return [
+              {
+                id: 'current',
+                payload: {
+                  name: 'public-keys-list',
+                  attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+                  children: [
+                    {
+                      name: 'pubkey-metadata',
+                      attrs: { 'v4-fingerprint': oldFp1 },
+                      children: [],
+                    },
+                    {
+                      name: 'pubkey-metadata',
+                      attrs: { 'v4-fingerprint': oldFp2 },
+                      children: [],
+                    },
+                  ],
+                },
+              },
+            ]
+          }
+          return []
+        },
+        subscribePEP: () => ({ unsubscribe: () => {} }),
+      }
+      const ctx: PluginContext = {
+        storage: createPluginStorage(new InMemoryStorageBackend(), 'openpgp-test'),
+        xmpp,
+        logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
+        account: { jid: 'alice@example.com' },
+        reportSecurityContextUpdate: () => {},
+      }
+      const plugin = new TestableWebOpenPGPPlugin()
+      setSessionPassphrase('strong-test-passphrase-123')
+      await plugin.init(ctx) // init swallows needs-identity-decision
+
+      const result = await plugin.retireAndGenerateIdentity()
+
+      // Step 1+2: each published fingerprint and the metadata node were retracted.
+      const retractedNodes = retractCalls.map((c) => c.node)
+      expect(retractedNodes).toContain('urn:xmpp:openpgp:0:public-keys')
+      expect(retractedNodes).toContain(`urn:xmpp:openpgp:0:public-keys:${oldFp1}`)
+      expect(retractedNodes).toContain(`urn:xmpp:openpgp:0:public-keys:${oldFp2}`)
+
+      // Step 4: a fresh fingerprint was generated.
+      expect(result.fingerprint).toMatch(/^[a-f0-9]{40}$/)
+      expect(result.fingerprint).not.toBe(oldFp1)
+      expect(result.fingerprint).not.toBe(oldFp2)
+
+      // Step 5: the new public key was published — both data and metadata nodes.
+      const publishedNodes = publishCalls.map((c) => c.node)
+      expect(publishedNodes).toContain(`urn:xmpp:openpgp:0:public-keys:${result.fingerprint}`)
+      expect(publishedNodes).toContain('urn:xmpp:openpgp:0:public-keys')
+    })
+
+    it('clears the own-key-conflict alert after a successful retire', async () => {
+      // Before retire, init recorded a conflict (server fp != local key
+      // would conflict if we had one). After retire, server == local and
+      // the conflict banner must come down on its own.
+      const { ctx } = makeCtxWithPublishedFingerprint('alice@example.com', 'cc'.repeat(20))
+      const plugin = new TestableWebOpenPGPPlugin()
+      setSessionPassphrase('strong-test-passphrase-123')
+      await plugin.init(ctx)
+
+      const { useOwnKeyConflictStore, recordOwnKeyConflict } = await import(
+        '@/stores/ownKeyConflictStore'
+      )
+      // Simulate the conflict that the post-replace flow should clear.
+      recordOwnKeyConflict({
+        kind: 'primary-mismatch',
+        localFingerprint: 'dd'.repeat(20),
+        publishedFingerprint: 'cc'.repeat(20),
+        publishedDate: '2026-05-11T00:00:00Z',
+      })
+      expect(useOwnKeyConflictStore.getState().conflict).not.toBeNull()
+
+      await plugin.retireAndGenerateIdentity()
+      expect(useOwnKeyConflictStore.getState().conflict).toBeNull()
+    })
+
+    it('continues to publish even when retract fails (best-effort)', async () => {
+      // PEP retract can fail for many transient reasons; the new
+      // publication will overwrite the metadata regardless, so a retract
+      // failure must NOT block regeneration.
+      let publishedNew = false
+      const xmpp: XMPPPrimitives = {
+        sendStanza: async () => {},
+        queryDisco: async () => ({
+          features: [{ var: 'http://jabber.org/protocol/pubsub' }],
+          identities: [{ category: 'pubsub', type: 'pep' }],
+        }),
+        publishPEP: async (node) => {
+          if (node === 'urn:xmpp:openpgp:0:public-keys') publishedNew = true
+        },
+        retractPEP: async () => {
+          throw new Error('item-not-found')
+        },
+        deletePEP: async () => {},
+        queryPEP: async (_jid, node): Promise<PEPItem[]> => {
+          if (node === 'urn:xmpp:openpgp:0:public-keys') {
+            return [
+              {
+                id: 'current',
+                payload: {
+                  name: 'public-keys-list',
+                  attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+                  children: [
+                    {
+                      name: 'pubkey-metadata',
+                      attrs: { 'v4-fingerprint': 'ee'.repeat(20) },
+                      children: [],
+                    },
+                  ],
+                },
+              },
+            ]
+          }
+          return []
+        },
+        subscribePEP: () => ({ unsubscribe: () => {} }),
+      }
+      const ctx: PluginContext = {
+        storage: createPluginStorage(new InMemoryStorageBackend(), 'openpgp-test'),
+        xmpp,
+        logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
+        account: { jid: 'alice@example.com' },
+        reportSecurityContextUpdate: () => {},
+      }
+      const plugin = new TestableWebOpenPGPPlugin()
+      setSessionPassphrase('strong-test-passphrase-123')
+      await plugin.init(ctx)
+
+      const result = await plugin.retireAndGenerateIdentity()
+      expect(result.fingerprint).toMatch(/^[a-f0-9]{40}$/)
+      expect(publishedNew).toBe(true)
     })
   })
 })

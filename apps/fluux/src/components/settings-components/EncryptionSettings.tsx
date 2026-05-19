@@ -9,12 +9,15 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { DeleteOpenpgpKeyDialog } from '@/components/DeleteOpenpgpKeyDialog'
 import { BackupPassphraseDialog } from '@/components/BackupPassphraseDialog'
 import { RestorePassphraseDialog } from '@/components/RestorePassphraseDialog'
-import { EnableWithBackupDialog } from '@/components/EnableWithBackupDialog'
+import { IdentityChoiceDialog } from '@/components/IdentityChoiceDialog'
 import { OwnKeyConflictBanner } from '@/components/OwnKeyConflictBanner'
 import { UnlockEncryptionDialog } from '@/components/UnlockEncryptionDialog'
 import { KeyPickerDialog } from '@/components/KeyPickerDialog'
 import type { KeyBundle } from '@/e2ee/OpenPGPPluginBase'
-import { probeRemoteSecretKeyBackup, SecretKeyBackupProbeError } from '@/e2ee/secretKeyProbe'
+import {
+  probeRemoteIdentityState,
+  SecretKeyBackupProbeError,
+} from '@/e2ee/secretKeyProbe'
 import { isKeyLocked } from '@/e2ee/webPassphraseStore'
 import { isTauri } from '@/utils/tauri'
 
@@ -76,13 +79,15 @@ export function EncryptionSettings() {
   // a remote backup exists, local and server are known to be in sync
   // and the backup/restore buttons are redundant.
   const [backedUpFingerprint, setBackedUpFingerprint] = useState<string | null>(null)
-  // Non-null only while the "we found a backup on enable — restore or
-  // start fresh?" dialog is open. Holds the armored backup ciphertext
-  // the probe pulled from PEP so the restore handler doesn't need to
-  // re-fetch it.
-  const [pendingEnableBackup, setPendingEnableBackup] = useState<{
+  // Set whenever the toggle (or auto-init) detected an existing server-
+  // side OpenPGP identity but this device has no local key. The user must
+  // resolve via the IdentityChoiceDialog — silent generation is refused
+  // both here AND inside WebOpenPGPPlugin.ensureKeyMaterial (defence in
+  // depth).
+  const [pendingIdentityChoice, setPendingIdentityChoice] = useState<{
     accountJid: string
-    backupMessage: string
+    hasBackup: boolean
+    publishedFingerprints: string[]
   } | null>(null)
 
   const [limitationsDismissed, setLimitationsDismissed] = useState(
@@ -189,9 +194,41 @@ export function EncryptionSettings() {
       }
       const bareJid = jid ? jid.split('/')[0] : null
       if (!isTauri()) {
-        // Web: register first (may end up in locked state if no passphrase set yet),
-        // then prompt the user to unlock / set up their passphrase.
+        // Web: same defence-in-depth as desktop — never silently generate
+        // when the server already advertises an OpenPGP identity for this
+        // account. The crypto-layer guard in WebOpenPGPPlugin would refuse
+        // anyway, but probing here lets us surface the resolution dialog
+        // directly instead of letting the unlock dialog fail with an
+        // obscure error.
+        //
+        // Register first so we can use the plugin's `hasNoLocalKey` to
+        // tell apart fresh-browser (needs choice) from returning-browser
+        // (needs unlock). `init` swallows both `key-locked` and
+        // `needs-identity-decision` so registration succeeds in either
+        // state.
         await registerE2EEPlugins(client)
+        if (!bareJid) {
+          if (isKeyLocked()) setShowUnlockDialog(true)
+          return
+        }
+        const plugin = client.e2ee?.getPlugin('openpgp') as
+          | { hasNoLocalKey?: () => Promise<boolean> }
+          | null
+          | undefined
+        const hasNoLocal = plugin?.hasNoLocalKey
+          ? await plugin.hasNoLocalKey()
+          : false
+        if (hasNoLocal) {
+          const state = await probeRemoteIdentityState(client, bareJid)
+          if (state.hasServerIdentity) {
+            setPendingIdentityChoice({
+              accountJid: bareJid,
+              hasBackup: state.backupMessage !== null,
+              publishedFingerprints: state.publishedFingerprints,
+            })
+            return
+          }
+        }
         if (isKeyLocked()) {
           setShowUnlockDialog(true)
         }
@@ -203,30 +240,45 @@ export function EncryptionSettings() {
         return
       }
 
-      const { invoke } = await import('@tauri-apps/api/core')
-      const hasLocal = await invoke<boolean>('openpgp_has_persisted_key', {
+      // Desktop: register first. Since the silent-fork guard now also
+      // lives in SequoiaPgpPlugin.ensureKeyMaterial, registration is
+      // safe even when the server has an existing identity — init
+      // swallows `needs-identity-decision` and the plugin stays
+      // registered without generating. After register, three states
+      // are possible:
+      //
+      //   - hasNoLocal=false → key was loaded from the OS keychain
+      //     (returning device) or generated fresh (clean account).
+      //     Nothing more to do; the toggle is on and the plugin is
+      //     ready.
+      //
+      //   - hasNoLocal=true → the guard fired. The server has an
+      //     OpenPGP identity for this account but the device has no
+      //     matching private key. Probe to enumerate the published
+      //     fingerprints + backup state for the dialog, then route
+      //     the user through IdentityChoiceDialog.
+      //
+      // The probe runs only in the second case; the common path
+      // (returning device) pays no extra IQ.
+      await registerE2EEPlugins(client)
+      const plugin = client.e2ee?.getPlugin('openpgp') as
+        | { hasNoLocalKey?: () => Promise<boolean> }
+        | null
+        | undefined
+      const hasNoLocal = plugin?.hasNoLocalKey
+        ? await plugin.hasNoLocalKey()
+        : false
+      if (!hasNoLocal) return
+      const state = await probeRemoteIdentityState(client, bareJid)
+      // The guard wouldn't have fired without server identity, but
+      // re-check defensively — the server's PEP could have changed
+      // between init's probe and ours.
+      if (!state.hasServerIdentity) return
+      setPendingIdentityChoice({
         accountJid: bareJid,
+        hasBackup: state.backupMessage !== null,
+        publishedFingerprints: state.publishedFingerprints,
       })
-      if (hasLocal) {
-        // Existing identity on this device — the normal register path
-        // loads it from disk. No server-side probe needed.
-        await registerE2EEPlugins(client)
-        return
-      }
-
-      // No local key; check the server before generating.
-      const backupMessage = await probeRemoteSecretKeyBackup(client, bareJid)
-      if (!backupMessage) {
-        // No backup, no local key — fresh generation is the only path.
-        await registerE2EEPlugins(client)
-        return
-      }
-
-      // Backup exists AND no local key: defer registration and hand
-      // the decision to the user. The dialog's handlers will either
-      // restore + register, generate fresh + register, or cancel the
-      // whole toggle.
-      setPendingEnableBackup({ accountJid: bareJid, backupMessage })
     } catch (err) {
       // A probe failure is structurally different from a generic toggle
       // failure: nothing was registered, nothing was generated, nothing
@@ -246,38 +298,90 @@ export function EncryptionSettings() {
     }
   }, [openpgpEnabled, online, client, jid, setOpenpgpEnabled, addToast, t])
 
-  const handleEnableRestore = useCallback(
+  // --- Identity choice dialog handlers (silent-fork prevention) ---
+  // Each handler resolves the `pendingIdentityChoice` state with one of
+  // the three explicit recovery paths. All three end by clearing the
+  // pending state and routing through the rest of the toggle flow so the
+  // user lands on the same "ready" state regardless of which path was
+  // taken.
+
+  const handleIdentityChoiceRestore = useCallback(
     async (passphrase: string) => {
-      if (!pendingEnableBackup) return
-      const { invoke } = await import('@tauri-apps/api/core')
-      await invoke('openpgp_backup_import', {
-        accountJid: pendingEnableBackup.accountJid,
-        backupMessage: pendingEnableBackup.backupMessage,
-        passphrase,
-      })
-      // The import persisted the TSK on disk; register now so the
-      // plugin's init loads (not generates) and the identity the user
-      // picked is the one advertised.
-      await registerE2EEPlugins(client)
-      setPendingEnableBackup(null)
+      const plugin = client.e2ee?.getPlugin('openpgp') as
+        | {
+            restoreSecretKey?: (pp: string) => Promise<
+              | { fingerprint: string }
+              | {
+                  needsPicker: true
+                  candidates: KeyBundle[]
+                  backupContext: { message: string; passphrase: string }
+                }
+            >
+            getBackedUpFingerprint?: () => string | null
+          }
+        | null
+        | undefined
+      if (!plugin?.restoreSecretKey) {
+        throw new Error(t('settings.encryption.backupPluginUnavailable'))
+      }
+      const result = await plugin.restoreSecretKey(passphrase)
+      if ('needsPicker' in result) {
+        // Multi-key backup: hand off to the existing picker. The choice
+        // dialog closes so the picker isn't stacked on top of it.
+        setPendingKeyPicker({
+          candidates: result.candidates,
+          backupMessage: result.backupContext.message,
+          passphrase: result.backupContext.passphrase,
+        })
+        setPendingIdentityChoice(null)
+        return
+      }
+      setFingerprint(result.fingerprint)
+      setBackedUpFingerprint(plugin.getBackedUpFingerprint?.() ?? result.fingerprint)
+      setPendingIdentityChoice(null)
       addToast('success', t('settings.encryption.restoreSuccess'))
     },
-    [pendingEnableBackup, client, addToast, t],
+    [client, t, addToast],
   )
 
-  const handleEnableUseFresh = useCallback(async () => {
-    // User declined the backup — register without touching the
-    // secret-key node. Generation produces a new identity that will
-    // overwrite the server-side public-keys metadata, which is what
-    // the user has explicitly chosen.
-    await registerE2EEPlugins(client)
-    setPendingEnableBackup(null)
+  const handleIdentityChoiceImportFile = useCallback(async () => {
+    // Mirror the existing file-import flow (handleImportFileRequest defined
+    // below). Inlined here to avoid a forward-reference (the choice
+    // handlers live near the toggle/probe code; the file flow lives in
+    // the danger-zone block further down).
+    const plugin = client.e2ee?.getPlugin('openpgp') as
+      | { pickKeyFile?: () => Promise<string | null> }
+      | null
+      | undefined
+    if (!plugin?.pickKeyFile) return
+    const content = await plugin.pickKeyFile()
+    if (!content) return
+    setPendingImportFileArmored(content)
+    // Close the choice dialog first so the passphrase dialog isn't
+    // stacked. The passphrase dialog's onConfirm handler
+    // (handleImportFileConfirm) will run the import.
+    setPendingIdentityChoice(null)
+    setShowImportFileDialog(true)
   }, [client])
 
-  const handleEnableCancel = useCallback(() => {
-    // Revert the toggle: neither register nor generate. The user
-    // isn't ready to decide yet; leave the server backup untouched.
-    setPendingEnableBackup(null)
+  const handleIdentityChoiceReplace = useCallback(async () => {
+    const plugin = client.e2ee?.getPlugin('openpgp') as
+      | { retireAndGenerateIdentity?: () => Promise<{ fingerprint: string }> }
+      | null
+      | undefined
+    if (!plugin?.retireAndGenerateIdentity) {
+      throw new Error(t('settings.encryption.backupPluginUnavailable'))
+    }
+    const result = await plugin.retireAndGenerateIdentity()
+    setFingerprint(result.fingerprint)
+    setPendingIdentityChoice(null)
+    addToast('success', t('settings.encryption.restoreSuccess'))
+  }, [client, t, addToast])
+
+  const handleIdentityChoiceCancel = useCallback(() => {
+    // User opted out — turn the toggle back off rather than leaving
+    // them in a half-registered state where the plugin sits idle.
+    setPendingIdentityChoice(null)
     setOpenpgpEnabled(false)
   }, [setOpenpgpEnabled])
 
@@ -994,11 +1098,14 @@ export function EncryptionSettings() {
         />
       )}
 
-      {pendingEnableBackup && (
-        <EnableWithBackupDialog
-          onRestore={handleEnableRestore}
-          onUseFresh={handleEnableUseFresh}
-          onCancel={handleEnableCancel}
+      {pendingIdentityChoice && (
+        <IdentityChoiceDialog
+          hasServerBackup={pendingIdentityChoice.hasBackup}
+          publishedFingerprints={pendingIdentityChoice.publishedFingerprints}
+          onRestoreFromServer={handleIdentityChoiceRestore}
+          onImportFromFile={handleIdentityChoiceImportFile}
+          onReplaceIdentity={handleIdentityChoiceReplace}
+          onCancel={handleIdentityChoiceCancel}
         />
       )}
 

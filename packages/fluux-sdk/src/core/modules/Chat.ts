@@ -1724,7 +1724,8 @@ export class Chat extends BaseModule {
     }
 
     if (this.deps.stores && !this.deps.stores.chat.hasConversation(conversationId)) {
-      const conversation = { id: conversationId, name: getLocalPart(conversationId), type: 'chat' as const, unreadCount: 0 }
+      const rosterContact = this.deps.stores.roster.getContact(conversationId)
+      const conversation = { id: conversationId, name: rosterContact?.name || getLocalPart(conversationId), type: 'chat' as const, unreadCount: 0 }
       // SDK event only - binding calls store.addConversation
       this.deps.emitSDK('chat:conversation', { conversation })
     }

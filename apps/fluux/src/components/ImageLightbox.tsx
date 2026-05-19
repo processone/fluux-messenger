@@ -8,6 +8,8 @@ import { X, Download, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { FileEncryption } from '@fluux/sdk'
 import { useAttachmentUrl } from '@/hooks'
+import { useContextMenu } from '@/hooks/useContextMenu'
+import { ImageContextMenu } from './ImageContextMenu'
 
 interface ImageLightboxProps {
   /** Original full-resolution image URL (proxied/decrypted internally for display) */
@@ -30,6 +32,7 @@ export function ImageLightbox({ src, alt, downloadUrl, filename, encryption, pla
   const { t } = useTranslation()
   const mouseDownTargetRef = useRef<EventTarget | null>(null)
   const { url: proxiedSrc, isLoading } = useAttachmentUrl(src, encryption)
+  const imageMenu = useContextMenu()
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -75,6 +78,7 @@ export function ImageLightbox({ src, alt, downloadUrl, filename, encryption, pla
           alt={alt || 'Image'}
           className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg select-none"
           draggable={false}
+          onContextMenu={imageMenu.handleContextMenu}
         />
       ) : (
         isLoading && <Loader2 className="w-8 h-8 text-white/70 animate-spin" />
@@ -86,6 +90,13 @@ export function ImageLightbox({ src, alt, downloadUrl, filename, encryption, pla
           {filename}
         </div>
       )}
+
+      <ImageContextMenu
+        originalUrl={src}
+        proxiedUrl={proxiedSrc ?? downloadUrl}
+        filename={filename}
+        menu={imageMenu}
+      />
     </div>,
     document.body
   )

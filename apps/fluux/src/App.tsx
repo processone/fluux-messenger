@@ -1,10 +1,15 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useConnection, useXMPPContext, hasFastToken } from '@fluux/sdk'
 import { registerE2EEPlugins } from './e2ee/registerPlugins'
 import { isKeyLocked } from './e2ee/webPassphraseStore'
+import { probeRemoteIdentityState } from './e2ee/secretKeyProbe'
 import { isOpenpgpEnabled } from './stores/encryptionSettingsStore'
+import { useToastStore } from './stores/toastStore'
 import { UnlockEncryptionDialog } from './components/UnlockEncryptionDialog'
+import { IdentityChoiceDialog } from './components/IdentityChoiceDialog'
+import { RestorePassphraseDialog } from './components/RestorePassphraseDialog'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { LoginScreen } from './components/LoginScreen'
 import { ChatLayout } from './components/ChatLayout'
@@ -50,8 +55,10 @@ function App() {
   // Detect render loops before they freeze the UI
   detectRenderLoop('App')
 
-  const { status } = useConnection()
+  const { status, jid } = useConnection()
   const { client } = useXMPPContext()
+  const { t } = useTranslation()
+  const addToast = useToastStore((s) => s.addToast)
   const tabCoordination = useTabCoordination(() => {
     // When another tab takes over, disconnect this client
     void client.disconnect()
@@ -148,6 +155,22 @@ function App() {
   const [hasBeenOnline, setHasBeenOnline] = useState(false)
 
   const [showWebUnlockDialog, setShowWebUnlockDialog] = useState(false)
+  // Set when auto-init detects a server-side OpenPGP identity for this
+  // account but no local key. Forces the user through IdentityChoiceDialog
+  // instead of the standard unlock dialog (which would otherwise reach
+  // ensureKeyMaterial, hit the crypto guard, and surface an opaque error).
+  // Keeping this state lifted here matches the existing pattern for
+  // showWebUnlockDialog: App is the single owner of the connect-time
+  // E2EE bootstrap flow.
+  const [pendingIdentityChoice, setPendingIdentityChoice] = useState<{
+    accountJid: string
+    hasBackup: boolean
+    publishedFingerprints: string[]
+  } | null>(null)
+  // Holds the armored file content while the user types the file
+  // passphrase. Decoupled from `pendingIdentityChoice` so the choice
+  // dialog can dismiss as soon as the file is picked.
+  const [pendingImportFile, setPendingImportFile] = useState<string | null>(null)
 
   // Auto-reconnect on page reload if session exists
   useSessionPersistence(tabCoordination.claimConnection)
@@ -167,8 +190,42 @@ function App() {
       // Fire-and-forget: a failure must not block the chat path.
       // On web, after registration the key may be in locked state — show the
       // unlock dialog so the user can supply the session passphrase.
-      void registerE2EEPlugins(client).then(() => {
-        if (!isTauri && isOpenpgpEnabled() && isKeyLocked()) {
+      void registerE2EEPlugins(client).then(async () => {
+        if (isTauri || !isOpenpgpEnabled()) return
+        // Web auto-init: if the server already advertises an OpenPGP
+        // identity but the local IndexedDB has no key (cleared cookies,
+        // new browser profile, fresh install of Fluux web on the same
+        // account), route the user to IdentityChoiceDialog up-front
+        // instead of through the unlock dialog. The crypto guard would
+        // refuse silent generation either way, but a clean dialog is
+        // friendlier than a generic unlock failure.
+        const accountJid = jid ? jid.split('/')[0] : null
+        const plugin = client.e2ee?.getPlugin('openpgp') as
+          | { hasNoLocalKey?: () => Promise<boolean> }
+          | null
+          | undefined
+        if (accountJid && plugin?.hasNoLocalKey) {
+          try {
+            const hasNoLocal = await plugin.hasNoLocalKey()
+            if (hasNoLocal) {
+              const state = await probeRemoteIdentityState(client, accountJid)
+              if (state.hasServerIdentity) {
+                setPendingIdentityChoice({
+                  accountJid,
+                  hasBackup: state.backupMessage !== null,
+                  publishedFingerprints: state.publishedFingerprints,
+                })
+                return
+              }
+            }
+          } catch {
+            // Probe failure (transient network, server down): fall
+            // through to the unlock dialog. The crypto guard remains
+            // effective; the worst case is a confused error message
+            // until the user re-toggles via Settings.
+          }
+        }
+        if (isKeyLocked()) {
           setShowWebUnlockDialog(true)
         }
       })
@@ -180,7 +237,81 @@ function App() {
         setIsAutoReconnecting(false)
       }
     }
-  }, [status, client])
+  }, [status, client, jid])
+
+  // --- Identity-choice handlers (web first-login safety net) ---
+  // Each resolves `pendingIdentityChoice` with one explicit recovery
+  // path. Failures stay inside the dialog (the dialog's try/catch
+  // surfaces the error to the user); success closes the dialog and
+  // emits a toast. Toast strings reuse settings.encryption.restoreSuccess
+  // — the user-visible outcome is identical regardless of which path
+  // ran (the account is now usable for E2EE).
+
+  const handleIdentityRestoreFromServer = useCallback(
+    async (passphrase: string) => {
+      const plugin = client.e2ee?.getPlugin('openpgp') as
+        | {
+            restoreSecretKey?: (pp: string) => Promise<unknown>
+          }
+        | null
+        | undefined
+      if (!plugin?.restoreSecretKey) {
+        throw new Error(t('settings.encryption.backupPluginUnavailable'))
+      }
+      await plugin.restoreSecretKey(passphrase)
+      setPendingIdentityChoice(null)
+      client.notifyE2EEKeyUnlocked?.()
+      addToast('success', t('settings.encryption.restoreSuccess'))
+    },
+    [client, t, addToast],
+  )
+
+  const handleIdentityImportFromFile = useCallback(async () => {
+    const plugin = client.e2ee?.getPlugin('openpgp') as
+      | { pickKeyFile?: () => Promise<string | null> }
+      | null
+      | undefined
+    if (!plugin?.pickKeyFile) return
+    const content = await plugin.pickKeyFile()
+    if (!content) return
+    // Close the choice dialog and hand off to the passphrase dialog.
+    setPendingIdentityChoice(null)
+    setPendingImportFile(content)
+  }, [client])
+
+  const handleImportFilePassphrase = useCallback(
+    async (passphrase: string) => {
+      if (!pendingImportFile) return
+      const plugin = client.e2ee?.getPlugin('openpgp') as
+        | {
+            importKeyFromFile?: (armored: string, pp: string) => Promise<unknown>
+          }
+        | null
+        | undefined
+      if (!plugin?.importKeyFromFile) {
+        throw new Error(t('settings.encryption.backupPluginUnavailable'))
+      }
+      await plugin.importKeyFromFile(pendingImportFile, passphrase)
+      setPendingImportFile(null)
+      client.notifyE2EEKeyUnlocked?.()
+      addToast('success', t('settings.encryption.restoreSuccess'))
+    },
+    [client, pendingImportFile, t, addToast],
+  )
+
+  const handleIdentityReplaceIdentity = useCallback(async () => {
+    const plugin = client.e2ee?.getPlugin('openpgp') as
+      | { retireAndGenerateIdentity?: () => Promise<unknown> }
+      | null
+      | undefined
+    if (!plugin?.retireAndGenerateIdentity) {
+      throw new Error(t('settings.encryption.backupPluginUnavailable'))
+    }
+    await plugin.retireAndGenerateIdentity()
+    setPendingIdentityChoice(null)
+    client.notifyE2EEKeyUnlocked?.()
+    addToast('success', t('settings.encryption.restoreSuccess'))
+  }, [client, t, addToast])
 
   // Check if we have a stored session (for reconnect scenarios)
   const hasSession = getSession() !== null
@@ -265,6 +396,25 @@ function App() {
         <UnlockEncryptionDialog
           client={client}
           onClose={() => setShowWebUnlockDialog(false)}
+        />
+      )}
+      {pendingIdentityChoice && (
+        <IdentityChoiceDialog
+          hasServerBackup={pendingIdentityChoice.hasBackup}
+          publishedFingerprints={pendingIdentityChoice.publishedFingerprints}
+          onRestoreFromServer={handleIdentityRestoreFromServer}
+          onImportFromFile={handleIdentityImportFromFile}
+          onReplaceIdentity={handleIdentityReplaceIdentity}
+          onCancel={() => setPendingIdentityChoice(null)}
+        />
+      )}
+      {pendingImportFile && (
+        <RestorePassphraseDialog
+          title={t('settings.encryption.importFileDialogTitle')}
+          body={t('settings.encryption.importFileDialogBody')}
+          confirmLabel={t('settings.encryption.importFileAction')}
+          onConfirm={handleImportFilePassphrase}
+          onCancel={() => setPendingImportFile(null)}
         />
       )}
     </>

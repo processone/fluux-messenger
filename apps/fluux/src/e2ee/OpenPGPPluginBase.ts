@@ -65,11 +65,17 @@ import {
   type E2EEErrorKind,
 } from '@fluux/sdk'
 import { getBareJid } from '@fluux/sdk'
+import type { XMPPClient } from '@fluux/sdk/core'
 import {
   clearBackedUpFingerprint,
   readBackedUpFingerprint,
   writeBackedUpFingerprint,
 } from './backupMarker'
+import {
+  probeRemoteIdentityState,
+  probeRemotePublishedFingerprints,
+  SecretKeyBackupProbeError,
+} from './secretKeyProbe'
 import {
   clearPeerVerified,
   isPeerVerified,
@@ -270,6 +276,19 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   private _syncingFromRemoteCount = 0
   private _publishVerificationTimeout: ReturnType<typeof setTimeout> | null = null
 
+  /**
+   * Cross-cutting bypass for the WebOpenPGPPlugin's silent-fork guard
+   * inside {@link ensureKeyMaterial}. Set by {@link retireAndGenerateIdentity}
+   * around its own explicit regeneration so the guard — which exists to
+   * catch ACCIDENTAL silent generation — doesn't block the
+   * user-authorised replacement. Read by the subclass's guard.
+   *
+   * Lives on the base because both subclasses share this concern: even
+   * desktop (Sequoia) will inherit the same guard in a follow-up to fix
+   * the symmetrical desktop bug. Always reset in a `finally`.
+   */
+  protected _allowSilentRegenerate = false
+
   // ---------------------------------------------------------------------------
   // Abstract crypto methods — implemented by each platform subclass
   // ---------------------------------------------------------------------------
@@ -392,6 +411,17 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         // Web plugin: key stored but passphrase not yet provided.
         // Plugin is registered in a locked state; call activateSubscriptions()
         // after the user unlocks via unlock().
+        return
+      }
+      if (err instanceof E2EEPluginError && err.code === 'needs-identity-decision') {
+        // Web plugin: no local key AND server already advertises an
+        // OpenPGP identity for this account. Silent generation would
+        // fork the identity, so the safety guard in `ensureKeyMaterial`
+        // bailed out. The plugin stays registered in a "needs decision"
+        // state — the host should detect this (via the unlock dialog or
+        // the encryption-settings toggle flow) and route the user to a
+        // resolution: import the matching private key, or explicitly
+        // retire the published identity.
         return
       }
       throw err
@@ -532,6 +562,159 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     }
 
     return { fingerprint: bundle.fingerprint }
+  }
+
+  /**
+   * Explicit, user-driven invalidation + replacement of the published
+   * OpenPGP identity. The third option of the IdentityChoiceDialog —
+   * for users who cannot recover the matching private key (no backup,
+   * no file) and accept that:
+   *   - peers must re-pin (key change alert on their side);
+   *   - past messages encrypted to the retired key are unrecoverable
+   *     from this device.
+   *
+   * Distinct from {@link rotateEncryptionKey} (rotates the encryption
+   * subkey within the same primary cert — keeps the published identity
+   * stable) and from {@link restoreSecretKey} / {@link importKeyFromFile}
+   * (imports a key whose fingerprint already matches the published one).
+   *
+   * Steps:
+   *   1. Enumerate every published fingerprint via the lightweight PEP
+   *      probe so we retract historical data nodes too, not just the
+   *      one this device happens to know about.
+   *   2. Retract metadata + each data node. Best-effort — a retract
+   *      failure must not block step 4 because the new publication
+   *      overwrites the metadata regardless.
+   *   3. Clear local key material so the regenerate branch fires.
+   *   4. Generate a fresh keypair. The {@link _allowSilentRegenerate}
+   *      flag bypasses the web subclass's safety guard (which exists
+   *      to catch ACCIDENTAL forks; this is an authorised replacement).
+   *   5. Publish the new public key (data, then metadata, mirroring
+   *      {@link ensureIdentity}'s ordering).
+   *   6. Clear the own-key-conflict banner: server and local are now
+   *      back in sync.
+   */
+  async retireAndGenerateIdentity(): Promise<IdentityInfo> {
+    const ctx = this.requireCtx()
+
+    let publishedFingerprints: string[] = []
+    try {
+      publishedFingerprints = await probeRemotePublishedFingerprints(
+        this.makePepProbeAdapter(),
+        ctx.account.jid,
+      )
+    } catch (err) {
+      ctx.logger.debug(
+        `${this.pluginName()}: enumerate published fingerprints during retire failed: ${formatError(err)}`,
+      )
+    }
+
+    await ctx.xmpp
+      .retractPEP(PUBLIC_KEYS_METADATA_NODE, CURRENT_ITEM_ID)
+      .catch((err) => {
+        ctx.logger.debug(
+          `${this.pluginName()}: retract metadata during retire failed: ${formatError(err)}`,
+        )
+      })
+    for (const fp of publishedFingerprints) {
+      await ctx.xmpp
+        .retractPEP(publicKeyDataNodeFor(fp), CURRENT_ITEM_ID)
+        .catch((err) => {
+          ctx.logger.debug(
+            `${this.pluginName()}: retract data node ${fp} during retire failed: ${formatError(err)}`,
+          )
+        })
+    }
+
+    await this.forgetAccount(ctx.account.jid).catch(() => {})
+    this.ownBundle = null
+
+    this._allowSilentRegenerate = true
+    let bundle: KeyBundle
+    try {
+      bundle = await this.ensureKeyMaterial(ctx.account.jid)
+    } finally {
+      this._allowSilentRegenerate = false
+    }
+    this.ownBundle = bundle
+
+    try {
+      await this.publishOwnPublicKeyData(bundle)
+      await this.publishOwnPublicKeyMetadata(bundle)
+    } catch (err) {
+      ctx.logger.warn(
+        `${this.pluginName()}: retire publish failed: ${formatError(err)}`,
+      )
+    }
+
+    clearOwnKeyConflict()
+
+    return { fingerprint: bundle.fingerprint }
+  }
+
+  /**
+   * Shared "silent-fork" safety guard, called by both subclasses' key-
+   * generation paths before they create new key material. Refuses
+   * generation when the server already holds OpenPGP identity material
+   * for this account — either a published public key OR a secret-key
+   * backup. The bug this prevents: a fresh device that silently
+   * generates a key, publishes its fingerprint to PEP, and overwrites
+   * the metadata peers had pinned, leaving any sibling device that
+   * still holds the matching private key (or any peer whose pinning
+   * has not refreshed) unable to deliver / decrypt.
+   *
+   * Bypassable via the {@link _allowSilentRegenerate} flag, which
+   * {@link retireAndGenerateIdentity} sets during its
+   * user-authorised replacement (it retracted the published identity
+   * itself; propagation timing would otherwise re-trip the guard).
+   */
+  protected async assertSilentGenerationAllowed(accountJid: string): Promise<void> {
+    if (this._allowSilentRegenerate) return
+    let identityState
+    try {
+      identityState = await probeRemoteIdentityState(
+        this.makePepProbeAdapter(),
+        accountJid,
+      )
+    } catch (err) {
+      if (err instanceof SecretKeyBackupProbeError) {
+        throw new E2EEPluginError(
+          'transient',
+          'identity-probe-failed',
+          `${this.pluginName()}: could not probe server for existing identity before key generation: ${err.message}`,
+          err,
+        )
+      }
+      throw err
+    }
+    if (identityState.hasServerIdentity) {
+      const reason =
+        identityState.publishedFingerprints.length > 0
+          ? `public key advertised (${identityState.publishedFingerprints[0]})`
+          : 'backup present'
+      throw new E2EEPluginError(
+        'permanent',
+        'needs-identity-decision',
+        `${this.pluginName()}: server already holds an OpenPGP identity for ${accountJid} (${reason}). ` +
+          `Silent generation would fork this identity. The user must import the matching private key ` +
+          `(from the server backup or a file) or explicitly retire the published identity.`,
+      )
+    }
+  }
+
+  /**
+   * Adapter that lets the standalone PEP probe helpers (which take an
+   * XMPPClient) run against this plugin's `ctx.xmpp.queryPEP`. The
+   * shape match is exact for the one call site they touch (`pubsub.query`).
+   */
+  protected makePepProbeAdapter(): XMPPClient {
+    const ctx = this.requireCtx()
+    return {
+      pubsub: {
+        query: (jid: string, node: string, max?: number) =>
+          ctx.xmpp.queryPEP(jid, node, max),
+      },
+    } as unknown as XMPPClient
   }
 
   async retractPublicKeys(): Promise<void> {

@@ -94,7 +94,14 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
       }
     }
 
-    // No stored key — generate a fresh one.
+    // Defence in depth: refuse to silent-generate when the server
+    // already holds OpenPGP identity material for this account. See
+    // {@link OpenPGPPluginBase.assertSilentGenerationAllowed} for the
+    // full rationale. Bypassable via `_allowSilentRegenerate` set by
+    // `retireAndGenerateIdentity`.
+    await this.assertSilentGenerationAllowed(accountJid)
+
+    // Truly fresh account, OR explicit retire+regenerate. Safe to generate.
     return this.generateAndStoreKey(accountJid, passphrase, ctx.storage)
   }
 

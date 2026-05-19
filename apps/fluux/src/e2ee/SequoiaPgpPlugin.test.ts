@@ -821,6 +821,20 @@ describe('SequoiaPgpPlugin', () => {
 
     it('records a primary-mismatch conflict and skips publish when server has a different primary key', async () => {
       const { ctx, peerPublish, published } = makeContext('me@example.com')
+      // Simulate a returning device: the local OS keychain already has a
+      // key (the seeded `openpgp_ensure_key` call below populates the
+      // fake Rust cache). Without this, the new silent-generation guard
+      // would fire first (hasNoLocalKey=true + server identity present)
+      // and bail out before `checkOwnPublishedKeyConsistency` runs —
+      // which is the right behaviour for a TRULY fresh device, but
+      // hides the primary-mismatch detection path that this test is
+      // about: a returning device whose local key disagrees with the
+      // server's published one (key tampering, sibling-device rotation
+      // we missed).
+      await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'me@example.com',
+        userId: 'xmpp:me@example.com',
+      })
       // Server has a completely different key fingerprint (tampering or new device).
       peerPublish('me@example.com', METADATA_NODE, {
         id: 'current',
@@ -848,6 +862,89 @@ describe('SequoiaPgpPlugin', () => {
       expect(conflict!.publishedDate).toBe('2024-01-01T00:00:00Z')
       // No publish: the user must decide before we overwrite the server.
       expect(published).toHaveLength(0)
+    })
+
+    it('refuses silent generation when server advertises a key but device has none', async () => {
+      // Mirror of the web-side guard: a truly fresh desktop install
+      // (no on-disk key) connecting to an account whose PEP already
+      // lists a public key MUST NOT silently generate. Doing so would
+      // publish a competing fingerprint and silently fork the
+      // identity for any sibling device that still holds the matching
+      // private key. The guard throws `needs-identity-decision`, init
+      // swallows it (same shape as `key-locked`), and the plugin
+      // stays registered for the host UI to drive the resolution.
+      const { ctx, peerPublish } = makeContext('me@example.com')
+      // Deliberately do NOT pre-seed the local key: hasNoLocalKey
+      // returns true, the guard fires.
+      peerPublish('me@example.com', METADATA_NODE, {
+        id: 'current',
+        payload: {
+          name: 'public-keys-list',
+          attrs: { xmlns: OX_NS },
+          children: [
+            {
+              name: 'pubkey-metadata',
+              attrs: {
+                'v4-fingerprint': 'PREEXISTINGFP000',
+                'v6-fingerprint': 'PREEXISTINGFP000',
+                date: '2024-01-01T00:00:00Z',
+              },
+              children: [],
+            },
+          ],
+        },
+      })
+      // init swallows needs-identity-decision; ensureKeyMaterial reached
+      // directly via a manual call asserts the guard's behaviour.
+      await plugin.init(ctx)
+      const passthrough = plugin as unknown as {
+        ensureKeyMaterial(jid: string): Promise<KeyBundle>
+      }
+      await expect(passthrough.ensureKeyMaterial('me@example.com')).rejects.toMatchObject({
+        code: 'needs-identity-decision',
+      })
+    })
+
+    it('refuses silent generation when server has a backup but device has none', async () => {
+      // Symmetric edge case to the test above: the publication has
+      // been retracted (or never happened) but the secret-key backup
+      // is still on the server. A silent generation here would
+      // overwrite the backup the user could otherwise restore from.
+      const { ctx } = makeContext('me@example.com')
+      // Publish the backup directly via the ctx.xmpp shim — the
+      // metadata stays absent on purpose so the only signal of
+      // server-side identity is the backup itself.
+      await ctx.xmpp.publishPEP(
+        'urn:xmpp:openpgp:0:secret-key',
+        {
+          id: 'current',
+          payload: {
+            name: 'secretkey',
+            attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+            children: [encodeOpenPgpArmorForXep0373(
+              makeOpenPgpArmor('PGP MESSAGE', 'fake-backup-payload'),
+            )],
+          },
+        },
+      )
+      await plugin.init(ctx)
+      const passthrough = plugin as unknown as {
+        ensureKeyMaterial(jid: string): Promise<KeyBundle>
+      }
+      await expect(passthrough.ensureKeyMaterial('me@example.com')).rejects.toMatchObject({
+        code: 'needs-identity-decision',
+      })
+    })
+
+    it('still generates silently when neither server material nor local key exists', async () => {
+      // First-time setup, truly clean slate: no server identity, no
+      // local key. This is the only path where silent generation is
+      // safe, and the guard must not get in its way.
+      const { ctx, published } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      // Local key was generated AND the new identity got published.
+      expect(plugin.getOwnFingerprint()).toMatch(/^[A-Za-z0-9]+$/)
+      expect(published.length).toBeGreaterThan(0)
     })
 
     it('records a subkey-mismatch conflict when primary FP matches but data node differs (rotation on another device)', async () => {
@@ -912,6 +1009,13 @@ describe('SequoiaPgpPlugin', () => {
 
     it('blocks encrypt() while an own-key conflict is live', async () => {
       const { ctx, peerPublish } = makeContext('me@example.com')
+      // Seed local key so init reaches the primary-mismatch detection
+      // path (and not the new silent-generation guard, which bails
+      // earlier for fresh devices).
+      await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'me@example.com',
+        userId: 'xmpp:me@example.com',
+      })
       // Inject a primary-mismatch so init records a conflict.
       peerPublish('me@example.com', METADATA_NODE, {
         id: 'current',
@@ -946,6 +1050,12 @@ describe('SequoiaPgpPlugin', () => {
   describe('resolveOwnKeyConflict', () => {
     it('overwriteServer re-publishes local key and clears the conflict', async () => {
       const { ctx, peerPublish, published } = makeContext('me@example.com')
+      // Seed local key so init reaches the primary-mismatch path
+      // (see comment in the "blocks encrypt" test above).
+      await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'me@example.com',
+        userId: 'xmpp:me@example.com',
+      })
       peerPublish('me@example.com', METADATA_NODE, {
         id: 'current',
         payload: {
@@ -978,6 +1088,12 @@ describe('SequoiaPgpPlugin', () => {
     it('importFromServer restores backup and clears the conflict', async () => {
       // Set up: init produces a conflict (tampered primary).
       const { ctx, peerPublish } = makeContext('me@example.com')
+      // Seed local key so init reaches the primary-mismatch path
+      // (see comment in the "blocks encrypt" test above).
+      await fake.invoke<KeyBundle>('openpgp_ensure_key', {
+        accountJid: 'me@example.com',
+        userId: 'xmpp:me@example.com',
+      })
       peerPublish('me@example.com', METADATA_NODE, {
         id: 'current',
         payload: {

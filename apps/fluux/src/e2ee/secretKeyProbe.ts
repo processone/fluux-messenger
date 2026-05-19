@@ -27,6 +27,7 @@ import type { XMPPClient } from '@fluux/sdk/core'
 
 const OX_NAMESPACE = 'urn:xmpp:openpgp:0'
 const SECRET_KEY_NODE = 'urn:xmpp:openpgp:0:secret-key'
+const PUBLIC_KEYS_METADATA_NODE = 'urn:xmpp:openpgp:0:public-keys'
 
 /**
  * Raised by {@link probeRemoteSecretKeyBackup} when the probe couldn't
@@ -88,6 +89,105 @@ export async function probeRemoteSecretKeyBackup(
     }
   }
   return null
+}
+
+/**
+ * Snapshot of the user's server-side OpenPGP identity state. The
+ * {@link probeRemoteIdentityState} composer returns this so the toggle
+ * and auto-init flows can decide in one shot whether silent fresh-key
+ * generation is safe.
+ *
+ * `hasServerIdentity` is the headline decision: when true, the caller
+ * MUST defer to a user-driven resolution path (restore from backup,
+ * import from file, or explicit "replace identity"). Generating a
+ * fresh key in that state would either silently fork the identity
+ * (other device still holds the matching private key) or overwrite a
+ * usable backup with a key the user can't recover.
+ */
+export interface RemoteIdentityState {
+  /** Armored OpenPGP backup ciphertext when present; `null` when no backup. */
+  backupMessage: string | null
+  /** Deduplicated fingerprints listed in the metadata node; empty when absent. */
+  publishedFingerprints: string[]
+  /** Convenience flag: `backupMessage != null` OR `publishedFingerprints.length > 0`. */
+  hasServerIdentity: boolean
+}
+
+/**
+ * Query the user's PEP public-keys metadata node. Returns the list of
+ * fingerprints (v4 and/or v6) the user has advertised, deduplicated to
+ * collapse the openpgp.js quirk where both attributes carry the same
+ * value for v4 keys.
+ *
+ * Returns `[]` for `item-not-found` and for nodes that resolve but
+ * contain no parseable `<public-keys-list>`/`<pubkey-metadata>`.
+ *
+ * Throws {@link SecretKeyBackupProbeError} on transient/permission/
+ * timeout failures, for the same reason {@link probeRemoteSecretKeyBackup}
+ * does: a "no answer" we can't distinguish from "no published key" would
+ * let the caller silent-generate over an existing identity.
+ */
+export async function probeRemotePublishedFingerprints(
+  client: XMPPClient,
+  bareJid: string,
+): Promise<string[]> {
+  let items: Awaited<ReturnType<XMPPClient['pubsub']['query']>>
+  try {
+    items = await client.pubsub.query(bareJid, PUBLIC_KEYS_METADATA_NODE, 1)
+  } catch (err) {
+    if (isItemNotFoundError(err)) return []
+    throw new SecretKeyBackupProbeError(err)
+  }
+
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const item of items) {
+    const p = item.payload
+    if (!p || typeof p === 'string') continue
+    if (p.name !== 'public-keys-list' || p.attrs?.xmlns !== OX_NAMESPACE) continue
+    for (const child of p.children) {
+      if (typeof child === 'string') continue
+      if (child.name !== 'pubkey-metadata') continue
+      // Push v4 first when both are present so consumers that take
+      // `out[0]` see the legacy fingerprint first (matches the order
+      // existing code paths assume).
+      const v4 = child.attrs?.['v4-fingerprint']
+      const v6 = child.attrs?.['v6-fingerprint']
+      for (const fp of [v4, v6]) {
+        if (typeof fp !== 'string' || fp.length === 0) continue
+        if (seen.has(fp)) continue
+        seen.add(fp)
+        out.push(fp)
+      }
+    }
+  }
+  return out
+}
+
+/**
+ * Composed probe used by the Settings toggle and the App.tsx auto-init
+ * path. Returns the union of {@link probeRemoteSecretKeyBackup} and
+ * {@link probeRemotePublishedFingerprints} so the caller can branch
+ * once on {@link RemoteIdentityState.hasServerIdentity}.
+ *
+ * Both sub-probes run in parallel: they hit different PEP nodes and
+ * there's no ordering dependency. If either throws, the composed
+ * probe rethrows — partial information is not useful for the
+ * silent-fork decision.
+ */
+export async function probeRemoteIdentityState(
+  client: XMPPClient,
+  bareJid: string,
+): Promise<RemoteIdentityState> {
+  const [backupMessage, publishedFingerprints] = await Promise.all([
+    probeRemoteSecretKeyBackup(client, bareJid),
+    probeRemotePublishedFingerprints(client, bareJid),
+  ])
+  return {
+    backupMessage,
+    publishedFingerprints,
+    hasServerIdentity: backupMessage !== null || publishedFingerprints.length > 0,
+  }
 }
 
 /**
