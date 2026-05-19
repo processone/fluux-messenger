@@ -98,16 +98,11 @@ if (tauriConf.bundle && tauriConf.bundle.createUpdaterArtifacts !== true) {
   console.log('  createUpdaterArtifacts: false -> true (fixed)')
 }
 
-// Update bundleVersion with short git hash
-try {
-  const gitHash = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim()
-  tauriConf.bundle.macOS.bundleVersion = gitHash
-  console.log(`  version: ${oldTauriVersion} -> ${baseVersion}`)
-  console.log(`  bundleVersion: ${gitHash}`)
-} catch (e) {
-  console.log(`  version: ${oldTauriVersion} -> ${baseVersion}`)
-  console.log(`  bundleVersion: (unchanged, git not available)`)
-}
+// Update bundleVersion with semver (macOS CFBundleVersion needs an orderable value)
+const oldBundleVersion = tauriConf.bundle.macOS.bundleVersion
+tauriConf.bundle.macOS.bundleVersion = baseVersion
+console.log(`  version: ${oldTauriVersion} -> ${baseVersion}`)
+console.log(`  bundleVersion: ${oldBundleVersion} -> ${baseVersion}`)
 fs.writeFileSync(tauriPath, JSON.stringify(tauriConf, null, 2) + '\n')
 
 // 4. Update Cargo.toml version
@@ -119,6 +114,15 @@ const oldCargoVersion = cargoVersionMatch ? cargoVersionMatch[1] : 'unknown'
 cargoContent = cargoContent.replace(/^version\s*=\s*"[^"]+"/m, `version = "${baseVersion}"`)
 fs.writeFileSync(cargoPath, cargoContent)
 console.log(`  version: ${oldCargoVersion} -> ${baseVersion}`)
+
+// 4b. Regenerate Cargo.lock and Tauri schemas
+console.log('\nRegenerating Cargo.lock and Tauri schemas...')
+try {
+  execSync('cargo check', { cwd: path.join(ROOT, 'apps/fluux/src-tauri'), stdio: 'inherit' })
+  console.log('  Cargo.lock and gen/schemas/ updated')
+} catch (e) {
+  console.error('  Warning: cargo check failed — Cargo.lock and schemas may be out of date')
+}
 
 // 5. Update packaging version numbers
 console.log('\nUpdating packaging files...')
