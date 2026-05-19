@@ -1396,9 +1396,9 @@ fn main() {
                                     // toggle forces GTK to recalculate decorations while
                                     // respecting the work area (top bar, dock).
                                     let was_maximized =
-                                        saved_state.map_or(false, |(_, _, m, _)| m);
+                                        saved_state.is_some_and(|(_, _, m, _)| m);
                                     let was_fullscreen =
-                                        saved_state.map_or(false, |(_, _, _, fs)| fs);
+                                        saved_state.is_some_and(|(_, _, _, fs)| fs);
                                     if !was_maximized && !was_fullscreen {
                                         let _ = window.maximize();
                                     }

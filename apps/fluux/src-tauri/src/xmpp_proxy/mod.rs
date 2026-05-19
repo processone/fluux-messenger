@@ -427,6 +427,7 @@ async fn handle_connection(
     // Upgrade to WebSocket, echoing any requested subprotocol (e.g. "xmpp" per RFC 7395).
     // Browsers reject the connection if the server does not echo the Sec-WebSocket-Protocol
     // header back when the client sends one.
+    #[allow(clippy::result_large_err)]
     let mut ws = accept_hdr_async(ws_stream, |req: &Request, mut resp: Response| {
         if let Some(protocol) = req.headers().get("Sec-WebSocket-Protocol") {
             resp.headers_mut()
