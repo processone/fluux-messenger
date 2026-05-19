@@ -96,3 +96,43 @@ jobs:
             exit 1
           fi
           echo "No unstable Zustand selector patterns found."
+
+  rust:
+    name: Rust
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libxss-dev \
+            libdbus-1-dev
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/fluux/src-tauri
+
+      - name: Run tests
+        working-directory: apps/fluux/src-tauri
+        run: cargo test --locked
+
+      - name: Clippy
+        working-directory: apps/fluux/src-tauri
+        run: cargo clippy --locked -- -D warnings
+
+      - name: Check generated files are up to date
+        run: git diff --exit-code apps/fluux/src-tauri/gen/
