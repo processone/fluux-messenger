@@ -27,7 +27,7 @@ npm run release:prepare X.Y.Z
 | `package.json`                         | Version number (root)                        |
 | `apps/fluux/package.json`              | Version number (app)                         |
 | `packages/fluux-sdk/package.json`      | Version number (SDK)                         |
-| `apps/fluux/src-tauri/tauri.conf.json` | Version + bundleVersion                      |
+| `apps/fluux/src-tauri/tauri.conf.json` | Version + bundleVersion (semver)              |
 
 ## Step-by-Step Release
 
@@ -145,7 +145,7 @@ npm run release:prepare 0.9.0
 
 This will:
 - Update version in all `package.json` files
-- Update version and `bundleVersion` in `tauri.conf.json`
+- Update version and `bundleVersion` (semver) in `tauri.conf.json`
 - Generate `CHANGELOG.md` from `changelog.ts`
 - Generate `RELEASE_NOTES.md` for the auto-updater
 
