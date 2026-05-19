@@ -12,7 +12,7 @@
 // WEBKIT_DISABLE_COMPOSITING_MODE is additionally set when FLUUX_DISABLE_GPU
 // is defined, for NVIDIA EGL display issues (grey screen / EGL_BAD_PARAMETER).
 #[cfg(target_os = "linux")]
-#[ctor::ctor]
+#[ctor::ctor(unsafe)]
 fn set_linux_webkit_env() {
     // Work around WebKitGTK dmabuf renderer crash on Wayland
     std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
