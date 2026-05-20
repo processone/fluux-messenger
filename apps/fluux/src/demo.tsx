@@ -12,8 +12,8 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
 import { XMPPProvider, DemoClient, E2EEManager, InMemoryStorageBackend } from '@fluux/sdk'
-import type { E2EEPlugin, PluginContext, E2EEProtocolDescriptor, PeerSupport, IdentityInfo, ConversationTarget, ConversationHandle, EncryptedPayload, DecryptResult } from '@fluux/sdk'
 import { adminStore, ignoreStore } from '@fluux/sdk/stores'
+import { DemoOpenPGPPlugin, DEMO_AVA_FINGERPRINT } from './demo/DemoOpenPGPPlugin'
 import { ThemeProvider } from './providers/ThemeProvider'
 import { useThemeStore } from './stores/themeStore'
 import { useEncryptionSettingsStore } from './stores/encryptionSettingsStore'
@@ -53,24 +53,9 @@ demoClient.populateDemo(demoData)
 demoClient.setDiscoverableRooms(getDiscoverableRooms())
 
 // Seed E2EE state so the encryption badge is visible on Ava's conversation.
-const DEMO_AVA_FINGERPRINT = 'A1B2C3D4E5F6A1B2C3D4E5F6A1B2C3D4E5F6A1B2'
-const demoOpenpgpPlugin = {
-  descriptor: { id: 'openpgp', displayName: 'OpenPGP', securityLevel: 30, features: { forwardSecrecy: false, postCompromiseSecurity: false, multiDevice: true, groupChat: false, asynchronous: true, deniability: false } } satisfies E2EEProtocolDescriptor,
-  async init(_ctx: PluginContext) {},
-  async shutdown() {},
-  async ensureIdentity(): Promise<IdentityInfo> { return { fingerprint: 'DEMO000000000000000000000000000000000000' } },
-  probePeer: async (peer: string): Promise<PeerSupport> => ({ supported: peer === 'ava@fluux.chat', ttl: 3600, fingerprint: peer === 'ava@fluux.chat' ? DEMO_AVA_FINGERPRINT : undefined }),
-  getPeerFingerprint(peer: string): string | null { return peer === 'ava@fluux.chat' ? DEMO_AVA_FINGERPRINT : null },
-  async openConversation(_target: ConversationTarget): Promise<ConversationHandle> { return { protocolId: 'openpgp', state: null } },
-  async closeConversation() {},
-  async encrypt(_handle: ConversationHandle, _plaintext: Uint8Array): Promise<EncryptedPayload> { return { protocolId: 'openpgp', stanzaElement: { name: 'openpgp', attrs: { xmlns: 'urn:xmpp:openpgp:0' }, children: [] }, fallbackBody: '[OpenPGP-encrypted message]' } },
-  async decrypt(): Promise<DecryptResult> { return { plaintext: new Uint8Array(), senderDevice: { jid: '', deviceId: '' }, securityContext: { protocolId: 'openpgp', trust: 'tofu' } } },
-  getVerificationMethods() { return [] },
-  async startVerification() { return { method: { id: '', displayName: '' }, cancel: async () => {}, result: Promise.resolve('unknown' as const) } },
-  async getPeerTrust() { return 'unknown' as const },
-  async getDeviceTrust() { return 'unknown' as const },
-  tryClaimInbound() { return null },
-} satisfies E2EEPlugin & { getPeerFingerprint: (peer: string) => string | null }
+// URL param ?e2ee=conflict starts with no local key to trigger IdentityChoiceDialog.
+const forceConflict = params.get('e2ee') === 'conflict'
+const demoOpenpgpPlugin = new DemoOpenPGPPlugin({ forceConflict })
 const noopXmpp = { sendStanza: async () => {}, queryDisco: async () => ({ features: [], identities: [] }), publishPEP: async () => {}, retractPEP: async () => {}, deletePEP: async () => {}, queryPEP: async () => [] as any[], subscribePEP: () => ({ unsubscribe: () => {} }) }
 demoClient.e2ee = new E2EEManager({ storage: new InMemoryStorageBackend(), xmpp: noopXmpp, account: { jid: 'you@fluux.chat' } })
 void demoClient.e2ee.register(demoOpenpgpPlugin).then(() => {
