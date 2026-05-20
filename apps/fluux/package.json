@@ -17,7 +17,8 @@
     "clean:all": "rm -rf dist node_modules src-tauri/target",
     "tauri": "tauri",
     "tauri:dev": "tauri dev -- -- --verbose",
-    "tauri:build": "./scripts/tauri-build.sh"
+    "tauri:build": "./scripts/tauri-build.sh",
+    "tauri:install": "./scripts/tauri-install.sh"
   },
   "dependencies": {
     "@emoji-mart/data": "^1.2.1",
