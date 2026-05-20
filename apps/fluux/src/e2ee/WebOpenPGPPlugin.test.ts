@@ -9,6 +9,8 @@
  * realm-sensitive `instanceof Uint8Array` checks that fail under
  * jsdom (which uses a different realm than Node's globals).
  */
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   InMemoryStorageBackend,
@@ -23,6 +25,8 @@ import {
 import { WebOpenPGPPlugin } from './WebOpenPGPPlugin'
 import { clearSessionPassphrase, setSessionPassphrase } from './webPassphraseStore'
 import type { KeyBundle } from './OpenPGPPluginBase'
+
+const FIXTURES_DIR = resolve(__dirname, 'fixtures')
 
 // Expose the crypto-layer protected methods so we can round-trip
 // without going through the full XEP-0373 envelope handling.
@@ -1243,33 +1247,36 @@ describe('WebOpenPGPPlugin', () => {
       ).rejects.toMatchObject({ code: 'unsupported-key-algorithm', kind: 'permanent' })
     })
 
-    it('imports a raw armored TSK', async () => {
-      // Produce a raw armored PRIVATE KEY BLOCK — exactly what
-      // `gpg --export-secret-keys --armor` emits. The key is encrypted
-      // with a user passphrase via S2K, NOT wrapped in an SKESK message.
-      const { generateKey } = await import('openpgp')
-      const { privateKey } = await generateKey({
-        type: 'ecc',
-        curve: 'curve25519Legacy' as const,
-        userIDs: [{ name: 'Alice', email: 'alice@example.com' }],
-        passphrase: 'gnupg-secret',
-        format: 'object',
-      })
-      const armoredPrivateKey = privateKey.armor()
+    it('imports a real GnuPG-produced armored TSK (interop fixture)', async () => {
+      // Fixture: `gnupg_modern_key.asc` was generated with real GnuPG
+      // (gpg 2.5.18) via:
+      //   gpg --quick-gen-key '…' ed25519 default 0
+      //   gpg --quick-add-key <FP> cv25519 encr 0
+      //   gpg --export-secret-keys --armor <FP>
+      // Primary key: ed25519 (sign+certify), subkey: cv25519 (encrypt).
+      // Passphrase set at generation: 'fluux-fixture-passphrase'. Proves
+      // openpgp.js can parse and unlock secret keys produced by a real
+      // GnuPG export, not just keys we round-trip through ourselves.
+      const armoredPrivateKey = readFileSync(
+        resolve(FIXTURES_DIR, 'gnupg_modern_key.asc'),
+        'utf-8',
+      )
       expect(armoredPrivateKey.startsWith('-----BEGIN PGP PRIVATE KEY BLOCK-----')).toBe(true)
 
       const dest = new TestableWebOpenPGPPlugin()
-      const { ctx } = makeCtx('alice@example.com')
+      const { ctx } = makeCtx('fixture@fluux.test')
       await dest.init(ctx)
 
       const bundles = await dest.callBackupImportAll(
-        'alice@example.com',
+        'fixture@fluux.test',
         armoredPrivateKey,
-        'gnupg-secret',
+        'fluux-fixture-passphrase',
       )
 
       expect(bundles).toHaveLength(1)
-      expect(bundles[0].fingerprint).toBe(privateKey.getFingerprint())
+      expect(bundles[0].fingerprint.toUpperCase()).toBe(
+        'E7DFB4979F5F2745B2B113B65DD61AB5E88A475B',
+      )
       expect(bundles[0].publicArmored).toContain('BEGIN PGP PUBLIC KEY BLOCK')
     })
   })
