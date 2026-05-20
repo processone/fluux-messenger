@@ -56,7 +56,7 @@
         "dismiss": "Скасувати"
     },
     "archive": {
-        "noArchivedConversations": "Немає архівованих розмов"
+        "noArchivedConversations": "Немає архівованих бесід"
     },
     "presence": {
         "online": "В мережі",
@@ -90,8 +90,8 @@
         "cancelReconnection": "Скасувати перепідключення"
     },
     "conversations": {
-        "backToConversations": "Назад до розмов",
-        "noConversations": "Ще немає розмов",
+        "backToConversations": "Назад до бесід",
+        "noConversations": "Ще немає бесід",
         "archive": "Архівувати",
         "unarchive": "Розархівувати",
         "delete": "Видалити",
@@ -103,7 +103,7 @@
         "online": "В мережі",
         "offline": "Не в мережі",
         "error": "Помилка",
-        "startChat": "Почати розмову",
+        "startChat": "Почати бесіду",
         "rename": "Перейменувати",
         "removeContact": "Видалити контакт",
         "removeFromRoster": "Видалити з моїх контактів",
@@ -123,7 +123,7 @@
         "failedToSendRequest": "Не вдалося надіслати запит",
         "sending": "Надсилання...",
         "contact": "Контакт",
-        "startConversation": "Почати розмову",
+        "startConversation": "Почати бесіду",
         "addToContacts": "Додати до контактів",
         "connectedDevices": "Підключені пристрої",
         "nameCannotBeEmpty": "Ім'я не може бути порожнім",
@@ -338,7 +338,7 @@
         "templateOpenDesc": "Будь-хто може приєднатися",
         "templateUnlisted": "Неперелічена",
         "templateUnlistedDesc": "Прихована, відкритий доступ",
-        "templatePrivateHelp": "Кімната прихована з каталогу. Приєднатися можуть лише запрошені. Найкраще для командних або групових розмов.",
+        "templatePrivateHelp": "Кімната прихована зі списку. Приєднатися можуть лише запрошені. Найкраще для командних або групових бесід.",
         "templateOpenHelp": "Кімната відображається в публічному каталозі. Будь-хто може знайти її та приєднатися без запрошення. Найкраще для каналів спільноти.",
         "templateUnlistedHelp": "Кімната прихована з каталогу, але будь-хто, хто має адресу, може вільно приєднатися. Найкраще для поширення посилання на кімнату.",
         "roomAlreadyExists": "Кімната з такою адресою вже існує. Будь ласка, оберіть іншу адресу.",
@@ -431,7 +431,7 @@
         "noMessages": "Ще немає повідомлень. Привітайтеся!",
         "loadingMessages": "Завантаження повідомлень...",
         "newMessages": "Нові повідомлення",
-        "historyStart": "Початок розмови",
+        "historyStart": "Початок бесіди",
         "historyGap": "Деякі повідомлення можуть бути відсутні",
         "loadMissingMessages": "Завантажити відсутні повідомлення",
         "loadEarlierMessages": "Завантажити попередні повідомлення",
@@ -474,24 +474,24 @@
         "errorDetails": "Помилка: {{error}}",
         "encryption": {
             "encryptedTo": "Зашифровано для {{name}}",
-            "checking": "Перевірка співрозмовника…",
+            "checking": "Перевірка співбеседника…",
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Перевірений ключ OpenPGP",
-            "blocked": "Encryption paused",
-            "blockedTooltip": "Peer's key has changed — resolve to resume encryption",
-            "attachmentKeyWouldLeak": "Message not sent — the attachment is encrypted but end-to-end encryption is unavailable. Sending would expose the file key.",
-            "plaintextForced": "Encryption disabled",
-            "plaintextForcedTooltip": "You've disabled encryption for this conversation — messages are sent in plaintext",
+            "blocked": "Шифрування призупинено",
+            "blockedTooltip": "Ключ співбеседника змінився — дозвольте відновити шифрування",
+            "attachmentKeyWouldLeak": "Повідомлення не надіслано — вкладення зашифровано, але наскрізне шифрування недоступне. Надсилання розкриє ключ файлу.",
+            "plaintextForced": "Шифрування зупинено",
+            "plaintextForcedTooltip": "Ви вимкнули шифрування для цієї бесіди — повідомлення надсилаються відкритим текстом",
             "rejected": "Сертифікат відхилено",
-            "rejectedTooltip": "Сертифікат OpenPGP співрозмовника недійсний — натисніть для подробиць",
+            "rejectedTooltip": "Сертифікат OpenPGP співбеседника недійсний — натисніть для подробиць",
             "rejectedTitle": "Сертифікат відхилено",
             "rejectionCode": {
                 "validation_failed": "Не вдалося розібрати сертифікат",
                 "fingerprint_mismatch": "Відбиток не збігається із заявленим значенням",
-                "uid_mismatch": "Ідентичність сертифіката не збігається з адресою співрозмовника"
+                "uid_mismatch": "Ідентичність сертифіката не збігається з адресою співбеседника"
             },
-            "disableEncryption": "Disable encryption for this conversation",
-            "enableEncryption": "Re-enable encryption",
+            "disableEncryption": "Вимкнути шифрування для цієї бесіди",
+            "enableEncryption": "Знову ввімкнуть шифрування",
             "tooltip": {
                 "header": "Зашифровано",
                 "protocol": {
@@ -508,7 +508,7 @@
         "verifyPeer": {
             "chipAriaLabel": "Зашифровано для {{name}} — клацніть, щоб перевірити відбиток",
             "dialogTitle": "Перевірити ключ OpenPGP користувача {{name}}",
-            "dialogBody": "Прочитайте свій код вголос для {{name}} і введіть код, який вам зачитає {{name}}. Коди збігаються лише якщо ніхто не перехоплює ваші повідомлення.",
+            "dialogBody": "Зачитайте свій код вголос для {{name}} та введіть код, який вам зачитає. Ці коди збігуться тільки якщо ніхто не перехоплює ваші повідомлення.",
             "dialogWarning": "Використовуйте надійний другий канал — особисто, у відеодзвінку, в якому ви впізнаєте людину, або у вже перевіреній наскрізно зашифрованій бесіді. Серверу не можна довіряти передачу цього порівняння.",
             "myCodeLabel": "Прочитайте цей код для {{name}}",
             "myCodeHelp": "Скажіть ці 4 цифри вголос.",
@@ -532,9 +532,9 @@
             "title": "Ключ шифрування {{name}} змінився",
             "body": "Схоже, цей контакт змінив свій ключ шифрування. Ви можете перевірити новий відбиток для відновлення повної довіри або прийняти його без перевірки, щоб продовжити з базовою довірою.",
             "reVerify": "Перевірити знову",
-            "encryptionBlocked": "Шифрування призупинено для цієї розмови, доки ви не вирішите зміну.",
+            "encryptionBlocked": "Шифрування призупинено для цієї бесіди, доки ви не вирішите цю зміну.",
             "acceptWithoutVerifying": "Прийняти без перевірки",
-            "acceptedWithoutVerifying": "Новий ключ прийнято — співрозмовник не перевірений",
+            "acceptedWithoutVerifying": "Новий ключ прийнято — співбеседник не перевірений",
             "acceptFailed": "Не вдалося прийняти новий ключ — спробуйте знову"
         }
     },
@@ -842,7 +842,7 @@
         "offlineNotice": "Редагування профілю недоступне в режимі офлайн",
         "connection": "З'єднання",
         "connectionMethod_proxy": "TCP/TLS",
-        "connectionMethod_websocket": "WebSocket",
+        "connectionMethod_websocket": "ВебСокет",
         "webPush": "Веб-сповіщення",
         "webPush_unavailable": "Не підтримується",
         "webPush_available": "Очікує реєстрації",
@@ -863,9 +863,9 @@
         "serverInformation": "Інформація про сервер",
         "close": "Закрити консоль",
         "filter": "Фільтр...",
-        "sendStanza": "Надіслати станзу (Ctrl+Enter)",
-        "enterStanza": "Введіть XML станзу для відправки... (Ctrl+Enter для відправки)",
-        "connectToSend": "Підключіться, щоб надсилати станзи",
+        "sendStanza": "Надіслати stanza ({{modifier}}+Enter)",
+        "enterStanza": "Введіть XML станзу для відправки... ({{modifier}}+Enter для відправки)",
+        "connectToSend": "Підключіться, щоб надсилати stanza",
         "noEntries": "Ще немає записів",
         "trafficWillAppear": "Трафік з'явиться тут",
         "connectToSeeTraffic": "Підключіться, щоб бачити XMPP трафік",
@@ -881,21 +881,21 @@
     },
     "emptyState": {
         "messages": {
-            "title": "Приватні розмови",
-            "description": "Виберіть розмову з бічної панелі або створіть її зі списку контактів."
+            "title": "Приватні бесіди",
+            "description": "Виберіть бесіду з бічної панелі або створіть її зі списку контактів."
         },
         "rooms": {
             "title": "Чат-кімнати",
-            "description": "Приєднайтеся до кімнати з ваших закладок або створіть нову групову розмову, щоб почати спілкування."
+            "description": "Приєднайтеся до кімнати з ваших закладок або створіть нову групову бесіду, щоб почати спілкування."
         },
         "directory": {
             "title": "Інформація про контакт",
-            "description": "Натисніть на контакт, щоб переглянути його профіль, підключені пристрої або почати розмову.",
-            "hint": "Подвійне клацання, щоб почати розмову безпосередньо."
+            "description": "Натисніть на контакт, щоб переглянути його профіль, підключені пристрої або почати бесіду.",
+            "hint": "Подвійне клацання, щоб почати бесіду безпосередньо."
         },
         "archive": {
-            "title": "Архівовані розмови",
-            "description": "Архівовані розмови з'являться тут. Ви можете відновити їх у ваш список повідомлень будь-коли."
+            "title": "Архівовані бесіди",
+            "description": "Архівовані бесіди з'являться тут. Ви можете відновити їх у ваш список повідомлень будь-коли."
         },
         "events": {
             "title": "Очікуючі події",
@@ -939,19 +939,19 @@
         "toggleXmppConsole": "Перемкнути консоль XMPP",
         "toggleLightDarkMode": "Перемкнути світлу/темну тему",
         "javascriptConsole": "Консоль JavaScript (якщо доступна)",
-        "nextUnread": "Наступна непрочитана розмова",
+        "nextUnread": "Наступна непрочитана бесіда",
         "messagesView": "Повідомлення",
         "roomsView": "Кімнати",
         "connectionsView": "Контакти",
         "archiveView": "Архів",
         "eventsView": "Події",
         "adminView": "Адміністрування",
-        "findInConversation": "Знайти в розмові",
+        "findInConversation": "Знайти в бесіді",
         "nextMatch": "Наступний збіг",
         "previousMatch": "Попередній збіг",
         "searchView": "Пошук",
-        "previousItem": "Попередня розмова/кімната",
-        "nextItem": "Наступна розмова/кімната",
+        "previousItem": "Попередня бесіда/кімната",
+        "nextItem": "Наступна бесіда/кімната",
         "settings": "Налаштування",
         "changeStatus": "Змінити статус",
         "createQuickChat": "Створити швидкий чат",
@@ -1057,7 +1057,7 @@
         "filteringContacts": "Фільтрація контактів...",
         "filteringRooms": "Фільтрація кімнат...",
         "filteringCommands": "Фільтрація команд...",
-        "searchMessages": "Search messages for \"{{query}}\""
+        "searchMessages": "Пошук повідомлень по \"{{query}}\""
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Ім'я, що відображається у списку кімнат та в заголовку.",
@@ -1072,7 +1072,7 @@
         "muc#roomconfig_passwordprotectedroom": "Вимагати пароль для входу в кімнату.",
         "muc#roomconfig_roomsecret": "Пароль, необхідний для входу в кімнату.",
         "muc#roomconfig_maxusers": "Максимальна кількість учасників у кімнаті.",
-        "muc#roomconfig_enablelogging": "Увімкнути публічне журналювання розмов. Стенограми можуть бути доступні поза кімнатою (напр., на вебсайті). Це відрізняється від архіву повідомлень (MAM), який використовується клієнтами для отримання історії.",
+        "muc#roomconfig_enablelogging": "Увімкнути публічне журналювання розмов. Исторія бесід може бути доступна поза кімнатою (напр., на вебсайті). Це відрізняється від архіву повідомлень (MAM), який використовується клієнтами для отримання історії.",
         "muc#roomconfig_lang": "Основна мова, що використовується в цій кімнаті.",
         "muc#roomconfig_allowpm": "Визначає, хто може надсилати приватні повідомлення іншим учасникам.",
         "muc#roomconfig_presencebroadcast": "Які ролі отримують сповіщення про присутність при вході або виході учасників.",
