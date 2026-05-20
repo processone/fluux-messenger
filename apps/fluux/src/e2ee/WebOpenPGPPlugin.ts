@@ -266,11 +266,19 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
     return this.bundleFromKey(privateKey)
   }
 
-  protected async backupImportAll(
-    _accountJid: string,
+  /**
+   * Decrypt a Fluux/Sequoia backup container (an OpenPGP MESSAGE wrapping
+   * a binary TSK under a passphrase-derived SKESK) and return the
+   * decrypted PrivateKey objects found inside.
+   *
+   * Wrong-passphrase failures are translated to E2EEPluginError; parse
+   * failures propagate so the caller can decide whether to retry with a
+   * different format.
+   */
+  private async decryptBackupMessage(
     backupMessage: string,
     passphrase: string,
-  ): Promise<KeyBundle[]> {
+  ): Promise<PrivateKey[]> {
     const { readMessage, decrypt, readPrivateKeys } = await import('openpgp')
 
     const message = await readMessage({ armoredMessage: backupMessage })
@@ -291,14 +299,21 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
       )
     }
 
-    let keys: PrivateKey[]
     try {
-      keys = await readPrivateKeys({ binaryKeys: tskBytes })
+      return await readPrivateKeys({ binaryKeys: tskBytes })
     } catch {
-      keys = await readPrivateKeys({
+      return await readPrivateKeys({
         armoredKeys: new TextDecoder().decode(tskBytes),
       })
     }
+  }
+
+  protected async backupImportAll(
+    _accountJid: string,
+    backupMessage: string,
+    passphrase: string,
+  ): Promise<KeyBundle[]> {
+    const keys = await this.decryptBackupMessage(backupMessage, passphrase)
 
     this.pendingImportKeys.clear()
     for (const key of keys) {
