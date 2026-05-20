@@ -6,6 +6,7 @@ import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
 import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
 import { usePinnedPrimaryFingerprintsStore } from '@/stores/pinnedPrimaryFingerprintsStore'
 import { useCertRejectionStore, type CertRejection } from '@/stores/certRejectionStore'
+import { useWebKeyLocked } from './useWebKeyLocked'
 
 /**
  * Per-conversation encryption status surfaced to the composer chip.
@@ -40,6 +41,12 @@ import { useCertRejectionStore, type CertRejection } from '@/stores/certRejectio
  * - `plaintextForced` — user has explicitly disabled encryption for
  *                     this conversation. Messages are sent in plaintext
  *                     even if the peer has a published key.
+ * - `keyLocked`     — peer supports OpenPGP and we would normally encrypt
+ *                     to them, but the local private key is locked (web
+ *                     session passphrase not yet entered). Outbound
+ *                     encryption is blocked until the user unlocks; the
+ *                     chip surfaces the locked state with a click-to-unlock
+ *                     affordance. Tauri builds never reach this state.
  */
 export type ConversationEncryptionState =
   | { kind: 'disabled' }
@@ -64,6 +71,7 @@ export type ConversationEncryptionState =
   | { kind: 'blocked'; pinnedFingerprint: string; advertisedFingerprint: string }
   | { kind: 'unsupported' }
   | { kind: 'rejected'; reasons: CertRejection[] }
+  | { kind: 'keyLocked'; fingerprint?: string }
 
 /**
  * Minimal structural type for the pieces of `SequoiaPgpPlugin` this
@@ -145,6 +153,12 @@ export function useConversationEncryptionState(
   const certRejections = useCertRejectionStore((s) =>
     peerJid ? (s.rejectionsByJid[peerJid] ?? null) : null,
   )
+
+  // Reactive web-only flag: true while the OpenPGP private key is locked
+  // (no session passphrase entered yet). Tauri builds always read `false`.
+  // Used to promote the `encrypted` state to `keyLocked` so the chip
+  // surfaces the unlock affordance instead of pretending encryption works.
+  const webKeyLocked = useWebKeyLocked()
 
   // The base state is what the probe / cache produces — kind, peer
   // fingerprint, and so on. Trust is derived below from this plus the
@@ -264,10 +278,18 @@ export function useConversationEncryptionState(
       return { kind: 'rejected', reasons: certRejections }
     }
     if (base.kind !== 'encrypted') return base
+    // When the peer key is cached and we would normally show `encrypted`,
+    // but the local private key is locked (web only), promote to
+    // `keyLocked` so the chip surfaces a click-to-unlock affordance. We
+    // keep the peer fingerprint around so the tooltip can still display
+    // it — handy for users who want to verify the peer before unlocking.
+    if (webKeyLocked) {
+      return { kind: 'keyLocked', fingerprint: base.fingerprint }
+    }
     return {
       kind: 'encrypted',
       fingerprint: base.fingerprint,
       trust: verifiedFingerprint === base.fingerprint ? 'verified' : 'unverified',
     }
-  }, [base, isForcedPlaintext, verifiedFingerprint, alertCurrentFp, alertPreviousFp, certRejections])
+  }, [base, isForcedPlaintext, verifiedFingerprint, alertCurrentFp, alertPreviousFp, certRejections, webKeyLocked])
 }

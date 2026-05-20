@@ -15,6 +15,7 @@ import { MessageBubble, MessageList as MessageListComponent, shouldShowAvatar, b
 import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
 import { useConversationEncryptionState, type ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
+import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
 import { ChristmasAnimation } from './ChristmasAnimation'
 import { ChatHeader } from './ChatHeader'
 import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment } from './MessageComposer'
@@ -945,6 +946,7 @@ function MessageInput({
 }) {
   const { t } = useTranslation()
   const { sendMessage, sendChatState, isArchived, unarchiveConversation, setDraft, getDraft, clearDraft, clearFirstNewMessageId } = useChatActive()
+  const openWebUnlockDialog = useWebUnlockDialogStore((s) => s.openWebUnlockDialog)
 
   // Draft persistence - saves on conversation change, restores on load
   const [text, setText] = useConversationDraft({
@@ -983,6 +985,19 @@ function MessageInput({
   }
 
   const handleSend = async (text: string): Promise<boolean> => {
+    // Refuse to send while the local OpenPGP key is locked for an
+    // encrypted conversation. Without the guard, the file upload would
+    // happen plaintext-or-ciphertext-with-no-recipient (depending on
+    // `encryptAttachment` below) and the send would fail at encrypt
+    // time, leaving an orphaned upload on the server. Opening the
+    // unlock dialog routes the user to the passphrase prompt; the
+    // typed text stays in the composer (we return `false` here, which
+    // skips the `setText('')` clear in MessageComposer).
+    if (encryptionState.kind === 'keyLocked') {
+      openWebUnlockDialog()
+      return false
+    }
+
     // Unarchive conversation if archived (user is actively chatting)
     // and switch to Messages view to see it in the main list
     if (type === 'chat' && isArchived(conversationId)) {

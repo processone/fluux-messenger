@@ -14,6 +14,7 @@ import { getTranslatedStatusText } from '@/utils/statusText'
 import { Tooltip } from './Tooltip'
 import { ArrowLeft, Clock, Hash, Lock, LockOpen, Loader2, Search, ShieldAlert, ShieldCheck, ShieldOff, ShieldX } from 'lucide-react'
 import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
+import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
 
 export interface ChatHeaderProps {
   name: string
@@ -156,6 +157,32 @@ function formatFingerprint(fp: string): string {
   return fp.match(/.{1,4}/g)?.join(' ') ?? fp
 }
 
+function KeyLockedIcon({ fingerprint }: { fingerprint?: string }) {
+  const { t } = useTranslation()
+  const openWebUnlockDialog = useWebUnlockDialogStore((s) => s.openWebUnlockDialog)
+  const btnClass = 'p-1.5 rounded transition-colors'
+  const tooltip = (
+    <div>
+      <div>{t('chat.encryption.keyLockedTooltip')}</div>
+      {fingerprint && (
+        <div className="font-mono text-xs mt-0.5 opacity-75">{formatFingerprint(fingerprint)}</div>
+      )}
+    </div>
+  )
+  return (
+    <Tooltip content={tooltip} position="bottom">
+      <button
+        type="button"
+        onClick={() => openWebUnlockDialog()}
+        className={`${btnClass} text-yellow-500 hover:text-yellow-600 cursor-pointer`}
+        aria-label={t('chat.encryption.keyLocked')}
+      >
+        <Lock className="w-4 h-4" />
+      </button>
+    </Tooltip>
+  )
+}
+
 function EncryptionIcon({
   state,
   peerName,
@@ -210,6 +237,10 @@ function EncryptionIcon({
         </div>
       </Tooltip>
     )
+  }
+
+  if (state.kind === 'keyLocked') {
+    return <KeyLockedIcon fingerprint={state.fingerprint} />
   }
 
   if (state.kind === 'rejected') {

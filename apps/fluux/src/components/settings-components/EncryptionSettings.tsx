@@ -12,7 +12,7 @@ import { RestorePassphraseDialog } from '@/components/RestorePassphraseDialog'
 import { ExternalKeyExportDialog } from '@/components/ExternalKeyExportDialog'
 import { IdentityChoiceDialog } from '@/components/IdentityChoiceDialog'
 import { OwnKeyConflictBanner } from '@/components/OwnKeyConflictBanner'
-import { UnlockEncryptionDialog } from '@/components/UnlockEncryptionDialog'
+import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
 import { KeyPickerDialog } from '@/components/KeyPickerDialog'
 import type { KeyBundle } from '@/e2ee/OpenPGPPluginBase'
 import {
@@ -101,7 +101,7 @@ export function EncryptionSettings() {
   const [showExternalExportDialog, setShowExternalExportDialog] = useState(false)
   const [showImportFileDialog, setShowImportFileDialog] = useState(false)
   const [pendingImportFileArmored, setPendingImportFileArmored] = useState<string | null>(null)
-  const [showUnlockDialog, setShowUnlockDialog] = useState(false)
+  const openWebUnlockDialog = useWebUnlockDialogStore((s) => s.openWebUnlockDialog)
   const [pendingKeyPicker, setPendingKeyPicker] = useState<{
     candidates: KeyBundle[]
     backupMessage: string
@@ -210,7 +210,7 @@ export function EncryptionSettings() {
         // state.
         await registerE2EEPlugins(client)
         if (!bareJid) {
-          if (isKeyLocked()) setShowUnlockDialog(true)
+          if (isKeyLocked()) openWebUnlockDialog()
           return
         }
         const plugin = client.e2ee?.getPlugin('openpgp') as
@@ -232,7 +232,7 @@ export function EncryptionSettings() {
           }
         }
         if (isKeyLocked()) {
-          setShowUnlockDialog(true)
+          openWebUnlockDialog()
         }
         return
       }
@@ -298,7 +298,7 @@ export function EncryptionSettings() {
     } finally {
       setIsToggling(false)
     }
-  }, [openpgpEnabled, online, client, jid, setOpenpgpEnabled, addToast, t])
+  }, [openpgpEnabled, online, client, jid, setOpenpgpEnabled, addToast, t, openWebUnlockDialog])
 
   // --- Identity choice dialog handlers (silent-fork prevention) ---
   // Each handler resolves the `pendingIdentityChoice` state with one of
@@ -798,7 +798,7 @@ export function EncryptionSettings() {
               {t('settings.encryption.lockedBannerBody')}
             </p>
             <button
-              onClick={() => setShowUnlockDialog(true)}
+              onClick={() => openWebUnlockDialog()}
               className="flex-shrink-0 px-3 py-1.5 text-sm text-white bg-fluux-brand hover:opacity-90 rounded-lg transition-colors"
             >
               {t('settings.encryption.unlockAction')}
@@ -1163,13 +1163,6 @@ export function EncryptionSettings() {
             setShowImportFileDialog(false)
             setPendingImportFileArmored(null)
           }}
-        />
-      )}
-
-      {showUnlockDialog && (
-        <UnlockEncryptionDialog
-          client={client}
-          onClose={() => setShowUnlockDialog(false)}
         />
       )}
 
