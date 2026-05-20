@@ -13,6 +13,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   InMemoryStorageBackend,
   createPluginStorage,
+  parsePayloadEnvelope,
+  serializePayloadEnvelope,
+  xml,
   type PEPItem,
   type PluginContext,
   type XMPPPrimitives,
@@ -138,6 +141,116 @@ function makeCtx(accountJid: string, sharedBackend?: InMemoryStorageBackend): {
     reportSecurityContextUpdate: () => {},
   }
   return { ctx, backend }
+}
+
+// ---------------------------------------------------------------------------
+// Multi-device PEP fixture
+// ---------------------------------------------------------------------------
+// A shared in-memory PEP "server" lets multiple plugin instances probe each
+// other's published OpenPGP keys without standing up a real XMPP transport.
+// Both alice's devices and bob's plugin point at the same map; when one
+// publishes (or the test seeds the map directly), the others see it on the
+// next queryPEP.
+type SharedPep = Map<string, PEPItem[]> // key: `${jid}\0${node}`
+
+function pepKey(jid: string, node: string): string {
+  return `${jid}\0${node}`
+}
+
+function makeCtxWithSharedPep(
+  accountJid: string,
+  shared: SharedPep,
+  sharedBackend?: InMemoryStorageBackend,
+): { ctx: PluginContext; backend: InMemoryStorageBackend } {
+  const backend = sharedBackend ?? new InMemoryStorageBackend()
+  const xmpp: XMPPPrimitives = {
+    sendStanza: async () => {},
+    queryDisco: async () => ({
+      features: [
+        { var: 'http://jabber.org/protocol/pubsub' },
+        { var: 'http://jabber.org/protocol/pubsub#publish-options' },
+      ],
+      identities: [{ category: 'pubsub', type: 'pep' }],
+    }),
+    publishPEP: async () => {},
+    retractPEP: async () => {},
+    deletePEP: async () => {},
+    queryPEP: async (jid, node): Promise<PEPItem[]> => shared.get(pepKey(jid, node)) ?? [],
+    subscribePEP: () => ({ unsubscribe: () => {} }),
+  }
+  const ctx: PluginContext = {
+    storage: createPluginStorage(backend, 'openpgp-test'),
+    xmpp,
+    logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
+    account: { jid: accountJid },
+    reportSecurityContextUpdate: () => {},
+  }
+  return { ctx, backend }
+}
+
+// XEP-0373 publishes the raw (dearmored) public-key bytes inside <data>
+// base64-encoded. The plugin's own `base64EncodeOpenPgpBlock` helper isn't
+// exported, so we replicate the equivalent shape here for test fixtures.
+function dearmorBase64ForXep0373(armored: string): string {
+  const lines = armored.replace(/\r\n/g, '\n').split('\n')
+  const begin = lines.findIndex((line) => /^-----BEGIN PGP [^-]+-----$/.test(line.trim()))
+  const end = lines.findIndex(
+    (line, index) => index > begin && /^-----END PGP [^-]+-----$/.test(line.trim()),
+  )
+  if (begin < 0 || end < 0) throw new Error('test: expected ASCII-armored OpenPGP block')
+  let afterHeaders = false
+  const body: string[] = []
+  for (let i = begin + 1; i < end; i++) {
+    const line = lines[i].trim()
+    if (!afterHeaders) {
+      if (line === '') afterHeaders = true
+      continue
+    }
+    if (line === '' || line.startsWith('=')) continue
+    body.push(line)
+  }
+  // The base64 body of the armor block IS the wire format the plugin
+  // expects (its own helper just dearmors then re-base64s the bytes,
+  // which equals the armor body modulo line breaks).
+  return body.join('')
+}
+
+function publishKeyToSharedPep(shared: SharedPep, jid: string, bundle: KeyBundle): void {
+  shared.set(pepKey(jid, 'urn:xmpp:openpgp:0:public-keys'), [
+    {
+      id: 'current',
+      payload: {
+        name: 'public-keys-list',
+        attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+        children: [
+          {
+            name: 'pubkey-metadata',
+            attrs: {
+              'v4-fingerprint': bundle.fingerprint,
+              date: '2024-01-01T00:00:00Z',
+            },
+            children: [],
+          },
+        ],
+      },
+    },
+  ])
+  shared.set(pepKey(jid, `urn:xmpp:openpgp:0:public-keys:${bundle.fingerprint}`), [
+    {
+      id: 'current',
+      payload: {
+        name: 'pubkey',
+        attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+        children: [
+          {
+            name: 'data',
+            attrs: {},
+            children: [dearmorBase64ForXep0373(bundle.publicArmored)],
+          },
+        ],
+      },
+    },
+  ])
 }
 
 beforeEach(async () => {
@@ -504,6 +617,198 @@ describe('WebOpenPGPPlugin', () => {
       expect(await plugin.hasNoLocalKey()).toBe(false)
       await plugin.callForgetAccount('alice@example.com')
       expect(await plugin.hasNoLocalKey()).toBe(true)
+    })
+  })
+
+  describe('self-outgoing carbon decrypt (multi-device, XEP-0280)', () => {
+    // Multi-device scenario: alice has two devices sharing the same
+    // OpenPGP private key (one `InMemoryStorageBackend` between them,
+    // matching Adrien's "j'ai la même clé sur tous les devices firefox"
+    // setup). Bob is a separate account. Device-A sends to Bob; the
+    // server fans the message out to device-B as a XEP-0280 sent carbon.
+    // device-B must decrypt the carbon, which requires (1) encrypt-to-
+    // self at send time and (2) the inverted reflection check on
+    // receive — without isSelfOutgoing the plugin rejects every carbon
+    // because the signcrypt `<to/>` names Bob, not alice.
+
+    async function buildMultiDeviceTriple(): Promise<{
+      shared: SharedPep
+      aliceDeviceA: WebOpenPGPPlugin
+      aliceDeviceB: WebOpenPGPPlugin
+      aliceBundle: KeyBundle
+      bobBundle: KeyBundle
+    }> {
+      const shared: SharedPep = new Map()
+      const aliceBackend = new InMemoryStorageBackend()
+      const passphrase = 'alice-passphrase-strong'
+
+      // Alice device-A — generates the account key.
+      setSessionPassphrase(passphrase)
+      const aliceDeviceA = new WebOpenPGPPlugin()
+      const aliceACtx = makeCtxWithSharedPep('alice@example.com', shared, aliceBackend).ctx
+      await aliceDeviceA.init(aliceACtx)
+      // Force key generation via probePeer's underlying ensureKey.
+      // Easier path: use the Testable wrapper directly.
+      const aliceFromInit = new TestableWebOpenPGPPlugin()
+      const aliceInitCtx = makeCtxWithSharedPep('alice@example.com', shared, aliceBackend).ctx
+      await aliceFromInit.init(aliceInitCtx)
+      const aliceBundle = await aliceFromInit.callEnsureKeyMaterial('alice@example.com')
+
+      // Alice device-B — separate plugin instance, SAME backend so it
+      // loads the same private key.
+      clearSessionPassphrase()
+      setSessionPassphrase(passphrase)
+      const aliceDeviceB = new WebOpenPGPPlugin()
+      const aliceBCtx = makeCtxWithSharedPep('alice@example.com', shared, aliceBackend).ctx
+      await aliceDeviceB.init(aliceBCtx)
+      // Force device-B to load (rather than regenerate) the existing key.
+      const aliceDeviceBTestable = aliceDeviceB as unknown as {
+        ensureKeyMaterial: (jid: string) => Promise<KeyBundle>
+      }
+      await aliceDeviceBTestable.ensureKeyMaterial('alice@example.com')
+
+      // Bob — different identity, his own backend.
+      clearSessionPassphrase()
+      setSessionPassphrase('bob-passphrase-strong')
+      const bob = new TestableWebOpenPGPPlugin()
+      const bobCtx = makeCtxWithSharedPep('bob@example.com', shared).ctx
+      await bob.init(bobCtx)
+      const bobBundle = await bob.callEnsureKeyMaterial('bob@example.com')
+
+      // Cross-publish both keys via the shared PEP so probePeer works
+      // for both directions.
+      publishKeyToSharedPep(shared, 'alice@example.com', aliceBundle)
+      publishKeyToSharedPep(shared, 'bob@example.com', bobBundle)
+
+      // Restore alice's passphrase as the active session for the test
+      // body (otherwise encrypt/decrypt requireUnlocked will throw).
+      clearSessionPassphrase()
+      setSessionPassphrase(passphrase)
+
+      return { shared, aliceDeviceA, aliceDeviceB, aliceBundle, bobBundle }
+    }
+
+    it('alice device-B decrypts a sent carbon produced by device-A (encrypt-to-self path)', async () => {
+      const { aliceDeviceA, aliceDeviceB, aliceBundle, bobBundle } =
+        await buildMultiDeviceTriple()
+      // Suppress unused-var lint on bobBundle (it's published via the
+      // helper but the test doesn't need it directly).
+      void bobBundle
+
+      // device-A probes bob (populates peerKeys for the encrypt step),
+      // then encrypts via the full high-level API — produces a wire-
+      // shaped <openpgp> element with a signcrypt envelope inside.
+      await aliceDeviceA.probePeer('bob@example.com')
+      const sendHandle = await aliceDeviceA.openConversation({
+        kind: 'direct',
+        peer: 'bob@example.com',
+      })
+      // plugin.encrypt expects the plaintext to be a serialized
+      // <payload xmlns='jabber:client'> envelope (same shape Chat.ts
+      // ships on the real send path).
+      const plaintext = new TextEncoder().encode(
+        serializePayloadEnvelope([xml('body', {}, 'hello from device-A')]),
+      )
+      const payload = await aliceDeviceA.encrypt(sendHandle, plaintext)
+      expect(payload.protocolId).toBe('openpgp')
+
+      // device-B receives the sent carbon. It opens the conversation
+      // against bob (the RECIPIENT, mirroring what Chat.ts does for
+      // sent carbons) and decrypts with isSelfOutgoing: true.
+      const carbonHandle = await aliceDeviceB.openConversation({
+        kind: 'direct',
+        peer: 'bob@example.com',
+      })
+      const claim = aliceDeviceB.tryClaimInbound(payload.stanzaElement)
+      expect(claim).not.toBeNull()
+
+      const decrypted = await aliceDeviceB.decrypt(carbonHandle, claim!, {
+        isSelfOutgoing: true,
+      })
+
+      // The decrypted plaintext is the inner payload envelope; the
+      // SDK pipeline normally lifts its children onto the stanza root.
+      // Just confirm the body roundtrips.
+      const envelopeXml = new TextDecoder().decode(decrypted.plaintext)
+      const children = parsePayloadEnvelope(envelopeXml)!
+      expect(children.find((c) => c.name === 'body')?.text()).toBe(
+        'hello from device-A',
+      )
+      // Trust is evaluated against our own key (we signed); since we
+      // hold the signing key locally the signature verifies.
+      expect(decrypted.securityContext.protocolId).toBe('openpgp')
+      expect(decrypted.securityContext.trust).toBe('verified')
+      expect(decrypted.securityContext.notes).toBeUndefined()
+      // Attribution: the carbon doesn't reveal which sibling device
+      // originated the send, so the message is attributed to our bare
+      // JID with our own signing fingerprint.
+      expect(decrypted.senderDevice.jid).toBe('alice@example.com')
+      expect(decrypted.senderDevice.deviceId).toBe(aliceBundle.fingerprint)
+    })
+
+    it('rejects a self-outgoing decrypt when the envelope <to/> does not name the conversation peer', async () => {
+      // The inverted reflection check must still have teeth: with
+      // isSelfOutgoing, addressees MUST include the conversation peer.
+      // Opening device-B's handle against the wrong peer (charlie
+      // instead of bob) must surface as envelope-reflection so a
+      // tampered carbon can't be silently mis-attributed.
+      const { aliceDeviceA, aliceDeviceB } = await buildMultiDeviceTriple()
+
+      await aliceDeviceA.probePeer('bob@example.com')
+      const sendHandle = await aliceDeviceA.openConversation({
+        kind: 'direct',
+        peer: 'bob@example.com',
+      })
+      const payload = await aliceDeviceA.encrypt(
+        sendHandle,
+        new TextEncoder().encode(
+          serializePayloadEnvelope([xml('body', {}, 'to bob')]),
+        ),
+      )
+
+      // Open the carbon handle against the WRONG peer — the inverted
+      // check should compare "is bob in addressees?" against the
+      // conversation peer (charlie) and reject.
+      const wrongHandle = await aliceDeviceB.openConversation({
+        kind: 'direct',
+        peer: 'charlie@example.com',
+      })
+      const claim = aliceDeviceB.tryClaimInbound(payload.stanzaElement)!
+      await expect(
+        aliceDeviceB.decrypt(wrongHandle, claim, { isSelfOutgoing: true }),
+      ).rejects.toMatchObject({ code: 'envelope-reflection' })
+    })
+
+    it('without isSelfOutgoing, the same carbon is rejected by the default reflection check (regression baseline)', async () => {
+      // This is the bug Adrien reported: pre-fix, the live carbon path
+      // passed bareFrom (our own JID) as the peer and did NOT set the
+      // flag. With the modern fix-pair, Chat.ts now opens against the
+      // recipient AND sets isSelfOutgoing; if either step regresses
+      // (e.g. Chat.ts is reverted), this test guards the plugin layer
+      // by confirming the default check rejects the legitimate carbon.
+      const { aliceDeviceA, aliceDeviceB } = await buildMultiDeviceTriple()
+
+      await aliceDeviceA.probePeer('bob@example.com')
+      const sendHandle = await aliceDeviceA.openConversation({
+        kind: 'direct',
+        peer: 'bob@example.com',
+      })
+      const payload = await aliceDeviceA.encrypt(
+        sendHandle,
+        new TextEncoder().encode(
+          serializePayloadEnvelope([xml('body', {}, 'hello')]),
+        ),
+      )
+
+      const carbonHandle = await aliceDeviceB.openConversation({
+        kind: 'direct',
+        peer: 'bob@example.com',
+      })
+      const claim = aliceDeviceB.tryClaimInbound(payload.stanzaElement)!
+      // No isSelfOutgoing → default check fires.
+      await expect(aliceDeviceB.decrypt(carbonHandle, claim)).rejects.toMatchObject({
+        code: 'envelope-reflection',
+      })
     })
   })
 

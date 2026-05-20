@@ -74,6 +74,7 @@ import { getDomain } from '../jid'
 import { logInfo, logError as logErr } from '../logger'
 import {
   decryptStanzaInPlace,
+  deriveConversationContext,
   readStashedAuthoredAt,
   readStashedEncryptedPayload,
   readStashedSecurityContext,
@@ -1672,7 +1673,18 @@ export class MAM extends BaseModule {
   ): Promise<void> {
     const manager = this.deps.getE2EEManager?.()
     if (!manager) return
-    await decryptStanzaInPlace(messageEl, manager, peer, 'archive')
+    // Same helper the live path uses. The passed-in `peer` is kept as
+    // an explicit input rather than deriving it here too: room
+    // replays come through this function with `roomJid` (which the
+    // helper would not produce for a `from = roomJid/nickname`-shaped
+    // groupchat message), and our callers already do the right thing
+    // for 1:1. We only need the helper to tell us whether this entry
+    // is self-outgoing so the plugin can flip its envelope checks.
+    const ownBareJid = getBareJid(this.deps.getCurrentJid() ?? '')
+    const { isSelfOutgoing } = deriveConversationContext(messageEl, ownBareJid)
+    await decryptStanzaInPlace(messageEl, manager, peer, 'archive', {
+      isSelfOutgoing,
+    })
   }
 
   /**

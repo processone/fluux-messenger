@@ -288,6 +288,80 @@ describe('MAM E2EE wiring', () => {
     expect(messages[0].securityContext).toBeUndefined()
   })
 
+  it('threads isSelfOutgoing: true when the archive entry was sent by us (from === ownBareJid)', async () => {
+    // MAM auto-detects self-outgoing entries by comparing the message's
+    // bare `from` to the account's own bare JID. The signal must reach
+    // the plugin via `decryptArchive`'s context so it can branch its
+    // signature-key lookup and addressees reflection check. Without it,
+    // the OpenPGP plugin would reject our own archived sends as
+    // reflection attacks.
+    const payload = await manager.encryptOutbound(
+      { kind: 'direct', peer: PEER },
+      new TextEncoder().encode('archived self-outgoing'),
+    )
+    if (!payload) throw new Error('Test setup: encryptOutbound returned null')
+
+    const decryptSpy = vi.spyOn(manager, 'decryptArchive')
+
+    const forwardedMessage = xml(
+      'message',
+      { from: ME + '/device-A', to: PEER, type: 'chat', id: 'mam-self-flag' },
+      xml('body', {}, payload.payload.fallbackBody ?? '[encrypted]'),
+      xml(
+        payload.payload.stanzaElement.name,
+        payload.payload.stanzaElement.attrs,
+        ...(payload.payload.stanzaElement.children as (string | Element)[]),
+      ),
+    )
+    const archiveEntry = buildMAMResult({
+      archiveId: 'arch-self-flag',
+      forwardedMessage,
+    })
+
+    await runQueryWithEntry(harness, PEER, archiveEntry)
+
+    expect(decryptSpy).toHaveBeenCalledTimes(1)
+    const [, , context] = decryptSpy.mock.calls[0]
+    expect(context?.isSelfOutgoing).toBe(true)
+  })
+
+  it('does NOT set isSelfOutgoing for an inbound archive entry (from === peer)', async () => {
+    // Regression guard symmetric to the live carbon test: inbound
+    // archive entries (the peer sent the message TO us) must not get
+    // the flag, otherwise the plugin's reflection check would be
+    // inverted on legitimate peer messages.
+    const peerManager = await makeManagerWithDummyPlugin(PEER)
+    const payload = await peerManager.encryptOutbound(
+      { kind: 'direct', peer: ME },
+      new TextEncoder().encode('archived inbound'),
+    )
+    if (!payload) throw new Error('Test setup: encryptOutbound returned null')
+
+    const decryptSpy = vi.spyOn(manager, 'decryptArchive')
+
+    const forwardedMessage = xml(
+      'message',
+      { from: PEER + '/res', to: ME, type: 'chat', id: 'mam-inbound-flag' },
+      xml('body', {}, payload.payload.fallbackBody ?? '[encrypted]'),
+      xml(
+        payload.payload.stanzaElement.name,
+        payload.payload.stanzaElement.attrs,
+        ...(payload.payload.stanzaElement.children as (string | Element)[]),
+      ),
+    )
+    const archiveEntry = buildMAMResult({
+      archiveId: 'arch-inbound-flag',
+      forwardedMessage,
+    })
+
+    await runQueryWithEntry(harness, PEER, archiveEntry)
+
+    expect(decryptSpy).toHaveBeenCalledTimes(1)
+    const [, , context] = decryptSpy.mock.calls[0]
+    // Either undefined or explicitly false — never true for inbound.
+    expect(context?.isSelfOutgoing).not.toBe(true)
+  })
+
   it('forwards the archived stanza messageId to plugin.decrypt', async () => {
     // Same race-window guarantee as the live path: the SDK must thread the
     // messageId of the forwarded stanza into the plugin's decrypt call so

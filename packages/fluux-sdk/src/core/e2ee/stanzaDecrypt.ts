@@ -22,7 +22,8 @@ import type { Element } from '@xmpp/client'
 import { elementToData } from './stanzaAdapter'
 import { parse as parsePayloadEnvelope } from './payloadEnvelope'
 import type { E2EEManager, SecurityContext } from './index'
-import type { InboundSource } from './types'
+import type { InboundDecryptContext, InboundSource } from './types'
+import { getBareJid } from '../jid'
 import { logWarn, logInfo } from '../logger'
 import { NS_EME } from '../namespaces'
 
@@ -63,22 +64,28 @@ export interface DecryptInPlaceResult {
  *
  * @param stanza - The `<message>` element (live or MAM-forwarded).
  * @param manager - The registered E2EE manager.
- * @param senderPeer - Bare JID of the peer whose conversation this decrypt
- *   should open. For live messages this is `bareFrom`; for archived
- *   messages it's the conversation partner (which may differ from `from`
- *   when the archived message is a carbon/self-outgoing entry — callers
- *   are responsible for that mapping).
+ * @param senderPeer - Bare JID of the **conversation peer** whose handle the
+ *   plugin should open. For received messages this is `bareFrom`; for
+ *   self-outgoing entries (XEP-0280 sent carbons, XEP-0313 MAM self-replays)
+ *   it's the recipient (`bareTo`) — callers are responsible for that mapping.
+ *   Pair the `bareTo` mapping with `options.isSelfOutgoing = true` so the
+ *   plugin can invert its peer-key / reflection checks.
  * @param source - `'live'` for freshly-delivered stanzas, `'archive'` for
  *   stanzas replayed from XEP-0313 MAM. Routing through the archive path
  *   lets ratcheting plugins (OMEMO/MLS) decrypt history without advancing
  *   their live session state; stateless plugins (OpenPGP) see no
  *   difference. Defaults to `'live'` for backwards compatibility.
+ * @param options - Optional context forwarded to the plugin's `decrypt`
+ *   call. `isSelfOutgoing` signals that we are decrypting one of our own
+ *   messages (sent-carbon or self-MAM-replay) and the plugin should branch
+ *   its sender-key / envelope-addressees logic accordingly.
  */
 export async function decryptStanzaInPlace(
   stanza: Element,
   manager: E2EEManager,
   senderPeer: string,
   source: InboundSource = 'live',
+  options?: { isSelfOutgoing?: boolean },
 ): Promise<DecryptInPlaceResult> {
   const marked = stanza as unknown as {
     [DECRYPTED_MARKER]?: boolean
@@ -130,7 +137,14 @@ export async function decryptStanzaInPlace(
 
   try {
     const messageId = stanza.attrs.id
-    const context = messageId ? { messageId } : undefined
+    const isSelfOutgoing = options?.isSelfOutgoing === true
+    const context: InboundDecryptContext | undefined =
+      messageId || isSelfOutgoing
+        ? {
+            ...(messageId && { messageId }),
+            ...(isSelfOutgoing && { isSelfOutgoing: true as const }),
+          }
+        : undefined
     const target = { kind: 'direct' as const, peer: senderPeer }
     const result =
       source === 'archive'
@@ -220,6 +234,51 @@ export async function decryptStanzaInPlace(
     ...(securityContext && { securityContext }),
     ...(authoredAt && { authoredAt }),
     ...(failureReason !== null && { encryptedPayloadXml: encryptedChildXml }),
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Conversation-context derivation
+// ---------------------------------------------------------------------------
+
+/**
+ * From a `<message>` element and the account's own bare JID, derive
+ * the conversation peer plus whether this stanza is one of our own
+ * outgoing messages being delivered back to us (XEP-0280 sent carbon
+ * or XEP-0313 MAM self-replay).
+ *
+ * The single rule both the live (`Chat`) and archive (`MAM`) paths
+ * follow: if the message's bare `from` is our own JID, the message
+ * originated from one of our devices — the conversation peer is then
+ * the recipient (`to`), and the plugin needs `isSelfOutgoing: true`
+ * to invert its sender-key / envelope-addressees checks. Otherwise
+ * the peer is the sender (`from`).
+ *
+ * Centralizing this here is load-bearing: the bug Adrien reported in
+ * production was that the live path used the message's `from` as the
+ * peer for sent carbons (i.e. our own JID), while the archive path
+ * mapped to `to` correctly. Now both call this helper.
+ *
+ * Note for MUC: room messages have `from = roomJid/nickname` and
+ * `to = our-jid/resource`, so `bareFrom !== ownBareJid` — the helper
+ * naturally returns `peer = roomJid` and `isSelfOutgoing = false`.
+ *
+ * @param messageEl - The `<message>` element after carbon unwrapping
+ *   (live path) or after MAM `<forwarded>` extraction (archive path).
+ * @param ownBareJid - The current account's bare JID. Empty string
+ *   disables self-outgoing detection (defensive fallback for callers
+ *   that may not yet have a current JID).
+ */
+export function deriveConversationContext(
+  messageEl: Element,
+  ownBareJid: string,
+): { peer: string; isSelfOutgoing: boolean } {
+  const bareFrom = messageEl.attrs.from ? getBareJid(messageEl.attrs.from) : ''
+  const bareTo = messageEl.attrs.to ? getBareJid(messageEl.attrs.to) : ''
+  const isSelfOutgoing = ownBareJid !== '' && bareFrom === ownBareJid
+  return {
+    peer: isSelfOutgoing ? bareTo : bareFrom,
+    isSelfOutgoing,
   }
 }
 

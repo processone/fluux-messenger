@@ -35,6 +35,7 @@ import type { E2EEManager } from '../e2ee'
 import { E2EEEncryptionRequiredError } from '../e2ee'
 import {
   decryptStanzaInPlace,
+  deriveConversationContext,
   readStashedAuthoredAt,
   readStashedEncryptedPayload,
   readStashedSecurityContext,
@@ -363,9 +364,17 @@ export class Chat extends BaseModule {
     isCarbonCopy: boolean,
     isSentCarbon: boolean,
   ): Promise<void> {
-    const from = stanza.attrs.from
-    const bareFrom = from ? getBareJid(from) : ''
-    await decryptStanzaInPlace(stanza, manager, bareFrom, 'live')
+    // Single helper covers every live shape (regular received, received
+    // carbon, sent carbon): if `from` is our bare JID, the peer is the
+    // recipient (`to`) and the plugin is told this is one of our own
+    // outgoing messages being delivered back to us. Same rule MAM
+    // applies on its archive entries — keeping the two paths aligned
+    // through one function is what guards against the original bug.
+    const ownBareJid = getBareJid(this.deps.getCurrentJid() ?? '')
+    const { peer, isSelfOutgoing } = deriveConversationContext(stanza, ownBareJid)
+    await decryptStanzaInPlace(stanza, manager, peer, 'live', {
+      isSelfOutgoing,
+    })
     this.handleMessageInternal(stanza, isCarbonCopy, isSentCarbon)
   }
 

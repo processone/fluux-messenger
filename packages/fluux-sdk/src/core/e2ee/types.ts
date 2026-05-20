@@ -164,6 +164,17 @@ export interface InboundDecryptContext {
    * upgrade event can patch the right rendered message.
    */
   messageId?: string
+  /**
+   * `true` when this stanza is one of our own outgoing messages being
+   * delivered back to us — XEP-0280 sent carbons on a sibling device, or
+   * a XEP-0313 MAM self-outgoing replay. Encrypt-to-self makes the
+   * ciphertext openable, but the conventional inbound checks (peer-key
+   * signature verification, addressees-contain-self reflection defence)
+   * are inverted: the signer is us, and the envelope `<to/>` names the
+   * conversation peer rather than us. Plugins that ship those defences
+   * (OpenPGP, OMEMO) must branch on this flag.
+   */
+  isSelfOutgoing?: boolean
 }
 
 /**

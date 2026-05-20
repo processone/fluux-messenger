@@ -10,6 +10,7 @@ import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 import {
   decryptStanzaInPlace,
+  deriveConversationContext,
   readStashedAuthoredAt,
   readStashedSecurityContext,
   readStashedEncryptedPayload,
@@ -326,5 +327,149 @@ describe('stanzaHasEMEHint', () => {
     ) as Element
 
     expect(stanzaHasEMEHint(stanza)).toBe(false)
+  })
+})
+
+describe('deriveConversationContext', () => {
+  const ME = 'alice@example.com'
+
+  it('regular received message: peer is the sender, not self-outgoing', () => {
+    const stanza = xml(
+      'message',
+      { from: 'bob@example.com/laptop', to: `${ME}/desktop`, type: 'chat', id: 'm1' },
+      xml('body', {}, 'hi'),
+    ) as Element
+
+    expect(deriveConversationContext(stanza, ME)).toEqual({
+      peer: 'bob@example.com',
+      isSelfOutgoing: false,
+    })
+  })
+
+  it('XEP-0280 sent carbon shape: peer is the recipient (to), self-outgoing', () => {
+    // After carbon unwrapping the inner message has from=us, to=peer.
+    // This is what the live Chat path sees when our other device's
+    // outgoing send is fanned out to us via `<sent xmlns=carbons:2>`.
+    const innerSentCarbon = xml(
+      'message',
+      { from: `${ME}/device-A`, to: 'bob@example.com', type: 'chat', id: 'm-sent' },
+      xml('body', {}, 'hello from device-A'),
+    ) as Element
+
+    expect(deriveConversationContext(innerSentCarbon, ME)).toEqual({
+      peer: 'bob@example.com',
+      isSelfOutgoing: true,
+    })
+  })
+
+  it('XEP-0280 received carbon shape: peer is still the original sender, not self-outgoing', () => {
+    // A received carbon wraps an INBOUND message, so the inner shape
+    // looks identical to a regular received: from=peer, to=us.
+    const innerReceivedCarbon = xml(
+      'message',
+      { from: 'bob@example.com/laptop', to: `${ME}/desktop`, type: 'chat', id: 'm-recv' },
+      xml('body', {}, 'hi from bob'),
+    ) as Element
+
+    expect(deriveConversationContext(innerReceivedCarbon, ME)).toEqual({
+      peer: 'bob@example.com',
+      isSelfOutgoing: false,
+    })
+  })
+
+  it('MUC groupchat: peer is the room JID, not self-outgoing', () => {
+    // Room messages come from `roomJid/nickname`. The bare from is the
+    // room JID, never our own JID, so the helper correctly attributes
+    // them to the room without flipping the self-outgoing flag — even
+    // for messages we sent ourselves to the room.
+    const roomMessage = xml(
+      'message',
+      {
+        from: 'room@conference.example.com/alice',
+        to: `${ME}/desktop`,
+        type: 'groupchat',
+        id: 'm-room',
+      },
+      xml('body', {}, 'hey everyone'),
+    ) as Element
+
+    expect(deriveConversationContext(roomMessage, ME)).toEqual({
+      peer: 'room@conference.example.com',
+      isSelfOutgoing: false,
+    })
+  })
+
+  it('full JIDs are reduced to bare JIDs in both peer and self-detection', () => {
+    // The plugin operates on bare JIDs for conversation handles; the
+    // helper must do the resource-stripping itself so callers do not
+    // have to remember to. Tested by feeding full JIDs and asserting
+    // the bare ones come back.
+    const stanza = xml(
+      'message',
+      { from: `${ME}/longest-resource-name`, to: 'bob@example.com/phone', type: 'chat' },
+      xml('body', {}, 'reduce'),
+    ) as Element
+
+    expect(deriveConversationContext(stanza, ME)).toEqual({
+      peer: 'bob@example.com',
+      isSelfOutgoing: true,
+    })
+  })
+
+  it('empty own JID disables self-outgoing detection (defensive)', () => {
+    // Callers (Chat, MAM) read the current JID lazily and may end up
+    // with an empty string during teardown or before connect. Without
+    // the guard, a message from `@example.com` could match by
+    // coincidence and be mis-flagged as self-outgoing.
+    const stanza = xml(
+      'message',
+      { from: `${ME}/device-A`, to: 'bob@example.com', type: 'chat' },
+      xml('body', {}, 'careful'),
+    ) as Element
+
+    expect(deriveConversationContext(stanza, '')).toEqual({
+      peer: 'alice@example.com',
+      isSelfOutgoing: false,
+    })
+  })
+
+  it('missing from attribute: peer falls back to empty, never claims self-outgoing', () => {
+    const stanza = xml('message', { to: 'bob@example.com', type: 'chat' }) as Element
+
+    expect(deriveConversationContext(stanza, ME)).toEqual({
+      peer: '',
+      isSelfOutgoing: false,
+    })
+  })
+
+  it('missing to attribute on a self-outgoing stanza: peer is empty rather than guessing', () => {
+    // A self-outgoing inner message must have a `to` (the recipient).
+    // If it somehow arrives without one (malformed carbon, server
+    // bug), the helper returns peer = '' rather than echoing our own
+    // JID — the downstream decrypt step will then fail loudly instead
+    // of opening a self-conversation handle.
+    const stanza = xml('message', { from: `${ME}/device-A`, type: 'chat' }) as Element
+
+    expect(deriveConversationContext(stanza, ME)).toEqual({
+      peer: '',
+      isSelfOutgoing: true,
+    })
+  })
+
+  it('case-sensitive JID comparison (no normalisation, mirrors getBareJid)', () => {
+    // getBareJid does not lowercase — neither does this helper, so a
+    // server that ships a different case in `from` would be treated as
+    // a different account. Documented here so the behavior is explicit
+    // and any future stringprep work is a deliberate change.
+    const stanza = xml(
+      'message',
+      { from: 'Alice@example.com/device-A', to: 'bob@example.com', type: 'chat' },
+      xml('body', {}, 'cased'),
+    ) as Element
+
+    expect(deriveConversationContext(stanza, ME)).toEqual({
+      peer: 'Alice@example.com',
+      isSelfOutgoing: false,
+    })
   })
 })

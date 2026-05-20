@@ -415,6 +415,168 @@ describe('Chat E2EE wiring', () => {
       // re-dispatched synthetic pass.
       expect(spy).toHaveBeenCalledTimes(1)
     })
+
+    it('does NOT set isSelfOutgoing for a received encrypted message (regression guard)', async () => {
+      // The isSelfOutgoing flag must be tightly scoped — flipping it on a
+      // received message would invert the reflection check on Bob's
+      // incoming traffic and tell the plugin to verify signatures with
+      // OUR own key (which Bob didn't sign with). Both would be silent
+      // security holes. This guards against accidentally flipping the
+      // flag for normal inbound stanzas.
+      const spy = vi.spyOn(manager, 'decryptInbound')
+
+      // Produce a real encrypted stanza by sending one, then re-cast it
+      // as an inbound message from Bob.
+      await chat.sendMessage('bob@example.com', 'hello back')
+      const outgoing = captured[0]
+      captured.length = 0
+
+      const inbound = xml(
+        'message',
+        { from: 'bob@example.com/r', to: 'me@example.com', type: 'chat', id: 'm-inbound' },
+        ...outgoing.children.filter((c) => typeof c === 'string' || c.name !== 'active'),
+      )
+
+      const rxChat = chat
+      rxChat.handle(inbound)
+      await new Promise((r) => setTimeout(r, 0))
+
+      expect(spy).toHaveBeenCalledTimes(1)
+      const [, senderTarget, context] = spy.mock.calls[0]
+      expect(senderTarget).toEqual({ kind: 'direct', peer: 'bob@example.com' })
+      // Critical: undefined OR explicitly false — never true.
+      expect(context?.isSelfOutgoing).not.toBe(true)
+    })
+
+    it('does NOT set isSelfOutgoing for a received <received> carbon (Bob → us via our other device)', async () => {
+      // A `<received>` carbon is a copy of an INCOMING message from a
+      // peer, delivered to a sibling device. The original sender is the
+      // peer (not us) — so the inverted reflection check would be wrong
+      // and the signature verification key must be the peer's, not ours.
+      const spy = vi.spyOn(manager, 'decryptInbound')
+
+      await chat.sendMessage('bob@example.com', 'pretend Bob sent this')
+      const outgoing = captured[0]
+      captured.length = 0
+
+      // Wrap the encrypted payload as if Bob's send arrived as a
+      // `<received>` carbon on our device-B.
+      const inner = xml(
+        'message',
+        {
+          from: 'bob@example.com/laptop',
+          to: 'me@example.com',
+          type: 'chat',
+          id: 'm-recv-carbon',
+        },
+        ...outgoing.children.filter((c) => typeof c === 'string' || c.name !== 'active'),
+      )
+      const carbon = xml(
+        'message',
+        { from: 'me@example.com', to: 'me@example.com/device-B', type: 'chat' },
+        xml(
+          'received',
+          { xmlns: 'urn:xmpp:carbons:2' },
+          xml('forwarded', { xmlns: 'urn:xmpp:forward:0' }, inner),
+        ),
+      )
+
+      chat.handle(carbon)
+      await new Promise((r) => setTimeout(r, 0))
+
+      expect(spy).toHaveBeenCalledTimes(1)
+      const [, senderTarget, context] = spy.mock.calls[0]
+      // Conversation peer is Bob (the sender), not us.
+      expect(senderTarget).toEqual({ kind: 'direct', peer: 'bob@example.com' })
+      // Critical: <received> carbons are inbound — must NOT flip the flag.
+      expect(context?.isSelfOutgoing).not.toBe(true)
+    })
+
+    it('decrypts a sent carbon (XEP-0280) — own outgoing encrypted message replayed on another device', async () => {
+      // Multi-device bug: when our other device sends an encrypted message,
+      // the server fans out a `<sent xmlns='urn:xmpp:carbons:2'>` carbon to
+      // every other resource of our account. The carbon's inner stanza is
+      // OUR message (from=us, to=peer) with the ciphertext as encoded by the
+      // sending device. The receiving device must decrypt it and surface the
+      // plaintext in the conversation with the peer.
+      //
+      // Without proper handling, two things go wrong:
+      //   1. The plugin is asked to open a conversation with our own JID (a
+      //      reflection-like context) and signature verification looks up
+      //      the wrong key.
+      //   2. The plugin's XEP-0373 reflection defence rejects the envelope
+      //      because the signcrypt `<to/>` names the conversation peer, not
+      //      us — so the legitimate carbon is treated as a reflected attack.
+      //
+      // The SDK contract: for sent carbons, decryptInbound is called with
+      //   - senderTarget.peer === the recipient (bareTo), so the plugin
+      //     opens conversation with the right counterparty, and
+      //   - context.isSelfOutgoing === true, so the plugin can branch its
+      //     verification / addressees logic.
+      const spy = vi.spyOn(manager, 'decryptInbound')
+
+      // Produce a real encrypted stanza by sending one from the sender device.
+      await chat.sendMessage('bob@example.com', 'hello from device-A')
+      const outgoing = captured[0]
+      captured.length = 0
+
+      // Fabricate the carbon as it would arrive on device-B: outer message
+      // addressed to us, wrapping a `<sent>` carbon with the original.
+      const inner = xml(
+        'message',
+        {
+          from: 'me@example.com/device-A',
+          to: 'bob@example.com',
+          type: 'chat',
+          id: 'm-carbon-sent',
+        },
+        ...outgoing.children.filter((c) => typeof c === 'string' || c.name !== 'active'),
+      )
+      const carbon = xml(
+        'message',
+        { from: 'me@example.com', to: 'me@example.com/device-B', type: 'chat' },
+        xml(
+          'sent',
+          { xmlns: 'urn:xmpp:carbons:2' },
+          xml('forwarded', { xmlns: 'urn:xmpp:forward:0' }, inner),
+        ),
+      )
+
+      // Receive the carbon on device-B (uses the same manager, but a fresh
+      // Chat instance bound to a fresh event sink so we observe only this
+      // delivery).
+      const sdkEvents: Array<{ event: string; payload: unknown }> = []
+      const { deps } = makeDeps({
+        jid: 'me@example.com',
+        manager,
+        captureStanza: () => {},
+      })
+      deps.emitSDK = (event, payload) => {
+        sdkEvents.push({ event, payload })
+      }
+      const rxChat = new Chat(deps, stubMAM())
+
+      const handled = rxChat.handle(carbon)
+      expect(handled).toBe(true)
+      await new Promise((r) => setTimeout(r, 0))
+
+      // The plugin must be invoked with the conversation peer (the recipient)
+      // and the isSelfOutgoing flag — without these, the OpenPGP plugin's
+      // reflection check rejects the legitimate carbon.
+      expect(spy).toHaveBeenCalledTimes(1)
+      const [, senderTarget, context] = spy.mock.calls[0]
+      expect(senderTarget).toEqual({ kind: 'direct', peer: 'bob@example.com' })
+      expect(context?.isSelfOutgoing).toBe(true)
+
+      // The decrypted carbon must surface as an outgoing message in the
+      // conversation with bob (the recipient), not with us.
+      const chatMessageEvents = sdkEvents.filter((e) => e.event === 'chat:message')
+      expect(chatMessageEvents).toHaveLength(1)
+      const msg = (chatMessageEvents[0].payload as { message: { conversationId: string; isOutgoing: boolean; body: string } }).message
+      expect(msg.conversationId).toBe('bob@example.com')
+      expect(msg.isOutgoing).toBe(true)
+      expect(msg.body).toBe('hello from device-A')
+    })
   })
 
   describe('securityContext threading', () => {
