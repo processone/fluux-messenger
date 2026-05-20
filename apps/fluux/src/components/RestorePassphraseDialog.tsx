@@ -89,49 +89,53 @@ export function RestorePassphraseDialog({
         }
       }}
     >
-      <div className="bg-fluux-sidebar rounded-lg p-5 max-w-md w-full mx-4 shadow-xl">
-        <h3 className="text-lg font-semibold text-fluux-text mb-1">
-          {title ?? t('settings.encryption.restoreDialogTitle')}
-        </h3>
-        <p className="text-sm text-fluux-muted mb-4">
-          {body ?? t('settings.encryption.restoreDialogBody')}
-        </p>
-
-        <div className="flex gap-2 p-3 mb-4 rounded-lg bg-yellow-500/10 text-xs text-fluux-muted leading-snug">
-          <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
-          <p className="font-medium text-fluux-text">
-            {t('settings.encryption.restoreDialogWarning')}
+      <div className="bg-fluux-sidebar rounded-lg max-w-md w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
+        <div className="px-5 pt-5 pb-3">
+          <h3 className="text-lg font-semibold text-fluux-text mb-1">
+            {title ?? t('settings.encryption.restoreDialogTitle')}
+          </h3>
+          <p className="text-sm text-fluux-muted">
+            {body ?? t('settings.encryption.restoreDialogBody')}
           </p>
         </div>
 
-        <label className="block text-sm text-fluux-text mb-1">
-          {t('settings.encryption.restorePassphraseLabel')}
-        </label>
-        <input
-          ref={inputRef}
-          type="password"
-          value={passphrase}
-          disabled={isRestoring}
-          onChange={(e) => {
-            setPassphrase(e.target.value)
-            if (error) setError(null)
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && passphrase.trim() && !isRestoring) {
-              void handleConfirm()
-            }
-          }}
-          placeholder={t('settings.encryption.restorePassphrasePlaceholder')}
-          className="w-full px-3 py-2 mb-4 rounded-lg bg-fluux-bg border border-fluux-hover text-fluux-text focus:outline-none focus:border-fluux-brand disabled:opacity-50"
-        />
+        <div className="flex-1 overflow-y-auto min-h-0 px-5">
+          <div className="flex gap-2 p-3 mb-4 rounded-lg bg-yellow-500/10 text-xs text-fluux-muted leading-snug">
+            <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+            <p className="font-medium text-fluux-text">
+              {t('settings.encryption.restoreDialogWarning')}
+            </p>
+          </div>
 
-        {error && (
-          <p className="text-xs text-red-500 dark:text-red-400 mb-3 break-words">
-            {error}
-          </p>
-        )}
+          <label className="block text-sm text-fluux-text mb-1">
+            {t('settings.encryption.restorePassphraseLabel')}
+          </label>
+          <input
+            ref={inputRef}
+            type="password"
+            value={passphrase}
+            disabled={isRestoring}
+            onChange={(e) => {
+              setPassphrase(e.target.value)
+              if (error) setError(null)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && passphrase.trim() && !isRestoring) {
+                void handleConfirm()
+              }
+            }}
+            placeholder={t('settings.encryption.restorePassphrasePlaceholder')}
+            className="w-full px-3 py-2 mb-4 rounded-lg bg-fluux-bg border border-fluux-hover text-fluux-text focus:outline-none focus:border-fluux-brand disabled:opacity-50"
+          />
 
-        <div className="flex gap-2 justify-end">
+          {error && (
+            <p className="text-xs text-red-500 dark:text-red-400 mb-3 break-words">
+              {error}
+            </p>
+          )}
+        </div>
+
+        <div className="px-5 pb-5 pt-3 flex gap-2 justify-end">
           <button
             onClick={onCancel}
             disabled={isRestoring}

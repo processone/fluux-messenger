@@ -88,48 +88,52 @@ export function DeleteOpenpgpKeyDialog({
         }
       }}
     >
-      <div className="bg-fluux-sidebar rounded-lg p-5 max-w-md w-full mx-4 shadow-xl">
-        <h3 className="text-lg font-semibold text-fluux-text mb-1">
-          {t('settings.encryption.deleteKeyConfirmTitle')}
-        </h3>
-        <p className="text-sm text-fluux-muted mb-4">
-          {t('settings.encryption.deleteKeyConfirmMessage', {
-            fingerprint: formatFingerprint(fingerprint),
-          })}
-        </p>
-
-        <div className="flex gap-2 p-3 mb-4 rounded-lg bg-yellow-500/10 text-xs text-fluux-muted leading-snug">
-          <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
-          <p className="font-medium text-fluux-text">
-            {t('settings.encryption.deleteKeyConsequences')}
+      <div className="bg-fluux-sidebar rounded-lg max-w-md w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
+        <div className="px-5 pt-5 pb-3">
+          <h3 className="text-lg font-semibold text-fluux-text mb-1">
+            {t('settings.encryption.deleteKeyConfirmTitle')}
+          </h3>
+          <p className="text-sm text-fluux-muted">
+            {t('settings.encryption.deleteKeyConfirmMessage', {
+              fingerprint: formatFingerprint(fingerprint),
+            })}
           </p>
         </div>
 
-        {backupExists && (
-          <label className="flex items-start gap-2 mb-4 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={deleteBackup}
-              disabled={isRunning}
-              onChange={(e) => setDeleteBackup(e.target.checked)}
-              className="mt-0.5 flex-shrink-0 cursor-pointer"
-            />
-            <span className="text-sm text-fluux-text leading-snug">
-              {t('settings.encryption.deleteKeyAlsoBackup')}
-              <span className="block text-xs text-fluux-muted mt-0.5">
-                {t('settings.encryption.deleteKeyAlsoBackupHint')}
+        <div className="flex-1 overflow-y-auto min-h-0 px-5">
+          <div className="flex gap-2 p-3 mb-4 rounded-lg bg-yellow-500/10 text-xs text-fluux-muted leading-snug">
+            <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+            <p className="font-medium text-fluux-text">
+              {t('settings.encryption.deleteKeyConsequences')}
+            </p>
+          </div>
+
+          {backupExists && (
+            <label className="flex items-start gap-2 mb-4 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={deleteBackup}
+                disabled={isRunning}
+                onChange={(e) => setDeleteBackup(e.target.checked)}
+                className="mt-0.5 flex-shrink-0 cursor-pointer"
+              />
+              <span className="text-sm text-fluux-text leading-snug">
+                {t('settings.encryption.deleteKeyAlsoBackup')}
+                <span className="block text-xs text-fluux-muted mt-0.5">
+                  {t('settings.encryption.deleteKeyAlsoBackupHint')}
+                </span>
               </span>
-            </span>
-          </label>
-        )}
+            </label>
+          )}
 
-        {error && (
-          <p className="text-xs text-red-500 dark:text-red-400 mb-3 break-words">
-            {error}
-          </p>
-        )}
+          {error && (
+            <p className="text-xs text-red-500 dark:text-red-400 mb-3 break-words">
+              {error}
+            </p>
+          )}
+        </div>
 
-        <div className="flex gap-2 justify-end">
+        <div className="px-5 pb-5 pt-3 flex gap-2 justify-end">
           <button
             onClick={onCancel}
             disabled={isRunning}

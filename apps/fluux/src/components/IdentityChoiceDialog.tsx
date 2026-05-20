@@ -139,29 +139,31 @@ export function IdentityChoiceDialog({
         }
       }}
     >
-      <div className="bg-fluux-sidebar rounded-lg p-5 max-w-lg w-full mx-4 shadow-xl">
-        <h3 className="text-lg font-semibold text-fluux-text mb-1">
-          {t('settings.encryption.identityChoice.title')}
-        </h3>
-        <p className="text-sm text-fluux-muted mb-4">
-          {t('settings.encryption.identityChoice.body')}
-        </p>
+      <div className="bg-fluux-sidebar rounded-lg max-w-lg w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
+        <div className="px-5 pt-5 pb-3">
+          <h3 className="text-lg font-semibold text-fluux-text mb-1">
+            {t('settings.encryption.identityChoice.title')}
+          </h3>
+          <p className="text-sm text-fluux-muted">
+            {t('settings.encryption.identityChoice.body')}
+          </p>
+        </div>
 
-        {publishedFingerprints.length > 0 && (
-          <div className="mb-4 p-3 rounded-lg bg-fluux-bg/50 border border-fluux-hover">
-            <p className="text-xs text-fluux-muted mb-1">
-              {t('settings.encryption.identityChoice.publishedFingerprintLabel')}
-            </p>
-            <p className="font-mono text-xs text-fluux-text break-all">
-              {publishedFingerprints[0]}
-              {publishedFingerprints.length > 1 &&
-                ` (+${publishedFingerprints.length - 1})`}
-            </p>
-          </div>
-        )}
+        <div className="flex-1 overflow-y-auto min-h-0 px-5">
+          {publishedFingerprints.length > 0 && (
+            <div className="mb-4 p-3 rounded-lg bg-fluux-bg/50 border border-fluux-hover">
+              <p className="text-xs text-fluux-muted mb-1">
+                {t('settings.encryption.identityChoice.publishedFingerprintLabel')}
+              </p>
+              <p className="font-mono text-xs text-fluux-text break-all">
+                {publishedFingerprints[0]}
+                {publishedFingerprints.length > 1 &&
+                  ` (+${publishedFingerprints.length - 1})`}
+              </p>
+            </div>
+          )}
 
-        {phase === 'choose' && (
-          <>
+          {phase === 'choose' && (
             <div className="flex flex-col gap-2 mb-4">
               <ChoiceButton
                 icon={<Server className="w-4 h-4" />}
@@ -188,109 +190,107 @@ export function IdentityChoiceDialog({
                 danger
               />
             </div>
-            {error && (
-              <p className="text-xs text-red-500 dark:text-red-400 mb-3 break-words">
-                {error}
-              </p>
-            )}
-            <div className="flex justify-end">
-              <button
-                onClick={onCancel}
-                className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors"
-              >
-                {t('common.cancel')}
-              </button>
-            </div>
-          </>
-        )}
+          )}
 
-        {phase === 'restoring' && (
-          <>
-            <label className="block text-sm text-fluux-text mb-1">
-              {t('settings.encryption.identityChoice.restorePassphraseLabel')}
-            </label>
-            <input
-              ref={passphraseInputRef}
-              type="password"
-              value={passphrase}
-              onChange={(e) => {
-                setPassphrase(e.target.value)
-                if (error) setError(null)
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && passphrase.trim()) {
-                  void handleConfirmRestore()
-                }
-              }}
-              placeholder={t('settings.encryption.identityChoice.restorePassphrasePlaceholder')}
-              className="w-full px-3 py-2 mb-4 rounded-lg bg-fluux-bg border border-fluux-hover text-fluux-text focus:outline-none focus:border-fluux-brand"
-            />
-            {error && (
-              <p className="text-xs text-red-500 dark:text-red-400 mb-3 break-words">
-                {error}
-              </p>
-            )}
-            <div className="flex flex-wrap gap-2 justify-end">
-              <button
-                onClick={() => {
-                  setPhase('choose')
-                  setPassphrase('')
-                  setError(null)
+          {phase === 'restoring' && (
+            <>
+              <label className="block text-sm text-fluux-text mb-1">
+                {t('settings.encryption.identityChoice.restorePassphraseLabel')}
+              </label>
+              <input
+                ref={passphraseInputRef}
+                type="password"
+                value={passphrase}
+                onChange={(e) => {
+                  setPassphrase(e.target.value)
+                  if (error) setError(null)
                 }}
-                className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors"
-              >
-                {t('common.back')}
-              </button>
-              <button
-                onClick={handleConfirmRestore}
-                disabled={!passphrase.trim()}
-                className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-fluux-brand hover:opacity-90 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {t('settings.encryption.identityChoice.restoreAction')}
-              </button>
-            </div>
-          </>
-        )}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && passphrase.trim()) {
+                    void handleConfirmRestore()
+                  }
+                }}
+                placeholder={t('settings.encryption.identityChoice.restorePassphrasePlaceholder')}
+                className="w-full px-3 py-2 mb-4 rounded-lg bg-fluux-bg border border-fluux-hover text-fluux-text focus:outline-none focus:border-fluux-brand"
+              />
+            </>
+          )}
 
-        {phase === 'confirm-replace' && (
-          <>
+          {phase === 'confirm-replace' && (
             <div className="flex gap-2 p-3 mb-4 rounded-lg bg-yellow-500/10 text-xs text-fluux-muted leading-snug">
               <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
               <p className="font-medium text-fluux-text">
                 {t('settings.encryption.identityChoice.replaceWarning')}
               </p>
             </div>
-            {error && (
-              <p className="text-xs text-red-500 dark:text-red-400 mb-3 break-words">
-                {error}
-              </p>
-            )}
-            <div className="flex flex-wrap gap-2 justify-end">
-              <button
-                onClick={() => {
-                  setPhase('choose')
-                  setError(null)
-                }}
-                className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors"
-              >
-                {t('common.back')}
-              </button>
-              <button
-                onClick={handleConfirmReplace}
-                className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
-              >
-                {t('settings.encryption.identityChoice.replaceConfirmAction')}
-              </button>
+          )}
+
+          {(phase === 'importing' || phase === 'replacing') && (
+            <div className="flex items-center justify-center py-6 text-sm text-fluux-muted gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              {phase === 'importing'
+                ? t('settings.encryption.identityChoice.importingProgress')
+                : t('settings.encryption.identityChoice.replacingProgress')}
             </div>
-          </>
+          )}
+
+          {error && (
+            <p className="text-xs text-red-500 dark:text-red-400 mb-3 break-words">
+              {error}
+            </p>
+          )}
+        </div>
+
+        {phase === 'choose' && (
+          <div className="px-5 pb-5 pt-3 flex justify-end">
+            <button
+              onClick={onCancel}
+              className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors"
+            >
+              {t('common.cancel')}
+            </button>
+          </div>
         )}
 
-        {(phase === 'importing' || phase === 'replacing') && (
-          <div className="flex items-center justify-center py-6 text-sm text-fluux-muted gap-2">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            {phase === 'importing'
-              ? t('settings.encryption.identityChoice.importingProgress')
-              : t('settings.encryption.identityChoice.replacingProgress')}
+        {phase === 'restoring' && (
+          <div className="px-5 pb-5 pt-3 flex flex-wrap gap-2 justify-end">
+            <button
+              onClick={() => {
+                setPhase('choose')
+                setPassphrase('')
+                setError(null)
+              }}
+              className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors"
+            >
+              {t('common.back')}
+            </button>
+            <button
+              onClick={handleConfirmRestore}
+              disabled={!passphrase.trim()}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-fluux-brand hover:opacity-90 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {t('settings.encryption.identityChoice.restoreAction')}
+            </button>
+          </div>
+        )}
+
+        {phase === 'confirm-replace' && (
+          <div className="px-5 pb-5 pt-3 flex flex-wrap gap-2 justify-end">
+            <button
+              onClick={() => {
+                setPhase('choose')
+                setError(null)
+              }}
+              className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors"
+            >
+              {t('common.back')}
+            </button>
+            <button
+              onClick={handleConfirmReplace}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+            >
+              {t('settings.encryption.identityChoice.replaceConfirmAction')}
+            </button>
           </div>
         )}
       </div>

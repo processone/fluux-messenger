@@ -68,64 +68,68 @@ export function KeyPickerDialog({ candidates, onConfirm, onCancel }: KeyPickerDi
         }
       }}
     >
-      <div className="bg-fluux-sidebar rounded-lg p-5 max-w-md w-full mx-4 shadow-xl">
-        <h3 className="text-lg font-semibold text-fluux-text mb-1">
-          {t('settings.encryption.keyPicker.title')}
-        </h3>
-        <p className="text-sm text-fluux-muted mb-4">
-          {t('settings.encryption.keyPicker.body')}
-        </p>
+      <div className="bg-fluux-sidebar rounded-lg max-w-md w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
+        <div className="px-5 pt-5 pb-3">
+          <h3 className="text-lg font-semibold text-fluux-text mb-1">
+            {t('settings.encryption.keyPicker.title')}
+          </h3>
+          <p className="text-sm text-fluux-muted">
+            {t('settings.encryption.keyPicker.body')}
+          </p>
+        </div>
 
-        <div className="space-y-2 mb-4 max-h-60 overflow-y-auto">
-          {sorted.map((bundle, idx) => (
-            <label
-              key={bundle.fingerprint}
-              className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                selected === bundle.fingerprint
-                  ? 'border-fluux-brand bg-fluux-brand/10'
-                  : 'border-fluux-hover bg-fluux-bg hover:border-fluux-active'
-              } ${isInstalling ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              <input
-                type="radio"
-                name="key-picker"
-                value={bundle.fingerprint}
-                checked={selected === bundle.fingerprint}
-                disabled={isInstalling}
-                onChange={() => setSelected(bundle.fingerprint)}
-                className="accent-fluux-brand"
-              />
-              <Key className="w-4 h-4 text-fluux-muted flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono text-fluux-text truncate">
-                    …{bundle.fingerprint.slice(-8).toUpperCase()}
-                  </span>
-                  {idx === 0 && (
-                    <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-fluux-brand">
-                      <Star className="w-3 h-3" />
-                      {t('settings.encryption.keyPicker.recommended')}
+        <div className="flex-1 overflow-y-auto min-h-0 px-5">
+          <div className="space-y-2 mb-4">
+            {sorted.map((bundle, idx) => (
+              <label
+                key={bundle.fingerprint}
+                className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                  selected === bundle.fingerprint
+                    ? 'border-fluux-brand bg-fluux-brand/10'
+                    : 'border-fluux-hover bg-fluux-bg hover:border-fluux-active'
+                } ${isInstalling ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                <input
+                  type="radio"
+                  name="key-picker"
+                  value={bundle.fingerprint}
+                  checked={selected === bundle.fingerprint}
+                  disabled={isInstalling}
+                  onChange={() => setSelected(bundle.fingerprint)}
+                  className="accent-fluux-brand"
+                />
+                <Key className="w-4 h-4 text-fluux-muted flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono text-fluux-text truncate">
+                      …{bundle.fingerprint.slice(-8).toUpperCase()}
+                    </span>
+                    {idx === 0 && (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-fluux-brand">
+                        <Star className="w-3 h-3" />
+                        {t('settings.encryption.keyPicker.recommended')}
+                      </span>
+                    )}
+                  </div>
+                  {bundle.createdAt && (
+                    <span className="text-[11px] text-fluux-muted">
+                      {t('settings.encryption.keyPicker.created')}{' '}
+                      {formatDate(bundle.createdAt)}
                     </span>
                   )}
                 </div>
-                {bundle.createdAt && (
-                  <span className="text-[11px] text-fluux-muted">
-                    {t('settings.encryption.keyPicker.created')}{' '}
-                    {formatDate(bundle.createdAt)}
-                  </span>
-                )}
-              </div>
-            </label>
-          ))}
+              </label>
+            ))}
+          </div>
+
+          {error && (
+            <p className="text-xs text-red-500 dark:text-red-400 mb-3 break-words">
+              {error}
+            </p>
+          )}
         </div>
 
-        {error && (
-          <p className="text-xs text-red-500 dark:text-red-400 mb-3 break-words">
-            {error}
-          </p>
-        )}
-
-        <div className="flex gap-2 justify-end">
+        <div className="px-5 pb-5 pt-3 flex gap-2 justify-end">
           <button
             onClick={onCancel}
             disabled={isInstalling}
