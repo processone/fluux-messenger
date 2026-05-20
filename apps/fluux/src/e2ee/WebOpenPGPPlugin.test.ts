@@ -1177,6 +1177,38 @@ describe('WebOpenPGPPlugin', () => {
     })
   })
 
+  describe('raw private key import (gpg --export-secret-keys)', () => {
+    it('imports a raw armored TSK', async () => {
+      // Produce a raw armored PRIVATE KEY BLOCK — exactly what
+      // `gpg --export-secret-keys --armor` emits. The key is encrypted
+      // with a user passphrase via S2K, NOT wrapped in an SKESK message.
+      const { generateKey } = await import('openpgp')
+      const { privateKey } = await generateKey({
+        type: 'ecc',
+        curve: 'curve25519Legacy' as const,
+        userIDs: [{ name: 'Alice', email: 'alice@example.com' }],
+        passphrase: 'gnupg-secret',
+        format: 'object',
+      })
+      const armoredPrivateKey = privateKey.armor()
+      expect(armoredPrivateKey.startsWith('-----BEGIN PGP PRIVATE KEY BLOCK-----')).toBe(true)
+
+      const dest = new TestableWebOpenPGPPlugin()
+      const { ctx } = makeCtx('alice@example.com')
+      await dest.init(ctx)
+
+      const bundles = await dest.callBackupImportAll(
+        'alice@example.com',
+        armoredPrivateKey,
+        'gnupg-secret',
+      )
+
+      expect(bundles).toHaveLength(1)
+      expect(bundles[0].fingerprint).toBe(privateKey.getFingerprint())
+      expect(bundles[0].publicArmored).toContain('BEGIN PGP PUBLIC KEY BLOCK')
+    })
+  })
+
   describe('selectKeyFromBackup heuristic', () => {
     it('returns null for an empty bundle array', async () => {
       const plugin = new TestableWebOpenPGPPlugin()

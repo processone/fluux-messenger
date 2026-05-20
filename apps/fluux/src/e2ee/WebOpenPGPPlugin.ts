@@ -32,6 +32,7 @@ import {
 } from './OpenPGPPluginBase'
 import { clearSessionPassphrase, getSessionPassphrase, setSessionPassphrase } from './webPassphraseStore'
 import { USE_V6_KEYS } from './passphraseGenerator'
+import { detectArmorKind } from './armorDetect'
 
 const PRIVATE_KEY_STORAGE_KEY = 'private-key'
 
@@ -308,12 +309,69 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
     }
   }
 
+  /**
+   * Decrypt a raw armored OpenPGP transferable secret key (the output of
+   * `gpg --export-secret-keys --armor`). Each key's secret material is
+   * S2K-protected with the user's GnuPG passphrase; we unlock them all
+   * up front so the rest of the import pipeline sees decrypted keys, the
+   * same shape `decryptBackupMessage` returns.
+   */
+  private async decryptRawPrivateKeys(
+    armoredKey: string,
+    passphrase: string,
+  ): Promise<PrivateKey[]> {
+    const { readPrivateKeys, decryptKey } = await import('openpgp')
+
+    let keys: PrivateKey[]
+    try {
+      keys = await readPrivateKeys({ armoredKeys: armoredKey })
+    } catch (err) {
+      throw new E2EEPluginError(
+        'permanent',
+        'malformed-data',
+        'WebOpenPGPPlugin: could not parse private key block',
+        err,
+      )
+    }
+
+    const decrypted: PrivateKey[] = []
+    for (const key of keys) {
+      if (key.isDecrypted()) {
+        decrypted.push(key)
+        continue
+      }
+      try {
+        decrypted.push(await decryptKey({ privateKey: key, passphrase }))
+      } catch (err) {
+        throw new E2EEPluginError(
+          'permanent',
+          'wrong-passphrase',
+          'WebOpenPGPPlugin: private key decryption failed — wrong passphrase',
+          err,
+        )
+      }
+    }
+    return decrypted
+  }
+
   protected async backupImportAll(
     _accountJid: string,
     backupMessage: string,
     passphrase: string,
   ): Promise<KeyBundle[]> {
-    const keys = await this.decryptBackupMessage(backupMessage, passphrase)
+    const kind = detectArmorKind(backupMessage)
+    let keys: PrivateKey[]
+    if (kind === 'private-key') {
+      keys = await this.decryptRawPrivateKeys(backupMessage, passphrase)
+    } else if (kind === 'message') {
+      keys = await this.decryptBackupMessage(backupMessage, passphrase)
+    } else {
+      throw new E2EEPluginError(
+        'permanent',
+        'malformed-data',
+        'WebOpenPGPPlugin: file is neither an OpenPGP message nor a private key block',
+      )
+    }
 
     this.pendingImportKeys.clear()
     for (const key of keys) {
