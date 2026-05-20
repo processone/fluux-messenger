@@ -21,14 +21,22 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
 vi.mock('@/stores/encryptionSettingsStore', () => ({
   useEncryptionSettingsStore: vi.fn(),
 }))
+// Lock-state hook stays under per-test control. Default to `false`
+// (unlocked) so the bulk of the suite, which tests other transitions,
+// is not affected by the keyLocked promotion path.
+vi.mock('@/hooks/useWebKeyLocked', () => ({
+  useWebKeyLocked: vi.fn(() => false),
+}))
 
 import { useConnection, useXMPPContext } from '@fluux/sdk'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
+import { useWebKeyLocked } from '@/hooks/useWebKeyLocked'
 
 const mockedUseConnection = useConnection as unknown as ReturnType<typeof vi.fn>
 const mockedUseXMPPContext = useXMPPContext as unknown as ReturnType<typeof vi.fn>
 const mockedUseEncryptionSettingsStore =
   useEncryptionSettingsStore as unknown as ReturnType<typeof vi.fn>
+const mockedUseWebKeyLocked = useWebKeyLocked as unknown as ReturnType<typeof vi.fn>
 
 interface FakePlugin {
   getPeerFingerprint: ReturnType<typeof vi.fn>
@@ -66,6 +74,9 @@ function makePlugin(overrides: Partial<FakePlugin> = {}): FakePlugin {
 describe('useConversationEncryptionState', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Default the lock-state hook to "unlocked" so existing tests aren't
+    // affected by the keyLocked promotion path.
+    mockedUseWebKeyLocked.mockReturnValue(false)
   })
   afterEach(() => {
     vi.restoreAllMocks()
@@ -614,6 +625,53 @@ describe('useConversationEncryptionState', () => {
           fingerprint: fp,
           trust: 'unverified',
         })
+      })
+    })
+  })
+
+  describe('web key-locked promotion', () => {
+    it("promotes 'encrypted' to 'keyLocked' when the web private key is locked", () => {
+      mockedUseWebKeyLocked.mockReturnValue(true)
+      const fp = 'LOCKED_FP'
+      wireMocks({
+        plugin: makePlugin({
+          getPeerFingerprint: vi.fn().mockReturnValue(fp),
+        }),
+      })
+      const { result } = renderHook(() =>
+        useConversationEncryptionState('bob@example.com', 'chat'),
+      )
+      expect(result.current).toEqual({ kind: 'keyLocked', fingerprint: fp })
+    })
+
+    it("returns 'encrypted' when the key becomes unlocked", () => {
+      mockedUseWebKeyLocked.mockReturnValue(false)
+      const fp = 'UNLOCKED_FP'
+      wireMocks({
+        plugin: makePlugin({
+          getPeerFingerprint: vi.fn().mockReturnValue(fp),
+        }),
+      })
+      const { result } = renderHook(() =>
+        useConversationEncryptionState('bob@example.com', 'chat'),
+      )
+      expect(result.current).toMatchObject({ kind: 'encrypted', fingerprint: fp })
+    })
+
+    it("does not affect 'unsupported' peers when locked", () => {
+      mockedUseWebKeyLocked.mockReturnValue(true)
+      wireMocks({
+        plugin: makePlugin({
+          probePeer: vi.fn().mockResolvedValue({ supported: false }),
+        }),
+      })
+      const { result } = renderHook(() =>
+        useConversationEncryptionState('bob@example.com', 'chat'),
+      )
+      // Lock state must not bubble up for peers we wouldn't encrypt to
+      // anyway — would be confusing UX.
+      return waitFor(() => {
+        expect(result.current).toEqual({ kind: 'unsupported' })
       })
     })
   })

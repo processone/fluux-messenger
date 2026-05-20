@@ -12,6 +12,7 @@ import { Avatar } from '../Avatar'
 import { AvatarLightbox } from '../AvatarLightbox'
 import { MessageToolbar } from './MessageToolbar'
 import { MessageBody } from './MessageBody'
+import { EncryptedPlaceholder } from './EncryptedPlaceholder'
 import { MessageReactions } from './MessageReactions'
 import { scrollToMessage, isActionMessage } from './messageGrouping'
 import { MessageAttachments } from '../MessageAttachments'
@@ -446,25 +447,30 @@ export const MessageBubble = memo(function MessageBubble({
 
         {/* Collapsible wrapper for long messages */}
         <CollapsibleContent messageId={message.id} isSelected={isSelected} isHovered={isHovered}>
-          {/* Message body (SDK already strips OOB URL from body for non-XEP-0428 clients) */}
-          <MessageBody
-            body={message.body}
-            isEdited={message.isEdited}
-            originalBody={message.originalBody}
-            isRetracted={message.isRetracted}
-            isModerated={message.isModerated}
-            moderatedBy={message.moderatedBy}
-            moderationReason={message.moderationReason}
-            noStyling={message.noStyling}
-            senderName={senderName}
-            senderColor={senderColor}
-            mentions={mentions}
-            nickname={nickname}
-            knownNicks={knownNicks}
-            isDarkMode={isDarkMode}
-            highlightTerms={highlightTerms}
-            isCurrentMatch={isCurrentMatch}
-          />
+          {/* Encrypted-payload placeholder takes precedence over body text
+              so the SDK's English fallback string never reaches the UI. */}
+          {message.encryptedPayload ? (
+            <EncryptedPlaceholder />
+          ) : (
+            <MessageBody
+              body={message.body}
+              isEdited={message.isEdited}
+              originalBody={message.originalBody}
+              isRetracted={message.isRetracted}
+              isModerated={message.isModerated}
+              moderatedBy={message.moderatedBy}
+              moderationReason={message.moderationReason}
+              noStyling={message.noStyling}
+              senderName={senderName}
+              senderColor={senderColor}
+              mentions={mentions}
+              nickname={nickname}
+              knownNicks={knownNicks}
+              isDarkMode={isDarkMode}
+              highlightTerms={highlightTerms}
+              isCurrentMatch={isCurrentMatch}
+            />
+          )}
 
           {/* File attachments (image, video, audio, text preview, document card) - hidden for retracted */}
           {!message.isRetracted && <MessageAttachments attachment={message.attachment} onMediaLoad={onMediaLoad} isSelected={isSelected} isHovered={isHovered} />}

@@ -10,6 +10,7 @@ import { useToastStore } from './stores/toastStore'
 import { UnlockEncryptionDialog } from './components/UnlockEncryptionDialog'
 import { IdentityChoiceDialog } from './components/IdentityChoiceDialog'
 import { RestorePassphraseDialog } from './components/RestorePassphraseDialog'
+import { useWebUnlockDialogStore } from './stores/webUnlockDialogStore'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { LoginScreen } from './components/LoginScreen'
 import { ChatLayout } from './components/ChatLayout'
@@ -154,7 +155,9 @@ function App() {
   // Used to distinguish initial page load reconnect from wake-from-sleep reconnect
   const [hasBeenOnline, setHasBeenOnline] = useState(false)
 
-  const [showWebUnlockDialog, setShowWebUnlockDialog] = useState(false)
+  const showWebUnlockDialog = useWebUnlockDialogStore((s) => s.isOpen)
+  const openWebUnlockDialog = useWebUnlockDialogStore((s) => s.openWebUnlockDialog)
+  const closeWebUnlockDialog = useWebUnlockDialogStore((s) => s.closeWebUnlockDialog)
   // Set when auto-init detects a server-side OpenPGP identity for this
   // account but no local key. Forces the user through IdentityChoiceDialog
   // instead of the standard unlock dialog (which would otherwise reach
@@ -226,7 +229,7 @@ function App() {
           }
         }
         if (isKeyLocked()) {
-          setShowWebUnlockDialog(true)
+          openWebUnlockDialog()
         }
       })
     } else if (status !== 'connecting') {
@@ -237,7 +240,7 @@ function App() {
         setIsAutoReconnecting(false)
       }
     }
-  }, [status, client, jid])
+  }, [status, client, jid, openWebUnlockDialog])
 
   // --- Identity-choice handlers (web first-login safety net) ---
   // Each resolves `pendingIdentityChoice` with one explicit recovery
@@ -395,7 +398,7 @@ function App() {
       {showWebUnlockDialog && (
         <UnlockEncryptionDialog
           client={client}
-          onClose={() => setShowWebUnlockDialog(false)}
+          onClose={() => closeWebUnlockDialog()}
         />
       )}
       {pendingIdentityChoice && (

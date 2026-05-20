@@ -108,6 +108,11 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
   return (
     <div
       data-modal="true"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="unlock-encryption-dialog-title"
+      aria-describedby="unlock-encryption-dialog-body"
+      aria-busy={loading || isWorking || undefined}
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
       onMouseDown={(e) => {
         mouseDownTargetRef.current = e.target
@@ -127,10 +132,10 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
         {/* Hidden username distinguishes this entry from the XMPP login in password managers. */}
         <input type="text" name="username" autoComplete="section-openpgp username" value="openpgp-passphrase" readOnly aria-hidden="true" className="hidden" />
         <div className="px-5 pt-5 pb-3">
-          <h3 className="text-lg font-semibold text-fluux-text mb-1">
+          <h3 id="unlock-encryption-dialog-title" className="text-lg font-semibold text-fluux-text mb-1">
             {loading ? ' ' : title}
           </h3>
-          <p className="text-sm text-fluux-muted">{loading ? ' ' : body}</p>
+          <p id="unlock-encryption-dialog-body" className="text-sm text-fluux-muted">{loading ? ' ' : body}</p>
         </div>
 
         <div className="flex-1 overflow-y-auto min-h-0 px-5">
