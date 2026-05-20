@@ -9,6 +9,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { DeleteOpenpgpKeyDialog } from '@/components/DeleteOpenpgpKeyDialog'
 import { BackupPassphraseDialog } from '@/components/BackupPassphraseDialog'
 import { RestorePassphraseDialog } from '@/components/RestorePassphraseDialog'
+import { ExternalKeyExportDialog } from '@/components/ExternalKeyExportDialog'
 import { IdentityChoiceDialog } from '@/components/IdentityChoiceDialog'
 import { OwnKeyConflictBanner } from '@/components/OwnKeyConflictBanner'
 import { UnlockEncryptionDialog } from '@/components/UnlockEncryptionDialog'
@@ -97,6 +98,7 @@ export function EncryptionSettings() {
   const [rotateDescVisible, setRotateDescVisible] = useState(false)
   const [dangerZoneExpanded, setDangerZoneExpanded] = useState(false)
   const [showExportFileDialog, setShowExportFileDialog] = useState(false)
+  const [showExternalExportDialog, setShowExternalExportDialog] = useState(false)
   const [showImportFileDialog, setShowImportFileDialog] = useState(false)
   const [pendingImportFileArmored, setPendingImportFileArmored] = useState<string | null>(null)
   const [showUnlockDialog, setShowUnlockDialog] = useState(false)
@@ -675,6 +677,24 @@ export function EncryptionSettings() {
     [client, addToast, t],
   )
 
+  const handleExternalExportConfirm = useCallback(
+    async (passphrase: string | null) => {
+      const plugin = client.e2ee?.getPlugin('openpgp') as
+        | { exportPrivateKeyToFile?: (pp: string | null) => Promise<boolean> }
+        | null
+        | undefined
+      if (!plugin?.exportPrivateKeyToFile) {
+        throw new Error(t('settings.encryption.backupPluginUnavailable'))
+      }
+      const saved = await plugin.exportPrivateKeyToFile(passphrase)
+      setShowExternalExportDialog(false)
+      if (saved) {
+        addToast('success', t('settings.encryption.externalExportSuccess'))
+      }
+    },
+    [client, addToast, t],
+  )
+
   const handleImportFileRequest = useCallback(async () => {
     const plugin = client.e2ee?.getPlugin('openpgp') as
       | { pickKeyFile?: () => Promise<string | null> }
@@ -951,6 +971,13 @@ export function EncryptionSettings() {
                       <FileUp className="w-3.5 h-3.5" />
                       {t('settings.encryption.importFileAction')}
                     </button>
+                    <button
+                      onClick={() => setShowExternalExportDialog(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
+                    >
+                      <FileDown className="w-3.5 h-3.5" />
+                      {t('settings.encryption.externalExportAction')}
+                    </button>
                   </div>
                 </>
               )
@@ -1116,6 +1143,13 @@ export function EncryptionSettings() {
           confirmLabel={t('settings.encryption.exportFileAction')}
           onConfirm={handleExportFileConfirm}
           onCancel={() => setShowExportFileDialog(false)}
+        />
+      )}
+
+      {showExternalExportDialog && (
+        <ExternalKeyExportDialog
+          onConfirm={handleExternalExportConfirm}
+          onCancel={() => setShowExternalExportDialog(false)}
         />
       )}
 

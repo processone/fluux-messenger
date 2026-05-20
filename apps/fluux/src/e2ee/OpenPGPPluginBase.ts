@@ -390,6 +390,20 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   abstract exportKeyToFile(passphrase: string): Promise<boolean>
 
   /**
+   * Export the account TSK as an ASCII-armored `PRIVATE KEY BLOCK`, the
+   * standard OpenPGP format expected by external tools (gpg, OpenKeychain,
+   * Kleopatra). Distinct from {@link exportKeyToFile} which produces a
+   * XEP-0373 §5 encrypted MESSAGE only other XMPP clients understand.
+   *
+   * `passphrase` is optional: when provided, secret packets are wrapped
+   * with the standard Iterated+Salted S2K (universally interoperable);
+   * when `null`, secret packets are written in clear and the UI must have
+   * acknowledged the risk. Returns `true` when the file was written,
+   * `false` when the user cancelled the save dialog.
+   */
+  abstract exportPrivateKeyToFile(passphrase: string | null): Promise<boolean>
+
+  /**
    * Open a file picker and return the armored content of the selected
    * file, or `null` when the user cancels the picker.
    */
@@ -1453,17 +1467,34 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const ciphertext = base64DecodeOpenPgpBlock(encodedCiphertext, 'PGP MESSAGE')
 
     const peer = extractPeer(handle)
-    const senderPublicArmored = this.peerKeys.get(peer)?.publicArmored ?? null
+    const ownBareJid = getBareJid(ctx.account.jid)
+    const isSelfOutgoing = context?.isSelfOutgoing === true
+
+    // The signer is whoever produced this ciphertext: for a received
+    // message it's the conversation peer; for a self-outgoing replay
+    // (XEP-0280 sent carbon or XEP-0313 MAM self-entry) it was us.
+    // Pick the public key that should be able to verify the signature.
+    const senderPublicArmored = isSelfOutgoing
+      ? this.ownBundle?.publicArmored ?? null
+      : this.peerKeys.get(peer)?.publicArmored ?? null
 
     const output = await this.decryptWithOwnKey(ctx.account.jid, ciphertext, senderPublicArmored)
 
     const envelope = this.unwrapOrRethrow(output.plaintext)
-    const ownBareJid = getBareJid(ctx.account.jid)
-    if (!envelope.addressees.some((addr: string) => getBareJid(addr) === ownBareJid)) {
+    // XEP-0373 §3.1 reflection defence. Received messages: the envelope
+    // `<to/>` MUST name us — otherwise an attacker has reflected someone
+    // else's ciphertext back at us. Self-outgoing carbons / MAM-replays:
+    // we sent the message TO the conversation peer, so `<to/>` names the
+    // peer; checking for our own JID would always fail. Invert the check
+    // — addressees must contain the peer we opened the conversation with.
+    const expectedAddressee = isSelfOutgoing ? peer : ownBareJid
+    if (!envelope.addressees.some((addr: string) => getBareJid(addr) === expectedAddressee)) {
       throw new E2EEPluginError(
         'permanent',
         'envelope-reflection',
-        `${this.pluginName()}: signcrypt <to/> does not address ${ownBareJid}`,
+        isSelfOutgoing
+          ? `${this.pluginName()}: self-outgoing signcrypt <to/> does not address conversation peer ${peer}`
+          : `${this.pluginName()}: signcrypt <to/> does not address ${ownBareJid}`,
       )
     }
     const skew = Math.abs(envelope.timestamp.getTime() - this.now())
@@ -1476,9 +1507,16 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     }
 
     const plaintextBytes = new TextEncoder().encode(envelope.payloadXml)
-    const securityContext = this.buildInboundSecurityContext(peer, output)
+    const securityContext = isSelfOutgoing
+      ? this.buildSelfOutgoingSecurityContext(output)
+      : this.buildInboundSecurityContext(peer, output)
 
+    // Deferred signature re-verification: only meaningful for received
+    // messages where the sender's key may arrive after the message did.
+    // For self-outgoing, our own key is by definition already cached on
+    // this device — if the signature didn't verify here, it never will.
     if (
+      !isSelfOutgoing &&
       context?.messageId &&
       !output.signatureVerified &&
       output.signaturePresent &&
@@ -1492,11 +1530,19 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       })
     }
 
+    // For self-outgoing replays, the originating device is one of our own
+    // resources. The carbon doesn't reveal which one to the plugin layer,
+    // so attribute the message to our bare JID; the signer fingerprint
+    // (when present) still identifies the actual signing key.
+    const senderJid = isSelfOutgoing ? ownBareJid : peer
+    const fallbackFingerprint = isSelfOutgoing
+      ? this.ownBundle?.fingerprint
+      : this.peerKeys.get(peer)?.fingerprint
     return {
       plaintext: plaintextBytes,
       senderDevice: {
-        jid: peer,
-        deviceId: output.signerFingerprint ?? this.peerKeys.get(peer)?.fingerprint ?? 'unknown',
+        jid: senderJid,
+        deviceId: output.signerFingerprint ?? fallbackFingerprint ?? 'unknown',
       },
       securityContext,
       authoredAt: envelope.timestamp,
@@ -1656,6 +1702,35 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       notes.push(cached ? 'Signature did not verify' : 'Sender key not cached — signature not checked')
     } else if (!fingerprintMatches) {
       notes.push('Signature verified but fingerprint does not match cached peer')
+    }
+
+    return {
+      protocolId: OPENPGP_DESCRIPTOR.id,
+      trust,
+      ...(notes.length > 0 && { notes }),
+    }
+  }
+
+  /**
+   * Trust evaluation for a self-outgoing ciphertext (sent carbon or
+   * MAM-replayed self-entry). The signer is us — we measure trust against
+   * our own published key bundle, not a peer's. A verified signature that
+   * matches our own fingerprint earns `verified`; anything else stays
+   * `untrusted` (e.g. server-injected payload that won't verify, or a
+   * fingerprint mismatch indicating identity rotation we haven't seen).
+   */
+  private buildSelfOutgoingSecurityContext(output: DecryptOutput): SecurityContext {
+    const ownBundle = this.ownBundle
+    const fingerprintMatches =
+      ownBundle && output.signerFingerprint && fingerprintsEqual(ownBundle.fingerprint, output.signerFingerprint)
+    const trust: SecurityContext['trust'] =
+      output.signatureVerified && fingerprintMatches ? 'verified' : 'untrusted'
+
+    const notes: string[] = []
+    if (!output.signatureVerified) {
+      notes.push(ownBundle ? 'Own signature did not verify' : 'Own key not loaded — signature not checked')
+    } else if (!fingerprintMatches) {
+      notes.push('Signature verified but signer fingerprint does not match own key')
     }
 
     return {

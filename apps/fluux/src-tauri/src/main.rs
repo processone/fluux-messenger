@@ -50,6 +50,7 @@ use tauri_plugin_opener::OpenerExt;
 mod xmpp_proxy;
 mod openpgp;
 mod openpgp_backup;
+mod openpgp_export;
 mod openpgp_storage;
 
 #[cfg(target_os = "macos")]
@@ -1109,6 +1110,7 @@ fn main() {
             openpgp::openpgp_forget_account,
             openpgp::openpgp_has_persisted_key,
             openpgp::openpgp_backup_encrypt,
+            openpgp::openpgp_export_private_key,
             openpgp::openpgp_backup_import,
             openpgp::openpgp_backup_import_all,
             openpgp::openpgp_backup_import_selected,

@@ -206,6 +206,35 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
     return true
   }
 
+  async exportPrivateKeyToFile(passphrase: string | null): Promise<boolean> {
+    const ctx = this.requireCtx()
+    if (!this.ownBundle) {
+      throw new E2EEPluginError(
+        'permanent',
+        'no-identity',
+        'SequoiaPgpPlugin: no identity to export — call ensureIdentity first',
+      )
+    }
+    let armoredKey: string
+    try {
+      armoredKey = await this.invoke<string>('openpgp_export_private_key', {
+        accountJid: ctx.account.jid,
+        passphrase,
+      })
+    } catch (err) {
+      throw this.toPluginError('exportPrivateKeyToFile', err)
+    }
+    const { save } = await import('@tauri-apps/plugin-dialog')
+    const filePath = await save({
+      defaultPath: 'openpgp-private-key.asc',
+      filters: [{ name: 'OpenPGP Private Key', extensions: ['asc', 'pgp', 'gpg'] }],
+    })
+    if (!filePath) return false
+    const { writeTextFile } = await import('@tauri-apps/plugin-fs')
+    await writeTextFile(filePath, armoredKey)
+    return true
+  }
+
   async pickKeyFile(): Promise<string | null> {
     const { open } = await import('@tauri-apps/plugin-dialog')
     const result = await open({

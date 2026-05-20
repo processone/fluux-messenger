@@ -43,6 +43,22 @@ function normalizeBackupPassphrase(raw: string): string {
   return raw.normalize('NFKD').toLowerCase().split(/\s+/).filter(Boolean).join(' ')
 }
 
+/** Save `content` as `filename` via a transient `<a download>` anchor. */
+function triggerBrowserDownload(content: string, filename: string): void {
+  const blob = new Blob([content], { type: 'text/plain' })
+  const url = URL.createObjectURL(blob)
+  try {
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
 export class WebOpenPGPPlugin extends OpenPGPPluginBase {
   /** In-memory decrypted private key. Cleared on shutdown / page reload. */
   private ownPrivateKey: PrivateKey | null = null
@@ -350,18 +366,33 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
       )
     }
     const armoredMessage = await this.backupEncrypt(ctx.account.jid, passphrase)
-    const blob = new Blob([armoredMessage], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    try {
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'openpgp-backup.asc'
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-    } finally {
-      URL.revokeObjectURL(url)
+    triggerBrowserDownload(armoredMessage, 'openpgp-backup.asc')
+    return true
+  }
+
+  async exportPrivateKeyToFile(passphrase: string | null): Promise<boolean> {
+    await this.requireUnlocked()
+    if (!this.ownBundle || !this.ownPrivateKey) {
+      throw new E2EEPluginError(
+        'permanent',
+        'no-identity',
+        'WebOpenPGPPlugin: no identity to export',
+      )
     }
+    // openpgp.js carries the secret key material on the in-memory
+    // PrivateKey. For protected export we wrap it with the user-chosen
+    // passphrase via encryptKey(); for unprotected we serialize the
+    // already-decrypted key directly. Either way the output is a
+    // standard armored PRIVATE KEY BLOCK that external tools can ingest.
+    let armoredKey: string
+    if (passphrase && passphrase.length > 0) {
+      const { encryptKey } = await import('openpgp')
+      const encrypted = await encryptKey({ privateKey: this.ownPrivateKey, passphrase })
+      armoredKey = encrypted.armor()
+    } else {
+      armoredKey = this.ownPrivateKey.armor()
+    }
+    triggerBrowserDownload(armoredKey, 'openpgp-private-key.asc')
     return true
   }
 
