@@ -1220,6 +1220,29 @@ describe('WebOpenPGPPlugin', () => {
       ).rejects.toMatchObject({ code: 'malformed-data', kind: 'permanent' })
     })
 
+    it('rejects a key with no encryption-capable subkey (e.g. DSA sign-only)', async () => {
+      // Synthesize a sign-only key by generating a normal key then stripping
+      // its subkeys. openpgp.js will then reject getEncryptionKey().
+      const { generateKey } = await import('openpgp')
+      const { privateKey } = await generateKey({
+        type: 'ecc',
+        curve: 'curve25519Legacy' as const,
+        userIDs: [{ name: 'Eve', email: 'eve@example.com' }],
+        passphrase: 'pw',
+        format: 'object',
+      })
+      privateKey.subkeys = []
+      const armoredPrivateKey = privateKey.armor()
+
+      const dest = new TestableWebOpenPGPPlugin()
+      const { ctx } = makeCtx('eve@example.com')
+      await dest.init(ctx)
+
+      await expect(
+        dest.callBackupImportAll('eve@example.com', armoredPrivateKey, 'pw'),
+      ).rejects.toMatchObject({ code: 'unsupported-key-algorithm', kind: 'permanent' })
+    })
+
     it('imports a raw armored TSK', async () => {
       // Produce a raw armored PRIVATE KEY BLOCK — exactly what
       // `gpg --export-secret-keys --armor` emits. The key is encrypted

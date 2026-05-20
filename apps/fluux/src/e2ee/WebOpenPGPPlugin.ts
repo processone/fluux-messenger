@@ -374,16 +374,30 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
     }
 
     this.pendingImportKeys.clear()
+    const bundles: KeyBundle[] = []
     for (const key of keys) {
+      try {
+        // openpgp.js applies `rejectPublicKeyAlgorithms` here, so a key
+        // whose only encryption-capable subkey is ElGamal (or whose
+        // primary key alone has no encryption subkey) throws.
+        await key.getEncryptionKey()
+      } catch (err) {
+        throw new E2EEPluginError(
+          'permanent',
+          'unsupported-key-algorithm',
+          `WebOpenPGPPlugin: imported key ${key.getFingerprint()} has no usable encryption subkey`,
+          err,
+        )
+      }
       this.pendingImportKeys.set(key.getFingerprint(), key)
+      bundles.push({
+        fingerprint: key.getFingerprint(),
+        publicArmored: key.toPublic().armor(),
+        keychainBacked: false,
+        createdAt: key.getCreationTime().toISOString(),
+      })
     }
-
-    return keys.map((k) => ({
-      fingerprint: k.getFingerprint(),
-      publicArmored: k.toPublic().armor(),
-      keychainBacked: false,
-      createdAt: k.getCreationTime().toISOString(),
-    }))
+    return bundles
   }
 
   protected async backupImportSelected(
