@@ -533,6 +533,22 @@ export class Chat extends BaseModule {
         } else {
           children.unshift(xml('body', {}, fallbackBody))
         }
+        // Remove <fallback for="NS_CORRECTION">: its body indices referenced the
+        // plaintext "[Corrected] …" prefix which no longer exists in the E2EE
+        // fallback body.  Keeping it causes recipients to truncate the displayed
+        // fallback (e.g. "[OpenPGP-encrypted message]" → "rypted message]").
+        for (let i = children.length - 1; i >= 0; i--) {
+          const c = children[i]
+          if (typeof c === 'string') continue
+          const el = c as Element
+          if (
+            el.name === 'fallback' &&
+            el.attrs?.xmlns === NS_FALLBACK &&
+            el.attrs?.for === NS_CORRECTION
+          ) {
+            children.splice(i, 1)
+          }
+        }
         children.push(dataToElement(result.payload.stanzaElement))
         children.push(
           xml('encryption', {

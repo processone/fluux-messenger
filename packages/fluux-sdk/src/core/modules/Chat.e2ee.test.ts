@@ -905,6 +905,16 @@ describe('Chat E2EE wiring', () => {
       expect(sent.getChild('plain', 'urn:fluux:e2ee-dummy:0')).toBeDefined()
       expect(sent.getChild('encryption', 'urn:xmpp:eme:0')).toBeDefined()
       expect(sent.getChild('replace', 'urn:xmpp:message-correct:0')).toBeDefined()
+
+      // The <fallback for="NS_CORRECTION"> with body indices must be removed:
+      // its start/end positions referenced the plaintext body, not the E2EE
+      // fallback string, so keeping it causes recipients to truncate the
+      // displayed fallback (e.g. "[OpenPGP-encrypted message]" → "rypted message]").
+      const fallbacks = sent.children.filter(
+        (c): c is Element =>
+          typeof c !== 'string' && c.name === 'fallback' && c.attrs?.xmlns === 'urn:xmpp:fallback:0',
+      )
+      expect(fallbacks).toHaveLength(0)
     })
 
     it('strict mode throws when correcting to an E2EE-unreachable peer', async () => {
@@ -954,6 +964,31 @@ describe('Chat E2EE wiring', () => {
       ).rejects.toBeInstanceOf(E2EEEncryptionRequiredError)
 
       expect(captured).toHaveLength(0)
+    })
+
+    it('strips both correction and OOB fallback when encrypting a correction with attachment', async () => {
+      await chat.sendCorrection('bob@example.com', 'orig-id', 'new caption', 'chat', {
+        url: 'https://upload.example.com/photo.bin',
+        name: 'photo.jpg',
+        mediaType: 'image/jpeg',
+        encryption: {
+          cipher: 'aes-256-gcm',
+          key: new Uint8Array(32).fill(9),
+          iv: new Uint8Array(12).fill(10),
+        },
+      })
+
+      expect(captured).toHaveLength(1)
+      const sent = captured[0]
+
+      expect(sent.getChild('replace', 'urn:xmpp:message-correct:0')).toBeDefined()
+      expect(sent.getChild('plain', 'urn:fluux:e2ee-dummy:0')).toBeDefined()
+
+      const fallbacks = sent.children.filter(
+        (c): c is Element =>
+          typeof c !== 'string' && c.name === 'fallback' && c.attrs?.xmlns === 'urn:xmpp:fallback:0',
+      )
+      expect(fallbacks).toHaveLength(0)
     })
 
     it('groupchat correction sends plaintext (MUC E2EE not supported in this phase)', async () => {
