@@ -1178,6 +1178,48 @@ describe('WebOpenPGPPlugin', () => {
   })
 
   describe('raw private key import (gpg --export-secret-keys)', () => {
+    it('rejects a raw armored TSK with wrong passphrase', async () => {
+      const { generateKey } = await import('openpgp')
+      const { privateKey } = await generateKey({
+        type: 'ecc',
+        curve: 'curve25519Legacy' as const,
+        userIDs: [{ name: 'Bob', email: 'bob@example.com' }],
+        passphrase: 'correct-horse-battery-staple',
+        format: 'object',
+      })
+      const armoredPrivateKey = privateKey.armor()
+
+      const dest = new TestableWebOpenPGPPlugin()
+      const { ctx } = makeCtx('bob@example.com')
+      await dest.init(ctx)
+
+      await expect(
+        dest.callBackupImportAll('bob@example.com', armoredPrivateKey, 'wrong-passphrase'),
+      ).rejects.toMatchObject({ code: 'wrong-passphrase', kind: 'permanent' })
+    })
+
+    it('rejects a public-key block (neither MESSAGE nor PRIVATE KEY BLOCK)', async () => {
+      const dest = new TestableWebOpenPGPPlugin()
+      const { ctx } = makeCtx('carol@example.com')
+      await dest.init(ctx)
+      const garbage = `-----BEGIN PGP PUBLIC KEY BLOCK-----\n\nmQGN...\n-----END PGP PUBLIC KEY BLOCK-----\n`
+
+      await expect(
+        dest.callBackupImportAll('carol@example.com', garbage, 'any'),
+      ).rejects.toMatchObject({ code: 'malformed-data', kind: 'permanent' })
+    })
+
+    it('rejects an unparseable private-key block', async () => {
+      const dest = new TestableWebOpenPGPPlugin()
+      const { ctx } = makeCtx('dave@example.com')
+      await dest.init(ctx)
+      const broken = `-----BEGIN PGP PRIVATE KEY BLOCK-----\n\nnot-real-base64-data\n-----END PGP PRIVATE KEY BLOCK-----\n`
+
+      await expect(
+        dest.callBackupImportAll('dave@example.com', broken, 'any'),
+      ).rejects.toMatchObject({ code: 'malformed-data', kind: 'permanent' })
+    })
+
     it('imports a raw armored TSK', async () => {
       // Produce a raw armored PRIVATE KEY BLOCK — exactly what
       // `gpg --export-secret-keys --armor` emits. The key is encrypted
