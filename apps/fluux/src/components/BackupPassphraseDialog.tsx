@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Copy, Check, AlertTriangle, Loader2, RefreshCw } from 'lucide-react'
 import { generateBackupPassphrase, generateBackupCode, USE_V6_KEYS } from '@/e2ee/passphraseGenerator'
+import { SaveToPasswordManagerButton } from './SaveToPasswordManagerButton'
 
 // Draw a fresh passphrase in the user's UI language. 8 words ×
 // 11 bits (BIP-39) = 88 bits, which matches the acceptability gate
@@ -218,6 +219,12 @@ export function BackupPassphraseDialog({
               ? t('settings.encryption.backupCopied')
               : t('settings.encryption.backupCopy')}
           </button>
+          <SaveToPasswordManagerButton
+            id="openpgp-passphrase"
+            name={t('settings.encryption.savePassphraseManagerLabel')}
+            passphrase={passphrase}
+            disabled={isPublishing}
+          />
           <button
             onClick={handleRegenerate}
             disabled={isPublishing || !passphrase}
