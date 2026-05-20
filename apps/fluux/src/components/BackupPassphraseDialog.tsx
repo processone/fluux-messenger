@@ -150,6 +150,17 @@ export function BackupPassphraseDialog({
       }}
     >
       <div className="bg-fluux-sidebar rounded-lg max-w-md w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
+        <form
+          onSubmit={(e) => { e.preventDefault(); void handleConfirm() }}
+          className="contents"
+        >
+        {/*
+          Hidden fields for password manager detection. The "username" isolates this
+          entry from the XMPP login. The "password" carries the generated passphrase so
+          1Password / Bitwarden / browser managers offer to save it on confirm.
+        */}
+        <input type="text" name="username" autoComplete="section-openpgp username" value="openpgp-passphrase" readOnly aria-hidden="true" className="hidden" />
+        <input type="password" name="passphrase" autoComplete="section-openpgp new-password" value={passphrase ?? ''} readOnly aria-hidden="true" className="hidden" />
         <div className="px-5 pt-5 pb-3">
           <h3 className="text-lg font-semibold text-fluux-text mb-1">
             {title ?? t('settings.encryption.backupDialogTitle')}
@@ -242,6 +253,7 @@ export function BackupPassphraseDialog({
         <div className="px-5 pb-5 pt-3">
           <div className="flex gap-2 justify-end">
             <button
+              type="button"
               onClick={onCancel}
               disabled={isPublishing}
               className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors disabled:opacity-50"
@@ -249,7 +261,7 @@ export function BackupPassphraseDialog({
               {t('common.cancel')}
             </button>
             <button
-              onClick={handleConfirm}
+              type="submit"
               disabled={!acknowledged || isPublishing || !passphrase}
               className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-fluux-brand hover:opacity-90 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -258,6 +270,7 @@ export function BackupPassphraseDialog({
             </button>
           </div>
         </div>
+        </form>
       </div>
     </div>
   )

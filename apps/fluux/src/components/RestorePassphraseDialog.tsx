@@ -1,6 +1,36 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AlertTriangle, Loader2 } from 'lucide-react'
+import { USE_V6_KEYS } from '@/e2ee/passphraseGenerator'
+
+const BACKUP_CODE_ALPHABET = '123456789ABCDEFGHIJKLMNPQRSTUVWXYZ'
+
+function formatBackupCode(raw: string): string {
+  const clean = raw
+    .toUpperCase()
+    .split('')
+    .filter(c => BACKUP_CODE_ALPHABET.includes(c))
+    .slice(0, 24)
+    .join('')
+  const parts: string[] = []
+  for (let i = 0; i < clean.length; i += 4) {
+    parts.push(clean.slice(i, i + 4))
+  }
+  return parts.join('-')
+}
+
+// Returns cursor position in `formatted` after `cleanCount` valid chars.
+function cursorAfterClean(formatted: string, cleanCount: number): number {
+  if (cleanCount === 0) return 0
+  let seen = 0
+  for (let i = 0; i < formatted.length; i++) {
+    if (formatted[i] !== '-') {
+      seen++
+      if (seen === cleanCount) return i + 1
+    }
+  }
+  return formatted.length
+}
 
 interface RestorePassphraseDialogProps {
   /** Called with the user's passphrase when they click the confirm button. */
@@ -12,6 +42,8 @@ interface RestorePassphraseDialogProps {
   body?: string
   /** Override the confirm button label. Defaults to "Restore from server". */
   confirmLabel?: string
+  /** True when the passphrase is an XEP-0373 backup code (XXXX-XXXX-… format). Defaults to !USE_V6_KEYS. */
+  isBackupCode?: boolean
 }
 
 /**
@@ -35,10 +67,12 @@ export function RestorePassphraseDialog({
   title,
   body,
   confirmLabel,
+  isBackupCode = !USE_V6_KEYS,
 }: RestorePassphraseDialogProps) {
   const { t } = useTranslation()
   const mouseDownTargetRef = useRef<EventTarget | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const backupCursorRef = useRef<number>(0)
 
   const [passphrase, setPassphrase] = useState('')
   const [isRestoring, setIsRestoring] = useState(false)
@@ -55,6 +89,49 @@ export function RestorePassphraseDialog({
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [onCancel, isRestoring])
+
+  // After backup code reformatting, restore cursor position to where the
+  // user was typing rather than jumping to the end.
+  useLayoutEffect(() => {
+    if (isBackupCode && inputRef.current) {
+      inputRef.current.setSelectionRange(backupCursorRef.current, backupCursorRef.current)
+    }
+  }, [passphrase, isBackupCode])
+
+  const handleBackupCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.currentTarget
+    const rawCursor = input.selectionStart ?? input.value.length
+    // Count valid alphabet chars before the cursor in the raw (unformatted) value.
+    let validBefore = 0
+    for (let i = 0; i < rawCursor; i++) {
+      if (BACKUP_CODE_ALPHABET.includes(input.value[i]?.toUpperCase() ?? '')) validBefore++
+    }
+    const newFormatted = formatBackupCode(input.value)
+    backupCursorRef.current = cursorAfterClean(newFormatted, validBefore)
+    setPassphrase(newFormatted)
+    if (error) setError(null)
+  }
+
+  const handleBackupCodeKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Backspace') return
+    const input = e.currentTarget
+    const cursor = input.selectionStart ?? 0
+    // Only intercept if there is no selection and cursor is right after a dash.
+    // Default browser backspace would delete the dash and let it re-appear on
+    // the next onChange, leaving the cursor stuck — so we manually delete the
+    // valid char that precedes the dash instead.
+    if (input.selectionStart !== input.selectionEnd || cursor === 0 || passphrase[cursor - 1] !== '-') return
+    e.preventDefault()
+    const clean = passphrase.replace(/-/g, '')
+    const dashesBeforeDash = passphrase.slice(0, cursor - 1).split('').filter(c => c === '-').length
+    const cleanPos = cursor - 1 - dashesBeforeDash - 1
+    if (cleanPos < 0) return
+    const newClean = clean.slice(0, cleanPos) + clean.slice(cleanPos + 1)
+    const newFormatted = formatBackupCode(newClean)
+    backupCursorRef.current = cursorAfterClean(newFormatted, cleanPos)
+    setPassphrase(newFormatted)
+    if (error) setError(null)
+  }
 
   const handleConfirm = useCallback(async () => {
     if (!passphrase.trim()) return
@@ -90,6 +167,12 @@ export function RestorePassphraseDialog({
       }}
     >
       <div className="bg-fluux-sidebar rounded-lg max-w-md w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
+        <form
+          onSubmit={(e) => { e.preventDefault(); void handleConfirm() }}
+          className="contents"
+        >
+        {/* Hidden username distinguishes this entry from the XMPP login in password managers. */}
+        <input type="text" name="username" autoComplete="section-openpgp username" value="openpgp-passphrase" readOnly aria-hidden="true" className="hidden" />
         <div className="px-5 pt-5 pb-3">
           <h3 className="text-lg font-semibold text-fluux-text mb-1">
             {title ?? t('settings.encryption.restoreDialogTitle')}
@@ -110,23 +193,39 @@ export function RestorePassphraseDialog({
           <label className="block text-sm text-fluux-text mb-1">
             {t('settings.encryption.restorePassphraseLabel')}
           </label>
-          <input
-            ref={inputRef}
-            type="password"
-            value={passphrase}
-            disabled={isRestoring}
-            onChange={(e) => {
-              setPassphrase(e.target.value)
-              if (error) setError(null)
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && passphrase.trim() && !isRestoring) {
-                void handleConfirm()
-              }
-            }}
-            placeholder={t('settings.encryption.restorePassphrasePlaceholder')}
-            className="w-full px-3 py-2 mb-4 rounded-lg bg-fluux-bg border border-fluux-hover text-fluux-text focus:outline-none focus:border-fluux-brand disabled:opacity-50"
-          />
+          {isBackupCode ? (
+            <input
+              ref={inputRef}
+              type="text"
+              name="backup-code"
+              value={passphrase}
+              disabled={isRestoring}
+              onChange={handleBackupCodeChange}
+              onKeyDown={handleBackupCodeKeyDown}
+              placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"
+              maxLength={29}
+              spellCheck={false}
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="characters"
+              className="w-full px-3 py-2 mb-4 rounded-lg bg-fluux-bg border border-fluux-hover text-fluux-text font-mono tracking-widest focus:outline-none focus:border-fluux-brand disabled:opacity-50"
+            />
+          ) : (
+            <input
+              ref={inputRef}
+              type="password"
+              name="passphrase"
+              autoComplete="section-openpgp current-password"
+              value={passphrase}
+              disabled={isRestoring}
+              onChange={(e) => {
+                setPassphrase(e.target.value)
+                if (error) setError(null)
+              }}
+              placeholder={t('settings.encryption.restorePassphrasePlaceholder')}
+              className="w-full px-3 py-2 mb-4 rounded-lg bg-fluux-bg border border-fluux-hover text-fluux-text focus:outline-none focus:border-fluux-brand disabled:opacity-50"
+            />
+          )}
 
           {error && (
             <p className="text-xs text-red-500 dark:text-red-400 mb-3 break-words">
@@ -137,6 +236,7 @@ export function RestorePassphraseDialog({
 
         <div className="px-5 pb-5 pt-3 flex gap-2 justify-end">
           <button
+            type="button"
             onClick={onCancel}
             disabled={isRestoring}
             className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors disabled:opacity-50"
@@ -144,7 +244,7 @@ export function RestorePassphraseDialog({
             {t('common.cancel')}
           </button>
           <button
-            onClick={handleConfirm}
+            type="submit"
             disabled={!passphrase.trim() || isRestoring}
             className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-fluux-brand hover:opacity-90 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -152,6 +252,7 @@ export function RestorePassphraseDialog({
             {confirmLabel ?? t('settings.encryption.restoreAction')}
           </button>
         </div>
+        </form>
       </div>
     </div>
   )

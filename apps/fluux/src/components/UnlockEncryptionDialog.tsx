@@ -120,6 +120,12 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
       }}
     >
       <div className="bg-fluux-sidebar rounded-lg max-w-md w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
+        <form
+          onSubmit={(e) => { e.preventDefault(); void handleConfirm() }}
+          className="contents"
+        >
+        {/* Hidden username distinguishes this entry from the XMPP login in password managers. */}
+        <input type="text" name="username" autoComplete="section-openpgp username" value="openpgp-passphrase" readOnly aria-hidden="true" className="hidden" />
         <div className="px-5 pt-5 pb-3">
           <h3 className="text-lg font-semibold text-fluux-text mb-1">
             {loading ? ' ' : title}
@@ -134,17 +140,13 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
           <input
             ref={inputRef}
             type="password"
+            name="passphrase"
+            autoComplete={isFirstTime ? 'section-openpgp new-password' : 'section-openpgp current-password'}
             value={passphrase}
             disabled={isWorking || loading}
             onChange={(e) => {
               setPassphrase(e.target.value)
               if (error) setError(null)
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !isWorking && !loading) {
-                if (isFirstTime && !confirmPassphrase) return
-                void handleConfirm()
-              }
             }}
             placeholder={t('settings.encryption.restorePassphrasePlaceholder')}
             className="w-full px-3 py-2 mb-3 rounded-lg bg-fluux-bg border border-fluux-hover text-fluux-text focus:outline-none focus:border-fluux-brand disabled:opacity-50"
@@ -157,16 +159,13 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
               </label>
               <input
                 type="password"
+                name="confirm-passphrase"
+                autoComplete="section-openpgp new-password"
                 value={confirmPassphrase}
                 disabled={isWorking}
                 onChange={(e) => {
                   setConfirmPassphrase(e.target.value)
                   if (error) setError(null)
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && passphrase && confirmPassphrase && !isWorking) {
-                    void handleConfirm()
-                  }
                 }}
                 placeholder={t('settings.encryption.restorePassphrasePlaceholder')}
                 className="w-full px-3 py-2 mb-3 rounded-lg bg-fluux-bg border border-fluux-hover text-fluux-text focus:outline-none focus:border-fluux-brand disabled:opacity-50"
@@ -181,6 +180,7 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
 
         <div className="px-5 pb-5 pt-3 flex gap-2 justify-end">
           <button
+            type="button"
             onClick={() => onClose(false)}
             disabled={isWorking}
             className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors disabled:opacity-50"
@@ -188,7 +188,7 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
             {t('settings.encryption.unlockSkip')}
           </button>
           <button
-            onClick={() => { void handleConfirm() }}
+            type="submit"
             disabled={!passphrase.trim() || isWorking || loading}
             className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-fluux-brand hover:opacity-90 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -196,6 +196,7 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
             {loading ? '    ' : confirmLabel}
           </button>
         </div>
+        </form>
       </div>
     </div>
   )
