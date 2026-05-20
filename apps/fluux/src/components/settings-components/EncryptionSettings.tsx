@@ -726,21 +726,32 @@ export function EncryptionSettings() {
       if (!plugin?.importKeyFromFile) {
         throw new Error(t('settings.encryption.backupPluginUnavailable'))
       }
-      const result = await plugin.importKeyFromFile(pendingImportFileArmored, passphrase)
-      if ('needsPicker' in result) {
-        setPendingKeyPicker({
-          candidates: result.candidates,
-          backupMessage: result.backupContext.message,
-          passphrase: result.backupContext.passphrase,
-        })
+      try {
+        const result = await plugin.importKeyFromFile(pendingImportFileArmored, passphrase)
+        if ('needsPicker' in result) {
+          setPendingKeyPicker({
+            candidates: result.candidates,
+            backupMessage: result.backupContext.message,
+            passphrase: result.backupContext.passphrase,
+          })
+          setShowImportFileDialog(false)
+          return
+        }
+        setFingerprint(result.fingerprint)
         setShowImportFileDialog(false)
-        return
+        setPendingImportFileArmored(null)
+        setBackupProbeNonce((n) => n + 1)
+        addToast('success', t('settings.encryption.importFileSuccess'))
+      } catch (err) {
+        const code = (err as { code?: string } | null)?.code
+        if (code === 'unsupported-key-algorithm') {
+          addToast('error', t('settings.encryption.unsupportedKeyAlgorithm'))
+          setShowImportFileDialog(false)
+          setPendingImportFileArmored(null)
+          return
+        }
+        throw err
       }
-      setFingerprint(result.fingerprint)
-      setShowImportFileDialog(false)
-      setPendingImportFileArmored(null)
-      setBackupProbeNonce((n) => n + 1)
-      addToast('success', t('settings.encryption.importFileSuccess'))
     },
     [pendingImportFileArmored, client, addToast, t],
   )
