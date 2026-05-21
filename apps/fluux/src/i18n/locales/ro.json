@@ -488,6 +488,8 @@
             "keyLockedTooltip": "Criptare blocată — apasă pentru a debloca",
             "encryptedClickToUnlock": "Mesaj criptat — apasă pentru a debloca",
             "encryptedCouldNotDecrypt": "Nu s-a putut decripta acest mesaj",
+            "encryptedDisabled": "Criptarea este dezactivată — activați-o din setări",
+            "couldNotDecryptTooltip": "Mesaj criptat pentru o cheie care nu este disponibilă pe acest dispozitiv",
             "rejected": "Certificat respins",
             "rejectedTooltip": "Certificatul OpenPGP al interlocutorului este invalid — apasă pentru detalii",
             "rejectedTitle": "Certificat respins",

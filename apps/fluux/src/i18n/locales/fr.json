@@ -486,6 +486,8 @@
             "keyLockedTooltip": "Chiffrement verrouillé — cliquez pour déverrouiller",
             "encryptedClickToUnlock": "Message chiffré — cliquez pour déverrouiller",
             "encryptedCouldNotDecrypt": "Ce message n'a pas pu être déchiffré",
+            "encryptedDisabled": "Chiffrement désactivé — activez-le dans les paramètres",
+            "couldNotDecryptTooltip": "Message chiffré pour une clé qui n'est pas disponible sur cet appareil",
             "rejected": "Certificat rejeté",
             "rejectedTooltip": "Le certificat OpenPGP du correspondant est invalide — cliquez pour plus de détails",
             "rejectedTitle": "Certificat rejeté",

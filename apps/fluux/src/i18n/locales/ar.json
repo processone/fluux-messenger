@@ -486,6 +486,8 @@
             "keyLockedTooltip": "التشفير مقفل — انقر للفتح",
             "encryptedClickToUnlock": "رسالة مشفرة — انقر للفتح",
             "encryptedCouldNotDecrypt": "تعذر فك تشفير هذه الرسالة",
+            "encryptedDisabled": "التشفير معطّل — قم بتفعيله من الإعدادات",
+            "couldNotDecryptTooltip": "رسالة مشفّرة بمفتاح غير متوفّر على هذا الجهاز",
             "rejected": "الشهادة مرفوضة",
             "rejectedTooltip": "شهادة OpenPGP الخاصة بالطرف الآخر غير صالحة — انقر للتفاصيل",
             "rejectedTitle": "الشهادة مرفوضة",

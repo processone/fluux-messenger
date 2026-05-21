@@ -486,6 +486,8 @@
             "keyLockedTooltip": "Šifriranje zaključano — kliknite za otključavanje",
             "encryptedClickToUnlock": "Šifrirana poruka — kliknite za otključavanje",
             "encryptedCouldNotDecrypt": "Ovu poruku nije bilo moguće dešifrirati",
+            "encryptedDisabled": "Šifriranje je isključeno — uključite ga u postavkama",
+            "couldNotDecryptTooltip": "Poruka je šifrirana za ključ koji nije dostupan na ovom uređaju",
             "rejected": "Certifikat odbijen",
             "rejectedTooltip": "OpenPGP certifikat sugovornika nije valjan — kliknite za pojedinosti",
             "rejectedTitle": "Certifikat odbijen",

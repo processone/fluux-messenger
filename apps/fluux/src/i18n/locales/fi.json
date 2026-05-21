@@ -486,6 +486,8 @@
             "keyLockedTooltip": "Salaus lukittu — avaa napsauttamalla",
             "encryptedClickToUnlock": "Salattu viesti — avaa napsauttamalla",
             "encryptedCouldNotDecrypt": "Tämän viestin salausta ei voitu purkaa",
+            "encryptedDisabled": "Salaus poistettu käytöstä — ota se käyttöön asetuksissa",
+            "couldNotDecryptTooltip": "Viesti on salattu avaimelle, jota ei ole saatavilla tässä laitteessa",
             "rejected": "Varmenne hylätty",
             "rejectedTooltip": "Keskustelukumppanin OpenPGP-varmenne on virheellinen — napsauta nähdäksesi lisätietoja",
             "rejectedTitle": "Varmenne hylätty",

@@ -486,6 +486,8 @@
             "keyLockedTooltip": "Tá an criptiú faoi ghlas — cliceáil chun é a dhíghlasáil",
             "encryptedClickToUnlock": "Teachtaireacht chriptithe — cliceáil chun é a dhíghlasáil",
             "encryptedCouldNotDecrypt": "Níorbh fhéidir an teachtaireacht seo a dhíchriptiú",
+            "encryptedDisabled": "Tá an criptiú díchumasaithe — cumasaigh é sna socruithe",
+            "couldNotDecryptTooltip": "Tá an teachtaireacht criptithe le heochair nach bhfuil ar fáil ar an ngléas seo",
             "rejected": "Teastas diúltaithe",
             "rejectedTooltip": "Tá teastas OpenPGP an chomhpháirtí neamhbhailí — cliceáil le haghaidh sonraí",
             "rejectedTitle": "Teastas diúltaithe",

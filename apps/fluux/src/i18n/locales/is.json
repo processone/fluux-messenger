@@ -486,6 +486,8 @@
             "keyLockedTooltip": "Dulkóðun læst — smelltu til að aflæsa",
             "encryptedClickToUnlock": "Dulkóðuð skilaboð — smelltu til að aflæsa",
             "encryptedCouldNotDecrypt": "Tókst ekki að afkóða þessi skilaboð",
+            "encryptedDisabled": "Dulkóðun er óvirk — virkjaðu hana í stillingunum",
+            "couldNotDecryptTooltip": "Skilaboð dulkóðuð fyrir lykil sem er ekki tiltækur á þessu tæki",
             "rejected": "Vottorði hafnað",
             "rejectedTooltip": "OpenPGP-vottorð viðmælanda er ógilt — smelltu fyrir nánari upplýsingar",
             "rejectedTitle": "Vottorði hafnað",

@@ -486,6 +486,8 @@
             "keyLockedTooltip": "ההצפנה נעולה — לחץ לפתיחה",
             "encryptedClickToUnlock": "הודעה מוצפנת — לחץ לפתיחה",
             "encryptedCouldNotDecrypt": "לא ניתן היה לפענח הודעה זו",
+            "encryptedDisabled": "ההצפנה מושבתת — הפעל אותה בהגדרות",
+            "couldNotDecryptTooltip": "ההודעה הוצפנה למפתח שאינו זמין במכשיר זה",
             "rejected": "אישור נדחה",
             "rejectedTooltip": "אישור ה-OpenPGP של הצד השני אינו תקף — לחץ/י לפרטים",
             "rejectedTitle": "אישור נדחה",

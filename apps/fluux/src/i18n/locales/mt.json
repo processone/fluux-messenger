@@ -488,6 +488,8 @@
             "keyLockedTooltip": "L-encryption huwa msakkar — ikklikkja biex tiftaħ",
             "encryptedClickToUnlock": "Messaġġ kriptat — ikklikkja biex tiftaħ",
             "encryptedCouldNotDecrypt": "Ma setax jiġi deċifrat dan il-messaġġ",
+            "encryptedDisabled": "L-encryption huwa diżattivat — attivah fis-settings",
+            "couldNotDecryptTooltip": "Messaġġ ikkriptat għal ċavetta li mhix disponibbli fuq dan it-tagħmir",
             "rejected": "Iċ-ċertifikat ġie rrifjutat",
             "rejectedTooltip": "Iċ-ċertifikat OpenPGP tal-persuna l-oħra mhux validu — ikklikkja għad-dettalji",
             "rejectedTitle": "Iċ-ċertifikat ġie rrifjutat",

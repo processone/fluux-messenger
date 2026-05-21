@@ -486,6 +486,8 @@
             "keyLockedTooltip": "Kryptering låst — klik for at låse op",
             "encryptedClickToUnlock": "Krypteret besked — klik for at låse op",
             "encryptedCouldNotDecrypt": "Kunne ikke dekryptere denne besked",
+            "encryptedDisabled": "Kryptering deaktiveret — aktivér den i indstillingerne",
+            "couldNotDecryptTooltip": "Beskeden er krypteret til en nøgle, der ikke er tilgængelig på denne enhed",
             "rejected": "Certifikat afvist",
             "rejectedTooltip": "Modpartens OpenPGP-certifikat er ugyldigt — klik for detaljer",
             "rejectedTitle": "Certifikat afvist",

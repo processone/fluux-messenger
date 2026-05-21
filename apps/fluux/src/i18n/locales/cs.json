@@ -488,6 +488,8 @@
             "keyLockedTooltip": "Šifrování uzamčeno — odemkněte kliknutím",
             "encryptedClickToUnlock": "Šifrovaná zpráva — odemkněte kliknutím",
             "encryptedCouldNotDecrypt": "Tuto zprávu se nepodařilo dešifrovat",
+            "encryptedDisabled": "Šifrování je vypnuto — zapněte jej v nastavení",
+            "couldNotDecryptTooltip": "Zpráva zašifrovaná pro klíč, který není na tomto zařízení k dispozici",
             "rejected": "Certifikát odmítnut",
             "rejectedTooltip": "OpenPGP certifikát protistrany je neplatný — klikněte pro podrobnosti",
             "rejectedTitle": "Certifikát odmítnut",

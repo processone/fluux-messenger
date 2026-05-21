@@ -486,6 +486,8 @@
             "keyLockedTooltip": "Kryptering låst — klicka för att låsa upp",
             "encryptedClickToUnlock": "Krypterat meddelande — klicka för att låsa upp",
             "encryptedCouldNotDecrypt": "Kunde inte dekryptera detta meddelande",
+            "encryptedDisabled": "Kryptering inaktiverad — aktivera den i inställningarna",
+            "couldNotDecryptTooltip": "Meddelandet är krypterat till en nyckel som inte är tillgänglig på denna enhet",
             "rejected": "Certifikat avvisat",
             "rejectedTooltip": "Samtalspartnerns OpenPGP-certifikat är ogiltigt — klicka för detaljer",
             "rejectedTitle": "Certifikat avvisat",

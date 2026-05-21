@@ -486,6 +486,8 @@
             "keyLockedTooltip": "Versleuteling vergrendeld — klik om te ontgrendelen",
             "encryptedClickToUnlock": "Versleuteld bericht — klik om te ontgrendelen",
             "encryptedCouldNotDecrypt": "Dit bericht kon niet worden ontsleuteld",
+            "encryptedDisabled": "Versleuteling uitgeschakeld — schakel deze in de instellingen in",
+            "couldNotDecryptTooltip": "Bericht versleuteld met een sleutel die niet beschikbaar is op dit apparaat",
             "rejected": "Certificaat geweigerd",
             "rejectedTooltip": "Het OpenPGP-certificaat van de gesprekspartner is ongeldig — klik voor details",
             "rejectedTitle": "Certificaat geweigerd",

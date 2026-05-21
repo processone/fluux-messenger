@@ -488,6 +488,8 @@
             "keyLockedTooltip": "Cifrado bloqueado — haz clic para desbloquear",
             "encryptedClickToUnlock": "Mensaje cifrado — haz clic para desbloquear",
             "encryptedCouldNotDecrypt": "No se pudo descifrar este mensaje",
+            "encryptedDisabled": "Cifrado desactivado — actívalo en los ajustes",
+            "couldNotDecryptTooltip": "Mensaje cifrado para una clave que no está disponible en este dispositivo",
             "rejected": "Certificado rechazado",
             "rejectedTooltip": "El certificado OpenPGP del contacto no es válido — haz clic para más detalles",
             "rejectedTitle": "Certificado rechazado",

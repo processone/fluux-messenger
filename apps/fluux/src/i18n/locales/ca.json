@@ -488,6 +488,8 @@
             "keyLockedTooltip": "Xifratge bloquejat — feu clic per desbloquejar",
             "encryptedClickToUnlock": "Missatge xifrat — feu clic per desbloquejar",
             "encryptedCouldNotDecrypt": "No s'ha pogut desxifrar aquest missatge",
+            "encryptedDisabled": "Xifratge desactivat — activeu-lo a la configuració",
+            "couldNotDecryptTooltip": "Missatge xifrat per a una clau no disponible en aquest dispositiu",
             "rejected": "Certificat rebutjat",
             "rejectedTooltip": "El certificat OpenPGP del contacte no és vàlid — feu clic per veure'n els detalls",
             "rejectedTitle": "Certificat rebutjat",

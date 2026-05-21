@@ -487,6 +487,8 @@
             "keyLockedTooltip": "Šifrēšana ir bloķēta — noklikšķiniet, lai atbloķētu",
             "encryptedClickToUnlock": "Šifrēts ziņojums — noklikšķiniet, lai atbloķētu",
             "encryptedCouldNotDecrypt": "Šo ziņojumu nevarēja atšifrēt",
+            "encryptedDisabled": "Šifrēšana ir izslēgta — ieslēdziet to iestatījumos",
+            "couldNotDecryptTooltip": "Ziņojums šifrēts ar atslēgu, kas šajā ierīcē nav pieejama",
             "rejected": "Sertifikāts noraidīts",
             "rejectedTooltip": "Sarunu biedra OpenPGP sertifikāts nav derīgs — noklikšķiniet, lai uzzinātu vairāk",
             "rejectedTitle": "Sertifikāts noraidīts",
