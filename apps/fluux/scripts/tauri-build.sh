@@ -1,5 +1,10 @@
 #!/bin/bash
-# Build Tauri app with git commit hash as bundle version
+# Build Tauri app
+#
+# bundleVersion in tauri.conf.json is managed by scripts/prepare-release.js
+# and must remain a semver-orderable value. The git short hash is already
+# exposed to the app at compile time via src-tauri/build.rs (GIT_HASH env var)
+# and to the web build via vite.config.ts.
 #
 # Usage:
 #   ./tauri-build.sh              # Build for current architecture
@@ -11,7 +16,6 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TAURI_CONF="$SCRIPT_DIR/../src-tauri/tauri.conf.json"
-GIT_HASH=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
 # Cross-platform sed in-place edit using temp file (avoids macOS sed -i '' issues)
 sed_inplace() {
@@ -20,10 +24,6 @@ sed_inplace() {
     local tmpfile="${file}.tmp"
     sed "$pattern" "$file" > "$tmpfile" && mv "$tmpfile" "$file"
 }
-
-# Update bundleVersion in tauri.conf.json with git hash
-sed_inplace "s/\"bundleVersion\": \"[^\"]*\"/\"bundleVersion\": \"$GIT_HASH\"/" "$TAURI_CONF"
-echo "Set bundleVersion to $GIT_HASH"
 
 # Disable updater artifacts if no signing key is available (local dev builds)
 UPDATER_DISABLED=false
