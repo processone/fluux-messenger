@@ -3414,8 +3414,12 @@ describe('SequoiaPgpPlugin', () => {
     function buildVerificationsPepItem(
       ownFp: string,
       verifications: Record<string, string>,
+      version?: number,
     ): PEPItem {
-      const json = JSON.stringify({ v: 1, ts: 1000, verifications })
+      const json =
+        version === undefined
+          ? JSON.stringify({ v: 1, ts: 1000, verifications })
+          : JSON.stringify({ v: 2, ts: 1000, version, verifications })
       const encoded = btoa(unescape(encodeURIComponent(json)))
       const armored = `OPENPGP-STUB:${ownFp}:${ownFp}:${encoded}`
       const b64Armored = btoa(unescape(encodeURIComponent(armored)))
@@ -3427,6 +3431,23 @@ describe('SequoiaPgpPlugin', () => {
           children: [{ name: 'data', attrs: {}, children: [b64Armored] }],
         },
       }
+    }
+
+    // Reverse the plugin's publish encoding: data child holds
+    // base64(makeOpenPgpArmor('OPENPGP-STUB:<recipient>:<sender>:<base64-json>')).
+    function decodePublishedVerifications(item: PEPItem): {
+      version?: number
+      verifications: Record<string, string>
+    } {
+      const dataChild = item.payload.children.find(
+        (c): c is XMLElementData => typeof c !== 'string' && c.name === 'data',
+      )
+      const dataText = dataChild?.children[0]
+      if (typeof dataText !== 'string') throw new Error('no data child in published item')
+      const armored = decodeURIComponent(escape(atob(dataText)))
+      const stub = readOpenPgpArmorPayloadForTest(armored)
+      const payloadB64 = stub.slice('OPENPGP-STUB:'.length).split(':')[2]
+      return JSON.parse(decodeURIComponent(escape(atob(payloadB64))))
     }
 
     it('seeds the local verified-peers store from the server node on init', async () => {
@@ -3562,6 +3583,130 @@ describe('SequoiaPgpPlugin', () => {
       } finally {
         vi.useRealTimers()
       }
+    })
+
+    it('publishes an empty snapshot when the last verification is revoked, and it does not resurrect on resync', async () => {
+      vi.useFakeTimers()
+      try {
+        let verificationsCb: ((item: PEPItem) => void) | null = null
+        const { ctx, published } = makeContext('me@example.com')
+        ctx.xmpp.subscribePEP = (_jid, node, cb) => {
+          if (node === VERIFICATIONS_NODE) verificationsCb = cb
+          return { unsubscribe: () => {} }
+        }
+        const fp = 'FP_REVOKE_TEST'
+        fake.accounts.set('me@example.com', {
+          fingerprint: fp,
+          publicArmored: makeOpenPgpArmor(
+            'PGP PUBLIC KEY BLOCK',
+            `Fingerprint: ${fp}\nUID: xmpp:me@example.com\nKind: public\nRotation: 0\n`,
+          ),
+          keychainBacked: true,
+        })
+        await plugin.init(ctx)
+
+        const store = await import('@/stores/verifiedPeerKeysStore')
+        store.setPeerVerified('alice@example.com', 'ALICE_FP')
+        await vi.advanceTimersByTimeAsync(600)
+        store.clearPeerVerified('alice@example.com')
+        await vi.advanceTimersByTimeAsync(600)
+
+        // The empty map is published (not skipped), overwriting the server node.
+        const verNodes = published.filter((p) => p.node === VERIFICATIONS_NODE)
+        const lastPayload = decodePublishedVerifications(verNodes[verNodes.length - 1].item)
+        expect(lastPayload.verifications).toEqual({})
+
+        // The server now serves that empty snapshot; a resync must not resurrect alice.
+        verificationsCb!({ id: 'current', payload: { name: '', attrs: {}, children: [] } })
+        for (let i = 0; i < 10; i++) await Promise.resolve()
+        await vi.advanceTimersByTimeAsync(600)
+        expect(store.isPeerVerified('alice@example.com', 'ALICE_FP')).toBe(false)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('ignores a replayed older snapshot from the server (no trust rollback)', async () => {
+      let verificationsCb: ((item: PEPItem) => void) | null = null
+      let currentItem: PEPItem | null = null
+      const { ctx } = makeContext('me@example.com')
+      ctx.xmpp.subscribePEP = (_jid, node, cb) => {
+        if (node === VERIFICATIONS_NODE) verificationsCb = cb
+        return { unsubscribe: () => {} }
+      }
+      ctx.xmpp.queryPEP = async (_jid, node) =>
+        node === VERIFICATIONS_NODE && currentItem ? [currentItem] : []
+      const fp = 'FP_REPLAY_TEST'
+      fake.accounts.set('me@example.com', {
+        fingerprint: fp,
+        publicArmored: makeOpenPgpArmor(
+          'PGP PUBLIC KEY BLOCK',
+          `Fingerprint: ${fp}\nUID: xmpp:me@example.com\nKind: public\nRotation: 0\n`,
+        ),
+        keychainBacked: true,
+      })
+      await plugin.init(ctx)
+      const store = await import('@/stores/verifiedPeerKeysStore')
+
+      // A newer snapshot (version 5): bob is verified, alice already revoked elsewhere.
+      currentItem = buildVerificationsPepItem(fp, { 'bob@example.com': 'BOB_FP' }, 5)
+      verificationsCb!({ id: 'current', payload: { name: '', attrs: {}, children: [] } })
+      await new Promise((r) => setTimeout(r, 0))
+      expect(store.isPeerVerified('bob@example.com', 'BOB_FP')).toBe(true)
+      expect(store.isPeerVerified('alice@example.com', 'ALICE_FP')).toBe(false)
+
+      // The server replays an OLDER snapshot (version 1) that still trusts alice.
+      currentItem = buildVerificationsPepItem(
+        fp,
+        { 'alice@example.com': 'ALICE_FP', 'bob@example.com': 'BOB_FP' },
+        1,
+      )
+      verificationsCb!({ id: 'current', payload: { name: '', attrs: {}, children: [] } })
+      await new Promise((r) => setTimeout(r, 0))
+
+      // Rollback rejected: alice is NOT resurrected, bob is untouched.
+      expect(store.isPeerVerified('alice@example.com', 'ALICE_FP')).toBe(false)
+      expect(store.isPeerVerified('bob@example.com', 'BOB_FP')).toBe(true)
+    })
+
+    it('clears a locally-verified peer that a newer remote snapshot drops', async () => {
+      let verificationsCb: ((item: PEPItem) => void) | null = null
+      let currentItem: PEPItem | null = null
+      const { ctx } = makeContext('me@example.com')
+      ctx.xmpp.subscribePEP = (_jid, node, cb) => {
+        if (node === VERIFICATIONS_NODE) verificationsCb = cb
+        return { unsubscribe: () => {} }
+      }
+      ctx.xmpp.queryPEP = async (_jid, node) =>
+        node === VERIFICATIONS_NODE && currentItem ? [currentItem] : []
+      const fp = 'FP_DROP_TEST'
+      fake.accounts.set('me@example.com', {
+        fingerprint: fp,
+        publicArmored: makeOpenPgpArmor(
+          'PGP PUBLIC KEY BLOCK',
+          `Fingerprint: ${fp}\nUID: xmpp:me@example.com\nKind: public\nRotation: 0\n`,
+        ),
+        keychainBacked: true,
+      })
+
+      const store = await import('@/stores/verifiedPeerKeysStore')
+      // Seed local state BEFORE init so the store subscription (attached during
+      // init) does not schedule a publish from these writes.
+      store.useVerifiedPeerKeysStore.setState({
+        verifiedFingerprintByJid: {
+          'alice@example.com': 'ALICE_FP',
+          'bob@example.com': 'BOB_FP',
+        },
+      })
+      await plugin.init(ctx)
+
+      // Another device published a newer snapshot (version 5) that dropped alice.
+      currentItem = buildVerificationsPepItem(fp, { 'bob@example.com': 'BOB_FP' }, 5)
+      verificationsCb!({ id: 'current', payload: { name: '', attrs: {}, children: [] } })
+      await new Promise((r) => setTimeout(r, 0))
+
+      expect(store.isPeerVerified('alice@example.com', 'ALICE_FP')).toBe(false)
+      expect(store.isPeerVerified('bob@example.com', 'BOB_FP')).toBe(true)
     })
   })
 })
