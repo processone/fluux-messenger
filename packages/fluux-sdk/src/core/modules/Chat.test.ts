@@ -3682,23 +3682,26 @@ describe('XMPPClient Message — E2EE downgrade protection', () => {
     ).rejects.toThrow(E2EEEncryptionRequiredError)
   })
 
-  it('throws E2EEEncryptionRequiredError when encrypt() throws mid-flight for a verified peer', async () => {
+  it('blocks the send (re-throws the plugin error) when encrypt() throws mid-flight for a verified peer', async () => {
     await connectClient()
     xmppClient.e2ee = makeE2EEManager({ encryptResult: 'throw', isVerified: true }) as any
 
+    // A selected plugin failing to encrypt must never fall back to plaintext;
+    // the original plugin error propagates so the UI can surface it.
     await expect(
       xmppClient.chat.sendMessage('bob@example.com', 'hello', 'chat'),
-    ).rejects.toThrow(E2EEEncryptionRequiredError)
+    ).rejects.toThrow('plugin boom')
   })
 
-  it('sends plaintext (logs warning) when encrypt() throws for an unverified peer in opportunistic mode', async () => {
+  it('blocks the send (re-throws the plugin error) when encrypt() throws for an unverified peer in opportunistic mode', async () => {
     await connectClient()
     xmppClient.e2ee = makeE2EEManager({ encryptResult: 'throw', isVerified: false }) as any
 
-    // Should fall through to plaintext — the plugin error is logged but not surfaced.
+    // Core downgrade-protection fix: even opportunistic + unverified must NOT
+    // silently send plaintext when a selected plugin fails to encrypt.
     await expect(
       xmppClient.chat.sendMessage('bob@example.com', 'hello', 'chat'),
-    ).resolves.not.toThrow()
+    ).rejects.toThrow('plugin boom')
   })
 
   it('allows plaintext for a verified peer when forcedPlaintext is set', async () => {
