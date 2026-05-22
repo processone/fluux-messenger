@@ -997,6 +997,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     this._syncingFromRemoteCount++
     const ctx = this.ctx
     const ownPublicArmored = this.ownBundle.publicArmored
+    const ownFingerprint = this.ownBundle.fingerprint
     try {
       const remote = await fetchVerificationsFromServer(
         ctx,
@@ -1004,6 +1005,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
           this.decryptWithOwnKey(ctx.account.jid, ciphertext, senderKey),
         ctx.account.jid,
         ownPublicArmored,
+        ownFingerprint,
       )
       if (!remote) return
       const local = useVerifiedPeerKeysStore.getState().verifiedFingerprintByJid

@@ -3411,17 +3411,20 @@ describe('SequoiaPgpPlugin', () => {
 
     // Build a PEP item that looks exactly like one publishVerificationsToServer
     // would produce: base64(OPENPGP-STUB ciphertext) inside verifications-data.
+    // `signerFp` defaults to `ownFp` (a legitimate self-signed item); pass a
+    // different value to simulate a server-forged node signed by a foreign key.
     function buildVerificationsPepItem(
       ownFp: string,
       verifications: Record<string, string>,
       version?: number,
+      signerFp: string = ownFp,
     ): PEPItem {
       const json =
         version === undefined
           ? JSON.stringify({ v: 1, ts: 1000, verifications })
           : JSON.stringify({ v: 2, ts: 1000, version, verifications })
       const encoded = btoa(unescape(encodeURIComponent(json)))
-      const armored = `OPENPGP-STUB:${ownFp}:${ownFp}:${encoded}`
+      const armored = `OPENPGP-STUB:${ownFp}:${signerFp}:${encoded}`
       const b64Armored = btoa(unescape(encodeURIComponent(armored)))
       return {
         id: 'current',
@@ -3473,6 +3476,31 @@ describe('SequoiaPgpPlugin', () => {
 
       const { isPeerVerified: isVerified } = await import('@/stores/verifiedPeerKeysStore')
       expect(isVerified('alice@example.com', 'ALICE_FP')).toBe(true)
+    })
+
+    it('ignores a server-forged verifications node signed by a foreign key', async () => {
+      const { ctx, peerPublish } = makeContext('me@example.com')
+      const fp = 'FP_FORGE_TEST'
+      fake.accounts.set('me@example.com', {
+        fingerprint: fp,
+        publicArmored: makeOpenPgpArmor(
+          'PGP PUBLIC KEY BLOCK',
+          `Fingerprint: ${fp}\nUID: xmpp:me@example.com\nKind: public\nRotation: 0\n`,
+        ),
+        keychainBacked: true,
+      })
+      // A malicious server can encrypt an arbitrary map to our public key, but
+      // it cannot sign as us — so the embedded signer fingerprint is foreign.
+      peerPublish(
+        'me@example.com',
+        VERIFICATIONS_NODE,
+        buildVerificationsPepItem(fp, { 'mallory@example.com': 'MALLORY_FP' }, undefined, 'ATTACKER_FP'),
+      )
+      await plugin.init(ctx)
+      await new Promise((r) => setTimeout(r, 0))
+
+      const { isPeerVerified: isVerified } = await import('@/stores/verifiedPeerKeysStore')
+      expect(isVerified('mallory@example.com', 'MALLORY_FP')).toBe(false)
     })
 
     it('publishes the verifications PEP node after a local verification is added', async () => {

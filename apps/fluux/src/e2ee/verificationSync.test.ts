@@ -1,38 +1,62 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { PluginContext, XMLElementData } from '@fluux/sdk'
 import {
   VERIFICATIONS_NODE,
   publishVerificationsToServer,
   fetchVerificationsFromServer,
   planVerificationUpdate,
+  type DecryptFn,
 } from './verificationSync'
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function b64(input: string): string {
-  return btoa(unescape(encodeURIComponent(input)))
-}
 function unb64(encoded: string): string {
   return decodeURIComponent(escape(atob(encoded)))
 }
 
-/** A passthrough crypto pair: the "ciphertext" is the plaintext verbatim. */
-const passthroughEncrypt = async (plaintext: string) => plaintext
-const passthroughDecrypt = async (ciphertext: string) => ({ plaintext: ciphertext })
+const OWN_FP = 'AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555'
+const OWN_PUBLIC = 'OWN-PUBLIC-ARMOR'
+const OWN_JID = 'me@example.com'
 
-/** Minimal ctx exposing only the PEP primitives the module touches. */
+const passthroughEncrypt = async (plaintext: string) => plaintext
+
+interface DecryptMeta {
+  plaintext: string
+  signatureVerified: boolean
+  signerFingerprint: string | null
+  signaturePresent: boolean
+}
+
+/** A DecryptFn returning caller-controlled plaintext + signature metadata. */
+function decryptReturning(meta: DecryptMeta): DecryptFn {
+  return async () => ({ ...meta })
+}
+
+/** A self-signed decrypt that passes the own-key signature gate. */
+function selfSignedDecrypt(plaintext: string): DecryptFn {
+  return decryptReturning({
+    plaintext,
+    signatureVerified: true,
+    signerFingerprint: OWN_FP,
+    signaturePresent: true,
+  })
+}
+
+type PepItem = { id: string; payload: XMLElementData }
+
+/** Minimal ctx exposing the PEP primitives the module touches. */
 function makeCtx(): {
   ctx: PluginContext
-  published: Array<{ node: string; item: { id: string; payload: XMLElementData }; options?: unknown }>
-  setNode: (item: { id: string; payload: XMLElementData } | null) => void
+  published: Array<{ node: string; item: PepItem; options?: unknown }>
+  setNode: (item: PepItem | null) => void
 } {
-  const published: Array<{ node: string; item: { id: string; payload: XMLElementData }; options?: unknown }> = []
-  let node: { id: string; payload: XMLElementData } | null = null
+  const published: Array<{ node: string; item: PepItem; options?: unknown }> = []
+  let node: PepItem | null = null
   const ctx = {
     xmpp: {
-      publishPEP: async (n: string, item: { id: string; payload: XMLElementData }, options?: unknown) => {
+      publishPEP: async (n: string, item: PepItem, options?: unknown) => {
         published.push({ node: n, item, options })
         node = item
       },
@@ -42,19 +66,19 @@ function makeCtx(): {
   return { ctx, published, setNode: (item) => (node = item) }
 }
 
-/** Build a PEP item exactly as the module would, from a payload JSON string. */
-function itemFromJson(json: string): { id: string; payload: XMLElementData } {
+/** A verifications item with an arbitrary (decrypt-ignored) data child. */
+function itemWithData(dataChild: string): PepItem {
   return {
     id: 'current',
     payload: {
       name: 'verifications-data',
       attrs: { xmlns: VERIFICATIONS_NODE },
-      children: [{ name: 'data', attrs: {}, children: [b64(json)] }],
+      children: [{ name: 'data', attrs: {}, children: [dataChild] }],
     },
   }
 }
 
-function decodePublishedPayload(item: { payload: XMLElementData }): Record<string, unknown> {
+function decodePublishedPayload(item: PepItem): Record<string, unknown> {
   const dataChild = item.payload.children.find(
     (c): c is XMLElementData => typeof c !== 'string' && c.name === 'data',
   )
@@ -63,6 +87,12 @@ function decodePublishedPayload(item: { payload: XMLElementData }): Record<strin
   return JSON.parse(unb64(text)) as Record<string, unknown>
 }
 
+const VALID_V1_PAYLOAD = JSON.stringify({
+  v: 1,
+  ts: 1000,
+  verifications: { 'bob@example.com': 'BOB_FP' },
+})
+
 // ---------------------------------------------------------------------------
 // publishVerificationsToServer
 // ---------------------------------------------------------------------------
@@ -70,7 +100,7 @@ function decodePublishedPayload(item: { payload: XMLElementData }): Record<strin
 describe('publishVerificationsToServer', () => {
   it('publishes even when the verifications map is empty (revocation of the last entry)', async () => {
     const { ctx, published } = makeCtx()
-    await publishVerificationsToServer(ctx, passthroughEncrypt, 'OWNPUB', {}, 1)
+    await publishVerificationsToServer(ctx, passthroughEncrypt, OWN_PUBLIC, {}, 1)
     expect(published).toHaveLength(1)
     expect(published[0].node).toBe(VERIFICATIONS_NODE)
     expect(decodePublishedPayload(published[0].item).verifications).toEqual({})
@@ -81,7 +111,7 @@ describe('publishVerificationsToServer', () => {
     await publishVerificationsToServer(
       ctx,
       passthroughEncrypt,
-      'OWNPUB',
+      OWN_PUBLIC,
       { 'alice@example.com': 'ALICE_FP' },
       7,
     )
@@ -93,27 +123,122 @@ describe('publishVerificationsToServer', () => {
 })
 
 // ---------------------------------------------------------------------------
-// fetchVerificationsFromServer
+// fetchVerificationsFromServer — signature enforcement
 // ---------------------------------------------------------------------------
 
-describe('fetchVerificationsFromServer', () => {
+describe('fetchVerificationsFromServer — signature enforcement', () => {
+  function fetchWith(meta: DecryptMeta, ownFp: string = OWN_FP) {
+    const { ctx, setNode } = makeCtx()
+    setNode(itemWithData('AAAA'))
+    return fetchVerificationsFromServer(ctx, decryptReturning(meta), OWN_JID, OWN_PUBLIC, ownFp)
+  }
+
+  it('returns the map for a payload validly signed by our own primary key', async () => {
+    const result = await fetchWith({
+      plaintext: VALID_V1_PAYLOAD,
+      signatureVerified: true,
+      signerFingerprint: OWN_FP,
+      signaturePresent: true,
+    })
+    expect(result).toEqual({ verifications: { 'bob@example.com': 'BOB_FP' }, version: 0 })
+  })
+
+  it('rejects an unsigned payload (server-forged ciphertext to our public key)', async () => {
+    const result = await fetchWith({
+      plaintext: VALID_V1_PAYLOAD,
+      signatureVerified: false,
+      signerFingerprint: null,
+      signaturePresent: false,
+    })
+    expect(result).toBeNull()
+  })
+
+  it('rejects a payload whose signature is present but does not verify', async () => {
+    const result = await fetchWith({
+      plaintext: VALID_V1_PAYLOAD,
+      signatureVerified: false,
+      signerFingerprint: OWN_FP,
+      signaturePresent: true,
+    })
+    expect(result).toBeNull()
+  })
+
+  it('rejects a payload validly signed by a key other than our own primary key', async () => {
+    const result = await fetchWith({
+      plaintext: VALID_V1_PAYLOAD,
+      signatureVerified: true,
+      signerFingerprint: 'DEADBEEF0000111122223333444455556666AAAA',
+      signaturePresent: true,
+    })
+    expect(result).toBeNull()
+  })
+
+  it('rejects a verified signature with no signer fingerprint (defensive)', async () => {
+    const result = await fetchWith({
+      plaintext: VALID_V1_PAYLOAD,
+      signatureVerified: true,
+      signerFingerprint: null,
+      signaturePresent: true,
+    })
+    expect(result).toBeNull()
+  })
+
+  it('matches the signer fingerprint case-insensitively', async () => {
+    const result = await fetchWith(
+      {
+        plaintext: VALID_V1_PAYLOAD,
+        signatureVerified: true,
+        signerFingerprint: OWN_FP.toLowerCase(),
+        signaturePresent: true,
+      },
+      OWN_FP.toUpperCase(),
+    )
+    expect(result).toEqual({ verifications: { 'bob@example.com': 'BOB_FP' }, version: 0 })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// fetchVerificationsFromServer — version handling
+// ---------------------------------------------------------------------------
+
+describe('fetchVerificationsFromServer — version', () => {
   it('returns the verifications and version from a v2 payload', async () => {
     const { ctx, setNode } = makeCtx()
-    setNode(itemFromJson(JSON.stringify({ v: 2, ts: 1000, version: 5, verifications: { 'a@x': 'A' } })))
-    const result = await fetchVerificationsFromServer(ctx, passthroughDecrypt, 'me@x', 'OWNPUB')
+    setNode(itemWithData('AAAA'))
+    const json = JSON.stringify({ v: 2, ts: 1000, version: 5, verifications: { 'a@x': 'A' } })
+    const result = await fetchVerificationsFromServer(
+      ctx,
+      selfSignedDecrypt(json),
+      OWN_JID,
+      OWN_PUBLIC,
+      OWN_FP,
+    )
     expect(result).toEqual({ verifications: { 'a@x': 'A' }, version: 5 })
   })
 
   it('defaults version to 0 for a legacy v1 payload (no version field)', async () => {
     const { ctx, setNode } = makeCtx()
-    setNode(itemFromJson(JSON.stringify({ v: 1, ts: 1000, verifications: { 'a@x': 'A' } })))
-    const result = await fetchVerificationsFromServer(ctx, passthroughDecrypt, 'me@x', 'OWNPUB')
+    setNode(itemWithData('AAAA'))
+    const json = JSON.stringify({ v: 1, ts: 1000, verifications: { 'a@x': 'A' } })
+    const result = await fetchVerificationsFromServer(
+      ctx,
+      selfSignedDecrypt(json),
+      OWN_JID,
+      OWN_PUBLIC,
+      OWN_FP,
+    )
     expect(result).toEqual({ verifications: { 'a@x': 'A' }, version: 0 })
   })
 
   it('returns null when the node is absent', async () => {
     const { ctx } = makeCtx()
-    const result = await fetchVerificationsFromServer(ctx, passthroughDecrypt, 'me@x', 'OWNPUB')
+    const result = await fetchVerificationsFromServer(
+      ctx,
+      selfSignedDecrypt(VALID_V1_PAYLOAD),
+      OWN_JID,
+      OWN_PUBLIC,
+      OWN_FP,
+    )
     expect(result).toBeNull()
   })
 })

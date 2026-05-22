@@ -2,34 +2,35 @@
  * Cross-device synchronisation of peer verification records.
  *
  * Publishes the local `verifiedPeerKeysStore` map to a private PEP node
- * (`urn:xmpp:fluux:verifications:0`, `accessModel='whitelist'`) encrypted
- * to the user's own OpenPGP key. Other devices of the same account receive
- * a PEP headline, fetch the node, decrypt it, and reconcile their store.
+ * (`urn:xmpp:fluux:verifications:0`, `accessModel='whitelist'`) sign+encrypted
+ * to the user's own OpenPGP key. Other devices of the same account receive a
+ * PEP headline, fetch the node, decrypt it, and reconcile their store.
  *
  * Crypto is abstracted behind {@link EncryptFn}/{@link DecryptFn} so this
  * module works with both the Sequoia/Tauri backend and the openpgp.js web
  * backend without modification.
  *
- * Sync strategy: **versioned snapshot, last-writer-wins**. Each publish
- * carries a monotonically increasing `version`. A device applies a remote
- * snapshot only when its `version` is strictly newer than the highest it
- * has already applied ({@link loadAppliedVerificationsVersion}); the
- * snapshot then *replaces* local state — additions, fingerprint changes,
- * AND removals all propagate. Two consequences matter for security:
+ * Two independent properties protect trust against an untrusted server:
  *
- *  - Revocations propagate. A device that revokes its last verification
- *    publishes an empty (but signed + versioned) snapshot rather than
- *    skipping the publish, so the entry cannot resurface on resync.
- *  - Server rollback is rejected. The published payload is signed by the
- *    account's own primary key, but a signature proves authorship, not
- *    freshness — a malicious server can replay an older genuine snapshot.
- *    The monotonic `version` gate makes a replayed (older-or-equal) node a
- *    no-op, closing the trust-rollback path.
+ *  - **Authorship — the signature, not the access model.** The fetch path
+ *    discards any payload not signed by the account's own primary key, so a
+ *    tampering server cannot inject forged "verified" entries by encrypting
+ *    to the user's (public) key — it cannot sign as the user.
+ *  - **Freshness — a monotonic version.** A signature proves authorship but
+ *    NOT freshness: a server can replay an older genuine snapshot. Each
+ *    publish carries a strictly increasing `version`; a snapshot is applied
+ *    only when newer than the highest already applied
+ *    ({@link loadAppliedVerificationsVersion}), so a replayed (older-or-equal)
+ *    node is a no-op, closing the trust-rollback path.
  *
- * The trade-off is that two concurrent verifications made offline on
- * different devices collapse to the later publisher's snapshot (the other
- * verification is lost and must be re-done) — a fail-safe direction
- * (under-trust → re-verify), never resurrection of a revoked key.
+ * Sync strategy: **versioned snapshot, last-writer-wins**. An applied snapshot
+ * *replaces* local state — additions, fingerprint changes, AND removals all
+ * propagate. A revocation of the last verification publishes an empty (but
+ * signed + versioned) snapshot rather than skipping the publish, so the entry
+ * cannot resurface on resync. The trade-off is that two concurrent
+ * verifications made offline on different devices collapse to the later
+ * publisher's snapshot (the other is lost and must be re-done) — a fail-safe
+ * direction (under-trust → re-verify), never resurrection of a revoked key.
  */
 
 import type { PluginContext, XMLElementData } from '@fluux/sdk'
@@ -40,11 +41,28 @@ export type EncryptFn = (
   recipientPublicArmored: string,
 ) => Promise<string>
 
-/** Decrypt `ciphertext` (encrypted to us). Returns `{ plaintext }`. */
+/**
+ * Decrypt `ciphertext` (encrypted to us) and report on its signature.
+ *
+ * The signature metadata is mandatory: cross-device sync only trusts a
+ * payload that carries a valid signature from the account's own key, so the
+ * caller must surface whatever the crypto backend reports. Mirrors the
+ * backend `DecryptOutput` shape.
+ */
 export type DecryptFn = (
   ciphertext: string,
   senderPublicArmored: string,
-) => Promise<{ plaintext: string }>
+) => Promise<{
+  plaintext: string
+  signatureVerified: boolean
+  signerFingerprint: string | null
+  signaturePresent: boolean
+}>
+
+/** Case- and whitespace-insensitive fingerprint comparison. */
+function fingerprintsEqual(a: string, b: string): boolean {
+  return a.replace(/\s+/g, '').toLowerCase() === b.replace(/\s+/g, '').toLowerCase()
+}
 
 export const VERIFICATIONS_NODE = 'urn:xmpp:fluux:verifications:0'
 const VERIFICATIONS_XMLNS = VERIFICATIONS_NODE
@@ -179,14 +197,24 @@ export async function publishVerificationsToServer(
 /**
  * Fetch the private PEP node, decrypt it, and return the verification map
  * together with its `version`. A legacy v1 payload (no `version` field)
- * decodes to version `0`. Returns `null` when the node is absent, fails to
- * decrypt, or is malformed.
+ * decodes to version `0`.
+ *
+ * Downgrade protection: the decrypted payload is only trusted when it carries
+ * a signature that verifies against the account's *own primary key*
+ * (`ownFingerprint`). A malicious server can encrypt an arbitrary map to the
+ * user's public key (it is, after all, public), but it cannot forge a
+ * signature from the user's secret key — so any unsigned, wrong-signed, or
+ * foreign-signed payload is discarded.
+ *
+ * Returns `null` when the node is absent, decryption fails, the signature
+ * check does not pass, or the payload is malformed.
  */
 export async function fetchVerificationsFromServer(
   ctx: PluginContext,
   decryptFn: DecryptFn,
   ownJid: string,
   ownPublicArmored: string,
+  ownFingerprint: string,
 ): Promise<{ verifications: Record<string, string>; version: number } | null> {
   let items: { id: string; payload: XMLElementData }[]
   try {
@@ -201,10 +229,21 @@ export async function fetchVerificationsFromServer(
 
   const armored = b64Decode(base64Ciphertext)
 
-  let decrypted: { plaintext: string }
+  let decrypted: Awaited<ReturnType<DecryptFn>>
   try {
     decrypted = await decryptFn(armored, ownPublicArmored)
   } catch {
+    return null
+  }
+
+  // Downgrade protection: only a payload signed by our own primary key is
+  // trusted. Reject unsigned, unverified, or foreign-signed maps — these can
+  // only originate from a tampering server, not from one of our devices.
+  if (
+    !decrypted.signatureVerified ||
+    !decrypted.signerFingerprint ||
+    !fingerprintsEqual(decrypted.signerFingerprint, ownFingerprint)
+  ) {
     return null
   }
 
