@@ -85,8 +85,10 @@ import {
 import {
   VERIFICATIONS_NODE,
   fetchVerificationsFromServer,
-  mergeVerifications,
+  loadAppliedVerificationsVersion,
+  planVerificationUpdate,
   publishVerificationsToServer,
+  saveAppliedVerificationsVersion,
 } from './verificationSync'
 import {
   clearKeyChangeAlert,
@@ -1007,11 +1009,11 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       )
       if (!remote) return
       const local = useVerifiedPeerKeysStore.getState().verifiedFingerprintByJid
-      const { hasNewEntries, merged } = mergeVerifications(remote, local)
-      if (!hasNewEntries) return
-      for (const [jid, fp] of Object.entries(merged)) {
-        if (!local[jid]) setPeerVerified(jid, fp)
-      }
+      const plan = planVerificationUpdate(remote, local, loadAppliedVerificationsVersion())
+      if (!plan.apply) return
+      for (const { jid, fingerprint } of plan.toSet) setPeerVerified(jid, fingerprint)
+      for (const jid of plan.toClear) clearPeerVerified(jid)
+      saveAppliedVerificationsVersion(plan.version)
     } catch {
       // Non-blocking — local store is always the source of truth.
     } finally {
@@ -1028,13 +1030,19 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       if (!this.ownBundle || !this.ctx) return
       const ctx = this.ctx
       const ownPublicArmored = this.ownBundle.publicArmored
+      // Reserve the next version above the highest we've applied/published.
+      // Real versions start at 1; 0 is reserved for legacy (v1) snapshots.
+      const nextVersion = Math.max(loadAppliedVerificationsVersion(), 0) + 1
       void publishVerificationsToServer(
         ctx,
         (plaintext, recipientKey) =>
           this.encryptToRecipient(ctx.account.jid, recipientKey, plaintext),
         ownPublicArmored,
         verifications,
-      ).catch(() => {})
+        nextVersion,
+      )
+        .then(() => saveAppliedVerificationsVersion(nextVersion))
+        .catch(() => {})
     }, 500)
   }
 
