@@ -176,6 +176,40 @@ function ensureContrastWithWhite(hex: string): string {
 }
 
 /**
+ * For animated GIF avatars, extract the first frame as a static PNG data URL.
+ * Returns null for non-GIF images or while loading.
+ */
+function useStaticFrame(url: string | undefined): string | null {
+  const [frame, setFrame] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!url) { setFrame(null); return }
+    let cancelled = false
+
+    fetch(url)
+      .then(r => r.blob())
+      .then(blob => {
+        if (cancelled || blob.type !== 'image/gif') return
+        const img = new Image()
+        img.onload = () => {
+          if (cancelled) return
+          const c = document.createElement('canvas')
+          c.width = img.naturalWidth
+          c.height = img.naturalHeight
+          c.getContext('2d')?.drawImage(img, 0, 0)
+          setFrame(c.toDataURL('image/png'))
+        }
+        img.src = url
+      })
+      .catch(() => {})
+
+    return () => { cancelled = true }
+  }, [url])
+
+  return frame
+}
+
+/**
  * Reusable Avatar component with XEP-0392 consistent color generation.
  *
  * Features:
@@ -184,6 +218,7 @@ function ensureContrastWithWhite(hex: string): string {
  * - Supports presence indicators
  * - Multiple size presets
  * - Accessible with proper alt text
+ * - Animated GIF avatars are frozen by default, play on hover
  */
 export function Avatar({
   identifier,
@@ -234,6 +269,10 @@ export function Avatar({
   const [imgError, setImgError] = useState(false)
   useEffect(() => { setImgError(false) }, [avatarUrl])
 
+  // Animated GIF: show static first frame by default, animate on hover
+  const staticFrame = useStaticFrame(avatarUrl)
+  const [hovered, setHovered] = useState(false)
+
   // Determine if clickable
   const isClickable = clickable ?? !!onClick
 
@@ -246,11 +285,15 @@ export function Avatar({
   ].filter(Boolean).join(' ')
 
   return (
-    <div className={containerClasses} onClick={onClick}>
+    <div
+      className={containerClasses}
+      onClick={onClick}
+      onMouseEnter={staticFrame ? () => setHovered(true) : undefined}
+      onMouseLeave={staticFrame ? () => setHovered(false) : undefined}
+    >
       {avatarUrl && !imgError ? (
-        // Avatar image
         <img
-          src={avatarUrl}
+          src={staticFrame && !hovered ? staticFrame : avatarUrl}
           alt={displayName}
           className="w-full h-full rounded-full object-cover"
           draggable={false}
