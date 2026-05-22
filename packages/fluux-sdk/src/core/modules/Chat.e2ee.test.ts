@@ -1051,6 +1051,20 @@ describe('Chat E2EE wiring', () => {
       expect(captured).toHaveLength(0)
     })
 
+    it('blocks the resend (no plaintext) when a selected plugin throws mid-encrypt', async () => {
+      // resendMessage shares applyE2EEToOutboundChat with sendMessage: a
+      // selected plugin failing mid-encrypt must block the retry, never fall
+      // back to resending the body in cleartext.
+      vi.spyOn(manager, 'encryptOutbound').mockRejectedValue(
+        new E2EEPluginError('permanent', 'pin-mismatch', 'fingerprint changed'),
+      )
+
+      await expect(
+        chat.resendMessage('bob@example.com', 'leaky retry', 'msg-retry-fail'),
+      ).rejects.toBeInstanceOf(E2EEPluginError)
+      expect(captured).toHaveLength(0)
+    })
+
     it('throws when retrying a message whose attachment carries an aesgcm key', async () => {
       const emptyManager = new E2EEManager({
         storage: new InMemoryStorageBackend(),
@@ -1123,6 +1137,20 @@ describe('Chat E2EE wiring', () => {
       await expect(
         strictChat.sendCorrection('bob@example.com', 'orig-id', 'leaky edit'),
       ).rejects.toBeInstanceOf(E2EEEncryptionRequiredError)
+      expect(captured).toHaveLength(0)
+    })
+
+    it('blocks the correction (no plaintext) when a selected plugin throws mid-encrypt', async () => {
+      // sendCorrection shares applyE2EEToOutboundChat: a selected plugin
+      // failing mid-encrypt must block the edit, never push the corrected
+      // body to the server in cleartext.
+      vi.spyOn(manager, 'encryptOutbound').mockRejectedValue(
+        new E2EEPluginError('permanent', 'pin-mismatch', 'fingerprint changed'),
+      )
+
+      await expect(
+        chat.sendCorrection('bob@example.com', 'orig-id', 'leaky edit'),
+      ).rejects.toBeInstanceOf(E2EEPluginError)
       expect(captured).toHaveLength(0)
     })
 
