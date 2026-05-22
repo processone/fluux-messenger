@@ -13,7 +13,7 @@ describe('detectArmorKind', () => {
   })
 
   it('tolerates leading whitespace and BOM', () => {
-    const armored = `﻿\n   \n-----BEGIN PGP PRIVATE KEY BLOCK-----\n\nlQOY...\n-----END PGP PRIVATE KEY BLOCK-----\n`
+    const armored = `\\uFEFF\n   \n-----BEGIN PGP PRIVATE KEY BLOCK-----\n\nlQOY...\n-----END PGP PRIVATE KEY BLOCK-----\n`
     expect(detectArmorKind(armored)).toBe('private-key')
   })
 
