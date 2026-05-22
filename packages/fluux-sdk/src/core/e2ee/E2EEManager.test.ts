@@ -910,6 +910,54 @@ describe('E2EEManager — assertPlaintextPermitted', () => {
   })
 })
 
+describe('assertPlaintextPermitted — sticky established trust', () => {
+  function makeManagerWithPlugin(): { mgr: E2EEManager; plugin: FakePlugin } {
+    const mgr = new E2EEManager({
+      storage: new InMemoryStorageBackend(),
+      xmpp: makeXmpp(),
+      account: { jid: 'me@example.com' },
+    })
+    const plugin = new FakePlugin(strongDescriptor, 'urn:test:strong')
+    return { mgr, plugin }
+  }
+
+  it('blocks plaintext to a tofu-pinned peer in opportunistic mode', async () => {
+    const { mgr, plugin } = makeManagerWithPlugin()
+    await mgr.register(plugin)
+    vi.spyOn(plugin, 'getPeerTrust').mockResolvedValue('tofu')
+    await expect(
+      mgr.assertPlaintextPermitted({ kind: 'direct', peer: 'bob@example.com' }),
+    ).rejects.toBeInstanceOf(E2EEEncryptionRequiredError)
+  })
+
+  it('blocks plaintext to an introduced peer in opportunistic mode', async () => {
+    const { mgr, plugin } = makeManagerWithPlugin()
+    await mgr.register(plugin)
+    vi.spyOn(plugin, 'getPeerTrust').mockResolvedValue('introduced')
+    await expect(
+      mgr.assertPlaintextPermitted({ kind: 'direct', peer: 'bob@example.com' }),
+    ).rejects.toBeInstanceOf(E2EEEncryptionRequiredError)
+  })
+
+  it('permits plaintext to an unknown peer in opportunistic mode', async () => {
+    const { mgr, plugin } = makeManagerWithPlugin()
+    await mgr.register(plugin)
+    vi.spyOn(plugin, 'getPeerTrust').mockResolvedValue('unknown')
+    await expect(
+      mgr.assertPlaintextPermitted({ kind: 'direct', peer: 'bob@example.com' }),
+    ).resolves.toBeUndefined()
+  })
+
+  it('permits plaintext to an untrusted peer in opportunistic mode', async () => {
+    const { mgr, plugin } = makeManagerWithPlugin()
+    await mgr.register(plugin)
+    vi.spyOn(plugin, 'getPeerTrust').mockResolvedValue('untrusted')
+    await expect(
+      mgr.assertPlaintextPermitted({ kind: 'direct', peer: 'bob@example.com' }),
+    ).resolves.toBeUndefined()
+  })
+})
+
 describe('E2EEManager — deferred decrypt support', () => {
   it('hasPlugins returns false when no plugins are registered', () => {
     const mgr = makeManager()

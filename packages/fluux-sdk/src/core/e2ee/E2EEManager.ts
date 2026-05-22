@@ -265,6 +265,31 @@ export class E2EEManager {
   }
 
   /**
+   * True if any registered plugin reports an *established* trust state for
+   * this peer — `verified`, `introduced`, or `tofu`. These all mean "we hold
+   * a pinned key for this peer", so plaintext is an implicit per-peer downgrade
+   * and must be blocked even under the opportunistic global policy. `untrusted`
+   * and `unknown` are excluded: the former is a deliberate not-trusted marker,
+   * the latter means we have never seen a key (legitimate first contact).
+   *
+   * Plugin trust-check errors are treated as not-established (fail-open) so a
+   * transient plugin fault never permanently blocks the send path.
+   */
+  async hasEstablishedTrust(peer: BareJID): Promise<boolean> {
+    for (const plugin of this.plugins.values()) {
+      try {
+        const trust = await plugin.getPeerTrust(peer)
+        if (trust === 'verified' || trust === 'introduced' || trust === 'tofu') {
+          return true
+        }
+      } catch {
+        // Plugin trust check failed — cannot confirm, continue.
+      }
+    }
+    return false
+  }
+
+  /**
    * Assert that sending a plaintext message to `target` is permitted
    * under the current policy.
    *
@@ -275,7 +300,7 @@ export class E2EEManager {
    * Priority order:
    * 1. Forced-plaintext override always passes — explicit user consent.
    * 2. Strict global send policy blocks all plaintext.
-   * 3. A verified direct peer blocks plaintext (implicit per-peer strict).
+   * 3. A direct peer with established trust (verified / introduced / tofu) blocks plaintext (implicit per-peer strict).
    * 4. Opportunistic policy with an unverified peer → allowed.
    */
   async assertPlaintextPermitted(target: ConversationTarget): Promise<void> {
@@ -284,8 +309,8 @@ export class E2EEManager {
       throw new E2EEEncryptionRequiredError(target)
     }
     if (target.kind === 'direct') {
-      const verified = await this.isPeerVerified(target.peer).catch(() => false)
-      if (verified) throw new E2EEEncryptionRequiredError(target)
+      const established = await this.hasEstablishedTrust(target.peer).catch(() => false)
+      if (established) throw new E2EEEncryptionRequiredError(target)
     }
   }
 
