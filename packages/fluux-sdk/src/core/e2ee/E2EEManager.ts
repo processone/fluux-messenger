@@ -245,9 +245,9 @@ export class E2EEManager {
 
   /**
    * Returns true if any registered plugin reports this peer as `'verified'`.
-   * Used by the send path to enforce per-peer strict policy: a peer the user
-   * has verified out-of-band must never silently receive plaintext, even when
-   * the global send policy is `'opportunistic'`.
+   * A narrower predicate than {@link hasEstablishedTrust} (which now owns the
+   * send-path plaintext-block decision); kept as a public query for callers
+   * that specifically need out-of-band-verified status, not TOFU/introduced.
    *
    * Plugin trust-check errors are treated as non-verified (fail-open) so a
    * transient plugin fault never permanently blocks the send path.
@@ -269,7 +269,10 @@ export class E2EEManager {
    * this peer — `verified`, `introduced`, or `tofu`. These all mean "we hold
    * a pinned key for this peer", so plaintext is an implicit per-peer downgrade
    * and must be blocked even under the opportunistic global policy. `untrusted`
-   * and `unknown` are excluded: the former is a deliberate not-trusted marker,
+   * and `unknown` are excluded: the former is a deliberate not-trusted marker
+   * (forward-looking — the current OpenPGP plugin never reports `untrusted` for
+   * peer trust, so key-changed peers do not rely on this exclusion: they still
+   * report `tofu` from the cached old key and encrypt() throws pin-mismatch),
    * the latter means we have never seen a key (legitimate first contact).
    *
    * Plugin trust-check errors are treated as not-established (fail-open) so a
