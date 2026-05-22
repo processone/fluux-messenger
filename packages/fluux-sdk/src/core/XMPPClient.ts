@@ -1722,6 +1722,68 @@ export class XMPPClient {
   }
 
   /**
+   * Re-attempt deferred decrypts AND upgrade stale trust for a specific
+   * peer, triggered when that peer's PEP key material changes.
+   *
+   * Two categories of stored messages are handled:
+   *
+   * 1. Messages with `encryptedPayload` — the peer key was not available
+   *    when the message was first processed, so the signature could not be
+   *    verified. Re-decrypt now that the key may be cached.
+   *
+   * 2. Old messages without `encryptedPayload` but with
+   *    `securityContext.trust === 'untrusted'` and a "not cached" note —
+   *    these were persisted before the payload-stash fix landed. We cannot
+   *    re-verify their signatures (the ciphertext is gone), but the
+   *    decryption + signcrypt envelope validation succeeded, so upgrading
+   *    to `tofu` is a sound pragmatic trade-off.
+   */
+  private async retryPendingDecryptsForPeer(peer: string): Promise<void> {
+    const manager = this.e2ee
+    if (!manager || !manager.hasPlugins()) return
+    if (!this.stores) return
+
+    const chatBindings = this.stores.chat
+    const chatMessages = chatStore.getState().messages
+    const peerMessages = chatMessages.get(peer)
+    if (!peerMessages) return
+
+    let updated = 0
+    for (const msg of peerMessages) {
+      if (msg.encryptedPayload) {
+        const result = await this.retryDecryptSingle(
+          manager, msg.encryptedPayload, msg.from, peer,
+        )
+        if (result) {
+          chatBindings.updateMessage(peer, msg.id, {
+            body: result.body,
+            ...(result.securityContext && { securityContext: result.securityContext }),
+            ...(result.attachment && { attachment: result.attachment }),
+            encryptedPayload: undefined,
+          })
+          updated++
+        }
+        continue
+      }
+      if (
+        msg.securityContext?.trust === 'untrusted' &&
+        msg.securityContext.notes?.some((n) => n.includes('not cached'))
+      ) {
+        chatBindings.updateMessage(peer, msg.id, {
+          securityContext: {
+            protocolId: msg.securityContext.protocolId,
+            trust: 'tofu',
+          },
+        })
+        updated++
+      }
+    }
+    if (updated > 0) {
+      logInfo(`E2EE peer key change: upgraded ${updated} message(s) for ${peer}`)
+    }
+  }
+
+  /**
    * Build the E2EEManager if it doesn't yet exist, or if the previous
    * manager was bound to a different JID. On a plain reconnect/SM-resume
    * for the same identity this is a no-op and existing plugins stay
@@ -1763,6 +1825,14 @@ export class XMPPClient {
     // before the plugin was available.
     this.e2ee.onPluginRegistered((pluginId) => {
       this.emitSDK('e2ee:plugin-registered', { pluginId })
+    })
+    // When a peer's key material changes (PEP notification), re-attempt
+    // deferred decrypts: messages that were decrypted successfully but
+    // with untrusted trust (peer key not cached at decrypt time) can now
+    // have their signature verified and trust upgraded to tofu/verified.
+    // Also upgrade old persisted messages that lack encryptedPayload.
+    this.e2ee.onPeerKeysChanged((peer) => {
+      void this.retryPendingDecryptsForPeer(peer)
     })
   }
 

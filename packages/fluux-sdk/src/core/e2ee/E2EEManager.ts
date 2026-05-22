@@ -86,6 +86,7 @@ export class E2EEManager {
   private readonly securityContextListeners = new Set<SecurityContextUpdateListener>()
   private readonly forcedPlaintextConversations = new Set<string>()
   private pluginRegisteredCallback: ((pluginId: string) => void) | null = null
+  private peerKeysChangedCallback: ((peer: BareJID) => void) | null = null
   // PEP key-change notifications can race plugin registration: the server
   // bursts headline pushes immediately on stream open, but plugins finish
   // their async init (IndexedDB hydration, key unwrap) seconds later. We
@@ -198,6 +199,11 @@ export class E2EEManager {
   /** Set a callback invoked whenever a plugin is registered. */
   onPluginRegistered(cb: (pluginId: string) => void): void {
     this.pluginRegisteredCallback = cb
+  }
+
+  /** Set a callback invoked whenever a peer's key material changes via PEP. */
+  onPeerKeysChanged(cb: (peer: BareJID) => void): void {
+    this.peerKeysChangedCallback = cb
   }
 
   /** Force all outbound sends to this target to skip encryption entirely. Inbound decryption is unaffected. */
@@ -374,11 +380,12 @@ export class E2EEManager {
       } else {
         this.enqueuePendingPeerKeyChange(protocolId, peer)
       }
-      return
+    } else {
+      for (const plugin of this.plugins.values()) {
+        plugin.onPeerKeysChanged?.(peer)
+      }
     }
-    for (const plugin of this.plugins.values()) {
-      plugin.onPeerKeysChanged?.(peer)
-    }
+    this.peerKeysChangedCallback?.(peer)
   }
 
   /**

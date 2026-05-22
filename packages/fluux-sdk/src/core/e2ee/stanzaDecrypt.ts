@@ -221,6 +221,17 @@ export async function decryptStanzaInPlace(
     }
   }
 
+  // Decrypt succeeded but the plugin reported untrusted trust (e.g. peer
+  // key not yet cached so the signature could not be verified). Stash
+  // the encrypted payload so retryPendingDecrypts() can re-verify the
+  // signature once the peer key arrives — same mechanism used for full
+  // decrypt failures, but here the body is already correct.
+  const needsDeferredVerification =
+    failureReason === null && securityContext?.trust === 'untrusted'
+  if (needsDeferredVerification) {
+    stashPayload(stanza, encryptedChildXml)
+  }
+
   if (securityContext) {
     marked[SECURITY_CONTEXT_STASH] = securityContext
   }
@@ -233,7 +244,9 @@ export async function decryptStanzaInPlace(
     attempted: true,
     ...(securityContext && { securityContext }),
     ...(authoredAt && { authoredAt }),
-    ...(failureReason !== null && { encryptedPayloadXml: encryptedChildXml }),
+    ...((failureReason !== null || needsDeferredVerification) && {
+      encryptedPayloadXml: encryptedChildXml,
+    }),
   }
 }
 

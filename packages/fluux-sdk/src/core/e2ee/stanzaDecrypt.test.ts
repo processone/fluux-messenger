@@ -237,7 +237,7 @@ describe('stanzaDecrypt encrypted payload stash on failure', () => {
     expect(readStashedEncryptedPayload(stanza)).toBe(result.encryptedPayloadXml)
   })
 
-  it('does not stash payload on successful decrypt', async () => {
+  it('does not stash payload on successful decrypt with trusted context', async () => {
     const manager = await makeManager(new FakeE2EEPlugin(undefined))
     const stanza = buildStanza()
 
@@ -247,7 +247,53 @@ describe('stanzaDecrypt encrypted payload stash on failure', () => {
     expect(result.encryptedPayloadXml).toBeUndefined()
     expect(readStashedEncryptedPayload(stanza)).toBeUndefined()
   })
+
+  it('stashes payload when decrypt succeeds but trust is untrusted', async () => {
+    const manager = await makeManager(new UntrustedE2EEPlugin())
+    const stanza = buildStanza()
+
+    const result = await decryptStanzaInPlace(stanza, manager, 'peer@example.com')
+
+    expect(result.attempted).toBe(true)
+    // Body should be decrypted
+    const body = stanza.getChild('body')
+    expect(body?.children[0]).toBe('decrypted body')
+    // But encrypted payload should be preserved for later re-verification
+    expect(result.encryptedPayloadXml).toBeDefined()
+    expect(result.encryptedPayloadXml).toContain(TEST_NAMESPACE)
+    expect(readStashedEncryptedPayload(stanza)).toBe(result.encryptedPayloadXml)
+    // Security context should reflect untrusted
+    expect(result.securityContext?.trust).toBe('untrusted')
+  })
 })
+
+// ---------------------------------------------------------------------------
+// Untrusted plugin: decrypt succeeds but reports untrusted trust (e.g. peer
+// key not cached, so signature could not be verified)
+// ---------------------------------------------------------------------------
+
+class UntrustedE2EEPlugin extends FakeE2EEPlugin {
+  constructor() {
+    super(undefined)
+  }
+
+  override async decrypt(
+    _h: ConversationHandle,
+    _payload: EncryptedPayload,
+  ): Promise<DecryptResult> {
+    const securityContext: SecurityContext = {
+      protocolId: TEST_PROTOCOL_ID,
+      trust: 'untrusted',
+      notes: ['Sender key not cached — signature not checked'],
+    }
+    const plaintextXml = serializePayloadEnvelope([xml('body', {}, 'decrypted body')])
+    return {
+      plaintext: new TextEncoder().encode(plaintextXml),
+      senderDevice: { jid: 'peer@example.com', deviceId: 'dev' },
+      securityContext,
+    }
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Deferred decryption: EME-based stash without plugin
