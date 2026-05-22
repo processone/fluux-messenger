@@ -318,6 +318,119 @@ describe('E2EEManager — strategy selection', () => {
     expect(aHook).toHaveBeenCalledWith('bob@example.com')
     expect(bHook).toHaveBeenCalledWith('bob@example.com')
   })
+
+  // Race covered: server bursts PEP key-change pushes immediately on stream
+  // open, but the openpgp plugin only finishes init after IndexedDB hydration
+  // (seconds later). Without queuing, those early pushes are dropped and the
+  // plugin's peer-key cache stays empty until something else probes — which
+  // is exactly what produced "Sender key not cached" on the first message
+  // received after reconnect.
+  describe('pending queue for not-yet-registered plugins', () => {
+    it('drains queued peers when the plugin registers', async () => {
+      const mgr = makeManager()
+      const onChanged = vi.fn()
+      const plugin = new FakePlugin(weakDescriptor, 'urn:test:weak')
+      ;(plugin as E2EEPlugin).onPeerKeysChanged = onChanged
+
+      mgr.notifyPeerKeysChanged('bob@example.com', weakDescriptor.id)
+      mgr.notifyPeerKeysChanged('carol@example.com', weakDescriptor.id)
+      expect(onChanged).not.toHaveBeenCalled()
+
+      await mgr.register(plugin)
+
+      expect(onChanged).toHaveBeenCalledTimes(2)
+      expect(onChanged).toHaveBeenCalledWith('bob@example.com')
+      expect(onChanged).toHaveBeenCalledWith('carol@example.com')
+    })
+
+    it('deduplicates repeated notifications for the same peer', async () => {
+      const mgr = makeManager()
+      const onChanged = vi.fn()
+      const plugin = new FakePlugin(weakDescriptor, 'urn:test:weak')
+      ;(plugin as E2EEPlugin).onPeerKeysChanged = onChanged
+
+      // The server sends one PEP push per replyto resource (XEP-0163 PEP+1),
+      // so a peer with three online resources triggers three identical
+      // notifyPeerKeysChanged calls. The plugin only needs to refetch once.
+      mgr.notifyPeerKeysChanged('bob@example.com', weakDescriptor.id)
+      mgr.notifyPeerKeysChanged('bob@example.com', weakDescriptor.id)
+      mgr.notifyPeerKeysChanged('bob@example.com', weakDescriptor.id)
+      await mgr.register(plugin)
+
+      expect(onChanged).toHaveBeenCalledTimes(1)
+      expect(onChanged).toHaveBeenCalledWith('bob@example.com')
+    })
+
+    it('only drains the queue for the registered plugin id', async () => {
+      const mgr = makeManager()
+      const strong = new FakePlugin(strongDescriptor, 'urn:test:strong')
+      const weak = new FakePlugin(weakDescriptor, 'urn:test:weak')
+      const strongHook = vi.fn()
+      const weakHook = vi.fn()
+      ;(strong as E2EEPlugin).onPeerKeysChanged = strongHook
+      ;(weak as E2EEPlugin).onPeerKeysChanged = weakHook
+
+      mgr.notifyPeerKeysChanged('bob@example.com', strongDescriptor.id)
+      mgr.notifyPeerKeysChanged('carol@example.com', weakDescriptor.id)
+
+      await mgr.register(weak)
+      expect(weakHook).toHaveBeenCalledWith('carol@example.com')
+      expect(strongHook).not.toHaveBeenCalled()
+
+      await mgr.register(strong)
+      expect(strongHook).toHaveBeenCalledWith('bob@example.com')
+    })
+
+    it('does not re-drain on a second register of the same plugin id', async () => {
+      const mgr = makeManager()
+      const onChanged = vi.fn()
+      const plugin = new FakePlugin(weakDescriptor, 'urn:test:weak')
+      ;(plugin as E2EEPlugin).onPeerKeysChanged = onChanged
+
+      mgr.notifyPeerKeysChanged('bob@example.com', weakDescriptor.id)
+      await mgr.register(plugin)
+      expect(onChanged).toHaveBeenCalledTimes(1)
+
+      await mgr.unregister(weakDescriptor.id)
+
+      const replacement = new FakePlugin(weakDescriptor, 'urn:test:weak-2')
+      const replacementHook = vi.fn()
+      ;(replacement as E2EEPlugin).onPeerKeysChanged = replacementHook
+      await mgr.register(replacement)
+
+      // The queue was drained on the first register; the replacement plugin
+      // starts with a clean slate and does NOT replay the old notification.
+      expect(replacementHook).not.toHaveBeenCalled()
+    })
+
+    it('does not queue when no protocolId is given (broadcast path)', async () => {
+      const mgr = makeManager()
+      // Broadcast before any plugin is registered: nothing to fan out to
+      // and nothing to queue (we don't speculate which future plugin ids
+      // a "retract all" applies to).
+      mgr.notifyPeerKeysChanged('bob@example.com')
+
+      const onChanged = vi.fn()
+      const plugin = new FakePlugin(weakDescriptor, 'urn:test:weak')
+      ;(plugin as E2EEPlugin).onPeerKeysChanged = onChanged
+      await mgr.register(plugin)
+
+      expect(onChanged).not.toHaveBeenCalled()
+    })
+
+    it('post-registration notifications still fire synchronously (no queue interference)', async () => {
+      const mgr = makeManager()
+      const onChanged = vi.fn()
+      const plugin = new FakePlugin(weakDescriptor, 'urn:test:weak')
+      ;(plugin as E2EEPlugin).onPeerKeysChanged = onChanged
+      await mgr.register(plugin)
+
+      mgr.notifyPeerKeysChanged('bob@example.com', weakDescriptor.id)
+
+      expect(onChanged).toHaveBeenCalledTimes(1)
+      expect(onChanged).toHaveBeenCalledWith('bob@example.com')
+    })
+  })
 })
 
 describe('E2EEManager — security context updates', () => {

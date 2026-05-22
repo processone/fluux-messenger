@@ -369,7 +369,8 @@ describe('PubSub — openpgp public-keys headline', () => {
     expect(notify).toHaveBeenCalledWith('mrtest@process-one.net', 'openpgp')
   })
 
-  it('is a silent no-op when no E2EE manager is wired', () => {
+  it('is a silent no-op when getE2EEManager is not provided (E2EE disabled)', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const deps = makeDeps(async () => xml('iq', {}))
     const pubsub = new PubSub(deps)
 
@@ -382,6 +383,35 @@ describe('PubSub — openpgp public-keys headline', () => {
     )
 
     expect(() => pubsub.handle(stanza)).not.toThrow()
+    expect(warn).not.toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
+  it('logs a warning when the manager accessor is wired but returns null (race)', () => {
+    // E2EE is supposed to be on for this build (accessor present), but the
+    // manager itself isn't built yet — typically the initial PEP burst on
+    // stream open arriving before XMPPClient finishes setUpE2EEManager().
+    // We can't recover the drop, but it should be visible in the console.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const deps: ModuleDependencies = {
+      ...makeDeps(async () => xml('iq', {})),
+      getE2EEManager: () => null,
+    }
+    const pubsub = new PubSub(deps)
+
+    const stanza = xml('message', { from: 'mrtest@process-one.net/x' },
+      xml('event', { xmlns: 'http://jabber.org/protocol/pubsub#event' },
+        xml('items', { node: 'urn:xmpp:openpgp:0:public-keys' },
+          xml('item', { id: 'current' }),
+        ),
+      ),
+    )
+    pubsub.handle(stanza)
+
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn.mock.calls[0][0]).toMatch(/mrtest@process-one\.net/)
+    expect(warn.mock.calls[0][0]).toMatch(/manager not built/)
+    warn.mockRestore()
   })
 
   it('invalidates on <items><retract/></items> (key removed, not rotated)', () => {

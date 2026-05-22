@@ -86,6 +86,14 @@ export class E2EEManager {
   private readonly securityContextListeners = new Set<SecurityContextUpdateListener>()
   private readonly forcedPlaintextConversations = new Set<string>()
   private pluginRegisteredCallback: ((pluginId: string) => void) | null = null
+  // PEP key-change notifications can race plugin registration: the server
+  // bursts headline pushes immediately on stream open, but plugins finish
+  // their async init (IndexedDB hydration, key unwrap) seconds later. We
+  // queue notifications addressed to a known-but-unregistered plugin id
+  // and drain them in register() so the plugin sees them as soon as it
+  // comes online — otherwise its in-memory peer-key cache stays empty
+  // until something else (encrypt path, conversation open) probes the peer.
+  private readonly pendingPeerKeyChanges = new Map<string, Set<BareJID>>()
 
   constructor(options: E2EEManagerOptions) {
     this.storage = options.storage
@@ -136,7 +144,29 @@ export class E2EEManager {
     await plugin.init(ctx)
     this.plugins.set(id, plugin)
     this.logger.info(`E2EE plugin registered: ${id}`)
+    this.drainPendingPeerKeyChanges(id, plugin)
     this.pluginRegisteredCallback?.(id)
+  }
+
+  /**
+   * Replay any PEP key-change notifications that arrived before this plugin
+   * was registered. Each queued peer triggers a single `onPeerKeysChanged`
+   * call; the plugin re-fetches its keys lazily from there.
+   */
+  private drainPendingPeerKeyChanges(id: string, plugin: E2EEPlugin): void {
+    const pending = this.pendingPeerKeyChanges.get(id)
+    if (!pending || pending.size === 0) return
+    this.pendingPeerKeyChanges.delete(id)
+    this.logger.info(
+      `E2EE plugin ${id}: draining ${pending.size} queued peer key-change(s)`,
+    )
+    for (const peer of pending) {
+      try {
+        plugin.onPeerKeysChanged?.(peer)
+      } catch (err) {
+        this.logger.warn(`E2EE plugin ${id} onPeerKeysChanged(${peer}) threw`, err)
+      }
+    }
   }
 
   /** Shut down and remove a plugin. Safe to call with an unknown id. */
@@ -338,12 +368,38 @@ export class E2EEManager {
   notifyPeerKeysChanged(peer: BareJID, protocolId?: string): void {
     this.invalidateCapability(peer, protocolId)
     if (protocolId) {
-      this.plugins.get(protocolId)?.onPeerKeysChanged?.(peer)
+      const plugin = this.plugins.get(protocolId)
+      if (plugin) {
+        plugin.onPeerKeysChanged?.(peer)
+      } else {
+        this.enqueuePendingPeerKeyChange(protocolId, peer)
+      }
       return
     }
     for (const plugin of this.plugins.values()) {
       plugin.onPeerKeysChanged?.(peer)
     }
+  }
+
+  /**
+   * Buffer a peer key-change notification addressed to a not-yet-registered
+   * plugin id. Drained on the next successful {@link register} for that id.
+   *
+   * We intentionally do not queue when no `protocolId` is given (the
+   * broadcast path is reserved for "peer retracted everything" — it
+   * applies only to plugins already in the registry, not future ones).
+   */
+  private enqueuePendingPeerKeyChange(protocolId: string, peer: BareJID): void {
+    let set = this.pendingPeerKeyChanges.get(protocolId)
+    if (!set) {
+      set = new Set()
+      this.pendingPeerKeyChanges.set(protocolId, set)
+    }
+    if (set.has(peer)) return
+    set.add(peer)
+    this.logger.debug(
+      `E2EE plugin ${protocolId} not yet registered; queued peer key-change for ${peer}`,
+    )
   }
 
   /**

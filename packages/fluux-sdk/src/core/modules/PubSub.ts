@@ -256,12 +256,24 @@ export class PubSub extends BaseModule {
    *
    * Routed through the E2EE manager so we drop the shared capability
    * cache entry *and* the plugin's own positive key cache in one call.
-   * If the manager or the openpgp plugin isn't registered (e.g. E2EE
-   * disabled) this is a no-op — the headline still flows to any
-   * generic subscribers via dispatchToSubscribers.
+   * If the manager itself isn't built yet (a real race during the
+   * initial PEP burst on stream open) we log so the drop is visible —
+   * the plugin-level queue inside E2EEManager catches the more common
+   * "manager up, plugin not yet registered" case automatically. When
+   * `getE2EEManager` itself is not wired (E2EE disabled in this build)
+   * the call is silently skipped — there's nothing to recover.
    */
   private invalidateOpenPgpKeys(bareFrom: string): void {
-    this.deps.getE2EEManager?.()?.notifyPeerKeysChanged(bareFrom, 'openpgp')
+    const accessor = this.deps.getE2EEManager
+    if (!accessor) return
+    const manager = accessor()
+    if (!manager) {
+      console.warn(
+        `[PubSub] OpenPGP key-change from ${bareFrom} dropped: E2EE manager not built yet`,
+      )
+      return
+    }
+    manager.notifyPeerKeysChanged(bareFrom, 'openpgp')
   }
 
   private handleAvatarMetadata(bareFrom: string, items: Element): void {
