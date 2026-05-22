@@ -1679,10 +1679,19 @@ export class XMPPClient {
       const ltx = await import('ltx')
       const encryptedEl = ltx.parse(encryptedPayloadXml) as unknown as Element
 
-      // Build a minimal stanza wrapper for decryptStanzaInPlace
+      // Build a minimal stanza wrapper for decryptStanzaInPlace.
+      // Detect self-outgoing (sent carbon or MAM self-replay): when the
+      // sender's bare JID equals our own, the signcrypt envelope's <to/>
+      // addresses the conversation peer — not us — so the plugin's
+      // reflection check must be inverted via isSelfOutgoing.
+      const ownBareJid = this.currentJid ? getBareJid(this.currentJid) : ''
+      const isSelfOutgoing = ownBareJid !== '' && getBareJid(senderJid) === ownBareJid
       const stanza = xml('message', { from: senderJid }, encryptedEl)
 
-      const result = await decryptStanzaInPlace(stanza, manager, peer, 'archive')
+      const result = await decryptStanzaInPlace(
+        stanza, manager, peer, 'archive',
+        isSelfOutgoing ? { isSelfOutgoing: true } : undefined,
+      )
       if (!result.attempted || result.encryptedPayloadXml) {
         // Still can't decrypt
         return null
