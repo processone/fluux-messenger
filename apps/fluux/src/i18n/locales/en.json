@@ -497,7 +497,11 @@
             },
             "disableEncryption": "Disable encryption for this conversation",
             "enableEncryption": "Re-enable encryption",
-            "attachmentKeyWouldLeak": "Message not sent — the attachment is encrypted but end-to-end encryption is unavailable. Sending would expose the file key.",
+            "sendBlockedEncryptionRequired": "Message not sent — encryption is required for this conversation but isn't available right now.",
+            "sendBlockedKeyChanged": "Message not sent — this contact's encryption key changed. Review the key change before sending.",
+            "sendBlockedKeyLocked": "Message not sent — unlock your encryption key to send this message.",
+            "sendBlockedKeyConflict": "Message not sent — resolve your encryption key conflict before sending.",
+            "sendBlockedGeneric": "Message not sent — encryption failed.",
             "tooltip": {
                 "header": "Encrypted",
                 "protocol": {

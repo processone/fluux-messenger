@@ -498,7 +498,11 @@
             },
             "disableEncryption": "Désactiver le chiffrement pour cette conversation",
             "enableEncryption": "Réactiver le chiffrement",
-            "attachmentKeyWouldLeak": "Message non envoyé — la pièce jointe est chiffrée mais le chiffrement de bout en bout n'est pas disponible. L'envoi exposerait la clé du fichier.",
+            "sendBlockedEncryptionRequired": "Message non envoyé — le chiffrement est requis pour cette conversation mais n'est pas disponible pour le moment.",
+            "sendBlockedKeyChanged": "Message non envoyé — la clé de chiffrement de ce contact a changé. Vérifiez le changement de clé avant d'envoyer.",
+            "sendBlockedKeyLocked": "Message non envoyé — déverrouillez votre clé de chiffrement pour envoyer ce message.",
+            "sendBlockedKeyConflict": "Message non envoyé — résolvez le conflit de votre clé de chiffrement avant d'envoyer.",
+            "sendBlockedGeneric": "Message non envoyé — le chiffrement a échoué.",
             "tooltip": {
                 "header": "Chiffré",
                 "protocol": {
