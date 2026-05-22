@@ -9,8 +9,8 @@ import { TextArea } from './ui/TextInput'
 // Lazy-load emoji picker — keeps ~150KB of emoji data out of the main bundle
 const emojiPickerImport = () => import('./EmojiPicker').then(m => ({ default: m.EmojiPicker }))
 const EmojiPicker = lazy(emojiPickerImport)
-import { E2EEEncryptionRequiredError } from '@fluux/sdk'
 import type { FileAttachment } from '@fluux/sdk'
+import { encryptionSendErrorKey } from '@/e2ee/encryptionSendError'
 import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { useToastStore } from '@/stores/toastStore'
 
@@ -410,8 +410,9 @@ export function MessageComposer({
         }
       }
     } catch (err) {
-      if (err instanceof E2EEEncryptionRequiredError) {
-        addToast('error', t('chat.encryption.attachmentKeyWouldLeak'))
+      const toastKey = encryptionSendErrorKey(err)
+      if (toastKey) {
+        addToast('error', t(toastKey))
       } else {
         console.error('Failed to send message:', err)
       }
