@@ -309,7 +309,10 @@ export class E2EEManager {
       throw new E2EEEncryptionRequiredError(target)
     }
     if (target.kind === 'direct') {
-      const established = await this.hasEstablishedTrust(target.peer).catch(() => false)
+      // No outer catch: hasEstablishedTrust already fails open per plugin, so a
+      // throw here would be an unexpected logic error — fail closed (block)
+      // rather than silently permitting plaintext.
+      const established = await this.hasEstablishedTrust(target.peer)
       if (established) throw new E2EEEncryptionRequiredError(target)
     }
   }
