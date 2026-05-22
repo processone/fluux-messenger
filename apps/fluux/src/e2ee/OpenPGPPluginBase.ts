@@ -1417,7 +1417,11 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const peer = extractPeer(handle)
     const peerBundle = this.peerKeys.get(peer)
     if (!peerBundle) {
-      throw new Error(`${this.pluginName()}: no cached public key for ${peer} — probe first`)
+      throw new E2EEPluginError(
+        'transient',
+        'peer-key-missing',
+        `${this.pluginName()}: no cached public key for ${peer} — probe first`,
+      )
     }
     if (getKeyChangeAlert(peer)) {
       throw new E2EEPluginError(

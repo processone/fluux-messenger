@@ -13,6 +13,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
+  E2EEPluginError,
   InMemoryStorageBackend,
   createPluginStorage,
   parsePayloadEnvelope,
@@ -856,6 +857,30 @@ describe('WebOpenPGPPlugin', () => {
         aliceBundle.publicArmored,
       )
       expect(bobDecrypted.plaintext).toBe('hello bob')
+    })
+  })
+
+  describe('encrypt — missing peer key', () => {
+    it('throws E2EEPluginError with code peer-key-missing when peerKeys has no entry for the peer', async () => {
+      const alice = new TestableWebOpenPGPPlugin()
+      const { ctx } = makeCtx('alice@example.com')
+      setSessionPassphrase('alice-pp')
+      await alice.init(ctx)
+      // Generate alice's own key so requireCtx() and requireUnlocked() pass.
+      await alice.callEnsureKeyMaterial('alice@example.com')
+
+      // Open a conversation with bob WITHOUT probing him first, so peerKeys
+      // has no entry for bob@example.com.
+      const handle = await alice.openConversation({
+        kind: 'direct',
+        peer: 'bob@example.com',
+      })
+      const plaintext = new TextEncoder().encode('<payload/>')
+
+      await expect(alice.encrypt(handle, plaintext)).rejects.toSatisfy(
+        (e: unknown) =>
+          e instanceof E2EEPluginError && e.code === 'peer-key-missing',
+      )
     })
   })
 
