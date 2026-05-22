@@ -289,6 +289,7 @@ describe('Chat E2EE wiring', () => {
     })
 
     it('blocks the send when a selected plugin throws key-locked (transient)', async () => {
+      // Transient failure (e.g. key requires passphrase): same no-plaintext guarantee applies.
       vi.spyOn(manager, 'encryptOutbound').mockRejectedValue(
         new E2EEPluginError('transient', 'key-locked', 'key is locked'),
       )

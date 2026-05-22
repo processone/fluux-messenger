@@ -578,8 +578,9 @@ export class Chat extends BaseModule {
       await manager.assertPlaintextPermitted({ kind: 'direct', peer: recipient })
     } catch (err) {
       if (err instanceof E2EEEncryptionRequiredError) throw err
-      // A plugin was selected (encryptOutbound only reaches encrypt() after
-      // selectStrategy picked one) and encryption failed mid-flight. This is
+      // A plugin was selected (selectStrategy returned non-null) and a
+      // mid-flight failure occurred (openConversation, encrypt, or similar
+      // — all run inside encryptOutbound and surface here). This is
       // NOT a policy question: encryption was expected for this peer, so we
       // must never silently downgrade to plaintext — pin-mismatch, key-locked
       // and own-key-conflict all surface here, and leaking the body at the
