@@ -2,9 +2,14 @@
  * Cross-device synchronisation of peer verification records.
  *
  * Publishes the local `verifiedPeerKeysStore` map to a private PEP node
- * (`urn:xmpp:fluux:verifications:0`, `accessModel='whitelist'`) encrypted
+ * (`urn:xmpp:fluux:verifications:0`, `accessModel='whitelist'`) sign+encrypted
  * to the user's own OpenPGP key. Other devices of the same account receive
  * a PEP headline, fetch the node, decrypt it, and merge the entries.
+ *
+ * Trust hinges on the signature, not the access model: the fetch path discards
+ * any payload not signed by the account's own primary key, so a tampering
+ * server cannot inject forged "verified" entries by encrypting to the user's
+ * (public) key.
  *
  * Crypto is abstracted behind {@link EncryptFn}/{@link DecryptFn} so this
  * module works with both the Sequoia/Tauri backend and the openpgp.js web
@@ -23,11 +28,28 @@ export type EncryptFn = (
   recipientPublicArmored: string,
 ) => Promise<string>
 
-/** Decrypt `ciphertext` (encrypted to us). Returns `{ plaintext }`. */
+/**
+ * Decrypt `ciphertext` (encrypted to us) and report on its signature.
+ *
+ * The signature metadata is mandatory: cross-device sync only trusts a
+ * payload that carries a valid signature from the account's own key, so the
+ * caller must surface whatever the crypto backend reports. Mirrors the
+ * backend `DecryptOutput` shape.
+ */
 export type DecryptFn = (
   ciphertext: string,
   senderPublicArmored: string,
-) => Promise<{ plaintext: string }>
+) => Promise<{
+  plaintext: string
+  signatureVerified: boolean
+  signerFingerprint: string | null
+  signaturePresent: boolean
+}>
+
+/** Case- and whitespace-insensitive fingerprint comparison. */
+function fingerprintsEqual(a: string, b: string): boolean {
+  return a.replace(/\s+/g, '').toLowerCase() === b.replace(/\s+/g, '').toLowerCase()
+}
 
 export const VERIFICATIONS_NODE = 'urn:xmpp:fluux:verifications:0'
 const VERIFICATIONS_XMLNS = VERIFICATIONS_NODE
@@ -109,13 +131,23 @@ export async function publishVerificationsToServer(
 
 /**
  * Fetch the private PEP node, decrypt it, and return the verification map.
- * Returns `null` when the node is absent or decryption fails.
+ *
+ * Downgrade protection: the decrypted payload is only trusted when it carries
+ * a signature that verifies against the account's *own primary key*
+ * (`ownFingerprint`). A malicious server can encrypt an arbitrary map to the
+ * user's public key (it is, after all, public), but it cannot forge a
+ * signature from the user's secret key — so any unsigned, wrong-signed, or
+ * foreign-signed payload is discarded.
+ *
+ * Returns `null` when the node is absent, decryption fails, or the signature
+ * check does not pass.
  */
 export async function fetchVerificationsFromServer(
   ctx: PluginContext,
   decryptFn: DecryptFn,
   ownJid: string,
   ownPublicArmored: string,
+  ownFingerprint: string,
 ): Promise<Record<string, string> | null> {
   let items: { id: string; payload: XMLElementData }[]
   try {
@@ -130,10 +162,21 @@ export async function fetchVerificationsFromServer(
 
   const armored = b64Decode(base64Ciphertext)
 
-  let decrypted: { plaintext: string }
+  let decrypted: Awaited<ReturnType<DecryptFn>>
   try {
     decrypted = await decryptFn(armored, ownPublicArmored)
   } catch {
+    return null
+  }
+
+  // Downgrade protection: only a payload signed by our own primary key is
+  // trusted. Reject unsigned, unverified, or foreign-signed maps — these can
+  // only originate from a tampering server, not from one of our devices.
+  if (
+    !decrypted.signatureVerified ||
+    !decrypted.signerFingerprint ||
+    !fingerprintsEqual(decrypted.signerFingerprint, ownFingerprint)
+  ) {
     return null
   }
 
