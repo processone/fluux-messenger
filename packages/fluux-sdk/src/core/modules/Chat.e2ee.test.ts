@@ -13,6 +13,7 @@ import type { MAM } from './MAM'
 import type { ModuleDependencies } from './BaseModule'
 import {
   E2EEEncryptionRequiredError,
+  E2EEPluginError,
   E2EEManager,
   InMemoryStorageBackend,
   type XMPPPrimitives,
@@ -270,6 +271,31 @@ describe('Chat E2EE wiring', () => {
       ).rejects.toBeInstanceOf(E2EEEncryptionRequiredError)
 
       // Critically: nothing was sent to the wire.
+      expect(captured).toHaveLength(0)
+    })
+
+    it('blocks the send (no plaintext) when a selected plugin throws pin-mismatch', async () => {
+      // A plugin is registered (dummy), so encryptOutbound reaches encrypt().
+      // Simulate the OpenPGP pin-mismatch failure: encryption was expected for
+      // this peer, so the message must NOT fall back to cleartext.
+      vi.spyOn(manager, 'encryptOutbound').mockRejectedValue(
+        new E2EEPluginError('permanent', 'pin-mismatch', 'fingerprint changed'),
+      )
+
+      await expect(chat.sendMessage('bob@example.com', 'secret')).rejects.toBeInstanceOf(
+        E2EEPluginError,
+      )
+      expect(captured).toHaveLength(0)
+    })
+
+    it('blocks the send when a selected plugin throws key-locked (transient)', async () => {
+      vi.spyOn(manager, 'encryptOutbound').mockRejectedValue(
+        new E2EEPluginError('transient', 'key-locked', 'key is locked'),
+      )
+
+      await expect(chat.sendMessage('bob@example.com', 'secret')).rejects.toBeInstanceOf(
+        E2EEPluginError,
+      )
       expect(captured).toHaveLength(0)
     })
 

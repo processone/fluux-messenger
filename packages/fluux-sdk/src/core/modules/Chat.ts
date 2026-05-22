@@ -578,12 +578,18 @@ export class Chat extends BaseModule {
       await manager.assertPlaintextPermitted({ kind: 'direct', peer: recipient })
     } catch (err) {
       if (err instanceof E2EEEncryptionRequiredError) throw err
-      // Plugin was selected but encrypt() threw mid-flight — same policy
-      // check: block unless the user explicitly overrode to plaintext.
-      await manager.assertPlaintextPermitted({ kind: 'direct', peer: recipient })
+      // A plugin was selected (encryptOutbound only reaches encrypt() after
+      // selectStrategy picked one) and encryption failed mid-flight. This is
+      // NOT a policy question: encryption was expected for this peer, so we
+      // must never silently downgrade to plaintext — pin-mismatch, key-locked
+      // and own-key-conflict all surface here, and leaking the body at the
+      // exact moment tampering is suspected is the worst outcome. Re-throw so
+      // the UI can prompt to unlock / verify / resolve. A forced-plaintext
+      // conversation selects no plugin and never reaches this catch.
       logWarn(
-        `E2EE encrypt failed for ${recipient}, sending plaintext: ${err instanceof Error ? err.message : String(err)}`,
+        `E2EE encrypt failed for ${recipient}, blocking plaintext send: ${err instanceof Error ? err.message : String(err)}`,
       )
+      throw err
     }
     return undefined
   }
