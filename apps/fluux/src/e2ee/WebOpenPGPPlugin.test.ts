@@ -13,7 +13,6 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
-  E2EEPluginError,
   InMemoryStorageBackend,
   createPluginStorage,
   parsePayloadEnvelope,
@@ -877,10 +876,10 @@ describe('WebOpenPGPPlugin', () => {
       })
       const plaintext = new TextEncoder().encode('<payload/>')
 
-      await expect(alice.encrypt(handle, plaintext)).rejects.toSatisfy(
-        (e: unknown) =>
-          e instanceof E2EEPluginError && e.code === 'peer-key-missing',
-      )
+      await expect(alice.encrypt(handle, plaintext)).rejects.toMatchObject({
+        code: 'peer-key-missing',
+        kind: 'transient',
+      })
     })
   })
 
