@@ -718,6 +718,20 @@ export class Connection extends BaseModule {
     const serverForInvalidation = this.credentials?.server
     const shouldInvalidateFastToken = !!options.invalidateFastToken
 
+    // Drop the client-side FAST token synchronously, in the same tick the UI
+    // transitions to 'disconnected'. Leaving it behind lets the app's
+    // post-disconnect auto-reconnect path silently re-authenticate after
+    // logout — and on Tauri the LoginScreen webview reload can outrace any
+    // async cleanup. We capture the token first so the (best-effort,
+    // network-bound) server-side invalidation below can still use it.
+    const bareJidForFastToken =
+      shouldInvalidateFastToken && jidForSmCleanup ? getBareJid(jidForSmCleanup) : null
+    const capturedFastToken = bareJidForFastToken ? fetchFastToken(bareJidForFastToken) : null
+    if (bareJidForFastToken) {
+      deleteFastToken(bareJidForFastToken)
+      logDisconnect('FAST token removed from local storage (sync)')
+    }
+
     if (clientToStop) {
       this.xmpp = null
     }
@@ -739,16 +753,18 @@ export class Connection extends BaseModule {
     // SM persistence, room message flush, and XMPP stream close.
     // Safe to run after UI has transitioned.
 
-    // Best-effort FAST token invalidation (XEP-0484 §6). Runs before the
-    // transport is torn down so the short-lived invalidation session can
-    // reach the server while we still have network path established.
-    if (shouldInvalidateFastToken && jidForSmCleanup && serverForInvalidation) {
-      const bareJid = getBareJid(jidForSmCleanup)
-      logDisconnect(`attempting FAST token invalidation for ${bareJid}`)
+    // Best-effort server-side FAST token invalidation (XEP-0484 §6). Runs
+    // before the transport is torn down so the short-lived invalidation
+    // session can reach the server while we still have a network path. The
+    // local token was already deleted synchronously above; we pass the
+    // captured copy so this session can still authenticate to invalidate it.
+    if (bareJidForFastToken && serverForInvalidation && capturedFastToken) {
+      logDisconnect(`attempting FAST token invalidation for ${bareJidForFastToken}`)
       try {
         const result = await invalidateFastTokenOnServer({
-          jid: bareJid,
+          jid: bareJidForFastToken,
           server: serverForInvalidation,
+          token: capturedFastToken,
         })
         if (result.ok) {
           logDisconnect(`FAST token invalidated on server${result.reason ? ` (${result.reason})` : ''}`)
@@ -760,12 +776,6 @@ export class Connection extends BaseModule {
         const message = err instanceof Error ? err.message : String(err)
         logDisconnect(`FAST token invalidation threw (${message})`)
       }
-
-      // Remove the client-side token regardless of server-side outcome.
-      // Leaving it behind lets the app's post-disconnect auto-reconnect path
-      // silently re-authenticate after logout.
-      deleteFastToken(bareJid)
-      logDisconnect('FAST token removed from local storage')
     }
 
     this.smPersistence.clearCache()

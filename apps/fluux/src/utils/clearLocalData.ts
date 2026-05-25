@@ -25,6 +25,24 @@ const USER_DATA_KEYS = [
   'xmpp-has-saved-credentials',
 ]
 
+/**
+ * Drop the credential that enables silent auto-reconnection for one account
+ * (the XEP-0484 FAST token).
+ *
+ * Synchronous and reload-safe by design: the logout flow must run this BEFORE
+ * the Tauri webview reload triggered by LoginScreen (the WRY event-delivery
+ * workaround). That reload resets `useSessionPersistence`'s once-per-startup
+ * guard, so without dropping the token first the post-reload auto-connect path
+ * would silently re-authenticate the user we just logged out.
+ *
+ * Unlike `clearLocalData`, this preserves messages, cache, roster, and the
+ * `xmpp-last-jid` / `xmpp-last-server` login-form prefill.
+ */
+export function clearAutoReconnectCredentials(jid: string | null): void {
+  if (!jid) return
+  deleteFastToken(getBareJid(jid))
+}
+
 interface ClearLocalDataOptions {
   /**
    * When true, clears all local account data.

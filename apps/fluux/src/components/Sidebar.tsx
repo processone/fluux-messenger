@@ -39,7 +39,7 @@ import {
 } from 'lucide-react'
 import { clearSession } from '@/hooks/useSessionPersistence'
 import { deleteCredentials } from '@/utils/keychain'
-import { clearLocalData } from '@/utils/clearLocalData'
+import { clearLocalData, clearAutoReconnectCredentials } from '@/utils/clearLocalData'
 
 // Import extracted sidebar components
 import {
@@ -541,6 +541,13 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
                   // clearLocalData() clears session at the end of cleanup.
                   await clearLocalData().catch(() => {})
                 } else {
+                  // Drop the FAST token synchronously so the post-logout webview
+                  // reload (LoginScreen's WRY workaround) can't trip the
+                  // auto-reconnect path. The SDK's disconnect() also clears it,
+                  // but only after an async server round-trip that the reload
+                  // can outrace. (clearLocalData handles this in the clean path.)
+                  clearAutoReconnectCredentials(jid)
+
                   // Reset connection store so App re-renders and routes to LoginScreen.
                   // (clearLocalData already resets stores in the clean path.)
                   connectionStore.getState().reset()
