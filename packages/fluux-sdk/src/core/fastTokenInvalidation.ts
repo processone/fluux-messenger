@@ -27,6 +27,13 @@ export interface InvalidateFastTokenOptions {
   server: string
   /** Override the default invalidation timeout (ms) */
   timeoutMs?: number
+  /**
+   * Pre-fetched token to use for the invalidation session. When provided,
+   * this function does not read localStorage — letting the caller delete the
+   * client-side token synchronously (e.g. before a webview reload) while still
+   * invalidating it server-side. Falls back to a localStorage lookup when omitted.
+   */
+  token?: FastToken | null
 }
 
 export interface InvalidateFastTokenResult {
@@ -78,7 +85,7 @@ export async function invalidateFastTokenOnServer(
   const { jid, server, timeoutMs = FAST_TOKEN_INVALIDATION_TIMEOUT_MS } = options
 
   const bareJid = getBareJid(jid)
-  const token: FastToken | null = fetchFastToken(bareJid)
+  const token: FastToken | null = options.token ?? fetchFastToken(bareJid)
   if (!token) {
     return { ok: false, reason: 'no-token' }
   }

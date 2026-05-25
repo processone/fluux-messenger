@@ -147,6 +147,24 @@ describe('invalidateFastTokenOnServer', () => {
     expect(mockClientFactory).not.toHaveBeenCalled()
   })
 
+  it('uses a pre-fetched token without reading localStorage', async () => {
+    const inst = createMockInstance()
+    mockClientFactory.mockImplementation(() => inst)
+
+    const p = invalidateFastTokenOnServer({
+      jid: 'alice@example.com',
+      server: 'wss://example.com/ws',
+      token: TOKEN,
+    })
+    await Promise.resolve()
+    inst._emit('online')
+    const result = await p
+
+    expect(result.ok).toBe(true)
+    // The caller already deleted the local copy; we must not depend on it.
+    expect(mockFetchFastToken).not.toHaveBeenCalled()
+  })
+
   it('returns {ok:false, invalid-jid} when JID lacks a localpart', async () => {
     mockFetchFastToken.mockReturnValue(TOKEN)
     const result = await invalidateFastTokenOnServer({

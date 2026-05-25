@@ -457,22 +457,67 @@ describe('XMPPClient Connection', () => {
       mockXmppClientInstance._emit('online')
       await connectPromise
 
+      const fakeToken = {
+        mechanism: 'HT-SHA-256-NONE',
+        token: 'tok',
+        expiry: new Date(Date.now() + 86_400_000).toISOString(),
+      }
       mockInvalidateFastTokenOnServer.mockClear()
       mockInvalidateFastTokenOnServer.mockResolvedValue({ ok: true })
       mockDeleteFastToken.mockClear()
+      mockFetchFastToken.mockReturnValue(fakeToken)
 
       await xmppClient.disconnect({ invalidateFastToken: true })
 
+      // The captured token is threaded through so the server round-trip can
+      // still authenticate to invalidate it, even though the local copy was
+      // already deleted synchronously.
       expect(mockInvalidateFastTokenOnServer).toHaveBeenCalledWith(
         expect.objectContaining({
           jid: 'user@example.com',
           server: expect.stringContaining('example.com'),
+          token: fakeToken,
         })
       )
       // Client-side token must also be removed so auto-reconnect paths
       // cannot silently log the user back in after an explicit logout.
       expect(mockDeleteFastToken).toHaveBeenCalledWith('user@example.com')
       expect(mockStores.connection.setStatus).toHaveBeenCalledWith('disconnected')
+
+      mockFetchFastToken.mockReturnValue(null)
+    })
+
+    it('removes the client-side FAST token synchronously, before the server round-trip settles', async () => {
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      const fakeToken = {
+        mechanism: 'HT-SHA-256-NONE',
+        token: 'tok',
+        expiry: new Date(Date.now() + 86_400_000).toISOString(),
+      }
+      mockDeleteFastToken.mockClear()
+      mockFetchFastToken.mockReturnValue(fakeToken)
+      // Server invalidation that never resolves — simulates a slow/stalled
+      // round-trip (or, on Tauri, the webview reload tearing down the JS
+      // context before it can settle).
+      mockInvalidateFastTokenOnServer.mockReturnValue(new Promise<never>(() => {}))
+
+      // Intentionally not awaited: disconnect() stays pending on the stalled
+      // server call. The local token deletion happens in the synchronous
+      // phase, before that await is reached.
+      void xmppClient.disconnect({ invalidateFastToken: true })
+
+      expect(mockDeleteFastToken).toHaveBeenCalledWith('user@example.com')
+
+      mockFetchFastToken.mockReturnValue(null)
+      mockInvalidateFastTokenOnServer.mockResolvedValue({ ok: true })
     })
 
     it('continues disconnect cleanup when FAST token invalidation fails', async () => {
@@ -485,9 +530,15 @@ describe('XMPPClient Connection', () => {
       mockXmppClientInstance._emit('online')
       await connectPromise
 
+      const fakeToken = {
+        mechanism: 'HT-SHA-256-NONE',
+        token: 'tok',
+        expiry: new Date(Date.now() + 86_400_000).toISOString(),
+      }
       mockInvalidateFastTokenOnServer.mockClear()
       mockInvalidateFastTokenOnServer.mockRejectedValueOnce(new Error('network down'))
       mockDeleteFastToken.mockClear()
+      mockFetchFastToken.mockReturnValue(fakeToken)
 
       await expect(
         xmppClient.disconnect({ invalidateFastToken: true })
@@ -499,6 +550,8 @@ describe('XMPPClient Connection', () => {
       // failed — user intent is clear, and a lingering entry would re-enable
       // auto-reconnect after logout.
       expect(mockDeleteFastToken).toHaveBeenCalledWith('user@example.com')
+
+      mockFetchFastToken.mockReturnValue(null)
     })
 
     it('removes client-side FAST token when server returns not-ok result', async () => {
@@ -511,13 +564,21 @@ describe('XMPPClient Connection', () => {
       mockXmppClientInstance._emit('online')
       await connectPromise
 
+      const fakeToken = {
+        mechanism: 'HT-SHA-256-NONE',
+        token: 'tok',
+        expiry: new Date(Date.now() + 86_400_000).toISOString(),
+      }
       mockInvalidateFastTokenOnServer.mockClear()
       mockInvalidateFastTokenOnServer.mockResolvedValue({ ok: false, reason: 'no-token' })
       mockDeleteFastToken.mockClear()
+      mockFetchFastToken.mockReturnValue(fakeToken)
 
       await xmppClient.disconnect({ invalidateFastToken: true })
 
       expect(mockDeleteFastToken).toHaveBeenCalledWith('user@example.com')
+
+      mockFetchFastToken.mockReturnValue(null)
     })
 
     it('should resolve disconnect even when client.stop never settles', async () => {
