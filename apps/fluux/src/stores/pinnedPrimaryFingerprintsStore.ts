@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { buildScopedStorageKey } from '@fluux/sdk'
 
 /**
  * Per-peer primary-key fingerprint pins — the cryptographic anchor of
@@ -37,13 +38,30 @@ interface PinnedPrimaryFingerprintsState {
   pinnedFingerprintByJid: Record<string, string>
   setPinned: (jid: string, fingerprint: string) => void
   clearPinned: (jid: string) => void
+  rehydrate: () => void
 }
 
-const STORAGE_KEY = 'fluux-e2ee-pinned-primary-fingerprints'
+const STORAGE_KEY_BASE = 'fluux-e2ee-pinned-primary-fingerprints'
 
-function loadInitial(): Record<string, string> {
+function getScopedKey(): string {
+  return buildScopedStorageKey(STORAGE_KEY_BASE)
+}
+
+function loadFromStorage(): Record<string, string> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const scopedKey = getScopedKey()
+    let raw = localStorage.getItem(scopedKey)
+
+    // Migration: if the scoped key has no data, check the old unscoped key.
+    if (!raw && scopedKey !== STORAGE_KEY_BASE) {
+      const legacy = localStorage.getItem(STORAGE_KEY_BASE)
+      if (legacy) {
+        localStorage.setItem(scopedKey, legacy)
+        localStorage.removeItem(STORAGE_KEY_BASE)
+        raw = legacy
+      }
+    }
+
     if (!raw) return {}
     const parsed = JSON.parse(raw) as unknown
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
@@ -61,7 +79,7 @@ function loadInitial(): Record<string, string> {
 
 function persist(map: Record<string, string>): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(map))
+    localStorage.setItem(getScopedKey(), JSON.stringify(map))
   } catch {
     // Best-effort. In-memory state stays consistent for the rest of the
     // session; the pin would auto-restore on next first-cache after a
@@ -71,7 +89,7 @@ function persist(map: Record<string, string>): void {
 
 export const usePinnedPrimaryFingerprintsStore = create<PinnedPrimaryFingerprintsState>(
   (set) => ({
-    pinnedFingerprintByJid: loadInitial(),
+    pinnedFingerprintByJid: loadFromStorage(),
     setPinned: (jid, fingerprint) => {
       set((s) => {
         // No-op if the same fp is being re-pinned — saves a render and
@@ -92,6 +110,7 @@ export const usePinnedPrimaryFingerprintsStore = create<PinnedPrimaryFingerprint
         return { pinnedFingerprintByJid: next }
       })
     },
+    rehydrate: () => set({ pinnedFingerprintByJid: loadFromStorage() }),
   }),
 )
 
@@ -127,4 +146,8 @@ export function setPinnedPrimaryFp(jid: string, fingerprint: string): void {
  */
 export function clearPinnedPrimaryFp(jid: string): void {
   usePinnedPrimaryFingerprintsStore.getState().clearPinned(jid)
+}
+
+export function rehydratePinnedPrimaryFingerprints(): void {
+  usePinnedPrimaryFingerprintsStore.getState().rehydrate()
 }

@@ -25,6 +25,7 @@ import { useAutoUpdate } from './hooks'
 import { useIgnoreSync } from './hooks/useIgnoreSync'
 import { useExternalLinkHandler } from './hooks/useExternalLinkHandler'
 import { usePlatformState } from './hooks/usePlatformState'
+import { useAccountScopeRehydration } from './hooks/useAccountScopeRehydration'
 import { clearLocalData } from './utils/clearLocalData'
 
 // Tauri detection
@@ -71,6 +72,7 @@ function App() {
   // Must stay mounted even during the full-screen auto-reconnect spinner:
   // native keepalive / wake listeners are what unstick reconnect after long sleep.
   usePlatformState()
+  useAccountScopeRehydration()
   const update = useAutoUpdate({ autoCheck: true })
 
   // Listen for --clear-storage CLI flag (Tauri only)

@@ -949,6 +949,7 @@ export class XMPPClient {
       chatStore.getState().switchAccount(scopedJid)
       roomStore.getState().switchAccount(scopedJid)
       activityLogStore.getState().rehydrate()
+      ignoreStore.getState().rehydrate()
     }
 
     // Open the search index DB and backfill from message cache if needed (one-time migration)

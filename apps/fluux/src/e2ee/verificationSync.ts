@@ -34,6 +34,7 @@
  */
 
 import type { PluginContext, XMLElementData } from '@fluux/sdk'
+import { buildScopedStorageKey } from '@fluux/sdk'
 
 /** Encrypt `plaintext` to `recipientPublicArmored`. Returns armored ciphertext. */
 export type EncryptFn = (
@@ -68,7 +69,7 @@ export const VERIFICATIONS_NODE = 'urn:xmpp:fluux:verifications:0'
 const VERIFICATIONS_XMLNS = VERIFICATIONS_NODE
 
 /** localStorage key holding the highest snapshot version applied/published. */
-const VERSION_STORAGE_KEY = 'fluux-e2ee-verifications-version'
+const VERSION_STORAGE_KEY_BASE = 'fluux-e2ee-verifications-version'
 
 interface VerificationPayload {
   v: 2
@@ -141,7 +142,17 @@ function b64Decode(encoded: string): string {
  */
 export function loadAppliedVerificationsVersion(): number {
   try {
-    const raw = localStorage.getItem(VERSION_STORAGE_KEY)
+    const scopedKey = buildScopedStorageKey(VERSION_STORAGE_KEY_BASE)
+    let raw = localStorage.getItem(scopedKey)
+    // Migration: copy from base key if scoped key is empty
+    if (raw === null && scopedKey !== VERSION_STORAGE_KEY_BASE) {
+      const legacy = localStorage.getItem(VERSION_STORAGE_KEY_BASE)
+      if (legacy !== null) {
+        localStorage.setItem(scopedKey, legacy)
+        localStorage.removeItem(VERSION_STORAGE_KEY_BASE)
+        raw = legacy
+      }
+    }
     if (raw === null) return -1
     const n = Number.parseInt(raw, 10)
     return Number.isFinite(n) ? n : -1
@@ -152,7 +163,7 @@ export function loadAppliedVerificationsVersion(): number {
 
 export function saveAppliedVerificationsVersion(version: number): void {
   try {
-    localStorage.setItem(VERSION_STORAGE_KEY, String(version))
+    localStorage.setItem(buildScopedStorageKey(VERSION_STORAGE_KEY_BASE), String(version))
   } catch {
     // Best-effort, mirroring verifiedPeerKeysStore: a failed persist still
     // leaves in-memory state consistent for the rest of the session.

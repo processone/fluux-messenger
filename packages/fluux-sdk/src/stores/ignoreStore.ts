@@ -1,9 +1,14 @@
 import { createStore } from 'zustand/vanilla'
 import { persist } from 'zustand/middleware'
 import { getResource } from '../core/jid'
+import { buildScopedStorageKey } from '../utils/storageScope'
 
-const STORAGE_KEY = 'fluux-ignored-users'
+const STORAGE_KEY_BASE = 'fluux-ignored-users'
 const EMPTY_IGNORED_ARRAY: IgnoredUser[] = []
+
+function getScopedStorageKey(): string {
+  return buildScopedStorageKey(STORAGE_KEY_BASE)
+}
 
 /**
  * An ignored user entry, stored per room.
@@ -40,6 +45,7 @@ interface IgnoreState {
   setIgnoredForRoom: (roomJid: string, users: IgnoredUser[]) => void
   isIgnored: (roomJid: string, identifier: string) => boolean
   getIgnoredForRoom: (roomJid: string) => IgnoredUser[]
+  rehydrate: () => void
   reset: () => void
 }
 
@@ -99,17 +105,57 @@ export const ignoreStore = createStore<IgnoreState>()(
         return get().ignoredUsers[roomJid] ?? EMPTY_IGNORED_ARRAY
       },
 
+      rehydrate: () => {
+        ignoreStore.persist.rehydrate()
+      },
+
       reset: () => {
         set({ ignoredUsers: {} })
         try {
-          localStorage.removeItem(STORAGE_KEY)
+          localStorage.removeItem(getScopedStorageKey())
         } catch {
           // Ignore storage errors
         }
       },
     }),
     {
-      name: STORAGE_KEY,
+      name: STORAGE_KEY_BASE,
+      storage: {
+        getItem: () => {
+          const scopedKey = getScopedStorageKey()
+          try {
+            let str = localStorage.getItem(scopedKey)
+            // Migration: copy from base key if scoped key is empty
+            if (!str && scopedKey !== STORAGE_KEY_BASE) {
+              const legacy = localStorage.getItem(STORAGE_KEY_BASE)
+              if (legacy) {
+                localStorage.setItem(scopedKey, legacy)
+                localStorage.removeItem(STORAGE_KEY_BASE)
+                str = legacy
+              }
+            }
+            if (!str) return null
+            return JSON.parse(str)
+          } catch {
+            localStorage.removeItem(scopedKey)
+            return null
+          }
+        },
+        setItem: (_, value) => {
+          try {
+            localStorage.setItem(getScopedStorageKey(), JSON.stringify(value))
+          } catch {
+            // Storage quota exceeded or other error, continue without persistence
+          }
+        },
+        removeItem: () => {
+          try {
+            localStorage.removeItem(getScopedStorageKey())
+          } catch {
+            // Ignore storage errors
+          }
+        },
+      },
     }
   )
 )

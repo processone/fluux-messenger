@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { buildScopedStorageKey } from '@fluux/sdk'
 
 /**
  * Per-peer fingerprint verifications the user has explicitly confirmed
@@ -28,13 +29,30 @@ interface VerifiedPeerKeysState {
   verifiedFingerprintByJid: Record<string, string>
   setVerified: (jid: string, fingerprint: string) => void
   clearVerified: (jid: string) => void
+  rehydrate: () => void
 }
 
-const STORAGE_KEY = 'fluux-e2ee-verified-peers'
+const STORAGE_KEY_BASE = 'fluux-e2ee-verified-peers'
 
-function loadInitial(): Record<string, string> {
+function getScopedKey(): string {
+  return buildScopedStorageKey(STORAGE_KEY_BASE)
+}
+
+function loadFromStorage(): Record<string, string> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const scopedKey = getScopedKey()
+    let raw = localStorage.getItem(scopedKey)
+
+    // Migration: if the scoped key has no data, check the old unscoped key.
+    if (!raw && scopedKey !== STORAGE_KEY_BASE) {
+      const unscopedRaw = localStorage.getItem(STORAGE_KEY_BASE)
+      if (unscopedRaw) {
+        localStorage.setItem(scopedKey, unscopedRaw)
+        localStorage.removeItem(STORAGE_KEY_BASE)
+        raw = unscopedRaw
+      }
+    }
+
     if (!raw) return {}
     const parsed = JSON.parse(raw) as unknown
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
@@ -55,7 +73,7 @@ function loadInitial(): Record<string, string> {
 
 function persist(map: Record<string, string>): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(map))
+    localStorage.setItem(getScopedKey(), JSON.stringify(map))
   } catch {
     // Best-effort. A failure to persist still leaves in-memory state
     // consistent for the rest of the session; the user just has to
@@ -64,7 +82,7 @@ function persist(map: Record<string, string>): void {
 }
 
 export const useVerifiedPeerKeysStore = create<VerifiedPeerKeysState>((set) => ({
-  verifiedFingerprintByJid: loadInitial(),
+  verifiedFingerprintByJid: loadFromStorage(),
   setVerified: (jid, fingerprint) => {
     set((s) => {
       // Skip the update if the fingerprint we'd write is already what
@@ -85,6 +103,7 @@ export const useVerifiedPeerKeysStore = create<VerifiedPeerKeysState>((set) => (
       return { verifiedFingerprintByJid: next }
     })
   },
+  rehydrate: () => set({ verifiedFingerprintByJid: loadFromStorage() }),
 }))
 
 // ---- Imperative helpers ----------------------------------------------
@@ -130,4 +149,8 @@ export function setPeerVerified(jid: string, fingerprint: string): void {
  */
 export function getVerifiedPeerFingerprint(jid: string): string | null {
   return useVerifiedPeerKeysStore.getState().verifiedFingerprintByJid[jid] ?? null
+}
+
+export function rehydrateVerifiedPeerKeys(): void {
+  useVerifiedPeerKeysStore.getState().rehydrate()
 }

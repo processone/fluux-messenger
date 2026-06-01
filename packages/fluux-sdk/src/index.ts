@@ -113,6 +113,7 @@ export { useSearch } from './hooks/useSearch'
 export type { SearchResult, SearchResultContext, SearchFilterType, InPrefixSuggestion } from './hooks/useSearch'
 export { rebuildSearchIndex, clearSearchIndex, parseSearchQuery } from './utils/searchIndex'
 export type { RebuildProgress, ParsedQuery } from './utils/searchIndex'
+export { buildScopedStorageKey, getStorageScopeJid } from './utils/storageScope'
 
 // Fine-grained metadata subscription hooks (Phase 6)
 export {

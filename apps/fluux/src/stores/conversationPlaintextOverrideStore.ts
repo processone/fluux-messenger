@@ -1,10 +1,25 @@
 import { create } from 'zustand'
+import { buildScopedStorageKey } from '@fluux/sdk'
 
-const STORAGE_KEY = 'fluux-e2ee-plaintext-overrides'
+const STORAGE_KEY_BASE = 'fluux-e2ee-plaintext-overrides'
 
-function loadInitial(): Record<string, true> {
+function getScopedKey(): string {
+  return buildScopedStorageKey(STORAGE_KEY_BASE)
+}
+
+function loadFromStorage(): Record<string, true> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const scopedKey = getScopedKey()
+    let raw = localStorage.getItem(scopedKey)
+    // Migration: copy from base key if scoped key is empty
+    if (!raw && scopedKey !== STORAGE_KEY_BASE) {
+      const oldRaw = localStorage.getItem(STORAGE_KEY_BASE)
+      if (oldRaw) {
+        localStorage.setItem(scopedKey, oldRaw)
+        localStorage.removeItem(STORAGE_KEY_BASE)
+        raw = oldRaw
+      }
+    }
     if (!raw) return {}
     const parsed = JSON.parse(raw) as unknown
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return {}
@@ -20,7 +35,7 @@ function loadInitial(): Record<string, true> {
 
 function persist(jids: Record<string, true>): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(jids))
+    localStorage.setItem(getScopedKey(), JSON.stringify(jids))
   } catch {
     // localStorage unavailable — in-memory state stays consistent.
   }
@@ -30,11 +45,12 @@ interface ConversationPlaintextOverrideState {
   plaintextJids: Record<string, true>
   setForcedPlaintext: (jid: string, forced: boolean) => void
   isForcedPlaintext: (jid: string) => boolean
+  rehydrate: () => void
 }
 
 export const useConversationPlaintextOverrideStore = create<ConversationPlaintextOverrideState>(
   (set, get) => ({
-    plaintextJids: loadInitial(),
+    plaintextJids: loadFromStorage(),
 
     setForcedPlaintext: (jid, forced) => {
       set((s) => {
@@ -47,9 +63,15 @@ export const useConversationPlaintextOverrideStore = create<ConversationPlaintex
     },
 
     isForcedPlaintext: (jid) => jid in get().plaintextJids,
+
+    rehydrate: () => set({ plaintextJids: loadFromStorage() }),
   }),
 )
 
 export function isConversationForcedPlaintext(jid: string): boolean {
   return jid in useConversationPlaintextOverrideStore.getState().plaintextJids
+}
+
+export function rehydratePlaintextOverrides(): void {
+  useConversationPlaintextOverrideStore.getState().rehydrate()
 }
