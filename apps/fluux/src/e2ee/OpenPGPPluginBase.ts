@@ -1109,6 +1109,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       for (const { jid, fingerprint } of plan.toSet) setPeerVerified(jid, fingerprint)
       for (const jid of plan.toClear) clearPeerVerified(jid)
       saveAppliedVerificationsVersion(plan.version)
+      this.scheduleTrustStateSeal()
     } catch {
       // Non-blocking — local store is always the source of truth.
     } finally {
@@ -1136,7 +1137,10 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         verifications,
         nextVersion,
       )
-        .then(() => saveAppliedVerificationsVersion(nextVersion))
+        .then(() => {
+          saveAppliedVerificationsVersion(nextVersion)
+          this.scheduleTrustStateSeal()
+        })
         .catch(() => {})
     }, 500)
   }

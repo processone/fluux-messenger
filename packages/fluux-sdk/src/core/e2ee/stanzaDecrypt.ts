@@ -25,8 +25,36 @@ import type { E2EEManager, SecurityContext } from './index'
 import { isE2EEPluginError } from './errors'
 import type { InboundDecryptContext, InboundSource } from './types'
 import { getBareJid } from '../jid'
-import { logWarn, logInfo } from '../logger'
-import { NS_EME } from '../namespaces'
+import { logWarn, logInfo, logDebug } from '../logger'
+import {
+  NS_EME,
+  NS_OOB,
+  NS_FILE_METADATA,
+  NS_REACTIONS,
+  NS_RETRACT,
+  NS_FASTEN,
+  NS_EASTER_EGG,
+} from '../namespaces'
+
+// Elements permitted inside a decrypted payload envelope. Anything not
+// in this set is dropped to prevent a malicious sender from injecting
+// stanza children (e.g. <delay/>, <origin-id/>) that downstream parsers
+// would trust. The set mirrors the encryption policy in Chat.ts.
+const ALLOWED_PAYLOAD_CHILDREN = new Set([
+  'body',
+  `x\0${NS_OOB}`,
+  `file\0${NS_FILE_METADATA}`,
+  `reactions\0${NS_REACTIONS}`,
+  `retract\0${NS_RETRACT}`,
+  `apply-to\0${NS_FASTEN}`,
+  `easter-egg\0${NS_EASTER_EGG}`,
+])
+
+function isAllowedPayloadChild(child: Element): boolean {
+  if (child.name === 'body') return true
+  const xmlns = child.attrs?.xmlns as string | undefined
+  return xmlns ? ALLOWED_PAYLOAD_CHILDREN.has(`${child.name}\0${xmlns}`) : false
+}
 
 const DECRYPTED_MARKER = '__e2eeDecrypted'
 const SECURITY_CONTEXT_STASH = '__securityContext'
@@ -235,7 +263,11 @@ export async function decryptStanzaInPlace(
         if (idx >= 0) stanza.children.splice(idx, 1)
       }
       for (const child of envelopeChildren) {
-        stanza.children.push(child)
+        if (typeof child === 'string' || isAllowedPayloadChild(child as Element)) {
+          stanza.children.push(child)
+        } else {
+          logDebug(`E2EE: dropped disallowed payload child <${(child as Element).name}> from ${senderPeer}`)
+        }
       }
     } else {
       const bodyEl = stanza.getChild('body')
