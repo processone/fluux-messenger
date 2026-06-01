@@ -726,6 +726,11 @@
             "rotateSuccess": "A titkosítási kulcs lecserélve",
             "rotateFailed": "A kulcsot nem sikerült lecserélni. Próbálja újra.",
             "rotatePluginUnavailable": "Az OpenPGP modul nem érhető el",
+            "trustStateCompromised": {
+                "title": "A bizalmi állapot integritás-ellenőrzése sikertelen",
+                "description": "A helyi bizalmi adatokat esetleg megváltoztatták. A csendes kulcs-újrarögzítés le van tiltva a kulcscsere megakadályozása érdekében.",
+                "reestablishButton": "Újraellenőrzés és folytatás"
+            },
             "ownKeyConflict": {
                 "primaryMismatchTitle": "A közzétett kulcsa megváltozott",
                 "primaryMismatchBody": "A szerver által a fiókjához hirdetett kulcs nem egyezik az ezen az eszközön lévővel. Ez azt jelentheti, hogy a szervert megváltoztatták, vagy egy másik eszköz új kulcsot generált.",

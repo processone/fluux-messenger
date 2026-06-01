@@ -728,6 +728,11 @@
             "rotateSuccess": "Cheie de criptare rotită",
             "rotateFailed": "Cheia nu a putut fi rotită. Încearcă din nou.",
             "rotatePluginUnavailable": "Modulul OpenPGP indisponibil",
+            "trustStateCompromised": {
+                "title": "Verificarea integrității stării de încredere a eșuat",
+                "description": "Datele locale de încredere pot fi fost falsificate. Refixarea silențioasă a cheii este blocată pentru a preveni substituirea cheilor.",
+                "reestablishButton": "Reverifică și continuă"
+            },
             "ownKeyConflict": {
                 "primaryMismatchTitle": "Cheia ta publicată s-a schimbat",
                 "primaryMismatchBody": "Cheia pe care serverul o anunță pentru contul tău nu corespunde cu cea de pe acest dispozitiv. Aceasta ar putea însemna că serverul a fost manipulat, sau că un alt dispozitiv a generat o cheie nouă.",

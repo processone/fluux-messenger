@@ -728,6 +728,11 @@
             "rotateSuccess": "Šifrovací klíč rotován",
             "rotateFailed": "Nepodařilo se rotovat klíč. Zkuste to znovu.",
             "rotatePluginUnavailable": "Modul OpenPGP není k dispozici",
+            "trustStateCompromised": {
+                "title": "Kontrola integrity stavu důvěry selhala",
+                "description": "Místní data důvěry mohla být zmanipulována. Tiché opětovné připnutí klíče je zablokováno, aby se zabránilo záměně klíčů.",
+                "reestablishButton": "Znovu ověřit a pokračovat"
+            },
             "ownKeyConflict": {
                 "primaryMismatchTitle": "Váš publikovaný klíč se změnil",
                 "primaryMismatchBody": "Klíč, který server inzeruje pro váš účet, neodpovídá klíči v tomto zařízení. Může to znamenat, že server byl pozměněn, nebo jiné zařízení vygenerovalo nový klíč.",

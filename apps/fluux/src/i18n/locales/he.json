@@ -726,6 +726,11 @@
             "rotateSuccess": "מפתח ההצפנה הוחלף",
             "rotateFailed": "לא ניתן להחליף את המפתח. נסה שוב.",
             "rotatePluginUnavailable": "מודול OpenPGP אינו זמין",
+            "trustStateCompromised": {
+                "title": "בדיקת שלמות מצב האמון נכשלה",
+                "description": "ייתכן שנתוני האמון המקומיים זויפו. הצמדה מחדש שקטה של מפתח חסומה כדי למנוע החלפת מפתחות.",
+                "reestablishButton": "אמת מחדש והמשך"
+            },
             "ownKeyConflict": {
                 "primaryMismatchTitle": "המפתח המפורסם שלך השתנה",
                 "primaryMismatchBody": "המפתח שהשרת מפרסם עבור חשבונך אינו תואם למפתח שבמכשיר זה. ייתכן שהשרת נפגע, או שמכשיר אחר יצר מפתח חדש.",

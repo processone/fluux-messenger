@@ -728,6 +728,11 @@
             "rotateSuccess": "Clau de xifratge rotada",
             "rotateFailed": "No s'ha pogut rotar la clau. Torneu-ho a provar.",
             "rotatePluginUnavailable": "Mòdul OpenPGP no disponible",
+            "trustStateCompromised": {
+                "title": "La verificació d'integritat de l'estat de confiança ha fallat",
+                "description": "Les dades de confiança locals poden haver estat manipulades. El reassignament silenciós de claus està bloquejat per evitar la substitució de claus.",
+                "reestablishButton": "Reverificar i continuar"
+            },
             "ownKeyConflict": {
                 "primaryMismatchTitle": "La vostra clau publicada ha canviat",
                 "primaryMismatchBody": "La clau que el servidor anuncia per al vostre compte no coincideix amb la d'aquest dispositiu. Això podria significar que el servidor ha estat manipulat, o que un altre dispositiu ha generat una clau nova.",

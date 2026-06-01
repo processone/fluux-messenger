@@ -726,6 +726,11 @@
             "rotateSuccess": "Krypteringsnøkkel rotert",
             "rotateFailed": "Kunne ikke rotere nøkkelen. Prøv igjen.",
             "rotatePluginUnavailable": "OpenPGP-modul ikke tilgjengelig",
+            "trustStateCompromised": {
+                "title": "Integritetssjekk av tillitstilstand mislyktes",
+                "description": "Lokale tillitsdata kan ha blitt manipulert. Stille gjen-festing av nøkkel er blokkert for å forhindre nøkkelbytte.",
+                "reestablishButton": "Verifiser på nytt og fortsett"
+            },
             "ownKeyConflict": {
                 "primaryMismatchTitle": "Den publiserte nøkkelen din har endret seg",
                 "primaryMismatchBody": "Nøkkelen serveren annonserer for kontoen din stemmer ikke overens med den på denne enheten. Dette kan bety at serveren er blitt manipulert, eller at en annen enhet har generert en ny nøkkel.",

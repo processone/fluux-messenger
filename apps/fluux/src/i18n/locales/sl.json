@@ -728,6 +728,11 @@
             "rotateSuccess": "Šifrirni ključ zamenjan",
             "rotateFailed": "Ključa ni bilo mogoče zamenjati. Poskusite znova.",
             "rotatePluginUnavailable": "Modul OpenPGP ni na voljo",
+            "trustStateCompromised": {
+                "title": "Preverjanje celovitosti stanja zaupanja ni uspelo",
+                "description": "Lokalni podatki o zaupanju so bili morda spremenjeni. Tiho ponovno pripenjanje ključa je blokirano, da se prepreči zamenjava ključev.",
+                "reestablishButton": "Ponovno preveri in nadaljuj"
+            },
             "ownKeyConflict": {
                 "primaryMismatchTitle": "Vaš objavljeni ključ se je spremenil",
                 "primaryMismatchBody": "Ključ, ki ga strežnik oglašuje za vaš račun, se ne ujema s ključem na tej napravi. To lahko pomeni, da je bil strežnik nedovoljeno spremenjen, ali pa je druga naprava ustvarila nov ključ.",

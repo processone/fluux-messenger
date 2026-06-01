@@ -726,6 +726,11 @@
             "rotateSuccess": "Salausavain vaihdettu",
             "rotateFailed": "Avaimen vaihto epäonnistui. Yritä uudelleen.",
             "rotatePluginUnavailable": "OpenPGP-moduuli ei saatavilla",
+            "trustStateCompromised": {
+                "title": "Luottamustilan eheyden tarkistus epäonnistui",
+                "description": "Paikallisia luottamustietoja on voitu peukaloida. Hiljainen avaimen uudelleenkiinnitys on estetty avaimen vaihdon estämiseksi.",
+                "reestablishButton": "Vahvista uudelleen ja jatka"
+            },
             "ownKeyConflict": {
                 "primaryMismatchTitle": "Julkaistu avaimesi on muuttunut",
                 "primaryMismatchBody": "Avain, jota palvelin mainostaa tilillesi, ei vastaa tällä laitteella olevaa avainta. Tämä voi tarkoittaa, että palvelimeen on kajottu, tai toinen laite on luonut uuden avaimen.",

@@ -728,6 +728,11 @@
             "rotateSuccess": "Ċ-ċavetta tal-kriptaġġ ġiet irrotata",
             "rotateFailed": "Ma rnexxiex jiġi rrotat iċ-ċavetta. Erġa' pprova.",
             "rotatePluginUnavailable": "Il-modulu OpenPGP mhux disponibbli",
+            "trustStateCompromised": {
+                "title": "Il-verifika tal-integrità tal-istat ta' fiduċja falliet",
+                "description": "Id-data lokali ta' fiduċja setgħet ġiet manipolata. Ir-ripinning silenzjuż taċ-ċavetta huwa mblukkat biex jipprevjeni s-sostituzzjoni taċ-ċavetti.",
+                "reestablishButton": "Erġa' ivverifika u kompli"
+            },
             "ownKeyConflict": {
                 "primaryMismatchTitle": "Il-ċavetta ppubblikata tiegħek inbidlet",
                 "primaryMismatchBody": "Iċ-ċavetta li l-server qed jirrikmanda għall-kont tiegħek ma taqbilx maċ-ċavetta fuq dan l-apparat. Dan jista' jfisser li s-server kien manipolat, jew apparat ieħor ġenera ċavetta ġdida.",

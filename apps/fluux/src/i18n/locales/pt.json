@@ -728,6 +728,11 @@
             "rotateSuccess": "Chave de criptografia rodada",
             "rotateFailed": "Não foi possível rodar a chave. Tente novamente.",
             "rotatePluginUnavailable": "Módulo OpenPGP indisponível",
+            "trustStateCompromised": {
+                "title": "A verificação de integridade do estado de confiança falhou",
+                "description": "Os dados de confiança locais podem ter sido adulterados. A reatribuição silenciosa de chave está bloqueada para impedir a substituição de chaves.",
+                "reestablishButton": "Reverificar e continuar"
+            },
             "ownKeyConflict": {
                 "primaryMismatchTitle": "A sua chave publicada foi alterada",
                 "primaryMismatchBody": "A chave que o servidor anuncia para a sua conta não corresponde à chave neste dispositivo. Isso pode significar que o servidor foi adulterado, ou que outro dispositivo gerou uma nova chave.",

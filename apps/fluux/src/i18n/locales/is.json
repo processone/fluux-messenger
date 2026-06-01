@@ -726,6 +726,11 @@
             "rotateSuccess": "Dulkóðunarlykli skipt",
             "rotateFailed": "Ekki tókst að skipta um lykil. Reyndu aftur.",
             "rotatePluginUnavailable": "OpenPGP-eining ekki tiltæk",
+            "trustStateCompromised": {
+                "title": "Heilleikaskoðun trauststöðu mistókst",
+                "description": "Staðbundin traustagögn kunna að hafa verið breytt. Þögul endurstifting lykils er lokuð til að koma í veg fyrir lykilskipti.",
+                "reestablishButton": "Endurstaðfesta og halda áfram"
+            },
             "ownKeyConflict": {
                 "primaryMismatchTitle": "Birtur lykill þinn hefur breyst",
                 "primaryMismatchBody": "Lykillinn sem þjónninn auglýsir fyrir reikninginn þinn passar ekki við lykilinn á þessum tæki. Þetta gæti þýtt að þjónninn hafi verið áhrif á, eða annað tæki hafi búið til nýjan lykil.",

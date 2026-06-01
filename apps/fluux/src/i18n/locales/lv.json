@@ -727,6 +727,11 @@
             "rotateSuccess": "Šifrēšanas atslēga rotēta",
             "rotateFailed": "Neizdevās rotēt atslēgu. Mēģiniet vēlreiz.",
             "rotatePluginUnavailable": "OpenPGP modulis nav pieejams",
+            "trustStateCompromised": {
+                "title": "Uzticības stāvokļa integritātes pārbaude neizdevās",
+                "description": "Vietējie uzticības dati var būt tikuši sagrozīti. Klusa atslēgas atkārtota piespraušana ir bloķēta, lai novērstu atslēgu aizstāšanu.",
+                "reestablishButton": "Atkārtoti verificēt un turpināt"
+            },
             "ownKeyConflict": {
                 "primaryMismatchTitle": "Jūsu publicētā atslēga ir mainījusies",
                 "primaryMismatchBody": "Atslēga, ko serveris reklamē jūsu kontam, neatbilst atslēgai šajā ierīcē. Tas var nozīmēt, ka serveris ir ticis manipulēts, vai cita ierīce ir ģenerējusi jaunu atslēgu.",

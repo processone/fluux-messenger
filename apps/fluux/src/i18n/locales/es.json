@@ -728,6 +728,11 @@
             "rotateSuccess": "Clave de cifrado rotada",
             "rotateFailed": "No se pudo rotar la clave. Inténtalo de nuevo.",
             "rotatePluginUnavailable": "Módulo OpenPGP no disponible",
+            "trustStateCompromised": {
+                "title": "La verificación de integridad del estado de confianza falló",
+                "description": "Los datos de confianza locales pueden haber sido manipulados. La reasignación silenciosa de claves está bloqueada para evitar la sustitución de claves.",
+                "reestablishButton": "Reverificar y continuar"
+            },
             "ownKeyConflict": {
                 "primaryMismatchTitle": "Tu clave publicada ha cambiado",
                 "primaryMismatchBody": "La clave que el servidor anuncia para tu cuenta no coincide con la de este dispositivo. Esto podría significar que el servidor fue manipulado, o que otro dispositivo generó una clave nueva.",

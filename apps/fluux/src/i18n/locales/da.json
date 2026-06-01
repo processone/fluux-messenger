@@ -726,6 +726,11 @@
             "rotateSuccess": "Krypteringsnøgle roteret",
             "rotateFailed": "Kunne ikke rotere nøglen. Prøv igen.",
             "rotatePluginUnavailable": "OpenPGP-modul ikke tilgængeligt",
+            "trustStateCompromised": {
+                "title": "Integritetskontrol af tillidstilstand mislykkedes",
+                "description": "Lokale tillidsdata kan være blevet manipuleret. Stille gen-fastgørelse af nøgle er blokeret for at forhindre nøgleudskiftning.",
+                "reestablishButton": "Genverificer og fortsæt"
+            },
             "ownKeyConflict": {
                 "primaryMismatchTitle": "Din publicerede nøgle er ændret",
                 "primaryMismatchBody": "Den nøgle, serveren annoncerer for din konto, svarer ikke til den på denne enhed. Det kan betyde, at serveren er blevet manipuleret, eller at en anden enhed har genereret en ny nøgle.",

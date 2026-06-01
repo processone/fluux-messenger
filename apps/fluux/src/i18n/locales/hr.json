@@ -726,6 +726,11 @@
             "rotateSuccess": "Ključ za šifriranje rotiran",
             "rotateFailed": "Ključ se nije mogao rotirati. Pokušajte ponovno.",
             "rotatePluginUnavailable": "OpenPGP modul nije dostupan",
+            "trustStateCompromised": {
+                "title": "Provjera integriteta stanja povjerenja nije uspjela",
+                "description": "Lokalni podaci o povjerenju mogli su biti neovlašteno izmijenjeni. Tiho ponovno pričvršćivanje ključa je blokirano kako bi se spriječila zamjena ključeva.",
+                "reestablishButton": "Ponovno verificiraj i nastavi"
+            },
             "ownKeyConflict": {
                 "primaryMismatchTitle": "Vaš objavljeni ključ je promijenjen",
                 "primaryMismatchBody": "Ključ koji server oglašava za vaš račun ne odgovara ključu na ovom uređaju. To može značiti da je server bio neovlašteno izmijenjen, ili da je drugi uređaj generirao novi ključ.",

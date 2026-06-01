@@ -12,6 +12,7 @@ import { RestorePassphraseDialog } from '@/components/RestorePassphraseDialog'
 import { ExternalKeyExportDialog } from '@/components/ExternalKeyExportDialog'
 import { IdentityChoiceDialog } from '@/components/IdentityChoiceDialog'
 import { OwnKeyConflictBanner } from '@/components/OwnKeyConflictBanner'
+import { TrustStateCompromisedBanner } from '@/components/TrustStateCompromisedBanner'
 import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
 import { KeyPickerDialog } from '@/components/KeyPickerDialog'
 import type { KeyBundle } from '@/e2ee/OpenPGPPluginBase'
@@ -801,6 +802,7 @@ export function EncryptionSettings() {
         {/* Own-key conflict banner — shown above status when init detects a
             mismatch between the local key and what the server advertises */}
         {openpgpEnabled && <OwnKeyConflictBanner />}
+        {openpgpEnabled && <TrustStateCompromisedBanner />}
 
         {/* Web locked banner — shown when key exists but no session passphrase */}
         {webLocked && (

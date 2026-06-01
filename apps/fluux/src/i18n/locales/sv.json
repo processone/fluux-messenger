@@ -726,6 +726,11 @@
             "rotateSuccess": "Krypteringsnyckel roterad",
             "rotateFailed": "Det gick inte att rotera nyckeln. Försök igen.",
             "rotatePluginUnavailable": "OpenPGP-modul ej tillgänglig",
+            "trustStateCompromised": {
+                "title": "Integritetskontroll av förtroendetillstånd misslyckades",
+                "description": "Lokala förtroendedata kan ha manipulerats. Tyst omfästning av nyckel är blockerad för att förhindra nyckelsubstitution.",
+                "reestablishButton": "Verifiera igen och fortsätt"
+            },
             "ownKeyConflict": {
                 "primaryMismatchTitle": "Din publicerade nyckel har ändrats",
                 "primaryMismatchBody": "Nyckeln som servern annonserar för ditt konto matchar inte den på den här enheten. Det kan innebära att servern har manipulerats, eller att en annan enhet genererade en ny nyckel.",

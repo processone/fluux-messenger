@@ -726,6 +726,11 @@
             "rotateSuccess": "Versleutelingssleutel geroteerd",
             "rotateFailed": "Sleutel kon niet worden geroteerd. Probeer opnieuw.",
             "rotatePluginUnavailable": "OpenPGP-module niet beschikbaar",
+            "trustStateCompromised": {
+                "title": "Integriteitscontrole van vertrouwensstatus mislukt",
+                "description": "Lokale vertrouwensgegevens zijn mogelijk gemanipuleerd. Stille herbevestiging van de sleutel is geblokkeerd om sleutelvervanging te voorkomen.",
+                "reestablishButton": "Opnieuw verifiëren en doorgaan"
+            },
             "ownKeyConflict": {
                 "primaryMismatchTitle": "Uw gepubliceerde sleutel is gewijzigd",
                 "primaryMismatchBody": "De sleutel die de server adverteert voor uw account komt niet overeen met de sleutel op dit apparaat. Dit kan betekenen dat de server is gemanipuleerd, of dat een ander apparaat een nieuwe sleutel heeft gegenereerd.",

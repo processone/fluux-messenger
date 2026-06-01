@@ -728,6 +728,11 @@
             "rotateSuccess": "Verschlüsselungsschlüssel rotiert",
             "rotateFailed": "Schlüssel konnte nicht rotiert werden. Versuchen Sie es erneut.",
             "rotatePluginUnavailable": "OpenPGP-Modul nicht verfügbar",
+            "trustStateCompromised": {
+                "title": "Integritätsprüfung des Vertrauensstatus fehlgeschlagen",
+                "description": "Lokale Vertrauensdaten wurden möglicherweise manipuliert. Stilles erneutes Anheften von Schlüsseln ist blockiert, um Schlüsselersetzung zu verhindern.",
+                "reestablishButton": "Erneut verifizieren und fortfahren"
+            },
             "ownKeyConflict": {
                 "primaryMismatchTitle": "Ihr veröffentlichter Schlüssel hat sich geändert",
                 "primaryMismatchBody": "Der Schlüssel, den der Server für Ihr Konto ankündigt, stimmt nicht mit dem auf diesem Gerät überein. Dies könnte bedeuten, dass der Server manipuliert wurde, oder ein anderes Gerät einen neuen Schlüssel generiert hat.",

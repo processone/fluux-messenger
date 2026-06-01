@@ -642,6 +642,11 @@
             "rotateSuccess": "Encryption key rotated",
             "rotateFailed": "Couldn't rotate the key. Try again.",
             "rotatePluginUnavailable": "OpenPGP plugin not available",
+            "trustStateCompromised": {
+                "title": "Trust state integrity check failed",
+                "description": "Local trust data may have been tampered with. Silent key re-pinning is blocked to prevent key substitution.",
+                "reestablishButton": "Re-verify and continue"
+            },
             "ownKeyConflict": {
                 "primaryMismatchTitle": "Your published key has changed",
                 "primaryMismatchBody": "The key the server is advertising for your account doesn't match the one on this device. This could mean the server was tampered with, or another device generated a new key.",

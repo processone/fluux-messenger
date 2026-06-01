@@ -109,6 +109,15 @@ import {
   recordCertRejections,
   type CertRejection,
 } from '@/stores/certRejectionStore'
+import {
+  sealTrustState,
+  verifyTrustStateSeal,
+  isTofuBlockedByCompromise,
+  clearCompromisedAndReseal,
+} from './trustStateIntegrity'
+import { usePinnedPrimaryFingerprintsStore } from '@/stores/pinnedPrimaryFingerprintsStore'
+import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
+import { setTrustStateStatus } from '@/stores/trustStateStatusStore'
 
 // ---------------------------------------------------------------------------
 // XEP-0373 constants
@@ -275,6 +284,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   protected now: () => number = () => Date.now()
 
   private _verificationStoreUnsub: (() => void) | null = null
+  private _trustStoreUnsubs: Array<() => void> = []
+  private _trustStateSealTimeout: ReturnType<typeof setTimeout> | null = null
   private _syncingFromRemoteCount = 0
   private _publishVerificationTimeout: ReturnType<typeof setTimeout> | null = null
 
@@ -468,6 +479,84 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         }
       },
     )
+
+    this._trustStoreUnsubs = [
+      usePinnedPrimaryFingerprintsStore.subscribe(
+        (state, prev) => {
+          if (state.pinnedFingerprintByJid !== prev.pinnedFingerprintByJid) {
+            this.scheduleTrustStateSeal()
+          }
+        },
+      ),
+      useVerifiedPeerKeysStore.subscribe(
+        (state, prev) => {
+          if (state.verifiedFingerprintByJid !== prev.verifiedFingerprintByJid) {
+            this.scheduleTrustStateSeal()
+          }
+        },
+      ),
+      useKeyChangeAlertsStore.subscribe(
+        (state, prev) => {
+          if (state.alertsByJid !== prev.alertsByJid) {
+            this.scheduleTrustStateSeal()
+          }
+        },
+      ),
+    ]
+
+    void this.verifyTrustStateOnInit()
+  }
+
+  private scheduleTrustStateSeal(): void {
+    if (!this.ctx) return
+    if (this._trustStateSealTimeout !== null) clearTimeout(this._trustStateSealTimeout)
+    this._trustStateSealTimeout = setTimeout(() => {
+      this._trustStateSealTimeout = null
+      if (!this.ctx) return
+      void this.sealTrustStateNow()
+    }, 500)
+  }
+
+  private async sealTrustStateNow(): Promise<void> {
+    const ownPublicArmored = this.ownBundle?.publicArmored
+    if (!ownPublicArmored || !this.ctx) return
+    try {
+      const jid = this.ctx.account.jid
+      await sealTrustState(
+        (plaintext, recipientKey) => this.encryptToRecipient(jid, recipientKey, plaintext),
+        ownPublicArmored,
+      )
+      setTrustStateStatus('sealed')
+    } catch {
+      // Best-effort — key may be locked between scheduling and execution
+    }
+  }
+
+  private async verifyTrustStateOnInit(): Promise<void> {
+    const ownPublicArmored = this.ownBundle?.publicArmored
+    const ownFingerprint = this.ownBundle?.fingerprint
+    if (!ownPublicArmored || !ownFingerprint || !this.ctx) return
+    const jid = this.ctx.account.jid
+    const { status, details } = await verifyTrustStateSeal(
+      (ciphertext, senderPub) => this.decryptWithOwnKey(jid, ciphertext, senderPub),
+      ownPublicArmored,
+      ownFingerprint,
+    )
+    if (status === 'pending-seal') {
+      await this.sealTrustStateNow()
+      return
+    }
+    setTrustStateStatus(status, details)
+  }
+
+  async resealTrustState(): Promise<void> {
+    const ownPublicArmored = this.ownBundle?.publicArmored
+    if (!ownPublicArmored || !this.ctx) return
+    const jid = this.ctx.account.jid
+    await clearCompromisedAndReseal(
+      (plaintext, recipientKey) => this.encryptToRecipient(jid, recipientKey, plaintext),
+      ownPublicArmored,
+    )
   }
 
   async shutdown(): Promise<void> {
@@ -475,8 +564,14 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       clearTimeout(this._publishVerificationTimeout)
       this._publishVerificationTimeout = null
     }
+    if (this._trustStateSealTimeout !== null) {
+      clearTimeout(this._trustStateSealTimeout)
+      this._trustStateSealTimeout = null
+    }
     this._verificationStoreUnsub?.()
     this._verificationStoreUnsub = null
+    this._trustStoreUnsubs.forEach((u) => u())
+    this._trustStoreUnsubs = []
     this.ownBundle = null
     this.peerKeys.clear()
     this.pendingVerifications.clear()
@@ -1360,6 +1455,10 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   private cachePeerKey(peer: BareJID, bundle: KeyBundle): void {
     const pinnedFp = getPinnedPrimaryFp(peer)
     if (!pinnedFp) {
+      if (isTofuBlockedByCompromise(peer)) {
+        recordKeyChangeAlert(peer, 'unknown-cleared', bundle.fingerprint)
+        return
+      }
       setPinnedPrimaryFp(peer, bundle.fingerprint)
       this.peerKeys.set(peer, bundle)
       return

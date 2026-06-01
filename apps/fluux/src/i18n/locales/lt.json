@@ -726,6 +726,11 @@
             "rotateSuccess": "Šifravimo raktas pakeistas",
             "rotateFailed": "Nepavyko pakeisti rakto. Bandykite dar kartą.",
             "rotatePluginUnavailable": "OpenPGP modulis nepasiekiamas",
+            "trustStateCompromised": {
+                "title": "Pasitikėjimo būsenos vientisumo patikra nepavyko",
+                "description": "Vietiniai pasitikėjimo duomenys galėjo būti pakeisti. Tylus rakto pakartotinis prisegimas užblokuotas, kad būtų išvengta raktų pakeitimo.",
+                "reestablishButton": "Pakartotinai patikrinti ir tęsti"
+            },
             "ownKeyConflict": {
                 "primaryMismatchTitle": "Jūsų paskelbtas raktas pasikeitė",
                 "primaryMismatchBody": "Raktas, kurį serveris skelbia jūsų paskyrai, neatitinka rakto šiame įrenginyje. Tai gali reikšti, kad serveris buvo sugadintas, arba kitas įrenginys sugeneravo naują raktą.",

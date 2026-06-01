@@ -728,6 +728,11 @@
             "rotateSuccess": "Chiave di cifratura ruotata",
             "rotateFailed": "Impossibile ruotare la chiave. Riprova.",
             "rotatePluginUnavailable": "Modulo OpenPGP non disponibile",
+            "trustStateCompromised": {
+                "title": "Verifica dell'integrità dello stato di fiducia non riuscita",
+                "description": "I dati di fiducia locali potrebbero essere stati manomessi. Il ri-pinning silenzioso della chiave è bloccato per prevenire la sostituzione delle chiavi.",
+                "reestablishButton": "Riverifica e continua"
+            },
             "ownKeyConflict": {
                 "primaryMismatchTitle": "La tua chiave pubblicata è cambiata",
                 "primaryMismatchBody": "La chiave che il server pubblicizza per il tuo account non corrisponde a quella su questo dispositivo. Potrebbe significare che il server è stato manomesso, o che un altro dispositivo ha generato una nuova chiave.",

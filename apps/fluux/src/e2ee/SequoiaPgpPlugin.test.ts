@@ -561,10 +561,12 @@ describe('SequoiaPgpPlugin', () => {
     const alertsStore = await import('@/stores/keyChangeAlertsStore')
     const pinStore = await import('@/stores/pinnedPrimaryFingerprintsStore')
     const ownConflictStore = await import('@/stores/ownKeyConflictStore')
+    const trustStatusStore = await import('@/stores/trustStateStatusStore')
     verifiedStore.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
     alertsStore.useKeyChangeAlertsStore.setState({ alertsByJid: {} })
     pinStore.usePinnedPrimaryFingerprintsStore.setState({ pinnedFingerprintByJid: {} })
     ownConflictStore.useOwnKeyConflictStore.setState({ conflict: null })
+    trustStatusStore.useTrustStateStatusStore.getState().clear()
 
     fake = makeFakeRust()
     plugin = new SequoiaPgpPlugin({ invoke: fake.invoke })

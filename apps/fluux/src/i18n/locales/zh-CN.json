@@ -726,6 +726,11 @@
             "rotateSuccess": "加密密钥已轮换",
             "rotateFailed": "无法轮换密钥，请重试。",
             "rotatePluginUnavailable": "OpenPGP 插件不可用",
+            "trustStateCompromised": {
+                "title": "信任状态完整性检查失败",
+                "description": "本地信任数据可能已被篡改。静默重新固定密钥已被阻止，以防止密钥替换。",
+                "reestablishButton": "重新验证并继续"
+            },
             "ownKeyConflict": {
                 "primaryMismatchTitle": "您发布的密钥已更改",
                 "primaryMismatchBody": "服务器为您的账号发布的密钥与此设备上的密钥不匹配。这可能意味着服务器遭到篡改，或另一台设备已生成新密钥。",

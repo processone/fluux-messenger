@@ -728,6 +728,11 @@
             "rotateSuccess": "Krüpteerimisvõti roteeritud",
             "rotateFailed": "Võtit ei õnnestunud roteerida. Proovige uuesti.",
             "rotatePluginUnavailable": "OpenPGP moodul pole saadaval",
+            "trustStateCompromised": {
+                "title": "Usalduse oleku terviklikkuse kontroll ebaõnnestus",
+                "description": "Kohalikke usaldusandmeid võidi muuta. Vaikne võtme uuesti kinnitamine on blokeeritud võtme asendamise vältimiseks.",
+                "reestablishButton": "Kinnita uuesti ja jätka"
+            },
             "ownKeyConflict": {
                 "primaryMismatchTitle": "Teie avaldatud võti on muutunud",
                 "primaryMismatchBody": "Võti, mida server teie konto jaoks reklaamib, ei ühti sellel seadmel oleva võtmega. See võib tähendada, et serverit on muudetud, või teine seade lõi uue võtme.",

@@ -728,6 +728,11 @@
             "rotateSuccess": "Klucz szyfrowania zmieniony",
             "rotateFailed": "Nie udało się zmienić klucza. Spróbuj ponownie.",
             "rotatePluginUnavailable": "Moduł OpenPGP niedostępny",
+            "trustStateCompromised": {
+                "title": "Sprawdzanie integralności stanu zaufania nie powiodło się",
+                "description": "Lokalne dane zaufania mogły zostać zmanipulowane. Ciche ponowne przypięcie klucza jest zablokowane, aby zapobiec podmianie kluczy.",
+                "reestablishButton": "Zweryfikuj ponownie i kontynuuj"
+            },
             "ownKeyConflict": {
                 "primaryMismatchTitle": "Twój opublikowany klucz uległ zmianie",
                 "primaryMismatchBody": "Klucz reklamowany przez serwer dla Twojego konta nie odpowiada kluczowi na tym urządzeniu. Może to oznaczać, że serwer został zmodyfikowany, lub inne urządzenie wygenerowało nowy klucz.",
