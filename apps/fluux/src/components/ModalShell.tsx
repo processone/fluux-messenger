@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
 import { Tooltip } from './Tooltip'
@@ -21,7 +21,6 @@ export function ModalShell({
   children,
 }: ModalShellProps) {
   const { t } = useTranslation()
-  const mouseDownTargetRef = useRef<EventTarget | null>(null)
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -35,10 +34,15 @@ export function ModalShell({
     <div
       data-modal="true"
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      onMouseDown={(e) => { mouseDownTargetRef.current = e.target }}
-      onClick={(e) => e.target === e.currentTarget && mouseDownTargetRef.current === e.currentTarget && onClose()}
     >
-      <div className={`bg-fluux-sidebar rounded-lg shadow-xl w-full ${width} mx-4 ${panelClassName ?? ''}`}>
+      <button
+        type="button"
+        aria-hidden="true"
+        tabIndex={-1}
+        onClick={onClose}
+        className="absolute inset-0 cursor-default"
+      />
+      <div className={`relative z-10 bg-fluux-sidebar rounded-lg shadow-xl w-full ${width} mx-4 ${panelClassName ?? ''}`}>
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-fluux-hover flex-shrink-0">
           <h2 className="text-lg font-semibold text-fluux-text">{title}</h2>
@@ -48,7 +52,7 @@ export function ModalShell({
               aria-label={t('common.close')}
               className="p-1 text-fluux-muted hover:text-fluux-text rounded hover:bg-fluux-hover"
             >
-              <X className="w-4 h-4" />
+              <X className="size-4" />
             </button>
           </Tooltip>
         </div>

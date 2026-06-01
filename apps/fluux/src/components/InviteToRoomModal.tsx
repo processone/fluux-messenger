@@ -59,7 +59,7 @@ function InviteToRoomModalContent({ onClose, room }: InviteToRoomModalProps) {
 
   const title = (
     <span className="flex items-center gap-2">
-      <UserPlus className="w-5 h-5 text-fluux-brand" />
+      <UserPlus className="size-5 text-fluux-brand" />
       {t('rooms.inviteToRoom')}
     </span>
   )
@@ -120,7 +120,7 @@ function InviteToRoomModalContent({ onClose, room }: InviteToRoomModalProps) {
                      disabled:opacity-50 disabled:cursor-not-allowed
                      flex items-center gap-2"
         >
-          <Send className="rtl-mirror w-4 h-4" />
+          <Send className="rtl-mirror size-4" />
           {t('rooms.sendInvitations', { count: selectedContacts.length })}
         </button>
       </div>

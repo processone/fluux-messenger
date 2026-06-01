@@ -263,13 +263,13 @@ export function ActivityContextView({ onBack }: { onBack?: () => void }) {
             className="p-1 -ms-1 rounded hover:bg-fluux-hover md:hidden"
             aria-label={t('common.back', 'Back')}
           >
-            <ArrowLeft className="w-5 h-5 text-fluux-muted rtl-mirror" />
+            <ArrowLeft className="size-5 text-fluux-muted rtl-mirror" />
           </button>
         )}
 
         {/* Event icon */}
-        <div className="w-9 h-9 bg-fluux-bg rounded-full flex items-center justify-center flex-shrink-0">
-          <Heart className="w-5 h-5 text-fluux-muted" />
+        <div className="size-9 bg-fluux-bg rounded-full flex items-center justify-center flex-shrink-0">
+          <Heart className="size-5 text-fluux-muted" />
         </div>
 
         {/* Conversation info */}
@@ -309,7 +309,7 @@ export function ActivityContextView({ onBack }: { onBack?: () => void }) {
       {/* Bottom banner — event preview indicator with Go to message action */}
       <div className="p-3 border-t border-fluux-hover flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-fluux-muted">
-          <Heart className="w-4 h-4" />
+          <Heart className="size-4" />
           <span className="text-sm">{t('activityLog.previewBanner', 'You are viewing an event preview')}</span>
         </div>
         <button
@@ -317,7 +317,7 @@ export function ActivityContextView({ onBack }: { onBack?: () => void }) {
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md
                      bg-fluux-brand/10 text-fluux-brand hover:bg-fluux-brand/20 transition-colors flex-shrink-0"
         >
-          <ExternalLink className="w-3.5 h-3.5" />
+          <ExternalLink className="size-3.5" />
           {t('search.goToMessage', 'Go to message')}
         </button>
       </div>

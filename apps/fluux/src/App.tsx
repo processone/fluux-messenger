@@ -331,7 +331,7 @@ function App() {
         <TitleBar />
         <div className="flex h-screen items-center justify-center bg-fluux-bg">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-fluux-brand mx-auto mb-4" />
+            <div className="animate-spin rounded-full size-8 border-b-2 border-fluux-brand mx-auto mb-4" />
             <p className="text-fluux-muted">Reconnecting...</p>
           </div>
         </div>

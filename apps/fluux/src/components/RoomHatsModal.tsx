@@ -332,7 +332,7 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
       {/* Search */}
       <div className="px-4 py-2 border-b border-fluux-hover">
         <div className="relative">
-          <Search className="w-4 h-4 absolute start-2.5 top-1/2 -translate-y-1/2 text-fluux-muted" />
+          <Search className="size-4 absolute start-2.5 top-1/2 -translate-y-1/2 text-fluux-muted" />
           <TextInput
             type="text"
             value={search}
@@ -346,7 +346,7 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
               onClick={() => setSearch('')}
               className="absolute end-2 top-1/2 -translate-y-1/2 text-fluux-muted hover:text-fluux-text"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="size-3.5" />
             </button>
           )}
         </div>
@@ -356,7 +356,7 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
       <div className="flex-1 overflow-y-auto min-h-0">
         {isLoadingTab ? (
           <div className="flex items-center justify-center py-8">
-            <Loader2 className="w-5 h-5 animate-spin text-fluux-muted" />
+            <Loader2 className="size-5 animate-spin text-fluux-muted" />
           </div>
         ) : activeTab === 'definitions' ? (
           /* ---- Definitions list ---- */
@@ -382,14 +382,14 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
                     <span className="flex-1 text-xs text-fluux-muted truncate">{hat.uri}</span>
                     {/* Delete */}
                     {isDeleting ? (
-                      <Loader2 className="w-4 h-4 animate-spin text-fluux-muted" />
+                      <Loader2 className="size-4 animate-spin text-fluux-muted" />
                     ) : (
                       <button
                         onClick={() => setConfirmDelete(hat)}
                         className="p-1 text-fluux-muted hover:text-fluux-red transition-colors"
                         title={t('rooms.destroyHat')}
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="size-3.5" />
                       </button>
                     )}
                   </div>
@@ -422,7 +422,7 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
                     </span>
                     {/* Unassign */}
                     {isRemoving ? (
-                      <Loader2 className="w-4 h-4 animate-spin text-fluux-muted" />
+                      <Loader2 className="size-4 animate-spin text-fluux-muted" />
                     ) : (
                       <button
                         onClick={() => void handleUnassign(a)}
@@ -477,9 +477,9 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
                          rounded-lg transition-colors whitespace-nowrap"
             >
               {isCreating ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="size-4 animate-spin" />
               ) : (
-                <Plus className="w-4 h-4" />
+                <Plus className="size-4" />
               )}
               {t('rooms.addHat')}
             </button>
@@ -561,9 +561,9 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
                          rounded-lg transition-colors"
             >
               {isAssigning ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="size-4 animate-spin" />
               ) : (
-                <Plus className="w-4 h-4" />
+                <Plus className="size-4" />
               )}
               {t('rooms.assignHat')}
             </button>

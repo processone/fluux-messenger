@@ -70,7 +70,7 @@ export function ContactActionsMenu({
         aria-expanded={isOpen}
         className="p-2 rounded-lg text-fluux-muted hover:text-fluux-text hover:bg-fluux-hover transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
       >
-        <MoreVertical className="w-5 h-5" />
+        <MoreVertical className="size-5" />
       </button>
 
       {isOpen && (
@@ -86,7 +86,7 @@ export function ContactActionsMenu({
               onClick={onClick}
               className={`w-full flex items-center gap-2 px-3 py-2.5 text-start text-sm transition-colors hover:bg-fluux-active ${danger ? 'text-fluux-red' : 'text-fluux-text'}`}
             >
-              <Icon className="w-4 h-4 flex-shrink-0" />
+              <Icon className="size-4 flex-shrink-0" />
               <span>{label}</span>
             </button>
           ))}

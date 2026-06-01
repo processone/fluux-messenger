@@ -81,6 +81,7 @@ export function ChristmasAnimation({ onComplete, duration = 6000 }: ChristmasAni
 
   return (
     <div
+      aria-hidden="true"
       className={`fixed inset-0 z-50 pointer-events-none overflow-hidden transition-opacity duration-500 bg-slate-900/50 ${
         isVisible ? 'opacity-100' : 'opacity-0'
       }`}

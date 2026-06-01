@@ -183,7 +183,7 @@ export function ArchiveList() {
   if (archivedConversations.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-fluux-muted px-4 text-center">
-        <Archive className="w-12 h-12 mb-3 opacity-50" />
+        <Archive className="size-12 mb-3 opacity-50" />
         <p>{t('archive.noArchivedConversations')}</p>
       </div>
     )
@@ -298,12 +298,12 @@ export const ConversationItem = memo(function ConversationItem({
             <img
               src={room.avatar}
               alt={conversation.name}
-              className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+              className="size-8 rounded-full object-cover flex-shrink-0"
               draggable={false}
             />
           ) : (
             <Hash
-              className="w-8 h-8 flex-shrink-0 p-1.5 rounded-full text-white"
+              className="size-8 flex-shrink-0 p-1.5 rounded-full text-white"
               style={{ backgroundColor: generateConsistentColorHexSync(conversation.id, { saturation: 60, lightness: 45 }) }}
             />
           )
@@ -407,12 +407,12 @@ function ConversationContextMenu({
           <>
             <MenuButton
               onClick={handleUnarchive}
-              icon={<ArchiveRestore className="w-4 h-4" />}
+              icon={<ArchiveRestore className="size-4" />}
               label={t('conversations.unarchive')}
             />
             <MenuButton
               onClick={handleDeleteClick}
-              icon={<Trash2 className="w-4 h-4" />}
+              icon={<Trash2 className="size-4" />}
               label={t('conversations.delete')}
               variant="danger"
             />
@@ -421,12 +421,12 @@ function ConversationContextMenu({
           <>
             <MenuButton
               onClick={handleArchive}
-              icon={<Archive className="w-4 h-4" />}
+              icon={<Archive className="size-4" />}
               label={t('conversations.archive')}
             />
             <MenuButton
               onClick={handleDeleteClick}
-              icon={<Trash2 className="w-4 h-4" />}
+              icon={<Trash2 className="size-4" />}
               label={t('conversations.delete')}
               variant="danger"
             />

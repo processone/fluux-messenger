@@ -57,7 +57,7 @@ export const EncryptedPlaceholder = memo(function EncryptedPlaceholder(
         className="flex items-center gap-2 text-fluux-muted italic hover:text-fluux-text transition-colors cursor-pointer text-start"
         aria-label={t('chat.encryption.encryptedDisabled')}
       >
-        <Lock className="w-3.5 h-3.5 flex-shrink-0 text-fluux-muted" aria-hidden="true" />
+        <Lock className="size-3.5 flex-shrink-0 text-fluux-muted" aria-hidden="true" />
         <span className="underline underline-offset-2 decoration-dotted">
           {t('chat.encryption.encryptedDisabled')}
         </span>
@@ -73,7 +73,7 @@ export const EncryptedPlaceholder = memo(function EncryptedPlaceholder(
         className="flex items-center gap-2 text-fluux-muted italic hover:text-fluux-text transition-colors cursor-pointer text-start"
         aria-label={t('chat.encryption.encryptedClickToUnlock')}
       >
-        <Lock className="w-3.5 h-3.5 flex-shrink-0 text-yellow-500" aria-hidden="true" />
+        <Lock className="size-3.5 flex-shrink-0 text-yellow-500" aria-hidden="true" />
         <span className="underline underline-offset-2 decoration-dotted">
           {t('chat.encryption.encryptedClickToUnlock')}
         </span>
@@ -87,7 +87,7 @@ export const EncryptedPlaceholder = memo(function EncryptedPlaceholder(
       position="top"
       className="flex items-center gap-2 text-fluux-muted italic"
     >
-      <LockOpen className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true" />
+      <LockOpen className="size-3.5 flex-shrink-0" aria-hidden="true" />
       <span>{t('chat.encryption.encryptedCouldNotDecrypt')}</span>
     </Tooltip>
   )

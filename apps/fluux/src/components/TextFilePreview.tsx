@@ -33,7 +33,7 @@ export function TextFilePreview({ attachment, isSelected = false, isHovered = fa
       <div className="rounded-t-lg bg-fluux-bg/60 border border-fluux-border border-b-0 overflow-hidden">
         {isLoading ? (
           <div className="flex items-center justify-center p-4 text-fluux-muted">
-            <Loader2 className="w-4 h-4 animate-spin me-2" />
+            <Loader2 className="size-4 animate-spin me-2" />
             <span className="text-sm">{t('chat.loadingPreview')}</span>
           </div>
         ) : error ? (
@@ -67,8 +67,8 @@ export function TextFilePreview({ attachment, isSelected = false, isHovered = fa
         rel="noopener noreferrer"
         className="flex items-center gap-3 p-3 rounded-b-lg bg-fluux-hover/60 hover:bg-fluux-bg/60 border border-fluux-border transition-colors group/file"
       >
-        <div className="w-8 h-8 rounded-lg bg-fluux-muted/20 flex items-center justify-center flex-shrink-0">
-          <FileText className="w-4 h-4 text-fluux-muted" />
+        <div className="size-8 rounded-lg bg-fluux-muted/20 flex items-center justify-center flex-shrink-0">
+          <FileText className="size-4 text-fluux-muted" />
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-fluux-text truncate">
@@ -80,7 +80,7 @@ export function TextFilePreview({ attachment, isSelected = false, isHovered = fa
             {isTruncated && ` • ${t('chat.truncated')}`}
           </p>
         </div>
-        <Download className="w-4 h-4 text-fluux-muted opacity-0 group-hover/file:opacity-100 transition-opacity flex-shrink-0" />
+        <Download className="size-4 text-fluux-muted opacity-0 group-hover/file:opacity-100 transition-opacity flex-shrink-0" />
       </a>
     </div>
   )

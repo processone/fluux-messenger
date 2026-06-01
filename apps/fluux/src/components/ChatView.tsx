@@ -313,7 +313,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
       {isDragging && (
         <div className="absolute inset-0 z-50 bg-fluux-bg/95 backdrop-blur-sm flex items-center justify-center pointer-events-none">
           <div className="flex flex-col items-center gap-4 p-8 border-2 border-dashed border-fluux-brand rounded-xl bg-fluux-bg/50">
-            <Upload className="w-12 h-12 text-fluux-brand" />
+            <Upload className="size-12 text-fluux-brand" />
             <p className="text-lg font-medium text-fluux-text">{t('upload.dropToUpload')}</p>
           </div>
         </div>
@@ -667,7 +667,7 @@ const ChatMessageList = memo(function ChatMessageList({
       loadingState={
         <div className="flex-1 flex items-center justify-center text-fluux-muted">
           <div className="flex items-center gap-2">
-            <Loader2 className="w-5 h-5 animate-spin" />
+            <Loader2 className="size-5 animate-spin" />
             <span>{t('chat.loadingMessages')}</span>
           </div>
         </div>

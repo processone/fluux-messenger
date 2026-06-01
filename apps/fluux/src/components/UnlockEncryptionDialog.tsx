@@ -22,7 +22,6 @@ interface UnlockEncryptionDialogProps {
  */
 export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDialogProps) {
   const { t } = useTranslation()
-  const mouseDownTargetRef = useRef<EventTarget | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
 
   const [passphrase, setPassphrase] = useState('')
@@ -114,17 +113,16 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
       aria-describedby="unlock-encryption-dialog-body"
       aria-busy={loading || isWorking || undefined}
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      onMouseDown={(e) => {
-        mouseDownTargetRef.current = e.target
-      }}
-      onClick={(e) => {
-        if (isWorking) return
-        if (e.target === e.currentTarget && mouseDownTargetRef.current === e.currentTarget) {
-          onClose(false)
-        }
-      }}
     >
-      <div className="bg-fluux-sidebar rounded-lg max-w-md w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
+      <button
+        type="button"
+        aria-hidden="true"
+        tabIndex={-1}
+        disabled={isWorking}
+        onClick={() => onClose(false)}
+        className="absolute inset-0 cursor-default"
+      />
+      <div className="relative z-10 bg-fluux-sidebar rounded-lg max-w-md w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
         <form
           onSubmit={(e) => { e.preventDefault(); void handleConfirm() }}
           className="contents"
@@ -197,7 +195,7 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
             disabled={!passphrase.trim() || isWorking || loading}
             className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-fluux-brand hover:opacity-90 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isWorking && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            {isWorking && <Loader2 className="size-3.5 animate-spin" />}
             {loading ? '    ' : confirmLabel}
           </button>
         </div>

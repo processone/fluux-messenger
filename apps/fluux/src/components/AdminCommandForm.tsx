@@ -92,7 +92,7 @@ export function AdminCommandForm({
       {/* Target user display (when pre-filled) */}
       {targetJid && (
         <div className="flex items-center gap-2 p-3 rounded-lg bg-fluux-bg border border-fluux-hover mb-4">
-          <User className="w-5 h-5 text-fluux-muted flex-shrink-0" />
+          <User className="size-5 text-fluux-muted flex-shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-xs text-fluux-muted">{t('admin.targetUser')}</p>
             <p className="text-sm text-fluux-text font-medium truncate">{targetJid}</p>
@@ -105,7 +105,7 @@ export function AdminCommandForm({
                 className="p-1 text-fluux-muted hover:text-fluux-text rounded transition-colors"
                 aria-label={t('admin.changeUser')}
               >
-                <X className="w-4 h-4" />
+                <X className="size-4" />
               </button>
             </Tooltip>
           )}
@@ -175,7 +175,7 @@ function NoteDisplay({ note }: { note: { type: 'info' | 'warn' | 'error'; text: 
 
   return (
     <div className={`flex items-start gap-2 p-3 rounded-lg border mb-4 ${styles[note.type]}`}>
-      <Icon className="w-5 h-5 flex-shrink-0 mt-0.5" />
+      <Icon className="size-5 flex-shrink-0 mt-0.5" />
       <p className="text-sm">{note.text}</p>
     </div>
   )

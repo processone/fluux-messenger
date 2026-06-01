@@ -181,7 +181,7 @@ export const MessageToolbar = memo(function MessageToolbar({
           className={`p-1.5 transition-colors ${showReactionPicker || showMoreMenu ? '' : 'hover:bg-fluux-hover'}`}
           aria-label={t('chat.moreReactions')}
         >
-          <SmilePlus className="w-4 h-4 text-fluux-muted" />
+          <SmilePlus className="size-4 text-fluux-muted" />
         </button>
 
         {/* Full emoji picker for reactions */}
@@ -206,7 +206,7 @@ export const MessageToolbar = memo(function MessageToolbar({
             className={`p-1.5 transition-colors ${showReactionPicker || showMoreMenu ? '' : 'hover:bg-fluux-hover'}`}
             aria-label={t('chat.reply')}
           >
-            <Reply className="rtl-mirror w-4 h-4 text-fluux-muted" />
+            <Reply className="rtl-mirror size-4 text-fluux-muted" />
           </button>
         </Tooltip>
       )}
@@ -219,7 +219,7 @@ export const MessageToolbar = memo(function MessageToolbar({
             className={`p-1.5 transition-colors ${showReactionPicker || showMoreMenu ? '' : 'hover:bg-fluux-hover'}`}
             aria-label={t('chat.editMessage')}
           >
-            <Pencil className="w-4 h-4 text-fluux-muted" />
+            <Pencil className="size-4 text-fluux-muted" />
           </button>
         </Tooltip>
       )}
@@ -231,7 +231,7 @@ export const MessageToolbar = memo(function MessageToolbar({
           aria-label={t('chat.forwardMessage')}
           disabled
         >
-          <Forward className="rtl-mirror w-4 h-4 text-fluux-muted" />
+          <Forward className="rtl-mirror size-4 text-fluux-muted" />
         </button>
       </Tooltip>
 
@@ -252,7 +252,7 @@ export const MessageToolbar = memo(function MessageToolbar({
             aria-label={t('chat.moreOptions')}
             disabled={!canDelete}
           >
-            <MoreHorizontal className="w-4 h-4 text-fluux-muted" />
+            <MoreHorizontal className="size-4 text-fluux-muted" />
           </button>
         </Tooltip>
 
@@ -263,7 +263,7 @@ export const MessageToolbar = memo(function MessageToolbar({
               onClick={handleDelete}
               className="w-full px-3 py-2 text-sm text-start text-red-500 hover:bg-fluux-hover transition-colors flex items-center gap-2"
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="size-4" />
               {t('chat.deleteMessage')}
             </button>
           </div>

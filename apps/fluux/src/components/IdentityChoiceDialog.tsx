@@ -46,7 +46,6 @@ export function IdentityChoiceDialog({
   onCancel,
 }: IdentityChoiceDialogProps) {
   const { t } = useTranslation()
-  const mouseDownTargetRef = useRef<EventTarget | null>(null)
   const passphraseInputRef = useRef<HTMLInputElement | null>(null)
 
   const [phase, setPhase] = useState<Phase>('choose')
@@ -129,17 +128,16 @@ export function IdentityChoiceDialog({
     <div
       data-modal="true"
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      onMouseDown={(e) => {
-        mouseDownTargetRef.current = e.target
-      }}
-      onClick={(e) => {
-        if (isBusy) return
-        if (e.target === e.currentTarget && mouseDownTargetRef.current === e.currentTarget) {
-          onCancel()
-        }
-      }}
     >
-      <div className="bg-fluux-sidebar rounded-lg max-w-lg w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
+      <button
+        type="button"
+        aria-hidden="true"
+        tabIndex={-1}
+        disabled={isBusy}
+        onClick={onCancel}
+        className="absolute inset-0 cursor-default"
+      />
+      <div className="relative z-10 bg-fluux-sidebar rounded-lg max-w-lg w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
         <div className="px-5 pt-5 pb-3">
           <h3 className="text-lg font-semibold text-fluux-text mb-1">
             {t('settings.encryption.identityChoice.title')}
@@ -166,7 +164,7 @@ export function IdentityChoiceDialog({
           {phase === 'choose' && (
             <div className="flex flex-col gap-2 mb-4">
               <ChoiceButton
-                icon={<Server className="w-4 h-4" />}
+                icon={<Server className="size-4" />}
                 title={t('settings.encryption.identityChoice.restoreFromServerTitle')}
                 description={t(
                   hasServerBackup
@@ -177,13 +175,13 @@ export function IdentityChoiceDialog({
                 onClick={handleStartRestore}
               />
               <ChoiceButton
-                icon={<FileUp className="w-4 h-4" />}
+                icon={<FileUp className="size-4" />}
                 title={t('settings.encryption.identityChoice.importFromFileTitle')}
                 description={t('settings.encryption.identityChoice.importFromFileBody')}
                 onClick={handleImportFile}
               />
               <ChoiceButton
-                icon={<RotateCcw className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />}
+                icon={<RotateCcw className="size-4 text-yellow-600 dark:text-yellow-400" />}
                 title={t('settings.encryption.identityChoice.replaceTitle')}
                 description={t('settings.encryption.identityChoice.replaceBody')}
                 onClick={handleStartReplace}
@@ -218,7 +216,7 @@ export function IdentityChoiceDialog({
 
           {phase === 'confirm-replace' && (
             <div className="flex gap-2 p-3 mb-4 rounded-lg bg-yellow-500/10 text-xs text-fluux-muted leading-snug">
-              <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+              <AlertTriangle className="size-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
               <p className="font-medium text-fluux-text">
                 {t('settings.encryption.identityChoice.replaceWarning')}
               </p>
@@ -227,7 +225,7 @@ export function IdentityChoiceDialog({
 
           {(phase === 'importing' || phase === 'replacing') && (
             <div className="flex items-center justify-center py-6 text-sm text-fluux-muted gap-2">
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="size-4 animate-spin" />
               {phase === 'importing'
                 ? t('settings.encryption.identityChoice.importingProgress')
                 : t('settings.encryption.identityChoice.replacingProgress')}

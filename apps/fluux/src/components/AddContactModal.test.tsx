@@ -262,8 +262,8 @@ describe('AddContactModal', () => {
 
       // The backdrop is the outermost div with the click handler
       const backdrop = screen.getByRole('heading', { name: 'contacts.addContact' }).closest('.fixed')!
-      fireEvent.mouseDown(backdrop)
-      fireEvent.click(backdrop)
+      // The dismiss affordance is now a full-overlay backdrop <button> (first child)
+      fireEvent.click(backdrop.querySelector('button')!)
 
       expect(mockOnClose).toHaveBeenCalled()
     })

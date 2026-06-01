@@ -6,12 +6,12 @@ import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS } from '@/constants/ui'
  * Avatar sizes and their corresponding Tailwind classes
  */
 const SIZES = {
-  xs: { container: 'w-6 h-6', text: 'text-xs', presence: 'w-2 h-2 -bottom-0 -end-0' },
-  sm: { container: 'w-8 h-8', text: 'text-sm', presence: 'w-3 h-3 -bottom-0.5 -end-0.5' },
-  header: { container: 'w-9 h-9', text: 'text-base', presence: 'w-3 h-3 -bottom-0.5 -end-0.5' },
-  md: { container: 'w-10 h-10', text: 'text-base', presence: 'w-3.5 h-3.5 -bottom-0.5 -end-0.5' },
-  lg: { container: 'w-12 h-12', text: 'text-lg', presence: 'w-4 h-4 -bottom-0.5 -end-0.5' },
-  xl: { container: 'w-24 h-24', text: 'text-3xl', presence: 'w-5 h-5 bottom-0 end-0' },
+  xs: { container: 'size-6', text: 'text-xs', presence: 'size-2 -bottom-0 -end-0' },
+  sm: { container: 'size-8', text: 'text-sm', presence: 'size-3 -bottom-0.5 -end-0.5' },
+  header: { container: 'size-9', text: 'text-base', presence: 'size-3 -bottom-0.5 -end-0.5' },
+  md: { container: 'size-10', text: 'text-base', presence: 'size-3.5 -bottom-0.5 -end-0.5' },
+  lg: { container: 'size-12', text: 'text-lg', presence: 'size-4 -bottom-0.5 -end-0.5' },
+  xl: { container: 'size-24', text: 'text-3xl', presence: 'size-5 bottom-0 end-0' },
 } as const
 
 export type AvatarSize = keyof typeof SIZES
@@ -287,7 +287,19 @@ export function Avatar({
   return (
     <div
       className={containerClasses}
-      onClick={onClick}
+      {...(isClickable
+        ? {
+            role: 'button' as const,
+            tabIndex: 0,
+            onClick,
+            onKeyDown: (e: import('react').KeyboardEvent) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onClick?.()
+              }
+            },
+          }
+        : {})}
       onMouseEnter={staticFrame ? () => setHovered(true) : undefined}
       onMouseLeave={staticFrame ? () => setHovered(false) : undefined}
     >
@@ -347,9 +359,9 @@ export function useContactAvatarProps(contact: {
 export function TypingIndicator() {
   return (
     <div className="absolute -bottom-0.5 -end-0.5 w-5 h-3.5 bg-fluux-bg rounded-full border-2 border-fluux-sidebar flex items-center justify-center gap-0.5">
-      <span className="w-1 h-1 bg-fluux-muted rounded-full animate-typing-dot-1" />
-      <span className="w-1 h-1 bg-fluux-muted rounded-full animate-typing-dot-2" />
-      <span className="w-1 h-1 bg-fluux-muted rounded-full animate-typing-dot-3" />
+      <span className="size-1 bg-fluux-muted rounded-full animate-typing-dot-1" />
+      <span className="size-1 bg-fluux-muted rounded-full animate-typing-dot-2" />
+      <span className="size-1 bg-fluux-muted rounded-full animate-typing-dot-3" />
     </div>
   )
 }

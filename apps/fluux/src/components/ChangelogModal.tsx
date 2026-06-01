@@ -30,7 +30,7 @@ export function ChangelogModal({ onClose }: ChangelogModalProps) {
 
   const title = (
     <span className="flex items-center gap-2">
-      <Sparkles className="w-5 h-5 text-fluux-brand" />
+      <Sparkles className="size-5 text-fluux-brand" />
       {t('changelog.title')}
     </span>
   )

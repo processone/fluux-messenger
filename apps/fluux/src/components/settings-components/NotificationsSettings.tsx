@@ -127,13 +127,13 @@ export function NotificationsSettings() {
         <div className="flex items-center justify-between p-4 rounded-lg border-2 border-fluux-hover bg-fluux-bg">
           <div className="flex items-center gap-3">
             {notificationStatus === 'granted' ? (
-              <Bell className="w-5 h-5 text-green-500" />
+              <Bell className="size-5 text-green-500" />
             ) : notificationStatus === 'denied' ? (
-              <BellOff className="w-5 h-5 text-red-500" />
+              <BellOff className="size-5 text-red-500" />
             ) : notificationStatus === 'unavailable' ? (
-              <BellOff className="w-5 h-5 text-fluux-muted" />
+              <BellOff className="size-5 text-fluux-muted" />
             ) : (
-              <Bell className="w-5 h-5 text-fluux-muted animate-pulse" />
+              <Bell className="size-5 text-fluux-muted animate-pulse" />
             )}
             <div>
               <p className="text-sm font-medium text-fluux-text">
@@ -156,7 +156,7 @@ export function NotificationsSettings() {
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand hover:text-fluux-text
                          bg-fluux-brand/10 hover:bg-fluux-brand/20 rounded-md transition-colors"
             >
-              <Bell className="w-4 h-4" />
+              <Bell className="size-4" />
               {t('settings.requestPermission')}
             </button>
           )}
@@ -168,7 +168,7 @@ export function NotificationsSettings() {
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand hover:text-fluux-text
                          bg-fluux-brand/10 hover:bg-fluux-brand/20 rounded-md transition-colors"
             >
-              <ExternalLink className="w-4 h-4" />
+              <ExternalLink className="size-4" />
               {t('settings.openSettings')}
             </button>
           )}
@@ -182,7 +182,7 @@ export function NotificationsSettings() {
         {isWebPushSupported && isConnected && (
           <div className="flex items-center justify-between p-4 rounded-lg border-2 border-fluux-hover bg-fluux-bg">
             <div className="flex items-center gap-3">
-              <Send className={`w-5 h-5 ${
+              <Send className={`size-5 ${
                 webPushStatus === 'registered' ? 'text-green-500'
                   : webPushStatus === 'disabled' ? 'text-red-500'
                   : webPushStatus === 'available' ? 'text-yellow-500'
@@ -204,7 +204,7 @@ export function NotificationsSettings() {
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand hover:text-fluux-text
                            bg-fluux-brand/10 hover:bg-fluux-brand/20 rounded-md transition-colors"
               >
-                <Bell className="w-4 h-4" />
+                <Bell className="size-4" />
                 {t('settings.webPushEnable')}
               </button>
             )}
@@ -216,7 +216,7 @@ export function NotificationsSettings() {
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-500 hover:text-red-400
                            bg-red-500/10 hover:bg-red-500/20 rounded-md transition-colors disabled:opacity-50"
               >
-                <BellOff className="w-4 h-4" />
+                <BellOff className="size-4" />
                 {t('settings.webPushDisable')}
               </button>
             )}
@@ -227,7 +227,7 @@ export function NotificationsSettings() {
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand hover:text-fluux-text
                            bg-fluux-brand/10 hover:bg-fluux-brand/20 rounded-md transition-colors"
               >
-                <Bell className="w-4 h-4" />
+                <Bell className="size-4" />
                 {t('settings.webPushReEnable')}
               </button>
             )}

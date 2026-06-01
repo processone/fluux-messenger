@@ -301,7 +301,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
                   className="px-3 py-2 text-sm text-fluux-text-on-accent bg-fluux-brand rounded
                              hover:bg-fluux-brand/80 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Search className="w-4 h-4" />
+                  <Search className="size-4" />
                 </button>
               </Tooltip>
               <Tooltip content={t('common.cancel')}>
@@ -316,13 +316,13 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
                   className="px-3 py-2 text-sm text-fluux-muted hover:text-fluux-text
                              bg-fluux-bg rounded hover:bg-fluux-hover"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="size-4" />
                 </button>
               </Tooltip>
             </div>
           ) : (
             <div className="relative">
-              <Server className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fluux-muted pointer-events-none" />
+              <Server className="absolute start-3 top-1/2 -translate-y-1/2 size-4 text-fluux-muted pointer-events-none" />
               <select
                 id="muc-service"
                 value={selectedService}
@@ -341,7 +341,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
                 ))}
                 <option value="__custom__" className="bg-fluux-bg text-fluux-text">{t('rooms.customMucServer')}</option>
               </select>
-              <ChevronDown className="absolute end-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fluux-muted pointer-events-none" />
+              <ChevronDown className="absolute end-3 top-1/2 -translate-y-1/2 size-4 text-fluux-muted pointer-events-none" />
             </div>
           )}
         </div>
@@ -367,7 +367,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
         {/* Search */}
         <div className="px-4 py-3 border-b border-fluux-hover flex-shrink-0">
           <div className="relative">
-            <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fluux-muted" />
+            <Search className="absolute start-3 top-1/2 -translate-y-1/2 size-4 text-fluux-muted" />
             <TextInput
               ref={searchInputRef}
               type="text"
@@ -392,7 +392,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
         <div ref={listRef} className="flex-1 overflow-y-auto p-2">
           {loading ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-6 h-6 text-fluux-muted animate-spin" />
+              <Loader2 className="size-6 text-fluux-muted animate-spin" />
             </div>
           ) : filteredRooms.length === 0 ? (
             <div className="text-center py-8 text-fluux-muted">
@@ -417,10 +417,10 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
                                  : 'border-transparent hover:bg-fluux-hover'}`}
                   >
                     <div
-                      className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                      className="size-8 rounded-lg flex items-center justify-center flex-shrink-0"
                       style={{ backgroundColor: generateConsistentColorHexSync(room.jid, { saturation: 60, lightness: 45 }) }}
                     >
-                      <Hash className="w-4 h-4 text-white" />
+                      <Hash className="size-4 text-white" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-fluux-text truncate">{room.name}</p>
@@ -449,7 +449,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
                                    ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}`}
                       >
                         {isJoining ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <Loader2 className="size-4 animate-spin" />
                         ) : (
                           t('rooms.join')
                         )}
@@ -463,7 +463,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
               <div ref={sentinelRef} className="py-2">
                 {loadingMore && (
                   <div className="flex items-center justify-center gap-2 text-fluux-muted">
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="size-4 animate-spin" />
                   </div>
                 )}
               </div>

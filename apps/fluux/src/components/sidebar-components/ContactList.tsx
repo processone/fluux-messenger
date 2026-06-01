@@ -374,14 +374,14 @@ const ContactItem = memo(function ContactItem({
             onClick={handleStartChat}
             className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
           >
-            <MessageCircle className="w-4 h-4" />
+            <MessageCircle className="size-4" />
             <span>{t('contacts.startChat')}</span>
           </button>
           <button
             onClick={handleRename}
             className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
           >
-            <Pencil className="w-4 h-4" />
+            <Pencil className="size-4" />
             <span>{t('contacts.rename')}</span>
           </button>
           {showManageOption && (
@@ -391,7 +391,7 @@ const ContactItem = memo(function ContactItem({
                 onClick={handleManage}
                 className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
               >
-                <Wrench className="w-4 h-4" />
+                <Wrench className="size-4" />
                 <span>{t('contacts.manage')}</span>
               </button>
             </>
@@ -401,7 +401,7 @@ const ContactItem = memo(function ContactItem({
             onClick={handleRemove}
             className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-red hover:bg-fluux-red hover:text-white transition-colors"
           >
-            <Trash2 className="w-4 h-4" />
+            <Trash2 className="size-4" />
             <span>{t('contacts.removeContact')}</span>
           </button>
         </div>

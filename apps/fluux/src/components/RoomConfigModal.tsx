@@ -111,12 +111,12 @@ export function RoomConfigModal({
     >
       {loading ? (
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-6 h-6 text-fluux-brand animate-spin" />
+          <Loader2 className="size-6 text-fluux-brand animate-spin" />
         </div>
       ) : fetchError ? (
         <div className="p-4">
           <div className="flex items-start gap-2 p-3 rounded-lg border bg-red-500/10 border-red-500/30 text-red-400">
-            <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+            <AlertCircle className="size-5 flex-shrink-0 mt-0.5" />
             <p className="text-sm">{fetchError}</p>
           </div>
         </div>
@@ -231,7 +231,7 @@ function ConfigFormContent({
                 disabled={saving}
                 className="flex items-center gap-2 px-3 py-2 text-sm text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-lg transition-colors disabled:opacity-50"
               >
-                <Trash2 className="w-4 h-4" />
+                <Trash2 className="size-4" />
                 {t('rooms.destroyRoom')}
               </button>
             </div>
@@ -242,7 +242,7 @@ function ConfigFormContent({
       {/* Save error */}
       {saveError && (
         <div className="mx-4 mb-2 flex items-start gap-2 p-3 rounded-lg border bg-red-500/10 border-red-500/30 text-red-400">
-          <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <AlertCircle className="size-4 flex-shrink-0 mt-0.5" />
           <p className="text-sm">{saveError}</p>
         </div>
       )}

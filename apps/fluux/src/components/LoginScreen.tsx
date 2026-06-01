@@ -352,7 +352,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
           <img
             src="/logo.png"
             alt={t('login.title')}
-            className="w-16 h-16 mx-auto mb-4"
+            className="size-16 mx-auto mb-4"
           />
           <h1 className="text-2xl font-bold text-fluux-text">{t('login.title')}</h1>
           <p className="text-fluux-muted mt-2">{t('login.subtitle')}</p>
@@ -417,9 +417,9 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
                 aria-label={showPassword ? t('login.hidePassword') : t('login.showPassword')}
               >
                 {showPassword ? (
-                  <EyeOff className="w-5 h-5" />
+                  <EyeOff className="size-5" />
                 ) : (
-                  <Eye className="w-5 h-5" />
+                  <Eye className="size-5" />
                 )}
               </button>
             </div>
@@ -433,9 +433,9 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
               className="flex items-center gap-1 text-xs text-fluux-muted hover:text-fluux-text transition-colors mb-2"
             >
               {showServerField ? (
-                <ChevronDown className="w-3 h-3" />
+                <ChevronDown className="size-3" />
               ) : (
-                <ChevronRight className="w-3 h-3" />
+                <ChevronRight className="size-3" />
               )}
               <span className="font-semibold uppercase">{t('login.serverLabel')}</span>
             </button>
@@ -472,12 +472,12 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
               checked={rememberMe}
               onChange={(e) => setRememberMe(e.target.checked)}
               disabled={isLoading}
-              className="w-4 h-4 rounded border border-fluux-border bg-fluux-bg
+              className="size-4 rounded border border-fluux-border bg-fluux-bg
                          checked:bg-fluux-brand checked:border-fluux-brand
                          focus:ring-fluux-brand focus:ring-offset-0"
             />
             <label htmlFor="remember" className="text-sm text-fluux-text flex items-center gap-2">
-              <KeyRound className="w-4 h-4 text-fluux-muted" />
+              <KeyRound className="size-4 text-fluux-muted" />
               {t('login.rememberMe')}
               {isDesktopApp && (
                 <span className="text-xs text-fluux-muted">{t('login.storedInKeychain')}</span>
@@ -491,7 +491,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
           {/* Keychain indicator */}
           {loadedFromKeychain && (
             <div className="flex items-center gap-2 text-xs text-fluux-green">
-              <KeyRound className="w-3 h-3" />
+              <KeyRound className="size-3" />
               {t('login.credentialsLoaded')}
             </div>
           )}
@@ -515,7 +515,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
           >
             {isConnecting ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="size-4 animate-spin" />
                 {t('login.connecting')}
               </>
             ) : (

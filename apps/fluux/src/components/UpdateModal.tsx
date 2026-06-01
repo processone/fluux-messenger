@@ -24,19 +24,21 @@ export function UpdateModal({ state, onDownload, onRelaunch, onDismiss }: Update
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [onDismiss, state.downloading])
 
-  // Close when clicking backdrop (only if not downloading)
-  const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget && !state.downloading) onDismiss()
-  }
-
   return (
     <div
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      onClick={handleBackdropClick}
     >
+      <button
+        type="button"
+        aria-hidden="true"
+        tabIndex={-1}
+        disabled={state.downloading}
+        onClick={onDismiss}
+        className="absolute inset-0 cursor-default"
+      />
       <div
         ref={modalRef}
-        className="bg-fluux-sidebar rounded-lg shadow-xl border border-fluux-hover w-96 overflow-hidden"
+        className="relative z-10 bg-fluux-sidebar rounded-lg shadow-xl border border-fluux-hover w-96 overflow-hidden"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-fluux-hover">
@@ -47,7 +49,7 @@ export function UpdateModal({ state, onDownload, onRelaunch, onDismiss }: Update
                 onClick={onDismiss}
                 className="p-1 text-fluux-muted hover:text-fluux-text rounded hover:bg-fluux-hover"
               >
-                <X className="w-4 h-4" />
+                <X className="size-4" />
               </button>
             </Tooltip>
           )}
@@ -57,13 +59,13 @@ export function UpdateModal({ state, onDownload, onRelaunch, onDismiss }: Update
         <div className="p-6">
           {/* Version info */}
           <div className="text-center mb-4">
-            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-fluux-brand/10 flex items-center justify-center">
+            <div className="size-12 mx-auto mb-3 rounded-full bg-fluux-brand/10 flex items-center justify-center">
               {state.downloaded ? (
-                <CheckCircle className="w-6 h-6 text-fluux-green" />
+                <CheckCircle className="size-6 text-fluux-green" />
               ) : state.error ? (
-                <AlertCircle className="w-6 h-6 text-fluux-red" />
+                <AlertCircle className="size-6 text-fluux-red" />
               ) : (
-                <Download className="w-6 h-6 text-fluux-brand" />
+                <Download className="size-6 text-fluux-brand" />
               )}
             </div>
             <h3 className="text-lg font-semibold text-fluux-text mb-1">
@@ -117,7 +119,7 @@ export function UpdateModal({ state, onDownload, onRelaunch, onDismiss }: Update
                 onClick={onRelaunch}
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-fluux-brand text-fluux-text-on-accent rounded-lg hover:bg-fluux-brand/90 transition-colors"
               >
-                <RefreshCw className="w-4 h-4" />
+                <RefreshCw className="size-4" />
                 {t('update.restartNow')}
               </button>
             ) : state.downloading ? (
@@ -125,7 +127,7 @@ export function UpdateModal({ state, onDownload, onRelaunch, onDismiss }: Update
                 disabled
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-fluux-muted/20 text-fluux-muted rounded-lg cursor-not-allowed"
               >
-                <Download className="w-4 h-4 animate-bounce" />
+                <Download className="size-4 animate-bounce" />
                 {t('update.downloading')}
               </button>
             ) : (
@@ -140,7 +142,7 @@ export function UpdateModal({ state, onDownload, onRelaunch, onDismiss }: Update
                   onClick={onDownload}
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-fluux-brand text-fluux-text-on-accent rounded-lg hover:bg-fluux-brand/90 transition-colors"
                 >
-                  <Download className="w-4 h-4" />
+                  <Download className="size-4" />
                   {t('update.updateNow')}
                 </button>
               </>

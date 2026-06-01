@@ -247,7 +247,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
           <img
             src="/logo.png"
             alt="Fluux"
-            className="w-7 h-7 mb-2 opacity-80"
+            className="size-7 mb-2 opacity-80"
             draggable={false}
           />
         )}
@@ -341,8 +341,8 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
                   onClick={() => setShowContactDropdown(!showContactDropdown)}
                   className="p-1 text-fluux-muted hover:text-fluux-text flex items-center"
                 >
-                  <Users className="w-5 h-5" />
-                  <ChevronDown className="w-3 h-3 -ms-0.5" />
+                  <Users className="size-5" />
+                  <ChevronDown className="size-3 -ms-0.5" />
                 </button>
               </Tooltip>
               {showContactDropdown && (
@@ -351,7 +351,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
                     onClick={() => { setShowContactDropdown(false); modalActions.open('addContact') }}
                     className="w-full px-3 py-2 text-start text-sm hover:bg-fluux-hover flex items-center gap-2"
                   >
-                    <UserPlus className="w-4 h-4 text-fluux-muted" />
+                    <UserPlus className="size-4 text-fluux-muted" />
                     <span>{t('sidebar.addContact')}</span>
                   </button>
                   <div className="border-t border-fluux-hover my-1" />
@@ -359,7 +359,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
                     onClick={() => { setShowContactDropdown(false); navigateToSettings('blocked') }}
                     className="w-full px-3 py-2 text-start text-sm hover:bg-fluux-hover flex items-center gap-2"
                   >
-                    <Ban className="w-4 h-4 text-fluux-muted" />
+                    <Ban className="size-4 text-fluux-muted" />
                     <span>{t('sidebar.blockedUsers')}</span>
                   </button>
                 </div>
@@ -373,8 +373,8 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
                   onClick={() => setShowRoomDropdown(!showRoomDropdown)}
                   className="p-1 text-fluux-muted hover:text-fluux-text flex items-center"
                 >
-                  <Plus className="w-5 h-5" />
-                  <ChevronDown className="w-3 h-3 -ms-0.5" />
+                  <Plus className="size-5" />
+                  <ChevronDown className="size-3 -ms-0.5" />
                 </button>
               </Tooltip>
               {showRoomDropdown && (
@@ -383,14 +383,14 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
                     onClick={() => { setShowRoomDropdown(false); modalActions.open('quickChat') }}
                     className="w-full px-3 py-2 text-start text-sm hover:bg-fluux-hover flex items-center gap-2"
                   >
-                    <Zap className="w-4 h-4 text-amber-500" />
+                    <Zap className="size-4 text-amber-500" />
                     <span>{t('rooms.quickChat')}</span>
                   </button>
                   <button
                     onClick={() => { setShowRoomDropdown(false); setShowCreateRoom(true) }}
                     className="w-full px-3 py-2 text-start text-sm hover:bg-fluux-hover flex items-center gap-2"
                   >
-                    <Hash className="w-4 h-4 text-fluux-muted" />
+                    <Hash className="size-4 text-fluux-muted" />
                     <span>{t('rooms.permanentRoom')}</span>
                   </button>
                   <div className="border-t border-fluux-hover my-1" />
@@ -398,14 +398,14 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
                     onClick={() => { setShowRoomDropdown(false); setShowJoinRoom(true) }}
                     className="w-full px-3 py-2 text-start text-sm hover:bg-fluux-hover flex items-center gap-2"
                   >
-                    <LogIn className="w-4 h-4 text-fluux-muted" />
+                    <LogIn className="size-4 text-fluux-muted" />
                     <span>{t('rooms.joinRoom')}</span>
                   </button>
                   <button
                     onClick={() => { setShowRoomDropdown(false); setShowBrowseRooms(true) }}
                     className="w-full px-3 py-2 text-start text-sm hover:bg-fluux-hover flex items-center gap-2"
                   >
-                    <Search className="w-4 h-4 text-fluux-muted" />
+                    <Search className="size-4 text-fluux-muted" />
                     <span>{t('rooms.browseRooms')}</span>
                   </button>
                   <div className="border-t border-fluux-hover my-1" />
@@ -421,7 +421,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
                       isCatchingUpRooms ? 'text-fluux-muted cursor-wait' : 'hover:bg-fluux-hover'
                     }`}
                   >
-                    <RefreshCw className={`w-4 h-4 text-fluux-muted ${isCatchingUpRooms ? 'animate-spin' : ''}`} />
+                    <RefreshCw className={`size-4 text-fluux-muted ${isCatchingUpRooms ? 'animate-spin' : ''}`} />
                     <span>{t('rooms.catchUpAll')}</span>
                   </button>
                 </div>
@@ -476,7 +476,10 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
             {/* Large avatar - clickable for profile settings */}
             <Tooltip content={t('sidebar.viewProfile')} position="top">
               <div
+                role="button"
+                tabIndex={0}
                 onClick={() => { modalActions.close('presenceMenu'); navigateToSettings('profile') }}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); modalActions.close('presenceMenu'); navigateToSettings('profile') } }}
                 className="flex-shrink-0 me-1 rounded-full hover:ring-2 hover:ring-fluux-muted/30 transition-all cursor-pointer"
               >
                 <Avatar
@@ -491,12 +494,13 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
             {/* Name and status stacked vertically */}
             <div className="flex-1 min-w-0 space-y-0.5">
               <Tooltip content={t('sidebar.viewProfile')} position="top">
-                <p
+                <button
+                  type="button"
                   onClick={() => { modalActions.close('presenceMenu'); navigateToSettings('profile') }}
-                  className="text-sm font-medium text-fluux-text truncate cursor-pointer hover:underline"
+                  className="block w-full text-start text-sm font-medium text-fluux-text truncate cursor-pointer hover:underline"
                 >
                   {ownNickname || jid?.split('@')[0]}
-                </p>
+                </button>
               </Tooltip>
               {status === 'online' && !showVerifying ? (
                 <PresenceSelector isOpen={showPresenceMenu} onOpenChange={(open) => open ? modalActions.open('presenceMenu') : modalActions.close('presenceMenu')} />
@@ -511,7 +515,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
                   onClick={cancelReconnect}
                   className="p-2 text-fluux-muted hover:text-fluux-red rounded hover:bg-fluux-hover flex-shrink-0"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="size-4" />
                 </button>
               </Tooltip>
             ) : (
@@ -573,6 +577,9 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
       {/* Resize Handle - desktop only */}
       <Tooltip content={t('sidebar.resizeHint')} position="right" delay={800}>
         <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-hidden="true"
           onMouseDown={handleMouseDown}
           onDoubleClick={handleDoubleClick}
           onMouseEnter={() => setIsResizeHover(true)}

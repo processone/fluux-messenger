@@ -27,7 +27,7 @@ export function SettingsSidebar({ activeCategory, onCategoryChange }: SettingsSi
                     : 'text-fluux-text hover:bg-fluux-hover'
                   }`}
               >
-                <Icon className={`w-5 h-5 ${isActive ? 'text-fluux-brand' : 'text-fluux-muted'}`} />
+                <Icon className={`size-5 ${isActive ? 'text-fluux-brand' : 'text-fluux-muted'}`} />
                 <span className="text-sm font-medium">{t(category.labelKey)}</span>
               </button>
             </li>

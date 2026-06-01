@@ -106,17 +106,17 @@ describe('Avatar', () => {
   describe('Sizes', () => {
     it('applies correct size classes for sm (default)', () => {
       const { container } = render(<Avatar identifier="alice" />)
-      expect(container.firstChild).toHaveClass('w-8', 'h-8')
+      expect(container.firstChild).toHaveClass('size-8')
     })
 
     it('applies correct size classes for md', () => {
       const { container } = render(<Avatar identifier="alice" size="md" />)
-      expect(container.firstChild).toHaveClass('w-10', 'h-10')
+      expect(container.firstChild).toHaveClass('size-10')
     })
 
     it('applies correct size classes for lg', () => {
       const { container } = render(<Avatar identifier="alice" size="lg" />)
-      expect(container.firstChild).toHaveClass('w-12', 'h-12')
+      expect(container.firstChild).toHaveClass('size-12')
     })
   })
 

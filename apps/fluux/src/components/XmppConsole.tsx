@@ -64,8 +64,11 @@ const ConsoleEntry = React.memo(function ConsoleEntry({ entry, isSelected, expan
   if (isEvent) {
     return (
       <div
+        role="button"
+        tabIndex={0}
         className={`${selectedClass} cursor-pointer border-s-4 border-s-orange-500`}
         onClick={() => onSelect(entry.id)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(entry.id) } }}
       >
         <div className="flex items-start gap-2 px-3 py-1.5">
           <span className="text-fluux-muted text-xs font-mono whitespace-nowrap">
@@ -106,8 +109,12 @@ const ConsoleEntry = React.memo(function ConsoleEntry({ entry, isSelected, expan
   return (
     <div className={`${selectedClass} border-s-4 ${borderColor}`}>
       <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
         className="flex items-center gap-2 px-3 py-1.5 cursor-pointer select-none"
         onClick={() => { onSelect(entry.id); onToggle(entry.id); }}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(entry.id); onToggle(entry.id); } }}
       >
         <span className="text-fluux-muted text-xs font-mono whitespace-nowrap">
           [{format(entry.timestamp, 'HH:mm:ss.SSS')}]
@@ -148,9 +155,9 @@ const ConsoleEntry = React.memo(function ConsoleEntry({ entry, isSelected, expan
         )}
 
         {expanded ? (
-          <ChevronUp className="w-4 h-4 text-fluux-muted flex-shrink-0" />
+          <ChevronUp className="size-4 text-fluux-muted flex-shrink-0" />
         ) : (
-          <ChevronDown className="w-4 h-4 text-fluux-muted flex-shrink-0" />
+          <ChevronDown className="size-4 text-fluux-muted flex-shrink-0" />
         )}
       </div>
       {expanded && (
@@ -500,6 +507,9 @@ export function XmppConsole() {
       {/* Resize handle */}
       <div
         ref={resizeRef}
+        role="separator"
+        aria-orientation="horizontal"
+        aria-hidden="true"
         className={`h-1 cursor-ns-resize transition-colors ${
           isResizing ? 'bg-fluux-brand/40' : isResizeHover ? 'bg-fluux-brand/20' : 'bg-fluux-bg'
         }`}
@@ -555,7 +565,7 @@ export function XmppConsole() {
           </div>
           {/* Search input */}
           <div className="relative">
-            <Search className="absolute start-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-fluux-muted" />
+            <Search className="absolute start-2 top-1/2 -translate-y-1/2 size-3.5 text-fluux-muted" />
             <TextInput
               type="text"
               value={searchQuery}
@@ -568,7 +578,7 @@ export function XmppConsole() {
                 onClick={() => setSearchQuery('')}
                 className="absolute end-1.5 top-1/2 -translate-y-1/2 text-fluux-muted hover:text-fluux-text"
               >
-                <X className="w-3 h-3" />
+                <X className="size-3" />
               </button>
             )}
           </div>
@@ -579,7 +589,7 @@ export function XmppConsole() {
               className="p-1.5 text-fluux-muted hover:text-fluux-text hover:bg-fluux-bg/50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
               aria-label={t('console.serverInfo')}
             >
-              <Server className="w-4 h-4" />
+              <Server className="size-4" />
             </button>
           </Tooltip>
           <Tooltip content={t('console.export')} position="bottom">
@@ -589,7 +599,7 @@ export function XmppConsole() {
               className="p-1.5 text-fluux-muted hover:text-fluux-text hover:bg-fluux-bg/50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
               aria-label={t('console.export')}
             >
-              <Download className="w-4 h-4" />
+              <Download className="size-4" />
             </button>
           </Tooltip>
           <Tooltip content={t('console.clear')} position="bottom">
@@ -598,7 +608,7 @@ export function XmppConsole() {
               className="p-1.5 text-fluux-muted hover:text-fluux-text hover:bg-fluux-bg/50 rounded"
               aria-label={t('console.clear')}
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="size-4" />
             </button>
           </Tooltip>
           <Tooltip content={t('console.close')} position="left">
@@ -607,7 +617,7 @@ export function XmppConsole() {
               className="p-1.5 text-fluux-muted hover:text-fluux-text hover:bg-fluux-bg/50 rounded"
               aria-label={t('console.close')}
             >
-              <X className="w-4 h-4" />
+              <X className="size-4" />
             </button>
           </Tooltip>
         </div>
@@ -683,7 +693,7 @@ export function XmppConsole() {
             }}
             className="absolute bottom-4 end-4 flex items-center gap-2 px-3 py-2 bg-fluux-brand text-fluux-text-on-accent text-sm font-medium rounded-full shadow-lg hover:bg-fluux-brand/90 transition-colors"
           >
-            <ArrowDownToLine className="w-4 h-4" />
+            <ArrowDownToLine className="size-4" />
             {t('console.goToLive')}
           </button>
         )}
@@ -712,7 +722,7 @@ export function XmppConsole() {
               className="px-4 bg-fluux-brand text-fluux-text-on-accent rounded hover:bg-fluux-brand/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               aria-label={t('console.sendStanza', { modifier: isMac ? '⌘' : 'Ctrl' })}
             >
-              <Send className="rtl-mirror w-4 h-4" />
+              <Send className="rtl-mirror size-4" />
             </button>
           </Tooltip>
         </div>
@@ -720,22 +730,28 @@ export function XmppConsole() {
 
       {/* Server Info Modal */}
       {showServerInfo && serverInfo && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowServerInfo(false)}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <button
+            type="button"
+            aria-hidden="true"
+            tabIndex={-1}
+            onClick={() => setShowServerInfo(false)}
+            className="absolute inset-0 cursor-default"
+          />
           <div
-            className="bg-fluux-sidebar rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col"
-            onClick={(e) => e.stopPropagation()}
+            className="relative z-10 bg-fluux-sidebar rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col"
           >
             {/* Modal Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-fluux-bg">
               <div className="flex items-center gap-2">
-                <Server className="w-5 h-5 text-fluux-brand" />
+                <Server className="size-5 text-fluux-brand" />
                 <h2 className="text-lg font-semibold text-fluux-text">{t('console.serverInformation')}</h2>
               </div>
               <button
                 onClick={() => setShowServerInfo(false)}
                 className="p-1 text-fluux-muted hover:text-fluux-text rounded"
               >
-                <X className="w-5 h-5" />
+                <X className="size-5" />
               </button>
             </div>
 

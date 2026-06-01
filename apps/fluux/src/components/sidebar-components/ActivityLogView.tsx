@@ -234,15 +234,27 @@ function ActivityEventItem({
       className={`group flex items-start gap-2 px-2 py-1.5 rounded transition-colors
         ${isNavigable ? 'cursor-pointer hover:bg-fluux-hover' : 'cursor-default'}
         ${event.muted ? 'opacity-50' : ''}`}
-      onClick={handleClick}
+      {...(isNavigable
+        ? {
+            role: 'button' as const,
+            tabIndex: 0,
+            onClick: handleClick,
+            onKeyDown: (e: import('react').KeyboardEvent) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onNavigate()
+              }
+            },
+          }
+        : {})}
     >
       {/* Avatar or icon */}
       <div className="flex-shrink-0 mt-0.5">
         {avatarId ? (
           <Avatar identifier={avatarId} name={avatarId.split('@')[0]} size="sm" />
         ) : (
-          <div className="w-7 h-7 rounded-full bg-fluux-hover flex items-center justify-center">
-            <Icon className="w-3.5 h-3.5 text-fluux-muted" />
+          <div className="size-7 rounded-full bg-fluux-hover flex items-center justify-center">
+            <Icon className="size-3.5 text-fluux-muted" />
           </div>
         )}
       </div>
@@ -256,7 +268,7 @@ function ActivityEventItem({
           <span className="text-[10px] text-fluux-muted">{timeStr}</span>
           {ResolutionIcon && event.resolution && (
             <span className={`flex items-center gap-0.5 text-[10px] ${getResolutionColor(event.resolution)}`}>
-              <ResolutionIcon className="w-3 h-3" />
+              <ResolutionIcon className="size-3" />
               {t(`activityLog.${event.resolution}`)}
             </span>
           )}
@@ -317,7 +329,7 @@ function ReactionMuteDropdown({
         className={`${isOpen ? 'opacity-100' : 'opacity-0'} group-hover:opacity-100 text-fluux-muted hover:text-fluux-text transition-all`}
         aria-label={t('activityLog.muteReactions')}
       >
-        {anyMuted ? <Bell className="w-3.5 h-3.5" /> : <BellOff className="w-3.5 h-3.5" />}
+        {anyMuted ? <Bell className="size-3.5" /> : <BellOff className="size-3.5" />}
       </button>
 
       {isOpen && (

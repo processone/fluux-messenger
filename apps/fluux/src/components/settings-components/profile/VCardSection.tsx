@@ -113,7 +113,7 @@ export function VCardSection() {
             <div key={key}>
               {editingField === key ? (
                 <div className="flex items-center gap-3 px-3 py-2.5">
-                  <Icon className="w-4 h-4 text-fluux-muted flex-shrink-0" aria-hidden />
+                  <Icon className="size-4 text-fluux-muted flex-shrink-0" aria-hidden />
                   <TextInput
                     ref={inputRef}
                     type="text"
@@ -129,7 +129,7 @@ export function VCardSection() {
                 </div>
               ) : (
                 <div className="group flex items-center gap-3 px-3 py-2.5">
-                  <Icon className="w-4 h-4 text-fluux-muted flex-shrink-0" aria-hidden />
+                  <Icon className="size-4 text-fluux-muted flex-shrink-0" aria-hidden />
                   <span className="flex-1 text-sm text-fluux-text break-words">{ownVCard?.[key]}</span>
                   <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                     <button
@@ -138,7 +138,7 @@ export function VCardSection() {
                       className="p-0.5 text-fluux-muted hover:text-fluux-text rounded"
                       aria-label={t('profile.editNickname')}
                     >
-                      <Pencil className="w-3.5 h-3.5" />
+                      <Pencil className="size-3.5" />
                     </button>
                     <button
                       type="button"
@@ -146,7 +146,7 @@ export function VCardSection() {
                       className="p-0.5 text-fluux-muted hover:text-fluux-red rounded"
                       aria-label={t('common.remove')}
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="size-3.5" />
                     </button>
                   </div>
                 </div>
@@ -158,7 +158,7 @@ export function VCardSection() {
             const Icon = editingNewField.icon
             return (
               <div className="flex items-center gap-3 px-3 py-2.5">
-                <Icon className="w-4 h-4 text-fluux-muted flex-shrink-0" aria-hidden />
+                <Icon className="size-4 text-fluux-muted flex-shrink-0" aria-hidden />
                 <TextInput
                   ref={inputRef}
                   type="text"
@@ -192,7 +192,7 @@ export function VCardSection() {
             onClick={() => setShowAddField(!showAddField)}
             className="flex items-center gap-1 text-xs text-fluux-muted hover:text-fluux-text transition-colors"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="size-3.5" />
             {t('profile.addField')}
           </button>
           {showAddField && (
@@ -204,7 +204,7 @@ export function VCardSection() {
                   onClick={() => handleAddField(key)}
                   className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-fluux-text hover:bg-fluux-active transition-colors"
                 >
-                  <Icon className="w-4 h-4 text-fluux-muted" />
+                  <Icon className="size-4 text-fluux-muted" />
                   {label}
                 </button>
               ))}

@@ -300,7 +300,7 @@ export function ContactSelector({
                   className="hover:text-fluux-text"
                   disabled={disabled}
                 >
-                  <X className="w-3 h-3" />
+                  <X className="size-3" />
                 </button>
               </span>
             )
@@ -341,14 +341,17 @@ export function ContactSelector({
               return (
                 <div
                   key={contact.jid}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => selectContact(contact.jid)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectContact(contact.jid) } }}
                   className={`flex items-center gap-2 px-3 py-2 cursor-pointer ${
                     index === highlightedIndex
                       ? 'bg-fluux-brand/20 text-fluux-text'
                       : 'hover:bg-fluux-hover text-fluux-text'
                   }`}
                 >
-                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${presenceColor}`} />
+                  <span className={`size-2 rounded-full flex-shrink-0 ${presenceColor}`} />
                   <span className="text-sm truncate flex-1">{contact.name}</span>
                   <span className="text-xs text-fluux-muted truncate">{contact.jid}</span>
                   {index === highlightedIndex && (
@@ -369,10 +372,13 @@ export function ContactSelector({
             flipUp ? 'bottom-full mb-1' : 'top-full mt-1'
           }`}>
             <div
+              role="button"
+              tabIndex={0}
               onClick={() => selectContact(searchJidNormalized)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectContact(searchJidNormalized) } }}
               className="flex items-center gap-2 px-3 py-2 cursor-pointer bg-fluux-brand/20 text-fluux-text"
             >
-              <span className="w-2 h-2 rounded-full flex-shrink-0 bg-fluux-muted" />
+              <span className="size-2 rounded-full flex-shrink-0 bg-fluux-muted" />
               <span className="text-sm truncate flex-1">{searchJidNormalized}</span>
               <span className="text-xs text-fluux-muted">{t('contacts.pressEnterToAdd')}</span>
               <span className="text-xs text-fluux-muted">↵</span>

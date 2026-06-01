@@ -567,9 +567,9 @@ export function MessageComposer({
       {editingMessage && (
         <div className={`bg-fluux-hover rounded-t-lg px-3 py-2 flex items-start gap-2 border-s-2 ${willDeleteMessage ? 'border-red-500' : 'border-green-500'}`}>
           {willDeleteMessage ? (
-            <Trash2 className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+            <Trash2 className="size-4 text-red-500 flex-shrink-0 mt-0.5" />
           ) : (
-            <Pencil className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
+            <Pencil className="size-4 text-green-500 flex-shrink-0 mt-0.5" />
           )}
           <div className="flex-1 min-w-0">
             <p className={`text-xs font-medium ${willDeleteMessage ? 'text-red-500' : 'text-green-500'}`}>
@@ -582,9 +582,9 @@ export function MessageComposer({
             {editingMessage.attachment && !editAttachmentRemoved && (
               <div className="flex items-center gap-2 mt-1 p-1.5 bg-fluux-bg rounded">
                 {editingMessage.attachment.mediaType?.startsWith('image/') ? (
-                  <Image className="w-4 h-4 text-fluux-muted flex-shrink-0" />
+                  <Image className="size-4 text-fluux-muted flex-shrink-0" />
                 ) : (
-                  <FileText className="w-4 h-4 text-fluux-muted flex-shrink-0" />
+                  <FileText className="size-4 text-fluux-muted flex-shrink-0" />
                 )}
                 <span className="text-xs text-fluux-muted truncate flex-1">
                   {editingMessage.attachment.name || t('chat.attachment')}
@@ -596,7 +596,7 @@ export function MessageComposer({
                     className="p-0.5 text-fluux-muted hover:text-fluux-red transition-colors flex-shrink-0"
                     aria-label={t('chat.removeAttachment')}
                   >
-                    <X className="w-3 h-3" />
+                    <X className="size-3" />
                   </button>
                 </Tooltip>
               </div>
@@ -607,7 +607,7 @@ export function MessageComposer({
             onClick={handleCancelEdit}
             className="text-fluux-muted hover:text-fluux-text transition-colors flex-shrink-0"
           >
-            <X className="w-4 h-4" />
+            <X className="size-4" />
           </button>
         </div>
       )}
@@ -615,7 +615,7 @@ export function MessageComposer({
       {/* Reply preview */}
       {replyingTo && !editingMessage && (
         <div className="bg-fluux-hover rounded-t-lg px-3 py-2 flex items-start gap-2 border-s-2 border-fluux-brand">
-          <Reply className="rtl-mirror w-4 h-4 text-fluux-brand flex-shrink-0 mt-0.5" />
+          <Reply className="rtl-mirror size-4 text-fluux-brand flex-shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="text-xs font-medium text-fluux-brand">
               Replying to {replyingTo.senderName}
@@ -629,7 +629,7 @@ export function MessageComposer({
             onClick={onCancelReply}
             className="text-fluux-muted hover:text-fluux-text transition-colors flex-shrink-0"
           >
-            <X className="w-4 h-4" />
+            <X className="size-4" />
           </button>
         </div>
       )}
@@ -642,27 +642,27 @@ export function MessageComposer({
             <img
               src={pendingAttachment.previewUrl}
               alt={pendingAttachment.file.name}
-              className="w-12 h-12 object-cover rounded flex-shrink-0"
+              className="size-12 object-cover rounded flex-shrink-0"
             />
           ) : pendingAttachment.previewUrl && pendingAttachment.file.type.startsWith('video/') ? (
-            <div className="w-12 h-12 relative flex-shrink-0">
+            <div className="size-12 relative flex-shrink-0">
               <img
                 src={pendingAttachment.previewUrl}
                 alt={pendingAttachment.file.name}
                 className="w-full h-full object-cover rounded"
               />
               <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded">
-                <div className="w-4 h-4 border-2 border-white rounded-full flex items-center justify-center">
-                  <div className="w-0 h-0 border-s-[5px] border-s-white border-y-[3px] border-y-transparent ms-0.5" />
+                <div className="size-4 border-2 border-white rounded-full flex items-center justify-center">
+                  <div className="size-0 border-s-[5px] border-s-white border-y-[3px] border-y-transparent ms-0.5" />
                 </div>
               </div>
             </div>
           ) : (
-            <div className="w-12 h-12 flex items-center justify-center bg-fluux-bg rounded flex-shrink-0">
+            <div className="size-12 flex items-center justify-center bg-fluux-bg rounded flex-shrink-0">
               {pendingAttachment.file.type.startsWith('image/') ? (
-                <Image className="w-6 h-6 text-fluux-muted" />
+                <Image className="size-6 text-fluux-muted" />
               ) : (
-                <FileText className="w-6 h-6 text-fluux-muted" />
+                <FileText className="size-6 text-fluux-muted" />
               )}
             </div>
           )}
@@ -681,7 +681,7 @@ export function MessageComposer({
               className="p-1 text-fluux-muted hover:text-fluux-red transition-colors flex-shrink-0"
               aria-label={t('chat.removeAttachment')}
             >
-              <X className="w-4 h-4" />
+              <X className="size-4" />
             </button>
           </Tooltip>
         </div>
@@ -697,7 +697,7 @@ export function MessageComposer({
             className="p-0.5 text-fluux-red/60 hover:text-fluux-red transition-colors flex-shrink-0"
             aria-label={t('sidebar.dismiss')}
           >
-            <X className="w-3.5 h-3.5" />
+            <X className="size-3.5" />
           </button>
         </div>
       )}
@@ -716,8 +716,8 @@ export function MessageComposer({
           {uploadState?.isUploading ? (
             /* During upload, show spinner directly instead of the menu toggle */
             <button type="button" disabled className="p-3 text-fluux-brand">
-              <div className="relative w-5 h-5 flex items-center justify-center">
-                <Loader2 className="w-5 h-5 animate-spin" />
+              <div className="relative size-5 flex items-center justify-center">
+                <Loader2 className="size-5 animate-spin" />
                 <span className="absolute text-[8px] font-bold">
                   {uploadState.progress}
                 </span>
@@ -730,7 +730,7 @@ export function MessageComposer({
               aria-label={t('upload.attachFile')}
               className={`p-3 transition-colors ${showAttachMenu ? 'text-fluux-brand' : 'text-fluux-muted hover:text-fluux-text'}`}
             >
-              <Plus className={`w-5 h-5 transition-transform ${showAttachMenu ? 'rotate-45' : ''}`} />
+              <Plus className={`size-5 transition-transform ${showAttachMenu ? 'rotate-45' : ''}`} />
             </button>
           )}
 
@@ -749,7 +749,7 @@ export function MessageComposer({
                     : 'text-fluux-muted/50 cursor-not-allowed'
                 }`}
               >
-                <Paperclip className="w-4 h-4 flex-shrink-0" />
+                <Paperclip className="size-4 flex-shrink-0" />
                 {t('upload.attachFile')}
               </button>
               {onCreatePoll && (
@@ -761,7 +761,7 @@ export function MessageComposer({
                   }}
                   className="w-full flex items-center gap-3 px-3 py-2 text-sm text-start text-fluux-text hover:bg-fluux-hover transition-colors"
                 >
-                  <BarChart3 className="w-4 h-4 flex-shrink-0" />
+                  <BarChart3 className="size-4 flex-shrink-0" />
                   {t('poll.create', 'Create Poll')}
                 </button>
               )}
@@ -795,7 +795,7 @@ export function MessageComposer({
             onMouseEnter={() => { void emojiPickerImport() }}
             className={`p-3 transition-colors ${showEmojiPicker ? 'text-fluux-brand' : 'text-fluux-muted hover:text-fluux-text'}`}
           >
-            <Smile className="w-5 h-5" />
+            <Smile className="size-5" />
           </button>
 
           {/* Emoji picker popup (lazy-loaded) */}
@@ -825,11 +825,11 @@ export function MessageComposer({
             className="p-3 text-fluux-brand hover:text-fluux-brand-hover
                        disabled:text-fluux-muted disabled:cursor-not-allowed transition-colors relative"
           >
-            <Send className="rtl-mirror w-5 h-5" />
+            <Send className="rtl-mirror size-5" />
             {encryptionState?.kind === 'encrypted' && (
               encryptionState.trust === 'verified'
-                ? <ShieldCheck className="absolute bottom-2 end-2 w-2.5 h-2.5 text-green-500" />
-                : <Lock className="absolute bottom-2 end-2 w-2.5 h-2.5 text-fluux-muted" />
+                ? <ShieldCheck className="absolute bottom-2 end-2 size-2.5 text-green-500" />
+                : <Lock className="absolute bottom-2 end-2 size-2.5 text-fluux-muted" />
             )}
           </button>
         </Tooltip>

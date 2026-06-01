@@ -74,7 +74,7 @@ export function LanguageSettings() {
         {/* Language selection */}
         <div className="space-y-3">
           <label htmlFor="language-select" className="flex items-center gap-2">
-            <Globe className="w-4 h-4 text-fluux-muted" />
+            <Globe className="size-4 text-fluux-muted" />
             <span className="text-sm font-medium text-fluux-text">{t('settings.language')}</span>
           </label>
           <div className="relative">
@@ -95,7 +95,7 @@ export function LanguageSettings() {
                 </option>
               ))}
             </select>
-            <ChevronDown className="absolute end-3 top-1/2 -translate-y-1/2 w-5 h-5 text-fluux-muted pointer-events-none" />
+            <ChevronDown className="absolute end-3 top-1/2 -translate-y-1/2 size-5 text-fluux-muted pointer-events-none" />
           </div>
           {languageChanged && (
             <p className="text-xs text-fluux-muted italic">
@@ -107,7 +107,7 @@ export function LanguageSettings() {
         {/* Time format selection */}
         <div className="space-y-3">
           <label htmlFor="time-format-select" className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-fluux-muted" />
+            <Clock className="size-4 text-fluux-muted" />
             <span className="text-sm font-medium text-fluux-text">{t('settings.timeFormat')}</span>
           </label>
           <div className="relative">
@@ -128,7 +128,7 @@ export function LanguageSettings() {
                 </option>
               ))}
             </select>
-            <ChevronDown className="absolute end-3 top-1/2 -translate-y-1/2 w-5 h-5 text-fluux-muted pointer-events-none" />
+            <ChevronDown className="absolute end-3 top-1/2 -translate-y-1/2 size-5 text-fluux-muted pointer-events-none" />
           </div>
           <p className="text-xs text-fluux-muted">
             {t('settings.timeFormatDescription')}

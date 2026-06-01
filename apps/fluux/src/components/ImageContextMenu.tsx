@@ -54,17 +54,17 @@ export function ImageContextMenu({ originalUrl, proxiedUrl, filename, menu }: Im
     >
       <MenuButton
         onClick={handleCopyUrl}
-        icon={<Link className="w-4 h-4" />}
+        icon={<Link className="size-4" />}
         label={t('chat.copyImageUrl')}
       />
       <MenuButton
         onClick={handleOpenInBrowser}
-        icon={<ExternalLink className="w-4 h-4" />}
+        icon={<ExternalLink className="size-4" />}
         label={t('chat.openInBrowser')}
       />
       <MenuButton
         onClick={handleSave}
-        icon={<Download className="w-4 h-4" />}
+        icon={<Download className="size-4" />}
         label={t('chat.saveImage')}
       />
     </div>

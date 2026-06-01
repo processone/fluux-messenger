@@ -269,9 +269,9 @@ export function MessageList<T extends BaseMessage>({
                 }`}
               >
                 {isLoadingOlder ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="size-4 animate-spin" />
                 ) : (
-                  <ChevronUp className="w-4 h-4" />
+                  <ChevronUp className="size-4" />
                 )}
                 {t('chat.loadEarlierMessages')}
               </button>
@@ -339,7 +339,7 @@ export function MessageList<T extends BaseMessage>({
         <Tooltip content={t('chat.scrollToBottom') + ` (${isMac ? '⌘↓' : 'Ctrl+↓'})`} position="left">
           <button
             onClick={scrollToBottom}
-            className="w-10 h-10 rounded-full bg-fluux-bg border border-fluux-border shadow-lg flex items-center justify-center text-fluux-muted hover:text-fluux-text hover:bg-fluux-hover transition-colors duration-200 hover:scale-105 active:scale-95"
+            className="size-10 rounded-full bg-fluux-bg border border-fluux-border shadow-lg flex items-center justify-center text-fluux-muted hover:text-fluux-text hover:bg-fluux-hover transition-colors duration-200 hover:scale-105 active:scale-95"
             aria-label={t('chat.scrollToBottom')}
             tabIndex={showScrollToBottom ? 0 : -1}
           >
@@ -348,7 +348,7 @@ export function MessageList<T extends BaseMessage>({
                 {markerUnreadCount > 99 ? '99+' : markerUnreadCount}
               </span>
             )}
-            <ChevronDown className="w-5 h-5" />
+            <ChevronDown className="size-5" />
           </button>
         </Tooltip>
       </div>

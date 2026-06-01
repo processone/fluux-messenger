@@ -71,7 +71,7 @@ export function EntityListView<T>({
 
       {/* Search input */}
       <div className="relative mb-3">
-        <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fluux-muted" />
+        <Search className="absolute start-3 top-1/2 -translate-y-1/2 size-4 text-fluux-muted" />
         <TextInput
           type="text"
           value={searchValue}
@@ -100,7 +100,7 @@ export function EntityListView<T>({
             <div ref={loadMoreRef} className="py-2">
               {isLoading && (
                 <div className="flex items-center justify-center gap-2 text-fluux-muted">
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="size-4 animate-spin" />
                   <span className="text-sm">{t('admin.entityList.loadingMore')}</span>
                 </div>
               )}

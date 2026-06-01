@@ -368,7 +368,7 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
               onClick={onClose}
               className="p-1 text-fluux-muted hover:text-fluux-text rounded"
             >
-              <X className="w-5 h-5" />
+              <X className="size-5" />
             </button>
           </Tooltip>
         </div>
@@ -379,7 +379,7 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
             // Webcam capture mode
             <div className="flex flex-col items-center gap-4">
               {/* Webcam preview */}
-              <div className="relative w-[200px] h-[200px] rounded-full overflow-hidden bg-fluux-bg">
+              <div className="relative size-[200px] rounded-full overflow-hidden bg-fluux-bg">
                 <video
                   ref={videoRef}
                   autoPlay
@@ -390,7 +390,7 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
                 />
                 {!webcamReady && (
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-fluux-brand" />
+                    <div className="animate-spin rounded-full size-8 border-b-2 border-fluux-brand" />
                   </div>
                 )}
               </div>
@@ -402,14 +402,14 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
                   disabled={!webcamReady}
                   className="flex items-center gap-2 px-4 py-2 bg-fluux-brand hover:bg-fluux-brand-hover text-fluux-text-on-accent rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Camera className="w-5 h-5" />
+                  <Camera className="size-5" />
                   {t('avatar.takePhoto')}
                 </button>
                 <button
                   onClick={exitWebcamMode}
                   className="flex items-center gap-2 px-4 py-2 text-fluux-muted hover:text-fluux-text rounded transition-colors"
                 >
-                  <VideoOff className="w-5 h-5" />
+                  <VideoOff className="size-5" />
                   {t('common.cancel')}
                 </button>
               </div>
@@ -419,7 +419,10 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
             <div className="flex flex-col gap-4">
               {/* File upload option with drag-drop */}
               <div
+                role="button"
+                tabIndex={0}
                 onClick={() => fileInputRef.current?.click()}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInputRef.current?.click() } }}
                 onDragEnter={handleDragEnter}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
@@ -430,7 +433,7 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
                     : 'border-fluux-muted/50 hover:border-fluux-brand'
                 }`}
               >
-                <Upload className={`w-10 h-10 mx-auto mb-2 ${isFileDragOver ? 'text-fluux-brand' : 'text-fluux-muted'}`} />
+                <Upload className={`size-10 mx-auto mb-2 ${isFileDragOver ? 'text-fluux-brand' : 'text-fluux-muted'}`} />
                 <p className="text-fluux-text mb-1">
                   {isFileDragOver ? t('avatar.dropImageHere') : t('avatar.dragOrClick')}
                 </p>
@@ -440,10 +443,13 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
               {/* Webcam option - only show if available */}
               {isWebcamAvailable && (
                 <div
+                  role="button"
+                  tabIndex={0}
                   onClick={startWebcam}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void startWebcam() } }}
                   className="border-2 border-dashed border-fluux-muted/50 rounded-lg p-6 text-center cursor-pointer hover:border-fluux-brand transition-colors"
                 >
-                  <Video className="w-10 h-10 mx-auto mb-2 text-fluux-muted" />
+                  <Video className="size-10 mx-auto mb-2 text-fluux-muted" />
                   <p className="text-fluux-text mb-1">{t('avatar.useWebcam')}</p>
                   <p className="text-sm text-fluux-muted">{t('avatar.takePhotoDescription')}</p>
                 </div>
@@ -455,7 +461,7 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
               {/* Preview area */}
               <div
                 ref={previewRef}
-                className={`relative w-[200px] h-[200px] rounded-full overflow-hidden bg-fluux-bg touch-none select-none ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+                className={`relative size-[200px] rounded-full overflow-hidden bg-fluux-bg touch-none select-none ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
@@ -493,7 +499,7 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
                   disabled={zoom <= MIN_ZOOM}
                   className="p-2 text-fluux-muted hover:text-fluux-text disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <ZoomOut className="w-5 h-5" />
+                  <ZoomOut className="size-5" />
                 </button>
                 <div className="w-32 h-1 bg-fluux-bg rounded-full overflow-hidden">
                   <div
@@ -506,7 +512,7 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
                   disabled={zoom >= MAX_ZOOM}
                   className="p-2 text-fluux-muted hover:text-fluux-text disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <ZoomIn className="w-5 h-5" />
+                  <ZoomIn className="size-5" />
                 </button>
               </div>
 
@@ -518,7 +524,7 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
                     disabled={zoom === 1 && offset.x === 0 && offset.y === 0}
                     className="flex items-center gap-1 text-sm text-fluux-muted hover:text-fluux-text disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <RotateCcw className="w-4 h-4" />
+                    <RotateCcw className="size-4" />
                     {t('avatar.reset')}
                   </button>
                 </Tooltip>

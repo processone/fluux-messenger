@@ -78,9 +78,9 @@ export function AdminActionsDropdown({
                    text-fluux-text rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed
                    border border-fluux-hover"
       >
-        <Settings className="w-4 h-4" />
+        <Settings className="size-4" />
         <span>{t('admin.manageUser')}</span>
-        <ChevronDown className={`w-4 h-4 ms-auto transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`size-4 ms-auto transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (

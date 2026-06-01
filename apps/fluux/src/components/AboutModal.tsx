@@ -29,7 +29,7 @@ export function AboutModal({ onClose }: AboutModalProps) {
         <img
           src="/logo.png"
           alt="Fluux Messenger"
-          className="w-16 h-16 mx-auto mb-4"
+          className="size-16 mx-auto mb-4"
         />
         <h3 className="text-xl font-bold text-fluux-text mb-1">Fluux Messenger</h3>
         <p className="text-fluux-muted text-sm mb-1">
@@ -48,9 +48,9 @@ export function AboutModal({ onClose }: AboutModalProps) {
               className="p-1 text-fluux-muted hover:text-fluux-text rounded hover:bg-fluux-hover"
             >
               {copied ? (
-                <Check className="w-3.5 h-3.5 text-green-500" />
+                <Check className="size-3.5 text-green-500" />
               ) : (
-                <Copy className="w-3.5 h-3.5" />
+                <Copy className="size-3.5" />
               )}
             </button>
           </Tooltip>
@@ -64,7 +64,7 @@ export function AboutModal({ onClose }: AboutModalProps) {
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1.5 text-fluux-muted text-xs hover:text-fluux-brand mb-4"
         >
-          <Code className="w-3.5 h-3.5" />
+          <Code className="size-3.5" />
           {t('about.viewOnGithub')}
         </a>
         <p className="text-fluux-muted text-xs mb-3">

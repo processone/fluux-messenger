@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Key, Loader2, Star } from 'lucide-react'
 import type { KeyBundle } from '../e2ee/OpenPGPPluginBase'
@@ -11,7 +11,6 @@ interface KeyPickerDialogProps {
 
 export function KeyPickerDialog({ candidates, onConfirm, onCancel }: KeyPickerDialogProps) {
   const { t, i18n } = useTranslation()
-  const mouseDownTargetRef = useRef<EventTarget | null>(null)
 
   const sorted = [...candidates].sort((a, b) => {
     const da = a.createdAt ? new Date(a.createdAt).getTime() : 0
@@ -58,17 +57,16 @@ export function KeyPickerDialog({ candidates, onConfirm, onCancel }: KeyPickerDi
     <div
       data-modal="true"
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      onMouseDown={(e) => {
-        mouseDownTargetRef.current = e.target
-      }}
-      onClick={(e) => {
-        if (isInstalling) return
-        if (e.target === e.currentTarget && mouseDownTargetRef.current === e.currentTarget) {
-          onCancel()
-        }
-      }}
     >
-      <div className="bg-fluux-sidebar rounded-lg max-w-md w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
+      <button
+        type="button"
+        aria-hidden="true"
+        tabIndex={-1}
+        disabled={isInstalling}
+        onClick={onCancel}
+        className="absolute inset-0 cursor-default"
+      />
+      <div className="relative z-10 bg-fluux-sidebar rounded-lg max-w-md w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
         <div className="px-5 pt-5 pb-3">
           <h3 className="text-lg font-semibold text-fluux-text mb-1">
             {t('settings.encryption.keyPicker.title')}
@@ -98,7 +96,7 @@ export function KeyPickerDialog({ candidates, onConfirm, onCancel }: KeyPickerDi
                   onChange={() => setSelected(bundle.fingerprint)}
                   className="accent-fluux-brand"
                 />
-                <Key className="w-4 h-4 text-fluux-muted flex-shrink-0" />
+                <Key className="size-4 text-fluux-muted flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-mono text-fluux-text truncate">
@@ -106,7 +104,7 @@ export function KeyPickerDialog({ candidates, onConfirm, onCancel }: KeyPickerDi
                     </span>
                     {idx === 0 && (
                       <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-fluux-brand">
-                        <Star className="w-3 h-3" />
+                        <Star className="size-3" />
                         {t('settings.encryption.keyPicker.recommended')}
                       </span>
                     )}
@@ -142,7 +140,7 @@ export function KeyPickerDialog({ candidates, onConfirm, onCancel }: KeyPickerDi
             disabled={!selected || isInstalling}
             className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-fluux-brand hover:opacity-90 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isInstalling && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            {isInstalling && <Loader2 className="size-3.5 animate-spin" />}
             {t('settings.encryption.keyPicker.confirm')}
           </button>
         </div>

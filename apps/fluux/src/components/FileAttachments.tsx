@@ -92,7 +92,7 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
         className="pt-2 rounded-lg bg-fluux-hover/60 flex items-center justify-center"
         style={{ aspectRatio, maxWidth: `${maxWidthPx}px`, maxHeight: '300px', minHeight: '100px' }}
       >
-        <Loader2 className="w-6 h-6 text-fluux-muted animate-spin" />
+        <Loader2 className="size-6 text-fluux-muted animate-spin" />
       </div>
     )
   }
@@ -108,8 +108,8 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
           className="flex items-center gap-3 p-3 rounded-lg bg-fluux-bg/60 border border-fluux-border hover:bg-fluux-hover/60 transition-colors group/file"
           tabIndex={-1}
         >
-          <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 bg-fluux-muted/20 text-fluux-muted">
-            <ImageOff className="w-5 h-5" />
+          <div className="size-10 rounded-lg flex items-center justify-center flex-shrink-0 bg-fluux-muted/20 text-fluux-muted">
+            <ImageOff className="size-5" />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-fluux-muted truncate">
@@ -120,7 +120,7 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
               {attachment.size ? ` • ${formatBytes(attachment.size)}` : ''}
             </p>
           </div>
-          <Download className="w-4 h-4 text-fluux-muted opacity-0 group-hover/file:opacity-100 transition-opacity flex-shrink-0" />
+          <Download className="size-4 text-fluux-muted opacity-0 group-hover/file:opacity-100 transition-opacity flex-shrink-0" />
         </a>
       </div>
     )
@@ -228,7 +228,7 @@ export const VideoAttachment = memo(function VideoAttachment({ attachment, onLoa
   if (isLoading) {
     return (
       <div className="pt-2 max-w-md rounded-lg overflow-hidden bg-black flex items-center justify-center" style={containerStyle}>
-        <Loader2 className="w-8 h-8 text-fluux-muted animate-spin" />
+        <Loader2 className="size-8 text-fluux-muted animate-spin" />
       </div>
     )
   }
@@ -238,13 +238,13 @@ export const VideoAttachment = memo(function VideoAttachment({ attachment, onLoa
     return (
       <div className="pt-2 max-w-md rounded-lg overflow-hidden bg-fluux-hover/60 border border-fluux-border" style={containerStyle}>
         <div className="flex flex-col items-center justify-center text-fluux-muted text-sm py-8 gap-2">
-          <FileX className="w-8 h-8" />
+          <FileX className="size-8" />
           <span>{t('chat.videoUnavailable')}</span>
         </div>
         <div className="flex items-center gap-2 px-3 py-2 bg-fluux-bg/40">
           {attachment.name && (
             <div className="flex items-center gap-2 min-w-0">
-            <Film className="w-4 h-4 text-fluux-muted flex-shrink-0" />
+            <Film className="size-4 text-fluux-muted flex-shrink-0" />
             <span className="text-sm text-fluux-muted truncate">{attachment.name}</span>
             </div>
           )}
@@ -256,7 +256,7 @@ export const VideoAttachment = memo(function VideoAttachment({ attachment, onLoa
               aria-label={t('common.download')}
               tabIndex={-1}
             >
-              <Download className="w-4 h-4 text-fluux-muted hover:text-fluux-text" />
+              <Download className="size-4 text-fluux-muted hover:text-fluux-text" />
             </a>
           </Tooltip>
         </div>
@@ -282,7 +282,7 @@ export const VideoAttachment = memo(function VideoAttachment({ attachment, onLoa
       {/* Video info bar */}
       {attachment.name && (
         <div className="flex items-center gap-2 px-3 py-2 bg-fluux-bg/60 border-t border-fluux-border">
-          <Film className="w-4 h-4 text-fluux-muted flex-shrink-0" />
+          <Film className="size-4 text-fluux-muted flex-shrink-0" />
           <span className="text-sm text-fluux-text truncate">{attachment.name}</span>
           {attachment.duration !== undefined && (
             <span className="text-xs text-fluux-muted ms-auto flex-shrink-0">
@@ -297,7 +297,7 @@ export const VideoAttachment = memo(function VideoAttachment({ attachment, onLoa
               aria-label={t('common.download')}
               tabIndex={-1}
             >
-              <Download className="w-4 h-4 text-fluux-muted hover:text-fluux-text" />
+              <Download className="size-4 text-fluux-muted hover:text-fluux-text" />
             </a>
           </Tooltip>
         </div>
@@ -335,13 +335,13 @@ export function AudioAttachment({ attachment }: AttachmentProps) {
   return (
     <div className="pt-2 max-w-sm">
       <div className={`flex items-center gap-3 p-3 rounded-t-lg border border-b-0 border-fluux-border ${hasError ? 'bg-fluux-hover/40' : 'bg-fluux-hover/60'}`}>
-        <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${hasError ? 'bg-fluux-muted/30' : 'bg-fluux-brand'}`}>
+        <div className={`size-10 rounded-full flex items-center justify-center flex-shrink-0 ${hasError ? 'bg-fluux-muted/30' : 'bg-fluux-brand'}`}>
           {isLoading ? (
-            <Loader2 className="w-5 h-5 text-fluux-text-on-accent animate-spin" />
+            <Loader2 className="size-5 text-fluux-text-on-accent animate-spin" />
           ) : hasError ? (
-            <FileX className="w-5 h-5 text-fluux-muted" />
+            <FileX className="size-5 text-fluux-muted" />
           ) : (
-            <Music className="w-5 h-5 text-fluux-text-on-accent" />
+            <Music className="size-5 text-fluux-text-on-accent" />
           )}
         </div>
         <div className="flex-1 min-w-0">
@@ -365,7 +365,7 @@ export function AudioAttachment({ attachment }: AttachmentProps) {
               aria-label={t('common.download')}
               tabIndex={-1}
             >
-              <Download className="w-4 h-4 text-fluux-muted hover:text-fluux-text" />
+              <Download className="size-4 text-fluux-muted hover:text-fluux-text" />
             </a>
           </Tooltip>
         )}
@@ -406,18 +406,18 @@ export function FileAttachmentCard({ attachment }: AttachmentProps) {
       tabIndex={-1}
     >
       {/* File type icon */}
-      <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+      <div className={`size-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
         isPdfMimeType(attachment.mediaType) ? 'bg-red-500/20 text-red-500' :
         isEbookMimeType(attachment.mediaType) ? 'bg-purple-500/20 text-purple-500' :
         isDocumentMimeType(attachment.mediaType) ? 'bg-blue-500/20 text-blue-500' :
         isArchiveMimeType(attachment.mediaType) ? 'bg-yellow-500/20 text-yellow-500' :
         'bg-fluux-muted/20 text-fluux-muted'
       }`}>
-        {isPdfMimeType(attachment.mediaType) ? <FileText className="w-5 h-5" /> :
-         isEbookMimeType(attachment.mediaType) ? <BookOpen className="w-5 h-5" /> :
-         isDocumentMimeType(attachment.mediaType) ? <FileText className="w-5 h-5" /> :
-         isArchiveMimeType(attachment.mediaType) ? <Archive className="w-5 h-5" /> :
-         <File className="w-5 h-5" />}
+        {isPdfMimeType(attachment.mediaType) ? <FileText className="size-5" /> :
+         isEbookMimeType(attachment.mediaType) ? <BookOpen className="size-5" /> :
+         isDocumentMimeType(attachment.mediaType) ? <FileText className="size-5" /> :
+         isArchiveMimeType(attachment.mediaType) ? <Archive className="size-5" /> :
+         <File className="size-5" />}
       </div>
       {/* File info */}
       <div className="flex-1 min-w-0">
@@ -430,7 +430,7 @@ export function FileAttachmentCard({ attachment }: AttachmentProps) {
         </p>
       </div>
       {/* Download icon */}
-      <Download className="w-4 h-4 text-fluux-muted opacity-0 group-hover/file:opacity-100 transition-opacity flex-shrink-0" />
+      <Download className="size-4 text-fluux-muted opacity-0 group-hover/file:opacity-100 transition-opacity flex-shrink-0" />
     </a>
   )
 }

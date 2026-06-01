@@ -67,9 +67,9 @@ export function SaveToPasswordManagerButton({
       className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors disabled:opacity-50"
     >
       {isSaved ? (
-        <Check className="w-3.5 h-3.5 text-green-500" />
+        <Check className="size-3.5 text-green-500" />
       ) : (
-        <KeyRound className="w-3.5 h-3.5" />
+        <KeyRound className="size-3.5" />
       )}
       {isSaved
         ? t('settings.encryption.savePassphraseManagerSaved')

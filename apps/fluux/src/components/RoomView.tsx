@@ -338,7 +338,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
       {isDragging && (
         <div className="absolute inset-0 z-50 bg-fluux-bg/95 backdrop-blur-sm flex items-center justify-center pointer-events-none">
           <div className="flex flex-col items-center gap-4 p-8 border-2 border-dashed border-fluux-brand rounded-xl bg-fluux-bg/50">
-            <Upload className="w-12 h-12 text-fluux-brand" />
+            <Upload className="size-12 text-fluux-brand" />
             <p className="text-lg font-medium text-fluux-text">{t('upload.dropToUpload')}</p>
           </div>
         </div>
@@ -537,7 +537,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             {bareJid && onStartChat && (
               <MenuButton
                 onClick={() => { onStartChat(bareJid); nickMenu.close() }}
-                icon={<MessageCircle className="w-4 h-4" />}
+                icon={<MessageCircle className="size-4" />}
                 label={t('rooms.sendPrivateMessage')}
               />
             )}
@@ -555,13 +555,13 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
                 }
                 nickMenu.close()
               }}
-              icon={<EyeOff className="w-4 h-4" />}
+              icon={<EyeOff className="size-4" />}
               label={isIgnored ? t('rooms.stopIgnoring') : t('rooms.ignoreUser')}
             />
             {bareJid && onShowProfile && (
               <MenuButton
                 onClick={() => { onShowProfile(bareJid); nickMenu.close() }}
-                icon={<User className="w-4 h-4" />}
+                icon={<User className="size-4" />}
                 label={t('rooms.userInfo')}
               />
             )}
@@ -573,7 +573,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
                     setNickModerationTarget(nickMenuTarget)
                     nickMenu.close()
                   }}
-                  icon={<Settings className="w-4 h-4" />}
+                  icon={<Settings className="size-4" />}
                   label={t('rooms.manageOccupant')}
                 />
               </>
@@ -802,7 +802,7 @@ const RoomMessageList = memo(function RoomMessageList({
   const isInitialLoading = room.isJoining && !room.joined
   const loadingState = isInitialLoading ? (
     <div className="flex-1 flex flex-col items-center justify-center gap-3 text-fluux-muted">
-      <Loader2 className="w-8 h-8 animate-spin text-fluux-brand" />
+      <Loader2 className="size-8 animate-spin text-fluux-brand" />
       <p>{t('rooms.joining')}</p>
     </div>
   ) : null
@@ -812,7 +812,7 @@ const RoomMessageList = memo(function RoomMessageList({
     <div className="flex-1 flex flex-col items-center justify-center text-fluux-muted gap-2">
       {!isJoined && (
         <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 mb-2">
-          <AlertCircle className="w-4 h-4" />
+          <AlertCircle className="size-4" />
           <span className="text-sm">{t('rooms.notJoinedNoHistory')}</span>
         </div>
       )}
@@ -823,7 +823,7 @@ const RoomMessageList = memo(function RoomMessageList({
   // Extra content: cached history warning banner when not joined
   const extraContent = !isJoined && messages.length > 0 ? (
     <div className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-700 dark:text-amber-400">
-      <AlertCircle className="w-4 h-4 flex-shrink-0" />
+      <AlertCircle className="size-4 flex-shrink-0" />
       <span className="text-sm">
         {t('rooms.cachedHistoryWarning', {
           date: format(messages[messages.length - 1].timestamp, 'PPp'),
@@ -1140,12 +1140,12 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
     <>
       {occupant && occupant.affiliation === 'owner' && (
         <span className="self-center">
-          <Crown className="w-3.5 h-3.5 text-fluux-muted" />
+          <Crown className="size-3.5 text-fluux-muted" />
         </span>
       )}
       {occupant && occupant.affiliation === 'admin' && (
         <span className="self-center">
-          <Shield className="w-3.5 h-3.5 text-fluux-muted" />
+          <Shield className="size-3.5 text-fluux-muted" />
         </span>
       )}
       {(() => {
@@ -1280,15 +1280,19 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         <div
           data-modal="true"
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
+        >
+          <button
+            type="button"
+            aria-hidden="true"
+            tabIndex={-1}
+            onClick={() => {
               setShowModerateConfirm(false)
               setModerateReason('')
               setBanAfterModerate(false)
-            }
-          }}
-        >
-          <div className="bg-fluux-sidebar rounded-lg p-4 max-w-sm w-full mx-4 shadow-xl">
+            }}
+            className="absolute inset-0 cursor-default"
+          />
+          <div className="relative z-10 bg-fluux-sidebar rounded-lg p-4 max-w-sm w-full mx-4 shadow-xl">
             <h3 className="text-lg font-semibold text-fluux-text mb-2">{t('chat.moderateMessage')}</h3>
             <p className="text-sm text-fluux-muted mb-3">{t('chat.moderateMessageConfirm')}</p>
             <div className="mb-3">
@@ -1320,7 +1324,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
                   type="checkbox"
                   checked={banAfterModerate}
                   onChange={(e) => setBanAfterModerate(e.target.checked)}
-                  className="w-4 h-4 rounded border-fluux-border text-fluux-brand focus:ring-fluux-brand/50"
+                  className="size-4 rounded border-fluux-border text-fluux-brand focus:ring-fluux-brand/50"
                 />
                 <span className="text-sm text-fluux-text">{t('chat.moderateAndBan')}</span>
               </label>
@@ -1615,8 +1619,8 @@ function RoomMessageInput({
         >
           {/* Avatar */}
           {match.isAll ? (
-            <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 bg-fluux-brand">
-              <Users className="w-3.5 h-3.5 text-fluux-text-on-accent" />
+            <div className="size-6 rounded-full flex items-center justify-center flex-shrink-0 bg-fluux-brand">
+              <Users className="size-3.5 text-fluux-text-on-accent" />
             </div>
           ) : (
             <Avatar
@@ -1849,12 +1853,12 @@ function RoomJoinPrompt({
       >
         {isJoining ? (
           <>
-            <Loader2 className="w-4 h-4 animate-spin" />
+            <Loader2 className="size-4 animate-spin" />
             {t('rooms.joining')}
           </>
         ) : (
           <>
-            <LogIn className="w-4 h-4" />
+            <LogIn className="size-4" />
             {t('rooms.joinToParticipate')}
           </>
         )}

@@ -43,29 +43,29 @@ function getDeviceIcon(clientName: string) {
 
   // Check well-known clients first
   if (MOBILE_CLIENTS.some(c => name.includes(c))) {
-    return <Smartphone className="w-3 h-3" />
+    return <Smartphone className="size-3" />
   }
   if (DESKTOP_CLIENTS.some(c => name.includes(c))) {
-    return <Monitor className="w-3 h-3" />
+    return <Monitor className="size-3" />
   }
   if (WEB_CLIENTS.some(c => name.includes(c))) {
-    return <Globe className="w-3 h-3" />
+    return <Globe className="size-3" />
   }
 
   // Fall back to keyword-based detection
   if (name.includes('mobile') || name.includes('android') || name.includes('ios') || name.includes('iphone')) {
-    return <Smartphone className="w-3 h-3" />
+    return <Smartphone className="size-3" />
   }
   if (name.includes('tablet') || name.includes('ipad')) {
-    return <Tablet className="w-3 h-3" />
+    return <Tablet className="size-3" />
   }
   if (name.includes('web') || name.includes('browser')) {
-    return <Globe className="w-3 h-3" />
+    return <Globe className="size-3" />
   }
   if (name.includes('desktop') || name.includes('pc') || name.includes('mac') || name.includes('linux') || name.includes('windows')) {
-    return <Monitor className="w-3 h-3" />
+    return <Monitor className="size-3" />
   }
-  return <HelpCircle className="w-3 h-3" />
+  return <HelpCircle className="size-3" />
 }
 
 // Cache vCard results across popover opens to avoid redundant fetches
@@ -128,7 +128,7 @@ export function UserInfoPopover({ contact, jid, occupantJid, role, affiliation, 
     return () => { cancelled = true }
   }, [isOpen, contact?.jid, jid, occupantJid, client])
 
-  const handleClick = (e: React.MouseEvent) => {
+  const handleClick = (e: React.MouseEvent | React.KeyboardEvent) => {
     e.stopPropagation()
     if (isOpen) {
       setIsOpen(false)
@@ -185,7 +185,10 @@ export function UserInfoPopover({ contact, jid, occupantJid, role, affiliation, 
     <>
       <div
         ref={triggerRef}
+        role="button"
+        tabIndex={0}
         onClick={handleClick}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick(e) } }}
         className={`cursor-pointer ${className}`}
       >
         {children}
@@ -207,7 +210,7 @@ export function UserInfoPopover({ contact, jid, occupantJid, role, affiliation, 
           {/* vCard info */}
           {vcardLoading && (
             <div className="flex items-center gap-1.5 text-xs text-fluux-muted mb-2">
-              <Loader2 className="w-3 h-3 animate-spin" />
+              <Loader2 className="size-3 animate-spin" />
             </div>
           )}
           {vcard && (
@@ -219,19 +222,19 @@ export function UserInfoPopover({ contact, jid, occupantJid, role, affiliation, 
               )}
               {vcard.org && (
                 <div className="flex items-center gap-1.5 text-xs text-fluux-muted">
-                  <Building2 className="w-3 h-3 shrink-0" />
+                  <Building2 className="size-3 shrink-0" />
                   <span className="truncate">{vcard.org}</span>
                 </div>
               )}
               {vcard.email && (
                 <div className="flex items-center gap-1.5 text-xs text-fluux-muted">
-                  <Mail className="w-3 h-3 shrink-0" />
+                  <Mail className="size-3 shrink-0" />
                   <span className="truncate">{vcard.email}</span>
                 </div>
               )}
               {vcard.country && (
                 <div className="flex items-center gap-1.5 text-xs text-fluux-muted">
-                  <MapPin className="w-3 h-3 shrink-0" />
+                  <MapPin className="size-3 shrink-0" />
                   <span className="truncate">{vcard.country}</span>
                 </div>
               )}
@@ -241,7 +244,7 @@ export function UserInfoPopover({ contact, jid, occupantJid, role, affiliation, 
           {/* Local time (XEP-0202) */}
           {contactTime && (
             <div className="flex items-center gap-1.5 text-xs text-fluux-muted mb-2">
-              <Clock className="w-3 h-3 shrink-0" />
+              <Clock className="size-3 shrink-0" />
               <span>{t('presence.localTime')}: {contactTime}</span>
             </div>
           )}
@@ -251,9 +254,9 @@ export function UserInfoPopover({ contact, jid, occupantJid, role, affiliation, 
             <div className="flex flex-wrap gap-1.5 mb-2">
               {affiliation && affiliation !== 'none' && (
                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs rounded bg-fluux-hover text-fluux-text">
-                  {affiliation === 'owner' && <Crown className="w-3 h-3" />}
-                  {affiliation === 'admin' && <Shield className="w-3 h-3" />}
-                  {affiliation === 'member' && <UserCheck className="w-3 h-3" />}
+                  {affiliation === 'owner' && <Crown className="size-3" />}
+                  {affiliation === 'admin' && <Shield className="size-3" />}
+                  {affiliation === 'member' && <UserCheck className="size-3" />}
                   {t(`rooms.${affiliation}`)}
                 </span>
               )}

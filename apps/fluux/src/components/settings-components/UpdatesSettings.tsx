@@ -16,13 +16,13 @@ export function UpdatesSettings() {
         <div className="flex items-center justify-between p-4 rounded-lg border-2 border-fluux-hover bg-fluux-bg">
           <div className="flex items-center gap-3">
             {update.downloaded ? (
-              <CheckCircle className="w-5 h-5 text-fluux-green" />
+              <CheckCircle className="size-5 text-fluux-green" />
             ) : update.available ? (
-              <Download className="w-5 h-5 text-fluux-brand" />
+              <Download className="size-5 text-fluux-brand" />
             ) : update.checking ? (
-              <Loader2 className="w-5 h-5 text-fluux-muted animate-spin" />
+              <Loader2 className="size-5 text-fluux-muted animate-spin" />
             ) : (
-              <CheckCircle className="w-5 h-5 text-fluux-green" />
+              <CheckCircle className="size-5 text-fluux-green" />
             )}
             <div>
               <p className="text-sm font-medium text-fluux-text">
@@ -50,7 +50,7 @@ export function UpdatesSettings() {
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-text-on-accent
                            bg-fluux-brand hover:bg-fluux-brand/90 rounded-md transition-colors"
               >
-                <RefreshCw className="w-4 h-4" />
+                <RefreshCw className="size-4" />
                 {t('update.restart')}
               </button>
             ) : update.available && !update.downloading ? (
@@ -59,7 +59,7 @@ export function UpdatesSettings() {
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-text-on-accent
                            bg-fluux-brand hover:bg-fluux-brand/90 rounded-md transition-colors"
               >
-                <Download className="w-4 h-4" />
+                <Download className="size-4" />
                 {t('update.install')}
               </button>
             ) : update.downloading ? (
@@ -72,7 +72,7 @@ export function UpdatesSettings() {
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand hover:text-fluux-text
                            bg-fluux-brand/10 hover:bg-fluux-brand/20 rounded-md transition-colors"
               >
-                <RefreshCw className="w-4 h-4" />
+                <RefreshCw className="size-4" />
                 {t('update.checkForUpdates')}
               </button>
             ) : null}

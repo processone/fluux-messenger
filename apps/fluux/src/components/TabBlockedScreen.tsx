@@ -18,12 +18,12 @@ export function TabBlockedScreen({ takenOver, onTakeOver }: TabBlockedScreenProp
           <img
             src="/logo.png"
             alt={t('login.title')}
-            className="w-16 h-16 mx-auto mb-4 opacity-50"
+            className="size-16 mx-auto mb-4 opacity-50"
           />
         </div>
 
         <div className="bg-fluux-sidebar rounded-lg p-8 space-y-4">
-          <Monitor className="w-10 h-10 mx-auto text-fluux-muted" />
+          <Monitor className="size-10 mx-auto text-fluux-muted" />
 
           <h2 className="text-lg font-semibold text-fluux-text">
             {takenOver

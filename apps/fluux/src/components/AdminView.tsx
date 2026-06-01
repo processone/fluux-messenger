@@ -255,15 +255,15 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
   // Get icon based on active category
   const getIcon = () => {
     if (selectedUser) {
-      return <User className="w-5 h-5 text-fluux-brand" />
+      return <User className="size-5 text-fluux-brand" />
     }
     switch (activeCategory) {
       case 'users':
-        return <Users className="w-5 h-5 text-fluux-brand" />
+        return <Users className="size-5 text-fluux-brand" />
       case 'rooms':
-        return <Hash className="w-5 h-5 text-fluux-brand" />
+        return <Hash className="size-5 text-fluux-brand" />
       default:
-        return <Wrench className="w-5 h-5 text-fluux-brand" />
+        return <Wrench className="size-5 text-fluux-brand" />
     }
   }
 
@@ -362,7 +362,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
                              rounded-lg transition-colors"
                   aria-label={t('admin.userList.addUser')}
                 >
-                  <Plus className="w-5 h-5" />
+                  <Plus className="size-5" />
                 </button>
               </Tooltip>
             }
@@ -411,7 +411,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
     // Default placeholder
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-fluux-muted">
-        <Wrench className="w-12 h-12 mb-2 opacity-50" />
+        <Wrench className="size-12 mb-2 opacity-50" />
         <p>{t('admin.selectCommand')}</p>
       </div>
     )
@@ -428,7 +428,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
             className="p-1 -ms-1 me-2 rounded hover:bg-fluux-hover md:hidden"
             aria-label={t('common.back')}
           >
-            <ArrowLeft className="w-5 h-5 text-fluux-muted rtl-mirror" />
+            <ArrowLeft className="size-5 text-fluux-muted rtl-mirror" />
           </button>
         )}
         {getIcon()}

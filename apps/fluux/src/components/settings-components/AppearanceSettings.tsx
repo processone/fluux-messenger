@@ -79,7 +79,7 @@ function ThemeCard({
           className="absolute -top-1.5 -end-1.5 p-0.5 rounded-full bg-fluux-surface text-fluux-muted hover:text-fluux-red hover:bg-fluux-hover transition-colors cursor-pointer"
           title="Remove"
         >
-          <Trash2 className="w-3 h-3" />
+          <Trash2 className="size-3" />
         </div>
       )}
     </button>
@@ -104,7 +104,7 @@ function AccentDot({
     <button
       onClick={onSelect}
       title={preset.name}
-      className={`w-7 h-7 rounded-full shrink-0 transition-all ring-offset-2 ring-offset-fluux-bg
+      className={`size-7 rounded-full shrink-0 transition-all ring-offset-2 ring-offset-fluux-bg
         ${isSelected ? 'ring-2 ring-fluux-brand scale-110' : 'hover:scale-110'}`}
       style={{ backgroundColor: color }}
     />
@@ -258,7 +258,7 @@ export function AppearanceSettings() {
                       : 'border-fluux-hover bg-fluux-bg hover:border-fluux-muted'
                     }`}
                 >
-                  <Icon className={`w-6 h-6 ${isSelected ? 'text-fluux-brand' : 'text-fluux-muted'}`} />
+                  <Icon className={`size-6 ${isSelected ? 'text-fluux-brand' : 'text-fluux-muted'}`} />
                   <span className={`text-sm font-medium ${isSelected ? 'text-fluux-text' : 'text-fluux-muted'}`}>
                     {t(option.labelKey)}
                   </span>
@@ -325,7 +325,7 @@ export function AppearanceSettings() {
             onClick={() => themeInputRef.current?.click()}
             className="flex items-center gap-1.5 text-xs text-fluux-muted hover:text-fluux-text transition-colors"
           >
-            <Upload className="w-3.5 h-3.5" />
+            <Upload className="size-3.5" />
             {t('settings.importTheme')}
           </button>
           <input
@@ -345,14 +345,14 @@ export function AppearanceSettings() {
             <button
               onClick={() => clearAccentPreset()}
               title={t('settings.accentThemeDefault')}
-              className={`w-7 h-7 rounded-full shrink-0 transition-all ring-offset-2 ring-offset-fluux-bg
+              className={`size-7 rounded-full shrink-0 transition-all ring-offset-2 ring-offset-fluux-bg
                 flex items-center justify-center border-2 border-dashed
                 ${!accentPreset
                   ? 'ring-2 ring-fluux-brand scale-110 border-fluux-brand'
                   : 'border-fluux-muted hover:scale-110 hover:border-fluux-text'
                 }`}
             >
-              <RotateCcw className="w-3 h-3 text-fluux-muted" />
+              <RotateCcw className="size-3 text-fluux-muted" />
             </button>
             {/* Accent presets */}
             {getAccentPresets().map((preset) => (
@@ -384,14 +384,14 @@ export function AppearanceSettings() {
                       className="p-1 text-fluux-muted hover:text-fluux-text transition-colors"
                       title={t('settings.editSnippet')}
                     >
-                      <Pencil className="w-3.5 h-3.5" />
+                      <Pencil className="size-3.5" />
                     </button>
                     <button
                       onClick={() => removeSnippet(snippet.id)}
                       className="p-1 text-fluux-muted hover:text-fluux-red transition-colors"
                       title={t('settings.removeTheme')}
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="size-3.5" />
                     </button>
                     <button
                       onClick={() => toggleSnippet(snippet.id)}
@@ -400,7 +400,7 @@ export function AppearanceSettings() {
                       }`}
                     >
                       <span
-                        className={`absolute top-0.5 start-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                        className={`absolute top-0.5 start-0.5 size-4 rounded-full bg-white transition-transform ${
                           snippet.enabled ? 'translate-x-4' : ''
                         }`}
                       />
@@ -414,7 +414,7 @@ export function AppearanceSettings() {
             onClick={() => setShowNewSnippet(true)}
             className="flex items-center gap-1.5 text-xs text-fluux-muted hover:text-fluux-text transition-colors"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="size-3.5" />
             {t('settings.addCustomCss')}
           </button>
         </div>

@@ -270,8 +270,8 @@ export function OccupantPanel({
 
   const getRoleIcon = (role: string) => {
     switch (role) {
-      case 'moderator': return <Shield className="w-3 h-3" />
-      case 'participant': return <UserCheck className="w-3 h-3" />
+      case 'moderator': return <Shield className="size-3" />
+      case 'participant': return <UserCheck className="size-3" />
       default: return null
     }
   }
@@ -282,19 +282,19 @@ export function OccupantPanel({
       case 'owner':
         return (
           <span className="flex items-center gap-0.5 text-amber-600 dark:text-amber-400">
-            <Crown className="w-3 h-3" />
+            <Crown className="size-3" />
           </span>
         )
       case 'admin':
         return (
           <span className="flex items-center gap-0.5 text-fluux-brand">
-            <Shield className="w-3 h-3" />
+            <Shield className="size-3" />
           </span>
         )
       case 'member':
         return (
           <span className="flex items-center gap-0.5 text-fluux-green">
-            <UserCheck className="w-3 h-3" />
+            <UserCheck className="size-3" />
           </span>
         )
       default:
@@ -312,7 +312,7 @@ export function OccupantPanel({
               onClick={onClose}
               className="p-1 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors"
             >
-              <ArrowLeft className="w-5 h-5 rtl-mirror" />
+              <ArrowLeft className="size-5 rtl-mirror" />
             </button>
             <h3 className="font-semibold text-fluux-text">{t('rooms.members')}</h3>
           </div>
@@ -324,7 +324,7 @@ export function OccupantPanel({
                 onClick={onClose}
                 className="p-1 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors"
               >
-                <X className="w-4 h-4" />
+                <X className="size-4" />
               </button>
             </Tooltip>
           </>
@@ -441,7 +441,7 @@ export function OccupantPanel({
                         {getAffiliationBadge(bestAffiliation)}
                         {/* Ignored indicator */}
                         {ignored && (
-                          <EyeOff className="w-3 h-3 text-fluux-muted" />
+                          <EyeOff className="size-3 text-fluux-muted" />
                         )}
                         {/* XEP-0317 Hats from all connections (max 3 inline, overflow in tooltip) */}
                         {(() => {
@@ -545,7 +545,7 @@ export function OccupantPanel({
         {hiddenIgnoredUsers.length > 0 && (
           <div className="py-2">
             <div className="px-4 py-1 flex items-center gap-2 text-xs font-semibold text-fluux-muted uppercase">
-              <EyeOff className="w-3 h-3" />
+              <EyeOff className="size-3" />
               <span>{t('rooms.ignoredUsers')}</span>
               <span className="text-fluux-muted/60">— {hiddenIgnoredUsers.length}</span>
             </div>
@@ -589,7 +589,7 @@ export function OccupantPanel({
                         <span className="truncate text-sm text-fluux-text">
                           {displayName}
                         </span>
-                        <EyeOff className="w-3 h-3 text-fluux-muted" />
+                        <EyeOff className="size-3 text-fluux-muted" />
                       </div>
                       {ignoredUser.jid && (
                         <p className="text-xs text-fluux-muted truncate">{ignoredUser.jid}</p>
@@ -620,21 +620,21 @@ export function OccupantPanel({
           {menuTarget.bareJid && (
             <MenuButton
               onClick={() => handleStartChat(menuTarget.bareJid!)}
-              icon={<MessageCircle className="w-4 h-4" />}
+              icon={<MessageCircle className="size-4" />}
               label={t('rooms.sendPrivateMessage')}
             />
           )}
           {/* Ignore / Stop ignoring */}
           <MenuButton
             onClick={() => handleToggleIgnore(menuTarget)}
-            icon={<EyeOff className="w-4 h-4" />}
+            icon={<EyeOff className="size-4" />}
             label={isOccupantIgnored(menuTarget) ? t('rooms.stopIgnoring') : t('rooms.ignoreUser')}
           />
           {/* User info */}
           {menuTarget.bareJid && (
             <MenuButton
               onClick={() => handleShowProfile(menuTarget.bareJid!)}
-              icon={<User className="w-4 h-4" />}
+              icon={<User className="size-4" />}
               label={t('rooms.userInfo')}
             />
           )}
@@ -663,7 +663,7 @@ export function OccupantPanel({
                     setModerationTarget(menuTarget)
                     menu.close()
                   }}
-                  icon={<Settings className="w-4 h-4" />}
+                  icon={<Settings className="size-4" />}
                   label={t('rooms.manageOccupant')}
                 />
               </>

@@ -145,7 +145,7 @@ export function RoomHeader({
           className="p-1 -ms-1 rounded hover:bg-fluux-hover md:hidden"
           aria-label={t('rooms.backToRooms')}
         >
-          <ArrowLeft className="w-5 h-5 text-fluux-muted rtl-mirror" />
+          <ArrowLeft className="size-5 text-fluux-muted rtl-mirror" />
         </button>
       )}
 
@@ -159,10 +159,10 @@ export function RoomHeader({
         />
       ) : (
         <div
-          className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+          className="size-9 rounded-full flex items-center justify-center flex-shrink-0"
           style={{ backgroundColor: generateConsistentColorHexSync(room.jid, { saturation: 60, lightness: 45 }) }}
         >
-          <Hash className="w-5 h-5 text-white" />
+          <Hash className="size-5 text-white" />
         </div>
       )}
 
@@ -186,8 +186,8 @@ export function RoomHeader({
                        }`}
             aria-label={t('rooms.notificationSettings')}
           >
-            <NotifyIcon className="w-4 h-4" />
-            <ChevronDown className={`w-3 h-3 transition-transform ${showNotifyMenu ? 'rotate-180' : ''}`} />
+            <NotifyIcon className="size-4" />
+            <ChevronDown className={`size-3 transition-transform ${showNotifyMenu ? 'rotate-180' : ''}`} />
           </button>
         </Tooltip>
 
@@ -199,13 +199,13 @@ export function RoomHeader({
               onClick={() => handleSelectMode('mentions')}
               className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-start transition-colors"
             >
-              <BellOff className="w-4 h-4 text-fluux-muted" />
+              <BellOff className="size-4 text-fluux-muted" />
               <div className="flex-1">
                 <div className="text-sm text-fluux-text">{t('rooms.mentionsOnly')}</div>
                 <div className="text-xs text-fluux-muted">{t('rooms.defaultBehavior')}</div>
               </div>
               {notifyMode === 'mentions' && (
-                <Check className="w-4 h-4 text-fluux-brand" />
+                <Check className="size-4 text-fluux-brand" />
               )}
             </button>
 
@@ -214,13 +214,13 @@ export function RoomHeader({
               onClick={() => handleSelectMode('all-session')}
               className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-start transition-colors"
             >
-              <Bell className="w-4 h-4 text-fluux-muted" />
+              <Bell className="size-4 text-fluux-muted" />
               <div className="flex-1">
                 <div className="text-sm text-fluux-text">{t('rooms.allMessages')}</div>
                 <div className="text-xs text-fluux-muted">{t('rooms.thisSessionOnly')}</div>
               </div>
               {notifyMode === 'all-session' && (
-                <Check className="w-4 h-4 text-fluux-brand" />
+                <Check className="size-4 text-fluux-brand" />
               )}
             </button>
 
@@ -230,13 +230,13 @@ export function RoomHeader({
                 onClick={() => handleSelectMode('all-always')}
                 className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-start transition-colors"
               >
-                <BellRing className="w-4 h-4 text-fluux-muted" />
+                <BellRing className="size-4 text-fluux-muted" />
                 <div className="flex-1">
                   <div className="text-sm text-fluux-text">{t('rooms.allMessages')}</div>
                   <div className="text-xs text-fluux-muted">{t('rooms.alwaysSavedToBookmark')}</div>
                 </div>
                 {notifyMode === 'all-always' && (
-                  <Check className="w-4 h-4 text-fluux-brand" />
+                  <Check className="size-4 text-fluux-brand" />
                 )}
               </button>
             )}
@@ -251,7 +251,7 @@ export function RoomHeader({
           className="p-1.5 rounded-lg hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors"
           aria-label={t('rooms.inviteMember')}
         >
-          <UserPlus className="w-4 h-4" />
+          <UserPlus className="size-4" />
         </button>
       </Tooltip>
 
@@ -268,8 +268,8 @@ export function RoomHeader({
                          }`}
               aria-label={t('rooms.manageRoom')}
             >
-              <Settings className="w-4 h-4" />
-              <ChevronDown className={`w-3 h-3 transition-transform ${showOwnerMenu ? 'rotate-180' : ''}`} />
+              <Settings className="size-4" />
+              <ChevronDown className={`size-3 transition-transform ${showOwnerMenu ? 'rotate-180' : ''}`} />
             </button>
           </Tooltip>
 
@@ -284,7 +284,7 @@ export function RoomHeader({
                 }}
                 className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-start transition-colors"
               >
-                <Settings className="w-4 h-4 text-fluux-muted" />
+                <Settings className="size-4 text-fluux-muted" />
                 <div className="flex-1">
                   <div className="text-sm text-fluux-text">{t('rooms.roomSettings')}</div>
                   <div className="text-xs text-fluux-muted">{t('rooms.configureRoom')}</div>
@@ -299,7 +299,7 @@ export function RoomHeader({
                 }}
                 className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-start transition-colors"
               >
-                <Type className="w-4 h-4 text-fluux-muted" />
+                <Type className="size-4 text-fluux-muted" />
                 <div className="flex-1">
                   <div className="text-sm text-fluux-text">{t('rooms.changeSubject')}</div>
                 </div>
@@ -314,7 +314,7 @@ export function RoomHeader({
                   }}
                   className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-start transition-colors"
                 >
-                  <Image className="w-4 h-4 text-fluux-muted" />
+                  <Image className="size-4 text-fluux-muted" />
                   <div className="flex-1">
                     <div className="text-sm text-fluux-text">{t('rooms.changeAvatar')}</div>
                   </div>
@@ -334,7 +334,7 @@ export function RoomHeader({
                   }}
                   className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-start transition-colors text-fluux-red"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 className="size-4" />
                   <div className="flex-1">
                     <div className="text-sm">{t('rooms.removeAvatar')}</div>
                   </div>
@@ -350,7 +350,7 @@ export function RoomHeader({
                   }}
                   className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-start transition-colors"
                 >
-                  <UserMinus className="w-4 h-4 text-fluux-muted" />
+                  <UserMinus className="size-4 text-fluux-muted" />
                   <div className="flex-1">
                     <div className="text-sm text-fluux-text">{t('rooms.manageMembership')}</div>
                     <div className="text-xs text-fluux-muted">{t('rooms.kickBanMembers')}</div>
@@ -374,7 +374,7 @@ export function RoomHeader({
                   }`}
                   title={!room.supportsHats ? t('rooms.hatsNotEnabled') : undefined}
                 >
-                  <Award className="w-4 h-4 text-fluux-muted" />
+                  <Award className="size-4 text-fluux-muted" />
                   <div className="flex-1">
                     <div className="text-sm text-fluux-text">{t('rooms.manageHats')}</div>
                     <div className="text-xs text-fluux-muted">
@@ -395,7 +395,7 @@ export function RoomHeader({
             onClick={onSearchInConversation}
             className="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors"
           >
-            <Search className="w-4 h-4" />
+            <Search className="size-4" />
           </button>
         </Tooltip>
       )}
@@ -411,9 +411,9 @@ export function RoomHeader({
                      }`}
           aria-label={showOccupants ? t('rooms.hideMembers') : t('rooms.showMembers')}
         >
-          <Users className="w-4 h-4" />
+          <Users className="size-4" />
           <span className="text-sm font-medium">{uniqueOccupantCount}</span>
-          <ChevronRight className={`w-4 h-4 transition-transform ${showOccupants ? 'rotate-180' : ''}`} />
+          <ChevronRight className={`size-4 transition-transform ${showOccupants ? 'rotate-180' : ''}`} />
         </button>
       </Tooltip>
 
@@ -422,7 +422,7 @@ export function RoomHeader({
         <div className="absolute top-full inset-x-0 mt-1 mx-4 p-2 bg-fluux-red/20 border border-fluux-red/50 rounded text-fluux-red text-sm flex items-center justify-between z-40">
           <span>{avatarError}</span>
           <button onClick={() => setAvatarError(null)} className="p-1 hover:bg-fluux-red/20 rounded">
-            <X className="w-4 h-4" />
+            <X className="size-4" />
           </button>
         </div>
       )}

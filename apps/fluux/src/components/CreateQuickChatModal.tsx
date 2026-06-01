@@ -62,7 +62,7 @@ export function CreateQuickChatModal({ onClose }: CreateQuickChatModalProps) {
 
   const title = (
     <span className="flex items-center gap-2">
-      <Zap className="w-5 h-5 text-amber-500" />
+      <Zap className="size-5 text-amber-500" />
       {t('rooms.createQuickChat')}
     </span>
   )

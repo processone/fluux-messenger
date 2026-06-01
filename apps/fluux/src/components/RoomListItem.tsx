@@ -17,8 +17,8 @@ export function RoomListItem({
                  transition-colors text-start"
     >
       {/* Room icon */}
-      <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-fluux-bg flex items-center justify-center">
-        <Hash className="w-4 h-4 text-fluux-muted" />
+      <div className="flex-shrink-0 size-8 rounded-lg bg-fluux-bg flex items-center justify-center">
+        <Hash className="size-4 text-fluux-muted" />
       </div>
 
       {/* Room info */}
@@ -34,7 +34,7 @@ export function RoomListItem({
       {/* Occupant count */}
       {room.occupants !== undefined && (
         <div className="flex items-center gap-1 text-xs text-fluux-muted">
-          <Users className="w-3.5 h-3.5" />
+          <Users className="size-3.5" />
           <span>{room.occupants}</span>
         </div>
       )}

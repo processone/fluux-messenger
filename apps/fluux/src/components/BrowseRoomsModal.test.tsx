@@ -128,8 +128,8 @@ describe('BrowseRoomsModal', () => {
 
       // Click the backdrop (the outermost div)
       const backdrop = screen.getByText('rooms.browseRoomsTitle').closest('.fixed')!
-      fireEvent.mouseDown(backdrop)
-      fireEvent.click(backdrop)
+      // The dismiss affordance is now a full-overlay backdrop <button> (first child)
+      fireEvent.click(backdrop.querySelector('button')!)
 
       expect(mockOnClose).toHaveBeenCalled()
     })

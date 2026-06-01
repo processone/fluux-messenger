@@ -48,7 +48,7 @@ export function LinkPreviewCard({ preview, onLoad }: LinkPreviewCardProps) {
       <div className="p-3 space-y-1">
         {/* Site name / domain */}
         <div className="flex items-center gap-1.5 text-xs text-fluux-muted">
-          <ExternalLink className="w-3 h-3 flex-shrink-0" />
+          <ExternalLink className="size-3 flex-shrink-0" />
           <span className="truncate">{preview.siteName || domain}</span>
         </div>
 

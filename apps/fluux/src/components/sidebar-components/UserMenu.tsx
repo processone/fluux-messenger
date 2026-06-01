@@ -61,7 +61,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
             onClick={() => setIsOpen(!isOpen)}
             className="p-2 text-fluux-muted hover:text-fluux-text rounded hover:bg-fluux-hover"
           >
-            <MoreVertical className="w-4 h-4" />
+            <MoreVertical className="size-4" />
           </button>
         </Tooltip>
 
@@ -76,7 +76,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
                 }}
                 className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
               >
-                <Terminal className="w-4 h-4" />
+                <Terminal className="size-4" />
                 <span>{consoleOpen ? t('menu.hideConsole') : t('menu.showConsole')}</span>
               </button>
             )}
@@ -89,7 +89,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
               }}
               className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
             >
-              <Sparkles className="w-4 h-4" />
+              <Sparkles className="size-4" />
               <span>{t('menu.whatsNew')}</span>
             </button>
 
@@ -102,7 +102,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
                 }}
                 className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
               >
-                <Keyboard className="w-4 h-4" />
+                <Keyboard className="size-4" />
                 <span>{t('menu.keyboardShortcuts')}</span>
               </button>
             )}
@@ -115,7 +115,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
               onClick={() => setIsOpen(false)}
               className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
             >
-              <Bug className="w-4 h-4" />
+              <Bug className="size-4" />
               <span>{t('menu.reportIssue')}</span>
             </a>
 
@@ -127,7 +127,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
               }}
               className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
             >
-              <Info className="w-4 h-4" />
+              <Info className="size-4" />
               <span>{t('menu.about')}</span>
             </button>
 
@@ -142,7 +142,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
               }}
               className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-red hover:bg-fluux-red hover:text-white transition-colors"
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut className="size-4" />
               <span>{t('menu.logOut')}</span>
             </button>
           </div>
@@ -159,11 +159,17 @@ export function UserMenu({ onLogout }: UserMenuProps) {
       {showLogoutConfirm && (
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-          onClick={(e) => { if (e.target === e.currentTarget) setShowLogoutConfirm(false) }}
         >
-          <div className="bg-fluux-sidebar rounded-lg shadow-xl border border-fluux-hover w-80 overflow-hidden">
+          <button
+            type="button"
+            aria-hidden="true"
+            tabIndex={-1}
+            onClick={() => setShowLogoutConfirm(false)}
+            className="absolute inset-0 cursor-default"
+          />
+          <div className="relative z-10 bg-fluux-sidebar rounded-lg shadow-xl border border-fluux-hover w-80 overflow-hidden">
             <div className="p-6 text-center">
-              <LogOut className="w-12 h-12 mx-auto mb-4 text-fluux-muted" />
+              <LogOut className="size-12 mx-auto mb-4 text-fluux-muted" />
               <h3 className="text-lg font-semibold text-fluux-text mb-2">{t('menu.logOut')}</h3>
               <p className="text-fluux-muted text-sm mb-4">{t('menu.logoutConfirm')}</p>
               <label className="flex items-center gap-2 text-sm text-fluux-text cursor-pointer mb-6">
@@ -171,7 +177,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
                   type="checkbox"
                   checked={cleanLocalData}
                   onChange={(e) => setCleanLocalData(e.target.checked)}
-                  className="w-4 h-4 rounded border border-fluux-border bg-fluux-bg
+                  className="size-4 rounded border border-fluux-border bg-fluux-bg
                              checked:bg-fluux-brand checked:border-fluux-brand
                              focus:ring-fluux-brand focus:ring-offset-0"
                 />
