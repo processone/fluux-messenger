@@ -647,6 +647,11 @@ export class Chat extends BaseModule {
   private static readonly E2EE_PROTECTED_CHILD_KEYS: ReadonlySet<string> =
     new Set([`x|${NS_OOB}`, `file|${NS_FILE_METADATA}`])
 
+  /** XEP-0444 reactions ride inside the envelope; the reacted-to id rides with them. */
+  private static readonly E2EE_REACTION_KEYS: ReadonlySet<string> = new Set([
+    `reactions|${NS_REACTIONS}`,
+  ])
+
   // --- Chat Methods (Outgoing) ---
 
   /**
@@ -1017,8 +1022,9 @@ export class Chat extends BaseModule {
     // over E2EE — better to throw than silently downgrade.
     const manager = this.deps.getE2EEManager?.()
     let suppressReplyFallback = false
+    let peerCanEncrypt = false
     if (type === 'chat' && manager) {
-      const peerCanEncrypt = await manager
+      peerCanEncrypt = await manager
         .canEncryptTo({ kind: 'direct', peer: recipient })
         .catch(() => false)
       if (peerCanEncrypt) {
@@ -1062,6 +1068,17 @@ export class Chat extends BaseModule {
 
     const reactionStanzaId = generateUUID()
     children.push(createOriginIdElement(reactionStanzaId))
+
+    // Encrypt the reactions element (and the id it references) for 1:1 chats
+    // whenever the peer is E2EE-reachable. A mid-flight plugin failure throws
+    // here, blocking a silent plaintext downgrade.
+    if (type === 'chat' && peerCanEncrypt) {
+      await this.applyE2EEToOutboundChat(recipient, '', children, Chat.E2EE_REACTION_KEYS, {
+        encryptBody: false,
+        outerBody: 'remove',
+        storeHint: 'store',
+      })
+    }
 
     const message = xml('message', { to: recipient, type, id: reactionStanzaId }, ...children)
     await this.deps.sendStanza(message)
