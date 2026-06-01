@@ -127,6 +127,24 @@ import type { MAM } from './MAM'
  *
  * @category Core
  */
+/**
+ * Per-call tuning for {@link Chat.applyE2EEToOutboundChat}. Defaults preserve
+ * the message-body behaviour; body-less signal stanzas (reactions, retract,
+ * link previews, easter eggs) override them.
+ */
+interface E2EEOutboundOptions {
+  /** Carry a `<body>` (the plaintextBody arg) inside the encrypted envelope. Default true. */
+  encryptBody?: boolean
+  /**
+   * What to do with the OUTER stanza `<body>` after a successful encrypt:
+   *  - 'fallback' (default): replace/insert the plugin's encrypted-fallback string
+   *  - 'remove': strip any outer body (pure-signal stanzas)
+   */
+  outerBody?: 'fallback' | 'remove'
+  /** Hint appended after the encrypted element on success. Default 'store'; 'none' appends nothing. */
+  storeHint?: 'store' | 'no-store' | 'none'
+}
+
 export class Chat extends BaseModule {
   private mamModule: MAM
 
@@ -463,6 +481,7 @@ export class Chat extends BaseModule {
     plaintextBody: string,
     children: Element[],
     protectedChildKeys?: ReadonlySet<string>,
+    options?: E2EEOutboundOptions,
   ): Promise<MessageSecurityContext | undefined> {
     const manager = this.deps.getE2EEManager?.()
     if (!manager) return undefined
@@ -485,7 +504,8 @@ export class Chat extends BaseModule {
       // permissive policy) we want the outgoing stanza to look exactly
       // like the plaintext path would have built. Only commit the splice
       // after a successful encrypt.
-      const protectedChildren: Element[] = [xml('body', {}, plaintextBody)]
+      const encryptBody = options?.encryptBody ?? true
+      const protectedChildren: Element[] = encryptBody ? [xml('body', {}, plaintextBody)] : []
       const protectedIndices: number[] = []
       if (protectedChildKeys && protectedChildKeys.size > 0) {
         for (let i = 0; i < children.length; i++) {
@@ -498,6 +518,13 @@ export class Chat extends BaseModule {
             protectedIndices.push(i)
           }
         }
+      }
+      // Body-less callers must contribute at least one protected child; an
+      // empty envelope would encrypt nothing. Treat as "no encryption" so the
+      // caller's plaintext stanza is sent untouched.
+      if (protectedChildren.length === 0) {
+        await manager.assertPlaintextPermitted({ kind: 'direct', peer: recipient })
+        return undefined
       }
       const plaintext = serializePayloadEnvelope(protectedChildren)
 
@@ -536,11 +563,15 @@ export class Chat extends BaseModule {
           (c): c is Element =>
             typeof c !== 'string' && (c as { name?: string }).name === 'body',
         )
-        const fallbackBody = result.payload.fallbackBody ?? '[encrypted message]'
-        if (bodyIdx >= 0) {
-          children[bodyIdx] = xml('body', {}, fallbackBody)
+        if ((options?.outerBody ?? 'fallback') === 'remove') {
+          if (bodyIdx >= 0) children.splice(bodyIdx, 1)
         } else {
-          children.unshift(xml('body', {}, fallbackBody))
+          const fallbackBody = result.payload.fallbackBody ?? '[encrypted message]'
+          if (bodyIdx >= 0) {
+            children[bodyIdx] = xml('body', {}, fallbackBody)
+          } else {
+            children.unshift(xml('body', {}, fallbackBody))
+          }
         }
         // Remove <fallback for="NS_CORRECTION">: its body indices referenced the
         // plaintext "[Corrected] …" prefix which no longer exists in the E2EE
@@ -566,7 +597,10 @@ export class Chat extends BaseModule {
               result.payload.stanzaElement.attrs.xmlns ?? result.payload.protocolId,
           }),
         )
-        children.push(xml('store', { xmlns: NS_HINTS }))
+        const storeHint = options?.storeHint ?? 'store'
+        if (storeHint !== 'none') {
+          children.push(xml(storeHint, { xmlns: NS_HINTS }))
+        }
         return {
           protocolId: result.plugin.descriptor.id,
           trust: 'verified',
@@ -606,12 +640,35 @@ export class Chat extends BaseModule {
    *
    * Current scope: XEP-0066 OOB + XEP-0446 file-metadata — both of which
    * carry file URL / filename / size / mimetype that would otherwise leak
-   * to the XMPP server. Chat states, receipts/markers, LMC, reactions,
-   * reply are the planned follow-ups; add them here without other code
-   * changes when those PRs land.
+   * to the XMPP server. This set is only for extensions that ride alongside
+   * a message body. Standalone signal stanzas are encrypted by their own
+   * send methods via their own key sets (E2EE_REACTION_KEYS,
+   * E2EE_RETRACT_KEYS, E2EE_FASTEN_KEYS, E2EE_EASTER_EGG_KEYS) and LMC is
+   * handled inline in sendCorrection. Chat states (XEP-0085) remain
+   * plaintext by explicit product decision (see docs/ENCRYPTION.md).
    */
   private static readonly E2EE_PROTECTED_CHILD_KEYS: ReadonlySet<string> =
     new Set([`x|${NS_OOB}`, `file|${NS_FILE_METADATA}`])
+
+  /** XEP-0444 reactions ride inside the envelope; the reacted-to id rides with them. */
+  private static readonly E2EE_REACTION_KEYS: ReadonlySet<string> = new Set([
+    `reactions|${NS_REACTIONS}`,
+  ])
+
+  /** XEP-0424 retract element rides inside the envelope; the retracted id rides with it. */
+  private static readonly E2EE_RETRACT_KEYS: ReadonlySet<string> = new Set([
+    `retract|${NS_RETRACT}`,
+  ])
+
+  /** XEP-0422 OGP fastening rides inside the envelope (hides url/title/description/image). */
+  private static readonly E2EE_FASTEN_KEYS: ReadonlySet<string> = new Set([
+    `apply-to|${NS_FASTEN}`,
+  ])
+
+  /** Fluux easter-egg animation rides inside the envelope. */
+  private static readonly E2EE_EASTER_EGG_KEYS: ReadonlySet<string> = new Set([
+    `easter-egg|${NS_EASTER_EGG}`,
+  ])
 
   // --- Chat Methods (Outgoing) ---
 
@@ -983,8 +1040,9 @@ export class Chat extends BaseModule {
     // over E2EE — better to throw than silently downgrade.
     const manager = this.deps.getE2EEManager?.()
     let suppressReplyFallback = false
+    let peerCanEncrypt = false
     if (type === 'chat' && manager) {
-      const peerCanEncrypt = await manager
+      peerCanEncrypt = await manager
         .canEncryptTo({ kind: 'direct', peer: recipient })
         .catch(() => false)
       if (peerCanEncrypt) {
@@ -1028,6 +1086,17 @@ export class Chat extends BaseModule {
 
     const reactionStanzaId = generateUUID()
     children.push(createOriginIdElement(reactionStanzaId))
+
+    // Encrypt the reactions element (and the id it references) for 1:1 chats
+    // whenever the peer is E2EE-reachable. A mid-flight plugin failure throws
+    // here, blocking a silent plaintext downgrade.
+    if (type === 'chat' && peerCanEncrypt) {
+      await this.applyE2EEToOutboundChat(recipient, '', children, Chat.E2EE_REACTION_KEYS, {
+        encryptBody: false,
+        outerBody: 'remove',
+        storeHint: 'store',
+      })
+    }
 
     const message = xml('message', { to: recipient, type, id: reactionStanzaId }, ...children)
     await this.deps.sendStanza(message)
@@ -1210,17 +1279,30 @@ export class Chat extends BaseModule {
     const fallbackBody = 'This person attempted to retract a previous message, but it\'s unsupported by your client.'
 
     const retractionStanzaId = generateUUID()
-    const message = xml(
-      'message',
-      { to: recipient, type, id: retractionStanzaId },
+    const children: Element[] = [
       xml('body', {}, fallbackBody),
       xml('retract', { xmlns: NS_RETRACT, id: referenceId }),
       // XEP-0428: Mark the entire body as fallback
       xml('fallback', { xmlns: NS_FALLBACK, for: NS_RETRACT }),
-      createOriginIdElement(retractionStanzaId)
-    )
+      createOriginIdElement(retractionStanzaId),
+    ]
 
-    await this.deps.sendStanza(message)
+    // Encrypt the retract element for 1:1 chats. On success the helper hides
+    // the retraction (the English notice is replaced by the generic encrypted
+    // fallback and the <fallback for=NS_RETRACT> is dropped); on a mid-flight
+    // plugin failure it throws, blocking a silent plaintext downgrade. The
+    // plaintext path (no plugin reachable, permissive) keeps the notice.
+    if (type === 'chat') {
+      await this.applyE2EEToOutboundChat(recipient, '', children, Chat.E2EE_RETRACT_KEYS, {
+        encryptBody: false,
+        outerBody: 'fallback',
+        storeHint: 'store',
+      })
+    }
+
+    await this.deps.sendStanza(
+      xml('message', { to: recipient, type, id: retractionStanzaId }, ...children),
+    )
 
     // SDK events only - optimistic update via bindings
     const retractedAt = new Date()
@@ -1263,11 +1345,24 @@ export class Chat extends BaseModule {
    */
   async sendEasterEgg(to: string, type: 'chat' | 'groupchat', animation: string): Promise<void> {
     const recipient = type === 'chat' ? getBareJid(to) : to
-    const message = xml('message', { to: recipient, type, id: generateUUID() },
+    const children: Element[] = [
       xml('no-store', { xmlns: NS_HINTS }),
-      xml('easter-egg', { xmlns: NS_EASTER_EGG, animation })
+      xml('easter-egg', { xmlns: NS_EASTER_EGG, animation }),
+    ]
+
+    // Encrypt the animation for 1:1 chats. storeHint:'none' keeps the
+    // <no-store> we built; a mid-flight plugin failure throws.
+    if (type === 'chat') {
+      await this.applyE2EEToOutboundChat(recipient, '', children, Chat.E2EE_EASTER_EGG_KEYS, {
+        encryptBody: false,
+        outerBody: 'remove',
+        storeHint: 'none',
+      })
+    }
+
+    await this.deps.sendStanza(
+      xml('message', { to: recipient, type, id: generateUUID() }, ...children),
     )
-    await this.deps.sendStanza(message)
 
     // SDK event only - binding calls store.triggerAnimation
     if (type === 'groupchat') {
@@ -1319,13 +1414,28 @@ export class Chat extends BaseModule {
     if (preview.image) metaElements.push(xml('meta', { xmlns: 'http://www.w3.org/1999/xhtml', property: 'og:image', content: preview.image }))
     if (preview.siteName) metaElements.push(xml('meta', { xmlns: 'http://www.w3.org/1999/xhtml', property: 'og:site_name', content: preview.siteName }))
 
-    const message = xml('message', { to: recipient, type, id: generateUUID() },
+    const children: Element[] = [
       xml('apply-to', { xmlns: NS_FASTEN, id: originalId },
         xml('external', { xmlns: NS_FASTEN, name: 'ogp' }, ...metaElements)
       ),
-      xml('no-store', { xmlns: NS_HINTS })
+      xml('no-store', { xmlns: NS_HINTS }),
+    ]
+
+    // Encrypt the fastening for 1:1 chats so OGP url/title/description/image
+    // don't leak to the server. storeHint:'none' keeps the <no-store> we built
+    // (encrypted or not); a mid-flight plugin failure throws, blocking a
+    // silent plaintext downgrade.
+    if (type === 'chat') {
+      await this.applyE2EEToOutboundChat(recipient, '', children, Chat.E2EE_FASTEN_KEYS, {
+        encryptBody: false,
+        outerBody: 'remove',
+        storeHint: 'none',
+      })
+    }
+
+    await this.deps.sendStanza(
+      xml('message', { to: recipient, type, id: generateUUID() }, ...children),
     )
-    await this.deps.sendStanza(message)
 
     // SDK event only - binding calls store.updateMessage
     const updates = { linkPreview: preview }

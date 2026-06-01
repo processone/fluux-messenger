@@ -1255,7 +1255,7 @@ describe('Chat E2EE wiring', () => {
       return { deps: built.deps, capturedStanzas, sdkEmitted: built.sdkEmitted }
     }
 
-    it('omits the cleartext reply-quote fallback when the peer can be encrypted to', async () => {
+    it('moves the <reactions> element inside the encrypted payload when the peer can be encrypted to', async () => {
       const built = makeDepsWithOriginal({
         manager,
         originalBody: 'super secret original message',
@@ -1266,17 +1266,44 @@ describe('Chat E2EE wiring', () => {
 
       expect(built.capturedStanzas).toHaveLength(1)
       const sent = built.capturedStanzas[0]
-      // The whole point: no <body> at all (so no plaintext quote of the
-      // original message reaches the server), and no <reply>/<fallback>
-      // legacy machinery either.
+
+      // No cleartext reaction, no body, no legacy reply machinery on the wire.
+      expect(sent.getChild('reactions', 'urn:xmpp:reactions:0')).toBeUndefined()
       expect(sent.getChild('body')).toBeUndefined()
       expect(sent.getChild('reply', 'urn:xmpp:reply:0')).toBeUndefined()
-      // The reactions element itself is still present in cleartext —
-      // XEP-0444 doesn't define encrypted reactions and the server already
-      // sees emoji metadata; that's a known limitation, not a regression.
-      const reactions = sent.getChild('reactions', 'urn:xmpp:reactions:0')
-      expect(reactions).toBeDefined()
-      expect(reactions?.getChildren('reaction').length).toBe(1)
+
+      // Encrypted payload + EME + store hint instead.
+      expect(sent.getChild('plain', 'urn:fluux:e2ee-dummy:0')).toBeDefined()
+      expect(sent.getChild('encryption', 'urn:xmpp:eme:0')?.attrs.namespace).toBe(
+        'urn:fluux:e2ee-dummy:0',
+      )
+      expect(sent.getChild('store', 'urn:xmpp:hints')).toBeDefined()
+    })
+
+    it('round-trips an encrypted reaction back to a chat:reactions event', async () => {
+      // Send encrypted, then replay the captured stanza as if Bob sent it.
+      await chat.sendReaction('bob@example.com', 'orig-id', ['👍'])
+      const outgoing = captured[0]
+      expect(outgoing.getChild('reactions', 'urn:xmpp:reactions:0')).toBeUndefined()
+
+      const inbound = xml(
+        'message',
+        { from: 'bob@example.com/r', to: 'me@example.com', type: 'chat', id: 'm-react-rt' },
+        ...outgoing.children.filter((c) => typeof c === 'string' || c.name !== 'active'),
+      )
+
+      const rxBuilt = makeDeps({ jid: 'me@example.com', manager, captureStanza: () => {} })
+      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+      rxChat.handle(inbound)
+      await new Promise((r) => setTimeout(r, 0))
+
+      const evt = rxBuilt.sdkEmitted.find(
+        (e) => (e as { event: string }).event === 'chat:reactions',
+      ) as { payload: { conversationId: string; messageId: string; emojis: string[] } } | undefined
+      expect(evt).toBeDefined()
+      expect(evt!.payload.conversationId).toBe('bob@example.com')
+      expect(evt!.payload.messageId).toBe('orig-id')
+      expect(evt!.payload.emojis).toEqual(['👍'])
     })
 
     it('strict mode throws when reacting to an E2EE-unreachable peer with a quoted original', async () => {
@@ -1320,6 +1347,233 @@ describe('Chat E2EE wiring', () => {
       const body = sent.getChild('body')
       expect(body?.text()).toContain('legacy chat — already plaintext anyway')
       expect(sent.getChild('reply', 'urn:xmpp:reply:0')).toBeDefined()
+    })
+  })
+
+  describe('outbound encryption — sendRetraction', () => {
+    it('encrypts the retract element and hides the retraction notice for E2EE peers', async () => {
+      await chat.sendRetraction('bob@example.com', 'orig-id')
+
+      expect(captured).toHaveLength(1)
+      const sent = captured[0]
+
+      // The retract element and its target id are inside the encrypted payload.
+      expect(sent.getChild('retract', 'urn:xmpp:message-retract:1')).toBeUndefined()
+      // The retraction-revealing English body is replaced by the generic fallback.
+      expect(sent.getChild('body')?.text()).toBe('[dummy-plaintext payload]')
+      // The now-stale <fallback for=NS_RETRACT> is gone.
+      const retractFallback = sent
+        .getChildren('fallback', 'urn:xmpp:fallback:0')
+        .find((el) => el.attrs?.for === 'urn:xmpp:message-retract:1')
+      expect(retractFallback).toBeUndefined()
+      // Encrypted payload + EME present.
+      expect(sent.getChild('plain', 'urn:fluux:e2ee-dummy:0')).toBeDefined()
+      expect(sent.getChild('encryption', 'urn:xmpp:eme:0')).toBeDefined()
+    })
+
+    it('round-trips an encrypted retraction back to a chat:message-updated event', async () => {
+      await chat.sendRetraction('bob@example.com', 'orig-id')
+      const outgoing = captured[0]
+
+      const inbound = xml(
+        'message',
+        { from: 'bob@example.com/r', to: 'me@example.com', type: 'chat', id: 'm-retract-rt' },
+        ...outgoing.children.filter((c) => typeof c === 'string' || c.name !== 'active'),
+      )
+
+      const rxBuilt = makeDeps({ jid: 'me@example.com', manager, captureStanza: () => {} })
+      // handleIncomingRetraction needs the original message to confirm the sender.
+      rxBuilt.deps.stores = {
+        chat: {
+          getMessage: () => ({
+            id: 'orig-id',
+            from: 'bob@example.com',
+            body: 'will be retracted',
+          } as unknown as import('../types').Message),
+        },
+      } as unknown as import('../types').StoreBindings
+      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+      rxChat.handle(inbound)
+      await new Promise((r) => setTimeout(r, 0))
+
+      const evt = rxBuilt.sdkEmitted.find(
+        (e) => (e as { event: string }).event === 'chat:message-updated',
+      ) as { payload: { messageId: string; updates: { isRetracted?: boolean } } } | undefined
+      expect(evt).toBeDefined()
+      expect(evt!.payload.messageId).toBe('orig-id')
+      expect(evt!.payload.updates.isRetracted).toBe(true)
+    })
+
+    it('strict mode throws instead of retracting in plaintext to an unreachable peer', async () => {
+      const strictManager = new E2EEManager({
+        storage: new InMemoryStorageBackend(),
+        xmpp: stubXmppPrimitives(async () => {}),
+        account: { jid: 'me@example.com' },
+      })
+      strictManager.setSendPolicy('strict')
+      const { deps } = makeDeps({
+        jid: 'me@example.com',
+        manager: strictManager,
+        captureStanza: (el) => captured.push(el),
+      })
+      const strictChat = new Chat(deps, stubMAM())
+
+      await expect(
+        strictChat.sendRetraction('bob@example.com', 'orig-id'),
+      ).rejects.toBeInstanceOf(E2EEEncryptionRequiredError)
+      expect(captured).toHaveLength(0)
+    })
+
+    it('keeps the cleartext retraction notice when no E2EE plugin is registered', async () => {
+      const emptyManager = new E2EEManager({
+        storage: new InMemoryStorageBackend(),
+        xmpp: stubXmppPrimitives(async () => {}),
+        account: { jid: 'me@example.com' },
+      })
+      const { deps } = makeDeps({
+        jid: 'me@example.com',
+        manager: emptyManager,
+        captureStanza: (el) => captured.push(el),
+      })
+      const plainChat = new Chat(deps, stubMAM())
+
+      await plainChat.sendRetraction('bob@example.com', 'orig-id')
+
+      const sent = captured[0]
+      expect(sent.getChild('retract', 'urn:xmpp:message-retract:1')).toBeDefined()
+      expect(sent.getChild('body')?.text()).toContain('attempted to retract')
+      expect(sent.getChild('plain', 'urn:fluux:e2ee-dummy:0')).toBeUndefined()
+    })
+  })
+
+  describe('outbound encryption — sendLinkPreview', () => {
+    const preview = {
+      url: 'https://secret.example.com/article',
+      title: 'Confidential Title',
+      description: 'A description the server must not see',
+      image: 'https://secret.example.com/preview.jpg',
+      siteName: 'Secret Site',
+    }
+
+    it('moves the OGP fastening inside the encrypted payload and keeps no-store', async () => {
+      await chat.sendLinkPreview('bob@example.com', 'orig-id', preview)
+
+      expect(captured).toHaveLength(1)
+      const sent = captured[0]
+
+      // The apply-to fastening (carrying url/title/description/image) is encrypted.
+      expect(sent.getChild('apply-to', 'urn:xmpp:fasten:0')).toBeUndefined()
+      expect(sent.toString()).not.toContain('Confidential Title')
+      expect(sent.toString()).not.toContain('secret.example.com')
+      // Encrypted payload + EME, and the no-store hint preserved (not <store>).
+      expect(sent.getChild('plain', 'urn:fluux:e2ee-dummy:0')).toBeDefined()
+      expect(sent.getChild('encryption', 'urn:xmpp:eme:0')).toBeDefined()
+      expect(sent.getChild('no-store', 'urn:xmpp:hints')).toBeDefined()
+      expect(sent.getChild('store', 'urn:xmpp:hints')).toBeUndefined()
+    })
+
+    it('round-trips an encrypted link preview back to a chat:message-updated event', async () => {
+      await chat.sendLinkPreview('bob@example.com', 'orig-id', preview)
+      const outgoing = captured[0]
+
+      const inbound = xml(
+        'message',
+        { from: 'bob@example.com/r', to: 'me@example.com', type: 'chat', id: 'm-ogp-rt' },
+        ...outgoing.children.filter((c) => typeof c === 'string' || c.name !== 'active'),
+      )
+
+      const rxBuilt = makeDeps({ jid: 'me@example.com', manager, captureStanza: () => {} })
+      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+      rxChat.handle(inbound)
+      await new Promise((r) => setTimeout(r, 0))
+
+      const evt = rxBuilt.sdkEmitted.find(
+        (e) => (e as { event: string }).event === 'chat:message-updated',
+      ) as { payload: { messageId: string; updates: { linkPreview?: { title?: string } } } } | undefined
+      expect(evt).toBeDefined()
+      expect(evt!.payload.messageId).toBe('orig-id')
+      expect(evt!.payload.updates.linkPreview?.title).toBe('Confidential Title')
+    })
+
+    it('sends the preview in cleartext (no-store) when no E2EE plugin is registered', async () => {
+      const emptyManager = new E2EEManager({
+        storage: new InMemoryStorageBackend(),
+        xmpp: stubXmppPrimitives(async () => {}),
+        account: { jid: 'me@example.com' },
+      })
+      const { deps } = makeDeps({
+        jid: 'me@example.com',
+        manager: emptyManager,
+        captureStanza: (el) => captured.push(el),
+      })
+      const plainChat = new Chat(deps, stubMAM())
+
+      await plainChat.sendLinkPreview('bob@example.com', 'orig-id', preview)
+
+      const sent = captured[0]
+      expect(sent.getChild('apply-to', 'urn:xmpp:fasten:0')).toBeDefined()
+      expect(sent.getChild('no-store', 'urn:xmpp:hints')).toBeDefined()
+      expect(sent.getChild('plain', 'urn:fluux:e2ee-dummy:0')).toBeUndefined()
+    })
+  })
+
+  describe('outbound encryption — sendEasterEgg', () => {
+    it('moves the easter-egg element inside the encrypted payload and keeps no-store', async () => {
+      await chat.sendEasterEgg('bob@example.com', 'chat', 'confetti')
+
+      expect(captured).toHaveLength(1)
+      const sent = captured[0]
+
+      expect(sent.getChild('easter-egg', 'urn:fluux:easter-egg:0')).toBeUndefined()
+      expect(sent.toString()).not.toContain('confetti')
+      expect(sent.getChild('plain', 'urn:fluux:e2ee-dummy:0')).toBeDefined()
+      expect(sent.getChild('encryption', 'urn:xmpp:eme:0')).toBeDefined()
+      expect(sent.getChild('no-store', 'urn:xmpp:hints')).toBeDefined()
+      expect(sent.getChild('store', 'urn:xmpp:hints')).toBeUndefined()
+    })
+
+    it('round-trips an encrypted easter egg back to a chat:animation event', async () => {
+      await chat.sendEasterEgg('bob@example.com', 'chat', 'confetti')
+      const outgoing = captured[0]
+
+      const inbound = xml(
+        'message',
+        { from: 'bob@example.com/r', to: 'me@example.com', type: 'chat', id: 'm-egg-rt' },
+        ...outgoing.children.filter((c) => typeof c === 'string' || c.name !== 'active'),
+      )
+
+      const rxBuilt = makeDeps({ jid: 'me@example.com', manager, captureStanza: () => {} })
+      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+      rxChat.handle(inbound)
+      await new Promise((r) => setTimeout(r, 0))
+
+      const evt = rxBuilt.sdkEmitted.find(
+        (e) => (e as { event: string }).event === 'chat:animation',
+      ) as { payload: { conversationId: string; animation: string } } | undefined
+      expect(evt).toBeDefined()
+      expect(evt!.payload.conversationId).toBe('bob@example.com')
+      expect(evt!.payload.animation).toBe('confetti')
+    })
+
+    it('sends the easter egg in cleartext (no-store) when no E2EE plugin is registered', async () => {
+      const emptyManager = new E2EEManager({
+        storage: new InMemoryStorageBackend(),
+        xmpp: stubXmppPrimitives(async () => {}),
+        account: { jid: 'me@example.com' },
+      })
+      const { deps } = makeDeps({
+        jid: 'me@example.com',
+        manager: emptyManager,
+        captureStanza: (el) => captured.push(el),
+      })
+      const plainChat = new Chat(deps, stubMAM())
+
+      await plainChat.sendEasterEgg('bob@example.com', 'chat', 'confetti')
+
+      const sent = captured[0]
+      expect(sent.getChild('easter-egg', 'urn:fluux:easter-egg:0')).toBeDefined()
+      expect(sent.getChild('no-store', 'urn:xmpp:hints')).toBeDefined()
+      expect(sent.getChild('plain', 'urn:fluux:e2ee-dummy:0')).toBeUndefined()
     })
   })
 })
