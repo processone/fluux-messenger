@@ -1610,11 +1610,27 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
           : `${this.pluginName()}: signcrypt <to/> does not address ${ownBareJid}`,
       )
     }
-    // Skip timestamp skew check for archived messages (MAM replay,
-    // retryPendingDecrypts). The check is an anti-replay defence that
-    // only makes sense for live messages — archived messages are
-    // authentically old and would always fail the ±7-day window.
-    if (!context?.fromArchive) {
+    // Timestamp skew check — three modes:
+    //
+    // 1. Live messages: validate <time/> against now() ± 7 days.
+    // 2. MAM archive (fromArchive + archiveTimestamp): validate <time/>
+    //    against the <delay/> stamp ± 7 days. The message is old but
+    //    the envelope timestamp should be consistent with when the
+    //    server recorded it.
+    // 3. Retry (fromRetry): skip — the timestamp was already validated
+    //    on original live delivery; only the signature is pending.
+    if (context?.fromRetry) {
+      // Already validated on first delivery — skip.
+    } else if (context?.fromArchive && context.archiveTimestamp) {
+      const skew = Math.abs(envelope.timestamp.getTime() - context.archiveTimestamp.getTime())
+      if (skew > SIGNCRYPT_CLOCK_SKEW_MS) {
+        throw new E2EEPluginError(
+          'permanent',
+          'envelope-stale',
+          `${this.pluginName()}: signcrypt <time/> is ${Math.round(skew / 1000)}s off the archive <delay/> (±7-day tolerance)`,
+        )
+      }
+    } else if (!context?.fromArchive) {
       const skew = Math.abs(envelope.timestamp.getTime() - this.now())
       if (skew > SIGNCRYPT_CLOCK_SKEW_MS) {
         throw new E2EEPluginError(

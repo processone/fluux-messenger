@@ -177,13 +177,31 @@ export interface InboundDecryptContext {
    */
   isSelfOutgoing?: boolean
   /**
-   * `true` when this stanza was replayed from the XEP-0313 MAM archive
-   * or is being re-decrypted by {@link XMPPClient.retryPendingDecrypts}.
+   * `true` when this stanza was replayed from the XEP-0313 MAM archive.
    * Plugins should relax time-based anti-replay checks (e.g. signcrypt
-   * timestamp skew) for archived messages, since they may be arbitrarily
-   * old yet still authentic.
+   * timestamp skew) for archived messages — they are authentically old.
+   * When set, {@link archiveTimestamp} carries the `<delay/>` stamp so
+   * plugins can still validate relative freshness.
    */
   fromArchive?: boolean
+  /**
+   * XEP-0203 `<delay/>` timestamp from the MAM `<forwarded/>` wrapper.
+   * Only meaningful when {@link fromArchive} is `true`. Plugins should
+   * validate the signcrypt `<time/>` against this value (± tolerance)
+   * rather than against `now()` — this preserves temporal integrity
+   * without rejecting legitimately old archived messages.
+   */
+  archiveTimestamp?: Date
+  /**
+   * `true` when this stanza is being re-decrypted by
+   * {@link XMPPClient.retryPendingDecrypts}. Unlike {@link fromArchive},
+   * retried messages were originally live-delivered and SHOULD be subject
+   * to the normal timestamp skew check against their original reception
+   * time. The skew check is simply skipped for retries because the
+   * envelope `<time/>` was already validated on first delivery — only the
+   * signature is pending.
+   */
+  fromRetry?: boolean
 }
 
 /**

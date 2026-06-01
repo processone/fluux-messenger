@@ -239,7 +239,7 @@ export class MAM extends BaseModule {
           // plaintext, not fallback hints), then modification detection, then parse.
           for (const { forwarded, messageEl, archiveId } of rawEntries) {
             const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
-            await this.decryptArchiveEntryIfNeeded(messageEl, conversationId)
+            await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, forwardedTimestamp)
             if (this.collectModification(messageEl, modifications, (from) => getBareJid(from), forwardedTimestamp)) {
               continue
             }
@@ -382,7 +382,7 @@ export class MAM extends BaseModule {
           // Drain buffer: E2EE decrypt first, then modification detection, then parse.
           for (const { forwarded, messageEl, archiveId } of rawEntries) {
             const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
-            await this.decryptArchiveEntryIfNeeded(messageEl, roomJid)
+            await this.decryptArchiveEntryIfNeeded(messageEl, roomJid, forwardedTimestamp)
             if (this.collectModification(messageEl, modifications, (from) => from, forwardedTimestamp)) {
               continue
             }
@@ -509,7 +509,7 @@ export class MAM extends BaseModule {
         const from = getBareJid(messageEl.attrs.from || '')
         const to = getBareJid(messageEl.attrs.to || '')
         const conversationId = from === ownBareJid ? to : from
-        await this.decryptArchiveEntryIfNeeded(messageEl, conversationId)
+        await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, forwardedTimestamp)
         if (this.collectModification(messageEl, modifications, (from) => getBareJid(from), forwardedTimestamp)) {
           continue
         }
@@ -571,7 +571,7 @@ export class MAM extends BaseModule {
 
       for (const { forwarded, messageEl, archiveId } of rawEntries) {
         const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
-        await this.decryptArchiveEntryIfNeeded(messageEl, roomJid)
+        await this.decryptArchiveEntryIfNeeded(messageEl, roomJid, forwardedTimestamp)
         if (this.collectModification(messageEl, modifications, (from) => from, forwardedTimestamp)) {
           continue
         }
@@ -1670,6 +1670,7 @@ export class MAM extends BaseModule {
   private async decryptArchiveEntryIfNeeded(
     messageEl: Element,
     peer: string,
+    archiveTimestamp?: Date,
   ): Promise<void> {
     const manager = this.deps.getE2EEManager?.()
     if (!manager) return
@@ -1684,6 +1685,7 @@ export class MAM extends BaseModule {
     const { isSelfOutgoing } = deriveConversationContext(messageEl, ownBareJid)
     await decryptStanzaInPlace(messageEl, manager, peer, 'archive', {
       isSelfOutgoing,
+      archiveTimestamp,
     })
   }
 
@@ -1901,7 +1903,7 @@ export class MAM extends BaseModule {
     let result: RoomMessage | null = null
     if (rawEntry) {
       const { forwarded, messageEl, archiveId } = rawEntry as RawArchiveEntry
-      await this.decryptArchiveEntryIfNeeded(messageEl, roomJid)
+      await this.decryptArchiveEntryIfNeeded(messageEl, roomJid, this.extractForwardedTimestamp(forwarded))
       result = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
     }
 

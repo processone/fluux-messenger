@@ -86,7 +86,7 @@ export async function decryptStanzaInPlace(
   manager: E2EEManager,
   senderPeer: string,
   source: InboundSource = 'live',
-  options?: { isSelfOutgoing?: boolean },
+  options?: { isSelfOutgoing?: boolean; archiveTimestamp?: Date },
 ): Promise<DecryptInPlaceResult> {
   const marked = stanza as unknown as {
     [DECRYPTED_MARKER]?: boolean
@@ -139,13 +139,18 @@ export async function decryptStanzaInPlace(
   try {
     const messageId = stanza.attrs.id
     const isSelfOutgoing = options?.isSelfOutgoing === true
-    const fromArchive = source === 'archive'
+    const fromArchive = source === 'archive' && options?.archiveTimestamp != null
+    const fromRetry = source === 'archive' && options?.archiveTimestamp == null
     const context: InboundDecryptContext | undefined =
-      messageId || isSelfOutgoing || fromArchive
+      messageId || isSelfOutgoing || fromArchive || fromRetry
         ? {
             ...(messageId && { messageId }),
             ...(isSelfOutgoing && { isSelfOutgoing: true as const }),
-            ...(fromArchive && { fromArchive: true as const }),
+            ...(fromArchive && {
+              fromArchive: true as const,
+              archiveTimestamp: options!.archiveTimestamp!,
+            }),
+            ...(fromRetry && { fromRetry: true as const }),
           }
         : undefined
     const target = { kind: 'direct' as const, peer: senderPeer }
