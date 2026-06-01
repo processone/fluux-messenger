@@ -1511,13 +1511,19 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
           : `${this.pluginName()}: signcrypt <to/> does not address ${ownBareJid}`,
       )
     }
-    const skew = Math.abs(envelope.timestamp.getTime() - this.now())
-    if (skew > SIGNCRYPT_CLOCK_SKEW_MS) {
-      throw new E2EEPluginError(
-        'permanent',
-        'envelope-stale',
-        `${this.pluginName()}: signcrypt <time/> is ${Math.round(skew / 1000)}s outside the ±7-day skew window`,
-      )
+    // Skip timestamp skew check for archived messages (MAM replay,
+    // retryPendingDecrypts). The check is an anti-replay defence that
+    // only makes sense for live messages — archived messages are
+    // authentically old and would always fail the ±7-day window.
+    if (!context?.fromArchive) {
+      const skew = Math.abs(envelope.timestamp.getTime() - this.now())
+      if (skew > SIGNCRYPT_CLOCK_SKEW_MS) {
+        throw new E2EEPluginError(
+          'permanent',
+          'envelope-stale',
+          `${this.pluginName()}: signcrypt <time/> is ${Math.round(skew / 1000)}s outside the ±7-day skew window`,
+        )
+      }
     }
 
     const plaintextBytes = new TextEncoder().encode(envelope.payloadXml)

@@ -175,6 +175,14 @@ export interface InboundDecryptContext {
    * (OpenPGP, OMEMO) must branch on this flag.
    */
   isSelfOutgoing?: boolean
+  /**
+   * `true` when this stanza was replayed from the XEP-0313 MAM archive
+   * or is being re-decrypted by {@link XMPPClient.retryPendingDecrypts}.
+   * Plugins should relax time-based anti-replay checks (e.g. signcrypt
+   * timestamp skew) for archived messages, since they may be arbitrarily
+   * old yet still authentic.
+   */
+  fromArchive?: boolean
 }
 
 /**
