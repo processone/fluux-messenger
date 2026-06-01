@@ -1573,4 +1573,279 @@ describe('WebOpenPGPPlugin', () => {
       expect(publishedNew).toBe(true)
     })
   })
+
+  // -------------------------------------------------------------------------
+  // Signature enforcement & trust (mirrors SequoiaPgpPlugin coverage)
+  // -------------------------------------------------------------------------
+
+  describe('signature enforcement and trust', () => {
+    interface ActorCtx {
+      plugin: WebOpenPGPPlugin
+      testable: TestableWebOpenPGPPlugin
+      ctx: PluginContext
+      bundle: KeyBundle
+      securityUpdates: Array<{
+        peer: string
+        messageId: string
+        securityContext: { protocolId: string; trust: string; notes?: string[] }
+        body?: string
+      }>
+    }
+
+    async function buildCrossPublishedPair(): Promise<{
+      shared: SharedPep
+      alice: ActorCtx
+      bob: ActorCtx
+    }> {
+      const shared: SharedPep = new Map()
+
+      setSessionPassphrase('alice-strong-pp')
+      const alicePlugin = new TestableWebOpenPGPPlugin()
+      const aliceSecUpdates: ActorCtx['securityUpdates'] = []
+      const aliceRaw = makeCtxWithSharedPep('alice@example.com', shared)
+      const aliceCtx: PluginContext = {
+        ...aliceRaw.ctx,
+        reportSecurityContextUpdate: (u) => aliceSecUpdates.push(u as ActorCtx['securityUpdates'][0]),
+      }
+      await alicePlugin.init(aliceCtx)
+      const aliceBundle = await alicePlugin.callEnsureKeyMaterial('alice@example.com')
+      publishKeyToSharedPep(shared, 'alice@example.com', aliceBundle)
+
+      clearSessionPassphrase()
+      setSessionPassphrase('bob-strong-pp')
+      const bobPlugin = new TestableWebOpenPGPPlugin()
+      const bobSecUpdates: ActorCtx['securityUpdates'] = []
+      const bobRaw = makeCtxWithSharedPep('bob@example.com', shared)
+      const bobCtx: PluginContext = {
+        ...bobRaw.ctx,
+        reportSecurityContextUpdate: (u) => bobSecUpdates.push(u as ActorCtx['securityUpdates'][0]),
+      }
+      await bobPlugin.init(bobCtx)
+      const bobBundle = await bobPlugin.callEnsureKeyMaterial('bob@example.com')
+      publishKeyToSharedPep(shared, 'bob@example.com', bobBundle)
+
+      // Restore alice as active passphrase
+      clearSessionPassphrase()
+      setSessionPassphrase('alice-strong-pp')
+
+      return {
+        shared,
+        alice: { plugin: alicePlugin, testable: alicePlugin, ctx: aliceCtx, bundle: aliceBundle, securityUpdates: aliceSecUpdates },
+        bob: { plugin: bobPlugin, testable: bobPlugin, ctx: bobCtx, bundle: bobBundle, securityUpdates: bobSecUpdates },
+      }
+    }
+
+    function encodeBody(text: string): Uint8Array {
+      return new TextEncoder().encode(
+        serializePayloadEnvelope([xml('body', {}, text)]),
+      )
+    }
+
+    function decodeBody(plaintext: Uint8Array): string {
+      const xmlStr = new TextDecoder().decode(plaintext)
+      const children = parsePayloadEnvelope(xmlStr)
+      return children?.find((c) => c.name === 'body')?.text() ?? ''
+    }
+
+    const flushAsync = async () => {
+      for (let i = 0; i < 10; i++) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 0))
+      }
+    }
+
+    it('encrypts for a probed peer, decrypts back to plaintext with signature verified', async () => {
+      const { alice, bob } = await buildCrossPublishedPair()
+
+      await alice.plugin.probePeer('bob@example.com')
+      const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
+      const payload = await alice.plugin.encrypt(handle, encodeBody('hello bob'))
+
+      clearSessionPassphrase()
+      setSessionPassphrase('bob-strong-pp')
+      await bob.plugin.probePeer('alice@example.com')
+      const bobHandle = await bob.plugin.openConversation({ kind: 'direct', peer: 'alice@example.com' })
+      const claim = bob.plugin.tryClaimInbound(payload.stanzaElement)!
+      const decrypted = await bob.plugin.decrypt(bobHandle, claim)
+
+      expect(decodeBody(decrypted.plaintext)).toBe('hello bob')
+      expect(decrypted.securityContext.trust).toBe('tofu')
+      expect(decrypted.securityContext.notes).toBeUndefined()
+    })
+
+    it('marks trust untrusted when the sender key is not cached at decrypt time', async () => {
+      const { alice, bob } = await buildCrossPublishedPair()
+
+      await alice.plugin.probePeer('bob@example.com')
+      const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
+      const payload = await alice.plugin.encrypt(handle, encodeBody('from alice'))
+
+      // Bob decrypts WITHOUT probing alice first → sender key not cached
+      clearSessionPassphrase()
+      setSessionPassphrase('bob-strong-pp')
+      const bobHandle = await bob.plugin.openConversation({ kind: 'direct', peer: 'alice@example.com' })
+      const claim = bob.plugin.tryClaimInbound(payload.stanzaElement)!
+      const decrypted = await bob.plugin.decrypt(bobHandle, claim, { messageId: 'm-no-key' })
+
+      expect(decodeBody(decrypted.plaintext)).toBe('from alice')
+      expect(decrypted.securityContext.trust).toBe('untrusted')
+      expect(decrypted.securityContext.notes?.join(' ')).toMatch(/not cached/)
+    })
+
+    it('rejects when the signature does not match the cached sender cert (Case A)', async () => {
+      const { shared, alice, bob } = await buildCrossPublishedPair()
+
+      await alice.plugin.probePeer('bob@example.com')
+      const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
+      const payload = await alice.plugin.encrypt(handle, encodeBody('hi'))
+
+      // Bob caches eve's key as alice's (server substitution).
+      // Eve's key must carry UID xmpp:alice@example.com so probePeer
+      // accepts it — a real attacker can trivially forge the UID.
+      clearSessionPassphrase()
+      setSessionPassphrase('eve-strong-pp')
+      const eve = new TestableWebOpenPGPPlugin()
+      const eveCtx = makeCtx('alice@example.com').ctx
+      await eve.init(eveCtx)
+      const eveBundle = await eve.callEnsureKeyMaterial('alice@example.com')
+
+      // Overwrite alice's key in shared PEP with eve's key
+      publishKeyToSharedPep(shared, 'alice@example.com', eveBundle)
+
+      clearSessionPassphrase()
+      setSessionPassphrase('bob-strong-pp')
+      await bob.plugin.probePeer('alice@example.com')
+      const bobHandle = await bob.plugin.openConversation({ kind: 'direct', peer: 'alice@example.com' })
+      const claim = bob.plugin.tryClaimInbound(payload.stanzaElement)!
+
+      await expect(bob.plugin.decrypt(bobHandle, claim)).rejects.toThrow(/signature did not verify/)
+    })
+
+    it('rejects an envelope whose <time/> is more than 7 days skewed', async () => {
+      const { alice, bob } = await buildCrossPublishedPair()
+
+      // Monkey-patch the clock so the envelope timestamp is >7 days old
+      const realNow = Date.now()
+      const eightDaysMs = 8 * 24 * 60 * 60 * 1000
+      ;(alice.plugin as unknown as { now: () => number }).now = () => realNow - eightDaysMs
+
+      await alice.plugin.probePeer('bob@example.com')
+      const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
+      const payload = await alice.plugin.encrypt(handle, encodeBody('old message'))
+
+      // Restore alice's clock, bob uses real time
+      ;(alice.plugin as unknown as { now: () => number }).now = () => Date.now()
+
+      clearSessionPassphrase()
+      setSessionPassphrase('bob-strong-pp')
+      await bob.plugin.probePeer('alice@example.com')
+      const bobHandle = await bob.plugin.openConversation({ kind: 'direct', peer: 'alice@example.com' })
+      const claim = bob.plugin.tryClaimInbound(payload.stanzaElement)!
+
+      await expect(bob.plugin.decrypt(bobHandle, claim)).rejects.toMatchObject({
+        code: 'envelope-stale',
+      })
+    })
+
+    describe('pending signature verification buffer', () => {
+      it('drains the buffer on onPeerKeysChanged and reports an upgrade for verified entries', async () => {
+        const { shared, alice, bob } = await buildCrossPublishedPair()
+
+        await alice.plugin.probePeer('bob@example.com')
+        const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
+        const payload = await alice.plugin.encrypt(handle, encodeBody('stashed message'))
+
+        // Bob decrypts without alice's key → stashed for deferred verification
+        clearSessionPassphrase()
+        setSessionPassphrase('bob-strong-pp')
+        const bobHandle = await bob.plugin.openConversation({ kind: 'direct', peer: 'alice@example.com' })
+        const claim = bob.plugin.tryClaimInbound(payload.stanzaElement)!
+        await bob.plugin.decrypt(bobHandle, claim, { messageId: 'm-drain' })
+
+        // Now bob learns alice's real key → drain should upgrade
+        publishKeyToSharedPep(shared, 'alice@example.com', alice.bundle)
+        bob.plugin.onPeerKeysChanged('alice@example.com')
+        await flushAsync()
+
+        expect(bob.securityUpdates).toHaveLength(1)
+        expect(bob.securityUpdates[0].securityContext.trust).toBe('tofu')
+        expect(bob.securityUpdates[0].messageId).toBe('m-drain')
+      })
+
+      it('does not stash when the signature verified on first decrypt', async () => {
+        const { alice, bob } = await buildCrossPublishedPair()
+
+        await alice.plugin.probePeer('bob@example.com')
+        const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
+        const payload = await alice.plugin.encrypt(handle, encodeBody('immediate verify'))
+
+        clearSessionPassphrase()
+        setSessionPassphrase('bob-strong-pp')
+        await bob.plugin.probePeer('alice@example.com')
+        const bobHandle = await bob.plugin.openConversation({ kind: 'direct', peer: 'alice@example.com' })
+        const claim = bob.plugin.tryClaimInbound(payload.stanzaElement)!
+        const decrypted = await bob.plugin.decrypt(bobHandle, claim, { messageId: 'm-imm' })
+
+        expect(decrypted.securityContext.trust).toBe('tofu')
+
+        // Trigger drain — nothing should fire since entry was never stashed
+        bob.plugin.onPeerKeysChanged('alice@example.com')
+        await flushAsync()
+        expect(bob.securityUpdates).toHaveLength(0)
+      })
+
+      it('stash-then-verify-fails rejects the entry when key arrives (Case D)', async () => {
+        const { shared, alice, bob } = await buildCrossPublishedPair()
+
+        await alice.plugin.probePeer('bob@example.com')
+        const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
+        const payload = await alice.plugin.encrypt(handle, encodeBody('from real alice'))
+
+        // Bob decrypts without alice's key → stashed
+        clearSessionPassphrase()
+        setSessionPassphrase('bob-strong-pp')
+        const bobHandle = await bob.plugin.openConversation({ kind: 'direct', peer: 'alice@example.com' })
+        const claim = bob.plugin.tryClaimInbound(payload.stanzaElement)!
+        await bob.plugin.decrypt(bobHandle, claim, { messageId: 'm-mismatch' })
+
+        // Bob later sees eve's key advertised as alice (server misbehavior).
+        // Eve's key carries UID xmpp:alice@example.com so probePeer accepts it.
+        clearSessionPassphrase()
+        setSessionPassphrase('eve-strong-pp')
+        const eve = new TestableWebOpenPGPPlugin()
+        const eveCtx = makeCtx('alice@example.com').ctx
+        await eve.init(eveCtx)
+        const eveBundle = await eve.callEnsureKeyMaterial('alice@example.com')
+        publishKeyToSharedPep(shared, 'alice@example.com', eveBundle)
+
+        clearSessionPassphrase()
+        setSessionPassphrase('bob-strong-pp')
+        bob.plugin.onPeerKeysChanged('alice@example.com')
+        await flushAsync()
+
+        expect(bob.securityUpdates).toHaveLength(1)
+        expect(bob.securityUpdates[0].securityContext.trust).toBe('rejected')
+        expect(bob.securityUpdates[0].body).toBe('[Message rejected: invalid signature]')
+      })
+
+      it('does not stash when no messageId is available', async () => {
+        const { alice, bob } = await buildCrossPublishedPair()
+
+        await alice.plugin.probePeer('bob@example.com')
+        const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
+        const payload = await alice.plugin.encrypt(handle, encodeBody('no id'))
+
+        // Bob decrypts without key AND without messageId → no stash
+        clearSessionPassphrase()
+        setSessionPassphrase('bob-strong-pp')
+        const bobHandle = await bob.plugin.openConversation({ kind: 'direct', peer: 'alice@example.com' })
+        const claim = bob.plugin.tryClaimInbound(payload.stanzaElement)!
+        await bob.plugin.decrypt(bobHandle, claim) // no context → no messageId
+
+        // Drain should have nothing
+        bob.plugin.onPeerKeysChanged('alice@example.com')
+        await flushAsync()
+        expect(bob.securityUpdates).toHaveLength(0)
+      })
+    })
+  })
 })
