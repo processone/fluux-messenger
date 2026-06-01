@@ -662,6 +662,11 @@ export class Chat extends BaseModule {
     `apply-to|${NS_FASTEN}`,
   ])
 
+  /** Fluux easter-egg animation rides inside the envelope. */
+  private static readonly E2EE_EASTER_EGG_KEYS: ReadonlySet<string> = new Set([
+    `easter-egg|${NS_EASTER_EGG}`,
+  ])
+
   // --- Chat Methods (Outgoing) ---
 
   /**
@@ -1337,11 +1342,24 @@ export class Chat extends BaseModule {
    */
   async sendEasterEgg(to: string, type: 'chat' | 'groupchat', animation: string): Promise<void> {
     const recipient = type === 'chat' ? getBareJid(to) : to
-    const message = xml('message', { to: recipient, type, id: generateUUID() },
+    const children: Element[] = [
       xml('no-store', { xmlns: NS_HINTS }),
-      xml('easter-egg', { xmlns: NS_EASTER_EGG, animation })
+      xml('easter-egg', { xmlns: NS_EASTER_EGG, animation }),
+    ]
+
+    // Encrypt the animation for 1:1 chats. storeHint:'none' keeps the
+    // <no-store> we built; a mid-flight plugin failure throws.
+    if (type === 'chat') {
+      await this.applyE2EEToOutboundChat(recipient, '', children, Chat.E2EE_EASTER_EGG_KEYS, {
+        encryptBody: false,
+        outerBody: 'remove',
+        storeHint: 'none',
+      })
+    }
+
+    await this.deps.sendStanza(
+      xml('message', { to: recipient, type, id: generateUUID() }, ...children),
     )
-    await this.deps.sendStanza(message)
 
     // SDK event only - binding calls store.triggerAnimation
     if (type === 'groupchat') {

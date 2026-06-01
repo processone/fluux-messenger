@@ -1516,6 +1516,66 @@ describe('Chat E2EE wiring', () => {
       expect(sent.getChild('plain', 'urn:fluux:e2ee-dummy:0')).toBeUndefined()
     })
   })
+
+  describe('outbound encryption — sendEasterEgg', () => {
+    it('moves the easter-egg element inside the encrypted payload and keeps no-store', async () => {
+      await chat.sendEasterEgg('bob@example.com', 'chat', 'confetti')
+
+      expect(captured).toHaveLength(1)
+      const sent = captured[0]
+
+      expect(sent.getChild('easter-egg', 'urn:fluux:easter-egg:0')).toBeUndefined()
+      expect(sent.toString()).not.toContain('confetti')
+      expect(sent.getChild('plain', 'urn:fluux:e2ee-dummy:0')).toBeDefined()
+      expect(sent.getChild('encryption', 'urn:xmpp:eme:0')).toBeDefined()
+      expect(sent.getChild('no-store', 'urn:xmpp:hints')).toBeDefined()
+      expect(sent.getChild('store', 'urn:xmpp:hints')).toBeUndefined()
+    })
+
+    it('round-trips an encrypted easter egg back to a chat:animation event', async () => {
+      await chat.sendEasterEgg('bob@example.com', 'chat', 'confetti')
+      const outgoing = captured[0]
+
+      const inbound = xml(
+        'message',
+        { from: 'bob@example.com/r', to: 'me@example.com', type: 'chat', id: 'm-egg-rt' },
+        ...outgoing.children.filter((c) => typeof c === 'string' || c.name !== 'active'),
+      )
+
+      const rxBuilt = makeDeps({ jid: 'me@example.com', manager, captureStanza: () => {} })
+      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+      rxChat.handle(inbound)
+      await new Promise((r) => setTimeout(r, 0))
+
+      const evt = rxBuilt.sdkEmitted.find(
+        (e) => (e as { event: string }).event === 'chat:animation',
+      ) as { payload: { conversationId: string; animation: string } } | undefined
+      expect(evt).toBeDefined()
+      expect(evt!.payload.conversationId).toBe('bob@example.com')
+      expect(evt!.payload.animation).toBe('confetti')
+    })
+
+    it('sends the easter egg in cleartext (no-store) when no E2EE plugin is registered', async () => {
+      const emptyManager = new E2EEManager({
+        storage: new InMemoryStorageBackend(),
+        xmpp: stubXmppPrimitives(async () => {}),
+        account: { jid: 'me@example.com' },
+      })
+      const { deps } = makeDeps({
+        jid: 'me@example.com',
+        manager: emptyManager,
+        captureStanza: (el) => captured.push(el),
+      })
+      const plainChat = new Chat(deps, stubMAM())
+
+      await plainChat.sendEasterEgg('bob@example.com', 'chat', 'confetti')
+
+      const sent = captured[0]
+      expect(sent.getChild('easter-egg', 'urn:fluux:easter-egg:0')).toBeDefined()
+      expect(sent.getChild('no-store', 'urn:xmpp:hints')).toBeDefined()
+      expect(sent.getChild('plain', 'urn:fluux:e2ee-dummy:0')).toBeUndefined()
+    })
+  })
 })
 
 /**
