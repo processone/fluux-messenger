@@ -657,6 +657,11 @@ export class Chat extends BaseModule {
     `retract|${NS_RETRACT}`,
   ])
 
+  /** XEP-0422 OGP fastening rides inside the envelope (hides url/title/description/image). */
+  private static readonly E2EE_FASTEN_KEYS: ReadonlySet<string> = new Set([
+    `apply-to|${NS_FASTEN}`,
+  ])
+
   // --- Chat Methods (Outgoing) ---
 
   /**
@@ -1388,13 +1393,28 @@ export class Chat extends BaseModule {
     if (preview.image) metaElements.push(xml('meta', { xmlns: 'http://www.w3.org/1999/xhtml', property: 'og:image', content: preview.image }))
     if (preview.siteName) metaElements.push(xml('meta', { xmlns: 'http://www.w3.org/1999/xhtml', property: 'og:site_name', content: preview.siteName }))
 
-    const message = xml('message', { to: recipient, type, id: generateUUID() },
+    const children: Element[] = [
       xml('apply-to', { xmlns: NS_FASTEN, id: originalId },
         xml('external', { xmlns: NS_FASTEN, name: 'ogp' }, ...metaElements)
       ),
-      xml('no-store', { xmlns: NS_HINTS })
+      xml('no-store', { xmlns: NS_HINTS }),
+    ]
+
+    // Encrypt the fastening for 1:1 chats so OGP url/title/description/image
+    // don't leak to the server. storeHint:'none' keeps the <no-store> we built
+    // (encrypted or not); a mid-flight plugin failure throws, blocking a
+    // silent plaintext downgrade.
+    if (type === 'chat') {
+      await this.applyE2EEToOutboundChat(recipient, '', children, Chat.E2EE_FASTEN_KEYS, {
+        encryptBody: false,
+        outerBody: 'remove',
+        storeHint: 'none',
+      })
+    }
+
+    await this.deps.sendStanza(
+      xml('message', { to: recipient, type, id: generateUUID() }, ...children),
     )
-    await this.deps.sendStanza(message)
 
     // SDK event only - binding calls store.updateMessage
     const updates = { linkPreview: preview }

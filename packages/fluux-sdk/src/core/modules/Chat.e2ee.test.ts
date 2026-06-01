@@ -1445,6 +1445,77 @@ describe('Chat E2EE wiring', () => {
       expect(sent.getChild('plain', 'urn:fluux:e2ee-dummy:0')).toBeUndefined()
     })
   })
+
+  describe('outbound encryption — sendLinkPreview', () => {
+    const preview = {
+      url: 'https://secret.example.com/article',
+      title: 'Confidential Title',
+      description: 'A description the server must not see',
+      image: 'https://secret.example.com/preview.jpg',
+      siteName: 'Secret Site',
+    }
+
+    it('moves the OGP fastening inside the encrypted payload and keeps no-store', async () => {
+      await chat.sendLinkPreview('bob@example.com', 'orig-id', preview)
+
+      expect(captured).toHaveLength(1)
+      const sent = captured[0]
+
+      // The apply-to fastening (carrying url/title/description/image) is encrypted.
+      expect(sent.getChild('apply-to', 'urn:xmpp:fasten:0')).toBeUndefined()
+      expect(sent.toString()).not.toContain('Confidential Title')
+      expect(sent.toString()).not.toContain('secret.example.com')
+      // Encrypted payload + EME, and the no-store hint preserved (not <store>).
+      expect(sent.getChild('plain', 'urn:fluux:e2ee-dummy:0')).toBeDefined()
+      expect(sent.getChild('encryption', 'urn:xmpp:eme:0')).toBeDefined()
+      expect(sent.getChild('no-store', 'urn:xmpp:hints')).toBeDefined()
+      expect(sent.getChild('store', 'urn:xmpp:hints')).toBeUndefined()
+    })
+
+    it('round-trips an encrypted link preview back to a chat:message-updated event', async () => {
+      await chat.sendLinkPreview('bob@example.com', 'orig-id', preview)
+      const outgoing = captured[0]
+
+      const inbound = xml(
+        'message',
+        { from: 'bob@example.com/r', to: 'me@example.com', type: 'chat', id: 'm-ogp-rt' },
+        ...outgoing.children.filter((c) => typeof c === 'string' || c.name !== 'active'),
+      )
+
+      const rxBuilt = makeDeps({ jid: 'me@example.com', manager, captureStanza: () => {} })
+      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+      rxChat.handle(inbound)
+      await new Promise((r) => setTimeout(r, 0))
+
+      const evt = rxBuilt.sdkEmitted.find(
+        (e) => (e as { event: string }).event === 'chat:message-updated',
+      ) as { payload: { messageId: string; updates: { linkPreview?: { title?: string } } } } | undefined
+      expect(evt).toBeDefined()
+      expect(evt!.payload.messageId).toBe('orig-id')
+      expect(evt!.payload.updates.linkPreview?.title).toBe('Confidential Title')
+    })
+
+    it('sends the preview in cleartext (no-store) when no E2EE plugin is registered', async () => {
+      const emptyManager = new E2EEManager({
+        storage: new InMemoryStorageBackend(),
+        xmpp: stubXmppPrimitives(async () => {}),
+        account: { jid: 'me@example.com' },
+      })
+      const { deps } = makeDeps({
+        jid: 'me@example.com',
+        manager: emptyManager,
+        captureStanza: (el) => captured.push(el),
+      })
+      const plainChat = new Chat(deps, stubMAM())
+
+      await plainChat.sendLinkPreview('bob@example.com', 'orig-id', preview)
+
+      const sent = captured[0]
+      expect(sent.getChild('apply-to', 'urn:xmpp:fasten:0')).toBeDefined()
+      expect(sent.getChild('no-store', 'urn:xmpp:hints')).toBeDefined()
+      expect(sent.getChild('plain', 'urn:fluux:e2ee-dummy:0')).toBeUndefined()
+    })
+  })
 })
 
 /**
