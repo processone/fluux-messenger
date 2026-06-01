@@ -74,3 +74,9 @@ export type { ActivityLogState } from './activityLogStore'
 
 export { searchStore, setSearchClient, getSearchClient } from './searchStore'
 export type { SearchState, SearchResult, ContextMessage, SearchResultContext, SearchFilterType, InPrefixSuggestion } from './searchStore'
+
+// =============================================================================
+// UTILITIES
+// =============================================================================
+
+export { buildScopedStorageKey } from '../utils/storageScope'

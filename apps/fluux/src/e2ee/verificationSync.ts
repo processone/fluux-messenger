@@ -68,7 +68,7 @@ function fingerprintsEqual(a: string, b: string): boolean {
 export const VERIFICATIONS_NODE = 'urn:xmpp:fluux:verifications:0'
 const VERIFICATIONS_XMLNS = VERIFICATIONS_NODE
 
-/** localStorage key holding the highest snapshot version applied/published. */
+/** localStorage base key holding the highest snapshot version applied/published. */
 const VERSION_STORAGE_KEY_BASE = 'fluux-e2ee-verifications-version'
 
 interface VerificationPayload {
@@ -144,7 +144,6 @@ export function loadAppliedVerificationsVersion(): number {
   try {
     const scopedKey = buildScopedStorageKey(VERSION_STORAGE_KEY_BASE)
     let raw = localStorage.getItem(scopedKey)
-    // Migration: copy from base key if scoped key is empty
     if (raw === null && scopedKey !== VERSION_STORAGE_KEY_BASE) {
       const legacy = localStorage.getItem(VERSION_STORAGE_KEY_BASE)
       if (legacy !== null) {
