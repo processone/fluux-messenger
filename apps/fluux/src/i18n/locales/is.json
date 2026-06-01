@@ -511,7 +511,8 @@
                     "verified": "staðfest",
                     "tofu": "treyst",
                     "introduced": "kynnt",
-                    "untrusted": "óstaðfest"
+                    "untrusted": "óstaðfest",
+                    "rejected": "HAFNAÐ — ógild undirskrift"
                 }
             }
         },

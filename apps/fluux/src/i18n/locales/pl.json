@@ -513,7 +513,8 @@
                     "verified": "zweryfikowane",
                     "tofu": "zaufane",
                     "introduced": "przedstawiony",
-                    "untrusted": "niezweryfikowane"
+                    "untrusted": "niezweryfikowane",
+                    "rejected": "ODRZUCONO — nieprawidłowy podpis"
                 }
             }
         },

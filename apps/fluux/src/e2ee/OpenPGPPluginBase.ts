@@ -1526,6 +1526,26 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       }
     }
 
+    // XEP-0373 signcrypt mandate: signing AND encryption are required.
+    // Case B: no signature at all — malformed signcrypt.
+    if (!output.signaturePresent) {
+      throw new E2EEPluginError(
+        'permanent',
+        'signature-missing',
+        `${this.pluginName()}: signcrypt message contains no signature`,
+      )
+    }
+    // Case A: sender key available but signature did not verify.
+    if (senderPublicArmored && !output.signatureVerified) {
+      throw new E2EEPluginError(
+        'permanent',
+        'signature-failed',
+        `${this.pluginName()}: signcrypt signature did not verify against available sender key`,
+      )
+    }
+    // Case C (signaturePresent + !senderPublicArmored + !signatureVerified)
+    // falls through — the deferred-verification stash below handles it.
+
     const plaintextBytes = new TextEncoder().encode(envelope.payloadXml)
     const securityContext = isSelfOutgoing
       ? this.buildSelfOutgoingSecurityContext(output)
@@ -1694,12 +1714,31 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
           })
           continue
         }
-        remaining.push(entry)
+        // Case D: key now available but signature still invalid — reject.
+        ctx.reportSecurityContextUpdate({
+          peer,
+          messageId: entry.messageId,
+          securityContext: {
+            protocolId: OPENPGP_DESCRIPTOR.id,
+            trust: 'rejected',
+            notes: ['Signature did not verify against sender key'],
+          },
+        })
+        continue
       } catch (err) {
         ctx.logger.debug(
           `${this.pluginName()}: re-verify for ${peer}/${entry.messageId} failed: ${formatError(err)}`,
         )
-        remaining.push(entry)
+        ctx.reportSecurityContextUpdate({
+          peer,
+          messageId: entry.messageId,
+          securityContext: {
+            protocolId: OPENPGP_DESCRIPTOR.id,
+            trust: 'rejected',
+            notes: ['Re-verification failed'],
+          },
+        })
+        continue
       }
     }
     if (remaining.length === 0) this.pendingVerifications.delete(peer)

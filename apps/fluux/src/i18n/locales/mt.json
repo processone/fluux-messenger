@@ -513,7 +513,8 @@
                     "verified": "verifikat",
                     "tofu": "fdat",
                     "introduced": "introdott",
-                    "untrusted": "mhux verifikat"
+                    "untrusted": "mhux verifikat",
+                    "rejected": "MIĊĦUD — firma invalida"
                 }
             }
         },

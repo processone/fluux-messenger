@@ -513,7 +513,8 @@
                     "verified": "kontrollitud",
                     "tofu": "usaldatud",
                     "introduced": "tutvustatud",
-                    "untrusted": "kontrollimata"
+                    "untrusted": "kontrollimata",
+                    "rejected": "TAGASI LÜKATUD — kehtetu allkiri"
                 }
             }
         },

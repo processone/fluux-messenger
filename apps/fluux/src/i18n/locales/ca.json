@@ -513,7 +513,8 @@
                     "verified": "verificat",
                     "tofu": "de confiança",
                     "introduced": "presentat",
-                    "untrusted": "no verificat"
+                    "untrusted": "no verificat",
+                    "rejected": "REBUTJAT — signatura no vàlida"
                 }
             }
         },

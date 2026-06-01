@@ -1724,6 +1724,13 @@ export class XMPPClient {
         }
       }
 
+      if (securityContext?.trust === 'rejected') {
+        return {
+          body: '[Message rejected: invalid signature]',
+          securityContext,
+        }
+      }
+
       return { body, securityContext, attachment }
     } catch (err) {
       logWarn(`E2EE deferred decrypt failed for message from ${senderJid}: ${err instanceof Error ? err.message : String(err)}`)

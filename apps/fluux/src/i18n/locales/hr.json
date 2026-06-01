@@ -511,7 +511,8 @@
                     "verified": "provjereno",
                     "tofu": "povjerljivo",
                     "introduced": "uveden",
-                    "untrusted": "nije provjereno"
+                    "untrusted": "nije provjereno",
+                    "rejected": "ODBIJENO — nevažeći potpis"
                 }
             }
         },

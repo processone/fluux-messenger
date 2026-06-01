@@ -210,7 +210,7 @@ export interface MessageSecurityContext {
   /** Plugin identifier, e.g. `openpgp`, `omemo:2`. */
   protocolId: string
   /** Trust evaluation from the plugin. */
-  trust: 'verified' | 'introduced' | 'tofu' | 'untrusted'
+  trust: 'verified' | 'introduced' | 'tofu' | 'untrusted' | 'rejected'
   /** Optional display notes (e.g. "subkey 3 days old"). */
   notes?: string[]
 }
