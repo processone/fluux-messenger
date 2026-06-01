@@ -640,9 +640,12 @@ export class Chat extends BaseModule {
    *
    * Current scope: XEP-0066 OOB + XEP-0446 file-metadata — both of which
    * carry file URL / filename / size / mimetype that would otherwise leak
-   * to the XMPP server. Chat states, receipts/markers, LMC, reactions,
-   * reply are the planned follow-ups; add them here without other code
-   * changes when those PRs land.
+   * to the XMPP server. This set is only for extensions that ride alongside
+   * a message body. Standalone signal stanzas are encrypted by their own
+   * send methods via their own key sets (E2EE_REACTION_KEYS,
+   * E2EE_RETRACT_KEYS, E2EE_FASTEN_KEYS, E2EE_EASTER_EGG_KEYS) and LMC is
+   * handled inline in sendCorrection. Chat states (XEP-0085) remain
+   * plaintext by explicit product decision (see docs/ENCRYPTION.md).
    */
   private static readonly E2EE_PROTECTED_CHILD_KEYS: ReadonlySet<string> =
     new Set([`x|${NS_OOB}`, `file|${NS_FILE_METADATA}`])

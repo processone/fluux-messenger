@@ -120,10 +120,12 @@ On Linux and Windows the secret key falls back to a file with restricted permiss
 - Message content (text, formatting, replies) while in transit.
 - Message content stored on your server's archive.
 - Message content stored at your contact's server.
+- **Reactions, edits, retractions, link previews, and fun animations** in one-to-one chats. These ride inside the same encrypted envelope as the message body, so the server cannot see which emoji you reacted with, what you edited a message to say, which message you deleted, or which links you shared a preview of.
 
 **Not protected**
 
 - **Metadata**: who you talk to, when, and how often. XMPP routing information is always visible to the server.
+- **Typing indicators**: whether you are currently typing (XEP-0085 chat states) is sent in the clear. This is timing metadata only — it carries no message content — and running a separate encryption step on every keystroke transition would be disproportionate. Most encrypted messengers make the same choice. It may be revisited if a future threat model calls for hiding composition activity.
 - **Group chats** (multi-user rooms): the current OX implementation covers one-to-one conversations only.
 - **Compromised devices**: if someone can read your device's storage and the OS keychain, they can decrypt your messages. Use full-disk encryption.
 - **Local message cache**: for responsiveness, Fluux stores decrypted messages and attachment metadata in the browser/webview's local database. They are not re-encrypted at rest today. The OS file-system permissions and (for Tauri builds) the OS keychain protecting the secret key are the security boundary. Use full-disk encryption for best protection. Encrypting this cache is planned as a follow-up.
