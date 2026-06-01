@@ -1335,6 +1335,7 @@ impl DecryptionHelper for DecryptHelper<'_> {
         sym_algo: Option<SymmetricAlgorithm>,
         decrypt: &mut dyn FnMut(Option<SymmetricAlgorithm>, &SessionKey) -> bool,
     ) -> openpgp::Result<Option<Cert>> {
+        // First pass: try currently-valid encryption subkeys (common case).
         for ka in self
             .secret
             .keys()
@@ -1353,6 +1354,27 @@ impl DecryptionHelper for DecryptHelper<'_> {
                 }
             }
         }
+
+        // Second pass: try ALL secret subkeys regardless of policy/expiry.
+        // Historical MAM messages carry PKESK packets targeted at the
+        // encryption subkey that was current at send time. After subkey
+        // rotation the retired subkey is expired but its secret material
+        // is still in the local cert — we must try it. Also covers
+        // cross-implementation edge cases where the sender's library
+        // targeted a subkey that our policy filter doesn't surface.
+        for key in self.secret.keys().secret() {
+            let mut pair = key.key().clone().into_keypair()?;
+            for pkesk in pkesks {
+                if pkesk
+                    .decrypt(&mut pair, sym_algo)
+                    .map(|(algo, sk)| decrypt(algo, &sk))
+                    .unwrap_or(false)
+                {
+                    return Ok(Some(self.secret.clone()));
+                }
+            }
+        }
+
         Ok(None)
     }
 }
@@ -2045,6 +2067,39 @@ mod tests {
             out.signature_verified,
             "bob's signature must verify on replay regardless of alice's rotation"
         );
+    }
+
+    #[test]
+    fn ciphertext_encrypted_to_expired_subkey_still_decrypts() {
+        // The rotation expires the old subkey with a 1-second validity
+        // window. After that window closes, the policy-filtered first
+        // pass in DecryptionHelper won't find the old subkey. The
+        // second pass (all secret keys, no policy) must still succeed.
+        let (state, _alice, bob) = setup_two_accounts();
+
+        let pre_rotation_ciphertext = state
+            .encrypt("bob@example.com", &_alice.public_armored, "historical message")
+            .unwrap();
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let _rotated = runtime
+            .block_on(state.rotate_encryption_subkey("alice@example.com".into()))
+            .unwrap();
+
+        // Wait for the 1-second validity window to close.
+        std::thread::sleep(std::time::Duration::from_secs(2));
+
+        let out = state
+            .decrypt(
+                "alice@example.com",
+                &pre_rotation_ciphertext,
+                Some(&bob.public_armored),
+            )
+            .unwrap();
+        assert_eq!(out.plaintext, "historical message");
     }
 
     #[test]
