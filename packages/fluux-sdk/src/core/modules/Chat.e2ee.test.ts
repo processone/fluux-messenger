@@ -1349,6 +1349,102 @@ describe('Chat E2EE wiring', () => {
       expect(sent.getChild('reply', 'urn:xmpp:reply:0')).toBeDefined()
     })
   })
+
+  describe('outbound encryption — sendRetraction', () => {
+    it('encrypts the retract element and hides the retraction notice for E2EE peers', async () => {
+      await chat.sendRetraction('bob@example.com', 'orig-id')
+
+      expect(captured).toHaveLength(1)
+      const sent = captured[0]
+
+      // The retract element and its target id are inside the encrypted payload.
+      expect(sent.getChild('retract', 'urn:xmpp:message-retract:1')).toBeUndefined()
+      // The retraction-revealing English body is replaced by the generic fallback.
+      expect(sent.getChild('body')?.text()).toBe('[dummy-plaintext payload]')
+      // The now-stale <fallback for=NS_RETRACT> is gone.
+      const retractFallback = sent
+        .getChildren('fallback', 'urn:xmpp:fallback:0')
+        .find((el) => el.attrs?.for === 'urn:xmpp:message-retract:1')
+      expect(retractFallback).toBeUndefined()
+      // Encrypted payload + EME present.
+      expect(sent.getChild('plain', 'urn:fluux:e2ee-dummy:0')).toBeDefined()
+      expect(sent.getChild('encryption', 'urn:xmpp:eme:0')).toBeDefined()
+    })
+
+    it('round-trips an encrypted retraction back to a chat:message-updated event', async () => {
+      await chat.sendRetraction('bob@example.com', 'orig-id')
+      const outgoing = captured[0]
+
+      const inbound = xml(
+        'message',
+        { from: 'bob@example.com/r', to: 'me@example.com', type: 'chat', id: 'm-retract-rt' },
+        ...outgoing.children.filter((c) => typeof c === 'string' || c.name !== 'active'),
+      )
+
+      const rxBuilt = makeDeps({ jid: 'me@example.com', manager, captureStanza: () => {} })
+      // handleIncomingRetraction needs the original message to confirm the sender.
+      rxBuilt.deps.stores = {
+        chat: {
+          getMessage: () => ({
+            id: 'orig-id',
+            from: 'bob@example.com',
+            body: 'will be retracted',
+          } as unknown as import('../types').Message),
+        },
+      } as unknown as import('../types').StoreBindings
+      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+      rxChat.handle(inbound)
+      await new Promise((r) => setTimeout(r, 0))
+
+      const evt = rxBuilt.sdkEmitted.find(
+        (e) => (e as { event: string }).event === 'chat:message-updated',
+      ) as { payload: { messageId: string; updates: { isRetracted?: boolean } } } | undefined
+      expect(evt).toBeDefined()
+      expect(evt!.payload.messageId).toBe('orig-id')
+      expect(evt!.payload.updates.isRetracted).toBe(true)
+    })
+
+    it('strict mode throws instead of retracting in plaintext to an unreachable peer', async () => {
+      const strictManager = new E2EEManager({
+        storage: new InMemoryStorageBackend(),
+        xmpp: stubXmppPrimitives(async () => {}),
+        account: { jid: 'me@example.com' },
+      })
+      strictManager.setSendPolicy('strict')
+      const { deps } = makeDeps({
+        jid: 'me@example.com',
+        manager: strictManager,
+        captureStanza: (el) => captured.push(el),
+      })
+      const strictChat = new Chat(deps, stubMAM())
+
+      await expect(
+        strictChat.sendRetraction('bob@example.com', 'orig-id'),
+      ).rejects.toBeInstanceOf(E2EEEncryptionRequiredError)
+      expect(captured).toHaveLength(0)
+    })
+
+    it('keeps the cleartext retraction notice when no E2EE plugin is registered', async () => {
+      const emptyManager = new E2EEManager({
+        storage: new InMemoryStorageBackend(),
+        xmpp: stubXmppPrimitives(async () => {}),
+        account: { jid: 'me@example.com' },
+      })
+      const { deps } = makeDeps({
+        jid: 'me@example.com',
+        manager: emptyManager,
+        captureStanza: (el) => captured.push(el),
+      })
+      const plainChat = new Chat(deps, stubMAM())
+
+      await plainChat.sendRetraction('bob@example.com', 'orig-id')
+
+      const sent = captured[0]
+      expect(sent.getChild('retract', 'urn:xmpp:message-retract:1')).toBeDefined()
+      expect(sent.getChild('body')?.text()).toContain('attempted to retract')
+      expect(sent.getChild('plain', 'urn:fluux:e2ee-dummy:0')).toBeUndefined()
+    })
+  })
 })
 
 /**

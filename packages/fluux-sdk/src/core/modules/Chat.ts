@@ -652,6 +652,11 @@ export class Chat extends BaseModule {
     `reactions|${NS_REACTIONS}`,
   ])
 
+  /** XEP-0424 retract element rides inside the envelope; the retracted id rides with it. */
+  private static readonly E2EE_RETRACT_KEYS: ReadonlySet<string> = new Set([
+    `retract|${NS_RETRACT}`,
+  ])
+
   // --- Chat Methods (Outgoing) ---
 
   /**
@@ -1261,17 +1266,30 @@ export class Chat extends BaseModule {
     const fallbackBody = 'This person attempted to retract a previous message, but it\'s unsupported by your client.'
 
     const retractionStanzaId = generateUUID()
-    const message = xml(
-      'message',
-      { to: recipient, type, id: retractionStanzaId },
+    const children: Element[] = [
       xml('body', {}, fallbackBody),
       xml('retract', { xmlns: NS_RETRACT, id: referenceId }),
       // XEP-0428: Mark the entire body as fallback
       xml('fallback', { xmlns: NS_FALLBACK, for: NS_RETRACT }),
-      createOriginIdElement(retractionStanzaId)
-    )
+      createOriginIdElement(retractionStanzaId),
+    ]
 
-    await this.deps.sendStanza(message)
+    // Encrypt the retract element for 1:1 chats. On success the helper hides
+    // the retraction (the English notice is replaced by the generic encrypted
+    // fallback and the <fallback for=NS_RETRACT> is dropped); on a mid-flight
+    // plugin failure it throws, blocking a silent plaintext downgrade. The
+    // plaintext path (no plugin reachable, permissive) keeps the notice.
+    if (type === 'chat') {
+      await this.applyE2EEToOutboundChat(recipient, '', children, Chat.E2EE_RETRACT_KEYS, {
+        encryptBody: false,
+        outerBody: 'fallback',
+        storeHint: 'store',
+      })
+    }
+
+    await this.deps.sendStanza(
+      xml('message', { to: recipient, type, id: retractionStanzaId }, ...children),
+    )
 
     // SDK events only - optimistic update via bindings
     const retractedAt = new Date()
