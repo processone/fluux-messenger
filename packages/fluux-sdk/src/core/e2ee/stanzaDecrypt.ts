@@ -138,11 +138,13 @@ export async function decryptStanzaInPlace(
   try {
     const messageId = stanza.attrs.id
     const isSelfOutgoing = options?.isSelfOutgoing === true
+    const fromArchive = source === 'archive'
     const context: InboundDecryptContext | undefined =
-      messageId || isSelfOutgoing
+      messageId || isSelfOutgoing || fromArchive
         ? {
             ...(messageId && { messageId }),
             ...(isSelfOutgoing && { isSelfOutgoing: true as const }),
+            ...(fromArchive && { fromArchive: true as const }),
           }
         : undefined
     const target = { kind: 'direct' as const, peer: senderPeer }
