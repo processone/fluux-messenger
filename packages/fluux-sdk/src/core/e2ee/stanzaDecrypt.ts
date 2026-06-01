@@ -265,7 +265,7 @@ export async function decryptStanzaInPlace(
     attempted: true,
     ...(securityContext && { securityContext }),
     ...(authoredAt && { authoredAt }),
-    ...((failureReason !== null || needsDeferredVerification) && {
+    ...((failureReason !== null && securityContext?.trust !== 'rejected' || needsDeferredVerification) && {
       encryptedPayloadXml: encryptedChildXml,
     }),
   }

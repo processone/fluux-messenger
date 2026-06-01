@@ -211,6 +211,9 @@ export interface SecurityContextUpdate {
   /** Stanza-level message id of the message whose context changed. */
   messageId: string
   securityContext: SecurityContext
+  /** When set, replaces the stored message body (e.g. to expunge a
+   *  plaintext that was delivered before the signature was rejected). */
+  body?: string
 }
 
 /**
