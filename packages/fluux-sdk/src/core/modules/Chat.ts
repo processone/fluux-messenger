@@ -127,6 +127,24 @@ import type { MAM } from './MAM'
  *
  * @category Core
  */
+/**
+ * Per-call tuning for {@link Chat.applyE2EEToOutboundChat}. Defaults preserve
+ * the message-body behaviour; body-less signal stanzas (reactions, retract,
+ * link previews, easter eggs) override them.
+ */
+interface E2EEOutboundOptions {
+  /** Carry a `<body>` (the plaintextBody arg) inside the encrypted envelope. Default true. */
+  encryptBody?: boolean
+  /**
+   * What to do with the OUTER stanza `<body>` after a successful encrypt:
+   *  - 'fallback' (default): replace/insert the plugin's encrypted-fallback string
+   *  - 'remove': strip any outer body (pure-signal stanzas)
+   */
+  outerBody?: 'fallback' | 'remove'
+  /** Hint appended after the encrypted element on success. Default 'store'; 'none' appends nothing. */
+  storeHint?: 'store' | 'no-store' | 'none'
+}
+
 export class Chat extends BaseModule {
   private mamModule: MAM
 
@@ -463,6 +481,7 @@ export class Chat extends BaseModule {
     plaintextBody: string,
     children: Element[],
     protectedChildKeys?: ReadonlySet<string>,
+    options?: E2EEOutboundOptions,
   ): Promise<MessageSecurityContext | undefined> {
     const manager = this.deps.getE2EEManager?.()
     if (!manager) return undefined
@@ -485,7 +504,8 @@ export class Chat extends BaseModule {
       // permissive policy) we want the outgoing stanza to look exactly
       // like the plaintext path would have built. Only commit the splice
       // after a successful encrypt.
-      const protectedChildren: Element[] = [xml('body', {}, plaintextBody)]
+      const encryptBody = options?.encryptBody ?? true
+      const protectedChildren: Element[] = encryptBody ? [xml('body', {}, plaintextBody)] : []
       const protectedIndices: number[] = []
       if (protectedChildKeys && protectedChildKeys.size > 0) {
         for (let i = 0; i < children.length; i++) {
@@ -498,6 +518,13 @@ export class Chat extends BaseModule {
             protectedIndices.push(i)
           }
         }
+      }
+      // Body-less callers must contribute at least one protected child; an
+      // empty envelope would encrypt nothing. Treat as "no encryption" so the
+      // caller's plaintext stanza is sent untouched.
+      if (protectedChildren.length === 0) {
+        await manager.assertPlaintextPermitted({ kind: 'direct', peer: recipient })
+        return undefined
       }
       const plaintext = serializePayloadEnvelope(protectedChildren)
 
@@ -536,11 +563,15 @@ export class Chat extends BaseModule {
           (c): c is Element =>
             typeof c !== 'string' && (c as { name?: string }).name === 'body',
         )
-        const fallbackBody = result.payload.fallbackBody ?? '[encrypted message]'
-        if (bodyIdx >= 0) {
-          children[bodyIdx] = xml('body', {}, fallbackBody)
+        if ((options?.outerBody ?? 'fallback') === 'remove') {
+          if (bodyIdx >= 0) children.splice(bodyIdx, 1)
         } else {
-          children.unshift(xml('body', {}, fallbackBody))
+          const fallbackBody = result.payload.fallbackBody ?? '[encrypted message]'
+          if (bodyIdx >= 0) {
+            children[bodyIdx] = xml('body', {}, fallbackBody)
+          } else {
+            children.unshift(xml('body', {}, fallbackBody))
+          }
         }
         // Remove <fallback for="NS_CORRECTION">: its body indices referenced the
         // plaintext "[Corrected] …" prefix which no longer exists in the E2EE
@@ -566,7 +597,10 @@ export class Chat extends BaseModule {
               result.payload.stanzaElement.attrs.xmlns ?? result.payload.protocolId,
           }),
         )
-        children.push(xml('store', { xmlns: NS_HINTS }))
+        const storeHint = options?.storeHint ?? 'store'
+        if (storeHint !== 'none') {
+          children.push(xml(storeHint, { xmlns: NS_HINTS }))
+        }
         return {
           protocolId: result.plugin.descriptor.id,
           trust: 'verified',
