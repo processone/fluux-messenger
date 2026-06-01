@@ -108,9 +108,9 @@ export function OccupantModerationModal({
 
   const roleIcon = (role: RoomRole) => {
     switch (role) {
-      case 'moderator': return <ShieldPlus className="w-4 h-4" />
-      case 'participant': return occupant.role === 'moderator' ? <ShieldMinus className="w-4 h-4" /> : <Mic className="w-4 h-4" />
-      case 'visitor': return <MicOff className="w-4 h-4" />
+      case 'moderator': return <ShieldPlus className="size-4" />
+      case 'participant': return occupant.role === 'moderator' ? <ShieldMinus className="size-4" /> : <Mic className="size-4" />
+      case 'visitor': return <MicOff className="size-4" />
       default: return null
     }
   }
@@ -127,10 +127,10 @@ export function OccupantModerationModal({
 
   const affIcon = (aff: RoomAffiliation) => {
     switch (aff) {
-      case 'owner': return <Crown className="w-4 h-4" />
-      case 'admin': return <Shield className="w-4 h-4" />
-      case 'member': return <UserCheck className="w-4 h-4" />
-      case 'none': return <UserMinus className="w-4 h-4" />
+      case 'owner': return <Crown className="size-4" />
+      case 'admin': return <Shield className="size-4" />
+      case 'member': return <UserCheck className="size-4" />
+      case 'none': return <UserMinus className="size-4" />
       default: return null
     }
   }
@@ -269,7 +269,7 @@ export function OccupantModerationModal({
                       text-fluux-red hover:bg-fluux-red hover:text-white
                       disabled:opacity-50 transition-colors"
                   >
-                    <UserMinus className="w-4 h-4" />
+                    <UserMinus className="size-4" />
                     {t('rooms.kick')}
                   </button>
                 )}
@@ -281,7 +281,7 @@ export function OccupantModerationModal({
                       text-fluux-red hover:bg-fluux-red hover:text-white
                       disabled:opacity-50 transition-colors"
                   >
-                    <Ban className="w-4 h-4" />
+                    <Ban className="size-4" />
                     {t('rooms.ban')}
                   </button>
                 )}

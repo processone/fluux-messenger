@@ -66,7 +66,7 @@ export function PollCard({ poll, reactions, myReactions, onVote, onClosePoll, is
     <div className="mt-1 rounded-lg border border-fluux-border bg-fluux-surface p-3 flex flex-col gap-2">
       {/* Title header */}
       <div className="flex items-center gap-2">
-        <BarChart3 className="w-4 h-4 text-fluux-brand flex-shrink-0" />
+        <BarChart3 className="size-4 text-fluux-brand flex-shrink-0" />
         <span className="font-medium text-fluux-text text-sm">{poll.title}</span>
       </div>
 
@@ -114,7 +114,7 @@ export function PollCard({ poll, reactions, myReactions, onVote, onClosePoll, is
         <div className="flex items-center gap-2">
           {poll.deadline && !expired && !isClosed && (
             <span className="flex items-center gap-1 text-xs text-fluux-muted">
-              <Clock className="w-3 h-3" />
+              <Clock className="size-3" />
               {t('poll.deadlineDisplay', 'Ends {{date}}', {
                 date: new Date(poll.deadline).toLocaleString(undefined, {
                   month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -140,7 +140,7 @@ export function PollCard({ poll, reactions, myReactions, onVote, onClosePoll, is
               disabled={closing}
               className="flex items-center gap-1 text-xs text-fluux-muted hover:text-fluux-text transition-colors disabled:opacity-50"
             >
-              <Square className="w-3 h-3" />
+              <Square className="size-3" />
               {t('poll.close', 'Close poll')}
             </button>
           )}
@@ -228,7 +228,7 @@ function PollOption({ option, color, totalVoters, isMyVote, hasVoted, showResult
             </span>
           )}
           {isMyVote && (
-            <Check className="w-3.5 h-3.5 text-fluux-brand" />
+            <Check className="size-3.5 text-fluux-brand" />
           )}
         </div>
       </div>

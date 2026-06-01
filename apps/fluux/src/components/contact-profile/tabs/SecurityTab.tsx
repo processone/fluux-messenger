@@ -24,7 +24,7 @@ export function SecurityTab({
       <div className="space-y-3 max-w-md mx-auto">
         {state.kind === 'checking' && (
           <ExplanationPanel
-            icon={<Loader2 className="w-5 h-5 text-fluux-muted animate-spin flex-shrink-0" />}
+            icon={<Loader2 className="size-5 text-fluux-muted animate-spin flex-shrink-0" />}
             title={t('chat.encryption.checking')}
             tone="neutral"
           />
@@ -32,7 +32,7 @@ export function SecurityTab({
 
         {state.kind === 'blocked' && (
           <ExplanationPanel
-            icon={<ShieldAlert className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />}
+            icon={<ShieldAlert className="size-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />}
             title={t('chat.encryption.blocked')}
             tone="warning"
           />
@@ -41,7 +41,7 @@ export function SecurityTab({
         {state.kind === 'rejected' && (
           <>
             <ExplanationPanel
-              icon={<ShieldX className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0" />}
+              icon={<ShieldX className="size-5 text-red-600 dark:text-red-400 flex-shrink-0" />}
               title={t('contacts.encryption.rejectedTitle')}
               description={t('contacts.encryption.rejectedDescription')}
               tone="danger"
@@ -63,7 +63,7 @@ export function SecurityTab({
 
         {state.kind === 'unsupported' && (
           <ExplanationPanel
-            icon={<LockOpen className="w-5 h-5 text-fluux-muted flex-shrink-0" />}
+            icon={<LockOpen className="size-5 text-fluux-muted flex-shrink-0" />}
             title={t('contacts.encryption.notAvailableTitle')}
             description={t('contacts.encryption.notAvailableDescription')}
             tone="neutral"
@@ -73,7 +73,7 @@ export function SecurityTab({
         {state.kind === 'plaintextForced' && (
           <>
             <ExplanationPanel
-              icon={<LockOpen className="w-5 h-5 text-fluux-muted flex-shrink-0" />}
+              icon={<LockOpen className="size-5 text-fluux-muted flex-shrink-0" />}
               title={t('contacts.encryption.disabledByYouTitle')}
               description={t('contacts.encryption.disabledByYouDescription')}
               tone="neutral"
@@ -83,7 +83,7 @@ export function SecurityTab({
               onClick={onEnableEncryption}
               className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-bg hover:bg-fluux-hover text-fluux-text border border-fluux-hover rounded-lg transition-colors text-sm min-h-[44px]"
             >
-              <Lock className="w-4 h-4" />
+              <Lock className="size-4" />
               {t('chat.encryption.enableEncryption')}
             </button>
           </>
@@ -91,7 +91,7 @@ export function SecurityTab({
 
         {state.kind === 'disabled' && (
           <ExplanationPanel
-            icon={<LockOpen className="w-5 h-5 text-fluux-muted flex-shrink-0" />}
+            icon={<LockOpen className="size-5 text-fluux-muted flex-shrink-0" />}
             title={t('contacts.encryption.unavailableNowTitle')}
             description={t('contacts.encryption.unavailableNowDescription')}
             tone="neutral"
@@ -103,9 +103,9 @@ export function SecurityTab({
             <ExplanationPanel
               icon={
                 state.trust === 'verified' ? (
-                  <ShieldCheck className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0" />
+                  <ShieldCheck className="size-5 text-green-600 dark:text-green-400 flex-shrink-0" />
                 ) : (
-                  <Lock className="w-5 h-5 text-fluux-muted flex-shrink-0" />
+                  <Lock className="size-5 text-fluux-muted flex-shrink-0" />
                 )
               }
               title={
@@ -133,7 +133,7 @@ export function SecurityTab({
                 onClick={onVerify}
                 className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-bg hover:bg-fluux-hover text-fluux-text border border-fluux-hover rounded-lg transition-colors text-sm min-h-[44px]"
               >
-                <ShieldCheck className="w-4 h-4" />
+                <ShieldCheck className="size-4" />
                 {t('contacts.encryption.verifyButton')}
               </button>
             )}
@@ -144,7 +144,7 @@ export function SecurityTab({
                 onClick={onRequestRevoke}
                 className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-red/10 hover:bg-fluux-red/20 text-fluux-red border border-fluux-red rounded-lg transition-colors text-sm min-h-[44px]"
               >
-                <ShieldOff className="w-4 h-4" />
+                <ShieldOff className="size-4" />
                 {t('contacts.encryption.removeVerification')}
               </button>
             )}
@@ -154,7 +154,7 @@ export function SecurityTab({
               onClick={onDisableEncryption}
               className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-bg hover:bg-fluux-hover text-fluux-muted border border-fluux-hover rounded-lg transition-colors text-sm min-h-[44px]"
             >
-              <ShieldOff className="w-4 h-4" />
+              <ShieldOff className="size-4" />
               {t('contacts.encryption.disableForContact')}
             </button>
           </>

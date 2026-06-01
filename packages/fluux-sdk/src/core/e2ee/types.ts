@@ -124,8 +124,9 @@ export interface SecurityContext {
    * `introduced`  — a verified contact has signed this peer's key (web-of-trust hint; not first-person verified).
    * `tofu`        — key seen before and accepted via Trust-On-First-Use; no explicit verification.
    * `untrusted`   — key is new, has changed, or decryption failed.
+   * `rejected`    — signature verification failed or absent; message integrity not confirmed.
    */
-  trust: 'verified' | 'introduced' | 'tofu' | 'untrusted'
+  trust: 'verified' | 'introduced' | 'tofu' | 'untrusted' | 'rejected'
   /** Optional free-form notes (e.g. "subkey 3 days old"). */
   notes?: string[]
 }
@@ -210,6 +211,9 @@ export interface SecurityContextUpdate {
   /** Stanza-level message id of the message whose context changed. */
   messageId: string
   securityContext: SecurityContext
+  /** When set, replaces the stored message body (e.g. to expunge a
+   *  plaintext that was delivered before the signature was rejected). */
+  body?: string
 }
 
 /**

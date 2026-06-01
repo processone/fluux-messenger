@@ -88,7 +88,7 @@ export function OwnKeyConflictBanner() {
         role="alert"
         className="flex items-start gap-2 px-3 py-3 rounded-lg border border-red-500/30 bg-red-500/10"
       >
-        <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+        <AlertTriangle className="size-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
         <div className="flex-1 min-w-0 space-y-2">
           <p className="text-sm font-medium text-fluux-text leading-snug">
             {isPrimaryMismatch
@@ -140,7 +140,7 @@ export function OwnKeyConflictBanner() {
               disabled={busy}
               className="flex items-center gap-1.5 px-3 py-1 text-xs font-medium bg-fluux-brand text-white hover:opacity-90 rounded transition-colors disabled:opacity-50"
             >
-              <CloudUpload className="w-3.5 h-3.5" />
+              <CloudUpload className="size-3.5" />
               {t('settings.encryption.ownKeyConflict.overwriteServer')}
             </button>
             <button
@@ -148,7 +148,7 @@ export function OwnKeyConflictBanner() {
               disabled={busy}
               className="flex items-center gap-1.5 px-3 py-1 text-xs text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded transition-colors disabled:opacity-50"
             >
-              <CloudDownload className="w-3.5 h-3.5" />
+              <CloudDownload className="size-3.5" />
               {t('settings.encryption.ownKeyConflict.importFromServer')}
             </button>
           </div>

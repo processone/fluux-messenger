@@ -43,7 +43,7 @@ export function PollClosedCard({ pollClosed, closedAt }: PollClosedCardProps) {
     <div className="mt-1 rounded-lg border border-fluux-border bg-fluux-surface p-3 flex flex-col gap-2">
       {/* Header — title links to the original poll message */}
       <div className="flex items-center gap-2">
-        <BarChart3 className="w-4 h-4 text-fluux-muted flex-shrink-0" />
+        <BarChart3 className="size-4 text-fluux-muted flex-shrink-0" />
         <button
           onClick={() => scrollToMessage(pollClosed.pollMessageId)}
           className="font-medium text-fluux-text text-sm hover:text-fluux-brand transition-colors text-start truncate"
@@ -51,7 +51,7 @@ export function PollClosedCard({ pollClosed, closedAt }: PollClosedCardProps) {
         >
           {pollClosed.title}
         </button>
-        <Lock className="w-3.5 h-3.5 text-fluux-muted flex-shrink-0" />
+        <Lock className="size-3.5 text-fluux-muted flex-shrink-0" />
       </div>
 
       {/* Optional description */}

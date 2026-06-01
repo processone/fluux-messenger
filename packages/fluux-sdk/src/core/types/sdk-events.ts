@@ -190,6 +190,7 @@ export interface ChatEvents {
     conversationId: string
     messageId: string
     securityContext: import('./message-base').MessageSecurityContext
+    body?: string
   }
 
   /**

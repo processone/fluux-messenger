@@ -513,7 +513,8 @@
                     "verified": "ověřeno",
                     "tofu": "důvěryhodné",
                     "introduced": "představen",
-                    "untrusted": "neověřeno"
+                    "untrusted": "neověřeno",
+                    "rejected": "ODMÍTNUTO — neplatný podpis"
                 }
             }
         },

@@ -14,7 +14,7 @@ export function HistoryGapMarker({ onLoadMore, isLoading }: { onLoadMore: () => 
       <div className="flex items-center gap-3 w-full">
         <div className="flex-1 h-px bg-fluux-hover" />
         <div className="flex items-center gap-2 text-xs text-fluux-muted">
-          <AlertTriangle className="w-3.5 h-3.5" />
+          <AlertTriangle className="size-3.5" />
           <span>{t('chat.historyGap')}</span>
         </div>
         <div className="flex-1 h-px bg-fluux-hover" />
@@ -29,9 +29,9 @@ export function HistoryGapMarker({ onLoadMore, isLoading }: { onLoadMore: () => 
         }`}
       >
         {isLoading ? (
-          <Loader2 className="w-4 h-4 animate-spin" />
+          <Loader2 className="size-4 animate-spin" />
         ) : (
-          <AlertTriangle className="w-4 h-4" />
+          <AlertTriangle className="size-4" />
         )}
         {t('chat.loadMissingMessages')}
       </button>

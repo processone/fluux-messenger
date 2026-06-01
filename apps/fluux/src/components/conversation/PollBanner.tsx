@@ -66,7 +66,7 @@ export function PollBanner({ messages, myNick, votedPollIds, dismissedPollIds, o
 
   return (
     <div className="mx-2 mb-1 flex items-center gap-2 rounded-lg border border-fluux-brand/30 bg-fluux-brand/5 px-3 py-2 text-sm">
-      <BarChart3 className="w-4 h-4 text-fluux-brand flex-shrink-0" />
+      <BarChart3 className="size-4 text-fluux-brand flex-shrink-0" />
 
       <button
         onClick={() => scrollToMessage(latestPoll.id)}
@@ -78,7 +78,7 @@ export function PollBanner({ messages, myNick, votedPollIds, dismissedPollIds, o
         }
       </button>
 
-      <ChevronDown className="w-4 h-4 text-fluux-muted flex-shrink-0" />
+      <ChevronDown className="size-4 text-fluux-muted flex-shrink-0" />
 
       <button
         onClick={(e) => {
@@ -88,7 +88,7 @@ export function PollBanner({ messages, myNick, votedPollIds, dismissedPollIds, o
         className="p-0.5 text-fluux-muted hover:text-fluux-text transition-colors flex-shrink-0"
         aria-label={t('poll.dismissBanner', 'Dismiss')}
       >
-        <X className="w-3.5 h-3.5" />
+        <X className="size-3.5" />
       </button>
     </div>
   )

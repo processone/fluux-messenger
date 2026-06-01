@@ -217,8 +217,20 @@ export function Tooltip({
         onMouseLeave={triggerMode === 'hover' ? hideTooltip : undefined}
         onFocus={triggerMode === 'hover' ? showTooltip : undefined}
         onBlur={triggerMode === 'hover' ? hideTooltip : undefined}
-        onClick={triggerMode === 'click' ? toggleTooltip : undefined}
-        onPointerDown={triggerMode === 'click' ? (e) => e.stopPropagation() : undefined}
+        {...(triggerMode === 'click'
+          ? {
+              role: 'button' as const,
+              tabIndex: 0,
+              onClick: toggleTooltip,
+              onKeyDown: (e: import('react').KeyboardEvent) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  toggleTooltip()
+                }
+              },
+              onPointerDown: (e: import('react').PointerEvent) => e.stopPropagation(),
+            }
+          : {})}
         className={`${className || 'inline-flex'}${triggerMode === 'click' ? ' cursor-pointer' : ''}`}
       >
         {children}
@@ -245,7 +257,7 @@ export function Tooltip({
           {content}
           {/* Arrow */}
           <div
-            className={`absolute w-0 h-0 border-[6px] ${arrowStyles[actualPosition]}`}
+            className={`absolute size-0 border-[6px] ${arrowStyles[actualPosition]}`}
           />
         </div>,
         document.body

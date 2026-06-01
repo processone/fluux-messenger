@@ -511,7 +511,8 @@
                     "verified": "verifisert",
                     "tofu": "betrodd",
                     "introduced": "introdusert",
-                    "untrusted": "uverifisert"
+                    "untrusted": "uverifisert",
+                    "rejected": "AVVIST — ugyldig signatur"
                 }
             }
         },

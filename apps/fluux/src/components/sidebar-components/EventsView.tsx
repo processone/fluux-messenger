@@ -168,7 +168,7 @@ function SystemNotificationItem({ notification, onDismiss }: SystemNotificationI
     <div className={`px-3 py-3 rounded-lg ${bgColor} border ${borderColor} mb-2`}>
       <div className="flex items-start gap-3">
         {/* Icon */}
-        <AlertTriangle className={`w-5 h-5 ${iconColor} flex-shrink-0 mt-0.5`} />
+        <AlertTriangle className={`size-5 ${iconColor} flex-shrink-0 mt-0.5`} />
 
         {/* Content */}
         <div className="flex-1 min-w-0">
@@ -183,7 +183,7 @@ function SystemNotificationItem({ notification, onDismiss }: SystemNotificationI
             className="text-fluux-muted hover:text-fluux-text transition-colors"
             aria-label={t('sidebar.dismiss')}
           >
-            <X className="w-4 h-4" />
+            <X className="size-4" />
           </button>
         </Tooltip>
       </div>
@@ -225,14 +225,14 @@ function SubscriptionRequestItem({ request, onAccept, onReject, onBlock }: Subsc
           onClick={onAccept}
           className="flex-1 px-3 py-1.5 bg-fluux-green text-white text-sm font-medium rounded hover:bg-fluux-green/80 transition-colors flex items-center justify-center gap-1"
         >
-          <Check className="w-4 h-4" />
+          <Check className="size-4" />
           {t('common.accept')}
         </button>
         <button
           onClick={onReject}
           className="flex-1 px-3 py-1.5 bg-fluux-muted/20 text-fluux-text text-sm font-medium rounded hover:bg-fluux-muted/30 transition-colors flex items-center justify-center gap-1"
         >
-          <X className="w-4 h-4" />
+          <X className="size-4" />
           {t('common.reject')}
         </button>
         <Tooltip content={t('common.block')} position="top">
@@ -241,7 +241,7 @@ function SubscriptionRequestItem({ request, onAccept, onReject, onBlock }: Subsc
             className="px-3 py-1.5 bg-fluux-red text-white text-sm font-medium rounded hover:bg-fluux-red/80 transition-colors flex items-center justify-center gap-1"
             aria-label={t('common.block')}
           >
-            <Ban className="w-4 h-4" />
+            <Ban className="size-4" />
           </button>
         </Tooltip>
       </div>
@@ -264,8 +264,8 @@ function MucInvitationItem({ invitation, onAccept, onDecline }: MucInvitationIte
     <div className="px-2 py-2 rounded hover:bg-fluux-hover transition-colors">
       <div className="flex items-center gap-3">
         {/* Room icon */}
-        <div className="w-10 h-10 bg-fluux-brand rounded-lg flex items-center justify-center flex-shrink-0">
-          <DoorOpen className="w-5 h-5 text-white" />
+        <div className="size-10 bg-fluux-brand rounded-lg flex items-center justify-center flex-shrink-0">
+          <DoorOpen className="size-5 text-white" />
         </div>
 
         {/* Info */}
@@ -288,14 +288,14 @@ function MucInvitationItem({ invitation, onAccept, onDecline }: MucInvitationIte
           onClick={onAccept}
           className="flex-1 px-3 py-1.5 bg-fluux-green text-white text-sm font-medium rounded hover:bg-fluux-green/80 transition-colors flex items-center justify-center gap-1"
         >
-          <Check className="w-4 h-4" />
+          <Check className="size-4" />
           {t('events.join')}
         </button>
         <button
           onClick={onDecline}
           className="flex-1 px-3 py-1.5 bg-fluux-red text-white text-sm font-medium rounded hover:bg-fluux-red/80 transition-colors flex items-center justify-center gap-1"
         >
-          <X className="w-4 h-4" />
+          <X className="size-4" />
           {t('events.decline')}
         </button>
       </div>
@@ -347,14 +347,14 @@ function StrangerMessageItem({ jid, messages, onAccept, onIgnore, onBlock }: Str
           onClick={onAccept}
           className="flex-1 px-3 py-1.5 bg-fluux-brand text-fluux-text-on-accent text-sm font-medium rounded hover:bg-fluux-brand-hover transition-colors flex items-center justify-center gap-1"
         >
-          <Check className="w-4 h-4" />
+          <Check className="size-4" />
           {t('common.accept')}
         </button>
         <button
           onClick={onIgnore}
           className="flex-1 px-3 py-1.5 bg-fluux-muted/20 text-fluux-text text-sm font-medium rounded hover:bg-fluux-muted/30 transition-colors flex items-center justify-center gap-1"
         >
-          <X className="w-4 h-4" />
+          <X className="size-4" />
           {t('common.ignore')}
         </button>
         <Tooltip content={t('common.block')} position="top">
@@ -363,7 +363,7 @@ function StrangerMessageItem({ jid, messages, onAccept, onIgnore, onBlock }: Str
             className="px-3 py-1.5 bg-fluux-red text-white text-sm font-medium rounded hover:bg-fluux-red/80 transition-colors flex items-center justify-center gap-1"
             aria-label={t('common.block')}
           >
-            <Ban className="w-4 h-4" />
+            <Ban className="size-4" />
           </button>
         </Tooltip>
       </div>

@@ -511,7 +511,8 @@
                     "verified": "patvirtinta",
                     "tofu": "patikima",
                     "introduced": "pristatytas",
-                    "untrusted": "nepatikrinta"
+                    "untrusted": "nepatikrinta",
+                    "rejected": "ATMESTA — neteisingas parašas"
                 }
             }
         },

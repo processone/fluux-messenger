@@ -203,9 +203,12 @@ export function createStoreBindings(
     stores.chat.updateMessage(conversationId, messageId, updates)
   })
 
-  on('message:security-updated', ({ conversationId, messageId, securityContext }) => {
+  on('message:security-updated', ({ conversationId, messageId, securityContext, body }) => {
     const stores = getStores()
-    stores.chat.updateMessage(conversationId, messageId, { securityContext })
+    stores.chat.updateMessage(conversationId, messageId, {
+      securityContext,
+      ...(body !== undefined && { body }),
+    })
   })
 
   on('chat:message-error', ({ conversationId, messageId, error }) => {

@@ -511,7 +511,8 @@
                     "verified": "hitelesítve",
                     "tofu": "megbízható",
                     "introduced": "bemutatott",
-                    "untrusted": "nem hitelesítve"
+                    "untrusted": "nem hitelesítve",
+                    "rejected": "ELUTASÍTVA — érvénytelen aláírás"
                 }
             }
         },

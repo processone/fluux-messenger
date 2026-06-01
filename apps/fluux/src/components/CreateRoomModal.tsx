@@ -110,7 +110,7 @@ export function CreateRoomModal({ onClose }: CreateRoomModalProps) {
             className="w-full px-3 py-2 text-sm bg-fluux-bg border border-fluux-border rounded-lg text-fluux-text placeholder-fluux-muted focus:outline-none focus:ring-2 focus:ring-fluux-brand/50 disabled:opacity-50"
           />
           <p className="text-xs text-fluux-muted mt-1">
-            @{mucService || <Loader2 className="w-3 h-3 inline animate-spin" />}
+            @{mucService || <Loader2 className="size-3 inline animate-spin" />}
           </p>
         </div>
 
@@ -186,9 +186,9 @@ export function CreateRoomModal({ onClose }: CreateRoomModalProps) {
                 }`}
               >
                 <Tooltip content={help} position="top">
-                  <HelpCircle className="absolute top-1.5 end-1.5 w-3.5 h-3.5 text-fluux-muted cursor-help" />
+                  <HelpCircle className="absolute top-1.5 end-1.5 size-3.5 text-fluux-muted cursor-help" />
                 </Tooltip>
-                <Icon className="w-5 h-5" />
+                <Icon className="size-5" />
                 <span className="text-sm font-medium">{label}</span>
                 <span className="text-xs leading-tight">{desc}</span>
               </button>
@@ -199,7 +199,7 @@ export function CreateRoomModal({ onClose }: CreateRoomModalProps) {
         {/* Error */}
         {error && (
           <div className="flex items-start gap-2 p-3 rounded-lg border bg-red-500/10 border-red-500/30 text-red-400">
-            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <AlertCircle className="size-4 flex-shrink-0 mt-0.5" />
             <p className="text-sm">{error}</p>
           </div>
         )}

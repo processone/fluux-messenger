@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ShieldCheck, ShieldOff, AlertTriangle, Check, ChevronDown, ChevronRight } from 'lucide-react'
 import { deriveSas, splitSas } from '@fluux/sdk'
@@ -62,7 +62,6 @@ export function VerifyPeerDialog({
   onRevoke,
 }: VerifyPeerDialogProps) {
   const { t } = useTranslation()
-  const mouseDownTargetRef = useRef<EventTarget | null>(null)
   const [sas, setSas] = useState<{ mine: string; theirs: string } | null>(null)
   const [input, setInput] = useState('')
   const [showFingerprints, setShowFingerprints] = useState(false)
@@ -103,16 +102,15 @@ export function VerifyPeerDialog({
     <div
       data-modal="true"
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      onMouseDown={(e) => {
-        mouseDownTargetRef.current = e.target
-      }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget && mouseDownTargetRef.current === e.currentTarget) {
-          onCancel()
-        }
-      }}
     >
-      <div className="bg-fluux-sidebar rounded-lg max-w-md w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
+      <button
+        type="button"
+        aria-hidden="true"
+        tabIndex={-1}
+        onClick={onCancel}
+        className="absolute inset-0 cursor-default"
+      />
+      <div className="relative z-10 bg-fluux-sidebar rounded-lg max-w-md w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
         <div className="px-5 pt-5 pb-3">
           <h3 className="text-lg font-semibold text-fluux-text mb-1">
             {t('chat.verifyPeer.dialogTitle', { name: peerName })}
@@ -125,7 +123,7 @@ export function VerifyPeerDialog({
         <div className="flex-1 overflow-y-auto min-h-0 px-5">
         {alreadyVerified && (
           <div className="flex gap-2 p-3 mb-4 rounded-lg bg-green-500/10 text-xs text-fluux-muted leading-snug">
-            <ShieldCheck className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+            <ShieldCheck className="size-4 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
             <p className="font-medium text-fluux-text">
               {t('chat.verifyPeer.alreadyVerifiedBanner', { name: peerName })}
             </p>
@@ -133,7 +131,7 @@ export function VerifyPeerDialog({
         )}
 
         <div className="flex gap-2 p-3 mb-4 rounded-lg bg-yellow-500/10 text-xs text-fluux-muted leading-snug">
-          <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+          <AlertTriangle className="size-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
           <p className="font-medium text-fluux-text">
             {t('chat.verifyPeer.dialogWarning')}
           </p>
@@ -179,7 +177,7 @@ export function VerifyPeerDialog({
                 }`}
               />
               {inputMatches && (
-                <Check className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-green-600 dark:text-green-400" />
+                <Check className="absolute right-3 top-1/2 -translate-y-1/2 size-5 text-green-600 dark:text-green-400" />
               )}
             </div>
             {inputMismatch ? (
@@ -206,9 +204,9 @@ export function VerifyPeerDialog({
           className="flex items-center gap-1 text-xs text-fluux-muted hover:text-fluux-text mb-2"
         >
           {showFingerprints ? (
-            <ChevronDown className="w-3.5 h-3.5" />
+            <ChevronDown className="size-3.5" />
           ) : (
-            <ChevronRight className="w-3.5 h-3.5" />
+            <ChevronRight className="size-3.5" />
           )}
           {t(showFingerprints ? 'chat.verifyPeer.hideFullFingerprints' : 'chat.verifyPeer.showFullFingerprints')}
         </button>
@@ -243,7 +241,7 @@ export function VerifyPeerDialog({
               onClick={() => onConfirm(peerFingerprint)}
               className="w-full flex items-center justify-center gap-1.5 px-4 py-2 text-sm text-fluux-text border border-fluux-hover hover:bg-fluux-hover rounded-lg transition-colors"
             >
-              <ShieldCheck className="w-3.5 h-3.5" />
+              <ShieldCheck className="size-3.5" />
               {t('chat.verifyPeer.confirmByFingerprint')}
             </button>
           </div>
@@ -258,7 +256,7 @@ export function VerifyPeerDialog({
                 onClick={onRevoke}
                 className="flex items-center gap-1.5 px-4 py-2 text-sm text-fluux-red border border-fluux-red/50 hover:bg-fluux-red/10 rounded-lg transition-colors"
               >
-                <ShieldOff className="w-3.5 h-3.5" />
+                <ShieldOff className="size-3.5" />
                 {t('chat.verifyPeer.revokeAction')}
               </button>
             )}
@@ -274,7 +272,7 @@ export function VerifyPeerDialog({
                 disabled={!inputMatches}
                 className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-fluux-brand hover:opacity-90 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <ShieldCheck className="w-3.5 h-3.5" />
+                <ShieldCheck className="size-3.5" />
                 {t(alreadyVerified ? 'chat.verifyPeer.reconfirmAction' : 'chat.verifyPeer.confirmAction')}
               </button>
             </div>

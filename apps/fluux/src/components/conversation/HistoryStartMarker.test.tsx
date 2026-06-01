@@ -34,7 +34,7 @@ describe('HistoryStartMarker', () => {
 
     const icon = container.querySelector('svg')
     expect(icon).toBeInTheDocument()
-    expect(icon).toHaveClass('w-3.5', 'h-3.5')
+    expect(icon).toHaveClass('size-3.5')
   })
 
   it('should have correct styling classes', () => {

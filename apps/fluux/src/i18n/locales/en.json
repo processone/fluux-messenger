@@ -511,7 +511,8 @@
                     "verified": "verified",
                     "tofu": "trusted",
                     "introduced": "introduced",
-                    "untrusted": "unverified"
+                    "untrusted": "unverified",
+                    "rejected": "REJECTED — invalid signature"
                 }
             }
         },

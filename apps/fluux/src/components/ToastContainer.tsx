@@ -37,14 +37,14 @@ export function ToastContainer() {
                         rounded-lg shadow-lg animate-toast-in
                         max-w-sm min-w-[280px]`}
           >
-            <Icon className={`w-5 h-5 shrink-0 ${colors.icon}`} />
+            <Icon className={`size-5 shrink-0 ${colors.icon}`} />
             <span className="text-sm text-fluux-text flex-1">{toast.message}</span>
             <button
               onClick={() => removeToast(toast.id)}
               className="p-0.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text shrink-0"
               aria-label={t('common.dismiss')}
             >
-              <X className="w-4 h-4" />
+              <X className="size-4" />
             </button>
           </div>
         )

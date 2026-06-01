@@ -88,7 +88,7 @@ export function ContactProfileTabs({ active, onChange, encryptionState }: Contac
             <span>{label}</span>
             {Icon && badge && (
               <Icon
-                className={`w-4 h-4 ${badge.className}`}
+                className={`size-4 ${badge.className}`}
                 aria-label={badge.ariaLabel}
               />
             )}

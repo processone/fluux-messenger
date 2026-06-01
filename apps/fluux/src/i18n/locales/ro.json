@@ -513,7 +513,8 @@
                     "verified": "verificat",
                     "tofu": "de încredere",
                     "introduced": "prezentat",
-                    "untrusted": "neverificat"
+                    "untrusted": "neverificat",
+                    "rejected": "RESPINS — semnătură nevalidă"
                 }
             }
         },

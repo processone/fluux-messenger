@@ -99,7 +99,7 @@ export function AdminRoomView({
                        rounded-lg transition-colors"
             aria-label={t('common.close')}
           >
-            <ArrowLeft className="w-5 h-5 rtl-mirror" />
+            <ArrowLeft className="size-5 rtl-mirror" />
           </button>
         </Tooltip>
         <div className="flex-1 min-w-0">
@@ -114,13 +114,13 @@ export function AdminRoomView({
         {hasGetRoomOptionsCommand && (
           <div className="bg-fluux-bg rounded-lg p-4">
             <h3 className="text-sm font-medium text-fluux-muted mb-3 flex items-center gap-2">
-              <Settings className="w-4 h-4" />
+              <Settings className="size-4" />
               {t('admin.roomView.options')}
             </h3>
 
             {isLoadingOptions ? (
               <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 text-fluux-muted animate-spin" />
+                <Loader2 className="size-6 text-fluux-muted animate-spin" />
               </div>
             ) : optionsError ? (
               <div className="text-sm text-red-500 py-4 text-center">
@@ -164,7 +164,7 @@ export function AdminRoomView({
                          bg-red-500/10 hover:bg-red-500/20 text-red-500
                          disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="size-4" />
               <span className="text-sm">{t('admin.roomView.destroy')}</span>
             </button>
           </div>

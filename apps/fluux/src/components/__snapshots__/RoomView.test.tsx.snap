@@ -14,7 +14,7 @@ exports[`RoomView > Snapshots > should match snapshot for non-joined room 1`] = 
         class="h-14  px-4 flex items-center border-b border-fluux-bg shadow-sm gap-3"
       >
         <div
-          class="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+          class="size-9 rounded-full flex items-center justify-center flex-shrink-0"
           style="background-color: rgb(74, 144, 217);"
         >
           <span
@@ -144,7 +144,7 @@ exports[`RoomView > Snapshots > should match snapshot for non-joined room 1`] = 
             >
               <button
                 aria-label="chat.scrollToBottom"
-                class="w-10 h-10 rounded-full bg-fluux-bg border border-fluux-border shadow-lg flex items-center justify-center text-fluux-muted hover:text-fluux-text hover:bg-fluux-hover transition-colors duration-200 hover:scale-105 active:scale-95"
+                class="size-10 rounded-full bg-fluux-bg border border-fluux-border shadow-lg flex items-center justify-center text-fluux-muted hover:text-fluux-text hover:bg-fluux-hover transition-colors duration-200 hover:scale-105 active:scale-95"
                 tabindex="-1"
               >
                 <span

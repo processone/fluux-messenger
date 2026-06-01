@@ -190,7 +190,7 @@ export function FormField({ field, value, onChange, disabled }: FormFieldProps) 
             <span className="text-sm text-fluux-muted">{label}</span>
             {desc && (
               <Tooltip content={desc} position="top">
-                <HelpCircle className="w-3.5 h-3.5 text-fluux-muted cursor-help flex-shrink-0" />
+                <HelpCircle className="size-3.5 text-fluux-muted cursor-help flex-shrink-0" />
               </Tooltip>
             )}
           </label>
@@ -219,7 +219,7 @@ export function FormField({ field, value, onChange, disabled }: FormFieldProps) 
           {isRequired && <span className="text-red-400 ms-0.5">*</span>}
           {desc && (
             <Tooltip content={desc} position="top">
-              <HelpCircle className="w-3.5 h-3.5 text-fluux-muted cursor-help" />
+              <HelpCircle className="size-3.5 text-fluux-muted cursor-help" />
             </Tooltip>
           )}
         </label>

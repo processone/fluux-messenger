@@ -29,7 +29,7 @@ export function AccountSection({ onChangePassword }: AccountSectionProps) {
       <div className="rounded-lg bg-fluux-bg/40 divide-y divide-fluux-bg">
         {connectionMethod && (
           <div className="flex items-center gap-3 px-3 py-2.5">
-            <Network className="w-4 h-4 text-fluux-muted flex-shrink-0" aria-hidden />
+            <Network className="size-4 text-fluux-muted flex-shrink-0" aria-hidden />
             <span className="text-sm text-fluux-text break-words">
               {t(`profile.connectionMethod_${connectionMethod}`)}
               {authMechanism && ` · ${authMechanism}`}
@@ -39,12 +39,12 @@ export function AccountSection({ onChangePassword }: AccountSectionProps) {
 
         {showWebPush && (
           <div className="flex items-center gap-3 px-3 py-2.5">
-            <Bell className="w-4 h-4 text-fluux-muted flex-shrink-0" aria-hidden />
+            <Bell className="size-4 text-fluux-muted flex-shrink-0" aria-hidden />
             <span className="flex-1 text-sm text-fluux-text break-words">
               {t('profile.webPush')} · {t(`profile.webPush_${webPushStatus}`)}
             </span>
             <span
-              className={`w-2 h-2 rounded-full flex-shrink-0 ${
+              className={`size-2 rounded-full flex-shrink-0 ${
                 webPushStatus === 'registered'
                   ? 'bg-fluux-green'
                   : webPushStatus === 'available'
@@ -62,7 +62,7 @@ export function AccountSection({ onChangePassword }: AccountSectionProps) {
             onClick={onChangePassword}
             className="w-full flex items-center gap-3 px-3 py-2.5 text-start hover:bg-fluux-hover transition-colors"
           >
-            <Key className="w-4 h-4 text-fluux-muted flex-shrink-0" aria-hidden />
+            <Key className="size-4 text-fluux-muted flex-shrink-0" aria-hidden />
             <span className="text-sm text-fluux-text">{t('profile.changePassword')}</span>
           </button>
         ) : (
@@ -71,7 +71,7 @@ export function AccountSection({ onChangePassword }: AccountSectionProps) {
               className="w-full flex items-center gap-3 px-3 py-2.5 text-fluux-muted opacity-50"
               aria-label={passwordTooltip}
             >
-              <Key className="w-4 h-4 flex-shrink-0" aria-hidden />
+              <Key className="size-4 flex-shrink-0" aria-hidden />
               <span className="text-sm">{t('profile.changePassword')}</span>
             </div>
           </Tooltip>

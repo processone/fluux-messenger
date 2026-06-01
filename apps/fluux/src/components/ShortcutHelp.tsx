@@ -32,11 +32,16 @@ export function ShortcutHelp({ shortcuts, onClose }: ShortcutHelpProps) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-      onClick={onClose}
     >
+      <button
+        type="button"
+        aria-hidden="true"
+        tabIndex={-1}
+        onClick={onClose}
+        className="absolute inset-0 cursor-default"
+      />
       <div
-        className="bg-fluux-sidebar rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col"
-        onClick={(e) => e.stopPropagation()}
+        className="relative z-10 bg-fluux-sidebar rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-fluux-border">
@@ -47,7 +52,7 @@ export function ShortcutHelp({ shortcuts, onClose }: ShortcutHelpProps) {
               className="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors"
               aria-label={t('common.close')}
             >
-              <X className="w-5 h-5" />
+              <X className="size-5" />
             </button>
           </Tooltip>
         </div>

@@ -238,7 +238,7 @@ function CommandPaletteContent({
         sublabel: conv.id,
         lastMessagePreview: preview,
         lastMessageBody: conv.lastMessage?.body,
-        icon: <MessageSquare className="w-4 h-4" />,
+        icon: <MessageSquare className="size-4" />,
         action: () => selectConversation(conv.id),
         keywords: [getLocalPart(conv.id), 'message', 'chat'],
         presence: contact?.presence ?? 'offline',
@@ -259,7 +259,7 @@ function CommandPaletteContent({
         type: 'contact',
         label: contact.name,
         sublabel: contact.jid,
-        icon: <User className="w-4 h-4" />,
+        icon: <User className="size-4" />,
         action: () => {
           if (hasArchivedConversation) {
             // Open existing archived conversation in archive view
@@ -285,7 +285,7 @@ function CommandPaletteContent({
         sublabel: room.jid,
         lastMessagePreview: preview,
         lastMessageBody: room.lastMessage?.body,
-        icon: <Hash className="w-4 h-4" />,
+        icon: <Hash className="size-4" />,
         action: () => selectRoom(room.jid),
         keywords: [getLocalPart(room.jid), 'room', 'muc', 'group'],
       })
@@ -298,7 +298,7 @@ function CommandPaletteContent({
         type: 'room',
         label: room.name || room.jid.split('@')[0],
         sublabel: `${room.jid} (${t('rooms.bookmarked')})`,
-        icon: <Hash className="w-4 h-4 opacity-50" />,
+        icon: <Hash className="size-4 opacity-50" />,
         action: () => selectRoom(room.jid),
         keywords: [getLocalPart(room.jid), 'room', 'bookmark'],
       })
@@ -306,11 +306,11 @@ function CommandPaletteContent({
 
     // 5. Views (navigation)
     const views: Array<{ id: string; label: string; icon: React.ReactNode; view: SidebarView; keywords: string[] }> = [
-      { id: 'view-messages', label: t('sidebar.messages'), icon: <MessageSquare className="w-4 h-4" />, view: 'messages', keywords: ['messages', 'conversations', 'chat'] },
-      { id: 'view-rooms', label: t('sidebar.rooms'), icon: <Hash className="w-4 h-4" />, view: 'rooms', keywords: ['rooms', 'channels', 'muc'] },
-      { id: 'view-connections', label: t('sidebar.connections'), icon: <Users className="w-4 h-4" />, view: 'directory', keywords: ['connections', 'contacts', 'roster'] },
-      { id: 'view-archive', label: t('sidebar.archive'), icon: <Archive className="w-4 h-4" />, view: 'archive', keywords: ['archive', 'hidden', 'old'] },
-      { id: 'view-events', label: t('sidebar.events'), icon: <Bell className="w-4 h-4" />, view: 'events', keywords: ['events', 'notifications', 'requests'] },
+      { id: 'view-messages', label: t('sidebar.messages'), icon: <MessageSquare className="size-4" />, view: 'messages', keywords: ['messages', 'conversations', 'chat'] },
+      { id: 'view-rooms', label: t('sidebar.rooms'), icon: <Hash className="size-4" />, view: 'rooms', keywords: ['rooms', 'channels', 'muc'] },
+      { id: 'view-connections', label: t('sidebar.connections'), icon: <Users className="size-4" />, view: 'directory', keywords: ['connections', 'contacts', 'roster'] },
+      { id: 'view-archive', label: t('sidebar.archive'), icon: <Archive className="size-4" />, view: 'archive', keywords: ['archive', 'hidden', 'old'] },
+      { id: 'view-events', label: t('sidebar.events'), icon: <Bell className="size-4" />, view: 'events', keywords: ['events', 'notifications', 'requests'] },
     ]
 
     for (const v of views) {
@@ -326,12 +326,12 @@ function CommandPaletteContent({
 
     // 6. Actions
     const actions: Array<{ id: string; label: string; icon: React.ReactNode; action: () => void; keywords: string[] }> = [
-      { id: 'action-quick-chat', label: t('rooms.createQuickChat'), icon: <Plus className="w-4 h-4" />, action: () => { onCreateQuickChat(); onClose() }, keywords: ['new', 'create', 'quick', 'chat'] },
-      { id: 'action-add-contact', label: t('contacts.addContact'), icon: <Plus className="w-4 h-4" />, action: () => { onAddContact(); onClose() }, keywords: ['new', 'add', 'contact', 'friend'] },
-      { id: 'action-join-room', label: t('rooms.joinRoom'), icon: <Plus className="w-4 h-4" />, action: () => closeAndNavigate('rooms'), keywords: ['join', 'room', 'muc'] },
-      { id: 'action-settings', label: t('sidebar.settings'), icon: <Settings className="w-4 h-4" />, action: () => { onOpenSettings(); onClose() }, keywords: ['settings', 'preferences', 'options'] },
-      { id: 'action-shortcuts', label: t('shortcuts.title'), icon: <HelpCircle className="w-4 h-4" />, action: () => { onToggleShortcutHelp(); onClose() }, keywords: ['shortcuts', 'keyboard', 'help'] },
-      { id: 'action-console', label: t('console.title'), icon: <Terminal className="w-4 h-4" />, action: () => { onToggleConsole(); onClose() }, keywords: ['console', 'xmpp', 'debug'] },
+      { id: 'action-quick-chat', label: t('rooms.createQuickChat'), icon: <Plus className="size-4" />, action: () => { onCreateQuickChat(); onClose() }, keywords: ['new', 'create', 'quick', 'chat'] },
+      { id: 'action-add-contact', label: t('contacts.addContact'), icon: <Plus className="size-4" />, action: () => { onAddContact(); onClose() }, keywords: ['new', 'add', 'contact', 'friend'] },
+      { id: 'action-join-room', label: t('rooms.joinRoom'), icon: <Plus className="size-4" />, action: () => closeAndNavigate('rooms'), keywords: ['join', 'room', 'muc'] },
+      { id: 'action-settings', label: t('sidebar.settings'), icon: <Settings className="size-4" />, action: () => { onOpenSettings(); onClose() }, keywords: ['settings', 'preferences', 'options'] },
+      { id: 'action-shortcuts', label: t('shortcuts.title'), icon: <HelpCircle className="size-4" />, action: () => { onToggleShortcutHelp(); onClose() }, keywords: ['shortcuts', 'keyboard', 'help'] },
+      { id: 'action-console', label: t('console.title'), icon: <Terminal className="size-4" />, action: () => { onToggleConsole(); onClose() }, keywords: ['console', 'xmpp', 'debug'] },
     ]
 
     for (const a of actions) {
@@ -384,7 +384,7 @@ function CommandPaletteContent({
         id: 'search-gateway',
         type: 'action',
         label: t('commandPalette.searchMessages', { query: searchQuery }),
-        icon: <Search className="w-4 h-4" />,
+        icon: <Search className="size-4" />,
         action: () => {
           searchStore.getState().search(searchQuery)
           closeAndNavigate('search')
@@ -475,14 +475,6 @@ function CommandPaletteContent({
     }
   }
 
-  const backdropMouseDownRef = useRef<EventTarget | null>(null)
-  const handleBackdropMouseDown = (e: React.MouseEvent) => {
-    backdropMouseDownRef.current = e.target
-  }
-  const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget && backdropMouseDownRef.current === e.currentTarget) onClose()
-  }
-
   // Handle mouse movement to exit keyboard navigation mode
   const handleMouseMove = (e: React.MouseEvent) => {
     // Only exit keyboard nav if mouse actually moved (not just scroll-triggered events)
@@ -503,16 +495,23 @@ function CommandPaletteContent({
   return (
     <div
       className="fixed inset-0 bg-black/50 flex items-start justify-center pt-[15vh] z-50"
-      onMouseDown={handleBackdropMouseDown}
-      onClick={handleBackdropClick}
     >
+      <button
+        type="button"
+        aria-hidden="true"
+        tabIndex={-1}
+        onClick={onClose}
+        className="absolute inset-0 cursor-default"
+      />
       <div
-        className="bg-fluux-sidebar rounded-lg shadow-2xl w-full max-w-lg mx-4 overflow-hidden border border-fluux-hover"
+        role="dialog"
+        aria-modal="true"
+        className="relative z-10 bg-fluux-sidebar rounded-lg shadow-2xl w-full max-w-lg mx-4 overflow-hidden border border-fluux-hover"
         onKeyDown={handleKeyDown}
       >
         {/* Search Input */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-fluux-hover">
-          <Search className="w-5 h-5 text-fluux-muted flex-shrink-0" />
+          <Search className="size-5 text-fluux-muted flex-shrink-0" />
           <TextInput
             ref={inputRef}
             type="text"
@@ -560,7 +559,7 @@ function CommandPaletteContent({
                       </span>
                       {item.presence && (
                         <span
-                          className={`w-2 h-2 rounded-full flex-shrink-0 ${forceOffline ? APP_OFFLINE_PRESENCE_COLOR : PRESENCE_COLORS[item.presence]}`}
+                          className={`size-2 rounded-full flex-shrink-0 ${forceOffline ? APP_OFFLINE_PRESENCE_COLOR : PRESENCE_COLORS[item.presence]}`}
                         />
                       )}
                       <div className="flex-1 min-w-0">

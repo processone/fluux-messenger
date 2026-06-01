@@ -127,11 +127,11 @@ export function PresenceSelector({ isOpen: isOpenProp, onOpenChange }: PresenceS
           onClick={() => setIsOpen(!isOpen)}
           className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-full bg-fluux-hover hover:bg-fluux-bg border border-transparent hover:border-fluux-muted/30 transition-colors group min-w-0 max-w-full overflow-hidden"
         >
-          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${currentOption.color}`} />
+          <span className={`size-2 rounded-full flex-shrink-0 ${currentOption.color}`} />
           <span className="text-fluux-muted group-hover:text-fluux-text truncate min-w-0">
             {statusMessage || t(currentOption.labelKey)}
           </span>
-          <ChevronDown className={`w-3 h-3 text-fluux-muted group-hover:text-fluux-text flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+          <ChevronDown className={`size-3 text-fluux-muted group-hover:text-fluux-text flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
         </button>
       </Tooltip>
 
@@ -152,10 +152,10 @@ export function PresenceSelector({ isOpen: isOpenProp, onOpenChange }: PresenceS
                 focusedIndex === index ? 'bg-fluux-hover' : 'hover:bg-fluux-hover'
               }`}
             >
-              <span className={`w-2.5 h-2.5 rounded-full ${option.color}`} />
+              <span className={`size-2.5 rounded-full ${option.color}`} />
               <span className="flex-1">{t(option.labelKey)}</span>
               {presenceShow === option.value && (
-                <Check className="w-4 h-4 text-fluux-green" />
+                <Check className="size-4 text-fluux-green" />
               )}
             </button>
           ))}
@@ -235,7 +235,7 @@ export function StatusDisplay({
   if (status === 'verifying') {
     return (
       <p className="text-xs text-fluux-yellow truncate flex items-center gap-1">
-        <RefreshCw className="w-3 h-3 animate-spin" />
+        <RefreshCw className="size-3 animate-spin" />
         {t('status.verifying')}
       </p>
     )
@@ -244,7 +244,7 @@ export function StatusDisplay({
   if (status === 'reconnecting') {
     return (
       <p className="text-xs text-fluux-yellow truncate flex items-center gap-1">
-        <RefreshCw className="w-3 h-3 animate-spin" />
+        <RefreshCw className="size-3 animate-spin" />
         {secondsLeft !== null
           ? t('status.reconnectingIn', { seconds: secondsLeft, attempt: reconnectAttempt })
           : t('status.reconnecting')}
@@ -255,7 +255,7 @@ export function StatusDisplay({
   if (status === 'connecting') {
     return (
       <p className="text-xs text-fluux-yellow truncate flex items-center gap-1">
-        <RefreshCw className="w-3 h-3 animate-spin" />
+        <RefreshCw className="size-3 animate-spin" />
         {t('status.connecting')}
       </p>
     )

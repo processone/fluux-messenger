@@ -76,10 +76,10 @@ export function SettingsView({ onBack }: SettingsViewProps) {
             className="p-1 -ms-1 me-2 rounded hover:bg-fluux-hover md:hidden"
             aria-label={t('common.back')}
           >
-            <ArrowLeft className="w-5 h-5 text-fluux-muted rtl-mirror" />
+            <ArrowLeft className="size-5 text-fluux-muted rtl-mirror" />
           </button>
         )}
-        {CategoryIcon && <CategoryIcon className="w-5 h-5 text-fluux-muted me-2" />}
+        {CategoryIcon && <CategoryIcon className="size-5 text-fluux-muted me-2" />}
         <h2 className="font-semibold text-fluux-text">{categoryLabel}</h2>
       </div>
 

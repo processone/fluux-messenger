@@ -76,7 +76,7 @@ export function FindOnPageBar({
           className="p-0.5 rounded hover:bg-fluux-hover text-fluux-muted disabled:opacity-30"
           title={t('search.previousMatch', 'Previous match (Shift+Enter)')}
         >
-          <ChevronUp className="w-4 h-4" />
+          <ChevronUp className="size-4" />
         </button>
         <button
           onClick={onNext}
@@ -84,14 +84,14 @@ export function FindOnPageBar({
           className="p-0.5 rounded hover:bg-fluux-hover text-fluux-muted disabled:opacity-30"
           title={t('search.nextMatch', 'Next match (Enter)')}
         >
-          <ChevronDown className="w-4 h-4" />
+          <ChevronDown className="size-4" />
         </button>
         <button
           onClick={onClose}
           className="p-0.5 rounded hover:bg-fluux-hover text-fluux-muted"
           title={t('common.close', 'Close (Esc)')}
         >
-          <X className="w-3.5 h-3.5" />
+          <X className="size-3.5" />
         </button>
       </div>
     </div>

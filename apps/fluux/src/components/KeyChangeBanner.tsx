@@ -101,7 +101,7 @@ export function KeyChangeBanner({ peerJid, peerName }: KeyChangeBannerProps) {
         role="alert"
         className="mx-1 mt-1 mb-2 flex items-start gap-2 px-3 py-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10"
       >
-        <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+        <AlertTriangle className="size-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-fluux-text leading-snug">
             {t('chat.keyChangeBanner.title', { name: peerName })}
@@ -118,7 +118,7 @@ export function KeyChangeBanner({ peerJid, peerName }: KeyChangeBannerProps) {
               disabled={busy}
               className="flex items-center gap-1.5 px-3 py-1 text-xs font-medium bg-fluux-brand text-white hover:opacity-90 rounded transition-colors disabled:opacity-50"
             >
-              <ShieldCheck className="w-3.5 h-3.5" />
+              <ShieldCheck className="size-3.5" />
               {t('chat.keyChangeBanner.reVerify')}
             </button>
             <button
@@ -126,7 +126,7 @@ export function KeyChangeBanner({ peerJid, peerName }: KeyChangeBannerProps) {
               disabled={busy}
               className="flex items-center gap-1.5 px-3 py-1 text-xs font-medium bg-fluux-hover text-fluux-text hover:bg-fluux-active rounded transition-colors disabled:opacity-50"
             >
-              <ShieldAlert className="w-3.5 h-3.5" />
+              <ShieldAlert className="size-3.5" />
               {t('chat.keyChangeBanner.acceptWithoutVerifying')}
             </button>
           </div>

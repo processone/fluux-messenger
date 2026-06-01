@@ -2,7 +2,7 @@
  * Full-screen lightbox overlay for viewing image attachments.
  * Triggered by clicking on an image attachment in chat/room views.
  */
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Download, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -30,7 +30,6 @@ interface ImageLightboxProps {
 
 export function ImageLightbox({ src, alt, downloadUrl, filename, encryption, placeholderSrc, onClose }: ImageLightboxProps) {
   const { t } = useTranslation()
-  const mouseDownTargetRef = useRef<EventTarget | null>(null)
   const { url: proxiedSrc, isLoading } = useAttachmentUrl(src, encryption)
   const imageMenu = useContextMenu()
 
@@ -47,27 +46,31 @@ export function ImageLightbox({ src, alt, downloadUrl, filename, encryption, pla
   return createPortal(
     <div
       className="fixed inset-0 bg-black/90 flex flex-col items-center justify-center z-50"
-      onMouseDown={(e) => { mouseDownTargetRef.current = e.target }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget && mouseDownTargetRef.current === e.currentTarget) onClose()
-      }}
     >
+      {/* Click-outside-to-close backdrop (Escape also closes; see effect above) */}
+      <button
+        type="button"
+        aria-hidden="true"
+        tabIndex={-1}
+        onClick={onClose}
+        className="absolute inset-0 cursor-default"
+      />
       {/* Top-right controls */}
-      <div className="absolute top-4 end-4 flex items-center gap-2">
+      <div className="absolute top-4 end-4 z-10 flex items-center gap-2">
         <a
           href={proxiedSrc ?? downloadUrl}
           download={filename || 'image'}
           className="p-2 text-white/70 hover:text-white rounded-full hover:bg-white/10 transition-colors"
           title={t('common.download')}
         >
-          <Download className="w-6 h-6" />
+          <Download className="size-6" />
         </a>
         <button
           onClick={onClose}
           className="p-2 text-white/70 hover:text-white rounded-full hover:bg-white/10 transition-colors"
           title={t('common.close')}
         >
-          <X className="w-6 h-6" />
+          <X className="size-6" />
         </button>
       </div>
 
@@ -76,17 +79,17 @@ export function ImageLightbox({ src, alt, downloadUrl, filename, encryption, pla
         <img
           src={displaySrc}
           alt={alt || 'Image'}
-          className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg select-none"
+          className="relative z-10 max-w-[90vw] max-h-[85vh] object-contain rounded-lg select-none"
           draggable={false}
           onContextMenu={imageMenu.handleContextMenu}
         />
       ) : (
-        isLoading && <Loader2 className="w-8 h-8 text-white/70 animate-spin" />
+        isLoading && <Loader2 className="size-8 text-white/70 animate-spin" />
       )}
 
       {/* Filename label */}
       {filename && (
-        <div className="mt-3 text-white/70 text-sm truncate max-w-[90vw]">
+        <div className="relative z-10 mt-3 text-white/70 text-sm truncate max-w-[90vw]">
           {filename}
         </div>
       )}

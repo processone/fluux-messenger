@@ -513,7 +513,8 @@
                     "verified": "preverjeno",
                     "tofu": "zaupanja vredno",
                     "introduced": "predstavljen",
-                    "untrusted": "nepreverjeno"
+                    "untrusted": "nepreverjeno",
+                    "rejected": "ZAVRNJENO — neveljaven podpis"
                 }
             }
         },

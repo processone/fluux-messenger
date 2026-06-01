@@ -154,7 +154,7 @@ export function OwnProfileHero({
                 fallbackColor="var(--fluux-bg-accent)"
               />
               <div className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <Camera className="w-7 h-7 text-white" />
+                <Camera className="size-7 text-white" />
               </div>
             </button>
           </Tooltip>
@@ -201,7 +201,7 @@ export function OwnProfileHero({
                     className="p-1 text-fluux-muted hover:text-fluux-text rounded disabled:opacity-50 disabled:cursor-not-allowed"
                     aria-label={t('profile.editNickname')}
                   >
-                    <Pencil className="w-4 h-4" />
+                    <Pencil className="size-4" />
                   </button>
                 </Tooltip>
                 {ownNickname && (
@@ -213,7 +213,7 @@ export function OwnProfileHero({
                       className="p-1 text-fluux-muted hover:text-fluux-red rounded disabled:opacity-50 disabled:cursor-not-allowed"
                       aria-label={t('profile.resetToUsername')}
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="size-4" />
                     </button>
                   </Tooltip>
                 )}
@@ -226,7 +226,7 @@ export function OwnProfileHero({
 
           {/* Presence */}
           <div className="flex items-center gap-2 mt-2">
-            <span className={`w-2 h-2 rounded-full ${presenceColor}`} />
+            <span className={`size-2 rounded-full ${presenceColor}`} />
             <span className="text-fluux-text text-sm">
               {isConnected
                 ? `${t(`presence.${presenceShow}`)} · ${t('profile.active')}`

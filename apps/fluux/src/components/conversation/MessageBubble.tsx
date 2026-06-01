@@ -6,7 +6,7 @@
  */
 import { useState, useMemo, memo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { CornerUpRight, AlertCircle, RefreshCw, Lock } from 'lucide-react'
+import { CornerUpRight, AlertCircle, RefreshCw, Lock, ShieldAlert } from 'lucide-react'
 import { formatMessagePreview, formatXMPPError, type BaseMessage, type MentionReference, type Contact, type ContactIdentity, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
 import { Avatar } from '../Avatar'
 import { AvatarLightbox } from '../AvatarLightbox'
@@ -332,8 +332,11 @@ export const MessageBubble = memo(function MessageBubble({
           </span>
         ) : showAvatar ? (
           <div
+            role="button"
+            tabIndex={0}
             className="select-none cursor-pointer"
             onClick={(e) => { e.stopPropagation(); setShowAvatarLightbox(true) }}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowAvatarLightbox(true) } }}
             onContextMenu={onNickContextMenu}
             onTouchStart={onNickTouchStart}
             onTouchEnd={onNickTouchEnd}
@@ -406,13 +409,17 @@ export const MessageBubble = memo(function MessageBubble({
                   className={`flex items-center ${
                     message.securityContext.trust === 'verified'
                       ? 'text-green-500'
+                      : message.securityContext.trust === 'rejected'
+                      ? 'text-red-500'
                       : message.securityContext.trust === 'untrusted'
                       ? 'text-yellow-500'
                       : 'text-fluux-muted'
                   }`}
                   aria-label={`Encrypted with ${message.securityContext.protocolId}, trust ${message.securityContext.trust}`}
                 >
-                  <Lock className="w-3 h-3" />
+                  {message.securityContext.trust === 'rejected'
+                    ? <ShieldAlert className="size-3" />
+                    : <Lock className="size-3" />}
                 </span>
               </Tooltip>
             )}
@@ -433,7 +440,7 @@ export const MessageBubble = memo(function MessageBubble({
                 avatarUrl={replyContext.avatarUrl}
                 size="xs"
               />
-              <CornerUpRight className="rtl-mirror w-3 h-3 text-fluux-muted" />
+              <CornerUpRight className="rtl-mirror size-3 text-fluux-muted" />
             </div>
             <div className="text-sm text-fluux-muted min-w-0 flex-1">
               <span
@@ -510,7 +517,7 @@ export const MessageBubble = memo(function MessageBubble({
         {message.deliveryError && (
           <div className="flex flex-col gap-1 pt-1">
             <div className="flex items-center gap-1.5 text-red-500">
-              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+              <AlertCircle className="size-3.5 flex-shrink-0" />
               <span className="text-xs font-medium">{t('chat.deliveryFailed')}</span>
               <span className="text-xs text-fluux-muted">—</span>
               <button
@@ -526,7 +533,7 @@ export const MessageBubble = memo(function MessageBubble({
                     onClick={onRetry}
                     className="text-xs text-fluux-link hover:text-fluux-link-hover cursor-pointer underline flex items-center gap-1"
                   >
-                    <RefreshCw className="w-3 h-3" />
+                    <RefreshCw className="size-3" />
                     {t('chat.retry')}
                   </button>
                 </>

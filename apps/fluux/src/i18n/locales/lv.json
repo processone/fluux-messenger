@@ -512,7 +512,8 @@
                     "verified": "pārbaudīts",
                     "tofu": "uzticams",
                     "introduced": "iepazīstināts",
-                    "untrusted": "nepārbaudīts"
+                    "untrusted": "nepārbaudīts",
+                    "rejected": "NORAIDĪTS — nederīgs paraksts"
                 }
             }
         },

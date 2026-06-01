@@ -134,7 +134,7 @@ export function PollCreator({ onClose, onCreatePoll }: PollCreatorProps) {
                 <button
                   type="button"
                   onClick={() => setEmojiPickerIndex(emojiPickerIndex === index ? null : index)}
-                  className={`text-base flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-md border transition-colors
+                  className={`text-base flex-shrink-0 size-8 flex items-center justify-center rounded-md border transition-colors
                     ${emojiPickerIndex === index
                       ? 'border-fluux-brand bg-fluux-brand/10'
                       : 'border-transparent hover:border-fluux-border hover:bg-fluux-hover'
@@ -168,7 +168,7 @@ export function PollCreator({ onClose, onCreatePoll }: PollCreatorProps) {
                   className="p-1 text-fluux-muted hover:text-red-500 transition-colors"
                   aria-label={t('poll.removeOption', 'Remove option')}
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 className="size-4" />
                 </button>
               )}
             </div>
@@ -179,7 +179,7 @@ export function PollCreator({ onClose, onCreatePoll }: PollCreatorProps) {
               onClick={addOption}
               className="flex items-center gap-1.5 text-sm text-fluux-brand hover:text-fluux-text transition-colors mt-1"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="size-4" />
               {t('poll.addOption', 'Add option')}
             </button>
           )}
@@ -241,7 +241,7 @@ export function PollCreator({ onClose, onCreatePoll }: PollCreatorProps) {
             disabled={!isValid || sending}
             className="px-4 py-2 text-sm font-medium text-fluux-text-on-accent bg-fluux-brand rounded-md hover:bg-fluux-brand/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
           >
-            {sending && <Loader2 className="w-4 h-4 animate-spin" />}
+            {sending && <Loader2 className="size-4 animate-spin" />}
             {t('poll.send', 'Send Poll')}
           </button>
         </div>

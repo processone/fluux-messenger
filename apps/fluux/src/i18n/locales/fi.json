@@ -511,7 +511,8 @@
                     "verified": "vahvistettu",
                     "tofu": "luotettu",
                     "introduced": "esitelty",
-                    "untrusted": "vahvistamaton"
+                    "untrusted": "vahvistamaton",
+                    "rejected": "HYLÄTTY — virheellinen allekirjoitus"
                 }
             }
         },

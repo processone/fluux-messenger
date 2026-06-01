@@ -109,7 +109,7 @@ export function SearchView() {
       {/* Search input */}
       <div className="px-3 pt-3 pb-2">
         <div className="relative">
-          <Search className="absolute start-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-fluux-muted pointer-events-none" />
+          <Search className="absolute start-2.5 top-1/2 -translate-y-1/2 size-4 text-fluux-muted pointer-events-none" />
           <TextInput
             ref={inputRef}
             type="text"
@@ -126,7 +126,7 @@ export function SearchView() {
               onClick={clearSearch}
               className="absolute end-2 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-fluux-hover text-fluux-muted"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="size-3.5" />
             </button>
           )}
 
@@ -143,9 +143,9 @@ export function SearchView() {
                   <Avatar identifier={s.id} name={s.name} size="xs" />
                   <span className="truncate flex-1">{s.name}</span>
                   {s.isRoom ? (
-                    <Hash className="w-3 h-3 text-fluux-muted flex-shrink-0" />
+                    <Hash className="size-3 text-fluux-muted flex-shrink-0" />
                   ) : (
-                    <MessageSquare className="w-3 h-3 text-fluux-muted flex-shrink-0" />
+                    <MessageSquare className="size-3 text-fluux-muted flex-shrink-0" />
                   )}
                 </button>
               ))}
@@ -165,7 +165,7 @@ export function SearchView() {
             className="p-0.5 rounded hover:bg-fluux-hover text-fluux-muted flex-shrink-0"
             title={t('search.clearScope', 'Search all conversations')}
           >
-            <X className="w-3 h-3" />
+            <X className="size-3" />
           </button>
         </div>
       )}
@@ -183,7 +183,7 @@ export function SearchView() {
                   : 'bg-fluux-hover text-fluux-muted hover:text-fluux-text'
               }`}
             >
-              <Icon className="w-3 h-3" />
+              <Icon className="size-3" />
               {label}
             </button>
           ))}
@@ -194,7 +194,7 @@ export function SearchView() {
       <div ref={listRef} className="flex-1 overflow-y-auto px-1" {...getContainerProps()}>
         {isSearching && (
           <div className="flex items-center justify-center gap-2 py-8 text-fluux-muted text-sm">
-            <Loader2 className="w-4 h-4 animate-spin" />
+            <Loader2 className="size-4 animate-spin" />
             {t('search.searching', 'Searching…')}
           </div>
         )}
@@ -240,7 +240,7 @@ export function SearchView() {
               className="w-full flex items-center justify-center gap-2 py-2 text-sm text-fluux-muted
                          hover:text-fluux-text hover:bg-fluux-hover rounded-md transition-colors"
             >
-              <Cloud className="w-4 h-4" />
+              <Cloud className="size-4" />
               {t('search.searchServer', 'Search server archive')}
             </button>
           </div>
@@ -249,7 +249,7 @@ export function SearchView() {
         {/* MAM search loading */}
         {isSearchingMAM && (
           <div className="flex items-center justify-center gap-2 py-4 text-fluux-muted text-sm">
-            <Loader2 className="w-4 h-4 animate-spin" />
+            <Loader2 className="size-4 animate-spin" />
             {t('search.searchingServer', 'Searching server archive…')}
           </div>
         )}
@@ -259,7 +259,7 @@ export function SearchView() {
           <div className="space-y-0.5">
             <div className="px-2 pt-2 pb-1">
               <span className="text-xs text-fluux-muted font-medium flex items-center gap-1">
-                <Cloud className="w-3 h-3" />
+                <Cloud className="size-3" />
                 {t('search.serverResults', 'Server archive')}
               </span>
             </div>
@@ -357,7 +357,7 @@ function SearchResultItem({ result, context, isActive, isSelected, isKeyboardNav
               <img
                 src={roomAvatar}
                 alt={result.conversationName}
-                className="w-6 h-6 rounded-full object-cover"
+                className="size-6 rounded-full object-cover"
                 draggable={false}
               />
             ) : (
@@ -386,7 +386,7 @@ function SearchResultItem({ result, context, isActive, isSelected, isKeyboardNav
           </span>
           <div className="flex items-center gap-1 flex-shrink-0">
             {result.source === 'mam' && (
-              <Cloud className="w-3 h-3 text-fluux-muted" />
+              <Cloud className="size-3 text-fluux-muted" />
             )}
             <span className="text-xs text-fluux-muted">
               {formatConversationTime(timestamp, t, currentLang, timeFormat)}
@@ -396,7 +396,7 @@ function SearchResultItem({ result, context, isActive, isSelected, isKeyboardNav
               className="p-0.5 rounded opacity-0 group-hover/result:opacity-100 transition-opacity hover:bg-fluux-hover-strong"
               title="Go to message"
             >
-              <ExternalLink className="w-3 h-3 text-fluux-muted" />
+              <ExternalLink className="size-3 text-fluux-muted" />
             </button>
           </div>
         </div>

@@ -107,7 +107,7 @@ export function ContactProfileHero({
                     aria-label={t('contacts.rename')}
                     className="p-1 ms-1 text-fluux-muted hover:text-fluux-text rounded opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
                   >
-                    <Pencil className="w-4 h-4" />
+                    <Pencil className="size-4" />
                   </button>
                 </Tooltip>
               )}
@@ -124,7 +124,7 @@ export function ContactProfileHero({
 
           {/* Presence */}
           <div className="flex items-center gap-2 mt-2">
-            <span className={`w-2 h-2 rounded-full ${presenceColor}`} />
+            <span className={`size-2 rounded-full ${presenceColor}`} />
             <span className="text-fluux-text text-sm">{statusText}</span>
           </div>
 
@@ -154,7 +154,7 @@ export function ContactProfileHero({
               onClick={onStartConversation}
               className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-brand hover:bg-fluux-brand-hover text-fluux-text-on-accent rounded-lg transition-colors min-h-[44px]"
             >
-              <MessageCircle className="w-5 h-5" />
+              <MessageCircle className="size-5" />
               {t('contacts.startConversation')}
             </button>
             {actionsSlot}

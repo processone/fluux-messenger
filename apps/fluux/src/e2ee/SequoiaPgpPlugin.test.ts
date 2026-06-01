@@ -1791,10 +1791,10 @@ describe('SequoiaPgpPlugin', () => {
       expect(bobBuilt.securityUpdates).toHaveLength(0)
     })
 
-    it('stash-then-verify-fails keeps the entry and does not upgrade', async () => {
+    it('stash-then-verify-fails rejects the entry when key arrives', async () => {
       // The key that finally arrives is a DIFFERENT identity (eve's). The
-      // re-verify reports signatureVerified=false, so no upgrade fires and
-      // the entry stays for a potential next rotation.
+      // re-verify reports signatureVerified=false, so the message is
+      // rejected with its body expunged — not kept pending.
       const alicePlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
       const bobPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
       const aliceBuilt = makeContext('alice@example.com')
@@ -1831,7 +1831,9 @@ describe('SequoiaPgpPlugin', () => {
       bobPlugin.onPeerKeysChanged('alice@example.com')
       await flushAsync()
 
-      expect(bobBuilt.securityUpdates).toHaveLength(0)
+      expect(bobBuilt.securityUpdates).toHaveLength(1)
+      expect(bobBuilt.securityUpdates[0].securityContext.trust).toBe('rejected')
+      expect(bobBuilt.securityUpdates[0].body).toBe('[Message rejected: invalid signature]')
     })
 
     it('enforces the per-peer buffer size cap by evicting oldest entries', async () => {
@@ -2064,7 +2066,7 @@ describe('SequoiaPgpPlugin', () => {
       expect(decrypted.securityContext.notes?.join(' ')).toMatch(/Sender key not cached/)
     })
 
-    it('marks trust untrusted when the signature does not match the cached sender cert', async () => {
+    it('rejects when the signature does not match the cached sender cert', async () => {
       const { alice, bob } = await buildCrossPublishedPair(fake)
       await alice.plugin.probePeer('bob@example.com')
       const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
@@ -2122,11 +2124,8 @@ describe('SequoiaPgpPlugin', () => {
 
       const claim = bob.plugin.tryClaimInbound(payload.stanzaElement)!
       const bobHandle = await bob.plugin.openConversation({ kind: 'direct', peer: 'alice@example.com' })
-      const decrypted = await bob.plugin.decrypt(bobHandle, claim)
 
-      expect(decodeBodyFromPayload(decrypted.plaintext)).toBe('hi')
-      expect(decrypted.securityContext.trust).toBe('untrusted')
-      expect(decrypted.securityContext.notes?.join(' ')).toMatch(/Signature did not verify/)
+      await expect(bob.plugin.decrypt(bobHandle, claim)).rejects.toThrow(/signature did not verify/)
     })
 
     it('wraps the plaintext in a XEP-0373 §4.1 <signcrypt> envelope with all affixes', async () => {

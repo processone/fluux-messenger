@@ -88,11 +88,11 @@ export function StorageSettings() {
             disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isClearing ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
+            <Loader2 className="size-4 animate-spin" />
           ) : cleared ? (
-            <Check className="w-4 h-4 text-fluux-green" />
+            <Check className="size-4 text-fluux-green" />
           ) : (
-            <Trash2 className="w-4 h-4" />
+            <Trash2 className="size-4" />
           )}
           {cleared ? t('settings.storage.cacheCleared') : t('settings.storage.clearCache')}
         </button>
@@ -133,11 +133,11 @@ export function StorageSettings() {
             disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isRebuilding ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
+            <Loader2 className="size-4 animate-spin" />
           ) : rebuilt !== false ? (
-            <Check className="w-4 h-4 text-fluux-green" />
+            <Check className="size-4 text-fluux-green" />
           ) : (
-            <Search className="w-4 h-4" />
+            <Search className="size-4" />
           )}
           {isRebuilding
             ? t('settings.storage.rebuildingIndex', 'Rebuilding…')

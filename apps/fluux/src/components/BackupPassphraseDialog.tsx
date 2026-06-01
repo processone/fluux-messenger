@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Copy, Check, AlertTriangle, Loader2, RefreshCw } from 'lucide-react'
 import { generateBackupPassphrase, generateBackupCode, USE_V6_KEYS } from '@/e2ee/passphraseGenerator'
@@ -46,7 +46,6 @@ export function BackupPassphraseDialog({
   confirmLabel,
 }: BackupPassphraseDialogProps) {
   const { t, i18n } = useTranslation()
-  const mouseDownTargetRef = useRef<EventTarget | null>(null)
 
   // Regenerate on every open rather than keeping a stable value — a
   // user who cancelled and reopened should get a fresh passphrase so
@@ -140,17 +139,16 @@ export function BackupPassphraseDialog({
     <div
       data-modal="true"
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      onMouseDown={(e) => {
-        mouseDownTargetRef.current = e.target
-      }}
-      onClick={(e) => {
-        if (isPublishing) return
-        if (e.target === e.currentTarget && mouseDownTargetRef.current === e.currentTarget) {
-          onCancel()
-        }
-      }}
     >
-      <div className="bg-fluux-sidebar rounded-lg max-w-md w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
+      <button
+        type="button"
+        aria-hidden="true"
+        tabIndex={-1}
+        disabled={isPublishing}
+        onClick={onCancel}
+        className="absolute inset-0 cursor-default"
+      />
+      <div className="relative z-10 bg-fluux-sidebar rounded-lg max-w-md w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
         <form
           onSubmit={(e) => { e.preventDefault(); void handleConfirm() }}
           className="contents"
@@ -174,7 +172,7 @@ export function BackupPassphraseDialog({
         <div className="flex-1 overflow-y-auto min-h-0 px-5">
         {/* Warning callout — the single most important information in this dialog. */}
         <div className="flex gap-2 p-3 mb-4 rounded-lg bg-yellow-500/10 text-xs text-fluux-muted leading-snug">
-          <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+          <AlertTriangle className="size-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
           <p className="font-medium text-fluux-text">
             {t('settings.encryption.backupDialogWarning')}
           </p>
@@ -200,7 +198,7 @@ export function BackupPassphraseDialog({
               </div>
             )
           ) : (
-            <Loader2 className="w-4 h-4 animate-spin text-fluux-muted" />
+            <Loader2 className="size-4 animate-spin text-fluux-muted" />
           )}
         </div>
 
@@ -211,9 +209,9 @@ export function BackupPassphraseDialog({
             className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors disabled:opacity-50"
           >
             {isCopied ? (
-              <Check className="w-3.5 h-3.5 text-green-500" />
+              <Check className="size-3.5 text-green-500" />
             ) : (
-              <Copy className="w-3.5 h-3.5" />
+              <Copy className="size-3.5" />
             )}
             {isCopied
               ? t('settings.encryption.backupCopied')
@@ -232,7 +230,7 @@ export function BackupPassphraseDialog({
             title={t('settings.encryption.backupRegenerate')}
             aria-label={t('settings.encryption.backupRegenerate')}
           >
-            <RefreshCw className="w-3.5 h-3.5" />
+            <RefreshCw className="size-3.5" />
           </button>
         </div>
 
@@ -272,7 +270,7 @@ export function BackupPassphraseDialog({
               disabled={!acknowledged || isPublishing || !passphrase}
               className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-fluux-brand hover:opacity-90 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isPublishing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {isPublishing && <Loader2 className="size-3.5 animate-spin" />}
               {confirmLabel ?? t('settings.encryption.backupPublish')}
             </button>
           </div>

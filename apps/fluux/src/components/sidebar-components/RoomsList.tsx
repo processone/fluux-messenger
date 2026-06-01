@@ -120,7 +120,7 @@ export function RoomsList() {
     return (
       <>
         <div className="px-3 py-4 text-fluux-muted text-sm text-center">
-          <Hash className="w-12 h-12 mx-auto mb-3 opacity-50" />
+          <Hash className="size-12 mx-auto mb-3 opacity-50" />
           <p className="mb-2">{t('rooms.noRooms')}</p>
           <p className="text-xs opacity-75 mb-3">
             {t('rooms.noRoomsHint')}
@@ -129,7 +129,7 @@ export function RoomsList() {
             onClick={() => setShowCreateRoom(true)}
             className="inline-flex items-center gap-1 px-3 py-1.5 text-xs text-fluux-brand bg-fluux-brand/10 hover:bg-fluux-brand/20 rounded-lg transition-colors"
           >
-            <Plus className="w-3 h-3" />
+            <Plus className="size-3" />
             {t('rooms.createRoom')}
           </button>
         </div>
@@ -146,7 +146,7 @@ export function RoomsList() {
       {quickChats.length > 0 && (
         <div className="mb-4">
           <h3 className="text-xs font-semibold text-fluux-muted uppercase px-2 mb-2 flex items-center gap-1">
-            <Zap className="w-3 h-3 text-amber-500" />
+            <Zap className="size-3 text-amber-500" />
             {t('rooms.quickChatSection')} — {quickChats.length}
           </h3>
           <div className="space-y-0.5">
@@ -397,21 +397,21 @@ const RoomItem = memo(function RoomItem({
             <img
               src={room.avatar}
               alt={room.name}
-              className="w-8 h-8 rounded-full object-cover"
+              className="size-8 rounded-full object-cover"
               draggable={false}
             />
           ) : isQuickChat ? (
-            <Zap className="w-8 h-8 p-1.5 bg-amber-500/20 rounded-full text-amber-500" />
+            <Zap className="size-8 p-1.5 bg-amber-500/20 rounded-full text-amber-500" />
           ) : (
             <Hash
-              className="w-8 h-8 p-1.5 rounded-full text-white"
+              className="size-8 p-1.5 rounded-full text-white"
               style={{ backgroundColor: generateConsistentColorHexSync(room.jid, { saturation: 60, lightness: 45 }) }}
             />
           )}
           {/* Joining spinner */}
           {room.isJoining && (
-            <div className="absolute -bottom-0.5 -end-0.5 w-3.5 h-3.5 rounded-full border-2 border-fluux-sidebar bg-fluux-sidebar flex items-center justify-center">
-              <Loader2 className="w-2.5 h-2.5 text-fluux-brand animate-spin" />
+            <div className="absolute -bottom-0.5 -end-0.5 size-3.5 rounded-full border-2 border-fluux-sidebar bg-fluux-sidebar flex items-center justify-center">
+              <Loader2 className="size-2.5 text-fluux-brand animate-spin" />
             </div>
           )}
         </div>
@@ -421,7 +421,7 @@ const RoomItem = memo(function RoomItem({
             {/* Activity dot for unread (non-mention) activity */}
             {room.joined && room.unreadCount > 0 && room.mentionsCount === 0 && (
               <Tooltip content={`${room.unreadCount} unread`} position="top">
-                <div className="w-2.5 h-2.5 rounded-full bg-fluux-brand flex-shrink-0" />
+                <div className="size-2.5 rounded-full bg-fluux-brand flex-shrink-0" />
               </Tooltip>
             )}
             {/* Mentions count badge */}
@@ -478,7 +478,7 @@ const RoomItem = memo(function RoomItem({
               onClick={() => { menu.close(); onJoin() }}
               className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
             >
-              <LogIn className="w-4 h-4" />
+              <LogIn className="size-4" />
               <span>{t('rooms.joinRoom')}</span>
             </button>
           )}
@@ -489,7 +489,7 @@ const RoomItem = memo(function RoomItem({
               onClick={() => { menu.close(); onEditBookmark() }}
               className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
             >
-              <Pencil className="w-4 h-4" />
+              <Pencil className="size-4" />
               <span>{t('rooms.editBookmark')}</span>
             </button>
           )}
@@ -502,12 +502,12 @@ const RoomItem = memo(function RoomItem({
             >
               {room.autojoin ? (
                 <>
-                  <ToggleRight className="w-4 h-4 text-fluux-green" />
+                  <ToggleRight className="size-4 text-fluux-green" />
                   <span>{t('rooms.autojoinOn')}</span>
                 </>
               ) : (
                 <>
-                  <ToggleLeft className="w-4 h-4" />
+                  <ToggleLeft className="size-4" />
                   <span>{t('rooms.autojoinOff')}</span>
                 </>
               )}
@@ -525,7 +525,7 @@ const RoomItem = memo(function RoomItem({
               onClick={() => { menu.close(); onLeave() }}
               className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-red hover:bg-fluux-red hover:text-white transition-colors"
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut className="size-4" />
               <span>{t('rooms.leaveRoom')}</span>
             </button>
           )}
@@ -536,7 +536,7 @@ const RoomItem = memo(function RoomItem({
               onClick={() => { menu.close(); onRemoveBookmark() }}
               className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-red hover:bg-fluux-red hover:text-white transition-colors"
             >
-              <BookmarkX className="w-4 h-4" />
+              <BookmarkX className="size-4" />
               <span>{t('rooms.removeBookmark')}</span>
             </button>
           )}

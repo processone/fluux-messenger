@@ -511,7 +511,8 @@
                     "verified": "geverifieerd",
                     "tofu": "vertrouwd",
                     "introduced": "geïntroduceerd",
-                    "untrusted": "niet geverifieerd"
+                    "untrusted": "niet geverifieerd",
+                    "rejected": "GEWEIGERD — ongeldige handtekening"
                 }
             }
         },

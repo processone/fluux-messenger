@@ -70,7 +70,6 @@ export function RestorePassphraseDialog({
   isBackupCode = !USE_V6_KEYS,
 }: RestorePassphraseDialogProps) {
   const { t } = useTranslation()
-  const mouseDownTargetRef = useRef<EventTarget | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const backupCursorRef = useRef<number>(0)
 
@@ -156,17 +155,16 @@ export function RestorePassphraseDialog({
     <div
       data-modal="true"
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      onMouseDown={(e) => {
-        mouseDownTargetRef.current = e.target
-      }}
-      onClick={(e) => {
-        if (isRestoring) return
-        if (e.target === e.currentTarget && mouseDownTargetRef.current === e.currentTarget) {
-          onCancel()
-        }
-      }}
     >
-      <div className="bg-fluux-sidebar rounded-lg max-w-md w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
+      <button
+        type="button"
+        aria-hidden="true"
+        tabIndex={-1}
+        disabled={isRestoring}
+        onClick={onCancel}
+        className="absolute inset-0 cursor-default"
+      />
+      <div className="relative z-10 bg-fluux-sidebar rounded-lg max-w-md w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
         <form
           onSubmit={(e) => { e.preventDefault(); void handleConfirm() }}
           className="contents"
@@ -184,7 +182,7 @@ export function RestorePassphraseDialog({
 
         <div className="flex-1 overflow-y-auto min-h-0 px-5">
           <div className="flex gap-2 p-3 mb-4 rounded-lg bg-yellow-500/10 text-xs text-fluux-muted leading-snug">
-            <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+            <AlertTriangle className="size-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
             <p className="font-medium text-fluux-text">
               {t('settings.encryption.restoreDialogWarning')}
             </p>
@@ -248,7 +246,7 @@ export function RestorePassphraseDialog({
             disabled={!passphrase.trim() || isRestoring}
             className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-fluux-brand hover:opacity-90 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isRestoring && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            {isRestoring && <Loader2 className="size-3.5 animate-spin" />}
             {confirmLabel ?? t('settings.encryption.restoreAction')}
           </button>
         </div>

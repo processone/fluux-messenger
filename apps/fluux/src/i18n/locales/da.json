@@ -511,7 +511,8 @@
                     "verified": "verificeret",
                     "tofu": "betroet",
                     "introduced": "introduceret",
-                    "untrusted": "uverificeret"
+                    "untrusted": "uverificeret",
+                    "rejected": "AFVIST — ugyldig signatur"
                 }
             }
         },

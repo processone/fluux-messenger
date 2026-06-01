@@ -34,7 +34,6 @@ export function ExternalKeyExportDialog({
   onCancel,
 }: ExternalKeyExportDialogProps) {
   const { t } = useTranslation()
-  const mouseDownTargetRef = useRef<EventTarget | null>(null)
   const passphraseRef = useRef<HTMLInputElement | null>(null)
 
   const [mode, setMode] = useState<Mode>('protected')
@@ -79,17 +78,16 @@ export function ExternalKeyExportDialog({
     <div
       data-modal="true"
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      onMouseDown={(e) => {
-        mouseDownTargetRef.current = e.target
-      }}
-      onClick={(e) => {
-        if (isExporting) return
-        if (e.target === e.currentTarget && mouseDownTargetRef.current === e.currentTarget) {
-          onCancel()
-        }
-      }}
     >
-      <div className="bg-fluux-sidebar rounded-lg max-w-md w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
+      <button
+        type="button"
+        aria-hidden="true"
+        tabIndex={-1}
+        disabled={isExporting}
+        onClick={onCancel}
+        className="absolute inset-0 cursor-default"
+      />
+      <div className="relative z-10 bg-fluux-sidebar rounded-lg max-w-md w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
         <div className="px-5 pt-5 pb-3">
           <h3 className="text-lg font-semibold text-fluux-text mb-1">
             {t('settings.encryption.externalExportDialogTitle')}
@@ -112,7 +110,7 @@ export function ExternalKeyExportDialog({
                   : 'border-fluux-hover bg-fluux-bg hover:bg-fluux-hover'
               }`}
             >
-              <ShieldCheck className="w-4 h-4 text-fluux-brand flex-shrink-0 mt-0.5" />
+              <ShieldCheck className="size-4 text-fluux-brand flex-shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium text-fluux-text">
                   {t('settings.encryption.externalExportProtectedLabel')}
@@ -132,7 +130,7 @@ export function ExternalKeyExportDialog({
                   : 'border-fluux-hover bg-fluux-bg hover:bg-fluux-hover'
               }`}
             >
-              <ShieldOff className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+              <ShieldOff className="size-4 text-red-500 flex-shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium text-fluux-text">
                   {t('settings.encryption.externalExportUnprotectedLabel')}
@@ -191,7 +189,7 @@ export function ExternalKeyExportDialog({
           {mode === 'unprotected' && (
             <>
               <div className="flex gap-2 p-3 mb-3 rounded-lg bg-red-500/10 text-xs text-fluux-text leading-snug">
-                <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                <AlertTriangle className="size-4 text-red-500 flex-shrink-0 mt-0.5" />
                 <p className="font-medium">
                   {t('settings.encryption.externalExportUnprotectedWarning')}
                 </p>
@@ -231,7 +229,7 @@ export function ExternalKeyExportDialog({
             disabled={!canConfirm}
             className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-fluux-brand hover:opacity-90 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isExporting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            {isExporting && <Loader2 className="size-3.5 animate-spin" />}
             {t('settings.encryption.externalExportAction')}
           </button>
         </div>

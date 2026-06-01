@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AlertTriangle, Loader2 } from 'lucide-react'
 
@@ -49,7 +49,6 @@ export function DeleteOpenpgpKeyDialog({
   onCancel,
 }: DeleteOpenpgpKeyDialogProps) {
   const { t } = useTranslation()
-  const mouseDownTargetRef = useRef<EventTarget | null>(null)
 
   const [deleteBackup, setDeleteBackup] = useState(false)
   const [isRunning, setIsRunning] = useState(false)
@@ -78,17 +77,16 @@ export function DeleteOpenpgpKeyDialog({
     <div
       data-modal="true"
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      onMouseDown={(e) => {
-        mouseDownTargetRef.current = e.target
-      }}
-      onClick={(e) => {
-        if (isRunning) return
-        if (e.target === e.currentTarget && mouseDownTargetRef.current === e.currentTarget) {
-          onCancel()
-        }
-      }}
     >
-      <div className="bg-fluux-sidebar rounded-lg max-w-md w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
+      <button
+        type="button"
+        aria-hidden="true"
+        tabIndex={-1}
+        disabled={isRunning}
+        onClick={onCancel}
+        className="absolute inset-0 cursor-default"
+      />
+      <div className="relative z-10 bg-fluux-sidebar rounded-lg max-w-md w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
         <div className="px-5 pt-5 pb-3">
           <h3 className="text-lg font-semibold text-fluux-text mb-1">
             {t('settings.encryption.deleteKeyConfirmTitle')}
@@ -102,7 +100,7 @@ export function DeleteOpenpgpKeyDialog({
 
         <div className="flex-1 overflow-y-auto min-h-0 px-5">
           <div className="flex gap-2 p-3 mb-4 rounded-lg bg-yellow-500/10 text-xs text-fluux-muted leading-snug">
-            <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+            <AlertTriangle className="size-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
             <p className="font-medium text-fluux-text">
               {t('settings.encryption.deleteKeyConsequences')}
             </p>
@@ -146,7 +144,7 @@ export function DeleteOpenpgpKeyDialog({
             disabled={isRunning}
             className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isRunning && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            {isRunning && <Loader2 className="size-3.5 animate-spin" />}
             {t('settings.encryption.deleteKeyConfirmAction')}
           </button>
         </div>

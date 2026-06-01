@@ -511,7 +511,8 @@
                     "verified": "מאומת",
                     "tofu": "מהימן",
                     "introduced": "הוצג",
-                    "untrusted": "לא מאומת"
+                    "untrusted": "לא מאומת",
+                    "rejected": "נדחה — חתימה לא תקינה"
                 }
             }
         },

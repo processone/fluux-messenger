@@ -513,7 +513,8 @@
                     "verified": "verificado",
                     "tofu": "de confianza",
                     "introduced": "presentado",
-                    "untrusted": "sin verificar"
+                    "untrusted": "sin verificar",
+                    "rejected": "RECHAZADO — firma no válida"
                 }
             }
         },

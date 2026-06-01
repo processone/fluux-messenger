@@ -1724,6 +1724,13 @@ export class XMPPClient {
         }
       }
 
+      if (securityContext?.trust === 'rejected') {
+        return {
+          body: '[Message rejected: invalid signature]',
+          securityContext,
+        }
+      }
+
       return { body, securityContext, attachment }
     } catch (err) {
       logWarn(`E2EE deferred decrypt failed for message from ${senderJid}: ${err instanceof Error ? err.message : String(err)}`)
@@ -1823,11 +1830,12 @@ export class XMPPClient {
     // onto the SDK event surface so store bindings can patch messages
     // in place. Stays alive for the lifetime of this manager; a shutdown
     // in tearDownE2EEManager releases the manager and with it the listener.
-    this.e2ee.onSecurityContextUpdated(({ peer, messageId, securityContext }) => {
+    this.e2ee.onSecurityContextUpdated(({ peer, messageId, securityContext, body }) => {
       this.emitSDK('message:security-updated', {
         conversationId: peer,
         messageId,
         securityContext,
+        ...(body !== undefined && { body }),
       })
     })
     // When a plugin registers, emit a SDK event so backgroundSync (and other

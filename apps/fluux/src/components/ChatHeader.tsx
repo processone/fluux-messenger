@@ -64,14 +64,14 @@ export function ChatHeader({
           className="p-1 -ms-1 rounded hover:bg-fluux-hover md:hidden"
           aria-label={t('conversations.backToConversations')}
         >
-          <ArrowLeft className="w-5 h-5 text-fluux-muted rtl-mirror" />
+          <ArrowLeft className="size-5 text-fluux-muted rtl-mirror" />
         </button>
       )}
 
       {/* Avatar / Icon */}
       {isGroupChat ? (
-        <div className="w-9 h-9 bg-fluux-bg rounded-full flex items-center justify-center flex-shrink-0">
-          <Hash className="w-5 h-5 text-fluux-muted" />
+        <div className="size-9 bg-fluux-bg rounded-full flex items-center justify-center flex-shrink-0">
+          <Hash className="size-5 text-fluux-muted" />
         </div>
       ) : (
         <Avatar
@@ -101,7 +101,7 @@ export function ChatHeader({
               {contactTime && (
                 <Tooltip content={t('presence.localTime')} position="bottom" className="inline-flex items-center">
                   <span className="text-xs text-fluux-muted flex-shrink-0 flex items-center gap-1">
-                    · <Clock className="w-3 h-3" />{contactTime}
+                    · <Clock className="size-3" />{contactTime}
                   </span>
                 </Tooltip>
               )}
@@ -118,7 +118,7 @@ export function ChatHeader({
                 {contactTime && (
                   <Tooltip content={t('presence.localTime')} position="bottom" className="inline-flex items-center">
                     <span className="text-xs text-fluux-muted flex-shrink-0 flex items-center gap-1">
-                      · <Clock className="w-3 h-3" />{contactTime}
+                      · <Clock className="size-3" />{contactTime}
                     </span>
                   </Tooltip>
                 )}
@@ -146,7 +146,7 @@ export function ChatHeader({
           className="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors"
           title={t('chat.searchInConversation', 'Search in conversation')}
         >
-          <Search className="w-4 h-4" />
+          <Search className="size-4" />
         </button>
       )}
     </header>
@@ -177,7 +177,7 @@ function KeyLockedIcon({ fingerprint }: { fingerprint?: string }) {
         className={`${btnClass} text-yellow-500 hover:text-yellow-600 cursor-pointer`}
         aria-label={t('chat.encryption.keyLocked')}
       >
-        <Lock className="w-4 h-4" />
+        <Lock className="size-4" />
       </button>
     </Tooltip>
   )
@@ -217,7 +217,7 @@ function EncryptionIcon({
     return (
       <Tooltip content={t('chat.encryption.checking')} position="bottom">
         <div className={`${btnClass} text-fluux-muted`} role="status" aria-live="polite">
-          <Loader2 className="w-4 h-4 animate-spin" />
+          <Loader2 className="size-4 animate-spin" />
         </div>
       </Tooltip>
     )
@@ -233,7 +233,7 @@ function EncryptionIcon({
     return (
       <Tooltip content={tooltip} position="bottom">
         <div className={`${btnClass} text-yellow-500`} role="status">
-          <ShieldAlert className="w-4 h-4" />
+          <ShieldAlert className="size-4" />
         </div>
       </Tooltip>
     )
@@ -254,7 +254,7 @@ function EncryptionIcon({
             aria-label={t('chat.encryption.rejected')}
             aria-expanded={open}
           >
-            <ShieldX className="w-4 h-4" />
+            <ShieldX className="size-4" />
           </button>
         </Tooltip>
         {open && (
@@ -294,7 +294,7 @@ function EncryptionIcon({
             aria-label={t('chat.encryption.plaintextForced')}
             aria-expanded={open}
           >
-            <LockOpen className="w-4 h-4" />
+            <LockOpen className="size-4" />
           </button>
         </Tooltip>
         {open && (
@@ -305,7 +305,7 @@ function EncryptionIcon({
                 className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-fluux-text hover:bg-fluux-hover transition-colors"
                 onClick={() => { setOpen(false); onEnableClick() }}
               >
-                <Lock className="w-4 h-4 flex-shrink-0 text-fluux-muted" />
+                <Lock className="size-4 flex-shrink-0 text-fluux-muted" />
                 {t('chat.encryption.enableEncryption')}
               </button>
             )}
@@ -333,7 +333,7 @@ function EncryptionIcon({
     return (
       <Tooltip content={tooltip} position="bottom">
         <div className={`${btnClass} ${colorClass}`} role="status">
-          <Icon className="w-4 h-4" />
+          <Icon className="size-4" />
         </div>
       </Tooltip>
     )
@@ -362,7 +362,7 @@ function EncryptionIcon({
           aria-label={ariaLabel}
           aria-expanded={open}
         >
-          <Icon className="w-4 h-4" />
+          <Icon className="size-4" />
         </button>
       </Tooltip>
       {open && (
@@ -373,7 +373,7 @@ function EncryptionIcon({
               className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-fluux-text hover:bg-fluux-hover transition-colors"
               onClick={() => { setOpen(false); onVerifyClick() }}
             >
-              <ShieldCheck className="w-4 h-4 flex-shrink-0 text-fluux-muted" />
+              <ShieldCheck className="size-4 flex-shrink-0 text-fluux-muted" />
               {t('chat.verifyPeer.dialogTitle', { name: peerName })}
             </button>
           )}
@@ -383,7 +383,7 @@ function EncryptionIcon({
               className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-fluux-text hover:bg-fluux-hover transition-colors"
               onClick={() => { setOpen(false); onDisableClick() }}
             >
-              <ShieldOff className="w-4 h-4 flex-shrink-0 text-fluux-muted" />
+              <ShieldOff className="size-4 flex-shrink-0 text-fluux-muted" />
               {t('chat.encryption.disableEncryption')}
             </button>
           )}

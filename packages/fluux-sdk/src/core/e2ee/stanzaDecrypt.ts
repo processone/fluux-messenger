@@ -22,6 +22,7 @@ import type { Element } from '@xmpp/client'
 import { elementToData } from './stanzaAdapter'
 import { parse as parsePayloadEnvelope } from './payloadEnvelope'
 import type { E2EEManager, SecurityContext } from './index'
+import { isE2EEPluginError } from './errors'
 import type { InboundDecryptContext, InboundSource } from './types'
 import { getBareJid } from '../jid'
 import { logWarn, logInfo } from '../logger'
@@ -161,6 +162,13 @@ export async function decryptStanzaInPlace(
     }
   } catch (err) {
     failureReason = err instanceof Error ? err.message : String(err)
+    if (isE2EEPluginError(err) && (err.code === 'signature-failed' || err.code === 'signature-missing')) {
+      securityContext = {
+        protocolId: claim.plugin.descriptor.id,
+        trust: 'rejected',
+        notes: [failureReason],
+      }
+    }
   }
 
   // Always strip the encrypted element — either we replace the body with
@@ -171,23 +179,34 @@ export async function decryptStanzaInPlace(
   if (encryptedIdx >= 0) stanza.children.splice(encryptedIdx, 1)
 
   if (failureReason !== null) {
+    const isRejection = securityContext?.trust === 'rejected'
     logWarn(`E2EE decrypt failed for message from ${senderPeer}: ${failureReason}`)
-    // Stash the serialized encrypted element for deferred decryption.
-    // retryPendingDecrypts() will re-attempt when the key is unlocked.
-    stashPayload(stanza, encryptedChildXml)
-    // XEP-0373: a well-behaved sender inserted a fallback <body> for
-    // clients that cannot decrypt. Leave it alone. Synthesize a minimal
-    // placeholder only when none was provided, so the message still
-    // surfaces rather than being silently dropped.
-    if (!stanza.getChild('body')) {
-      stanza.children.push(
-        xml('body', {}, '[Encrypted message: could not decrypt]'),
-      )
-    }
-    securityContext = {
-      protocolId: claim.plugin.descriptor.id,
-      trust: 'untrusted',
-      notes: ['Could not decrypt'],
+    if (isRejection) {
+      // Signature rejection: suppress any sender-supplied body hint and
+      // replace with a client-side placeholder. Do NOT stash for deferred
+      // retry — the rejection is final.
+      const existingBody = stanza.getChild('body')
+      if (existingBody) {
+        existingBody.children = ['[Message rejected: invalid signature]']
+      } else {
+        stanza.children.push(
+          xml('body', {}, '[Message rejected: invalid signature]'),
+        )
+      }
+    } else {
+      // Decrypt failure (key locked, plugin missing, etc.): stash for
+      // deferred retry and keep the sender's fallback body hint.
+      stashPayload(stanza, encryptedChildXml)
+      if (!stanza.getChild('body')) {
+        stanza.children.push(
+          xml('body', {}, '[Encrypted message: could not decrypt]'),
+        )
+      }
+      securityContext = {
+        protocolId: claim.plugin.descriptor.id,
+        trust: 'untrusted',
+        notes: ['Could not decrypt'],
+      }
     }
   } else if (plaintext !== null) {
     // Plaintext can come in two shapes. New senders ship an XML payload
@@ -246,7 +265,7 @@ export async function decryptStanzaInPlace(
     attempted: true,
     ...(securityContext && { securityContext }),
     ...(authoredAt && { authoredAt }),
-    ...((failureReason !== null || needsDeferredVerification) && {
+    ...((failureReason !== null && securityContext?.trust !== 'rejected' || needsDeferredVerification) && {
       encryptedPayloadXml: encryptedChildXml,
     }),
   }

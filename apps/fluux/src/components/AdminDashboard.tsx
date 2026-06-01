@@ -66,7 +66,7 @@ export function AdminDashboard({ activeCategory, onCategoryChange }: AdminDashbo
   if (!isAdmin) {
     return (
       <div className="px-3 py-4 text-fluux-muted text-sm text-center">
-        <ShieldOff className="w-12 h-12 mx-auto mb-3 opacity-50" />
+        <ShieldOff className="size-12 mx-auto mb-3 opacity-50" />
         <p className="font-medium text-fluux-text mb-1">{t('admin.noAccess.title')}</p>
         <p>{t('admin.noAccess.description')}</p>
       </div>
@@ -77,7 +77,7 @@ export function AdminDashboard({ activeCategory, onCategoryChange }: AdminDashbo
     return (
       <div className="flex items-center justify-center py-8">
         <div className="flex items-center gap-2 text-fluux-muted">
-          <Loader2 className="w-5 h-5 animate-spin" />
+          <Loader2 className="size-5 animate-spin" />
           <span>{t('admin.discovering')}</span>
         </div>
       </div>
@@ -87,7 +87,7 @@ export function AdminDashboard({ activeCategory, onCategoryChange }: AdminDashbo
   if (commands.length === 0) {
     return (
       <div className="px-3 py-4 text-fluux-muted text-sm text-center">
-        <Wrench className="w-12 h-12 mx-auto mb-3 opacity-50" />
+        <Wrench className="size-12 mx-auto mb-3 opacity-50" />
         <p>{t('admin.noCommands')}</p>
       </div>
     )
@@ -222,7 +222,7 @@ function CategoryButton({
                    : 'hover:bg-fluux-hover text-fluux-text'
                  }`}
     >
-      <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-fluux-brand' : 'text-fluux-muted'}`} />
+      <Icon className={`size-4 flex-shrink-0 ${isActive ? 'text-fluux-brand' : 'text-fluux-muted'}`} />
       <span className="text-sm font-medium flex-1 text-start">{label}</span>
       {count !== undefined && (
         <span className={`text-xs px-1.5 py-0.5 rounded-full min-w-[1.5rem] text-center
@@ -234,7 +234,7 @@ function CategoryButton({
         </span>
       )}
       {hasExpandableContent && (
-        <ChevronRight className={`w-4 h-4 flex-shrink-0 transition-transform
+        <ChevronRight className={`size-4 flex-shrink-0 transition-transform
                                  ${isActive ? 'rotate-90 text-fluux-brand' : 'text-fluux-muted'}`} />
       )}
     </button>
@@ -265,7 +265,7 @@ function CommandButton({
                  }`}
     >
       <span className="truncate text-sm">{command.name}</span>
-      <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+      <ChevronRight className="size-4 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
     </button>
   )
 }

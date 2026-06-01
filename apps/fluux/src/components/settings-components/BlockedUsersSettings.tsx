@@ -127,9 +127,9 @@ export function BlockedUsersSettings() {
                          disabled:opacity-50"
             >
               {isBlocking ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="size-4 animate-spin" />
               ) : (
-                <Ban className="w-4 h-4" />
+                <Ban className="size-4" />
               )}
               {t('settings.blocked.block')}
             </button>
@@ -139,7 +139,7 @@ export function BlockedUsersSettings() {
               className="p-2 text-fluux-muted hover:text-fluux-text rounded-lg
                          hover:bg-fluux-hover transition-colors"
             >
-              <X className="w-4 h-4" />
+              <X className="size-4" />
             </button>
           </div>
           {blockError && (
@@ -153,7 +153,7 @@ export function BlockedUsersSettings() {
                      border-fluux-hover text-fluux-muted hover:text-fluux-text
                      hover:border-fluux-muted hover:bg-fluux-hover/50 transition-colors"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="size-4" />
           {t('settings.blocked.addManually')}
         </button>
       )}
@@ -161,7 +161,7 @@ export function BlockedUsersSettings() {
       {/* Search */}
       {blockedJids.length > 5 && (
         <div className="relative mb-4">
-          <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fluux-muted" />
+          <Search className="absolute start-3 top-1/2 -translate-y-1/2 size-4 text-fluux-muted" />
           <TextInput
             type="text"
             value={searchQuery}
@@ -177,7 +177,7 @@ export function BlockedUsersSettings() {
       {/* Blocked users list */}
       {blockedJids.length === 0 ? (
         <div className="text-center py-8">
-          <Ban className="w-12 h-12 text-fluux-muted mx-auto mb-3 opacity-50" />
+          <Ban className="size-12 text-fluux-muted mx-auto mb-3 opacity-50" />
           <p className="text-fluux-muted">{t('settings.blocked.empty')}</p>
         </div>
       ) : (
@@ -222,7 +222,7 @@ export function BlockedUsersSettings() {
                            bg-fluux-red hover:bg-fluux-red/90 rounded-md transition-colors
                            disabled:opacity-50"
               >
-                {isUnblockingAll && <Loader2 className="w-4 h-4 animate-spin" />}
+                {isUnblockingAll && <Loader2 className="size-4 animate-spin" />}
                 {t('settings.blocked.unblockAll')}
               </button>
             </div>
@@ -269,7 +269,7 @@ function BlockedUserItem({ jid, isUnblocking, onUnblock }: BlockedUserItemProps)
                    disabled:opacity-50"
       >
         {isUnblocking ? (
-          <Loader2 className="w-4 h-4 animate-spin" />
+          <Loader2 className="size-4 animate-spin" />
         ) : (
           t('settings.blocked.unblock')
         )}

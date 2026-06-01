@@ -40,7 +40,7 @@ export function ReactionBurst({ x, y, onDone }: ReactionBurstProps) {
         return (
           <span
             key={i}
-            className="absolute w-1.5 h-1.5 rounded-full bg-fluux-brand"
+            className="absolute size-1.5 rounded-full bg-fluux-brand"
             style={{
               '--angle': `${angle}deg`,
               '--distance': `-${distance}px`,

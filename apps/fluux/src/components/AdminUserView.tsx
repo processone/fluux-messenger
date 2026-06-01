@@ -47,7 +47,7 @@ export function AdminUserView({
                        rounded-lg transition-colors"
             aria-label={t('common.close')}
           >
-            <ArrowLeft className="w-5 h-5 rtl-mirror" />
+            <ArrowLeft className="size-5 rtl-mirror" />
           </button>
         </Tooltip>
         <div className="flex-1 min-w-0">
@@ -72,7 +72,7 @@ export function AdminUserView({
                          bg-fluux-hover hover:bg-fluux-sidebar text-fluux-text
                          disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              <Key className="w-4 h-4 text-fluux-muted" />
+              <Key className="size-4 text-fluux-muted" />
               <span className="text-sm">{t('admin.users.changePassword')}</span>
             </button>
 
@@ -84,7 +84,7 @@ export function AdminUserView({
                          bg-fluux-hover hover:bg-fluux-sidebar text-fluux-text
                          disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              <Power className="w-4 h-4 text-fluux-muted" />
+              <Power className="size-4 text-fluux-muted" />
               <span className="text-sm">{t('admin.users.endSessions')}</span>
             </button>
 
@@ -96,7 +96,7 @@ export function AdminUserView({
                          bg-red-500/10 hover:bg-red-500/20 text-red-500
                          disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="size-4" />
               <span className="text-sm">{t('admin.users.delete')}</span>
             </button>
           </div>

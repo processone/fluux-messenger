@@ -511,7 +511,8 @@
                     "verified": "已验证",
                     "tofu": "已信任",
                     "introduced": "已介绍",
-                    "untrusted": "未验证"
+                    "untrusted": "未验证",
+                    "rejected": "已拒绝 — 签名无效"
                 }
             }
         },

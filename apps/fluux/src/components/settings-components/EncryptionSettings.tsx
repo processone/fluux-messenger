@@ -768,7 +768,7 @@ export function EncryptionSettings() {
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <Lock className="w-4 h-4 text-fluux-muted flex-shrink-0" />
+                <Lock className="size-4 text-fluux-muted flex-shrink-0" />
                 <label className="text-sm font-medium text-fluux-text">
                   {t('settings.encryption.openpgpLabel')}
                 </label>
@@ -790,7 +790,7 @@ export function EncryptionSettings() {
               } ${isToggling ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}
             >
               <span
-                className={`absolute top-0.5 start-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                className={`absolute top-0.5 start-0.5 size-4 rounded-full bg-white transition-transform ${
                   openpgpEnabled ? 'translate-x-4' : ''
                 }`}
               />
@@ -857,9 +857,9 @@ export function EncryptionSettings() {
                     aria-label={t('settings.encryption.copyFingerprint')}
                   >
                     {isCopied ? (
-                      <Check className="w-3.5 h-3.5 text-green-500" />
+                      <Check className="size-3.5 text-green-500" />
                     ) : (
-                      <Copy className="w-3.5 h-3.5" />
+                      <Copy className="size-3.5" />
                     )}
                   </button>
                 </div>
@@ -871,7 +871,7 @@ export function EncryptionSettings() {
         {/* Limitations callout — dismissible */}
         {!limitationsDismissed && (
           <div className="flex gap-2 p-3 rounded-lg bg-yellow-500/10 text-xs text-fluux-muted leading-snug">
-            <AlertTriangle className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+            <AlertTriangle className="size-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="font-medium text-fluux-text">
                 {t('settings.encryption.limitationsTitle')}
@@ -883,7 +883,7 @@ export function EncryptionSettings() {
               aria-label={t('common.close')}
               className="flex-shrink-0 p-0.5 text-fluux-muted hover:text-fluux-text rounded transition-colors"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="size-3.5" />
             </button>
           </div>
         )}
@@ -900,7 +900,7 @@ export function EncryptionSettings() {
                 aria-label={t('settings.encryption.backupLabel')}
                 className="text-fluux-muted hover:text-fluux-text transition-colors"
               >
-                <Info className="w-3.5 h-3.5" />
+                <Info className="size-3.5" />
               </button>
             </div>
             {backupDescVisible && (
@@ -953,7 +953,7 @@ export function EncryptionSettings() {
                         onClick={handleBackupRequest}
                         className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
                       >
-                        <CloudUpload className="w-3.5 h-3.5" />
+                        <CloudUpload className="size-3.5" />
                         {t('settings.encryption.backupAction')}
                       </button>
                       {remoteBackupExists === true && (
@@ -961,7 +961,7 @@ export function EncryptionSettings() {
                           onClick={() => setShowRestoreDialog(true)}
                           className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
                         >
-                          <CloudDownload className="w-3.5 h-3.5" />
+                          <CloudDownload className="size-3.5" />
                           {t('settings.encryption.restoreAction')}
                         </button>
                       )}
@@ -972,21 +972,21 @@ export function EncryptionSettings() {
                       onClick={() => setShowExportFileDialog(true)}
                       className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
                     >
-                      <FileDown className="w-3.5 h-3.5" />
+                      <FileDown className="size-3.5" />
                       {t('settings.encryption.exportFileAction')}
                     </button>
                     <button
                       onClick={() => { void handleImportFileRequest() }}
                       className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
                     >
-                      <FileUp className="w-3.5 h-3.5" />
+                      <FileUp className="size-3.5" />
                       {t('settings.encryption.importFileAction')}
                     </button>
                     <button
                       onClick={() => setShowExternalExportDialog(true)}
                       className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
                     >
-                      <FileDown className="w-3.5 h-3.5" />
+                      <FileDown className="size-3.5" />
                       {t('settings.encryption.externalExportAction')}
                     </button>
                   </div>
@@ -1009,7 +1009,7 @@ export function EncryptionSettings() {
                 aria-label={t('settings.encryption.rotateLabel')}
                 className="text-fluux-muted hover:text-fluux-text transition-colors"
               >
-                <Info className="w-3.5 h-3.5" />
+                <Info className="size-3.5" />
               </button>
             </div>
             {rotateDescVisible && (
@@ -1023,7 +1023,7 @@ export function EncryptionSettings() {
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors disabled:opacity-50 disabled:cursor-wait"
             >
               <RefreshCw
-                className={`w-3.5 h-3.5 ${isRotating ? 'animate-spin' : ''}`}
+                className={`size-3.5 ${isRotating ? 'animate-spin' : ''}`}
               />
               {t('settings.encryption.rotateAction')}
             </button>
@@ -1046,9 +1046,9 @@ export function EncryptionSettings() {
               className="flex items-center gap-1.5 w-full text-left"
             >
               {dangerZoneExpanded ? (
-                <ChevronDown className="w-3.5 h-3.5 text-fluux-muted flex-shrink-0" />
+                <ChevronDown className="size-3.5 text-fluux-muted flex-shrink-0" />
               ) : (
-                <ChevronRight className="w-3.5 h-3.5 text-fluux-muted flex-shrink-0" />
+                <ChevronRight className="size-3.5 text-fluux-muted flex-shrink-0" />
               )}
               <span className="text-sm font-medium text-fluux-text">
                 {t('settings.encryption.dangerZone')}
@@ -1064,7 +1064,7 @@ export function EncryptionSettings() {
                   disabled={isDeleting}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-red-500/10 hover:bg-red-500/20 text-red-500 dark:text-red-400 rounded transition-colors disabled:opacity-50 disabled:cursor-wait"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className="size-3.5" />
                   {t('settings.encryption.deleteKey')}
                 </button>
               </div>

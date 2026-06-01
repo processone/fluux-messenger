@@ -2,9 +2,10 @@
  * Full-screen lightbox overlay for viewing avatars at a larger size.
  * Triggered by clicking on a message avatar in chat/room views.
  */
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Avatar } from './Avatar'
 
 interface AvatarLightboxProps {
@@ -21,7 +22,7 @@ interface AvatarLightboxProps {
 }
 
 export function AvatarLightbox({ avatarUrl, identifier, name, fallbackColor, onClose }: AvatarLightboxProps) {
-  const mouseDownTargetRef = useRef<EventTarget | null>(null)
+  const { t } = useTranslation()
 
   // Close on Escape
   useEffect(() => {
@@ -35,17 +36,23 @@ export function AvatarLightbox({ avatarUrl, identifier, name, fallbackColor, onC
   return createPortal(
     <div
       className="fixed inset-0 bg-black/70 flex flex-col items-center justify-center z-50"
-      onMouseDown={(e) => { mouseDownTargetRef.current = e.target }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget && mouseDownTargetRef.current === e.currentTarget) onClose()
-      }}
     >
+      {/* Click-outside-to-close backdrop (Escape also closes; see effect above) */}
+      <button
+        type="button"
+        aria-hidden="true"
+        tabIndex={-1}
+        onClick={onClose}
+        className="absolute inset-0 cursor-default"
+      />
       {/* Close button */}
       <button
+        type="button"
         onClick={onClose}
-        className="absolute top-4 end-4 p-2 text-white/70 hover:text-white rounded-full hover:bg-white/10 transition-colors"
+        aria-label={t('common.close')}
+        className="absolute top-4 end-4 z-10 p-2 text-white/70 hover:text-white rounded-full hover:bg-white/10 transition-colors"
       >
-        <X className="w-6 h-6" />
+        <X className="size-6" />
       </button>
 
       {/* Avatar */}
@@ -53,21 +60,23 @@ export function AvatarLightbox({ avatarUrl, identifier, name, fallbackColor, onC
         <img
           src={avatarUrl}
           alt={name || identifier}
-          className="w-48 h-48 rounded-full object-cover shadow-2xl"
+          className="relative z-10 size-48 rounded-full object-cover shadow-2xl"
           draggable={false}
         />
       ) : (
-        <Avatar
-          identifier={identifier}
-          name={name}
-          size="xl"
-          fallbackColor={fallbackColor}
-        />
+        <div className="relative z-10">
+          <Avatar
+            identifier={identifier}
+            name={name}
+            size="xl"
+            fallbackColor={fallbackColor}
+          />
+        </div>
       )}
 
       {/* Name label */}
       {name && (
-        <div className="mt-3 text-white text-lg font-medium">
+        <div className="relative z-10 mt-3 text-white text-lg font-medium">
           {name}
         </div>
       )}

@@ -68,15 +68,15 @@ export function TypingIndicator({ typingUsers, formatUser, className = '' }: Typ
       {/* Animated bouncing dots */}
       <span className="flex gap-0.5">
         <span
-          className="w-1.5 h-1.5 rounded-full bg-fluux-muted animate-bounce"
+          className="size-1.5 rounded-full bg-fluux-muted animate-bounce"
           style={{ animationDelay: '0ms' }}
         />
         <span
-          className="w-1.5 h-1.5 rounded-full bg-fluux-muted animate-bounce"
+          className="size-1.5 rounded-full bg-fluux-muted animate-bounce"
           style={{ animationDelay: '150ms' }}
         />
         <span
-          className="w-1.5 h-1.5 rounded-full bg-fluux-muted animate-bounce"
+          className="size-1.5 rounded-full bg-fluux-muted animate-bounce"
           style={{ animationDelay: '300ms' }}
         />
       </span>
