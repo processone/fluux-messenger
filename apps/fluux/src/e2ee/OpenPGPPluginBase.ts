@@ -1714,8 +1714,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
           })
           continue
         }
-        // Case D: key now available but signature still invalid — reject
-        // and expunge the plaintext body that was delivered optimistically.
+        // Case D: key now available but signature still invalid — reject.
         ctx.reportSecurityContextUpdate({
           peer,
           messageId: entry.messageId,
@@ -1724,7 +1723,6 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
             trust: 'rejected',
             notes: ['Signature did not verify against sender key'],
           },
-          body: '[Message rejected: invalid signature]',
         })
         continue
       } catch (err) {
@@ -1739,7 +1737,6 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
             trust: 'rejected',
             notes: ['Re-verification failed'],
           },
-          body: '[Message rejected: invalid signature]',
         })
         continue
       }
