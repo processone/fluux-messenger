@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { buildScopedStorageKey } from '@fluux/sdk'
 
 /**
  * Key-change alerts: per-peer entries that say "this peer was once
@@ -36,13 +37,30 @@ interface KeyChangeAlertsState {
   alertsByJid: Record<string, KeyChangeAlert>
   setAlert: (jid: string, alert: KeyChangeAlert) => void
   clearAlert: (jid: string) => void
+  rehydrate: () => void
 }
 
-const STORAGE_KEY = 'fluux-e2ee-key-change-alerts'
+const STORAGE_KEY_BASE = 'fluux-e2ee-key-change-alerts'
 
-function loadInitial(): Record<string, KeyChangeAlert> {
+function getScopedKey(): string {
+  return buildScopedStorageKey(STORAGE_KEY_BASE)
+}
+
+function loadFromStorage(): Record<string, KeyChangeAlert> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const scopedKey = getScopedKey()
+    let raw = localStorage.getItem(scopedKey)
+
+    // Migration: if the scoped key has no data, check the old unscoped key.
+    if (!raw && scopedKey !== STORAGE_KEY_BASE) {
+      const legacy = localStorage.getItem(STORAGE_KEY_BASE)
+      if (legacy) {
+        localStorage.setItem(scopedKey, legacy)
+        localStorage.removeItem(STORAGE_KEY_BASE)
+        raw = legacy
+      }
+    }
+
     if (!raw) return {}
     const parsed = JSON.parse(raw) as unknown
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
@@ -67,14 +85,14 @@ function loadInitial(): Record<string, KeyChangeAlert> {
 
 function persist(map: Record<string, KeyChangeAlert>): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(map))
+    localStorage.setItem(getScopedKey(), JSON.stringify(map))
   } catch {
     // Best-effort persistence; in-memory state stays consistent.
   }
 }
 
 export const useKeyChangeAlertsStore = create<KeyChangeAlertsState>((set) => ({
-  alertsByJid: loadInitial(),
+  alertsByJid: loadFromStorage(),
   setAlert: (jid, alert) => {
     set((s) => {
       // Idempotent: re-recording the same rotation (same prev → curr
@@ -101,6 +119,7 @@ export const useKeyChangeAlertsStore = create<KeyChangeAlertsState>((set) => ({
       return { alertsByJid: next }
     })
   },
+  rehydrate: () => set({ alertsByJid: loadFromStorage() }),
 }))
 
 // ---- Imperative helpers ----------------------------------------------
@@ -140,6 +159,10 @@ export function clearKeyChangeAlert(jid: string): void {
  */
 export function getKeyChangeAlert(jid: string): KeyChangeAlert | null {
   return useKeyChangeAlertsStore.getState().alertsByJid[jid] ?? null
+}
+
+export function rehydrateKeyChangeAlerts(): void {
+  useKeyChangeAlertsStore.getState().rehydrate()
 }
 
 export type { KeyChangeAlert }

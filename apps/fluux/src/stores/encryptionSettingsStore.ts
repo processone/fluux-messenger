@@ -1,9 +1,8 @@
 import { create } from 'zustand'
+import { buildScopedStorageKey } from '@fluux/sdk'
 
 /**
- * User preference for end-to-end encryption, scoped to the entire
- * application (not per-conversation — that lives in the SDK's strategy
- * pins when/if we expose per-conversation UI).
+ * User preference for end-to-end encryption, scoped per account.
  *
  * E2EE is currently **opt-in and off by default** because:
  * - OpenPGP plugin is experimental (RustCrypto backend, no signature
@@ -29,23 +28,39 @@ interface EncryptionSettingsState {
    */
   pluginRegisteredAt: number
   notifyPluginRegistered: () => void
+  rehydrate: () => void
 }
 
-const OPENPGP_ENABLED_KEY = 'fluux-e2ee-openpgp-enabled'
+const STORAGE_KEY_BASE = 'fluux-e2ee-openpgp-enabled'
 
-function getInitialOpenpgpEnabled(): boolean {
+function getScopedKey(): string {
+  return buildScopedStorageKey(STORAGE_KEY_BASE)
+}
+
+function loadOpenpgpEnabled(): boolean {
   try {
-    return localStorage.getItem(OPENPGP_ENABLED_KEY) === '1'
+    const scopedKey = getScopedKey()
+    let raw = localStorage.getItem(scopedKey)
+    // Migration: copy from base key if scoped key is empty
+    if (raw === null && scopedKey !== STORAGE_KEY_BASE) {
+      const legacy = localStorage.getItem(STORAGE_KEY_BASE)
+      if (legacy !== null) {
+        localStorage.setItem(scopedKey, legacy)
+        localStorage.removeItem(STORAGE_KEY_BASE)
+        raw = legacy
+      }
+    }
+    return raw === '1'
   } catch {
     return false
   }
 }
 
 export const useEncryptionSettingsStore = create<EncryptionSettingsState>((set) => ({
-  openpgpEnabled: getInitialOpenpgpEnabled(),
+  openpgpEnabled: loadOpenpgpEnabled(),
   setOpenpgpEnabled: (enabled) => {
     try {
-      localStorage.setItem(OPENPGP_ENABLED_KEY, enabled ? '1' : '0')
+      localStorage.setItem(getScopedKey(), enabled ? '1' : '0')
     } catch {
       // localStorage unavailable — still update in-memory state so the
       // rest of the session behaves consistently.
@@ -54,6 +69,7 @@ export const useEncryptionSettingsStore = create<EncryptionSettingsState>((set) 
   },
   pluginRegisteredAt: 0,
   notifyPluginRegistered: () => set((s) => ({ pluginRegisteredAt: s.pluginRegisteredAt + 1 })),
+  rehydrate: () => set({ openpgpEnabled: loadOpenpgpEnabled() }),
 }))
 
 /**
@@ -63,4 +79,8 @@ export const useEncryptionSettingsStore = create<EncryptionSettingsState>((set) 
  */
 export function isOpenpgpEnabled(): boolean {
   return useEncryptionSettingsStore.getState().openpgpEnabled
+}
+
+export function rehydrateEncryptionSettings(): void {
+  useEncryptionSettingsStore.getState().rehydrate()
 }

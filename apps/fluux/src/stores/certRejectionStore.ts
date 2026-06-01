@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { buildScopedStorageKey } from '@fluux/sdk'
 
 export type CertRejectionCode =
   | 'validation_failed'
@@ -16,13 +17,28 @@ interface CertRejectionState {
   rejectionsByJid: Record<string, CertRejection[]>
   setRejections: (jid: string, rejections: CertRejection[]) => void
   clearRejections: (jid: string) => void
+  rehydrate: () => void
 }
 
-const STORAGE_KEY = 'fluux-e2ee-cert-rejections'
+const STORAGE_KEY_BASE = 'fluux-e2ee-cert-rejections'
 
-function loadInitial(): Record<string, CertRejection[]> {
+function getScopedKey(): string {
+  return buildScopedStorageKey(STORAGE_KEY_BASE)
+}
+
+function loadFromStorage(): Record<string, CertRejection[]> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const scopedKey = getScopedKey()
+    let raw = localStorage.getItem(scopedKey)
+    // Migration: copy from base key if scoped key is empty
+    if (!raw && scopedKey !== STORAGE_KEY_BASE) {
+      const oldRaw = localStorage.getItem(STORAGE_KEY_BASE)
+      if (oldRaw) {
+        localStorage.setItem(scopedKey, oldRaw)
+        localStorage.removeItem(STORAGE_KEY_BASE)
+        raw = oldRaw
+      }
+    }
     if (!raw) return {}
     const parsed = JSON.parse(raw) as unknown
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
@@ -51,7 +67,7 @@ function isValidRejection(v: unknown): boolean {
 
 function persist(map: Record<string, CertRejection[]>): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(map))
+    localStorage.setItem(getScopedKey(), JSON.stringify(map))
   } catch {
     // Best-effort persistence.
   }
@@ -68,7 +84,7 @@ function rejectionsEqual(a: CertRejection[], b: CertRejection[]): boolean {
 }
 
 export const useCertRejectionStore = create<CertRejectionState>((set) => ({
-  rejectionsByJid: loadInitial(),
+  rejectionsByJid: loadFromStorage(),
   setRejections: (jid, rejections) => {
     set((s) => {
       const existing = s.rejectionsByJid[jid]
@@ -87,6 +103,7 @@ export const useCertRejectionStore = create<CertRejectionState>((set) => ({
       return { rejectionsByJid: next }
     })
   },
+  rehydrate: () => set({ rejectionsByJid: loadFromStorage() }),
 }))
 
 export function recordCertRejections(jid: string, rejections: CertRejection[]): void {
@@ -99,4 +116,8 @@ export function clearCertRejections(jid: string): void {
 
 export function getCertRejections(jid: string): CertRejection[] | null {
   return useCertRejectionStore.getState().rejectionsByJid[jid] ?? null
+}
+
+export function rehydrateCertRejections(): void {
+  useCertRejectionStore.getState().rehydrate()
 }

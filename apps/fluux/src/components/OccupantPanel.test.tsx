@@ -682,6 +682,7 @@ describe('OccupantPanel', () => {
           setIgnoredForRoom: vi.fn(),
           isIgnored: (rjid: string, id: string) => rjid === roomJid && id === identifier,
           getIgnoredForRoom: (rjid: string) => rjid === roomJid ? [ignoredUser] : [],
+          rehydrate: vi.fn(),
           reset: vi.fn(),
         } as IgnoreState
         return selector ? selector(state) : state
@@ -695,6 +696,7 @@ describe('OccupantPanel', () => {
         setIgnoredForRoom: vi.fn(),
         isIgnored: (rjid: string, id: string) => rjid === roomJid && id === identifier,
         getIgnoredForRoom: (rjid: string) => rjid === roomJid ? [ignoredUser] : [],
+        rehydrate: vi.fn(),
         reset: vi.fn(),
       })
     }
