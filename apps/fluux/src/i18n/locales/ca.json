@@ -479,6 +479,7 @@
             "checking": "Comprovant el contacte…",
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Clau OpenPGP verificada",
+            "tofuNewTooltip": "Contacte nou — verifiqueu l'empremta per a confiança plena",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed — resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Missatge no enviat — el xifratge és obligatori per a aquesta conversa, però ara mateix no està disponible.",

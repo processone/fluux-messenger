@@ -477,6 +477,7 @@
             "checking": "يجري التحقق من المراسل…",
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "مفتاح OpenPGP موثّق",
+            "tofuNewTooltip": "جهة اتصال جديدة — تحقّق من البصمة للثقة الكاملة",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed — resolve to resume encryption",
             "sendBlockedEncryptionRequired": "لم تُرسل الرسالة — التشفير مطلوب لهذه المحادثة لكنه غير متاح حاليًا.",

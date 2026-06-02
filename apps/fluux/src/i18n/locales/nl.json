@@ -477,6 +477,7 @@
             "checking": "Contact wordt gecontroleerd…",
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Geverifieerde OpenPGP-sleutel",
+            "tofuNewTooltip": "Nieuw contact — verifieer de vingerafdruk voor volledig vertrouwen",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed — resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Bericht niet verzonden — versleuteling is vereist voor dit gesprek, maar is op dit moment niet beschikbaar.",

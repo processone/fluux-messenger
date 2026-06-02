@@ -478,6 +478,7 @@
             "checking": "Έλεγχος συνομιλητή…",
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Επαληθευμένο κλειδί OpenPGP",
+            "tofuNewTooltip": "Νέα επαφή — επαληθεύστε το αποτύπωμα για πλήρη εμπιστοσύνη",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed — resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Το μήνυμα δεν στάλθηκε — η κρυπτογράφηση απαιτείται για αυτή τη συνομιλία αλλά δεν είναι διαθέσιμη αυτή τη στιγμή.",

@@ -479,6 +479,7 @@
             "checking": "Controllo del contatto…",
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Chiave OpenPGP verificata",
+            "tofuNewTooltip": "Nuovo contatto — verifica l'impronta per la piena fiducia",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed — resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Messaggio non inviato — la cifratura è obbligatoria per questa conversazione ma al momento non è disponibile.",

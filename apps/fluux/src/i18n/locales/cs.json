@@ -479,6 +479,7 @@
             "checking": "Kontrola kontaktu…",
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Ověřený klíč OpenPGP",
+            "tofuNewTooltip": "Nový kontakt — ověřte otisk pro plnou důvěru",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed — resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Zpráva nebyla odeslána — pro tuto konverzaci je vyžadováno šifrování, ale momentálně není k dispozici.",

@@ -4,7 +4,7 @@ import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
 import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
 import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
-import { usePinnedPrimaryFingerprintsStore } from '@/stores/pinnedPrimaryFingerprintsStore'
+import { usePinnedPrimaryFingerprintsStore, isTofuNew } from '@/stores/pinnedPrimaryFingerprintsStore'
 import { useCertRejectionStore, type CertRejection } from '@/stores/certRejectionStore'
 import { useWebKeyLocked } from './useWebKeyLocked'
 
@@ -66,7 +66,7 @@ export type ConversationEncryptionState =
        * state: trust the cached key for cryptographic purposes,
        * surface the unverified state in the UI.
        */
-      trust: 'verified' | 'unverified'
+      trust: 'verified' | 'unverified' | 'tofu-new'
     }
   | { kind: 'blocked'; pinnedFingerprint: string; advertisedFingerprint: string }
   | { kind: 'unsupported' }
@@ -286,10 +286,9 @@ export function useConversationEncryptionState(
     if (webKeyLocked) {
       return { kind: 'keyLocked', fingerprint: base.fingerprint }
     }
-    return {
-      kind: 'encrypted',
-      fingerprint: base.fingerprint,
-      trust: verifiedFingerprint === base.fingerprint ? 'verified' : 'unverified',
-    }
-  }, [base, isForcedPlaintext, verifiedFingerprint, alertCurrentFp, alertPreviousFp, certRejections, webKeyLocked])
+    const trust = verifiedFingerprint === base.fingerprint
+      ? 'verified'
+      : (peerJid && isTofuNew(peerJid) ? 'tofu-new' : 'unverified')
+    return { kind: 'encrypted', fingerprint: base.fingerprint, trust }
+  }, [base, peerJid, isForcedPlaintext, verifiedFingerprint, alertCurrentFp, alertPreviousFp, certRejections, webKeyLocked])
 }

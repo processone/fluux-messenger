@@ -479,6 +479,7 @@
             "checking": "Se verifică contactul…",
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Cheie OpenPGP verificată",
+            "tofuNewTooltip": "Contact nou — verificați amprenta pentru încredere deplină",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed — resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Mesaj netrimis — criptarea este obligatorie pentru această conversație, dar nu este disponibilă momentan.",

@@ -478,6 +478,7 @@
             "checking": "Pārbauda kontaktu…",
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Pārbaudīta OpenPGP atslēga",
+            "tofuNewTooltip": "Jauns kontakts — pārbaudiet pirkstu nospiedumu pilnai uzticībai",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed — resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Ziņojums nav nosūtīts — šai sarunai ir nepieciešama šifrēšana, taču pašlaik tā nav pieejama.",

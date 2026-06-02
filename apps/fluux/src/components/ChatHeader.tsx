@@ -317,14 +317,24 @@ function EncryptionIcon({
 
   // encrypted — shield/lock icon + popover with verify + disable options.
   const verified = state.kind === 'encrypted' && state.trust === 'verified'
-  const Icon = verified ? ShieldCheck : Lock
-  const colorClass = verified ? 'text-green-500' : 'text-fluux-muted hover:text-fluux-text'
+  const tofuNew = state.kind === 'encrypted' && state.trust === 'tofu-new'
+  const Icon = verified ? ShieldCheck : tofuNew ? ShieldAlert : Lock
+  const colorClass = verified
+    ? 'text-green-500'
+    : tofuNew
+      ? 'text-yellow-500'
+      : 'text-fluux-muted hover:text-fluux-text'
   const hasActions = onVerifyClick || onDisableClick
 
   if (!hasActions) {
     const tooltip = (
       <div>
-        <div>{verified ? t('chat.encryption.verifiedTooltip') : t('chat.encryption.openpgpTooltip')}</div>
+        <div>{verified
+          ? t('chat.encryption.verifiedTooltip')
+          : tofuNew
+            ? t('chat.encryption.tofuNewTooltip', 'New contact — verify fingerprint for full trust')
+            : t('chat.encryption.openpgpTooltip')
+        }</div>
         {state.kind === 'encrypted' && (
           <div className="font-mono text-xs mt-0.5 opacity-75">{formatFingerprint(state.fingerprint)}</div>
         )}
@@ -348,7 +358,12 @@ function EncryptionIcon({
       <Tooltip
         content={state.kind === 'encrypted' ? (
           <div>
-            <div>{verified ? t('chat.encryption.verifiedTooltip') : t('chat.encryption.openpgpTooltip')}</div>
+            <div>{verified
+              ? t('chat.encryption.verifiedTooltip')
+              : tofuNew
+                ? t('chat.encryption.tofuNewTooltip', 'New contact — verify fingerprint for full trust')
+                : t('chat.encryption.openpgpTooltip')
+            }</div>
             <div className="font-mono text-xs mt-0.5 opacity-75">{formatFingerprint(state.fingerprint)}</div>
           </div>
         ) : null}

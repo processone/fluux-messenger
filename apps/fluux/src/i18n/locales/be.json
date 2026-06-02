@@ -477,6 +477,7 @@
             "checking": "Праверка суразмоўцы…",
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Правераны ключ OpenPGP",
+            "tofuNewTooltip": "Новы кантакт — праверце адбітак для поўнага даверу",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed — resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Паведамленне не адпраўлена — для гэтай размовы патрабуецца шыфраванне, але зараз яно недаступнае.",

@@ -477,6 +477,7 @@
             "checking": "בודק את איש הקשר…",
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "מפתח OpenPGP מאומת",
+            "tofuNewTooltip": "איש קשר חדש — אמתו את טביעת האצבע לאמון מלא",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed — resolve to resume encryption",
             "sendBlockedEncryptionRequired": "ההודעה לא נשלחה — נדרשת הצפנה לשיחה זו אך היא אינה זמינה כעת.",

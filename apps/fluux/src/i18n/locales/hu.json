@@ -477,6 +477,7 @@
             "checking": "Partner ellenőrzése…",
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Ellenőrzött OpenPGP-kulcs",
+            "tofuNewTooltip": "Új kapcsolat — ellenőrizze az ujjlenyomatot a teljes bizalomhoz",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed — resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Az üzenet nem lett elküldve — ehhez a beszélgetéshez titkosítás szükséges, de jelenleg nem érhető el.",

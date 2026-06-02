@@ -479,6 +479,7 @@
             "checking": "Kontaktikontroll…",
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Kinnitatud OpenPGP võti",
+            "tofuNewTooltip": "Uus kontakt — kontrollige sõrmejälge täieliku usalduse jaoks",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed — resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Sõnumit ei saadetud — selle vestluse jaoks on krüpteerimine nõutav, kuid praegu pole see saadaval.",

@@ -479,6 +479,7 @@
             "checking": "Prüfe Gegenstelle…",
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Verifizierter OpenPGP-Schlüssel",
+            "tofuNewTooltip": "Neuer Kontakt — Fingerabdruck prüfen für volles Vertrauen",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed — resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Nachricht nicht gesendet — für diese Unterhaltung ist Verschlüsselung erforderlich, aber derzeit nicht verfügbar.",

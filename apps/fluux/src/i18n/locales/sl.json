@@ -479,6 +479,7 @@
             "checking": "Preverjanje stika…",
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Preverjen ključ OpenPGP",
+            "tofuNewTooltip": "Nov stik — preverite prstni odtis za popolno zaupanje",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed — resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Sporočilo ni bilo poslano — za ta pogovor je zahtevano šifriranje, vendar trenutno ni na voljo.",

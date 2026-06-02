@@ -36,12 +36,16 @@ import { buildScopedStorageKey } from '@fluux/sdk'
  */
 interface PinnedPrimaryFingerprintsState {
   pinnedFingerprintByJid: Record<string, string>
+  /** ISO timestamp when each peer was first TOFU-pinned. Persisted
+   *  separately from the fingerprints to avoid a format migration. */
+  pinnedAtByJid: Record<string, string>
   setPinned: (jid: string, fingerprint: string) => void
   clearPinned: (jid: string) => void
   rehydrate: () => void
 }
 
 const STORAGE_KEY_BASE = 'fluux-e2ee-pinned-primary-fingerprints'
+const PINNED_AT_KEY_BASE = 'fluux-e2ee-pinned-at'
 
 function getScopedKey(): string {
   return buildScopedStorageKey(STORAGE_KEY_BASE)
@@ -77,6 +81,28 @@ function loadFromStorage(): Record<string, string> {
   }
 }
 
+function loadPinnedAt(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(buildScopedStorageKey(PINNED_AT_KEY_BASE))
+    if (!raw) return {}
+    const parsed = JSON.parse(raw) as unknown
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+    const out: Record<string, string> = {}
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof k === 'string' && typeof v === 'string') out[k] = v
+    }
+    return out
+  } catch {
+    return {}
+  }
+}
+
+function persistPinnedAt(map: Record<string, string>): void {
+  try {
+    localStorage.setItem(buildScopedStorageKey(PINNED_AT_KEY_BASE), JSON.stringify(map))
+  } catch { /* best-effort */ }
+}
+
 function persist(map: Record<string, string>): void {
   try {
     localStorage.setItem(getScopedKey(), JSON.stringify(map))
@@ -90,14 +116,19 @@ function persist(map: Record<string, string>): void {
 export const usePinnedPrimaryFingerprintsStore = create<PinnedPrimaryFingerprintsState>(
   (set) => ({
     pinnedFingerprintByJid: loadFromStorage(),
+    pinnedAtByJid: loadPinnedAt(),
     setPinned: (jid, fingerprint) => {
       set((s) => {
-        // No-op if the same fp is being re-pinned — saves a render and
-        // a localStorage write on the common "first cache, then a
-        // re-probe of the same key" path.
         if (s.pinnedFingerprintByJid[jid] === fingerprint) return s
         const next = { ...s.pinnedFingerprintByJid, [jid]: fingerprint }
         persist(next)
+        // Record the pinning timestamp only on first pin for this JID
+        const isFirstPin = !(jid in s.pinnedAtByJid)
+        if (isFirstPin) {
+          const nextAt = { ...s.pinnedAtByJid, [jid]: new Date().toISOString() }
+          persistPinnedAt(nextAt)
+          return { pinnedFingerprintByJid: next, pinnedAtByJid: nextAt }
+        }
         return { pinnedFingerprintByJid: next }
       })
     },
@@ -107,10 +138,13 @@ export const usePinnedPrimaryFingerprintsStore = create<PinnedPrimaryFingerprint
         const next = { ...s.pinnedFingerprintByJid }
         delete next[jid]
         persist(next)
-        return { pinnedFingerprintByJid: next }
+        const nextAt = { ...s.pinnedAtByJid }
+        delete nextAt[jid]
+        persistPinnedAt(nextAt)
+        return { pinnedFingerprintByJid: next, pinnedAtByJid: nextAt }
       })
     },
-    rehydrate: () => set({ pinnedFingerprintByJid: loadFromStorage() }),
+    rehydrate: () => set({ pinnedFingerprintByJid: loadFromStorage(), pinnedAtByJid: loadPinnedAt() }),
   }),
 )
 
@@ -146,6 +180,19 @@ export function setPinnedPrimaryFp(jid: string, fingerprint: string): void {
  */
 export function clearPinnedPrimaryFp(jid: string): void {
   usePinnedPrimaryFingerprintsStore.getState().clearPinned(jid)
+}
+
+export function getPinnedAt(jid: string): string | null {
+  return usePinnedPrimaryFingerprintsStore.getState().pinnedAtByJid[jid] ?? null
+}
+
+/** Duration in ms below which a TOFU pin is considered "new". */
+export const TOFU_NEW_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000
+
+export function isTofuNew(jid: string): boolean {
+  const pinnedAt = getPinnedAt(jid)
+  if (!pinnedAt) return false
+  return Date.now() - new Date(pinnedAt).getTime() < TOFU_NEW_THRESHOLD_MS
 }
 
 export function rehydratePinnedPrimaryFingerprints(): void {

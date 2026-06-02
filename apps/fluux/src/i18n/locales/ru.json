@@ -477,6 +477,7 @@
             "checking": "Проверка собеседника…",
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Проверенный ключ OpenPGP",
+            "tofuNewTooltip": "Новый контакт — проверьте отпечаток для полного доверия",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed — resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Сообщение не отправлено — для этого разговора требуется шифрование, но сейчас оно недоступно.",

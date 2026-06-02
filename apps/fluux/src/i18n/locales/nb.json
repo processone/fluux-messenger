@@ -477,6 +477,7 @@
             "checking": "Sjekker kontakt…",
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Verifisert OpenPGP-nøkkel",
+            "tofuNewTooltip": "Ny kontakt — bekreft fingeravtrykk for full tillit",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed — resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Meldingen ble ikke sendt — kryptering kreves for denne samtalen, men er ikke tilgjengelig akkurat nå.",

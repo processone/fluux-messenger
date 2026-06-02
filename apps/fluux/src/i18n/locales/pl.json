@@ -479,6 +479,7 @@
             "checking": "Sprawdzanie kontaktu…",
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Zweryfikowany klucz OpenPGP",
+            "tofuNewTooltip": "Nowy kontakt — zweryfikuj odcisk palca, aby uzyskać pełne zaufanie",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed — resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Wiadomość nie została wysłana — ta rozmowa wymaga szyfrowania, ale obecnie jest ono niedostępne.",

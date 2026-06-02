@@ -477,6 +477,7 @@
             "checking": "Tikrinamas kontaktas…",
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Patvirtintas OpenPGP raktas",
+            "tofuNewTooltip": "Naujas kontaktas — patikrinkite piršto atspaudą pilnam pasitikėjimui",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed — resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Pranešimas neišsiųstas — šiam pokalbiui reikalingas šifravimas, bet šiuo metu jis nepasiekiamas.",

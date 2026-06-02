@@ -477,6 +477,7 @@
             "checking": "Ag seiceáil an teagmhálaí…",
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Eochair OpenPGP fíoraithe",
+            "tofuNewTooltip": "Teagmháil nua — fíoraigh an mhéarlorg le haghaidh muiníne iomlán",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed — resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Níor seoladh an teachtaireacht — tá criptiú ag teastáil don chomhrá seo ach níl sé ar fáil faoi láthair.",

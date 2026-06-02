@@ -479,6 +479,7 @@
             "checking": "Qed nikkontrolla l-kuntatt…",
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Ċavetta OpenPGP verifikata",
+            "tofuNewTooltip": "Kuntatt ġdid — ivverifika l-marka tas-saba' għal fiduċja sħiħa",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed — resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Il-messaġġ ma ntbagħatx — l-encryption huwa meħtieġ għal din il-konversazzjoni iżda bħalissa mhuwiex disponibbli.",

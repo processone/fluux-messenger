@@ -478,6 +478,7 @@
             "checking": "Vérification du correspondant…",
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Clé OpenPGP vérifiée",
+            "tofuNewTooltip": "Nouveau contact — vérifiez l'empreinte pour une confiance totale",
             "blocked": "Chiffrement suspendu",
             "blockedTooltip": "La clé du correspondant a changé — résolvez pour reprendre le chiffrement",
             "plaintextForced": "Chiffrement désactivé",

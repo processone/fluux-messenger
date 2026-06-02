@@ -477,6 +477,7 @@
             "checking": "Athuga viðmælanda…",
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Staðfestur OpenPGP-lykill",
+            "tofuNewTooltip": "Nýr tengiliður — staðfestu fingrafar til fulls trausts",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed — resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Skilaboð ekki send — dulkóðunar er krafist fyrir þetta samtal en hún er ekki tiltæk núna.",

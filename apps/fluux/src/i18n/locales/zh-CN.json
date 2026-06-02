@@ -477,6 +477,7 @@
             "checking": "正在检查对方…",
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "已验证的 OpenPGP 密钥",
+            "tofuNewTooltip": "新联系人 — 验证指纹以获得完全信任",
             "blocked": "加密已暂停",
             "blockedTooltip": "对方的密钥已更改 — 请解决以恢复加密",
             "sendBlockedEncryptionRequired": "消息未发送 — 此对话需要加密，但目前不可用。",

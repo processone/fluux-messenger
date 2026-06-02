@@ -477,6 +477,7 @@
             "checking": "Tarkistetaan yhteyshenkilöä…",
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Vahvistettu OpenPGP-avain",
+            "tofuNewTooltip": "Uusi yhteystieto — vahvista sormenjälki täyttä luottamusta varten",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed — resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Viestiä ei lähetetty — tämä keskustelu vaatii salausta, mutta se ei ole juuri nyt käytettävissä.",

@@ -477,6 +477,7 @@
             "checking": "Provjera kontakta…",
             "openpgpTooltip": "OpenPGP",
             "verifiedTooltip": "Provjereni OpenPGP ključ",
+            "tofuNewTooltip": "Novi kontakt — provjerite otisak za potpuno povjerenje",
             "blocked": "Encryption paused",
             "blockedTooltip": "Peer's key has changed — resolve to resume encryption",
             "sendBlockedEncryptionRequired": "Poruka nije poslana — za ovaj je razgovor potrebno šifriranje, ali trenutačno nije dostupno.",
