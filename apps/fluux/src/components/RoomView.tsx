@@ -486,6 +486,9 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
               setLastSentMessageId(id)
               lastSentTimerRef.current = setTimeout(() => setLastSentMessageId(null), 400)
             }}
+            whisperTarget={whisperTarget}
+            onClearWhisper={() => setWhisperTarget(null)}
+            sendWhisper={sendWhisper}
           />
         ) : (
           <RoomJoinPrompt
@@ -1406,6 +1409,9 @@ interface RoomMessageInputProps {
   processLinkPreview?: (messageId: string, body: string, to: string, type: 'chat' | 'groupchat') => Promise<void>
   isConnected: boolean
   onMessageIdSent?: (messageId: string) => void
+  whisperTarget?: string | null
+  onClearWhisper?: () => void
+  sendWhisper: (roomJid: string, nick: string, body: string) => Promise<string>
 }
 
 function RoomMessageInput({
@@ -1434,6 +1440,9 @@ function RoomMessageInput({
   processLinkPreview,
   isConnected,
   onMessageIdSent,
+  whisperTarget,
+  onClearWhisper,
+  sendWhisper,
   ref,
 }: RoomMessageInputProps & { ref?: React.Ref<MessageComposerHandle> }) {
   const { t } = useTranslation()
@@ -1548,6 +1557,18 @@ function RoomMessageInput({
 
   // Handle send
   const handleSend = async (sendText: string): Promise<boolean> => {
+    // Whisper mode (XEP-0045 §7.5): text-only, ephemeral, no reply/attachment.
+    if (whisperTarget) {
+      const body = sendText.trim()
+      if (!body) return false
+      const messageId = await sendWhisper(room.jid, whisperTarget, body)
+      onMessageIdSent?.(messageId)
+      clearDraft(room.jid)
+      onMessageSent?.()
+      setTimeout(() => clearFirstNewMessageId(room.jid), 500)
+      return true
+    }
+
     // Include reply info if replying to a message
     // SDK resolves stanzaId vs id for the protocol reference (XEP-0461)
     let replyTo: { id: string; to: string; fallback?: { author: string; body: string } } | undefined
@@ -1796,46 +1817,69 @@ function RoomMessageInput({
   }
 
   return (
-    <>
-    {showPollCreator && (
-      <PollCreator
-        onClose={() => setShowPollCreator(false)}
-        onCreatePoll={async (title, options, settings, description, deadline, customEmojis) => {
-          await sendPoll(room.jid, title, options, settings, description, deadline, customEmojis)
-        }}
+    <div
+      onKeyDownCapture={(e) => {
+        if (whisperTarget && e.key === 'Escape') {
+          e.stopPropagation()
+          onClearWhisper?.()
+        }
+      }}
+    >
+      {showPollCreator && (
+        <PollCreator
+          onClose={() => setShowPollCreator(false)}
+          onCreatePoll={async (title, options, settings, description, deadline, customEmojis) => {
+            await sendPoll(room.jid, title, options, settings, description, deadline, customEmojis)
+          }}
+        />
+      )}
+      {whisperTarget && (
+        <div className="flex items-center justify-between gap-2 px-3 py-1.5 mb-1 rounded bg-fluux-accent/10 text-sm text-fluux-accent">
+          <span className="inline-flex items-center gap-1.5 min-w-0">
+            <Lock className="size-4 shrink-0" />
+            <span className="truncate">{t('rooms.whisperingTo', { nick: whisperTarget })}</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => onClearWhisper?.()}
+            aria-label={t('common.cancel')}
+            className="shrink-0 rounded p-0.5 hover:bg-fluux-accent/20"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
+      <MessageComposer
+        ref={composerRef}
+        textareaRef={textareaRef}
+        placeholder={t('chat.messageRoom', { name: room.name })}
+        replyingTo={replyInfo}
+        onCancelReply={onCancelReply}
+        editingMessage={editInfo}
+        onCancelEdit={onCancelEdit}
+        onSendCorrection={handleCorrection}
+        onRetractMessage={handleRetract}
+        onComposingChange={onComposingChange}
+        onInputResize={onInputResize}
+        onSend={handleSend}
+        onSendEasterEgg={(animation) => sendEasterEgg(room.jid, animation)}
+        onCreatePoll={() => setShowPollCreator(true)}
+        onSendTypingState={handleTypingState}
+        typingNotificationsEnabled={shouldSendTypingNotifications}
+        renderInput={renderMentionInput}
+        aboveInput={mentionDropdown}
+        value={text}
+        onValueChange={setText}
+        onSelectionChange={setCursorPosition}
+        onFileSelect={onFileSelect}
+        uploadState={uploadState}
+        isUploadSupported={isUploadSupported}
+        pendingAttachment={pendingAttachment}
+        onRemovePendingAttachment={onRemovePendingAttachment}
+        disabled={!isConnected}
+        onEditLastMessage={onEditLastMessage}
       />
-    )}
-    <MessageComposer
-      ref={composerRef}
-      textareaRef={textareaRef}
-      placeholder={t('chat.messageRoom', { name: room.name })}
-      replyingTo={replyInfo}
-      onCancelReply={onCancelReply}
-      editingMessage={editInfo}
-      onCancelEdit={onCancelEdit}
-      onSendCorrection={handleCorrection}
-      onRetractMessage={handleRetract}
-      onComposingChange={onComposingChange}
-      onInputResize={onInputResize}
-      onSend={handleSend}
-      onSendEasterEgg={(animation) => sendEasterEgg(room.jid, animation)}
-      onCreatePoll={() => setShowPollCreator(true)}
-      onSendTypingState={handleTypingState}
-      typingNotificationsEnabled={shouldSendTypingNotifications}
-      renderInput={renderMentionInput}
-      aboveInput={mentionDropdown}
-      value={text}
-      onValueChange={setText}
-      onSelectionChange={setCursorPosition}
-      onFileSelect={onFileSelect}
-      uploadState={uploadState}
-      isUploadSupported={isUploadSupported}
-      pendingAttachment={pendingAttachment}
-      onRemovePendingAttachment={onRemovePendingAttachment}
-      disabled={!isConnected}
-      onEditLastMessage={onEditLastMessage}
-    />
-    </>
+    </div>
   )
 }
 
