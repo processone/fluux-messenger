@@ -394,6 +394,6 @@ describe('MAM E2EE wiring', () => {
 
     const lastCall = decryptSpy.mock.calls[decryptSpy.mock.calls.length - 1]
     expect(lastCall[2]).toMatchObject({ messageId: 'mam-msg-id', fromArchive: true })
-    expect(lastCall[2].archiveTimestamp).toBeInstanceOf(Date)
+    expect(lastCall[2]!.archiveTimestamp).toBeInstanceOf(Date)
   })
 })
