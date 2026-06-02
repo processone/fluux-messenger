@@ -159,6 +159,13 @@ export function useRoomActive() {
     [client]
   )
 
+  const sendWhisper = useCallback(
+    async (roomJid: string, nick: string, body: string): Promise<string> => {
+      return await client.chat.sendWhisper(roomJid, nick, body)
+    },
+    [client]
+  )
+
   const sendReaction = useCallback(
     async (roomJid: string, messageId: string, emojis: string[]) => {
       await client.chat.sendReaction(roomJid, messageId, emojis, 'groupchat')
@@ -390,6 +397,7 @@ export function useRoomActive() {
       joinRoom,
       markAsRead,
       sendMessage,
+      sendWhisper,
       sendReaction,
       sendPoll,
       votePoll,
@@ -422,6 +430,7 @@ export function useRoomActive() {
       joinRoom,
       markAsRead,
       sendMessage,
+      sendWhisper,
       sendReaction,
       sendPoll,
       votePoll,
