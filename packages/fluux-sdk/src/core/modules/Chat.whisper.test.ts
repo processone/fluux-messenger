@@ -111,4 +111,75 @@ describe('MUC Whispers', () => {
       expect(emitSDKSpy).not.toHaveBeenCalledWith('chat:message', expect.anything())
     })
   })
+
+  describe('incoming whispers', () => {
+    it('routes type=chat from a joined room occupant to room:whisper', async () => {
+      await connectClient()
+      const room = createMockRoom('room@conference.example.com', { joined: true, nickname: 'me' })
+      vi.mocked(mockStores.room.getRoom).mockReturnValue(room)
+
+      const stanza = createMockElement('message', {
+        from: 'room@conference.example.com/bob',
+        to: 'user@example.com',
+        type: 'chat',
+        id: 'w-1',
+      }, [{ name: 'body', text: 'between us' }])
+
+      mockXmppClientInstance._emit('stanza', stanza)
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:whisper', expect.objectContaining({
+        roomJid: 'room@conference.example.com',
+        message: expect.objectContaining({
+          isPrivate: true,
+          isOutgoing: false,
+          nick: 'bob',
+          whisperWith: 'bob',
+          noStore: true,
+          body: 'between us',
+        }),
+        incrementUnread: true,
+        incrementMentions: true,
+      }))
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('room:message', expect.anything())
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('chat:message', expect.anything())
+    })
+
+    it('does NOT reclassify a whisper carrying a muc#user marker as public', async () => {
+      await connectClient()
+      const room = createMockRoom('room@conference.example.com', { joined: true, nickname: 'me' })
+      vi.mocked(mockStores.room.getRoom).mockReturnValue(room)
+
+      const stanza = createMockElement('message', {
+        from: 'room@conference.example.com/bob',
+        to: 'user@example.com',
+        type: 'chat',
+        id: 'w-2',
+      }, [
+        { name: 'body', text: 'still private' },
+        { name: 'x', attrs: { xmlns: 'http://jabber.org/protocol/muc#user' } },
+      ])
+
+      mockXmppClientInstance._emit('stanza', stanza)
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:whisper', expect.anything())
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('room:message', expect.anything())
+    })
+
+    it('still routes type=chat from a non-joined JID to chat:message (no regression)', async () => {
+      await connectClient()
+      vi.mocked(mockStores.room.getRoom).mockReturnValue(undefined)
+
+      const stanza = createMockElement('message', {
+        from: 'contact@example.com/phone',
+        to: 'user@example.com',
+        type: 'chat',
+        id: 'c-1',
+      }, [{ name: 'body', text: 'hi' }])
+
+      mockXmppClientInstance._emit('stanza', stanza)
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', expect.anything())
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('room:whisper', expect.anything())
+    })
+  })
 })
