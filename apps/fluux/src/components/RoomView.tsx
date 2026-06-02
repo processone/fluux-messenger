@@ -502,6 +502,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
           ownAvatar={ownAvatar}
           onClose={handleCloseOccupants}
           onStartChat={onStartChat}
+          onWhisper={(nick) => setWhisperTarget(nick)}
           onShowProfile={onShowProfile}
         />
       )}

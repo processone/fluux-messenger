@@ -24,7 +24,7 @@ import { useToastStore } from '@/stores/toastStore'
 import { getTranslatedShowText } from '@/utils/presence'
 import { OccupantModerationModal } from './OccupantModerationModal'
 import { UserInfoPopover } from './conversation/UserInfoPopover'
-import { Shield, Crown, UserCheck, X, ArrowLeft, MessageCircle, EyeOff, User, Settings } from 'lucide-react'
+import { Shield, Crown, UserCheck, X, ArrowLeft, MessageCircle, EyeOff, User, Settings, Lock } from 'lucide-react'
 
 // Type for grouped occupants (multiple connections from same bare JID)
 interface GroupedOccupant {
@@ -40,6 +40,8 @@ export interface OccupantPanelProps {
   ownAvatar?: string | null
   onClose: () => void
   onStartChat?: (jid: string) => void
+  /** Start an ephemeral private "whisper" (XEP-0045 §7.5) with an occupant by nick */
+  onWhisper?: (nick: string) => void
   onShowProfile?: (jid: string) => void
   /** When true, renders as full-screen view with back arrow instead of inline sidebar */
   fullScreen?: boolean
@@ -54,6 +56,7 @@ export function OccupantPanel({
   ownAvatar,
   onClose,
   onStartChat,
+  onWhisper,
   onShowProfile,
   fullScreen = false,
 }: OccupantPanelProps) {
@@ -622,6 +625,14 @@ export function OccupantPanel({
               onClick={() => handleStartChat(menuTarget.bareJid!)}
               icon={<MessageCircle className="size-4" />}
               label={t('rooms.sendPrivateMessage')}
+            />
+          )}
+          {/* Whisper (ephemeral in-room private message) */}
+          {onWhisper && (
+            <MenuButton
+              onClick={() => { onWhisper(menuTarget.primaryNick); menu.close() }}
+              icon={<Lock className="size-4" />}
+              label={t('rooms.whisper')}
             />
           )}
           {/* Ignore / Stop ignoring */}
