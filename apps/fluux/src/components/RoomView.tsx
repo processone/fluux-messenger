@@ -10,7 +10,7 @@ import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
 import { Avatar, getConsistentTextColor } from './Avatar'
 import { format } from 'date-fns'
-import { Shield, Crown, Upload, Loader2, LogIn, AlertCircle, Users, MessageCircle, EyeOff, User, Settings } from 'lucide-react'
+import { Shield, Crown, Upload, Loader2, LogIn, AlertCircle, Users, MessageCircle, EyeOff, User, Settings, Lock, X } from 'lucide-react'
 import { ChristmasAnimation } from './ChristmasAnimation'
 import { TextInput, TextArea } from './ui/TextInput'
 import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment, MESSAGE_INPUT_BASE_CLASSES, MESSAGE_INPUT_OVERLAY_CLASSES } from './MessageComposer'
@@ -70,7 +70,7 @@ const EMPTY_IGNORED_ARRAY: import('@fluux/sdk/stores').IgnoredUser[] = []
 export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange, onStartChat, onShowProfile, findOnPageRef, onSearchInConversation }: RoomViewProps) {
   detectRenderLoop('RoomView')
   const { t } = useTranslation()
-  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendPoll, votePoll, closePoll, sendCorrection, retractMessage, moderateMessage, sendChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, continueRoomCatchUp, activeMAMState, submitRoomConfig, setSubject, destroyRoom, setAffiliation, setRole, targetMessageId, clearTargetMessageId } = useRoomActive()
+  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendPoll, votePoll, closePoll, sendCorrection, retractMessage, moderateMessage, sendChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, continueRoomCatchUp, activeMAMState, submitRoomConfig, setSubject, destroyRoom, setAffiliation, setRole, targetMessageId, clearTargetMessageId } = useRoomActive()
   const { contacts } = useRoster()
   // NOTE: Use focused selectors instead of useConnection() hook to avoid
   // re-renders when unrelated connection state changes (error, reconnectAttempt, etc.)
@@ -175,6 +175,14 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   const nickMenu = useContextMenu()
   const [nickMenuTarget, setNickMenuTarget] = useState<string | null>(null) // nick string
   const [nickModerationTarget, setNickModerationTarget] = useState<string | null>(null)
+
+  // Whisper mode: when set, the composer targets a specific nick privately
+  const [whisperTarget, setWhisperTarget] = useState<string | null>(null)
+
+  // Clear whisper mode when the active room changes
+  useEffect(() => {
+    setWhisperTarget(null)
+  }, [activeRoom?.jid])
   // setAffiliation and setRole are now from useRoomActive() to avoid subscribing
   // to list-level selectors that cause render loops when other rooms update
   const addToast = useToastStore((s) => s.addToast)
@@ -539,6 +547,13 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
                 onClick={() => { onStartChat(bareJid); nickMenu.close() }}
                 icon={<MessageCircle className="size-4" />}
                 label={t('rooms.sendPrivateMessage')}
+              />
+            )}
+            {nickMenuTarget !== activeRoom.nickname && (
+              <MenuButton
+                onClick={() => { setWhisperTarget(nickMenuTarget); nickMenu.close() }}
+                icon={<Lock className="size-4" />}
+                label={t('rooms.whisper')}
               />
             )}
             <MenuButton
@@ -1247,6 +1262,8 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         mentions={message.mentions}
         nickname={myNick}
         knownNicks={knownNicks}
+        isPrivate={message.isPrivate}
+        whisperWith={message.whisperWith}
         onNickContextMenu={!message.isOutgoing ? handleNickContextMenu : undefined}
         onNickTouchStart={!message.isOutgoing ? handleNickTouchStart : undefined}
         onNickTouchEnd={!message.isOutgoing ? onNickTouchEnd : undefined}
