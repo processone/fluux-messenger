@@ -869,6 +869,54 @@ export class Chat extends BaseModule {
   }
 
   /**
+   * XEP-0045 §7.5: send a private message ("whisper") to a single room
+   * occupant. Unlike {@link sendMessage}, this preserves the `/nick`
+   * resource (sendMessage strips it for type='chat') and emits `room:whisper`
+   * instead of `chat:message` so the message is treated as an ephemeral room
+   * private message rather than a 1:1 conversation.
+   *
+   * @param roomJid bare room JID, e.g. 'room@conference.example.com'
+   * @param nick    target occupant's nickname
+   * @param body    message text
+   * @returns the generated message id
+   */
+  async sendWhisper(roomJid: string, nick: string, body: string): Promise<string> {
+    const id = generateUUID()
+    const to = `${roomJid}/${nick}`
+
+    const message = xml('message', { to, type: 'chat', id },
+      xml('body', {}, body),
+      xml('active', { xmlns: NS_CHATSTATES }),
+      xml('x', { xmlns: NS_MUC_USER }),
+      createOriginIdElement(id),
+    )
+    await this.deps.sendStanza(message)
+
+    const ourNick = this.deps.stores?.room.getRoom(roomJid)?.nickname || ''
+    const whisper: RoomMessage = {
+      type: 'groupchat',
+      id,
+      originId: id,
+      roomJid,
+      from: `${roomJid}/${ourNick}`,
+      nick: ourNick,
+      body,
+      timestamp: new Date(),
+      isOutgoing: true,
+      isPrivate: true,
+      whisperWith: nick,
+      noStore: true,
+    }
+    this.deps.emitSDK('room:whisper', {
+      roomJid,
+      message: whisper,
+      incrementUnread: false,
+      incrementMentions: false,
+    })
+    return id
+  }
+
+  /**
    * Resend a previously failed message.
    *
    * Re-creates the message stanza from stored message data and sends it
