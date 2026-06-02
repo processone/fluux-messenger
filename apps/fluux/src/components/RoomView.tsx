@@ -10,7 +10,7 @@ import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
 import { Avatar, getConsistentTextColor } from './Avatar'
 import { format } from 'date-fns'
-import { Shield, Crown, Upload, Loader2, LogIn, AlertCircle, Users, MessageCircle, EyeOff, User, Settings } from 'lucide-react'
+import { Shield, Crown, Upload, Loader2, LogIn, AlertCircle, Users, MessageCircle, EyeOff, User, Settings, Lock, X } from 'lucide-react'
 import { ChristmasAnimation } from './ChristmasAnimation'
 import { TextInput, TextArea } from './ui/TextInput'
 import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment, MESSAGE_INPUT_BASE_CLASSES, MESSAGE_INPUT_OVERLAY_CLASSES } from './MessageComposer'
@@ -70,7 +70,7 @@ const EMPTY_IGNORED_ARRAY: import('@fluux/sdk/stores').IgnoredUser[] = []
 export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange, onStartChat, onShowProfile, findOnPageRef, onSearchInConversation }: RoomViewProps) {
   detectRenderLoop('RoomView')
   const { t } = useTranslation()
-  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendPoll, votePoll, closePoll, sendCorrection, retractMessage, moderateMessage, sendChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, continueRoomCatchUp, activeMAMState, submitRoomConfig, setSubject, destroyRoom, setAffiliation, setRole, targetMessageId, clearTargetMessageId } = useRoomActive()
+  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendPoll, votePoll, closePoll, sendCorrection, retractMessage, moderateMessage, sendChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, continueRoomCatchUp, activeMAMState, submitRoomConfig, setSubject, destroyRoom, setAffiliation, setRole, targetMessageId, clearTargetMessageId } = useRoomActive()
   const { contacts } = useRoster()
   // NOTE: Use focused selectors instead of useConnection() hook to avoid
   // re-renders when unrelated connection state changes (error, reconnectAttempt, etc.)
@@ -175,6 +175,10 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   const nickMenu = useContextMenu()
   const [nickMenuTarget, setNickMenuTarget] = useState<string | null>(null) // nick string
   const [nickModerationTarget, setNickModerationTarget] = useState<string | null>(null)
+
+  // Whisper mode: when set, the composer targets a specific nick privately
+  const [whisperTarget, setWhisperTarget] = useState<string | null>(null)
+
   // setAffiliation and setRole are now from useRoomActive() to avoid subscribing
   // to list-level selectors that cause render loops when other rooms update
   const addToast = useToastStore((s) => s.addToast)
@@ -259,11 +263,25 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   const pendingAttachmentRef = useRef(pendingAttachment)
   pendingAttachmentRef.current = pendingAttachment
 
-  // Clear reply/edit/pending attachment state when room changes
+  // Stable callback that clears any staged compose state before entering whisper
+  // mode. Whispers are text-only so a staged reply, edit, or pending attachment
+  // must be discarded to avoid showing conflicting UI (banner + attachment preview).
+  const enterWhisperMode = useCallback((nick: string) => {
+    setReplyingTo(null)
+    setEditingMessage(null)
+    if (pendingAttachmentRef.current?.previewUrl) {
+      URL.revokeObjectURL(pendingAttachmentRef.current.previewUrl)
+    }
+    setPendingAttachment(null)
+    setWhisperTarget(nick)
+  }, [])
+
+  // Clear reply/edit/whisper/pending attachment state when room changes
   // Note: scroll position is managed by MessageList component
   useEffect(() => {
     setReplyingTo(null)
     setEditingMessage(null)
+    setWhisperTarget(null)
     // Revoke old preview URL to avoid memory leaks
     if (pendingAttachmentRef.current?.previewUrl) {
       URL.revokeObjectURL(pendingAttachmentRef.current.previewUrl)
@@ -478,6 +496,9 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
               setLastSentMessageId(id)
               lastSentTimerRef.current = setTimeout(() => setLastSentMessageId(null), 400)
             }}
+            whisperTarget={whisperTarget}
+            onClearWhisper={() => setWhisperTarget(null)}
+            sendWhisper={sendWhisper}
           />
         ) : (
           <RoomJoinPrompt
@@ -494,6 +515,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
           ownAvatar={ownAvatar}
           onClose={handleCloseOccupants}
           onStartChat={onStartChat}
+          onWhisper={enterWhisperMode}
           onShowProfile={onShowProfile}
         />
       )}
@@ -539,6 +561,13 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
                 onClick={() => { onStartChat(bareJid); nickMenu.close() }}
                 icon={<MessageCircle className="size-4" />}
                 label={t('rooms.sendPrivateMessage')}
+              />
+            )}
+            {nickMenuTarget !== activeRoom.nickname && (
+              <MenuButton
+                onClick={() => { enterWhisperMode(nickMenuTarget!); nickMenu.close() }}
+                icon={<Lock className="size-4" />}
+                label={t('rooms.whisper')}
               />
             )}
             <MenuButton
@@ -1247,6 +1276,8 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         mentions={message.mentions}
         nickname={myNick}
         knownNicks={knownNicks}
+        isPrivate={message.isPrivate}
+        whisperWith={message.whisperWith}
         onNickContextMenu={!message.isOutgoing ? handleNickContextMenu : undefined}
         onNickTouchStart={!message.isOutgoing ? handleNickTouchStart : undefined}
         onNickTouchEnd={!message.isOutgoing ? onNickTouchEnd : undefined}
@@ -1389,6 +1420,9 @@ interface RoomMessageInputProps {
   processLinkPreview?: (messageId: string, body: string, to: string, type: 'chat' | 'groupchat') => Promise<void>
   isConnected: boolean
   onMessageIdSent?: (messageId: string) => void
+  whisperTarget?: string | null
+  onClearWhisper?: () => void
+  sendWhisper: (roomJid: string, nick: string, body: string) => Promise<string>
 }
 
 function RoomMessageInput({
@@ -1417,6 +1451,9 @@ function RoomMessageInput({
   processLinkPreview,
   isConnected,
   onMessageIdSent,
+  whisperTarget,
+  onClearWhisper,
+  sendWhisper,
   ref,
 }: RoomMessageInputProps & { ref?: React.Ref<MessageComposerHandle> }) {
   const { t } = useTranslation()
@@ -1531,6 +1568,18 @@ function RoomMessageInput({
 
   // Handle send
   const handleSend = async (sendText: string): Promise<boolean> => {
+    // Whisper mode (XEP-0045 §7.5): text-only, ephemeral, no reply/attachment.
+    if (whisperTarget) {
+      const body = sendText.trim()
+      if (!body) return false
+      const messageId = await sendWhisper(room.jid, whisperTarget, body)
+      onMessageIdSent?.(messageId)
+      clearDraft(room.jid)
+      onMessageSent?.()
+      setTimeout(() => clearFirstNewMessageId(room.jid), 500)
+      return true
+    }
+
     // Include reply info if replying to a message
     // SDK resolves stanzaId vs id for the protocol reference (XEP-0461)
     let replyTo: { id: string; to: string; fallback?: { author: string; body: string } } | undefined
@@ -1779,46 +1828,69 @@ function RoomMessageInput({
   }
 
   return (
-    <>
-    {showPollCreator && (
-      <PollCreator
-        onClose={() => setShowPollCreator(false)}
-        onCreatePoll={async (title, options, settings, description, deadline, customEmojis) => {
-          await sendPoll(room.jid, title, options, settings, description, deadline, customEmojis)
-        }}
+    <div
+      onKeyDownCapture={(e) => {
+        if (whisperTarget && e.key === 'Escape') {
+          e.stopPropagation()
+          onClearWhisper?.()
+        }
+      }}
+    >
+      {showPollCreator && (
+        <PollCreator
+          onClose={() => setShowPollCreator(false)}
+          onCreatePoll={async (title, options, settings, description, deadline, customEmojis) => {
+            await sendPoll(room.jid, title, options, settings, description, deadline, customEmojis)
+          }}
+        />
+      )}
+      {whisperTarget && (
+        <div className="flex items-center justify-between gap-2 px-3 py-1.5 mb-1 rounded bg-fluux-accent/10 text-sm text-fluux-accent">
+          <span className="inline-flex items-center gap-1.5 min-w-0">
+            <Lock className="size-4 shrink-0" />
+            <span className="truncate">{t('rooms.whisperingTo', { nick: whisperTarget })}</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => onClearWhisper?.()}
+            aria-label={t('common.cancel')}
+            className="shrink-0 rounded p-0.5 hover:bg-fluux-accent/20"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
+      <MessageComposer
+        ref={composerRef}
+        textareaRef={textareaRef}
+        placeholder={t('chat.messageRoom', { name: room.name })}
+        replyingTo={replyInfo}
+        onCancelReply={onCancelReply}
+        editingMessage={editInfo}
+        onCancelEdit={onCancelEdit}
+        onSendCorrection={handleCorrection}
+        onRetractMessage={handleRetract}
+        onComposingChange={onComposingChange}
+        onInputResize={onInputResize}
+        onSend={handleSend}
+        onSendEasterEgg={(animation) => sendEasterEgg(room.jid, animation)}
+        onCreatePoll={() => setShowPollCreator(true)}
+        onSendTypingState={handleTypingState}
+        typingNotificationsEnabled={shouldSendTypingNotifications}
+        renderInput={renderMentionInput}
+        aboveInput={mentionDropdown}
+        value={text}
+        onValueChange={setText}
+        onSelectionChange={setCursorPosition}
+        onFileSelect={onFileSelect}
+        uploadState={uploadState}
+        isUploadSupported={isUploadSupported}
+        pendingAttachment={pendingAttachment}
+        onRemovePendingAttachment={onRemovePendingAttachment}
+        disabled={!isConnected}
+        onEditLastMessage={onEditLastMessage}
       />
-    )}
-    <MessageComposer
-      ref={composerRef}
-      textareaRef={textareaRef}
-      placeholder={t('chat.messageRoom', { name: room.name })}
-      replyingTo={replyInfo}
-      onCancelReply={onCancelReply}
-      editingMessage={editInfo}
-      onCancelEdit={onCancelEdit}
-      onSendCorrection={handleCorrection}
-      onRetractMessage={handleRetract}
-      onComposingChange={onComposingChange}
-      onInputResize={onInputResize}
-      onSend={handleSend}
-      onSendEasterEgg={(animation) => sendEasterEgg(room.jid, animation)}
-      onCreatePoll={() => setShowPollCreator(true)}
-      onSendTypingState={handleTypingState}
-      typingNotificationsEnabled={shouldSendTypingNotifications}
-      renderInput={renderMentionInput}
-      aboveInput={mentionDropdown}
-      value={text}
-      onValueChange={setText}
-      onSelectionChange={setCursorPosition}
-      onFileSelect={onFileSelect}
-      uploadState={uploadState}
-      isUploadSupported={isUploadSupported}
-      pendingAttachment={pendingAttachment}
-      onRemovePendingAttachment={onRemovePendingAttachment}
-      disabled={!isConnected}
-      onEditLastMessage={onEditLastMessage}
-    />
-    </>
+    </div>
   )
 }
 

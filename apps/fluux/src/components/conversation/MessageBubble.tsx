@@ -60,6 +60,11 @@ export interface MessageBubbleProps {
   /** Occupant JID for vCard fetch in anonymous rooms (e.g. room@conf/nick) */
   senderOccupantJid?: string
 
+  /** XEP-0045 §7.5: render this message as a private "whisper". */
+  isPrivate?: boolean
+  /** Whisper counterpart nick (recipient if outgoing, sender if incoming). */
+  whisperWith?: string
+
   // Nick header extras (for room moderator badge, hats)
   nickExtras?: ReactNode
 
@@ -132,6 +137,8 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps): bool
   // Message identity and content
   if (prev.message.id !== next.message.id) return false
   if (prev.message.body !== next.message.body) return false
+  if (prev.isPrivate !== next.isPrivate) return false
+  if (prev.whisperWith !== next.whisperWith) return false
   if (prev.message.isEdited !== next.message.isEdited) return false
   if (prev.message.isRetracted !== next.message.isRetracted) return false
   if (prev.message.isOutgoing !== next.message.isOutgoing) return false
@@ -242,6 +249,8 @@ export const MessageBubble = memo(function MessageBubble({
   senderRole,
   senderAffiliation,
   senderOccupantJid,
+  isPrivate,
+  whisperWith,
   nickExtras,
   myReactions,
   onReaction,
@@ -359,7 +368,7 @@ export const MessageBubble = memo(function MessageBubble({
       </div>
 
       {/* Content */}
-      <div className={`relative flex-1 min-w-0 ${isSelected ? 'bg-fluux-selection -my-0.5 py-0.5 -ms-2 ps-2 -me-4 pe-4 rounded-s' : ''}`}>
+      <div className={`relative flex-1 min-w-0 ${isSelected ? 'bg-fluux-selection -my-0.5 py-0.5 -ms-2 ps-2 -me-4 pe-4 rounded-s' : ''}${isPrivate ? ' border-s-2 border-fluux-accent ps-2 -ms-2' : ''}`}>
         {/* Floating hover toolbar - hidden when user is composing or message is retracted */}
         {!message.isRetracted && (
           <MessageToolbar
@@ -403,6 +412,14 @@ export const MessageBubble = memo(function MessageBubble({
             <span className="text-xs text-fluux-muted">
               {formatTime(message.timestamp)}
             </span>
+            {isPrivate && (
+              <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-fluux-accent/15 text-fluux-accent font-medium">
+                <Lock className="size-3" />
+                {message.isOutgoing
+                  ? t('rooms.whisperTo', { nick: whisperWith })
+                  : t('rooms.whisperFrom', { nick: whisperWith })}
+              </span>
+            )}
             {message.securityContext && (
               <Tooltip content={formatSecurityTooltip(t, message.securityContext)} position="top" triggerMode="click">
                 <span

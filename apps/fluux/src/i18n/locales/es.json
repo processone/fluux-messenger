@@ -315,6 +315,10 @@
             "visitor": "Visitante"
         },
         "sendPrivateMessage": "Enviar mensaje privado",
+        "whisper": "Susurro",
+        "whisperingTo": "Susurrando en privado a {{nick}}",
+        "whisperTo": "Privado para {{nick}}",
+        "whisperFrom": "Privado de {{nick}}",
         "ignoreUser": "Ignorar en esta sala",
         "stopIgnoring": "Dejar de ignorar",
         "ignoredUsers": "Ignorados",

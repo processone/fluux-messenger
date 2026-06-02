@@ -375,7 +375,11 @@ describe('Message Routing', () => {
         joined: true,
         nickname: 'user',
       })
-      vi.mocked(mockStores.room.getRoom).mockReturnValue(mockRoom)
+      // Scope the mock to the actual room JID so that chat messages from
+      // non-room JIDs (contact@example.com) are not mistaken for whispers.
+      vi.mocked(mockStores.room.getRoom).mockImplementation((jid: string) =>
+        jid === 'room@conference.example.com' ? mockRoom : undefined
+      )
 
       // Interleave chat and groupchat messages
       const chatStanza1 = createMockElement('message', {

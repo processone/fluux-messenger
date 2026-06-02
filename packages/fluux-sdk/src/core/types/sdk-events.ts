@@ -275,6 +275,19 @@ export interface RoomEvents {
     incrementMentions?: boolean
   }
 
+  /**
+   * Private message ("whisper") received or sent in a room (XEP-0045 §7.5).
+   * Separate from `room:message` so bindings can mark it ephemeral and the
+   * UI can badge it. The carried message has `isPrivate: true` and
+   * `noStore: true`.
+   */
+  'room:whisper': {
+    roomJid: string
+    message: RoomMessage
+    incrementUnread?: boolean
+    incrementMentions?: boolean
+  }
+
   /** Room message updated */
   'room:message-updated': {
     roomJid: string

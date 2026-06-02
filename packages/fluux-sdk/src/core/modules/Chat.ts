@@ -218,7 +218,16 @@ export class Chat extends BaseModule {
       return { handled: true }
     }
 
-    if (type === 'chat' && hasMucUserElement) {
+    // XEP-0045 §7.5: a type='chat' message whose `from` is an occupant of a
+    // joined room (room@service/nick) is a private message ("whisper"), not a
+    // public room message. Detect it BEFORE the muc#user→groupchat
+    // reclassification below, which would otherwise surface it publicly.
+    const isWhisper =
+      type === 'chat' &&
+      !!from && !!getResource(from) &&
+      this.deps.stores?.room?.getRoom(getBareJid(from))?.joined === true
+
+    if (type === 'chat' && hasMucUserElement && !isWhisper) {
       type = 'groupchat'
     }
 
@@ -228,6 +237,22 @@ export class Chat extends BaseModule {
 
     if (!bareFrom) {
       return { handled: false }
+    }
+
+    // Whisper short-circuit: handle before the public sub-feature handlers
+    // (chat states, reactions, corrections, retractions, moderation), which
+    // are out of scope for whispers in v1.
+    if (isWhisper) {
+      if (body || stanza.getChild('x', NS_OOB)) {
+        // from is non-null here: isWhisper guards !!from
+        const whisper = this.processRoomWhisper(stanza, from!, bareFrom, body || '', isSentCarbon)
+        if (whisper && !isSentCarbon) {
+          this.deps.emit('message', whisper as unknown as Message)
+        }
+        return { handled: true, message: whisper }
+      }
+      // Bodyless whisper (e.g. a stray chat-state): claim and drop in v1.
+      return { handled: true }
     }
 
     // Note: PubSub events are now handled by the PubSub module
@@ -865,6 +890,57 @@ export class Chat extends BaseModule {
       this.deps.emitSDK('chat:message', { message })
     }
 
+    return id
+  }
+
+  /**
+   * XEP-0045 §7.5: send a private message ("whisper") to a single room
+   * occupant. Unlike {@link sendMessage}, this preserves the `/nick`
+   * resource (sendMessage strips it for type='chat') and emits `room:whisper`
+   * instead of `chat:message` so the message is treated as an ephemeral room
+   * private message rather than a 1:1 conversation.
+   *
+   * @param roomJid bare room JID, e.g. 'room@conference.example.com'
+   * @param nick    target occupant's nickname
+   * @param body    message text
+   * @returns the generated message id
+   */
+  async sendWhisper(roomJid: string, nick: string, body: string): Promise<string> {
+    const id = generateUUID()
+    const to = `${roomJid}/${nick}`
+
+    const message = xml('message', { to, type: 'chat', id },
+      xml('body', {}, body),
+      xml('active', { xmlns: NS_CHATSTATES }),
+      xml('x', { xmlns: NS_MUC_USER }),
+      createOriginIdElement(id),
+      xml('no-store', { xmlns: NS_HINTS }),
+    )
+    await this.deps.sendStanza(message)
+
+    const room = this.deps.stores?.room.getRoom(roomJid)
+    if (!room) logWarn(`sendWhisper: room ${roomJid} not found in store — sender nick will be empty`)
+    const ourNick = room?.nickname || ''
+    const whisper: RoomMessage = {
+      type: 'groupchat',
+      id,
+      originId: id,
+      roomJid,
+      from: `${roomJid}/${ourNick}`,
+      nick: ourNick,
+      body,
+      timestamp: new Date(),
+      isOutgoing: true,
+      isPrivate: true,
+      whisperWith: nick,
+      noStore: true,
+    }
+    this.deps.emitSDK('room:whisper', {
+      roomJid,
+      message: whisper,
+      incrementUnread: false,
+      incrementMentions: false,
+    })
     return id
   }
 
@@ -1987,6 +2063,69 @@ export class Chat extends BaseModule {
       message,
       incrementUnread: !message.isOutgoing,
       incrementMentions: message.isMention,
+    })
+    return message
+  }
+
+  /**
+   * XEP-0045 §7.5: build a RoomMessage for an incoming/sent private message.
+   * Mirrors the core of processRoomMessage but marks the message private and
+   * ephemeral (noStore), and skips public-only concerns (polls, public
+   * mention scanning). Emits `room:whisper`.
+   */
+  private processRoomWhisper(
+    stanza: Element,
+    from: string,
+    bareFrom: string,
+    body: string,
+    isSentCarbon: boolean
+  ): RoomMessage | null {
+    const roomJid = bareFrom
+    const nick = getResource(from) || ''
+    const room = this.deps.stores?.room.getRoom(roomJid)
+    if (!room) return null
+
+    const isOutgoing = isSentCarbon || (room.nickname.toLowerCase() === nick.toLowerCase())
+    const parsed = parseMessageContent({
+      messageEl: stanza,
+      body,
+      preserveFullReplyToJid: true,
+      messageContext: 'room',
+    })
+    const messageId = stanza.attrs.id || generateStableMessageId(from, parsed.timestamp, body)
+    const occupantId = stanza.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id
+
+    // whisperWith is always the remote occupant: the sender for incoming, or
+    // (rare sent-carbon case) the recipient derived from the `to` resource.
+    const whisperWith = isOutgoing ? (getResource(stanza.attrs.to) || nick) : nick
+
+    const message: RoomMessage = {
+      type: 'groupchat',
+      id: messageId,
+      ...(parsed.originId && { originId: parsed.originId }),
+      roomJid,
+      from,
+      nick,
+      body: parsed.processedBody,
+      timestamp: parsed.timestamp,
+      isOutgoing,
+      isPrivate: true,
+      whisperWith,
+      noStore: true,
+      ...(parsed.isDelayed && { isDelayed: true }),
+      ...(parsed.noStyling && { noStyling: true }),
+      ...(parsed.replyTo && { replyTo: parsed.replyTo }),
+      ...(parsed.attachment && { attachment: parsed.attachment }),
+      ...(occupantId && { occupantId }),
+    }
+
+    // Design decision (spec §11): an incoming whisper is treated like a mention
+    // for notification purposes — it bumps the room's mention counter.
+    this.deps.emitSDK('room:whisper', {
+      roomJid,
+      message,
+      incrementUnread: !isOutgoing,
+      incrementMentions: !isOutgoing,
     })
     return message
   }
