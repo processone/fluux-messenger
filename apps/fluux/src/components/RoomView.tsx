@@ -179,10 +179,6 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // Whisper mode: when set, the composer targets a specific nick privately
   const [whisperTarget, setWhisperTarget] = useState<string | null>(null)
 
-  // Clear whisper mode when the active room changes
-  useEffect(() => {
-    setWhisperTarget(null)
-  }, [activeRoom?.jid])
   // setAffiliation and setRole are now from useRoomActive() to avoid subscribing
   // to list-level selectors that cause render loops when other rooms update
   const addToast = useToastStore((s) => s.addToast)
@@ -267,11 +263,12 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   const pendingAttachmentRef = useRef(pendingAttachment)
   pendingAttachmentRef.current = pendingAttachment
 
-  // Clear reply/edit/pending attachment state when room changes
+  // Clear reply/edit/whisper/pending attachment state when room changes
   // Note: scroll position is managed by MessageList component
   useEffect(() => {
     setReplyingTo(null)
     setEditingMessage(null)
+    setWhisperTarget(null)
     // Revoke old preview URL to avoid memory leaks
     if (pendingAttachmentRef.current?.previewUrl) {
       URL.revokeObjectURL(pendingAttachmentRef.current.previewUrl)
