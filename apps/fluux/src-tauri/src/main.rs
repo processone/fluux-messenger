@@ -21,6 +21,53 @@ fn set_linux_webkit_env() {
     if std::env::var("FLUUX_DISABLE_GPU").is_ok() {
         std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
     }
+
+    // Keep the loopback hop to the local XMPP bridge off any system-wide proxy.
+    // Must run before WebKitGTK/libsoup initializes its proxy resolver.
+    ensure_loopback_no_proxy();
+}
+
+/// Ensure the loopback hop to Fluux's local XMPP bridge is never routed through a
+/// system-wide HTTP/SOCKS proxy.
+///
+/// The webview connects to a loopback WebSocket bridge (`ws://127.0.0.1` or
+/// `ws://[::1]`). On hosts with a system-wide proxy — especially auto/PAC setups —
+/// GLib/libsoup can fail the proxy lookup for *every* host, loopback included
+/// ("Unspecified proxy lookup failure"), so the webview never reaches the bridge
+/// and connecting fails outright. Merging the loopback hosts into `no_proxy`/
+/// `NO_PROXY` keeps the local hop direct while leaving the user's proxy in place
+/// for real hosts. Existing entries are preserved; we only append what's missing.
+fn ensure_loopback_no_proxy() {
+    const LOOPBACK: [&str; 3] = ["localhost", "127.0.0.1", "::1"];
+
+    for var in ["no_proxy", "NO_PROXY"] {
+        let existing = std::env::var(var).unwrap_or_default();
+        if let Some(merged) = merge_no_proxy(&existing, &LOOPBACK) {
+            std::env::set_var(var, merged);
+        }
+    }
+}
+
+/// Merge `hosts` into a comma-separated `no_proxy` value, preserving existing
+/// entries and appending only those that are missing (case-insensitive).
+/// Returns the new value when something was added, or `None` if every host was
+/// already present (so the caller can skip a redundant env write).
+fn merge_no_proxy(existing: &str, hosts: &[&str]) -> Option<String> {
+    let mut entries: Vec<String> = existing
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    let mut appended = false;
+    for host in hosts {
+        if !entries.iter().any(|e| e.eq_ignore_ascii_case(host)) {
+            entries.push((*host).to_string());
+            appended = true;
+        }
+    }
+
+    appended.then(|| entries.join(","))
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
@@ -913,6 +960,11 @@ fn print_startup_diagnostics() {
 }
 
 fn main() {
+    // Keep the loopback hop to the local XMPP bridge off any system-wide proxy.
+    // On Linux this also runs from a pre-main ctor (before WebKitGTK init); on
+    // macOS/Windows this is the earliest hook before the webview is created.
+    ensure_loopback_no_proxy();
+
     // Parse CLI flags early, before tracing subscriber init
     let args: Vec<String> = std::env::args().collect();
     let clear_storage = args
@@ -1686,4 +1738,36 @@ fn main() {
             });
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const LOOPBACK: [&str; 3] = ["localhost", "127.0.0.1", "::1"];
+
+    #[test]
+    fn test_merge_no_proxy_empty_adds_all_loopback() {
+        let merged = merge_no_proxy("", &LOOPBACK).expect("should append to empty");
+        assert_eq!(merged, "localhost,127.0.0.1,::1");
+    }
+
+    #[test]
+    fn test_merge_no_proxy_preserves_existing_entries() {
+        let merged =
+            merge_no_proxy("example.com, 10.0.0.0/8", &LOOPBACK).expect("should append loopback");
+        assert_eq!(merged, "example.com,10.0.0.0/8,localhost,127.0.0.1,::1");
+    }
+
+    #[test]
+    fn test_merge_no_proxy_noop_when_all_present() {
+        // Already-present hosts (case-insensitive) → no write needed.
+        assert_eq!(merge_no_proxy("LOCALHOST,127.0.0.1,::1", &LOOPBACK), None);
+    }
+
+    #[test]
+    fn test_merge_no_proxy_appends_only_missing() {
+        let merged = merge_no_proxy("127.0.0.1", &LOOPBACK).expect("should append the rest");
+        assert_eq!(merged, "127.0.0.1,localhost,::1");
+    }
 }

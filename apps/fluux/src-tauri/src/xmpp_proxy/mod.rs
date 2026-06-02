@@ -2,7 +2,9 @@ mod dns;
 mod framing;
 
 use dns::{parse_server_input, resolve_xmpp_server, ConnectionMode, ParsedServer, XmppEndpoint};
-use framing::{extract_stanza, translate_tcp_to_ws, translate_ws_to_tcp};
+use framing::{
+    extract_stanza, extract_stream_error_condition, translate_tcp_to_ws, translate_ws_to_tcp,
+};
 
 use futures_util::{SinkExt, StreamExt};
 use serde::Serialize;
@@ -24,11 +26,15 @@ use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::{accept_hdr_async, tungstenite::Message};
 use tracing::{debug, error, info, warn};
 
-#[cfg(target_os = "windows")]
+/// Loopback bind order for the local WebSocket listener: IPv4 first on all platforms.
+///
+/// The proxy advertises a literal loopback URL (`ws://HOST:PORT`) that the platform
+/// WebView must connect to. Both Windows WebView2 and macOS WKWebView fail to open a
+/// WebSocket to a literal IPv6 URL (`ws://[::1]:PORT`) even when IPv6 loopback works
+/// fine at the OS level. Binding `127.0.0.1` first means we advertise an IPv4 URL and
+/// sidestep that WebView limitation. `[::1]` stays as a fallback for the rare host that
+/// has IPv4 loopback disabled.
 const LOOPBACK_BIND_ORDER: [(&str, &str); 2] = [("127.0.0.1:0", "127.0.0.1"), ("[::1]:0", "[::1]")];
-
-#[cfg(not(target_os = "windows"))]
-const LOOPBACK_BIND_ORDER: [(&str, &str); 2] = [("[::1]:0", "[::1]"), ("127.0.0.1:0", "127.0.0.1")];
 
 /// Global flag to disable TLS certificate verification.
 /// Set once at startup via `set_dangerous_insecure_tls()` from the CLI `--dangerous-insecure-tls` flag.
@@ -95,6 +101,41 @@ fn now_millis() -> u64 {
         .duration_since(std::time::SystemTime::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64
+}
+
+/// Maximum payload for a WebSocket close-frame reason: control frames cap at
+/// 125 bytes and the status code consumes the first 2.
+const MAX_CLOSE_REASON_BYTES: usize = 123;
+
+/// Truncate a close-frame reason to the WebSocket byte limit on a UTF-8 char
+/// boundary, so we never emit an over-long control frame or split a codepoint.
+fn clamp_close_reason(mut reason: String) -> String {
+    if reason.len() <= MAX_CLOSE_REASON_BYTES {
+        return reason;
+    }
+    let mut end = MAX_CLOSE_REASON_BYTES;
+    while end > 0 && !reason.is_char_boundary(end) {
+        end -= 1;
+    }
+    reason.truncate(end);
+    reason
+}
+
+/// Build the WebSocket close-frame reason sent to the client on bridge teardown.
+///
+/// Historically this was a constant `"Bridge closed"`, which told the user
+/// nothing about *why* the connection dropped. We now encode the real cause:
+/// a relayed upstream stream-error condition (e.g. `host-unknown`,
+/// `see-other-host`) when one was seen — the single most actionable signal —
+/// otherwise the transport-level end reason (`TlsClosed`, `WatchdogTimeout`, …).
+/// The `"Bridge closed"` prefix is preserved so existing client-side detection
+/// keeps working.
+fn format_bridge_close_reason(end_reason_label: &str, stream_error: Option<&str>) -> String {
+    let reason = match stream_error {
+        Some(cond) => format!("Bridge closed: stream-error {cond}"),
+        None => format!("Bridge closed: {end_reason_label}"),
+    };
+    clamp_close_reason(reason)
 }
 
 /// Initialize rustls crypto provider (must be called once at startup)
@@ -314,9 +355,7 @@ impl XmppProxy {
 
         info!(server = %server, "Starting proxy (DNS resolution deferred to per-connection)");
 
-        // Bind to loopback on a random port.
-        // Windows currently prefers IPv4 to avoid WebView2 loopback issues seen with
-        // literal IPv6 URLs (`ws://[::1]:PORT`). Other platforms keep IPv6-first.
+        // Bind to loopback on a random port (IPv4 first; see LOOPBACK_BIND_ORDER).
         let mut bind_errors = Vec::new();
         let mut bound = None;
         for (bind_addr, host) in LOOPBACK_BIND_ORDER {
@@ -916,6 +955,9 @@ async fn bridge_websocket_tls(
     struct ProxyConnectionClosedEvent {
         conn_id: u64,
         reason: String,
+        /// Upstream stream-error condition (e.g. "host-unknown"), when the server
+        /// reported one before closing. `None` for plain transport-level closes.
+        stream_error: Option<String>,
     }
 
     let bridge_started = Instant::now();
@@ -944,6 +986,10 @@ async fn bridge_websocket_tls(
 
     // Shared activity timestamp for inactivity watchdog (epoch millis)
     let last_activity = Arc::new(AtomicU64::new(now_millis()));
+
+    // Most recent upstream stream-error condition (if any), captured by the
+    // TLS→WS task and read at teardown so we can report *why* the server closed.
+    let last_stream_error = Arc::new(std::sync::Mutex::new(None::<String>));
 
     // Flush any buffered client text stanzas collected before bridge startup.
     for text in pending_ws_texts {
@@ -991,6 +1037,7 @@ async fn bridge_websocket_tls(
 
     // Task 2: TLS -> WebSocket (requires stanza boundary detection)
     let activity_tls = last_activity.clone();
+    let stream_error_capture = last_stream_error.clone();
     let ws_write_for_tls = ws_write.clone();
     let mut tls_to_ws = tokio::spawn(async move {
         let mut buffer = Vec::new();
@@ -1013,6 +1060,13 @@ async fn bridge_websocket_tls(
                     let mut consumed = 0;
                     while let Some((stanza, bytes_used)) = extract_stanza(&buffer[consumed..]) {
                         consumed += bytes_used;
+                        // Remember any stream-error condition so teardown can report
+                        // why the server closed (e.g. host-unknown, see-other-host).
+                        if let Some(cond) = extract_stream_error_condition(&stanza) {
+                            if let Ok(mut slot) = stream_error_capture.lock() {
+                                *slot = Some(cond);
+                            }
+                        }
                         let translated = translate_tcp_to_ws(&stanza);
                         debug!(data = %translated, "TLS->WS");
                         if let Err(e) = ws_write_for_tls
@@ -1101,8 +1155,20 @@ async fn bridge_websocket_tls(
     ws_to_tls.abort();
     tls_to_ws.abort();
 
+    let end_reason_label = format!("{:?}", end_reason);
+    // The TLS→WS task has stopped writing by now; read any captured upstream
+    // stream-error condition so we can report the real cause to the client.
+    let captured_stream_error = last_stream_error
+        .lock()
+        .ok()
+        .and_then(|slot| slot.clone());
+    let close_reason =
+        format_bridge_close_reason(&end_reason_label, captured_stream_error.as_deref());
+
     // Send an explicit RFC7395 stream close and a WebSocket close frame so xmpp.js
     // receives a deterministic disconnect path even when upstream TLS died abruptly.
+    // The close reason carries the real cause (e.g. "Bridge closed: stream-error
+    // host-unknown") so the frontend can surface it instead of a generic message.
     let close_handshake_result = tokio::time::timeout(std::time::Duration::from_secs(2), async {
         let mut writer = ws_write.lock().await;
 
@@ -1116,7 +1182,7 @@ async fn bridge_websocket_tls(
         writer
             .send(Message::Close(Some(CloseFrame {
                 code: CloseCode::Normal,
-                reason: "Bridge closed".into(),
+                reason: close_reason.clone().into(),
             })))
             .await
             .map_err(|e| format!("failed to send WebSocket close frame: {}", e))?;
@@ -1126,7 +1192,7 @@ async fn bridge_websocket_tls(
     .await;
     match close_handshake_result {
         Ok(Ok(())) => {
-            info!(conn_id, "Sent RFC7395/WebSocket close handshake to client");
+            info!(conn_id, reason = %close_reason, "Sent RFC7395/WebSocket close handshake to client");
         }
         Ok(Err(err)) => {
             warn!(conn_id, error = %err, "Failed to send clean close handshake to client");
@@ -1135,8 +1201,6 @@ async fn bridge_websocket_tls(
             warn!(conn_id, "WebSocket close handshake send timed out");
         }
     }
-
-    let end_reason_label = format!("{:?}", end_reason);
 
     // Emit Tauri event so the frontend can immediately verify/reconnect after
     // abnormal bridge exits. Clean client-initiated close and app shutdown are excluded.
@@ -1150,6 +1214,7 @@ async fn bridge_websocket_tls(
                 ProxyConnectionClosedEvent {
                     conn_id,
                     reason: end_reason_label.clone(),
+                    stream_error: captured_stream_error.clone(),
                 },
             );
         }
@@ -1158,6 +1223,7 @@ async fn bridge_websocket_tls(
     info!(
         conn_id,
         reason = %end_reason_label,
+        stream_error = ?captured_stream_error,
         bridge_ms = bridge_started.elapsed().as_millis() as u64,
         "Bridge ended"
     );
@@ -1231,6 +1297,31 @@ mod tests {
 
     // Note: DNS/parsing tests are in dns.rs, framing/stanza tests are in framing.rs.
 
+    // --- Loopback bind / advertised URL tests ---
+
+    /// The proxy must advertise an IPv4 loopback URL (`ws://127.0.0.1:PORT`).
+    ///
+    /// Platform WebViews (Windows WebView2, macOS WKWebView) fail to open a
+    /// WebSocket to a literal IPv6 URL (`ws://[::1]:PORT`), so the advertised
+    /// URL must use the IPv4 loopback host even on hosts where IPv6 loopback
+    /// binds successfully. Regression guard for the `[::1]`-first bind order.
+    #[tokio::test]
+    async fn test_start_advertises_ipv4_loopback_url() {
+        let mut proxy = XmppProxy::new();
+        let result = proxy
+            .start("tcp://example.org:5222".to_string())
+            .await
+            .expect("proxy should bind a loopback listener");
+
+        assert!(
+            result.url.starts_with("ws://127.0.0.1:"),
+            "proxy must advertise an IPv4 loopback URL for WebView compatibility, got: {}",
+            result.url
+        );
+
+        proxy.stop().await.expect("proxy should stop cleanly");
+    }
+
     // --- ConnectionGuard tests ---
 
     #[test]
@@ -1274,6 +1365,61 @@ mod tests {
             result.is_ok(),
             "Should create TLS connector with system certs"
         );
+    }
+
+    // --- close reason formatting tests ---
+
+    #[test]
+    fn test_format_close_reason_transport_only() {
+        // No stream error → encode the transport-level end reason.
+        assert_eq!(
+            format_bridge_close_reason("TlsClosed", None),
+            "Bridge closed: TlsClosed"
+        );
+        assert_eq!(
+            format_bridge_close_reason("WatchdogTimeout", None),
+            "Bridge closed: WatchdogTimeout"
+        );
+    }
+
+    #[test]
+    fn test_format_close_reason_prefers_stream_error() {
+        // A captured stream-error condition is the most actionable signal.
+        assert_eq!(
+            format_bridge_close_reason("TlsClosed", Some("host-unknown")),
+            "Bridge closed: stream-error host-unknown"
+        );
+        assert_eq!(
+            format_bridge_close_reason("TlsReadError", Some("see-other-host")),
+            "Bridge closed: stream-error see-other-host"
+        );
+    }
+
+    #[test]
+    fn test_format_close_reason_preserves_legacy_prefix() {
+        // Client-side detection keys off the "Bridge closed" prefix.
+        assert!(format_bridge_close_reason("TlsClosed", None).starts_with("Bridge closed"));
+        assert!(
+            format_bridge_close_reason("TlsClosed", Some("conflict")).starts_with("Bridge closed")
+        );
+    }
+
+    #[test]
+    fn test_clamp_close_reason_within_limit() {
+        let s = "Bridge closed: TlsClosed".to_string();
+        assert_eq!(clamp_close_reason(s.clone()), s);
+    }
+
+    #[test]
+    fn test_clamp_close_reason_truncates_on_char_boundary() {
+        // A pathologically long condition must not produce an over-long frame
+        // or split a multi-byte codepoint.
+        let long = format!("Bridge closed: stream-error {}", "é".repeat(200));
+        let clamped = clamp_close_reason(long);
+        assert!(clamped.len() <= MAX_CLOSE_REASON_BYTES);
+        // Still valid UTF-8 (truncated on a char boundary) — String guarantees this,
+        // but assert the byte length left room rather than cutting mid-codepoint.
+        assert!(clamped.is_char_boundary(clamped.len()));
     }
 
     #[tokio::test]

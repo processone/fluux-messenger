@@ -2079,13 +2079,17 @@ export class Connection extends BaseModule {
       if (this.xmpp !== registeredClient) {
         const machineState = this.getMachineState()
         const machineStateText = JSON.stringify(machineState)
+        // The Rust bridge sends code 1000 with a reason that starts with
+        // "Bridge closed" and may carry the real cause (e.g.
+        // "Bridge closed: stream-error host-unknown"). Match the prefix so the
+        // enriched reason is still recognised as an expected bridge teardown.
         const isExpectedBridgeClose = wasClean
           && rawReason
           && typeof rawReason === 'object'
           && 'code' in rawReason
           && (rawReason as { code: number }).code === 1000
           && 'reason' in rawReason
-          && (rawReason as { reason?: string }).reason === 'Bridge closed'
+          && (rawReason as { reason?: string }).reason?.startsWith('Bridge closed') === true
         if (!isExpectedBridgeClose) {
           logInfo(`Disconnect from stale client, ignoring (state=${machineStateText}${closeInfo})`)
           this.stores.console.addEvent(

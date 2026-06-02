@@ -809,6 +809,33 @@ describe('XMPPClient Connection', () => {
       expect(errorArg).toBe('Connection failed: WebSocket closed (code: 1008, Policy violation)')
     })
 
+    it('should surface the enriched bridge close reason (upstream stream-error) on initial failure', async () => {
+      // The Rust bridge now encodes the real cause in the close reason instead
+      // of a bare "Bridge closed", so the user sees why the server dropped them.
+      mockXmppClientInstance.start.mockRejectedValue(new Error('Connection refused'))
+
+      await expect(
+        xmppClient.connect({
+          jid: 'user@example.com',
+          password: 'secret',
+          server: 'example.com',
+          skipDiscovery: true,
+        })
+      ).rejects.toThrow('Connection refused')
+
+      vi.mocked(mockStores.connection.setError).mockClear()
+
+      mockXmppClientInstance._emit('disconnect', {
+        clean: true,
+        reason: { code: 1000, reason: 'Bridge closed: stream-error host-unknown' },
+      })
+
+      const errorArg = vi.mocked(mockStores.connection.setError).mock.calls[0][0]
+      expect(errorArg).toBe(
+        'Connection failed: WebSocket closed (code: 1000, Bridge closed: stream-error host-unknown)'
+      )
+    })
+
     it('should prefer discovered XEP-0156 WebSocket endpoint before proxy for domain server inputs', async () => {
       mockDiscoverWebSocket.mockResolvedValue('wss://discovered.example.com/ws')
 

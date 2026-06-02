@@ -204,6 +204,59 @@ pub fn translate_tcp_to_ws<'a>(text: &'a str) -> Cow<'a, str> {
     Cow::Borrowed(text)
 }
 
+/// Extract the RFC 6120 §4.9 stream-error condition from a `<stream:error>` stanza.
+///
+/// When a server hits a fatal stream-level problem it sends a `<stream:error>`
+/// carrying a single defined-condition child (e.g. `<host-unknown/>`,
+/// `<see-other-host/>`, `<not-authorized/>`) and then closes the stream. When the
+/// bridge relays such an error and the upstream closes, that condition is by far
+/// the most actionable diagnostic — it explains *why* the connection dropped,
+/// unlike the generic transport "closed" signal. The bridge surfaces it in the
+/// WebSocket close reason so the client can show it to the user.
+///
+/// Accepts both the traditional TCP form (`<stream:error>…`) and the already
+/// RFC-7395-translated form (`<error xmlns="http://etherx.jabber.org/streams">…`).
+/// Returns the condition's local element name, or `None` when `stanza` is not a
+/// stream error (a stanza-level `<iq><error/></iq>` must NOT match).
+pub fn extract_stream_error_condition(stanza: &str) -> Option<String> {
+    let trimmed = stanza.trim();
+
+    // Only a stream-level <error> root qualifies: the prefixed TCP form, or the
+    // translated form which carries the stream namespace explicitly.
+    let is_stream_error = trimmed.starts_with("<stream:error")
+        || (trimmed.starts_with("<error")
+            && trimmed.contains("http://etherx.jabber.org/streams"));
+    if !is_stream_error {
+        return None;
+    }
+
+    let mut reader = Reader::from_str(trimmed);
+    reader.config_mut().check_end_names = false;
+
+    let mut seen_root = false;
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
+                if !seen_root {
+                    // Skip the <error>/<stream:error> root element itself.
+                    seen_root = true;
+                    continue;
+                }
+                let local = e.name().local_name();
+                let local = String::from_utf8_lossy(local.as_ref()).to_string();
+                // Per RFC 6120 §4.9.2 the optional <text> follows the condition;
+                // skip it in case it is ever emitted first.
+                if local == "text" {
+                    continue;
+                }
+                return Some(local);
+            }
+            Ok(Event::Eof) | Err(_) => return None,
+            _ => {}
+        }
+    }
+}
+
 /// State machine for stanza boundary detection (inspired by Fluux Agent's StanzaParser).
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum ParserState {
@@ -935,5 +988,59 @@ mod tests {
         assert!(stanza.contains("CDATA"));
         assert!(stanza.contains("</message>"));
         assert_eq!(consumed, buf.len());
+    }
+
+    // --- extract_stream_error_condition tests ---
+
+    #[test]
+    fn test_stream_error_condition_host_unknown() {
+        let s = r#"<stream:error><host-unknown xmlns='urn:ietf:params:xml:ns:xmpp-streams'/></stream:error>"#;
+        assert_eq!(extract_stream_error_condition(s).as_deref(), Some("host-unknown"));
+    }
+
+    #[test]
+    fn test_stream_error_condition_see_other_host_with_text_value() {
+        // <see-other-host> carries a text value (the redirect target)
+        let s = r#"<stream:error><see-other-host xmlns='urn:ietf:params:xml:ns:xmpp-streams'>other.example.com:5222</see-other-host></stream:error>"#;
+        assert_eq!(extract_stream_error_condition(s).as_deref(), Some("see-other-host"));
+    }
+
+    #[test]
+    fn test_stream_error_condition_skips_leading_text_element() {
+        // Condition should win even if a <text> element is present.
+        let s = r#"<stream:error><text xmlns='urn:ietf:params:xml:ns:xmpp-streams'>bye</text><conflict xmlns='urn:ietf:params:xml:ns:xmpp-streams'/></stream:error>"#;
+        assert_eq!(extract_stream_error_condition(s).as_deref(), Some("conflict"));
+    }
+
+    #[test]
+    fn test_stream_error_condition_translated_form() {
+        // Already RFC-7395-translated (prefix stripped, explicit xmlns).
+        let s = r#"<error xmlns="http://etherx.jabber.org/streams"><policy-violation xmlns="urn:ietf:params:xml:ns:xmpp-streams"/></error>"#;
+        assert_eq!(extract_stream_error_condition(s).as_deref(), Some("policy-violation"));
+    }
+
+    #[test]
+    fn test_stream_error_condition_not_authorized_with_text_after() {
+        let s = r#"<stream:error><not-authorized xmlns='urn:ietf:params:xml:ns:xmpp-streams'/><text xmlns='urn:ietf:params:xml:ns:xmpp-streams'>denied</text></stream:error>"#;
+        assert_eq!(extract_stream_error_condition(s).as_deref(), Some("not-authorized"));
+    }
+
+    #[test]
+    fn test_stream_error_condition_ignores_stanza_level_error() {
+        // A stanza-level <iq> error is NOT a stream error and must return None.
+        let s = r#"<iq type='error' id='1'><error type='cancel'><item-not-found xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/></error></iq>"#;
+        assert_eq!(extract_stream_error_condition(s), None);
+    }
+
+    #[test]
+    fn test_stream_error_condition_ignores_non_error_stanzas() {
+        assert_eq!(extract_stream_error_condition("<presence/>"), None);
+        assert_eq!(
+            extract_stream_error_condition(
+                r#"<features xmlns="http://etherx.jabber.org/streams"><mechanisms/></features>"#
+            ),
+            None
+        );
+        assert_eq!(extract_stream_error_condition("</stream:stream>"), None);
     }
 }
