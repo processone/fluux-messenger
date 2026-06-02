@@ -245,6 +245,34 @@ describe('createStoreBindings', () => {
       )
     })
 
+    it('room:whisper adds an ephemeral (noStore) message to the room store', () => {
+      const message: RoomMessage = {
+        type: 'groupchat',
+        id: 'w-1',
+        roomJid: 'room@conf.example.com',
+        from: 'room@conf.example.com/bob',
+        nick: 'bob',
+        body: 'between us',
+        timestamp: new Date(),
+        isOutgoing: false,
+        isPrivate: true,
+        whisperWith: 'bob',
+        noStore: true,
+      }
+      mockClient.emit('room:whisper', {
+        roomJid: 'room@conf.example.com',
+        message,
+        incrementUnread: true,
+        incrementMentions: true,
+      })
+
+      expect(mockStores.room.addMessage).toHaveBeenCalledWith(
+        'room@conf.example.com',
+        expect.objectContaining({ id: 'w-1', isPrivate: true, noStore: true }),
+        expect.objectContaining({ incrementUnread: true, incrementMentions: true }),
+      )
+    })
+
     it('should handle room:message-updated', () => {
       mockClient.emit('room:message-updated', {
         roomJid: 'room@conference.example.com',
