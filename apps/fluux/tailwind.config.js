@@ -29,6 +29,12 @@ export default {
           'brand': 'var(--fluux-bg-accent)',
           'brand-hover': 'var(--fluux-bg-accent-hover)',
           'text-on-accent': 'var(--fluux-text-on-accent)',
+          // Private (whisper) — pre-composed alpha variants (Tailwind opacity
+          // modifiers don't apply to var() colors, so each tint is its own token)
+          'private': 'var(--fluux-private)',
+          'private-soft': 'var(--fluux-private-soft)',
+          'private-border': 'var(--fluux-private-border)',
+          'private-hover': 'var(--fluux-private-hover)',
           // Status (semantic purpose, not color)
           'green': 'var(--fluux-status-success)',
           'yellow': 'var(--fluux-status-warning)',

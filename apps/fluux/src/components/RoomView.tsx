@@ -5,7 +5,7 @@ import { useRoomActive, useRoster, getBareJid, generateConsistentColorHexSync, g
 import { useConnectionStore, useIgnoreStore, useRoomStore } from '@fluux/sdk/react'
 import { ignoreStore, roomStore, type IgnoredUser } from '@fluux/sdk/stores'
 import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat, useContextMenu, isSmallScreen } from '@/hooks'
-import { MessageBubble, MessageList, shouldShowAvatar, buildReplyContext, PollBanner } from './conversation'
+import { MessageBubble, MessageList, shouldShowAvatar, whisperThreadPosition, buildReplyContext, PollBanner, type WhisperThreadPosition } from './conversation'
 import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
 import { Avatar, getConsistentTextColor } from './Avatar'
@@ -276,6 +276,16 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     setWhisperTarget(nick)
   }, [])
 
+  // Replying to a whisper stays private: re-enter whisper mode with that counterpart
+  // instead of staging a public reply (which would leak the private text into the room).
+  const handleReplyToMessage = useCallback((message: RoomMessage) => {
+    if (message.isPrivate && message.whisperWith) {
+      enterWhisperMode(message.whisperWith)
+    } else {
+      setReplyingTo(message)
+    }
+  }, [enterWhisperMode])
+
   // Clear reply/edit/whisper/pending attachment state when room changes
   // Note: scroll position is managed by MessageList component
   useEffect(() => {
@@ -425,7 +435,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             votePoll={votePoll}
             closePoll={closePoll}
 
-            onReply={setReplyingTo}
+            onReply={handleReplyToMessage}
             onEdit={setEditingMessage}
             lastOutgoingMessageId={lastOutgoingMessageId}
             lastMessageId={lastMessageId}
@@ -867,6 +877,7 @@ const RoomMessageList = memo(function RoomMessageList({
     <RoomMessageBubbleWrapper
       message={msg}
       showAvatar={shouldShowAvatar(groupMessages, idx)}
+      whisperThread={whisperThreadPosition(groupMessages, idx)}
       messagesById={messagesById}
       room={room}
       knownNicks={knownNicks}
@@ -935,6 +946,7 @@ const RoomMessageList = memo(function RoomMessageList({
 interface RoomMessageBubbleWrapperProps {
   message: RoomMessage
   showAvatar: boolean
+  whisperThread: WhisperThreadPosition | null
   messagesById: Map<string, RoomMessage>
   room: Room
   knownNicks: ReadonlySet<string>
@@ -981,6 +993,7 @@ interface RoomMessageBubbleWrapperProps {
 const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   message,
   showAvatar,
+  whisperThread,
   messagesById,
   room,
   knownNicks,
@@ -1276,8 +1289,8 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         mentions={message.mentions}
         nickname={myNick}
         knownNicks={knownNicks}
-        isPrivate={message.isPrivate}
         whisperWith={message.whisperWith}
+        whisperThread={whisperThread}
         onNickContextMenu={!message.isOutgoing ? handleNickContextMenu : undefined}
         onNickTouchStart={!message.isOutgoing ? handleNickTouchStart : undefined}
         onNickTouchEnd={!message.isOutgoing ? onNickTouchEnd : undefined}
@@ -1845,7 +1858,7 @@ function RoomMessageInput({
         />
       )}
       {whisperTarget && (
-        <div className="flex items-center justify-between gap-2 px-3 py-1.5 mb-1 rounded bg-fluux-accent/10 text-sm text-fluux-accent">
+        <div className="flex items-center justify-between gap-2 px-3 py-1.5 mb-1 rounded bg-fluux-private-soft text-sm text-fluux-private">
           <span className="inline-flex items-center gap-1.5 min-w-0">
             <Ear className="size-4 shrink-0" />
             <span className="truncate">{t('rooms.whisperingTo', { nick: whisperTarget })}</span>
@@ -1854,7 +1867,7 @@ function RoomMessageInput({
             type="button"
             onClick={() => onClearWhisper?.()}
             aria-label={t('common.cancel')}
-            className="shrink-0 rounded p-0.5 hover:bg-fluux-accent/20"
+            className="shrink-0 rounded p-0.5 hover:bg-fluux-private-hover"
           >
             <X className="size-4" />
           </button>
@@ -1863,7 +1876,7 @@ function RoomMessageInput({
       <MessageComposer
         ref={composerRef}
         textareaRef={textareaRef}
-        placeholder={t('chat.messageRoom', { name: room.name })}
+        placeholder={whisperTarget ? t('rooms.whisperPlaceholder', { nick: whisperTarget }) : t('chat.messageRoom', { name: room.name })}
         replyingTo={replyInfo}
         onCancelReply={onCancelReply}
         editingMessage={editInfo}

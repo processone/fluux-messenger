@@ -137,6 +137,43 @@ export function shouldShowAvatar<T extends GroupableMessage>(messages: T[], inde
   return timeDiff > 5 * 60 * 1000
 }
 
+/** Position of a message within a whisper thread (see `whisperThreadPosition`). */
+export type WhisperThreadPosition = 'solo' | 'start' | 'middle' | 'end'
+
+/**
+ * Two messages belong to the same whisper thread when both are private and share
+ * the same counterpart — regardless of who sent each. This lets a back-and-forth
+ * (Emma → you → Emma) gather into one thread even though the sender alternates.
+ */
+function sameWhisperThread(
+  a: GroupableMessage | undefined,
+  b: GroupableMessage | undefined,
+): boolean {
+  return !!a?.isPrivate && !!b?.isPrivate && a.whisperWith === b.whisperWith
+}
+
+/**
+ * Position of a message within a "whisper thread" — a consecutive run of private
+ * messages (XEP-0045 §7.5) with the same counterpart, used to render the run as a
+ * single bounded "private with X" container. A public message or a switch to a
+ * different counterpart breaks the run. Returns null for non-whisper messages.
+ */
+export function whisperThreadPosition<T extends GroupableMessage>(
+  messages: T[],
+  index: number,
+): WhisperThreadPosition | null {
+  const current = messages[index]
+  if (!current?.isPrivate) return null
+
+  const isStart = !sameWhisperThread(current, messages[index - 1])
+  const isEnd = !sameWhisperThread(current, messages[index + 1])
+
+  if (isStart && isEnd) return 'solo'
+  if (isStart) return 'start'
+  if (isEnd) return 'end'
+  return 'middle'
+}
+
 /**
  * Scrolls to a message element and highlights it temporarily.
  * Used when clicking on reply context to jump to the original message.

@@ -14,7 +14,7 @@ import { MessageToolbar } from './MessageToolbar'
 import { MessageBody } from './MessageBody'
 import { EncryptedPlaceholder } from './EncryptedPlaceholder'
 import { MessageReactions } from './MessageReactions'
-import { scrollToMessage, isActionMessage } from './messageGrouping'
+import { scrollToMessage, isActionMessage, type WhisperThreadPosition } from './messageGrouping'
 import { MessageAttachments } from '../MessageAttachments'
 import { LinkPreviewCard } from '../LinkPreviewCard'
 import { UserInfoPopover } from './UserInfoPopover'
@@ -60,10 +60,10 @@ export interface MessageBubbleProps {
   /** Occupant JID for vCard fetch in anonymous rooms (e.g. room@conf/nick) */
   senderOccupantJid?: string
 
-  /** XEP-0045 §7.5: render this message as a private "whisper". */
-  isPrivate?: boolean
   /** Whisper counterpart nick (recipient if outgoing, sender if incoming). */
   whisperWith?: string
+  /** Position within a whisper thread — drives the bounded "private with X" container. */
+  whisperThread?: WhisperThreadPosition | null
 
   // Nick header extras (for room moderator badge, hats)
   nickExtras?: ReactNode
@@ -137,8 +137,8 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps): bool
   // Message identity and content
   if (prev.message.id !== next.message.id) return false
   if (prev.message.body !== next.message.body) return false
-  if (prev.isPrivate !== next.isPrivate) return false
   if (prev.whisperWith !== next.whisperWith) return false
+  if (prev.whisperThread !== next.whisperThread) return false
   if (prev.message.isEdited !== next.message.isEdited) return false
   if (prev.message.isRetracted !== next.message.isRetracted) return false
   if (prev.message.isOutgoing !== next.message.isOutgoing) return false
@@ -249,8 +249,8 @@ export const MessageBubble = memo(function MessageBubble({
   senderRole,
   senderAffiliation,
   senderOccupantJid,
-  isPrivate,
   whisperWith,
+  whisperThread,
   nickExtras,
   myReactions,
   onReaction,
@@ -322,13 +322,22 @@ export const MessageBubble = memo(function MessageBubble({
     ? (isHovered ? 'bg-fluux-hover' : '')
     : (hasKeyboardSelection ? '' : 'hover:bg-fluux-hover')
 
+  // Whisper thread (XEP-0045 §7.5): a same-counterpart private run renders as one
+  // bounded "private with X" container; the strip on the first row carries the label.
+  const inThread = !!whisperThread
+  const threadStart = whisperThread === 'start' || whisperThread === 'solo'
+  const threadEnd = whisperThread === 'end' || whisperThread === 'solo'
+  const outerRowClass = inThread
+    ? `group flex gap-4 -mx-4 px-4 transition-colors ${threadStart ? 'pt-3' : ''} ${threadEnd ? 'pb-1.5' : ''}`
+    : `group flex gap-4 ${hoverClass} -mx-4 px-4 py-0.5 transition-colors ${showAvatar ? 'pt-4' : ''}`
+
   return (
     <div
       data-message-id={message.id}
       data-message-from={senderName}
       data-message-time={formatTime(message.timestamp)}
       data-message-body={message.body || ''}
-      className={`group flex gap-4 ${hoverClass} -mx-4 px-4 py-0.5 transition-colors ${showAvatar ? 'pt-4' : ''}`}
+      className={outerRowClass}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
@@ -368,7 +377,13 @@ export const MessageBubble = memo(function MessageBubble({
       </div>
 
       {/* Content */}
-      <div className={`relative flex-1 min-w-0 ${isSelected ? 'bg-fluux-selection -my-0.5 py-0.5 -ms-2 ps-2 -me-4 pe-4 rounded-s' : ''}${isPrivate ? ' border-s-2 border-fluux-accent ps-2 -ms-2' : ''}`}>
+      <div className={`relative flex-1 min-w-0 ${isSelected ? 'bg-fluux-selection -my-0.5 py-0.5 -ms-2 ps-2 -me-4 pe-4 rounded-s' : ''}${inThread ? ` bg-fluux-private-soft border-x border-fluux-private-border px-2.5 py-1 ${threadStart ? 'border-t rounded-t-lg' : ''} ${threadEnd ? 'border-b rounded-b-lg' : ''}` : ''}`}>
+        {threadStart && (
+          <div className="flex items-center gap-1.5 pb-1 text-xs font-medium text-fluux-private">
+            <Ear className="size-3.5 shrink-0" />
+            <span className="truncate">{t('rooms.whisperThread', { nick: whisperWith })}</span>
+          </div>
+        )}
         {/* Floating hover toolbar - hidden when user is composing or message is retracted */}
         {!message.isRetracted && (
           <MessageToolbar
@@ -412,14 +427,6 @@ export const MessageBubble = memo(function MessageBubble({
             <span className="text-xs text-fluux-muted">
               {formatTime(message.timestamp)}
             </span>
-            {isPrivate && (
-              <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-fluux-accent/15 text-fluux-accent font-medium">
-                <Ear className="size-3" />
-                {message.isOutgoing
-                  ? t('rooms.whisperTo', { nick: whisperWith })
-                  : t('rooms.whisperFrom', { nick: whisperWith })}
-              </span>
-            )}
             {message.securityContext && (
               <Tooltip content={formatSecurityTooltip(t, message.securityContext)} position="top" triggerMode="click">
                 <span
