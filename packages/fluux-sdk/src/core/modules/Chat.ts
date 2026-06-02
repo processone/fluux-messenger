@@ -244,7 +244,8 @@ export class Chat extends BaseModule {
     // are out of scope for whispers in v1.
     if (isWhisper) {
       if (body || stanza.getChild('x', NS_OOB)) {
-        const whisper = this.processRoomWhisper(stanza, from!, bareFrom, body || '', isCarbonCopy, isSentCarbon)
+        // from is non-null here: isWhisper guards !!from
+        const whisper = this.processRoomWhisper(stanza, from!, bareFrom, body || '', isSentCarbon)
         if (whisper && !isSentCarbon) {
           this.deps.emit('message', whisper as unknown as Message)
         }
@@ -2077,7 +2078,6 @@ export class Chat extends BaseModule {
     from: string,
     bareFrom: string,
     body: string,
-    _isCarbonCopy: boolean,
     isSentCarbon: boolean
   ): RoomMessage | null {
     const roomJid = bareFrom
@@ -2112,10 +2112,15 @@ export class Chat extends BaseModule {
       isPrivate: true,
       whisperWith,
       noStore: true,
+      ...(parsed.isDelayed && { isDelayed: true }),
+      ...(parsed.noStyling && { noStyling: true }),
+      ...(parsed.replyTo && { replyTo: parsed.replyTo }),
       ...(parsed.attachment && { attachment: parsed.attachment }),
       ...(occupantId && { occupantId }),
     }
 
+    // Design decision (spec §11): an incoming whisper is treated like a mention
+    // for notification purposes — it bumps the room's mention counter.
     this.deps.emitSDK('room:whisper', {
       roomJid,
       message,

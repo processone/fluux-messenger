@@ -178,6 +178,7 @@ describe('MUC Whispers', () => {
 
       mockXmppClientInstance._emit('stanza', stanza)
 
+      expect(mockStores.room.getRoom).toHaveBeenCalledWith('contact@example.com')
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', expect.anything())
       expect(emitSDKSpy).not.toHaveBeenCalledWith('room:whisper', expect.anything())
     })
