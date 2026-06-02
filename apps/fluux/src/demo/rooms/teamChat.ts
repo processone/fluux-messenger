@@ -190,10 +190,10 @@ export const TEAM_ROOM_MESSAGES: RoomMessage[] = [
       '4️⃣': ['James', 'Liam'],
     },
   },
-  // Whispers (XEP-0045 §7.5 private messages). A public message immediately
-  // followed by a whisper from the SAME sender exercises the grouping boundary
-  // that keeps the "Private to X" badge visible (without it the whisper would be
-  // silently folded into the public message's header). Plus one incoming whisper.
+  // Whispers (XEP-0045 §7.5 private messages). A public message followed by a
+  // private back-and-forth with the SAME person renders as one bounded "Private
+  // with Emma" thread — exercising whisperThreadPosition() across alternating
+  // senders. The leading public message breaks the run so the thread starts cleanly.
   {
     type: 'groupchat', id: 'demo-room-whisper-pub', from: `${ROOM_JID}/${SELF_NICK}`, nick: SELF_NICK,
     body: 'I\'ll go through the remaining review tasks this afternoon 👍',
@@ -209,6 +209,12 @@ export const TEAM_ROOM_MESSAGES: RoomMessage[] = [
     type: 'groupchat', id: 'demo-room-whisper-in', from: `${ROOM_JID}/Emma`, nick: 'Emma',
     body: 'On it — I\'ll verify his access and ping you privately if anything looks off.',
     timestamp: minutesAgo(9), isOutgoing: false, roomJid: ROOM_JID,
+    isPrivate: true, whisperWith: 'Emma',
+  },
+  {
+    type: 'groupchat', id: 'demo-room-whisper-out2', from: `${ROOM_JID}/${SELF_NICK}`, nick: SELF_NICK,
+    body: 'Perfect, thanks. Let\'s keep this between us until the migration lands.',
+    timestamp: minutesAgo(8.5), isOutgoing: true, roomJid: ROOM_JID,
     isPrivate: true, whisperWith: 'Emma',
   },
 ]

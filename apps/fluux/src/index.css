@@ -100,6 +100,14 @@
   --fluux-color-blue-rgb: 0, 168, 252;
   --fluux-color-purple-rgb: 88, 101, 242;
 
+  /* Private (whisper, XEP-0045 §7.5) — a reserved violet, distinct from the brand
+     accent and from the E2EE lock palette, so private messages read as their own
+     category rather than encryption. */
+  --fluux-private: hsl(270, 80%, 80%);
+  --fluux-private-soft: hsla(270, 75%, 66%, 0.15);
+  --fluux-private-border: hsla(270, 75%, 72%, 0.45);
+  --fluux-private-hover: hsla(270, 75%, 66%, 0.22);
+
   /* Typography primitives */
   --fluux-font-ui: 'Inter', system-ui, sans-serif;
   --fluux-font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
@@ -300,6 +308,12 @@
   --fluux-color-blue: #0969da;
   --fluux-color-blue-rgb: 9, 105, 218;
   --fluux-color-gray: #9ca3af;
+
+  /* Private (whisper) — deeper violet for contrast on light backgrounds */
+  --fluux-private: hsl(270, 70%, 48%);
+  --fluux-private-soft: hsla(270, 70%, 55%, 0.12);
+  --fluux-private-border: hsla(270, 60%, 50%, 0.40);
+  --fluux-private-hover: hsla(270, 70%, 55%, 0.18);
 
   /* Semantic overrides where cascade from foundation isn't sufficient */
   --fluux-bg-secondary: #d8dadf;

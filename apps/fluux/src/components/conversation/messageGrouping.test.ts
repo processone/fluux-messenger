@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { groupMessagesByDate, shouldShowAvatar, scrollToMessage, isActionMessage } from './messageGrouping'
+import { groupMessagesByDate, shouldShowAvatar, whisperThreadPosition, scrollToMessage, isActionMessage } from './messageGrouping'
 
 // Mock CSS.escape since it's not available in JSDOM
 // This implementation matches the browser's CSS.escape behavior
@@ -287,6 +287,50 @@ describe('shouldShowAvatar', () => {
 
       expect(shouldShowAvatar(messages, 1)).toBe(false)
     })
+  })
+})
+
+describe('whisperThreadPosition', () => {
+  // helpers: w = whisper with a counterpart; pub = public message
+  const w = (id: string, whisperWith: string, from = 'alice') => ({
+    id, timestamp: new Date('2024-01-15T10:00:00'), from, isPrivate: true, whisperWith,
+  })
+  const pub = (id: string, from = 'alice') => ({
+    id, timestamp: new Date('2024-01-15T10:00:00'), from,
+  })
+
+  it('returns null for a public message', () => {
+    expect(whisperThreadPosition([pub('1')], 0)).toBeNull()
+  })
+
+  it('marks a lone whisper between public messages as solo', () => {
+    const msgs = [pub('1'), w('2', 'bob'), pub('3')]
+    expect(whisperThreadPosition(msgs, 1)).toBe('solo')
+  })
+
+  it('gathers a same-counterpart run across alternating senders (start/middle/end)', () => {
+    const msgs = [pub('0'), w('1', 'emma', 'emma'), w('2', 'emma', 'you'), w('3', 'emma', 'emma')]
+    expect(whisperThreadPosition(msgs, 1)).toBe('start')
+    expect(whisperThreadPosition(msgs, 2)).toBe('middle')
+    expect(whisperThreadPosition(msgs, 3)).toBe('end')
+  })
+
+  it('breaks the run when a public message interrupts', () => {
+    const msgs = [w('1', 'emma'), pub('2'), w('3', 'emma')]
+    expect(whisperThreadPosition(msgs, 0)).toBe('solo')
+    expect(whisperThreadPosition(msgs, 2)).toBe('solo')
+  })
+
+  it('breaks the run when the counterpart changes', () => {
+    const msgs = [w('1', 'emma'), w('2', 'bob')]
+    expect(whisperThreadPosition(msgs, 0)).toBe('solo')
+    expect(whisperThreadPosition(msgs, 1)).toBe('solo')
+  })
+
+  it('marks a two-message same-counterpart run as start then end', () => {
+    const msgs = [w('1', 'emma', 'emma'), w('2', 'emma', 'you')]
+    expect(whisperThreadPosition(msgs, 0)).toBe('start')
+    expect(whisperThreadPosition(msgs, 1)).toBe('end')
   })
 })
 
