@@ -132,6 +132,16 @@ export interface RoomMessage extends Omit<BaseMessage, 'type'> {
    * Survives nick changes and works in anonymous rooms.
    */
   occupantId?: string
+  /**
+   * XEP-0045 §7.5: true if this is a private message ("whisper") exchanged
+   * with a single room occupant rather than a public room message.
+   */
+  isPrivate?: boolean
+  /**
+   * Nick of the whisper counterpart: the recipient if outgoing, the sender
+   * if incoming. Always identifies the *remote* occupant.
+   */
+  whisperWith?: string
 }
 
 /**
