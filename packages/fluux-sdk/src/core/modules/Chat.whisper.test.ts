@@ -65,7 +65,10 @@ describe('MUC Whispers', () => {
       const room = createMockRoom('room@conference.example.com', { joined: true, nickname: 'me' })
       vi.mocked(mockStores.room.getRoom).mockReturnValue(room)
 
-      await xmppClient.chat.sendWhisper('room@conference.example.com', 'bob', 'psst hello')
+      const id = await xmppClient.chat.sendWhisper('room@conference.example.com', 'bob', 'psst hello')
+
+      expect(typeof id).toBe('string')
+      expect(id.length).toBeGreaterThan(0)
 
       expect(mockXmppClientInstance.send).toHaveBeenCalledTimes(1)
       const sent = mockXmppClientInstance.send.mock.calls[0][0]
@@ -82,6 +85,9 @@ describe('MUC Whispers', () => {
 
       const originId = sent.children.find((c: any) => c.name === 'origin-id')
       expect(originId).toBeDefined()
+
+      const noStore = sent.children.find((c: any) => c.name === 'no-store')
+      expect(noStore).toBeDefined()
     })
 
     it('emits room:whisper (not chat:message) for the outgoing whisper', async () => {
@@ -99,6 +105,7 @@ describe('MUC Whispers', () => {
           whisperWith: 'bob',
           noStore: true,
           body: 'psst hello',
+          originId: expect.any(String),
         }),
       }))
       expect(emitSDKSpy).not.toHaveBeenCalledWith('chat:message', expect.anything())

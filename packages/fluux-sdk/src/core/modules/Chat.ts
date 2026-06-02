@@ -889,10 +889,13 @@ export class Chat extends BaseModule {
       xml('active', { xmlns: NS_CHATSTATES }),
       xml('x', { xmlns: NS_MUC_USER }),
       createOriginIdElement(id),
+      xml('no-store', { xmlns: NS_HINTS }),
     )
     await this.deps.sendStanza(message)
 
-    const ourNick = this.deps.stores?.room.getRoom(roomJid)?.nickname || ''
+    const room = this.deps.stores?.room.getRoom(roomJid)
+    if (!room) logWarn(`sendWhisper: room ${roomJid} not found in store — sender nick will be empty`)
+    const ourNick = room?.nickname || ''
     const whisper: RoomMessage = {
       type: 'groupchat',
       id,
