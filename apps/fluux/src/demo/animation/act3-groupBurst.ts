@@ -7,26 +7,26 @@ import type { DemoAnimationStep } from '@fluux/sdk'
 import { DOMAIN, ROOM_JID } from '../constants'
 
 export const act3Steps: DemoAnimationStep[] = [
-  // Oliver starts typing a DM
+  // Olivia starts typing a DM
   {
     delayMs: 90_000,
     action: 'typing',
-    data: { conversationId: `oliver@${DOMAIN}`, jid: `oliver@${DOMAIN}`, isTyping: true },
+    data: { conversationId: `olivia@${DOMAIN}`, jid: `olivia@${DOMAIN}`, isTyping: true },
   },
-  // Oliver sends an image
+  // Olivia sends an image
   {
     delayMs: 93_000,
     action: 'stop-typing',
-    data: { conversationId: `oliver@${DOMAIN}`, jid: `oliver@${DOMAIN}`, isTyping: false },
+    data: { conversationId: `olivia@${DOMAIN}`, jid: `olivia@${DOMAIN}`, isTyping: false },
   },
   {
     delayMs: 93_100,
     action: 'message',
     data: {
       message: {
-        type: 'chat', id: 'demo-anim-oliver-img', from: `oliver@${DOMAIN}`,
+        type: 'chat', id: 'demo-anim-olivia-img', from: `olivia@${DOMAIN}`,
         body: 'Here\'s how the dark mode turned out — the contrast ratios are all passing now',
-        timestamp: new Date(), isOutgoing: false, conversationId: `oliver@${DOMAIN}`,
+        timestamp: new Date(), isOutgoing: false, conversationId: `olivia@${DOMAIN}`,
         attachment: {
           url: './demo/screenshot-chat-dark.png',
           name: 'chat-dark-mode.png',
@@ -80,14 +80,14 @@ export const act3Steps: DemoAnimationStep[] = [
       file: { name: 'performance-report.png', size: 450_000, mediaType: 'image/png' },
     },
   },
-  // Oliver reacts to the uploaded file
+  // Olivia reacts to the uploaded file
   {
     delayMs: 125_000,
     action: 'chat-reaction',
     data: {
-      conversationId: `oliver@${DOMAIN}`,
-      messageId: 'demo-anim-oliver-img',
-      reactorJid: `oliver@${DOMAIN}`,
+      conversationId: `olivia@${DOMAIN}`,
+      messageId: 'demo-anim-olivia-img',
+      reactorJid: `olivia@${DOMAIN}`,
       emojis: ['🔥'],
     },
   },

@@ -250,6 +250,44 @@ describe('shouldShowAvatar', () => {
       expect(shouldShowAvatar(messages, 1)).toBe(false)
     })
   })
+
+  describe('whisper context grouping', () => {
+    it('breaks the group when a public message is followed by a whisper', () => {
+      const messages = [
+        { id: '1', timestamp: new Date('2024-01-15T10:00:00'), from: 'alice' },
+        { id: '2', timestamp: new Date('2024-01-15T10:01:00'), from: 'alice', isPrivate: true, whisperWith: 'bob' },
+      ]
+
+      expect(shouldShowAvatar(messages, 1)).toBe(true)
+    })
+
+    it('breaks the group when a whisper is followed by a public message', () => {
+      const messages = [
+        { id: '1', timestamp: new Date('2024-01-15T10:00:00'), from: 'alice', isPrivate: true, whisperWith: 'bob' },
+        { id: '2', timestamp: new Date('2024-01-15T10:01:00'), from: 'alice' },
+      ]
+
+      expect(shouldShowAvatar(messages, 1)).toBe(true)
+    })
+
+    it('breaks the group when the whisper counterpart changes', () => {
+      const messages = [
+        { id: '1', timestamp: new Date('2024-01-15T10:00:00'), from: 'alice', isPrivate: true, whisperWith: 'bob' },
+        { id: '2', timestamp: new Date('2024-01-15T10:01:00'), from: 'alice', isPrivate: true, whisperWith: 'charlie' },
+      ]
+
+      expect(shouldShowAvatar(messages, 1)).toBe(true)
+    })
+
+    it('keeps the group for consecutive whispers to the same counterpart within 5 minutes', () => {
+      const messages = [
+        { id: '1', timestamp: new Date('2024-01-15T10:00:00'), from: 'alice', isPrivate: true, whisperWith: 'bob' },
+        { id: '2', timestamp: new Date('2024-01-15T10:01:00'), from: 'alice', isPrivate: true, whisperWith: 'bob' },
+      ]
+
+      expect(shouldShowAvatar(messages, 1)).toBe(false)
+    })
+  })
 })
 
 describe('scrollToMessage', () => {

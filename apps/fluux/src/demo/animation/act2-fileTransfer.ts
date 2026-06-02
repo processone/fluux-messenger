@@ -42,14 +42,14 @@ export const act2Steps: DemoAnimationStep[] = [
       incrementUnread: true,
     },
   },
-  // Oliver reacts with party emoji
+  // Olivia reacts with party emoji
   {
     delayMs: 63_000,
     action: 'room-reaction',
     data: {
       roomJid: ROOM_JID,
       messageId: 'demo-anim-james-fix',
-      reactorNick: 'Oliver',
+      reactorNick: 'Olivia',
       emojis: ['🎉'],
     },
   },

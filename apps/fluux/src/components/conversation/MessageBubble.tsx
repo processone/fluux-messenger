@@ -6,7 +6,7 @@
  */
 import { useState, useMemo, memo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { CornerUpRight, AlertCircle, RefreshCw, Lock, ShieldAlert } from 'lucide-react'
+import { CornerUpRight, AlertCircle, RefreshCw, Lock, ShieldAlert, Ear } from 'lucide-react'
 import { formatMessagePreview, formatXMPPError, type BaseMessage, type MentionReference, type Contact, type ContactIdentity, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
 import { Avatar } from '../Avatar'
 import { AvatarLightbox } from '../AvatarLightbox'
@@ -414,7 +414,7 @@ export const MessageBubble = memo(function MessageBubble({
             </span>
             {isPrivate && (
               <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-fluux-accent/15 text-fluux-accent font-medium">
-                <Lock className="size-3" />
+                <Ear className="size-3" />
                 {message.isOutgoing
                   ? t('rooms.whisperTo', { nick: whisperWith })
                   : t('rooms.whisperFrom', { nick: whisperWith })}

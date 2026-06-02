@@ -5,7 +5,7 @@ import { DOMAIN, SELF_JID, SELF_NICK, DESIGN_ROOM_JID } from '../constants'
 
 export const DESIGN_ROOM_MESSAGES: RoomMessage[] = [
   {
-    type: 'groupchat', id: 'demo-design-1', from: `${DESIGN_ROOM_JID}/Oliver`, nick: 'Oliver',
+    type: 'groupchat', id: 'demo-design-1', from: `${DESIGN_ROOM_JID}/Olivia`, nick: 'Olivia',
     body: 'Let\'s review the component library before the sprint ends', timestamp: hoursAgo(5), isOutgoing: false, roomJid: DESIGN_ROOM_JID,
   },
   {
@@ -22,10 +22,10 @@ export const DESIGN_ROOM_MESSAGES: RoomMessage[] = [
     type: 'groupchat', id: 'demo-design-4', from: `${DESIGN_ROOM_JID}/Emma`, nick: 'Emma',
     body: 'AA for body text, AAA for headings and buttons — all passing',
     timestamp: hoursAgo(4.3), isOutgoing: false, roomJid: DESIGN_ROOM_JID,
-    reactions: { '✨': [SELF_NICK, 'Oliver'] },
+    reactions: { '✨': [SELF_NICK, 'Olivia'] },
   },
   {
-    type: 'groupchat', id: 'demo-design-5', from: `${DESIGN_ROOM_JID}/Oliver`, nick: 'Oliver',
+    type: 'groupchat', id: 'demo-design-5', from: `${DESIGN_ROOM_JID}/Olivia`, nick: 'Olivia',
     body: 'The typography scale is using a 1.25 ratio — works well for both mobile and desktop',
     timestamp: hoursAgo(4), isOutgoing: false, roomJid: DESIGN_ROOM_JID,
   },
@@ -35,7 +35,7 @@ export const DESIGN_ROOM_MESSAGES: RoomMessage[] = [
     timestamp: hoursAgo(3.5), isOutgoing: false, roomJid: DESIGN_ROOM_JID,
   },
   {
-    type: 'groupchat', id: 'demo-design-7', from: `${DESIGN_ROOM_JID}/Oliver`, nick: 'Oliver',
+    type: 'groupchat', id: 'demo-design-7', from: `${DESIGN_ROOM_JID}/Olivia`, nick: 'Olivia',
     body: 'Already drafted — icons use a 24px grid with 2px stroke weight for consistency',
     timestamp: hoursAgo(3.2), isOutgoing: false, roomJid: DESIGN_ROOM_JID,
     replyTo: { id: 'demo-design-6', to: `${DESIGN_ROOM_JID}/Mia`, fallbackBody: 'Love the progress! Can we add a section on icon guidelines to the style guide?' },
@@ -47,14 +47,14 @@ export const DESIGN_ROOM_MESSAGES: RoomMessage[] = [
     isRetracted: true,
     retractedAt: hoursAgo(3.05),
     isModerated: true,
-    moderatedBy: 'Oliver',
+    moderatedBy: 'Olivia',
     moderationReason: 'Contained draft credentials — removed for security',
   },
   {
     type: 'groupchat', id: 'demo-design-8', from: `${DESIGN_ROOM_JID}/${SELF_NICK}`, nick: SELF_NICK,
     body: 'The spacing system looks clean. Let\'s make sure the border radius tokens match across all components',
     timestamp: hoursAgo(3), isOutgoing: true, roomJid: DESIGN_ROOM_JID,
-    reactions: { '👍': ['Oliver', 'Emma'] },
+    reactions: { '👍': ['Olivia', 'Emma'] },
   },
   {
     type: 'groupchat', id: 'demo-design-9', from: `${DESIGN_ROOM_JID}/Emma`, nick: 'Emma',
@@ -82,7 +82,7 @@ export const DESIGN_ROOM_MESSAGES: RoomMessage[] = [
       settings: { allowMultiple: false, hideResultsBeforeVote: true },
     },
     reactions: {
-      '1️⃣': ['Oliver'],
+      '1️⃣': ['Olivia'],
       '3️⃣': ['Emma'],
     },
   },
@@ -109,7 +109,7 @@ export function getDesignRoom(): DemoRoomData {
     occupants: [
       { nick: SELF_NICK, jid: SELF_JID, affiliation: 'owner', role: 'moderator' },
       { nick: 'Emma', jid: `emma@${DOMAIN}`, affiliation: 'member', role: 'participant' },
-      { nick: 'Oliver', jid: `oliver@${DOMAIN}`, affiliation: 'admin', role: 'moderator' },
+      { nick: 'Olivia', jid: `olivia@${DOMAIN}`, affiliation: 'admin', role: 'moderator' },
       { nick: 'Mia', jid: `mia@${DOMAIN}`, affiliation: 'member', role: 'participant' },
     ],
     messages: DESIGN_ROOM_MESSAGES,

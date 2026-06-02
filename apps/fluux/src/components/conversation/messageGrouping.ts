@@ -26,6 +26,10 @@ interface GroupableMessage {
   timestamp: Date
   from: string
   securityContext?: GroupingSecurityContext
+  /** XEP-0045 §7.5: true if this is a private message ("whisper"). */
+  isPrivate?: boolean
+  /** Nick of the whisper counterpart (recipient if outgoing, sender if incoming). */
+  whisperWith?: string
 }
 
 /**
@@ -40,6 +44,19 @@ function sameSecurityContext(
   if (!a && !b) return true
   if (!a || !b) return false
   return a.protocolId === b.protocolId && a.trust === b.trust
+}
+
+/**
+ * Two messages share a group only if their whisper context matches: both public,
+ * or both whispers with the same counterpart. A public↔whisper transition (or a
+ * whisper-to-A↔whisper-to-B switch) forces a group break so the whisper badge
+ * re-shows on the new header — without this, a whisper nestled after a public
+ * message from the same sender would render without any "private to X" cue.
+ */
+function sameWhisperContext(a: GroupableMessage, b: GroupableMessage): boolean {
+  if (!a.isPrivate && !b.isPrivate) return true
+  if (!a.isPrivate || !b.isPrivate) return false
+  return a.whisperWith === b.whisperWith
 }
 
 /**
@@ -97,6 +114,8 @@ export function groupMessagesByDate<T extends GroupableMessage>(messages: T[]): 
  *   forces a group break so the lock indicator re-shows — without this, a
  *   sender's untrusted message nestled between trusted ones would render
  *   without any security-state cue).
+ * - Whisper context differs from previous (public↔private or a different
+ *   whisper counterpart forces a group break so the whisper badge re-shows).
  */
 export function shouldShowAvatar<T extends GroupableMessage>(messages: T[], index: number): boolean {
   if (index === 0) return true
@@ -109,6 +128,9 @@ export function shouldShowAvatar<T extends GroupableMessage>(messages: T[], inde
 
   // Show avatar if security context changed (encryption added/removed/trust shift)
   if (!sameSecurityContext(current.securityContext, previous.securityContext)) return true
+
+  // Show avatar if whisper context changed (public↔private, or different counterpart)
+  if (!sameWhisperContext(current, previous)) return true
 
   // Show avatar if more than 5 minutes apart
   const timeDiff = current.timestamp.getTime() - previous.timestamp.getTime()

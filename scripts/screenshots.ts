@@ -168,7 +168,7 @@ test('07 — Admin User List (dark)', async ({ page }) => {
           { jid: 'emma@fluux.chat', username: 'emma', isOnline: true },
           { jid: 'james@fluux.chat', username: 'james', isOnline: true },
           { jid: 'sophia@fluux.chat', username: 'sophia', isOnline: true },
-          { jid: 'oliver@fluux.chat', username: 'oliver', isOnline: true },
+          { jid: 'olivia@fluux.chat', username: 'olivia', isOnline: true },
           { jid: 'mia@fluux.chat', username: 'mia', isOnline: false },
           { jid: 'liam@fluux.chat', username: 'liam', isOnline: true },
           { jid: 'ava@fluux.chat', username: 'ava', isOnline: true },

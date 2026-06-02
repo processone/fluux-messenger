@@ -10,7 +10,7 @@ import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
 import { Avatar, getConsistentTextColor } from './Avatar'
 import { format } from 'date-fns'
-import { Shield, Crown, Upload, Loader2, LogIn, AlertCircle, Users, MessageCircle, EyeOff, User, Settings, Lock, X } from 'lucide-react'
+import { Shield, Crown, Upload, Loader2, LogIn, AlertCircle, Users, MessageCircle, EyeOff, User, Settings, Ear, X } from 'lucide-react'
 import { ChristmasAnimation } from './ChristmasAnimation'
 import { TextInput, TextArea } from './ui/TextInput'
 import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment, MESSAGE_INPUT_BASE_CLASSES, MESSAGE_INPUT_OVERLAY_CLASSES } from './MessageComposer'
@@ -566,7 +566,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             {nickMenuTarget !== activeRoom.nickname && (
               <MenuButton
                 onClick={() => { enterWhisperMode(nickMenuTarget!); nickMenu.close() }}
-                icon={<Lock className="size-4" />}
+                icon={<Ear className="size-4" />}
                 label={t('rooms.whisper')}
               />
             )}
@@ -1847,7 +1847,7 @@ function RoomMessageInput({
       {whisperTarget && (
         <div className="flex items-center justify-between gap-2 px-3 py-1.5 mb-1 rounded bg-fluux-accent/10 text-sm text-fluux-accent">
           <span className="inline-flex items-center gap-1.5 min-w-0">
-            <Lock className="size-4 shrink-0" />
+            <Ear className="size-4 shrink-0" />
             <span className="truncate">{t('rooms.whisperingTo', { nick: whisperTarget })}</span>
           </span>
           <button

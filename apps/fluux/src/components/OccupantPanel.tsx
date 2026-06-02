@@ -24,7 +24,7 @@ import { useToastStore } from '@/stores/toastStore'
 import { getTranslatedShowText } from '@/utils/presence'
 import { OccupantModerationModal } from './OccupantModerationModal'
 import { UserInfoPopover } from './conversation/UserInfoPopover'
-import { Shield, Crown, UserCheck, X, ArrowLeft, MessageCircle, EyeOff, User, Settings, Lock } from 'lucide-react'
+import { Shield, Crown, UserCheck, X, ArrowLeft, MessageCircle, EyeOff, User, Settings, Ear } from 'lucide-react'
 
 // Type for grouped occupants (multiple connections from same bare JID)
 interface GroupedOccupant {
@@ -631,7 +631,7 @@ export function OccupantPanel({
           {onWhisper && (
             <MenuButton
               onClick={() => { onWhisper(menuTarget.primaryNick); menu.close() }}
-              icon={<Lock className="size-4" />}
+              icon={<Ear className="size-4" />}
               label={t('rooms.whisper')}
             />
           )}

@@ -57,7 +57,7 @@ export const act5Steps: DemoAnimationStep[] = [
         isRetracted: true,
         retractedAt: new Date(),
         isModerated: true,
-        moderatedBy: 'Oliver',
+        moderatedBy: 'Olivia',
         moderationReason: 'Contained sensitive config values',
       },
     },

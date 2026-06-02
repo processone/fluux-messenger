@@ -10,7 +10,7 @@ export function getDemoActivityEvents(): ActivityEventInput[] {
       kind: 'actionable',
       timestamp: new Date(Date.now() - 26 * 3_600_000),
       resolution: 'accepted',
-      payload: { type: 'subscription-request', from: `oliver@${DOMAIN}` },
+      payload: { type: 'subscription-request', from: `olivia@${DOMAIN}` },
     },
     // Yesterday: joined a room from invitation
     {
@@ -52,7 +52,7 @@ export function getDemoActivityEvents(): ActivityEventInput[] {
         messageId: 'demo-room-6',
         reactors: [
           { reactorJid: 'Emma', emojis: ['✅'] },
-          { reactorJid: 'Oliver', emojis: ['✅'] },
+          { reactorJid: 'Olivia', emojis: ['✅'] },
         ],
         messagePreview: "Great work everyone. Let's aim to wrap up the remaining tasks by end of week",
       },

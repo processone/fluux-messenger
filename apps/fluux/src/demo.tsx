@@ -144,7 +144,7 @@ adminStore.getState().setCommands([
 ])
 adminStore.getState().setUsers([
   'you@fluux.chat', 'emma@fluux.chat', 'james@fluux.chat',
-  'sophia@fluux.chat', 'oliver@fluux.chat', 'mia@fluux.chat',
+  'sophia@fluux.chat', 'olivia@fluux.chat', 'mia@fluux.chat',
   'liam@fluux.chat', 'ava@fluux.chat', 'alex@fluux.chat',
 ])
 adminStore.getState().setUserList({
@@ -152,7 +152,7 @@ adminStore.getState().setUserList({
     { jid: 'emma@fluux.chat', username: 'emma', isOnline: true },
     { jid: 'james@fluux.chat', username: 'james', isOnline: true },
     { jid: 'sophia@fluux.chat', username: 'sophia', isOnline: true },
-    { jid: 'oliver@fluux.chat', username: 'oliver', isOnline: true },
+    { jid: 'olivia@fluux.chat', username: 'olivia', isOnline: true },
     { jid: 'mia@fluux.chat', username: 'mia', isOnline: false },
     { jid: 'liam@fluux.chat', username: 'liam', isOnline: true },
     { jid: 'ava@fluux.chat', username: 'ava', isOnline: true },

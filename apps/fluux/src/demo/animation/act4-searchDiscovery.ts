@@ -63,7 +63,7 @@ export const act4Steps: DemoAnimationStep[] = [
     data: {
       roomJid: ROOM_JID,
       messageId: 'demo-anim-poll',
-      reactorNick: 'Oliver',
+      reactorNick: 'Olivia',
       emojis: ['2️⃣'],
     },
   },
@@ -102,14 +102,14 @@ export const act4Steps: DemoAnimationStep[] = [
       },
     },
   },
-  // Oliver mentions @You in Team Chat
+  // Olivia mentions @You in Team Chat
   {
     delayMs: 170_000,
     action: 'room-message',
     data: {
       roomJid: ROOM_JID,
       message: {
-        type: 'groupchat', id: 'demo-anim-oliver-mention', from: `${ROOM_JID}/Oliver`, nick: 'Oliver',
+        type: 'groupchat', id: 'demo-anim-olivia-mention', from: `${ROOM_JID}/Olivia`, nick: 'Olivia',
         body: `@${SELF_NICK} can you review the PR for the icon update? I tagged you on GitHub`,
         timestamp: new Date(), isOutgoing: false, roomJid: ROOM_JID,
         mentions: [{ jid: SELF_JID, nick: SELF_NICK }],

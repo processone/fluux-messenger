@@ -35,12 +35,12 @@ export const DEMO_CONTACTS: Contact[] = [
     avatar: `${AVATAR_BASE}/avatar-sophia.webp`,
   },
   {
-    jid: `oliver@${DOMAIN}`,
-    name: 'Oliver Park',
+    jid: `olivia@${DOMAIN}`,
+    name: 'Olivia Park',
     presence: 'online',
     subscription: 'both',
     groups: ['Design'],
-    avatar: `${AVATAR_BASE}/avatar-oliver.webp`,
+    avatar: `${AVATAR_BASE}/avatar-olivia.webp`,
   },
   {
     jid: `mia@${DOMAIN}`,
@@ -74,7 +74,7 @@ export const DEMO_PRESENCES: DemoPresence[] = [
   { fullJid: `emma@${DOMAIN}/desktop`, show: null, priority: 5, client: 'Fluux' },
   { fullJid: `james@${DOMAIN}/mobile`, show: 'away', priority: 0, statusMessage: 'In a meeting until 3pm', client: 'Fluux' },
   { fullJid: `sophia@${DOMAIN}/laptop`, show: 'dnd', priority: 5, statusMessage: 'Deep work — ping me only if urgent', client: 'Fluux' },
-  { fullJid: `oliver@${DOMAIN}/desktop`, show: null, priority: 5, client: 'Fluux' },
+  { fullJid: `olivia@${DOMAIN}/desktop`, show: null, priority: 5, client: 'Fluux' },
   { fullJid: `liam@${DOMAIN}/desktop`, show: null, priority: 5, client: 'Fluux' },
   { fullJid: `ava@${DOMAIN}/laptop`, show: 'away', priority: 5, statusMessage: 'Roadmap review — back at 4', client: 'Fluux' },
 ]

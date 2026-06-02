@@ -63,7 +63,7 @@ export const EMMA_MESSAGES: Message[] = [
     },
   },
   {
-    type: 'chat', id: 'demo-emma-8', from: conv, body: 'Will do! Also, Oliver mentioned he has some icon suggestions',
+    type: 'chat', id: 'demo-emma-8', from: conv, body: 'Will do! Also, Olivia mentioned she has some icon suggestions',
     timestamp: minutesAgo(8), isOutgoing: false, conversationId: conv,
     replyTo: { id: 'demo-emma-5', fallbackBody: 'Perfect, let me know when it\'s ready for review' },
   },
