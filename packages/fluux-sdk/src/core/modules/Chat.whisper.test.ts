@@ -165,6 +165,56 @@ describe('MUC Whispers', () => {
       expect(emitSDKSpy).not.toHaveBeenCalledWith('room:message', expect.anything())
     })
 
+    it('processes a sent-carbon wrapping a whisper with isOutgoing:true', async () => {
+      await connectClient()
+      const room = createMockRoom('room@conference.example.com', { joined: true, nickname: 'me' })
+      vi.mocked(mockStores.room.getRoom).mockReturnValue(room)
+
+      // XEP-0280 sent carbon: outer message is from our own bare JID; the inner
+      // forwarded message is the whisper we sent to room/bob.
+      const carbonStanza = createMockElement('message', {
+        from: 'user@example.com',
+        to: 'user@example.com/other-device',
+      }, [
+        {
+          name: 'sent',
+          attrs: { xmlns: 'urn:xmpp:carbons:2' },
+          children: [
+            {
+              name: 'forwarded',
+              attrs: { xmlns: 'urn:xmpp:forward:0' },
+              children: [
+                {
+                  name: 'message',
+                  attrs: {
+                    from: 'room@conference.example.com/bob',
+                    to: 'user@example.com/primary',
+                    type: 'chat',
+                    id: 'wc-sent-1',
+                  },
+                  children: [
+                    { name: 'body', text: 'whisper carbon' },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ])
+
+      mockXmppClientInstance._emit('stanza', carbonStanza)
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:whisper', expect.objectContaining({
+        roomJid: 'room@conference.example.com',
+        message: expect.objectContaining({
+          isPrivate: true,
+          isOutgoing: true,
+          noStore: true,
+        }),
+      }))
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('chat:message', expect.anything())
+    })
+
     it('still routes type=chat from a non-joined JID to chat:message (no regression)', async () => {
       await connectClient()
       vi.mocked(mockStores.room.getRoom).mockReturnValue(undefined)

@@ -303,8 +303,10 @@ export function createStoreBindings(
     const stores = getStores()
     const ignoredUsers = stores.ignore.getIgnoredForRoom(roomJid)
     const nickToJidCache = stores.room.getRoom(roomJid)?.nickToJidCache
-    // Suppress notifications for ignored occupants
-    const doNotNotify = isMessageFromIgnoredUser(ignoredUsers, message, nickToJidCache)
+    // Suppress notifications for ignored occupants and replies quoting them
+    const doNotNotify =
+      isMessageFromIgnoredUser(ignoredUsers, message, nickToJidCache) ||
+      isReplyToIgnoredUser(ignoredUsers, message.replyTo, nickToJidCache)
     // Whisper is already noStore — addMessage appends to runtime only.
     stores.room.addMessage(roomJid, message, {
       incrementUnread: !!incrementUnread && !doNotNotify,

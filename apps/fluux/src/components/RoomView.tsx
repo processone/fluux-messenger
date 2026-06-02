@@ -263,6 +263,19 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   const pendingAttachmentRef = useRef(pendingAttachment)
   pendingAttachmentRef.current = pendingAttachment
 
+  // Stable callback that clears any staged compose state before entering whisper
+  // mode. Whispers are text-only so a staged reply, edit, or pending attachment
+  // must be discarded to avoid showing conflicting UI (banner + attachment preview).
+  const enterWhisperMode = useCallback((nick: string) => {
+    setReplyingTo(null)
+    setEditingMessage(null)
+    if (pendingAttachmentRef.current?.previewUrl) {
+      URL.revokeObjectURL(pendingAttachmentRef.current.previewUrl)
+    }
+    setPendingAttachment(null)
+    setWhisperTarget(nick)
+  }, [])
+
   // Clear reply/edit/whisper/pending attachment state when room changes
   // Note: scroll position is managed by MessageList component
   useEffect(() => {
@@ -502,7 +515,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
           ownAvatar={ownAvatar}
           onClose={handleCloseOccupants}
           onStartChat={onStartChat}
-          onWhisper={(nick) => setWhisperTarget(nick)}
+          onWhisper={enterWhisperMode}
           onShowProfile={onShowProfile}
         />
       )}
@@ -552,7 +565,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             )}
             {nickMenuTarget !== activeRoom.nickname && (
               <MenuButton
-                onClick={() => { setWhisperTarget(nickMenuTarget); nickMenu.close() }}
+                onClick={() => { enterWhisperMode(nickMenuTarget!); nickMenu.close() }}
                 icon={<Lock className="size-4" />}
                 label={t('rooms.whisper')}
               />
