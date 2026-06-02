@@ -368,7 +368,7 @@ export const MessageBubble = memo(function MessageBubble({
       </div>
 
       {/* Content */}
-      <div className={`relative flex-1 min-w-0 ${isSelected ? 'bg-fluux-selection -my-0.5 py-0.5 -ms-2 ps-2 -me-4 pe-4 rounded-s' : ''} ${isPrivate ? 'border-s-2 border-fluux-accent ps-2 -ms-2' : ''}`}>
+      <div className={`relative flex-1 min-w-0 ${isSelected ? 'bg-fluux-selection -my-0.5 py-0.5 -ms-2 ps-2 -me-4 pe-4 rounded-s' : ''}${isPrivate ? ' border-s-2 border-fluux-accent ps-2 -ms-2' : ''}`}>
         {/* Floating hover toolbar - hidden when user is composing or message is retracted */}
         {!message.isRetracted && (
           <MessageToolbar
