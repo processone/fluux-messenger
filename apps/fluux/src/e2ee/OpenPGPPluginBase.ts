@@ -137,6 +137,42 @@ function publicKeyDataNodeFor(fingerprint: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Peer key localStorage cache
+// ---------------------------------------------------------------------------
+
+const PEER_KEY_CACHE_PREFIX = 'fluux:e2ee:peer-keys:'
+
+function peerKeyCacheKey(accountJid: string): string {
+  return `${PEER_KEY_CACHE_PREFIX}${accountJid}`
+}
+
+function loadPeerKeyCache(accountJid: string): Map<BareJID, KeyBundle> {
+  const map = new Map<BareJID, KeyBundle>()
+  try {
+    const raw = localStorage.getItem(peerKeyCacheKey(accountJid))
+    if (!raw) return map
+    const entries = JSON.parse(raw) as Array<[string, KeyBundle]>
+    for (const [jid, bundle] of entries) {
+      map.set(jid, bundle)
+    }
+  } catch { /* corrupt cache — start fresh */ }
+  return map
+}
+
+function savePeerKeyCache(accountJid: string, map: Map<BareJID, KeyBundle>): void {
+  try {
+    localStorage.setItem(
+      peerKeyCacheKey(accountJid),
+      JSON.stringify([...map.entries()]),
+    )
+  } catch { /* storage full or unavailable */ }
+}
+
+function clearPeerKeyCache(accountJid: string): void {
+  try { localStorage.removeItem(peerKeyCacheKey(accountJid)) } catch { /* */ }
+}
+
+// ---------------------------------------------------------------------------
 // Shared types
 // ---------------------------------------------------------------------------
 
@@ -431,6 +467,11 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     if (!ctx.account.jid) {
       throw new Error(`${this.pluginName()}: requires a logged-in account JID`)
     }
+    // Rehydrate peer key cache so keys are available before MAM arrives.
+    const cached = loadPeerKeyCache(ctx.account.jid)
+    for (const [jid, bundle] of cached) {
+      this.peerKeys.set(jid, bundle)
+    }
     try {
       await this.ensureIdentity()
     } catch (err) {
@@ -587,6 +628,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     if (accountJid) {
       await this.forgetAccount(accountJid).catch(() => {})
       clearBackedUpFingerprint(accountJid)
+      clearPeerKeyCache(accountJid)
     }
     this.ownBundle = null
     this.peerKeys.clear()
@@ -1465,13 +1507,21 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       }
       setPinnedPrimaryFp(peer, bundle.fingerprint)
       this.peerKeys.set(peer, bundle)
+      this.persistPeerKeyCache()
       return
     }
     if (pinnedFp === bundle.fingerprint) {
       this.peerKeys.set(peer, bundle)
+      this.persistPeerKeyCache()
       return
     }
     recordKeyChangeAlert(peer, pinnedFp, bundle.fingerprint)
+  }
+
+  private persistPeerKeyCache(): void {
+    if (this.ctx?.account.jid) {
+      savePeerKeyCache(this.ctx.account.jid, this.peerKeys)
+    }
   }
 
   async acceptPeerKeyChange(peer: BareJID, asVerified: boolean): Promise<void> {
