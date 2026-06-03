@@ -100,6 +100,46 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
     chatStore.getState().reset()
   })
 
+  describe('unsupported-encryption self-heal', () => {
+    it('clears encryptedPayload and sets unsupportedEncryption for stored OMEMO messages when no OMEMO plugin is registered', async () => {
+      // DummyPlaintextPlugin claims "urn:fluux:e2ee-dummy:0" — it does NOT
+      // claim OMEMO ("eu.siacs.conversations.axolotl"). So hasPlugins() is
+      // true but the OMEMO payload goes unclaimed → unsupported branch.
+      const OMEMO_PAYLOAD_XML = '<encrypted xmlns="eu.siacs.conversations.axolotl">cipher</encrypted>'
+      const FALLBACK_BODY = 'OMEMO fallback'
+
+      chatStore.getState().addConversation({
+        id: 'alice@example.com',
+        name: 'Alice',
+        type: 'chat',
+        lastMessage: undefined,
+        unreadCount: 0,
+      })
+      chatStore.getState().addMessage({
+        type: 'chat',
+        id: 'msg-omemo-unsupported',
+        conversationId: 'alice@example.com',
+        from: 'alice@example.com',
+        body: FALLBACK_BODY,
+        timestamp: new Date(),
+        isOutgoing: false,
+        encryptedPayload: OMEMO_PAYLOAD_XML,
+      })
+
+      await xmppClient.retryPendingDecrypts()
+
+      const messages = chatStore.getState().messages.get('alice@example.com') ?? []
+      const msg = messages.find((m) => m.id === 'msg-omemo-unsupported')
+
+      expect(msg?.encryptedPayload).toBeUndefined()
+      expect(msg?.unsupportedEncryption).toEqual({
+        namespace: 'eu.siacs.conversations.axolotl',
+        name: 'OMEMO',
+      })
+      expect(msg?.body).toBe(FALLBACK_BODY)
+    })
+  })
+
   describe('isSelfOutgoing flag propagation', () => {
     it('passes isSelfOutgoing=true to the plugin when the sender equals our own bare JID', async () => {
       // A message where from === own bare JID represents a sent carbon or MAM

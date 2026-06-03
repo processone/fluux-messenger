@@ -183,6 +183,18 @@ import { initSearchIndex, backfillFromMessageCache } from '../utils/searchIndex'
  *
  * @category Core
  */
+
+/**
+ * Result of a single deferred-decrypt attempt.
+ * - `decrypted`: plaintext recovered — update body/security/attachment, clear `encryptedPayload`.
+ * - `unsupported`: protocol we have no plugin for — clear `encryptedPayload`, tag `unsupportedEncryption`, keep body.
+ * - `pending`: still cannot decrypt (key locked / plugin not ready) — leave `encryptedPayload`.
+ */
+type RetryOutcome =
+  | { kind: 'decrypted'; body: string; securityContext?: MessageSecurityContext; attachment?: FileAttachment }
+  | { kind: 'unsupported'; info: { namespace: string; name: string } }
+  | { kind: 'pending' }
+
 export class XMPPClient {
   protected currentJid: string | null = null
   private storageAdapter?: StorageAdapter
@@ -1619,17 +1631,22 @@ export class XMPPClient {
       for (const [conversationId, messages] of chatMessages) {
         for (const msg of messages) {
           if (!msg.encryptedPayload) continue
-          const result = await this.retryDecryptSingle(
+          const outcome = await this.retryDecryptSingle(
             manager, msg.encryptedPayload, msg.from, conversationId,
           )
-          if (result) {
+          if (outcome.kind === 'decrypted') {
             chatBindings.updateMessage(conversationId, msg.id, {
-              body: result.body,
-              ...(result.securityContext && { securityContext: result.securityContext }),
-              ...(result.attachment && { attachment: result.attachment }),
+              body: outcome.body,
+              ...(outcome.securityContext && { securityContext: outcome.securityContext }),
+              ...(outcome.attachment && { attachment: outcome.attachment }),
               encryptedPayload: undefined,
             })
             decryptedCount++
+          } else if (outcome.kind === 'unsupported') {
+            chatBindings.updateMessage(conversationId, msg.id, {
+              encryptedPayload: undefined,
+              unsupportedEncryption: outcome.info,
+            })
           }
         }
       }
@@ -1639,17 +1656,22 @@ export class XMPPClient {
       for (const [roomJid, runtime] of roomRuntimes) {
         for (const msg of runtime.messages) {
           if (!msg.encryptedPayload) continue
-          const result = await this.retryDecryptSingle(
+          const outcome = await this.retryDecryptSingle(
             manager, msg.encryptedPayload, msg.from, roomJid,
           )
-          if (result) {
+          if (outcome.kind === 'decrypted') {
             roomBindings.updateMessage(roomJid, msg.id, {
-              body: result.body,
-              ...(result.securityContext && { securityContext: result.securityContext }),
-              ...(result.attachment && { attachment: result.attachment }),
+              body: outcome.body,
+              ...(outcome.securityContext && { securityContext: outcome.securityContext }),
+              ...(outcome.attachment && { attachment: outcome.attachment }),
               encryptedPayload: undefined,
             })
             decryptedCount++
+          } else if (outcome.kind === 'unsupported') {
+            roomBindings.updateMessage(roomJid, msg.id, {
+              encryptedPayload: undefined,
+              unsupportedEncryption: outcome.info,
+            })
           }
         }
       }
@@ -1666,7 +1688,8 @@ export class XMPPClient {
 
   /**
    * Attempt to decrypt a single serialized encrypted payload.
-   * @returns Decrypted content or `null` if decryption still fails.
+   * @returns `RetryOutcome` describing whether decryption succeeded, the
+   *   protocol is unsupported, or the message should remain pending.
    * @internal
    */
   private async retryDecryptSingle(
@@ -1674,7 +1697,7 @@ export class XMPPClient {
     encryptedPayloadXml: string,
     senderJid: string,
     peer: string,
-  ): Promise<{ body: string; securityContext?: MessageSecurityContext; attachment?: FileAttachment } | null> {
+  ): Promise<RetryOutcome> {
     try {
       // Parse the serialized encrypted element back into an Element
       const ltx = await import('ltx')
@@ -1693,14 +1716,22 @@ export class XMPPClient {
         stanza, manager, peer, 'archive',
         isSelfOutgoing ? { isSelfOutgoing: true } : undefined,
       )
+
+      // Protocol we have no plugin for (e.g. OMEMO): nothing to retry. Drop the
+      // encryptedPayload and tag the message so the already-stored fallback body
+      // renders with an "unsupported method" hint.
+      if (result.unsupportedEncryption) {
+        return { kind: 'unsupported', info: result.unsupportedEncryption }
+      }
+
       if (!result.attempted || result.encryptedPayloadXml) {
         // Still can't decrypt
-        return null
+        return { kind: 'pending' }
       }
 
       // Extract the decrypted body
       const body = stanza.getChildText('body')
-      if (!body) return null
+      if (!body) return { kind: 'pending' }
 
       // Extract attachment if present — parseOobData handles aesgcm:// URI
       // parsing (XEP-0454 key/IV extraction), XEP-0446 file metadata, and
@@ -1726,15 +1757,21 @@ export class XMPPClient {
 
       if (securityContext?.trust === 'rejected') {
         return {
+          kind: 'decrypted',
           body: '[Message rejected: invalid signature]',
           securityContext,
         }
       }
 
-      return { body, securityContext, attachment }
+      return {
+        kind: 'decrypted',
+        body,
+        ...(securityContext && { securityContext }),
+        ...(attachment && { attachment }),
+      }
     } catch (err) {
       logWarn(`E2EE deferred decrypt failed for message from ${senderJid}: ${err instanceof Error ? err.message : String(err)}`)
-      return null
+      return { kind: 'pending' }
     }
   }
 
@@ -1768,15 +1805,21 @@ export class XMPPClient {
     let updated = 0
     for (const msg of peerMessages) {
       if (msg.encryptedPayload) {
-        const result = await this.retryDecryptSingle(
+        const outcome = await this.retryDecryptSingle(
           manager, msg.encryptedPayload, msg.from, peer,
         )
-        if (result) {
+        if (outcome.kind === 'decrypted') {
           chatBindings.updateMessage(peer, msg.id, {
-            body: result.body,
-            ...(result.securityContext && { securityContext: result.securityContext }),
-            ...(result.attachment && { attachment: result.attachment }),
+            body: outcome.body,
+            ...(outcome.securityContext && { securityContext: outcome.securityContext }),
+            ...(outcome.attachment && { attachment: outcome.attachment }),
             encryptedPayload: undefined,
+          })
+          updated++
+        } else if (outcome.kind === 'unsupported') {
+          chatBindings.updateMessage(peer, msg.id, {
+            encryptedPayload: undefined,
+            unsupportedEncryption: outcome.info,
           })
           updated++
         }
