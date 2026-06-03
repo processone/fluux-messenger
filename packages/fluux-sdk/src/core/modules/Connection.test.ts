@@ -831,9 +831,13 @@ describe('XMPPClient Connection', () => {
       })
 
       const errorArg = vi.mocked(mockStores.connection.setError).mock.calls[0][0]
-      expect(errorArg).toBe(
-        'Connection failed: WebSocket closed (code: 1000, Bridge closed: stream-error host-unknown)'
-      )
+      // The relayed stream-error condition is surfaced as an actionable message
+      // (the connection host serves a different vhost than the JID domain),
+      // keeping the raw condition visible but dropping the transport noise.
+      expect(errorArg).not.toBeNull()
+      expect(errorArg).toContain('host-unknown')
+      expect(errorArg!.toLowerCase()).toContain('domain')
+      expect(errorArg).not.toContain('WebSocket closed')
     })
 
     it('should prefer discovered XEP-0156 WebSocket endpoint before proxy for domain server inputs', async () => {

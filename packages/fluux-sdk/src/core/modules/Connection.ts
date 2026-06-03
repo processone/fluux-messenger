@@ -56,6 +56,7 @@ import { invalidateFastTokenOnServer } from '../fastTokenInvalidation'
 import { buildUserAgentElement } from '../userAgent'
 import { ProxyManager } from './proxyManager'
 import { isConnectionTraceEnabled } from './connectionDiagnostics'
+import { humanizeStreamError } from './streamErrors'
 
 // Dev-only error logging (checks Vite dev mode, excludes test mode)
 const isDev = (() => {
@@ -663,16 +664,21 @@ export class Connection extends BaseModule {
       }
       logError('Connection error:', error.message)
       logErr(`Connection error: ${error.message}`)
+      // If the failure carries a relayed upstream stream-error condition (e.g.
+      // host-unknown, when the connection host serves a different vhost than the
+      // JID domain), surface that actionable cause instead of the raw transport
+      // message. Machine routing stays keyed on the original message.
+      const displayError = humanizeStreamError(error.message) ?? error.message
       // Signal machine: initial connection failed. The machine's `connecting`
       // state routes CONNECTION_ERROR either to terminal.initialFailure
       // (default), to reconnecting.waiting (when SET_RETRY_INITIAL was set
       // to true by the caller), or — if a CONFLICT/AUTH_ERROR fired
       // synchronously from the stream-error handler — the machine is
       // already in a terminal state and CONNECTION_ERROR is ignored.
-      this.sendMachineEvent({ type: 'CONNECTION_ERROR', error: error.message }, 'connect:connection-error')
+      this.sendMachineEvent({ type: 'CONNECTION_ERROR', error: displayError }, 'connect:connection-error')
       this.stores.console.addEvent(`Connection error: ${error.message}`, 'error')
       // Emit SDK event for connection error
-      this.deps.emitSDK('connection:status', { status: 'error', error: error.message })
+      this.deps.emitSDK('connection:status', { status: 'error', error: displayError })
       this.emit('error', error)
       // Decide whether to throw based on the machine's POST-event state.
       // If the machine is in reconnecting.* the retry loop owns the outcome
@@ -2142,8 +2148,14 @@ export class Connection extends BaseModule {
             && (proxyServer.startsWith('ws://127.0.0.1:') || proxyServer.startsWith('ws://[::1]:'))
           const isAbnormalClose = rawReason && typeof rawReason === 'object' && 'code' in rawReason
             && (rawReason as { code: number }).code === 1006
+          // A relayed upstream <stream:error> (e.g. host-unknown) carried in the
+          // bridge close reason is the real, actionable cause — surface it ahead
+          // of the local-proxy/transport fallbacks.
+          const streamErrorMessage = reason ? humanizeStreamError(reason) : null
           let errorMsg: string
-          if (isProxyMode && isAbnormalClose) {
+          if (streamErrorMessage) {
+            errorMsg = streamErrorMessage
+          } else if (isProxyMode && isAbnormalClose) {
             errorMsg = 'Connection failed: Unable to reach local proxy. If a firewall prompt appeared, allow the connection and try again.'
           } else if (reason) {
             errorMsg = `Connection failed: ${reason}`
