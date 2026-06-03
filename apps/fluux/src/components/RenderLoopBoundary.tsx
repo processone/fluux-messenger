@@ -39,11 +39,16 @@ export class RenderLoopBoundary extends Component<Props, State> {
     }
   }
 
-  static getDerivedStateFromError(error: Error): Partial<State> {
-    const isRenderLoop = error.message.includes('Render loop detected')
+  static getDerivedStateFromError(error: unknown): Partial<State> {
+    // A child can throw a non-Error value (a string, a plain object, a DOM
+    // event). Reading `.message` on those would throw *inside* the boundary,
+    // which makes React tear down the whole tree — a silent blank "freeze"
+    // with no recovery UI. Normalize to an Error first.
+    const normalized = error instanceof Error ? error : new Error(String(error))
+    const isRenderLoop = normalized.message.includes('Render loop detected')
     return {
       hasError: true,
-      error,
+      error: normalized,
       renderStats: isRenderLoop ? getRenderStats() : null,
       selectorHistory: isRenderLoop ? getSelectorHistory() : null,
       copyStatus: 'idle',
