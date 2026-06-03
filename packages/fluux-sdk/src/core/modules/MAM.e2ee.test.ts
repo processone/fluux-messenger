@@ -126,6 +126,51 @@ function makeHarness(options: {
 }
 
 /**
+ * Variant of makeHarness where getE2EEManager returns undefined.
+ * Used to test the no-manager early-return path in decryptArchiveEntryIfNeeded.
+ */
+function makeHarnessNoManager(jid: string): TestHarness {
+  const collectors = new Map<string, (stanza: Element) => void>()
+  let pendingResolve: ((value: Element) => void) | null = null
+  let pendingReady: (() => void) | null = null
+  const readyPromise = new Promise<void>((r) => {
+    pendingReady = r
+  })
+
+  const deps: ModuleDependencies = {
+    stores: null,
+    sendStanza: async () => {},
+    sendIQ: () =>
+      new Promise<Element>((resolve) => {
+        pendingResolve = resolve
+        pendingReady?.()
+      }),
+    getCurrentJid: () => jid,
+    emit: () => {},
+    emitSDK: () => {},
+    getXmpp: () => null,
+    getE2EEManager: () => null,
+    registerMAMCollector: (queryId, collector) => {
+      collectors.set(queryId, collector)
+      return () => collectors.delete(queryId)
+    },
+  }
+
+  const mam = new MAM(deps)
+  return {
+    mam,
+    collectors,
+    iqPending: () => readyPromise,
+    resolveNextIQ: (fin: Element) => {
+      if (!pendingResolve) throw new Error('No pending sendIQ')
+      const r = pendingResolve
+      pendingResolve = null
+      r(fin)
+    },
+  }
+}
+
+/**
  * Run a MAM 1:1 query, feed it a single archive entry, and return the
  * parsed messages. The harness stalls sendIQ so we can inject the entry
  * into the collector before the query resolves.
@@ -368,6 +413,87 @@ describe('MAM E2EE wiring', () => {
     // encryptedPayload should NOT be set — OMEMO was recognised as unsupported,
     // not stashed for retry (that only happens when hasPlugins() is false).
     expect((msg as { encryptedPayload?: unknown }).encryptedPayload).toBeUndefined()
+  })
+
+  describe('no E2EE manager (archive replayed before E2EE init)', () => {
+    let noMgrHarness: TestHarness
+
+    beforeEach(() => {
+      noMgrHarness = makeHarnessNoManager(ME)
+    })
+
+    it('stashes encryptedPayload for retry when manager is absent on an OMEMO archive entry', async () => {
+      // No manager → decryptArchiveEntryIfNeeded must NOT early-return silently.
+      // It must call recordUnclaimedEME(stanza, false) which stashes the
+      // encrypted child as encryptedPayload so retryPendingDecrypts can
+      // self-heal once the manager + plugin come online.
+      const forwardedMessage = xml(
+        'message',
+        { from: PEER + '/mobile', to: ME, type: 'chat', id: 'mam-no-mgr-omemo' },
+        xml('body', {}, 'I sent you an OMEMO-encrypted message but your client does not seem to support that.'),
+        xml('encrypted', { xmlns: 'eu.siacs.conversations.axolotl' },
+          xml('header', { sid: '123456' }),
+          xml('payload', {}, 'AAAA'),
+        ),
+      )
+      const archiveEntry = buildMAMResult({
+        archiveId: 'arch-no-mgr-omemo',
+        forwardedMessage,
+      })
+
+      const resultPromise = noMgrHarness.mam.queryArchive({ with: PEER, max: 10 })
+      await noMgrHarness.iqPending()
+      const entries = [...noMgrHarness.collectors.entries()]
+      if (entries.length === 0) throw new Error('No collector registered')
+      const [queryId, collector] = entries[0]
+      archiveEntry.getChild('result', 'urn:xmpp:mam:2')!.attrs.queryid = queryId
+      collector(archiveEntry)
+      noMgrHarness.resolveNextIQ(
+        xml('iq', {}, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: 'true' })),
+      )
+      const result = await resultPromise
+
+      expect(result.messages).toHaveLength(1)
+      const msg = result.messages[0]
+      // Must be stashed for deferred retry — contains the OMEMO namespace.
+      expect(msg.encryptedPayload).toBeDefined()
+      expect(msg.encryptedPayload).toContain('eu.siacs.conversations.axolotl')
+      // Not yet tagged unsupported — we don't know that until a plugin exists.
+      expect(msg.unsupportedEncryption).toBeUndefined()
+      // Fallback body must be preserved.
+      expect(msg.body).toBe('I sent you an OMEMO-encrypted message but your client does not seem to support that.')
+    })
+
+    it('does NOT stash encryptedPayload for a cleartext archive entry when manager is absent', async () => {
+      // recordUnclaimedEME returns 'none' for cleartext; we must not over-stash.
+      const forwardedMessage = xml(
+        'message',
+        { from: PEER + '/r', to: ME, type: 'chat', id: 'mam-no-mgr-plain' },
+        xml('body', {}, 'just a plain message'),
+      )
+      const archiveEntry = buildMAMResult({
+        archiveId: 'arch-no-mgr-plain',
+        forwardedMessage,
+      })
+
+      const resultPromise = noMgrHarness.mam.queryArchive({ with: PEER, max: 10 })
+      await noMgrHarness.iqPending()
+      const entries = [...noMgrHarness.collectors.entries()]
+      if (entries.length === 0) throw new Error('No collector registered')
+      const [queryId, collector] = entries[0]
+      archiveEntry.getChild('result', 'urn:xmpp:mam:2')!.attrs.queryid = queryId
+      collector(archiveEntry)
+      noMgrHarness.resolveNextIQ(
+        xml('iq', {}, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: 'true' })),
+      )
+      const result = await resultPromise
+
+      expect(result.messages).toHaveLength(1)
+      const msg = result.messages[0]
+      expect(msg.body).toBe('just a plain message')
+      expect(msg.encryptedPayload).toBeUndefined()
+      expect(msg.unsupportedEncryption).toBeUndefined()
+    })
   })
 
   it('does NOT set isSelfOutgoing for an inbound archive entry (from === peer)', async () => {

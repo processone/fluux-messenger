@@ -79,6 +79,7 @@ import {
   readStashedEncryptedPayload,
   readStashedSecurityContext,
   readStashedUnsupportedEncryption,
+  recordUnclaimedEME,
 } from '../e2ee/stanzaDecrypt'
 import type { MessageSecurityContext } from '../types'
 import { parseSearchQuery, tokenize } from '../../utils/searchIndex'
@@ -1674,7 +1675,14 @@ export class MAM extends BaseModule {
     archiveTimestamp?: Date,
   ): Promise<void> {
     const manager = this.deps.getE2EEManager?.()
-    if (!manager) return
+    if (!manager) {
+      // No E2EE manager yet (archive replayed before E2EE init). Mirror the
+      // live path's no-manager handling: stash an EME-tagged payload for
+      // deferred retry so it self-heals (decrypts, or is tagged unsupported)
+      // once a manager + plugin come online. Cleartext entries are untouched.
+      recordUnclaimedEME(messageEl, false)
+      return
+    }
     // Same helper the live path uses. The passed-in `peer` is kept as
     // an explicit input rather than deriving it here too: room
     // replays come through this function with `roomJid` (which the
