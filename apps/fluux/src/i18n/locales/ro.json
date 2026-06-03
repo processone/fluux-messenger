@@ -499,6 +499,7 @@
             "encryptedCouldNotDecrypt": "Nu s-a putut decripta acest mesaj",
             "encryptedDisabled": "Criptarea este dezactivată — activați-o din setări",
             "couldNotDecryptTooltip": "Mesaj criptat pentru o cheie care nu este disponibilă pe acest dispozitiv",
+            "unsupportedMethodTooltip": "Criptat cu {{method}} — o metodă pe care acest dispozitiv nu o acceptă încă",
             "rejected": "Certificat respins",
             "rejectedTooltip": "Certificatul OpenPGP al interlocutorului este invalid — apasă pentru detalii",
             "rejectedTitle": "Certificat respins",

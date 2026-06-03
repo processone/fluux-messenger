@@ -499,6 +499,7 @@
             "encryptedCouldNotDecrypt": "Selle sõnumi dekrüpteerimine ebaõnnestus",
             "encryptedDisabled": "Krüpteerimine on välja lülitatud — lülitage see seadetes sisse",
             "couldNotDecryptTooltip": "Sõnum on krüpteeritud võtmega, mis ei ole selles seadmes saadaval",
+            "unsupportedMethodTooltip": "Krüptitud meetodiga {{method}} — seda meetodit see seade veel ei toeta",
             "rejected": "Sertifikaat tagasi lükatud",
             "rejectedTooltip": "Vestluspartneri OpenPGP sertifikaat on kehtetu — klõpsa üksikasjade jaoks",
             "rejectedTitle": "Sertifikaat tagasi lükatud",

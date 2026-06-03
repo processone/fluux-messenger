@@ -499,6 +499,7 @@
             "encryptedCouldNotDecrypt": "Não foi possível descriptografar esta mensagem",
             "encryptedDisabled": "Criptografia desativada — ative-a nas configurações",
             "couldNotDecryptTooltip": "Mensagem criptografada para uma chave não disponível neste dispositivo",
+            "unsupportedMethodTooltip": "Encriptado com {{method}} — um método que este dispositivo ainda não suporta",
             "rejected": "Certificado rejeitado",
             "rejectedTooltip": "O certificado OpenPGP do interlocutor é inválido — clica para mais detalhes",
             "rejectedTitle": "Certificado rejeitado",

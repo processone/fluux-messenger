@@ -492,6 +492,7 @@
             "encryptedCouldNotDecrypt": "Couldn't decrypt this message",
             "encryptedDisabled": "Encryption disabled — enable it in the settings",
             "couldNotDecryptTooltip": "Message encrypted to a key not available on this device",
+            "unsupportedMethodTooltip": "Encrypted with {{method}} — a method this device doesn't support yet",
             "rejected": "Certificate rejected",
             "rejectedTooltip": "Peer's OpenPGP certificate is invalid — click for details",
             "rejectedTitle": "Certificate rejected",
