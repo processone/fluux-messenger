@@ -199,6 +199,26 @@ export interface BaseMessage {
    * within the same session.
    */
   encryptedPayload?: string
+  /**
+   * Set when an incoming message used an end-to-end encryption protocol this
+   * client has no plugin for (e.g. OMEMO when only OpenPGP is wired). Unlike
+   * {@link encryptedPayload} there is nothing to retry — we will never decrypt
+   * it — so the SDK surfaces the sender's XEP-0380 fallback `<body>` verbatim
+   * and tags the message with the protocol it couldn't handle, letting the UI
+   * show a muted "unsupported method" hint. Mutually exclusive with
+   * `encryptedPayload` in practice.
+   */
+  unsupportedEncryption?: UnsupportedEncryptionInfo
+}
+
+/**
+ * Identity of an E2EE protocol this client cannot decrypt. `name` is a
+ * human-readable label (e.g. "OMEMO"); `namespace` is the XEP-0380 EME
+ * namespace (e.g. `eu.siacs.conversations.axolotl`).
+ */
+export interface UnsupportedEncryptionInfo {
+  namespace: string
+  name: string
 }
 
 /**
