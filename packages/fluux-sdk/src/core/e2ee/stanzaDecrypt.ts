@@ -78,10 +78,11 @@ export interface DecryptInPlaceResult {
    */
   authoredAt?: Date
   /**
-   * Serialized XML of the encrypted child element, present only when
-   * decryption was attempted but failed (key locked, unsupported protocol)
-   * or when an EME hint was detected but no plugin claimed the stanza.
-   * Callers should store this on the resulting {@link Message} so that
+   * Serialized XML of the encrypted child element, present when:
+   * - a plugin claimed the stanza but decrypt failed (e.g. key locked), or
+   * - an EME hint was present but no plugin is registered yet (deferred retry).
+   * Mutually exclusive with `unsupportedEncryption`. Callers should store this
+   * on the resulting {@link Message} so that
    * {@link XMPPClient.retryPendingDecrypts} can re-attempt later.
    */
   encryptedPayloadXml?: string
