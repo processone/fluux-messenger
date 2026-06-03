@@ -265,20 +265,27 @@ export const VideoAttachment = memo(function VideoAttachment({ attachment, onLoa
   }
 
   return (
-    <div className="pt-2 max-w-md rounded-lg overflow-hidden bg-black" style={containerStyle}>
-      <video
-        src={proxiedVideoUrl}
-        controls
-        preload="metadata"
-        poster={proxiedPosterUrl || undefined}
-        className="w-full h-full"
-        tabIndex={-1}
-        onLoadedMetadata={onLoad}
-        onError={() => {
-          failedUrlCache.add(attachment.url)
-          setLoadError(true)
-        }}
-      />
+    <div className="pt-2 max-w-md rounded-lg overflow-hidden bg-black">
+      {/* Height-locked video region: the box height is fixed by aspect-ratio and
+          the <video> is absolutely positioned to fill it, so native controls
+          render as an overlay and can never change the box height. On WebKitGTK
+          that height oscillation is what drives the message-list ResizeObserver
+          scroll-correction feedback loop. */}
+      <div className="relative w-full" style={containerStyle}>
+        <video
+          src={proxiedVideoUrl}
+          controls
+          preload="metadata"
+          poster={proxiedPosterUrl || undefined}
+          className="absolute inset-0 h-full w-full object-contain"
+          tabIndex={-1}
+          onLoadedMetadata={onLoad}
+          onError={() => {
+            failedUrlCache.add(attachment.url)
+            setLoadError(true)
+          }}
+        />
+      </div>
       {/* Video info bar */}
       {attachment.name && (
         <div className="flex items-center gap-2 px-3 py-2 bg-fluux-bg/60 border-t border-fluux-border">

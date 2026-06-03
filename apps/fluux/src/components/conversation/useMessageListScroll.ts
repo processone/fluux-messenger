@@ -17,6 +17,7 @@
 
 import { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react'
 import { scrollStateManager } from '@/utils/scrollStateManager'
+import { createResizeLoopMonitor } from './resizeLoopMonitor'
 
 // ============================================================================
 // DEBUG
@@ -108,6 +109,10 @@ export function useMessageListScroll({
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const contentRef = useRef<HTMLDivElement | null>(null)
   const contentObserverRef = useRef<ResizeObserver | null>(null)
+  // Pending rAF id for the coalesced scroll correction (content ResizeObserver).
+  const correctionRafRef = useRef<number | null>(null)
+  // Diagnostic-only monitor for runaway ResizeObserver fire rates (WebKitGTK).
+  const resizeMonitorRef = useRef<ReturnType<typeof createResizeLoopMonitor> | null>(null)
 
   // Track scroll position - always create internal ref to follow rules of hooks
   const internalIsAtBottomRef = useRef(true)
@@ -196,6 +201,10 @@ export function useMessageListScroll({
       contentObserverRef.current.disconnect()
       contentObserverRef.current = null
     }
+    if (correctionRafRef.current !== null) {
+      cancelAnimationFrame(correctionRafRef.current)
+      correctionRafRef.current = null
+    }
 
     contentRef.current = element
 
@@ -217,7 +226,10 @@ export function useMessageListScroll({
       // Set up content ResizeObserver
       let lastHeight = scroller.scrollHeight
 
-      const observer = new ResizeObserver(() => {
+      // The actual measure + scroll-correction. Run at most once per frame via
+      // the rAF-coalescing in the observer callback below.
+      const runCorrection = () => {
+        correctionRafRef.current = null
         const currentScroller = scrollerRef.current
         if (!currentScroller) return
 
@@ -265,6 +277,24 @@ export function useMessageListScroll({
         }
 
         lastHeight = newHeight
+      }
+
+      const observer = new ResizeObserver(() => {
+        // Diagnostic only: surface a runaway fire rate. WebKitGTK can oscillate
+        // a <video controls> height continuously, firing this hundreds of times
+        // a second — a pure main-thread loop the React render-loop detector
+        // can't see. Log-rate-limited; never disconnects.
+        if (!resizeMonitorRef.current) resizeMonitorRef.current = createResizeLoopMonitor()
+        const warning = resizeMonitorRef.current.record(performance.now())
+        if (warning) console.warn(warning)
+
+        // Coalesce the measure + correction into a single rAF no matter how many
+        // times the observer fires this frame. This breaks the read-scrollHeight
+        // -> write-scrollTop -> reflow -> re-fire feedback and caps the expensive
+        // work to once per frame.
+        if (correctionRafRef.current === null) {
+          correctionRafRef.current = requestAnimationFrame(runCorrection)
+        }
       })
 
       observer.observe(element)
@@ -846,6 +876,10 @@ export function useMessageListScroll({
       }
       if (contentObserverRef.current) {
         contentObserverRef.current.disconnect()
+      }
+      if (correctionRafRef.current !== null) {
+        cancelAnimationFrame(correctionRafRef.current)
+        correctionRafRef.current = null
       }
     }
   }, [])
