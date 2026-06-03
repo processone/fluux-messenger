@@ -1010,6 +1010,52 @@ describe('Chat E2EE wiring', () => {
     })
   })
 
+  describe('unsupported encryption — OMEMO with OpenPGP plugin registered', () => {
+    it('emits fallback body + unsupportedEncryption tag and no encryptedPayload when a plugin is registered but cannot claim OMEMO', async () => {
+      // manager has DummyPlaintextPlugin registered (hasPlugins() === true)
+      // but that plugin only claims its own namespace — it won't touch OMEMO.
+      const rxBuilt = makeDeps({
+        jid: 'me@example.com',
+        manager,
+        captureStanza: () => {},
+      })
+      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+
+      const inbound = xml(
+        'message',
+        { from: 'peer@example.com/r', to: 'me@example.com/x', id: 'omemo-1', type: 'chat' },
+        xml('encrypted', { xmlns: 'eu.siacs.conversations.axolotl' }, 'cipher'),
+        xml('encryption', { xmlns: 'urn:xmpp:eme:0', namespace: 'eu.siacs.conversations.axolotl', name: 'OMEMO' }),
+        xml('body', {}, 'I sent you an OMEMO encrypted message.'),
+      )
+
+      rxChat.handle(inbound)
+      await new Promise((r) => setTimeout(r, 0))
+
+      const chatMessageEvent = rxBuilt.sdkEmitted.find(
+        (e) => (e as { event: string }).event === 'chat:message',
+      ) as
+        | {
+            payload: {
+              message: {
+                body: string
+                encryptedPayload?: string
+                unsupportedEncryption?: { namespace: string; name: string }
+              }
+            }
+          }
+        | undefined
+
+      expect(chatMessageEvent).toBeDefined()
+      expect(chatMessageEvent!.payload.message.body).toBe('I sent you an OMEMO encrypted message.')
+      expect(chatMessageEvent!.payload.message.encryptedPayload).toBeUndefined()
+      expect(chatMessageEvent!.payload.message.unsupportedEncryption).toEqual({
+        namespace: 'eu.siacs.conversations.axolotl',
+        name: 'OMEMO',
+      })
+    })
+  })
+
   // -------------------------------------------------------------------
   // Regression: every chat-like outbound primitive must route through the
   // E2EE wrap. A leak in any of these paths (resend a failed encrypted
