@@ -4,17 +4,17 @@ import { MemoryRouter } from 'react-router-dom'
 import App from './App'
 
 const {
-  mockUseConnection,
+  mockUseConnectionStatus,
   mockUsePlatformState,
   mockGetSession,
 } = vi.hoisted(() => ({
-  mockUseConnection: vi.fn(),
+  mockUseConnectionStatus: vi.fn(),
   mockUsePlatformState: vi.fn(),
   mockGetSession: vi.fn(),
 }))
 
 vi.mock('@fluux/sdk', () => ({
-  useConnection: () => mockUseConnection(),
+  useConnectionStatus: () => mockUseConnectionStatus(),
   useXMPPContext: () => ({
     client: {
       disconnect: vi.fn().mockResolvedValue(undefined),
@@ -89,7 +89,7 @@ vi.mock('./components/UpdateModal', () => ({
 describe('App reconnect recovery hooks', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockUseConnection.mockReturnValue({ status: 'connecting' })
+    mockUseConnectionStatus.mockReturnValue({ status: 'connecting' })
     mockGetSession.mockReturnValue({
       jid: 'user@example.com',
       password: 'secret',

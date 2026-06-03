@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useConnection, deleteFastToken } from '@fluux/sdk'
+import { useConnectionStatus, useConnectionActions, deleteFastToken } from '@fluux/sdk'
 import { Loader2, KeyRound, Eye, EyeOff, ChevronDown, ChevronRight } from 'lucide-react'
 import { saveSession } from '@/hooks/useSessionPersistence'
 import { getResource } from '@/utils/xmppResource'
@@ -72,7 +72,8 @@ interface LoginScreenProps {
 export function LoginScreen({ claimConnection }: LoginScreenProps) {
   detectRenderLoop('LoginScreen')
   const { t, i18n } = useTranslation()
-  const { status, error, connect } = useConnection()
+  const { status, error } = useConnectionStatus()
+  const { connect } = useConnectionActions()
   const { dragRegionProps } = useWindowDrag()
 
   // Workaround: On macOS, the WRY/WKWebView can lose native event delivery

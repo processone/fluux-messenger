@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useConnection, useXMPPContext, hasFastToken } from '@fluux/sdk'
+import { useConnectionStatus, useXMPPContext, hasFastToken } from '@fluux/sdk'
 import { registerE2EEPlugins } from './e2ee/registerPlugins'
 import { isKeyLocked } from './e2ee/webPassphraseStore'
 import { probeRemoteIdentityState } from './e2ee/secretKeyProbe'
@@ -57,7 +57,7 @@ function App() {
   // Detect render loops before they freeze the UI
   detectRenderLoop('App')
 
-  const { status, jid } = useConnection()
+  const { status, jid } = useConnectionStatus()
   const { client } = useXMPPContext()
   const { t } = useTranslation()
   const addToast = useToastStore((s) => s.addToast)

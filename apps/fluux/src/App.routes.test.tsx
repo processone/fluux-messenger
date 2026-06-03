@@ -11,7 +11,7 @@ import App from './App'
 
 // Mock SDK hooks
 vi.mock('@fluux/sdk', () => ({
-  useConnection: vi.fn(() => ({
+  useConnectionStatus: vi.fn(() => ({
     status: 'online',
   })),
   useXMPPContext: vi.fn(() => ({

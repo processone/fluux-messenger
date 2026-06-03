@@ -1,4 +1,6 @@
 export { useConnection } from './useConnection'
+export { useConnectionStatus } from './useConnectionStatus'
+export { useConnectionActions } from './useConnectionActions'
 export { useChat } from './useChat'
 export { useChatActive } from './useChatActive'
 export { useRoster } from './useRoster'

@@ -37,6 +37,8 @@ export type { XMPPProviderProps } from '../provider'
 
 // High-level React hooks
 export { useConnection } from '../hooks/useConnection'
+export { useConnectionStatus } from '../hooks/useConnectionStatus'
+export { useConnectionActions } from '../hooks/useConnectionActions'
 export { useChat } from '../hooks/useChat'
 export { useRoster } from '../hooks/useRoster'
 export { useRosterActions } from '../hooks/useRosterActions'

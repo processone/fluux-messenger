@@ -1,9 +1,7 @@
-import { useCallback, useMemo } from 'react'
-import { connectionStore } from '../stores'
+import { useMemo } from 'react'
 import { useConnectionStore } from '../react/storeHooks'
-import { useXMPPContext } from '../provider'
-import type { LinkPreview, VCardInfo } from '../core/types'
 import { NS_REGISTER } from '../core/namespaces'
+import { useConnectionActions } from './useConnectionActions'
 
 /**
  * Hook for managing XMPP connection state and actions.
@@ -13,6 +11,12 @@ import { NS_REGISTER } from '../core/namespaces'
  *
  * **Note:** For presence state (presenceShow, statusMessage, isAutoAway),
  * use the `usePresence` hook instead. This hook focuses on connection lifecycle.
+ *
+ * **Performance:** `useConnection()` subscribes to the full connection store
+ * (~16 fields). Components that only need the connection lifecycle should
+ * prefer `useConnectionStatus()` (status/jid/error) and `useConnectionActions()`
+ * (connect/disconnect/...) to avoid re-rendering on unrelated field changes
+ * such as `connectionMethod`, `serverInfo`, or own-profile updates.
  *
  * @returns An object containing connection state and actions
  *
@@ -90,8 +94,6 @@ import { NS_REGISTER } from '../core/namespaces'
  * @category Hooks
  */
 export function useConnection() {
-  const { client } = useXMPPContext()
-
   const status = useConnectionStore((s) => s.status)
   const jid = useConnectionStore((s) => s.jid)
   const error = useConnectionStore((s) => s.error)
@@ -112,176 +114,13 @@ export function useConnection() {
   const webPushStatus = useConnectionStore((s) => s.webPushStatus)
   const webPushEnabled = useConnectionStore((s) => s.webPushEnabled)
 
-  const connect = useCallback(
-    async (
-      jid: string,
-      password: string | undefined,
-      server: string,
-      smState?: { id: string; inbound: number; outbound: number },
-      resource?: string,
-      lang?: string,
-      disableSmKeepalive?: boolean,
-      rememberSession?: boolean
-    ) => {
-      connectionStore.getState().setStatus('connecting')
-      connectionStore.getState().setError(null)
-      try {
-        await client.connect({ jid, password, server, resource, smState, lang, disableSmKeepalive, rememberSession })
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Connection failed'
-        connectionStore.getState().setStatus('error')
-        connectionStore.getState().setError(message)
-        throw err
-      }
-    },
-    [client]
-  )
-
-  const getStreamManagementState = useCallback(() => {
-    return client.getStreamManagementState()
-  }, [client])
-
-  const disconnect = useCallback(
-    async (options: { invalidateFastToken?: boolean } = {}) => {
-      await client.disconnect(options)
-    },
-    [client]
-  )
-
-  const cancelReconnect = useCallback(() => {
-    client.cancelReconnect()
-    connectionStore.getState().setStatus('disconnected')
-    connectionStore.getState().setReconnectState(0, null)
-  }, [client])
-
-
-  const setOwnNickname = useCallback(
-    async (nickname: string) => {
-      await client.profile.publishOwnNickname(nickname)
-    },
-    [client]
-  )
-
-  const setOwnAvatar = useCallback(
-    async (imageData: Uint8Array, mimeType: string, width: number, height: number) => {
-      // Convert Uint8Array to base64 data URL
-      const base64 = btoa(String.fromCharCode(...Array.from(imageData)))
-      const dataUrl = `data:${mimeType};base64,${base64}`
-      await client.profile.publishOwnAvatar(dataUrl, mimeType, width, height)
-    },
-    [client]
-  )
-
-  const clearOwnAvatar = useCallback(async () => {
-    await client.profile.clearOwnAvatar()
-  }, [client])
-
-  const clearOwnNickname = useCallback(async () => {
-    await client.profile.clearOwnNickname()
-  }, [client])
-
-  const fetchOwnVCard = useCallback(async () => {
-    return client.profile.fetchOwnVCard()
-  }, [client])
-
-  const setOwnVCard = useCallback(
-    async (info: VCardInfo) => {
-      await client.profile.publishOwnVCard(info)
-    },
-    [client]
-  )
-
-  const restoreOwnAvatarFromCache = useCallback(
-    async (avatarHash: string) => {
-      return client.profile.restoreOwnAvatarFromCache(avatarHash)
-    },
-    [client]
-  )
-
-  const changePassword = useCallback(
-    async (newPassword: string): Promise<void> => {
-      await client.profile.changePassword(newPassword)
-    },
-    [client]
-  )
-
-  const requestUploadSlot = useCallback(
-    async (filename: string, size: number, contentType: string) => {
-      return client.discovery.requestUploadSlot(filename, size, contentType)
-    },
-    [client]
-  )
-
-  const sendLinkPreview = useCallback(
-    async (
-      to: string,
-      originalMessageId: string,
-      preview: LinkPreview,
-      type: 'chat' | 'groupchat' = 'chat'
-    ) => {
-      await client.chat.sendLinkPreview(to, originalMessageId, preview, type)
-    },
-    [client]
-  )
-
-  /**
-   * Notify the SDK of a system state change.
-   *
-   * This is the recommended way to signal platform-specific events to the SDK.
-   * The app detects events (wake from sleep, visibility changes), the SDK handles
-   * the protocol response.
-   *
-   * @param state - 'awake' | 'sleeping' | 'visible' | 'hidden'
-   */
-  const notifySystemState = useCallback(
-    async (state: 'awake' | 'sleeping' | 'visible' | 'hidden') => {
-      await client.notifySystemState(state)
-    },
-    [client]
-  )
+  // Connection actions (no store subscriptions of their own)
+  const actions = useConnectionActions()
 
   // Check if server supports password change via XEP-0077 In-Band Registration
   const supportsPasswordChange = useMemo(() => {
     return serverInfo?.features?.includes(NS_REGISTER) ?? false
   }, [serverInfo?.features])
-
-  // Memoize actions object to prevent re-renders when only state changes
-  const actions = useMemo(
-    () => ({
-      connect,
-      disconnect,
-      cancelReconnect,
-      setOwnNickname,
-      setOwnAvatar,
-      clearOwnNickname,
-      clearOwnAvatar,
-      fetchOwnVCard,
-      setOwnVCard,
-      restoreOwnAvatarFromCache,
-      changePassword,
-      getStreamManagementState,
-      requestUploadSlot,
-      sendLinkPreview,
-      notifySystemState,
-    }),
-    [
-      connect,
-      disconnect,
-      cancelReconnect,
-      setOwnNickname,
-      setOwnAvatar,
-      clearOwnNickname,
-      clearOwnAvatar,
-      fetchOwnVCard,
-      setOwnVCard,
-      restoreOwnAvatarFromCache,
-      changePassword,
-      getStreamManagementState,
-      requestUploadSlot,
-      sendLinkPreview,
-      notifySystemState,
-    ]
-  )
 
   // Memoize the entire return value to prevent render loops
   // Components that destructure specific properties will still re-render

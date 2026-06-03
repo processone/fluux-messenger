@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { useConnection } from '@fluux/sdk'
+import { useConnectionStatus } from '@fluux/sdk'
 import { rehydrateVerifiedPeerKeys } from '../stores/verifiedPeerKeysStore'
 import { rehydratePinnedPrimaryFingerprints } from '../stores/pinnedPrimaryFingerprintsStore'
 import { rehydrateKeyChangeAlerts } from '../stores/keyChangeAlertsStore'
@@ -20,7 +20,7 @@ import { rehydrateEncryptionSettings } from '../stores/encryptionSettingsStore'
  * stores are populated before the plugin reads them.
  */
 export function useAccountScopeRehydration(): void {
-  const { jid } = useConnection()
+  const { jid } = useConnectionStatus()
   const bareJid = jid ? jid.split('/')[0] : null
   const prevJidRef = useRef<string | null>(null)
 
