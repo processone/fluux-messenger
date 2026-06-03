@@ -1182,11 +1182,37 @@ fn main() {
                         var origWarn = console.warn;
                         var origError = console.error;
                         var origDebug = console.debug;
+                        function serializeArg(a) {
+                            if (typeof a === 'string') return a;
+                            // Error objects keep message/stack on non-enumerable
+                            // properties, so JSON.stringify(err) === "{}". Surface
+                            // them explicitly or every logged error becomes "{}".
+                            if (a instanceof Error) {
+                                var head = (a.name || 'Error') + ': ' + (a.message || '');
+                                return a.stack ? head + '\n' + a.stack : head;
+                            }
+                            try {
+                                var s = JSON.stringify(a);
+                                if (s === undefined || s === '{}') {
+                                    // Error-like objects (DOMException, custom) or
+                                    // anything whose own enumerable props are empty.
+                                    if (a && (a.message || a.name || a.stack)) {
+                                        var parts = [];
+                                        if (a.name) parts.push(String(a.name));
+                                        if (a.message) parts.push(String(a.message));
+                                        if (a.stack) parts.push(String(a.stack));
+                                        return parts.join(': ');
+                                    }
+                                    return s === undefined ? String(a) : Object.prototype.toString.call(a);
+                                }
+                                return s;
+                            } catch (e) {
+                                try { return String(a); } catch (e2) { return '[unserializable]'; }
+                            }
+                        }
                         function forward(level, args) {
                             try {
-                                var msg = Array.prototype.slice.call(args).map(function(a) {
-                                    return typeof a === 'string' ? a : JSON.stringify(a);
-                                }).join(' ');
+                                var msg = Array.prototype.slice.call(args).map(serializeArg).join(' ');
                                 window.__TAURI_INTERNALS__.invoke('log_to_terminal', { level: level, message: msg });
                             } catch(e) {}
                         }
@@ -1196,11 +1222,25 @@ fn main() {
                         console.error = function() { origError.apply(console, arguments); forward('error', arguments); };
                         console.debug = function() { origDebug.apply(console, arguments); forward('debug', arguments); };
                         window.addEventListener('error', function(e) {
-                            if (e.target !== window && e.target.tagName) {
+                            // Resource load failures (img/video/script/link): e.target is the element.
+                            if (e.target && e.target !== window && e.target.tagName) {
                                 var src = e.target.src || e.target.href || '(unknown)';
                                 forward('error', ['Failed to load resource: ' + e.target.tagName.toLowerCase() + ' ' + src]);
+                                return;
+                            }
+                            // Uncaught JS exception: carries the real Error (message + stack)
+                            // and the source location. Without this, render-phase throws that
+                            // escape React reach the log as nothing at all.
+                            var where = (e.filename || '') + ':' + (e.lineno || 0) + ':' + (e.colno || 0);
+                            if (e.error) {
+                                forward('error', ['Uncaught exception at ' + where + ':', e.error]);
+                            } else {
+                                forward('error', ['Uncaught error at ' + where + ': ' + (e.message || '(unknown)')]);
                             }
                         }, true);
+                        window.addEventListener('unhandledrejection', function(e) {
+                            forward('error', ['Unhandled promise rejection:', e && e.reason]);
+                        });
                     })();
                 "#);
             }
