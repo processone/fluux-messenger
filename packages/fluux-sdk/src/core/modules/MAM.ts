@@ -78,6 +78,7 @@ import {
   readStashedAuthoredAt,
   readStashedEncryptedPayload,
   readStashedSecurityContext,
+  readStashedUnsupportedEncryption,
 } from '../e2ee/stanzaDecrypt'
 import type { MessageSecurityContext } from '../types'
 import { parseSearchQuery, tokenize } from '../../utils/searchIndex'
@@ -1745,6 +1746,7 @@ export class MAM extends BaseModule {
 
     const securityContext = this.archiveSecurityContext(messageEl)
     const encryptedPayload = readStashedEncryptedPayload(messageEl)
+    const unsupportedEncryption = readStashedUnsupportedEncryption(messageEl)
 
     return {
       type: 'chat',
@@ -1762,6 +1764,7 @@ export class MAM extends BaseModule {
       ...(parsed.attachment && { attachment: parsed.attachment }),
       ...(securityContext && { securityContext }),
       ...(encryptedPayload && { encryptedPayload }),
+      ...(unsupportedEncryption && { unsupportedEncryption }),
     }
   }
 
@@ -1813,6 +1816,7 @@ export class MAM extends BaseModule {
 
     const roomSecurityContext = this.archiveSecurityContext(messageEl)
     const roomEncryptedPayload = readStashedEncryptedPayload(messageEl)
+    const roomUnsupportedEncryption = readStashedUnsupportedEncryption(messageEl)
 
     const message: RoomMessage = {
       type: 'groupchat',
@@ -1832,6 +1836,7 @@ export class MAM extends BaseModule {
       ...(occupantId && { occupantId }),
       ...(roomSecurityContext && { securityContext: roomSecurityContext }),
       ...(roomEncryptedPayload && { encryptedPayload: roomEncryptedPayload }),
+      ...(roomUnsupportedEncryption && { unsupportedEncryption: roomUnsupportedEncryption }),
     }
 
     // Poll detection: parse <poll> or <poll-closed> elements from archived messages

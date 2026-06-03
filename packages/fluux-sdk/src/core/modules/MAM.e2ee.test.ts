@@ -325,6 +325,51 @@ describe('MAM E2EE wiring', () => {
     expect(context?.isSelfOutgoing).toBe(true)
   })
 
+  it('tags archived OMEMO messages with unsupportedEncryption and no encryptedPayload', async () => {
+    // Simulate an OMEMO-encrypted message from a peer. The DummyPlaintextPlugin
+    // is registered (hasPlugins() === true) but does NOT claim the OMEMO
+    // namespace, so decryptStanzaInPlace calls recordUnclaimedEME which stashes
+    // the unsupportedEncryption tag. parseArchiveMessage must read that tag
+    // onto the returned Message.
+    const forwardedMessage = xml(
+      'message',
+      { from: PEER + '/mobile', to: ME, type: 'chat', id: 'mam-omemo' },
+      xml('body', {}, 'I sent you an OMEMO-encrypted message but your client does not seem to support that.'),
+      xml('encrypted', { xmlns: 'eu.siacs.conversations.axolotl' },
+        xml('header', { sid: '123456' }),
+        xml('payload', {}, 'AAAA'),
+      ),
+    )
+    const archiveEntry = buildMAMResult({
+      archiveId: 'arch-omemo',
+      forwardedMessage,
+    })
+
+    // Use a local runner variant that also surfaces unsupportedEncryption.
+    const resultPromise = harness.mam.queryArchive({ with: PEER, max: 10 })
+    await harness.iqPending()
+    const entries = [...harness.collectors.entries()]
+    if (entries.length === 0) throw new Error('No collector registered')
+    const [queryId, collector] = entries[0]
+    archiveEntry.getChild('result', 'urn:xmpp:mam:2')!.attrs.queryid = queryId
+    collector(archiveEntry)
+    harness.resolveNextIQ(
+      xml('iq', {}, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: 'true' })),
+    )
+    const result = await resultPromise
+
+    expect(result.messages).toHaveLength(1)
+    const msg = result.messages[0]
+    expect(msg.unsupportedEncryption).toBeDefined()
+    expect(msg.unsupportedEncryption!.namespace).toBe('eu.siacs.conversations.axolotl')
+    expect(msg.unsupportedEncryption!.name).toBe('OMEMO')
+    // Fallback body from the sender must be preserved.
+    expect(msg.body).toBe('I sent you an OMEMO-encrypted message but your client does not seem to support that.')
+    // encryptedPayload should NOT be set — OMEMO was recognised as unsupported,
+    // not stashed for retry (that only happens when hasPlugins() is false).
+    expect((msg as { encryptedPayload?: unknown }).encryptedPayload).toBeUndefined()
+  })
+
   it('does NOT set isSelfOutgoing for an inbound archive entry (from === peer)', async () => {
     // Regression guard symmetric to the live carbon test: inbound
     // archive entries (the peer sent the message TO us) must not get
