@@ -1054,6 +1054,72 @@ describe('Chat E2EE wiring', () => {
         name: 'OMEMO',
       })
     })
+
+    it('emits room:message with unsupportedEncryption tag and fallback body for a groupchat OMEMO stanza', async () => {
+      // Live room message path: processRoomMessage must mirror processChatMessage
+      // and carry the unsupportedEncryption tag through to the RoomMessage.
+      const roomJid = 'team@conference.example.com'
+      const rxBuilt = makeDeps({
+        jid: 'me@example.com',
+        manager,
+        captureStanza: () => {},
+      })
+      // processRoomMessage bails early if stores.room.getRoom returns undefined.
+      // Provide a minimal stub so the path continues.
+      rxBuilt.deps.stores = {
+        room: {
+          getRoom: () => ({
+            jid: roomJid,
+            name: 'team',
+            nickname: 'me',
+            joined: true,
+            occupants: new Map(),
+            messages: [],
+            unreadCount: 0,
+            mentionsCount: 0,
+            typingUsers: new Set(),
+            isBookmarked: false,
+          }),
+        },
+      } as unknown as import('../types').StoreBindings
+
+      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+
+      const inbound = xml(
+        'message',
+        { from: `${roomJid}/peer`, to: 'me@example.com', id: 'room-omemo-1', type: 'groupchat' },
+        xml('encrypted', { xmlns: 'eu.siacs.conversations.axolotl' }, 'cipher'),
+        xml('encryption', { xmlns: 'urn:xmpp:eme:0', namespace: 'eu.siacs.conversations.axolotl', name: 'OMEMO' }),
+        xml('body', {}, 'I sent you an OMEMO encrypted message.'),
+      )
+
+      rxChat.handle(inbound)
+      await new Promise((r) => setTimeout(r, 0))
+
+      const roomMessageEvent = rxBuilt.sdkEmitted.find(
+        (e) => (e as { event: string }).event === 'room:message',
+      ) as
+        | {
+            payload: {
+              roomJid: string
+              message: {
+                body: string
+                encryptedPayload?: string
+                unsupportedEncryption?: { namespace: string; name: string }
+              }
+            }
+          }
+        | undefined
+
+      expect(roomMessageEvent).toBeDefined()
+      expect(roomMessageEvent!.payload.roomJid).toBe(roomJid)
+      expect(roomMessageEvent!.payload.message.body).toBe('I sent you an OMEMO encrypted message.')
+      expect(roomMessageEvent!.payload.message.encryptedPayload).toBeUndefined()
+      expect(roomMessageEvent!.payload.message.unsupportedEncryption).toEqual({
+        namespace: 'eu.siacs.conversations.axolotl',
+        name: 'OMEMO',
+      })
+    })
   })
 
   // -------------------------------------------------------------------

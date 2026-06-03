@@ -201,13 +201,15 @@ export class Chat extends BaseModule {
     // an unclaimed EME stanza is an unsupported protocol (e.g. OMEMO) so the
     // fallback <body> is shown with an "unsupported method" hint; otherwise the
     // payload is stashed for retryPendingDecrypts() once a plugin comes online.
-    const e2eeManager = this.deps.getE2EEManager?.()
+    // The two `!readStashed…` guards make this idempotent across re-entry
+    // (carbon copies / second passes through handleMessageInternal).
+    const manager = this.deps.getE2EEManager?.()
     if (
       !readStashedEncryptedPayload(stanza) &&
       !readStashedUnsupportedEncryption(stanza) &&
       stanzaHasEMEHint(stanza)
     ) {
-      recordUnclaimedEME(stanza, !!e2eeManager?.hasPlugins())
+      recordUnclaimedEME(stanza, !!manager?.hasPlugins())
     }
 
     const from = stanza.attrs.from
@@ -1967,6 +1969,7 @@ export class Chat extends BaseModule {
 
     const securityContext = this.readMessageSecurityContext(stanza)
     const encryptedPayload = readStashedEncryptedPayload(stanza)
+    const unsupportedEncryption = readStashedUnsupportedEncryption(stanza)
     const message: RoomMessage = {
       type: 'groupchat',
       id: messageId,
@@ -1986,6 +1989,7 @@ export class Chat extends BaseModule {
       ...(occupantId && { occupantId }),
       ...(securityContext && { securityContext }),
       ...(encryptedPayload && { encryptedPayload }),
+      ...(unsupportedEncryption && { unsupportedEncryption }),
     }
 
     // Poll detection: check for <poll> or <poll-closed> elements
