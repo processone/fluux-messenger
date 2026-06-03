@@ -82,6 +82,39 @@ pub fn translate_ws_to_tcp<'a>(text: &'a str) -> Cow<'a, str> {
     Cow::Borrowed(text)
 }
 
+/// Extract the `to` attribute from an RFC 7395 `<open/>` frame.
+///
+/// xmpp.js sends the XMPP service domain (the JID's domain) as the `to=` of its
+/// initial `<open/>`. The proxy reads it so explicit endpoints can use the JID
+/// domain for the STARTTLS `to=` and TLS SNI even when the connection host
+/// differs (e.g. `tcp://chat.process-one.net` for JID `me@process-one.net`).
+///
+/// Returns `None` when `text` is not an `<open/>` frame or carries no non-empty
+/// `to` attribute.
+pub fn extract_open_to(text: &str) -> Option<String> {
+    let trimmed = text.trim();
+    if !(trimmed.starts_with("<open ") || trimmed.starts_with("<open>")) {
+        return None;
+    }
+
+    let mut reader = Reader::from_str(trimmed);
+    reader.config_mut().check_end_names = false;
+
+    let event = reader.read_event();
+    let attrs = match &event {
+        Ok(Event::Empty(e)) | Ok(Event::Start(e)) => e.attributes(),
+        _ => return None,
+    };
+
+    for attr in attrs.flatten() {
+        if attr.key.as_ref() == b"to" {
+            let value = String::from_utf8_lossy(&attr.value).to_string();
+            return if value.is_empty() { None } else { Some(value) };
+        }
+    }
+    None
+}
+
 /// Translate traditional XMPP stream framing to RFC 7395 WebSocket framing
 /// - `<stream:stream ...>` → `<open xmlns="urn:ietf:params:xml:ns:xmpp-framing" .../>`
 /// - `</stream:stream>` → `<close xmlns="urn:ietf:params:xml:ns:xmpp-framing"/>`
@@ -1042,5 +1075,37 @@ mod tests {
             None
         );
         assert_eq!(extract_stream_error_condition("</stream:stream>"), None);
+    }
+
+    // --- extract_open_to tests ---
+
+    #[test]
+    fn test_extract_open_to_double_quotes() {
+        let open = r#"<open xmlns="urn:ietf:params:xml:ns:xmpp-framing" to="process-one.net" version="1.0"/>"#;
+        assert_eq!(extract_open_to(open).as_deref(), Some("process-one.net"));
+    }
+
+    #[test]
+    fn test_extract_open_to_single_quotes_with_from() {
+        let open = r#"<open xmlns='urn:ietf:params:xml:ns:xmpp-framing' to='process-one.net' from='me@process-one.net' version='1.0'/>"#;
+        assert_eq!(extract_open_to(open).as_deref(), Some("process-one.net"));
+    }
+
+    #[test]
+    fn test_extract_open_to_absent_returns_none() {
+        let open = r#"<open xmlns="urn:ietf:params:xml:ns:xmpp-framing" version="1.0"/>"#;
+        assert_eq!(extract_open_to(open), None);
+    }
+
+    #[test]
+    fn test_extract_open_to_empty_returns_none() {
+        let open = r#"<open xmlns="urn:ietf:params:xml:ns:xmpp-framing" to="" version="1.0"/>"#;
+        assert_eq!(extract_open_to(open), None);
+    }
+
+    #[test]
+    fn test_extract_open_to_non_open_returns_none() {
+        assert_eq!(extract_open_to(r#"<message to="a@b"/>"#), None);
+        assert_eq!(extract_open_to("</stream:stream>"), None);
     }
 }

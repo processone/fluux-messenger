@@ -3,7 +3,8 @@ mod framing;
 
 use dns::{parse_server_input, resolve_xmpp_server, ConnectionMode, ParsedServer, XmppEndpoint};
 use framing::{
-    extract_stanza, extract_stream_error_condition, translate_tcp_to_ws, translate_ws_to_tcp,
+    extract_open_to, extract_stanza, extract_stream_error_condition, translate_tcp_to_ws,
+    translate_ws_to_tcp,
 };
 
 use futures_util::{SinkExt, StreamExt};
@@ -136,6 +137,55 @@ fn format_bridge_close_reason(end_reason_label: &str, stream_error: Option<&str>
         None => format!("Bridge closed: {end_reason_label}"),
     };
     clamp_close_reason(reason)
+}
+
+/// Extract the stream-error condition that an upstream-connect failure encodes.
+///
+/// `perform_starttls` formats a relayed upstream `<stream:error>` as
+/// "… stream-error: <condition>" (e.g. `host-unknown`). `connect_upstream_tls`
+/// aggregates endpoint failures into one string that preserves that substring,
+/// so the connection handler can recover the condition for the WebSocket close
+/// reason. Returns `None` for plain transport failures (timeouts, refused
+/// connections, TLS errors), which carry no stream-level condition.
+fn stream_error_condition_from_error(message: &str) -> Option<String> {
+    const MARKER: &str = "stream-error: ";
+    let start = message.find(MARKER)? + MARKER.len();
+    let rest = &message[start..];
+    // Conditions are XML element local names (e.g. `host-unknown`,
+    // `see-other-host`) — no whitespace — so the first whitespace ends it.
+    let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+    let condition = rest[..end].trim();
+    if condition.is_empty() {
+        None
+    } else {
+        Some(condition.to_string())
+    }
+}
+
+/// Send the RFC 7395 `<close/>` plus a WebSocket close frame carrying `reason`,
+/// so the client (xmpp.js) gets a deterministic disconnect with the real cause
+/// instead of an abrupt socket drop. Best-effort, bounded by a short timeout.
+///
+/// Used for pre-bridge upstream failures; the bridge teardown path has its own
+/// equivalent close handshake on the split sink.
+async fn send_close_with_reason(
+    ws: &mut tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>,
+    reason: String,
+) {
+    let _ = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        let _ = ws
+            .send(Message::Text(
+                r#"<close xmlns="urn:ietf:params:xml:ns:xmpp-framing"/>"#.into(),
+            ))
+            .await;
+        let _ = ws
+            .send(Message::Close(Some(CloseFrame {
+                code: CloseCode::Normal,
+                reason: reason.into(),
+            })))
+            .await;
+    })
+    .await;
 }
 
 /// Initialize rustls crypto provider (must be called once at startup)
@@ -499,24 +549,53 @@ async fn handle_connection(
         "Received initial client stanza"
     );
 
+    // The client's initial <open to='…'/> carries the JID's service domain.
+    // Use it as the STARTTLS `to=` / TLS SNI for explicit endpoints, where the
+    // connection host may legitimately differ from the XMPP domain
+    // (e.g. tcp://chat.process-one.net for JID me@process-one.net).
+    let client_domain = extract_open_to(&initial_ws_text);
+
     // Buffer client text frames received while upstream connect/STARTTLS is in progress.
     // They are flushed to TLS once the bridge starts.
     let mut pending_ws_texts = vec![initial_ws_text];
 
     let upstream_connect_started = Instant::now();
-    let connect_future = connect_upstream_tls(server_input);
+    let connect_future = connect_upstream_tls(server_input, client_domain.as_deref());
     tokio::pin!(connect_future);
 
     let tls_stream = loop {
         tokio::select! {
             result = &mut connect_future => {
-                let tls_stream = result?;
-                info!(
-                    conn_id,
-                    connect_ms = upstream_connect_started.elapsed().as_millis() as u64,
-                    "Upstream TLS connected"
-                );
-                break tls_stream;
+                match result {
+                    Ok(tls_stream) => {
+                        info!(
+                            conn_id,
+                            connect_ms = upstream_connect_started.elapsed().as_millis() as u64,
+                            "Upstream TLS connected"
+                        );
+                        break tls_stream;
+                    }
+                    Err(err) => {
+                        // Upstream connect/STARTTLS failed before the bridge could
+                        // start. Don't just drop the WebSocket — xmpp.js would report
+                        // a misleading "WebSocket ECONNERROR". Send a clean close
+                        // carrying the real cause: a relayed stream-error condition
+                        // (e.g. host-unknown) when the server reported one, else the
+                        // transport message.
+                        let condition = stream_error_condition_from_error(&err);
+                        let reason =
+                            format_bridge_close_reason("UpstreamConnectFailed", condition.as_deref());
+                        warn!(
+                            conn_id,
+                            error = %err,
+                            stream_error = ?condition,
+                            connect_ms = upstream_connect_started.elapsed().as_millis() as u64,
+                            "Upstream connection failed; closing WebSocket with reason"
+                        );
+                        send_close_with_reason(&mut ws, reason).await;
+                        return Ok(());
+                    }
+                }
             }
             msg = ws.next() => {
                 match msg {
@@ -685,11 +764,15 @@ async fn try_connect_endpoint(
 /// falling through to the next endpoint on TCP or TLS failure.
 async fn connect_upstream_tls(
     server_input: &str,
+    client_domain: Option<&str>,
 ) -> Result<tokio_rustls::client::TlsStream<TcpStream>, String> {
     // Resolve DNS/SRV per connection (fresh resolution handles DNS changes after sleep)
     let resolve_started = Instant::now();
     let endpoints = match parse_server_input(server_input) {
         ParsedServer::Direct(host, port, mode, domain) => {
+            // Domain precedence: explicit `?domain=` override → client `<open to=>`
+            // (the JID's domain) → None (falls back to the connection host).
+            let domain = domain.or_else(|| client_domain.map(|d| d.to_string()));
             info!(host = %host, port, mode = ?mode, domain = ?domain, "Using explicit endpoint");
             vec![XmppEndpoint {
                 host,
@@ -842,6 +925,15 @@ async fn perform_starttls(
             if stanza.contains("<stream:features") || stanza.contains("<features") {
                 features_xml = stanza;
                 break;
+            }
+
+            // A <stream:error> (e.g. host-unknown, when the connection host serves
+            // a different vhost than the JID domain) terminates the stream. Surface
+            // the condition so the connection handler can tell the user *why*,
+            // instead of letting it look like a generic transport failure.
+            if let Some(condition) = extract_stream_error_condition(&stanza) {
+                warn!(condition = %condition, "STARTTLS: server returned stream error");
+                return Err(format!("STARTTLS: server stream-error: {condition}"));
             }
 
             // Unexpected stanza before features
@@ -1292,7 +1384,7 @@ pub async fn stop_proxy() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures_util::SinkExt;
+    use futures_util::{SinkExt, StreamExt};
     use tokio::io::AsyncReadExt;
 
     // Note: DNS/parsing tests are in dns.rs, framing/stanza tests are in framing.rs.
@@ -1514,6 +1606,243 @@ mod tests {
             active_connections.load(Ordering::SeqCst),
             0,
             "connection guard should decrement active connection count on early exit"
+        );
+    }
+
+    /// Spin up a fake upstream TCP server + the proxy `handle_connection`, send
+    /// `client_open` from a WebSocket client, and return the first stream header
+    /// the proxy writes upstream (the STARTTLS `<stream:stream …>`).
+    ///
+    /// `domain_param`, when set, is appended as `?domain=…` to the `tcp://` server
+    /// input. The fake upstream stays silent after capturing the header, so the
+    /// proxy's STARTTLS eventually errors — but the header is already captured.
+    async fn capture_proxy_starttls_header(
+        client_open: &str,
+        domain_param: Option<&str>,
+    ) -> String {
+        let upstream = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind fake upstream");
+        let upstream_port = upstream.local_addr().expect("upstream addr").port();
+        let (hdr_tx, hdr_rx) = tokio::sync::oneshot::channel::<String>();
+
+        tokio::spawn(async move {
+            let (mut sock, _) = upstream.accept().await.expect("accept upstream");
+            let mut buf = [0u8; 4096];
+            let mut acc = Vec::new();
+            loop {
+                match tokio::time::timeout(std::time::Duration::from_secs(2), sock.read(&mut buf))
+                    .await
+                {
+                    Ok(Ok(n)) if n > 0 => {
+                        acc.extend_from_slice(&buf[..n]);
+                        let s = String::from_utf8_lossy(&acc);
+                        // Wait for the full <stream:stream …> open, skipping the
+                        // leading <?xml …?> declaration (its own '>' comes first).
+                        if let Some(idx) = s.find("<stream:stream") {
+                            if s[idx..].contains('>') {
+                                break;
+                            }
+                        }
+                    }
+                    _ => break,
+                }
+            }
+            let _ = hdr_tx.send(String::from_utf8_lossy(&acc).to_string());
+            // Keep the socket open briefly so the proxy doesn't tear down first.
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(1), sock.read(&mut buf))
+                .await;
+        });
+
+        let server_input = match domain_param {
+            Some(d) => format!("tcp://127.0.0.1:{upstream_port}?domain={d}"),
+            None => format!("tcp://127.0.0.1:{upstream_port}"),
+        };
+
+        let ws_listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind ws listener");
+        let ws_addr = ws_listener.local_addr().expect("ws listener addr");
+        let (shutdown_tx, _) = tokio::sync::broadcast::channel(1);
+        let active = Arc::new(AtomicUsize::new(0));
+        let active_for_handler = active.clone();
+
+        let handler = tokio::spawn(async move {
+            let (ws_stream, _) = ws_listener.accept().await.expect("accept ws");
+            let _ = handle_connection(
+                ws_stream,
+                &server_input,
+                shutdown_tx.subscribe(),
+                active_for_handler,
+                None,
+            )
+            .await;
+        });
+
+        let ws_url = format!("ws://{}", ws_addr);
+        let (mut ws_client, _) = tokio_tungstenite::connect_async(ws_url)
+            .await
+            .expect("connect ws client");
+        ws_client
+            .send(Message::Text(client_open.to_string().into()))
+            .await
+            .expect("send <open/>");
+
+        let header = tokio::time::timeout(std::time::Duration::from_secs(3), hdr_rx)
+            .await
+            .expect("should capture upstream stream header before timeout")
+            .expect("header channel should not drop");
+
+        drop(ws_client);
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(2), handler).await;
+        header
+    }
+
+    /// Regression guard (R1): when the connection host differs from the JID
+    /// domain, the STARTTLS stream header MUST carry the JID domain (taken from
+    /// the client's `<open to=>`), not the connection host. Host-based since #134.
+    #[tokio::test]
+    async fn test_explicit_starttls_uses_jid_domain_from_open_to() {
+        let client_open = "<open xmlns='urn:ietf:params:xml:ns:xmpp-framing' to='process-one.net' from='me@process-one.net' version='1.0'/>";
+        let header = capture_proxy_starttls_header(client_open, None).await;
+        assert!(
+            header.contains("to='process-one.net'"),
+            "STARTTLS header must carry the JID domain from <open to=>, got: {header}"
+        );
+        assert!(
+            !header.contains("to='127.0.0.1'"),
+            "STARTTLS header must NOT use the connection host, got: {header}"
+        );
+    }
+
+    /// Precedence guard (R2): an explicit `?domain=` override wins over the
+    /// client's `<open to=>`.
+    #[tokio::test]
+    async fn test_explicit_starttls_domain_param_overrides_open_to() {
+        let client_open = "<open xmlns='urn:ietf:params:xml:ns:xmpp-framing' to='process-one.net' version='1.0'/>";
+        let header = capture_proxy_starttls_header(client_open, Some("explicit.example")).await;
+        assert!(
+            header.contains("to='explicit.example'"),
+            "?domain= override must win over <open to=>, got: {header}"
+        );
+    }
+
+    /// Part 2: an upstream stream error (host-unknown) must be relayed to the
+    /// client in the WebSocket close reason, not swallowed as an abrupt socket
+    /// drop (which xmpp.js reports as the misleading "WebSocket ECONNERROR").
+    #[tokio::test]
+    async fn test_upstream_stream_error_surfaced_in_ws_close_reason() {
+        let upstream = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind fake upstream");
+        let upstream_port = upstream.local_addr().expect("upstream addr").port();
+
+        tokio::spawn(async move {
+            let (mut sock, _) = upstream.accept().await.expect("accept upstream");
+            let mut buf = [0u8; 4096];
+            // Read the proxy's <stream:stream> opening.
+            let _ =
+                tokio::time::timeout(std::time::Duration::from_secs(2), sock.read(&mut buf)).await;
+            // Reply with a stream header + host-unknown stream error, then close —
+            // exactly what ejabberd does for an unknown vhost.
+            let resp = "<?xml version='1.0'?><stream:stream xmlns='jabber:client' xmlns:stream='http://etherx.jabber.org/streams' from='process-one.net' id='x' version='1.0'><stream:error><host-unknown xmlns='urn:ietf:params:xml:ns:xmpp-streams'/></stream:error></stream:stream>";
+            let _ = sock.write_all(resp.as_bytes()).await;
+            let _ = sock.flush().await;
+            let _ =
+                tokio::time::timeout(std::time::Duration::from_secs(1), sock.read(&mut buf)).await;
+        });
+
+        let server_input = format!("tcp://127.0.0.1:{upstream_port}");
+        let ws_listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind ws listener");
+        let ws_addr = ws_listener.local_addr().expect("ws listener addr");
+        let (shutdown_tx, _) = tokio::sync::broadcast::channel(1);
+        let active = Arc::new(AtomicUsize::new(0));
+        let active_for_handler = active.clone();
+
+        tokio::spawn(async move {
+            let (ws_stream, _) = ws_listener.accept().await.expect("accept ws");
+            let _ = handle_connection(
+                ws_stream,
+                &server_input,
+                shutdown_tx.subscribe(),
+                active_for_handler,
+                None,
+            )
+            .await;
+        });
+
+        let ws_url = format!("ws://{}", ws_addr);
+        let (mut ws_client, _) = tokio_tungstenite::connect_async(ws_url)
+            .await
+            .expect("connect ws client");
+        ws_client
+            .send(Message::Text(
+                "<open xmlns='urn:ietf:params:xml:ns:xmpp-framing' to='process-one.net' version='1.0'/>"
+                    .to_string()
+                    .into(),
+            ))
+            .await
+            .expect("send <open/>");
+
+        let mut close_reason = String::new();
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            while let Some(msg) = ws_client.next().await {
+                match msg {
+                    Ok(Message::Close(Some(frame))) => {
+                        close_reason = frame.reason.to_string();
+                        break;
+                    }
+                    Ok(Message::Close(None)) => break,
+                    Ok(_) => {}
+                    Err(_) => break,
+                }
+            }
+        })
+        .await;
+
+        assert!(
+            close_reason.contains("host-unknown"),
+            "WebSocket close reason must carry the upstream stream-error condition, got: {close_reason:?}"
+        );
+    }
+
+    // --- stream_error_condition_from_error tests ---
+
+    #[test]
+    fn test_stream_error_condition_from_error_present() {
+        assert_eq!(
+            stream_error_condition_from_error("STARTTLS: server stream-error: host-unknown")
+                .as_deref(),
+            Some("host-unknown")
+        );
+    }
+
+    #[test]
+    fn test_stream_error_condition_from_error_in_aggregated_message() {
+        // connect_upstream_tls wraps each endpoint failure; the marker survives.
+        let aggregated = "All 1 endpoint(s) failed:\n  - chat.process-one.net:5222 (Tcp): STARTTLS: server stream-error: host-unknown";
+        assert_eq!(
+            stream_error_condition_from_error(aggregated).as_deref(),
+            Some("host-unknown")
+        );
+    }
+
+    #[test]
+    fn test_stream_error_condition_from_error_hyphenated_condition() {
+        assert_eq!(
+            stream_error_condition_from_error("STARTTLS: server stream-error: see-other-host")
+                .as_deref(),
+            Some("see-other-host")
+        );
+    }
+
+    #[test]
+    fn test_stream_error_condition_from_error_transport_failure_is_none() {
+        assert_eq!(
+            stream_error_condition_from_error("TCP connect timed out after 15s to host:5222"),
+            None
         );
     }
 }
