@@ -552,8 +552,10 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
                   // can outrace. (clearLocalData handles this in the clean path.)
                   clearAutoReconnectCredentials(jid)
 
-                  // Reset connection store so App re-renders and routes to LoginScreen.
-                  // (clearLocalData already resets stores in the clean path.)
+                  // Clear connection store state so the next login starts fresh.
+                  // (App's route to LoginScreen is driven by the 'disconnected'
+                  // status from disconnect() above — see the gate in App.tsx —
+                  // not by this reset. clearLocalData resets stores in the clean path.)
                   connectionStore.getState().reset()
 
                   const keychainSettled = await Promise.race([

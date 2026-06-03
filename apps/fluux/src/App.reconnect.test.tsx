@@ -70,6 +70,16 @@ vi.mock('./hooks/useTabCoordination', () => ({
   })),
 }))
 
+// The online transition fires App's E2EE bootstrap effect; keep it inert so the
+// routing assertions don't depend on crypto/storage side effects.
+vi.mock('./e2ee/registerPlugins', () => ({
+  registerE2EEPlugins: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock('./hooks/useAccountScopeRehydration', () => ({
+  useAccountScopeRehydration: vi.fn(),
+}))
+
 vi.mock('./components/ChatLayout', () => ({
   ChatLayout: () => <div data-testid="chat-layout">ChatLayout</div>,
 }))
@@ -106,5 +116,162 @@ describe('App reconnect recovery hooks', () => {
 
     expect(screen.getByText('Reconnecting...')).toBeInTheDocument()
     expect(mockUsePlatformState).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('App connection-state routing (after the user has been online)', () => {
+  const renderApp = () =>
+    render(
+      <MemoryRouter initialEntries={['/messages']}>
+        <App />
+      </MemoryRouter>
+    )
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    // A stored session persists throughout: logout-keep-data and
+    // cancel-reconnect both leave credentials behind while the connection
+    // is no longer online. The gate must not key its login/chat decision on
+    // the (non-reactive) presence of that session alone.
+    mockGetSession.mockReturnValue({
+      jid: 'user@example.com',
+      password: 'secret',
+      server: 'example.com',
+    })
+  })
+
+  it('returns to LoginScreen after a disconnect even when a session is still stored', () => {
+    mockUseConnectionStatus.mockReturnValue({ status: 'online', jid: 'user@example.com' })
+    const { rerender } = renderApp()
+    expect(screen.getByTestId('chat-layout')).toBeInTheDocument()
+
+    // User picks "Disconnect" from the menu without clearing data → SDK
+    // transitions to 'disconnected'. The stored session must not pin them to a
+    // stale ChatLayout.
+    mockUseConnectionStatus.mockReturnValue({ status: 'disconnected', jid: null })
+    rerender(
+      <MemoryRouter initialEntries={['/messages']}>
+        <App />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByTestId('login-screen')).toBeInTheDocument()
+    expect(screen.queryByTestId('chat-layout')).not.toBeInTheDocument()
+  })
+
+  it('returns to LoginScreen on a terminal connection error with a stored session', () => {
+    mockUseConnectionStatus.mockReturnValue({ status: 'online', jid: 'user@example.com' })
+    const { rerender } = renderApp()
+    expect(screen.getByTestId('chat-layout')).toBeInTheDocument()
+
+    mockUseConnectionStatus.mockReturnValue({
+      status: 'error',
+      jid: null,
+      error: 'Authentication failed',
+    })
+    rerender(
+      <MemoryRouter initialEntries={['/messages']}>
+        <App />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByTestId('login-screen')).toBeInTheDocument()
+  })
+
+  it('stays on ChatLayout during a transient reconnect (does not flash login)', () => {
+    mockUseConnectionStatus.mockReturnValue({ status: 'online', jid: 'user@example.com' })
+    const { rerender } = renderApp()
+    expect(screen.getByTestId('chat-layout')).toBeInTheDocument()
+
+    mockUseConnectionStatus.mockReturnValue({ status: 'reconnecting', jid: 'user@example.com' })
+    rerender(
+      <MemoryRouter initialEntries={['/messages']}>
+        <App />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByTestId('chat-layout')).toBeInTheDocument()
+    expect(screen.queryByTestId('login-screen')).not.toBeInTheDocument()
+  })
+
+  it('routes to LoginScreen on a disconnect driven only by the status change (session still present)', () => {
+    // Regression guard for the core mechanism: the gate must react to `status`
+    // alone. Here the stored session is NEVER cleared (mockGetSession keeps
+    // returning it), so a gate that depended on `!hasSession` would stay on
+    // ChatLayout — exactly the original bug, where connectionStore.reset() left
+    // status/jid/error unchanged and App never re-rendered to notice the cleared
+    // session. Flipping only `status` must be enough to reach login.
+    mockUseConnectionStatus.mockReturnValue({ status: 'online', jid: 'user@example.com' })
+    const { rerender } = renderApp()
+    expect(screen.getByTestId('chat-layout')).toBeInTheDocument()
+    expect(mockGetSession()).not.toBeNull()
+
+    mockUseConnectionStatus.mockReturnValue({ status: 'disconnected', jid: null })
+    rerender(
+      <MemoryRouter initialEntries={['/messages']}>
+        <App />
+      </MemoryRouter>
+    )
+
+    expect(mockGetSession()).not.toBeNull() // session deliberately still present
+    expect(screen.getByTestId('login-screen')).toBeInTheDocument()
+  })
+})
+
+describe('App connection gate — initial load and fresh login', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('shows the auto-reconnect spinner (not LoginScreen) for a disconnected status during the initial reconnect', () => {
+    // Stored session → isAutoReconnecting initialises true; never been online.
+    // The spinner gate runs BEFORE the disconnected/error → login gate, so a
+    // 'disconnected' status here must show the spinner, not flash login.
+    mockGetSession.mockReturnValue({
+      jid: 'user@example.com',
+      password: 'secret',
+      server: 'example.com',
+    })
+    mockUseConnectionStatus.mockReturnValue({ status: 'disconnected', jid: null })
+
+    render(
+      <MemoryRouter initialEntries={['/messages']}>
+        <App />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByText('Reconnecting...')).toBeInTheDocument()
+    expect(screen.queryByTestId('login-screen')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('chat-layout')).not.toBeInTheDocument()
+  })
+
+  it('stays on LoginScreen while a fresh login is connecting (no stored session)', () => {
+    // No session → not auto-reconnecting; the login form owns the 'connecting'
+    // state and shows its own spinner, so the gate must keep LoginScreen rather
+    // than fall through to an empty ChatLayout.
+    mockGetSession.mockReturnValue(null)
+    mockUseConnectionStatus.mockReturnValue({ status: 'connecting', jid: null })
+
+    render(
+      <MemoryRouter initialEntries={['/messages']}>
+        <App />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByTestId('login-screen')).toBeInTheDocument()
+    expect(screen.queryByTestId('chat-layout')).not.toBeInTheDocument()
+  })
+
+  it('shows LoginScreen on a cold start with no session (disconnected)', () => {
+    mockGetSession.mockReturnValue(null)
+    mockUseConnectionStatus.mockReturnValue({ status: 'disconnected', jid: null })
+
+    render(
+      <MemoryRouter initialEntries={['/messages']}>
+        <App />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByTestId('login-screen')).toBeInTheDocument()
   })
 })

@@ -352,11 +352,22 @@ function App() {
     )
   }
 
-  // Show login when not online and no stored session exists.
-  // When a session exists (e.g., during SDK reconnection after sleep), stay on ChatLayout
-  // where the inline reconnect indicator shows. Uses status !== 'online' to cover all
-  // non-connected states (disconnected, connecting, reconnecting, error).
-  if (status !== 'online' && !hasSession) {
+  // Route to LoginScreen for settled, non-recoverable connection states.
+  //
+  // 'disconnected' (user logout / cancel-reconnect) and 'error' (terminal
+  // auth/conflict/initial-failure) are stable end states, so we always leave
+  // ChatLayout for them. A *transient* drop uses 'reconnecting'/'verifying' and
+  // keeps a stored session; those intentionally stay on ChatLayout so the
+  // inline reconnect indicator shows and the user keeps their place. The
+  // remaining `!hasSession` case covers a fresh login still in 'connecting'.
+  //
+  // Keying the terminal cases on `status` (which App subscribes to) is what
+  // makes this reactive. A sessionStorage write from clearSession() does NOT
+  // re-render App, so a gate that depended only on `!hasSession` could strand a
+  // logged-out user on a stale ChatLayout whenever the post-disconnect store
+  // reset left status/jid/error unchanged (it already does after disconnect()).
+  // The status transition emitted by disconnect() is the reliable re-render trigger.
+  if (status === 'disconnected' || status === 'error' || (status !== 'online' && !hasSession)) {
     return (
       <>
         <TitleBar />
