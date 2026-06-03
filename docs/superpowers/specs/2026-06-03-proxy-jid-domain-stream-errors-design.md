@@ -137,22 +137,30 @@ Domain precedence for an explicit endpoint becomes:
     (recognised by `Connection.ts:2086` `isExpectedBridgeClose`) instead of an
     abrupt 1006 drop, and the Tauri event now fires for pre-bridge failures too.
 
-### Part 3 — Frontend surfacing (SDK stays i18n-free)
+### Part 3 — Frontend surfacing (as built)
 
-- **`Connection.ts`:** in the `initialFailure` disconnect path (and the
-  connection-error path), when the close reason matches
-  `Bridge closed: stream-error <condition>`, extract `<condition>` and set
-  `connection.setError` to a stable token the app can recognize (keep the bare
-  condition, e.g. `stream-error:host-unknown`). Follows the existing
-  substring-token pattern (`isAuthError` already matches `not-authorized`).
-- **`LoginScreen.tsx`:** map a recognized stream-error condition to a localized
-  message via a small `streamErrorMessage(error, t)` helper; reveal the server
-  field (already done for non-auth errors). `host-unknown` gets a domain-specific
-  hint (front host serves a different vhost; use `?domain=` or check the server).
-- **i18n (`en.json` / `fr.json`):** add `login.streamError.*` keys for
-  `host-unknown`, `see-other-host`, `not-authorized`, `conflict`, `host-gone`,
-  `remote-connection-failed`, `policy-violation`, plus a generic
-  `stream-error: {{condition}}` fallback.
+- **`streamErrors.ts` (new SDK module):** two pure helpers —
+  `extractStreamErrorCondition(text)` (recovers the condition from the proxy's
+  `"… stream-error <condition>"` encoding, including inside a verbose
+  WebSocket-close message) and `humanizeStreamError(text)` (maps known conditions
+  — `host-unknown`, `see-other-host`, `not-authorized`, `conflict`, `host-gone`,
+  `remote-connection-failed`, `policy-violation`, … — to a clear, actionable
+  sentence that still shows the raw condition; generic fallback otherwise;
+  `null` when no condition is present).
+- **`Connection.ts`:** call `humanizeStreamError` in the two places the
+  user-facing connection error is built — the `connect()` catch (display string
+  for `CONNECTION_ERROR`/`emitSDK`) and the `initialFailure` disconnect branch
+  (which already folds the bridge close reason). When a condition is present the
+  humanized message replaces the transport noise; otherwise the existing message
+  is untouched. Machine routing stays keyed on the original message.
+- **`LoginScreen.tsx`:** no change — it already renders `connection.error`
+  verbatim, so the clearer message surfaces automatically (consistent with the
+  other English transport messages the SDK already emits, e.g. the local-proxy
+  firewall hint).
+- **Deferred:** full fr/en localization of connection errors. The app does not
+  localize connection errors today (they render raw), so localizing only stream
+  errors would be inconsistent. `extractStreamErrorCondition` is structured so a
+  later i18n pass can map the condition to `login.streamError.*` keys.
 
 ## Affected units
 
