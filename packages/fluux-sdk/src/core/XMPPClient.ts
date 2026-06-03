@@ -1839,7 +1839,7 @@ export class XMPPClient {
       }
     }
     if (updated > 0) {
-      logInfo(`E2EE peer key change: upgraded ${updated} message(s) for ${peer}`)
+      logInfo(`E2EE peer key change: updated ${updated} message(s) for ${peer}`)
     }
   }
 
