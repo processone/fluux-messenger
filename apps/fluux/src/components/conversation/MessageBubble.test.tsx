@@ -22,6 +22,12 @@ vi.mock('./messageGrouping', () => ({
   isActionMessage: (body?: string) => body?.startsWith('/me '),
 }))
 
+// Stub EncryptedPlaceholder — it depends on several store hooks not mocked here.
+// We only need to assert MessageBubble routes to it when encryptedPayload is set.
+vi.mock('./EncryptedPlaceholder', () => ({
+  EncryptedPlaceholder: () => <div data-testid="encrypted-placeholder" />,
+}))
+
 // Create a base message for testing
 function createTestMessage(overrides: Partial<BaseMessage> = {}): BaseMessage {
   return {
@@ -381,6 +387,23 @@ describe('MessageBubble', () => {
       )
       // Same DOM node retained → memo correctly skipped the render.
       expect(secondNode).toBe(firstNode)
+    })
+  })
+
+  describe('Encrypted payload (deferred/failed decrypt)', () => {
+    it('renders EncryptedPlaceholder instead of the body when encryptedPayload is set', () => {
+      const props = createDefaultProps({
+        message: createTestMessage({
+          body: 'this fallback hint text must NOT be shown',
+          encryptedPayload: '<openpgp xmlns="urn:xmpp:openpgp:0">cipher</openpgp>',
+        }),
+      })
+      render(<MessageBubble {...props} />)
+
+      // The placeholder takes over the body region…
+      expect(screen.getByTestId('encrypted-placeholder')).toBeInTheDocument()
+      // …and the raw body text is NOT rendered.
+      expect(screen.queryByText(/this fallback hint text must NOT be shown/)).not.toBeInTheDocument()
     })
   })
 
