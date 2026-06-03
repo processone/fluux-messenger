@@ -1030,6 +1030,28 @@ export class Profile extends BaseModule {
           }
         }
       }
+
+      // MUC occupant avatars live in each room's occupant map (keyed by nick),
+      // not in the contact/room hash store, so the loop above never touches
+      // them. After blob invalidation (WebKit reclaiming memory on sleep, or
+      // revokeAllBlobUrls on disconnect) their URLs are dead and were never
+      // re-pointed — the cause of broken occupant avatars ("img blob:" load
+      // failures) when reading public groups. Re-point each occupant whose
+      // cached avatar hash has a fresh URL.
+      const joinedRooms = this.deps.stores?.room?.joinedRooms?.() ?? []
+      for (const room of joinedRooms) {
+        for (const occupant of room.occupants.values()) {
+          if (!occupant.avatarHash) continue
+          const url = freshUrls.get(occupant.avatarHash)
+          if (!url) continue
+          this.deps.emitSDK('room:occupant-avatar', {
+            roomJid: room.jid,
+            nick: occupant.nick,
+            avatar: url,
+            avatarHash: occupant.avatarHash,
+          })
+        }
+      }
     } catch (error) {
       console.warn('Failed to refresh avatar blob URLs:', error)
     }
