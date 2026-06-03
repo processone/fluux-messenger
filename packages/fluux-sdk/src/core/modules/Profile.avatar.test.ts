@@ -7,6 +7,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { XMPPClient } from '../XMPPClient'
+import type { Room, RoomOccupant } from '../types/room'
 import {
   createMockXmppClient,
   createMockStores,
@@ -921,6 +922,42 @@ describe('XMPPClient Own Avatar', () => {
       await xmppClient.profile.refreshAllAvatarBlobUrls()
 
       expect(emitSDKSpy).not.toHaveBeenCalled()
+    })
+
+    it('should refresh stale blob URLs for MUC occupants', async () => {
+      emitSDKSpy.mockClear()
+
+      const { refreshAllBlobUrls, getAllAvatarHashes } = await import('../../utils/avatarCache')
+      vi.mocked(refreshAllBlobUrls).mockResolvedValue(new Map([['hash-o1', 'blob:fresh-occupant1']]))
+      // Occupant avatars are NOT in the contact/room hash store, so this stays empty.
+      vi.mocked(getAllAvatarHashes).mockResolvedValue([])
+
+      // A joined room whose occupant's avatar blob URL went stale after wake.
+      // refreshAllBlobUrls revoked the old blobs; occupants must be re-pointed.
+      const occupants = new Map<string, RoomOccupant>([
+        ['Alice', { nick: 'Alice', affiliation: 'none', role: 'participant', avatar: 'blob:stale-occupant', avatarHash: 'hash-o1' }],
+        ['Bob', { nick: 'Bob', affiliation: 'none', role: 'participant' }], // no avatarHash → must be skipped
+        ['Carol', { nick: 'Carol', affiliation: 'none', role: 'participant', avatar: 'blob:stale', avatarHash: 'hash-unknown' }], // hash not refreshed → skipped
+      ])
+      mockStores.room.joinedRooms.mockReturnValue([
+        {
+          jid: 'room@conf.example.com', name: 'Room', nickname: '',
+          joined: true, isBookmarked: false, occupants,
+          messages: [], unreadCount: 0, mentionsCount: 0, typingUsers: new Set<string>(),
+        } as Room,
+      ])
+
+      await xmppClient.profile.refreshAllAvatarBlobUrls()
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:occupant-avatar', {
+        roomJid: 'room@conf.example.com',
+        nick: 'Alice',
+        avatar: 'blob:fresh-occupant1',
+        avatarHash: 'hash-o1',
+      })
+      // Occupants without a hash, or whose hash wasn't refreshed, must not emit.
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('room:occupant-avatar', expect.objectContaining({ nick: 'Bob' }))
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('room:occupant-avatar', expect.objectContaining({ nick: 'Carol' }))
     })
   })
 
