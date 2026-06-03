@@ -384,6 +384,33 @@ describe('MessageBubble', () => {
     })
   })
 
+  describe('Unsupported encryption', () => {
+    it('shows the fallback body and a muted lock hint', () => {
+      const props = createDefaultProps({
+        message: createTestMessage({
+          body: "I sent you an OMEMO encrypted message but your client doesn't support it.",
+          unsupportedEncryption: { namespace: 'eu.siacs.conversations.axolotl', name: 'OMEMO' },
+        }),
+      })
+      const { container } = render(<MessageBubble {...props} />)
+
+      // Fallback body is shown (not replaced by a decrypt-failure placeholder)
+      expect(screen.getByText(/I sent you an OMEMO encrypted message/)).toBeInTheDocument()
+
+      // Muted lock hint present, labelled with the protocol name
+      const hint = container.querySelector(
+        '[aria-label="Encrypted with OMEMO, unsupported method"]',
+      )
+      expect(hint).not.toBeNull()
+
+      // Click reveals the tooltip (t() returns the key in tests)
+      fireEvent.click(hint!.parentElement!)
+      expect(screen.getByRole('tooltip').textContent).toContain(
+        'chat.encryption.unsupportedMethodTooltip',
+      )
+    })
+  })
+
   describe('Data Attributes', () => {
     it('sets correct data attributes on the message bubble', () => {
       const props = createDefaultProps({
