@@ -586,3 +586,51 @@ describe('recordUnclaimedEME', () => {
     expect(recordUnclaimedEME(stanza, false).kind).toBe('none')
   })
 })
+
+// ---------------------------------------------------------------------------
+// decryptStanzaInPlace: unsupported protocol with a registered plugin
+// ---------------------------------------------------------------------------
+
+describe('decryptStanzaInPlace unsupported encryption', () => {
+  function omemoStanza(): Element {
+    return xml(
+      'message',
+      { from: 'peer@example.com/r', id: 'u1', type: 'chat' },
+      xml('encrypted', { xmlns: 'eu.siacs.conversations.axolotl' }, 'cipher'),
+      xml('encryption', { xmlns: 'urn:xmpp:eme:0', namespace: 'eu.siacs.conversations.axolotl', name: 'OMEMO' }),
+      xml('body', {}, 'OMEMO fallback'),
+    ) as Element
+  }
+
+  it('flags OMEMO as unsupported (no payload stash) when a non-claiming plugin is registered', async () => {
+    // FakeE2EEPlugin only claims urn:test:e2ee:0, so it never claims OMEMO,
+    // but its presence means hasPlugins() === true.
+    const manager = await makeManager(new FakeE2EEPlugin(undefined))
+    const stanza = omemoStanza()
+
+    const result = await decryptStanzaInPlace(stanza, manager, 'peer@example.com')
+
+    expect(result.attempted).toBe(false)
+    expect(result.encryptedPayloadXml).toBeUndefined()
+    expect(result.unsupportedEncryption).toEqual({
+      namespace: 'eu.siacs.conversations.axolotl',
+      name: 'OMEMO',
+    })
+    expect(readStashedUnsupportedEncryption(stanza)).toEqual({
+      namespace: 'eu.siacs.conversations.axolotl',
+      name: 'OMEMO',
+    })
+    expect(stanza.getChildText('body')).toBe('OMEMO fallback')
+  })
+
+  it('stashes OMEMO for retry when no plugin is registered', async () => {
+    const manager = makeEmptyManager()
+    const stanza = omemoStanza()
+
+    const result = await decryptStanzaInPlace(stanza, manager, 'peer@example.com')
+
+    expect(result.attempted).toBe(false)
+    expect(result.unsupportedEncryption).toBeUndefined()
+    expect(result.encryptedPayloadXml).toContain('eu.siacs.conversations.axolotl')
+  })
+})

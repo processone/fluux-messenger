@@ -85,6 +85,13 @@ export interface DecryptInPlaceResult {
    * {@link XMPPClient.retryPendingDecrypts} can re-attempt later.
    */
   encryptedPayloadXml?: string
+  /**
+   * Set when the stanza is encrypted with a protocol this client has no plugin
+   * for (e.g. OMEMO when only OpenPGP is wired). Mutually exclusive with
+   * `encryptedPayloadXml`. Callers tag the message and surface its fallback
+   * `<body>` instead of a decrypt-failure placeholder.
+   */
+  unsupportedEncryption?: { namespace: string; name: string }
 }
 
 /**
@@ -146,13 +153,18 @@ export async function decryptStanzaInPlace(
     }
   }
   if (!claim || !encryptedChild) {
-    // No plugin claimed — check if this is still an encrypted message via
-    // XEP-0380 EME (Explicit Message Encryption). This happens when no
-    // plugin is registered yet (race at startup) or the message uses a
-    // protocol this client doesn't support. Stash the encrypted element
-    // so retryPendingDecrypts() can re-attempt when a plugin is available.
-    const payloadXml = stashEncryptedPayloadViaEME(stanza)
-    return { attempted: false, ...(payloadXml && { encryptedPayloadXml: payloadXml }) }
+    // No plugin claimed. recordUnclaimedEME tells apart "E2EE not ready yet"
+    // (no plugin registered — stash for deferred retry) from "protocol we have
+    // no plugin for" (e.g. OMEMO when only OpenPGP is wired — surface the
+    // sender's XEP-0380 fallback <body> with an unsupported-method tag).
+    const disposition = recordUnclaimedEME(stanza, manager.hasPlugins())
+    if (disposition.kind === 'retry') {
+      return { attempted: false, encryptedPayloadXml: disposition.encryptedPayloadXml }
+    }
+    if (disposition.kind === 'unsupported') {
+      return { attempted: false, unsupportedEncryption: disposition.info }
+    }
+    return { attempted: false }
   }
 
   // Serialize the encrypted element BEFORE any mutation — the element
@@ -470,31 +482,6 @@ export function readStashedUnsupportedEncryption(stanza: Element): EMEIdentity |
   return (stanza as unknown as { [UNSUPPORTED_ENC_STASH]?: EMEIdentity })[
     UNSUPPORTED_ENC_STASH
   ]
-}
-
-/**
- * EME-based fallback: when no plugin claimed the stanza, look for an
- * XEP-0380 `<encryption>` hint. If found, locate the encrypted child by
- * matching its namespace to the EME `namespace` attribute, serialize it,
- * and stash it on the stanza. Returns the serialized XML or `undefined`.
- */
-function stashEncryptedPayloadViaEME(stanza: Element): string | undefined {
-  const emeEl = stanza.getChild('encryption', NS_EME)
-  if (!emeEl) return undefined
-  const emeNamespace = emeEl.attrs.namespace
-  if (!emeNamespace) return undefined
-
-  for (const child of stanza.children) {
-    if (typeof child === 'string') continue
-    const childEl = child as Element
-    if (childEl.attrs.xmlns === emeNamespace) {
-      const payloadXml = childEl.toString()
-      stashPayload(stanza, payloadXml)
-      logInfo(`E2EE: stashed encrypted payload via EME (ns=${emeNamespace}) for deferred decrypt`)
-      return payloadXml
-    }
-  }
-  return undefined
 }
 
 /**
