@@ -497,6 +497,7 @@
             "encryptedCouldNotDecrypt": "Tämän viestin salausta ei voitu purkaa",
             "encryptedDisabled": "Salaus poistettu käytöstä — ota se käyttöön asetuksissa",
             "couldNotDecryptTooltip": "Viesti on salattu avaimelle, jota ei ole saatavilla tässä laitteessa",
+            "unsupportedMethodTooltip": "Salattu menetelmällä {{method}} — tätä menetelmää tämä laite ei vielä tue",
             "rejected": "Varmenne hylätty",
             "rejectedTooltip": "Keskustelukumppanin OpenPGP-varmenne on virheellinen — napsauta nähdäksesi lisätietoja",
             "rejectedTitle": "Varmenne hylätty",

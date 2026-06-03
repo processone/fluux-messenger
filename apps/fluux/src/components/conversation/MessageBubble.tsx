@@ -159,6 +159,13 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps): bool
   const nextSec = JSON.stringify(next.message.securityContext ?? null)
   if (prevSec !== nextSec) return false
 
+  // Unsupported-encryption tag — drives the muted lock hint. retryPendingDecrypts()
+  // can set this on an already-rendered message (migration of stored OMEMO
+  // messages), so it must invalidate the memo like securityContext does.
+  const prevUnsup = JSON.stringify(prev.message.unsupportedEncryption ?? null)
+  const nextUnsup = JSON.stringify(next.message.unsupportedEncryption ?? null)
+  if (prevUnsup !== nextUnsup) return false
+
   // My reactions array
   if (prev.myReactions.length !== next.myReactions.length) return false
   if (prev.myReactions.some((r, i) => r !== next.myReactions[i])) return false
@@ -444,6 +451,22 @@ export const MessageBubble = memo(function MessageBubble({
                   {message.securityContext.trust === 'rejected'
                     ? <ShieldAlert className="size-3" />
                     : <Lock className="size-3" />}
+                </span>
+              </Tooltip>
+            )}
+            {!message.securityContext && message.unsupportedEncryption && (
+              <Tooltip
+                content={t('chat.encryption.unsupportedMethodTooltip', {
+                  method: message.unsupportedEncryption.name,
+                })}
+                position="top"
+                triggerMode="click"
+              >
+                <span
+                  className="flex items-center text-fluux-muted"
+                  aria-label={`Encrypted with ${message.unsupportedEncryption.name}, unsupported method`}
+                >
+                  <Lock className="size-3" />
                 </span>
               </Tooltip>
             )}

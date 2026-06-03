@@ -499,6 +499,7 @@
             "encryptedCouldNotDecrypt": "Nie udało się odszyfrować tej wiadomości",
             "encryptedDisabled": "Szyfrowanie wyłączone — włącz je w ustawieniach",
             "couldNotDecryptTooltip": "Wiadomość zaszyfrowana kluczem niedostępnym na tym urządzeniu",
+            "unsupportedMethodTooltip": "Zaszyfrowano metodą {{method}} — ta metoda nie jest jeszcze obsługiwana na tym urządzeniu",
             "rejected": "Certyfikat odrzucony",
             "rejectedTooltip": "Certyfikat OpenPGP rozmówcy jest nieprawidłowy — kliknij, aby uzyskać szczegóły",
             "rejectedTitle": "Certyfikat odrzucony",

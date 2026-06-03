@@ -499,6 +499,7 @@
             "encryptedCouldNotDecrypt": "No s'ha pogut desxifrar aquest missatge",
             "encryptedDisabled": "Xifratge desactivat — activeu-lo a la configuració",
             "couldNotDecryptTooltip": "Missatge xifrat per a una clau no disponible en aquest dispositiu",
+            "unsupportedMethodTooltip": "Xifrat amb {{method}} — un mètode que aquest dispositiu encara no admet",
             "rejected": "Certificat rebutjat",
             "rejectedTooltip": "El certificat OpenPGP del contacte no és vàlid — feu clic per veure'n els detalls",
             "rejectedTitle": "Certificat rebutjat",

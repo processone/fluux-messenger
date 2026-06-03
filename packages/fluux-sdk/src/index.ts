@@ -224,6 +224,7 @@ export type {
   // Base message type (shared between chat and room messages)
   BaseMessage,
   MessageSecurityContext,
+  UnsupportedEncryptionInfo,
 
   // Chat types
   Message,

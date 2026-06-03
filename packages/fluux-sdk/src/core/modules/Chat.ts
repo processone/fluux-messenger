@@ -39,6 +39,8 @@ import {
   readStashedAuthoredAt,
   readStashedEncryptedPayload,
   readStashedSecurityContext,
+  readStashedUnsupportedEncryption,
+  recordUnclaimedEME,
   stanzaHasE2EEClaim,
   stanzaHasEMEHint,
 } from '../e2ee/stanzaDecrypt'
@@ -194,13 +196,20 @@ export class Chat extends BaseModule {
       return { handled: true }
     }
 
-    // Deferred decrypt: when tryHandleEncrypted returned false (no plugin
-    // registered or no manager), detect encrypted messages via EME hint and
-    // stash the encrypted payload for later retry. decryptStanzaInPlace
-    // handles the case where a manager exists but no plugin claims; this
-    // covers the case where no manager exists at all.
-    if (!readStashedEncryptedPayload(stanza) && stanzaHasEMEHint(stanza)) {
-      this.stashEncryptedPayloadForDeferredDecrypt(stanza)
+    // tryHandleEncrypted returned false: no plugin claimed the stanza (or there
+    // is no manager). recordUnclaimedEME tags it — when a plugin is registered,
+    // an unclaimed EME stanza is an unsupported protocol (e.g. OMEMO) so the
+    // fallback <body> is shown with an "unsupported method" hint; otherwise the
+    // payload is stashed for retryPendingDecrypts() once a plugin comes online.
+    // The two `!readStashed…` guards make this idempotent across re-entry
+    // (carbon copies / second passes through handleMessageInternal).
+    const manager = this.deps.getE2EEManager?.()
+    if (
+      !readStashedEncryptedPayload(stanza) &&
+      !readStashedUnsupportedEncryption(stanza) &&
+      stanzaHasEMEHint(stanza)
+    ) {
+      recordUnclaimedEME(stanza, !!manager?.hasPlugins())
     }
 
     const from = stanza.attrs.from
@@ -419,30 +428,6 @@ export class Chat extends BaseModule {
       isSelfOutgoing,
     })
     this.handleMessageInternal(stanza, isCarbonCopy, isSentCarbon)
-  }
-
-  /**
-   * Stash the encrypted child element on a stanza for deferred decryption
-   * when no E2EE manager or plugin is available. Uses the XEP-0380 EME hint
-   * to locate the encrypted child by namespace.
-   */
-  private stashEncryptedPayloadForDeferredDecrypt(stanza: Element): void {
-    const emeEl = stanza.getChild('encryption', NS_EME)
-    if (!emeEl) return
-    const emeNamespace = emeEl.attrs.namespace
-    if (!emeNamespace) return
-    for (const child of stanza.children) {
-      if (typeof child === 'string') continue
-      const childEl = child as Element
-      if (childEl.attrs.xmlns === emeNamespace) {
-        // Stash the serialized element for later retry — reuse the same
-        // stanza-level stash that decryptStanzaInPlace uses so downstream
-        // readers (processChatMessage) see it via readStashedEncryptedPayload.
-        const STASH = '__encryptedPayload'
-        ;(stanza as unknown as Record<string, string>)[STASH] = childEl.toString()
-        return
-      }
-    }
   }
 
   /**
@@ -1913,6 +1898,7 @@ export class Chat extends BaseModule {
 
     const securityContext = this.readMessageSecurityContext(stanza)
     const encryptedPayload = readStashedEncryptedPayload(stanza)
+    const unsupportedEncryption = readStashedUnsupportedEncryption(stanza)
     const message: Message = {
       type: 'chat',
       id: messageId,
@@ -1930,6 +1916,7 @@ export class Chat extends BaseModule {
       ...(isCorrection && { isEdited: true }),
       ...(securityContext && { securityContext }),
       ...(encryptedPayload && { encryptedPayload }),
+      ...(unsupportedEncryption && { unsupportedEncryption }),
     }
 
     if (!isOutgoing && this.deps.stores) {
@@ -1982,6 +1969,7 @@ export class Chat extends BaseModule {
 
     const securityContext = this.readMessageSecurityContext(stanza)
     const encryptedPayload = readStashedEncryptedPayload(stanza)
+    const unsupportedEncryption = readStashedUnsupportedEncryption(stanza)
     const message: RoomMessage = {
       type: 'groupchat',
       id: messageId,
@@ -2001,6 +1989,7 @@ export class Chat extends BaseModule {
       ...(occupantId && { occupantId }),
       ...(securityContext && { securityContext }),
       ...(encryptedPayload && { encryptedPayload }),
+      ...(unsupportedEncryption && { unsupportedEncryption }),
     }
 
     // Poll detection: check for <poll> or <poll-closed> elements

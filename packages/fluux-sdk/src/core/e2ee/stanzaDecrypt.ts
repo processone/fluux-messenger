@@ -78,13 +78,21 @@ export interface DecryptInPlaceResult {
    */
   authoredAt?: Date
   /**
-   * Serialized XML of the encrypted child element, present only when
-   * decryption was attempted but failed (key locked, unsupported protocol)
-   * or when an EME hint was detected but no plugin claimed the stanza.
-   * Callers should store this on the resulting {@link Message} so that
+   * Serialized XML of the encrypted child element, present when:
+   * - a plugin claimed the stanza but decrypt failed (e.g. key locked), or
+   * - an EME hint was present but no plugin is registered yet (deferred retry).
+   * Mutually exclusive with `unsupportedEncryption`. Callers should store this
+   * on the resulting {@link Message} so that
    * {@link XMPPClient.retryPendingDecrypts} can re-attempt later.
    */
   encryptedPayloadXml?: string
+  /**
+   * Set when the stanza is encrypted with a protocol this client has no plugin
+   * for (e.g. OMEMO when only OpenPGP is wired). Mutually exclusive with
+   * `encryptedPayloadXml`. Callers tag the message and surface its fallback
+   * `<body>` instead of a decrypt-failure placeholder.
+   */
+  unsupportedEncryption?: { namespace: string; name: string }
 }
 
 /**
@@ -146,13 +154,18 @@ export async function decryptStanzaInPlace(
     }
   }
   if (!claim || !encryptedChild) {
-    // No plugin claimed — check if this is still an encrypted message via
-    // XEP-0380 EME (Explicit Message Encryption). This happens when no
-    // plugin is registered yet (race at startup) or the message uses a
-    // protocol this client doesn't support. Stash the encrypted element
-    // so retryPendingDecrypts() can re-attempt when a plugin is available.
-    const payloadXml = stashEncryptedPayloadViaEME(stanza)
-    return { attempted: false, ...(payloadXml && { encryptedPayloadXml: payloadXml }) }
+    // No plugin claimed. recordUnclaimedEME tells apart "E2EE not ready yet"
+    // (no plugin registered — stash for deferred retry) from "protocol we have
+    // no plugin for" (e.g. OMEMO when only OpenPGP is wired — surface the
+    // sender's XEP-0380 fallback <body> with an unsupported-method tag).
+    const disposition = recordUnclaimedEME(stanza, manager.hasPlugins())
+    if (disposition.kind === 'retry') {
+      return { attempted: false, encryptedPayloadXml: disposition.encryptedPayloadXml }
+    }
+    if (disposition.kind === 'unsupported') {
+      return { attempted: false, unsupportedEncryption: disposition.info }
+    }
+    return { attempted: false }
   }
 
   // Serialize the encrypted element BEFORE any mutation — the element
@@ -364,29 +377,112 @@ function stashPayload(stanza: Element, payloadXml: string): void {
   ] = payloadXml
 }
 
-/**
- * EME-based fallback: when no plugin claimed the stanza, look for an
- * XEP-0380 `<encryption>` hint. If found, locate the encrypted child by
- * matching its namespace to the EME `namespace` attribute, serialize it,
- * and stash it on the stanza. Returns the serialized XML or `undefined`.
- */
-function stashEncryptedPayloadViaEME(stanza: Element): string | undefined {
-  const emeEl = stanza.getChild('encryption', NS_EME)
-  if (!emeEl) return undefined
-  const emeNamespace = emeEl.attrs.namespace
-  if (!emeNamespace) return undefined
+// ---------------------------------------------------------------------------
+// Unsupported / not-yet-ready encryption classification
+// ---------------------------------------------------------------------------
 
+/**
+ * Display names for known XEP-0380 EME namespaces, used to label messages
+ * encrypted with a protocol this build has no plugin for. Falls back to the
+ * EME `name` attribute, then the raw namespace, when not listed here.
+ */
+const EME_PROTOCOL_NAMES: Record<string, string> = {
+  'eu.siacs.conversations.axolotl': 'OMEMO',
+  'urn:xmpp:omemo:2': 'OMEMO 2',
+  'urn:xmpp:openpgp:0': 'OpenPGP',
+  'jabber:x:encrypted': 'Legacy OpenPGP',
+  'urn:xmpp:otr:0': 'OTR',
+}
+
+const KNOWN_ENCRYPTION_NAMESPACES = new Set(Object.keys(EME_PROTOCOL_NAMES))
+
+/**
+ * Identity of an encryption protocol surfaced to the UI. Structurally mirrors
+ * `UnsupportedEncryptionInfo` in the message types; kept separate to avoid an
+ * e2ee→types import cycle (same pattern as SecurityContext/MessageSecurityContext).
+ */
+interface EMEIdentity {
+  namespace: string
+  name: string
+}
+
+/**
+ * Outcome of classifying a `<message>` whose encrypted child no plugin claimed.
+ * - `retry`: E2EE isn't ready yet — the payload is stashed for deferred retry.
+ * - `unsupported`: a plugin is registered but none handles this protocol — the
+ *   sender's fallback `<body>` should be shown; the message is tagged so the UI
+ *   can render an "unsupported method" hint.
+ * - `none`: the stanza isn't actually encryption-tagged (cleartext / malformed).
+ */
+export type UnclaimedEMEDisposition =
+  | { kind: 'retry'; encryptedPayloadXml: string }
+  | { kind: 'unsupported'; info: EMEIdentity }
+  | { kind: 'none' }
+
+const UNSUPPORTED_ENC_STASH = '__unsupportedEncryption'
+
+/**
+ * Locate the encryption namespace + encrypted child of an unclaimed stanza.
+ * Prefers the XEP-0380 EME hint; falls back to any child whose own namespace
+ * is a known encryption namespace (covers retry stanzas rebuilt from a stashed
+ * `<encrypted>` element, which carry no EME hint).
+ */
+function findEncryptionTarget(
+  stanza: Element,
+): { namespace: string; child: Element | null; emeName?: string } | null {
+  const emeEl = stanza.getChild('encryption', NS_EME)
+  const emeNs = emeEl?.attrs.namespace as string | undefined
+  const emeName = emeEl?.attrs.name as string | undefined
   for (const child of stanza.children) {
     if (typeof child === 'string') continue
     const childEl = child as Element
-    if (childEl.attrs.xmlns === emeNamespace) {
-      const payloadXml = childEl.toString()
-      stashPayload(stanza, payloadXml)
-      logInfo(`E2EE: stashed encrypted payload via EME (ns=${emeNamespace}) for deferred decrypt`)
-      return payloadXml
+    const xmlns = childEl.attrs?.xmlns as string | undefined
+    if (!xmlns) continue
+    if (emeNs ? xmlns === emeNs : KNOWN_ENCRYPTION_NAMESPACES.has(xmlns)) {
+      return { namespace: xmlns, child: childEl, ...(emeName && { emeName }) }
     }
   }
-  return undefined
+  if (emeNs) return { namespace: emeNs, child: null, ...(emeName && { emeName }) }
+  return null
+}
+
+/**
+ * Classify and tag an encryption-tagged stanza that no plugin claimed, mutating
+ * the stanza with the appropriate stash. See {@link UnclaimedEMEDisposition}.
+ *
+ * @param hasPlugins - whether the E2EE manager has at least one plugin
+ *   registered. When false the protocol may still be one we support whose
+ *   plugin hasn't finished init — stash for retry. When true an unclaimed
+ *   stanza is a protocol we have no plugin for — unsupported.
+ */
+export function recordUnclaimedEME(
+  stanza: Element,
+  hasPlugins: boolean,
+): UnclaimedEMEDisposition {
+  const target = findEncryptionTarget(stanza)
+  if (!target) return { kind: 'none' }
+
+  if (hasPlugins) {
+    const name = EME_PROTOCOL_NAMES[target.namespace] ?? target.emeName ?? target.namespace
+    const info: EMEIdentity = { namespace: target.namespace, name }
+    ;(stanza as unknown as Record<string, EMEIdentity>)[UNSUPPORTED_ENC_STASH] = info
+    logInfo(`E2EE: message uses unsupported encryption (${name} / ${target.namespace})`)
+    return { kind: 'unsupported', info }
+  }
+
+  // Not ready yet — stash the encrypted child for retryPendingDecrypts().
+  const payloadXml = target.child?.toString()
+  if (!payloadXml) return { kind: 'none' }
+  stashPayload(stanza, payloadXml)
+  logInfo(`E2EE: stashed encrypted payload (ns=${target.namespace}) for deferred decrypt`)
+  return { kind: 'retry', encryptedPayloadXml: payloadXml }
+}
+
+/** Read back the unsupported-encryption identity recorded by {@link recordUnclaimedEME}. */
+export function readStashedUnsupportedEncryption(stanza: Element): EMEIdentity | undefined {
+  return (stanza as unknown as { [UNSUPPORTED_ENC_STASH]?: EMEIdentity })[
+    UNSUPPORTED_ENC_STASH
+  ]
 }
 
 /**

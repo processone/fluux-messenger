@@ -78,6 +78,8 @@ import {
   readStashedAuthoredAt,
   readStashedEncryptedPayload,
   readStashedSecurityContext,
+  readStashedUnsupportedEncryption,
+  recordUnclaimedEME,
 } from '../e2ee/stanzaDecrypt'
 import type { MessageSecurityContext } from '../types'
 import { parseSearchQuery, tokenize } from '../../utils/searchIndex'
@@ -1673,7 +1675,14 @@ export class MAM extends BaseModule {
     archiveTimestamp?: Date,
   ): Promise<void> {
     const manager = this.deps.getE2EEManager?.()
-    if (!manager) return
+    if (!manager) {
+      // No E2EE manager yet (archive replayed before E2EE init). Mirror the
+      // live path's no-manager handling: stash an EME-tagged payload for
+      // deferred retry so it self-heals (decrypts, or is tagged unsupported)
+      // once a manager + plugin come online. Cleartext entries are untouched.
+      recordUnclaimedEME(messageEl, false)
+      return
+    }
     // Same helper the live path uses. The passed-in `peer` is kept as
     // an explicit input rather than deriving it here too: room
     // replays come through this function with `roomJid` (which the
@@ -1745,6 +1754,7 @@ export class MAM extends BaseModule {
 
     const securityContext = this.archiveSecurityContext(messageEl)
     const encryptedPayload = readStashedEncryptedPayload(messageEl)
+    const unsupportedEncryption = readStashedUnsupportedEncryption(messageEl)
 
     return {
       type: 'chat',
@@ -1762,6 +1772,7 @@ export class MAM extends BaseModule {
       ...(parsed.attachment && { attachment: parsed.attachment }),
       ...(securityContext && { securityContext }),
       ...(encryptedPayload && { encryptedPayload }),
+      ...(unsupportedEncryption && { unsupportedEncryption }),
     }
   }
 
@@ -1813,6 +1824,7 @@ export class MAM extends BaseModule {
 
     const roomSecurityContext = this.archiveSecurityContext(messageEl)
     const roomEncryptedPayload = readStashedEncryptedPayload(messageEl)
+    const roomUnsupportedEncryption = readStashedUnsupportedEncryption(messageEl)
 
     const message: RoomMessage = {
       type: 'groupchat',
@@ -1832,6 +1844,7 @@ export class MAM extends BaseModule {
       ...(occupantId && { occupantId }),
       ...(roomSecurityContext && { securityContext: roomSecurityContext }),
       ...(roomEncryptedPayload && { encryptedPayload: roomEncryptedPayload }),
+      ...(roomUnsupportedEncryption && { unsupportedEncryption: roomUnsupportedEncryption }),
     }
 
     // Poll detection: parse <poll> or <poll-closed> elements from archived messages

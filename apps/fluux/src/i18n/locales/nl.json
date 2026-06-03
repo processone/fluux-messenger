@@ -497,6 +497,7 @@
             "encryptedCouldNotDecrypt": "Dit bericht kon niet worden ontsleuteld",
             "encryptedDisabled": "Versleuteling uitgeschakeld — schakel deze in de instellingen in",
             "couldNotDecryptTooltip": "Bericht versleuteld met een sleutel die niet beschikbaar is op dit apparaat",
+            "unsupportedMethodTooltip": "Versleuteld met {{method}} — een methode die dit apparaat nog niet ondersteunt",
             "rejected": "Certificaat geweigerd",
             "rejectedTooltip": "Het OpenPGP-certificaat van de gesprekspartner is ongeldig — klik voor details",
             "rejectedTitle": "Certificaat geweigerd",
