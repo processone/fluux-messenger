@@ -646,6 +646,7 @@ export function usePlatformState() {
         const payload = event.payload as unknown
         let reason = 'unknown'
         let connId = 'unknown'
+        let streamError = ''
         if (typeof payload === 'string') {
           reason = payload
         } else if (payload && typeof payload === 'object') {
@@ -653,10 +654,17 @@ export function usePlatformState() {
           if (typeof record.reason === 'string') reason = record.reason
           if (typeof record.conn_id === 'number') connId = String(record.conn_id)
           if (typeof record.connId === 'number') connId = String(record.connId)
+          if (typeof record.stream_error === 'string') streamError = record.stream_error
         }
+        // A relayed upstream stream-error (e.g. host-unknown) is the actionable
+        // cause; show it alongside the transport reason.
+        const detail = streamError ? `${reason}, stream-error=${streamError}` : reason
         console.log(
-          `[PlatformState] Proxy connection closed (conn=${connId}, reason=${reason}, status=${currentStatus})`
+          `[PlatformState] Proxy connection closed (conn=${connId}, reason=${detail}, status=${currentStatus})`
         )
+        // Surface the real cause in the in-app console so it lands in exported
+        // diagnostics, not just devtools.
+        consoleStore.getState().addEvent(`Proxy connection closed (${detail})`, 'connection')
       }).then((fn) => {
         if (cleanedUp) { fn() } else { unlistenProxyClosed = fn }
       })
