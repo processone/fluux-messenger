@@ -43,6 +43,32 @@ Endpoint failed ... STARTTLS: Server closed connection before features
 Not a transport problem: loopback and TCP both succeeded. (The morning `[::1]`
 loopback binds in the same log are unrelated and connected fine.)
 
+## History / regression analysis
+
+It *feels* like a regression — the bare domain `process-one.net` connects fine
+(SRV resolves host `chat.process-one.net` + domain `process-one.net`, so STARTTLS
+sends `to='process-one.net'`), yet typing that **same host** as
+`tcp://chat.process-one.net` fails. The git history shows a long-standing latent
+gap rather than a single-commit break:
+
+- **`da3a38bc` (#134, "Add TCP connection support")** introduced `perform_starttls`
+  and called it with the **connection host** (`perform_starttls(tcp_stream,
+  &endpoint.host)`). Explicit STARTTLS endpoints have used the host as the `to=`/SNI
+  ever since.
+- **`8e624f54` ("…TLS SNI domain handling…")** added `XmppEndpoint.domain`,
+  `tls_name()`, and the `?domain=` override, wiring the JID domain for the **SRV
+  path** — but explicit endpoints kept `domain: None` (host fallback), and **no
+  frontend code ever produces `?domain=`**, so that override is dead.
+- **Direct TLS (`tls://`, port 5223) accidentally works:** the proxy sends no
+  pre-TLS header, so the client's own `<open to='process-one.net'/>` reaches the
+  server through the bridge with the correct domain. Only STARTTLS — which needs a
+  proxy-generated pre-TLS header — is wrong. The fix removes that asymmetry by
+  feeding the same client `<open to=>` into the STARTTLS header.
+
+Implication for tests: a regression guard must assert the **STARTTLS pre-TLS
+stream header carries the JID domain when the connection host differs** — the
+exact thing that has silently been host-based since #134.
+
 ## Goals
 
 1. Explicit endpoints (`tcp://`, `tls://`, `host:port`) use the **JID's domain**
@@ -143,16 +169,36 @@ Domain precedence for an explicit endpoint becomes:
 
 ## Testing
 
-- **Rust / `framing.rs`:** `extract_open_to` with/without `to`, both quote
-  styles, non-`<open>` input.
-- **Rust / `mod.rs` (fake upstream harness, like the existing
-  `test_handle_connection_*`):**
-  - Part 1: client sends `<open to='process-one.net'/>` with `server_input =
-    tcp://127.0.0.1:<fake>`; assert the proxy's `<stream:stream>` carries
-    `to='process-one.net'` (host ≠ domain).
-  - Part 2: fake upstream replies `<stream:error><host-unknown/></stream:error>`;
-    assert the client receives a 1000 close whose reason contains
-    `stream-error host-unknown`.
+The user explicitly asked for regression coverage. The guards below lock in the
+*correct* behavior so the host-based `to=` can never silently return.
+
+**Regression guards (must fail on today's code, pass after the fix):**
+
+- **R1 — STARTTLS uses JID domain when host differs (the core regression).**
+  Fake-upstream harness (like `test_handle_connection_*`): client sends
+  `<open to='process-one.net'/>`, `server_input = tcp://127.0.0.1:<fakeport>`
+  (host ≠ domain). Assert the proxy's pre-TLS `<stream:stream>` carries
+  `to='process-one.net'`, **not** the connection host. This is the exact case
+  that has been host-based since #134.
+- **R2 — `?domain=` keeps precedence.** `server_input =
+  tcp://127.0.0.1:<fakeport>?domain=explicit.example` with client
+  `<open to='process-one.net'/>` → header carries `to='explicit.example'`
+  (override wins over the client `<open to=>`).
+- **R3 — direct-TLS / STARTTLS consistency.** Document the path that already
+  works: `tls://`/5223 lets the client `<open to=>` reach the server unchanged;
+  after the fix STARTTLS matches it. (Covered structurally by R1.)
+
+**Unit tests:**
+
+- **`framing::extract_open_to`:** with/without `to`, single/double quotes,
+  non-`<open>` input, empty `to`.
+- **`dns::parse_server_input`:** explicit `tcp://host` / `tls://host` /
+  `host:port` still yield `domain: None` (documents that the host fallback is
+  intentional and that the client `<open to=>` is what now supplies the domain).
+- **Part 2 surfacing:** fake upstream replies
+  `<stream:error><host-unknown/></stream:error>`; assert the client receives a
+  1000 close whose reason contains `stream-error host-unknown` (today it drops
+  with no frame → 1006).
 - **SDK / `Connection.test.ts`:** a `Bridge closed: stream-error host-unknown`
   close reason ends up as a `host-unknown`-bearing `connection.error`.
 - **App:** `streamErrorMessage` maps known conditions; new i18n keys exist in
