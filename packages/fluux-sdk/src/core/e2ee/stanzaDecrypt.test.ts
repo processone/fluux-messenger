@@ -15,6 +15,8 @@ import {
   readStashedSecurityContext,
   readStashedEncryptedPayload,
   stanzaHasEMEHint,
+  recordUnclaimedEME,
+  readStashedUnsupportedEncryption,
 } from './stanzaDecrypt'
 import { E2EEManager, InMemoryStorageBackend, type XMPPPrimitives } from './index'
 import { serialize as serializePayloadEnvelope } from './payloadEnvelope'
@@ -517,5 +519,70 @@ describe('deriveConversationContext', () => {
       peer: 'Alice@example.com',
       isSelfOutgoing: false,
     })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Unsupported vs not-ready classification (recordUnclaimedEME)
+// ---------------------------------------------------------------------------
+
+describe('recordUnclaimedEME', () => {
+  function omemoStanza(): Element {
+    return xml(
+      'message',
+      { from: 'peer@example.com/r', id: 'o1', type: 'chat' },
+      xml('encrypted', { xmlns: 'eu.siacs.conversations.axolotl' }, 'cipher'),
+      xml('encryption', { xmlns: 'urn:xmpp:eme:0', namespace: 'eu.siacs.conversations.axolotl', name: 'OMEMO' }),
+      xml('body', {}, 'I sent you an OMEMO encrypted message.'),
+    ) as Element
+  }
+
+  it('classifies an EME-tagged stanza as unsupported when plugins are ready', () => {
+    const stanza = omemoStanza()
+    const disposition = recordUnclaimedEME(stanza, true)
+
+    expect(disposition.kind).toBe('unsupported')
+    if (disposition.kind === 'unsupported') {
+      expect(disposition.info).toEqual({ namespace: 'eu.siacs.conversations.axolotl', name: 'OMEMO' })
+    }
+    expect(readStashedUnsupportedEncryption(stanza)).toEqual({
+      namespace: 'eu.siacs.conversations.axolotl',
+      name: 'OMEMO',
+    })
+    // Fallback body is left untouched
+    expect(stanza.getChildText('body')).toBe('I sent you an OMEMO encrypted message.')
+  })
+
+  it('classifies as retry (stash for deferred decrypt) when no plugins are ready', () => {
+    const stanza = omemoStanza()
+    const disposition = recordUnclaimedEME(stanza, false)
+
+    expect(disposition.kind).toBe('retry')
+    if (disposition.kind === 'retry') {
+      expect(disposition.encryptedPayloadXml).toContain('eu.siacs.conversations.axolotl')
+    }
+    expect(readStashedUnsupportedEncryption(stanza)).toBeUndefined()
+  })
+
+  it('detects the protocol from the child namespace when there is no EME hint (retry-shaped stanza)', () => {
+    // retryDecryptSingle rebuilds a stanza from the stashed <encrypted> element
+    // only — no EME hint. The child namespace alone must still classify it.
+    const stanza = xml(
+      'message',
+      { from: 'peer@example.com/r', id: 'o2', type: 'chat' },
+      xml('encrypted', { xmlns: 'eu.siacs.conversations.axolotl' }, 'cipher'),
+    ) as Element
+
+    const disposition = recordUnclaimedEME(stanza, true)
+    expect(disposition.kind).toBe('unsupported')
+    if (disposition.kind === 'unsupported') {
+      expect(disposition.info.name).toBe('OMEMO')
+    }
+  })
+
+  it('returns none for a cleartext stanza', () => {
+    const stanza = xml('message', { from: 'peer@example.com/r', type: 'chat' }, xml('body', {}, 'hi')) as Element
+    expect(recordUnclaimedEME(stanza, true).kind).toBe('none')
+    expect(recordUnclaimedEME(stanza, false).kind).toBe('none')
   })
 })
