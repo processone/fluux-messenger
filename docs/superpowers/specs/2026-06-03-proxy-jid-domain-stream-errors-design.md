@@ -1,0 +1,173 @@
+# Proxy: JID-domain for explicit endpoints + surfacing upstream stream errors
+
+- **Date:** 2026-06-03
+- **Status:** Proposed (awaiting review)
+- **Area:** `apps/fluux/src-tauri/src/xmpp_proxy/`, `packages/fluux-sdk/src/core/modules/Connection.ts`, `apps/fluux/src` (LoginScreen + i18n)
+
+## Problem
+
+Connecting with an explicit STARTTLS/TLS server override fails. Reproduced with
+JID `mremond@process-one.net` and server `tcp://chat.process-one.net`. The login
+screen shows a misleading `WebSocket ECONNERROR ws://127.0.0.1:60342`.
+
+Evidence from `~/Library/Logs/com.processone.fluux/fluux.log.2026-06-03`
+(conn_id=2, the screenshot's port 60342):
+
+```
+Using explicit endpoint host=chat.process-one.net port=5222 mode=Tcp domain=None
+New WebSocket connection addr=127.0.0.1:60343          # loopback OK
+Connected (TCP), performing STARTTLS                    # TCP to server OK
+STARTTLS: Unexpected stanza before features stanza=<stream:error><host-unknown/></stream:error>
+Endpoint failed ... STARTTLS: Server closed connection before features
+-> webview: WebSocket ECONNERROR ws://127.0.0.1:60342
+```
+
+**Root cause (two independent defects):**
+
+1. **Wrong XMPP domain.** `parse_server_input("tcp://chat.process-one.net")`
+   yields `domain: None`, so `XmppEndpoint::tls_name()` falls back to the
+   *connection host* `chat.process-one.net`. `perform_starttls` then sends
+   `<stream:stream to='chat.process-one.net'>` and uses that host for TLS SNI.
+   The ejabberd server hosts the vhost `process-one.net`, so it returns
+   `<stream:error><host-unknown/></stream:error>` and closes. The connection
+   host is *not* the service domain — they legitimately differ.
+
+2. **The real error is swallowed.** The `host-unknown` failure happens during
+   STARTTLS, **before the WS↔TLS bridge starts**. `handle_connection` propagates
+   the error with `?` and the WebSocket is dropped **without a close frame**.
+   xmpp.js sees an abnormal 1006 close and reports the generic
+   `WebSocket ECONNERROR`. The existing `proxy-connection-closed` event and the
+   enriched `"Bridge closed: stream-error <condition>"` close reason are only
+   produced **inside** `bridge_websocket_tls` (post-bridge), so neither fires here.
+
+Not a transport problem: loopback and TCP both succeeded. (The morning `[::1]`
+loopback binds in the same log are unrelated and connected fine.)
+
+## Goals
+
+1. Explicit endpoints (`tcp://`, `tls://`, `host:port`) use the **JID's domain**
+   as the STARTTLS `to=` and TLS SNI, so connecting via a front host that serves
+   a different vhost works.
+2. When the upstream returns **any** stream error (`host-unknown`,
+   `see-other-host`, `not-authorized`, `conflict`, …), surface that condition as
+   a clear, localized message on the login screen instead of `ECONNERROR` — for
+   both pre-bridge and post-bridge failures.
+
+## Non-goals
+
+- No change to the SRV-resolution path (it already attaches the JID domain).
+- No new login form field; the existing `?domain=` override stays as the
+  power-user escape hatch and keeps precedence.
+- No redesign of reconnection / state machine.
+
+## Approved decisions
+
+- **Domain source:** read the JID domain from the **client's initial `<open to=>`**
+  stanza, which xmpp.js already sends in-band (the SDK configures the client with
+  `getDomain(jid)`; `from='user@domain'` is already forwarded). Pure Rust, no
+  SDK/adapter/UI plumbing.
+- **Error scope:** surface **any** upstream stream-error condition (generic
+  mapping with per-condition messages for the common cases).
+
+## Design
+
+### Part 1 — JID domain from the client `<open/>`
+
+Domain precedence for an explicit endpoint becomes:
+`?domain=` (explicit override) → client `<open to=>` → connection host (today's fallback).
+
+- **`framing.rs`:** factor the `<open>` attribute parsing currently inlined in
+  `translate_ws_to_tcp` into a shared helper and expose
+  `extract_open_to(text: &str) -> Option<String>` (returns a non-empty `to`).
+  This avoids duplicating the quick-xml parsing (per CLAUDE.md: no duplication).
+- **`mod.rs` `handle_connection`:** after `wait_for_initial_client_stanza`,
+  compute `client_domain = extract_open_to(&initial_ws_text)` and pass it to
+  `connect_upstream_tls`.
+- **`mod.rs` `connect_upstream_tls(server_input, client_domain: Option<&str>)`:**
+  for `ParsedServer::Direct(host, port, mode, parsed_domain)`, set the endpoint
+  domain to `parsed_domain.or(client_domain)`. `ParsedServer::Domain` (SRV) is
+  unchanged. `tls_name()` then yields the JID domain, used for both the STARTTLS
+  `to=` and TLS SNI/verification — making explicit endpoints behave exactly like
+  the SRV path (host = where to connect, domain = what to verify, RFC 6120 §13.7.2).
+
+### Part 2 — Surface upstream stream errors
+
+- **`perform_starttls`:** when an extracted stanza is a stream error
+  (`extract_stream_error_condition` returns `Some`), stop and return an error that
+  **carries the condition**, instead of the generic "Server closed connection
+  before features".
+- **Error type:** introduce a small `UpstreamConnectError { message: String,
+  stream_error: Option<String> }` returned by `perform_starttls` /
+  `try_connect_endpoint` / `connect_upstream_tls`, so the condition survives the
+  per-endpoint aggregation (record the first condition seen).
+- **`mod.rs` `handle_connection`:** on `connect_upstream_tls` error, **before
+  returning**, (a) send a clean RFC7395 `<close/>` + WebSocket close frame whose
+  reason is `format_bridge_close_reason(label, condition)` (e.g.
+  `"Bridge closed: stream-error host-unknown"`), and (b) emit the existing
+  `proxy-connection-closed` event with `{ conn_id, reason, stream_error }`. Factor
+  the close handshake currently inlined in `bridge_websocket_tls` into a shared
+  `send_ws_close_handshake(ws, reason)` helper used by both paths.
+  - Result: the webview gets a clean **1000** close with the enriched reason
+    (recognised by `Connection.ts:2086` `isExpectedBridgeClose`) instead of an
+    abrupt 1006 drop, and the Tauri event now fires for pre-bridge failures too.
+
+### Part 3 — Frontend surfacing (SDK stays i18n-free)
+
+- **`Connection.ts`:** in the `initialFailure` disconnect path (and the
+  connection-error path), when the close reason matches
+  `Bridge closed: stream-error <condition>`, extract `<condition>` and set
+  `connection.setError` to a stable token the app can recognize (keep the bare
+  condition, e.g. `stream-error:host-unknown`). Follows the existing
+  substring-token pattern (`isAuthError` already matches `not-authorized`).
+- **`LoginScreen.tsx`:** map a recognized stream-error condition to a localized
+  message via a small `streamErrorMessage(error, t)` helper; reveal the server
+  field (already done for non-auth errors). `host-unknown` gets a domain-specific
+  hint (front host serves a different vhost; use `?domain=` or check the server).
+- **i18n (`en.json` / `fr.json`):** add `login.streamError.*` keys for
+  `host-unknown`, `see-other-host`, `not-authorized`, `conflict`, `host-gone`,
+  `remote-connection-failed`, `policy-violation`, plus a generic
+  `stream-error: {{condition}}` fallback.
+
+## Affected units
+
+| Unit | Type | Responsibility |
+|------|------|----------------|
+| `framing::extract_open_to` | new, pure | Read `to=` from an `<open/>` frame |
+| `connect_upstream_tls` | changed | Accept `client_domain`, apply domain precedence |
+| `perform_starttls` | changed | Detect stream-error, return its condition |
+| `UpstreamConnectError` | new | Carry `(message, stream_error)` up the stack |
+| `send_ws_close_handshake` | new (extracted) | Send RFC7395+WS close with reason |
+| `handle_connection` | changed | Close cleanly + emit event on upstream failure |
+| `Connection.ts` close path | changed | Extract condition into `connection.error` |
+| `LoginScreen` + i18n | changed | Localized message; reveal server field |
+
+## Testing
+
+- **Rust / `framing.rs`:** `extract_open_to` with/without `to`, both quote
+  styles, non-`<open>` input.
+- **Rust / `mod.rs` (fake upstream harness, like the existing
+  `test_handle_connection_*`):**
+  - Part 1: client sends `<open to='process-one.net'/>` with `server_input =
+    tcp://127.0.0.1:<fake>`; assert the proxy's `<stream:stream>` carries
+    `to='process-one.net'` (host ≠ domain).
+  - Part 2: fake upstream replies `<stream:error><host-unknown/></stream:error>`;
+    assert the client receives a 1000 close whose reason contains
+    `stream-error host-unknown`.
+- **SDK / `Connection.test.ts`:** a `Bridge closed: stream-error host-unknown`
+  close reason ends up as a `host-unknown`-bearing `connection.error`.
+- **App:** `streamErrorMessage` maps known conditions; new i18n keys exist in
+  both locales.
+
+Existing suites for `dns.rs`, `framing.rs`, and the proxy harness must stay green.
+
+## Backward compatibility / risks
+
+- Domain precedence keeps `?domain=` first and leaves the SRV path untouched →
+  low risk.
+- Explicit endpoints now verify the TLS cert against the **JID domain** (correct
+  per RFC 6120), not the connection host. A user who relied on connecting to a
+  host whose certificate only matches the host name would now need the
+  `?domain=`/host certificate to cover the JID domain — this is the correct
+  behavior, and `?domain=` remains available. Note in release notes.
+- Pre-bridge failures now close with code 1000 (+`Bridge closed` reason) instead
+  of 1006; the SDK already treats that as an expected terminal bridge close.
