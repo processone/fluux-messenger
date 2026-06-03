@@ -57,6 +57,7 @@
 
 ### Group Chat & Collaboration
 - **Multi-user Chat** - Complete MUC support with roles, affiliations, custom hats (role badges), @mentions, and bookmarks
+- **Private Messages in Rooms** - Mediated private messages (whispers, XEP-0045 §7.5) to a single occupant, shown as a distinct private thread you can reply to privately
 - **Quick Chat** - Instantly create ad-hoc group conversations and invite contacts by name
 - **Per-User Ignore** - Mute specific users per room, synced across devices
 - **Activity Log** - Persistent feed of events: invitations, subscription requests, reactions, poll votes, joins and leaves

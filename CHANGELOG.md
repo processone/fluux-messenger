@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - OpenPGP end-to-end encryption (XEP-0373 / XEP-0374) — encrypted 1:1 messaging with passphrase-protected key storage and secret-key backup/restore
 - OpenPGP end-to-end encryption support in web version
 - Multi-TSK (Transferable Secret Key) handling in the XEP-0373 backup restore flow for accounts with multiple OpenPGP keys
+- Mediated private messages in group chats ("whispers", XEP-0045 §7.5) — reply privately to a single occupant, shown as a distinct private thread
 
 ### Changed
 
