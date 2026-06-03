@@ -49,6 +49,10 @@ void i18n.use(initReactI18next).init({
             many: '{{name1}}, {{name2}}, and {{count}} others are typing...',
           },
         },
+        // Connection status (App auto-reconnect spinner)
+        status: {
+          reconnecting: 'Reconnecting...',
+        },
       },
     },
   },

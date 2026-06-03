@@ -332,7 +332,7 @@ function App() {
         <div className="flex h-screen items-center justify-center bg-fluux-bg">
           <div className="text-center">
             <div className="animate-spin rounded-full size-8 border-b-2 border-fluux-brand mx-auto mb-4" />
-            <p className="text-fluux-muted">Reconnecting...</p>
+            <p className="text-fluux-muted">{t('status.reconnecting')}</p>
           </div>
         </div>
       </>
