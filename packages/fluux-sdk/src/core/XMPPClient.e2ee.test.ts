@@ -23,6 +23,7 @@ vi.mock('../utils/messageCache', () => ({
   saveMessage: vi.fn().mockResolvedValue(undefined),
   saveMessages: vi.fn().mockResolvedValue(undefined),
   getMessages: vi.fn().mockResolvedValue([]),
+  getMessagesWithEncryptedPayload: vi.fn().mockResolvedValue([]),
   getMessage: vi.fn().mockResolvedValue(null),
   getMessageByStanzaId: vi.fn().mockResolvedValue(null),
   updateMessage: vi.fn().mockResolvedValue(undefined),
@@ -52,6 +53,7 @@ import {
 } from './e2ee'
 import { DummyPlaintextPlugin } from './e2ee/DummyPlaintextPlugin'
 import { _resetStorageScopeForTesting } from '../utils/storageScope'
+import * as messageCache from '../utils/messageCache'
 
 function stubXmppPrimitives(): XMPPPrimitives {
   return {
@@ -239,6 +241,93 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       const msg = messages.find((m) => m.id === 'msg-body-check')
       expect(msg?.body).toBe('hello')
       expect(msg?.encryptedPayload).toBeUndefined()
+    })
+  })
+
+  describe('durable-cache deferred decryption', () => {
+    // Regression guard for the web fresh-session reload bug: messages that
+    // failed to decrypt while the key was locked are persisted to IndexedDB
+    // (encryptedPayload stashed) but for conversations the user has NOT opened
+    // they are never loaded into the in-memory store. The original
+    // retryPendingDecrypts only scanned the in-memory store, so those stayed
+    // permanently "could not be decrypted" even after unlock.
+    it('decrypts and repairs a message that exists only in the durable cache', async () => {
+      vi.spyOn(manager, 'decryptArchive').mockResolvedValue({
+        plaintext: new TextEncoder().encode('hello'),
+        senderDevice: { jid: 'me@example.com', deviceId: 'test' },
+        securityContext: { protocolId: 'dummy-plaintext', trust: 'verified' },
+      })
+
+      // In-memory store is empty for this conversation; the message lives ONLY
+      // in IndexedDB (mocked), as after a fresh-session reload of an unopened
+      // conversation.
+      vi.mocked(messageCache.getMessagesWithEncryptedPayload).mockResolvedValue([
+        {
+          type: 'chat',
+          id: 'durable-1',
+          conversationId: 'carol@example.com',
+          from: 'carol@example.com',
+          body: '[dummy-plaintext payload]',
+          timestamp: new Date(),
+          isOutgoing: false,
+          encryptedPayload: DUMMY_PAYLOAD_XML,
+        },
+      ])
+
+      const count = await xmppClient.retryPendingDecrypts()
+
+      expect(count).toBe(1)
+      // Written back to the DURABLE cache with plaintext + cleared stash.
+      expect(messageCache.updateMessage).toHaveBeenCalledWith(
+        'durable-1',
+        expect.objectContaining({ body: 'hello', encryptedPayload: undefined })
+      )
+    })
+
+    it('does not double-process a message present in both memory and the durable cache', async () => {
+      vi.spyOn(manager, 'decryptArchive').mockResolvedValue({
+        plaintext: new TextEncoder().encode('hello'),
+        senderDevice: { jid: 'me@example.com', deviceId: 'test' },
+        securityContext: { protocolId: 'dummy-plaintext', trust: 'verified' },
+      })
+
+      chatStore.getState().addConversation({
+        id: 'dave@example.com',
+        name: 'Dave',
+        type: 'chat',
+        lastMessage: undefined,
+        unreadCount: 0,
+      })
+      chatStore.getState().addMessage({
+        type: 'chat',
+        id: 'dup-1',
+        conversationId: 'dave@example.com',
+        from: 'dave@example.com',
+        body: '[dummy-plaintext payload]',
+        timestamp: new Date(),
+        isOutgoing: false,
+        encryptedPayload: DUMMY_PAYLOAD_XML,
+      })
+      // Same message also surfaced by the durable scan.
+      vi.mocked(messageCache.getMessagesWithEncryptedPayload).mockResolvedValue([
+        {
+          type: 'chat',
+          id: 'dup-1',
+          conversationId: 'dave@example.com',
+          from: 'dave@example.com',
+          body: '[dummy-plaintext payload]',
+          timestamp: new Date(),
+          isOutgoing: false,
+          encryptedPayload: DUMMY_PAYLOAD_XML,
+        },
+      ])
+
+      const decryptSpy = vi.spyOn(manager, 'decryptArchive')
+      const count = await xmppClient.retryPendingDecrypts()
+
+      // Decrypted exactly once — the durable pass skips the already-handled id.
+      expect(decryptSpy).toHaveBeenCalledTimes(1)
+      expect(count).toBe(1)
     })
   })
 })

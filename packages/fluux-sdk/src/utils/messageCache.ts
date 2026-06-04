@@ -12,7 +12,9 @@ import type { Message, RoomMessage } from '../core/types'
 import { getStorageScopeJid } from './storageScope'
 
 const DB_NAME = 'fluux-message-cache'
-const DB_VERSION = 2
+// v3: add a SPARSE index on `encryptedPayload` so deferred decryption can list
+// only the messages still awaiting a key — without scanning the whole archive.
+const DB_VERSION = 3
 const MESSAGES_STORE = 'messages'
 const ROOM_MESSAGES_STORE = 'room-messages'
 
@@ -79,6 +81,8 @@ interface MessageCacheSchema extends DBSchema {
       stanzaId: string
       timestamp: number
       conv_timestamp: [string, number]
+      // Sparse: only messages awaiting deferred decryption are indexed here.
+      encryptedPayload: string
     }
   }
   [ROOM_MESSAGES_STORE]: {
@@ -135,8 +139,8 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
 
   dbNameForPromise = targetDbName
   dbPromise = openDB<MessageCacheSchema>(targetDbName, DB_VERSION, {
-    upgrade(db, oldVersion) {
-      // Chat messages store (unchanged)
+    upgrade(db, oldVersion, _newVersion, transaction) {
+      // Chat messages store
       if (!db.objectStoreNames.contains(MESSAGES_STORE)) {
         const msgStore = db.createObjectStore(MESSAGES_STORE, { keyPath: 'id' })
         msgStore.createIndex('conversationId', 'conversationId', { unique: false })
@@ -145,6 +149,14 @@ function getDB(scopeJid: string | null = getStorageScopeJid()): Promise<IDBPData
         msgStore.createIndex('conv_timestamp', ['conversationId', 'timestamp'], {
           unique: false,
         })
+        // Sparse index — records without `encryptedPayload` are excluded.
+        msgStore.createIndex('encryptedPayload', 'encryptedPayload', { unique: false })
+      } else if (oldVersion < 3) {
+        // v3 migration for existing DBs: add the sparse encryptedPayload index.
+        const msgStore = transaction.objectStore(MESSAGES_STORE)
+        if (!msgStore.indexNames.contains('encryptedPayload')) {
+          msgStore.createIndex('encryptedPayload', 'encryptedPayload', { unique: false })
+        }
       }
 
       // Room messages store
@@ -226,14 +238,69 @@ function deserializeRoomMessage(stored: StoredRoomMessage): RoomMessage {
 // Chat Message Operations
 // =============================================================================
 
+/** Minimal structural view of the idb chat-message object store. */
+type ChatMessageStore = {
+  get(key: string): Promise<StoredMessage | undefined>
+  put(value: StoredMessage): Promise<unknown>
+}
+
+/**
+ * Recoverability rank of a stored or incoming chat message:
+ *   2 = fully decrypted (real plaintext body)
+ *   1 = ciphertext stashed (`encryptedPayload`) — still retriable after unlock
+ *   0 = unsupported-encryption fallback — no ciphertext, cannot be recovered
+ */
+function decryptionRank(msg: {
+  encryptedPayload?: string
+  unsupportedEncryption?: unknown
+}): number {
+  if (msg.encryptedPayload) return 1
+  if (msg.unsupportedEncryption) return 0
+  return 2
+}
+
+/**
+ * Put a chat message without ever DEGRADING a higher-quality cache entry.
+ *
+ * E2EE re-ingestion hazards: a web page reload that yields a *fresh* session
+ * runs the background MAM catch-up while the OpenPGP key may still be locked,
+ * and a peer toggling their encryption makes history re-arrive as an
+ * unsupported fallback. Either way the re-fetched copy is less recoverable
+ * than what we already stored, and a blind `put` would overwrite our decrypted
+ * plaintext (or our retriable ciphertext) with a placeholder — leaving the
+ * message permanently showing "could not be decrypted" / "not supported".
+ *
+ * Guard: skip the write when the incoming message is strictly less recoverable
+ * than the stored one (see {@link decryptionRank}). Equal-or-better writes
+ * upsert normally — decrypted updates, ciphertext refreshes, and the upgrade
+ * of a fallback once the real ciphertext arrives.
+ */
+async function putChatMessageGuarded(
+  store: ChatMessageStore,
+  message: Message
+): Promise<void> {
+  const incomingRank = decryptionRank(message)
+  if (incomingRank < 2) {
+    const existing = await store.get(message.id)
+    if (existing && decryptionRank(existing) > incomingRank) {
+      // Existing entry is more recoverable — don't degrade it.
+      return
+    }
+  }
+  await store.put(serializeMessage(message))
+}
+
 /**
  * Save a chat message to IndexedDB.
- * Upserts - will overwrite if message with same ID exists.
+ * Upserts - will overwrite if message with same ID exists, EXCEPT it never
+ * degrades an already-decrypted entry (see {@link putChatMessageGuarded}).
  */
 export async function saveMessage(message: Message): Promise<void> {
   try {
     const db = await getDB(getStorageScopeJid())
-    await db.put(MESSAGES_STORE, serializeMessage(message))
+    const tx = db.transaction(MESSAGES_STORE, 'readwrite')
+    await putChatMessageGuarded(tx.store, message)
+    await tx.done
   } catch (error) {
     if (isIndexedDBAvailable()) {
       console.warn('Failed to save message:', error)
@@ -243,6 +310,7 @@ export async function saveMessage(message: Message): Promise<void> {
 
 /**
  * Save multiple chat messages to IndexedDB in a single transaction.
+ * Never degrades an already-decrypted entry (see {@link putChatMessageGuarded}).
  */
 export async function saveMessages(messages: Message[]): Promise<void> {
   if (messages.length === 0) return
@@ -252,12 +320,41 @@ export async function saveMessages(messages: Message[]): Promise<void> {
     const tx = db.transaction(MESSAGES_STORE, 'readwrite')
     const store = tx.objectStore(MESSAGES_STORE)
 
-    await Promise.all(messages.map((msg) => store.put(serializeMessage(msg))))
+    for (const msg of messages) {
+      await putChatMessageGuarded(store, msg)
+    }
     await tx.done
   } catch (error) {
     if (isIndexedDBAvailable()) {
       console.warn('Failed to save messages:', error)
     }
+  }
+}
+
+/**
+ * Return every cached chat message that still carries an `encryptedPayload` —
+ * i.e. that was ingested while no plugin could decrypt it (typically a locked
+ * E2EE key after a fresh-session page reload).
+ *
+ * Deferred decryption uses this to repair the DURABLE cache after the key is
+ * unlocked, not just the messages currently loaded in the in-memory store:
+ * conversations the user has not opened are otherwise left permanently showing
+ * "could not be decrypted". Scoped to the active account.
+ */
+export async function getMessagesWithEncryptedPayload(): Promise<Message[]> {
+  try {
+    const db = await getDB(getStorageScopeJid())
+    // Sparse index: this reads ONLY the messages still carrying an
+    // encryptedPayload — not the whole archive — so it stays cheap to call on
+    // every plugin-register / key-unlock, and is near-free when none are
+    // pending (the steady state).
+    const pending = await db.getAllFromIndex(MESSAGES_STORE, 'encryptedPayload')
+    return pending.map(deserializeMessage)
+  } catch (error) {
+    if (isIndexedDBAvailable()) {
+      console.warn('Failed to read pending-decrypt messages:', error)
+    }
+    return []
   }
 }
 
