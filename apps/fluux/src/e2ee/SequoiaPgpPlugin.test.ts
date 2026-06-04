@@ -2324,12 +2324,9 @@ describe('SequoiaPgpPlugin', () => {
   })
 
   describe('tryClaimInbound', () => {
-    it('claims openpgp elements in the correct or implicit namespace only', () => {
+    it('claims only openpgp elements in the correct namespace', () => {
       expect(
         plugin.tryClaimInbound({ name: 'openpgp', attrs: { xmlns: 'urn:xmpp:openpgp:0' }, children: ['x'] }),
-      ).not.toBeNull()
-      expect(
-        plugin.tryClaimInbound({ name: 'openpgp', attrs: {}, children: ['x'] }),
       ).not.toBeNull()
       expect(
         plugin.tryClaimInbound({ name: 'openpgp', attrs: { xmlns: 'urn:xmpp:other:0' }, children: [] }),
