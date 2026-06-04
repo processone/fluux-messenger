@@ -19,6 +19,80 @@ import {
   type XMPPPrimitives,
 } from '../e2ee'
 import { DummyPlaintextPlugin } from '../e2ee/DummyPlaintextPlugin'
+import type {
+  BareJID,
+  ConversationHandle,
+  ConversationTarget,
+  DecryptResult,
+  E2EEPlugin,
+  E2EEProtocolDescriptor,
+  EncryptedPayload,
+  IdentityInfo,
+  PeerSupport,
+  PluginContext,
+  TrustState,
+  VerificationFlow,
+  VerificationMethod,
+  XMLElementData,
+} from '../e2ee/types'
+
+const OX_NS = 'urn:xmpp:openpgp:0'
+
+/**
+ * Minimal plugin that claims <openpgp xmlns='urn:xmpp:openpgp:0'> elements
+ * and decrypts them to a fixed plaintext. Used to exercise the re-entry path
+ * after successful OpenPGP decryption without pulling in real crypto.
+ */
+class FakeOpenPGPPlugin implements E2EEPlugin {
+  readonly descriptor: E2EEProtocolDescriptor = {
+    id: 'openpgp',
+    displayName: 'OpenPGP (fake)',
+    securityLevel: 30,
+    features: {
+      forwardSecrecy: false,
+      postCompromiseSecurity: false,
+      multiDevice: true,
+      groupChat: false,
+      asynchronous: true,
+      deniability: false,
+    },
+  }
+
+  async init(_ctx: PluginContext): Promise<void> {}
+  async shutdown(): Promise<void> {}
+  async ensureIdentity(): Promise<IdentityInfo> { return { fingerprint: 'fake:fp' } }
+  async probePeer(_peer: BareJID): Promise<PeerSupport> { return { supported: true, ttl: 60 } }
+  async openConversation(_target: ConversationTarget): Promise<ConversationHandle> {
+    return { protocolId: this.descriptor.id, state: {} }
+  }
+  async closeConversation(_handle: ConversationHandle): Promise<void> {}
+  async encrypt(_handle: ConversationHandle, plaintext: Uint8Array): Promise<EncryptedPayload> {
+    return {
+      protocolId: this.descriptor.id,
+      stanzaElement: { name: 'openpgp', attrs: { xmlns: OX_NS }, children: [Buffer.from(plaintext).toString('base64')] },
+      fallbackBody: '[OpenPGP-encrypted message]',
+    }
+  }
+  async decrypt(_handle: ConversationHandle, payload: EncryptedPayload): Promise<DecryptResult> {
+    const encoded = payload.stanzaElement.children[0] as string
+    return {
+      plaintext: Buffer.from(encoded, 'base64'),
+      senderDevice: { jid: 'peer@example.com', deviceId: 'fake:fp' },
+      securityContext: { protocolId: this.descriptor.id, trust: 'verified' },
+    }
+  }
+  tryClaimInbound(child: XMLElementData): EncryptedPayload | null {
+    if (child.name !== 'openpgp') return null
+    if (child.attrs?.xmlns !== OX_NS) return null
+    return { protocolId: this.descriptor.id, stanzaElement: child }
+  }
+  getVerificationMethods(): VerificationMethod[] { return [] }
+  async startVerification(_peer: BareJID, _method: VerificationMethod): Promise<VerificationFlow> {
+    throw new Error('not supported')
+  }
+  async getPeerTrust(_peer: BareJID): Promise<TrustState> { return 'verified' }
+  async getDeviceTrust(_peer: BareJID, _deviceId: string): Promise<TrustState> { return 'verified' }
+}
 
 function stubXmppPrimitives(sendStanza: (el: Element) => Promise<void>): XMPPPrimitives {
   return {
@@ -1119,6 +1193,55 @@ describe('Chat E2EE wiring', () => {
         namespace: 'eu.siacs.conversations.axolotl',
         name: 'OMEMO',
       })
+    })
+  })
+
+  // -------------------------------------------------------------------
+  // Regression: a successfully-decrypted OpenPGP message must NOT be
+  // tagged with unsupportedEncryption on the re-entry pass that follows
+  // async decryption. The EME hint remains in the stanza after the
+  // <openpgp> element is stripped; the old recordUnclaimedEME logic
+  // treated "any plugin registered + unclaimed" as "unsupported", which
+  // fired on re-entry even though the plugin HAD just decrypted the
+  // message.
+  // -------------------------------------------------------------------
+  describe('re-entry after successful OpenPGP decryption', () => {
+    it('does NOT tag the message as unsupportedEncryption after successful decrypt', async () => {
+      const openpgpManager = new E2EEManager({
+        storage: new InMemoryStorageBackend(),
+        xmpp: stubXmppPrimitives(async () => {}),
+        account: { jid: 'me@example.com' },
+      })
+      await openpgpManager.register(new FakeOpenPGPPlugin())
+
+      const built = makeDeps({
+        jid: 'me@example.com',
+        manager: openpgpManager,
+        captureStanza: () => {},
+      })
+      const rxChat = new Chat(built.deps, stubMAM())
+
+      const plaintext = 'Hello from OpenPGP'
+      const encoded = Buffer.from(plaintext).toString('base64')
+      const inbound = xml(
+        'message',
+        { from: 'peer@example.com/r', to: 'me@example.com', type: 'chat', id: 'ox-1' },
+        xml('openpgp', { xmlns: OX_NS }, encoded),
+        xml('encryption', { xmlns: 'urn:xmpp:eme:0', namespace: OX_NS, name: 'OpenPGP' }),
+        xml('body', {}, '[OpenPGP-encrypted message]'),
+      )
+
+      rxChat.handle(inbound)
+      await new Promise((r) => setTimeout(r, 0))
+
+      const chatEvent = built.sdkEmitted.find(
+        (e) => (e as { event: string }).event === 'chat:message',
+      ) as { payload: { message: { body: string; unsupportedEncryption?: unknown; encryptedPayload?: string } } } | undefined
+
+      expect(chatEvent).toBeDefined()
+      expect(chatEvent!.payload.message.body).toBe(plaintext)
+      expect(chatEvent!.payload.message.unsupportedEncryption).toBeUndefined()
+      expect(chatEvent!.payload.message.encryptedPayload).toBeUndefined()
     })
   })
 
