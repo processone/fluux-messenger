@@ -335,7 +335,11 @@ function SearchResultItem({ result, context, isActive, isSelected, isKeyboardNav
   const highlighted = isActive || isSelected
 
   return (
-    <button
+    // Keyboard activation (Arrow + Enter) lives on the list container via
+    // useListKeyboardNav — see SearchView's getContainerProps / onSelect.
+    // The row is therefore a plain div (matching ConversationItem) so it can
+    // host the real "Go to message" button without nesting <button> in <button>.
+    <div
       {...itemAttribute}
       {...itemProps}
       onClick={onClick}
@@ -393,7 +397,7 @@ function SearchResultItem({ result, context, isActive, isSelected, isKeyboardNav
             </span>
             <button
               onClick={onGoToMessage}
-              className="p-0.5 rounded opacity-0 group-hover/result:opacity-100 transition-opacity hover:bg-fluux-hover-strong"
+              className="p-0.5 rounded opacity-0 group-hover/result:opacity-100 focus-visible:opacity-100 transition-opacity hover:bg-fluux-hover-strong"
               title="Go to message"
             >
               <ExternalLink className="size-3 text-fluux-muted" />
@@ -413,7 +417,7 @@ function SearchResultItem({ result, context, isActive, isSelected, isKeyboardNav
           <ContextLine key={`after-${i}`} body={msg.body} nick={msg.nick} from={msg.from} isRoom={result.isRoom} />
         ))}
       </div>
-    </button>
+    </div>
   )
 }
 
