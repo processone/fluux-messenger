@@ -209,7 +209,7 @@ export class Chat extends BaseModule {
       !readStashedUnsupportedEncryption(stanza) &&
       stanzaHasEMEHint(stanza)
     ) {
-      recordUnclaimedEME(stanza, !!manager?.hasPlugins())
+      recordUnclaimedEME(stanza, manager ?? false)
     }
 
     const from = stanza.attrs.from

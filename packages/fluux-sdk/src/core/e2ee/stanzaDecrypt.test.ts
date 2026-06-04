@@ -139,7 +139,7 @@ function stubXmppPrimitives(): XMPPPrimitives {
   }
 }
 
-async function makeManager(plugin: FakeE2EEPlugin): Promise<E2EEManager> {
+async function makeManager(plugin: E2EEPlugin): Promise<E2EEManager> {
   const manager = new E2EEManager({
     storage: new InMemoryStorageBackend(),
     xmpp: stubXmppPrimitives(),
@@ -207,6 +207,22 @@ class FailingE2EEPlugin extends FakeE2EEPlugin {
 
   override async decrypt(): Promise<DecryptResult> {
     throw new Error('key locked')
+  }
+}
+
+class NonClaimingOpenPgpPlugin extends FakeE2EEPlugin {
+  readonly descriptor: E2EEProtocolDescriptor = {
+    ...descriptor,
+    id: 'openpgp',
+    displayName: 'OpenPGP',
+  }
+
+  constructor() {
+    super(undefined)
+  }
+
+  override tryClaimInbound(_child: XMLElementData): EncryptedPayload | null {
+    return null
   }
 }
 
@@ -537,6 +553,16 @@ describe('recordUnclaimedEME', () => {
     ) as Element
   }
 
+  function openPgpStanza(): Element {
+    return xml(
+      'message',
+      { from: 'peer@example.com/r', id: 'pgp1', type: 'chat' },
+      xml('openpgp', { xmlns: 'urn:xmpp:openpgp:0' }, 'cipher'),
+      xml('encryption', { xmlns: 'urn:xmpp:eme:0', namespace: 'urn:xmpp:openpgp:0', name: 'OpenPGP' }),
+      xml('body', {}, '[OpenPGP-encrypted message]'),
+    ) as Element
+  }
+
   it('classifies an EME-tagged stanza as unsupported when plugins are ready', () => {
     const stanza = omemoStanza()
     const disposition = recordUnclaimedEME(stanza, true)
@@ -560,6 +586,18 @@ describe('recordUnclaimedEME', () => {
     expect(disposition.kind).toBe('retry')
     if (disposition.kind === 'retry') {
       expect(disposition.encryptedPayloadXml).toContain('eu.siacs.conversations.axolotl')
+    }
+    expect(readStashedUnsupportedEncryption(stanza)).toBeUndefined()
+  })
+
+  it('keeps unclaimed OpenPGP retryable when the OpenPGP plugin is registered', async () => {
+    const manager = await makeManager(new NonClaimingOpenPgpPlugin())
+    const stanza = openPgpStanza()
+    const disposition = recordUnclaimedEME(stanza, manager)
+
+    expect(disposition.kind).toBe('retry')
+    if (disposition.kind === 'retry') {
+      expect(disposition.encryptedPayloadXml).toContain('urn:xmpp:openpgp:0')
     }
     expect(readStashedUnsupportedEncryption(stanza)).toBeUndefined()
   })
