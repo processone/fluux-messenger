@@ -68,6 +68,64 @@ describe('useListKeyboardNav', () => {
     })
   })
 
+  describe('getItemProps reference stability', () => {
+    it('returns stable onMouseEnter/onMouseMove refs for the same index across renders', () => {
+      const { result, rerender } = renderHook(createWrapper(mockItems, mockOnSelect))
+
+      const firstEnter = result.current.getItemProps(1).onMouseEnter
+      const firstMove = result.current.getItemProps(1).onMouseMove
+
+      // Simulate a parent/list re-render (e.g. an incoming message updating the store).
+      rerender()
+
+      const secondEnter = result.current.getItemProps(1).onMouseEnter
+      const secondMove = result.current.getItemProps(1).onMouseMove
+
+      // Unstable handler identities defeat React.memo on every list item, so the
+      // entire list re-renders whenever any single item changes.
+      expect(secondEnter).toBe(firstEnter)
+      expect(secondMove).toBe(firstMove)
+    })
+
+    it('returns a stable handler ref for the same item after the list reorders', () => {
+      const itemsA: TestItem[] = [
+        { id: '1', name: 'Alice' },
+        { id: '2', name: 'Bob' },
+        { id: '3', name: 'Charlie' },
+      ]
+      const itemsReordered: TestItem[] = [
+        { id: '3', name: 'Charlie' },
+        { id: '1', name: 'Alice' },
+        { id: '2', name: 'Bob' },
+      ]
+      const { result, rerender } = renderHook(
+        ({ items }: { items: TestItem[] }) => {
+          const listRef = useRef<HTMLDivElement>(null)
+          return useListKeyboardNav({
+            items,
+            onSelect: mockOnSelect,
+            listRef,
+            getItemId: (item) => item.id,
+            itemAttribute: 'data-item-id',
+          })
+        },
+        { initialProps: { items: itemsA } }
+      )
+
+      // Handler for item '1', which starts at index 0.
+      const handlerBefore = result.current.getItemProps(0).onMouseEnter
+
+      // Reorder so item '1' moves to index 1 (as the activity-sorted sidebar does
+      // on every incoming message).
+      rerender({ items: itemsReordered })
+      const handlerAfter = result.current.getItemProps(1).onMouseEnter
+
+      // The hover handler must stay identity-stable PER ITEM across a reorder,
+      // otherwise every row whose index shifts re-renders, defeating React.memo.
+      expect(handlerAfter).toBe(handlerBefore)
+    })
+  })
+
   describe('Arrow key navigation', () => {
     it('selects first item on ArrowDown when no selection', () => {
       const { result } = renderHook(createWrapper(mockItems, mockOnSelect))
