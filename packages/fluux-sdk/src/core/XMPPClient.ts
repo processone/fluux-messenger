@@ -118,6 +118,7 @@ import { createDefaultStoreBindings, type DefaultStoreBindingsOptions } from './
 import { logDebug, logInfo, logWarn } from './logger'
 import { SDK_VERSION } from '../version'
 import { initSearchIndex, backfillFromMessageCache } from '../utils/searchIndex'
+import { getMessagesWithEncryptedPayload, updateMessage as cacheUpdateMessage } from '../utils/messageCache'
 
 /**
  * Core XMPP client with namespace-based module API.
@@ -1619,6 +1620,9 @@ export class XMPPClient {
 
     this.isRetryingDecrypts = true
     let decryptedCount = 0
+    // Chat messages handled by the in-memory pass below, so the durable-cache
+    // pass can skip them (keyed by conversationId + message id).
+    const handledChatKeys = new Set<string>()
 
     try {
       const chatBindings = this.stores.chat
@@ -1631,6 +1635,7 @@ export class XMPPClient {
       for (const [conversationId, messages] of chatMessages) {
         for (const msg of messages) {
           if (!msg.encryptedPayload) continue
+          handledChatKeys.add(`${conversationId} ${msg.id}`)
           const outcome = await this.retryDecryptSingle(
             manager, msg.encryptedPayload, msg.from, conversationId,
           )
@@ -1673,6 +1678,36 @@ export class XMPPClient {
               unsupportedEncryption: outcome.info,
             })
           }
+        }
+      }
+
+      // --- Durable cache (web fresh-session reload) ---
+      // Conversations the user has not opened are absent from the in-memory
+      // store, so the loops above miss their stashed messages — they would
+      // stay permanently "could not be decrypted" even after unlock. Repair
+      // them straight in IndexedDB. The sparse `encryptedPayload` index makes
+      // this O(pending), not a full-archive scan, and near-free when nothing
+      // is pending (the steady state).
+      for (const msg of await getMessagesWithEncryptedPayload()) {
+        const conversationId = msg.conversationId
+        if (!msg.encryptedPayload || !conversationId) continue
+        if (handledChatKeys.has(`${conversationId} ${msg.id}`)) continue
+        const outcome = await this.retryDecryptSingle(
+          manager, msg.encryptedPayload, msg.from, conversationId,
+        )
+        if (outcome.kind === 'decrypted') {
+          await cacheUpdateMessage(msg.id, {
+            body: outcome.body,
+            ...(outcome.securityContext && { securityContext: outcome.securityContext }),
+            ...(outcome.attachment && { attachment: outcome.attachment }),
+            encryptedPayload: undefined,
+          })
+          decryptedCount++
+        } else if (outcome.kind === 'unsupported') {
+          await cacheUpdateMessage(msg.id, {
+            encryptedPayload: undefined,
+            unsupportedEncryption: outcome.info,
+          })
         }
       }
 

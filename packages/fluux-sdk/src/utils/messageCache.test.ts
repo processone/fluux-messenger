@@ -583,6 +583,189 @@ describe('messageCache', () => {
     })
   })
 
+  describe('non-destructive E2EE save (never degrade decrypted cache)', () => {
+    const conversationId = 'peer@example.com'
+
+    it('does not let an undecryptable re-ingest overwrite an already-decrypted message', async () => {
+      setStorageScopeJid('me@example.com')
+
+      // Session 1: the message was decrypted live and persisted as plaintext.
+      await messageCache.saveMessage(
+        createMockMessage(conversationId, {
+          id: 'm1',
+          body: 'Bonjour en clair',
+          // no encryptedPayload — fully decrypted
+        })
+      )
+
+      // Reload → fresh-session MAM catch-up re-ingests the SAME message (same
+      // id) while the OpenPGP key is still locked: it arrives undecryptable,
+      // carrying the encrypted placeholder. This must NOT clobber the plaintext.
+      await messageCache.saveMessages([
+        createMockMessage(conversationId, {
+          id: 'm1',
+          body: '[OpenPGP-encrypted message]',
+          encryptedPayload: '<openpgp xmlns="urn:xmpp:openpgp:0">CIPHER</openpgp>',
+        }),
+      ])
+
+      const stored = await messageCache.getMessage('m1')
+      expect(stored?.body).toBe('Bonjour en clair')
+      expect(stored?.encryptedPayload).toBeUndefined()
+    })
+
+    it('still lets a decrypted message upgrade a previously-undecryptable one', async () => {
+      setStorageScopeJid('me@example.com')
+
+      // Received while locked → stored undecryptable.
+      await messageCache.saveMessage(
+        createMockMessage(conversationId, {
+          id: 'm2',
+          body: '[OpenPGP-encrypted message]',
+          encryptedPayload: '<openpgp xmlns="urn:xmpp:openpgp:0">CIPHER</openpgp>',
+        })
+      )
+
+      // Deferred decrypt succeeds → plaintext, no stash. Upgrade must apply.
+      await messageCache.saveMessage(
+        createMockMessage(conversationId, {
+          id: 'm2',
+          body: 'Coucou déchiffré',
+        })
+      )
+
+      const stored = await messageCache.getMessage('m2')
+      expect(stored?.body).toBe('Coucou déchiffré')
+      expect(stored?.encryptedPayload).toBeUndefined()
+    })
+
+    it('refreshes an undecryptable message with another undecryptable version', async () => {
+      setStorageScopeJid('me@example.com')
+
+      await messageCache.saveMessage(
+        createMockMessage(conversationId, {
+          id: 'm3',
+          body: '[OpenPGP-encrypted message]',
+          encryptedPayload: '<openpgp xmlns="urn:xmpp:openpgp:0">OLD</openpgp>',
+        })
+      )
+      await messageCache.saveMessage(
+        createMockMessage(conversationId, {
+          id: 'm3',
+          body: '[OpenPGP-encrypted message]',
+          encryptedPayload: '<openpgp xmlns="urn:xmpp:openpgp:0">NEW</openpgp>',
+        })
+      )
+
+      const stored = await messageCache.getMessage('m3')
+      expect(stored?.encryptedPayload).toContain('NEW')
+    })
+
+    it('does not let an unsupported-encryption fallback overwrite an already-decrypted message', async () => {
+      setStorageScopeJid('me@example.com')
+      await messageCache.saveMessage(
+        createMockMessage(conversationId, { id: 'u1', body: 'Texte clair' })
+      )
+      // Peer toggled their encryption off → re-ingest arrives as a fallback
+      // with no ciphertext to retry. Must not clobber the decrypted plaintext.
+      await messageCache.saveMessage(
+        createMockMessage(conversationId, {
+          id: 'u1',
+          body: '[Encrypted message]',
+          unsupportedEncryption: { namespace: 'urn:xmpp:openpgp:0', name: 'OpenPGP' },
+        })
+      )
+
+      const stored = await messageCache.getMessage('u1')
+      expect(stored?.body).toBe('Texte clair')
+      expect(stored?.unsupportedEncryption).toBeUndefined()
+    })
+
+    it('does not let an unsupported fallback overwrite a retriable encryptedPayload message', async () => {
+      setStorageScopeJid('me@example.com')
+      await messageCache.saveMessage(
+        createMockMessage(conversationId, {
+          id: 'u2',
+          body: '[OpenPGP-encrypted message]',
+          encryptedPayload: '<openpgp xmlns="urn:xmpp:openpgp:0">CIPHER</openpgp>',
+        })
+      )
+      // A fallback (no ciphertext) must not destroy the retriable ciphertext.
+      await messageCache.saveMessage(
+        createMockMessage(conversationId, {
+          id: 'u2',
+          body: '[Encrypted message]',
+          unsupportedEncryption: { namespace: 'eu.siacs.conversations.axolotl', name: 'OMEMO' },
+        })
+      )
+
+      const stored = await messageCache.getMessage('u2')
+      expect(stored?.encryptedPayload).toContain('CIPHER')
+      expect(stored?.unsupportedEncryption).toBeUndefined()
+    })
+
+    it('lets a retriable encryptedPayload replace an unsupported fallback (upgrade)', async () => {
+      setStorageScopeJid('me@example.com')
+      await messageCache.saveMessage(
+        createMockMessage(conversationId, {
+          id: 'u3',
+          body: '[Encrypted message]',
+          unsupportedEncryption: { namespace: 'eu.siacs.conversations.axolotl', name: 'OMEMO' },
+        })
+      )
+      // Plugin now available → ciphertext arrives and SHOULD take over so the
+      // deferred retry can decrypt it.
+      await messageCache.saveMessage(
+        createMockMessage(conversationId, {
+          id: 'u3',
+          body: '[OpenPGP-encrypted message]',
+          encryptedPayload: '<openpgp xmlns="urn:xmpp:openpgp:0">C3</openpgp>',
+        })
+      )
+
+      const stored = await messageCache.getMessage('u3')
+      expect(stored?.encryptedPayload).toContain('C3')
+      expect(stored?.unsupportedEncryption).toBeUndefined()
+    })
+  })
+
+  describe('getMessagesWithEncryptedPayload', () => {
+    it('returns only messages that still carry an encryptedPayload, across conversations', async () => {
+      setStorageScopeJid('me@example.com')
+      await messageCache.saveMessage(
+        createMockMessage('a@example.com', { id: 'plain', body: 'clair' })
+      )
+      await messageCache.saveMessage(
+        createMockMessage('a@example.com', {
+          id: 'enc1',
+          body: '[OpenPGP-encrypted message]',
+          encryptedPayload: '<openpgp xmlns="urn:xmpp:openpgp:0">ONE</openpgp>',
+        })
+      )
+      await messageCache.saveMessage(
+        createMockMessage('b@example.com', {
+          id: 'enc2',
+          body: '[OpenPGP-encrypted message]',
+          encryptedPayload: '<openpgp xmlns="urn:xmpp:openpgp:0">TWO</openpgp>',
+        })
+      )
+
+      const pending = await messageCache.getMessagesWithEncryptedPayload()
+      const ids = pending.map((m) => m.id).sort()
+      expect(ids).toEqual(['enc1', 'enc2'])
+      // Each must keep the data the deferred retry needs.
+      expect(pending.every((m) => !!m.encryptedPayload && !!m.conversationId)).toBe(true)
+    })
+
+    it('returns an empty array when nothing is pending', async () => {
+      setStorageScopeJid('me@example.com')
+      await messageCache.saveMessage(
+        createMockMessage('a@example.com', { id: 'plain', body: 'clair' })
+      )
+      expect(await messageCache.getMessagesWithEncryptedPayload()).toEqual([])
+    })
+  })
+
   describe('Error handling', () => {
     it('should handle getMessages on empty database gracefully', async () => {
       const messages = await messageCache.getMessages('nonexistent@example.com')
