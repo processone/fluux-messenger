@@ -316,6 +316,7 @@
         "whisper": "Kuiskaus",
         "whisperingTo": "Kuiskaat yksityisesti {{nick}}:lle",
         "whisperThread": "Yksityinen {{nick}}:n kanssa",
+        "whisperCounterpartGone": "{{nick}} ei ole enää huoneessa — et voi vastata",
         "whisperPlaceholder": "Kuiskaa {{nick}}:lle…",
         "ignoreUser": "Ohita tässä huoneessa",
         "stopIgnoring": "Lopeta ohittaminen",

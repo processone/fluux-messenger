@@ -5,7 +5,7 @@ import { useRoomActive, useRoster, getBareJid, generateConsistentColorHexSync, g
 import { useConnectionStore, useIgnoreStore, useRoomStore } from '@fluux/sdk/react'
 import { ignoreStore, roomStore, type IgnoredUser } from '@fluux/sdk/stores'
 import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat, useContextMenu, isSmallScreen } from '@/hooks'
-import { MessageBubble, MessageList, shouldShowAvatar, whisperThreadPosition, buildReplyContext, PollBanner, type WhisperThreadPosition } from './conversation'
+import { MessageBubble, MessageList, shouldShowAvatar, whisperThreadPosition, whisperCounterpartPresent, buildReplyContext, PollBanner, type WhisperThreadPosition } from './conversation'
 import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
 import { Avatar, getConsistentTextColor } from './Avatar'
@@ -280,11 +280,17 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // instead of staging a public reply (which would leak the private text into the room).
   const handleReplyToMessage = useCallback((message: RoomMessage) => {
     if (message.isPrivate && message.whisperWith) {
-      enterWhisperMode(message.whisperWith)
+      // Only continue a private thread if the counterpart is still in the room —
+      // replying to a recycled or absent nick would leak the private text.
+      if (activeRoom && whisperCounterpartPresent(message, activeRoom.occupants)) {
+        enterWhisperMode(message.whisperWith)
+      } else {
+        addToast('info', t('rooms.whisperCounterpartGone', { nick: message.whisperWith }))
+      }
     } else {
       setReplyingTo(message)
     }
-  }, [enterWhisperMode])
+  }, [enterWhisperMode, activeRoom, addToast, t])
 
   // Clear reply/edit/whisper/pending attachment state when room changes
   // Note: scroll position is managed by MessageList component
@@ -1291,6 +1297,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         knownNicks={knownNicks}
         whisperWith={message.whisperWith}
         whisperThread={whisperThread}
+        counterpartPresent={message.isPrivate ? whisperCounterpartPresent(message, room.occupants) : true}
         onNickContextMenu={!message.isOutgoing ? handleNickContextMenu : undefined}
         onNickTouchStart={!message.isOutgoing ? handleNickTouchStart : undefined}
         onNickTouchEnd={!message.isOutgoing ? onNickTouchEnd : undefined}

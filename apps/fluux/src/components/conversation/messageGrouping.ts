@@ -30,6 +30,8 @@ interface GroupableMessage {
   isPrivate?: boolean
   /** Nick of the whisper counterpart (recipient if outgoing, sender if incoming). */
   whisperWith?: string
+  /** XEP-0421 occupant-id of the whisper counterpart, when known. */
+  whisperWithOccupantId?: string
 }
 
 /**
@@ -47,6 +49,22 @@ function sameSecurityContext(
 }
 
 /**
+ * Whether two whispers share the same counterpart. Prefers the stable XEP-0421
+ * occupant-id when both carry it (so a recycled nick can't merge two different
+ * people's runs); falls back to the nick when either side lacks an id (legacy /
+ * persisted whispers, or rooms without occupant-id support).
+ */
+function sameWhisperCounterpart(
+  a: GroupableMessage | undefined,
+  b: GroupableMessage | undefined,
+): boolean {
+  if (a?.whisperWithOccupantId && b?.whisperWithOccupantId) {
+    return a.whisperWithOccupantId === b.whisperWithOccupantId
+  }
+  return a?.whisperWith === b?.whisperWith
+}
+
+/**
  * Two messages share a group only if their whisper context matches: both public,
  * or both whispers with the same counterpart. A public↔whisper transition (or a
  * whisper-to-A↔whisper-to-B switch) forces a group break so the whisper badge
@@ -56,7 +74,7 @@ function sameSecurityContext(
 function sameWhisperContext(a: GroupableMessage, b: GroupableMessage): boolean {
   if (!a.isPrivate && !b.isPrivate) return true
   if (!a.isPrivate || !b.isPrivate) return false
-  return a.whisperWith === b.whisperWith
+  return sameWhisperCounterpart(a, b)
 }
 
 /**
@@ -149,7 +167,7 @@ function sameWhisperThread(
   a: GroupableMessage | undefined,
   b: GroupableMessage | undefined,
 ): boolean {
-  return !!a?.isPrivate && !!b?.isPrivate && a.whisperWith === b.whisperWith
+  return !!a?.isPrivate && !!b?.isPrivate && sameWhisperCounterpart(a, b)
 }
 
 /**
@@ -172,6 +190,25 @@ export function whisperThreadPosition<T extends GroupableMessage>(
   if (isStart) return 'start'
   if (isEnd) return 'end'
   return 'middle'
+}
+
+/**
+ * Whether the counterpart of a whisper is currently in the room — used to gate
+ * replying (you can only continue a private thread with someone who is present).
+ * Matches on the stable occupant-id when the message carries one (so a recycled
+ * nick held by someone else reads as "not present"); otherwise falls back to nick.
+ */
+export function whisperCounterpartPresent(
+  msg: { whisperWith?: string; whisperWithOccupantId?: string },
+  occupants: ReadonlyMap<string, { occupantId?: string }>,
+): boolean {
+  if (msg.whisperWithOccupantId) {
+    for (const occ of occupants.values()) {
+      if (occ.occupantId === msg.whisperWithOccupantId) return true
+    }
+    return false
+  }
+  return !!msg.whisperWith && occupants.has(msg.whisperWith)
 }
 
 /**

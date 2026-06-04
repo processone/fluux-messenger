@@ -316,6 +316,7 @@
         "whisper": "Шэпт",
         "whisperingTo": "Шэпчаце прыватна да {{nick}}",
         "whisperThread": "Прыватна з {{nick}}",
+        "whisperCounterpartGone": "{{nick}} больш не ў пакоі — вы не можаце адказаць",
         "whisperPlaceholder": "Шапніце {{nick}}…",
         "ignoreUser": "Ігнараваць у гэтым пакоі",
         "stopIgnoring": "Спыніць ігнараванне",

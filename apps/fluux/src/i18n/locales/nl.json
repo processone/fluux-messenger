@@ -316,6 +316,7 @@
         "whisper": "Fluisteren",
         "whisperingTo": "Fluistert privé naar {{nick}}",
         "whisperThread": "Privé met {{nick}}",
+        "whisperCounterpartGone": "{{nick}} is niet meer in de ruimte — je kunt niet antwoorden",
         "whisperPlaceholder": "Fluister naar {{nick}}…",
         "ignoreUser": "Negeren in deze kamer",
         "stopIgnoring": "Stoppen met negeren",

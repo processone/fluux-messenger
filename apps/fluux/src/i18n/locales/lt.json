@@ -316,6 +316,7 @@
         "whisper": "Šnabždesys",
         "whisperingTo": "Šnabždate privačiai {{nick}}",
         "whisperThread": "Privačiai su {{nick}}",
+        "whisperCounterpartGone": "{{nick}} nebėra kambaryje — negalite atsakyti",
         "whisperPlaceholder": "Šnabždėti {{nick}}…",
         "ignoreUser": "Ignoruoti šiame kambaryje",
         "stopIgnoring": "Nustoti ignoruoti",

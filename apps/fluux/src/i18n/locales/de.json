@@ -318,6 +318,7 @@
         "whisper": "Flüstern",
         "whisperingTo": "Flüstert privat an {{nick}}",
         "whisperThread": "Privat mit {{nick}}",
+        "whisperCounterpartGone": "{{nick}} ist nicht mehr im Raum — du kannst nicht antworten",
         "whisperPlaceholder": "Flüstern an {{nick}}…",
         "ignoreUser": "In diesem Raum ignorieren",
         "stopIgnoring": "Nicht mehr ignorieren",

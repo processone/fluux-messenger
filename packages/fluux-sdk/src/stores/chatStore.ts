@@ -625,8 +625,8 @@ export const chatStore = createStore<ChatState>()(
             return state // Don't add duplicate message
           }
 
-          // XEP-0334: Save to IndexedDB only if message doesn't have noStore hint
-          if (!msg.noStore) {
+          // Save to IndexedDB + search index only if the message is locally persistable
+          if (!msg.noLocalStore) {
             void messageCache.saveMessage(msg)
             searchIndex.indexMessage(msg).catch((e) => console.warn('[searchIndex] indexMessage failed:', e))
           }
@@ -1098,8 +1098,8 @@ export const chatStore = createStore<ChatState>()(
             return { mamQueryStates: newStates }
           }
 
-          // XEP-0334: Save only messages without noStore hint to IndexedDB
-          const persistableMessages = newMessages.filter(msg => !msg.noStore)
+          // Persist only locally-persistable messages to IndexedDB
+          const persistableMessages = newMessages.filter(msg => !msg.noLocalStore)
           if (persistableMessages.length > 0) {
             void messageCache.saveMessages(persistableMessages)
             searchIndex.indexMessages(persistableMessages).catch((e) => console.warn('[searchIndex] indexMessages failed:', e))

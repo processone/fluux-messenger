@@ -316,6 +316,7 @@
         "whisper": "همس",
         "whisperingTo": "تهمس بشكل خاص إلى {{nick}}",
         "whisperThread": "خاص مع {{nick}}",
+        "whisperCounterpartGone": "{{nick}} لم يعد موجودًا في الغرفة — لا يمكنك الرد",
         "whisperPlaceholder": "اهمس إلى {{nick}}…",
         "ignoreUser": "تجاهل في هذه الغرفة",
         "stopIgnoring": "إلغاء التجاهل",

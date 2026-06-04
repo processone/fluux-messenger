@@ -367,10 +367,10 @@ describe('searchIndex', () => {
       expect(results).toHaveLength(0)
     })
 
-    it('should skip noStore messages', async () => {
+    it('should skip noLocalStore messages', async () => {
       await indexMessage(createChatMessage('alice@example.com', {
         body: 'Ephemeral message',
-        noStore: true,
+        noLocalStore: true,
       }))
 
       const results = await search('ephemeral')
@@ -489,7 +489,7 @@ describe('searchIndex', () => {
         createChatMessage('alice@example.com', { body: 'Valid message' }),
         createChatMessage('alice@example.com', { body: '', }), // empty body
         createChatMessage('alice@example.com', { body: 'Retracted', isRetracted: true }),
-        createChatMessage('alice@example.com', { body: 'No store', noStore: true }),
+        createChatMessage('alice@example.com', { body: 'No store', noLocalStore: true }),
       ]
 
       await indexMessages(messages)

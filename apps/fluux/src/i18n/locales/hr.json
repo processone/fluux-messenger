@@ -316,6 +316,7 @@
         "whisper": "Šaputanje",
         "whisperingTo": "Šaputate privatno {{nick}}-u",
         "whisperThread": "Privatno s {{nick}}",
+        "whisperCounterpartGone": "{{nick}} više nije u sobi — ne možete odgovoriti",
         "whisperPlaceholder": "Šapni {{nick}}…",
         "ignoreUser": "Ignoriraj u ovoj sobi",
         "stopIgnoring": "Prestani ignorirati",

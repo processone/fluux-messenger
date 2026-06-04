@@ -318,6 +318,7 @@
         "whisper": "Šepot",
         "whisperingTo": "Šeptáte soukromě {{nick}}",
         "whisperThread": "Soukromě s {{nick}}",
+        "whisperCounterpartGone": "{{nick}} už není v místnosti — nemůžete odpovědět",
         "whisperPlaceholder": "Šeptat {{nick}}…",
         "ignoreUser": "Ignorovat v této místnosti",
         "stopIgnoring": "Přestat ignorovat",

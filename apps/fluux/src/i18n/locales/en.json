@@ -316,6 +316,7 @@
         "whisper": "Whisper",
         "whisperingTo": "Whispering privately to {{nick}}",
         "whisperThread": "Private with {{nick}}",
+        "whisperCounterpartGone": "{{nick}} is no longer in the room — you can't reply",
         "whisperPlaceholder": "Whisper to {{nick}}…",
         "ignoreUser": "Ignore in this room",
         "stopIgnoring": "Stop ignoring",

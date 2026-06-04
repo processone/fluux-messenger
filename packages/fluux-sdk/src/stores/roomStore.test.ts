@@ -1266,7 +1266,7 @@ describe('roomStore', () => {
       expect(room?.lastReadAt).toEqual(msgTimestamp) // Updated to message time
     })
 
-    it('should save message to IndexedDB when noStore is false', () => {
+    it('should save message to IndexedDB when noLocalStore is false', () => {
       roomStore.getState().addRoom(createRoom('test@conference.example.com'))
       const message = createMessage('msg1', 'test@conference.example.com', 'alice', 'Hello!')
 
@@ -1275,16 +1275,16 @@ describe('roomStore', () => {
       expect(messageCache.saveRoomMessage).toHaveBeenCalled()
     })
 
-    it('should not save message to IndexedDB when noStore is true (XEP-0334)', () => {
+    it('should not save message to IndexedDB when noLocalStore is true (XEP-0334)', () => {
       roomStore.getState().addRoom(createRoom('test@conference.example.com'))
-      const message = { ...createMessage('msg1', 'test@conference.example.com', 'alice', 'Ephemeral'), noStore: true }
+      const message = { ...createMessage('msg1', 'test@conference.example.com', 'alice', 'Ephemeral'), noLocalStore: true }
 
       roomStore.getState().addMessage('test@conference.example.com', message)
 
       expect(messageCache.saveRoomMessage).not.toHaveBeenCalled()
     })
 
-    it('should set noStore=true on messages for Quick Chat rooms', () => {
+    it('should set noLocalStore=true on messages for Quick Chat rooms', () => {
       roomStore.getState().addRoom(createRoom('quickchat@conference.example.com', { isQuickChat: true }))
       const message = createMessage('msg1', 'quickchat@conference.example.com', 'alice', 'Quick chat message')
 
@@ -1293,15 +1293,15 @@ describe('roomStore', () => {
       // Message should not be saved to IndexedDB
       expect(messageCache.saveRoomMessage).not.toHaveBeenCalled()
 
-      // But message should still be in memory with noStore flag
+      // But message should still be in memory with noLocalStore flag
       const room = roomStore.getState().rooms.get('quickchat@conference.example.com')
       expect(room?.messages.length).toBe(1)
-      expect(room?.messages[0].noStore).toBe(true)
+      expect(room?.messages[0].noLocalStore).toBe(true)
     })
 
-    it('should still add noStore message to in-memory store', () => {
+    it('should still add noLocalStore message to in-memory store', () => {
       roomStore.getState().addRoom(createRoom('test@conference.example.com'))
-      const message = { ...createMessage('msg1', 'test@conference.example.com', 'alice', 'Ephemeral'), noStore: true }
+      const message = { ...createMessage('msg1', 'test@conference.example.com', 'alice', 'Ephemeral'), noLocalStore: true }
 
       roomStore.getState().addMessage('test@conference.example.com', message)
 
@@ -1310,9 +1310,9 @@ describe('roomStore', () => {
       expect(room?.messages[0].body).toBe('Ephemeral')
     })
 
-    it('should still increment unreadCount for noStore messages', () => {
+    it('should still increment unreadCount for noLocalStore messages', () => {
       roomStore.getState().addRoom(createRoom('test@conference.example.com'))
-      const message = { ...createMessage('msg1', 'test@conference.example.com', 'alice', 'Ephemeral'), noStore: true }
+      const message = { ...createMessage('msg1', 'test@conference.example.com', 'alice', 'Ephemeral'), noLocalStore: true }
 
       roomStore.getState().addMessage('test@conference.example.com', message)
 

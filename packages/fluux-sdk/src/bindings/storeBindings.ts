@@ -307,7 +307,7 @@ export function createStoreBindings(
     const doNotNotify =
       isMessageFromIgnoredUser(ignoredUsers, message, nickToJidCache) ||
       isReplyToIgnoredUser(ignoredUsers, message.replyTo, nickToJidCache)
-    // Whisper is already noStore — addMessage appends to runtime only.
+    // Whispers are locally durable: addMessage persists + indexes them like any message.
     stores.room.addMessage(roomJid, message, {
       incrementUnread: !!incrementUnread && !doNotNotify,
       incrementMentions: !!incrementMentions && !doNotNotify,

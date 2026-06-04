@@ -245,7 +245,7 @@ describe('createStoreBindings', () => {
       )
     })
 
-    it('room:whisper adds an ephemeral (noStore) message to the room store', () => {
+    it('room:whisper forwards a locally-durable private message to the room store', () => {
       const message: RoomMessage = {
         type: 'groupchat',
         id: 'w-1',
@@ -257,7 +257,7 @@ describe('createStoreBindings', () => {
         isOutgoing: false,
         isPrivate: true,
         whisperWith: 'bob',
-        noStore: true,
+        whisperWithOccupantId: 'occ-bob',
       }
       mockClient.emit('room:whisper', {
         roomJid: 'room@conf.example.com',
@@ -268,9 +268,12 @@ describe('createStoreBindings', () => {
 
       expect(mockStores.room.addMessage).toHaveBeenCalledWith(
         'room@conf.example.com',
-        expect.objectContaining({ id: 'w-1', isPrivate: true, noStore: true }),
+        expect.objectContaining({ id: 'w-1', isPrivate: true, whisperWith: 'bob', whisperWithOccupantId: 'occ-bob' }),
         expect.objectContaining({ incrementUnread: true, incrementMentions: true }),
       )
+      // The whisper carries no local-skip flag — addMessage will persist it.
+      const forwarded = (mockStores.room.addMessage as any).mock.calls[0][1]
+      expect(forwarded.noLocalStore).toBeUndefined()
     })
 
     it('should handle room:message-updated', () => {

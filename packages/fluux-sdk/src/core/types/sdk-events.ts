@@ -277,9 +277,8 @@ export interface RoomEvents {
 
   /**
    * Private message ("whisper") received or sent in a room (XEP-0045 §7.5).
-   * Separate from `room:message` so bindings can mark it ephemeral and the
-   * UI can badge it. The carried message has `isPrivate: true` and
-   * `noStore: true`.
+   * Separate from `room:message` so the UI can badge it as private. The carried
+   * message has `isPrivate: true` and `whisperWith` set to the counterpart nick.
    */
   'room:whisper': {
     roomJid: string

@@ -145,11 +145,16 @@ export interface BaseMessage {
   /** XEP-0422 + OGP: Link preview metadata for URLs in message */
   linkPreview?: LinkPreview
   /**
-   * XEP-0334: Message Processing Hint - do not store this message.
-   * When true, the message should not be persisted to local cache or server archives.
-   * Automatically set for messages in Quick Chat (transient) rooms.
+   * Local persistence opt-out. When true, this message is kept in the in-memory
+   * store only — it is NOT written to the local IndexedDB cache or the search
+   * index. Automatically set for messages in Quick Chat (transient) rooms.
+   *
+   * Independent of server archival: the XEP-0334 `<no-store>` wire hint that
+   * asks the server not to archive is added at the send site, not derived from
+   * this field. A message can be kept off the server archive yet still persisted
+   * locally (e.g. MUC whispers), or vice versa.
    */
-  noStore?: boolean
+  noLocalStore?: boolean
   /**
    * Delivery error received from the server for this message.
    * Set when the server returns a `<message type="error">` stanza,

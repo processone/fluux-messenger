@@ -850,13 +850,13 @@ export const roomStore = createStore<RoomState>()(
     // Get room to check if it's a Quick Chat (transient history)
     const room = get().rooms.get(roomJid)
 
-    // XEP-0334: Set noStore hint for Quick Chat room messages
+    // Quick Chat rooms are transient: keep their messages in memory only
     const messageToAdd = room?.isQuickChat
-      ? { ...message, noStore: true }
+      ? { ...message, noLocalStore: true }
       : message
 
-    // Save to IndexedDB only if message doesn't have noStore hint
-    if (!messageToAdd.noStore) {
+    // Save to IndexedDB only if the message is locally persistable
+    if (!messageToAdd.noLocalStore) {
       void messageCache.saveRoomMessage(messageToAdd)
       searchIndex.indexMessage(messageToAdd).catch((e) => console.warn('[searchIndex] indexMessage failed:', e))
     }
@@ -1775,8 +1775,8 @@ export const roomStore = createStore<RoomState>()(
         return { mamQueryStates: newStates }
       }
 
-      // XEP-0334: Save only messages without noStore hint to IndexedDB
-      const persistableMessages = newFromMAM.filter(msg => !msg.noStore)
+      // Persist only locally-persistable messages to IndexedDB
+      const persistableMessages = newFromMAM.filter(msg => !msg.noLocalStore)
       if (persistableMessages.length > 0) {
         void messageCache.saveRoomMessages(persistableMessages)
         searchIndex.indexMessages(persistableMessages).catch((e) => console.warn('[searchIndex] indexMessages failed:', e))

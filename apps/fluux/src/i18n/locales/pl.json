@@ -318,6 +318,7 @@
         "whisper": "Szept",
         "whisperingTo": "Szepczesz prywatnie do {{nick}}",
         "whisperThread": "Prywatnie z {{nick}}",
+        "whisperCounterpartGone": "{{nick}} nie jest już w pokoju — nie możesz odpowiedzieć",
         "whisperPlaceholder": "Szepnij do {{nick}}…",
         "ignoreUser": "Ignoruj w tym pokoju",
         "stopIgnoring": "Przestań ignorować",

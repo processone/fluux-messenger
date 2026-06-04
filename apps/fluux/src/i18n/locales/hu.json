@@ -316,6 +316,7 @@
         "whisper": "Suttogás",
         "whisperingTo": "Privát suttogás {{nick}} felé",
         "whisperThread": "Privát: {{nick}}",
+        "whisperCounterpartGone": "{{nick}} már nincs a szobában — nem válaszolhatsz",
         "whisperPlaceholder": "Suttogás {{nick}} felé…",
         "ignoreUser": "Mellőzés ebben a szobában",
         "stopIgnoring": "Mellőzés befejezése",

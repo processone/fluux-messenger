@@ -271,12 +271,12 @@ export async function initSearchIndex(scopeJid: string): Promise<void> {
 
 /**
  * Index a single message into the search index.
- * Skips messages with no body, retracted messages, and noStore messages.
+ * Skips messages with no body, retracted messages, and noLocalStore messages.
  * Silently returns if IndexedDB is not available.
  */
 export async function indexMessage(message: Message | RoomMessage): Promise<void> {
   if (!isIndexedDBAvailable()) return
-  if (!message.body || message.isRetracted || message.noStore) return
+  if (!message.body || message.isRetracted || message.noLocalStore) return
 
   const indexId = getIndexId(message)
   const tokens = uniqueTokens(message.body)
@@ -340,7 +340,7 @@ const INDEX_BATCH_SIZE = 50
  */
 export async function indexMessages(messages: (Message | RoomMessage)[]): Promise<void> {
   if (!isIndexedDBAvailable()) return
-  const indexable = messages.filter((m) => m.body && !m.isRetracted && !m.noStore)
+  const indexable = messages.filter((m) => m.body && !m.isRetracted && !m.noLocalStore)
   if (indexable.length === 0) return
 
   // Process in small batches to keep each IDB transaction short-lived
