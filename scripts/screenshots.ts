@@ -597,3 +597,45 @@ test('24 — Blog Hero v0.15.2', async ({ page }) => {
     Buffer.from(compositeB64, 'base64')
   )
 })
+
+// ── Feature Showcase: Encryption & Whispers ──────────────────────
+// Appended after the existing 01–24 set so their numbering stays stable
+// for any external references (blog posts, docs embeds).
+
+test('25 — Encrypted Chat (dark)', async ({ page }) => {
+  await waitForDemoReady(page)
+  await navigateTo(page, 'messages')
+  // Ava's thread carries OpenPGP security context on its recent messages —
+  // verified / TOFU / untrusted locks plus a "could not decrypt" fallback.
+  // It auto-scrolls to the latest, framing the encryption badges.
+  await selectItem(page, 'Ava Martinez')
+  await capture(page, '25-chat-encrypted-dark')
+})
+
+test('26 — Encryption Settings (dark)', async ({ page }) => {
+  await waitForDemoReady(page)
+  await navigateTo(page, 'settings')
+  // Open the Encryption category. OpenPGP is enabled in demo, so the panel
+  // shows the "ready" status plus the account fingerprint and key-management
+  // actions (back up / export / rotate).
+  await page.getByText('Encryption', { exact: true }).first().click()
+  // Wait for the fingerprint to render — proves the panel reached "ready"
+  // rather than capturing a transient "generating…" state.
+  await page.locator('code').filter({ hasText: 'BAF0' }).first().waitFor({ timeout: 5_000 })
+  await page.waitForTimeout(500)
+  await capture(page, '26-settings-encryption-dark')
+})
+
+test('27 — Whisper in Room (dark)', async ({ page }) => {
+  await waitForDemoReady(page)
+  await navigateTo(page, 'rooms')
+  await selectItem(page, 'Team Chat')
+  // Scroll the private "whisper" thread (XEP-0045 §7.5) into view — it renders
+  // as a bounded "Private with Emma" container near the end of the room.
+  const whisper = page.getByText('Private with Emma').first()
+  if (await whisper.isVisible()) {
+    await whisper.scrollIntoViewIfNeeded()
+    await page.waitForTimeout(500)
+  }
+  await capture(page, '27-whisper-dark')
+})

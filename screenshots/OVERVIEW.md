@@ -23,6 +23,18 @@ All screenshots are generated automatically from the [demo mode](../docs/DEMO_MO
 | <a href="./05-poll-dark.png"><img src="./05-poll-dark.png" width="400" alt="Polls"/></a> | <a href="./06-code-block-dark.png"><img src="./06-code-block-dark.png" width="400" alt="Code Blocks"/></a> |
 | *Emoji voting with single/multi-vote modes and live tallies*                             | *Syntax-highlighted code blocks with language detection*                                                   |
 
+## Security & Privacy
+
+| Encrypted Chat                                                                                                        | Encryption Settings                                                                                                                  |
+|-----------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------|
+| <a href="./25-chat-encrypted-dark.png"><img src="./25-chat-encrypted-dark.png" width="400" alt="Encrypted Chat"/></a> | <a href="./26-settings-encryption-dark.png"><img src="./26-settings-encryption-dark.png" width="400" alt="Encryption Settings"/></a> |
+| *OpenPGP end-to-end encryption with per-message trust badges*                                                          | *Key generation, fingerprint, server backup, and key export*                                                                         |
+
+| Whisper (Private Room Message)                                                                       |
+|------------------------------------------------------------------------------------------------------|
+| <a href="./27-whisper-dark.png"><img src="./27-whisper-dark.png" width="400" alt="Whisper"/></a>     |
+| *Private "whisper" messages to a single room occupant (XEP-0045 §7.5)*                                |
+
 ## Administration
 
 | Admin Panel                                                                                      |
