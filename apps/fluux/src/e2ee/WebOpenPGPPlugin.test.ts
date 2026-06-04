@@ -11,7 +11,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   InMemoryStorageBackend,
   createPluginStorage,
@@ -1827,6 +1827,47 @@ describe('WebOpenPGPPlugin', () => {
         expect(bob.securityUpdates).toHaveLength(1)
         expect(bob.securityUpdates[0].securityContext.trust).toBe('rejected')
         expect(bob.securityUpdates[0].body).toBe('[Message rejected: invalid signature]')
+      })
+
+      it('preserves the entry on a transient re-verify error instead of falsely rejecting', async () => {
+        const { shared, alice, bob } = await buildCrossPublishedPair()
+
+        await alice.plugin.probePeer('bob@example.com')
+        const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
+        const payload = await alice.plugin.encrypt(handle, encodeBody('transient retry'))
+
+        // Bob decrypts without alice's key → stashed for deferred verification
+        clearSessionPassphrase()
+        setSessionPassphrase('bob-strong-pp')
+        const bobHandle = await bob.plugin.openConversation({ kind: 'direct', peer: 'alice@example.com' })
+        const claim = bob.plugin.tryClaimInbound(payload.stanzaElement)!
+        await bob.plugin.decrypt(bobHandle, claim, { messageId: 'm-transient' })
+
+        // Bob learns alice's real key, but the re-verify decrypt fails with a
+        // TRANSIENT fault (e.g. IPC timeout). The message must NOT be rejected,
+        // and the entry must survive so a later drain can resolve it.
+        publishKeyToSharedPep(shared, 'alice@example.com', alice.bundle)
+        const spy = vi
+          .spyOn(
+            bob.testable as unknown as { decryptWithOwnKey: (...a: unknown[]) => Promise<unknown> },
+            'decryptWithOwnKey',
+          )
+          .mockRejectedValueOnce(new Error('ipc request timed out'))
+        bob.plugin.onPeerKeysChanged('alice@example.com')
+        await flushAsync()
+        spy.mockRestore()
+
+        // Transient failure must not produce a permanent rejection.
+        expect(
+          bob.securityUpdates.filter((u) => u.securityContext.trust === 'rejected'),
+        ).toHaveLength(0)
+
+        // The entry survived: a subsequent drain (decrypt now works) upgrades it.
+        bob.plugin.onPeerKeysChanged('alice@example.com')
+        await flushAsync()
+        const upgrades = bob.securityUpdates.filter((u) => u.securityContext.trust === 'tofu')
+        expect(upgrades).toHaveLength(1)
+        expect(upgrades[0].messageId).toBe('m-transient')
       })
 
       it('does not stash when no messageId is available', async () => {

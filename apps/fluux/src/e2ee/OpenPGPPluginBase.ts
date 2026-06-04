@@ -1900,6 +1900,16 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         ctx.logger.debug(
           `${this.pluginName()}: re-verify for ${peer}/${entry.messageId} failed: ${formatError(err)}`,
         )
+        // A transient fault (e.g. IPC timeout, backend panic) tells us nothing
+        // about the signature — rejecting here would clobber an optimistically
+        // delivered, possibly-valid message permanently. Keep the entry so the
+        // next drain (triggered by a future key change) can retry. Only a
+        // permanent error means the ciphertext itself is unrecoverable.
+        const { kind } = classifyBoundaryError(err)
+        if (kind === 'transient') {
+          remaining.push(entry)
+          continue
+        }
         ctx.reportSecurityContextUpdate({
           peer,
           messageId: entry.messageId,
