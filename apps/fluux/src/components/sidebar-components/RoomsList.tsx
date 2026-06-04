@@ -6,10 +6,10 @@ import {
   useRoomActions,
   roomStore,
   generateConsistentColorHexSync,
-  formatMessagePreview,
   type Room,
 } from '@fluux/sdk'
 import { useChatStore, useRoomStore } from '@fluux/sdk/react'
+import { formatLocalizedPreview } from '@/utils/messagePreviewText'
 import { EditBookmarkModal } from '../EditBookmarkModal'
 import { Tooltip } from '../Tooltip'
 import { useSidebarZone } from './types'
@@ -445,7 +445,7 @@ const RoomItem = memo(function RoomItem({
             ) : lastMessage ? (
               <span className={lastMessage.isRetracted ? 'italic' : ''}>
                 {lastMessage.isOutgoing ? `${t('chat.me')}: ` : `${lastMessage.nick}: `}
-                {lastMessage.isRetracted ? t('chat.messageDeleted') : formatMessagePreview(lastMessage)}
+                {lastMessage.isRetracted ? t('chat.messageDeleted') : formatLocalizedPreview(lastMessage, t)}
               </span>
             ) : room.joined ? (
               // No messages yet - show room subject if available, otherwise subtle placeholder

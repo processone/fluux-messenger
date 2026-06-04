@@ -498,6 +498,8 @@
             "encryptedDisabled": "加密已禁用 — 请在设置中启用",
             "couldNotDecryptTooltip": "消息已加密给本设备不可用的密钥",
             "unsupportedMethodTooltip": "已使用 {{method}} 加密 — 此设备尚不支持该方式",
+            "unsupportedMessage": "加密消息 — 不支持 {{method}}",
+            "unsupportedMessageGeneric": "加密消息 — 不支持此方法",
             "rejected": "证书被拒绝",
             "rejectedTooltip": "对方的 OpenPGP 证书无效 — 点击查看详情",
             "rejectedTitle": "证书被拒绝",

@@ -8,11 +8,11 @@ import {
   chatStore,
   roomStore,
   generateConsistentColorHexSync,
-  formatMessagePreview,
   type Conversation,
   type Contact,
   type Room,
 } from '@fluux/sdk'
+import { formatLocalizedPreview } from '@/utils/messagePreviewText'
 import { useChatStore, useConnectionStore } from '@fluux/sdk/react'
 import { Avatar, TypingIndicator } from '../Avatar'
 import { Tooltip } from '../Tooltip'
@@ -334,7 +334,7 @@ export const ConversationItem = memo(function ConversationItem({
           ) : conversation.lastMessage && (
             <p dir="auto" className={`truncate text-xs opacity-75 ${conversation.lastMessage.isRetracted ? 'italic' : ''}`}>
               {conversation.lastMessage.isOutgoing ? `${t('chat.me')}: ` : ''}
-              {conversation.lastMessage.isRetracted ? t('chat.messageDeleted') : formatMessagePreview(conversation.lastMessage)}
+              {conversation.lastMessage.isRetracted ? t('chat.messageDeleted') : formatLocalizedPreview(conversation.lastMessage, t)}
             </p>
           )}
         </div>

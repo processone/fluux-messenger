@@ -498,6 +498,8 @@
             "encryptedDisabled": "Šifravimas išjungtas — įjunkite jį nustatymuose",
             "couldNotDecryptTooltip": "Pranešimas užšifruotas raktu, kuris šiame įrenginyje nepasiekiamas",
             "unsupportedMethodTooltip": "Užšifruota naudojant {{method}} — šis metodas dar nepalaikomas šiame įrenginyje",
+            "unsupportedMessage": "Šifruotas pranešimas — {{method}} nepalaikomas",
+            "unsupportedMessageGeneric": "Šifruotas pranešimas — metodas nepalaikomas",
             "rejected": "Sertifikatas atmestas",
             "rejectedTooltip": "Pašnekovo OpenPGP sertifikatas yra negaliojantis — spustelėkite norėdami sužinoti daugiau",
             "rejectedTitle": "Sertifikatas atmestas",

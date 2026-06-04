@@ -498,6 +498,8 @@
             "encryptedDisabled": "Salaus poistettu käytöstä — ota se käyttöön asetuksissa",
             "couldNotDecryptTooltip": "Viesti on salattu avaimelle, jota ei ole saatavilla tässä laitteessa",
             "unsupportedMethodTooltip": "Salattu menetelmällä {{method}} — tätä menetelmää tämä laite ei vielä tue",
+            "unsupportedMessage": "Salattu viesti — {{method}} ei tueta",
+            "unsupportedMessageGeneric": "Salattu viesti — menetelmää ei tueta",
             "rejected": "Varmenne hylätty",
             "rejectedTooltip": "Keskustelukumppanin OpenPGP-varmenne on virheellinen — napsauta nähdäksesi lisätietoja",
             "rejectedTitle": "Varmenne hylätty",

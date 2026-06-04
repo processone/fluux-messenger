@@ -498,6 +498,8 @@
             "encryptedDisabled": "Kryptering inaktiverad — aktivera den i inställningarna",
             "couldNotDecryptTooltip": "Meddelandet är krypterat till en nyckel som inte är tillgänglig på denna enhet",
             "unsupportedMethodTooltip": "Krypterat med {{method}} — en metod som den här enheten inte stöder ännu",
+            "unsupportedMessage": "Krypterat meddelande — {{method}} stöds inte",
+            "unsupportedMessageGeneric": "Krypterat meddelande — metoden stöds inte",
             "rejected": "Certifikat avvisat",
             "rejectedTooltip": "Samtalspartnerns OpenPGP-certifikat är ogiltigt — klicka för detaljer",
             "rejectedTitle": "Certifikat avvisat",

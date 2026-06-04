@@ -498,6 +498,8 @@
             "encryptedDisabled": "A titkosítás ki van kapcsolva — kapcsolja be a beállításokban",
             "couldNotDecryptTooltip": "Az üzenetet olyan kulccsal titkosították, amely ezen az eszközön nem érhető el",
             "unsupportedMethodTooltip": "{{method}} titkosítással — ezt a módszert ez az eszköz még nem támogatja",
+            "unsupportedMessage": "Titkosított üzenet — a(z) {{method}} nem támogatott",
+            "unsupportedMessageGeneric": "Titkosított üzenet — a módszer nem támogatott",
             "rejected": "Tanúsítvány elutasítva",
             "rejectedTooltip": "A partner OpenPGP tanúsítványa érvénytelen — kattints a részletekért",
             "rejectedTitle": "Tanúsítvány elutasítva",

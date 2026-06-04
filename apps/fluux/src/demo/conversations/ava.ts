@@ -106,4 +106,15 @@ export const AVA_MESSAGES: Message[] = [
       notes: ['Could not decrypt'],
     },
   },
+  // Example of an *unsupported* encryption method: the peer sent an OMEMO
+  // message but no OMEMO plugin is registered. The sender's plaintext fallback
+  // <body> (chosen by their client, in their language) must NOT surface as if
+  // it were a real message — a localized "Encrypted message — OMEMO not
+  // supported" notice renders instead (UnsupportedEncryptionNotice).
+  {
+    type: 'chat', id: 'demo-ava-16', from: conv,
+    body: "You received a message encrypted with OMEMO but your client doesn't support OMEMO or its support is currently disabled.",
+    timestamp: minutesAgo(1), isOutgoing: false, conversationId: conv,
+    unsupportedEncryption: { namespace: 'eu.siacs.conversations.axolotl', name: 'OMEMO' },
+  },
 ]

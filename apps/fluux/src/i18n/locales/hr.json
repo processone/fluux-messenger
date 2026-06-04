@@ -498,6 +498,8 @@
             "encryptedDisabled": "Šifriranje je isključeno — uključite ga u postavkama",
             "couldNotDecryptTooltip": "Poruka je šifrirana za ključ koji nije dostupan na ovom uređaju",
             "unsupportedMethodTooltip": "Šifrirano pomoću {{method}} — metoda koju ovaj uređaj još ne podržava",
+            "unsupportedMessage": "Šifrirana poruka — {{method}} nije podržan",
+            "unsupportedMessageGeneric": "Šifrirana poruka — metoda nije podržana",
             "rejected": "Certifikat odbijen",
             "rejectedTooltip": "OpenPGP certifikat sugovornika nije valjan — kliknite za pojedinosti",
             "rejectedTitle": "Certifikat odbijen",

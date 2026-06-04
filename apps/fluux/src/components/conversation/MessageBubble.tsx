@@ -13,6 +13,7 @@ import { AvatarLightbox } from '../AvatarLightbox'
 import { MessageToolbar } from './MessageToolbar'
 import { MessageBody } from './MessageBody'
 import { EncryptedPlaceholder } from './EncryptedPlaceholder'
+import { UnsupportedEncryptionNotice } from './UnsupportedEncryptionNotice'
 import { MessageReactions } from './MessageReactions'
 import { scrollToMessage, isActionMessage, type WhisperThreadPosition } from './messageGrouping'
 import { MessageAttachments } from '../MessageAttachments'
@@ -454,22 +455,6 @@ export const MessageBubble = memo(function MessageBubble({
                 </span>
               </Tooltip>
             )}
-            {!message.securityContext && message.unsupportedEncryption && (
-              <Tooltip
-                content={t('chat.encryption.unsupportedMethodTooltip', {
-                  method: message.unsupportedEncryption.name,
-                })}
-                position="top"
-                triggerMode="click"
-              >
-                <span
-                  className="flex items-center text-fluux-muted"
-                  aria-label={`Encrypted with ${message.unsupportedEncryption.name}, unsupported method`}
-                >
-                  <Lock className="size-3" />
-                </span>
-              </Tooltip>
-            )}
           </div>
         )}
 
@@ -501,10 +486,14 @@ export const MessageBubble = memo(function MessageBubble({
 
         {/* Collapsible wrapper for long messages */}
         <CollapsibleContent messageId={message.id} isSelected={isSelected} isHovered={isHovered}>
-          {/* Encrypted-payload placeholder takes precedence over body text
-              so the SDK's English fallback string never reaches the UI. */}
+          {/* Encryption placeholders take precedence over body text so the
+              sender's plaintext fallback never reaches the UI. encryptedPayload:
+              an E2EE stanza we couldn't decrypt. unsupportedEncryption: a
+              protocol no registered plugin handles (e.g. OMEMO). */}
           {message.encryptedPayload ? (
             <EncryptedPlaceholder />
+          ) : message.unsupportedEncryption ? (
+            <UnsupportedEncryptionNotice method={message.unsupportedEncryption.name} />
           ) : (
             <MessageBody
               body={message.body}

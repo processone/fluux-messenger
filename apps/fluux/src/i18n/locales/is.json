@@ -498,6 +498,8 @@
             "encryptedDisabled": "Dulkóðun er óvirk — virkjaðu hana í stillingunum",
             "couldNotDecryptTooltip": "Skilaboð dulkóðuð fyrir lykil sem er ekki tiltækur á þessu tæki",
             "unsupportedMethodTooltip": "Dulkóðað með {{method}} — aðferð sem þetta tæki styður ekki enn",
+            "unsupportedMessage": "Dulkóðuð skilaboð — {{method}} er ekki stutt",
+            "unsupportedMessageGeneric": "Dulkóðuð skilaboð — aðferð er ekki studd",
             "rejected": "Vottorði hafnað",
             "rejectedTooltip": "OpenPGP-vottorð viðmælanda er ógilt — smelltu fyrir nánari upplýsingar",
             "rejectedTitle": "Vottorði hafnað",

@@ -14,7 +14,8 @@ import {
   Users,
   Search,
 } from 'lucide-react'
-import { useChat, useRoom, useRoster, matchNameOrJid, getLocalPart, formatMessagePreview, searchStore } from '@fluux/sdk'
+import { useChat, useRoom, useRoster, matchNameOrJid, getLocalPart, searchStore } from '@fluux/sdk'
+import { formatLocalizedPreview } from '@/utils/messagePreviewText'
 import { useChatStore, useConnectionStore } from '@fluux/sdk/react'
 import type { PresenceStatus } from '@fluux/sdk'
 import type { SidebarView } from './Sidebar'
@@ -230,7 +231,7 @@ function CommandPaletteContent({
     for (const conv of conversations) {
       if (conv.type !== 'chat') continue
       const contact = contacts.find((c) => c.jid === conv.id)
-      const preview = conv.lastMessage ? formatMessagePreview(conv.lastMessage) : undefined
+      const preview = conv.lastMessage ? formatLocalizedPreview(conv.lastMessage, t) : undefined
       items.push({
         id: `conv-${conv.id}`,
         type: 'conversation',
@@ -277,7 +278,7 @@ function CommandPaletteContent({
 
     // 3. Joined rooms
     for (const room of joinedRooms) {
-      const preview = room.lastMessage ? formatMessagePreview(room.lastMessage) : undefined
+      const preview = room.lastMessage ? formatLocalizedPreview(room.lastMessage, t) : undefined
       items.push({
         id: `room-${room.jid}`,
         type: 'room',

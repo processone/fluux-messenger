@@ -500,6 +500,8 @@
             "encryptedDisabled": "L-encryption huwa diżattivat — attivah fis-settings",
             "couldNotDecryptTooltip": "Messaġġ ikkriptat għal ċavetta li mhix disponibbli fuq dan it-tagħmir",
             "unsupportedMethodTooltip": "Ikkriptat bi {{method}} — metodu li dan l-apparat għadu ma jappoġġjax",
+            "unsupportedMessage": "Messaġġ kriptat — {{method}} mhux appoġġjat",
+            "unsupportedMessageGeneric": "Messaġġ kriptat — metodu mhux appoġġjat",
             "rejected": "Iċ-ċertifikat ġie rrifjutat",
             "rejectedTooltip": "Iċ-ċertifikat OpenPGP tal-persuna l-oħra mhux validu — ikklikkja għad-dettalji",
             "rejectedTitle": "Iċ-ċertifikat ġie rrifjutat",

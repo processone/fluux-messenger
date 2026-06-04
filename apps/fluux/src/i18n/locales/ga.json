@@ -498,6 +498,8 @@
             "encryptedDisabled": "Tá an criptiú díchumasaithe — cumasaigh é sna socruithe",
             "couldNotDecryptTooltip": "Tá an teachtaireacht criptithe le heochair nach bhfuil ar fáil ar an ngléas seo",
             "unsupportedMethodTooltip": "Criptithe le {{method}} — modh nach dtacaíonn an gléas seo leis go fóill",
+            "unsupportedMessage": "Teachtaireacht chriptithe — ní thacaítear le {{method}}",
+            "unsupportedMessageGeneric": "Teachtaireacht chriptithe — ní thacaítear leis an modh",
             "rejected": "Teastas diúltaithe",
             "rejectedTooltip": "Tá teastas OpenPGP an chomhpháirtí neamhbhailí — cliceáil le haghaidh sonraí",
             "rejectedTitle": "Teastas diúltaithe",
