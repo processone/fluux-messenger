@@ -99,14 +99,14 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // IMPORTANT: Use stable empty array reference to prevent infinite re-renders.
   // Zustand uses Object.is to compare selector results — a new [] each time causes re-render loops.
   const ignoredForRoom = useIgnoreStore((s) => activeRoom ? (s.ignoredUsers[activeRoom.jid] ?? EMPTY_IGNORED_ARRAY) : EMPTY_IGNORED_ARRAY)
-  const displayMessages = (() => {
+  const displayMessages = useMemo(() => {
     if (ignoredForRoom.length === 0) return activeMessages
     const cache = activeRoom?.nickToJidCache
     return activeMessages.filter(msg =>
       !isMessageFromIgnoredUser(ignoredForRoom, msg, cache) &&
       !isReplyToIgnoredUser(ignoredForRoom, msg.replyTo, cache)
     )
-  })()
+  }, [activeMessages, ignoredForRoom, activeRoom?.nickToJidCache])
 
   // Filter typing indicators from ignored users
   const filteredTypingUsers = useMemo(() => {
@@ -263,7 +263,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
 
   // Create a lookup map for messages by ID (for reply context)
   // Index by both client id and stanza-id since replies may reference either
-  const messagesById = createMessageLookup(activeMessages)
+  const messagesById = useMemo(() => createMessageLookup(activeMessages), [activeMessages])
 
   // Track pendingAttachment in a ref for cleanup (not a trigger)
   const pendingAttachmentRef = useRef(pendingAttachment)
@@ -349,21 +349,21 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     isUploadSupported: isSupported,
   })
 
-  // Memoize the clearFirstNewMessageId callback to avoid render loops
-  // (inline arrow functions create new references on every render)
+  // Stable callbacks passed to memoized RoomMessageList — useCallback prevents
+  // the child from re-rendering when only unrelated RoomView state changes.
   const roomJid = activeRoom?.jid
-  const handleClearFirstNewMessageId = () => {
+  const handleClearFirstNewMessageId = useCallback(() => {
     if (roomJid) {
       clearFirstNewMessageId(roomJid)
     }
-  }
+  }, [roomJid, clearFirstNewMessageId])
 
   // Viewport observer callback: update lastSeenMessageId as user scrolls
-  const handleMessageSeen = (messageId: string) => {
+  const handleMessageSeen = useCallback((messageId: string) => {
     if (roomJid) {
       updateLastSeenMessageId(roomJid, messageId)
     }
-  }
+  }, [roomJid, updateLastSeenMessageId])
 
   // Find on page: browser-style search within this room
   const find = useFindOnPage(activeMessages, activeRoom?.jid)
