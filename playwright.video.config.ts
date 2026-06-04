@@ -19,7 +19,9 @@ export default defineConfig({
   workers: 1,
   use: {
     baseURL: 'http://localhost:5173',
-    viewport: { width: 1920, height: 1080 },
+    // The recording context (record.ts) sets its own denser viewport + 2×
+    // device scale; this is just the fixture default.
+    viewport: { width: 1280, height: 720 },
     // Backstop: never let a missing element hang the whole multi-minute run.
     actionTimeout: 20_000,
     navigationTimeout: 30_000,
