@@ -33,6 +33,45 @@ The demo populates the UI with:
 - **1 group chat room** ("Team Chat") with 4 occupants, reactions, and replies
 - **Live animations** that start after page load: typing indicators, incoming messages, and emoji reactions
 
+## Recording a Demo Video
+
+A Playwright pipeline drives demo mode and records a promo-style walkthrough of the major features. It produces two variants from one shared storyboard:
+
+| Command                   | Produces                              | Length                 |
+|---------------------------|---------------------------------------|------------------------|
+| `npm run demo:video`      | both variants                         | —                      |
+| `npm run demo:video:reel` | `video/fluux-demo-reel.{webm,mp4}`    | ~90s highlight reel    |
+| `npm run demo:video:full` | `video/fluux-demo-full.{webm,mp4}`    | ~3–4 min full tour     |
+
+Output is written to the git-ignored `video/` directory at the repo root, as **1920×1080 WebM and MP4**.
+
+### Prerequisites
+
+```bash
+npm run build:sdk                 # demo consumes the built SDK
+npx playwright install chromium   # one-time, if not already installed
+# ffmpeg must be on PATH for the MP4 conversion (the WebM is always produced)
+```
+
+Playwright starts the dev server automatically (reusing one already running on `:5173`).
+
+### How it works
+
+The script opens `/demo.html?tutorial=false`, drives navigation deterministically (via the `HashRouter`), and layers on promo polish: a synthetic gliding cursor with click ripples, lower-third captions, and intro/outro title cards. "Live" moments — typing indicators, incoming messages, reactions — are fired on cue through `DemoClient.startAnimation()` while the camera is framed on the relevant conversation.
+
+### Editing the walkthrough
+
+| File                          | Purpose                                                                  |
+|-------------------------------|--------------------------------------------------------------------------|
+| `scripts/video/storyboard.ts` | Ordered scenes — add, reorder, or retag features here                    |
+| `scripts/video/helpers.ts`    | Cursor, captions, title cards, navigation, live beats, MP4 conversion    |
+| `scripts/video/record.ts`     | Entry point (the `reel` and `full` tests)                                |
+| `playwright.video.config.ts`  | 1080p canvas, video recording, timeout, dev-server reuse                 |
+
+Each scene is tagged `variant: 'reel'` (appears in both videos) or `variant: 'full'` (full tour only), so the reel is a strict subset of the full tour.
+
+> **Capture quality:** video is captured with Playwright's built-in `recordVideo` (variable frame rate) and re-encoded to a constant-30fps H.264 MP4 via ffmpeg. If motion looks choppy, the capture layer in `helpers.ts` can be swapped for deterministic frame capture (CDP screencast or interval screenshots) assembled by ffmpeg at a constant frame rate — without touching the storyboard.
+
 ## Architecture
 
 ### Entry Point

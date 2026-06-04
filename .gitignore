@@ -40,6 +40,9 @@ coverage/
 test-results/
 playwright-report/
 
+# Generated demo videos (large binaries) — root-anchored so scripts/video/ is NOT ignored
+/video/
+
 # Security
 *.pem
 *.key
