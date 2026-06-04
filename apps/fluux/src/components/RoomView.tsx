@@ -1955,6 +1955,9 @@ function RoomMessageInput({
         onRemovePendingAttachment={onRemovePendingAttachment}
         disabled={!isConnected}
         sendDisabled={whisperCounterpartGone}
+        sendBadge={whisperTarget
+          ? <Ear className={`absolute bottom-2 end-2 size-2.5 ${whisperCounterpartGone ? 'text-fluux-muted' : 'text-fluux-private'}`} />
+          : undefined}
         onEditLastMessage={onEditLastMessage}
       />
     </div>

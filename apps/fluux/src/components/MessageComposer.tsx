@@ -146,6 +146,12 @@ interface MessageComposerProps {
   onEditLastMessage?: () => void
   /** Encryption state for the current conversation (badge on send button) */
   encryptionState?: ConversationEncryptionState
+  /**
+   * Small badge overlaid on the Send button (bottom-end corner), mirroring the
+   * encryption padlock. Used to signal a non-default send mode — e.g. a whisper
+   * (private message). Hidden when an encryption badge is shown (encryption wins).
+   */
+  sendBadge?: ReactNode
 }
 
 export function MessageComposer({
@@ -178,6 +184,7 @@ export function MessageComposer({
   sendDisabled = false,
   onEditLastMessage,
   encryptionState,
+  sendBadge,
   ref,
 }: MessageComposerProps & { ref?: Ref<MessageComposerHandle> }) {
   detectRenderLoop('MessageComposer')
@@ -835,11 +842,11 @@ export function MessageComposer({
                        disabled:text-fluux-muted disabled:cursor-not-allowed transition-colors relative"
           >
             <Send className="rtl-mirror size-5" />
-            {encryptionState?.kind === 'encrypted' && (
+            {encryptionState?.kind === 'encrypted' ? (
               encryptionState.trust === 'verified'
                 ? <ShieldCheck className="absolute bottom-2 end-2 size-2.5 text-green-500" />
                 : <Lock className="absolute bottom-2 end-2 size-2.5 text-fluux-muted" />
-            )}
+            ) : sendBadge}
           </button>
         </Tooltip>
       </div>
