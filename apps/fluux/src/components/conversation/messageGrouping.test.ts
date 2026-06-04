@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { groupMessagesByDate, shouldShowAvatar, whisperThreadPosition, scrollToMessage, isActionMessage } from './messageGrouping'
+import { groupMessagesByDate, shouldShowAvatar, whisperThreadPosition, whisperCounterpartPresent, scrollToMessage, isActionMessage } from './messageGrouping'
 
 // Mock CSS.escape since it's not available in JSDOM
 // This implementation matches the browser's CSS.escape behavior
@@ -331,6 +331,58 @@ describe('whisperThreadPosition', () => {
     const msgs = [w('1', 'emma', 'emma'), w('2', 'emma', 'you')]
     expect(whisperThreadPosition(msgs, 0)).toBe('start')
     expect(whisperThreadPosition(msgs, 1)).toBe('end')
+  })
+
+  // Thread identity prefers the stable occupant-id (XEP-0421): a recycled nick
+  // must not merge two different people's whisper runs.
+  const wo = (id: string, whisperWith: string, whisperWithOccupantId: string, from = 'alice') => ({
+    id, timestamp: new Date('2024-01-15T10:00:00'), from, isPrivate: true, whisperWith, whisperWithOccupantId,
+  })
+
+  it('splits same-nick whispers that have different occupant-ids (recycled nick)', () => {
+    const msgs = [wo('1', 'bob', 'occ-1'), wo('2', 'bob', 'occ-2')]
+    expect(whisperThreadPosition(msgs, 0)).toBe('solo')
+    expect(whisperThreadPosition(msgs, 1)).toBe('solo')
+  })
+
+  it('keeps same-occupant-id whispers in one thread', () => {
+    const msgs = [wo('1', 'bob', 'occ-1'), wo('2', 'bob', 'occ-1')]
+    expect(whisperThreadPosition(msgs, 0)).toBe('start')
+    expect(whisperThreadPosition(msgs, 1)).toBe('end')
+  })
+
+  it('falls back to nick when either side lacks an occupant-id', () => {
+    const legacy = { id: '1', timestamp: new Date('2024-01-15T10:00:00'), from: 'alice', isPrivate: true, whisperWith: 'bob' }
+    const withId = wo('2', 'bob', 'occ-1')
+    expect(whisperThreadPosition([legacy, withId], 0)).toBe('start')
+    expect(whisperThreadPosition([legacy, withId], 1)).toBe('end')
+  })
+})
+
+describe('whisperCounterpartPresent', () => {
+  const occ = (nick: string, occupantId?: string) => ({ nick, occupantId })
+  const occupantsOf = (...list: { nick: string; occupantId?: string }[]) =>
+    new Map(list.map((o) => [o.nick, o] as const))
+
+  it('is present when an occupant matches the counterpart occupant-id', () => {
+    const msg = { whisperWith: 'bob', whisperWithOccupantId: 'occ-1' }
+    expect(whisperCounterpartPresent(msg, occupantsOf(occ('bob', 'occ-1')))).toBe(true)
+  })
+
+  it('is absent when the nick matches but the occupant-id differs (recycled nick)', () => {
+    const msg = { whisperWith: 'bob', whisperWithOccupantId: 'occ-1' }
+    expect(whisperCounterpartPresent(msg, occupantsOf(occ('bob', 'occ-2')))).toBe(false)
+  })
+
+  it('falls back to nick presence when the message has no occupant-id', () => {
+    const msg = { whisperWith: 'bob' }
+    expect(whisperCounterpartPresent(msg, occupantsOf(occ('bob')))).toBe(true)
+    expect(whisperCounterpartPresent(msg, occupantsOf(occ('carol')))).toBe(false)
+  })
+
+  it('is absent when the counterpart is no longer in the room', () => {
+    const msg = { whisperWith: 'bob', whisperWithOccupantId: 'occ-1' }
+    expect(whisperCounterpartPresent(msg, occupantsOf())).toBe(false)
   })
 })
 

@@ -318,6 +318,7 @@
         "whisper": "Sosistamine",
         "whisperingTo": "Sosistate privaatselt {{nick}}-le",
         "whisperThread": "Privaatne {{nick}}-ga",
+        "whisperCounterpartGone": "{{nick}} pole enam toas — sa ei saa vastata",
         "whisperPlaceholder": "Sosista {{nick}}-le…",
         "ignoreUser": "Ignoreeri selles ruumis",
         "stopIgnoring": "Lõpeta ignoreerimine",

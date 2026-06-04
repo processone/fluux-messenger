@@ -317,6 +317,7 @@
         "whisper": "Šepot",
         "whisperingTo": "Šepkáte súkromne {{nick}}",
         "whisperThread": "Súkromne s {{nick}}",
+        "whisperCounterpartGone": "{{nick}} už nie je v miestnosti — nemôžete odpovedať",
         "whisperPlaceholder": "Šepkať {{nick}}…",
         "ignoreUser": "Ignorovať v tejto miestnosti",
         "stopIgnoring": "Prestať ignorovať",

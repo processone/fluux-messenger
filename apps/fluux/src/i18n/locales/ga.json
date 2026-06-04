@@ -316,6 +316,7 @@
         "whisper": "Cogar",
         "whisperingTo": "Ag cogarnach go príobháideach chuig {{nick}}",
         "whisperThread": "Príobháideach le {{nick}}",
+        "whisperCounterpartGone": "Níl {{nick}} sa seomra a thuilleadh — ní féidir leat freagra a thabhairt",
         "whisperPlaceholder": "Cogar chuig {{nick}}…",
         "ignoreUser": "Déan neamhaird sa seomra seo",
         "stopIgnoring": "Stop ag déanamh neamhaird",

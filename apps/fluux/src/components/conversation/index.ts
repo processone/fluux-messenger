@@ -21,7 +21,7 @@ export { HistoryGapMarker } from './HistoryGapMarker'
 export { MessageBubble, buildReplyContext } from './MessageBubble'
 export type { MessageBubbleProps } from './MessageBubble'
 
-export { groupMessagesByDate, shouldShowAvatar, whisperThreadPosition, scrollToMessage, isActionMessage } from './messageGrouping'
+export { groupMessagesByDate, shouldShowAvatar, whisperThreadPosition, whisperCounterpartPresent, scrollToMessage, isActionMessage } from './messageGrouping'
 export type { MessageGroup, WhisperThreadPosition } from './messageGrouping'
 
 export { MessageList } from './MessageList'

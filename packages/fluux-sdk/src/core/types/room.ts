@@ -142,6 +142,13 @@ export interface RoomMessage extends Omit<BaseMessage, 'type'> {
    * if incoming. Always identifies the *remote* occupant.
    */
   whisperWith?: string
+  /**
+   * XEP-0421 occupant-id of the whisper counterpart (the remote occupant named
+   * in {@link whisperWith}). Lets a persisted whisper thread re-bind to the same
+   * person across rejoins/nick changes, and gates replying so a recycled nick
+   * can't be mis-addressed. Absent in rooms without occupant-id support.
+   */
+  whisperWithOccupantId?: string
 }
 
 /**

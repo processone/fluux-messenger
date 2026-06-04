@@ -882,8 +882,9 @@ export class Chat extends BaseModule {
    * XEP-0045 §7.5: send a private message ("whisper") to a single room
    * occupant. Unlike {@link sendMessage}, this preserves the `/nick`
    * resource (sendMessage strips it for type='chat') and emits `room:whisper`
-   * instead of `chat:message` so the message is treated as an ephemeral room
-   * private message rather than a 1:1 conversation.
+   * instead of `chat:message` so the message is tracked as a private room
+   * message rather than a 1:1 conversation. The XEP-0334 `<no-store>` hint
+   * keeps it off the server archive; it is still persisted locally.
    *
    * @param roomJid bare room JID, e.g. 'room@conference.example.com'
    * @param nick    target occupant's nickname
@@ -906,6 +907,9 @@ export class Chat extends BaseModule {
     const room = this.deps.stores?.room.getRoom(roomJid)
     if (!room) logWarn(`sendWhisper: room ${roomJid} not found in store — sender nick will be empty`)
     const ourNick = room?.nickname || ''
+    // Counterpart's stable occupant-id (XEP-0421), resolved from the live occupant
+    // list, so a persisted thread can be re-bound to the same person later.
+    const targetOccupantId = room?.occupants.get(nick)?.occupantId
     const whisper: RoomMessage = {
       type: 'groupchat',
       id,
@@ -918,7 +922,7 @@ export class Chat extends BaseModule {
       isOutgoing: true,
       isPrivate: true,
       whisperWith: nick,
-      noStore: true,
+      ...(targetOccupantId && { whisperWithOccupantId: targetOccupantId }),
     }
     this.deps.emitSDK('room:whisper', {
       roomJid,
@@ -2058,9 +2062,9 @@ export class Chat extends BaseModule {
 
   /**
    * XEP-0045 §7.5: build a RoomMessage for an incoming/sent private message.
-   * Mirrors the core of processRoomMessage but marks the message private and
-   * ephemeral (noStore), and skips public-only concerns (polls, public
-   * mention scanning). Emits `room:whisper`.
+   * Mirrors the core of processRoomMessage but marks the message private
+   * (persisted locally, kept off the server archive), and skips public-only
+   * concerns (polls, public mention scanning). Emits `room:whisper`.
    */
   private processRoomWhisper(
     stanza: Element,
@@ -2087,6 +2091,11 @@ export class Chat extends BaseModule {
     // whisperWith is always the remote occupant: the sender for incoming, or
     // (rare sent-carbon case) the recipient derived from the `to` resource.
     const whisperWith = isOutgoing ? (getResource(stanza.attrs.to) || nick) : nick
+    // Counterpart's stable occupant-id (XEP-0421): the sender's id for an incoming
+    // whisper, or the recipient's (looked up by nick) for a sent-carbon echo.
+    const whisperWithOccupantId = isOutgoing
+      ? room.occupants.get(whisperWith)?.occupantId
+      : occupantId
 
     const message: RoomMessage = {
       type: 'groupchat',
@@ -2100,7 +2109,7 @@ export class Chat extends BaseModule {
       isOutgoing,
       isPrivate: true,
       whisperWith,
-      noStore: true,
+      ...(whisperWithOccupantId && { whisperWithOccupantId }),
       ...(parsed.isDelayed && { isDelayed: true }),
       ...(parsed.noStyling && { noStyling: true }),
       ...(parsed.replyTo && { replyTo: parsed.replyTo }),

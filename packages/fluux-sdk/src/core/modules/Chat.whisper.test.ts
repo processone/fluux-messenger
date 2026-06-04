@@ -92,7 +92,13 @@ describe('MUC Whispers', () => {
 
     it('emits room:whisper (not chat:message) for the outgoing whisper', async () => {
       await connectClient()
-      const room = createMockRoom('room@conference.example.com', { joined: true, nickname: 'me' })
+      const room = createMockRoom('room@conference.example.com', {
+        joined: true,
+        nickname: 'me',
+        occupants: new Map([
+          ['bob', { nick: 'bob', affiliation: 'member', role: 'participant', occupantId: 'occ-bob' }],
+        ]),
+      })
       vi.mocked(mockStores.room.getRoom).mockReturnValue(room)
 
       await xmppClient.chat.sendWhisper('room@conference.example.com', 'bob', 'psst hello')
@@ -103,12 +109,19 @@ describe('MUC Whispers', () => {
           isPrivate: true,
           isOutgoing: true,
           whisperWith: 'bob',
-          noStore: true,
           body: 'psst hello',
           originId: expect.any(String),
         }),
       }))
       expect(emitSDKSpy).not.toHaveBeenCalledWith('chat:message', expect.anything())
+
+      // Whispers are locally durable now: not flagged noLocalStore, and they carry
+      // the counterpart's occupant-id (resolved from the occupants map) so a recycled
+      // nick can't be mis-addressed when replying later.
+      const whisperCall = emitSDKSpy.mock.calls.find((c: any) => c[0] === 'room:whisper')
+      const whisperMsg = (whisperCall?.[1] as any)?.message
+      expect(whisperMsg.noLocalStore).toBeUndefined()
+      expect(whisperMsg.whisperWithOccupantId).toBe('occ-bob')
     })
   })
 
@@ -123,7 +136,10 @@ describe('MUC Whispers', () => {
         to: 'user@example.com',
         type: 'chat',
         id: 'w-1',
-      }, [{ name: 'body', text: 'between us' }])
+      }, [
+        { name: 'body', text: 'between us' },
+        { name: 'occupant-id', attrs: { xmlns: 'urn:xmpp:occupant-id:0', id: 'occ-bob' } },
+      ])
 
       mockXmppClientInstance._emit('stanza', stanza)
 
@@ -134,12 +150,17 @@ describe('MUC Whispers', () => {
           isOutgoing: false,
           nick: 'bob',
           whisperWith: 'bob',
-          noStore: true,
           body: 'between us',
         }),
         incrementUnread: true,
         incrementMentions: true,
       }))
+
+      // Incoming whisper is locally durable and carries the sender's occupant-id.
+      const whisperCall = emitSDKSpy.mock.calls.find((c: any) => c[0] === 'room:whisper')
+      const whisperMsg = (whisperCall?.[1] as any)?.message
+      expect(whisperMsg.noLocalStore).toBeUndefined()
+      expect(whisperMsg.whisperWithOccupantId).toBe('occ-bob')
       expect(emitSDKSpy).not.toHaveBeenCalledWith('room:message', expect.anything())
       expect(emitSDKSpy).not.toHaveBeenCalledWith('chat:message', expect.anything())
     })
@@ -209,10 +230,14 @@ describe('MUC Whispers', () => {
         message: expect.objectContaining({
           isPrivate: true,
           isOutgoing: true,
-          noStore: true,
         }),
       }))
       expect(emitSDKSpy).not.toHaveBeenCalledWith('chat:message', expect.anything())
+
+      // Sent-carbon whisper is also locally durable.
+      const whisperCall = emitSDKSpy.mock.calls.find((c: any) => c[0] === 'room:whisper')
+      const whisperMsg = (whisperCall?.[1] as any)?.message
+      expect(whisperMsg.noLocalStore).toBeUndefined()
     })
 
     it('still routes type=chat from a non-joined JID to chat:message (no regression)', async () => {

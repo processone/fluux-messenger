@@ -6,7 +6,7 @@
  */
 import { useState, useMemo, memo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { CornerUpRight, AlertCircle, RefreshCw, Lock, ShieldAlert, Ear } from 'lucide-react'
+import { CornerUpRight, AlertCircle, RefreshCw, Lock, ShieldAlert, Ear, UserX } from 'lucide-react'
 import { formatMessagePreview, formatXMPPError, type BaseMessage, type MentionReference, type Contact, type ContactIdentity, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
 import { Avatar } from '../Avatar'
 import { AvatarLightbox } from '../AvatarLightbox'
@@ -65,6 +65,12 @@ export interface MessageBubbleProps {
   whisperWith?: string
   /** Position within a whisper thread — drives the bounded "private with X" container. */
   whisperThread?: WhisperThreadPosition | null
+  /**
+   * Whether the whisper counterpart is currently in the room. When false, the
+   * thread's last row shows a "no longer in the room" note and reply is disabled.
+   * Undefined = treated as present (e.g. non-whisper messages).
+   */
+  counterpartPresent?: boolean
 
   // Nick header extras (for room moderator badge, hats)
   nickExtras?: ReactNode
@@ -140,6 +146,7 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps): bool
   if (prev.message.body !== next.message.body) return false
   if (prev.whisperWith !== next.whisperWith) return false
   if (prev.whisperThread !== next.whisperThread) return false
+  if (prev.counterpartPresent !== next.counterpartPresent) return false
   if (prev.message.isEdited !== next.message.isEdited) return false
   if (prev.message.isRetracted !== next.message.isRetracted) return false
   if (prev.message.isOutgoing !== next.message.isOutgoing) return false
@@ -259,6 +266,7 @@ export const MessageBubble = memo(function MessageBubble({
   senderOccupantJid,
   whisperWith,
   whisperThread,
+  counterpartPresent,
   nickExtras,
   myReactions,
   onReaction,
@@ -335,6 +343,8 @@ export const MessageBubble = memo(function MessageBubble({
   const inThread = !!whisperThread
   const threadStart = whisperThread === 'start' || whisperThread === 'solo'
   const threadEnd = whisperThread === 'end' || whisperThread === 'solo'
+  // Counterpart left the room: the thread becomes read-only (can't reply privately).
+  const counterpartGone = inThread && counterpartPresent === false
   const outerRowClass = inThread
     ? `group flex gap-4 -mx-4 px-4 transition-colors ${threadStart ? 'pt-3' : ''} ${threadEnd ? 'pb-1.5' : ''}`
     : `group flex gap-4 ${hoverClass} -mx-4 px-4 py-0.5 transition-colors ${showAvatar ? 'pt-4' : ''}`
@@ -400,7 +410,7 @@ export const MessageBubble = memo(function MessageBubble({
             onEdit={onEdit}
             onDelete={onDelete}
             myReactions={reactionsEnabled ? myReactions : []}
-            canReply={!isLastMessage}
+            canReply={!isLastMessage && !counterpartGone}
             canEdit={message.isOutgoing && isLastOutgoing}
             canDelete={message.isOutgoing || canModerate === true}
             isHidden={hideToolbar || false}
@@ -580,6 +590,14 @@ export const MessageBubble = memo(function MessageBubble({
                 {t('chat.errorDetails', { error: formatXMPPError(message.deliveryError) })}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Whisper thread footer: counterpart is no longer in the room — reply disabled */}
+        {threadEnd && counterpartGone && (
+          <div className="flex items-center gap-1.5 pt-1.5 text-xs text-fluux-muted">
+            <UserX className="size-3.5 shrink-0" />
+            <span className="truncate">{t('rooms.whisperCounterpartGone', { nick: whisperWith })}</span>
           </div>
         )}
       </div>

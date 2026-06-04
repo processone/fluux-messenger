@@ -316,6 +316,7 @@
         "whisper": "私语",
         "whisperingTo": "正在私语给 {{nick}}",
         "whisperThread": "与 {{nick}} 私聊",
+        "whisperCounterpartGone": "{{nick}} 已不在房间中 — 无法回复",
         "whisperPlaceholder": "私语给 {{nick}}…",
         "ignoreUser": "在此房间中忽略",
         "stopIgnoring": "停止忽略",

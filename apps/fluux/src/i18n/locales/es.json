@@ -318,6 +318,7 @@
         "whisper": "Susurro",
         "whisperingTo": "Susurrando en privado a {{nick}}",
         "whisperThread": "Privado con {{nick}}",
+        "whisperCounterpartGone": "{{nick}} ya no está en la sala — no puedes responder",
         "whisperPlaceholder": "Susurrar a {{nick}}…",
         "ignoreUser": "Ignorar en esta sala",
         "stopIgnoring": "Dejar de ignorar",

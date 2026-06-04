@@ -316,6 +316,7 @@
         "whisper": "Hvísla",
         "whisperingTo": "Hvíslað í einrúmi til {{nick}}",
         "whisperThread": "Einka með {{nick}}",
+        "whisperCounterpartGone": "{{nick}} er ekki lengur í herberginu — þú getur ekki svarað",
         "whisperPlaceholder": "Hvísla til {{nick}}…",
         "ignoreUser": "Hunsa í þessu herbergi",
         "stopIgnoring": "Hætta að hunsa",

@@ -317,6 +317,7 @@
         "whisper": "Čuksts",
         "whisperingTo": "Čukstat privāti {{nick}}",
         "whisperThread": "Privāti ar {{nick}}",
+        "whisperCounterpartGone": "{{nick}} vairs nav istabā — jūs nevarat atbildēt",
         "whisperPlaceholder": "Čukstēt {{nick}}…",
         "ignoreUser": "Ignorēt šajā istabā",
         "stopIgnoring": "Pārtraukt ignorēšanu",

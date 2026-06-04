@@ -316,6 +316,7 @@
         "whisper": "Hvisk",
         "whisperingTo": "Hvisker privat til {{nick}}",
         "whisperThread": "Privat med {{nick}}",
+        "whisperCounterpartGone": "{{nick}} er ikke længere i rummet — du kan ikke svare",
         "whisperPlaceholder": "Hvisk til {{nick}}…",
         "ignoreUser": "Ignorér i dette rum",
         "stopIgnoring": "Stop med at ignorere",

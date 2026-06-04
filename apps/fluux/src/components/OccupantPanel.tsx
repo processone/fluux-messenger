@@ -40,7 +40,7 @@ export interface OccupantPanelProps {
   ownAvatar?: string | null
   onClose: () => void
   onStartChat?: (jid: string) => void
-  /** Start an ephemeral private "whisper" (XEP-0045 §7.5) with an occupant by nick */
+  /** Start a private "whisper" (XEP-0045 §7.5) with an occupant by nick */
   onWhisper?: (nick: string) => void
   onShowProfile?: (jid: string) => void
   /** When true, renders as full-screen view with back arrow instead of inline sidebar */
@@ -627,7 +627,7 @@ export function OccupantPanel({
               label={t('rooms.sendPrivateMessage')}
             />
           )}
-          {/* Whisper (ephemeral in-room private message) */}
+          {/* Whisper (in-room private message) */}
           {onWhisper && (
             <MenuButton
               onClick={() => { onWhisper(menuTarget.primaryNick); menu.close() }}

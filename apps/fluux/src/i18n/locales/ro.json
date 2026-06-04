@@ -318,6 +318,7 @@
         "whisper": "Șoaptă",
         "whisperingTo": "Îi șoptești în privat lui {{nick}}",
         "whisperThread": "Privat cu {{nick}}",
+        "whisperCounterpartGone": "{{nick}} nu mai este în cameră — nu poți răspunde",
         "whisperPlaceholder": "Șoptește către {{nick}}…",
         "ignoreUser": "Ignoră în această cameră",
         "stopIgnoring": "Oprește ignorarea",

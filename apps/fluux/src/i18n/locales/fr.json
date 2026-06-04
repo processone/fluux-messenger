@@ -317,6 +317,7 @@
         "whisper": "Chuchotement",
         "whisperingTo": "Vous chuchotez en privé à {{nick}}",
         "whisperThread": "Privé avec {{nick}}",
+        "whisperCounterpartGone": "{{nick}} n'est plus dans le salon — vous ne pouvez pas répondre",
         "whisperPlaceholder": "Chuchoter à {{nick}}…",
         "ignoreUser": "Ignorer dans ce salon",
         "stopIgnoring": "Ne plus ignorer",
