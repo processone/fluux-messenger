@@ -24,6 +24,9 @@ export type { MessageBubbleProps } from './MessageBubble'
 export { groupMessagesByDate, shouldShowAvatar, whisperThreadPosition, whisperCounterpartPresent, scrollToMessage, isActionMessage } from './messageGrouping'
 export type { MessageGroup, WhisperThreadPosition } from './messageGrouping'
 
+export { resolveWhisperTarget, whisperTargetPresent, decideWhisperSend } from './whisperTarget'
+export type { WhisperTarget, WhisperSendDecision } from './whisperTarget'
+
 export { MessageList } from './MessageList'
 export type { MessageListProps } from './MessageList'
 

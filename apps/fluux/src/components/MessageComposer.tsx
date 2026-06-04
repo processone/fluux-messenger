@@ -135,10 +135,23 @@ interface MessageComposerProps {
   onRemovePendingAttachment?: () => void
   /** Whether sending is disabled (e.g., when offline) */
   disabled?: boolean
+  /**
+   * Disable only the Send action (button + Enter) while keeping the textarea
+   * editable. Unlike {@link disabled}, the typed text is preserved and can still
+   * be edited — used when a whisper counterpart has left the room, so the private
+   * draft is held but must not be sent (XEP-0045 §7.5).
+   */
+  sendDisabled?: boolean
   /** Callback when Up arrow is pressed in empty field (to edit last message) */
   onEditLastMessage?: () => void
   /** Encryption state for the current conversation (badge on send button) */
   encryptionState?: ConversationEncryptionState
+  /**
+   * Small badge overlaid on the Send button (bottom-end corner), mirroring the
+   * encryption padlock. Used to signal a non-default send mode — e.g. a whisper
+   * (private message). Hidden when an encryption badge is shown (encryption wins).
+   */
+  sendBadge?: ReactNode
 }
 
 export function MessageComposer({
@@ -168,8 +181,10 @@ export function MessageComposer({
   pendingAttachment,
   onRemovePendingAttachment,
   disabled = false,
+  sendDisabled = false,
   onEditLastMessage,
   encryptionState,
+  sendBadge,
   ref,
 }: MessageComposerProps & { ref?: Ref<MessageComposerHandle> }) {
   detectRenderLoop('MessageComposer')
@@ -424,8 +439,9 @@ export function MessageComposer({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      // Don't submit if disabled (e.g., offline)
-      if (disabled) return
+      // Don't submit if disabled (e.g., offline) or send-gated (e.g., whisper
+      // counterpart left the room — keep the draft, just refuse to send).
+      if (disabled || sendDisabled) return
       void handleSubmit(e)
     } else if (e.key === 'Escape') {
       // Cancel edit mode on Escape
@@ -821,16 +837,16 @@ export function MessageComposer({
         >
           <button
             type="submit"
-            disabled={(!text.trim() && !pendingAttachment) || sending || disabled}
+            disabled={(!text.trim() && !pendingAttachment) || sending || disabled || sendDisabled}
             className="p-3 text-fluux-brand hover:text-fluux-brand-hover
                        disabled:text-fluux-muted disabled:cursor-not-allowed transition-colors relative"
           >
             <Send className="rtl-mirror size-5" />
-            {encryptionState?.kind === 'encrypted' && (
+            {encryptionState?.kind === 'encrypted' ? (
               encryptionState.trust === 'verified'
                 ? <ShieldCheck className="absolute bottom-2 end-2 size-2.5 text-green-500" />
                 : <Lock className="absolute bottom-2 end-2 size-2.5 text-fluux-muted" />
-            )}
+            ) : sendBadge}
           </button>
         </Tooltip>
       </div>
