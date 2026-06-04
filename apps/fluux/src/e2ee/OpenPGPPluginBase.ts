@@ -1760,8 +1760,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
 
   tryClaimInbound(stanzaChild: XMLElementData): EncryptedPayload | null {
     if (stanzaChild.name !== 'openpgp') return null
-    const xmlns = stanzaChild.attrs?.xmlns
-    if (xmlns && xmlns !== OX_NAMESPACE) return null
+    if (stanzaChild.attrs?.xmlns !== OX_NAMESPACE) return null
     return {
       protocolId: OPENPGP_DESCRIPTOR.id,
       stanzaElement: stanzaChild,
