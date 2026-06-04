@@ -46,7 +46,7 @@ npx playwright install chromium
 npm run screenshots
 ```
 
-This produces 10 PNG files in the `screenshots/` directory covering major features in both dark and light mode: 1:1 chat, group chat with members panel, conversation list, contacts, polls, code blocks, admin dashboard, and settings.
+This produces a set of PNG files in the `screenshots/` directory covering major features in both dark and light mode: 1:1 chat, group chat with members panel, conversation list, contacts, polls, code blocks, encrypted messages, encryption settings, whispers, admin dashboard, settings, theme variants, and right-to-left locales. See the [visual overview](../screenshots/OVERVIEW.md) for the full gallery.
 
 The script navigates the demo at `/demo.html?tutorial=false`, freezes the animation timeline, and captures each view at 1280×800. To add or modify screenshots, edit `scripts/screenshots.ts`.
 
