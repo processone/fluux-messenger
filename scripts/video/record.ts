@@ -23,7 +23,7 @@
 import { test, type Browser } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
 import {
-  VIDEO_SIZE, BASE_URL, DEMO_URL,
+  RENDER_SIZE, BASE_URL, DEMO_URL,
   openDemo, waitForAppReady, installPolishLayers,
   coverWithTitle, hideTitleCard, titleCard, convertToMp4,
 } from './helpers'
@@ -45,11 +45,13 @@ async function record(browser: Browser, variant: Variant): Promise<void> {
   await warm.close()
 
   const context = await browser.newContext({
-    viewport: VIDEO_SIZE,
-    deviceScaleFactor: 1,
+    // Lay out + capture natively at the denser RENDER_SIZE so the UI fills the
+    // frame (and cursor coordinates stay native); convertToMp4 upscales the
+    // result to VIDEO_SIZE (1080p) with a high-quality lanczos filter.
+    viewport: RENDER_SIZE,
     colorScheme: 'dark',
     baseURL: BASE_URL,
-    recordVideo: { dir: RAW_DIR, size: VIDEO_SIZE },
+    recordVideo: { dir: RAW_DIR, size: RENDER_SIZE },
   })
   const page = await context.newPage()
   const video = page.video()

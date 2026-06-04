@@ -18,6 +18,14 @@ import { existsSync } from 'node:fs'
 
 export const BASE_URL = 'http://localhost:5173'
 export const DEMO_URL = `${BASE_URL}/demo.html?tutorial=false`
+/**
+ * CSS viewport the app lays out in. Deliberately denser than the 1080p output
+ * (same width as the marketing screenshots) so the UI fills the frame instead
+ * of leaving wide empty gutters — the app is captured at 2× and scaled to the
+ * output size below, keeping the result crisp.
+ */
+export const RENDER_SIZE = { width: 1280, height: 720 }
+/** Output video dimensions. */
 export const VIDEO_SIZE = { width: 1920, height: 1080 }
 
 /** Demo JIDs (stable in demo seed data — see apps/fluux/src/demo/). */
@@ -161,8 +169,8 @@ export async function installPolishLayers(page: Page): Promise<void> {
       r.addEventListener('animationend', () => r.remove())
     }, true)
   })
-  // Park the cursor off to the side initially.
-  await page.mouse.move(VIDEO_SIZE.width * 0.5, VIDEO_SIZE.height * 0.5)
+  // Park the cursor in the middle of the (CSS) viewport initially.
+  await page.mouse.move(RENDER_SIZE.width * 0.5, RENDER_SIZE.height * 0.5)
 }
 
 /** Show the lower-third caption (fades in, stays until hideCaption). */
@@ -413,6 +421,8 @@ export function convertToMp4(webmPath: string, mp4Path: string): void {
   try {
     execFileSync('ffmpeg', [
       '-y', '-i', webmPath,
+      // Upscale the dense native capture to the 1080p output (lanczos = sharp).
+      '-vf', `scale=${VIDEO_SIZE.width}:${VIDEO_SIZE.height}:flags=lanczos`,
       '-r', '30',
       '-c:v', 'libx264',
       '-pix_fmt', 'yuv420p',
