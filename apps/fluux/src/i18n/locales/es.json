@@ -500,6 +500,8 @@
             "encryptedDisabled": "Cifrado desactivado — actívalo en los ajustes",
             "couldNotDecryptTooltip": "Mensaje cifrado para una clave que no está disponible en este dispositivo",
             "unsupportedMethodTooltip": "Cifrado con {{method}}: un método que este dispositivo aún no admite",
+            "unsupportedMessage": "Mensaje cifrado — {{method}} no compatible",
+            "unsupportedMessageGeneric": "Mensaje cifrado — método no compatible",
             "rejected": "Certificado rechazado",
             "rejectedTooltip": "El certificado OpenPGP del contacto no es válido — haz clic para más detalles",
             "rejectedTitle": "Certificado rechazado",

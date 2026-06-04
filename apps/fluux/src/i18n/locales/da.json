@@ -498,6 +498,8 @@
             "encryptedDisabled": "Kryptering deaktiveret — aktivér den i indstillingerne",
             "couldNotDecryptTooltip": "Beskeden er krypteret til en nøgle, der ikke er tilgængelig på denne enhed",
             "unsupportedMethodTooltip": "Krypteret med {{method}} — en metode, som denne enhed endnu ikke understøtter",
+            "unsupportedMessage": "Krypteret besked — {{method}} understøttes ikke",
+            "unsupportedMessageGeneric": "Krypteret besked — metoden understøttes ikke",
             "rejected": "Certifikat afvist",
             "rejectedTooltip": "Modpartens OpenPGP-certifikat er ugyldigt — klik for detaljer",
             "rejectedTitle": "Certifikat afvist",

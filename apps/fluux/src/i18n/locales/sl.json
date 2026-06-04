@@ -500,6 +500,8 @@
             "encryptedDisabled": "Šifriranje je izklopljeno — vklopite ga v nastavitvah",
             "couldNotDecryptTooltip": "Sporočilo je šifrirano za ključ, ki v tej napravi ni na voljo",
             "unsupportedMethodTooltip": "Šifrirano z {{method}} — metoda, ki je ta naprava še ne podpira",
+            "unsupportedMessage": "Šifrirano sporočilo — {{method}} ni podprto",
+            "unsupportedMessageGeneric": "Šifrirano sporočilo — metoda ni podprta",
             "rejected": "Potrdilo zavrnjeno",
             "rejectedTooltip": "Potrdilo OpenPGP sogovornika ni veljavno — kliknite za podrobnosti",
             "rejectedTitle": "Potrdilo zavrnjeno",

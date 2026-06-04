@@ -500,6 +500,8 @@
             "encryptedDisabled": "Šifrování je vypnuto — zapněte jej v nastavení",
             "couldNotDecryptTooltip": "Zpráva zašifrovaná pro klíč, který není na tomto zařízení k dispozici",
             "unsupportedMethodTooltip": "Šifrováno pomocí {{method}} — metoda, kterou toto zařízení zatím nepodporuje",
+            "unsupportedMessage": "Šifrovaná zpráva — {{method}} není podporováno",
+            "unsupportedMessageGeneric": "Šifrovaná zpráva — metoda není podporována",
             "rejected": "Certifikát odmítnut",
             "rejectedTooltip": "OpenPGP certifikát protistrany je neplatný — klikněte pro podrobnosti",
             "rejectedTitle": "Certifikát odmítnut",

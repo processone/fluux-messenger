@@ -500,6 +500,8 @@
             "encryptedDisabled": "Verschlüsselung deaktiviert — in den Einstellungen aktivieren",
             "couldNotDecryptTooltip": "Nachricht für einen auf diesem Gerät nicht verfügbaren Schlüssel verschlüsselt",
             "unsupportedMethodTooltip": "Mit {{method}} verschlüsselt – eine Methode, die dieses Gerät noch nicht unterstützt",
+            "unsupportedMessage": "Verschlüsselte Nachricht — {{method}} wird nicht unterstützt",
+            "unsupportedMessageGeneric": "Verschlüsselte Nachricht — Methode wird nicht unterstützt",
             "rejected": "Zertifikat abgelehnt",
             "rejectedTooltip": "Das OpenPGP-Zertifikat des Gesprächspartners ist ungültig — klicke für Details",
             "rejectedTitle": "Zertifikat abgelehnt",

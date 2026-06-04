@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { rosterStore, usePresence } from '@fluux/sdk'
 import type { Conversation, Message, Room, RoomMessage } from '@fluux/sdk'
 import { sendNotification, onAction } from '@tauri-apps/plugin-notification'
@@ -7,7 +8,7 @@ import { useNotificationEvents } from './useNotificationEvents'
 import { useNavigateToTarget } from './useNavigateToTarget'
 import { useNotificationPermission, isTauri } from './useNotificationPermission'
 import { getNotificationAvatarUrl } from '@/utils/notificationAvatar'
-import { formatMessagePreview } from '@fluux/sdk'
+import { formatLocalizedPreview } from '@/utils/messagePreviewText'
 import { notificationDebug } from '@/utils/notificationDebug'
 import { showWebNotification } from '@/utils/webNotification'
 
@@ -24,6 +25,7 @@ export function useDesktopNotifications(): void {
   const { navigateToConversation, navigateToRoom } = useNavigateToTarget()
   const permissionGranted = useNotificationPermission()
   const { presenceStatus } = usePresence()
+  const { t } = useTranslation()
 
   // Refs for stable access in async callbacks (useNavigateToTarget uses refs internally)
   const navigateToConversationRef = useRef(navigateToConversation)
@@ -78,7 +80,7 @@ export function useDesktopNotifications(): void {
 
     const senderName = message.from.split('@')[0]
     const title = conv.name || senderName
-    const body = formatMessagePreview(message)
+    const body = formatLocalizedPreview(message, t)
 
     notificationDebug.desktopNotification({
       title,
@@ -125,7 +127,7 @@ export function useDesktopNotifications(): void {
 
     // Format: "nick @ Room Name" as title, message body as body
     const title = `${message.nick} @ ${room.name}`
-    const body = formatMessagePreview(message)
+    const body = formatLocalizedPreview(message, t)
 
     notificationDebug.desktopNotification({
       title,

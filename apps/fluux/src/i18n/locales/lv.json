@@ -499,6 +499,8 @@
             "encryptedDisabled": "Šifrēšana ir izslēgta — ieslēdziet to iestatījumos",
             "couldNotDecryptTooltip": "Ziņojums šifrēts ar atslēgu, kas šajā ierīcē nav pieejama",
             "unsupportedMethodTooltip": "Šifrēts ar {{method}} — šī metode šajā ierīcē vēl netiek atbalstīta",
+            "unsupportedMessage": "Šifrēts ziņojums — {{method}} netiek atbalstīts",
+            "unsupportedMessageGeneric": "Šifrēts ziņojums — metode netiek atbalstīta",
             "rejected": "Sertifikāts noraidīts",
             "rejectedTooltip": "Sarunu biedra OpenPGP sertifikāts nav derīgs — noklikšķiniet, lai uzzinātu vairāk",
             "rejectedTitle": "Sertifikāts noraidīts",

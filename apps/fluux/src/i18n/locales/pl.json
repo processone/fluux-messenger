@@ -500,6 +500,8 @@
             "encryptedDisabled": "Szyfrowanie wyłączone — włącz je w ustawieniach",
             "couldNotDecryptTooltip": "Wiadomość zaszyfrowana kluczem niedostępnym na tym urządzeniu",
             "unsupportedMethodTooltip": "Zaszyfrowano metodą {{method}} — ta metoda nie jest jeszcze obsługiwana na tym urządzeniu",
+            "unsupportedMessage": "Wiadomość zaszyfrowana — {{method}} nie jest obsługiwane",
+            "unsupportedMessageGeneric": "Wiadomość zaszyfrowana — metoda nie jest obsługiwana",
             "rejected": "Certyfikat odrzucony",
             "rejectedTooltip": "Certyfikat OpenPGP rozmówcy jest nieprawidłowy — kliknij, aby uzyskać szczegóły",
             "rejectedTitle": "Certyfikat odrzucony",

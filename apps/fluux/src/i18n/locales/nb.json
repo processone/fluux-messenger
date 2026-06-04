@@ -498,6 +498,8 @@
             "encryptedDisabled": "Kryptering er slått av — slå den på i innstillingene",
             "couldNotDecryptTooltip": "Meldingen er kryptert til en nøkkel som ikke er tilgjengelig på denne enheten",
             "unsupportedMethodTooltip": "Kryptert med {{method}} — en metode denne enheten ennå ikke støtter",
+            "unsupportedMessage": "Kryptert melding — {{method}} støttes ikke",
+            "unsupportedMessageGeneric": "Kryptert melding — metoden støttes ikke",
             "rejected": "Sertifikat avvist",
             "rejectedTooltip": "Samtalepartnerens OpenPGP-sertifikat er ugyldig — klikk for detaljer",
             "rejectedTitle": "Sertifikat avvist",

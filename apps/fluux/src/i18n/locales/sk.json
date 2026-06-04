@@ -499,6 +499,8 @@
             "encryptedDisabled": "Šifrovanie je vypnuté — zapnite ho v nastaveniach",
             "couldNotDecryptTooltip": "Správa je zašifrovaná pre kľúč, ktorý nie je v tomto zariadení k dispozícii",
             "unsupportedMethodTooltip": "Šifrované pomocou {{method}} — metóda, ktorú toto zariadenie zatiaľ nepodporuje",
+            "unsupportedMessage": "Šifrovaná správa — {{method}} nie je podporovaný",
+            "unsupportedMessageGeneric": "Šifrovaná správa — metóda nie je podporovaná",
             "rejected": "Certifikát zamietnutý",
             "rejectedTooltip": "OpenPGP certifikát partnera je neplatný — kliknite pre podrobnosti",
             "rejectedTitle": "Certifikát zamietnutý",
