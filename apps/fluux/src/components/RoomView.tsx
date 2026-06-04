@@ -146,12 +146,13 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   const lastMessageId = activeMessages.length > 0 ? activeMessages[activeMessages.length - 1].id : null
 
   // Handler to edit the last outgoing message (triggered by Up arrow in empty composer)
-  const handleEditLastMessage = () => {
-    const msg = findLastEditableMessage(activeMessages)
+  // Reads messages from the store at call time to avoid closing over the changing activeMessages array
+  const handleEditLastMessage = useCallback(() => {
+    const msg = findLastEditableMessage(roomStore.getState().activeMessages())
     if (msg) {
       setEditingMessage(msg)
     }
-  }
+  }, [])
 
   // Composing state - hides message toolbars when user is typing
   const [isComposing, setIsComposing] = useState(false)
@@ -164,8 +165,8 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     onShowOccupantsChange?.(show)
   }
 
-  const handleCancelReply = () => setReplyingTo(null)
-  const handleCancelEdit = () => setEditingMessage(null)
+  const handleCancelReply = useCallback(() => setReplyingTo(null), [])
+  const handleCancelEdit = useCallback(() => setEditingMessage(null), [])
   const handleReactionPickerChange = (messageId: string, isOpen: boolean) => {
     setActiveReactionPickerMessageId(isOpen ? messageId : null)
   }
@@ -201,7 +202,10 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     nickMenu.handleTouchEnd()
   }
 
-  const uploadStateObj = { isUploading, progress, error: uploadError, clearError: clearUploadError }
+  const uploadStateObj = useMemo(
+    () => ({ isUploading, progress, error: uploadError, clearError: clearUploadError }),
+    [isUploading, progress, uploadError, clearUploadError]
+  )
 
   // Scroll ref for programmatic scrolling and keyboard navigation
   const scrollRef = useRef<HTMLElement>(null)
@@ -211,31 +215,31 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   const composerHandleRef = useRef<MessageComposerHandle>(null)
 
   // Scroll to bottom (used after sending a message)
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTo({
         top: scrollRef.current.scrollHeight,
         behavior: 'smooth',
       })
     }
-  }
+  }, [])
 
   // Scroll to bottom when media loads (images, videos, link previews)
   // Only scrolls if user was already at bottom to avoid disrupting scroll position
-  const handleMediaLoad = () => {
+  const handleMediaLoad = useCallback(() => {
     if (scrollRef.current && isAtBottomRef.current) {
       // Use instant scroll to avoid jarring animation when content expands
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }
+  }, [])
 
   // Scroll to bottom when composer resizes (typing long message)
   // Only scrolls if user was already at bottom to avoid disrupting scroll position
-  const handleInputResize = () => {
+  const handleInputResize = useCallback(() => {
     if (scrollRef.current && isAtBottomRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }
+  }, [])
 
   // Keyboard navigation for message selection
   const {
@@ -318,8 +322,9 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
 
   // File drop handler - stages file for preview only (no upload yet - privacy protection)
   // Upload happens when user clicks Send, not on drop (prevents accidental data leaks)
-  const handleFileDrop = (file: File) => {
-    if (!activeRoom || !isSupported) return
+  // Uses activeRoomRef to avoid closing over the churning activeRoom object.
+  const handleFileDrop = useCallback((file: File) => {
+    if (!activeRoomRef.current || !isSupported) return
     // Create preview URL for images/videos
     const previewUrl = file.type.startsWith('image/') || file.type.startsWith('video/')
       ? URL.createObjectURL(file)
@@ -327,15 +332,16 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     setPendingAttachment({ file, previewUrl })
     // Focus composer so user can add a message
     setTimeout(() => composerHandleRef.current?.focus(), 0)
-  }
+  }, [isSupported])
 
   // Clear pending attachment and revoke preview URL
-  const handleRemovePendingAttachment = () => {
-    if (pendingAttachment?.previewUrl) {
-      URL.revokeObjectURL(pendingAttachment.previewUrl)
+  // Uses pendingAttachmentRef to read current value without closing over state
+  const handleRemovePendingAttachment = useCallback(() => {
+    if (pendingAttachmentRef.current?.previewUrl) {
+      URL.revokeObjectURL(pendingAttachmentRef.current.previewUrl)
     }
     setPendingAttachment(null)
-  }
+  }, [])
 
   // Drag-and-drop for file upload (handles both HTML5 and Tauri native)
   const { isDragging, dragHandlers } = useDragAndDrop({
@@ -370,6 +376,18 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     goToNext: find.goToNext,
     goToPrev: find.goToPrev,
   }), [find.open, find.close, find.isOpen, find.goToNext, find.goToPrev])
+
+  // Stable handler for the send-animation: clears the highlight after 400 ms.
+  // Uses a ref for the timer to avoid any closure over state.
+  const handleMessageIdSent = useCallback((id: string) => {
+    if (lastSentTimerRef.current) clearTimeout(lastSentTimerRef.current)
+    setLastSentMessageId(id)
+    lastSentTimerRef.current = setTimeout(() => setLastSentMessageId(null), 400)
+  }, [])
+
+  // Stable callback to clear whisper target (name avoids clash with the
+  // composer-internal handleClearWhisper defined inside RoomMessageInput).
+  const handleClearWhisperTarget = useCallback(() => setWhisperTarget(null), [])
 
   if (!activeRoom) return null
 
@@ -517,13 +535,9 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             onRemovePendingAttachment={handleRemovePendingAttachment}
             processLinkPreview={processMessageForLinkPreview}
             isConnected={isConnected}
-            onMessageIdSent={(id) => {
-              if (lastSentTimerRef.current) clearTimeout(lastSentTimerRef.current)
-              setLastSentMessageId(id)
-              lastSentTimerRef.current = setTimeout(() => setLastSentMessageId(null), 400)
-            }}
+            onMessageIdSent={handleMessageIdSent}
             whisperTarget={whisperTarget}
-            onClearWhisper={() => setWhisperTarget(null)}
+            onClearWhisper={handleClearWhisperTarget}
             sendWhisper={sendWhisper}
           />
         ) : (
