@@ -5,7 +5,7 @@ import { useRoomActive, useRoster, getBareJid, generateConsistentColorHexSync, g
 import { useConnectionStore, useIgnoreStore, useRoomStore } from '@fluux/sdk/react'
 import { ignoreStore, roomStore, type IgnoredUser } from '@fluux/sdk/stores'
 import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat, useContextMenu, isSmallScreen } from '@/hooks'
-import { MessageBubble, MessageList, shouldShowAvatar, whisperThreadPosition, whisperCounterpartPresent, buildReplyContext, PollBanner, type WhisperThreadPosition } from './conversation'
+import { MessageBubble, MessageList, shouldShowAvatar, whisperThreadPosition, whisperCounterpartPresent, resolveWhisperTarget, whisperTargetPresent, decideWhisperSend, buildReplyContext, PollBanner, type WhisperThreadPosition, type WhisperTarget } from './conversation'
 import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
 import { Avatar, getConsistentTextColor } from './Avatar'
@@ -176,8 +176,10 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   const [nickMenuTarget, setNickMenuTarget] = useState<string | null>(null) // nick string
   const [nickModerationTarget, setNickModerationTarget] = useState<string | null>(null)
 
-  // Whisper mode: when set, the composer targets a specific nick privately
-  const [whisperTarget, setWhisperTarget] = useState<string | null>(null)
+  // Whisper mode: when set, the composer targets a specific occupant privately.
+  // Carries the counterpart's occupant-id (captured at entry) so presence checks
+  // bind to the person, not just the nick (XEP-0045 §7.5, XEP-0421).
+  const [whisperTarget, setWhisperTarget] = useState<WhisperTarget | null>(null)
 
   // setAffiliation and setRole are now from useRoomActive() to avoid subscribing
   // to list-level selectors that cause render loops when other rooms update
@@ -263,6 +265,12 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   const pendingAttachmentRef = useRef(pendingAttachment)
   pendingAttachmentRef.current = pendingAttachment
 
+  // Track the active room in a ref so enterWhisperMode can resolve the
+  // counterpart's occupant-id at call time without depending on activeRoom
+  // (which changes on every occupant update and would destabilize the callback).
+  const activeRoomRef = useRef(activeRoom)
+  activeRoomRef.current = activeRoom
+
   // Stable callback that clears any staged compose state before entering whisper
   // mode. Whispers are text-only so a staged reply, edit, or pending attachment
   // must be discarded to avoid showing conflicting UI (banner + attachment preview).
@@ -273,7 +281,9 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
       URL.revokeObjectURL(pendingAttachmentRef.current.previewUrl)
     }
     setPendingAttachment(null)
-    setWhisperTarget(nick)
+    // Capture the counterpart's occupant-id now so the send/disable gates can
+    // bind to this exact person even if they later change nick or leave.
+    setWhisperTarget(resolveWhisperTarget(nick, activeRoomRef.current?.occupants ?? new Map()))
   }, [])
 
   // Replying to a whisper stays private: re-enter whisper mode with that counterpart
@@ -1440,7 +1450,7 @@ interface RoomMessageInputProps {
   processLinkPreview?: (messageId: string, body: string, to: string, type: 'chat' | 'groupchat') => Promise<void>
   isConnected: boolean
   onMessageIdSent?: (messageId: string) => void
-  whisperTarget?: string | null
+  whisperTarget?: WhisperTarget | null
   onClearWhisper?: () => void
   sendWhisper: (roomJid: string, nick: string, body: string) => Promise<string>
 }
@@ -1478,7 +1488,13 @@ function RoomMessageInput({
 }: RoomMessageInputProps & { ref?: React.Ref<MessageComposerHandle> }) {
   const { t } = useTranslation()
   const { setDraft, getDraft, clearDraft, clearFirstNewMessageId } = useRoomActive()
+  const addToast = useToastStore((s) => s.addToast)
   const [showPollCreator, setShowPollCreator] = useState(false)
+
+  // Reactive whisper-counterpart presence. `room.occupants` updates when someone
+  // leaves/joins, so this re-evaluates on every occupant change — driving the
+  // "gone" banner and the disabled Send button while preserving the typed draft.
+  const whisperCounterpartGone = !!whisperTarget && !whisperTargetPresent(whisperTarget, room.occupants)
 
   // Mention state
   const [cursorPosition, setCursorPosition] = useState(0)
@@ -1502,6 +1518,16 @@ function RoomMessageInput({
     composerRef,
     onDraftRestored: handleDraftRestored,
   })
+
+  // Exit whisper mode AND discard the typed text. The composer draft is keyed only
+  // by room JID, so a private whisper draft would otherwise survive into the public
+  // composer and could be sent to the whole room. Discarding upholds the invariant:
+  // private text is never converted into a public message (XEP-0045 §7.5).
+  const handleClearWhisper = () => {
+    setText('')
+    clearDraft(room.jid)
+    onClearWhisper?.()
+  }
 
   // Type-to-focus: auto-focus composer when user starts typing anywhere
   useTypeToFocus(composerRef)
@@ -1590,9 +1616,19 @@ function RoomMessageInput({
   const handleSend = async (sendText: string): Promise<boolean> => {
     // Whisper mode (XEP-0045 §7.5): text-only, ephemeral, no reply/attachment.
     if (whisperTarget) {
-      const body = sendText.trim()
-      if (!body) return false
-      const messageId = await sendWhisper(room.jid, whisperTarget, body)
+      // Hard backstop: re-check presence against the LIVE occupant list (not the
+      // closed-over prop) so we cover the gap between the counterpart leaving and
+      // React re-rendering the disabled Send button. Never deliver private text
+      // once they've left or the nick has been recycled by someone else.
+      const liveOccupants = roomStore.getState().getRoom(room.jid)?.occupants ?? room.occupants
+      const decision = decideWhisperSend(whisperTarget, sendText, liveOccupants)
+      if (!decision.ok) {
+        if (decision.reason === 'counterpart-gone') {
+          addToast('info', t('rooms.whisperCounterpartGone', { nick: decision.nick }))
+        }
+        return false
+      }
+      const messageId = await sendWhisper(room.jid, decision.nick, decision.body)
       onMessageIdSent?.(messageId)
       clearDraft(room.jid)
       onMessageSent?.()
@@ -1852,7 +1888,7 @@ function RoomMessageInput({
       onKeyDownCapture={(e) => {
         if (whisperTarget && e.key === 'Escape') {
           e.stopPropagation()
-          onClearWhisper?.()
+          handleClearWhisper()
         }
       }}
     >
@@ -1865,16 +1901,26 @@ function RoomMessageInput({
         />
       )}
       {whisperTarget && (
-        <div className="flex items-center justify-between gap-2 px-3 py-1.5 mb-1 rounded bg-fluux-private-soft text-sm text-fluux-private">
+        <div className={`flex items-center justify-between gap-2 px-3 py-1.5 mb-1 rounded text-sm ${
+          whisperCounterpartGone
+            ? 'bg-fluux-muted/10 text-fluux-muted'
+            : 'bg-fluux-private-soft text-fluux-private'
+        }`}>
           <span className="inline-flex items-center gap-1.5 min-w-0">
-            <Ear className="size-4 shrink-0" />
-            <span className="truncate">{t('rooms.whisperingTo', { nick: whisperTarget })}</span>
+            {whisperCounterpartGone
+              ? <AlertCircle className="size-4 shrink-0" />
+              : <Ear className="size-4 shrink-0" />}
+            <span className="truncate">
+              {whisperCounterpartGone
+                ? t('rooms.whisperCounterpartGone', { nick: whisperTarget.nick })
+                : t('rooms.whisperingTo', { nick: whisperTarget.nick })}
+            </span>
           </span>
           <button
             type="button"
-            onClick={() => onClearWhisper?.()}
+            onClick={handleClearWhisper}
             aria-label={t('common.cancel')}
-            className="shrink-0 rounded p-0.5 hover:bg-fluux-private-hover"
+            className={`shrink-0 rounded p-0.5 ${whisperCounterpartGone ? 'hover:bg-fluux-muted/20' : 'hover:bg-fluux-private-hover'}`}
           >
             <X className="size-4" />
           </button>
@@ -1883,7 +1929,7 @@ function RoomMessageInput({
       <MessageComposer
         ref={composerRef}
         textareaRef={textareaRef}
-        placeholder={whisperTarget ? t('rooms.whisperPlaceholder', { nick: whisperTarget }) : t('chat.messageRoom', { name: room.name })}
+        placeholder={whisperTarget ? t('rooms.whisperPlaceholder', { nick: whisperTarget.nick }) : t('chat.messageRoom', { name: room.name })}
         replyingTo={replyInfo}
         onCancelReply={onCancelReply}
         editingMessage={editInfo}
@@ -1908,6 +1954,7 @@ function RoomMessageInput({
         pendingAttachment={pendingAttachment}
         onRemovePendingAttachment={onRemovePendingAttachment}
         disabled={!isConnected}
+        sendDisabled={whisperCounterpartGone}
         onEditLastMessage={onEditLastMessage}
       />
     </div>
