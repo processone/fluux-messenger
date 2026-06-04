@@ -158,7 +158,7 @@ export async function decryptStanzaInPlace(
     // (no plugin registered — stash for deferred retry) from "protocol we have
     // no plugin for" (e.g. OMEMO when only OpenPGP is wired — surface the
     // sender's XEP-0380 fallback <body> with an unsupported-method tag).
-    const disposition = recordUnclaimedEME(stanza, manager.hasPlugins())
+    const disposition = recordUnclaimedEME(stanza, manager)
     if (disposition.kind === 'retry') {
       return { attempted: false, encryptedPayloadXml: disposition.encryptedPayloadXml }
     }
@@ -396,6 +396,10 @@ const EME_PROTOCOL_NAMES: Record<string, string> = {
 
 const KNOWN_ENCRYPTION_NAMESPACES = new Set(Object.keys(EME_PROTOCOL_NAMES))
 
+const EME_NAMESPACE_PLUGIN_IDS: Record<string, string> = {
+  'urn:xmpp:openpgp:0': 'openpgp',
+}
+
 /**
  * Identity of an encryption protocol surfaced to the UI. Structurally mirrors
  * `UnsupportedEncryptionInfo` in the message types; kept separate to avoid an
@@ -420,6 +424,32 @@ export type UnclaimedEMEDisposition =
   | { kind: 'none' }
 
 const UNSUPPORTED_ENC_STASH = '__unsupportedEncryption'
+
+interface PluginRegistry {
+  hasPlugins(): boolean
+  getPlugin(id: string): unknown
+}
+
+type UnclaimedEMEPluginState = boolean | PluginRegistry
+
+function unclaimedPluginState(state: UnclaimedEMEPluginState): {
+  hasPlugins: boolean
+  hasPluginForNamespace(namespace: string): boolean
+} {
+  if (typeof state === 'boolean') {
+    return {
+      hasPlugins: state,
+      hasPluginForNamespace: () => false,
+    }
+  }
+  return {
+    hasPlugins: state.hasPlugins(),
+    hasPluginForNamespace: (namespace) => {
+      const pluginId = EME_NAMESPACE_PLUGIN_IDS[namespace]
+      return pluginId ? !!state.getPlugin(pluginId) : false
+    },
+  }
+}
 
 /**
  * Locate the encryption namespace + encrypted child of an unclaimed stanza.
@@ -450,19 +480,23 @@ function findEncryptionTarget(
  * Classify and tag an encryption-tagged stanza that no plugin claimed, mutating
  * the stanza with the appropriate stash. See {@link UnclaimedEMEDisposition}.
  *
- * @param hasPlugins - whether the E2EE manager has at least one plugin
+ * @param pluginState - whether the E2EE manager has at least one plugin
  *   registered. When false the protocol may still be one we support whose
  *   plugin hasn't finished init — stash for retry. When true an unclaimed
- *   stanza is a protocol we have no plugin for — unsupported.
+ *   stanza is a protocol we have no plugin for — unsupported, unless the
+ *   corresponding plugin is registered and merely failed to claim this exact
+ *   shape, in which case keep it retryable instead of surfacing a false
+ *   "not supported" notice.
  */
 export function recordUnclaimedEME(
   stanza: Element,
-  hasPlugins: boolean,
+  pluginState: UnclaimedEMEPluginState,
 ): UnclaimedEMEDisposition {
   const target = findEncryptionTarget(stanza)
   if (!target) return { kind: 'none' }
 
-  if (hasPlugins) {
+  const state = unclaimedPluginState(pluginState)
+  if (state.hasPlugins && !state.hasPluginForNamespace(target.namespace)) {
     const name = EME_PROTOCOL_NAMES[target.namespace] ?? target.emeName ?? target.namespace
     const info: EMEIdentity = { namespace: target.namespace, name }
     ;(stanza as unknown as Record<string, EMEIdentity>)[UNSUPPORTED_ENC_STASH] = info
