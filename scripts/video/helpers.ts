@@ -101,9 +101,9 @@ export async function installPolishLayers(page: Page): Promise<void> {
         margin: -2px 0 0 -2px; filter: drop-shadow(0 2px 3px rgba(0,0,0,.45));
       }
       #vid-caption {
-        z-index: 2147483640; bottom: 8%; left: 50%;
-        transform: translate(-50%, 0); opacity: 0;
-        max-width: 78%; padding: 16px 26px; border-radius: 16px; text-align: center;
+        z-index: 2147483640; bottom: 8%; right: 6%;
+        transform: translate(0, 0); opacity: 0;
+        max-width: 50%; padding: 16px 26px; border-radius: 16px; text-align: center;
         background: rgba(15,17,21,.74); backdrop-filter: blur(10px);
         box-shadow: 0 10px 40px rgba(0,0,0,.35);
         font-family: Inter, system-ui, -apple-system, sans-serif; color: #fff;
