@@ -1776,7 +1776,7 @@ export class XMPPClient {
         logDebug(
           `E2EE deferred decrypt: attachment from ${getDomain(senderJid)} — ` +
           `url=${attachment.url.slice(0, 40)}… mediaType=${attachment.mediaType ?? 'none'} ` +
-          `encrypted=${!!attachment.encryption} name=${attachment.name ?? 'none'}`,
+          `encrypted=${!!attachment.encryption} name=${attachment.name ? '<redacted>' : 'none'}`,
         )
       }
 
