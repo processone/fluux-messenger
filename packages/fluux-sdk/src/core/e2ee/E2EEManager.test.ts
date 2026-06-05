@@ -219,6 +219,26 @@ describe('E2EEManager — peer key change + probe redaction', () => {
   })
 })
 
+describe('E2EEManager — encrypt failure logging', () => {
+  it('logs (domain-only, with code) and rethrows when encrypt fails', async () => {
+    const { logger, calls } = makeSpyLogger()
+    const manager = makeManagerWithLogger(logger)
+    const plugin = new FakePlugin(weakDescriptor, 'urn:x:openpgp')
+    plugin.encryptImpl = () => {
+      throw new Error('boom')
+    }
+    await manager.register(plugin)
+    await expect(
+      manager.encryptOutbound({ kind: 'direct', peer: 'dave@vault.example.com' }, new Uint8Array([1])),
+    ).rejects.toThrow('boom')
+    const warn = calls.find((c) => c.level === 'warn' && c.message.includes('encrypt failed'))
+    expect(warn).toBeDefined()
+    expect(warn!.message).toContain('vault.example.com')
+    expect(warn!.message).not.toContain('dave@')
+    expect(warn!.message).toContain('openpgp')
+  })
+})
+
 describe('E2EEManager — registration', () => {
   it('registers and lists plugins sorted by securityLevel desc', async () => {
     const mgr = makeManager()

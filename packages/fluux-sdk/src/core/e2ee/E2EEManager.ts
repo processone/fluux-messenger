@@ -1,5 +1,6 @@
 import { getDomain } from '../jid'
 import { CapabilityCache, type CapabilityCacheOptions } from './CapabilityCache'
+import { isE2EEPluginError } from './errors'
 import { createPluginStorage, type StorageBackend } from './PluginStorage'
 import type {
   AccountInfo,
@@ -494,6 +495,10 @@ export class E2EEManager {
     try {
       const payload = await plugin.encrypt(handle, plaintext)
       return { plugin, payload }
+    } catch (err) {
+      const code = isE2EEPluginError(err) ? ` (${err.code}/${err.kind})` : ''
+      this.logger.warn(`encrypt failed for ${targetLabel(target)} via ${plugin.descriptor.id}${code}`)
+      throw err
     } finally {
       await plugin.closeConversation(handle).catch(() => {})
     }
