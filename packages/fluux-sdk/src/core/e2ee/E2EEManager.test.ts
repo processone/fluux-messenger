@@ -174,6 +174,23 @@ describe('E2EEManager — diagnostic logger', () => {
   })
 })
 
+describe('E2EEManager — no mutual support logging', () => {
+  it('warns (domain-only) when no plugin is mutually available', async () => {
+    const { logger, calls } = makeSpyLogger()
+    const manager = makeManagerWithLogger(logger)
+    const plugin = new FakePlugin(weakDescriptor, 'urn:x:openpgp', {
+      support: () => ({ supported: false, ttl: 60 }),
+    })
+    await manager.register(plugin)
+    const result = await manager.selectStrategy({ kind: 'direct', peer: 'bob@chat.example.com' })
+    expect(result).toBeNull()
+    const warn = calls.find((c) => c.level === 'warn' && c.message.includes('no mutual E2EE support'))
+    expect(warn).toBeDefined()
+    expect(warn!.message).toContain('chat.example.com')
+    expect(warn!.message).not.toContain('bob@')
+  })
+})
+
 describe('E2EEManager — registration', () => {
   it('registers and lists plugins sorted by securityLevel desc', async () => {
     const mgr = makeManager()

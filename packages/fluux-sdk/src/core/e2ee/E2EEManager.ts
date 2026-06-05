@@ -1,3 +1,4 @@
+import { getDomain } from '../jid'
 import { CapabilityCache, type CapabilityCacheOptions } from './CapabilityCache'
 import { createPluginStorage, type StorageBackend } from './PluginStorage'
 import type {
@@ -364,7 +365,10 @@ export class E2EEManager {
     }
 
     const mutual = await this.mutuallySupported(target)
-    if (mutual.length === 0) return null
+    if (mutual.length === 0) {
+      this.logger.warn(`no mutual E2EE support for ${targetLabel(target)}`)
+      return null
+    }
     mutual.sort((a, b) => b.descriptor.securityLevel - a.descriptor.securityLevel)
     return mutual[0]
   }
@@ -589,6 +593,11 @@ export class E2EEManager {
 
 function targetPeers(target: ConversationTarget): BareJID[] {
   return target.kind === 'direct' ? [target.peer] : target.participants
+}
+
+/** Privacy-safe label for a conversation target: domain for 1:1, room JID for MUC. */
+function targetLabel(target: ConversationTarget): string {
+  return target.kind === 'direct' ? getDomain(target.peer) : target.room
 }
 
 function targetKey(target: ConversationTarget): string {
