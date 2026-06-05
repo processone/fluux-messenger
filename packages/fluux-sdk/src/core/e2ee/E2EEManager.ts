@@ -114,6 +114,18 @@ export class E2EEManager {
   }
 
   /**
+   * The diagnostic logger this manager (and its plugins via `ctx.logger`)
+   * write to. Exposed so the shared inbound-decrypt step
+   * ({@link decryptStanzaInPlace}) can route its E2EE diagnostics through the
+   * same fan-out logger instead of the standalone module logger.
+   *
+   * @internal
+   */
+  getDiagnosticLogger(): Logger {
+    return this.logger
+  }
+
+  /**
    * Replace the storage backend. Must be called before any plugins are
    * registered — plugins receive a namespaced view of the backend at
    * {@link register} time and are not affected by later changes.

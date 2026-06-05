@@ -9,6 +9,7 @@ import type {
   E2EEPlugin,
   E2EEProtocolDescriptor,
   EncryptedPayload,
+  Logger,
   PeerSupport,
   PluginContext,
   TrustState,
@@ -34,6 +35,31 @@ function makeManager(): E2EEManager {
     storage: new InMemoryStorageBackend(),
     xmpp: makeXmpp(),
     account: { jid: 'me@example.com' },
+  })
+}
+
+interface LogCall {
+  level: 'debug' | 'info' | 'warn' | 'error'
+  message: string
+  args: unknown[]
+}
+function makeSpyLogger(): { logger: Logger; calls: LogCall[] } {
+  const calls: LogCall[] = []
+  const rec =
+    (level: LogCall['level']) =>
+    (message: string, ...args: unknown[]) =>
+      calls.push({ level, message, args })
+  return {
+    logger: { debug: rec('debug'), info: rec('info'), warn: rec('warn'), error: rec('error') },
+    calls,
+  }
+}
+function makeManagerWithLogger(logger: Logger): E2EEManager {
+  return new E2EEManager({
+    storage: new InMemoryStorageBackend(),
+    xmpp: makeXmpp(),
+    account: { jid: 'me@example.com' },
+    logger,
   })
 }
 
@@ -139,6 +165,14 @@ const weakDescriptor: E2EEProtocolDescriptor = {
     deniability: false,
   },
 }
+
+describe('E2EEManager — diagnostic logger', () => {
+  it('exposes the injected logger via getDiagnosticLogger()', () => {
+    const { logger } = makeSpyLogger()
+    const manager = makeManagerWithLogger(logger)
+    expect(manager.getDiagnosticLogger()).toBe(logger)
+  })
+})
 
 describe('E2EEManager — registration', () => {
   it('registers and lists plugins sorted by securityLevel desc', async () => {
