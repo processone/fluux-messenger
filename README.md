@@ -15,6 +15,10 @@
 
 [![Try the Live Demo](https://img.shields.io/badge/🚀_Try_the_Live_Demo-demo.fluux.io-2ea44f?style=for-the-badge)](https://demo.fluux.io)
 
+<video src="https://github.com/processone/fluux-messenger/raw/main/assets/readme/fluux-demo.mp4" controls muted width="760"></video>
+
+*A quick tour — messaging, group rooms, end-to-end encryption, and theming.*
+
 </div>
 
 ## Table of Contents
