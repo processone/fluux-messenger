@@ -124,7 +124,7 @@ export class Director {
       const o = (i + 1) / 8
       return this.page.evaluate((o) => {
         const el = document.getElementById('vid-caption')
-        if (el) { el.style.opacity = String(o); el.style.transform = `translate(-50%, ${10 * (1 - o)}px)` }
+        if (el) { el.style.opacity = String(o); el.style.transform = `translate(0, ${10 * (1 - o)}px)` }
       }, o)
     })
   }
