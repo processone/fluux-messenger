@@ -37,40 +37,47 @@ The demo populates the UI with:
 
 A Playwright pipeline drives demo mode and records a promo-style walkthrough of the major features. It produces two variants from one shared storyboard:
 
-| Command                   | Produces                              | Length                 |
-|---------------------------|---------------------------------------|------------------------|
-| `npm run demo:video`      | both variants                         | —                      |
-| `npm run demo:video:reel` | `video/fluux-demo-reel.{webm,mp4}`    | ~90s highlight reel    |
-| `npm run demo:video:full` | `video/fluux-demo-full.{webm,mp4}`    | ~3–4 min full tour     |
+| Command                   | Produces                              | Length                |
+|---------------------------|---------------------------------------|-----------------------|
+| `npm run demo:video`      | both variants                         | —                     |
+| `npm run demo:video:reel` | `video/fluux-demo-reel.{mp4,webm}`    | ~45s highlight reel   |
+| `npm run demo:video:full` | `video/fluux-demo-full.{mp4,webm}`    | ~80s full tour        |
 
-Output is written to the git-ignored `video/` directory at the repo root, as **1920×1080 WebM and MP4**.
+Output is written to the git-ignored `video/` directory at the repo root, as **native 1920×1080 MP4 and WebM** (no upscaling).
 
 ### Prerequisites
 
 ```bash
 npm run build:sdk                 # demo consumes the built SDK
 npx playwright install chromium   # one-time, if not already installed
-# ffmpeg must be on PATH for the MP4 conversion (the WebM is always produced)
+# ffmpeg must be on PATH — it assembles the captured frames into the MP4 + WebM
 ```
 
 Playwright starts the dev server automatically (reusing one already running on `:5173`).
 
 ### How it works
 
-The script opens `/demo.html?tutorial=false`, drives navigation deterministically (via the `HashRouter`), and layers on promo polish: a synthetic gliding cursor with click ripples, lower-third captions, and intro/outro title cards. "Live" moments — typing indicators, incoming messages, reactions — are fired on cue through `DemoClient.startAnimation()` while the camera is framed on the relevant conversation.
+The recorder is a **deterministic stepped capture** (see `scripts/video/director.ts`):
+
+- The app renders at a dense **1280×720** viewport with **`deviceScaleFactor: 1.5`**, so it fills the frame (like the marketing screenshots) and `page.screenshot()` produces **true native 1920×1080** frames — no upscaling. (`recordVideo` / CDP screencast capture at the CSS-viewport resolution, forcing a 720p-or-upscale trade-off; `page.screenshot()` respects the device scale.)
+- It takes **one screenshot per output frame.** Script-controlled motion — the synthetic gliding cursor, caption and title-card fades — advances one eased step per frame, so motion is smooth by construction and fully deterministic (no virtual-clock fragility).
+- The app's own CSS transitions/animations are **frozen**, so every frame is a clean, deterministic still; static moments are a single screenshot held for a duration.
+- "Live" beats (typing indicators, incoming messages, reactions) are injected through `DemoClient` and then held, rather than relying on wall-clock timers.
+- ffmpeg assembles the frames (with per-frame durations) into an exact, smooth **30fps** MP4 + WebM.
+
+Because it screenshots frame-by-frame, **rendering is slower than real time** (~1 min reel / ~2 min full) — fine for a one-off asset, and the result is reproducible.
 
 ### Editing the walkthrough
 
-| File                          | Purpose                                                                  |
-|-------------------------------|--------------------------------------------------------------------------|
-| `scripts/video/storyboard.ts` | Ordered scenes — add, reorder, or retag features here                    |
-| `scripts/video/helpers.ts`    | Cursor, captions, title cards, navigation, live beats, MP4 conversion    |
-| `scripts/video/record.ts`     | Entry point (the `reel` and `full` tests)                                |
-| `playwright.video.config.ts`  | 1080p canvas, video recording, timeout, dev-server reuse                 |
+| File                          | Purpose                                                                    |
+|-------------------------------|----------------------------------------------------------------------------|
+| `scripts/video/storyboard.ts` | Ordered scenes — add, reorder, or retag features here                      |
+| `scripts/video/director.ts`   | The stepped recorder: frame capture, cursor/caption/beat actions, assembly |
+| `scripts/video/helpers.ts`    | Constants, page bootstrap, overlay (cursor / caption / title) injection    |
+| `scripts/video/record.ts`     | Entry point (the `reel` and `full` tests)                                  |
+| `playwright.video.config.ts`  | Dense fixture viewport, timeout, dev-server reuse                          |
 
-Each scene is tagged `variant: 'reel'` (appears in both videos) or `variant: 'full'` (full tour only), so the reel is a strict subset of the full tour.
-
-> **Capture quality:** video is captured with Playwright's built-in `recordVideo` (variable frame rate) and re-encoded to a constant-30fps H.264 MP4 via ffmpeg. If motion looks choppy, the capture layer in `helpers.ts` can be swapped for deterministic frame capture (CDP screencast or interval screenshots) assembled by ffmpeg at a constant frame rate — without touching the storyboard.
+Each scene is tagged `variant: 'reel'` (appears in both videos) or `variant: 'full'` (full tour only), so the reel is a strict subset of the full tour. Scenes drive the `Director` — e.g. `d.navigateTo('rooms')`, `d.selectItem('Team Chat')`, `d.caption(...)`, `d.typeBeat(...)`.
 
 ## Architecture
 
