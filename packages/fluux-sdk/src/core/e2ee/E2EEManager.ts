@@ -1,4 +1,6 @@
+import { getDomain } from '../jid'
 import { CapabilityCache, type CapabilityCacheOptions } from './CapabilityCache'
+import { isE2EEPluginError } from './errors'
 import { createPluginStorage, type StorageBackend } from './PluginStorage'
 import type {
   AccountInfo,
@@ -114,6 +116,18 @@ export class E2EEManager {
   }
 
   /**
+   * The diagnostic logger this manager (and its plugins via `ctx.logger`)
+   * write to. Exposed so the shared inbound-decrypt step
+   * ({@link decryptStanzaInPlace}) can route its E2EE diagnostics through the
+   * same fan-out logger instead of the standalone module logger.
+   *
+   * @internal
+   */
+  getDiagnosticLogger(): Logger {
+    return this.logger
+  }
+
+  /**
    * Replace the storage backend. Must be called before any plugins are
    * registered — plugins receive a namespaced view of the backend at
    * {@link register} time and are not affected by later changes.
@@ -165,7 +179,7 @@ export class E2EEManager {
       try {
         plugin.onPeerKeysChanged?.(peer)
       } catch (err) {
-        this.logger.warn(`E2EE plugin ${id} onPeerKeysChanged(${peer}) threw`, err)
+        this.logger.warn(`E2EE plugin ${id} onPeerKeysChanged(${getDomain(peer)}) threw`, err)
       }
     }
   }
@@ -352,7 +366,10 @@ export class E2EEManager {
     }
 
     const mutual = await this.mutuallySupported(target)
-    if (mutual.length === 0) return null
+    if (mutual.length === 0) {
+      this.logger.warn(`no mutual E2EE support for ${targetLabel(target)}`)
+      return null
+    }
     mutual.sort((a, b) => b.descriptor.securityLevel - a.descriptor.securityLevel)
     return mutual[0]
   }
@@ -381,7 +398,7 @@ export class E2EEManager {
         this.capabilityCache.put(plugin.descriptor.id, peer, support)
         if (!support.supported) return false
       } catch (err) {
-        this.logger.warn(`Capability probe failed: ${plugin.descriptor.id} ${peer}`, err)
+        this.logger.warn(`Capability probe failed: ${plugin.descriptor.id} ${getDomain(peer)}`, err)
         return false
       }
     }
@@ -403,6 +420,9 @@ export class E2EEManager {
    * retracted everything at once); when it's set only that plugin is.
    */
   notifyPeerKeysChanged(peer: BareJID, protocolId?: string): void {
+    this.logger.info(
+      `peer key change for ${getDomain(peer)}${protocolId ? ` [${protocolId}]` : ''}`,
+    )
     this.invalidateCapability(peer, protocolId)
     if (protocolId) {
       const plugin = this.plugins.get(protocolId)
@@ -436,7 +456,7 @@ export class E2EEManager {
     if (set.has(peer)) return
     set.add(peer)
     this.logger.debug(
-      `E2EE plugin ${protocolId} not yet registered; queued peer key-change for ${peer}`,
+      `E2EE plugin ${protocolId} not yet registered; queued peer key-change for ${getDomain(peer)}`,
     )
   }
 
@@ -475,6 +495,10 @@ export class E2EEManager {
     try {
       const payload = await plugin.encrypt(handle, plaintext)
       return { plugin, payload }
+    } catch (err) {
+      const code = isE2EEPluginError(err) ? ` (${err.code}/${err.kind})` : ''
+      this.logger.warn(`encrypt failed for ${targetLabel(target)} via ${plugin.descriptor.id}${code}`)
+      throw err
     } finally {
       await plugin.closeConversation(handle).catch(() => {})
     }
@@ -577,6 +601,11 @@ export class E2EEManager {
 
 function targetPeers(target: ConversationTarget): BareJID[] {
   return target.kind === 'direct' ? [target.peer] : target.participants
+}
+
+/** Privacy-safe label for a conversation target: domain for 1:1, room JID for MUC. */
+function targetLabel(target: ConversationTarget): string {
+  return target.kind === 'direct' ? getDomain(target.peer) : target.room
 }
 
 function targetKey(target: ConversationTarget): string {

@@ -9,6 +9,7 @@ import type {
   E2EEPlugin,
   E2EEProtocolDescriptor,
   EncryptedPayload,
+  Logger,
   PeerSupport,
   PluginContext,
   TrustState,
@@ -34,6 +35,31 @@ function makeManager(): E2EEManager {
     storage: new InMemoryStorageBackend(),
     xmpp: makeXmpp(),
     account: { jid: 'me@example.com' },
+  })
+}
+
+interface LogCall {
+  level: 'debug' | 'info' | 'warn' | 'error'
+  message: string
+  args: unknown[]
+}
+function makeSpyLogger(): { logger: Logger; calls: LogCall[] } {
+  const calls: LogCall[] = []
+  const rec =
+    (level: LogCall['level']) =>
+    (message: string, ...args: unknown[]) =>
+      calls.push({ level, message, args })
+  return {
+    logger: { debug: rec('debug'), info: rec('info'), warn: rec('warn'), error: rec('error') },
+    calls,
+  }
+}
+function makeManagerWithLogger(logger: Logger): E2EEManager {
+  return new E2EEManager({
+    storage: new InMemoryStorageBackend(),
+    xmpp: makeXmpp(),
+    account: { jid: 'me@example.com' },
+    logger,
   })
 }
 
@@ -139,6 +165,79 @@ const weakDescriptor: E2EEProtocolDescriptor = {
     deniability: false,
   },
 }
+
+describe('E2EEManager — diagnostic logger', () => {
+  it('exposes the injected logger via getDiagnosticLogger()', () => {
+    const { logger } = makeSpyLogger()
+    const manager = makeManagerWithLogger(logger)
+    expect(manager.getDiagnosticLogger()).toBe(logger)
+  })
+})
+
+describe('E2EEManager — no mutual support logging', () => {
+  it('warns (domain-only) when no plugin is mutually available', async () => {
+    const { logger, calls } = makeSpyLogger()
+    const manager = makeManagerWithLogger(logger)
+    const plugin = new FakePlugin(weakDescriptor, 'urn:x:openpgp', {
+      support: () => ({ supported: false, ttl: 60 }),
+    })
+    await manager.register(plugin)
+    const result = await manager.selectStrategy({ kind: 'direct', peer: 'bob@chat.example.com' })
+    expect(result).toBeNull()
+    const warn = calls.find((c) => c.level === 'warn' && c.message.includes('no mutual E2EE support'))
+    expect(warn).toBeDefined()
+    expect(warn!.message).toContain('chat.example.com')
+    expect(warn!.message).not.toContain('bob@')
+  })
+})
+
+describe('E2EEManager — peer key change + probe redaction', () => {
+  it('logs peer key change with domain only', async () => {
+    const { logger, calls } = makeSpyLogger()
+    const manager = makeManagerWithLogger(logger)
+    manager.notifyPeerKeysChanged('alice@im.example.org', 'openpgp')
+    const info = calls.find((c) => c.message.includes('peer key change'))
+    expect(info).toBeDefined()
+    expect(info!.message).toContain('im.example.org')
+    expect(info!.message).not.toContain('alice@')
+    expect(info!.message).toContain('openpgp')
+  })
+
+  it('redacts the peer in the capability-probe-failed warning', async () => {
+    const { logger, calls } = makeSpyLogger()
+    const manager = makeManagerWithLogger(logger)
+    const plugin = new FakePlugin(weakDescriptor, 'urn:x:openpgp')
+    plugin.probePeer = async () => {
+      throw new Error('network down')
+    }
+    await manager.register(plugin)
+    await manager.selectStrategy({ kind: 'direct', peer: 'carol@secret.example.net' })
+    const warn = calls.find((c) => c.message.includes('Capability probe failed'))
+    expect(warn).toBeDefined()
+    expect(warn!.message).toContain('secret.example.net')
+    expect(warn!.message).not.toContain('carol@')
+  })
+})
+
+describe('E2EEManager — encrypt failure logging', () => {
+  it('logs (domain-only, with code) and rethrows when encrypt fails', async () => {
+    const { logger, calls } = makeSpyLogger()
+    const manager = makeManagerWithLogger(logger)
+    const plugin = new FakePlugin(weakDescriptor, 'urn:x:openpgp')
+    plugin.encryptImpl = () => {
+      throw new Error('boom')
+    }
+    await manager.register(plugin)
+    await expect(
+      manager.encryptOutbound({ kind: 'direct', peer: 'dave@vault.example.com' }, new Uint8Array([1])),
+    ).rejects.toThrow('boom')
+    const warn = calls.find((c) => c.level === 'warn' && c.message.includes('encrypt failed'))
+    expect(warn).toBeDefined()
+    expect(warn!.message).toContain('vault.example.com')
+    expect(warn!.message).not.toContain('dave@')
+    expect(warn!.message).toContain('openpgp')
+  })
+})
 
 describe('E2EEManager — registration', () => {
   it('registers and lists plugins sorted by securityLevel desc', async () => {

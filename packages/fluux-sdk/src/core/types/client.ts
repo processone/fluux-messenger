@@ -132,7 +132,7 @@ export interface StoreBindings {
   }
   console: {
     addPacket: (direction: 'incoming' | 'outgoing', xml: string) => void
-    addEvent: (message: string, category?: 'connection' | 'error' | 'sm' | 'presence') => void
+    addEvent: (message: string, category?: 'connection' | 'error' | 'sm' | 'presence' | 'e2ee') => void
   }
   events: {
     addSubscriptionRequest: (from: string) => void

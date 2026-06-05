@@ -47,6 +47,7 @@ import {
   FRESH_SESSION_SETUP_TIMEOUT_MS,
 } from './modules/connectionTimeouts'
 import { getBareJid, getLocalPart, getDomain } from './jid'
+import { createE2EEDiagnosticLogger } from './e2eeDiagnosticLogger'
 import { getStorageScopeJid, setStorageScopeJid } from '../utils/storageScope'
 
 /**
@@ -1898,10 +1899,15 @@ export class XMPPClient {
       this.e2ee = null
     }
 
+    const e2eeLogger = createE2EEDiagnosticLogger({
+      addEvent: (message, category) => this.stores?.console.addEvent(message, category),
+    })
+
     this.e2ee = new E2EEManager({
       storage: this.e2eeStorageBackend,
       xmpp: this.buildE2EEPrimitives(),
       account: { jid: bareJid },
+      logger: e2eeLogger,
     })
     // Route plugin-reported security upgrades (e.g. a late-arriving
     // sender key flipping a previously-untrusted message to trusted)
@@ -1909,6 +1915,7 @@ export class XMPPClient {
     // in place. Stays alive for the lifetime of this manager; a shutdown
     // in tearDownE2EEManager releases the manager and with it the listener.
     this.e2ee.onSecurityContextUpdated(({ peer, messageId, securityContext, body }) => {
+      e2eeLogger.info(`trust updated for ${getDomain(peer)} msg ${messageId}: ${securityContext.trust}`)
       this.emitSDK('message:security-updated', {
         conversationId: peer,
         messageId,

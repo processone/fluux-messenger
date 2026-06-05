@@ -24,8 +24,8 @@ import { parse as parsePayloadEnvelope } from './payloadEnvelope'
 import type { E2EEManager, SecurityContext } from './index'
 import { isE2EEPluginError } from './errors'
 import type { InboundDecryptContext, InboundSource } from './types'
-import { getBareJid } from '../jid'
-import { logWarn, logInfo, logDebug } from '../logger'
+import { getBareJid, getDomain } from '../jid'
+import { logInfo } from '../logger'
 import {
   NS_EME,
   NS_OOB,
@@ -226,7 +226,11 @@ export async function decryptStanzaInPlace(
 
   if (failureReason !== null) {
     const isRejection = securityContext?.trust === 'rejected'
-    logWarn(`E2EE decrypt failed for message from ${senderPeer}: ${failureReason}`)
+    manager
+      .getDiagnosticLogger()
+      .warn(
+        `decrypt failed from ${getDomain(senderPeer)} (${isRejection ? 'rejected: invalid signature' : 'retryable'}): ${failureReason}`,
+      )
     if (isRejection) {
       // Signature rejection: suppress any sender-supplied body hint and
       // replace with a client-side placeholder. Do NOT stash for deferred
@@ -279,7 +283,9 @@ export async function decryptStanzaInPlace(
         if (typeof child === 'string' || isAllowedPayloadChild(child as Element)) {
           stanza.children.push(child)
         } else {
-          logDebug(`E2EE: dropped disallowed payload child <${(child as Element).name}> from ${senderPeer}`)
+          manager
+            .getDiagnosticLogger()
+            .debug(`dropped disallowed payload child <${(child as Element).name}> from ${getDomain(senderPeer)}`)
         }
       }
     } else {
