@@ -32,6 +32,7 @@ import type { ActivityEventInput } from '../core/types/activity'
 import type { Contact } from '../core/types/roster'
 import type { Room, RoomMessage, RoomOccupant } from '../core/types/room'
 import type { DemoData, DemoAnimationStep } from './types'
+import { buildStressEvents, type StressScenario } from './stress'
 import { parsePollElement, parsePollClosedElement } from '../core/poll'
 import type { PollData, PollClosedData } from '../core/types/message-base'
 
@@ -109,6 +110,34 @@ export class DemoClient extends XMPPClient {
       if (!this.knownRooms.has(room.jid)) {
         this.knownRooms.set(room.jid, { name: room.name, occupantCount: room.occupantCount })
       }
+    }
+  }
+
+  /**
+   * DEV/DEMO ONLY. Replays a synthetic load (e.g. joining many large rooms) by
+   * scheduling SDK events over timers, to reproduce render-performance issues
+   * deterministically. Returns a handle whose stop() cancels pending events.
+   */
+  runStressScenario(scenario: StressScenario): { stop: () => void } {
+    const selfNick = this.selfJid.split('@')[0] || 'you'
+    const events = buildStressEvents(scenario, {
+      selfJid: this.selfJid,
+      selfNick,
+      conferenceService: this.conferenceService,
+    })
+    let timers: ReturnType<typeof setTimeout>[] = [
+      ...events.map(ev =>
+        setTimeout(() => {
+          // Same cast style as dispatchStep(): payloads are generated to match the event.
+          this.emitSDK(ev.type as Parameters<typeof this.emitSDK>[0], ev.payload as never)
+        }, ev.delayMs),
+      ),
+    ]
+    return {
+      stop: () => {
+        for (const t of timers) clearTimeout(t)
+        timers = []
+      },
     }
   }
 
