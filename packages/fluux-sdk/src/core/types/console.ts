@@ -29,5 +29,5 @@ export interface XmppPacket {
   /** When the packet was sent/received */
   timestamp: Date
   /** For events: category for filtering */
-  eventCategory?: 'connection' | 'error' | 'sm' | 'presence'
+  eventCategory?: 'connection' | 'error' | 'sm' | 'presence' | 'e2ee'
 }
