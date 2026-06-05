@@ -178,7 +178,7 @@ export class E2EEManager {
       try {
         plugin.onPeerKeysChanged?.(peer)
       } catch (err) {
-        this.logger.warn(`E2EE plugin ${id} onPeerKeysChanged(${peer}) threw`, err)
+        this.logger.warn(`E2EE plugin ${id} onPeerKeysChanged(${getDomain(peer)}) threw`, err)
       }
     }
   }
@@ -397,7 +397,7 @@ export class E2EEManager {
         this.capabilityCache.put(plugin.descriptor.id, peer, support)
         if (!support.supported) return false
       } catch (err) {
-        this.logger.warn(`Capability probe failed: ${plugin.descriptor.id} ${peer}`, err)
+        this.logger.warn(`Capability probe failed: ${plugin.descriptor.id} ${getDomain(peer)}`, err)
         return false
       }
     }
@@ -419,6 +419,9 @@ export class E2EEManager {
    * retracted everything at once); when it's set only that plugin is.
    */
   notifyPeerKeysChanged(peer: BareJID, protocolId?: string): void {
+    this.logger.info(
+      `peer key change for ${getDomain(peer)}${protocolId ? ` [${protocolId}]` : ''}`,
+    )
     this.invalidateCapability(peer, protocolId)
     if (protocolId) {
       const plugin = this.plugins.get(protocolId)
@@ -452,7 +455,7 @@ export class E2EEManager {
     if (set.has(peer)) return
     set.add(peer)
     this.logger.debug(
-      `E2EE plugin ${protocolId} not yet registered; queued peer key-change for ${peer}`,
+      `E2EE plugin ${protocolId} not yet registered; queued peer key-change for ${getDomain(peer)}`,
     )
   }
 

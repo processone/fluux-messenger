@@ -191,6 +191,34 @@ describe('E2EEManager — no mutual support logging', () => {
   })
 })
 
+describe('E2EEManager — peer key change + probe redaction', () => {
+  it('logs peer key change with domain only', async () => {
+    const { logger, calls } = makeSpyLogger()
+    const manager = makeManagerWithLogger(logger)
+    manager.notifyPeerKeysChanged('alice@im.example.org', 'openpgp')
+    const info = calls.find((c) => c.message.includes('peer key change'))
+    expect(info).toBeDefined()
+    expect(info!.message).toContain('im.example.org')
+    expect(info!.message).not.toContain('alice@')
+    expect(info!.message).toContain('openpgp')
+  })
+
+  it('redacts the peer in the capability-probe-failed warning', async () => {
+    const { logger, calls } = makeSpyLogger()
+    const manager = makeManagerWithLogger(logger)
+    const plugin = new FakePlugin(weakDescriptor, 'urn:x:openpgp')
+    plugin.probePeer = async () => {
+      throw new Error('network down')
+    }
+    await manager.register(plugin)
+    await manager.selectStrategy({ kind: 'direct', peer: 'carol@secret.example.net' })
+    const warn = calls.find((c) => c.message.includes('Capability probe failed'))
+    expect(warn).toBeDefined()
+    expect(warn!.message).toContain('secret.example.net')
+    expect(warn!.message).not.toContain('carol@')
+  })
+})
+
 describe('E2EEManager — registration', () => {
   it('registers and lists plugins sorted by securityLevel desc', async () => {
     const mgr = makeManager()
