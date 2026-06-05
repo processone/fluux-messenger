@@ -192,6 +192,39 @@ function makeCtxWithSharedPep(
   return { ctx, backend }
 }
 
+function makeCtxWithWritablePep(
+  accountJid: string,
+  shared: SharedPep,
+  sharedBackend?: InMemoryStorageBackend,
+): { ctx: PluginContext; backend: InMemoryStorageBackend } {
+  const backend = sharedBackend ?? new InMemoryStorageBackend()
+  const xmpp: XMPPPrimitives = {
+    sendStanza: async () => {},
+    queryDisco: async () => ({
+      features: [
+        { var: 'http://jabber.org/protocol/pubsub' },
+        { var: 'http://jabber.org/protocol/pubsub#publish-options' },
+      ],
+      identities: [{ category: 'pubsub', type: 'pep' }],
+    }),
+    publishPEP: async (node, item) => {
+      shared.set(pepKey(accountJid, node), [{ id: item.id, payload: item.payload }])
+    },
+    retractPEP: async (node) => { shared.delete(pepKey(accountJid, node)) },
+    deletePEP: async (node) => { shared.delete(pepKey(accountJid, node)) },
+    queryPEP: async (jid, node): Promise<PEPItem[]> => shared.get(pepKey(jid, node)) ?? [],
+    subscribePEP: () => ({ unsubscribe: () => {} }),
+  }
+  const ctx: PluginContext = {
+    storage: createPluginStorage(backend, 'openpgp-test'),
+    xmpp,
+    logger: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
+    account: { jid: accountJid },
+    reportSecurityContextUpdate: () => {},
+  }
+  return { ctx, backend }
+}
+
 // XEP-0373 publishes the raw (dearmored) public-key bytes inside <data>
 // base64-encoded. The plugin's own `base64EncodeOpenPgpBlock` helper isn't
 // exported, so we replicate the equivalent shape here for test fixtures.
@@ -1016,7 +1049,7 @@ describe('WebOpenPGPPlugin', () => {
       expect(fresh.getOwnFingerprint()).toBe(originalFp)
     })
 
-    it('clears the session passphrase on a wrong-passphrase unlock', async () => {
+    it('clears the session passphrase on a wrong-passphrase unlock (no backup available)', async () => {
       const backend = new InMemoryStorageBackend()
 
       const setup = new WebOpenPGPPlugin()
@@ -1029,9 +1062,11 @@ describe('WebOpenPGPPlugin', () => {
       const freshCtx = makeCtx('alice@example.com', backend).ctx
       await fresh.init(freshCtx)
 
-      await expect(fresh.unlock('wrong-pp')).rejects.toMatchObject({
-        code: 'wrong-passphrase',
-      })
+      // With no server backup, a wrong passphrase surfaces as
+      // NoRecoveryAvailableError (local decrypt failed + no backup to fall
+      // back to). The session passphrase must still be rolled back.
+      const { NoRecoveryAvailableError } = await import('./recoveryErrors')
+      await expect(fresh.unlock('wrong-pp')).rejects.toBeInstanceOf(NoRecoveryAvailableError)
 
       // After failure, the session passphrase must have been rolled back
       // so the locked state is preserved (no half-unlocked plugin).
@@ -1888,6 +1923,100 @@ describe('WebOpenPGPPlugin', () => {
         bob.plugin.onPeerKeysChanged('alice@example.com')
         await flushAsync()
         expect(bob.securityUpdates).toHaveLength(0)
+      })
+    })
+  })
+
+  describe('unlock — auto-recovery from server backup', () => {
+    const PP = 'current-backup-passphrase-123'
+
+    it('returns recovered:false on a normal local unlock', async () => {
+      const backend = new InMemoryStorageBackend()
+      const setup = new WebOpenPGPPlugin()
+      setSessionPassphrase(PP)
+      await setup.init(makeCtx('alice@example.com', backend).ctx)
+      const fp = setup.getOwnFingerprint()
+
+      clearSessionPassphrase()
+      const fresh = new WebOpenPGPPlugin()
+      await fresh.init(makeCtx('alice@example.com', backend).ctx)
+      const result = await fresh.unlock(PP)
+
+      expect(result).toEqual({ recovered: false })
+      expect(fresh.getOwnFingerprint()).toBe(fp)
+    })
+
+    it('recovers a stale local key from the server backup (rotated passphrase)', async () => {
+      const shared: SharedPep = new Map()
+      const sourceBackend = new InMemoryStorageBackend()
+      setSessionPassphrase('old-local-passphrase')
+      const source = new TestableWebOpenPGPPlugin()
+      await source.init(makeCtxWithWritablePep('alice@example.com', shared, sourceBackend).ctx)
+      const original = await source.callEnsureKeyMaterial('alice@example.com')
+      await source.backupSecretKey(PP) // publishes the backup under the NEW passphrase
+
+      clearSessionPassphrase()
+      const device = new WebOpenPGPPlugin()
+      await device.init(makeCtxWithWritablePep('alice@example.com', shared, sourceBackend).ctx)
+      expect(device.getOwnFingerprint()).toBeNull() // locked
+
+      const result = await device.unlock(PP) // NEW passphrase fails locally, opens the backup
+
+      expect(result).toEqual({ recovered: true })
+      expect(device.getOwnFingerprint()).toBe(original.fingerprint)
+    })
+
+    it('recovers when there is no local key but a server backup exists', async () => {
+      const shared: SharedPep = new Map()
+      setSessionPassphrase('source-session-pp')
+      const source = new TestableWebOpenPGPPlugin()
+      await source.init(makeCtxWithWritablePep('alice@example.com', shared).ctx)
+      const original = await source.callEnsureKeyMaterial('alice@example.com')
+      await source.backupSecretKey(PP)
+
+      clearSessionPassphrase()
+      const device = new WebOpenPGPPlugin() // empty backend
+      await device.init(makeCtxWithWritablePep('alice@example.com', shared).ctx)
+
+      const result = await device.unlock(PP)
+
+      expect(result).toEqual({ recovered: true })
+      expect(device.getOwnFingerprint()).toBe(original.fingerprint)
+    })
+
+    it('throws NoRecoveryAvailableError when local is stale and there is no backup', async () => {
+      const backend = new InMemoryStorageBackend()
+      const setup = new WebOpenPGPPlugin()
+      setSessionPassphrase('real-passphrase')
+      await setup.init(makeCtx('alice@example.com', backend).ctx)
+
+      clearSessionPassphrase()
+      const device = new WebOpenPGPPlugin()
+      await device.init(makeCtx('alice@example.com', backend).ctx)
+
+      const { NoRecoveryAvailableError } = await import('./recoveryErrors')
+      await expect(device.unlock('wrong-and-no-backup')).rejects.toBeInstanceOf(
+        NoRecoveryAvailableError,
+      )
+      const { isKeyLocked } = await import('./webPassphraseStore')
+      expect(isKeyLocked()).toBe(true) // rolled back
+    })
+
+    it('throws wrong-passphrase when neither local nor backup decrypt', async () => {
+      const shared: SharedPep = new Map()
+      const backend = new InMemoryStorageBackend()
+      setSessionPassphrase('local-pp')
+      const source = new TestableWebOpenPGPPlugin()
+      await source.init(makeCtxWithWritablePep('alice@example.com', shared, backend).ctx)
+      await source.callEnsureKeyMaterial('alice@example.com')
+      await source.backupSecretKey('backup-pp')
+
+      clearSessionPassphrase()
+      const device = new WebOpenPGPPlugin()
+      await device.init(makeCtxWithWritablePep('alice@example.com', shared, backend).ctx)
+
+      await expect(device.unlock('neither-of-them')).rejects.toMatchObject({
+        code: 'wrong-passphrase',
       })
     })
   })
