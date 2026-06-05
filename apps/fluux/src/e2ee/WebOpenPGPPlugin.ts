@@ -141,6 +141,15 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
         this.ownPrivateKey = privateKey
         return this.bundleFromKey(privateKey)
       } catch (err) {
+        // Do NOT swallow the real reason: the message is almost always a
+        // genuine wrong passphrase, but it can also be a corrupt/foreign
+        // blob. Log the underlying cause and keep it on the error chain so
+        // unlock()'s recovery path and any future diagnosis can see it.
+        this.requireCtx().logger.warn(
+          `WebOpenPGPPlugin: stored private key did not decrypt: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        )
         throw new E2EEPluginError(
           'permanent',
           'wrong-passphrase',
