@@ -29,7 +29,8 @@
     "ux:audit": "npx playwright test --config playwright.ux.config.ts",
     "demo:video": "npx playwright test --config playwright.video.config.ts",
     "demo:video:reel": "npx playwright test --config playwright.video.config.ts --grep reel",
-    "demo:video:full": "npx playwright test --config playwright.video.config.ts --grep full"
+    "demo:video:full": "npx playwright test --config playwright.video.config.ts --grep full",
+    "demo:video:readme": "ffmpeg -y -i video/fluux-demo-reel.mp4 -c:v libx264 -crf 30 -preset slow -pix_fmt yuv420p -movflags +faststart -an assets/readme/fluux-demo.mp4"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

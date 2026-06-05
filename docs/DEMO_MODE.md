@@ -45,6 +45,17 @@ A Playwright pipeline drives demo mode and records a promo-style walkthrough of 
 
 Output is written to the git-ignored `video/` directory at the repo root, as **native 1920×1080 MP4 and WebM** (no upscaling).
 
+### README clip
+
+The project `README.md` embeds a compact copy of the reel via a `<video>` tag. It lives at `assets/readme/fluux-demo.mp4` (tracked — unlike `video/`). To refresh it after a storyboard change:
+
+```bash
+npm run demo:video:reel      # 1. (re)generate the native 1080p reel
+npm run demo:video:readme    # 2. re-encode it to a compact ~1.5 MB clip
+```
+
+`demo:video:readme` runs ffmpeg on `video/fluux-demo-reel.mp4` (so generate the reel first) and writes a 1080p H.264 clip at CRF 30 (~1.5 MB) — small enough to commit, full resolution preserved.
+
 ### Prerequisites
 
 ```bash
