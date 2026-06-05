@@ -62,17 +62,21 @@ Rejected alternatives:
 
 ## Design
 
-### 1. New `'e2ee'` event category
+### 1. New `'e2ee'` event category + `[E2EE]` message prefix
 
-- Add `'e2ee'` to the `category` union of `addEvent` and to the `eventCategory`
-  field of `XmppPacket` in
-  [consoleStore.ts:53](../../../packages/fluux-sdk/src/stores/consoleStore.ts)
-  (and the interface at :22–33).
-- Add `'e2ee'` to `FilterType` and the filter-chip row in
-  [XmppConsole.tsx:15](../../../apps/fluux/src/components/XmppConsole.tsx) and
-  [:551](../../../apps/fluux/src/components/XmppConsole.tsx). All E2EE events use
-  this single category, so a user isolates the entire encryption timeline with one
-  filter.
+- Add `'e2ee'` to the `category` union of `addEvent`
+  ([consoleStore.ts:53](../../../packages/fluux-sdk/src/stores/consoleStore.ts))
+  and to the `eventCategory` field of `XmppPacket`
+  ([types/console.ts:32](../../../packages/fluux-sdk/src/core/types/console.ts)).
+- **No new filter chip.** The console's filter is content-type based
+  (`getEntryFilterType` in
+  [XmppConsole.tsx:31](../../../apps/fluux/src/components/XmppConsole.tsx) returns
+  `'event'` for every event regardless of `eventCategory`); `eventCategory` is not
+  a filter dimension today. Rather than rework the filter model, every E2EE log
+  message carries an `[E2EE]` prefix (added by the diagnostic logger), so it is
+  visible in the row, isolable via the existing search box, and present in the text
+  export. The `'e2ee'` category is added for semantic correctness and future
+  per-category colouring/filtering, but is not relied on for isolation now.
 
 ### 2. Fan-out diagnostic logger
 
