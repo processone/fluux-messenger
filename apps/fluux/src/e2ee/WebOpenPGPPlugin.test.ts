@@ -2019,5 +2019,46 @@ describe('WebOpenPGPPlugin', () => {
         code: 'wrong-passphrase',
       })
     })
+
+    it('re-raises needs-identity-decision when the server has a published key but no secret backup', async () => {
+      // No local key + server advertises a public key but holds no secret
+      // backup → recovery has nothing to restore, so the original
+      // needs-identity-decision is preserved for the IdentityChoiceDialog.
+      const { ctx } = makeCtxWithPublishedFingerprint('alice@example.com', 'c3'.repeat(20))
+      const device = new WebOpenPGPPlugin()
+      await device.init(ctx) // locked (no passphrase yet) → init swallows key-locked
+
+      await expect(device.unlock('some-passphrase-123')).rejects.toMatchObject({
+        code: 'needs-identity-decision',
+      })
+      const { isKeyLocked } = await import('./webPassphraseStore')
+      expect(isKeyLocked()).toBe(true) // rolled back
+    })
+
+    it('throws KeyPickerRequiredError when recovery finds a multi-key backup', async () => {
+      // The PEP-level multi-key parsing is covered by the backupImportAll
+      // tests; here we verify unlock's needsPicker → KeyPickerRequiredError
+      // wiring (and passphrase rollback). Stub restoreSecretKey to report a
+      // multi-key backup so the test stays focused on the orchestration.
+      const backend = new InMemoryStorageBackend()
+      setSessionPassphrase('old-local-pp')
+      const setup = new WebOpenPGPPlugin()
+      await setup.init(makeCtx('alice@example.com', backend).ctx) // stores a key under old-local-pp
+
+      clearSessionPassphrase()
+      const device = new WebOpenPGPPlugin()
+      await device.init(makeCtx('alice@example.com', backend).ctx)
+      const candidates: KeyBundle[] = [
+        { fingerprint: 'a'.repeat(40), publicArmored: 'PUB-A', keychainBacked: false },
+        { fingerprint: 'b'.repeat(40), publicArmored: 'PUB-B', keychainBacked: false },
+      ]
+      ;(device as unknown as { restoreSecretKey: (pp: string) => Promise<unknown> }).restoreSecretKey =
+        async () => ({ needsPicker: true, candidates, backupContext: { message: 'MSG', passphrase: 'new-pp' } })
+
+      const { KeyPickerRequiredError } = await import('./recoveryErrors')
+      await expect(device.unlock('wrong-for-local-pp')).rejects.toBeInstanceOf(KeyPickerRequiredError)
+      const { isKeyLocked } = await import('./webPassphraseStore')
+      expect(isKeyLocked()).toBe(true) // rolled back
+    })
   })
 })

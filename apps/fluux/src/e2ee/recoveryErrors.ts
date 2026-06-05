@@ -21,6 +21,7 @@ export class KeyPickerRequiredError extends Error {
 /** No server backup exists to recover from (with or without a local key). */
 export class NoRecoveryAvailableError extends Error {
   readonly code = 'no-recovery-available' as const
+  override readonly cause?: unknown
   constructor(readonly hadLocalKey: boolean, cause?: unknown) {
     super(
       hadLocalKey
@@ -28,6 +29,6 @@ export class NoRecoveryAvailableError extends Error {
         : 'No local key and no server backup is available.',
     )
     this.name = 'NoRecoveryAvailableError'
-    if (cause !== undefined) (this as { cause?: unknown }).cause = cause
+    if (cause !== undefined) this.cause = cause
   }
 }
