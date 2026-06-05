@@ -1,0 +1,65 @@
+import type { StressScenario } from '@fluux/sdk'
+
+/** Parse `?stress=rooms:15,messages:150,occupants:80,mode:backfill` into a scenario. */
+export function parseStressParam(params: URLSearchParams): StressScenario | null {
+  const raw = params.get('stress')
+  if (raw === null) return null
+  const scenario: StressScenario = { kind: 'room-join' }
+  for (const part of raw.split(',')) {
+    const [key, value] = part.split(':')
+    if (!key || value === undefined) continue
+    const n = Number(value)
+    switch (key.trim()) {
+      case 'rooms': if (Number.isFinite(n)) scenario.rooms = n; break
+      case 'messages': if (Number.isFinite(n)) scenario.messagesPerRoom = n; break
+      case 'occupants': if (Number.isFinite(n)) scenario.occupants = n; break
+      case 'mode': if (value === 'backfill' || value === 'live') scenario.mode = value; break
+    }
+  }
+  return scenario
+}
+
+type RenderRecord = { componentName?: string | null; count?: number }
+
+/** Fold a batch of react-scan render records into a per-component count map. */
+export function aggregateRenders(counts: Record<string, number>, renders: RenderRecord[]): Record<string, number> {
+  for (const r of renders ?? []) {
+    const name = r.componentName || '?'
+    counts[name] = (counts[name] ?? 0) + (r.count ?? 1)
+  }
+  return counts
+}
+
+/**
+ * DEV/DEMO ONLY. Loads react-scan (devDependency) on demand and exposes a small
+ * measurement API on window.__perf. Never called in production (gated by ?perf
+ * in demo.tsx; react-scan is a devDependency and demo assets are stripped from
+ * prod builds).
+ */
+export async function installPerfHarness(): Promise<void> {
+  let counts: Record<string, number> = {}
+  try {
+    const reactScan = (window as unknown as { reactScan?: (o: unknown) => void }).reactScan
+      ?? (await import('react-scan')).scan
+    reactScan({ enabled: true, log: false, onRender: (_f: unknown, renders: RenderRecord[]) => aggregateRenders(counts, renders) })
+  } catch (e) {
+    console.warn('[perf] react-scan unavailable:', e)
+  }
+  const det = await import('../utils/renderLoopDetector').catch(() => null)
+  ;(window as unknown as Record<string, unknown>).__perf = {
+    reset: () => { counts = {} },
+    counts: () => ({ ...counts }),
+    async measure(label: string, fn: () => unknown | Promise<unknown>) {
+      counts = {}
+      const t0 = performance.now()
+      await fn()
+      await new Promise(r => setTimeout(r, 50))
+      const top = Object.entries(counts).sort((a, b) => b[1] - a[1])
+      const report = { label, durationMs: Math.round(performance.now() - t0), renders: top, note: 'StrictMode doubles dev renders; divide by 2 for logical counts' }
+      console.table(top)
+      return report
+    },
+    detector: det,
+  }
+  console.info('[perf] window.__perf ready — try await __perf.measure("burst", () => __demoClient.runStressScenario({ kind: "room-join", rooms: 15, messagesPerRoom: 150, mode: "live" }))')
+}

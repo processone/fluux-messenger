@@ -23,6 +23,7 @@ import { RenderLoopBoundary, RenderLoopWarningBanner } from './components/Render
 import { DemoTutorialProvider } from './demo/tutorial/DemoTutorialProvider'
 import { buildDemoData, buildDemoAnimation } from './demo/demoData'
 import { getDiscoverableRooms } from './demo/rooms'
+import { parseStressParam, installPerfHarness } from './demo/perfHarness'
 import App from './App'
 import i18n from './i18n'
 import './index.css'
@@ -51,6 +52,16 @@ const demoAnimation = buildDemoAnimation()
 const demoClient = new DemoClient()
 demoClient.populateDemo(demoData)
 demoClient.setDiscoverableRooms(getDiscoverableRooms())
+
+const stressScenario = parseStressParam(params)
+if (stressScenario) {
+  // Defer so the first paint happens before the load starts.
+  setTimeout(() => demoClient.runStressScenario(stressScenario), 500)
+}
+
+if (params.get('perf') === '1') {
+  void installPerfHarness()
+}
 
 // Seed E2EE state so the encryption badge is visible on Ava's conversation.
 // URL param ?e2ee=conflict starts with no local key to trigger IdentityChoiceDialog.
