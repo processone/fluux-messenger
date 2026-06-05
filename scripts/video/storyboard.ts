@@ -43,9 +43,13 @@ export const storyboard: Scene[] = [
     run: async (d) => {
       await d.caption('Jump anywhere', 'Command palette — ⌘K')
       await d.press('Meta+k', 800)
-      await d.typeText('team')
-      await d.dwell(1600)
-      await d.press('Escape', 500)
+      await d.typeText('design')
+      await d.dwell(900)
+      // Click the result to jump straight into it (the Design Review room).
+      // A room result is unique to the palette (rooms aren't in the messages
+      // sidebar), so the click isn't blocked by the modal backdrop — and it's
+      // a different destination from the Team Chat rooms scene, so no repeat.
+      await d.glideClick(d.page.getByText('Design Review', { exact: true }).first(), 1500)
       await d.clearCaption()
     },
   },
