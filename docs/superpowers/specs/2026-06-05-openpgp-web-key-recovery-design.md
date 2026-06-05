@@ -43,6 +43,22 @@ Two secondary defects made this hard to diagnose and impossible to self-recover:
   decryption fail on the passphrase; otherwise surface the real reason.
 - **Accurate status** on the encryption settings screen.
 
+## Invariants — encryption stays opt-in
+
+This change must not make encryption any less optional than it is today:
+
+- **Off by default.** `openpgpEnabled` defaults to `false`, scoped per account
+  (`encryptionSettingsStore`), and is flipped to `true` **only** by the user's explicit
+  Settings toggle. Nothing in this work auto-enables it.
+- **Everything stays gated.** Plugin registration (`registerE2EEPlugins` early-returns on
+  `!isOpenpgpEnabled()`) and every dialog — unlock / restore / setup / identity-choice,
+  auto-opened from `App.tsx` only when `isOpenpgpEnabled()` (`App.tsx:199`) — remain
+  behind the toggle. A user who never enables encryption sees none of it, even if the
+  server advertises an identity/backup for their account from another device.
+- **Always skippable.** The unlock dialog's "send without encryption" skip
+  (`unlockSkip` / `onClose(false)` / Escape) MUST remain present in **all three modes**,
+  including the new Restore mode. Restore and Setup are *offered*, never forced.
+
 ## Non-goals
 
 - Desktop / Sequoia plugin (OS keychain, no passphrase — different model).
