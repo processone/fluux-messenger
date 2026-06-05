@@ -119,10 +119,10 @@ vi.mock('@fluux/sdk', () => ({
     joinRoom: mockJoinRoom,
     setRoomAvatar: mockSetRoomAvatar,
     clearRoomAvatar: mockClearRoomAvatar,
-    getDraft: vi.fn(() => ''),
-    setDraft: vi.fn(),
-    clearDraft: vi.fn(),
   }),
+  // Focused room subscriptions used by the memoized RoomMessageInput composer.
+  useRoomEntity: () => mockActiveRoom ? { name: mockActiveRoom.name, nickname: mockActiveRoom.nickname } : undefined,
+  useRoomOccupants: () => mockActiveRoom?.occupants ?? new Map(),
   useRoster: () => ({
     contacts: mockContacts,
   }),
@@ -199,6 +199,12 @@ vi.mock('@fluux/sdk', () => ({
       dismissPoll: vi.fn(),
       getVotedPollIds: () => new Set(),
       getDismissedPollIds: () => new Set(),
+      // Read non-reactively by RoomMessageInput (messageNicks, whisper backstop, drafts).
+      getRoom: () => mockActiveRoom ?? undefined,
+      getDraft: () => '',
+      setDraft: vi.fn(),
+      clearDraft: vi.fn(),
+      clearFirstNewMessageId: vi.fn(),
     }),
     subscribe: vi.fn(() => vi.fn()),
   },
@@ -329,6 +335,10 @@ vi.mock('@/hooks', () => ({
     handleTouchStart: vi.fn(),
     handleTouchEnd: vi.fn(),
   }),
+  // Used by the memoized RoomMessageInput composer for the whisper gate.
+  // Mirrors the real hook: false when not whispering, otherwise nick presence.
+  useWhisperCounterpartPresent: (_roomJid: string, target: { nick: string } | null | undefined) =>
+    !!target && !!mockActiveRoom?.occupants?.has(target.nick),
 }))
 
 // Mock utils

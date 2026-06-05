@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   useXMPP,
@@ -49,19 +49,24 @@ export function useFileUpload() {
   const { client } = useXMPP()
   // Use focused selector for httpUploadService (only re-render when it changes)
   const httpUploadService = useConnectionStore((s) => s.httpUploadService)
-  // Get requestUploadSlot from client
-  const requestUploadSlot = (filename: string, size: number, contentType: string) => {
-    return client.discovery.requestUploadSlot(filename, size, contentType)
-  }
+  // Get requestUploadSlot from client. Memoized on `client` (stable React
+  // context value) so it doesn't churn the `uploadFile` callback below.
+  const requestUploadSlot = useCallback(
+    (filename: string, size: number, contentType: string) => {
+      return client.discovery.requestUploadSlot(filename, size, contentType)
+    },
+    [client],
+  )
   const [state, setState] = useState<UploadState>({
     isUploading: false,
     progress: 0,
     error: null,
   })
 
-  const clearError = () => {
+  // `setState` from useState is stable, so no deps are needed here.
+  const clearError = useCallback(() => {
     setState(s => ({ ...s, error: null }))
-  }
+  }, [])
 
   /**
    * Upload a file with optional thumbnail and duration extraction.
@@ -80,7 +85,7 @@ export function useFileUpload() {
    * Returns FileAttachment with URL, thumbnail info, duration, and
    * optional encryption metadata, or null on failure.
    */
-  const uploadFile = async (file: File, options?: { encrypt?: boolean }): Promise<FileAttachment | null> => {
+  const uploadFile = useCallback(async (file: File, options?: { encrypt?: boolean }): Promise<FileAttachment | null> => {
     const shouldEncrypt = options?.encrypt === true
     if (!httpUploadService) {
       setState(s => ({ ...s, error: t('upload.notSupported') }))
@@ -267,7 +272,7 @@ export function useFileUpload() {
       setState({ isUploading: false, progress: 0, error: message })
       return null
     }
-  }
+  }, [httpUploadService, t, requestUploadSlot])
 
   return {
     ...state,

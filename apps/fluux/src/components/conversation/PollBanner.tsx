@@ -5,7 +5,7 @@
  * Clicking the banner scrolls to the most recent unanswered poll.
  * The dismiss button hides the banner for that poll (persisted to localStorage).
  */
-import { useMemo } from 'react'
+import { memo, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { BarChart3, X, ChevronDown } from 'lucide-react'
 import { hasVotedOnPoll, isPollExpired, type RoomMessage } from '@fluux/sdk'
@@ -24,7 +24,7 @@ export interface PollBannerProps {
   onDismiss: (messageId: string) => void
 }
 
-export function PollBanner({ messages, myNick, votedPollIds, dismissedPollIds, onDismiss }: PollBannerProps) {
+export const PollBanner = memo(function PollBanner({ messages, myNick, votedPollIds, dismissedPollIds, onDismiss }: PollBannerProps) {
   const { t } = useTranslation()
 
   // Build the set of poll message IDs that have been closed
@@ -92,4 +92,4 @@ export function PollBanner({ messages, myNick, votedPollIds, dismissedPollIds, o
       </button>
     </div>
   )
-}
+})

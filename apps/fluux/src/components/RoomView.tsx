@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect, useCallback, useImperativeHandle, useMemo, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useRoomActive, useRoster, getBareJid, generateConsistentColorHexSync, getPresenceFromShow, createMessageLookup, isMessageFromIgnoredUser, isReplyToIgnoredUser, canKick, canBan, canModerate, getAvailableAffiliations, getAvailableRoles, getMyReactions, type RoomMessage, type Room, type MentionReference, type ChatStateNotification, type Contact, type FileAttachment, type RoomAffiliation, type RoomRole, type PollData } from '@fluux/sdk'
+import { useRoomActive, useRoomEntity, useRoomOccupants, useRoster, getBareJid, generateConsistentColorHexSync, getPresenceFromShow, createMessageLookup, isMessageFromIgnoredUser, isReplyToIgnoredUser, canKick, canBan, canModerate, getAvailableAffiliations, getAvailableRoles, getMyReactions, type RoomMessage, type Room, type MentionReference, type ChatStateNotification, type Contact, type FileAttachment, type RoomAffiliation, type RoomRole, type PollData } from '@fluux/sdk'
 import { useConnectionStore, useIgnoreStore, useRoomStore } from '@fluux/sdk/react'
 import { ignoreStore, roomStore, type IgnoredUser } from '@fluux/sdk/stores'
-import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat, useContextMenu, isSmallScreen } from '@/hooks'
-import { MessageBubble, MessageList, shouldShowAvatar, whisperThreadPosition, whisperCounterpartPresent, resolveWhisperTarget, whisperTargetPresent, decideWhisperSend, buildReplyContext, PollBanner, type WhisperThreadPosition, type WhisperTarget } from './conversation'
+import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat, useContextMenu, useWhisperCounterpartPresent, isSmallScreen } from '@/hooks'
+import { MessageBubble, MessageList, shouldShowAvatar, whisperThreadPosition, whisperCounterpartPresent, resolveWhisperTarget, decideWhisperSend, buildReplyContext, PollBanner, type WhisperThreadPosition, type WhisperTarget } from './conversation'
 import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
 import { Avatar, getConsistentTextColor } from './Avatar'
@@ -99,14 +99,14 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // IMPORTANT: Use stable empty array reference to prevent infinite re-renders.
   // Zustand uses Object.is to compare selector results — a new [] each time causes re-render loops.
   const ignoredForRoom = useIgnoreStore((s) => activeRoom ? (s.ignoredUsers[activeRoom.jid] ?? EMPTY_IGNORED_ARRAY) : EMPTY_IGNORED_ARRAY)
-  const displayMessages = (() => {
+  const displayMessages = useMemo(() => {
     if (ignoredForRoom.length === 0) return activeMessages
     const cache = activeRoom?.nickToJidCache
     return activeMessages.filter(msg =>
       !isMessageFromIgnoredUser(ignoredForRoom, msg, cache) &&
       !isReplyToIgnoredUser(ignoredForRoom, msg.replyTo, cache)
     )
-  })()
+  }, [activeMessages, ignoredForRoom, activeRoom?.nickToJidCache])
 
   // Filter typing indicators from ignored users
   const filteredTypingUsers = useMemo(() => {
@@ -146,12 +146,13 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   const lastMessageId = activeMessages.length > 0 ? activeMessages[activeMessages.length - 1].id : null
 
   // Handler to edit the last outgoing message (triggered by Up arrow in empty composer)
-  const handleEditLastMessage = () => {
-    const msg = findLastEditableMessage(activeMessages)
+  // Reads messages from the store at call time to avoid closing over the changing activeMessages array
+  const handleEditLastMessage = useCallback(() => {
+    const msg = findLastEditableMessage(roomStore.getState().activeMessages())
     if (msg) {
       setEditingMessage(msg)
     }
-  }
+  }, [])
 
   // Composing state - hides message toolbars when user is typing
   const [isComposing, setIsComposing] = useState(false)
@@ -164,8 +165,8 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     onShowOccupantsChange?.(show)
   }
 
-  const handleCancelReply = () => setReplyingTo(null)
-  const handleCancelEdit = () => setEditingMessage(null)
+  const handleCancelReply = useCallback(() => setReplyingTo(null), [])
+  const handleCancelEdit = useCallback(() => setEditingMessage(null), [])
   const handleReactionPickerChange = (messageId: string, isOpen: boolean) => {
     setActiveReactionPickerMessageId(isOpen ? messageId : null)
   }
@@ -201,7 +202,10 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     nickMenu.handleTouchEnd()
   }
 
-  const uploadStateObj = { isUploading, progress, error: uploadError, clearError: clearUploadError }
+  const uploadStateObj = useMemo(
+    () => ({ isUploading, progress, error: uploadError, clearError: clearUploadError }),
+    [isUploading, progress, uploadError, clearUploadError]
+  )
 
   // Scroll ref for programmatic scrolling and keyboard navigation
   const scrollRef = useRef<HTMLElement>(null)
@@ -211,31 +215,31 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   const composerHandleRef = useRef<MessageComposerHandle>(null)
 
   // Scroll to bottom (used after sending a message)
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTo({
         top: scrollRef.current.scrollHeight,
         behavior: 'smooth',
       })
     }
-  }
+  }, [])
 
   // Scroll to bottom when media loads (images, videos, link previews)
   // Only scrolls if user was already at bottom to avoid disrupting scroll position
-  const handleMediaLoad = () => {
+  const handleMediaLoad = useCallback(() => {
     if (scrollRef.current && isAtBottomRef.current) {
       // Use instant scroll to avoid jarring animation when content expands
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }
+  }, [])
 
   // Scroll to bottom when composer resizes (typing long message)
   // Only scrolls if user was already at bottom to avoid disrupting scroll position
-  const handleInputResize = () => {
+  const handleInputResize = useCallback(() => {
     if (scrollRef.current && isAtBottomRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }
+  }, [])
 
   // Keyboard navigation for message selection
   const {
@@ -259,7 +263,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
 
   // Create a lookup map for messages by ID (for reply context)
   // Index by both client id and stanza-id since replies may reference either
-  const messagesById = createMessageLookup(activeMessages)
+  const messagesById = useMemo(() => createMessageLookup(activeMessages), [activeMessages])
 
   // Track pendingAttachment in a ref for cleanup (not a trigger)
   const pendingAttachmentRef = useRef(pendingAttachment)
@@ -318,8 +322,9 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
 
   // File drop handler - stages file for preview only (no upload yet - privacy protection)
   // Upload happens when user clicks Send, not on drop (prevents accidental data leaks)
-  const handleFileDrop = (file: File) => {
-    if (!activeRoom || !isSupported) return
+  // Uses activeRoomRef to avoid closing over the churning activeRoom object.
+  const handleFileDrop = useCallback((file: File) => {
+    if (!activeRoomRef.current || !isSupported) return
     // Create preview URL for images/videos
     const previewUrl = file.type.startsWith('image/') || file.type.startsWith('video/')
       ? URL.createObjectURL(file)
@@ -327,15 +332,16 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     setPendingAttachment({ file, previewUrl })
     // Focus composer so user can add a message
     setTimeout(() => composerHandleRef.current?.focus(), 0)
-  }
+  }, [isSupported])
 
   // Clear pending attachment and revoke preview URL
-  const handleRemovePendingAttachment = () => {
-    if (pendingAttachment?.previewUrl) {
-      URL.revokeObjectURL(pendingAttachment.previewUrl)
+  // Uses pendingAttachmentRef to read current value without closing over state
+  const handleRemovePendingAttachment = useCallback(() => {
+    if (pendingAttachmentRef.current?.previewUrl) {
+      URL.revokeObjectURL(pendingAttachmentRef.current.previewUrl)
     }
     setPendingAttachment(null)
-  }
+  }, [])
 
   // Drag-and-drop for file upload (handles both HTML5 and Tauri native)
   const { isDragging, dragHandlers } = useDragAndDrop({
@@ -343,21 +349,21 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     isUploadSupported: isSupported,
   })
 
-  // Memoize the clearFirstNewMessageId callback to avoid render loops
-  // (inline arrow functions create new references on every render)
+  // Stable callbacks passed to memoized RoomMessageList — useCallback prevents
+  // the child from re-rendering when only unrelated RoomView state changes.
   const roomJid = activeRoom?.jid
-  const handleClearFirstNewMessageId = () => {
+  const handleClearFirstNewMessageId = useCallback(() => {
     if (roomJid) {
       clearFirstNewMessageId(roomJid)
     }
-  }
+  }, [roomJid, clearFirstNewMessageId])
 
   // Viewport observer callback: update lastSeenMessageId as user scrolls
-  const handleMessageSeen = (messageId: string) => {
+  const handleMessageSeen = useCallback((messageId: string) => {
     if (roomJid) {
       updateLastSeenMessageId(roomJid, messageId)
     }
-  }
+  }, [roomJid, updateLastSeenMessageId])
 
   // Find on page: browser-style search within this room
   const find = useFindOnPage(activeMessages, activeRoom?.jid)
@@ -370,6 +376,18 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     goToNext: find.goToNext,
     goToPrev: find.goToPrev,
   }), [find.open, find.close, find.isOpen, find.goToNext, find.goToPrev])
+
+  // Stable handler for the send-animation: clears the highlight after 400 ms.
+  // Uses a ref for the timer to avoid any closure over state.
+  const handleMessageIdSent = useCallback((id: string) => {
+    if (lastSentTimerRef.current) clearTimeout(lastSentTimerRef.current)
+    setLastSentMessageId(id)
+    lastSentTimerRef.current = setTimeout(() => setLastSentMessageId(null), 400)
+  }, [])
+
+  // Stable callback to clear whisper target (name avoids clash with the
+  // composer-internal handleClearWhisper defined inside RoomMessageInput).
+  const handleClearWhisperTarget = useCallback(() => setWhisperTarget(null), [])
 
   if (!activeRoom) return null
 
@@ -493,7 +511,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
           <RoomMessageInput
             key={activeRoom.jid}
             ref={composerHandleRef}
-            room={activeRoom}
+            roomJid={activeRoom.jid}
             textareaRef={composerRef as React.RefObject<HTMLTextAreaElement | null>}
             sendMessage={sendMessage}
             sendCorrection={sendCorrection}
@@ -517,13 +535,9 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             onRemovePendingAttachment={handleRemovePendingAttachment}
             processLinkPreview={processMessageForLinkPreview}
             isConnected={isConnected}
-            onMessageIdSent={(id) => {
-              if (lastSentTimerRef.current) clearTimeout(lastSentTimerRef.current)
-              setLastSentMessageId(id)
-              lastSentTimerRef.current = setTimeout(() => setLastSentMessageId(null), 400)
-            }}
+            onMessageIdSent={handleMessageIdSent}
             whisperTarget={whisperTarget}
-            onClearWhisper={() => setWhisperTarget(null)}
+            onClearWhisper={handleClearWhisperTarget}
             sendWhisper={sendWhisper}
           />
         ) : (
@@ -1425,7 +1439,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
 })
 
 interface RoomMessageInputProps {
-  room: Room
+  roomJid: string
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>
   sendMessage: (roomJid: string, body: string, replyTo?: { id: string; to: string; fallback?: { author: string; body: string } }, references?: MentionReference[], attachment?: FileAttachment) => Promise<string>
   sendCorrection: (roomJid: string, messageId: string, newBody: string, attachment?: FileAttachment) => Promise<void>
@@ -1455,8 +1469,8 @@ interface RoomMessageInputProps {
   sendWhisper: (roomJid: string, nick: string, body: string) => Promise<string>
 }
 
-function RoomMessageInput({
-  room,
+export const RoomMessageInput = memo(function RoomMessageInput({
+  roomJid,
   textareaRef,
   sendMessage,
   sendCorrection,
@@ -1487,14 +1501,22 @@ function RoomMessageInput({
   ref,
 }: RoomMessageInputProps & { ref?: React.Ref<MessageComposerHandle> }) {
   const { t } = useTranslation()
-  const { setDraft, getDraft, clearDraft, clearFirstNewMessageId } = useRoomActive()
+  // Narrow, reference-stable subscriptions: the composer re-renders on entity
+  // changes (name/nickname) and occupant changes, but NOT on message churn.
+  const entity = useRoomEntity(roomJid)
+  const roomName = entity?.name ?? roomJid
+  const roomNickname = entity?.nickname ?? ''
+  const occupants = useRoomOccupants(roomJid)
+  // Draft actions are stable function refs — read non-reactively from the store.
+  const { setDraft, getDraft, clearDraft, clearFirstNewMessageId } = roomStore.getState()
   const addToast = useToastStore((s) => s.addToast)
   const [showPollCreator, setShowPollCreator] = useState(false)
 
-  // Reactive whisper-counterpart presence. `room.occupants` updates when someone
-  // leaves/joins, so this re-evaluates on every occupant change — driving the
-  // "gone" banner and the disabled Send button while preserving the typed draft.
-  const whisperCounterpartGone = !!whisperTarget && !whisperTargetPresent(whisperTarget, room.occupants)
+  // Reactive whisper-counterpart presence. The hook re-evaluates on every occupant
+  // change — driving the "gone" banner and the disabled Send button while preserving
+  // the typed draft. Called unconditionally (returns false when target is null).
+  const counterpartPresent = useWhisperCounterpartPresent(roomJid, whisperTarget)
+  const whisperCounterpartGone = !!whisperTarget && !counterpartPresent
 
   // Mention state
   const [cursorPosition, setCursorPosition] = useState(0)
@@ -1513,7 +1535,7 @@ function RoomMessageInput({
 
   // Draft persistence - saves on room change, restores on load, clears references
   const [text, setText] = useConversationDraft({
-    conversationId: room.jid,
+    conversationId: roomJid,
     draftOperations: { getDraft, setDraft, clearDraft },
     composerRef,
     onDraftRestored: handleDraftRestored,
@@ -1525,7 +1547,7 @@ function RoomMessageInput({
   // private text is never converted into a public message (XEP-0045 §7.5).
   const handleClearWhisper = () => {
     setText('')
-    clearDraft(room.jid)
+    clearDraft(roomJid)
     onClearWhisper?.()
   }
 
@@ -1533,21 +1555,20 @@ function RoomMessageInput({
   useTypeToFocus(composerRef)
 
   // Check if room is small enough to send typing notifications
-  const shouldSendTypingNotifications = room.occupants.size < MAX_ROOM_SIZE_FOR_TYPING
+  const shouldSendTypingNotifications = occupants.size < MAX_ROOM_SIZE_FOR_TYPING
 
-  // Collect unique nicks from message history and affiliated members for mention suggestions
+  // Collect mention-candidate nicks (occupants + history authors + affiliated
+  // members). Read NON-reactively from the store on each render: this must NOT
+  // subscribe to room.messages (that would re-render the composer on every
+  // message). Recomputed each render so it stays fresh while typing, without a
+  // subscription. (Do not memoize on [roomJid] — that would freeze the set at
+  // room-entry and miss later authors.)
   const messageNicks = (() => {
     const nicks = new Set<string>()
-    for (const msg of room.messages) {
-      nicks.add(msg.nick)
-    }
-    // Add nicks from affiliated members (offline users with known nicks)
-    if (room.affiliatedMembers) {
-      for (const member of room.affiliatedMembers) {
-        if (member.nick) {
-          nicks.add(member.nick)
-        }
-      }
+    const liveRoom = roomStore.getState().getRoom(roomJid)
+    for (const msg of liveRoom?.messages ?? []) nicks.add(msg.nick)
+    for (const member of liveRoom?.affiliatedMembers ?? []) {
+      if (member.nick) nicks.add(member.nick)
     }
     return nicks
   })()
@@ -1556,9 +1577,9 @@ function RoomMessageInput({
   const { state: mentionState, selectMatch, moveSelection, dismiss } = useMentionAutocomplete(
     text,
     cursorPosition,
-    room.occupants,
-    room.nickname,
-    room.jid,
+    occupants,
+    roomNickname,
+    roomJid,
     messageNicks
   )
 
@@ -1603,13 +1624,13 @@ function RoomMessageInput({
 
   // Handle correction
   const handleCorrection = async (messageId: string, newBody: string, attachment?: import('@fluux/sdk').FileAttachment): Promise<boolean> => {
-    await sendCorrection(room.jid, messageId, newBody, attachment)
+    await sendCorrection(roomJid, messageId, newBody, attachment)
     return true
   }
 
   // Handle retraction (when edit removes all content)
   const handleRetract = async (messageId: string): Promise<void> => {
-    await retractMessage(room.jid, messageId)
+    await retractMessage(roomJid, messageId)
   }
 
   // Handle send
@@ -1620,7 +1641,7 @@ function RoomMessageInput({
       // closed-over prop) so we cover the gap between the counterpart leaving and
       // React re-rendering the disabled Send button. Never deliver private text
       // once they've left or the nick has been recycled by someone else.
-      const liveOccupants = roomStore.getState().getRoom(room.jid)?.occupants ?? room.occupants
+      const liveOccupants = roomStore.getState().getRoom(roomJid)?.occupants ?? occupants
       const decision = decideWhisperSend(whisperTarget, sendText, liveOccupants)
       if (!decision.ok) {
         if (decision.reason === 'counterpart-gone') {
@@ -1628,11 +1649,11 @@ function RoomMessageInput({
         }
         return false
       }
-      const messageId = await sendWhisper(room.jid, decision.nick, decision.body)
+      const messageId = await sendWhisper(roomJid, decision.nick, decision.body)
       onMessageIdSent?.(messageId)
-      clearDraft(room.jid)
+      clearDraft(roomJid)
       onMessageSent?.()
-      setTimeout(() => clearFirstNewMessageId(room.jid), 500)
+      setTimeout(() => clearFirstNewMessageId(roomJid), 500)
       return true
     }
 
@@ -1659,7 +1680,7 @@ function RoomMessageInput({
 
     // The body is the file URL if no text was entered, otherwise the user's text
     const body = sendText || attachment?.url || ''
-    const messageId = await sendMessage(room.jid, body, replyTo, references.length > 0 ? references : undefined, attachment ?? undefined)
+    const messageId = await sendMessage(roomJid, body, replyTo, references.length > 0 ? references : undefined, attachment ?? undefined)
     setReferences([])
 
     // Notify parent of sent message ID for animation
@@ -1671,23 +1692,23 @@ function RoomMessageInput({
     }
 
     // Clear draft immediately so sidebar updates
-    clearDraft(room.jid)
+    clearDraft(roomJid)
 
     // Process link preview in background (don't block on it)
     if (processLinkPreview && sendText) {
-      processLinkPreview(messageId, sendText, room.jid, 'groupchat').catch(console.error)
+      processLinkPreview(messageId, sendText, roomJid, 'groupchat').catch(console.error)
     }
 
     // Send active state after message (for small rooms)
     if (shouldSendTypingNotifications) {
-      void sendChatState(room.jid, 'active')
+      void sendChatState(roomJid, 'active')
     }
 
     // Scroll to bottom to show the sent message
     onMessageSent?.()
 
     // Clear the "new messages" marker after a short delay (user is actively engaged)
-    setTimeout(() => clearFirstNewMessageId(room.jid), 500)
+    setTimeout(() => clearFirstNewMessageId(roomJid), 500)
 
     return true
   }
@@ -1695,7 +1716,7 @@ function RoomMessageInput({
   // Handle typing state
   const handleTypingState = (state: 'composing' | 'paused') => {
     if (shouldSendTypingNotifications) {
-      void sendChatState(room.jid, state)
+      void sendChatState(roomJid, state)
     }
   }
 
@@ -1896,7 +1917,7 @@ function RoomMessageInput({
         <PollCreator
           onClose={() => setShowPollCreator(false)}
           onCreatePoll={async (title, options, settings, description, deadline, customEmojis) => {
-            await sendPoll(room.jid, title, options, settings, description, deadline, customEmojis)
+            await sendPoll(roomJid, title, options, settings, description, deadline, customEmojis)
           }}
         />
       )}
@@ -1929,7 +1950,7 @@ function RoomMessageInput({
       <MessageComposer
         ref={composerRef}
         textareaRef={textareaRef}
-        placeholder={whisperTarget ? t('rooms.whisperPlaceholder', { nick: whisperTarget.nick }) : t('chat.messageRoom', { name: room.name })}
+        placeholder={whisperTarget ? t('rooms.whisperPlaceholder', { nick: whisperTarget.nick }) : t('chat.messageRoom', { name: roomName })}
         replyingTo={replyInfo}
         onCancelReply={onCancelReply}
         editingMessage={editInfo}
@@ -1939,7 +1960,7 @@ function RoomMessageInput({
         onComposingChange={onComposingChange}
         onInputResize={onInputResize}
         onSend={handleSend}
-        onSendEasterEgg={(animation) => sendEasterEgg(room.jid, animation)}
+        onSendEasterEgg={(animation) => sendEasterEgg(roomJid, animation)}
         onCreatePoll={() => setShowPollCreator(true)}
         onSendTypingState={handleTypingState}
         typingNotificationsEnabled={shouldSendTypingNotifications}
@@ -1962,7 +1983,7 @@ function RoomMessageInput({
       />
     </div>
   )
-}
+})
 
 /**
  * Join prompt shown when viewing a bookmarked room that is not joined.

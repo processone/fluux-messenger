@@ -5,7 +5,7 @@
  * using the Tauri backend, then sends a fastening with the preview.
  */
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useXMPP } from '@fluux/sdk'
 import { fetchUrlMetadata, extractFirstUrl, isImageUrl } from '@/utils/linkPreview'
 import type { LinkPreview } from '@fluux/sdk'
@@ -18,9 +18,6 @@ interface LinkPreviewState {
 export function useLinkPreview() {
   // Get client from context for methods (avoiding useConnection's 12+ subscriptions)
   const { client } = useXMPP()
-  const sendLinkPreview = async (to: string, messageId: string, preview: LinkPreview, type: 'chat' | 'groupchat') => {
-    await client.chat.sendLinkPreview(to, messageId, preview, type)
-  }
   const [state, setState] = useState<LinkPreviewState>({
     isFetching: false,
     error: null,
@@ -35,50 +32,50 @@ export function useLinkPreview() {
    * @param to - The conversation JID
    * @param type - Message type ('chat' or 'groupchat')
    */
-  const processMessageForLinkPreview = async (
+  const processMessageForLinkPreview = useCallback(async (
     messageId: string,
     body: string,
     to: string,
     type: 'chat' | 'groupchat'
   ): Promise<void> => {
-      // Extract first URL from message
-      const url = extractFirstUrl(body)
-      if (!url) return
+    // Extract first URL from message
+    const url = extractFirstUrl(body)
+    if (!url) return
 
-      // Skip image URLs - they're displayed inline, not as link previews
-      if (isImageUrl(url)) return
+    // Skip image URLs - they're displayed inline, not as link previews
+    if (isImageUrl(url)) return
 
-      setState({ isFetching: true, error: null })
+    setState({ isFetching: true, error: null })
 
-      try {
-        // Fetch URL metadata using Tauri backend
-        const metadata = await fetchUrlMetadata(url)
-        if (!metadata) {
-          setState({ isFetching: false, error: null })
-          return
-        }
-
-        // Convert to LinkPreview format
-        const preview: LinkPreview = {
-          url: metadata.url,
-          ...(metadata.title && { title: metadata.title }),
-          ...(metadata.description && { description: metadata.description }),
-          ...(metadata.image && { image: metadata.image }),
-          ...(metadata.site_name && { siteName: metadata.site_name }),
-        }
-
-        // Send the fastening with link preview
-        await sendLinkPreview(to, messageId, preview, type)
-
+    try {
+      // Fetch URL metadata using Tauri backend
+      const metadata = await fetchUrlMetadata(url)
+      if (!metadata) {
         setState({ isFetching: false, error: null })
-      } catch (err) {
-        console.error('Failed to fetch link preview:', err)
-        setState({
-          isFetching: false,
-          error: err instanceof Error ? err.message : 'Failed to fetch preview',
-        })
+        return
       }
+
+      // Convert to LinkPreview format
+      const preview: LinkPreview = {
+        url: metadata.url,
+        ...(metadata.title && { title: metadata.title }),
+        ...(metadata.description && { description: metadata.description }),
+        ...(metadata.image && { image: metadata.image }),
+        ...(metadata.site_name && { siteName: metadata.site_name }),
+      }
+
+      // Send the fastening with link preview
+      await client.chat.sendLinkPreview(to, messageId, preview, type)
+
+      setState({ isFetching: false, error: null })
+    } catch (err) {
+      console.error('Failed to fetch link preview:', err)
+      setState({
+        isFetching: false,
+        error: err instanceof Error ? err.message : 'Failed to fetch preview',
+      })
     }
+  }, [client])
 
   return {
     ...state,

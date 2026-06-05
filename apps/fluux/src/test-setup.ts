@@ -152,10 +152,15 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
     roomStore: {
       getState: () => ({
         rooms: new Map(),
+        roomRuntime: new Map(),
         activeRoomJid: null,
         setActiveRoom: vi.fn(),
         markAsRead: vi.fn(),
         clearFirstNewMessageId: vi.fn(),
+        getRoom: () => undefined,
+        getDraft: () => '',
+        setDraft: vi.fn(),
+        clearDraft: vi.fn(),
       }),
       subscribe: vi.fn(() => vi.fn()),
     },
@@ -305,11 +310,18 @@ vi.mock('@fluux/sdk/react', () => ({
   useRoomStore: vi.fn((selector) => {
     const state = {
       rooms: new Map(),
+      roomEntities: new Map(),
+      roomMeta: new Map(),
+      roomRuntime: new Map(),
+      drafts: new Map(),
       activeRoomJid: null,
       setActiveRoom: vi.fn(),
       addRoom: vi.fn(),
       markAsRead: vi.fn(),
       clearFirstNewMessageId: vi.fn(),
+      setDraft: vi.fn(),
+      getDraft: () => '',
+      clearDraft: vi.fn(),
       roomsWithUnreadCount: () => 0,
       getMAMQueryState: () => ({ isLoading: false, hasMoreHistory: false }),
     }
