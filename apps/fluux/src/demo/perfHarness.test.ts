@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseStressParam } from './perfHarness'
+import { parseStressParam, aggregateRenders } from './perfHarness'
 
 describe('parseStressParam', () => {
   it('returns null when absent', () => {
@@ -12,5 +12,14 @@ describe('parseStressParam', () => {
   it('ignores unknown keys and clamps invalid numbers', () => {
     const s = parseStressParam(new URLSearchParams('stress=rooms:abc,foo:bar,messages:10'))
     expect(s).toEqual({ kind: 'room-join', messagesPerRoom: 10 })
+  })
+})
+
+describe('aggregateRenders', () => {
+  it('sums render counts per component name', () => {
+    const counts = {}
+    aggregateRenders(counts, [{ componentName: 'RoomItem', count: 1 }, { componentName: 'Tooltip', count: 2 }])
+    aggregateRenders(counts, [{ componentName: 'RoomItem', count: 1 }])
+    expect(counts).toEqual({ RoomItem: 2, Tooltip: 2 })
   })
 })
