@@ -333,11 +333,25 @@ export function useListKeyboardNav<T>({
     element?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }, [selectedIndex, items, listRef, getItemId, itemAttribute])
 
-  // Helper to get props for each item
-  const getItemProps = (index: number) => ({
-      'data-selected': index === selectedIndex,
+  // Per-item hover handlers are cached (keyed by item id) so their identities stay
+  // stable across renders AND reorders. Passing fresh onMouseEnter/onMouseMove would defeat
+  // React.memo on every list item, re-rendering the whole list whenever any single
+  // item changes (e.g. the rapid store updates during a multi-room join / MAM sync).
+  // Mutable state read inside the handlers (isKeyboardNav) is accessed via a ref so
+  // the cached closures never go stale.
+  const isKeyboardNavRef = useRef(isKeyboardNav)
+  isKeyboardNavRef.current = isKeyboardNav
+  const itemHandlersRef = useRef<Map<string, {
+    onMouseEnter: (e: React.MouseEvent) => void
+    onMouseMove: (e: React.MouseEvent) => void
+  }>>(new Map())
+
+  const getItemHandlers = (itemId: string) => {
+    const cached = itemHandlersRef.current.get(itemId)
+    if (cached) return cached
+    const handlers = {
       onMouseEnter: (e: React.MouseEvent) => {
-        if (isKeyboardNav) return
+        if (isKeyboardNavRef.current) return
         // Ignore scroll-induced enters: when the list scrolls (keyboard auto-scroll or mouse wheel),
         // items pass under a stationary cursor, triggering onMouseEnter. We detect this by checking
         // whether the mouse actually moved to new coordinates.
@@ -346,6 +360,11 @@ export function useListKeyboardNav<T>({
         const y = e.clientY
         if (prev && prev.x === x && prev.y === y) return
         lastMousePosRef.current = { x, y }
+        // Resolve the item's CURRENT index at call time. Handlers are keyed by id,
+        // so a row keeps one stable handler even when the activity-sorted list
+        // reorders (its index changes, but its handler identity does not).
+        const index = itemIdToIndexRef.current.get(itemId)
+        if (index === undefined) return
         selectionSourceRef.current = 'mouse'
         setSelectedIndex(index)
       },
@@ -358,11 +377,29 @@ export function useListKeyboardNav<T>({
         const y = e.clientY
         if (prev && prev.x === x && prev.y === y) return
         lastMousePosRef.current = { x, y }
-        if (isKeyboardNav) {
+        if (isKeyboardNavRef.current) {
           setIsKeyboardNav(false)
         }
       },
-    })
+    }
+    itemHandlersRef.current.set(itemId, handlers)
+    return handlers
+  }
+
+  // Helper to get props for each item. data-selected is per-render (a primitive,
+  // so it only differs for the items whose selection actually changed), while the
+  // hover handlers are stable references keyed by item id — so a row keeps the same
+  // handler identity across re-renders AND reorders, letting React.memo bail.
+  const getItemProps = (index: number) => {
+    const item = items[index]
+    const itemId = item ? getItemId(item) : `__index__${index}`
+    const handlers = getItemHandlers(itemId)
+    return {
+      'data-selected': index === selectedIndex,
+      onMouseEnter: handlers.onMouseEnter,
+      onMouseMove: handlers.onMouseMove,
+    }
+  }
 
   // Helper to get the data attribute for scroll targeting
   const getItemAttribute = (index: number): Record<string, string> => {

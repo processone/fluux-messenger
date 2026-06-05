@@ -142,6 +142,7 @@ function saveDismissedPollsToStorage(dismissedPolls: Map<string, Set<string>>, j
  * constants instead of creating new [] instances each time.
  */
 const EMPTY_ROOM_ARRAY: Room[] = []
+const EMPTY_SIDEBAR_JIDS: string[] = []
 
 // Selector memoization caches.
 // Store selectors (joinedRooms, allRooms, etc.) are called on every Zustand subscription check.
@@ -314,6 +315,13 @@ export interface RoomState {
   joinedRooms: () => Room[]
   bookmarkedRooms: () => Room[]
   allRooms: () => Room[] // All rooms (bookmarked or joined)
+  /**
+   * Sidebar-ordered, section-encoded room JIDs ("<section> <jid>", where section
+   * is quick | joined | bookmarked). Subscribe via useShallow so the sidebar list
+   * re-renders only when membership / order / section changes — NOT on every
+   * message or unread update. Each row subscribes to its own room by JID.
+   */
+  roomSidebarJids: () => string[]
   quickChatRooms: () => Room[] // All quick chat rooms
   activeRoom: () => Room | undefined
   activeMessages: () => RoomMessage[]
@@ -1898,6 +1906,33 @@ export const roomStore = createStore<RoomState>()(
     })
     _cachedAllRooms = result
     return result
+  },
+
+  roomSidebarJids: () => {
+    const all = get().allRooms() // activity-sorted; bookmarked || joined
+    if (all.length === 0) return EMPTY_SIDEBAR_JIDS
+    // Partition into the sidebar's three sections. Section + JID are encoded into a
+    // single string (space-separated; JIDs and section codes never contain spaces)
+    // so the result is a flat string[] that compares cleanly under useShallow — the
+    // list re-renders only when membership, order, or section actually changes, not
+    // when a room's messages / unread / last-message-preview change.
+    const quick: string[] = []
+    const joined: string[] = []
+    const bookmarkedNotJoined: Room[] = []
+    for (const r of all) {
+      if (r.isQuickChat) quick.push(`quick ${r.jid}`)
+      else if (r.joined || r.isJoining) joined.push(`joined ${r.jid}`)
+      else if (r.isBookmarked) bookmarkedNotJoined.push(r)
+    }
+    // Bookmarked-but-not-joined rooms are listed alphabetically by name.
+    bookmarkedNotJoined.sort((a, b) =>
+      (a.name || a.jid).toLowerCase().localeCompare((b.name || b.jid).toLowerCase())
+    )
+    return [
+      ...quick,
+      ...joined,
+      ...bookmarkedNotJoined.map(r => `bookmarked ${r.jid}`),
+    ]
   },
 
   quickChatRooms: () => {

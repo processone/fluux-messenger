@@ -75,13 +75,23 @@ export function ConversationList() {
   // Create maps for quick lookup
   const contactMap = new Map(contacts.map(c => [c.jid, c]))
 
-  const handleConversationClick = (convId: string) => {
-    // Push if going from list to first item, replace if switching between items
-    const hasActive = !!chatStore.getState().activeConversationId
-    void setActiveRoom(null)
-    void setActiveConversation(convId)
-    navigateToMessages(convId, { replace: hasActive })
+  // Identity-stable click handler. useCallback is unreliable here: the React
+  // Compiler leaves JSX-only callbacks as fresh closures, which breaks
+  // ConversationItem's React.memo and re-renders the whole list on every update.
+  // A lazy-init ref + "latest" ref keeps the handler stable for the list's life.
+  const latestNavRef = useRef({ setActiveRoom, setActiveConversation, navigateToMessages })
+  latestNavRef.current = { setActiveRoom, setActiveConversation, navigateToMessages }
+  const clickRef = useRef<((convId: string) => void) | null>(null)
+  if (!clickRef.current) {
+    clickRef.current = (convId: string) => {
+      const L = latestNavRef.current
+      const hasActive = !!chatStore.getState().activeConversationId
+      void L.setActiveRoom(null)
+      void L.setActiveConversation(convId)
+      L.navigateToMessages(convId, { replace: hasActive })
+    }
   }
+  const handleConversationClick = clickRef.current
 
   // Keyboard navigation
   // Alt+Arrow navigation is owned by the global handler in useKeyboardShortcuts
@@ -118,7 +128,7 @@ export function ConversationList() {
             isActive={conv.id === activeConversationId}
             isSelected={index === selectedIndex}
             isKeyboardNav={isKeyboardNav}
-            onClick={() => handleConversationClick(conv.id)}
+            onClick={handleConversationClick}
             {...getItemAttribute(index)}
             {...getItemProps(index)}
           />
@@ -162,12 +172,20 @@ export function ArchiveList() {
 
   const contactMap = new Map(contacts.map(c => [c.jid, c]))
 
-  const handleConversationClick = (convId: string) => {
-    const hasActive = !!chatStore.getState().activeConversationId
-    void setActiveRoom(null)
-    void setActiveConversation(convId)
-    navigateToArchive(convId, { replace: hasActive })
+  // Identity-stable click handler (see ConversationList for rationale).
+  const latestNavRef = useRef({ setActiveRoom, setActiveConversation, navigateToArchive })
+  latestNavRef.current = { setActiveRoom, setActiveConversation, navigateToArchive }
+  const clickRef = useRef<((convId: string) => void) | null>(null)
+  if (!clickRef.current) {
+    clickRef.current = (convId: string) => {
+      const L = latestNavRef.current
+      const hasActive = !!chatStore.getState().activeConversationId
+      void L.setActiveRoom(null)
+      void L.setActiveConversation(convId)
+      L.navigateToArchive(convId, { replace: hasActive })
+    }
   }
+  const handleConversationClick = clickRef.current
 
   const { selectedIndex, isKeyboardNav, getItemProps, getItemAttribute, getContainerProps } = useListKeyboardNav({
     items: archivedConversations,
@@ -201,7 +219,7 @@ export function ArchiveList() {
             isActive={conv.id === activeConversationId}
             isSelected={index === selectedIndex}
             isKeyboardNav={isKeyboardNav}
-            onClick={() => handleConversationClick(conv.id)}
+            onClick={handleConversationClick}
             {...getItemAttribute(index)}
             {...getItemProps(index)}
           />
@@ -228,7 +246,7 @@ interface ConversationItemProps {
   isActive: boolean
   isSelected?: boolean
   isKeyboardNav?: boolean
-  onClick: () => void
+  onClick: (conversationId: string) => void
   onMouseEnter?: (e: React.MouseEvent) => void
   onMouseMove?: (e: React.MouseEvent) => void
   'data-conv-id'?: string
@@ -266,7 +284,7 @@ export const ConversationItem = memo(function ConversationItem({
 
   const handleClick = () => {
     if (isOpen || longPressTriggered.current) return
-    onClick()
+    onClick(conversation.id)
   }
 
   return (

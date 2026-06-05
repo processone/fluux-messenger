@@ -2,11 +2,11 @@ import React, { useState, useRef, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { useContextMenu, useListKeyboardNav, useRouteSync } from '@/hooks'
+import { detectRenderLoop, trackSelectorChange } from '@/utils/renderLoopDetector'
 import {
   useRoomActions,
   roomStore,
   generateConsistentColorHexSync,
-  type Room,
 } from '@fluux/sdk'
 import { useChatStore, useRoomStore } from '@fluux/sdk/react'
 import { formatLocalizedPreview } from '@/utils/messagePreviewText'
@@ -29,94 +29,135 @@ import {
   Plus,
 } from 'lucide-react'
 
+type SidebarSection = 'quick' | 'joined' | 'bookmarked'
+
+/** Decode a "<section> <jid>" entry from roomSidebarJids(). */
+function decodeSidebarEntry(entry: string): { section: SidebarSection; jid: string } {
+  const sep = entry.indexOf(' ')
+  return { section: entry.slice(0, sep) as SidebarSection, jid: entry.slice(sep + 1) }
+}
+
 export function RoomsList() {
+  detectRenderLoop('RoomsList')
   const { t } = useTranslation()
-  // Focused subscriptions — avoid useRoom() which subscribes to ~15 values
-  // (activeRoom, activeMessages, totalUnreadCount, etc.) that this list-level
-  // component doesn't need. RoomsList is always mounted in the Sidebar, so each
-  // unrelated subscription would re-render the whole list during sync.
-  // drafts is intentionally NOT subscribed here — each RoomItem subscribes to
-  // its own draft entry to avoid full-list re-renders on per-room keystrokes.
-  const rooms = useRoomStore(useShallow((s) => s.allRooms()))
+
+  // Subscribe ONLY to the sidebar-ordered, section-encoded list of room JIDs.
+  // This re-renders the list only on membership / order / section changes — NOT on
+  // per-room message, unread, or last-message-preview churn (which is the storm a
+  // multi-room join produces). Each RoomItem subscribes to its own room by JID, so
+  // a message to one room re-renders just that row. drafts/typing are likewise per-row.
+  const sidebarEntries = useRoomStore(useShallow((s) => s.roomSidebarJids()))
   const activeRoomJid = useRoomStore((s) => s.activeRoomJid)
   const { joinRoom, leaveRoom, setBookmark, removeBookmark, setActiveRoom } = useRoomActions()
   const setActiveConversation = useChatStore((s) => s.setActiveConversation)
   const { navigateToRooms } = useRouteSync()
-  const [editingRoom, setEditingRoom] = useState<Room | null>(null)
+  const [editingRoomJid, setEditingRoomJid] = useState<string | null>(null)
   const [showCreateRoom, setShowCreateRoom] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
   const zoneRef = useSidebarZone()
 
-  // Separate quick chats, joined/joining rooms, and bookmarked-only rooms
-  const quickChats = rooms.filter(r => r.isQuickChat)
-  // Include rooms that are joined OR currently joining (so they move to Joined section immediately)
-  const joinedRooms = rooms.filter(r => (r.joined || r.isJoining) && !r.isQuickChat)
-  const bookmarkedNotJoined = rooms
-    .filter(r => !r.joined && !r.isJoining && r.isBookmarked && !r.isQuickChat)
-    .sort((a, b) => (a.name || a.jid).toLowerCase().localeCompare((b.name || b.jid).toLowerCase()))
+  // Diagnostic: track the subscription value per render (dev-only).
+  trackSelectorChange('RoomsList', 'sidebarEntries', sidebarEntries)
+  trackSelectorChange('RoomsList', 'activeRoomJid', activeRoomJid)
 
-  // Full list of rooms for plain arrow navigation (all rooms)
-  const flatRooms = [...quickChats, ...joinedRooms, ...bookmarkedNotJoined]
-
-  // Map from jid to flat index for quick lookup
-  const jidToIndex = new Map(flatRooms.map((r, i) => [r.jid, i]))
-
-  const handleRoomClick = (roomJid: string, isJoined: boolean) => {
-    // Allow single-click to select any room (joined or bookmarked)
-    // Non-joined rooms will show cached history with a "join to participate" prompt
-    void isJoined // Unused now, but kept for API consistency
-    // Push if going from list to first item, replace if switching between rooms
-    const hasActive = !!roomStore.getState().activeRoomJid
-    // Clear any active 1:1 conversation
-    void setActiveConversation(null)
-    // Set this room as active
-    void setActiveRoom(roomJid)
-    navigateToRooms(roomJid, { replace: hasActive })
+  // Decode into sections (display order is already correct in sidebarEntries).
+  const quickChatJids: string[] = []
+  const joinedJids: string[] = []
+  const bookmarkedJids: string[] = []
+  const flatJids: string[] = []
+  for (const entry of sidebarEntries) {
+    const { section, jid } = decodeSidebarEntry(entry)
+    flatJids.push(jid)
+    if (section === 'quick') quickChatJids.push(jid)
+    else if (section === 'joined') joinedJids.push(jid)
+    else bookmarkedJids.push(jid)
   }
+  const jidToIndex = new Map(flatJids.map((jid, i) => [jid, i]))
 
-  const handleRoomDoubleClick = async (roomJid: string, isJoined: boolean, nickname: string) => {
-    const hasActive = !!roomStore.getState().activeRoomJid
-    if (isJoined) {
-      // If already joined, just select it
-      void setActiveConversation(null)
-      void setActiveRoom(roomJid)
-    } else {
-      // Join the bookmarked room and switch to it
-      await joinRoom(roomJid, nickname)
-      void setActiveConversation(null)
-      void setActiveRoom(roomJid)
+  // Stable per-row callbacks (taking a JID) so the memoized RoomItem rows keep
+  // identity-stable props and only re-render when their own room changes.
+  //
+  // NOTE: useCallback is intentionally NOT used here. With the React Compiler
+  // enabled, callbacks that are only consumed by JSX (not by a hook dependency)
+  // are left as fresh closures each render; the parent's JSX memoization is
+  // supposed to cover them, but it is invalidated whenever activeRoomJid /
+  // selectedIndex change — which re-creates the closures and breaks RoomItem's
+  // React.memo, re-rendering every row. Building the handlers once in a ref and
+  // routing through a "latest" ref keeps their identity stable for the lifetime
+  // of the list while always invoking the current actions.
+  const latestRef = useRef({ setActiveConversation, setActiveRoom, joinRoom, leaveRoom, removeBookmark, setBookmark, navigateToRooms, setEditingRoomJid })
+  latestRef.current = { setActiveConversation, setActiveRoom, joinRoom, leaveRoom, removeBookmark, setBookmark, navigateToRooms, setEditingRoomJid }
+
+  const handlersRef = useRef<{
+    onSelect: (roomJid: string) => void
+    onActivate: (roomJid: string) => void
+    onJoin: (roomJid: string) => void
+    onLeave: (roomJid: string) => void
+    onEditBookmark: (roomJid: string) => void
+    onRemoveBookmark: (roomJid: string) => void
+    onToggleAutojoin: (roomJid: string) => void
+  } | null>(null)
+  if (!handlersRef.current) {
+    handlersRef.current = {
+      onSelect: (roomJid) => {
+        const L = latestRef.current
+        const hasActive = !!roomStore.getState().activeRoomJid
+        void L.setActiveConversation(null)
+        void L.setActiveRoom(roomJid)
+        L.navigateToRooms(roomJid, { replace: hasActive })
+      },
+      onActivate: async (roomJid) => {
+        const L = latestRef.current
+        const room = roomStore.getState().getRoom(roomJid)
+        const hasActive = !!roomStore.getState().activeRoomJid
+        if (room?.joined) {
+          void L.setActiveConversation(null)
+          void L.setActiveRoom(roomJid)
+        } else {
+          await L.joinRoom(roomJid, room?.nickname ?? '')
+          void L.setActiveConversation(null)
+          void L.setActiveRoom(roomJid)
+        }
+        L.navigateToRooms(roomJid, { replace: hasActive })
+      },
+      onJoin: (roomJid) => {
+        const L = latestRef.current
+        const room = roomStore.getState().getRoom(roomJid)
+        void L.joinRoom(roomJid, room?.nickname ?? '')
+      },
+      onLeave: (roomJid) => {
+        const L = latestRef.current
+        if (roomStore.getState().activeRoomJid === roomJid) void L.setActiveRoom(null)
+        void L.leaveRoom(roomJid)
+      },
+      onEditBookmark: (roomJid) => latestRef.current.setEditingRoomJid(roomJid),
+      onRemoveBookmark: (roomJid) => { void latestRef.current.removeBookmark(roomJid) },
+      onToggleAutojoin: (roomJid) => {
+        const room = roomStore.getState().getRoom(roomJid)
+        if (!room) return
+        void latestRef.current.setBookmark(roomJid, {
+          name: room.name,
+          nick: room.nickname,
+          autojoin: !room.autojoin,
+        })
+      },
     }
-    navigateToRooms(roomJid, { replace: hasActive })
   }
+  const handlers = handlersRef.current
 
-  // Keyboard navigation - select room on Enter (same as single-click)
-  const handleRoomSelect = (room: Room) => {
-    // Select the room (joined or bookmarked) to show its content
-    // Non-joined rooms will show cached history with join prompt
-    const hasActive = !!roomStore.getState().activeRoomJid
-    void setActiveConversation(null)
-    void setActiveRoom(room.jid)
-    navigateToRooms(room.jid, { replace: hasActive })
-  }
-
-  // Keyboard navigation:
-  // - Plain arrows: highlight rooms (all rooms including bookmarked) — does not activate
-  // - Enter: select highlighted room
-  // - Alt+arrows: handled by the global shortcut (useKeyboardShortcuts.goToNextItem)
-  //   which navigates joined rooms only. The list reacts via `activeItemId` so
-  //   the active room is scrolled into view.
+  // Keyboard navigation over the flat JID list. Enter selects the highlighted room.
   const { selectedIndex, isKeyboardNav, getItemProps, getItemAttribute, getContainerProps } = useListKeyboardNav({
-    items: flatRooms,
-    onSelect: handleRoomSelect,
+    items: flatJids,
+    onSelect: handlers.onSelect,
     listRef,
-    getItemId: (room) => room.jid,
+    getItemId: (jid) => jid,
     itemAttribute: 'data-room-jid',
     zoneRef,
     enableBounce: true,
     activeItemId: activeRoomJid,
   })
 
-  if (rooms.length === 0) {
+  if (sidebarEntries.length === 0) {
     return (
       <>
         <div className="px-3 py-4 text-fluux-muted text-sm text-center">
@@ -140,116 +181,66 @@ export function RoomsList() {
     )
   }
 
+  const editingRoom = editingRoomJid ? roomStore.getState().getRoom(editingRoomJid) : null
+
+  const renderRoom = (jid: string, isQuickChat: boolean) => {
+    const flatIndex = jidToIndex.get(jid) ?? -1
+    return (
+      <RoomItem
+        key={jid}
+        roomJid={jid}
+        isActive={jid === activeRoomJid}
+        isSelected={flatIndex === selectedIndex}
+        isKeyboardNav={isKeyboardNav}
+        isQuickChat={isQuickChat}
+        onSelect={handlers.onSelect}
+        onActivate={handlers.onActivate}
+        onJoin={handlers.onJoin}
+        onLeave={handlers.onLeave}
+        onEditBookmark={handlers.onEditBookmark}
+        onRemoveBookmark={handlers.onRemoveBookmark}
+        onToggleAutojoin={handlers.onToggleAutojoin}
+        {...getItemAttribute(flatIndex)}
+        {...getItemProps(flatIndex)}
+      />
+    )
+  }
+
   return (
     <div ref={listRef} className="px-2 py-2" {...getContainerProps()}>
       {/* Quick Chats - only show if any exist */}
-      {quickChats.length > 0 && (
+      {quickChatJids.length > 0 && (
         <div className="mb-4">
           <h3 className="text-xs font-semibold text-fluux-muted uppercase px-2 mb-2 flex items-center gap-1">
             <Zap className="size-3 text-amber-500" />
-            {t('rooms.quickChatSection')} — {quickChats.length}
+            {t('rooms.quickChatSection')} — {quickChatJids.length}
           </h3>
           <div className="space-y-0.5">
-            {quickChats.map((room) => {
-              const flatIndex = jidToIndex.get(room.jid) ?? -1
-              return (
-                <RoomItem
-                  key={room.jid}
-                  room={room}
-                  isActive={room.jid === activeRoomJid}
-                  isSelected={flatIndex === selectedIndex}
-                  isKeyboardNav={isKeyboardNav}
-                  onClick={() => handleRoomClick(room.jid, true)}
-                  onDoubleClick={() => handleRoomDoubleClick(room.jid, true, room.nickname)}
-                  onJoin={() => joinRoom(room.jid, room.nickname)}
-                  onLeave={() => {
-                    if (activeRoomJid === room.jid) void setActiveRoom(null)
-                    void leaveRoom(room.jid)
-                  }}
-                  onEditBookmark={() => {}} // Quick chats don't have bookmark editing
-                  onRemoveBookmark={() => {}} // Quick chats aren't bookmarked
-                  onToggleAutojoin={() => {}} // Quick chats don't have autojoin
-                  isQuickChat
-                  {...getItemAttribute(flatIndex)}
-                  {...getItemProps(flatIndex)}
-                />
-              )
-            })}
+            {quickChatJids.map((jid) => renderRoom(jid, true))}
           </div>
         </div>
       )}
 
       {/* Joined rooms */}
-      {joinedRooms.length > 0 && (
+      {joinedJids.length > 0 && (
         <>
           <h3 className="text-xs font-semibold text-fluux-muted uppercase px-2 mb-2">
-              {t('rooms.joined')} — {joinedRooms.length}
+              {t('rooms.joined')} — {joinedJids.length}
           </h3>
           <div className="space-y-0.5">
-            {joinedRooms.map((room) => {
-              const flatIndex = jidToIndex.get(room.jid) ?? -1
-              return (
-                <RoomItem
-                  key={room.jid}
-                  room={room}
-                  isActive={room.jid === activeRoomJid}
-                  isSelected={flatIndex === selectedIndex}
-                  isKeyboardNav={isKeyboardNav}
-                  onClick={() => handleRoomClick(room.jid, true)}
-                  onDoubleClick={() => handleRoomDoubleClick(room.jid, true, room.nickname)}
-                  onJoin={() => joinRoom(room.jid, room.nickname)}
-                  onLeave={() => {
-                    if (activeRoomJid === room.jid) void setActiveRoom(null)
-                    void leaveRoom(room.jid)
-                  }}
-                  onEditBookmark={() => setEditingRoom(room)}
-                  onRemoveBookmark={() => removeBookmark(room.jid)}
-                  onToggleAutojoin={() => setBookmark(room.jid, {
-                    name: room.name,
-                    nick: room.nickname,
-                    autojoin: !room.autojoin,
-                  })}
-                  {...getItemAttribute(flatIndex)}
-                  {...getItemProps(flatIndex)}
-                />
-              )
-            })}
+            {joinedJids.map((jid) => renderRoom(jid, false))}
           </div>
         </>
       )}
 
       {/* Bookmarked but not joined */}
-      {bookmarkedNotJoined.length > 0 && (
+      {bookmarkedJids.length > 0 && (
         <>
           <h3 className="text-xs font-semibold text-fluux-muted uppercase px-2 mb-2 mt-4">
-            {t('rooms.bookmarked')} — {bookmarkedNotJoined.length}
+            {t('rooms.bookmarked')} — {bookmarkedJids.length}
           </h3>
           <div className="space-y-0.5">
-          {bookmarkedNotJoined.map((room) => {
-            const flatIndex = jidToIndex.get(room.jid) ?? -1
-            return (
-              <RoomItem
-                key={room.jid}
-                room={room}
-                isActive={room.jid === activeRoomJid}
-                isSelected={flatIndex === selectedIndex}
-                isKeyboardNav={isKeyboardNav}
-                onClick={() => handleRoomClick(room.jid, false)}
-                onDoubleClick={() => handleRoomDoubleClick(room.jid, false, room.nickname)}
-                onJoin={() => joinRoom(room.jid, room.nickname)}
-                onLeave={() => leaveRoom(room.jid)}
-                onEditBookmark={() => setEditingRoom(room)}
-                onRemoveBookmark={() => removeBookmark(room.jid)}
-                onToggleAutojoin={() => setBookmark(room.jid, {
-                  name: room.name,
-                  nick: room.nickname,
-                  autojoin: !room.autojoin,
-                })}
-                {...getItemAttribute(flatIndex)}
-                {...getItemProps(flatIndex)}
-              />
-            )
-          })}
+            {bookmarkedJids.map((jid) => renderRoom(jid, false))}
           </div>
         </>
       )}
@@ -260,9 +251,9 @@ export function RoomsList() {
           room={editingRoom}
           onSave={async (options) => {
             await setBookmark(editingRoom.jid, options)
-            setEditingRoom(null)
+            setEditingRoomJid(null)
           }}
-          onClose={() => setEditingRoom(null)}
+          onClose={() => setEditingRoomJid(null)}
         />
       )}
 
@@ -275,17 +266,17 @@ export function RoomsList() {
 }
 
 interface RoomItemProps {
-  room: Room
+  roomJid: string
   isActive: boolean
   isSelected?: boolean
   isKeyboardNav?: boolean
-  onClick: () => void
-  onDoubleClick: () => void
-  onJoin: () => void
-  onLeave: () => void
-  onEditBookmark: () => void
-  onRemoveBookmark: () => void
-  onToggleAutojoin: () => void
+  onSelect: (roomJid: string) => void
+  onActivate: (roomJid: string) => void
+  onJoin: (roomJid: string) => void
+  onLeave: (roomJid: string) => void
+  onEditBookmark: (roomJid: string) => void
+  onRemoveBookmark: (roomJid: string) => void
+  onToggleAutojoin: (roomJid: string) => void
   onMouseEnter?: (e: React.MouseEvent) => void
   onMouseMove?: (e: React.MouseEvent) => void
   isQuickChat?: boolean
@@ -294,12 +285,12 @@ interface RoomItemProps {
 }
 
 const RoomItem = memo(function RoomItem({
-  room,
+  roomJid,
   isActive,
   isSelected,
   isKeyboardNav,
-  onClick,
-  onDoubleClick,
+  onSelect,
+  onActivate,
   onJoin,
   onLeave,
   onEditBookmark,
@@ -315,9 +306,13 @@ const RoomItem = memo(function RoomItem({
   const menu = useContextMenu()
   const currentLang = i18n.language.split('-')[0]
   const timeFormat = useSettingsStore((s) => s.timeFormat)
-  // Per-item subscription: only this row re-renders when ITS draft changes,
-  // not the whole list when any room's draft changes.
-  const draft = useRoomStore((s) => s.drafts.get(room.jid))
+  // Per-row subscriptions: this row re-renders only when ITS room (messages,
+  // unread, last message, presence) or draft changes — not when any other room
+  // updates during a multi-room join / MAM sync.
+  const room = useRoomStore((s) => s.getRoom(roomJid))
+  const draft = useRoomStore((s) => s.drafts.get(roomJid))
+
+  if (!room) return null
 
   // Get last message for preview (uses pre-computed lastMessage from metadata for better performance)
   const lastMessage = room.lastMessage ?? null
@@ -326,14 +321,14 @@ const RoomItem = memo(function RoomItem({
     if (menu.isOpen || menu.longPressTriggered.current) return
     // Don't allow click during joining - room is not ready yet
     if (room.isJoining) return
-    onClick()
+    onSelect(roomJid)
   }
 
   const handleDoubleClick = () => {
     if (menu.isOpen) return
     // Don't allow double-click during joining
     if (room.isJoining) return
-    onDoubleClick()
+    onActivate(roomJid)
   }
 
   // Determine tooltip based on state
@@ -475,7 +470,7 @@ const RoomItem = memo(function RoomItem({
           {/* Join (only for non-joined rooms) */}
           {!room.joined && (
             <button
-              onClick={() => { menu.close(); onJoin() }}
+              onClick={() => { menu.close(); onJoin(roomJid) }}
               className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
             >
               <LogIn className="size-4" />
@@ -486,7 +481,7 @@ const RoomItem = memo(function RoomItem({
           {/* Edit bookmark (only for bookmarked rooms) */}
           {room.isBookmarked && (
             <button
-              onClick={() => { menu.close(); onEditBookmark() }}
+              onClick={() => { menu.close(); onEditBookmark(roomJid) }}
               className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
             >
               <Pencil className="size-4" />
@@ -497,7 +492,7 @@ const RoomItem = memo(function RoomItem({
           {/* Toggle autojoin (only for bookmarked rooms) */}
           {room.isBookmarked && (
             <button
-              onClick={() => { menu.close(); onToggleAutojoin() }}
+              onClick={() => { menu.close(); onToggleAutojoin(roomJid) }}
               className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
             >
               {room.autojoin ? (
@@ -522,7 +517,7 @@ const RoomItem = memo(function RoomItem({
           {/* Leave room (only for joined rooms) */}
           {room.joined && (
             <button
-              onClick={() => { menu.close(); onLeave() }}
+              onClick={() => { menu.close(); onLeave(roomJid) }}
               className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-red hover:bg-fluux-red hover:text-white transition-colors"
             >
               <LogOut className="size-4" />
@@ -533,7 +528,7 @@ const RoomItem = memo(function RoomItem({
           {/* Remove bookmark (only for bookmarked rooms) */}
           {room.isBookmarked && (
             <button
-              onClick={() => { menu.close(); onRemoveBookmark() }}
+              onClick={() => { menu.close(); onRemoveBookmark(roomJid) }}
               className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-red hover:bg-fluux-red hover:text-white transition-colors"
             >
               <BookmarkX className="size-4" />
