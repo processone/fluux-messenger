@@ -46,7 +46,7 @@ import {
   FRESH_SESSION_IQ_TIMEOUT_MS,
   FRESH_SESSION_SETUP_TIMEOUT_MS,
 } from './modules/connectionTimeouts'
-import { getBareJid, getLocalPart } from './jid'
+import { getBareJid, getLocalPart, getDomain } from './jid'
 import { getStorageScopeJid, setStorageScopeJid } from '../utils/storageScope'
 
 /**
@@ -1774,7 +1774,7 @@ export class XMPPClient {
       const attachment = parseOobData(stanza)
       if (attachment) {
         logDebug(
-          `E2EE deferred decrypt: attachment from ${senderJid} — ` +
+          `E2EE deferred decrypt: attachment from ${getDomain(senderJid)} — ` +
           `url=${attachment.url.slice(0, 40)}… mediaType=${attachment.mediaType ?? 'none'} ` +
           `encrypted=${!!attachment.encryption} name=${attachment.name ?? 'none'}`,
         )
@@ -1805,7 +1805,7 @@ export class XMPPClient {
         ...(attachment && { attachment }),
       }
     } catch (err) {
-      logWarn(`E2EE deferred decrypt failed for message from ${senderJid}: ${err instanceof Error ? err.message : String(err)}`)
+      logWarn(`E2EE deferred decrypt failed for message from ${getDomain(senderJid)}: ${err instanceof Error ? err.message : String(err)}`)
       return { kind: 'pending' }
     }
   }
@@ -1874,7 +1874,7 @@ export class XMPPClient {
       }
     }
     if (updated > 0) {
-      logInfo(`E2EE peer key change: updated ${updated} message(s) for ${peer}`)
+      logInfo(`E2EE peer key change: updated ${updated} message(s) for ${getDomain(peer)}`)
     }
   }
 
