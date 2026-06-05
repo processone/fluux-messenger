@@ -17,13 +17,53 @@ and `docs/superpowers/specs/2026-06-05-perf-stress-ui-harness-design.md`.
 - `mode:live` = reorders on every message (worst case).
 For custom sequences, drive `window.__demoClient.emitSDK('room:message', { roomJid, message })`.
 
+**Test EVERY churn source, not just messages.** A component can be decoupled from
+one and still storm on another (PR #451 killed the composer's *message* re-renders
+but it still re-renders ~1:1 on *occupant* churn — `addOccupant`/`removeOccupant`
+replace the occupants Map each event, so `useRoomOccupants` consumers + the
+unmemoized `OccupantPanel` storm). Drivers to replay individually:
+- messages → `emitSDK('room:message', { roomJid, message })`
+- presence storm (netsplit rejoin / busy room / show-flapping) →
+  `emitSDK('room:occupant-joined'|'room:occupant-left', …)` (one event per stanza;
+  `room:occupants-batch` is the single-render initial-join path — don't use it to
+  simulate a storm)
+- typing → `emitSDK('room:typing', { roomJid, nick, isTyping })`
+
+**Running from a git WORKTREE:** the worktree has no `node_modules`; the explicit-path
+alias `@xmpp/sasl-scram-sha-1 → ../../node_modules/...` in `apps/fluux/vite.config.ts`
+then fails (`[UNLOADABLE_DEPENDENCY]`, blank page). Fix: `ln -s <main-checkout>/node_modules <worktree>/node_modules`
+(remove it when done — `.gitignore`'s `node_modules/` has a trailing slash so it does
+NOT ignore a symlink, and it shows in `git status`). `@fluux/sdk` is aliased to
+`packages/fluux-sdk/src`, so you ARE testing the worktree's source.
+
 ## 2. Measure
-- `await window.__perf.measure('label', () => window.__demoClient.runStressScenario({ kind:'room-join', rooms:15, messagesPerRoom:150, mode:'live' }))`
-  → per-component render table.
-- `window.__det = await import('/src/utils/renderLoopDetector.ts')` →
-  `__det.getRenderStats()`, `__det.getSelectorHistory()`.
+- **Preferred:** `await window.__perf.measure('label', () => window.__demoClient.runStressScenario({ kind:'room-join', rooms:15, messagesPerRoom:150, mode:'live' }))`
+  → per-component render table (react-scan).
+- **If `?perf=1` / react-scan HANGS the renderer on load** (seen: react-scan +
+  React-Compiler + StrictMode over the full demo tree — every eval/screenshot times
+  out): skip it and use the always-on detector instead. `window.__det = await import('/src/utils/renderLoopDetector.ts')`
+  (same singleton Vite serves) → `__det.getRenderStats()`. Instrumented components:
+  App, ChatLayout, Sidebar, RoomsList, ConversationList, RoomView, MessageList,
+  MessageComposer (NOT RoomMessageInput / OccupantPanel — add a counter for those).
+- **Detector `getRenderStats()` count uses a RESETTING 1000ms window** — it zeroes
+  when a component renders past the window, so it CANNOT capture cumulative magnitude
+  for floods that span/​spill past ~1s (you read a tiny post-reset remnant; saw a
+  60-event storm report "2"). For reliable magnitude, splice a never-resetting counter
+  `;(globalThis).__rc = (globalThis).__rc||{}; (globalThis).__rc.X = ((globalThis).__rc.X||0)+1`
+  after each `detectRenderLoop()` call (and into un-instrumented components), reset
+  `window.__rc = {}` before each run. `startSyncGracePeriod()` raises the throw
+  threshold 200→500 + silences warnings so a legit heavy flood doesn't trip the
+  RenderLoopBoundary mid-measurement.
+- **Live preview evals choke** ("Promise was collected" / 30s timeout) on awaits ≳1s
+  and while the renderer is saturated mid-flood. So: FIRE the flood fire-and-forget in
+  one eval, `sleep` in Bash, READ counters in a separate eval (the `__rc` counter is
+  cumulative so read timing doesn't matter). Read the live store via
+  `import('/@fs/<abs>/packages/fluux-sdk/src/index.ts')` — same instance; verify
+  `roomStore.getState().activeRoomJid` matches the open room.
 - CAVEAT: React StrictMode doubles dev renders — divide by 2 for logical counts.
-- Sanity baseline: a no-op parent re-render should produce 0 child renders.
+- Sanity baseline: a no-op parent re-render should produce 0 child renders (the
+  per-event diagnostic — fire ONE event, read which counters tick — is the cleanest
+  signal and sidesteps batching/coalescing).
 
 ## 3. Diagnose — find the memo-breaking prop, then its source
 react-scan reports React-Compiler-memoized components as `forget:true`,

@@ -255,6 +255,23 @@ export function useRoomOccupants(roomJid: string): Map<string, RoomOccupant> {
   return useRoomStore(roomSelectors.runtimeOccupantsFor(roomJid)) ?? EMPTY_OCCUPANT_MAP
 }
 
+/**
+ * Subscribe to the room occupant COUNT (a primitive) instead of the occupants Map.
+ *
+ * The occupants Map ref is replaced on every occupant event (join / leave / show /
+ * avatar update), so `useRoomOccupants` consumers re-render on all of them. Use this
+ * when you only need the size: it re-renders only when the count actually changes
+ * (join / leave), bailing on metadata-only churn (e.g. presence flapping in a busy
+ * room). Read the occupant data non-reactively (`roomStore.getState()`) if you also
+ * need it for a computation that is already recomputed each render.
+ *
+ * @param roomJid - The room JID to subscribe to
+ * @returns The number of occupants currently in the room
+ */
+export function useRoomOccupantCount(roomJid: string): number {
+  return useRoomStore(roomSelectors.runtimeOccupantCountFor(roomJid))
+}
+
 /** Room sidebar item type - shared between hooks */
 export interface RoomSidebarItem {
   jid: string
