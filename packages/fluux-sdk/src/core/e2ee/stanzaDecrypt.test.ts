@@ -28,6 +28,7 @@ import type {
   E2EEProtocolDescriptor,
   EncryptedPayload,
   IdentityInfo,
+  Logger,
   PeerSupport,
   PluginContext,
   SecurityContext,
@@ -64,6 +65,9 @@ class FakeE2EEPlugin implements E2EEPlugin {
   readonly descriptor = descriptor
   private ctx: PluginContext | null = null
 
+  /** When true, {@link decrypt} throws to exercise the failure-logging path. */
+  public failDecrypt = false
+
   constructor(private readonly authoredAt: Date | undefined) {}
 
   async init(ctx: PluginContext): Promise<void> {
@@ -95,6 +99,7 @@ class FakeE2EEPlugin implements E2EEPlugin {
     _h: ConversationHandle,
     _payload: EncryptedPayload,
   ): Promise<DecryptResult> {
+    if (this.failDecrypt) throw new Error('decrypt boom')
     const securityContext: SecurityContext = {
       protocolId: TEST_PROTOCOL_ID,
       trust: 'tofu',
@@ -147,6 +152,16 @@ async function makeManager(plugin: E2EEPlugin): Promise<E2EEManager> {
   })
   await manager.register(plugin)
   return manager
+}
+
+/** Records every call to the injected diagnostic logger for assertions. */
+function makeSpyLogger(): { logger: Logger; calls: { level: string; message: string }[] } {
+  const calls: { level: string; message: string }[] = []
+  const rec = (level: string) => (message: string) => calls.push({ level, message })
+  return {
+    logger: { debug: rec('debug'), info: rec('info'), warn: rec('warn'), error: rec('error') },
+    calls,
+  }
 }
 
 function buildStanza(): Element {
@@ -670,5 +685,36 @@ describe('decryptStanzaInPlace unsupported encryption', () => {
     expect(result.attempted).toBe(false)
     expect(result.unsupportedEncryption).toBeUndefined()
     expect(result.encryptedPayloadXml).toContain('eu.siacs.conversations.axolotl')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Decrypt-path diagnostics route through the manager's injected logger
+// ---------------------------------------------------------------------------
+
+describe('decryptStanzaInPlace — failure logging routes through the manager logger', () => {
+  it('warns via the diagnostic logger with domain only on decrypt failure', async () => {
+    const { logger, calls } = makeSpyLogger()
+    const manager = new E2EEManager({
+      storage: new InMemoryStorageBackend(),
+      xmpp: stubXmppPrimitives(),
+      account: { jid: 'me@example.com' },
+      logger,
+    })
+    const plugin = new FakeE2EEPlugin(undefined)
+    plugin.failDecrypt = true
+    await manager.register(plugin)
+
+    const stanza = xml(
+      'message',
+      { from: 'eve@private.example.org/res', id: 'm1' },
+      xml('enc', { xmlns: TEST_NAMESPACE }, 'ciphertext'),
+    ) as unknown as Element
+    await decryptStanzaInPlace(stanza, manager, 'eve@private.example.org', 'live')
+
+    const warn = calls.find((c) => c.level === 'warn' && c.message.includes('decrypt failed'))
+    expect(warn).toBeDefined()
+    expect(warn!.message).toContain('private.example.org')
+    expect(warn!.message).not.toContain('eve@')
   })
 })
