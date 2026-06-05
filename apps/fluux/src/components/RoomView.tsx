@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useImperativeHandle, useMemo, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useRoomActive, useRoomEntity, useRoomOccupants, useRoster, getBareJid, generateConsistentColorHexSync, getPresenceFromShow, createMessageLookup, isMessageFromIgnoredUser, isReplyToIgnoredUser, canKick, canBan, canModerate, getAvailableAffiliations, getAvailableRoles, getMyReactions, type RoomMessage, type Room, type MentionReference, type ChatStateNotification, type Contact, type FileAttachment, type RoomAffiliation, type RoomRole, type PollData } from '@fluux/sdk'
+import { useRoomActive, useRoomEntity, useRoomOccupantCount, useRoster, getBareJid, generateConsistentColorHexSync, getPresenceFromShow, createMessageLookup, isMessageFromIgnoredUser, isReplyToIgnoredUser, canKick, canBan, canModerate, getAvailableAffiliations, getAvailableRoles, getMyReactions, type RoomMessage, type Room, type RoomOccupant, type MentionReference, type ChatStateNotification, type Contact, type FileAttachment, type RoomAffiliation, type RoomRole, type PollData } from '@fluux/sdk'
 import { useConnectionStore, useIgnoreStore, useRoomStore } from '@fluux/sdk/react'
 import { ignoreStore, roomStore, type IgnoredUser } from '@fluux/sdk/stores'
 import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat, useContextMenu, useWhisperCounterpartPresent, isSmallScreen } from '@/hooks'
@@ -66,6 +66,8 @@ const MAX_ROOM_SIZE_FOR_TYPING = 30
 
 // Stable empty array for useIgnoreStore selector to prevent infinite re-render loops
 const EMPTY_IGNORED_ARRAY: import('@fluux/sdk/stores').IgnoredUser[] = []
+// Stable empty fallback for the composer's NON-reactive occupants read.
+const EMPTY_OCCUPANTS: Map<string, RoomOccupant> = new Map()
 
 export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange, onStartChat, onShowProfile, findOnPageRef, onSearchInConversation }: RoomViewProps) {
   detectRenderLoop('RoomView')
@@ -1502,11 +1504,22 @@ export const RoomMessageInput = memo(function RoomMessageInput({
 }: RoomMessageInputProps & { ref?: React.Ref<MessageComposerHandle> }) {
   const { t } = useTranslation()
   // Narrow, reference-stable subscriptions: the composer re-renders on entity
-  // changes (name/nickname) and occupant changes, but NOT on message churn.
+  // changes (name/nickname) and occupant COUNT changes (join/leave), but NOT on
+  // message churn nor on occupant metadata churn (show/avatar/presence flapping).
   const entity = useRoomEntity(roomJid)
   const roomName = entity?.name ?? roomJid
   const roomNickname = entity?.nickname ?? ''
-  const occupants = useRoomOccupants(roomJid)
+  // Subscribe ONLY to the occupant COUNT (a primitive). The occupants Map ref is
+  // replaced on every occupant event (join/leave/show/avatar update), so subscribing
+  // to the Map re-rendered the composer ~1:1 with presence churn (netsplit rejoin,
+  // busy room, show-flapping). The count changes only on join/leave. The occupant
+  // DATA — needed for mention candidates and the typing threshold — is read
+  // NON-reactively from the store on each render (like messageNicks below): the
+  // composer already re-renders on every keystroke while composing a mention, so the
+  // candidate list stays fresh without a Map subscription, and the nick set only
+  // changes on join/leave (a count change, which DOES re-render).
+  const occupantCount = useRoomOccupantCount(roomJid)
+  const occupants = roomStore.getState().getRoom(roomJid)?.occupants ?? EMPTY_OCCUPANTS
   // Draft actions are stable function refs — read non-reactively from the store.
   const { setDraft, getDraft, clearDraft, clearFirstNewMessageId } = roomStore.getState()
   const addToast = useToastStore((s) => s.addToast)
@@ -1554,8 +1567,8 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   // Type-to-focus: auto-focus composer when user starts typing anywhere
   useTypeToFocus(composerRef)
 
-  // Check if room is small enough to send typing notifications
-  const shouldSendTypingNotifications = occupants.size < MAX_ROOM_SIZE_FOR_TYPING
+  // Check if room is small enough to send typing notifications (reactive on count).
+  const shouldSendTypingNotifications = occupantCount < MAX_ROOM_SIZE_FOR_TYPING
 
   // Collect mention-candidate nicks (occupants + history authors + affiliated
   // members). Read NON-reactively from the store on each render: this must NOT

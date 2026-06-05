@@ -550,4 +550,16 @@ export const roomSelectors = {
   runtimeOccupantsFor: (roomJid: string) => (state: RoomState): Map<string, RoomOccupant> => {
     return state.roomRuntime.get(roomJid)?.occupants ?? EMPTY_OCCUPANT_MAP
   },
+
+  /**
+   * Get the occupant COUNT for a room (a primitive) using the runtime map.
+   *
+   * Prefer this over `runtimeOccupantsFor` when a consumer only needs the size:
+   * the occupants Map ref is replaced on every occupant event (join/leave/show/
+   * avatar update), so subscribing to the Map re-renders on all of them; the count
+   * only changes on join/leave, so a count subscription bails on metadata churn.
+   */
+  runtimeOccupantCountFor: (roomJid: string) => (state: RoomState): number => {
+    return state.roomRuntime.get(roomJid)?.occupants.size ?? 0
+  },
 }

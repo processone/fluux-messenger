@@ -123,6 +123,7 @@ vi.mock('@fluux/sdk', () => ({
   // Focused room subscriptions used by the memoized RoomMessageInput composer.
   useRoomEntity: () => mockActiveRoom ? { name: mockActiveRoom.name, nickname: mockActiveRoom.nickname } : undefined,
   useRoomOccupants: () => mockActiveRoom?.occupants ?? new Map(),
+  useRoomOccupantCount: () => mockActiveRoom?.occupants?.size ?? 0,
   useRoster: () => ({
     contacts: mockContacts,
   }),

@@ -132,6 +132,7 @@ export {
   useRoomRuntime,
   useRoomMessages,
   useRoomOccupants,
+  useRoomOccupantCount,
   useAllRoomSidebarItems,
   useRoomSidebarItems,
   useRoomTotalMentionsCount,

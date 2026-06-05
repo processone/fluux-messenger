@@ -9,7 +9,7 @@
  * - Shows contact avatars for known roster contacts
  * - Right-click context menu: private message, copy JID, ignore, user info
  */
-import { useState } from 'react'
+import { useState, useRef, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Room, RoomOccupant, Contact, PresenceShow, RoomAffiliation, RoomRole } from '@fluux/sdk'
 import { getPresenceFromShow, getBareJid, getBestPresenceShow, generateConsistentColorHexSync, canKick, canBan, getAvailableAffiliations, getAvailableRoles } from '@fluux/sdk'
@@ -50,6 +50,237 @@ export interface OccupantPanelProps {
 // Stable empty array for useIgnoreStore selector to prevent infinite re-render loops
 const EMPTY_IGNORED_ARRAY: IgnoredUser[] = []
 
+// Affiliation badge — pure mapping from affiliation to a small icon. Module-level so
+// the memoized OccupantRow can use it without recreating a closure per render.
+function getAffiliationBadge(affiliation: string) {
+  switch (affiliation) {
+    case 'owner':
+      return (
+        <span className="flex items-center gap-0.5 text-amber-600 dark:text-amber-400">
+          <Crown className="size-3" />
+        </span>
+      )
+    case 'admin':
+      return (
+        <span className="flex items-center gap-0.5 text-fluux-brand">
+          <Shield className="size-3" />
+        </span>
+      )
+    case 'member':
+      return (
+        <span className="flex items-center gap-0.5 text-fluux-green">
+          <UserCheck className="size-3" />
+        </span>
+      )
+    default:
+      return null
+  }
+}
+
+interface OccupantRowProps {
+  group: GroupedOccupant
+  roomJid: string
+  roomNickname: string
+  ownAvatar?: string | null
+  forceOffline: boolean
+  contactsByJid: Map<string, Contact>
+  ignored: boolean
+  onContextMenu: (group: GroupedOccupant, e: React.MouseEvent) => void
+  onTouchStart: (group: GroupedOccupant, e: React.TouchEvent) => void
+  onTouchEnd: (e: React.TouchEvent) => void
+  onTouchMove: (e: React.TouchEvent) => void
+}
+
+/**
+ * One occupant row (a bare-JID group of connections), memoized so a presence/occupant
+ * event re-renders ONLY the changed row, not the whole list. `roomStore.addOccupant`
+ * replaces the occupants Map but keeps unchanged occupants' object refs, so the
+ * connection-by-reference comparison below bails for every row except the one whose
+ * occupant object actually changed. All other props are kept reference-stable by the
+ * parent (callbacks via a lazy ref; `contactsByJid` from a memoized map).
+ */
+function occupantRowPropsEqual(prev: OccupantRowProps, next: OccupantRowProps): boolean {
+  const pc = prev.group.connections
+  const nc = next.group.connections
+  if (pc.length !== nc.length) return false
+  for (let i = 0; i < pc.length; i++) {
+    if (pc[i] !== nc[i]) return false // occupant object ref changed → this row changed
+  }
+  return (
+    prev.roomJid === next.roomJid &&
+    prev.roomNickname === next.roomNickname &&
+    prev.ownAvatar === next.ownAvatar &&
+    prev.forceOffline === next.forceOffline &&
+    prev.contactsByJid === next.contactsByJid &&
+    prev.ignored === next.ignored &&
+    prev.onContextMenu === next.onContextMenu &&
+    prev.onTouchStart === next.onTouchStart &&
+    prev.onTouchEnd === next.onTouchEnd &&
+    prev.onTouchMove === next.onTouchMove
+  )
+}
+
+const OccupantRow = memo(function OccupantRow({
+  group,
+  roomJid,
+  roomNickname,
+  ownAvatar,
+  forceOffline,
+  contactsByJid,
+  ignored,
+  onContextMenu,
+  onTouchStart,
+  onTouchEnd,
+  onTouchMove,
+}: OccupantRowProps) {
+  const { t } = useTranslation()
+  const primaryOccupant = group.connections[0]
+  const hasMultipleConnections = group.connections.length > 1
+  const isMe = group.connections.some(conn => conn.nick === roomNickname)
+
+  // Get occupant avatar from XEP-0398 or fall back to contact avatar
+  const occupantAvatar = group.connections.find(c => c.avatar)?.avatar
+  const contact = group.bareJid ? contactsByJid.get(group.bareJid) : undefined
+  const contactAvatar = contact?.avatar
+  const displayAvatar = occupantAvatar || contactAvatar
+
+  // Build tooltip showing all nicks if multiple connections
+  const tooltip = hasMultipleConnections
+    ? `${group.connections.map(c => c.nick).join(', ')} (${group.connections.length} ${t('rooms.connections')})`
+    : getOccupantTooltip(primaryOccupant, t, forceOffline)
+
+  // Collect all unique hats from all connections
+  const allHats = new Map<string, { uri: string; title: string; hue?: number }>()
+  for (const conn of group.connections) {
+    conn.hats?.forEach(hat => {
+      if (!allHats.has(hat.uri)) {
+        allHats.set(hat.uri, hat)
+      }
+    })
+  }
+
+  // Get highest affiliation from all connections
+  const affiliationPriority: Record<string, number> = { owner: 0, admin: 1, member: 2, outcast: 3, none: 4 }
+  const bestAffiliation = group.connections.reduce((best, conn) => {
+    const bestPriority = affiliationPriority[best] ?? 5
+    const connPriority = affiliationPriority[conn.affiliation] ?? 5
+    return connPriority < bestPriority ? conn.affiliation : best
+  }, 'none' as string)
+
+  return (
+    <Tooltip
+      content={tooltip || ''}
+      position="left"
+      disabled={!tooltip}
+      className="block"
+    >
+      <div
+        onContextMenu={(e) => onContextMenu(group, e)}
+        onTouchStart={(e) => onTouchStart(group, e)}
+        onTouchEnd={onTouchEnd}
+        onTouchMove={onTouchMove}
+        className={`px-4 py-1.5 flex items-center gap-2 hover:bg-fluux-hover/50 cursor-default
+                   ${isMe ? 'bg-fluux-brand/10' : ''}
+                   ${ignored ? 'opacity-40' : ''}`}
+      >
+        {/* Avatar with best presence (XEP-0398 occupant avatar or roster contact avatar) */}
+        <Avatar
+          identifier={group.primaryNick}
+          name={group.primaryNick}
+          avatarUrl={isMe ? (ownAvatar || undefined) : displayAvatar}
+          size="sm"
+          presence={getPresenceFromShow(group.bestPresence)}
+          presenceBorderColor="border-fluux-sidebar"
+          fallbackColor={isMe ? 'var(--fluux-bg-accent)' : undefined}
+          forceOffline={forceOffline}
+        />
+
+        {/* Nick and badges */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {isMe ? (
+              <span className="truncate text-sm font-semibold text-fluux-text">
+                {group.primaryNick}
+                <span className="text-fluux-muted font-normal"> {t('rooms.you')}</span>
+              </span>
+            ) : (
+              <UserInfoPopover
+                contact={group.bareJid ? contactsByJid.get(group.bareJid) : undefined}
+                jid={group.bareJid}
+                occupantJid={`${roomJid}/${group.primaryNick}`}
+                role={primaryOccupant.role}
+                affiliation={bestAffiliation as RoomAffiliation}
+              >
+                <span className="truncate text-sm text-fluux-text">
+                  {group.primaryNick}
+                </span>
+              </UserInfoPopover>
+            )}
+            {/* Connection count badge */}
+            {hasMultipleConnections && (
+              <span className="flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-medium rounded-full bg-fluux-muted/20 text-fluux-muted">
+                ×{group.connections.length}
+              </span>
+            )}
+            {getAffiliationBadge(bestAffiliation)}
+            {/* Ignored indicator */}
+            {ignored && (
+              <EyeOff className="size-3 text-fluux-muted" />
+            )}
+            {/* XEP-0317 Hats from all connections (max 3 inline, overflow in tooltip) */}
+            {(() => {
+              const hats = Array.from(allHats.values())
+              const MAX_INLINE = 3
+              const visible = hats.slice(0, MAX_INLINE)
+              const overflow = hats.slice(MAX_INLINE, MAX_INLINE + 9)
+              return (
+                <>
+                  {visible.map((hat) => (
+                    <span
+                      key={hat.uri}
+                      className="px-1.5 py-0.5 text-[10px] font-medium rounded"
+                      style={getHatColors(hat)}
+                    >
+                      {hat.title}
+                    </span>
+                  ))}
+                  {overflow.length > 0 && (
+                    <Tooltip
+                      content={
+                        <div className="flex flex-col gap-1">
+                          {overflow.map((hat) => (
+                            <span
+                              key={hat.uri}
+                              className="px-1.5 py-0.5 text-[10px] font-medium rounded inline-block"
+                              style={getHatColors(hat)}
+                            >
+                              {hat.title}
+                            </span>
+                          ))}
+                        </div>
+                      }
+                      position="top"
+                      delay={300}
+                    >
+                      <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-fluux-muted/20 text-fluux-muted cursor-default">
+                        +{overflow.length}
+                      </span>
+                    </Tooltip>
+                  )}
+                </>
+              )
+            })()}
+          </div>
+          {/* Show bare JID if available */}
+          {group.bareJid && (
+            <p className="text-xs text-fluux-muted truncate">{group.bareJid}</p>
+          )}
+        </div>
+      </div>
+    </Tooltip>
+  )
+}, occupantRowPropsEqual)
+
 export function OccupantPanel({
   room,
   contactsByJid,
@@ -70,18 +301,41 @@ export function OccupantPanel({
   const menu = useContextMenu()
   const [menuTarget, setMenuTarget] = useState<GroupedOccupant | null>(null)
 
-  const handleOccupantContextMenu = (e: React.MouseEvent, group: GroupedOccupant) => {
-    // Don't show menu for self
-    if (group.connections.some(conn => conn.nick === room.nickname)) return
-    setMenuTarget(group)
-    menu.handleContextMenu(e)
+  // Reference-STABLE row callbacks for the memoized OccupantRow. They must not be
+  // recreated each render or the memo would no-op (it compares them by reference).
+  // Lazy-init + a "latest" ref keeps the function identities fixed while still reading
+  // the current menu/nickname (the compiler-proof pattern, NOT useCallback).
+  const rowCtxRef = useRef({ menu, setMenuTarget, roomNickname: room.nickname })
+  rowCtxRef.current = { menu, setMenuTarget, roomNickname: room.nickname }
+  const rowHandlersRef = useRef<{
+    onContextMenu: (group: GroupedOccupant, e: React.MouseEvent) => void
+    onTouchStart: (group: GroupedOccupant, e: React.TouchEvent) => void
+    onTouchEnd: (e: React.TouchEvent) => void
+    onTouchMove: (e: React.TouchEvent) => void
+  } | null>(null)
+  if (!rowHandlersRef.current) {
+    rowHandlersRef.current = {
+      onContextMenu: (group, e) => {
+        const { menu, setMenuTarget, roomNickname } = rowCtxRef.current
+        if (group.connections.some(conn => conn.nick === roomNickname)) return // no menu for self
+        setMenuTarget(group)
+        menu.handleContextMenu(e)
+      },
+      onTouchStart: (group, e) => {
+        const { menu, setMenuTarget, roomNickname } = rowCtxRef.current
+        if (group.connections.some(conn => conn.nick === roomNickname)) return
+        setMenuTarget(group)
+        menu.handleTouchStart(e)
+      },
+      onTouchEnd: () => rowCtxRef.current.menu.handleTouchEnd(),
+      onTouchMove: () => rowCtxRef.current.menu.handleTouchEnd(),
+    }
   }
+  const rowHandlers = rowHandlersRef.current
 
-  const handleOccupantTouchStart = (e: React.TouchEvent, group: GroupedOccupant) => {
-    if (group.connections.some(conn => conn.nick === room.nickname)) return
-    setMenuTarget(group)
-    menu.handleTouchStart(e)
-  }
+  // Non-memoized rows (e.g. hidden-ignored synthetic rows) delegate to the same logic.
+  const handleOccupantContextMenu = (e: React.MouseEvent, group: GroupedOccupant) => rowHandlers.onContextMenu(group, e)
+  const handleOccupantTouchStart = (e: React.TouchEvent, group: GroupedOccupant) => rowHandlers.onTouchStart(group, e)
 
   /** Get the best stable identifier for an occupant group */
   const getOccupantIdentifier = (group: GroupedOccupant): string => {
@@ -279,32 +533,6 @@ export function OccupantPanel({
     }
   }
 
-  // Affiliation badges - tooltips removed, info now in unified row tooltip
-  const getAffiliationBadge = (affiliation: string) => {
-    switch (affiliation) {
-      case 'owner':
-        return (
-          <span className="flex items-center gap-0.5 text-amber-600 dark:text-amber-400">
-            <Crown className="size-3" />
-          </span>
-        )
-      case 'admin':
-        return (
-          <span className="flex items-center gap-0.5 text-fluux-brand">
-            <Shield className="size-3" />
-          </span>
-        )
-      case 'member':
-        return (
-          <span className="flex items-center gap-0.5 text-fluux-green">
-            <UserCheck className="size-3" />
-          </span>
-        )
-      default:
-        return null
-    }
-  }
-
   return (
     <div className={`${fullScreen ? 'w-full h-full' : 'w-64 border-s border-fluux-bg'} flex flex-col bg-fluux-sidebar`}>
       {/* Panel header */}
@@ -345,160 +573,24 @@ export function OccupantPanel({
               <span className="text-fluux-muted/60">— {occupants.length}</span>
             </div>
 
-            {/* Grouped occupants in this role */}
-            {occupants.map((group) => {
-              const primaryOccupant = group.connections[0]
-              const hasMultipleConnections = group.connections.length > 1
-              const isMe = group.connections.some(conn => conn.nick === room.nickname)
-
-              // Get occupant avatar from XEP-0398 or fall back to contact avatar
-              // Check all connections for an avatar (any of them may have it)
-              const occupantAvatar = group.connections.find(c => c.avatar)?.avatar
-              // Get contact avatar if occupant's real JID is known and they're in our roster
-              const contact = group.bareJid ? contactsByJid.get(group.bareJid) : undefined
-              const contactAvatar = contact?.avatar
-              // Prefer occupant's direct avatar (XEP-0398) over contact avatar
-              const displayAvatar = occupantAvatar || contactAvatar
-
-              // Build tooltip showing all nicks if multiple connections
-              const tooltip = hasMultipleConnections
-                ? `${group.connections.map(c => c.nick).join(', ')} (${group.connections.length} ${t('rooms.connections')})`
-                : getOccupantTooltip(primaryOccupant, t, forceOffline)
-
-              // Collect all unique hats from all connections
-              const allHats = new Map<string, { uri: string; title: string; hue?: number }>()
-              for (const conn of group.connections) {
-                conn.hats?.forEach(hat => {
-                  if (!allHats.has(hat.uri)) {
-                    allHats.set(hat.uri, hat)
-                  }
-                })
-              }
-
-              // Get highest affiliation from all connections
-              const affiliationPriority: Record<string, number> = { owner: 0, admin: 1, member: 2, outcast: 3, none: 4 }
-              const bestAffiliation = group.connections.reduce((best, conn) => {
-                const bestPriority = affiliationPriority[best] ?? 5
-                const connPriority = affiliationPriority[conn.affiliation] ?? 5
-                return connPriority < bestPriority ? conn.affiliation : best
-              }, 'none' as string)
-
-              const ignored = isOccupantIgnored(group)
-
-              return (
-                <Tooltip
-                  key={group.bareJid || group.primaryNick}
-                  content={tooltip || ''}
-                  position="left"
-                  disabled={!tooltip}
-                  className="block"
-                >
-                  <div
-                    onContextMenu={(e) => handleOccupantContextMenu(e, group)}
-                    onTouchStart={(e) => handleOccupantTouchStart(e, group)}
-                    onTouchEnd={menu.handleTouchEnd}
-                    onTouchMove={menu.handleTouchEnd}
-                    className={`px-4 py-1.5 flex items-center gap-2 hover:bg-fluux-hover/50 cursor-default
-                               ${isMe ? 'bg-fluux-brand/10' : ''}
-                               ${ignored ? 'opacity-40' : ''}`}
-                  >
-                    {/* Avatar with best presence (XEP-0398 occupant avatar or roster contact avatar) */}
-                    <Avatar
-                      identifier={group.primaryNick}
-                      name={group.primaryNick}
-                      avatarUrl={isMe ? (ownAvatar || undefined) : displayAvatar}
-                      size="sm"
-                      presence={getPresenceFromShow(group.bestPresence)}
-                      presenceBorderColor="border-fluux-sidebar"
-                      fallbackColor={isMe ? 'var(--fluux-bg-accent)' : undefined}
-                      forceOffline={forceOffline}
-                    />
-
-                    {/* Nick and badges */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {isMe ? (
-                          <span className="truncate text-sm font-semibold text-fluux-text">
-                            {group.primaryNick}
-                            <span className="text-fluux-muted font-normal"> {t('rooms.you')}</span>
-                          </span>
-                        ) : (
-                          <UserInfoPopover
-                            contact={group.bareJid ? contactsByJid.get(group.bareJid) : undefined}
-                            jid={group.bareJid}
-                            occupantJid={`${room.jid}/${group.primaryNick}`}
-                            role={primaryOccupant.role}
-                            affiliation={bestAffiliation as RoomAffiliation}
-                          >
-                            <span className="truncate text-sm text-fluux-text">
-                              {group.primaryNick}
-                            </span>
-                          </UserInfoPopover>
-                        )}
-                        {/* Connection count badge */}
-                        {hasMultipleConnections && (
-                          <span className="flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-medium rounded-full bg-fluux-muted/20 text-fluux-muted">
-                            ×{group.connections.length}
-                          </span>
-                        )}
-                        {getAffiliationBadge(bestAffiliation)}
-                        {/* Ignored indicator */}
-                        {ignored && (
-                          <EyeOff className="size-3 text-fluux-muted" />
-                        )}
-                        {/* XEP-0317 Hats from all connections (max 3 inline, overflow in tooltip) */}
-                        {(() => {
-                          const hats = Array.from(allHats.values())
-                          const MAX_INLINE = 3
-                          const visible = hats.slice(0, MAX_INLINE)
-                          const overflow = hats.slice(MAX_INLINE, MAX_INLINE + 9)
-                          return (
-                            <>
-                              {visible.map((hat) => (
-                                <span
-                                  key={hat.uri}
-                                  className="px-1.5 py-0.5 text-[10px] font-medium rounded"
-                                  style={getHatColors(hat)}
-                                >
-                                  {hat.title}
-                                </span>
-                              ))}
-                              {overflow.length > 0 && (
-                                <Tooltip
-                                  content={
-                                    <div className="flex flex-col gap-1">
-                                      {overflow.map((hat) => (
-                                        <span
-                                          key={hat.uri}
-                                          className="px-1.5 py-0.5 text-[10px] font-medium rounded inline-block"
-                                          style={getHatColors(hat)}
-                                        >
-                                          {hat.title}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  }
-                                  position="top"
-                                  delay={300}
-                                >
-                                  <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-fluux-muted/20 text-fluux-muted cursor-default">
-                                    +{overflow.length}
-                                  </span>
-                                </Tooltip>
-                              )}
-                            </>
-                          )
-                        })()}
-                      </div>
-                      {/* Show bare JID if available */}
-                      {group.bareJid && (
-                        <p className="text-xs text-fluux-muted truncate">{group.bareJid}</p>
-                      )}
-                    </div>
-                  </div>
-                </Tooltip>
-              )
-            })}
+            {/* Grouped occupants in this role — each row is a memoized OccupantRow so a
+                presence/occupant event re-renders ONLY the changed row, not the whole list. */}
+            {occupants.map((group) => (
+              <OccupantRow
+                key={group.bareJid || group.primaryNick}
+                group={group}
+                roomJid={room.jid}
+                roomNickname={room.nickname}
+                ownAvatar={ownAvatar}
+                forceOffline={forceOffline}
+                contactsByJid={contactsByJid}
+                ignored={isOccupantIgnored(group)}
+                onContextMenu={rowHandlers.onContextMenu}
+                onTouchStart={rowHandlers.onTouchStart}
+                onTouchEnd={rowHandlers.onTouchEnd}
+                onTouchMove={rowHandlers.onTouchMove}
+              />
+            ))}
           </div>
         ))}
 

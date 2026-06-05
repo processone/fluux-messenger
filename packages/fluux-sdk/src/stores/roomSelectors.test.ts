@@ -682,4 +682,25 @@ describe('roomSelectors', () => {
       expect(result.get('alice')).toEqual(occupant)
     })
   })
+
+  describe('runtimeOccupantCountFor', () => {
+    it('should return the occupant count from runtime', () => {
+      const runtime: RoomRuntime = {
+        occupants: new Map([
+          ['alice', { nick: 'alice', affiliation: 'member', role: 'participant' }],
+          ['bob', { nick: 'bob', affiliation: 'member', role: 'participant' }],
+        ]),
+        messages: [],
+      }
+      const roomRuntime = new Map([['room@conference.example.com', runtime]])
+      const state = createMockState({ roomRuntime })
+
+      expect(roomSelectors.runtimeOccupantCountFor('room@conference.example.com')(state)).toBe(2)
+    })
+
+    it('should return 0 for an unknown room', () => {
+      const state = createMockState({ roomRuntime: new Map() })
+      expect(roomSelectors.runtimeOccupantCountFor('missing@conference.example.com')(state)).toBe(0)
+    })
+  })
 })
