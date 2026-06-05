@@ -5,51 +5,34 @@
  *   - 'reel' scenes appear in BOTH the short reel and the full tour
  *   - 'full' scenes appear ONLY in the full tour
  *
- * The array is in full-tour order; filtering to 'reel' keeps a sensible
- * subset flow. Scenes drive navigation deterministically and fire "live
- * beats" so the app feels real-time on camera.
+ * Scenes drive a Director, which captures one native-resolution frame per step.
  */
 
-import { type Page } from '@playwright/test'
-import {
-  DOMAIN, ROOM_JID,
-  showCaption, hideCaption, dwell, navigateTo, selectItem, glideClick,
-  setTheme, setColorScheme, setLanguage, scrollToText,
-  beatIncomingChat, beatChatReaction, beatRoomMessage,
-} from './helpers'
+import { DOMAIN, ROOM_JID, SELF_JID } from './helpers'
+import { type Director } from './director'
 
 export type Variant = 'reel' | 'full'
 
 export interface Scene {
   id: string
   variant: Variant
-  run: (page: Page) => Promise<void>
+  run: (d: Director) => Promise<void>
 }
 
 export const storyboard: Scene[] = [
-  // 1 — Direct messaging + reactions/replies (reel)
+  // 1 — Direct messaging + reactions (reel)
   {
     id: 'messaging',
     variant: 'reel',
-    run: async (page) => {
-      await navigateTo(page, 'messages')
-      await selectItem(page, 'Emma Wilson')
-      await showCaption(page, 'Fast, modern messaging', 'Reactions, replies & rich text — built in')
-      await dwell(page, 2200)
-      const msgId = await beatIncomingChat(page, {
-        conversationId: `emma@${DOMAIN}`,
-        from: `emma@${DOMAIN}`,
-        body: 'Perfect — see you at 4! 🎉',
-      })
-      await dwell(page, 900)
-      await beatChatReaction(page, {
-        conversationId: `emma@${DOMAIN}`,
-        messageId: msgId,
-        reactorJid: `you@${DOMAIN}`,
-        emojis: ['👍'],
-      })
-      await dwell(page, 1500)
-      await hideCaption(page)
+    run: async (d) => {
+      await d.navigateTo('messages')
+      await d.selectItem('Emma Wilson')
+      await d.caption('Fast, modern messaging', 'Reactions, replies & rich text — built in')
+      await d.dwell(1800)
+      const msgId = await d.typeBeat({ conversationId: `emma@${DOMAIN}`, from: `emma@${DOMAIN}`, body: 'Perfect — see you at 4! 🎉' })
+      await d.chatReaction({ conversationId: `emma@${DOMAIN}`, messageId: msgId, reactorJid: SELF_JID, emojis: ['👍'] })
+      await d.dwell(1200)
+      await d.clearCaption()
     },
   },
 
@@ -57,15 +40,13 @@ export const storyboard: Scene[] = [
   {
     id: 'command-palette',
     variant: 'reel',
-    run: async (page) => {
-      await showCaption(page, 'Jump anywhere', 'Command palette — ⌘K')
-      await page.keyboard.press('Meta+k')
-      await dwell(page, 900)
-      await page.keyboard.type('team', { delay: 130 })
-      await dwell(page, 2000)
-      await page.keyboard.press('Escape')
-      await dwell(page, 600)
-      await hideCaption(page)
+    run: async (d) => {
+      await d.caption('Jump anywhere', 'Command palette — ⌘K')
+      await d.press('Meta+k', 800)
+      await d.typeText('team')
+      await d.dwell(1600)
+      await d.press('Escape', 500)
+      await d.clearCaption()
     },
   },
 
@@ -73,19 +54,15 @@ export const storyboard: Scene[] = [
   {
     id: 'rooms',
     variant: 'reel',
-    run: async (page) => {
-      await navigateTo(page, 'rooms')
-      await selectItem(page, 'Team Chat')
-      await showCaption(page, 'Group chat & rooms', 'MUC rooms with presence, roles & members')
-      const membersBtn = page.locator('button[aria-label="Show members"]')
-      if (await membersBtn.isVisible().catch(() => false)) {
-        await dwell(page, 600)
-        await membersBtn.click()
-        await dwell(page, 1200)
-      }
-      await beatRoomMessage(page, { roomJid: ROOM_JID, nick: 'James', body: 'Pushed the fix — CI is green ✅' })
-      await dwell(page, 1600)
-      await hideCaption(page)
+    run: async (d) => {
+      await d.navigateTo('rooms')
+      await d.selectItem('Team Chat')
+      await d.caption('Group chat & rooms', 'MUC rooms with presence, roles & members')
+      const membersBtn = d.page.locator('button[aria-label="Show members"]')
+      if (await membersBtn.isVisible().catch(() => false)) await d.glideClick(membersBtn, 1000)
+      await d.roomBeat({ roomJid: ROOM_JID, nick: 'James', body: 'Pushed the fix — CI is green ✅' })
+      await d.dwell(1400)
+      await d.clearCaption()
     },
   },
 
@@ -93,21 +70,13 @@ export const storyboard: Scene[] = [
   {
     id: 'poll-code',
     variant: 'full',
-    run: async (page) => {
-      await navigateTo(page, 'rooms')
-      await selectItem(page, 'Team Chat')
-      await showCaption(page, 'Polls & code sharing', 'Syntax-highlighted code and built-in polls')
-      const poll = page.locator('[class*="poll" i]').first()
-      if (await poll.isVisible().catch(() => false)) {
-        await poll.scrollIntoViewIfNeeded()
-        await dwell(page, 2000)
-      }
-      const code = page.locator('pre code').first()
-      if (await code.isVisible().catch(() => false)) {
-        await code.scrollIntoViewIfNeeded()
-        await dwell(page, 2000)
-      }
-      await hideCaption(page)
+    run: async (d) => {
+      await d.navigateTo('rooms')
+      await d.selectItem('Team Chat')
+      await d.caption('Polls & code sharing', 'Syntax-highlighted code and built-in polls')
+      await d.scrollLocator(d.page.locator('[class*="poll" i]').first(), 2000)
+      await d.scrollLocator(d.page.locator('pre code').first(), 2000)
+      await d.clearCaption()
     },
   },
 
@@ -115,13 +84,12 @@ export const storyboard: Scene[] = [
   {
     id: 'whisper',
     variant: 'full',
-    run: async (page) => {
-      await navigateTo(page, 'rooms')
-      await selectItem(page, 'Team Chat')
-      await showCaption(page, 'Private whispers', 'One-to-one messages inside a room (XEP-0045)')
-      await scrollToText(page, 'Private with Emma')
-      await dwell(page, 2200)
-      await hideCaption(page)
+    run: async (d) => {
+      await d.navigateTo('rooms')
+      await d.selectItem('Team Chat')
+      await d.caption('Private whispers', 'One-to-one messages inside a room (XEP-0045)')
+      await d.scrollTo('Private with Emma', 2200)
+      await d.clearCaption()
     },
   },
 
@@ -129,12 +97,12 @@ export const storyboard: Scene[] = [
   {
     id: 'encryption',
     variant: 'reel',
-    run: async (page) => {
-      await navigateTo(page, 'messages')
-      await selectItem(page, 'Ava Martinez')
-      await showCaption(page, 'End-to-end encryption', 'OpenPGP with verified / TOFU trust states')
-      await dwell(page, 3200)
-      await hideCaption(page)
+    run: async (d) => {
+      await d.navigateTo('messages')
+      await d.selectItem('Ava Martinez')
+      await d.caption('End-to-end encryption', 'OpenPGP with verified / TOFU trust states')
+      await d.dwell(3000)
+      await d.clearCaption()
     },
   },
 
@@ -142,14 +110,13 @@ export const storyboard: Scene[] = [
   {
     id: 'encryption-settings',
     variant: 'full',
-    run: async (page) => {
-      await navigateTo(page, 'settings')
-      await glideClickText(page, 'Encryption')
-      await page.locator('code').filter({ hasText: 'BAF0' }).first()
-        .waitFor({ timeout: 6_000 }).catch(() => {})
-      await showCaption(page, 'Your keys, your control', 'Fingerprint, backup, export & key rotation')
-      await dwell(page, 3000)
-      await hideCaption(page)
+    run: async (d) => {
+      await d.navigateTo('settings')
+      await d.glideClick(d.page.getByText('Encryption', { exact: true }).first(), 700)
+      await d.page.locator('code').filter({ hasText: 'BAF0' }).first().waitFor({ timeout: 6_000 }).catch(() => {})
+      await d.caption('Your keys, your control', 'Fingerprint, backup, export & key rotation')
+      await d.dwell(2800)
+      await d.clearCaption()
     },
   },
 
@@ -157,21 +124,16 @@ export const storyboard: Scene[] = [
   {
     id: 'themes',
     variant: 'reel',
-    run: async (page) => {
-      await navigateTo(page, 'messages')
-      await selectItem(page, 'Emma Wilson')
-      await showCaption(page, 'Make it yours', 'Light & dark, plus curated themes')
-      await setColorScheme(page, 'light')
-      await dwell(page, 1500)
-      await setTheme(page, 'nord')
-      await dwell(page, 1400)
-      await setTheme(page, 'dracula')
-      await dwell(page, 1400)
-      // Reset to the default ('fluux') dark look for any following scenes.
-      await setTheme(page, 'fluux')
-      await setColorScheme(page, 'dark')
-      await dwell(page, 900)
-      await hideCaption(page)
+    run: async (d) => {
+      await d.navigateTo('messages')
+      await d.selectItem('Emma Wilson')
+      await d.caption('Make it yours', 'Light & dark, plus curated themes')
+      await d.setColorScheme('light', 1400)
+      await d.setTheme('nord', 1300)
+      await d.setTheme('dracula', 1300)
+      await d.setTheme('fluux')
+      await d.setColorScheme('dark', 900)
+      await d.clearCaption()
     },
   },
 
@@ -179,19 +141,15 @@ export const storyboard: Scene[] = [
   {
     id: 'search',
     variant: 'full',
-    run: async (page) => {
-      await navigateTo(page, 'search')
-      await showCaption(page, 'Search everything', 'Full-text search across conversations & rooms')
-      const input = page.locator('input[type="text"]').first()
-      await input.click()
-      await page.keyboard.type('design', { delay: 120 })
-      await dwell(page, 1600)
-      const firstResult = page.locator('[data-search-result-id]').first()
-      if (await firstResult.isVisible().catch(() => false)) {
-        await firstResult.click()
-        await dwell(page, 1800)
-      }
-      await hideCaption(page)
+    run: async (d) => {
+      await d.navigateTo('search')
+      await d.caption('Search everything', 'Full-text search across conversations & rooms')
+      await d.glideClick(d.page.locator('input[type="text"]').first(), 400)
+      await d.typeText('design')
+      await d.dwell(1400)
+      const firstResult = d.page.locator('[data-search-result-id]').first()
+      if (await firstResult.isVisible().catch(() => false)) await d.glideClick(firstResult, 1800)
+      await d.clearCaption()
     },
   },
 
@@ -199,15 +157,13 @@ export const storyboard: Scene[] = [
   {
     id: 'i18n',
     variant: 'full',
-    run: async (page) => {
-      await navigateTo(page, 'messages')
-      await selectItem(page, 'Emma Wilson')
-      await showCaption(page, '33 languages · full RTL', 'Right-to-left layouts, fully mirrored')
-      await setLanguage(page, 'ar')
-      await dwell(page, 3000)
-      await setLanguage(page, 'en')
-      await dwell(page, 800)
-      await hideCaption(page)
+    run: async (d) => {
+      await d.navigateTo('messages')
+      await d.selectItem('Emma Wilson')
+      await d.caption('33 languages · full RTL', 'Right-to-left layouts, fully mirrored')
+      await d.setLanguage('ar', 3000)
+      await d.setLanguage('en', 800)
+      await d.clearCaption()
     },
   },
 
@@ -215,11 +171,11 @@ export const storyboard: Scene[] = [
   {
     id: 'admin',
     variant: 'full',
-    run: async (page) => {
-      await navigateTo(page, 'admin')
-      await glideClickText(page, 'Users')
+    run: async (d) => {
+      await d.navigateTo('admin')
+      await d.glideClick(d.page.getByText('Users', { exact: true }).first(), 700)
       // In demo mode fetchUsers() has no server — reseed the list (as in screenshots.ts).
-      await page.evaluate(() => {
+      await d.page.evaluate(() => {
         const adminStore = (window as any).__adminStore
         if (!adminStore) return
         adminStore.getState().setUserList({
@@ -237,17 +193,12 @@ export const storyboard: Scene[] = [
           pagination: { count: 8 },
         })
       })
-      await showCaption(page, 'Built-in admin console', 'Manage users, rooms & the server (ejabberd / XEP-0133)')
-      await dwell(page, 3000)
-      await hideCaption(page)
+      await d.caption('Built-in admin console', 'Manage users, rooms & the server (ejabberd / XEP-0133)')
+      await d.dwell(3000)
+      await d.clearCaption()
     },
   },
 ]
-
-/** Glide-click a settings/admin category by its visible label. */
-async function glideClickText(page: Page, label: string): Promise<void> {
-  await glideClick(page, page.getByText(label, { exact: true }).first(), 900)
-}
 
 /** Scenes for a given variant, in storyboard order. */
 export function scenesFor(variant: Variant): Scene[] {

@@ -2,7 +2,7 @@
  * Demo video recorder for Fluux Messenger.
  *
  * Drives the demo (`/demo.html`) with Playwright and records a promo video of
- * the major features. Produces two variants:
+ * the major features, in two variants:
  *   - reel: short highlight (~90s)
  *   - full: comprehensive tour (~3–4 min)
  *
@@ -11,78 +11,62 @@
  *   npm run demo:video:reel    # reel only
  *   npm run demo:video:full    # full only
  *
- * Output (gitignored):
- *   video/fluux-demo-reel.webm  + .mp4
- *   video/fluux-demo-full.webm  + .mp4
+ * Output (gitignored): video/fluux-demo-<variant>.mp4 (+ .webm)
  *
- * Capture strategy A: Playwright recordVideo (WebM) → ffmpeg → MP4. If motion
- * looks choppy, swap the capture layer for deterministic CDP frames at a
- * constant fps without touching the storyboard.
+ * Capture: a deterministic stepped recorder (see director.ts) takes one native
+ * 1920×1080 screenshot per output frame from a dense (1280×720 @ 1.5×) render,
+ * then ffmpeg assembles an exact, smooth constant-fps video — no upscaling, no
+ * virtual-time fragility.
  */
 
 import { test, type Browser } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
-import {
-  RENDER_SIZE, BASE_URL, DEMO_URL,
-  openDemo, waitForAppReady, installPolishLayers,
-  coverWithTitle, hideTitleCard, titleCard, convertToMp4,
-} from './helpers'
+import { RENDER_SIZE, BASE_URL, DEMO_URL } from './helpers'
+import { Director } from './director'
 import { scenesFor, type Variant } from './storyboard'
 
 const OUTPUT_DIR = 'video'
-const RAW_DIR = `${OUTPUT_DIR}/.raw`
 
 async function record(browser: Browser, variant: Variant): Promise<void> {
-  mkdirSync(RAW_DIR, { recursive: true })
+  mkdirSync(OUTPUT_DIR, { recursive: true })
 
-  // Pre-warm the dev server (off-camera): the first cold load of the large
-  // demo bundle takes several seconds to compile in Vite dev, which would show
-  // as a white flash at the very start of the recording. Warming it first lets
-  // the recorded navigation reach the app almost immediately.
+  // Pre-warm the dev server (off-camera) so the recorded run reaches the app
+  // fast instead of waiting on a cold Vite compile.
   const warm = await browser.newContext()
-  const warmPage = await warm.newPage()
-  await warmPage.goto(DEMO_URL, { waitUntil: 'networkidle', timeout: 60_000 }).catch(() => {})
+  await (await warm.newPage()).goto(DEMO_URL, { waitUntil: 'networkidle', timeout: 60_000 }).catch(() => {})
   await warm.close()
 
   const context = await browser.newContext({
-    // Lay out + capture natively at the denser RENDER_SIZE so the UI fills the
-    // frame (and cursor coordinates stay native); convertToMp4 upscales the
-    // result to VIDEO_SIZE (1080p) with a high-quality lanczos filter.
+    // Dense layout (fills the frame) rendered at 1.5× so screenshots are a
+    // native 1920×1080 — no upscaling. Native mouse coordinates (no zoom).
     viewport: RENDER_SIZE,
+    deviceScaleFactor: 1.5,
     colorScheme: 'dark',
     baseURL: BASE_URL,
-    recordVideo: { dir: RAW_DIR, size: RENDER_SIZE },
   })
   const page = await context.newPage()
-  const video = page.video()
+  const d = new Director(page, `${OUTPUT_DIR}/.frames-${variant}`)
 
+  let ok = false
   try {
-    // Open the page and immediately cover it with the intro card so the
-    // app's load happens off-camera (no white flash, no pre-roll glimpse).
-    await openDemo(page)
-    await installPolishLayers(page)
-    await coverWithTitle(page, 'Fluux Messenger', 'A modern XMPP client')
-    await waitForAppReady(page)
-    await page.waitForTimeout(1600) // hold the intro card
-    await hideTitleCard(page)
-
+    await d.setup('Fluux Messenger', 'A modern XMPP client')
+    await d.intro(1600)
     for (const scene of scenesFor(variant)) {
       // eslint-disable-next-line no-console
       console.log(`  ▶ ${variant}: ${scene.id}`)
-      await scene.run(page)
+      await scene.run(d)
     }
-
-    await titleCard(page, 'Fluux Messenger', 'Open. Secure. Yours.', 2800)
+    await d.outro('Fluux Messenger', 'Open. Secure. Yours.', 2600)
+    ok = true
   } finally {
-    await context.close() // finalises the WebM
+    await context.close()
   }
 
-  if (video) {
-    const webm = `${OUTPUT_DIR}/fluux-demo-${variant}.webm`
-    await video.saveAs(webm)
+  if (ok) {
+    const { frames, seconds } = d.finish(`${OUTPUT_DIR}/fluux-demo-${variant}`)
     // eslint-disable-next-line no-console
-    console.log(`  ✓ WebM: ${webm}`)
-    convertToMp4(webm, `${OUTPUT_DIR}/fluux-demo-${variant}.mp4`)
+    console.log(`  ✓ ${variant}: video/fluux-demo-${variant}.mp4 (${frames} frames, ${seconds.toFixed(1)}s)`)
+    d.cleanup()
   }
 }
 
