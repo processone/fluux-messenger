@@ -25,6 +25,7 @@ import { isTauri } from '@/utils/tauri'
 
 type PluginStatus =
   | 'disabled'
+  | 'locked'
   | 'generating'
   | 'ready'
   | 'waiting-online'
@@ -122,9 +123,11 @@ export function EncryptionSettings() {
       ? 'waiting-online'
       : fingerprint
         ? 'ready'
-        : generationFailed
-          ? 'generation-failed'
-          : 'generating'
+        : webLocked
+          ? 'locked'
+          : generationFailed
+            ? 'generation-failed'
+            : 'generating'
 
   // Track fingerprint — poll briefly after enable so the "Generating…"
   // state resolves without needing a manual reload. The plugin exposes
@@ -841,6 +844,8 @@ export function EncryptionSettings() {
               >
                 {pluginStatus === 'waiting-online' &&
                   t('settings.encryption.statusWaitingOnline')}
+                {pluginStatus === 'locked' &&
+                  t('settings.encryption.statusLocked')}
                 {pluginStatus === 'generating' &&
                   t('settings.encryption.statusGenerating')}
                 {pluginStatus === 'ready' && t('settings.encryption.statusReady')}

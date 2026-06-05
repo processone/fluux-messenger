@@ -2,6 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Loader2 } from 'lucide-react'
 import type { XMPPClient } from '@fluux/sdk/core'
+import { KeyPickerDialog } from './KeyPickerDialog'
+import { KeyPickerRequiredError, NoRecoveryAvailableError } from '@/e2ee/recoveryErrors'
+import type { KeyBundle } from '@/e2ee/OpenPGPPluginBase'
 
 interface UnlockEncryptionDialogProps {
   client: XMPPClient
@@ -11,14 +14,17 @@ interface UnlockEncryptionDialogProps {
 /**
  * Passphrase dialog for the web OpenPGP plugin.
  *
- * Auto-detects whether this is a first-time setup (no local key in
- * IndexedDB) or a returning-user unlock, and adjusts title, body, and
- * button label accordingly. On first-time setup, a confirm field is
- * shown to catch typos.
+ * Auto-detects the right mode:
+ * - "unlock"  — local key exists, prompt for passphrase to decrypt it
+ * - "restore" — no local key but a server backup exists, offer recovery
+ * - "setup"   — no local key and no backup, first-time key generation
  *
- * On confirm: calls `plugin.unlock(passphrase)`, which sets the session
- * passphrase, decrypts (or generates) the key, publishes to PEP, and
- * activates verification-sync subscriptions.
+ * The plugin's `unlock(passphrase)` handles all three flows and returns
+ * `{ recovered: boolean }`. It may throw `KeyPickerRequiredError` (multiple
+ * backup keys found) or `NoRecoveryAvailableError` (nothing to recover from).
+ *
+ * Encryption is opt-in — the skip button is always visible so the user can
+ * send without encryption if they choose.
  */
 export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDialogProps) {
   const { t } = useTranslation()
@@ -26,28 +32,48 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
 
   const [passphrase, setPassphrase] = useState('')
   const [confirmPassphrase, setConfirmPassphrase] = useState('')
-  const [isFirstTime, setIsFirstTime] = useState<boolean | null>(null)
+  type DialogMode = 'unlock' | 'restore' | 'setup'
+  const [mode, setMode] = useState<DialogMode | null>(null)
+  const [recovered, setRecovered] = useState(false)
+  const [noRecovery, setNoRecovery] = useState<{ hadLocalKey: boolean } | null>(null)
+  const [picker, setPicker] = useState<{
+    candidates: KeyBundle[]
+    backupContext: { message: string; passphrase: string }
+  } | null>(null)
   const [isWorking, setIsWorking] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const plugin = client.e2ee?.getPlugin('openpgp') as
-      | { hasNoLocalKey?: () => Promise<boolean> }
+      | { hasNoLocalKey?: () => Promise<boolean>; hasSecretKeyBackup?: () => Promise<boolean> }
       | null
       | undefined
     if (!plugin?.hasNoLocalKey) {
-      setIsFirstTime(false)
+      setMode('unlock')
       return
     }
-    plugin
-      .hasNoLocalKey()
-      .then(setIsFirstTime)
-      .catch(() => setIsFirstTime(false))
+    let cancelled = false
+    void (async () => {
+      try {
+        const noLocal = await plugin.hasNoLocalKey!()
+        if (!noLocal) {
+          if (!cancelled) setMode('unlock')
+          return
+        }
+        const hasBackup = plugin.hasSecretKeyBackup ? await plugin.hasSecretKeyBackup() : false
+        if (!cancelled) setMode(hasBackup ? 'restore' : 'setup')
+      } catch {
+        if (!cancelled) setMode('unlock')
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
   }, [client])
 
   useEffect(() => {
     inputRef.current?.focus()
-  }, [isFirstTime])
+  }, [mode])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -63,7 +89,7 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
       setError(t('settings.encryption.unlockPassphraseTooShort'))
       return
     }
-    if (isFirstTime && passphrase !== confirmPassphrase) {
+    if (mode === 'setup' && passphrase !== confirmPassphrase) {
       setError(t('settings.encryption.unlockPassphraseMismatch'))
       return
     }
@@ -72,37 +98,86 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
     setError(null)
     try {
       const plugin = client.e2ee?.getPlugin('openpgp') as
-        | { unlock?: (pp: string) => Promise<void> }
+        | { unlock?: (pp: string) => Promise<{ recovered: boolean }> }
         | null
         | undefined
       if (!plugin?.unlock) {
         throw new Error(t('settings.encryption.backupPluginUnavailable'))
       }
-      await plugin.unlock(passphrase)
-      // Trigger deferred decryption of messages that arrived while the
-      // key was locked (e.g. MAM catch-up messages fetched before the
-      // user entered the passphrase).
+      const result = await plugin.unlock(passphrase)
+      client.notifyE2EEKeyUnlocked()
+      if (result?.recovered) {
+        setRecovered(true)
+        setTimeout(() => onClose(true), 1500)
+        return
+      }
+      onClose(true)
+    } catch (err) {
+      if (err instanceof KeyPickerRequiredError) {
+        setPicker({ candidates: err.candidates, backupContext: err.backupContext })
+        setIsWorking(false)
+        return
+      }
+      if (err instanceof NoRecoveryAvailableError) {
+        setNoRecovery({ hadLocalKey: err.hadLocalKey })
+        setIsWorking(false)
+        return
+      }
+      setError(err instanceof Error ? err.message : String(err))
+      setIsWorking(false)
+    }
+  }, [passphrase, confirmPassphrase, mode, client, onClose, t])
+
+  const handleImportKeyFile = useCallback(async () => {
+    const plugin = client.e2ee?.getPlugin('openpgp') as
+      | {
+          pickKeyFile?: () => Promise<string | null>
+          importKeyFromFile?: (armored: string, pp: string) => Promise<
+            | { fingerprint: string }
+            | { needsPicker: true; candidates: KeyBundle[]; backupContext: { message: string; passphrase: string } }
+          >
+        }
+      | null
+      | undefined
+    if (!plugin?.pickKeyFile || !plugin.importKeyFromFile) return
+    const content = await plugin.pickKeyFile()
+    if (!content) return
+    try {
+      const result = await plugin.importKeyFromFile(content, passphrase)
+      if ('needsPicker' in result) {
+        setPicker({ candidates: result.candidates, backupContext: result.backupContext })
+        setNoRecovery(null)
+        return
+      }
       client.notifyE2EEKeyUnlocked()
       onClose(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
-      setIsWorking(false)
     }
-  }, [passphrase, confirmPassphrase, isFirstTime, client, onClose, t])
+  }, [client, passphrase, onClose])
 
-  const title = isFirstTime
-    ? t('settings.encryption.unlockDialogSetupTitle')
-    : t('settings.encryption.unlockDialogTitle')
+  const title =
+    mode === 'setup'
+      ? t('settings.encryption.unlockDialogSetupTitle')
+      : mode === 'restore'
+        ? t('settings.encryption.unlockDialogRestoreTitle')
+        : t('settings.encryption.unlockDialogTitle')
 
-  const body = isFirstTime
-    ? t('settings.encryption.unlockDialogSetupBody')
-    : t('settings.encryption.unlockDialogBody')
+  const body =
+    mode === 'setup'
+      ? t('settings.encryption.unlockDialogSetupBody')
+      : mode === 'restore'
+        ? t('settings.encryption.unlockDialogRestoreBody')
+        : t('settings.encryption.unlockDialogBody')
 
-  const confirmLabel = isFirstTime
-    ? t('settings.encryption.unlockSetupAction')
-    : t('settings.encryption.unlockAction')
+  const confirmLabel =
+    mode === 'setup'
+      ? t('settings.encryption.unlockSetupAction')
+      : mode === 'restore'
+        ? t('settings.encryption.restoreAction')
+        : t('settings.encryption.unlockAction')
 
-  const loading = isFirstTime === null
+  const loading = mode === null
 
   return (
     <div
@@ -144,7 +219,7 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
             ref={inputRef}
             type="password"
             name="passphrase"
-            autoComplete={isFirstTime ? 'section-openpgp new-password' : 'section-openpgp current-password'}
+            autoComplete={mode === 'setup' ? 'section-openpgp new-password' : 'section-openpgp current-password'}
             value={passphrase}
             disabled={isWorking || loading}
             onChange={(e) => {
@@ -155,7 +230,7 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
             className="w-full px-3 py-2 mb-3 rounded-lg bg-fluux-bg border border-fluux-hover text-fluux-text focus:outline-none focus:border-fluux-brand disabled:opacity-50"
           />
 
-          {isFirstTime && (
+          {mode === 'setup' && (
             <>
               <label className="block text-sm text-fluux-text mb-1">
                 {t('settings.encryption.restorePassphraseLabel')} (confirm)
@@ -174,6 +249,28 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
                 className="w-full px-3 py-2 mb-3 rounded-lg bg-fluux-bg border border-fluux-hover text-fluux-text focus:outline-none focus:border-fluux-brand disabled:opacity-50"
               />
             </>
+          )}
+
+          {recovered && (
+            <p className="text-xs text-green-600 dark:text-green-400 mb-3">
+              {t('settings.encryption.unlockRecoveredNote')}
+            </p>
+          )}
+          {noRecovery && (
+            <div className="mb-3 space-y-2">
+              <p className="text-xs text-fluux-text">
+                {noRecovery.hadLocalKey
+                  ? t('settings.encryption.unlockNoRecoveryBody')
+                  : t('settings.encryption.unlockNoKeyNoBackupBody')}
+              </p>
+              <button
+                type="button"
+                onClick={() => { void handleImportKeyFile() }}
+                className="px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
+              >
+                {t('settings.encryption.importFileAction')}
+              </button>
+            </div>
           )}
 
           {error && (
@@ -201,6 +298,28 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
         </div>
         </form>
       </div>
+
+      {picker && (
+        <KeyPickerDialog
+          candidates={picker.candidates}
+          onConfirm={async (selectedFingerprint) => {
+            const plugin = client.e2ee?.getPlugin('openpgp') as
+              | { installSelectedKey?: (msg: string, pp: string, fp: string) => Promise<{ fingerprint: string }> }
+              | null
+              | undefined
+            if (!plugin?.installSelectedKey) return
+            await plugin.installSelectedKey(
+              picker.backupContext.message,
+              picker.backupContext.passphrase,
+              selectedFingerprint,
+            )
+            setPicker(null)
+            client.notifyE2EEKeyUnlocked()
+            onClose(true)
+          }}
+          onCancel={() => setPicker(null)}
+        />
+      )}
     </div>
   )
 }

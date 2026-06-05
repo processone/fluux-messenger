@@ -23,18 +23,57 @@
  */
 
 import type { PrivateKey } from 'openpgp'
-import { E2EEPluginError } from '@fluux/sdk'
+import { E2EEPluginError, isE2EEPluginError } from '@fluux/sdk'
 import {
   OpenPGPPluginBase,
   type CertValidation,
   type DecryptOutput,
   type KeyBundle,
+  type RestoreResult,
 } from './OpenPGPPluginBase'
+import { KeyPickerRequiredError, NoRecoveryAvailableError } from './recoveryErrors'
 import { clearSessionPassphrase, getSessionPassphrase, setSessionPassphrase } from './webPassphraseStore'
 import { USE_V6_KEYS } from './passphraseGenerator'
 import { detectArmorKind } from './armorDetect'
 
 const PRIVATE_KEY_STORAGE_KEY = 'private-key'
+
+/**
+ * A local-key failure that the server backup might fix: the stored blob
+ * won't decrypt with this passphrase, or there's no local blob but the
+ * server advertises an identity. Both are worth a backup-recovery attempt.
+ */
+function isRecoverableLocalFailure(err: unknown): boolean {
+  return (
+    isE2EEPluginError(err) &&
+    (err.code === 'wrong-passphrase' || err.code === 'needs-identity-decision')
+  )
+}
+
+/** Decide the final error after BOTH the local key and the backup failed. */
+function classifyRecoveryFailure(localErr: unknown, recoverErr: unknown): Error {
+  const localCode = isE2EEPluginError(localErr) ? localErr.code : undefined
+  const recoverCode = isE2EEPluginError(recoverErr) ? recoverErr.code : undefined
+  if (recoverCode === 'no-backup') {
+    // No secret backup to recover from. When the local failure was a
+    // published-identity-without-backup, preserve that error so the host's
+    // existing IdentityChoiceDialog routing (import file / retire) applies.
+    if (localCode === 'needs-identity-decision') {
+      return localErr instanceof Error ? localErr : new Error(String(localErr))
+    }
+    return new NoRecoveryAvailableError(localCode === 'wrong-passphrase', recoverErr)
+  }
+  if (recoverCode === 'wrong-passphrase') {
+    return new E2EEPluginError(
+      'permanent',
+      'wrong-passphrase',
+      'WebOpenPGPPlugin: wrong passphrase — neither the local key nor the server backup could be decrypted',
+      recoverErr,
+    )
+  }
+  // Transient (server unreachable, etc.) — surface as-is so the user retries.
+  return recoverErr instanceof Error ? recoverErr : new Error(String(recoverErr))
+}
 
 /**
  * Normalize a backup passphrase to match Rust's `normalize_passphrase`:
@@ -102,6 +141,15 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
         this.ownPrivateKey = privateKey
         return this.bundleFromKey(privateKey)
       } catch (err) {
+        // Do NOT swallow the real reason: the message is almost always a
+        // genuine wrong passphrase, but it can also be a corrupt/foreign
+        // blob. Log the underlying cause and keep it on the error chain so
+        // unlock()'s recovery path and any future diagnosis can see it.
+        this.requireCtx().logger.warn(
+          `WebOpenPGPPlugin: stored private key did not decrypt: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        )
         throw new E2EEPluginError(
           'permanent',
           'wrong-passphrase',
@@ -529,19 +577,41 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
   /**
    * Unlock the plugin with a passphrase (decrypts the stored private key
    * into memory). Called by the unlock dialog after the user confirms.
-   * Throws if the passphrase is wrong.
+   *
+   * On a normal unlock, returns `{ recovered: false }`. If the local key
+   * could not be decrypted but a server backup was successfully restored,
+   * returns `{ recovered: true }`. Throws on unrecoverable failures.
    */
-  async unlock(passphrase: string): Promise<void> {
+  async unlock(passphrase: string): Promise<{ recovered: boolean }> {
     setSessionPassphrase(passphrase)
     try {
-      // Re-run ensureIdentity to decrypt the key and re-publish if needed.
+      // Happy path: decrypt the local key and publish/subscribe.
       await this.ensureIdentity()
-      // Activate PEP and store subscriptions now that the key is loaded.
       this.activateSubscriptions()
+      return { recovered: false }
     } catch (err) {
-      // Roll back passphrase on failure so the locked state is preserved.
-      clearSessionPassphrase()
-      throw err
+      if (!isRecoverableLocalFailure(err)) {
+        clearSessionPassphrase()
+        throw err
+      }
+      // The local copy is missing or won't open with this passphrase. The
+      // key is recoverable from the server backup if the passphrase is the
+      // current one — try that before giving up.
+      let result: RestoreResult
+      try {
+        result = await this.restoreSecretKey(passphrase)
+      } catch (recoverErr) {
+        clearSessionPassphrase()
+        throw classifyRecoveryFailure(err, recoverErr)
+      }
+      if ('needsPicker' in result) {
+        clearSessionPassphrase()
+        throw new KeyPickerRequiredError(result.candidates, result.backupContext)
+      }
+      // restoreSecretKey installed + published the recovered key and set the
+      // session passphrase. Activate subscriptions and report recovery.
+      this.activateSubscriptions()
+      return { recovered: true }
     }
   }
 
