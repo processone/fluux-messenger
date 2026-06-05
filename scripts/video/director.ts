@@ -179,12 +179,20 @@ export class Director {
   /** Switch the top-level view: glide to the nav icon, then hash-navigate
    *  (authoritative — the icon click alone doesn't switch from every route). */
   async navigateTo(view: string): Promise<void> {
+    const path = VIEW_PATHS[view] ?? `/${view}`
+    // If we're already on this view (e.g. the command palette just jumped us
+    // into a room), don't replay the icon-rail click — the list is already
+    // shown, so the click would be a redundant gesture on camera.
+    const alreadyHere = await this.page.evaluate(
+      (p) => window.location.hash === `#${p}` || window.location.hash.startsWith(`#${p}/`),
+      path,
+    )
+    if (alreadyHere) return
     const navBtn = this.page.locator(`[data-nav="${view}"]`)
     try {
       await this.glideTo(navBtn, 16)
       await navBtn.click({ timeout: 5_000 })
     } catch { /* visual nicety; hash nav below is authoritative */ }
-    const path = VIEW_PATHS[view] ?? `/${view}`
     await this.page.evaluate((p) => { window.location.hash = `#${p}` }, path)
     await this.page.waitForTimeout(400)
     await this.hold(700)
