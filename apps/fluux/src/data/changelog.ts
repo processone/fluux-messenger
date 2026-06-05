@@ -46,6 +46,7 @@ export const changelog: ChangelogEntry[] = [
           'Sidebar user panel: prevent status label truncation',
           'RTL sidebar lists: truncate Latin names at the end instead of the start',
           'Blockquote decorative quote marks no longer clipped at the edge',
+          'Rendering performance improvements',
         ],
       },
     ],

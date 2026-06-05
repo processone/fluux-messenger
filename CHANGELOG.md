@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sidebar user panel: prevent status label truncation
 - RTL sidebar lists: truncate Latin names at the end instead of the start
 - Blockquote decorative quote marks no longer clipped at the edge
+- Rendering performance improvements
 
 ## [0.15.2] - 2026-04-21
 

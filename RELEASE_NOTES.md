@@ -24,6 +24,7 @@
 - Sidebar user panel: prevent status label truncation
 - RTL sidebar lists: truncate Latin names at the end instead of the start
 - Blockquote decorative quote marks no longer clipped at the edge
+- Rendering performance improvements
 
 ---
 [Full Changelog](https://github.com/processone/fluux-messenger/blob/main/CHANGELOG.md)
