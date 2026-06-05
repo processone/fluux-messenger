@@ -50,7 +50,7 @@ interface ConsoleState {
   setOpen: (open: boolean) => void
   setHeight: (height: number) => void
   addPacket: (direction: 'incoming' | 'outgoing', xml: string) => void
-  addEvent: (message: string, category?: 'connection' | 'error' | 'sm' | 'presence') => void
+  addEvent: (message: string, category?: 'connection' | 'error' | 'sm' | 'presence' | 'e2ee') => void
   clearEntries: () => void
   reset: () => void
 }
