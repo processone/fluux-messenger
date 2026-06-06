@@ -1465,7 +1465,7 @@ describe('XMPPClient Message', () => {
     })
   })
 
-  describe('XEP-0461 reply id selection for reactions and corrections', () => {
+  describe('reference-id selection per XEP (reply / reaction / correction)', () => {
     it('should use client id for chat reaction reference (not stanzaId)', async () => {
       await connectClient()
 
@@ -1528,12 +1528,41 @@ describe('XMPPClient Message', () => {
       expect(replaceEl.attrs.id).toBe('client-msg-id')
     })
 
-    it('should prefer stanzaId for groupchat correction reference', async () => {
+    it('should reference origin-id for chat correction when the original has one', async () => {
       await connectClient()
 
+      vi.mocked(mockStores.chat.getMessage).mockReturnValue({
+        type: 'chat',
+        id: 'client-msg-id',
+        originId: 'origin-uuid',
+        stanzaId: 'server-stanza-id',
+        conversationId: 'alice@example.com',
+        from: 'me@example.com',
+        body: 'Original with typo',
+        timestamp: new Date(),
+        isOutgoing: true,
+      })
+
+      await xmppClient.chat.sendCorrection('alice@example.com', 'client-msg-id', 'Original without typo', 'chat')
+
+      const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
+      const replaceEl = sentStanza.children.find((c: any) => c.name === 'replace')
+      // XEP-0308 references the sender-assigned id: origin-id when present.
+      expect(replaceEl.attrs.id).toBe('origin-uuid')
+      expect(replaceEl.attrs.id).not.toBe('server-stanza-id')
+    })
+
+    it('should reference origin-id (not stanzaId) for groupchat correction per XEP-0308', async () => {
+      await connectClient()
+
+      // XEP-0308 has NO group-chat carve-out (unlike XEP-0461 replies /
+      // XEP-0444 reactions / XEP-0424 retractions, which all switch to the MUC
+      // stanza-id). A correction references the id the original SENDER assigned
+      // — the origin-id — never the server/MUC stanza-id.
       mockStores.room.getMessage = vi.fn().mockReturnValue({
         type: 'groupchat',
         id: 'client-msg-id',
+        originId: 'origin-uuid',
         stanzaId: 'server-stanza-id',
         body: 'Original with typo',
         from: 'room@conference.example.com/me',
@@ -1544,7 +1573,31 @@ describe('XMPPClient Message', () => {
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const replaceEl = sentStanza.children.find((c: any) => c.name === 'replace')
       expect(replaceEl).toBeDefined()
-      expect(replaceEl.attrs.id).toBe('server-stanza-id')
+      expect(replaceEl.attrs.id).toBe('origin-uuid')
+      expect(replaceEl.attrs.id).not.toBe('server-stanza-id')
+    })
+
+    it('should fall back to message id (never stanzaId) for groupchat correction without origin-id', async () => {
+      await connectClient()
+
+      // Regression guard for the real log scenario: ejabberd preserves the
+      // sender id and the store also holds a numeric stanza-id. The correction
+      // must reference the message id — using the stanza-id makes compliant
+      // clients (e.g. Conversations) render the edit as a brand-new message.
+      mockStores.room.getMessage = vi.fn().mockReturnValue({
+        type: 'groupchat',
+        id: 'client-msg-id',
+        stanzaId: '1780677708963770',
+        body: 'Original with typo',
+        from: 'room@conference.example.com/me',
+      })
+
+      await xmppClient.chat.sendCorrection('room@conference.example.com', 'client-msg-id', 'Original without typo', 'groupchat')
+
+      const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
+      const replaceEl = sentStanza.children.find((c: any) => c.name === 'replace')
+      expect(replaceEl.attrs.id).toBe('client-msg-id')
+      expect(replaceEl.attrs.id).not.toBe('1780677708963770')
     })
   })
 
@@ -2095,13 +2148,14 @@ describe('XMPPClient Message', () => {
       })
     })
 
-    it('should prefer stanzaId for groupchat correction reference', async () => {
+    it('should reference origin-id (not stanzaId) for groupchat correction', async () => {
       await connectClient()
 
       mockStores.room.getRoom = vi.fn().mockReturnValue({ jid: 'room@conference.example.com', nickname: 'me' })
       mockStores.room.getMessage = vi.fn().mockReturnValue({
         type: 'groupchat',
         id: 'client-msg-id',
+        originId: 'origin-uuid',
         stanzaId: 'server-stanza-id',
         body: 'Original',
         from: 'room@conference.example.com/me',
@@ -2111,7 +2165,9 @@ describe('XMPPClient Message', () => {
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
       const replaceEl = sentStanza.children.find((c: any) => c.name === 'replace')
-      expect(replaceEl.attrs.id).toBe('server-stanza-id')
+      // XEP-0308 has no group-chat carve-out: reference the origin-id, not the MUC stanza-id.
+      expect(replaceEl.attrs.id).toBe('origin-uuid')
+      expect(replaceEl.attrs.id).not.toBe('server-stanza-id')
     })
   })
 
@@ -2252,6 +2308,86 @@ describe('XMPPClient Message', () => {
           isEdited: true,
         })
       })
+    })
+  })
+
+  describe('MUC author verification via occupant-id (XEP-0421)', () => {
+    const roomJid = 'room@conference.example.com'
+
+    function buildCorrection(senderNick: string, occupantId?: string, replaceId = 'original-msg-id') {
+      const children: any[] = [
+        { name: 'body', text: 'Corrected text' },
+        { name: 'replace', attrs: { xmlns: 'urn:xmpp:message-correct:0', id: replaceId } },
+      ]
+      if (occupantId) children.push({ name: 'occupant-id', attrs: { xmlns: 'urn:xmpp:occupant-id:0', id: occupantId } })
+      return createMockElement('message', { from: `${roomJid}/${senderNick}`, to: 'user@example.com', type: 'groupchat', id: 'correction-stanza' }, children)
+    }
+
+    function buildRetraction(senderNick: string, occupantId?: string, retractId = 'server-stanza-id-999') {
+      const children: any[] = [
+        { name: 'retract', attrs: { xmlns: 'urn:xmpp:message-retract:1', id: retractId } },
+        { name: 'body', text: 'Fallback' },
+      ]
+      if (occupantId) children.push({ name: 'occupant-id', attrs: { xmlns: 'urn:xmpp:occupant-id:0', id: occupantId } })
+      return createMockElement('message', { from: `${roomJid}/${senderNick}`, to: 'user@example.com', type: 'groupchat', id: 'retraction-stanza' }, children)
+    }
+
+    it('should reject a correction when occupant-id differs despite a matching nick (nickname takeover)', async () => {
+      await connectClient()
+      mockStores.room.getRoom = vi.fn().mockReturnValue({ jid: roomJid, nickname: 'me' })
+      mockStores.room.getMessage = vi.fn().mockReturnValue({
+        type: 'groupchat', id: 'original-msg-id', from: `${roomJid}/Alice`,
+        occupantId: 'alice-occ', body: 'Original', nick: 'Alice',
+      })
+
+      // Mallory has taken the nick "Alice" but carries a different occupant-id
+      mockXmppClientInstance._emit('stanza', buildCorrection('Alice', 'mallory-occ'))
+
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('room:message-updated', expect.anything())
+    })
+
+    it('should apply a correction when the occupant-id matches', async () => {
+      await connectClient()
+      mockStores.room.getRoom = vi.fn().mockReturnValue({ jid: roomJid, nickname: 'me' })
+      mockStores.room.getMessage = vi.fn().mockReturnValue({
+        type: 'groupchat', id: 'original-msg-id', from: `${roomJid}/Alice`,
+        occupantId: 'alice-occ', body: 'Original', nick: 'Alice',
+      })
+
+      mockXmppClientInstance._emit('stanza', buildCorrection('Alice', 'alice-occ'))
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:message-updated', expect.objectContaining({
+        roomJid, messageId: 'original-msg-id', updates: expect.objectContaining({ isEdited: true }),
+      }))
+    })
+
+    it('should fall back to the full MUC JID when occupant-id is absent (legacy servers)', async () => {
+      await connectClient()
+      mockStores.room.getRoom = vi.fn().mockReturnValue({ jid: roomJid, nickname: 'me' })
+      mockStores.room.getMessage = vi.fn().mockReturnValue({
+        type: 'groupchat', id: 'original-msg-id', from: `${roomJid}/Alice`,
+        body: 'Original', nick: 'Alice', // no occupantId stored
+      })
+
+      // No occupant-id on the stanza either → full-JID check applies
+      mockXmppClientInstance._emit('stanza', buildCorrection('Alice', undefined))
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:message-updated', expect.objectContaining({
+        roomJid, messageId: 'original-msg-id', updates: expect.objectContaining({ isEdited: true }),
+      }))
+    })
+
+    it('should reject a retraction when occupant-id differs despite a matching nick (nickname takeover)', async () => {
+      await connectClient()
+      mockStores.room.getRoom = vi.fn().mockReturnValue({ jid: roomJid, nickname: 'me' })
+      mockStores.room.getMessage = vi.fn().mockReturnValue({
+        type: 'groupchat', id: 'client-msg-id', stanzaId: 'server-stanza-id-999',
+        from: `${roomJid}/Alice`, occupantId: 'alice-occ', body: 'Original', nick: 'Alice',
+      })
+
+      mockXmppClientInstance._emit('stanza', buildRetraction('Alice', 'mallory-occ'))
+
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('room:message-updated', expect.anything())
     })
   })
 
