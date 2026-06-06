@@ -122,6 +122,35 @@ describe('createMessageLookup', () => {
     expect(found?.nick).toBe('debacle')
   })
 
+  it('should index messages by origin-id when present (XEP-0359)', () => {
+    // After XEP-0308, an inbound correction references the sender-assigned
+    // origin-id. If a MUC rewrote the message id, the original is only
+    // resolvable via origin-id.
+    const messages = [
+      { id: 'muc-rewritten-id', originId: 'sender-origin-uuid', stanzaId: 'mam-id', body: 'Hello' },
+    ]
+
+    const lookup = createMessageLookup(messages)
+
+    expect(lookup.get('muc-rewritten-id')).toEqual(messages[0])
+    expect(lookup.get('mam-id')).toEqual(messages[0])
+    expect(lookup.get('sender-origin-uuid')).toEqual(messages[0])
+  })
+
+  it('should not let an origin-id shadow another message\'s real id (no over-match)', () => {
+    // origin-id is sender-controlled (XEP-0359) and only a fallback tier: a
+    // message owning the value as its real id must win over a different message
+    // that merely carries it as origin-id, regardless of array order.
+    const messages = [
+      { id: 'real-id-owner', body: 'owner (listed first)' },
+      { id: 'other', originId: 'real-id-owner', body: 'origin-id carrier' },
+    ]
+
+    const lookup = createMessageLookup(messages)
+
+    expect(lookup.get('real-id-owner')?.body).toBe('owner (listed first)')
+  })
+
   it('should handle messages without correctionStanzaIds', () => {
     const messages = [
       { id: 'msg-1', stanzaId: 'stanza-1', body: 'No corrections' },
@@ -190,6 +219,27 @@ describe('findMessageById', () => {
 
     const found = findMessageById(messages, 'correction-stanza-1')
     expect(found).toEqual(messages[0])
+  })
+
+  it('should find message by origin-id (XEP-0308 correction reference)', () => {
+    const messages = [
+      { id: 'muc-rewritten-id', originId: 'sender-origin-uuid', stanzaId: 'mam-id', body: 'Hello' },
+    ]
+
+    const found = findMessageById(messages, 'sender-origin-uuid')
+    expect(found).toEqual(messages[0])
+  })
+
+  it('should prefer a strong-tier (id/stanzaId) match over an origin-id match', () => {
+    // Guards against over-matching: an earlier message carrying the value as a
+    // (spoofable) origin-id must not shadow the later message that owns it as id.
+    const messages = [
+      { id: 'other', originId: 'shared-value', body: 'origin-id carrier (first)' },
+      { id: 'shared-value', body: 'real id owner' },
+    ]
+
+    const found = findMessageById(messages, 'shared-value')
+    expect(found?.body).toBe('real id owner')
   })
 
   it('should return undefined when correction stanza-id does not match', () => {

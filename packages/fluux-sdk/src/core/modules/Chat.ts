@@ -331,7 +331,8 @@ export class Chat extends BaseModule {
         bareFrom,
         bareTo,
         type,
-        isSentCarbon
+        isSentCarbon,
+        stanza.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id
       )) return { handled: true }
     }
 
@@ -1207,8 +1208,16 @@ export class Chat extends BaseModule {
   async sendCorrection(to: string, originalMessageId: string, newBody: string, type: 'chat' | 'groupchat' = 'chat', attachment?: FileAttachment): Promise<void> {
     const recipient = type === 'chat' ? getBareJid(to) : to
 
-    // For MUC, prefer stanzaId (server-assigned, stable) for the correction reference
-    const referenceId = this.getMessageReferenceId(to, originalMessageId, type)
+    // XEP-0308 (Last Message Correction) has NO group-chat carve-out — unlike
+    // XEP-0461 replies, XEP-0444 reactions and XEP-0424 retractions, which all
+    // switch to the server/MUC stanza-id. A correction MUST reference the id the
+    // ORIGINAL SENDER assigned: the origin-id (XEP-0359) when present, otherwise
+    // the message id. Referencing the stanza-id breaks correction matching on
+    // compliant clients (they render the edit as a brand-new message).
+    const original = type === 'groupchat'
+      ? this.deps.stores?.room.getMessage(to, originalMessageId)
+      : this.deps.stores?.chat.getMessage(to, originalMessageId)
+    const referenceId = original?.originId ?? originalMessageId
 
     const correctionPrefix = '[Corrected] '
     const correctionFallbackEnd = correctionPrefix.length
@@ -1293,17 +1302,13 @@ export class Chat extends BaseModule {
 
     await this.deps.sendStanza(xml('message', { to: recipient, type, id: correctionStanzaId }, ...children))
 
-    // SDK events only - bindings call store methods
-    if (type === 'groupchat') {
-      const original = this.deps.stores?.room.getMessage(to, originalMessageId)
-      if (original) {
-        const updates = { body: newBody, isEdited: true, originalBody: original.originalBody ?? original.body, attachment }
+    // SDK events only - bindings call store methods. Reuses the original
+    // message fetched above for the correction reference.
+    if (original) {
+      const updates = { body: newBody, isEdited: true, originalBody: original.originalBody ?? original.body, attachment }
+      if (type === 'groupchat') {
         this.deps.emitSDK('room:message-updated', { roomJid: to, messageId: originalMessageId, updates })
-      }
-    } else {
-      const original = this.deps.stores?.chat.getMessage(to, originalMessageId)
-      if (original) {
-        const updates = { body: newBody, isEdited: true, originalBody: original.originalBody ?? original.body, attachment }
+      } else {
         this.deps.emitSDK('chat:message-updated', { conversationId: to, messageId: originalMessageId, updates })
       }
     }
@@ -1722,6 +1727,21 @@ export class Chat extends BaseModule {
     }
   }
 
+  /**
+   * XEP-0421: in a MUC the occupant-id is the stable, unforgeable author
+   * identity — the full room JID is nick-based and a nick can be reassigned to
+   * a different occupant once the author leaves. Prefer occupant-id when BOTH
+   * the stored message and the incoming stanza carry one; otherwise fall back to
+   * the full MUC JID (older servers / no XEP-0421 support). XEP-0424 mandates
+   * this occupant-id check for retractions; we apply the same gate to corrections.
+   */
+  private isSameMucAuthor(original: RoomMessage, from: string, senderOccupantId: string | undefined): boolean {
+    if (original.occupantId && senderOccupantId) {
+      return original.occupantId === senderOccupantId
+    }
+    return original.from === from
+  }
+
   private handleIncomingCorrection(stanza: Element, originalId: string, from: string, bareFrom: string, bareTo: string | undefined, body: string, type: string, isSentCarbon: boolean): boolean {
     const myBareJid = getBareJid(this.deps.getCurrentJid() ?? '')
     const isOutgoing = isSentCarbon || bareFrom === myBareJid
@@ -1735,7 +1755,8 @@ export class Chat extends BaseModule {
     // SDK events only - bindings call store methods
     if (type === 'groupchat') {
       const original = this.deps.stores?.room.getMessage(conversationId, originalId)
-      if (original && original.from === from) {
+      const senderOccupantId = stanza.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id
+      if (original && this.isSameMucAuthor(original, from, senderOccupantId)) {
         const correctionData = applyCorrection(stanza, body, original.originalBody ?? original.body)
         if (correctionStanzaId) {
           correctionData.correctionStanzaIds = [...(original.correctionStanzaIds ?? []), correctionStanzaId]
@@ -1757,7 +1778,7 @@ export class Chat extends BaseModule {
     return false
   }
 
-  private handleIncomingRetraction(originalId: string, from: string, bareFrom: string, bareTo: string | undefined, type: string, isSentCarbon: boolean): boolean {
+  private handleIncomingRetraction(originalId: string, from: string, bareFrom: string, bareTo: string | undefined, type: string, isSentCarbon: boolean, senderOccupantId?: string): boolean {
     const myBareJid = getBareJid(this.deps.getCurrentJid() ?? '')
     const isOutgoing = isSentCarbon || bareFrom === myBareJid
     const conversationId = isOutgoing ? bareTo : bareFrom
@@ -1766,7 +1787,7 @@ export class Chat extends BaseModule {
     // SDK events only - bindings call store methods
     if (type === 'groupchat') {
       const original = this.deps.stores?.room.getMessage(conversationId, originalId)
-      const retractionData = applyRetraction(!!original && original.from === from)
+      const retractionData = applyRetraction(!!original && this.isSameMucAuthor(original, from, senderOccupantId))
       if (retractionData) {
         this.deps.emitSDK('room:message-updated', { roomJid: conversationId, messageId: originalId, updates: retractionData })
         return true

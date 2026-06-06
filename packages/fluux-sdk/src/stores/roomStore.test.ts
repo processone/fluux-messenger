@@ -1801,6 +1801,19 @@ describe('roomStore', () => {
       expect(room?.messages[0].reactions).toEqual({ '👍': ['bob'] })
     })
 
+    it('should find message by originId when a reaction references the sender id', () => {
+      const messages = [createMessage('muc-rewritten-id', 'test@conference.example.com', 'alice', 'Hello')]
+      messages[0].originId = 'sender-origin-uuid'
+      messages[0].stanzaId = 'server-stanza-id-789'
+      roomStore.getState().addRoom(createRoom('test@conference.example.com', { messages }))
+
+      // Reaction references the sender-assigned origin-id (e.g. a corrected message)
+      roomStore.getState().updateReactions('test@conference.example.com', 'sender-origin-uuid', 'bob', ['👍'])
+
+      const room = roomStore.getState().rooms.get('test@conference.example.com')
+      expect(room?.messages[0].reactions).toEqual({ '👍': ['bob'] })
+    })
+
     it('should replace reactions when referenced by stanzaId', () => {
       const messages = [createMessage('msg1', 'test@conference.example.com', 'alice', 'Hello')]
       messages[0].stanzaId = 'server-stanza-id-456'
@@ -3095,6 +3108,50 @@ describe('roomStore', () => {
       expect(updated?.isRetracted).toBe(true)
       // Verify IndexedDB update uses actual message id, not the stanza-id
       expect(messageCache.updateRoomMessage).toHaveBeenCalledWith('client-id-1', { isRetracted: true })
+    })
+
+    it('should update message found by originId when a correction references the origin-id', () => {
+      const roomJid = 'room@conference.example.com'
+      const msg: RoomMessage = {
+        ...createMessage('muc-rewritten-id', roomJid, 'alice', 'Hello'),
+        originId: 'sender-origin-uuid',
+        stanzaId: 'server-stanza-id-123',
+      }
+      const room = createRoom(roomJid, { messages: [msg], joined: true })
+      roomStore.getState().addRoom(room)
+
+      // XEP-0308 corrections reference the sender-assigned origin-id. If a MUC
+      // rewrote the message id, matching on id/stanzaId alone would miss it.
+      roomStore.getState().updateMessage(roomJid, 'sender-origin-uuid', { isEdited: true, body: 'Hello (fixed)' })
+
+      const updated = roomStore.getState().rooms.get(roomJid)?.messages[0]
+      expect(updated?.isEdited).toBe(true)
+      expect(updated?.body).toBe('Hello (fixed)')
+      // IndexedDB update still keyed by the actual stored message id.
+      expect(messageCache.updateRoomMessage).toHaveBeenCalledWith('muc-rewritten-id', { isEdited: true, body: 'Hello (fixed)' })
+    })
+
+    it('should not touch an origin-id carrier when another message owns the id (no over-match)', () => {
+      const roomJid = 'room@conference.example.com'
+      const carrier: RoomMessage = {
+        ...createMessage('other-id', roomJid, 'alice', 'carrier body'),
+        originId: 'shared-value',
+      }
+      const owner = createMessage('shared-value', roomJid, 'alice', 'owner body')
+      const room = createRoom(roomJid, { messages: [carrier, owner], joined: true })
+      roomStore.getState().addRoom(room)
+
+      // Reference resolves to the message that OWNS it as id — not the carrier
+      // that merely holds it as a (spoofable) origin-id.
+      roomStore.getState().updateMessage(roomJid, 'shared-value', { isEdited: true, body: 'edited' })
+
+      const msgs = roomStore.getState().rooms.get(roomJid)?.messages
+      const updatedOwner = msgs?.find((m) => m.id === 'shared-value')
+      const untouchedCarrier = msgs?.find((m) => m.id === 'other-id')
+      expect(updatedOwner?.body).toBe('edited')
+      expect(updatedOwner?.isEdited).toBe(true)
+      expect(untouchedCarrier?.body).toBe('carrier body')
+      expect(untouchedCarrier?.isEdited).toBeUndefined()
     })
 
     it('should update roomRuntime messages in sync', () => {

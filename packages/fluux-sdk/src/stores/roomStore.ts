@@ -12,7 +12,7 @@ import type {
   RSMResponse,
 } from '../core/types'
 import { setTypingTimeout, clearTypingTimeout } from './typingTimeout'
-import { findMessageById } from '../utils/messageLookup'
+import { findMessageById, findMessageIndexById } from '../utils/messageLookup'
 import { getBareJid } from '../core/jid'
 import { logInfo } from '../core/logger'
 import * as messageCache from '../utils/messageCache'
@@ -964,10 +964,11 @@ export const roomStore = createStore<RoomState>()(
       const existing = newRooms.get(roomJid)
       if (!existing) return state
 
+      // Resolve to a single target: id/stanzaId win, origin-id is fallback only.
+      const targetIdx = findMessageIndexById(existing.messages, messageId)
       let updatedMessage: RoomMessage | undefined
-      const newMessages = existing.messages.map((msg) => {
-        // Match by id or stanzaId (reactions may reference either)
-        if (msg.id !== messageId && msg.stanzaId !== messageId) return msg
+      const newMessages = targetIdx === -1 ? existing.messages : existing.messages.map((msg, i) => {
+        if (i !== targetIdx) return msg
 
         // Build new reactions map
         const newReactions: Record<string, string[]> = {}
@@ -1028,10 +1029,13 @@ export const roomStore = createStore<RoomState>()(
       const existing = newRooms.get(roomJid)
       if (!existing) return state
 
+      // Resolve to a single target: id/stanzaId win, origin-id is fallback only.
+      // Retractions (XEP-0424) reference the MUC stanza-id; corrections (XEP-0308)
+      // reference the sender-assigned origin-id (a MUC may rewrite the message id).
+      const targetIdx = findMessageIndexById(existing.messages, messageId)
       let updatedMessage: RoomMessage | undefined
-      const newMessages = existing.messages.map((msg) => {
-        // Match by id or stanzaId (retractions/corrections reference stanza-id in MUC)
-        if (msg.id !== messageId && msg.stanzaId !== messageId) return msg
+      const newMessages = targetIdx === -1 ? existing.messages : existing.messages.map((msg, i) => {
+        if (i !== targetIdx) return msg
         updatedMessage = { ...msg, ...updates }
         return updatedMessage
       })

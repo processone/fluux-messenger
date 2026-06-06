@@ -1029,6 +1029,22 @@ describe('chatStore', () => {
       expect(messages?.[0].reactions).toEqual({ '👍': ['bob@example.com'] })
     })
 
+    it('should find message by origin-id when a reaction references the sender id', () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      const msg: Message = {
+        ...createMessage('alice@example.com', 'Hello!'),
+        id: 'rewritten-id',
+        originId: 'sender-origin-uuid',
+      }
+      chatStore.getState().addMessage(msg)
+
+      // XEP-0444: a 1:1 reaction references the origin-id when present.
+      chatStore.getState().updateReactions('alice@example.com', 'sender-origin-uuid', 'bob@example.com', ['👍'])
+
+      const messages = chatStore.getState().messages.get('alice@example.com')
+      expect(messages?.[0].reactions).toEqual({ '👍': ['bob@example.com'] })
+    })
+
     it('should add multiple reactions from same user', () => {
       chatStore.getState().addConversation(createConversation('alice@example.com'))
       const msg = createMessage('alice@example.com', 'Hello!')
@@ -2205,6 +2221,30 @@ describe('chatStore', () => {
 
       const updated = store.getMessage('alice@example.com', 'msg-123')
       expect(updated?.body).toBe('Edited message')
+      expect(updated?.isEdited).toBe(true)
+    })
+
+    it('should find message by origin-id when a correction references it (XEP-0308)', () => {
+      const store = chatStore.getState()
+      store.addConversation(createConversation('alice@example.com'))
+
+      const message: Message = {
+        type: 'chat',
+        id: 'rewritten-id',
+        originId: 'sender-origin-uuid',
+        conversationId: 'alice@example.com',
+        from: 'alice@example.com',
+        body: 'Original',
+        timestamp: new Date(),
+        isOutgoing: false,
+      }
+      store.addMessage(message)
+
+      // Correction references the sender-assigned origin-id, not the stored id.
+      store.updateMessage('alice@example.com', 'sender-origin-uuid', { body: 'Fixed', isEdited: true })
+
+      const updated = store.getMessage('alice@example.com', 'rewritten-id')
+      expect(updated?.body).toBe('Fixed')
       expect(updated?.isEdited).toBe(true)
     })
 

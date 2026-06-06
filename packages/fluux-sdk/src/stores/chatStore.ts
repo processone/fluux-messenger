@@ -2,7 +2,7 @@ import { createStore } from 'zustand/vanilla'
 import { persist, subscribeWithSelector } from 'zustand/middleware'
 import type { Message, Conversation, ConversationEntity, ConversationMetadata, MAMQueryState, RSMResponse } from '../core'
 import { setTypingTimeout, clearTypingTimeout, clearAllTypingTimeouts } from './typingTimeout'
-import { findMessageById } from '../utils/messageLookup'
+import { findMessageById, findMessageIndexById } from '../utils/messageLookup'
 import * as messageCache from '../utils/messageCache'
 import * as searchIndex from '../utils/searchIndex'
 import * as mamState from './shared/mamState'
@@ -920,8 +920,9 @@ export const chatStore = createStore<ChatState>()(
           const convMessages = state.messages.get(conversationId)
           if (!convMessages) return state
 
-          // Find message by id or stanzaId (reactions may reference either)
-          const messageIndex = convMessages.findIndex((m) => m.id === messageId || m.stanzaId === messageId)
+          // Resolve by id/stanzaId first, origin-id only as fallback (reactions
+          // may reference any tier; origin-id must not shadow a real id).
+          const messageIndex = findMessageIndexById(convMessages, messageId)
           if (messageIndex === -1) return state
 
           const message = convMessages[messageIndex]
@@ -966,8 +967,9 @@ export const chatStore = createStore<ChatState>()(
           const convMessages = state.messages.get(conversationId)
           if (!convMessages) return state
 
-          // Find message by id or stanzaId (corrections may reference either)
-          const messageIndex = convMessages.findIndex((m) => m.id === messageId || m.stanzaId === messageId)
+          // Resolve by id/stanzaId first, origin-id only as fallback. XEP-0308
+          // corrections reference the origin-id; retractions/MAM may use stanzaId.
+          const messageIndex = findMessageIndexById(convMessages, messageId)
           if (messageIndex === -1) return state
 
           const newMessages = new Map(state.messages)
