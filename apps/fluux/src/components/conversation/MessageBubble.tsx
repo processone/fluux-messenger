@@ -649,7 +649,7 @@ function formatSecurityTooltip(
  */
 export function buildReplyContext<T extends BaseMessage>(
   message: T,
-  messagesById: Map<string, T>,
+  getMessageById: (id: string) => T | undefined,
   getSenderName: (msg: T | undefined, fallbackId: string | undefined) => string,
   getSenderColor: (msg: T | undefined, fallbackId: string | undefined, isDarkMode?: boolean) => string,
   getAvatarInfo: (msg: T | undefined, fallbackId: string | undefined) => { avatarUrl?: string; avatarIdentifier: string },
@@ -657,7 +657,7 @@ export function buildReplyContext<T extends BaseMessage>(
 ): MessageBubbleProps['replyContext'] {
   if (!message.replyTo) return undefined
 
-  const originalMessage = messagesById.get(message.replyTo.id)
+  const originalMessage = getMessageById(message.replyTo.id)
   const fallbackId = message.replyTo.to
   const senderName = getSenderName(originalMessage, fallbackId)
   const senderColor = getSenderColor(originalMessage, fallbackId, isDarkMode)

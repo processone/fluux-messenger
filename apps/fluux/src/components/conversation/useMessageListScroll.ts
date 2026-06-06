@@ -489,7 +489,11 @@ export function useMessageListScroll({
   //
   // This prevents jitter from multiple images loading in sequence.
 
-  const handleMediaLoad = () => {
+  // Stable identity (deps are all refs/constants) so it can be passed to every
+  // memoized message row without breaking their `memo` bailout. React Compiler
+  // does NOT memoize this (it's returned from a hook and used only in parent
+  // JSX), so the manual useCallback is required — see RENDER_PERF_TESTS.md.
+  const handleMediaLoad = useCallback(() => {
     const scroller = scrollerRef.current
     if (!scroller) return
 
@@ -540,7 +544,7 @@ export function useMessageListScroll({
       mediaLoadSnapshotRef.current = null
       mediaLoadDebounceRef.current = null
     }, MEDIA_LOAD_DEBOUNCE_MS)
-  }
+  }, [isAtBottomRef])
 
   // ==========================================================================
   // SCROLL EVENT HANDLER

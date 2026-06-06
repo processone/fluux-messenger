@@ -454,7 +454,7 @@ describe('buildReplyContext', () => {
 
     const result = buildReplyContext(
       message,
-      messagesById,
+      (id) => messagesById.get(id),
       () => 'Unknown',
       () => 'rgb(0, 0, 0)',
       () => ({ avatarUrl: undefined, avatarIdentifier: 'unknown' })
@@ -479,7 +479,7 @@ describe('buildReplyContext', () => {
 
     const result = buildReplyContext(
       replyMessage,
-      messagesById,
+      (id) => messagesById.get(id),
       (msg) => msg ? 'Bob' : 'Unknown',
       () => 'rgb(100, 100, 100)',
       (msg) => ({ avatarUrl: msg ? 'http://example.com/bob.jpg' : undefined, avatarIdentifier: 'bob@example.com' })
@@ -508,7 +508,7 @@ describe('buildReplyContext', () => {
 
     const result = buildReplyContext(
       replyMessage,
-      messagesById,
+      (id) => messagesById.get(id),
       (msg, fallbackId) => msg ? 'Found' : (fallbackId ? 'Charlie' : 'Unknown'),
       () => 'rgb(50, 50, 50)',
       (_msg, fallbackId) => ({ avatarUrl: undefined, avatarIdentifier: fallbackId || 'unknown' })
@@ -551,7 +551,7 @@ describe('buildReplyContext', () => {
 
     const result = buildReplyContext(
       replyMessage,
-      messagesById,
+      (id) => messagesById.get(id),
       (msg) => msg ? 'Bob' : 'Unknown',
       () => 'rgb(100, 100, 100)',
       () => ({ avatarUrl: 'http://example.com/bob.jpg', avatarIdentifier: 'bob@example.com' })

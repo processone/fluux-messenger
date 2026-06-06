@@ -88,14 +88,16 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     ? () => onSearchInConversation(activeRoom.jid)
     : undefined
 
-  // Create a map of contacts by JID for quick lookup (used to show avatars for known contacts)
-  const contactsByJid = (() => {
+  // Create a map of contacts by JID for quick lookup (used to show avatars for known
+  // contacts). Memoized so it keeps a stable identity across renders — a fresh Map
+  // every render breaks the memo bailout of every RoomMessageBubbleWrapper.
+  const contactsByJid = useMemo(() => {
     const map = new Map<string, Contact>()
     for (const contact of contacts) {
       map.set(contact.jid, contact)
     }
     return map
-  })()
+  }, [contacts])
 
   // Filter out messages from ignored users and replies quoting them (client-side ignore)
   // IMPORTANT: Use stable empty array reference to prevent infinite re-renders.
@@ -169,9 +171,10 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
 
   const handleCancelReply = useCallback(() => setReplyingTo(null), [])
   const handleCancelEdit = useCallback(() => setEditingMessage(null), [])
-  const handleReactionPickerChange = (messageId: string, isOpen: boolean) => {
+  // Stable identity so it does not break the memo bailout of every message row.
+  const handleReactionPickerChange = useCallback((messageId: string, isOpen: boolean) => {
     setActiveReactionPickerMessageId(isOpen ? messageId : null)
-  }
+  }, [])
   const handleCloseOccupants = () => setShowOccupants(false)
 
   // Nick context menu state (right-click / long-press on nick in messages)
@@ -188,21 +191,28 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // to list-level selectors that cause render loops when other rooms update
   const addToast = useToastStore((s) => s.addToast)
 
-  const handleNickContextMenu = (nick: string, e: React.MouseEvent) => {
-    if (!activeRoom || nick === activeRoom.nickname) return
+  // Stable identities (read the room from the store at call time instead of closing
+  // over the recombined `activeRoom`) so they do not break the memo bailout of every
+  // message row. The nickMenu.* handlers are stabilized inside useContextMenu, so
+  // destructuring them gives exhaustive-deps stable references to depend on.
+  const { handleContextMenu: openNickMenu, handleTouchStart: startNickLongPress, handleTouchEnd: cancelNickLongPress } = nickMenu
+  const handleNickContextMenu = useCallback((nick: string, e: React.MouseEvent) => {
+    const room = roomStore.getState().activeRoom()
+    if (!room || nick === room.nickname) return
     setNickMenuTarget(nick)
-    nickMenu.handleContextMenu(e)
-  }
+    openNickMenu(e)
+  }, [openNickMenu])
 
-  const handleNickTouchStart = (nick: string, e: React.TouchEvent) => {
-    if (!activeRoom || nick === activeRoom.nickname) return
+  const handleNickTouchStart = useCallback((nick: string, e: React.TouchEvent) => {
+    const room = roomStore.getState().activeRoom()
+    if (!room || nick === room.nickname) return
     setNickMenuTarget(nick)
-    nickMenu.handleTouchStart(e)
-  }
+    startNickLongPress(e)
+  }, [startNickLongPress])
 
-  const handleNickTouchEnd = () => {
-    nickMenu.handleTouchEnd()
-  }
+  const handleNickTouchEnd = useCallback(() => {
+    cancelNickLongPress()
+  }, [cancelNickLongPress])
 
   const uploadStateObj = useMemo(
     () => ({ isUploading, progress, error: uploadError, clearError: clearUploadError }),
@@ -263,9 +273,15 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // Format copied messages with sender headers
   useMessageCopy(scrollRef)
 
-  // Create a lookup map for messages by ID (for reply context)
-  // Index by both client id and stanza-id since replies may reference either
+  // Lookup map for messages by ID (for reply context), indexed by both client id
+  // and stanza-id since replies may reference either. Exposed to rows as a STABLE
+  // getter so a new Map (every appended message) does not break the memo bailout
+  // of every RoomMessageBubbleWrapper. Ref updated in an effect (not during
+  // render) to avoid making the React Compiler bail on RoomView.
   const messagesById = useMemo(() => createMessageLookup(activeMessages), [activeMessages])
+  const messagesByIdRef = useRef(messagesById)
+  useEffect(() => { messagesByIdRef.current = messagesById }, [messagesById])
+  const getMessageById = useCallback((id: string) => messagesByIdRef.current.get(id), [])
 
   // Track pendingAttachment in a ref for cleanup (not a trigger)
   const pendingAttachmentRef = useRef(pendingAttachment)
@@ -276,6 +292,33 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // (which changes on every occupant update and would destabilize the callback).
   const activeRoomRef = useRef(activeRoom)
   activeRoomRef.current = activeRoom
+
+  // Referentially-stable room for the message rows. `activeRoom` is recombined
+  // (entity/meta/runtime) on every render, so passing it directly re-renders every
+  // RoomMessageBubbleWrapper on each new message. The rows only read these fields,
+  // none of which change on a plain message append — so keep the previous reference
+  // until one of them actually changes (occupant/cache/nick churn). Implemented with
+  // a ref + field comparison rather than useMemo-with-partial-deps so it stays clean
+  // for both react-hooks/exhaustive-deps and the React Compiler.
+  const stableRoomRef = useRef(activeRoom)
+  {
+    const prev = stableRoomRef.current
+    if (!activeRoom) {
+      stableRoomRef.current = undefined
+    } else if (
+      !prev ||
+      prev.jid !== activeRoom.jid ||
+      prev.nickname !== activeRoom.nickname ||
+      prev.joined !== activeRoom.joined ||
+      prev.supportsReactions !== activeRoom.supportsReactions ||
+      prev.occupants !== activeRoom.occupants ||
+      prev.nickToJidCache !== activeRoom.nickToJidCache ||
+      prev.nickToAvatarCache !== activeRoom.nickToAvatarCache
+    ) {
+      stableRoomRef.current = activeRoom
+    }
+  }
+  const stableRoom = stableRoomRef.current
 
   // Stable callback that clears any staged compose state before entering whisper
   // mode. Whispers are text-only so a staged reply, edit, or pending attachment
@@ -298,7 +341,10 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     if (message.isPrivate && message.whisperWith) {
       // Only continue a private thread if the counterpart is still in the room —
       // replying to a recycled or absent nick would leak the private text.
-      if (activeRoom && whisperCounterpartPresent(message, activeRoom.occupants)) {
+      // Read the room from a ref (not the recombined activeRoom) so this callback
+      // keeps a stable identity and does not break the message-row memo bailout.
+      const room = activeRoomRef.current
+      if (room && whisperCounterpartPresent(message, room.occupants)) {
         enterWhisperMode(message.whisperWith)
       } else {
         addToast('info', t('rooms.whisperCounterpartGone', { nick: message.whisperWith }))
@@ -306,7 +352,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     } else {
       setReplyingTo(message)
     }
-  }, [enterWhisperMode, activeRoom, addToast, t])
+  }, [enterWhisperMode, addToast, t])
 
   // Clear reply/edit/whisper/pending attachment state when room changes
   // Note: scroll position is managed by MessageList component
@@ -461,10 +507,10 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
           )}
           <RoomMessageList
             messages={displayMessages}
-            messagesById={messagesById}
+            getMessageById={getMessageById}
             scrollerRef={scrollRef}
             isAtBottomRef={isAtBottomRef}
-            room={activeRoom}
+            room={stableRoom ?? activeRoom}
             contactsByJid={contactsByJid}
             ownAvatar={ownAvatar}
             sendReaction={sendReaction}
@@ -711,9 +757,9 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   )
 }
 
-const RoomMessageList = memo(function RoomMessageList({
+export const RoomMessageList = memo(function RoomMessageList({
   messages,
-  messagesById,
+  getMessageById,
   scrollerRef,
   isAtBottomRef,
   room,
@@ -758,7 +804,7 @@ const RoomMessageList = memo(function RoomMessageList({
   isCatchingUp,
 }: {
   messages: RoomMessage[]
-  messagesById: Map<string, RoomMessage>
+  getMessageById: (id: string) => RoomMessage | undefined
   scrollerRef: React.RefObject<HTMLElement | null>
   isAtBottomRef: React.MutableRefObject<boolean>
   room: Room
@@ -810,18 +856,19 @@ const RoomMessageList = memo(function RoomMessageList({
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null)
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Handle mouse enter on a message - set it as hovered immediately
-  const handleMessageHover = (messageId: string) => {
+  // Handle mouse enter on a message - set it as hovered immediately.
+  // Stable identity (refs/stable setter) so it does not break row memo bailout.
+  const handleMessageHover = useCallback((messageId: string) => {
     // Clear any pending timeout to clear hover
     if (hoverTimeoutRef.current) {
       clearTimeout(hoverTimeoutRef.current)
       hoverTimeoutRef.current = null
     }
     setHoveredMessageId(messageId)
-  }
+  }, [])
 
-  // Handle mouse leave from a message - delay clearing to allow moving to toolbar
-  const handleMessageLeave = () => {
+  // Handle mouse leave from a message - delay clearing to allow moving to toolbar.
+  const handleMessageLeave = useCallback(() => {
     // Clear any existing timeout
     if (hoverTimeoutRef.current) {
       clearTimeout(hoverTimeoutRef.current)
@@ -831,7 +878,7 @@ const RoomMessageList = memo(function RoomMessageList({
       setHoveredMessageId(null)
       hoverTimeoutRef.current = null
     }, 100) // Small delay to allow mouse to reach toolbar
-  }
+  }, [])
 
   // Clear hover when room changes
   useEffect(() => {
@@ -848,7 +895,9 @@ const RoomMessageList = memo(function RoomMessageList({
   }, [])
 
   // Set of original poll message IDs that have been closed (a poll-closed message references them).
-  // Used to disable the "Close poll" button on already-closed polls.
+  // Used to disable the "Close poll" button on already-closed polls. Exposed to rows
+  // as a STABLE getter — a fresh Set every render (messages change on every append)
+  // would break the memo bailout of every RoomMessageBubbleWrapper.
   const closedPollIds = useMemo(() => {
     const ids = new Set<string>()
     for (const msg of messages) {
@@ -858,6 +907,9 @@ const RoomMessageList = memo(function RoomMessageList({
     }
     return ids
   }, [messages])
+  const closedPollIdsRef = useRef(closedPollIds)
+  useEffect(() => { closedPollIdsRef.current = closedPollIds }, [closedPollIds])
+  const isPollClosed = useCallback((pollMessageId: string) => closedPollIdsRef.current.has(pollMessageId), [])
 
   // Set of known occupant nicknames for IRC-style mention highlighting
   const knownNicks = useMemo(() => {
@@ -910,7 +962,7 @@ const RoomMessageList = memo(function RoomMessageList({
       message={msg}
       showAvatar={shouldShowAvatar(groupMessages, idx)}
       whisperThread={whisperThreadPosition(groupMessages, idx)}
-      messagesById={messagesById}
+      getMessageById={getMessageById}
       room={room}
       knownNicks={knownNicks}
       contactsByJid={contactsByJid}
@@ -919,13 +971,13 @@ const RoomMessageList = memo(function RoomMessageList({
       votePoll={votePoll}
       closePoll={closePoll}
 
-      closedPollIds={closedPollIds}
+      isPollClosed={isPollClosed}
       onReply={onReply}
       onEdit={onEdit}
       isLastOutgoing={msg.id === lastOutgoingMessageId}
       isLastMessage={msg.id === lastMessageId}
       hideToolbar={isComposing || (activeReactionPickerMessageId !== null && activeReactionPickerMessageId !== msg.id)}
-      onReactionPickerChange={(isOpen) => onReactionPickerChange(msg.id, isOpen)}
+      onReactionPickerChange={onReactionPickerChange}
       retractMessage={retractMessage}
       moderateMessage={moderateMessage}
       isSelected={msg.id === selectedMessageId}
@@ -934,7 +986,7 @@ const RoomMessageList = memo(function RoomMessageList({
       isDarkMode={isDarkMode}
       onMediaLoad={onMediaLoad}
       isHovered={hoveredMessageId === msg.id}
-      onMouseEnter={() => handleMessageHover(msg.id)}
+      onMouseEnter={handleMessageHover}
       onMouseLeave={handleMessageLeave}
       formatTime={formatTime}
       timeFormat={effectiveTimeFormat}
@@ -979,7 +1031,7 @@ interface RoomMessageBubbleWrapperProps {
   message: RoomMessage
   showAvatar: boolean
   whisperThread: WhisperThreadPosition | null
-  messagesById: Map<string, RoomMessage>
+  getMessageById: (id: string) => RoomMessage | undefined
   room: Room
   knownNicks: ReadonlySet<string>
   contactsByJid: Map<string, Contact>
@@ -992,7 +1044,8 @@ interface RoomMessageBubbleWrapperProps {
   isLastOutgoing: boolean
   isLastMessage: boolean
   hideToolbar?: boolean
-  onReactionPickerChange?: (isOpen: boolean) => void
+  // Receives the row's own id so the parent can pass a STABLE handler (id bound here).
+  onReactionPickerChange?: (messageId: string, isOpen: boolean) => void
   retractMessage: (roomJid: string, messageId: string) => Promise<void>
   moderateMessage: (roomJid: string, stanzaId: string, reason?: string) => Promise<void>
   isSelected?: boolean
@@ -1000,9 +1053,10 @@ interface RoomMessageBubbleWrapperProps {
   showToolbarForSelection?: boolean
   isDarkMode?: boolean
   onMediaLoad?: () => void
-  // Hover state for stable toolbar interaction
+  // Hover state for stable toolbar interaction.
+  // onMouseEnter receives the row's own id so the parent can pass a stable handler.
   isHovered?: boolean
-  onMouseEnter?: () => void
+  onMouseEnter?: (messageId: string) => void
   onMouseLeave?: () => void
   // Time formatting function (respects user's 12h/24h preference)
   formatTime: (date: Date) => string
@@ -1014,8 +1068,8 @@ interface RoomMessageBubbleWrapperProps {
   onNickTouchEnd?: () => void
   // Affiliation action (passed from parent to avoid useRoom() subscription)
   setAffiliation: (roomJid: string, userJid: string, affiliation: RoomAffiliation, reason?: string) => Promise<void>
-  // Set of poll message IDs that have been closed (to disable close button)
-  closedPollIds: Set<string>
+  // Stable getter: is this poll message closed? (to disable close button)
+  isPollClosed: (pollMessageId: string) => boolean
   // Highlight terms for find-on-page
   highlightTerms?: string[]
   // Whether this message is the current find-on-page match
@@ -1026,7 +1080,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   message,
   showAvatar,
   whisperThread,
-  messagesById,
+  getMessageById,
   room,
   knownNicks,
   contactsByJid,
@@ -1056,7 +1110,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   onNickTouchStart,
   onNickTouchEnd,
   setAffiliation,
-  closedPollIds,
+  isPollClosed,
   highlightTerms,
   isCurrentMatch,
 }: RoomMessageBubbleWrapperProps) {
@@ -1161,7 +1215,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   // Build reply context using shared helper
   const replyContext = buildReplyContext(
     message,
-    messagesById,
+    getMessageById,
     (originalMsg, fallbackId) => {
       if (originalMsg) return originalMsg.nick
       // For rooms, fallbackId is the full JID like room@server/nick - extract nick
@@ -1289,7 +1343,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         isLastMessage={isLastMessage}
         isDarkMode={isDarkMode}
         isHovered={isHovered}
-        onMouseEnter={onMouseEnter}
+        onMouseEnter={() => onMouseEnter?.(message.id)}
         onMouseLeave={onMouseLeave}
         senderName={resolvedSenderName}
         senderColor={senderColor}
@@ -1327,9 +1381,9 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         onNickContextMenu={!message.isOutgoing ? handleNickContextMenu : undefined}
         onNickTouchStart={!message.isOutgoing ? handleNickTouchStart : undefined}
         onNickTouchEnd={!message.isOutgoing ? onNickTouchEnd : undefined}
-        onReactionPickerChange={onReactionPickerChange}
+        onReactionPickerChange={(isOpen) => onReactionPickerChange?.(message.id, isOpen)}
         onPollVote={handlePollVote}
-        onClosePoll={message.isOutgoing && message.poll && !closedPollIds.has(message.id) && !message.pollClosedAt ? () => closePoll(room.jid, message.id) : undefined}
+        onClosePoll={message.isOutgoing && message.poll && !isPollClosed(message.id) && !message.pollClosedAt ? () => closePoll(room.jid, message.id) : undefined}
 
         formatTime={formatTime}
         timeFormat={timeFormat}
