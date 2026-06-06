@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useImperativeHandle, memo, type RefObject } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useMemo, useImperativeHandle, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { useChatActive, useContactIdentities, createMessageLookup, getBareJid, getLocalPart, getMyReactions, useXMPPContext, type Message, type ContactIdentity } from '@fluux/sdk'
@@ -41,7 +41,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   const { t } = useTranslation()
   // Use useChatActive instead of useChat to avoid subscribing to the conversation list.
   // This prevents re-renders during background MAM sync of other conversations.
-  const { activeConversation, activeMessages, activeTypingUsers, sendReaction, sendCorrection, retractMessage, retryMessage, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, activeMAMState, fetchOlderHistory, targetMessageId, clearTargetMessageId } = useChatActive()
+  const { activeConversation, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, retryMessage, sendChatState, isArchived, unarchiveConversation, setDraft, getDraft, clearDraft, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, activeMAMState, fetchOlderHistory, targetMessageId, clearTargetMessageId } = useChatActive()
   // Use useContactIdentities instead of useRoster() to avoid re-renders on
   // presence changes. ChatView only needs contact names and avatars for display.
   const contactsByJid = useContactIdentities()
@@ -82,13 +82,20 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     ? () => onSearchInConversation(activeConversation.id)
     : undefined
 
+  // Latest messages in a ref so the stable callbacks below don't close over
+  // `activeMessages` (which changes on every incoming message). This keeps the
+  // props passed to the memoized MessageInput referentially stable, so the
+  // composer no longer re-renders once per message (RenderLoopDetector warning).
+  const activeMessagesRef = useRef(activeMessages)
+  activeMessagesRef.current = activeMessages
+
   // Handler to edit the last outgoing message (triggered by Up arrow in empty composer)
-  const handleEditLastMessage = () => {
-    const msg = findLastEditableMessage(activeMessages)
+  const handleEditLastMessage = useCallback(() => {
+    const msg = findLastEditableMessage(activeMessagesRef.current)
     if (msg) {
       setEditingMessage(msg)
     }
-  }
+  }, [])
 
   // Composing state - hides message toolbars when user is typing
   const [isComposing, setIsComposing] = useState(false)
@@ -96,15 +103,21 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   // Track which message has reaction picker open (hides other toolbars)
   const [activeReactionPickerMessageId, setActiveReactionPickerMessageId] = useState<string | null>(null)
 
-  // Callbacks for child components
-  const handleCancelReply = () => setReplyingTo(null)
-  const handleCancelEdit = () => setEditingMessage(null)
-  const handleReactionPickerChange = (messageId: string, isOpen: boolean) => {
+  // Callbacks for child components (stable identities for the memoized MessageInput)
+  const handleCancelReply = useCallback(() => setReplyingTo(null), [])
+  const handleCancelEdit = useCallback(() => setEditingMessage(null), [])
+  // Stable identity so it does not break the memo bailout of every message row.
+  const handleReactionPickerChange = useCallback((messageId: string, isOpen: boolean) => {
     setActiveReactionPickerMessageId(isOpen ? messageId : null)
-  }
+  }, [])
 
-  // Upload state object
-  const uploadStateObj = { isUploading, progress, error: uploadError, clearError: clearUploadError }
+  // Upload state object — memoized so it stays referentially stable between
+  // renders when no upload is in progress, preventing the memoized MessageInput
+  // from re-rendering on every ChatView render.
+  const uploadStateObj = useMemo(
+    () => ({ isUploading, progress, error: uploadError, clearError: clearUploadError }),
+    [isUploading, progress, uploadError, clearUploadError],
+  )
 
   // Composer handle ref for type-to-focus (separate from focus zone ref)
   const composerHandleRef = useRef<MessageComposerHandle>(null)
@@ -129,14 +142,21 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   const isAtBottomRef = useRef(true)
 
   // Scroll to bottom (used after sending a message)
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTo({
         top: scrollRef.current.scrollHeight,
         behavior: 'smooth',
       })
     }
-  }
+  }, [])
+
+  // Stable handler for the send-animation: clears the highlight after 400 ms.
+  const handleMessageIdSent = useCallback((id: string) => {
+    if (lastSentTimerRef.current) clearTimeout(lastSentTimerRef.current)
+    setLastSentMessageId(id)
+    lastSentTimerRef.current = setTimeout(() => setLastSentMessageId(null), 400)
+  }, [])
 
   // Note: Media load scroll handling is now managed by useMessageListScroll hook
   // via the handleMediaLoad callback passed through renderMessage. This provides
@@ -144,11 +164,11 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
 
   // Scroll to bottom when composer resizes (typing long message)
   // Only scrolls if user was already at bottom to avoid disrupting scroll position
-  const handleInputResize = () => {
+  const handleInputResize = useCallback(() => {
     if (scrollRef.current && isAtBottomRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }
+  }, [])
 
   // Keyboard navigation for message selection
   const {
@@ -170,9 +190,20 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   // Format copied messages with sender headers
   useMessageCopy(scrollRef)
 
-  // Create a lookup map for messages by ID (for reply context)
-  // Index by both client id and stanza-id since replies may reference either
-  const messagesById = createMessageLookup(activeMessages)
+  // Lookup map for messages by ID (for reply context), indexed by both client id
+  // and stanza-id since replies may reference either. Exposed to rows as a STABLE
+  // getter: a fresh Map would change identity every render and break the memo
+  // bailout of every ChatMessageBubble when a new message is appended.
+  //
+  // The ref is updated in an effect (NOT during render): a render-phase ref write
+  // that calls createMessageLookup makes the React Compiler bail on ChatView and
+  // stop memoizing the <MessageInput> element (composer re-renders per message).
+  // The one-render lag is irrelevant — reply targets are older messages already
+  // present in the previous render's map.
+  const messagesById = useMemo(() => createMessageLookup(activeMessages), [activeMessages])
+  const messagesByIdRef = useRef(messagesById)
+  useEffect(() => { messagesByIdRef.current = messagesById }, [messagesById])
+  const getMessageById = useCallback((id: string) => messagesByIdRef.current.get(id), [])
 
   // Track pendingAttachment in a ref for cleanup (not a trigger)
   const pendingAttachmentRef = useRef(pendingAttachment)
@@ -198,7 +229,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
 
   // File drop handler - stages file for preview only (no upload yet - privacy protection)
   // Upload happens when user clicks Send, not on drop (prevents accidental data leaks)
-  const handleFileDrop = (file: File) => {
+  const handleFileDrop = useCallback((file: File) => {
     if (!activeConversation || !isSupported) return
     // Create preview URL for images/videos
     const previewUrl = file.type.startsWith('image/') || file.type.startsWith('video/')
@@ -207,15 +238,15 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     setPendingAttachment({ file, previewUrl })
     // Focus composer so user can add a message
     setTimeout(() => composerHandleRef.current?.focus(), 0)
-  }
+  }, [activeConversation, isSupported])
 
   // Clear pending attachment and revoke preview URL
-  const handleRemovePendingAttachment = () => {
-    if (pendingAttachment?.previewUrl) {
-      URL.revokeObjectURL(pendingAttachment.previewUrl)
+  const handleRemovePendingAttachment = useCallback(() => {
+    if (pendingAttachmentRef.current?.previewUrl) {
+      URL.revokeObjectURL(pendingAttachmentRef.current.previewUrl)
     }
     setPendingAttachment(null)
-  }
+  }, [])
 
   // Drag-and-drop for file upload (handles both HTML5 and Tauri native)
   const { isDragging, dragHandlers } = useDragAndDrop({
@@ -223,12 +254,13 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     isUploadSupported: isSupported,
   })
 
-  // Handle reply button click - set reply state and focus composer
-  const handleReply = (message: Message) => {
+  // Handle reply button click - set reply state and focus composer.
+  // Stable identity so it does not break the memo bailout of every message row.
+  const handleReply = useCallback((message: Message) => {
     setReplyingTo(message)
     // Focus composer so user can start typing immediately
     setTimeout(() => composerHandleRef.current?.focus(), 0)
-  }
+  }, [])
 
   const conversationId = activeConversation?.id
   const handleClearFirstNewMessageId = () => {
@@ -397,7 +429,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
         <ChatMessageList
           messages={activeMessages}
           contactsByJid={contactsByJid}
-          messagesById={messagesById}
+          getMessageById={getMessageById}
           typingUsers={activeTypingUsers}
           scrollerRef={scrollRef}
           isAtBottomRef={isAtBottomRef}
@@ -444,19 +476,23 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
         conversationName={activeConversation.name}
         type={activeConversation.type}
         onMessageSent={scrollToBottom}
-        onMessageIdSent={(id) => {
-          if (lastSentTimerRef.current) clearTimeout(lastSentTimerRef.current)
-          setLastSentMessageId(id)
-          lastSentTimerRef.current = setTimeout(() => setLastSentMessageId(null), 400)
-        }}
+        onMessageIdSent={handleMessageIdSent}
         onInputResize={handleInputResize}
         replyingTo={replyingTo}
         onCancelReply={handleCancelReply}
         editingMessage={editingMessage}
         onCancelEdit={handleCancelEdit}
         onEditLastMessage={handleEditLastMessage}
+        sendMessage={sendMessage}
         sendCorrection={sendCorrection}
         retractMessage={retractMessage}
+        sendChatState={sendChatState}
+        isArchived={isArchived}
+        unarchiveConversation={unarchiveConversation}
+        setDraft={setDraft}
+        getDraft={getDraft}
+        clearDraft={clearDraft}
+        clearFirstNewMessageId={clearFirstNewMessageId}
         contactsByJid={contactsByJid}
         onComposingChange={setIsComposing}
         sendEasterEgg={sendEasterEgg}
@@ -480,10 +516,10 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   )
 }
 
-const ChatMessageList = memo(function ChatMessageList({
+export const ChatMessageList = memo(function ChatMessageList({
   messages,
   contactsByJid,
-  messagesById,
+  getMessageById,
   typingUsers,
   scrollerRef,
   isAtBottomRef,
@@ -521,7 +557,7 @@ const ChatMessageList = memo(function ChatMessageList({
 }: {
   messages: Message[]
   contactsByJid: Map<string, ContactIdentity>
-  messagesById: Map<string, Message>
+  getMessageById: (id: string) => Message | undefined
   typingUsers: string[]
   scrollerRef: React.RefObject<HTMLElement | null>
   isAtBottomRef: React.MutableRefObject<boolean>
@@ -565,18 +601,19 @@ const ChatMessageList = memo(function ChatMessageList({
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null)
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Handle mouse enter on a message - set it as hovered immediately
-  const handleMessageHover = (messageId: string) => {
+  // Handle mouse enter on a message - set it as hovered immediately.
+  // Stable identity (refs/stable setter) so it does not break row memo bailout.
+  const handleMessageHover = useCallback((messageId: string) => {
     // Clear any pending timeout to clear hover
     if (hoverTimeoutRef.current) {
       clearTimeout(hoverTimeoutRef.current)
       hoverTimeoutRef.current = null
     }
     setHoveredMessageId(messageId)
-  }
+  }, [])
 
-  // Handle mouse leave from a message - delay clearing to allow moving to toolbar
-  const handleMessageLeave = () => {
+  // Handle mouse leave from a message - delay clearing to allow moving to toolbar.
+  const handleMessageLeave = useCallback(() => {
     // Clear any existing timeout
     if (hoverTimeoutRef.current) {
       clearTimeout(hoverTimeoutRef.current)
@@ -586,7 +623,7 @@ const ChatMessageList = memo(function ChatMessageList({
       setHoveredMessageId(null)
       hoverTimeoutRef.current = null
     }, 100) // Small delay to allow mouse to reach toolbar
-  }
+  }, [])
 
   // Clear hover when conversation changes
   useEffect(() => {
@@ -621,13 +658,13 @@ const ChatMessageList = memo(function ChatMessageList({
       sendReaction={sendReaction}
       myBareJid={myBareJid}
       contactsByJid={contactsByJid}
-      messagesById={messagesById}
+      getMessageById={getMessageById}
       onReply={onReply}
       onEdit={onEdit}
       isLastOutgoing={msg.id === lastOutgoingMessageId}
       isLastMessage={msg.id === lastMessageId}
       hideToolbar={isComposing || (activeReactionPickerMessageId !== null && activeReactionPickerMessageId !== msg.id)}
-      onReactionPickerChange={(isOpen) => onReactionPickerChange(msg.id, isOpen)}
+      onReactionPickerChange={onReactionPickerChange}
       retractMessage={retractMessage}
       retryMessage={retryMessage}
       isSelected={msg.id === selectedMessageId}
@@ -636,7 +673,7 @@ const ChatMessageList = memo(function ChatMessageList({
       isDarkMode={isDarkMode}
       onMediaLoad={onMediaLoad}
       isHovered={hoveredMessageId === msg.id}
-      onMouseEnter={() => handleMessageHover(msg.id)}
+      onMouseEnter={handleMessageHover}
       onMouseLeave={handleMessageLeave}
       formatTime={formatTime}
       timeFormat={effectiveTimeFormat}
@@ -687,13 +724,15 @@ interface ChatMessageBubbleProps {
   sendReaction: (to: string, messageId: string, emojis: string[], type: 'chat' | 'groupchat') => Promise<void>
   myBareJid?: string
   contactsByJid: Map<string, ContactIdentity>
-  messagesById: Map<string, Message>
+  getMessageById: (id: string) => Message | undefined
   onReply: (message: Message) => void
   onEdit: (message: Message) => void
   isLastOutgoing: boolean
   isLastMessage: boolean
   hideToolbar?: boolean
-  onReactionPickerChange?: (isOpen: boolean) => void
+  // Receives the row's own id so the row can be passed a STABLE handler (the id
+  // is bound inside the row, not via a per-render closure in the parent).
+  onReactionPickerChange?: (messageId: string, isOpen: boolean) => void
   retractMessage: (conversationId: string, messageId: string) => Promise<void>
   retryMessage: (conversationId: string, messageId: string) => Promise<void>
   isSelected?: boolean
@@ -701,9 +740,10 @@ interface ChatMessageBubbleProps {
   showToolbarForSelection?: boolean
   isDarkMode?: boolean
   onMediaLoad?: () => void
-  // Hover state for stable toolbar interaction
+  // Hover state for stable toolbar interaction.
+  // onMouseEnter receives the row's own id so the parent can pass a stable handler.
   isHovered?: boolean
-  onMouseEnter?: () => void
+  onMouseEnter?: (messageId: string) => void
   onMouseLeave?: () => void
   // Time formatting function (respects user's 12h/24h preference)
   formatTime: (date: Date) => string
@@ -726,7 +766,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
   sendReaction,
   myBareJid,
   contactsByJid,
-  messagesById,
+  getMessageById,
   onReply,
   onEdit,
   isLastOutgoing,
@@ -781,7 +821,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
   // Build reply context using shared helper
   const replyContext = buildReplyContext(
     message,
-    messagesById,
+    getMessageById,
     (originalMsg, fallbackId) => {
       // Own messages: use ownNickname or JID username
       if (originalMsg?.isOutgoing) {
@@ -844,7 +884,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
         isLastMessage={isLastMessage}
         isDarkMode={isDarkMode}
         isHovered={isHovered}
-        onMouseEnter={onMouseEnter}
+        onMouseEnter={() => onMouseEnter?.(message.id)}
         onMouseLeave={onMouseLeave}
         senderName={senderName}
         senderColor={senderColor}
@@ -862,7 +902,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
         onRetry={message.deliveryError ? () => { void retryMessage(conversationId, message.id) } : undefined}
         onMediaLoad={onMediaLoad}
         replyContext={replyContext}
-        onReactionPickerChange={onReactionPickerChange}
+        onReactionPickerChange={(isOpen) => onReactionPickerChange?.(message.id, isOpen)}
         formatTime={formatTime}
         timeFormat={timeFormat}
         highlightTerms={highlightTerms}
@@ -885,7 +925,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
   )
 })
 
-function MessageInput({
+export const MessageInput = memo(function MessageInput({
   composerRef,
   textareaRef,
   conversationId,
@@ -897,8 +937,16 @@ function MessageInput({
   onCancelReply,
   editingMessage,
   onCancelEdit,
+  sendMessage,
   sendCorrection,
   retractMessage,
+  sendChatState,
+  isArchived,
+  unarchiveConversation,
+  setDraft,
+  getDraft,
+  clearDraft,
+  clearFirstNewMessageId,
   contactsByJid,
   onComposingChange,
   sendEasterEgg,
@@ -927,8 +975,16 @@ function MessageInput({
   onCancelReply: () => void
   editingMessage: Message | null
   onCancelEdit: () => void
+  sendMessage: (to: string, body: string, type?: 'chat' | 'groupchat', replyTo?: { id: string; to?: string; fallback?: { author: string; body: string } }, attachment?: import('@fluux/sdk').FileAttachment) => Promise<string>
   sendCorrection: (conversationId: string, messageId: string, newBody: string, attachment?: import('@fluux/sdk').FileAttachment) => Promise<void>
   retractMessage: (conversationId: string, messageId: string) => Promise<void>
+  sendChatState: (to: string, state: import('@fluux/sdk').ChatStateNotification, type?: 'chat' | 'groupchat') => Promise<void>
+  isArchived: (id: string) => boolean
+  unarchiveConversation: (id: string) => void
+  setDraft: (conversationId: string, text: string) => void
+  getDraft: (conversationId: string) => string
+  clearDraft: (conversationId: string) => void
+  clearFirstNewMessageId: (conversationId: string) => void
   contactsByJid: Map<string, ContactIdentity>
   onComposingChange?: (isComposing: boolean) => void
   sendEasterEgg: (to: string, type: 'chat' | 'groupchat', animation: string) => Promise<void>
@@ -945,7 +1001,6 @@ function MessageInput({
   encryptionState: ConversationEncryptionState
 }) {
   const { t } = useTranslation()
-  const { sendMessage, sendChatState, isArchived, unarchiveConversation, setDraft, getDraft, clearDraft, clearFirstNewMessageId } = useChatActive()
   const openWebUnlockDialog = useWebUnlockDialogStore((s) => s.openWebUnlockDialog)
 
   // Draft persistence - saves on conversation change, restores on load
@@ -1097,5 +1152,5 @@ function MessageInput({
       />
     </>
   )
-}
+})
 

@@ -437,7 +437,7 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
     // Build reply context
     const replyContext = buildReplyContext(
       msg,
-      messagesById,
+      (id) => messagesById.get(id),
       (originalMsg, fallbackId) => {
         if (originalMsg?.isOutgoing) return ownNickname || originalMsg.from.split('@')[0]
         if (isRoom && originalMsg?.type === 'groupchat') return (originalMsg as RoomMessage).nick

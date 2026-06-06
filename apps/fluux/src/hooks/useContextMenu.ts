@@ -127,16 +127,17 @@ export function useContextMenu(options: UseContextMenuOptions = {}): ContextMenu
     }
   }, [isOpen, position.x, position.y])
 
-  // Right-click handler (desktop)
-  const handleContextMenu = (e: React.MouseEvent) => {
+  // Right-click handler (desktop). Stable identity (refs + stable setters) so
+  // consumers can depend on it without re-creating their own callbacks each render.
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
     clickPosition.current = { x: e.clientX, y: e.clientY }
     setPosition({ x: e.clientX, y: e.clientY })
     setIsOpen(true)
-  }
+  }, [])
 
   // Long-press start (mobile)
-  const handleTouchStart = (e: React.TouchEvent) => {
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
     longPressTriggered.current = false
     const touch = e.touches[0]
     longPressTimeout.current = setTimeout(() => {
@@ -145,15 +146,15 @@ export function useContextMenu(options: UseContextMenuOptions = {}): ContextMenu
       setPosition({ x: touch.clientX, y: touch.clientY })
       setIsOpen(true)
     }, longPressDuration)
-  }
+  }, [longPressDuration])
 
   // Cancel long-press on move or end
-  const handleTouchEnd = () => {
+  const handleTouchEnd = useCallback(() => {
     if (longPressTimeout.current) {
       clearTimeout(longPressTimeout.current)
       longPressTimeout.current = null
     }
-  }
+  }, [])
 
   return {
     isOpen,
