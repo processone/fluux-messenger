@@ -5,7 +5,6 @@ import { useClickOutside, useWindowDrag, useRouteSync } from '@/hooks'
 import { useModals } from '@/contexts'
 import {
   useXMPP,
-  connectionStore,
   type Contact,
   type AdminCategory,
 } from '@fluux/sdk'
@@ -37,9 +36,7 @@ import {
   UserPlus,
   RefreshCw,
 } from 'lucide-react'
-import { clearSession } from '@/hooks/useSessionPersistence'
-import { deleteCredentials } from '@/utils/keychain'
-import { clearLocalData, clearAutoReconnectCredentials } from '@/utils/clearLocalData'
+import { performLogout } from '@/utils/performLogout'
 
 // Import extracted sidebar components
 import {
@@ -64,9 +61,6 @@ import {
 
 // Re-export SidebarView for external use
 export type { SidebarView }
-
-const LOGOUT_DISCONNECT_TIMEOUT_MS = 2500
-const LOGOUT_KEYCHAIN_TIMEOUT_MS = 2500
 
 interface SidebarProps {
   onSelectContact?: (contact: Contact) => void
@@ -519,58 +513,9 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
                 </button>
               </Tooltip>
             ) : (
-              <UserMenu onLogout={async (shouldCleanLocalData) => {
-                // Always attempt disconnect first. Request FAST token
-                // invalidation (XEP-0484 §6) so the server drops any
-                // stored token instead of leaving it usable until expiry.
-                const disconnectSettled = await Promise.race([
-                  disconnect({ invalidateFastToken: true })
-                    .then(() => 'done' as const)
-                    .catch(() => 'error' as const),
-                  new Promise<'timeout'>((resolve) => {
-                    setTimeout(() => resolve('timeout'), LOGOUT_DISCONNECT_TIMEOUT_MS)
-                  }),
-                ])
-                if (disconnectSettled === 'timeout') {
-                  console.warn(
-                    `[Fluux] Logout: disconnect timed out after ${LOGOUT_DISCONNECT_TIMEOUT_MS}ms, continuing cleanup`
-                  )
-                }
-
-                // Clear persisted session immediately so the UI can leave ChatLayout
-                // even if OS keychain or storage cleanup stalls on this platform.
-                clearSession()
-
-                if (shouldCleanLocalData) {
-                  // clearLocalData() clears session at the end of cleanup.
-                  await clearLocalData().catch(() => {})
-                } else {
-                  // Drop the FAST token synchronously so the post-logout webview
-                  // reload (LoginScreen's WRY workaround) can't trip the
-                  // auto-reconnect path. The SDK's disconnect() also clears it,
-                  // but only after an async server round-trip that the reload
-                  // can outrace. (clearLocalData handles this in the clean path.)
-                  clearAutoReconnectCredentials(jid)
-
-                  // Clear connection store state so the next login starts fresh.
-                  // (App's route to LoginScreen is driven by the 'disconnected'
-                  // status from disconnect() above — see the gate in App.tsx —
-                  // not by this reset. clearLocalData resets stores in the clean path.)
-                  connectionStore.getState().reset()
-
-                  const keychainSettled = await Promise.race([
-                    deleteCredentials().then(() => 'done' as const).catch(() => 'error' as const),
-                    new Promise<'timeout'>((resolve) => {
-                      setTimeout(() => resolve('timeout'), LOGOUT_KEYCHAIN_TIMEOUT_MS)
-                    }),
-                  ])
-                  if (keychainSettled === 'timeout') {
-                    console.warn(
-                      `[Fluux] Logout: keychain cleanup timed out after ${LOGOUT_KEYCHAIN_TIMEOUT_MS}ms`
-                    )
-                  }
-                }
-              }} />
+              <UserMenu onLogout={(shouldCleanLocalData) =>
+                performLogout({ disconnect, jid, shouldCleanLocalData })
+              } />
             )}
           </div>
         </div>

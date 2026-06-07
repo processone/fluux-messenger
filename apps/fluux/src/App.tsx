@@ -27,6 +27,7 @@ import { useExternalLinkHandler } from './hooks/useExternalLinkHandler'
 import { usePlatformState } from './hooks/usePlatformState'
 import { useAccountScopeRehydration } from './hooks/useAccountScopeRehydration'
 import { clearLocalData } from './utils/clearLocalData'
+import { markConnectActive } from './utils/reconnectIntent'
 
 // Tauri detection
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -185,6 +186,12 @@ function App() {
     if (status === 'online') {
       setIsAutoReconnecting(false)
       setHasBeenOnline(true)
+      // Re-arm auto-reconnect: reaching 'online' means the user is connected on
+      // purpose (manual login, keychain auto-connect, or a reload reconnect), so
+      // future reloads should reconnect. This is the single chokepoint that
+      // clears a prior logout's intent — it can only run on a transition INTO
+      // 'online', never during logout (disconnect() flips status first).
+      markConnectActive()
       // Mark that we've been online this session. LoginScreen reads this flag
       // to detect post-disconnect transitions and trigger a webview reload
       // (workaround for WRY losing native event delivery on macOS).
