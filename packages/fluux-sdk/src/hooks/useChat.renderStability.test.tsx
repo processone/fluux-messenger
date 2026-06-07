@@ -1,7 +1,7 @@
 /**
  * @vitest-environment happy-dom
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useChat } from './useChat'
 import { useChatActive } from './useChatActive'
@@ -128,5 +128,70 @@ describe('useChat render stability', () => {
     // Should be bounded — linear at worst
     expect(totalRenders).toBeLessThanOrEqual(50)
     expect(result.current.conversations.length).toBe(50)
+  })
+
+  // Typing / draft churn must NOT re-render list consumers of useChat().
+  // useChat() must not subscribe to the whole typingStates / drafts Maps — those
+  // are replaced on every keystroke in ANY conversation, which would storm the
+  // sidebar conversation list during background activity. Per-conversation typing
+  // and drafts are read inside the memoized ConversationItem via narrow selectors
+  // (useChatStore((s) => s.typingStates.get(id))), not at the list level.
+  describe('typing/draft churn isolation (regression guard for #1)', () => {
+    // setTyping schedules an auto-clear setTimeout; fake timers keep it from
+    // firing after teardown (which would surface as stderr).
+    beforeEach(() => { vi.useFakeTimers() })
+    afterEach(() => { vi.clearAllTimers(); vi.useRealTimers() })
+
+    function setupActiveConversation() {
+      const convs = generateConversations(5)
+      act(() => {
+        convs.forEach(c => chatStore.getState().addConversation(c))
+        chatStore.getState().setActiveConversation(convs[0].id)
+      })
+      return convs
+    }
+
+    it('does NOT re-render a useChat() consumer when a non-active conversation starts typing', () => {
+      const convs = setupActiveConversation()
+
+      const { result } = renderHook(
+        () => {
+          const renderCount = useRenderCount()
+          useChat()
+          return { renderCount }
+        },
+        { wrapper }
+      )
+
+      const before = result.current.renderCount
+
+      act(() => {
+        chatStore.getState().setTyping(convs[1].id, 'someone@example.com', true)
+      })
+
+      // A typing change in a background conversation must not touch the list.
+      expect(result.current.renderCount).toBe(before)
+    })
+
+    it('does NOT re-render a useChat() consumer when a draft changes', () => {
+      const convs = setupActiveConversation()
+
+      const { result } = renderHook(
+        () => {
+          const renderCount = useRenderCount()
+          useChat()
+          return { renderCount }
+        },
+        { wrapper }
+      )
+
+      const before = result.current.renderCount
+
+      act(() => {
+        chatStore.getState().setDraft(convs[1].id, 'a background draft')
+      })
+
+      expect(result.current.renderCount).toBe(before)
+    })
   })
 })
