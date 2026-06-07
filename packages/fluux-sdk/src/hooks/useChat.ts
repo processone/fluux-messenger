@@ -135,11 +135,13 @@ export function useChat() {
     return Array.from(typingSet)
   }))
 
-  // Get all typing states (Map of conversationId -> Set of JIDs typing)
-  const typingStates = useChatStore(useShallow((s) => s.typingStates))
-
-  // Get all drafts (Map of conversationId -> draft text)
-  const drafts = useChatStore(useShallow((s) => s.drafts))
+  // NOTE: useChat() deliberately does NOT subscribe to the whole typingStates /
+  // drafts Maps. Those are replaced on every keystroke in ANY conversation, so a
+  // list-level subscription would storm every useChat() consumer (the sidebar
+  // conversation list, command palette) during background activity. Per-conversation
+  // typing and drafts are read inside the memoized ConversationItem via narrow
+  // selectors: useChatStore((s) => s.typingStates.get(id)). The active
+  // conversation's typing indicator is covered by activeTypingUsers above.
 
   // Easter egg animation state
   const activeAnimation = useChatStore((s) => s.activeAnimation)
@@ -444,8 +446,6 @@ export function useChat() {
       activeConversation,
       activeMessages,
       activeTypingUsers,
-      typingStates,
-      drafts,
       activeAnimation,
       // XEP-0313: MAM state
       supportsMAM,
@@ -462,8 +462,6 @@ export function useChat() {
       activeConversation,
       activeMessages,
       activeTypingUsers,
-      typingStates,
-      drafts,
       activeAnimation,
       supportsMAM,
       activeMAMState,

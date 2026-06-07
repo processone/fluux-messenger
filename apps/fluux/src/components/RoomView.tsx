@@ -1556,6 +1556,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   sendWhisper,
   ref,
 }: RoomMessageInputProps & { ref?: React.Ref<MessageComposerHandle> }) {
+  detectRenderLoop('RoomMessageInput')
   const { t } = useTranslation()
   // Narrow, reference-stable subscriptions: the composer re-renders on entity
   // changes (name/nickname) and occupant COUNT changes (join/leave), but NOT on

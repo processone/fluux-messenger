@@ -8,6 +8,7 @@ import { RenameContactModal } from '../RenameContactModal'
 import { Tooltip } from '../Tooltip'
 import { useSidebarZone, ContactTooltipContent } from './types'
 import { getTranslatedStatusText } from '@/utils/statusText'
+import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { MessageCircle, Trash2, Pencil, Wrench } from 'lucide-react'
 import { TextInput } from '../ui/TextInput'
 
@@ -19,6 +20,7 @@ interface ContactListProps {
 }
 
 export function ContactList({ onStartChat, onSelectContact, onManageUser, activeContactJid }: ContactListProps) {
+  detectRenderLoop('ContactList')
   const { t } = useTranslation()
   const { sortedContacts, removeContact, renameContact } = useRoster()
   const connectionStatus = useConnectionStore((s) => s.status)
