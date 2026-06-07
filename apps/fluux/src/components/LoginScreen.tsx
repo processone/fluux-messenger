@@ -11,6 +11,7 @@ import { isTauri } from '@/utils/tauri'
 import { getDomainFromJid, getWebsocketUrlForDomain } from '@/config/wellKnownServers'
 import { useWindowDrag } from '@/hooks'
 import { isOpenpgpEnabled } from '@/stores/encryptionSettingsStore'
+import { getReconnectIntent } from '@/utils/reconnectIntent'
 
 const STORAGE_KEY_JID = 'xmpp-last-jid'
 const STORAGE_KEY_SERVER = 'xmpp-last-server'
@@ -253,6 +254,11 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
     if (!loadedFromKeychain) return
     if (!jid || !password) return
     if (status === 'connecting' || status === 'online') return
+    // Respect a deliberate logout: never silently re-authenticate from the
+    // keychain after the user logged out, even if credential deletion lost its
+    // race and the keychain entry survived. Mirrors the gate in
+    // useSessionPersistence — the reconnect intent is the single source of truth.
+    if (getReconnectIntent() === 'logged-out') return
 
     // Mark as auto-connected to prevent loops
     hasAutoConnected.current = true

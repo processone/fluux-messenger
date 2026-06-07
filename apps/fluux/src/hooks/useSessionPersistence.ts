@@ -6,6 +6,7 @@ import type { Contact, Room, RoomOccupant, ServerInfo, HttpUploadService, RoomMe
 import { getResource } from '@/utils/xmppResource'
 import { isTauri } from '@/utils/tauri'
 import { getCredentials, hasSavedCredentials } from '@/utils/keychain'
+import { getReconnectIntent } from '@/utils/reconnectIntent'
 
 const SESSION_KEY = 'xmpp-session'
 const ROSTER_KEY = 'xmpp-roster'
@@ -522,6 +523,15 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
     // disconnect can accidentally trigger an "auto-reconnect on reload".
     if (autoReconnectCheckedRef.current || status !== 'disconnected') return
     autoReconnectCheckedRef.current = true
+
+    // Single source of truth: if the user deliberately logged out, never
+    // auto-reconnect — no matter which credential (sessionStorage session or
+    // FAST token) happened to survive cleanup, and regardless of the webview
+    // reload that resets the in-memory guard above. The intent is persisted in
+    // localStorage so it survives that reload; logout sets it synchronously
+    // before any cleanup runs. This replaces the previous "delete the credential
+    // fast enough to beat the reload" race with a guard that runs first.
+    if (getReconnectIntent() === 'logged-out') return
 
     const session = getSession()
     if (session) {

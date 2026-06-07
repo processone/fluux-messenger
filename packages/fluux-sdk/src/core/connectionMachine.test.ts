@@ -892,6 +892,43 @@ describe('connectionMachine', () => {
       actor.stop()
     })
 
+    // Contract: a deliberately-disconnected machine (post-logout) must NOT
+    // re-enter the reconnect loop on its own. SOCKET_DIED (emitted as the
+    // post-logout socket tears down) and TRIGGER_RECONNECT are ignored by the
+    // disconnected state — pin that by assertion so a future handler added here
+    // can't silently re-enable auto-reconnect after logout. Only CONNECT (a
+    // user-initiated login) may leave 'disconnected'.
+    it('should ignore SOCKET_DIED in disconnected (post-logout socket teardown)', () => {
+      const actor = createActor(connectionMachine).start()
+      actor.send({ type: 'CONNECT' })
+      actor.send({ type: 'CONNECTION_SUCCESS' })
+      actor.send({ type: 'DISCONNECT' })
+      actor.send({ type: 'SOCKET_DIED' })
+      expect(actor.getSnapshot().value).toBe('disconnected')
+      actor.stop()
+    })
+
+    it('should ignore TRIGGER_RECONNECT in disconnected', () => {
+      const actor = createActor(connectionMachine).start()
+      actor.send({ type: 'CONNECT' })
+      actor.send({ type: 'CONNECTION_SUCCESS' })
+      actor.send({ type: 'DISCONNECT' })
+      actor.send({ type: 'TRIGGER_RECONNECT' })
+      expect(actor.getSnapshot().value).toBe('disconnected')
+      actor.stop()
+    })
+
+    it('should only leave disconnected on CONNECT', () => {
+      const actor = createActor(connectionMachine).start()
+      actor.send({ type: 'CONNECT' })
+      actor.send({ type: 'CONNECTION_SUCCESS' })
+      actor.send({ type: 'DISCONNECT' })
+      expect(actor.getSnapshot().value).toBe('disconnected')
+      actor.send({ type: 'CONNECT' })
+      expect(actor.getSnapshot().value).toBe('connecting')
+      actor.stop()
+    })
+
     it('should ignore TRIGGER_RECONNECT in terminal', () => {
       const actor = createActor(connectionMachine).start()
       actor.send({ type: 'CONNECT' })
