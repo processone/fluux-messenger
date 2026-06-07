@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { useChat, useRoom, useRoster, matchNameOrJid, getLocalPart, searchStore } from '@fluux/sdk'
 import { formatLocalizedPreview } from '@/utils/messagePreviewText'
+import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { useChatStore, useConnectionStore } from '@fluux/sdk/react'
 import type { PresenceStatus } from '@fluux/sdk'
 import type { SidebarView } from './Sidebar'
@@ -168,6 +169,7 @@ function CommandPaletteContent({
   onAddContact,
   onStartConversation,
 }: CommandPaletteProps) {
+  detectRenderLoop('CommandPalette')
   const { t } = useTranslation()
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)

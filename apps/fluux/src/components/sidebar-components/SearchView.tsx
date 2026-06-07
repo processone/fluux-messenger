@@ -6,6 +6,7 @@ import { Avatar } from '../Avatar'
 import { useNavigateToTarget } from '@/hooks/useNavigateToTarget'
 import { useListKeyboardNav } from '@/hooks'
 import { formatConversationTime } from '@/utils/dateFormat'
+import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { useSettingsStore, type TimeFormat } from '@/stores/settingsStore'
 import { useSidebarZone } from './types'
 import { Search, X, Loader2, ExternalLink, Cloud, Users, MessageSquare, Hash } from 'lucide-react'
@@ -19,6 +20,7 @@ function getConversationName(conversationId: string): string {
 }
 
 export function SearchView() {
+  detectRenderLoop('SearchView')
   const { t, i18n } = useTranslation()
   const {
     query, results, isSearching, error, search, clearSearch, previewResult, setPreviewResult,
