@@ -222,8 +222,22 @@ export function scrollToMessage(messageId: string): void {
   // Some clients use base64-encoded IDs that contain these characters
   const escapedId = CSS.escape(messageId)
 
+  // A reply/reaction/correction references its target by whichever id tier the
+  // sender chose: XEP-0461 replies in a MUC reference the room-assigned stanza-id,
+  // XEP-0308 corrections reference the sender's origin-id. The DOM keys each row by
+  // the local message id but also exposes data-stanza-id / data-origin-id, so resolve
+  // against every tier — the reference passed here may not have been mapped back to a
+  // local id (e.g. the target wasn't in the lookup when the reply row last rendered).
+  function findElement(): Element | null {
+    return (
+      document.querySelector(`[data-message-id="${escapedId}"]`) ??
+      document.querySelector(`[data-stanza-id="${escapedId}"]`) ??
+      document.querySelector(`[data-origin-id="${escapedId}"]`)
+    )
+  }
+
   function tryScroll(retriesLeft: number) {
-    const element = document.querySelector(`[data-message-id="${escapedId}"]`)
+    const element = findElement()
     if (element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'center' })
       element.classList.add('message-highlight')

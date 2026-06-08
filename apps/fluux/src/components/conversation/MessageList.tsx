@@ -303,6 +303,8 @@ export function MessageList<T extends BaseMessage>({
                   <div
                     key={msg.id}
                     data-message-id={msg.id}
+                    data-stanza-id={msg.stanzaId}
+                    data-origin-id={msg.originId}
                     style={msg.id === lastSentMessageId ? { animation: 'message-send 300ms ease-out' } : undefined}
                   >
                     {showGapMarker && <HistoryGapMarker onLoadMore={onCatchUpHistory} isLoading={isCatchingUp ?? false} />}
