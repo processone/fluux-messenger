@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { groupMessagesByDate, shouldShowAvatar, whisperThreadPosition, whisperCounterpartPresent, scrollToMessage, isActionMessage } from './messageGrouping'
+import { groupMessagesByDate, shouldShowAvatar, whisperThreadPosition, whisperCounterpartPresent, scrollToMessage, isActionMessage, canClosePoll } from './messageGrouping'
 
 // Mock CSS.escape since it's not available in JSDOM
 // This implementation matches the browser's CSS.escape behavior
@@ -481,6 +481,53 @@ describe('scrollToMessage', () => {
     expect(querySelectorSpy).toHaveBeenCalledWith('[data-message-id="abc\\+def\\/ghi\\=jkl"]')
     expect(mockElement.scrollIntoView).toHaveBeenCalled()
   })
+
+  it('should resolve a message by its stanza-id when the local id does not match', () => {
+    // Regression: MUC replies (XEP-0461) reference the room-assigned stanza-id, but
+    // DOM rows are keyed by local message id. When the reply context froze the raw
+    // stanza-id (target not in the lookup at render time), scrollToMessage must fall
+    // through to data-stanza-id to find the row instead of giving up.
+    querySelectorSpy.mockImplementation((sel: string) =>
+      sel === '[data-stanza-id="2026-06-08-b9469e60caa58b7f"]'
+        ? (mockElement as unknown as Element)
+        : null
+    )
+
+    scrollToMessage('2026-06-08-b9469e60caa58b7f')
+
+    expect(querySelectorSpy).toHaveBeenCalledWith('[data-message-id="2026-06-08-b9469e60caa58b7f"]')
+    expect(querySelectorSpy).toHaveBeenCalledWith('[data-stanza-id="2026-06-08-b9469e60caa58b7f"]')
+    expect(mockElement.scrollIntoView).toHaveBeenCalledWith({
+      behavior: 'smooth',
+      block: 'center',
+    })
+    expect(mockElement.classList.add).toHaveBeenCalledWith('message-highlight')
+  })
+
+  it('should resolve a message by its origin-id when neither local id nor stanza-id match', () => {
+    // XEP-0308 corrections reference the sender-assigned origin-id.
+    querySelectorSpy.mockImplementation((sel: string) =>
+      sel === '[data-origin-id="origin-xyz"]' ? (mockElement as unknown as Element) : null
+    )
+
+    scrollToMessage('origin-xyz')
+
+    expect(querySelectorSpy).toHaveBeenCalledWith('[data-origin-id="origin-xyz"]')
+    expect(mockElement.scrollIntoView).toHaveBeenCalled()
+  })
+
+  it('should prefer the local-id match over stanza-id / origin-id', () => {
+    // The strong local-id tier wins so a sender-controlled origin-id can never shadow
+    // a real id match on a different row.
+    querySelectorSpy.mockReturnValue(mockElement as unknown as Element)
+
+    scrollToMessage('local-1')
+
+    // First lookup is by data-message-id; since it matches, the fallbacks are skipped.
+    expect(querySelectorSpy).toHaveBeenCalledWith('[data-message-id="local-1"]')
+    expect(querySelectorSpy).not.toHaveBeenCalledWith('[data-stanza-id="local-1"]')
+    expect(mockElement.scrollIntoView).toHaveBeenCalled()
+  })
 })
 
 describe('isActionMessage', () => {
@@ -510,5 +557,32 @@ describe('isActionMessage', () => {
     expect(isActionMessage(undefined)).toBe(false)
     // @ts-expect-error - testing null handling
     expect(isActionMessage(null)).toBe(false)
+  })
+})
+
+describe('canClosePoll', () => {
+  const ownPoll = { isOutgoing: true, poll: { title: 'Lunch?' } }
+
+  it('offers close for your own open poll', () => {
+    expect(canClosePoll(ownPoll, false)).toBe(true)
+  })
+
+  it('hides close once the poll is closed (reactive boolean — the regression guard)', () => {
+    // This is the value that must stay reactive: passing `true` here (because a
+    // poll-closed message arrived) MUST flip the decision. The row receives this as
+    // a plain boolean prop, never reads it from a frozen stable getter at render.
+    expect(canClosePoll(ownPoll, true)).toBe(false)
+  })
+
+  it('hides close when the poll message itself is marked closed', () => {
+    expect(canClosePoll({ ...ownPoll, pollClosedAt: new Date() }, false)).toBe(false)
+  })
+
+  it('never offers close on someone else’s poll', () => {
+    expect(canClosePoll({ isOutgoing: false, poll: { title: 'Lunch?' } }, false)).toBe(false)
+  })
+
+  it('never offers close on a non-poll message', () => {
+    expect(canClosePoll({ isOutgoing: true }, false)).toBe(false)
   })
 })

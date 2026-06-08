@@ -9,6 +9,25 @@ export function isActionMessage(body: string | undefined): boolean {
 }
 
 /**
+ * Whether the "close poll" action should be offered for a message.
+ *
+ * GUARD (regression class): `isClosed` MUST be a plain reactive value — derived
+ * per-message and passed to the row as a prop — NOT read at render time from a
+ * stable getter/ref inside a memoized row. A memoized row only re-renders when its
+ * own props change, so reading a stable getter during render freezes the result:
+ * the row would keep offering "close" on an already-closed poll until it remounts.
+ * This is the same failure mode that froze the reply-scroll target (see
+ * `scrollToMessage` and RoomView's `getMessageById` note). Keeping this a typed
+ * `boolean` parameter makes the freeze unrepresentable for this decision.
+ */
+export function canClosePoll(
+  message: { isOutgoing?: boolean; poll?: unknown; pollClosedAt?: Date },
+  isClosed: boolean,
+): boolean {
+  return Boolean(message.isOutgoing && message.poll && !isClosed && !message.pollClosedAt)
+}
+
+/**
  * Security context subset used for grouping. Matches the SDK's
  * `MessageSecurityContext` shape — duplicated here to keep this module
  * free of SDK imports so it stays cheap to unit-test.
@@ -222,8 +241,22 @@ export function scrollToMessage(messageId: string): void {
   // Some clients use base64-encoded IDs that contain these characters
   const escapedId = CSS.escape(messageId)
 
+  // A reply/reaction/correction references its target by whichever id tier the
+  // sender chose: XEP-0461 replies in a MUC reference the room-assigned stanza-id,
+  // XEP-0308 corrections reference the sender's origin-id. The DOM keys each row by
+  // the local message id but also exposes data-stanza-id / data-origin-id, so resolve
+  // against every tier — the reference passed here may not have been mapped back to a
+  // local id (e.g. the target wasn't in the lookup when the reply row last rendered).
+  function findElement(): Element | null {
+    return (
+      document.querySelector(`[data-message-id="${escapedId}"]`) ??
+      document.querySelector(`[data-stanza-id="${escapedId}"]`) ??
+      document.querySelector(`[data-origin-id="${escapedId}"]`)
+    )
+  }
+
   function tryScroll(retriesLeft: number) {
-    const element = document.querySelector(`[data-message-id="${escapedId}"]`)
+    const element = findElement()
     if (element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'center' })
       element.classList.add('message-highlight')
