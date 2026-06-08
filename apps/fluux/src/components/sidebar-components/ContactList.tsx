@@ -56,21 +56,39 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
   // Map from jid to flat index for quick lookup
   const jidToIndex = new Map(flatContactList.map((c, i) => [c.jid, i]))
 
-  // Handle contact selection - single click opens profile and updates highlight
-  const handleSelectContact = (contact: Contact) => {
-    onSelectContact?.(contact)
+  // Reference-STABLE row callbacks for the memoized ContactItem. Their identity must stay
+  // fixed across re-renders or the memo no-ops and the WHOLE roster re-renders row by row
+  // on every presence stanza (rosterStore replaces the contacts Map each time). Same
+  // lazy-init + "latest" ref pattern as RoomsList (compiler-proof; useCallback is stripped).
+  const latestRef = useRef({ onSelectContact, onStartChat, removeContact, renameContact, onManageUser })
+  latestRef.current = { onSelectContact, onStartChat, removeContact, renameContact, onManageUser }
+  const rowHandlersRef = useRef<{
+    onSelect: (contact: Contact) => void
+    onStartChat: (contact: Contact) => void
+    onRemove: (jid: string) => void
+    onRename: (jid: string, name: string) => Promise<void>
+    onManageUser: (jid: string) => void
+  } | null>(null)
+  if (!rowHandlersRef.current) {
+    rowHandlersRef.current = {
+      onSelect: (contact) => latestRef.current.onSelectContact?.(contact),
+      onStartChat: (contact) => latestRef.current.onStartChat?.(contact),
+      onRemove: (jid) => latestRef.current.removeContact(jid),
+      onRename: (jid, name) => latestRef.current.renameContact(jid, name),
+      onManageUser: (jid) => latestRef.current.onManageUser?.(jid),
+    }
   }
-
-  // Handle starting a chat - double click
-  const handleStartChat = (contact: Contact) => {
-    onStartChat?.(contact)
-  }
+  const rowHandlers = rowHandlersRef.current
+  // Manage handler is exposed only when the capability exists (parent passed onManageUser);
+  // ContactItem keys its "Manage" menu item off this being defined. `onManageUser` is a
+  // stable prop so this derived value stays referentially stable across renders.
+  const onManageUserStable = onManageUser ? rowHandlers.onManageUser : undefined
 
   // Keyboard navigation using the hook
   // Plain arrows: just highlight, Alt+arrows: navigate AND open contact profile
   const { selectedIndex, isKeyboardNav, getItemProps, getContainerProps } = useListKeyboardNav({
     items: flatContactList,
-    onSelect: handleSelectContact,
+    onSelect: rowHandlers.onSelect,
     listRef,
     searchInputRef,
     getItemId: (contact) => contact.jid,
@@ -126,11 +144,11 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
                 selectedJid={selectedJid}
                 isKeyboardNav={isKeyboardNav}
                 jidToIndex={jidToIndex}
-                onSelect={handleSelectContact}
-                onStartChat={handleStartChat}
-                onRemove={removeContact}
-                onRename={renameContact}
-                onManageUser={onManageUser}
+                onSelect={rowHandlers.onSelect}
+                onStartChat={rowHandlers.onStartChat}
+                onRemove={rowHandlers.onRemove}
+                onRename={rowHandlers.onRename}
+                onManageUser={onManageUserStable}
                 getItemProps={getItemProps}
                 forceOffline={forceOffline}
               />
@@ -143,11 +161,11 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
                 selectedJid={selectedJid}
                 isKeyboardNav={isKeyboardNav}
                 jidToIndex={jidToIndex}
-                onSelect={handleSelectContact}
-                onStartChat={handleStartChat}
-                onRemove={removeContact}
-                onRename={renameContact}
-                onManageUser={onManageUser}
+                onSelect={rowHandlers.onSelect}
+                onStartChat={rowHandlers.onStartChat}
+                onRemove={rowHandlers.onRemove}
+                onRename={rowHandlers.onRename}
+                onManageUser={onManageUserStable}
                 getItemProps={getItemProps}
                 forceOffline={forceOffline}
               />
@@ -160,11 +178,11 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
                 selectedJid={selectedJid}
                 isKeyboardNav={isKeyboardNav}
                 jidToIndex={jidToIndex}
-                onSelect={handleSelectContact}
-                onStartChat={handleStartChat}
-                onRemove={removeContact}
-                onRename={renameContact}
-                onManageUser={onManageUser}
+                onSelect={rowHandlers.onSelect}
+                onStartChat={rowHandlers.onStartChat}
+                onRemove={rowHandlers.onRemove}
+                onRename={rowHandlers.onRename}
+                onManageUser={onManageUserStable}
                 getItemProps={getItemProps}
                 forceOffline={forceOffline}
               />
@@ -227,11 +245,11 @@ function ContactGroup({
               isActive={contact.jid === activeJid}
               isSelected={contact.jid === selectedJid}
               isKeyboardNav={isKeyboardNav}
-              onSelect={() => onSelect(contact)}
-              onStartChat={() => onStartChat(contact)}
-              onRemove={() => onRemove(contact.jid)}
-              onRename={(name) => onRename(contact.jid, name)}
-              onManageUser={onManageUser ? () => onManageUser(contact.jid) : undefined}
+              onSelect={onSelect}
+              onStartChat={onStartChat}
+              onRemove={onRemove}
+              onRename={onRename}
+              onManageUser={onManageUser}
               onMouseEnter={itemProps.onMouseEnter}
               onMouseMove={itemProps.onMouseMove}
               forceOffline={forceOffline}
@@ -248,11 +266,11 @@ interface ContactItemProps {
   isActive?: boolean
   isSelected?: boolean
   isKeyboardNav?: boolean
-  onSelect: () => void
-  onStartChat: () => void
-  onRemove: () => void
-  onRename: (name: string) => Promise<void>
-  onManageUser?: () => void
+  onSelect: (contact: Contact) => void
+  onStartChat: (contact: Contact) => void
+  onRemove: (jid: string) => void
+  onRename: (jid: string, name: string) => Promise<void>
+  onManageUser?: (jid: string) => void
   onMouseEnter?: (e: React.MouseEvent) => void
   onMouseMove?: (e: React.MouseEvent) => void
   forceOffline: boolean
@@ -287,17 +305,17 @@ const ContactItem = memo(function ContactItem({
   // Handle single-click to select contact (shows profile view)
   const handleClick = () => {
     if (menu.isOpen) return
-    onSelect()
+    onSelect(contact)
   }
 
   const handleStartChat = () => {
     menu.close()
-    onStartChat()
+    onStartChat(contact)
   }
 
   const handleRemove = () => {
     menu.close()
-    onRemove()
+    onRemove(contact.jid)
   }
 
   const handleRename = () => {
@@ -307,7 +325,7 @@ const ContactItem = memo(function ContactItem({
 
   const handleManage = () => {
     menu.close()
-    onManageUser?.()
+    onManageUser?.(contact.jid)
   }
 
   return (
@@ -322,7 +340,7 @@ const ContactItem = memo(function ContactItem({
         <div
           data-contact-jid={contact.jid}
           onClick={handleClick}
-          onDoubleClick={onStartChat}
+          onDoubleClick={() => onStartChat(contact)}
           onContextMenu={menu.handleContextMenu}
           onTouchStart={menu.handleTouchStart}
           onTouchEnd={menu.handleTouchEnd}
@@ -413,7 +431,7 @@ const ContactItem = memo(function ContactItem({
       {showRenameModal && (
         <RenameContactModal
           contact={contact}
-          onRename={onRename}
+          onRename={(name) => onRename(contact.jid, name)}
           onClose={() => setShowRenameModal(false)}
         />
       )}
