@@ -48,11 +48,16 @@ const MAX_RENDER_HISTORY = 20       // Keep last N renders per component for deb
 const WAKE_GRACE_PERIOD_MS = 3000   // Suppress warnings for this long after wake
 const SYNC_GRACE_PERIOD_MS = 15000  // Raise error threshold after fresh connection (covers full MAM + roster + room catch-up)
 const SYNC_GRACE_THRESHOLD = 500    // Error threshold during sync grace period
+const INTERACTION_GRACE_MS = 1500   // Suppress warnings for this long after a keystroke (covers inter-key gaps; rolling)
 
 // Track if we're in a grace period (e.g., after wake from sleep)
 let wakeGraceUntil = 0
 // Track sync grace period (raised error threshold during initial connection sync)
 let syncGraceUntil = 0
+// Track interaction grace period (suppress warnings during active typing — a
+// controlled input legitimately re-renders ~1-2× per keystroke, which fast typing
+// or OS key-repeat pushes past the warning threshold without any actual loop).
+let interactionGraceUntil = 0
 
 function getComponentState(componentName: string): ComponentState {
   let state = componentStates.get(componentName)
@@ -128,8 +133,9 @@ export function detectRenderLoop(componentName: string): void {
   }
 
   // Warning threshold - log but don't throw
-  // Skip warning during wake grace period (expected high render frequency after sleep)
-  const inGracePeriod = now < wakeGraceUntil
+  // Skip warning during a grace period (expected high render frequency): after
+  // sleep/wake, or while the user is actively typing into a controlled input.
+  const inGracePeriod = now < wakeGraceUntil || now < interactionGraceUntil
   if (state.renderCount === WARNING_THRESHOLD && !state.hasWarned && !inGracePeriod) {
     state.hasWarned = true
     console.warn(
@@ -289,6 +295,18 @@ export function resetRenderLoopDetector(): void {
   componentStates.clear()
   wakeGraceUntil = 0
   syncGraceUntil = 0
+  interactionGraceUntil = 0
+}
+
+/**
+ * Signal that a user-input event just occurred (e.g. a keystroke in the message
+ * composer). Suppresses render-loop *warnings* for a short rolling window so that
+ * legitimate per-keystroke re-renders of a controlled input don't read as a loop.
+ * The error/throw threshold is NOT affected — a genuine loop triggered while
+ * typing still trips the hard break.
+ */
+export function notifyUserInput(): void {
+  interactionGraceUntil = Date.now() + INTERACTION_GRACE_MS
 }
 
 /**
