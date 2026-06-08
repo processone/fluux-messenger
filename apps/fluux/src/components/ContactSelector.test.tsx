@@ -23,6 +23,12 @@ vi.mock('@fluux/sdk', () => ({
   useRoster: () => ({
     contacts: mockContacts,
   }),
+  // Recent-activity ordering is now read non-reactively from the vanilla chatStore.
+  chatStore: {
+    getState: () => ({
+      conversations: new Map(mockConversations.map((c) => [c.id, c])),
+    }),
+  },
   // JID utilities moved from app to SDK
   matchNameOrJid: (name: string, jid: string, query: string) => {
     const lowerQuery = query.toLowerCase()

@@ -21,6 +21,8 @@ vi.mock('@fluux/sdk', () => ({
   useRoster: () => ({
     contacts: mockContacts,
   }),
+  // ContactSelector reads recent-activity non-reactively from the vanilla chatStore.
+  chatStore: { getState: () => ({ conversations: new Map() }) },
   getAvailableAffiliations: (selfAff: RoomAffiliation, _targetAff: RoomAffiliation) => {
     if (selfAff === 'owner') return ['owner', 'admin', 'member', 'none', 'outcast']
     return []

@@ -1,9 +1,8 @@
 import { useState, useRef, useEffect, useLayoutEffect } from 'react'
-import { useShallow } from 'zustand/react/shallow'
 import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
-import { useRoster, matchNameOrJid } from '@fluux/sdk'
-import { useChatStore, useConnectionStore } from '@fluux/sdk/react'
+import { useRoster, matchNameOrJid, chatStore } from '@fluux/sdk'
+import { useConnectionStore } from '@fluux/sdk/react'
 import { X } from 'lucide-react'
 import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS } from '@/constants/ui'
 
@@ -73,9 +72,6 @@ export function ContactSelector({
   const { contacts } = useRoster()
   const connectionStatus = useConnectionStore((s) => s.status)
   const forceOffline = connectionStatus !== 'online'
-  // Focused selector — useChat() would also pull in typing/draft Maps, MAM
-  // state, active conversation, etc., which this selector doesn't need.
-  const conversations = useChatStore(useShallow((s) => Array.from(s.conversations.values())))
   const [search, setSearch] = useState('')
   const [highlightedIndex, setHighlightedIndex] = useState(0)
   const [flipUp, setFlipUp] = useState(false)
@@ -83,15 +79,17 @@ export function ContactSelector({
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Build a map of JID -> last activity timestamp for sorting
+  // Recent-activity ordering is a one-shot nicety for the dropdown. Read it
+  // non-reactively (getState, not a subscription) so the picker does NOT re-render
+  // on every conversation change while open — the combined conversations map churns
+  // on every new message / typing / meta update.
   const recentActivityMap = (() => {
     const map = new Map<string, number>()
-    conversations.forEach(conv => {
+    for (const conv of chatStore.getState().conversations.values()) {
       if (conv.lastMessage?.timestamp) {
-        const time = conv.lastMessage.timestamp.getTime()
-        map.set(conv.id, time)
+        map.set(conv.id, conv.lastMessage.timestamp.getTime())
       }
-    })
+    }
     return map
   })()
 

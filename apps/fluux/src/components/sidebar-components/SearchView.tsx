@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState } from 'react'
+import { useRef, useEffect, useCallback, useState, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearch, chatStore, roomStore, rosterStore, getLocalPart } from '@fluux/sdk'
 import type { SearchResult, SearchResultContext, SearchFilterType } from '@fluux/sdk'
@@ -42,18 +42,36 @@ export function SearchView() {
     inputRef.current?.focus()
   }, [])
 
-  const handleSelect = useCallback(
-    (result: SearchResult) => {
-      setPreviewResult(result)
-    },
-    [setPreviewResult]
-  )
+  // Reference-stable row callbacks for the memoized SearchResultItem (lazy-init + latest
+  // ref; compiler-proof — useCallback is stripped for JSX-only callbacks, which would
+  // break the row memo on every keystroke / selection change).
+  const latestRef = useRef({ setPreviewResult, navigateToRoom, navigateToConversation })
+  latestRef.current = { setPreviewResult, navigateToRoom, navigateToConversation }
+  const rowHandlersRef = useRef<{
+    onSelect: (result: SearchResult) => void
+    onGoToMessage: (e: React.MouseEvent, result: SearchResult) => void
+  } | null>(null)
+  if (!rowHandlersRef.current) {
+    rowHandlersRef.current = {
+      onSelect: (result) => latestRef.current.setPreviewResult(result),
+      onGoToMessage: (e, result) => {
+        e.stopPropagation()
+        latestRef.current.setPreviewResult(null)
+        if (result.isRoom) {
+          latestRef.current.navigateToRoom(result.conversationId, result.messageId)
+        } else {
+          latestRef.current.navigateToConversation(result.conversationId, result.messageId)
+        }
+      },
+    }
+  }
+  const rowHandlers = rowHandlersRef.current
 
   const allResults = [...results, ...mamResults]
 
   const { selectedIndex, isKeyboardNav, getItemProps, getItemAttribute, getContainerProps } = useListKeyboardNav({
     items: allResults,
-    onSelect: handleSelect,
+    onSelect: rowHandlers.onSelect,
     listRef,
     searchInputRef: inputRef,
     getItemId: (result) => result.indexId,
@@ -61,19 +79,6 @@ export function SearchView() {
     zoneRef,
     activateOnAltNav: true,
   })
-
-  const handleGoToMessage = useCallback(
-    (e: React.MouseEvent, result: SearchResult) => {
-      e.stopPropagation()
-      setPreviewResult(null)
-      if (result.isRoom) {
-        navigateToRoom(result.conversationId, result.messageId)
-      } else {
-        navigateToConversation(result.conversationId, result.messageId)
-      }
-    },
-    [navigateToConversation, navigateToRoom, setPreviewResult]
-  )
 
   // Reset highlight when suggestions change
   useEffect(() => {
@@ -222,13 +227,12 @@ export function SearchView() {
                 isActive={previewResult?.indexId === result.indexId}
                 isSelected={selectedIndex === index}
                 isKeyboardNav={isKeyboardNav}
-                onClick={() => handleSelect(result)}
-                onGoToMessage={(e) => handleGoToMessage(e, result)}
-                itemProps={getItemProps(index)}
-                itemAttribute={getItemAttribute(index)}
+                onSelect={rowHandlers.onSelect}
+                onGoToMessage={rowHandlers.onGoToMessage}
+                {...getItemProps(index)}
+                {...getItemAttribute(index)}
                 currentLang={currentLang}
                 timeFormat={timeFormat}
-                t={t}
               />
             ))}
           </div>
@@ -275,13 +279,12 @@ export function SearchView() {
                   isActive={previewResult?.indexId === result.indexId}
                   isSelected={selectedIndex === globalIndex}
                   isKeyboardNav={isKeyboardNav}
-                  onClick={() => handleSelect(result)}
-                  onGoToMessage={(e) => handleGoToMessage(e, result)}
-                  itemProps={getItemProps(globalIndex)}
-                  itemAttribute={getItemAttribute(globalIndex)}
+                  onSelect={rowHandlers.onSelect}
+                  onGoToMessage={rowHandlers.onGoToMessage}
+                  {...getItemProps(globalIndex)}
+                  {...getItemAttribute(globalIndex)}
                   currentLang={currentLang}
                   timeFormat={timeFormat}
-                  t={t}
                 />
               )
             })}
@@ -322,16 +325,20 @@ interface SearchResultItemProps {
   isActive: boolean
   isSelected: boolean
   isKeyboardNav: boolean
-  onClick: () => void
-  onGoToMessage: (e: React.MouseEvent) => void
-  itemProps: ReturnType<ReturnType<typeof useListKeyboardNav>['getItemProps']>
-  itemAttribute: Record<string, string>
+  onSelect: (result: SearchResult) => void
+  onGoToMessage: (e: React.MouseEvent, result: SearchResult) => void
+  onMouseEnter?: (e: React.MouseEvent) => void
+  onMouseMove?: (e: React.MouseEvent) => void
+  'data-selected'?: boolean
+  'data-search-result-id'?: string
   currentLang: string
   timeFormat: TimeFormat
-  t: (key: string) => string
 }
 
-function SearchResultItem({ result, context, isActive, isSelected, isKeyboardNav, onClick, onGoToMessage, itemProps, itemAttribute, currentLang, timeFormat, t }: SearchResultItemProps) {
+const SearchResultItem = memo(function SearchResultItem({ result, context, isActive, isSelected, isKeyboardNav, onSelect, onGoToMessage, onMouseEnter, onMouseMove, currentLang, timeFormat, ...rest }: SearchResultItemProps) {
+  // Self-source t (like ContactItem/RoomItem/OccupantRow) — a t passed as a prop is a
+  // fresh function each parent render and would break this row's memo.
+  const { t } = useTranslation()
   const timestamp = new Date(result.timestamp)
 
   const highlighted = isActive || isSelected
@@ -341,10 +348,14 @@ function SearchResultItem({ result, context, isActive, isSelected, isKeyboardNav
     // useListKeyboardNav — see SearchView's getContainerProps / onSelect.
     // The row is therefore a plain div (matching ConversationItem) so it can
     // host the real "Go to message" button without nesting <button> in <button>.
+    // itemProps/itemAttribute are spread at the call site so the row receives flat,
+    // reference-stable props (onMouseEnter/onMouseMove cached by id) — the memo bails
+    // unless THIS row's data actually changes.
     <div
-      {...itemAttribute}
-      {...itemProps}
-      onClick={onClick}
+      {...rest}
+      onMouseEnter={onMouseEnter}
+      onMouseMove={onMouseMove}
+      onClick={() => onSelect(result)}
       className={`w-full px-2 py-1.5 rounded flex items-start gap-2.5 text-start cursor-pointer
                  transition-colors group/result ${
                    highlighted
@@ -398,7 +409,7 @@ function SearchResultItem({ result, context, isActive, isSelected, isKeyboardNav
               {formatConversationTime(timestamp, t, currentLang, timeFormat)}
             </span>
             <button
-              onClick={onGoToMessage}
+              onClick={(e) => onGoToMessage(e, result)}
               className="p-0.5 rounded opacity-0 group-hover/result:opacity-100 focus-visible:opacity-100 transition-opacity hover:bg-fluux-hover-strong"
               title="Go to message"
             >
@@ -421,7 +432,7 @@ function SearchResultItem({ result, context, isActive, isSelected, isKeyboardNav
       </div>
     </div>
   )
-}
+})
 
 function ContextLine({
   body,
