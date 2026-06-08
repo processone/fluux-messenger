@@ -528,6 +528,7 @@
         "verifyPeer": {
             "chipAriaLabel": "Dulritað til {{name}} — smelltu til að staðfesta fingrafarið",
             "dialogTitle": "Staðfesta OpenPGP-lykil {{name}}",
+            "menuViewVerified": "Sýna staðfestan OpenPGP-lykil {{name}}",
             "dialogBody": "Lestu kóðann þinn upphátt fyrir {{name}} og sláðu inn kóðann sem {{name}} les fyrir þig. Kóðarnir stemma aðeins ef enginn er að hlera skilaboðin þín.",
             "dialogWarning": "Notaðu treysta hliðarrás — persónulega, í myndsímtali þar sem þú þekkir manneskjuna, eða í þegar staðfestum enda-til-enda dulkóðuðum samtali. Ekki er hægt að treysta þjóninum fyrir að miðla þessari samanburði.",
             "myCodeLabel": "Lesa þennan kóða fyrir {{name}}",

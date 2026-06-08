@@ -528,6 +528,7 @@
         "verifyPeer": {
             "chipAriaLabel": "Titkosítva {{name}} számára — kattintson a ujjlenyomat ellenőrzéséhez",
             "dialogTitle": "{{name}} OpenPGP-kulcsának ellenőrzése",
+            "menuViewVerified": "{{name}} ellenőrzött OpenPGP-kulcsának megtekintése",
             "dialogBody": "Olvassa fel a kódját {{name}}-nek hangosan, és írja be a kódot, amelyet {{name}} felolvas Önnek. A kódok csak akkor egyeznek, ha senki sem hallgatja le az üzeneteit.",
             "dialogWarning": "Használjon megbízható második csatornát — személyesen, videohívásban, amelyben felismeri a személyt, vagy már ellenőrzött végpontok közötti titkosított csevegésben. A szerverben nem lehet megbízni ennek az összehasonlításnak a továbbításában.",
             "myCodeLabel": "Olvassa fel ezt a kódot {{name}}-nek",

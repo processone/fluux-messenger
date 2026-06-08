@@ -528,6 +528,7 @@
         "verifyPeer": {
             "chipAriaLabel": "Encrypted to {{name}} — click to verify fingerprint",
             "dialogTitle": "Verify {{name}}'s OpenPGP key",
+            "menuViewVerified": "View {{name}}'s verified OpenPGP key",
             "dialogBody": "Read your code aloud to {{name}} and type the code they read to you. The codes only match if no one is intercepting your messages.",
             "dialogWarning": "Use a trusted second channel — in person, a video call you recognise the person on, an already-verified end-to-end-encrypted chat. The server can't be trusted to relay this comparison for you.",
             "myCodeLabel": "Read this code to {{name}}",

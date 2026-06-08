@@ -528,6 +528,7 @@
         "verifyPeer": {
             "chipAriaLabel": "Criptithe go {{name}} — cliceáil chun méarlorg a fhíorú",
             "dialogTitle": "Fíoraigh eochair OpenPGP {{name}}",
+            "menuViewVerified": "Taispeáin eochair OpenPGP fhíoraithe {{name}}",
             "dialogBody": "Léigh do chód os ard do {{name}} agus clóscríobh an cód a léann {{name}} duit. Ní chomhoireann na cóid ach amháin mura bhfuil aon duine ag idircheapadh do theachtaireachtaí.",
             "dialogWarning": "Úsáid bealach iontaofa eile — go pearsanta, i nglao físe ina n-aithníonn tú an duine, nó i gcomhrá criptithe deireadh-go-deireadh fíoraithe cheana féin. Ní féidir muinín a chur sa fhreastalaí an chomparáid seo a chur ar aghaidh.",
             "myCodeLabel": "Léigh an cód seo do {{name}}",

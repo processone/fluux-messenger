@@ -528,6 +528,7 @@
         "verifyPeer": {
             "chipAriaLabel": "已加密至 {{name}} — 点击即可验证指纹",
             "dialogTitle": "验证 {{name}} 的 OpenPGP 密钥",
+            "menuViewVerified": "查看 {{name}} 的已验证 OpenPGP 密钥",
             "dialogBody": "将您的验证码大声读给 {{name}} 听，并输入对方读给您的验证码。只有在没有人截获您的消息时，验证码才会匹配。",
             "dialogWarning": "使用可信的第二通道 — 面对面交流，在能认出对方的视频通话中，或在已验证的端到端加密聊天中。切勿交由服务器代为完成比对，服务器并不可信。",
             "myCodeLabel": "将此验证码读给 {{name}}",

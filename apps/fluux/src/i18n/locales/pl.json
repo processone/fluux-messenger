@@ -530,6 +530,7 @@
         "verifyPeer": {
             "chipAriaLabel": "Szyfrowane do {{name}} — kliknij, aby zweryfikować odcisk klucza",
             "dialogTitle": "Zweryfikuj klucz OpenPGP użytkownika {{name}}",
+            "menuViewVerified": "Wyświetl zweryfikowany klucz OpenPGP użytkownika {{name}}",
             "dialogBody": "Przeczytaj swój kod na głos osobie {{name}} i wpisz kod, który przeczyta Ci {{name}}. Kody zgadzają się tylko wtedy, gdy nikt nie przechwytuje Twoich wiadomości.",
             "dialogWarning": "Użyj zaufanego drugiego kanału — osobiście, w rozmowie wideo, w której rozpoznajesz osobę, lub w już zweryfikowanej szyfrowanej end-to-end rozmowie. Serwerowi nie można ufać w przekazywaniu tego porównania.",
             "myCodeLabel": "Przeczytaj ten kod osobie {{name}}",

@@ -530,6 +530,7 @@
         "verifyPeer": {
             "chipAriaLabel": "Criptat către {{name}} — faceți clic pentru a verifica amprenta",
             "dialogTitle": "Verifică cheia OpenPGP a lui {{name}}",
+            "menuViewVerified": "Vezi cheia OpenPGP verificată a lui {{name}}",
             "dialogBody": "Citește-ți codul cu voce tare lui {{name}} și introdu codul pe care {{name}} ți-l citește. Codurile se potrivesc doar dacă nimeni nu îți interceptează mesajele.",
             "dialogWarning": "Folosește un al doilea canal de încredere — în persoană, într-un apel video în care recunoști persoana, sau într-o conversație criptată end-to-end deja verificată. Serverului nu i se poate încredința retransmiterea acestei comparații.",
             "myCodeLabel": "Citește acest cod lui {{name}}",

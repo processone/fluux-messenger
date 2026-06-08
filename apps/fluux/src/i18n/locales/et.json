@@ -530,6 +530,7 @@
         "verifyPeer": {
             "chipAriaLabel": "Krüpteeritud {{name}}-le — klõpsa sõrmejälje kinnitamiseks",
             "dialogTitle": "Kinnita {{name}} OpenPGP võti",
+            "menuViewVerified": "Kuva {{name}} kinnitatud OpenPGP võti",
             "dialogBody": "Lugege oma kood valjusti ette {{name}}-le ja sisestage kood, mille {{name}} teile ette loeb. Koodid ühtivad ainult siis, kui keegi ei pealtkuula teie sõnumeid.",
             "dialogWarning": "Kasutage usaldusväärset teist kanalit — isiklikult, videokõnes, kus tunnete inimese ära, või juba kontrollitud otspunktist-otspunkti krüpteeritud vestluses. Serverit ei saa selle võrdluse edastamisel usaldada.",
             "myCodeLabel": "Lugege see kood ette {{name}}-le",

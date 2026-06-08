@@ -530,6 +530,7 @@
         "verifyPeer": {
             "chipAriaLabel": "Ikkriptat lil {{name}} — ikklikkja biex tivverifika l-marka tas-saba'",
             "dialogTitle": "Ivverifika ċ-ċavetta OpenPGP ta' {{name}}",
+            "menuViewVerified": "Uri ċ-ċavetta OpenPGP verifikata ta' {{name}}",
             "dialogBody": "Aqra l-kodiċi tiegħek b'leħen għoli lil {{name}} u ittajpja l-kodiċi li {{name}} jaqra lilek. Il-kodiċijiet jaqblu biss jekk ħadd ma qed jinterċetta l-messaġġi tiegħek.",
             "dialogWarning": "Uża kanal sekondarju ta' fiduċja — wiċċ imb wiċċ, f'sejħa bil-vidjow fejn tagħraf il-persuna, jew f'chat ikkriptata end-to-end diġà vverifikata. Ma jistax ikun hemm fiduċja fis-server biex jgħaddi din it-tqabbila.",
             "myCodeLabel": "Aqra dan il-kodiċi lil {{name}}",

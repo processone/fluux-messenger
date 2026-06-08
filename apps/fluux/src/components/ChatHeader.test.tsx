@@ -216,6 +216,74 @@ describe('ChatHeader', () => {
     })
   })
 
+  describe('Encryption menu', () => {
+    const encrypted = (trust: 'verified' | 'unverified' | 'tofu-new') =>
+      ({ kind: 'encrypted', fingerprint: 'AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555', trust }) as const
+
+    it('labels the verify item "Verify ... key" when the key is not yet verified', () => {
+      const contact = setupContact()
+      render(
+        <ChatHeader
+          name="Alice Smith"
+          type="chat"
+          contact={contact}
+          jid={contact.jid}
+          encryptionState={encrypted('unverified')}
+          onEncryptionClick={vi.fn()}
+          onDisableEncryptionClick={vi.fn()}
+        />
+      )
+
+      // Open the menu (button aria-label for the unverified chip).
+      fireEvent.click(screen.getByRole('button', { name: 'chat.verifyPeer.chipAriaLabel' }))
+
+      expect(screen.getByText('chat.verifyPeer.dialogTitle')).toBeInTheDocument()
+      expect(screen.queryByText('chat.verifyPeer.menuViewVerified')).not.toBeInTheDocument()
+    })
+
+    it('labels the verify item "View verified key" when the key is already verified', () => {
+      const contact = setupContact()
+      render(
+        <ChatHeader
+          name="Alice Smith"
+          type="chat"
+          contact={contact}
+          jid={contact.jid}
+          encryptionState={encrypted('verified')}
+          onEncryptionClick={vi.fn()}
+          onDisableEncryptionClick={vi.fn()}
+        />
+      )
+
+      // Open the menu (button aria-label switches to "encrypted to" when verified).
+      fireEvent.click(screen.getByRole('button', { name: 'chat.encryption.encryptedTo' }))
+
+      expect(screen.getByText('chat.verifyPeer.menuViewVerified')).toBeInTheDocument()
+      expect(screen.queryByText('chat.verifyPeer.dialogTitle')).not.toBeInTheDocument()
+    })
+
+    it('still invokes onVerifyClick when the verified "view" item is clicked', () => {
+      const contact = setupContact()
+      const onEncryptionClick = vi.fn()
+      render(
+        <ChatHeader
+          name="Alice Smith"
+          type="chat"
+          contact={contact}
+          jid={contact.jid}
+          encryptionState={encrypted('verified')}
+          onEncryptionClick={onEncryptionClick}
+          onDisableEncryptionClick={vi.fn()}
+        />
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: 'chat.encryption.encryptedTo' }))
+      fireEvent.click(screen.getByText('chat.verifyPeer.menuViewVerified'))
+
+      expect(onEncryptionClick).toHaveBeenCalledTimes(1)
+    })
+  })
+
   describe('Title Bar', () => {
     it('applies title bar class from useWindowDrag', () => {
       const { container } = render(

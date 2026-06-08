@@ -529,6 +529,7 @@
         "verifyPeer": {
             "chipAriaLabel": "Chiffré à destination de {{name}} — cliquez pour vérifier l'empreinte",
             "dialogTitle": "Vérifier la clé OpenPGP de {{name}}",
+            "menuViewVerified": "Voir la clé OpenPGP vérifiée de {{name}}",
             "dialogBody": "Lisez votre code à voix haute à {{name}} et saisissez le code que {{name}} vous lit. Les deux codes ne correspondent que si personne n'intercepte vos messages.",
             "dialogWarning": "Utilisez un canal de confiance — en personne, lors d'un appel vidéo où vous reconnaissez votre correspondant, ou dans une conversation chiffrée déjà vérifiée. Le serveur ne peut pas relayer cette comparaison.",
             "myCodeLabel": "Lisez ce code à {{name}}",

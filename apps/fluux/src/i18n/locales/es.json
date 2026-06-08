@@ -530,6 +530,7 @@
         "verifyPeer": {
             "chipAriaLabel": "Cifrado para {{name}} — haz clic para verificar la huella",
             "dialogTitle": "Verificar la clave OpenPGP de {{name}}",
+            "menuViewVerified": "Ver la clave OpenPGP verificada de {{name}}",
             "dialogBody": "Lee tu código en voz alta a {{name}} y escribe el código que {{name}} te dicte. Los códigos solo coinciden si nadie está interceptando tus mensajes.",
             "dialogWarning": "Usa un segundo canal de confianza — en persona, en una videollamada donde reconozcas a la persona, o en un chat cifrado de extremo a extremo ya verificado. No se puede confiar en el servidor para retransmitir esta comparación.",
             "myCodeLabel": "Lee este código a {{name}}",

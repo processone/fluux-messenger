@@ -528,6 +528,7 @@
         "verifyPeer": {
             "chipAriaLabel": "Krypterat till {{name}} — klicka för att verifiera fingeravtrycket",
             "dialogTitle": "Verifiera {{name}}s OpenPGP-nyckel",
+            "menuViewVerified": "Visa {{name}}s verifierade OpenPGP-nyckel",
             "dialogBody": "Läs din kod högt för {{name}} och skriv in koden som {{name}} läser för dig. Koderna stämmer bara om ingen avlyssnar dina meddelanden.",
             "dialogWarning": "Använd en pålitlig andra kanal — personligen, i ett videosamtal där du känner igen personen, eller i en redan verifierad end-to-end-krypterad chatt. Servern kan inte litas på för att förmedla denna jämförelse.",
             "myCodeLabel": "Läs den här koden för {{name}}",

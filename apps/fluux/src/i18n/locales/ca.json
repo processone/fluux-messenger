@@ -530,6 +530,7 @@
         "verifyPeer": {
             "chipAriaLabel": "Xifrat per a {{name}} — fes clic per verificar l'empremta",
             "dialogTitle": "Verifica la clau OpenPGP de {{name}}",
+            "menuViewVerified": "Mostra la clau OpenPGP verificada de {{name}}",
             "dialogBody": "Llegeix el teu codi en veu alta a {{name}} i escriu el codi que {{name}} et llegeix. Els codis només coincideixen si ningú no està interceptant els teus missatges.",
             "dialogWarning": "Utilitza un segon canal de confiança — en persona, en una videotrucada on reconeguis la persona, o en una conversa xifrada d'extrem a extrem ja verificada. No es pot confiar en el servidor per transmetre aquesta comparació.",
             "myCodeLabel": "Llegeix aquest codi a {{name}}",

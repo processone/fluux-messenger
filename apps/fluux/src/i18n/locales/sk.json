@@ -529,6 +529,7 @@
         "verifyPeer": {
             "chipAriaLabel": "Šifrované pre {{name}} — kliknutím overíte odtlačok",
             "dialogTitle": "Overiť kľúč OpenPGP používateľa {{name}}",
+            "menuViewVerified": "Zobraziť overený kľúč OpenPGP používateľa {{name}}",
             "dialogBody": "Prečítajte svoj kód nahlas {{name}} a napíšte kód, ktorý vám prečíta {{name}}. Kódy sa zhodujú iba vtedy, ak nikto neodpočúva vaše správy.",
             "dialogWarning": "Použite dôveryhodný druhý kanál — osobne, vo videohovore, v ktorom osobu spoznávate, alebo v už overenom end-to-end šifrovanom chate. Serveru nemožno dôverovať, že tento porovnanie sprostredkuje.",
             "myCodeLabel": "Prečítajte tento kód {{name}}",

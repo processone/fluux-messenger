@@ -530,6 +530,7 @@
         "verifyPeer": {
             "chipAriaLabel": "Verschlüsselt an {{name}} — klicken, um Fingerabdruck zu verifizieren",
             "dialogTitle": "OpenPGP-Schlüssel von {{name}} verifizieren",
+            "menuViewVerified": "Verifizierten OpenPGP-Schlüssel von {{name}} anzeigen",
             "dialogBody": "Lesen Sie Ihren Code laut für {{name}} vor und tippen Sie den Code ein, den {{name}} Ihnen vorliest. Die Codes stimmen nur überein, wenn niemand Ihre Nachrichten abfängt.",
             "dialogWarning": "Verwenden Sie einen vertrauenswürdigen zweiten Kanal — persönlich, in einem Videoanruf, in dem Sie die Person erkennen, oder in einem bereits verifizierten Ende-zu-Ende-verschlüsselten Chat. Dem Server kann nicht vertraut werden, diesen Vergleich zu vermitteln.",
             "myCodeLabel": "Diesen Code an {{name}} vorlesen",

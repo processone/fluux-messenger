@@ -529,6 +529,7 @@
         "verifyPeer": {
             "chipAriaLabel": "Šifrēts {{name}} — noklikšķiniet, lai pārbaudītu pirkstu nospiedumu",
             "dialogTitle": "Pārbaudīt {{name}} OpenPGP atslēgu",
+            "menuViewVerified": "Skatīt {{name}} pārbaudīto OpenPGP atslēgu",
             "dialogBody": "Skaļi nolasiet savu kodu {{name}} un ievadiet kodu, kuru jums nolasīs {{name}}. Kodi sakrīt tikai tad, ja neviens neaiztur jūsu ziņojumus.",
             "dialogWarning": "Izmantojiet uzticamu otro kanālu — personīgi, video zvanā, kurā atpazīstat personu, vai jau pārbaudītā end-to-end šifrētā sarunā. Serverim nevar uzticēties šī salīdzinājuma pārsūtīšanā.",
             "myCodeLabel": "Nolasiet šo kodu {{name}}",

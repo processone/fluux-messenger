@@ -528,6 +528,7 @@
         "verifyPeer": {
             "chipAriaLabel": "Kryptert til {{name}} — klikk for å verifisere fingeravtrykket",
             "dialogTitle": "Verifiser {{name}}s OpenPGP-nøkkel",
+            "menuViewVerified": "Vis {{name}}s verifiserte OpenPGP-nøkkel",
             "dialogBody": "Les koden din høyt for {{name}}, og skriv inn koden {{name}} leser for deg. Kodene stemmer overens bare hvis ingen avlytter meldingene deres.",
             "dialogWarning": "Bruk en betrodd andre kanal — personlig, i en videosamtale der du gjenkjenner personen, eller i en allerede verifisert ende-til-ende-kryptert samtale. Serveren kan ikke stoles på for å formidle denne sammenligningen.",
             "myCodeLabel": "Les denne koden for {{name}}",

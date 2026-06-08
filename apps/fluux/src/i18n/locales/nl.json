@@ -528,6 +528,7 @@
         "verifyPeer": {
             "chipAriaLabel": "Versleuteld naar {{name}} — klik om vingerafdruk te verifiëren",
             "dialogTitle": "Verifieer de OpenPGP-sleutel van {{name}}",
+            "menuViewVerified": "Bekijk de geverifieerde OpenPGP-sleutel van {{name}}",
             "dialogBody": "Lees je code hardop voor aan {{name}} en typ de code die {{name}} aan jou voorleest. De codes komen alleen overeen als niemand je berichten onderschept.",
             "dialogWarning": "Gebruik een vertrouwd tweede kanaal — in persoon, in een videogesprek waarin je de persoon herkent, of in een al geverifieerde end-to-end-versleutelde chat. Op de server kun je niet vertrouwen om deze vergelijking door te geven.",
             "myCodeLabel": "Lees deze code voor aan {{name}}",

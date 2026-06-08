@@ -528,6 +528,7 @@
         "verifyPeer": {
             "chipAriaLabel": "Salattu vastaanottajalle {{name}} — napsauta vahvistaaksesi sormenjäljen",
             "dialogTitle": "Vahvista käyttäjän {{name}} OpenPGP-avain",
+            "menuViewVerified": "Näytä käyttäjän {{name}} vahvistettu OpenPGP-avain",
             "dialogBody": "Lue koodisi ääneen henkilölle {{name}} ja kirjoita koodi, jonka {{name}} lukee sinulle. Koodit täsmäävät vain, jos kukaan ei salakuuntele viestejäsi.",
             "dialogWarning": "Käytä luotettua toista kanavaa — henkilökohtaisesti, videopuhelussa jossa tunnistat henkilön, tai jo varmennetussa päästä päähän salatussa keskustelussa. Palvelimeen ei voi luottaa tämän vertailun välittämisessä.",
             "myCodeLabel": "Lue tämä koodi henkilölle {{name}}",

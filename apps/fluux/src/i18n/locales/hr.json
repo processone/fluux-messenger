@@ -528,6 +528,7 @@
         "verifyPeer": {
             "chipAriaLabel": "Šifrirano za {{name}} — kliknite za provjeru otiska",
             "dialogTitle": "Provjeri OpenPGP ključ korisnika {{name}}",
+            "menuViewVerified": "Prikaži provjereni OpenPGP ključ korisnika {{name}}",
             "dialogBody": "Pročitajte svoj kod naglas osobi {{name}} i unesite kod koji vam {{name}} pročita. Kodovi se podudaraju samo ako nitko ne presreće vaše poruke.",
             "dialogWarning": "Koristite pouzdan drugi kanal — osobno, u videopozivu u kojem prepoznajete osobu, ili u već provjerenom end-to-end šifriranom razgovoru. Poslužitelju se ne može vjerovati za prosljeđivanje ove usporedbe.",
             "myCodeLabel": "Pročitajte ovaj kod osobi {{name}}",

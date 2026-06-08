@@ -528,6 +528,7 @@
         "verifyPeer": {
             "chipAriaLabel": "Užšifruota {{name}} — spustelėkite norėdami patvirtinti pirštų atspaudą",
             "dialogTitle": "Patvirtinti {{name}} OpenPGP raktą",
+            "menuViewVerified": "Peržiūrėti {{name}} patvirtintą OpenPGP raktą",
             "dialogBody": "Garsiai perskaitykite savo kodą {{name}} ir įveskite kodą, kurį jums perskaitys {{name}}. Kodai sutampa tik tada, kai niekas neperima jūsų pranešimų.",
             "dialogWarning": "Naudokite patikimą antrąjį kanalą — asmeniškai, vaizdo skambutyje, kuriame atpažįstate asmenį, arba jau patvirtintame end-to-end šifruotame pokalbyje. Serveriu negalima pasitikėti dėl šio palyginimo perdavimo.",
             "myCodeLabel": "Perskaitykite šį kodą {{name}}",

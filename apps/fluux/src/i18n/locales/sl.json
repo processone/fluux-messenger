@@ -530,6 +530,7 @@
         "verifyPeer": {
             "chipAriaLabel": "Šifrirano za {{name}} — kliknite za preverjanje prstnega odtisa",
             "dialogTitle": "Preveri ključ OpenPGP uporabnika {{name}}",
+            "menuViewVerified": "Prikaži preverjeni ključ OpenPGP uporabnika {{name}}",
             "dialogBody": "Preberite svojo kodo na glas osebi {{name}} in vnesite kodo, ki vam jo prebere {{name}}. Kodi se ujemata samo, če nihče ne prestreza vaših sporočil.",
             "dialogWarning": "Uporabite zaupanja vreden drugi kanal — osebno, v videoklicu, kjer osebo prepoznate, ali v že preverjenem end-to-end šifriranem klepetu. Strežniku ne morete zaupati posredovanja te primerjave.",
             "myCodeLabel": "Preberite to kodo osebi {{name}}",
