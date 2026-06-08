@@ -5,7 +5,7 @@ import { useRoomActive, useRoomEntity, useRoomOccupantCount, useContactIdentitie
 import { useConnectionStore, useIgnoreStore, useRoomStore } from '@fluux/sdk/react'
 import { ignoreStore, roomStore, type IgnoredUser } from '@fluux/sdk/stores'
 import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat, useContextMenu, useWhisperCounterpartPresent, isSmallScreen } from '@/hooks'
-import { MessageBubble, MessageList, shouldShowAvatar, whisperThreadPosition, whisperCounterpartPresent, resolveWhisperTarget, decideWhisperSend, buildReplyContext, PollBanner, type WhisperThreadPosition, type WhisperTarget } from './conversation'
+import { MessageBubble, MessageList, shouldShowAvatar, whisperThreadPosition, whisperCounterpartPresent, resolveWhisperTarget, decideWhisperSend, buildReplyContext, canClosePoll, PollBanner, type WhisperThreadPosition, type WhisperTarget } from './conversation'
 import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
 import { Avatar, getConsistentTextColor } from './Avatar'
@@ -272,6 +272,14 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // getter so a new Map (every appended message) does not break the memo bailout
   // of every RoomMessageBubbleWrapper. Ref updated in an effect (not during
   // render) to avoid making the React Compiler bail on RoomView.
+  //
+  // GUARD (regression class): a value DERIVED from this stable getter AT RENDER TIME
+  // inside a memoized row freezes — the row only re-renders when its own props change,
+  // so it won't pick up later lookup contents (e.g. a reply whose target hadn't loaded
+  // yet). Either (a) make the consumer tolerate a stale/unresolved result — as
+  // scrollToMessage does by also matching data-stanza-id / data-origin-id — or
+  // (b) pass a reactive per-message prop instead of reading the getter at render (see
+  // canClosePoll / isPollClosed). Never gate UI solely on a render-time read here.
   const messagesById = useMemo(() => createMessageLookup(activeMessages), [activeMessages])
   const messagesByIdRef = useRef(messagesById)
   useEffect(() => { messagesByIdRef.current = messagesById }, [messagesById])
@@ -889,9 +897,12 @@ export const RoomMessageList = memo(function RoomMessageList({
   }, [])
 
   // Set of original poll message IDs that have been closed (a poll-closed message references them).
-  // Used to disable the "Close poll" button on already-closed polls. Exposed to rows
-  // as a STABLE getter — a fresh Set every render (messages change on every append)
-  // would break the memo bailout of every RoomMessageBubbleWrapper.
+  // Used to disable the "Close poll" button on already-closed polls. Each row receives a
+  // per-message boolean derived from this set (see renderMessage), NOT the Set itself nor a
+  // stable getter: a fresh Set or a stable-ref getter read during render would either break the
+  // memo bailout of every row on each append, or freeze the closed-state inside the memoized row
+  // (a row only re-renders when its own props change). A per-message boolean flips only for the
+  // poll that closed, so it stays reactive without re-rendering unrelated rows.
   const closedPollIds = useMemo(() => {
     const ids = new Set<string>()
     for (const msg of messages) {
@@ -901,9 +912,6 @@ export const RoomMessageList = memo(function RoomMessageList({
     }
     return ids
   }, [messages])
-  const closedPollIdsRef = useRef(closedPollIds)
-  useEffect(() => { closedPollIdsRef.current = closedPollIds }, [closedPollIds])
-  const isPollClosed = useCallback((pollMessageId: string) => closedPollIdsRef.current.has(pollMessageId), [])
 
   // Set of known occupant nicknames for IRC-style mention highlighting
   const knownNicks = useMemo(() => {
@@ -965,7 +973,7 @@ export const RoomMessageList = memo(function RoomMessageList({
       votePoll={votePoll}
       closePoll={closePoll}
 
-      isPollClosed={isPollClosed}
+      isPollClosed={closedPollIds.has(msg.id)}
       onReply={onReply}
       onEdit={onEdit}
       isLastOutgoing={msg.id === lastOutgoingMessageId}
@@ -1062,8 +1070,10 @@ interface RoomMessageBubbleWrapperProps {
   onNickTouchEnd?: () => void
   // Affiliation action (passed from parent to avoid useRoom() subscription)
   setAffiliation: (roomJid: string, userJid: string, affiliation: RoomAffiliation, reason?: string) => Promise<void>
-  // Stable getter: is this poll message closed? (to disable close button)
-  isPollClosed: (pollMessageId: string) => boolean
+  // Per-message boolean: is this poll already closed? (to hide the close action).
+  // A reactive prop, NOT a stable getter — so the memoized row updates when its own
+  // poll closes instead of freezing a render-time lookup.
+  isPollClosed: boolean
   // Highlight terms for find-on-page
   highlightTerms?: string[]
   // Whether this message is the current find-on-page match
@@ -1377,7 +1387,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         onNickTouchEnd={!message.isOutgoing ? onNickTouchEnd : undefined}
         onReactionPickerChange={(isOpen) => onReactionPickerChange?.(message.id, isOpen)}
         onPollVote={handlePollVote}
-        onClosePoll={message.isOutgoing && message.poll && !isPollClosed(message.id) && !message.pollClosedAt ? () => closePoll(room.jid, message.id) : undefined}
+        onClosePoll={canClosePoll(message, isPollClosed) ? () => closePoll(room.jid, message.id) : undefined}
 
         formatTime={formatTime}
         timeFormat={timeFormat}

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { groupMessagesByDate, shouldShowAvatar, whisperThreadPosition, whisperCounterpartPresent, scrollToMessage, isActionMessage } from './messageGrouping'
+import { groupMessagesByDate, shouldShowAvatar, whisperThreadPosition, whisperCounterpartPresent, scrollToMessage, isActionMessage, canClosePoll } from './messageGrouping'
 
 // Mock CSS.escape since it's not available in JSDOM
 // This implementation matches the browser's CSS.escape behavior
@@ -557,5 +557,32 @@ describe('isActionMessage', () => {
     expect(isActionMessage(undefined)).toBe(false)
     // @ts-expect-error - testing null handling
     expect(isActionMessage(null)).toBe(false)
+  })
+})
+
+describe('canClosePoll', () => {
+  const ownPoll = { isOutgoing: true, poll: { title: 'Lunch?' } }
+
+  it('offers close for your own open poll', () => {
+    expect(canClosePoll(ownPoll, false)).toBe(true)
+  })
+
+  it('hides close once the poll is closed (reactive boolean — the regression guard)', () => {
+    // This is the value that must stay reactive: passing `true` here (because a
+    // poll-closed message arrived) MUST flip the decision. The row receives this as
+    // a plain boolean prop, never reads it from a frozen stable getter at render.
+    expect(canClosePoll(ownPoll, true)).toBe(false)
+  })
+
+  it('hides close when the poll message itself is marked closed', () => {
+    expect(canClosePoll({ ...ownPoll, pollClosedAt: new Date() }, false)).toBe(false)
+  })
+
+  it('never offers close on someone else’s poll', () => {
+    expect(canClosePoll({ isOutgoing: false, poll: { title: 'Lunch?' } }, false)).toBe(false)
+  })
+
+  it('never offers close on a non-poll message', () => {
+    expect(canClosePoll({ isOutgoing: true }, false)).toBe(false)
   })
 })

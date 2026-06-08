@@ -9,6 +9,25 @@ export function isActionMessage(body: string | undefined): boolean {
 }
 
 /**
+ * Whether the "close poll" action should be offered for a message.
+ *
+ * GUARD (regression class): `isClosed` MUST be a plain reactive value — derived
+ * per-message and passed to the row as a prop — NOT read at render time from a
+ * stable getter/ref inside a memoized row. A memoized row only re-renders when its
+ * own props change, so reading a stable getter during render freezes the result:
+ * the row would keep offering "close" on an already-closed poll until it remounts.
+ * This is the same failure mode that froze the reply-scroll target (see
+ * `scrollToMessage` and RoomView's `getMessageById` note). Keeping this a typed
+ * `boolean` parameter makes the freeze unrepresentable for this decision.
+ */
+export function canClosePoll(
+  message: { isOutgoing?: boolean; poll?: unknown; pollClosedAt?: Date },
+  isClosed: boolean,
+): boolean {
+  return Boolean(message.isOutgoing && message.poll && !isClosed && !message.pollClosedAt)
+}
+
+/**
  * Security context subset used for grouping. Matches the SDK's
  * `MessageSecurityContext` shape — duplicated here to keep this module
  * free of SDK imports so it stays cheap to unit-test.
