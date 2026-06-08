@@ -16,6 +16,7 @@ vi.mock('@/utils/renderLoopDetector', () => ({
   resetRenderLoopDetector: vi.fn(),
   startWakeGracePeriod: vi.fn(),
   startSyncGracePeriod: vi.fn(),
+  notifyUserInput: vi.fn(),
   getRenderStats: vi.fn(() => ({})),
 }))
 

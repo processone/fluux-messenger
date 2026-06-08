@@ -327,6 +327,7 @@ vi.mock('@/hooks/useEventsDesktopNotifications', () => ({
 
 vi.mock('@/utils/renderLoopDetector', () => ({
   detectRenderLoop: () => {},
+  notifyUserInput: () => {},
 }))
 
 // Note: useRouteSync is not mocked - we use the real implementation with MemoryRouter

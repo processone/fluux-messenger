@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, Suspense, lazy, type ReactNode, type RefObject, type Ref, useImperativeHandle } from 'react'
 import { useTranslation } from 'react-i18next'
-import { detectRenderLoop } from '@/utils/renderLoopDetector'
+import { detectRenderLoop, notifyUserInput } from '@/utils/renderLoopDetector'
 import { Send, Smile, Paperclip, Reply, X, Pencil, Loader2, Image, FileText, Trash2, BarChart3, Plus, Lock, ShieldCheck } from 'lucide-react'
 import { useClickOutside, useSlashCommands } from '@/hooks'
 import { Tooltip } from './Tooltip'
@@ -323,6 +323,11 @@ export function MessageComposer({
   // Control character filtering (Tauri macOS arrow-key bug) is handled by
   // the TextArea component — see ui/TextInput.tsx
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    // A keystroke legitimately re-renders this controlled input (text + caret)
+    // ~1-2× — fast typing / key-repeat would otherwise trip the render-loop
+    // *warning*. Arm the interaction grace so warnings stay quiet while typing;
+    // the hard loop-break threshold is unaffected.
+    notifyUserInput()
     setText(e.target.value)
 
     // Update toolbar visibility based on typing activity
