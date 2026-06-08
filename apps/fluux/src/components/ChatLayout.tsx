@@ -20,7 +20,7 @@ import { ToastContainer } from './ToastContainer'
 import {
   // Vanilla stores for imperative .getState() access
   chatStore, roomStore, consoleStore, adminStore, rosterStore, searchStore, activityLogStore,
-  useRosterActions,
+  useRosterActions, useContactIdentities,
   type Contact, type Conversation, type AdminCategory
 } from '@fluux/sdk'
 // React hook wrappers for reactive subscriptions
@@ -846,16 +846,11 @@ function FullScreenOccupantPanel({ onClose, onStartChat, onShowProfile }: {
     const jid = s.activeRoomJid
     return jid ? s.rooms.get(jid) : undefined
   })
-  const contacts = useRosterStore((s) => s.contacts)
   const ownAvatar = useConnectionStore((s) => s.ownAvatar)
-
-  const contactsByJid = (() => {
-    const map = new Map<string, Contact>()
-    for (const contact of contacts.values()) {
-      map.set(contact.jid, contact)
-    }
-    return map
-  })()
+  // Presence-immune identity map (name/avatar) — same fix as RoomView: using
+  // useContactIdentities instead of the full roster keeps occupant rows from
+  // re-rendering on every presence stanza.
+  const contactsByJid = useContactIdentities()
 
   if (!activeRoom) return null
 

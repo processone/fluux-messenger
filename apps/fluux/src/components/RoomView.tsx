@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useImperativeHandle, useMemo, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useRoomActive, useRoomEntity, useRoomOccupantCount, useRoster, getBareJid, generateConsistentColorHexSync, getPresenceFromShow, createMessageLookup, isMessageFromIgnoredUser, isReplyToIgnoredUser, canKick, canBan, canModerate, getAvailableAffiliations, getAvailableRoles, getMyReactions, type RoomMessage, type Room, type RoomOccupant, type MentionReference, type ChatStateNotification, type Contact, type FileAttachment, type RoomAffiliation, type RoomRole, type PollData } from '@fluux/sdk'
+import { useRoomActive, useRoomEntity, useRoomOccupantCount, useContactIdentities, getBareJid, generateConsistentColorHexSync, getPresenceFromShow, createMessageLookup, isMessageFromIgnoredUser, isReplyToIgnoredUser, canKick, canBan, canModerate, getAvailableAffiliations, getAvailableRoles, getMyReactions, type RoomMessage, type Room, type RoomOccupant, type MentionReference, type ChatStateNotification, type ContactIdentity, type FileAttachment, type RoomAffiliation, type RoomRole, type PollData } from '@fluux/sdk'
 import { useConnectionStore, useIgnoreStore, useRoomStore } from '@fluux/sdk/react'
 import { ignoreStore, roomStore, type IgnoredUser } from '@fluux/sdk/stores'
 import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat, useContextMenu, useWhisperCounterpartPresent, isSmallScreen } from '@/hooks'
@@ -73,7 +73,6 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   detectRenderLoop('RoomView')
   const { t } = useTranslation()
   const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendPoll, votePoll, closePoll, sendCorrection, retractMessage, moderateMessage, sendChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, continueRoomCatchUp, activeMAMState, submitRoomConfig, setSubject, destroyRoom, setAffiliation, setRole, targetMessageId, clearTargetMessageId } = useRoomActive()
-  const { contacts } = useRoster()
   // NOTE: Use focused selectors instead of useConnection() hook to avoid
   // re-renders when unrelated connection state changes (error, reconnectAttempt, etc.)
   const ownAvatar = useConnectionStore((s) => s.ownAvatar)
@@ -88,16 +87,11 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     ? () => onSearchInConversation(activeRoom.jid)
     : undefined
 
-  // Create a map of contacts by JID for quick lookup (used to show avatars for known
-  // contacts). Memoized so it keeps a stable identity across renders — a fresh Map
-  // every render breaks the memo bailout of every RoomMessageBubbleWrapper.
-  const contactsByJid = useMemo(() => {
-    const map = new Map<string, Contact>()
-    for (const contact of contacts) {
-      map.set(contact.jid, contact)
-    }
-    return map
-  }, [contacts])
+  // Contact identity (name/avatar) lookup for occupant + message-row avatars. Sourced from
+  // useContactIdentities (NOT useRoster) so it stays referentially stable across presence
+  // churn — a fresh map every render breaks the memo bailout of every RoomMessageBubbleWrapper
+  // and OccupantRow, and presence-only updates don't change a contact's identity.
+  const contactsByJid = useContactIdentities()
 
   // Filter out messages from ignored users and replies quoting them (client-side ignore)
   // IMPORTANT: Use stable empty array reference to prevent infinite re-renders.
@@ -808,7 +802,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   scrollerRef: React.RefObject<HTMLElement | null>
   isAtBottomRef: React.MutableRefObject<boolean>
   room: Room
-  contactsByJid: Map<string, Contact>
+  contactsByJid: Map<string, ContactIdentity>
   ownAvatar?: string | null
   sendReaction: (roomJid: string, messageId: string, emojis: string[]) => Promise<void>
   votePoll: (roomJid: string, messageId: string, optionEmoji: string, currentMyReactions: string[], poll: PollData, isClosed?: boolean) => Promise<void>
@@ -1034,7 +1028,7 @@ interface RoomMessageBubbleWrapperProps {
   getMessageById: (id: string) => RoomMessage | undefined
   room: Room
   knownNicks: ReadonlySet<string>
-  contactsByJid: Map<string, Contact>
+  contactsByJid: Map<string, ContactIdentity>
   ownAvatar?: string | null
   sendReaction: (roomJid: string, messageId: string, emojis: string[]) => Promise<void>
   votePoll: (roomJid: string, messageId: string, optionEmoji: string, currentMyReactions: string[], poll: PollData, isClosed?: boolean) => Promise<void>

@@ -127,6 +127,13 @@ vi.mock('@fluux/sdk', () => ({
   useRoster: () => ({
     contacts: mockContacts,
   }),
+  // RoomView reads contact avatars via useContactIdentities (presence-immune); map the
+  // test contacts to identity entries so avatar assertions still hold.
+  useContactIdentities: () => {
+    const map = new Map<string, { jid: string; name: string; avatar?: string }>()
+    for (const c of mockContacts) map.set(c.jid, { jid: c.jid, name: c.name, avatar: c.avatar })
+    return map
+  },
   useConnection: () => ({
     jid: 'me@example.com/resource',
     ownAvatar: null,

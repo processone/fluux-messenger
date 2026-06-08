@@ -11,7 +11,7 @@
  */
 import { useState, useRef, useMemo, memo } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { Room, RoomOccupant, Contact, RoomAffiliation, RoomRole } from '@fluux/sdk'
+import type { Room, RoomOccupant, ContactIdentity, RoomAffiliation, RoomRole } from '@fluux/sdk'
 import { getPresenceFromShow, getBareJid, generateConsistentColorHexSync, canKick, canBan, getAvailableAffiliations, getAvailableRoles } from '@fluux/sdk'
 import { useRoomActions } from '@fluux/sdk'
 import { useConnectionStore, useIgnoreStore } from '@fluux/sdk/react'
@@ -30,7 +30,7 @@ import { Shield, Crown, UserCheck, X, ArrowLeft, MessageCircle, EyeOff, User, Se
 
 export interface OccupantPanelProps {
   room: Room
-  contactsByJid: Map<string, Contact>
+  contactsByJid: Map<string, ContactIdentity>
   ownAvatar?: string | null
   onClose: () => void
   onStartChat?: (jid: string) => void
@@ -77,7 +77,7 @@ interface OccupantRowProps {
   roomNickname: string
   ownAvatar?: string | null
   forceOffline: boolean
-  contactsByJid: Map<string, Contact>
+  contactsByJid: Map<string, ContactIdentity>
   ignored: boolean
   onContextMenu: (group: GroupedOccupant, e: React.MouseEvent) => void
   onTouchStart: (group: GroupedOccupant, e: React.TouchEvent) => void

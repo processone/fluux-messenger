@@ -131,4 +131,26 @@ describe('OccupantPanel per-row memoization', () => {
 
     expect(groupSpy.mock.calls.length).toBe(callsAfterMount)
   })
+
+  // ---- Presence-churn guard (the RoomView / FullScreenOccupantPanel fix) ----
+
+  it('re-renders ALL rows when contactsByJid identity changes (the pre-fix presence storm)', () => {
+    const alice = createOccupant({ nick: 'alice', jid: 'alice@example.com' })
+    const bob = createOccupant({ nick: 'bob', jid: 'bob@example.com' })
+    const onClose = () => {}
+    const room = createRoom(new Map([['alice', alice], ['bob', bob]]))
+
+    // A NEW contactsByJid Map each render is what the OLD useRoster sourcing produced on
+    // every presence stanza. OccupantRow's comparator depends on contactsByJid identity.
+    const { rerender } = render(<OccupantPanel room={room} contactsByJid={new Map()} onClose={onClose} />)
+    const afterMount = avatarRenders.count
+    const perRow = afterMount / 2
+    rerender(<OccupantPanel room={room} contactsByJid={new Map()} onClose={onClose} />)
+
+    // Both rows re-render because contactsByJid is a fresh reference. The RoomView /
+    // FullScreenOccupantPanel fix sources contactsByJid from useContactIdentities, which
+    // returns a STABLE ref across presence churn (proven in the SDK
+    // useRoster.renderStability test) — so in the app these rows bail on presence stanzas.
+    expect(avatarRenders.count - afterMount).toBeGreaterThanOrEqual(perRow * 2)
+  })
 })
