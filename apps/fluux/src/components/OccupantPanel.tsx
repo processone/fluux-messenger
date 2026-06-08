@@ -9,10 +9,10 @@
  * - Shows contact avatars for known roster contacts
  * - Right-click context menu: private message, copy JID, ignore, user info
  */
-import { useState, useRef, memo } from 'react'
+import { useState, useRef, useMemo, memo } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { Room, RoomOccupant, Contact, PresenceShow, RoomAffiliation, RoomRole } from '@fluux/sdk'
-import { getPresenceFromShow, getBareJid, getBestPresenceShow, generateConsistentColorHexSync, canKick, canBan, getAvailableAffiliations, getAvailableRoles } from '@fluux/sdk'
+import type { Room, RoomOccupant, Contact, RoomAffiliation, RoomRole } from '@fluux/sdk'
+import { getPresenceFromShow, getBareJid, generateConsistentColorHexSync, canKick, canBan, getAvailableAffiliations, getAvailableRoles } from '@fluux/sdk'
 import { useRoomActions } from '@fluux/sdk'
 import { useConnectionStore, useIgnoreStore } from '@fluux/sdk/react'
 import { ignoreStore, type IgnoredUser } from '@fluux/sdk/stores'
@@ -23,17 +23,10 @@ import { useContextMenu, useWindowDrag } from '@/hooks'
 import { useToastStore } from '@/stores/toastStore'
 import { getTranslatedShowText } from '@/utils/presence'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
+import { groupOccupantsByRole, type GroupedOccupant } from '@/utils/occupantGrouping'
 import { OccupantModerationModal } from './OccupantModerationModal'
 import { UserInfoPopover } from './conversation/UserInfoPopover'
 import { Shield, Crown, UserCheck, X, ArrowLeft, MessageCircle, EyeOff, User, Settings, Ear } from 'lucide-react'
-
-// Type for grouped occupants (multiple connections from same bare JID)
-interface GroupedOccupant {
-  bareJid?: string
-  connections: RoomOccupant[]
-  primaryNick: string // Main display nick
-  bestPresence?: PresenceShow // Best presence show state (online > chat > away > xa > dnd)
-}
 
 export interface OccupantPanelProps {
   room: Room
@@ -424,58 +417,14 @@ export function OccupantPanel({
     }
   }
 
-  // Sort occupants by role priority: moderator > participant > visitor
-  const sortedOccupants = (() => {
-    const occupants = Array.from(room.occupants.values())
+  // Sort + group occupants by role (and by bare JID within each role). Memoized on the
+  // occupants Map ref so a parent re-render (message activity, menu / connection state)
+  // does NOT redo the O(n log n) work when the occupants are unchanged.
+  const groupedOccupants = useMemo(() => groupOccupantsByRole(room.occupants), [room.occupants])
 
-    const rolePriority: Record<string, number> = {
-      moderator: 0,
-      participant: 1,
-      visitor: 2,
-      none: 3,
-    }
-
-    return occupants.sort((a, b) => {
-      // First by role
-      const roleDiff = (rolePriority[a.role] ?? 3) - (rolePriority[b.role] ?? 3)
-      if (roleDiff !== 0) return roleDiff
-      // Then alphabetically by nick
-      return a.nick.localeCompare(b.nick)
-    })
-  })()
-
-  // Group occupants by role, then by bare JID within each role
-  const groupedOccupants = (() => {
-    const groups: { role: string; occupants: GroupedOccupant[] }[] = []
-    let currentRole: string | null = null
-    let currentRoleOccupants: RoomOccupant[] = []
-
-    // First, group by role
-    for (const occupant of sortedOccupants) {
-      if (occupant.role !== currentRole) {
-        if (currentRoleOccupants.length > 0 && currentRole) {
-          // Process the current role group
-          const groupedByJid = groupOccupantsByBareJid(currentRoleOccupants)
-          groups.push({ role: currentRole, occupants: groupedByJid })
-        }
-        currentRole = occupant.role
-        currentRoleOccupants = [occupant]
-      } else {
-        currentRoleOccupants.push(occupant)
-      }
-    }
-
-    // Don't forget the last role group
-    if (currentRoleOccupants.length > 0 && currentRole) {
-      const groupedByJid = groupOccupantsByBareJid(currentRoleOccupants)
-      groups.push({ role: currentRole, occupants: groupedByJid })
-    }
-
-    return groups
-  })()
-
-  // Compute offline members: affiliated members not currently online as occupants
-  const offlineMembers = (() => {
+  // Affiliated members not currently online as occupants. Memoized on occupants +
+  // member list so it is not recomputed on unrelated re-renders.
+  const offlineMembers = useMemo(() => {
     if (!room.affiliatedMembers || room.affiliatedMembers.length === 0) return []
 
     // Collect all online JIDs and nicks from occupants
@@ -496,10 +445,10 @@ export function OccupantPanel({
       const nameB = b.nick || b.jid
       return nameA.localeCompare(nameB)
     })
-  })()
+  }, [room.affiliatedMembers, room.occupants])
 
-  // Compute ignored users not already visible as online occupants or offline members
-  const hiddenIgnoredUsers = (() => {
+  // Ignored users not already visible as online occupants or offline members.
+  const hiddenIgnoredUsers = useMemo(() => {
     if (ignoredForRoom.length === 0) return []
 
     // Collect all identifiers visible in the occupant list
@@ -516,7 +465,7 @@ export function OccupantPanel({
     }
 
     return ignoredForRoom.filter(u => !visibleIdentifiers.has(u.identifier))
-  })()
+  }, [ignoredForRoom, room.occupants, offlineMembers])
 
   const getRoleLabel = (role: string) => {
     switch (role) {
@@ -699,7 +648,7 @@ export function OccupantPanel({
           </div>
         )}
 
-        {sortedOccupants.length === 0 && offlineMembers.length === 0 && (
+        {room.occupants.size === 0 && offlineMembers.length === 0 && (
           <div className="px-4 py-8 text-center text-fluux-muted text-sm">
             {t('rooms.noMembersInRoom')}
           </div>
@@ -861,57 +810,4 @@ function getHatColors(hat: { uri: string; hue?: number }) {
     backgroundColor: bgColor,
     color: textColor,
   }
-}
-
-/**
- * Group occupants by bare JID within a role.
- * Occupants with the same bare JID are grouped together.
- * Occupants without a JID are each in their own group.
- */
-function groupOccupantsByBareJid(occupants: RoomOccupant[]): GroupedOccupant[] {
-  const byBareJid = new Map<string, RoomOccupant[]>()
-  const noJid: RoomOccupant[] = []
-
-  for (const occupant of occupants) {
-    if (occupant.jid) {
-      const bareJid = getBareJid(occupant.jid)
-      const existing = byBareJid.get(bareJid)
-      if (existing) {
-        existing.push(occupant)
-      } else {
-        byBareJid.set(bareJid, [occupant])
-      }
-    } else {
-      noJid.push(occupant)
-    }
-  }
-
-  const result: GroupedOccupant[] = []
-
-  // Add grouped occupants (those with JIDs)
-  for (const [bareJid, connections] of byBareJid) {
-    // Sort connections by nick for consistency
-    connections.sort((a, b) => a.nick.localeCompare(b.nick))
-    result.push({
-      bareJid,
-      connections,
-      primaryNick: connections[0].nick,
-      bestPresence: getBestPresenceShow(connections.map(c => c.show)),
-    })
-  }
-
-  // Add occupants without JIDs as individual groups
-  for (const occupant of noJid) {
-    result.push({
-      bareJid: undefined,
-      connections: [occupant],
-      primaryNick: occupant.nick,
-      bestPresence: occupant.show,
-    })
-  }
-
-  // Sort all by primary nick
-  result.sort((a, b) => a.primaryNick.localeCompare(b.primaryNick))
-
-  return result
 }

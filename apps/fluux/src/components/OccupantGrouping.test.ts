@@ -1,58 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { getBareJid, getBestPresenceShow, type RoomOccupant, type PresenceShow } from '@fluux/sdk'
-
-// Type for grouped occupants (copied from RoomView.tsx for testing)
-interface GroupedOccupant {
-  bareJid?: string
-  connections: RoomOccupant[]
-  primaryNick: string
-  bestPresence?: PresenceShow
-}
-
-// Helper function copied from RoomView.tsx for testing
-function groupOccupantsByBareJid(occupants: RoomOccupant[]): GroupedOccupant[] {
-  const byBareJid = new Map<string, RoomOccupant[]>()
-  const noJid: RoomOccupant[] = []
-
-  for (const occupant of occupants) {
-    if (occupant.jid) {
-      const bareJid = getBareJid(occupant.jid)
-      const existing = byBareJid.get(bareJid)
-      if (existing) {
-        existing.push(occupant)
-      } else {
-        byBareJid.set(bareJid, [occupant])
-      }
-    } else {
-      noJid.push(occupant)
-    }
-  }
-
-  const result: GroupedOccupant[] = []
-
-  for (const [bareJid, connections] of byBareJid) {
-    connections.sort((a, b) => a.nick.localeCompare(b.nick))
-    result.push({
-      bareJid,
-      connections,
-      primaryNick: connections[0].nick,
-      bestPresence: getBestPresenceShow(connections.map(c => c.show)),
-    })
-  }
-
-  for (const occupant of noJid) {
-    result.push({
-      bareJid: undefined,
-      connections: [occupant],
-      primaryNick: occupant.nick,
-      bestPresence: occupant.show,
-    })
-  }
-
-  result.sort((a, b) => a.primaryNick.localeCompare(b.primaryNick))
-
-  return result
-}
+import type { RoomOccupant } from '@fluux/sdk'
+import { groupOccupantsByBareJid } from '@/utils/occupantGrouping'
 
 // Helper to create test occupants
 function createOccupant(nick: string, opts: Partial<RoomOccupant> = {}): RoomOccupant {

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render } from '@testing-library/react'
 import { OccupantPanel } from './OccupantPanel'
+import { groupOccupantsByRole } from '@/utils/occupantGrouping'
 import type { Room, RoomOccupant } from '@fluux/sdk'
 
 // Count occupant-row renders: each online occupant row renders exactly one Avatar.
@@ -54,6 +55,14 @@ vi.mock('@/utils/presence', () => ({
   getTranslatedShowText: (show: string | undefined) => show || 'online',
 }))
 
+// Wrap the real grouping helper in a spy so we can assert it is memoized (not
+// recomputed on every panel render). importOriginal keeps the real implementation
+// so the rows still render correctly.
+vi.mock('@/utils/occupantGrouping', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/utils/occupantGrouping')>()
+  return { ...actual, groupOccupantsByRole: vi.fn(actual.groupOccupantsByRole) }
+})
+
 const createOccupant = (overrides: Partial<RoomOccupant> = {}): RoomOccupant => ({
   nick: 'User', role: 'participant', affiliation: 'none', ...overrides,
 })
@@ -95,5 +104,31 @@ describe('OccupantPanel per-row memoization', () => {
     // Only bob's row should re-render — one row's worth, NOT all three.
     expect(delta).toBeGreaterThan(0)
     expect(delta).toBeLessThanOrEqual(perRowCost)
+  })
+
+  it('memoizes grouping — does not re-group when the panel re-renders with unchanged occupants', () => {
+    const groupSpy = vi.mocked(groupOccupantsByRole)
+    groupSpy.mockClear()
+
+    const alice = createOccupant({ nick: 'alice', jid: 'alice@example.com' })
+    const bob = createOccupant({ nick: 'bob', jid: 'bob@example.com' })
+    const occupants = new Map([['alice', alice], ['bob', bob]])
+    const contactsByJid = new Map()
+    const onClose = () => {}
+
+    const room1 = createRoom(occupants)
+    const { rerender } = render(
+      <OccupantPanel room={room1} contactsByJid={contactsByJid} onClose={onClose} />
+    )
+    const callsAfterMount = groupSpy.mock.calls.length
+    expect(callsAfterMount).toBeGreaterThan(0)
+
+    // A parent re-render that does NOT change occupants (message activity, menu or
+    // connection-state change): NEW room object, SAME occupants Map ref. The old IIFE
+    // re-grouped here on every render; the useMemo must skip it.
+    const room2 = { ...room1 }
+    rerender(<OccupantPanel room={room2} contactsByJid={contactsByJid} onClose={onClose} />)
+
+    expect(groupSpy.mock.calls.length).toBe(callsAfterMount)
   })
 })
