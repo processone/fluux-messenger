@@ -87,6 +87,36 @@ export function isEntireBodyFallback(stanza: Element, targetNamespace: string): 
 }
 
 /**
+ * Extract the quoted original text from a XEP-0461 reply fallback block.
+ *
+ * The fallback is a XEP-0393 quotation, optionally preceded by an attribution
+ * line. All styles seen in the wild are handled:
+ *   "> Anna wrote:\n> We should bake a cake"  (own-line attribution — Fluux + the XEP-0461 example)
+ *   "> Anna: We should bake a cake"           (inline attribution — some clients)
+ *   "> We should bake a cake"                 (plain quotation, no attribution)
+ *
+ * The reply chip renders the author separately, so this returns just the
+ * quoted content — attribution and "> " quote markers removed, e.g.
+ * "We should bake a cake".
+ */
+export function extractReplyFallbackBody(fallbackText: string): string {
+  if (!fallbackText) return ''
+  const lines = fallbackText.split('\n')
+
+  if (lines.length > 1 && /^>\s.*\bwrote:\s*$/.test(lines[0])) {
+    // Own-line "> Author wrote:" attribution → drop the whole first line.
+    lines.shift()
+  } else {
+    // Inline "> Author: text" attribution → keep only the text after the colon.
+    const inline = lines[0].match(/^>\s[^:\n]+:\s(.+)$/)
+    if (inline) lines[0] = `> ${inline[1]}`
+  }
+
+  // Strip the "> " (or ">") quote marker from every remaining line.
+  return lines.map((line) => line.replace(/^>\s?/, '')).join('\n').trim()
+}
+
+/**
  * XEP-0428: Process fallback indications and strip fallback text from body.
  * Supports multiple fallback elements per stanza.
  *
@@ -140,12 +170,10 @@ export function processFallback(
       continue
     }
 
-    // For replies, extract and save the fallback text (for when original not found)
+    // For replies, extract and save the quoted text (shown in the reply chip
+    // when the referenced message isn't in the local store).
     if (fallbackFor === NS_REPLY && replyTo) {
-      const fallbackText = body.slice(start, end)
-      // Parse fallback format: "> Author: message\n" - extract just the message
-      const fallbackMatch = fallbackText.match(/^> [^:]+: (.+)$/m)
-      fallbackBody = fallbackMatch ? fallbackMatch[1] : fallbackText.replace(/^> /, '')
+      fallbackBody = extractReplyFallbackBody(body.slice(start, end))
     }
 
     ranges.push({ start, end, forNs: fallbackFor })

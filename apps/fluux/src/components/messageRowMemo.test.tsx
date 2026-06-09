@@ -82,7 +82,6 @@ const stubRoom = {
 // changes, exactly like a real message append.
 const CHAT_PROPS = {
   contactsByJid: new Map(),
-  getMessageById: () => undefined,
   typingUsers: [] as string[],
   scrollerRef: { current: null },
   isAtBottomRef: { current: true },
@@ -120,7 +119,6 @@ const CHAT_PROPS = {
 }
 
 const ROOM_PROPS = {
-  getMessageById: () => undefined,
   scrollerRef: { current: null },
   isAtBottomRef: { current: true },
   room: stubRoom,

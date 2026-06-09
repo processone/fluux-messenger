@@ -307,6 +307,74 @@ describe('fallbackUtils', () => {
       expect(result.fallbackBody).toBe('quoted text')
     })
 
+    it('should extract clean quoted text from a "> Author wrote:" reply fallback (XEP-0461/Fluux format)', () => {
+      // Fluux (and the XEP-0461 example) put the attribution on its own
+      // "> Author wrote:" line, then "> "-prefix every quoted original line.
+      // The chip shows the author separately, so fallbackBody must be just
+      // the quoted content — no "wrote:" header, no "> " markers.
+      const fallbackText = '> arne wrote:\n> It would be really good if we could deescalate\n'
+      const body = fallbackText + 'This message ?'
+      const stanza = createMockElement('message', {}, [
+        {
+          name: 'fallback',
+          attrs: { xmlns: 'urn:xmpp:fallback:0', for: 'urn:xmpp:reply:0' },
+          children: [
+            { name: 'body', attrs: { xmlns: 'urn:xmpp:fallback:0', start: '0', end: String(fallbackText.length) } },
+          ],
+        },
+      ])
+      const result = processFallback(
+        stanza,
+        body,
+        { validTargets: ['urn:xmpp:reply:0'] },
+        { id: 'original-msg-id', to: 'arne@example.com' }
+      )
+      expect(result.processedBody).toBe('This message ?')
+      expect(result.fallbackBody).toBe('It would be really good if we could deescalate')
+    })
+
+    it('should extract multi-line quoted text and strip every "> " marker', () => {
+      const fallbackText = '> arne wrote:\n> line one\n> line two\n'
+      const body = fallbackText + 'my reply'
+      const stanza = createMockElement('message', {}, [
+        {
+          name: 'fallback',
+          attrs: { xmlns: 'urn:xmpp:fallback:0', for: 'urn:xmpp:reply:0' },
+          children: [
+            { name: 'body', attrs: { xmlns: 'urn:xmpp:fallback:0', start: '0', end: String(fallbackText.length) } },
+          ],
+        },
+      ])
+      const result = processFallback(
+        stanza,
+        body,
+        { validTargets: ['urn:xmpp:reply:0'] },
+        { id: 'x', to: 'arne@example.com' }
+      )
+      expect(result.fallbackBody).toBe('line one\nline two')
+    })
+
+    it('should extract quoted text from a plain "> " quotation with no attribution line', () => {
+      const fallbackText = '> just a quoted line\n'
+      const body = fallbackText + 'reply text'
+      const stanza = createMockElement('message', {}, [
+        {
+          name: 'fallback',
+          attrs: { xmlns: 'urn:xmpp:fallback:0', for: 'urn:xmpp:reply:0' },
+          children: [
+            { name: 'body', attrs: { xmlns: 'urn:xmpp:fallback:0', start: '0', end: String(fallbackText.length) } },
+          ],
+        },
+      ])
+      const result = processFallback(
+        stanza,
+        body,
+        { validTargets: ['urn:xmpp:reply:0'] },
+        { id: 'x', to: 'someone@example.com' }
+      )
+      expect(result.fallbackBody).toBe('just a quoted line')
+    })
+
     it('should handle invalid range gracefully', () => {
       const stanza = createMockElement('message', {}, [
         {
