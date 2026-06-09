@@ -843,13 +843,13 @@ export function MessageComposer({
           <button
             type="submit"
             disabled={(!text.trim() && !pendingAttachment) || sending || disabled || sendDisabled}
-            className="p-3 text-fluux-brand hover:text-fluux-brand-hover
+            className="group/send p-3 text-fluux-brand hover:text-fluux-brand-hover
                        disabled:text-fluux-muted disabled:cursor-not-allowed transition-colors relative"
           >
             <Send className="rtl-mirror size-5" />
             {encryptionState?.kind === 'encrypted' ? (
               encryptionState.trust === 'verified'
-                ? <ShieldCheck className="absolute bottom-2 end-2 size-2.5 text-green-500" />
+                ? <ShieldCheck className="absolute bottom-2 end-2 size-2.5 text-green-500 group-disabled/send:text-fluux-muted" />
                 : <Lock className="absolute bottom-2 end-2 size-2.5 text-fluux-muted" />
             ) : sendBadge}
           </button>
