@@ -50,6 +50,7 @@ let mockEncryptionState: { kind: string; fingerprint?: string; trust?: string } 
 vi.mock('@fluux/sdk', () => ({
   getBareJid: (jid: string) => jid.split('/')[0],
   getLocalPart: (jid: string) => jid.split('@')[0],
+  useReferencedMessage: () => undefined,
   useChat: () => ({
     activeConversation: mockActiveConversation,
     activeMessages: mockActiveMessages,
