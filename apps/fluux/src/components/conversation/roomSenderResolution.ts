@@ -10,6 +10,9 @@ export interface ResolvedRoomSender {
   resolvedSenderName: string
   senderRole: RoomRole | undefined
   senderAffiliation: RoomAffiliation | undefined
+  // Superset JID used for the senderColor contact lookup — has the occupant-id
+  // fallback that senderBareJidForBan (ban-permission only) intentionally excludes.
+  senderBareJid: string | undefined
   senderBareJidForBan: string | undefined
   canModerate: boolean
   canBan: boolean
@@ -55,6 +58,7 @@ export function resolveRoomSender(
     senderAvatar, resolvedSenderName,
     senderRole: occupant?.role,
     senderAffiliation: occupant?.affiliation,
+    senderBareJid,
     senderBareJidForBan,
     canModerate: canModerateMsg,
     canBan: canBanUser,

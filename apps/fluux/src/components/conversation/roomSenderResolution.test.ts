@@ -85,6 +85,21 @@ describe('resolveRoomSender', () => {
     const s = resolveRoomSender(msg({ isPrivate: true, whisperWith: 'alice' }), room({}), new Map(), undefined)
     expect(s.counterpartPresent).toBe(false)
   })
+  it('senderBareJid falls back via the occupant-id cache where senderBareJidForBan is undefined', () => {
+    // Message nick is NOT a current occupant, but occupant-id matches an occupant
+    // under a different nick; the JID for that nick lives only in nickToJidCache.
+    const bob = { nick: 'bob2', occupantId: 'oid-bob', role: 'participant', affiliation: 'none' } as any
+    const r = room({
+      occupants: new Map([['bob2', bob]]),
+      // cache keyed by the occupant-id-matched nick, NOT message.nick
+      nickToJidCache: new Map([['bob2', 'bob@server']]),
+    })
+    const s = resolveRoomSender(msg({ nick: 'bob', occupantId: 'oid-bob' }), r, new Map(), undefined)
+    // Ban path has no occupant-id fallback → undefined (occupant.jid absent, cache miss on message.nick)
+    expect(s.senderBareJidForBan).toBeUndefined()
+    // Superset JID resolves via the occupant-id-matched nick cache entry
+    expect(s.senderBareJid).toBe('bob@server')
+  })
 })
 
 describe('resolveReplyAvatar', () => {
