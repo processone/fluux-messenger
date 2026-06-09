@@ -1,0 +1,674 @@
+# MUC Presence-Churn Row Decoupling Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Make a MUC presence stanza re-render only the message rows authored by the affected occupant, instead of the entire non-virtualized room message list.
+
+**Architecture:** Invert sender resolution — resolve each message's sender (and reply-target avatar) in the list layer (`renderMessage`, cheap Map lookups), then pass only reference-stable objects (`occupant`, `selfOccupant`) and primitives down to the memoized `RoomMessageBubbleWrapper`, which stops referencing `room`. Because `roomStore.addOccupant` preserves unchanged occupants' object refs, a presence change for occupant X changes props only for X's rows; every other row's shallow memo bails.
+
+**Tech Stack:** React 19 (+ React Compiler), Zustand, Vitest + @testing-library/react, TypeScript. Spec: `docs/superpowers/specs/2026-06-09-muc-presence-row-decoupling-design.md`.
+
+---
+
+## File Structure
+
+- **Create** `apps/fluux/src/components/conversation/roomSenderResolution.ts` — pure resolution: `selectSelfOccupant`, `resolveRoomSender`, `resolveReplyAvatar`, `stableNickSet`. One responsibility: turn live room state + a message into reference/value-stable per-row data. No React.
+- **Create** `apps/fluux/src/components/conversation/roomSenderResolution.test.ts` — unit tests for the pure functions.
+- **Modify** `apps/fluux/src/components/RoomView.tsx` — `RoomMessageList` (`renderMessage`, `knownNicks`, a `replyContext` per-message cache) and `RoomMessageBubbleWrapper` (slim prop interface; consume resolved props).
+- **Create** `apps/fluux/src/components/roomRowPresenceMemo.test.tsx` — render-count regression guard.
+
+`RoomOccupant`, `Room`, `RoomMessage`, `RoomAffiliation`, `RoomRole`, `ContactIdentity` are imported from `@fluux/sdk`. Helpers `getBareJid`, `getPresenceFromShow`, `canModerate`, `canBan` from `@fluux/sdk`; `getConsistentTextColor` from `../Avatar`; `whisperCounterpartPresent`, `buildReplyContext` from `./conversation` (re-exported via `./conversation/index`).
+
+---
+
+## Task 1: Pure module — `selectSelfOccupant` + `stableNickSet`
+
+**Files:**
+- Create: `apps/fluux/src/components/conversation/roomSenderResolution.ts`
+- Test: `apps/fluux/src/components/conversation/roomSenderResolution.test.ts`
+
+- [ ] **Step 1: Write failing tests**
+
+```ts
+import { describe, it, expect } from 'vitest'
+import { selectSelfOccupant, stableNickSet } from './roomSenderResolution'
+import type { RoomOccupant } from '@fluux/sdk'
+
+const occ = (nick: string, extra: Partial<RoomOccupant> = {}): RoomOccupant =>
+  ({ nick, role: 'participant', affiliation: 'none', ...extra } as RoomOccupant)
+
+describe('selectSelfOccupant', () => {
+  it('returns the occupant matching myNick', () => {
+    const map = new Map([['me', occ('me')], ['you', occ('you')]])
+    expect(selectSelfOccupant(map, 'me')?.nick).toBe('me')
+  })
+  it('returns undefined when myNick is undefined or absent', () => {
+    const map = new Map([['you', occ('you')]])
+    expect(selectSelfOccupant(map, undefined)).toBeUndefined()
+    expect(selectSelfOccupant(map, 'me')).toBeUndefined()
+  })
+})
+
+describe('stableNickSet', () => {
+  it('returns the SAME set ref when the nick set is unchanged across calls', () => {
+    const a = new Map([['x', occ('x')], ['y', occ('y')]])
+    const first = stableNickSet(a, undefined)
+    // New occupants Map (presence flap) but identical key set:
+    const b = new Map([['x', occ('x', { show: 'away' })], ['y', occ('y')]])
+    const second = stableNickSet(b, first)
+    expect(second).toBe(first)
+  })
+  it('returns a NEW set ref when a nick is added or removed', () => {
+    const a = new Map([['x', occ('x')]])
+    const first = stableNickSet(a, undefined)
+    const b = new Map([['x', occ('x')], ['z', occ('z')]])
+    const second = stableNickSet(b, first)
+    expect(second).not.toBe(first)
+    expect(second.has('z')).toBe(true)
+  })
+})
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd apps/fluux && npx vitest run src/components/conversation/roomSenderResolution.test.ts`
+Expected: FAIL — "selectSelfOccupant is not a function" (module/exports missing).
+
+- [ ] **Step 3: Write minimal implementation**
+
+```ts
+import type { RoomOccupant } from '@fluux/sdk'
+
+export function selectSelfOccupant(
+  occupants: ReadonlyMap<string, RoomOccupant>,
+  myNick: string | undefined,
+): RoomOccupant | undefined {
+  return myNick ? occupants.get(myNick) : undefined
+}
+
+/**
+ * Returns a Set of occupant nicks whose reference is STABLE across presence
+ * (show/status) churn — it only changes when the nick set itself changes.
+ * Pass the previous result as `prev` to enable the bail.
+ */
+export function stableNickSet(
+  occupants: ReadonlyMap<string, RoomOccupant>,
+  prev: ReadonlySet<string> | undefined,
+): ReadonlySet<string> {
+  if (prev && prev.size === occupants.size) {
+    let same = true
+    for (const nick of occupants.keys()) {
+      if (!prev.has(nick)) { same = false; break }
+    }
+    if (same) return prev
+  }
+  return new Set(occupants.keys())
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `cd apps/fluux && npx vitest run src/components/conversation/roomSenderResolution.test.ts`
+Expected: PASS (4 tests).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/fluux/src/components/conversation/roomSenderResolution.ts apps/fluux/src/components/conversation/roomSenderResolution.test.ts
+git commit -m "feat(rooms): add selectSelfOccupant + stableNickSet resolution helpers"
+```
+
+---
+
+## Task 2: `resolveRoomSender` — the per-row sender slice
+
+This lifts the resolution currently inline in `RoomMessageBubbleWrapper` at `RoomView.tsx:1131-1182`, `:1357`, `:1384` into a pure function. Compare your implementation against those lines to keep behavior identical.
+
+**Files:**
+- Modify: `apps/fluux/src/components/conversation/roomSenderResolution.ts`
+- Test: `apps/fluux/src/components/conversation/roomSenderResolution.test.ts`
+
+- [ ] **Step 1: Write failing tests**
+
+```ts
+import { resolveRoomSender } from './roomSenderResolution'
+import type { Room, RoomMessage } from '@fluux/sdk'
+
+const room = (over: Partial<Room>): Room => ({
+  jid: 'r@conf', nickname: 'me', joined: true, supportsReactions: true,
+  occupants: new Map(), nickToJidCache: new Map(), nickToAvatarCache: new Map(),
+  ...over,
+} as Room)
+const msg = (over: Partial<RoomMessage>): RoomMessage =>
+  ({ id: '1', nick: 'alice', isOutgoing: false, isPrivate: false, ...over } as RoomMessage)
+
+describe('resolveRoomSender', () => {
+  it('resolves avatar + presence from the live occupant by nick', () => {
+    const alice = { nick: 'alice', role: 'participant', affiliation: 'none', show: 'away', avatar: 'blob:a' } as any
+    const r = room({ occupants: new Map([['alice', alice]]) })
+    const s = resolveRoomSender(msg({}), r, new Map(), undefined)
+    expect(s.occupant).toBe(alice)            // stable live ref
+    expect(s.senderAvatar).toBe('blob:a')
+    expect(s.avatarPresence).toBe('away')
+    expect(s.resolvedSenderName).toBe('alice')
+  })
+
+  it('falls back to occupant-id match when nick is not a current occupant', () => {
+    const bob = { nick: 'bob2', occupantId: 'oid-bob', role: 'participant', affiliation: 'none', show: 'online' } as any
+    const r = room({ occupants: new Map([['bob2', bob]]) })
+    const s = resolveRoomSender(msg({ nick: 'bob', occupantId: 'oid-bob' }), r, new Map(), undefined)
+    expect(s.occupant).toBe(bob)
+    expect(s.resolvedSenderName).toBe('bob2')  // occupantIdMatchNick wins
+  })
+
+  it('reports avatarPresence offline when occupant absent (joined room)', () => {
+    const s = resolveRoomSender(msg({ nick: 'ghost' }), room({}), new Map(), undefined)
+    expect(s.avatarPresence).toBe('offline')
+  })
+
+  it('counterpartPresent is true for non-private messages', () => {
+    const s = resolveRoomSender(msg({ isPrivate: false }), room({}), new Map(), undefined)
+    expect(s.counterpartPresent).toBe(true)
+  })
+})
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd apps/fluux && npx vitest run src/components/conversation/roomSenderResolution.test.ts -t resolveRoomSender`
+Expected: FAIL — "resolveRoomSender is not a function".
+
+- [ ] **Step 3: Write implementation**
+
+Add to `roomSenderResolution.ts` (lift logic from `RoomView.tsx:1131-1188`, `:1357`, `:1384`):
+
+```ts
+import { getBareJid, getPresenceFromShow, canModerate, canBan } from '@fluux/sdk'
+import { whisperCounterpartPresent } from './'
+import type { Room, RoomMessage, RoomRole, RoomAffiliation, ContactIdentity } from '@fluux/sdk'
+
+export interface ResolvedRoomSender {
+  occupant: RoomOccupant | undefined
+  occupantIdMatchNick: string | undefined
+  avatarPresence: 'online' | 'away' | 'dnd' | 'offline' | undefined
+  senderAvatar: string | undefined
+  resolvedSenderName: string
+  senderRole: RoomRole | undefined
+  senderAffiliation: RoomAffiliation | undefined
+  senderBareJidForBan: string | undefined
+  canModerate: boolean
+  canBan: boolean
+  counterpartPresent: boolean
+}
+
+export function resolveRoomSender(
+  message: RoomMessage,
+  room: Room,
+  contactsByJid: ReadonlyMap<string, ContactIdentity>,
+  selfOccupant: RoomOccupant | undefined,
+): ResolvedRoomSender {
+  let occupant = room.occupants.get(message.nick)
+  let occupantIdMatchNick: string | undefined
+  if (!occupant && message.occupantId) {
+    for (const occ of room.occupants.values()) {
+      if (occ.occupantId === message.occupantId) { occupant = occ; occupantIdMatchNick = occ.nick; break }
+    }
+  }
+
+  const canModerateMsg = !message.isOutgoing && selfOccupant
+    ? canModerate(selfOccupant.role, selfOccupant.affiliation, occupant?.affiliation ?? 'none')
+    : false
+
+  const senderBareJidForBan = occupant?.jid
+    ? getBareJid(occupant.jid)
+    : room.nickToJidCache?.get(message.nick)
+  const canBanUser = !message.isOutgoing && selfOccupant && senderBareJidForBan
+    ? canBan(selfOccupant.affiliation, occupant?.affiliation ?? 'none')
+    : false
+
+  const senderBareJid = occupant?.jid
+    ? getBareJid(occupant.jid)
+    : room.nickToJidCache?.get(message.nick) || room.nickToJidCache?.get(occupantIdMatchNick ?? '')
+  const contact = senderBareJid ? contactsByJid.get(senderBareJid) : undefined
+  const cachedAvatar = room.nickToAvatarCache?.get(message.nick)
+    || room.nickToAvatarCache?.get(occupantIdMatchNick ?? '')
+  const senderAvatar = occupant?.avatar || cachedAvatar || contact?.avatar
+
+  const resolvedSenderName = occupantIdMatchNick
+    || (contact?.name && !occupant ? contact.name : null)
+    || message.nick
+
+  return {
+    occupant,
+    occupantIdMatchNick,
+    avatarPresence: room.joined ? (occupant ? getPresenceFromShow(occupant.show) : 'offline') : undefined,
+    senderAvatar,
+    resolvedSenderName,
+    senderRole: occupant?.role,
+    senderAffiliation: occupant?.affiliation,
+    senderBareJidForBan,
+    canModerate: canModerateMsg,
+    canBan: !!canBanUser,
+    counterpartPresent: message.isPrivate ? whisperCounterpartPresent(message, room.occupants) : true,
+  }
+}
+```
+
+Add `RoomOccupant` to the existing type import at the top of the file.
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `cd apps/fluux && npx vitest run src/components/conversation/roomSenderResolution.test.ts`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/fluux/src/components/conversation/roomSenderResolution.ts apps/fluux/src/components/conversation/roomSenderResolution.test.ts
+git commit -m "feat(rooms): resolveRoomSender pure per-row sender resolution"
+```
+
+---
+
+## Task 3: `resolveReplyAvatar` — reply-target avatar (lifts RoomView.tsx:1244-1254)
+
+The reply preview resolves a DIFFERENT occupant (the quoted message's sender). Extract just the avatar/identifier resolution so the wrapper no longer needs `room.occupants` for it.
+
+**Files:**
+- Modify: `apps/fluux/src/components/conversation/roomSenderResolution.ts`
+- Test: `apps/fluux/src/components/conversation/roomSenderResolution.test.ts`
+
+- [ ] **Step 1: Write failing test**
+
+```ts
+import { resolveReplyAvatar } from './roomSenderResolution'
+
+describe('resolveReplyAvatar', () => {
+  it('prefers occupant avatar, then cache, then contact', () => {
+    const r = room({
+      occupants: new Map([['alice', { nick: 'alice', avatar: 'blob:occ' } as any]]),
+      nickToAvatarCache: new Map([['alice', 'blob:cache']]),
+    })
+    const res = resolveReplyAvatar('alice', r, new Map(), 'me', 'blob:own')
+    expect(res).toEqual({ avatarUrl: 'blob:occ', avatarIdentifier: 'alice' })
+  })
+  it('uses own avatar when the reply nick is me', () => {
+    expect(resolveReplyAvatar('me', room({}), new Map(), 'me', 'blob:own'))
+      .toEqual({ avatarUrl: 'blob:own', avatarIdentifier: 'me' })
+  })
+  it('returns undefined identifier-safe result for a null nick', () => {
+    expect(resolveReplyAvatar(undefined, room({}), new Map(), 'me', undefined))
+      .toEqual({ avatarUrl: undefined, avatarIdentifier: 'unknown' })
+  })
+})
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd apps/fluux && npx vitest run src/components/conversation/roomSenderResolution.test.ts -t resolveReplyAvatar`
+Expected: FAIL — "resolveReplyAvatar is not a function".
+
+- [ ] **Step 3: Write implementation**
+
+```ts
+export function resolveReplyAvatar(
+  nick: string | undefined,
+  room: Room,
+  contactsByJid: ReadonlyMap<string, ContactIdentity>,
+  myNick: string | undefined,
+  ownAvatar: string | null | undefined,
+): { avatarUrl: string | undefined; avatarIdentifier: string } {
+  if (nick === myNick && nick) {
+    return { avatarUrl: ownAvatar || undefined, avatarIdentifier: nick }
+  }
+  const occupantForReply = nick ? room.occupants.get(nick) : undefined
+  const senderBareJid = occupantForReply?.jid
+    ? getBareJid(occupantForReply.jid)
+    : (nick ? room.nickToJidCache?.get(nick) : undefined)
+  const contactAvatar = senderBareJid ? contactsByJid.get(senderBareJid)?.avatar : undefined
+  const cachedReplyAvatar = nick ? room.nickToAvatarCache?.get(nick) : undefined
+  return {
+    avatarUrl: occupantForReply?.avatar || cachedReplyAvatar || contactAvatar,
+    avatarIdentifier: nick || 'unknown',
+  }
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `cd apps/fluux && npx vitest run src/components/conversation/roomSenderResolution.test.ts`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/fluux/src/components/conversation/roomSenderResolution.ts apps/fluux/src/components/conversation/roomSenderResolution.test.ts
+git commit -m "feat(rooms): resolveReplyAvatar for reply-preview avatar resolution"
+```
+
+---
+
+## Task 4: Stabilize `knownNicks` in RoomMessageList
+
+`knownNicks` (`RoomView.tsx:917-923`) is `useMemo`'d on `room.occupants`, whose ref is replaced on every show flap → it returns a fresh `Set` and busts every row. Replace it with a ref-stable derivation using `stableNickSet`.
+
+**Files:**
+- Modify: `apps/fluux/src/components/RoomView.tsx:917-923`
+
+- [ ] **Step 1: Replace the `knownNicks` memo**
+
+Old (`:916-923`):
+```tsx
+  // Set of known occupant nicknames for IRC-style mention highlighting
+  const knownNicks = useMemo(() => {
+    const nicks = new Set<string>()
+    for (const nick of room.occupants.keys()) {
+      nicks.add(nick)
+    }
+    return nicks
+  }, [room.occupants])
+```
+
+New:
+```tsx
+  // Set of known occupant nicknames for IRC-style mention highlighting.
+  // Ref-stable across presence (show/status) churn — only changes when the nick
+  // SET changes — so it does not bust every memoized row on each presence stanza.
+  const knownNicksRef = useRef<ReadonlySet<string>>(new Set())
+  knownNicksRef.current = stableNickSet(room.occupants, knownNicksRef.current)
+  const knownNicks = knownNicksRef.current
+```
+
+Add `stableNickSet` to the import from `./conversation/roomSenderResolution` (create the import line). `useRef` is already imported (`RoomView.tsx:1`).
+
+- [ ] **Step 2: Typecheck**
+
+Run: `npm run typecheck`
+Expected: PASS (no errors).
+
+- [ ] **Step 3: Run existing RoomView tests to confirm no regression**
+
+Run: `cd apps/fluux && npx vitest run src/components/RoomView.test.tsx`
+Expected: PASS.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add apps/fluux/src/components/RoomView.tsx
+git commit -m "perf(rooms): stabilize knownNicks across presence churn"
+```
+
+---
+
+## Task 5: Wire resolution into `renderMessage`; stabilize `replyContext`
+
+Resolve the sender per message and pass resolved props instead of `room`. Stabilize `replyContext` with a per-message cache so its object ref is stable when its inputs are unchanged.
+
+**Files:**
+- Modify: `apps/fluux/src/components/RoomView.tsx` (RoomMessageList body around `:906-1001`)
+
+- [ ] **Step 1: Add `selfOccupant` + the replyContext cache above `renderMessage`**
+
+Insert after the `knownNicks` block (~`:923`):
+```tsx
+  const selfOccupant = useMemo(
+    () => selectSelfOccupant(room.occupants, room.nickname),
+    [room.occupants, room.nickname],
+  )
+
+  // Per-message replyContext cache: keeps a STABLE object ref unless the inputs
+  // that affect the reply preview change (quoted id, reply-target occupant ref,
+  // reply avatar, dark mode). Prevents a fresh replyContext from busting every
+  // row's memo on unrelated presence churn.
+  const replyCtxCacheRef = useRef(new Map<string, { key: string; value: ReturnType<typeof buildReplyContext> }>())
+```
+
+Import `selectSelfOccupant`, `resolveRoomSender`, `resolveReplyAvatar` from `./conversation/roomSenderResolution`.
+
+- [ ] **Step 2: Rewrite `renderMessage` to resolve + pass slim props**
+
+Replace the `renderMessage` body (`:962-1002`). Resolve the sender, build a cached replyContext, and pass the resolved fields. (Reply-context key uses the reply-target occupant ref so it stays stable; `getMessageById` is already stable.)
+
+```tsx
+  const renderMessage = (msg: RoomMessage, idx: number, groupMessages: RoomMessage[]) => {
+    const sender = resolveRoomSender(msg, room, contactsByJid, selfOccupant)
+
+    // Stable replyContext (see cache above).
+    const quoted = msg.replyTo ? getMessageById(msg.replyTo) : undefined
+    const replyNick = quoted?.nick ?? (msg.replyTo ? msg.replyTo.split('/').pop() : undefined)
+    const replyOcc = replyNick ? room.occupants.get(replyNick) : undefined
+    const replyAvatar = resolveReplyAvatar(replyNick, room, contactsByJid, room.nickname, ownAvatar)
+    const ctxKey = `${msg.replyTo ?? ''}|${replyOcc ? 'o' : '_'}|${replyAvatar.avatarUrl ?? ''}|${isDarkMode ? 'd' : 'l'}`
+    const cached = replyCtxCacheRef.current.get(msg.id)
+    let replyContext = cached?.value
+    if (!cached || cached.key !== ctxKey) {
+      replyContext = buildRoomReplyContext(msg, getMessageById, replyAvatar, room.nickname, isDarkMode)
+      replyCtxCacheRef.current.set(msg.id, { key: ctxKey, value: replyContext })
+    }
+
+    return (
+      <RoomMessageBubbleWrapper
+        message={msg}
+        showAvatar={shouldShowAvatar(groupMessages, idx)}
+        whisperThread={whisperThreadPosition(groupMessages, idx)}
+        getMessageById={getMessageById}
+        roomJid={room.jid}
+        myNick={room.nickname}
+        supportsReactions={room.supportsReactions !== false}
+        occupant={sender.occupant}
+        avatarPresence={sender.avatarPresence}
+        senderAvatar={sender.senderAvatar}
+        resolvedSenderName={sender.resolvedSenderName}
+        senderRole={sender.senderRole}
+        senderAffiliation={sender.senderAffiliation}
+        senderBareJidForBan={sender.senderBareJidForBan}
+        canModerate={sender.canModerate}
+        canBan={sender.canBan}
+        counterpartPresent={sender.counterpartPresent}
+        replyContext={replyContext}
+        knownNicks={knownNicks}
+        contactsByJid={contactsByJid}
+        ownAvatar={ownAvatar}
+        sendReaction={sendReaction}
+        votePoll={votePoll}
+        closePoll={closePoll}
+        isPollClosed={closedPollIds.has(msg.id)}
+        onReply={onReply}
+        onEdit={onEdit}
+        isLastOutgoing={msg.id === lastOutgoingMessageId}
+        isLastMessage={msg.id === lastMessageId}
+        hideToolbar={isComposing || (activeReactionPickerMessageId !== null && activeReactionPickerMessageId !== msg.id)}
+        onReactionPickerChange={onReactionPickerChange}
+        retractMessage={retractMessage}
+        moderateMessage={moderateMessage}
+        isSelected={msg.id === selectedMessageId}
+        hasKeyboardSelection={hasKeyboardSelection}
+        showToolbarForSelection={showToolbarForSelection}
+        isDarkMode={isDarkMode}
+        onMediaLoad={onMediaLoad}
+        isHovered={hoveredMessageId === msg.id}
+        onMouseEnter={handleMessageHover}
+        onMouseLeave={handleMessageLeave}
+        formatTime={formatTime}
+        timeFormat={effectiveTimeFormat}
+        onNickContextMenu={onNickContextMenu}
+        onNickTouchStart={onNickTouchStart}
+        onNickTouchEnd={onNickTouchEnd}
+        setAffiliation={setAffiliation}
+        highlightTerms={highlightTerms}
+        isCurrentMatch={msg.id === currentMatchId}
+      />
+    )
+  }
+```
+
+> Note: `buildRoomReplyContext` is a thin wrapper (Task 6) around the existing `buildReplyContext` that feeds the resolved `replyAvatar` instead of reading `room` inside the callbacks. `msg.replyTo` is the existing reply-id field — confirm its exact name in `RoomMessage` and adjust if different.
+
+- [ ] **Step 3: Typecheck (expect failures referencing missing wrapper props)**
+
+Run: `npm run typecheck`
+Expected: FAIL — `RoomMessageBubbleWrapperProps` does not yet have `occupant`, `roomJid`, etc., and `buildRoomReplyContext` is undefined. This is expected; Task 6 fixes it. Do NOT commit yet.
+
+---
+
+## Task 6: Slim `RoomMessageBubbleWrapper` to consume resolved props
+
+**Files:**
+- Modify: `apps/fluux/src/components/RoomView.tsx` (`RoomMessageBubbleWrapperProps` `:1032-1081`; the wrapper body `:1083-1500`)
+
+- [ ] **Step 1: Replace the prop interface's `room` with the resolved fields**
+
+In `RoomMessageBubbleWrapperProps` remove `room: Room` and add:
+```tsx
+  roomJid: string
+  myNick: string | undefined
+  supportsReactions: boolean
+  occupant: RoomOccupant | undefined
+  avatarPresence: 'online' | 'away' | 'dnd' | 'offline' | undefined
+  senderAvatar: string | undefined
+  resolvedSenderName: string
+  senderRole: RoomRole | undefined
+  senderAffiliation: RoomAffiliation | undefined
+  senderBareJidForBan: string | undefined
+  canModerate: boolean
+  canBan: boolean
+  counterpartPresent: boolean
+  replyContext: ReturnType<typeof buildReplyContext>
+```
+
+- [ ] **Step 2: Delete the internal resolution; use props**
+
+In the wrapper body delete `:1131-1182` (sender/self/avatar/name/permission resolution) and the `replyContext` build (`:1219-1257`). Replace remaining `room.*` reads:
+- `room.jid` → `roomJid` (handleReaction `:1201`, handlePollVote `:1216`, `senderOccupantJid` `:1362`, `closePoll` call).
+- `room.nickname`/`myNick` → `myNick` prop.
+- `room.supportsReactions !== false` (`:1365`) → `supportsReactions` prop.
+- `occupant`, `senderAvatar`, `resolvedSenderName`, `canModerateMsg`→`canModerate`, `senderRole`/`senderAffiliation`, `avatarPresence`, `counterpartPresent` → use the props.
+- `contact` (for `senderColor` `:1186`): derive locally from `senderBareJidForBan`/`contactsByJid` is NOT equivalent (color uses senderBareJid which may differ). Keep a minimal local lookup: `const contact = senderBareJidForBan ? contactsByJid.get(senderBareJidForBan) : undefined` — acceptable since `senderBareJidForBan` equals `senderBareJid` for color purposes here; verify against `:1164-1168` and if they diverge, also return `senderColorJid` from `resolveRoomSender`.
+- `avatarPresence={...}` (`:1357`) → `avatarPresence={avatarPresence}`.
+- `counterpartPresent={...}` (`:1384`) → `counterpartPresent={counterpartPresent}`.
+
+After this, the wrapper must contain **no** reference to `room` (grep to confirm — Step 4).
+
+- [ ] **Step 3: Add `buildRoomReplyContext` helper near `RoomMessageBubbleWrapper`**
+
+```tsx
+// Builds reply context from a PRE-RESOLVED reply avatar (no `room` access), so
+// the row can be fed a stable replyContext from the list layer.
+function buildRoomReplyContext(
+  message: RoomMessage,
+  getMessageById: (id: string) => RoomMessage | undefined,
+  replyAvatar: { avatarUrl: string | undefined; avatarIdentifier: string },
+  myNick: string | undefined,
+  isDarkMode: boolean | undefined,
+) {
+  return buildReplyContext(
+    message,
+    getMessageById,
+    (originalMsg, fallbackId) =>
+      originalMsg ? originalMsg.nick : (fallbackId ? fallbackId.split('/').pop() || 'Unknown' : 'Unknown'),
+    (originalMsg, fallbackId, dark) => {
+      if (originalMsg?.isOutgoing) return 'var(--fluux-text-accent)'
+      const nick = originalMsg?.nick || (fallbackId ? fallbackId.split('/').pop() : undefined)
+      return nick ? getConsistentTextColor(nick, dark) : 'var(--fluux-brand)'
+    },
+    () => replyAvatar,
+    isDarkMode,
+  )
+}
+```
+
+- [ ] **Step 4: Confirm the wrapper no longer references `room`, then typecheck + tests**
+
+```bash
+awk 'NR>=1083 && NR<=1520' apps/fluux/src/components/RoomView.tsx | grep -n 'room\.' || echo "CLEAN: no room.* in wrapper"
+```
+Expected: `CLEAN`.
+Run: `npm run typecheck` → PASS.
+Run: `cd apps/fluux && npx vitest run src/components/RoomView.test.tsx` → PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/fluux/src/components/RoomView.tsx
+git commit -m "perf(rooms): pass resolved per-row sender data to room message rows"
+```
+
+---
+
+## Task 7: Render-count regression guard
+
+Prove the win: a presence flap for one occupant re-renders only that occupant's rows; a join of an unrelated occupant re-renders no existing rows.
+
+**Files:**
+- Create: `apps/fluux/src/components/roomRowPresenceMemo.test.tsx`
+
+Follow the existing pattern in `apps/fluux/src/components/messageRowMemo.test.tsx` (counter ref incremented in a spied row; mock the SDK stores via `test-setup.ts`). The test must:
+
+- [ ] **Step 1: Write the guard test**
+
+```tsx
+// Render a RoomView/RoomMessageList with N messages from 3 distinct occupants
+// (alice, bob, carol). Track per-occupant row render counts via a module-level
+// counter incremented inside a spy on RoomMessageBubbleWrapper's MessageBubble
+// (mirror messageRowMemo.test.tsx's instrumentation).
+//
+// 1) Flap alice's presence: roomStore.addOccupant(roomJid, { ...alice, show: 'away' })
+//    EXPECT: only alice's rows re-render (delta === alice's message count),
+//            bob's and carol's deltas === 0.
+// 2) Join a brand-new occupant 'dave' (no messages): addOccupant(roomJid, dave)
+//    EXPECT: all existing-row deltas === 0.
+// 3) Append a new message from bob: addMessage(...)
+//    EXPECT: existing rows' deltas === 0 (only the new row mounts).
+```
+
+Write it concretely using the project's room test helpers (see `RoomView.test.tsx` setup for `createMockStores`/`createMockRoom` usage and the demo `emitSDK` drivers referenced in `.claude/skills/perf-stress-ui`). Assert exact counts, not ranges.
+
+- [ ] **Step 2: Run — verify it passes against the new code**
+
+Run: `cd apps/fluux && npx vitest run src/components/roomRowPresenceMemo.test.tsx`
+Expected: PASS. (If it FAILS showing all rows re-render on the flap, a `room.*` prop leaked into the wrapper — re-check Task 6 Step 4.)
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add apps/fluux/src/components/roomRowPresenceMemo.test.tsx
+git commit -m "test(rooms): guard per-occupant row re-render on presence churn"
+```
+
+---
+
+## Task 8: Full verification + perf-harness measurement
+
+**Files:** none (verification only)
+
+- [ ] **Step 1: Typecheck, lint, full app + SDK suites**
+
+```bash
+npm run typecheck
+npm run lint
+cd apps/fluux && npx vitest run
+```
+Expected: typecheck clean; lint 0 errors; all tests pass with no stderr from changed code.
+
+- [ ] **Step 2: Measure with the demo perf harness (perf-stress-ui skill)**
+
+Per `.claude/skills/perf-stress-ui`: `npm run dev`, open
+`http://localhost:5173/demo.html?tutorial=false&stress=rooms:15,messages:150,mode:backfill&perf=1`,
+open a deep room, then drive a sustained presence churn:
+```js
+// fire-and-forget in one eval, read counters in another
+for (let i=0;i<60;i++) window.__demoClient.emitSDK('room:occupant-joined', { roomJid, occupant: {/* flap one nick's show */} })
+```
+Expected: per the `__rc` never-resetting counter recipe, `RoomMessageBubbleWrapper` renders scale with the number of *flapping* occupants, NOT with `messages:150`. Record before/after counts in the PR description.
+
+- [ ] **Step 3: Final commit / PR**
+
+The branch `fix/muc-presence-row-decoupling` is ready for PR. Do not push without maintainer go-ahead.
+
+---
+
+## Self-Review (completed by plan author)
+
+- **Spec coverage:** resolve-in-list/pass-primitives (Tasks 2,5,6); reply-target resolution — *added beyond spec* (Task 3) since the wrapper has a second occupant-resolution site the spec under-specified; `knownNicks` stabilization (Task 4); render-count guard (Task 7); virtualization explicitly excluded (no task). ✓
+- **Type consistency:** `ResolvedRoomSender` fields used in Task 5/6 match Task 2's definition; `RoomOccupant`/`RoomRole`/`RoomAffiliation` are the `@fluux/sdk` names (confirmed in `RoomView.tsx:4`). `buildRoomReplyContext` defined in Task 6, used in Task 5 (forward reference — Task 5 typecheck is expected to fail until Task 6; called out in Task 5 Step 3).
+- **Known soft spots flagged for the implementer:** (a) confirm `RoomMessage.replyTo` field name; (b) `senderColor`'s `contact` lookup uses `senderBareJid` which may differ from `senderBareJidForBan` — Task 6 Step 2 says verify and, if they diverge, return a `senderColorJid` from `resolveRoomSender`; (c) the guard test must use exact counts.
