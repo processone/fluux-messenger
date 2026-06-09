@@ -32,16 +32,16 @@ export function resolveRoomSender(
   const canModerateMsg = !message.isOutgoing && selfOccupant
     ? canModerate(selfOccupant.role, selfOccupant.affiliation, occupant?.affiliation ?? 'none')
     : false
+  // senderBareJidForBan intentionally has NO occupant-id fallback — matches pre-refactor ban-permission behavior
   const senderBareJidForBan = occupant?.jid
     ? getBareJid(occupant.jid)
     : room.nickToJidCache?.get(message.nick)
   const canBanUser = !message.isOutgoing && selfOccupant && senderBareJidForBan
     ? canBan(selfOccupant.affiliation, occupant?.affiliation ?? 'none')
     : false
-  const senderBareJid = occupant?.jid
-    ? getBareJid(occupant.jid)
-    : room.nickToJidCache?.get(message.nick)
-      || room.nickToJidCache?.get(occupantIdMatchNick ?? '')
+  // reuse senderBareJidForBan, adding only the occupant-id fallback that the ban path intentionally excludes
+  const senderBareJid = senderBareJidForBan
+    || room.nickToJidCache?.get(occupantIdMatchNick ?? '')
   const contact = senderBareJid ? contactsByJid.get(senderBareJid) : undefined
   const cachedAvatar = room.nickToAvatarCache?.get(message.nick)
     || room.nickToAvatarCache?.get(occupantIdMatchNick ?? '')
@@ -57,7 +57,7 @@ export function resolveRoomSender(
     senderAffiliation: occupant?.affiliation,
     senderBareJidForBan,
     canModerate: canModerateMsg,
-    canBan: !!canBanUser,
+    canBan: canBanUser,
     counterpartPresent: message.isPrivate ? whisperCounterpartPresent(message, room.occupants) : true,
   }
 }

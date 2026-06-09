@@ -68,6 +68,23 @@ describe('resolveRoomSender', () => {
     const s = resolveRoomSender(msg({ isPrivate: false }), room({}), new Map(), undefined)
     expect(s.counterpartPresent).toBe(true)
   })
+  it('canModerate is true when self is moderator and sender is participant', () => {
+    const self = { nick: 'me', role: 'moderator', affiliation: 'member' } as any
+    const alice = { nick: 'alice', role: 'participant', affiliation: 'none' } as any
+    const r = room({ occupants: new Map([['alice', alice], ['me', self]]) })
+    const s = resolveRoomSender(msg({}), r, new Map(), self)
+    expect(s.canModerate).toBe(true)
+  })
+  it('canModerate is false for outgoing messages even when self is moderator', () => {
+    const self = { nick: 'me', role: 'moderator', affiliation: 'admin' } as any
+    const r = room({ occupants: new Map([['me', self]]) })
+    const s = resolveRoomSender(msg({ isOutgoing: true }), r, new Map(), self)
+    expect(s.canModerate).toBe(false)
+  })
+  it('counterpartPresent is false for a private message when the counterpart is absent', () => {
+    const s = resolveRoomSender(msg({ isPrivate: true, whisperWith: 'alice' }), room({}), new Map(), undefined)
+    expect(s.counterpartPresent).toBe(false)
+  })
 })
 
 describe('resolveReplyAvatar', () => {
@@ -86,5 +103,20 @@ describe('resolveReplyAvatar', () => {
   it('returns identifier-safe result for a null nick', () => {
     expect(resolveReplyAvatar(undefined, room({}), new Map(), 'me', undefined))
       .toEqual({ avatarUrl: undefined, avatarIdentifier: 'unknown' })
+  })
+  it('falls back to nickToAvatarCache when the occupant has no avatar', () => {
+    const r = room({
+      occupants: new Map([['alice', { nick: 'alice' } as any]]),
+      nickToAvatarCache: new Map([['alice', 'blob:cache']]),
+    })
+    expect(resolveReplyAvatar('alice', r, new Map(), 'me', undefined).avatarUrl).toBe('blob:cache')
+  })
+  it('falls back to the contact avatar when occupant and cache have none', () => {
+    const r = room({
+      occupants: new Map([['alice', { nick: 'alice', jid: 'alice@x' } as any]]),
+    })
+    // getBareJid strips resource; 'alice@x' has no slash so getBareJid returns 'alice@x' unchanged
+    const contacts = new Map([['alice@x', { jid: 'alice@x', name: 'Alice', avatar: 'blob:contact' } as any]])
+    expect(resolveReplyAvatar('alice', r, contacts, 'me', undefined).avatarUrl).toBe('blob:contact')
   })
 })
