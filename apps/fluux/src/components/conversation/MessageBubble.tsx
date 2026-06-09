@@ -638,10 +638,16 @@ function formatSecurityTooltip(
 }
 
 /**
- * Helper to build reply context from a message and lookup functions.
+ * Build the reply-context view model for a message's quoted reply.
+ *
+ * The referenced ("original") message is resolved by the caller — reactively,
+ * via `useReferencedMessage` — and passed in directly. buildReplyContext does
+ * NOT look it up itself: a render-time lookup inside a memoized row freezes on
+ * the XEP-0428 fallback when the target only loads later. When `originalMessage`
+ * is undefined the reply's `fallbackBody` is shown instead.
  *
  * @param message - The message that has a replyTo
- * @param messagesById - Map to look up the original message
+ * @param originalMessage - The resolved referenced message, or undefined if not (yet) available
  * @param getSenderName - Function to get display name from sender ID
  * @param getSenderColor - Function to get color from sender ID
  * @param getAvatarInfo - Function to get avatar URL and identifier from sender
@@ -649,7 +655,7 @@ function formatSecurityTooltip(
  */
 export function buildReplyContext<T extends BaseMessage>(
   message: T,
-  getMessageById: (id: string) => T | undefined,
+  originalMessage: T | undefined,
   getSenderName: (msg: T | undefined, fallbackId: string | undefined) => string,
   getSenderColor: (msg: T | undefined, fallbackId: string | undefined, isDarkMode?: boolean) => string,
   getAvatarInfo: (msg: T | undefined, fallbackId: string | undefined) => { avatarUrl?: string; avatarIdentifier: string },
@@ -657,7 +663,6 @@ export function buildReplyContext<T extends BaseMessage>(
 ): MessageBubbleProps['replyContext'] {
   if (!message.replyTo) return undefined
 
-  const originalMessage = getMessageById(message.replyTo.id)
   const fallbackId = message.replyTo.to
   const senderName = getSenderName(originalMessage, fallbackId)
   const senderColor = getSenderColor(originalMessage, fallbackId, isDarkMode)

@@ -102,6 +102,7 @@ function _isReplyToIgnoredUser(
 
 // Mock SDK hooks and pure functions
 vi.mock('@fluux/sdk', () => ({
+  useReferencedMessage: () => undefined,
   useRoomActive: () => ({
     activeRoom: mockActiveRoom,
     activeMessages: mockActiveMessages,

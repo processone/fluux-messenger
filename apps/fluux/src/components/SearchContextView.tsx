@@ -434,10 +434,12 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
       senderJid = msg.from.split('/')[0]
     }
 
-    // Build reply context
+    // Build reply context. The search context is a fixed result set rendered
+    // once (not a live, paginating list), so resolving from the local lookup at
+    // render is safe here — no memoized-row freeze to worry about.
     const replyContext = buildReplyContext(
       msg,
-      (id) => messagesById.get(id),
+      msg.replyTo ? messagesById.get(msg.replyTo.id) : undefined,
       (originalMsg, fallbackId) => {
         if (originalMsg?.isOutgoing) return ownNickname || originalMsg.from.split('@')[0]
         if (isRoom && originalMsg?.type === 'groupchat') return (originalMsg as RoomMessage).nick
