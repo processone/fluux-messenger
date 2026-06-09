@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useImperativeHandle, useMemo, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useRoomActive, useRoomEntity, useRoomOccupantCount, useContactIdentities, getBareJid, generateConsistentColorHexSync, getPresenceFromShow, useReferencedMessage, isMessageFromIgnoredUser, isReplyToIgnoredUser, canKick, canBan, canModerate, getAvailableAffiliations, getAvailableRoles, getMyReactions, type RoomMessage, type Room, type RoomOccupant, type MentionReference, type ChatStateNotification, type ContactIdentity, type FileAttachment, type RoomAffiliation, type RoomRole, type PollData } from '@fluux/sdk'
+import { useRoomActive, useRoomEntity, useRoomOccupantCount, useContactIdentities, getBareJid, generateConsistentColorHexSync, useReferencedMessage, isMessageFromIgnoredUser, isReplyToIgnoredUser, canKick, canBan, getAvailableAffiliations, getAvailableRoles, getMyReactions, type RoomMessage, type Room, type RoomOccupant, type MentionReference, type ChatStateNotification, type ContactIdentity, type FileAttachment, type RoomAffiliation, type RoomRole, type PollData } from '@fluux/sdk'
 import { useConnectionStore, useIgnoreStore, useRoomStore } from '@fluux/sdk/react'
 import { ignoreStore, roomStore, type IgnoredUser } from '@fluux/sdk/stores'
 import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat, useContextMenu, useWhisperCounterpartPresent, isSmallScreen } from '@/hooks'
@@ -9,6 +9,7 @@ import { MessageBubble, MessageList, shouldShowAvatar, whisperThreadPosition, wh
 import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
 import { Avatar, getConsistentTextColor } from './Avatar'
+import { selectSelfOccupant, stableNickSet, resolveRoomSender, resolveReplyAvatar } from './conversation/roomSenderResolution'
 import { format } from 'date-fns'
 import { Shield, Crown, Upload, Loader2, LogIn, AlertCircle, Users, MessageCircle, EyeOff, User, Settings, Ear, X } from 'lucide-react'
 import { ChristmasAnimation } from './ChristmasAnimation'
@@ -897,14 +898,19 @@ export const RoomMessageList = memo(function RoomMessageList({
     return ids
   }, [messages])
 
-  // Set of known occupant nicknames for IRC-style mention highlighting
-  const knownNicks = useMemo(() => {
-    const nicks = new Set<string>()
-    for (const nick of room.occupants.keys()) {
-      nicks.add(nick)
-    }
-    return nicks
-  }, [room.occupants])
+  // Set of known occupant nicknames for IRC-style mention highlighting.
+  // Ref-stable across presence (show/status) churn — only changes when the nick
+  // SET changes — so it does not bust every memoized row on each presence stanza.
+  const knownNicksRef = useRef<ReadonlySet<string>>(new Set())
+  knownNicksRef.current = stableNickSet(room.occupants, knownNicksRef.current)
+  const knownNicks = knownNicksRef.current
+
+  // The current user's own occupant record (stable ref across presence churn unless
+  // our own role/affiliation changes). Used per-row to compute moderation permission.
+  const selfOccupant = useMemo(
+    () => selectSelfOccupant(room.occupants, room.nickname),
+    [room.occupants, room.nickname],
+  )
 
   // Loading state: only show when joining room (SDK auto-loads cache in background)
   // No "loading messages" spinner - cache loads instantly, messages appear immediately
@@ -941,48 +947,87 @@ export const RoomMessageList = memo(function RoomMessageList({
     </div>
   ) : null
 
-  // Memoize renderMessage to prevent render loops
-  // Note: This callback captures many values, but they all affect how messages render
-  const renderMessage = (msg: RoomMessage, idx: number, groupMessages: RoomMessage[]) => (
-    <RoomMessageBubbleWrapper
-      message={msg}
-      showAvatar={shouldShowAvatar(groupMessages, idx)}
-      whisperThread={whisperThreadPosition(groupMessages, idx)}
-      room={room}
-      knownNicks={knownNicks}
-      contactsByJid={contactsByJid}
-      ownAvatar={ownAvatar}
-      sendReaction={sendReaction}
-      votePoll={votePoll}
-      closePoll={closePoll}
+  // Resolve each message's sender (and reply-target avatar) HERE, in the list layer,
+  // from cheap Map lookups — then pass only reference-stable objects (the live
+  // `occupant`, which roomStore.addOccupant preserves for unchanged occupants) and
+  // primitives down to the memoized row. A presence change for occupant X thus changes
+  // props only for X's rows; every other row's shallow memo bails. The row no longer
+  // sees `room` (a fresh Map ref every presence stanza), so it stops re-rendering on
+  // unrelated presence churn.
+  const renderMessage = (msg: RoomMessage, idx: number, groupMessages: RoomMessage[]) => {
+    const sender = resolveRoomSender(msg, room, contactsByJid, selfOccupant)
 
-      isPollClosed={closedPollIds.has(msg.id)}
-      onReply={onReply}
-      onEdit={onEdit}
-      isLastOutgoing={msg.id === lastOutgoingMessageId}
-      isLastMessage={msg.id === lastMessageId}
-      hideToolbar={isComposing || (activeReactionPickerMessageId !== null && activeReactionPickerMessageId !== msg.id)}
-      onReactionPickerChange={onReactionPickerChange}
-      retractMessage={retractMessage}
-      moderateMessage={moderateMessage}
-      isSelected={msg.id === selectedMessageId}
-      hasKeyboardSelection={hasKeyboardSelection}
-      showToolbarForSelection={showToolbarForSelection}
-      isDarkMode={isDarkMode}
-      onMediaLoad={onMediaLoad}
-      isHovered={hoveredMessageId === msg.id}
-      onMouseEnter={handleMessageHover}
-      onMouseLeave={handleMessageLeave}
-      formatTime={formatTime}
-      timeFormat={effectiveTimeFormat}
-      onNickContextMenu={onNickContextMenu}
-      onNickTouchStart={onNickTouchStart}
-      onNickTouchEnd={onNickTouchEnd}
-      setAffiliation={setAffiliation}
-      highlightTerms={highlightTerms}
-      isCurrentMatch={msg.id === currentMatchId}
-    />
-  )
+    // Resolve the reply-preview avatar to PRIMITIVES (the wrapper builds the
+    // replyContext object internally from these — see RoomMessageBubbleWrapper — so
+    // nothing object-shaped is passed that could bust the row memo on presence churn).
+    let replyAvatarUrl: string | undefined
+    let replyAvatarIdentifier: string | undefined
+    if (msg.replyTo) {
+      // Reply-target nick from the XEP-0461 `to` JID (room@server/nick). The reply BODY
+      // is resolved reactively in the row via useReferencedMessage; only the preview
+      // avatar is resolved here so it can be passed down as a memo-safe primitive.
+      // replyNick may be undefined (no `to`); resolveReplyAvatar handles that safely.
+      const replyNick = msg.replyTo.to ? msg.replyTo.to.split('/').pop() : undefined
+      const ra = resolveReplyAvatar(replyNick, room, contactsByJid, room.nickname, ownAvatar)
+      replyAvatarUrl = ra.avatarUrl
+      replyAvatarIdentifier = ra.avatarIdentifier
+    }
+
+    return (
+      <RoomMessageBubbleWrapper
+        message={msg}
+        showAvatar={shouldShowAvatar(groupMessages, idx)}
+        whisperThread={whisperThreadPosition(groupMessages, idx)}
+        roomJid={room.jid}
+        myNick={room.nickname}
+        supportsReactions={room.supportsReactions !== false}
+        occupant={sender.occupant}
+        avatarPresence={sender.avatarPresence}
+        senderAvatar={sender.senderAvatar}
+        resolvedSenderName={sender.resolvedSenderName}
+        senderRole={sender.senderRole}
+        senderAffiliation={sender.senderAffiliation}
+        senderBareJid={sender.senderBareJid}
+        senderBareJidForBan={sender.senderBareJidForBan}
+        canModerate={sender.canModerate}
+        canBan={sender.canBan}
+        counterpartPresent={sender.counterpartPresent}
+        replyAvatarUrl={replyAvatarUrl}
+        replyAvatarIdentifier={replyAvatarIdentifier}
+        knownNicks={knownNicks}
+        contactsByJid={contactsByJid}
+        ownAvatar={ownAvatar}
+        sendReaction={sendReaction}
+        votePoll={votePoll}
+        closePoll={closePoll}
+        isPollClosed={closedPollIds.has(msg.id)}
+        onReply={onReply}
+        onEdit={onEdit}
+        isLastOutgoing={msg.id === lastOutgoingMessageId}
+        isLastMessage={msg.id === lastMessageId}
+        hideToolbar={isComposing || (activeReactionPickerMessageId !== null && activeReactionPickerMessageId !== msg.id)}
+        onReactionPickerChange={onReactionPickerChange}
+        retractMessage={retractMessage}
+        moderateMessage={moderateMessage}
+        isSelected={msg.id === selectedMessageId}
+        hasKeyboardSelection={hasKeyboardSelection}
+        showToolbarForSelection={showToolbarForSelection}
+        isDarkMode={isDarkMode}
+        onMediaLoad={onMediaLoad}
+        isHovered={hoveredMessageId === msg.id}
+        onMouseEnter={handleMessageHover}
+        onMouseLeave={handleMessageLeave}
+        formatTime={formatTime}
+        timeFormat={effectiveTimeFormat}
+        onNickContextMenu={onNickContextMenu}
+        onNickTouchStart={onNickTouchStart}
+        onNickTouchEnd={onNickTouchEnd}
+        setAffiliation={setAffiliation}
+        highlightTerms={highlightTerms}
+        isCurrentMatch={msg.id === currentMatchId}
+      />
+    )
+  }
 
   return (
     <MessageList
@@ -1016,7 +1061,28 @@ interface RoomMessageBubbleWrapperProps {
   message: RoomMessage
   showAvatar: boolean
   whisperThread: WhisperThreadPosition | null
-  room: Room
+  // Per-row resolved sender data (resolved in the list layer from cheap Map lookups).
+  // `occupant` is the live, reference-stable occupant record (roomStore.addOccupant
+  // preserves unchanged refs); the rest are primitives. Passing these instead of `room`
+  // is what lets the row memo bail on presence churn for unaffected occupants.
+  roomJid: string
+  myNick: string | undefined
+  supportsReactions: boolean
+  occupant: RoomOccupant | undefined
+  avatarPresence: 'online' | 'away' | 'dnd' | 'offline' | undefined
+  senderAvatar: string | undefined
+  resolvedSenderName: string
+  senderRole: RoomRole | undefined
+  senderAffiliation: RoomAffiliation | undefined
+  // Superset JID, for senderColor's contact lookup (occupant-id fallback included).
+  senderBareJid: string | undefined
+  senderBareJidForBan: string | undefined
+  canModerate: boolean
+  canBan: boolean
+  counterpartPresent: boolean
+  // Reply-preview avatar as primitives; the wrapper builds replyContext from these.
+  replyAvatarUrl: string | undefined
+  replyAvatarIdentifier: string | undefined
   knownNicks: ReadonlySet<string>
   contactsByJid: Map<string, ContactIdentity>
   ownAvatar?: string | null
@@ -1066,7 +1132,22 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   message,
   showAvatar,
   whisperThread,
-  room,
+  roomJid,
+  myNick,
+  supportsReactions,
+  occupant,
+  avatarPresence,
+  senderAvatar,
+  resolvedSenderName,
+  senderRole,
+  senderAffiliation,
+  senderBareJid,
+  senderBareJidForBan,
+  canModerate: canModerateMsg,
+  canBan: canBanUser,
+  counterpartPresent,
+  replyAvatarUrl,
+  replyAvatarIdentifier,
   knownNicks,
   contactsByJid,
   ownAvatar,
@@ -1109,62 +1190,21 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   // Delete own message confirmation state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
-  // Resolve the replied-to message reactively from the store. Reading a
-  // render-time lookup here would freeze this memoized row on the XEP-0428
-  // fallback when the quoted message only paginates in later.
-  const replyTarget = useReferencedMessage({ type: 'groupchat', roomJid: room.jid, id: message.replyTo?.id })
+  // Sender data (occupant, senderAvatar, resolvedSenderName, presence, permissions,
+  // JIDs) is resolved once per row in the list layer (resolveRoomSender) and passed in
+  // as reference-stable / primitive props — see RoomMessageList.renderMessage. The row
+  // therefore never touches `room` (a fresh Map ref every presence stanza), so its memo
+  // bails on presence churn for unaffected occupants.
+  //
+  // Roster contact for senderColor: looked up from the superset senderBareJid prop
+  // (occupant-id fallback included), matching the pre-refactor lookup.
 
-  // Get occupant info if available (by nick, then by occupant-id for nick changes)
-  let occupant = room.occupants.get(message.nick)
-  let occupantIdMatchNick: string | undefined
-  if (!occupant && message.occupantId) {
-    for (const occ of room.occupants.values()) {
-      if (occ.occupantId === message.occupantId) {
-        occupant = occ
-        occupantIdMatchNick = occ.nick
-        break
-      }
-    }
-  }
-  const myNick = room.nickname
+  // Resolve the replied-to message reactively from the store. Reading a render-time
+  // lookup here would freeze this memoized row on the XEP-0428 fallback when the quoted
+  // message only paginates in later. Uses the roomJid prop (the row no longer sees `room`).
+  const replyTarget = useReferencedMessage({ type: 'groupchat', roomJid, id: message.replyTo?.id })
 
-  // Compute moderation permission for non-outgoing messages
-  const selfOccupant = myNick ? room.occupants.get(myNick) : undefined
-  const canModerateMsg = !message.isOutgoing && selfOccupant
-    ? canModerate(selfOccupant.role, selfOccupant.affiliation, occupant?.affiliation ?? 'none')
-    : false
-
-  // Can we ban this user? Need their real JID and ban permission
-  const senderBareJidForBan = occupant?.jid
-    ? getBareJid(occupant.jid)
-    : room.nickToJidCache?.get(message.nick)
-  const canBanUser = !message.isOutgoing && selfOccupant && senderBareJidForBan
-    ? canBan(selfOccupant.affiliation, occupant?.affiliation ?? 'none')
-    : false
-
-  // Get avatar for message sender:
-  // 1. XEP-0398 occupant avatar (fetched from MUC presence vcard-temp:x:update)
-  // 2. Cached avatar from nickToAvatarCache (persists after occupant leaves)
-  // 3. Contact avatar (if occupant's real JID is in our roster)
-  // 4. Fall back to fallback avatar generation
-  const senderBareJid = occupant?.jid
-    ? getBareJid(occupant.jid)
-    : room.nickToJidCache?.get(message.nick)
-      || room.nickToJidCache?.get(occupantIdMatchNick ?? '')
   const contact = senderBareJid ? contactsByJid.get(senderBareJid) : undefined
-  const contactAvatar = contact?.avatar
-  const cachedAvatar = room.nickToAvatarCache?.get(message.nick)
-    || room.nickToAvatarCache?.get(occupantIdMatchNick ?? '')
-  const senderAvatar = occupant?.avatar || cachedAvatar || contactAvatar
-
-  // Resolve display name when message.nick doesn't match any current occupant.
-  // This handles cases where the message nick differs from the current occupant nick
-  // (e.g., server reflects JID local part instead of MUC nickname, or nick changed between sessions)
-  // Priority: 1) direct nick match → use as-is  2) occupant-id match → current occupant nick
-  //           3) roster contact name  4) raw message.nick fallback
-  const resolvedSenderName = occupantIdMatchNick
-    || (contact?.name && !occupant ? contact.name : null)
-    || message.nick
 
   // Get sender color: accent for own messages, contact's pre-calculated color, or fallback to nick-based generation
   const senderColor = message.isOutgoing
@@ -1184,7 +1224,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
     if (message.poll) {
       const pollEmojis = message.poll.options.map(o => o.emoji)
       if (pollEmojis.includes(emoji)) {
-        void votePoll(room.jid, message.id, emoji, myReactions, message.poll)
+        void votePoll(roomJid, message.id, emoji, myReactions, message.poll)
         return
       }
     }
@@ -1194,12 +1234,12 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
       ? myReactions.filter(e => e !== emoji)
       : [...myReactions, emoji]
 
-    void sendReaction(room.jid, message.id, newReactions)
+    void sendReaction(roomJid, message.id, newReactions)
   }
 
   // Handle poll vote — uses SDK vote() which enforces single/multi-vote rules
   const handlePollVote = message.poll ? (emoji: string) => {
-    void votePoll(room.jid, message.id, emoji, myReactions, message.poll!, !!message.pollClosedAt)
+    void votePoll(roomJid, message.id, emoji, myReactions, message.poll!, !!message.pollClosedAt)
   } : undefined
 
   // Build reply context using shared helper (replyTarget resolved above)
@@ -1217,28 +1257,9 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
       const nick = originalMsg?.nick || (fallbackId ? fallbackId.split('/').pop() : undefined)
       return nick ? getConsistentTextColor(nick, dark) : 'var(--fluux-brand)'
     },
-    (originalMsg, fallbackId) => {
-      const nick = originalMsg?.nick || (fallbackId ? fallbackId.split('/').pop() : undefined)
-      // If the quoted message is from the current user, use own avatar
-      if (nick === myNick) {
-        return {
-          avatarUrl: ownAvatar || undefined,
-          avatarIdentifier: nick || 'unknown',
-        }
-      }
-      // Try to get avatar: XEP-0398 occupant avatar, cached avatar, or contact avatar
-      const occupantForReply = nick ? room.occupants.get(nick) : undefined
-      const senderBareJid = occupantForReply?.jid
-        ? getBareJid(occupantForReply.jid)
-        : (nick ? room.nickToJidCache?.get(nick) : undefined)
-      const contactAvatar = senderBareJid ? contactsByJid.get(senderBareJid)?.avatar : undefined
-      const cachedReplyAvatar = nick ? room.nickToAvatarCache?.get(nick) : undefined
-      const replyAvatar = occupantForReply?.avatar || cachedReplyAvatar || contactAvatar
-      return {
-        avatarUrl: replyAvatar,
-        avatarIdentifier: nick || 'unknown',
-      }
-    },
+    // Reply-target avatar resolved to primitives in the list layer (resolveReplyAvatar)
+    // and passed in — so this callback reads no `room` and the row memo stays bail-able.
+    () => ({ avatarUrl: replyAvatarUrl, avatarIdentifier: replyAvatarIdentifier ?? 'unknown' }),
     isDarkMode
   )
 
@@ -1340,15 +1361,15 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         avatarUrl={message.isOutgoing ? (ownAvatar || undefined) : (senderAvatar || undefined)}
         avatarIdentifier={resolvedSenderName}
         avatarFallbackColor={senderColor}
-        avatarPresence={room.joined ? (occupant ? getPresenceFromShow(occupant.show) : 'offline') : undefined}
+        avatarPresence={avatarPresence}
         senderJid={senderBareJid}
         senderContact={contact}
-        senderRole={occupant?.role}
-        senderAffiliation={occupant?.affiliation}
-        senderOccupantJid={`${room.jid}/${message.nick}`}
+        senderRole={senderRole}
+        senderAffiliation={senderAffiliation}
+        senderOccupantJid={`${roomJid}/${message.nick}`}
         nickExtras={nickExtras}
         myReactions={myReactions}
-        onReaction={room.supportsReactions !== false ? handleReaction : undefined}
+        onReaction={supportsReactions ? handleReaction : undefined}
         getReactorName={getReactorName}
         canModerate={canModerateMsg}
         onReply={() => onReply(message)}
@@ -1367,13 +1388,13 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         knownNicks={knownNicks}
         whisperWith={message.whisperWith}
         whisperThread={whisperThread}
-        counterpartPresent={message.isPrivate ? whisperCounterpartPresent(message, room.occupants) : true}
+        counterpartPresent={counterpartPresent}
         onNickContextMenu={!message.isOutgoing ? handleNickContextMenu : undefined}
         onNickTouchStart={!message.isOutgoing ? handleNickTouchStart : undefined}
         onNickTouchEnd={!message.isOutgoing ? onNickTouchEnd : undefined}
         onReactionPickerChange={(isOpen) => onReactionPickerChange?.(message.id, isOpen)}
         onPollVote={handlePollVote}
-        onClosePoll={canClosePoll(message, isPollClosed) ? () => closePoll(room.jid, message.id) : undefined}
+        onClosePoll={canClosePoll(message, isPollClosed) ? () => closePoll(roomJid, message.id) : undefined}
 
         formatTime={formatTime}
         timeFormat={timeFormat}
@@ -1390,7 +1411,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
           variant="danger"
           onConfirm={() => {
             setShowDeleteConfirm(false)
-            void retractMessage(room.jid, message.id)
+            void retractMessage(roomJid, message.id)
           }}
           onCancel={() => setShowDeleteConfirm(false)}
         />
@@ -1427,9 +1448,9 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
                     setShowModerateConfirm(false)
                     const reason = moderateReason.trim() || undefined
                     setModerateReason('')
-                    void moderateMessage(room.jid, message.stanzaId ?? message.id, reason)
+                    void moderateMessage(roomJid, message.stanzaId ?? message.id, reason)
                     if (banAfterModerate && senderBareJidForBan) {
-                      void setAffiliation(room.jid, senderBareJidForBan, 'outcast', reason)
+                      void setAffiliation(roomJid, senderBareJidForBan, 'outcast', reason)
                     }
                     setBanAfterModerate(false)
                   }
@@ -1466,9 +1487,9 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
                   setShowModerateConfirm(false)
                   const reason = moderateReason.trim() || undefined
                   setModerateReason('')
-                  void moderateMessage(room.jid, message.stanzaId ?? message.id, reason)
+                  void moderateMessage(roomJid, message.stanzaId ?? message.id, reason)
                   if (banAfterModerate && senderBareJidForBan) {
-                    void setAffiliation(room.jid, senderBareJidForBan, 'outcast', reason)
+                    void setAffiliation(roomJid, senderBareJidForBan, 'outcast', reason)
                   }
                   setBanAfterModerate(false)
                 }}
