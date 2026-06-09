@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo, useImperativeHandle, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useChatActive, useContactIdentities, createMessageLookup, getBareJid, getLocalPart, getMyReactions, useXMPPContext, type Message, type ContactIdentity } from '@fluux/sdk'
+import { useChatActive, useContactIdentities, useReferencedMessage, getBareJid, getLocalPart, getMyReactions, useXMPPContext, type Message, type ContactIdentity } from '@fluux/sdk'
 import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
 import { useToastStore } from '@/stores/toastStore'
 import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
@@ -190,20 +190,10 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   // Format copied messages with sender headers
   useMessageCopy(scrollRef)
 
-  // Lookup map for messages by ID (for reply context), indexed by both client id
-  // and stanza-id since replies may reference either. Exposed to rows as a STABLE
-  // getter: a fresh Map would change identity every render and break the memo
-  // bailout of every ChatMessageBubble when a new message is appended.
-  //
-  // The ref is updated in an effect (NOT during render): a render-phase ref write
-  // that calls createMessageLookup makes the React Compiler bail on ChatView and
-  // stop memoizing the <MessageInput> element (composer re-renders per message).
-  // The one-render lag is irrelevant — reply targets are older messages already
-  // present in the previous render's map.
-  const messagesById = useMemo(() => createMessageLookup(activeMessages), [activeMessages])
-  const messagesByIdRef = useRef(messagesById)
-  useEffect(() => { messagesByIdRef.current = messagesById }, [messagesById])
-  const getMessageById = useCallback((id: string) => messagesByIdRef.current.get(id), [])
+  // Reply targets are resolved reactively per-row via useReferencedMessage (in
+  // ChatMessageBubble), so this view no longer holds a render-time lookup map — a
+  // value derived from one froze inside the memoized row when the quoted message
+  // only loaded later. Store subscription = reactive, no freeze.
 
   // Track pendingAttachment in a ref for cleanup (not a trigger)
   const pendingAttachmentRef = useRef(pendingAttachment)
@@ -429,7 +419,6 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
         <ChatMessageList
           messages={activeMessages}
           contactsByJid={contactsByJid}
-          getMessageById={getMessageById}
           typingUsers={activeTypingUsers}
           scrollerRef={scrollRef}
           isAtBottomRef={isAtBottomRef}
@@ -519,7 +508,6 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
 export const ChatMessageList = memo(function ChatMessageList({
   messages,
   contactsByJid,
-  getMessageById,
   typingUsers,
   scrollerRef,
   isAtBottomRef,
@@ -557,7 +545,6 @@ export const ChatMessageList = memo(function ChatMessageList({
 }: {
   messages: Message[]
   contactsByJid: Map<string, ContactIdentity>
-  getMessageById: (id: string) => Message | undefined
   typingUsers: string[]
   scrollerRef: React.RefObject<HTMLElement | null>
   isAtBottomRef: React.MutableRefObject<boolean>
@@ -658,7 +645,6 @@ export const ChatMessageList = memo(function ChatMessageList({
       sendReaction={sendReaction}
       myBareJid={myBareJid}
       contactsByJid={contactsByJid}
-      getMessageById={getMessageById}
       onReply={onReply}
       onEdit={onEdit}
       isLastOutgoing={msg.id === lastOutgoingMessageId}
@@ -724,7 +710,6 @@ interface ChatMessageBubbleProps {
   sendReaction: (to: string, messageId: string, emojis: string[], type: 'chat' | 'groupchat') => Promise<void>
   myBareJid?: string
   contactsByJid: Map<string, ContactIdentity>
-  getMessageById: (id: string) => Message | undefined
   onReply: (message: Message) => void
   onEdit: (message: Message) => void
   isLastOutgoing: boolean
@@ -766,7 +751,6 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
   sendReaction,
   myBareJid,
   contactsByJid,
-  getMessageById,
   onReply,
   onEdit,
   isLastOutgoing,
@@ -789,6 +773,11 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
   isCurrentMatch,
 }: ChatMessageBubbleProps) {
   const { t } = useTranslation()
+
+  // Resolve the replied-to message reactively from the store. Reading a
+  // render-time lookup here would freeze this memoized row on the XEP-0428
+  // fallback when the quoted message only paginates in later.
+  const replyTarget = useReferencedMessage({ type: 'chat', conversationId, id: message.replyTo?.id })
 
   // Use display name from roster, fall back to JID username
   // For outgoing messages, use own nickname if set
@@ -818,10 +807,10 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
     void sendReaction(conversationId, message.id, newReactions, conversationType)
   }
 
-  // Build reply context using shared helper
+  // Build reply context using shared helper (replyTarget resolved above)
   const replyContext = buildReplyContext(
     message,
-    getMessageById,
+    replyTarget,
     (originalMsg, fallbackId) => {
       // Own messages: use ownNickname or JID username
       if (originalMsg?.isOutgoing) {

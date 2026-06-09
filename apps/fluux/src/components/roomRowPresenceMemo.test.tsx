@@ -74,7 +74,6 @@ const stubRoom: Room = {
 
 // Stable props shared across renders — mirrors the ROOM_PROPS shape in messageRowMemo.test.tsx.
 const ROOM_PROPS = {
-  getMessageById: () => undefined,
   scrollerRef: { current: null },
   isAtBottomRef: { current: true },
   contactsByJid: new Map(),

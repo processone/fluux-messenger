@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useImperativeHandle, useMemo, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useRoomActive, useRoomEntity, useRoomOccupantCount, useContactIdentities, getBareJid, generateConsistentColorHexSync, createMessageLookup, isMessageFromIgnoredUser, isReplyToIgnoredUser, canKick, canBan, getAvailableAffiliations, getAvailableRoles, getMyReactions, type RoomMessage, type Room, type RoomOccupant, type MentionReference, type ChatStateNotification, type ContactIdentity, type FileAttachment, type RoomAffiliation, type RoomRole, type PollData } from '@fluux/sdk'
+import { useRoomActive, useRoomEntity, useRoomOccupantCount, useContactIdentities, getBareJid, generateConsistentColorHexSync, useReferencedMessage, isMessageFromIgnoredUser, isReplyToIgnoredUser, canKick, canBan, getAvailableAffiliations, getAvailableRoles, getMyReactions, type RoomMessage, type Room, type RoomOccupant, type MentionReference, type ChatStateNotification, type ContactIdentity, type FileAttachment, type RoomAffiliation, type RoomRole, type PollData } from '@fluux/sdk'
 import { useConnectionStore, useIgnoreStore, useRoomStore } from '@fluux/sdk/react'
 import { ignoreStore, roomStore, type IgnoredUser } from '@fluux/sdk/stores'
 import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat, useContextMenu, useWhisperCounterpartPresent, isSmallScreen } from '@/hooks'
@@ -268,23 +268,10 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // Format copied messages with sender headers
   useMessageCopy(scrollRef)
 
-  // Lookup map for messages by ID (for reply context), indexed by both client id
-  // and stanza-id since replies may reference either. Exposed to rows as a STABLE
-  // getter so a new Map (every appended message) does not break the memo bailout
-  // of every RoomMessageBubbleWrapper. Ref updated in an effect (not during
-  // render) to avoid making the React Compiler bail on RoomView.
-  //
-  // GUARD (regression class): a value DERIVED from this stable getter AT RENDER TIME
-  // inside a memoized row freezes — the row only re-renders when its own props change,
-  // so it won't pick up later lookup contents (e.g. a reply whose target hadn't loaded
-  // yet). Either (a) make the consumer tolerate a stale/unresolved result — as
-  // scrollToMessage does by also matching data-stanza-id / data-origin-id — or
-  // (b) pass a reactive per-message prop instead of reading the getter at render (see
-  // canClosePoll / isPollClosed). Never gate UI solely on a render-time read here.
-  const messagesById = useMemo(() => createMessageLookup(activeMessages), [activeMessages])
-  const messagesByIdRef = useRef(messagesById)
-  useEffect(() => { messagesByIdRef.current = messagesById }, [messagesById])
-  const getMessageById = useCallback((id: string) => messagesByIdRef.current.get(id), [])
+  // Reply targets are resolved reactively per-row via useReferencedMessage (in
+  // RoomMessageBubbleWrapper), so the list no longer holds a render-time lookup
+  // map here — a value derived from such a map froze inside the memoized row when
+  // the target only loaded later. Store subscription = reactive, no freeze.
 
   // Track pendingAttachment in a ref for cleanup (not a trigger)
   const pendingAttachmentRef = useRef(pendingAttachment)
@@ -510,7 +497,6 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
           )}
           <RoomMessageList
             messages={displayMessages}
-            getMessageById={getMessageById}
             scrollerRef={scrollRef}
             isAtBottomRef={isAtBottomRef}
             room={stableRoom ?? activeRoom}
@@ -762,7 +748,6 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
 
 export const RoomMessageList = memo(function RoomMessageList({
   messages,
-  getMessageById,
   scrollerRef,
   isAtBottomRef,
   room,
@@ -807,7 +792,6 @@ export const RoomMessageList = memo(function RoomMessageList({
   isCatchingUp,
 }: {
   messages: RoomMessage[]
-  getMessageById: (id: string) => RoomMessage | undefined
   scrollerRef: React.RefObject<HTMLElement | null>
   isAtBottomRef: React.MutableRefObject<boolean>
   room: Room
@@ -979,9 +963,11 @@ export const RoomMessageList = memo(function RoomMessageList({
     let replyAvatarUrl: string | undefined
     let replyAvatarIdentifier: string | undefined
     if (msg.replyTo) {
-      const original = getMessageById(msg.replyTo.id)
-      const replyNick = original?.nick || (msg.replyTo.to ? msg.replyTo.to.split('/').pop() : undefined)
-      // replyNick may be undefined (unresolved reply target); resolveReplyAvatar handles that safely.
+      // Reply-target nick from the XEP-0461 `to` JID (room@server/nick). The reply BODY
+      // is resolved reactively in the row via useReferencedMessage; only the preview
+      // avatar is resolved here so it can be passed down as a memo-safe primitive.
+      // replyNick may be undefined (no `to`); resolveReplyAvatar handles that safely.
+      const replyNick = msg.replyTo.to ? msg.replyTo.to.split('/').pop() : undefined
       const ra = resolveReplyAvatar(replyNick, room, contactsByJid, room.nickname, ownAvatar)
       replyAvatarUrl = ra.avatarUrl
       replyAvatarIdentifier = ra.avatarIdentifier
@@ -992,7 +978,6 @@ export const RoomMessageList = memo(function RoomMessageList({
         message={msg}
         showAvatar={shouldShowAvatar(groupMessages, idx)}
         whisperThread={whisperThreadPosition(groupMessages, idx)}
-        getMessageById={getMessageById}
         roomJid={room.jid}
         myNick={room.nickname}
         supportsReactions={room.supportsReactions !== false}
@@ -1076,7 +1061,6 @@ interface RoomMessageBubbleWrapperProps {
   message: RoomMessage
   showAvatar: boolean
   whisperThread: WhisperThreadPosition | null
-  getMessageById: (id: string) => RoomMessage | undefined
   // Per-row resolved sender data (resolved in the list layer from cheap Map lookups).
   // `occupant` is the live, reference-stable occupant record (roomStore.addOccupant
   // preserves unchanged refs); the rest are primitives. Passing these instead of `room`
@@ -1148,7 +1132,6 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   message,
   showAvatar,
   whisperThread,
-  getMessageById,
   roomJid,
   myNick,
   supportsReactions,
@@ -1215,6 +1198,12 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   //
   // Roster contact for senderColor: looked up from the superset senderBareJid prop
   // (occupant-id fallback included), matching the pre-refactor lookup.
+
+  // Resolve the replied-to message reactively from the store. Reading a render-time
+  // lookup here would freeze this memoized row on the XEP-0428 fallback when the quoted
+  // message only paginates in later. Uses the roomJid prop (the row no longer sees `room`).
+  const replyTarget = useReferencedMessage({ type: 'groupchat', roomJid, id: message.replyTo?.id })
+
   const contact = senderBareJid ? contactsByJid.get(senderBareJid) : undefined
 
   // Get sender color: accent for own messages, contact's pre-calculated color, or fallback to nick-based generation
@@ -1253,10 +1242,10 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
     void votePoll(roomJid, message.id, emoji, myReactions, message.poll!, !!message.pollClosedAt)
   } : undefined
 
-  // Build reply context using shared helper
+  // Build reply context using shared helper (replyTarget resolved above)
   const replyContext = buildReplyContext(
     message,
-    getMessageById,
+    replyTarget,
     (originalMsg, fallbackId) => {
       if (originalMsg) return originalMsg.nick
       // For rooms, fallbackId is the full JID like room@server/nick - extract nick

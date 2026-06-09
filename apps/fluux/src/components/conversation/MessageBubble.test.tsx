@@ -448,13 +448,15 @@ describe('MessageBubble', () => {
 })
 
 describe('buildReplyContext', () => {
+  // The referenced message is resolved by the caller (reactively, via
+  // useReferencedMessage) and passed in directly — buildReplyContext no longer
+  // performs the lookup itself, so it can never freeze inside a memoized row.
   it('returns undefined when message has no replyTo', () => {
     const message = createTestMessage()
-    const messagesById = new Map<string, BaseMessage>()
 
     const result = buildReplyContext(
       message,
-      (id) => messagesById.get(id),
+      undefined,
       () => 'Unknown',
       () => 'rgb(0, 0, 0)',
       () => ({ avatarUrl: undefined, avatarIdentifier: 'unknown' })
@@ -463,7 +465,7 @@ describe('buildReplyContext', () => {
     expect(result).toBeUndefined()
   })
 
-  it('builds reply context from original message', () => {
+  it('builds reply context from the resolved original message', () => {
     const originalMessage = createTestMessage({
       id: 'original-1',
       body: 'Original body',
@@ -473,13 +475,10 @@ describe('buildReplyContext', () => {
       id: 'reply-1',
       replyTo: { id: 'original-1', to: 'bob@example.com' },
     })
-    const messagesById = new Map<string, BaseMessage>([
-      ['original-1', originalMessage],
-    ])
 
     const result = buildReplyContext(
       replyMessage,
-      (id) => messagesById.get(id),
+      originalMessage,
       (msg) => msg ? 'Bob' : 'Unknown',
       () => 'rgb(100, 100, 100)',
       (msg) => ({ avatarUrl: msg ? 'http://example.com/bob.jpg' : undefined, avatarIdentifier: 'bob@example.com' })
@@ -495,7 +494,7 @@ describe('buildReplyContext', () => {
     })
   })
 
-  it('uses fallback when original message not found', () => {
+  it('uses fallback when the original message is not resolved (e.g. not yet loaded)', () => {
     const replyMessage = createTestMessage({
       id: 'reply-1',
       replyTo: {
@@ -504,11 +503,10 @@ describe('buildReplyContext', () => {
         fallbackBody: 'Fallback text',
       },
     })
-    const messagesById = new Map<string, BaseMessage>()
 
     const result = buildReplyContext(
       replyMessage,
-      (id) => messagesById.get(id),
+      undefined,
       (msg, fallbackId) => msg ? 'Found' : (fallbackId ? 'Charlie' : 'Unknown'),
       () => 'rgb(50, 50, 50)',
       (_msg, fallbackId) => ({ avatarUrl: undefined, avatarIdentifier: fallbackId || 'unknown' })
@@ -524,14 +522,11 @@ describe('buildReplyContext', () => {
     })
   })
 
-  it('uses original message id when reply references stanza-id (regression test for scroll)', () => {
-    // This test verifies the fix for the bug where clicking on a reply context
-    // would not scroll to the original message. The issue was that when the reply
-    // references a message by its stanza-id (from MAM), but the DOM uses the
-    // client-generated message.id for data-message-id, scrollToMessage() wouldn't
-    // find the element.
-    //
-    // The fix ensures we always use originalMessage.id for the messageId.
+  it('uses the original message id (not the referenced stanza-id) for scroll targeting', () => {
+    // When a reply references a message by its stanza-id (from MAM) but the DOM
+    // keys rows by the client-generated message.id, the reply chip must scroll to
+    // originalMessage.id. Resolution across id/stanza-id now happens upstream
+    // (useReferencedMessage); buildReplyContext just prefers the resolved id.
     const originalMessage = createTestMessage({
       id: 'client-uuid-123',           // The client-generated ID used in DOM
       stanzaId: 'mam-stanza-id-456',   // The server-assigned stanza-id from MAM
@@ -543,15 +538,10 @@ describe('buildReplyContext', () => {
       // Reply references the message by stanza-id (common when original came from MAM)
       replyTo: { id: 'mam-stanza-id-456', to: 'bob@example.com' },
     })
-    // The messagesById map is indexed by both id and stanzaId (via createMessageLookup)
-    const messagesById = new Map<string, BaseMessage>([
-      ['client-uuid-123', originalMessage],
-      ['mam-stanza-id-456', originalMessage],  // Same message, indexed by stanza-id too
-    ])
 
     const result = buildReplyContext(
       replyMessage,
-      (id) => messagesById.get(id),
+      originalMessage,
       (msg) => msg ? 'Bob' : 'Unknown',
       () => 'rgb(100, 100, 100)',
       () => ({ avatarUrl: 'http://example.com/bob.jpg', avatarIdentifier: 'bob@example.com' })
