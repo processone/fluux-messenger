@@ -23,6 +23,7 @@ This document lists the XMPP Extension Protocols (XEPs) and related RFCs impleme
 | [XEP-0202](https://xmpp.org/extensions/xep-0202.html) | Entity Time                                     | ✅ Implemented | Responds to queries; queries contacts and displays local time in chat header and contact popover            |
 | [XEP-0280](https://xmpp.org/extensions/xep-0280.html) | Message Carbons                                 | ✅ Implemented | Sync messages across multiple connected clients                                                             |
 | [XEP-0368](https://xmpp.org/extensions/xep-0368.html) | SRV Records for XMPP over TLS                   | ✅ Implemented | Desktop: SRV lookup for `_xmpps-client._tcp` (direct TLS) and `_xmpp-client._tcp` (STARTTLS) via Rust proxy |
+| [XEP-0386](https://xmpp.org/extensions/xep-0386.html) | Bind 2.0                                         | ✅ Implemented | Inline resource binding within SASL2, with Stream Management enabled inline                                  |
 | [XEP-0388](https://xmpp.org/extensions/xep-0388.html) | Extensible SASL Profile (SASL2)                  | ✅ Implemented | Modern authentication with inline features (bind2, FAST). Falls back to SASL1 if server doesn't support it  |
 | [XEP-0484](https://xmpp.org/extensions/xep-0484.html) | Fast Authentication Streamlining Tokens (FAST)   | ✅ Implemented | Token-based reconnection without password (web: 14-day localStorage persistence, HT-SHA-256-NONE mechanism) |
 
@@ -104,6 +105,7 @@ This document lists the XMPP Extension Protocols (XEPs) and related RFCs impleme
 | [XEP-0373](https://xmpp.org/extensions/xep-0373.html) | OpenPGP for XMPP (OX)                        | ✅ Implemented | Public key publication and retrieval via PEP node (`urn:xmpp:openpgp:0:public-keys`), secret key backup (XEP-0223 private node), key pinning, peer key change detection |
 | [XEP-0374](https://xmpp.org/extensions/xep-0374.html) | OpenPGP for XMPP Instant Messaging (OX-IM)   | ✅ Implemented | `<signcrypt>` envelope for 1:1 and MUC messages; send-policy negotiation; MAM history decryption; capability discovery via caps (`urn:xmpp:openpgp:im:0`) |
 | [XEP-0380](https://xmpp.org/extensions/xep-0380.html) | Explicit Message Encryption                   | ✅ Implemented | `<encryption>` element appended to outgoing encrypted messages so legacy clients display a meaningful fallback                                        |
+| [XEP-0454](https://xmpp.org/extensions/xep-0454.html) | OMEMO Media Sharing                           | 🟡 Partial     | `aesgcm://` URIs (AES-256 key + IV in the URL fragment) for encrypted file attachments, carried inside the OpenPGP E2EE envelope (adapted for OX, not OMEMO) |
 
 ## Administration
 
@@ -138,6 +140,16 @@ Fluux uses custom extensions across several namespaces:
 - **Room notification preferences**: Stored in XEP-0402 bookmark extensions to enable per-room notification settings (mentions only vs. all messages)
 - **@all mentions**: Room-wide mention indicator (`urn:fluux:mentions:0`) for notifying all participants
 - **Quick chat marker**: `<quickchat xmlns="urn:xmpp:fluux:0"/>` element included in MUC invitations to indicate the room is a temporary quick chat (non-persistent, auto-destroys when empty)
+
+### Polls (`urn:fluux:poll:0`)
+
+Reaction-based polls for MUC rooms, built on top of XEP-0444 (Message Reactions) and XEP-0428 (Fallback Indication). A `<poll>` element carries the question and options; votes are cast as reactions, and a `<poll-closed>` element finalizes results. See [docs/XEP-POLL_PROTOCOL.md](docs/XEP-POLL_PROTOCOL.md) for the full protocol.
+
+| Element                            | Purpose                                                                |
+|------------------------------------|------------------------------------------------------------------------|
+| `<poll xmlns="urn:fluux:poll:0">`         | Poll definition (question, options, single/multiple choice, hidden results) |
+| `<poll-closed xmlns="urn:fluux:poll:0">`  | Closes a poll and snapshots the final tally                            |
+| `<poll-results xmlns="urn:fluux:poll:0">` | Aggregated vote counts                                                 |
 
 ### Private PEP Storage (XEP-0223)
 

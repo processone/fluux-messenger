@@ -246,6 +246,15 @@
       </xmpp:SupportedXep>
     </implements>
 
+    <!-- XEP-0386: Bind 2.0 -->
+    <implements>
+      <xmpp:SupportedXep>
+        <xmpp:xep rdf:resource="https://xmpp.org/extensions/xep-0386.html"/>
+        <xmpp:status>complete</xmpp:status>
+        <xmpp:note>Inline resource binding within SASL2, with Stream Management enabled inline</xmpp:note>
+      </xmpp:SupportedXep>
+    </implements>
+
     <!-- XEP-0388: Extensible SASL Profile (SASL2) -->
     <implements>
       <xmpp:SupportedXep>
@@ -551,6 +560,15 @@
       </xmpp:SupportedXep>
     </implements>
 
+    <!-- XEP-0454: OMEMO Media Sharing -->
+    <implements>
+      <xmpp:SupportedXep>
+        <xmpp:xep rdf:resource="https://xmpp.org/extensions/xep-0454.html"/>
+        <xmpp:status>partial</xmpp:status>
+        <xmpp:note>aesgcm:// URIs (AES-256 key and IV in the URL fragment) for encrypted file attachments, carried inside the OpenPGP E2EE envelope</xmpp:note>
+      </xmpp:SupportedXep>
+    </implements>
+
     <!-- Planned XEPs -->
 
     <!-- XEP-0184: Message Delivery Receipts -->
@@ -578,6 +596,62 @@
     </implements>
 
     <!-- Releases -->
+    <release>
+      <Version>
+        <revision>0.15.2</revision>
+        <created>2026-04-21</created>
+        <file-release rdf:resource="https://github.com/processone/fluux-messenger/releases/tag/v0.15.2"/>
+      </Version>
+    </release>
+    <release>
+      <Version>
+        <revision>0.15.1</revision>
+        <created>2026-04-06</created>
+        <file-release rdf:resource="https://github.com/processone/fluux-messenger/releases/tag/v0.15.1"/>
+      </Version>
+    </release>
+    <release>
+      <Version>
+        <revision>0.15.0</revision>
+        <created>2026-03-26</created>
+        <file-release rdf:resource="https://github.com/processone/fluux-messenger/releases/tag/v0.15.0"/>
+      </Version>
+    </release>
+    <release>
+      <Version>
+        <revision>0.14.0</revision>
+        <created>2026-03-16</created>
+        <file-release rdf:resource="https://github.com/processone/fluux-messenger/releases/tag/v0.14.0"/>
+      </Version>
+    </release>
+    <release>
+      <Version>
+        <revision>0.13.3</revision>
+        <created>2026-03-04</created>
+        <file-release rdf:resource="https://github.com/processone/fluux-messenger/releases/tag/v0.13.3"/>
+      </Version>
+    </release>
+    <release>
+      <Version>
+        <revision>0.13.2</revision>
+        <created>2026-02-19</created>
+        <file-release rdf:resource="https://github.com/processone/fluux-messenger/releases/tag/v0.13.2"/>
+      </Version>
+    </release>
+    <release>
+      <Version>
+        <revision>0.13.1</revision>
+        <created>2026-02-13</created>
+        <file-release rdf:resource="https://github.com/processone/fluux-messenger/releases/tag/v0.13.1"/>
+      </Version>
+    </release>
+    <release>
+      <Version>
+        <revision>0.13.0</revision>
+        <created>2026-02-12</created>
+        <file-release rdf:resource="https://github.com/processone/fluux-messenger/releases/tag/v0.13.0"/>
+      </Version>
+    </release>
     <release>
       <Version>
         <revision>0.12.1</revision>
