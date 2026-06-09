@@ -959,6 +959,28 @@ describe('XMPPClient Own Avatar', () => {
       expect(emitSDKSpy).not.toHaveBeenCalledWith('room:occupant-avatar', expect.objectContaining({ nick: 'Bob' }))
       expect(emitSDKSpy).not.toHaveBeenCalledWith('room:occupant-avatar', expect.objectContaining({ nick: 'Carol' }))
     })
+
+    it('should re-point the current user\'s own avatar via connection:own-avatar', async () => {
+      emitSDKSpy.mockClear()
+
+      const { refreshAllBlobUrls, getAllAvatarHashes } = await import('../../utils/avatarCache')
+      vi.mocked(refreshAllBlobUrls).mockResolvedValue(new Map([['hash-self', 'blob:fresh-self']]))
+      // The own avatar is stored in the hash store as a 'contact' under the
+      // user's own bare JID (Profile.fetchOwnAvatar → saveAvatarHash(..., 'contact')).
+      vi.mocked(getAllAvatarHashes).mockResolvedValue([
+        { jid: 'user@example.com', hash: 'hash-self', type: 'contact' },
+      ])
+      // The user is not in their own roster, so getContact misses.
+      mockStores.roster.getContact.mockReturnValue(undefined)
+
+      await xmppClient.profile.refreshAllAvatarBlobUrls()
+
+      // Must re-point the own avatar through the connection store, not the roster.
+      expect(emitSDKSpy).toHaveBeenCalledWith('connection:own-avatar', {
+        avatar: 'blob:fresh-self', hash: 'hash-self',
+      })
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('roster:avatar', expect.objectContaining({ jid: 'user@example.com' }))
+    })
   })
 
   describe('Negative Avatar Cache', () => {

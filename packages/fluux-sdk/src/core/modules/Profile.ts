@@ -1010,12 +1010,24 @@ export class Profile extends BaseModule {
       const freshUrls = await refreshAllBlobUrls()
       if (freshUrls.size === 0) return
 
+      const currentJid = this.deps.getCurrentJid()
+      const ownBareJid = currentJid ? getBareJid(currentJid) : null
+
       const hashMappings = await getAllAvatarHashes()
       for (const mapping of hashMappings) {
         const url = freshUrls.get(mapping.hash)
         if (!url) continue
 
         if (mapping.type === 'contact') {
+          // The current user's own avatar is stored as a 'contact' under their
+          // own bare JID, but the user isn't in their own roster (so getContact
+          // misses) and it needs the connection:own-avatar event, not
+          // roster:avatar. Without this the own avatar's blob URL — revoked by
+          // refreshAllBlobUrls — is never re-pointed and renders as a fallback.
+          if (ownBareJid && mapping.jid === ownBareJid) {
+            this.deps.emitSDK('connection:own-avatar', { avatar: url, hash: mapping.hash })
+            continue
+          }
           const contact = this.deps.stores?.roster.getContact(mapping.jid)
           if (contact) {
             this.deps.emitSDK('roster:avatar', { jid: mapping.jid, avatar: url, avatarHash: mapping.hash })
