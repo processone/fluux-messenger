@@ -657,6 +657,28 @@ export function _resetBlobUrlPoolForTesting(): void {
 }
 
 /**
+ * Diagnostic counter of SM resumptions that triggered an avatar blob-URL refresh.
+ * Lets the opt-in memory probe correlate blob-pool growth against resume count —
+ * a flat pool size across many resumes confirms the SM-resume leak class is gone.
+ */
+let avatarResumeCount = 0
+
+/** Current number of live avatar blob URLs. Diagnostic only. */
+export function getBlobUrlPoolSize(): number {
+  return blobUrlPool.size
+}
+
+/** Record one SM resumption that triggered a blob-URL refresh. Diagnostic only. */
+export function bumpAvatarResumeCount(): void {
+  avatarResumeCount++
+}
+
+/** Number of SM resumptions seen this session. Diagnostic only. */
+export function getAvatarResumeCount(): number {
+  return avatarResumeCount
+}
+
+/**
  * Reset the PEP-forbidden domains set.
  * For test isolation only.
  * @internal

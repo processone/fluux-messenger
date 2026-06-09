@@ -120,6 +120,7 @@ import { logDebug, logInfo, logWarn } from './logger'
 import { SDK_VERSION } from '../version'
 import { initSearchIndex, backfillFromMessageCache } from '../utils/searchIndex'
 import { getMessagesWithEncryptedPayload, updateMessage as cacheUpdateMessage } from '../utils/messageCache'
+import { bumpAvatarResumeCount } from '../utils/avatarCache'
 
 /**
  * Core XMPP client with namespace-based module API.
@@ -2053,6 +2054,7 @@ export class XMPPClient {
     // the URLs are still live there, so refreshing would re-read every avatar from
     // IndexedDB and re-create its blob URL on every reconnection for no benefit.
     if (!isShortDisconnect) {
+      bumpAvatarResumeCount() // diagnostic: count refresh-triggering resumes (memory probe)
       this.profile.refreshAllAvatarBlobUrls().catch(() => {})
     }
 
