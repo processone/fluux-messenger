@@ -62,6 +62,28 @@ export function resolveRoomSender(
   }
 }
 
+export function resolveReplyAvatar(
+  nick: string | undefined,
+  room: Room,
+  contactsByJid: ReadonlyMap<string, ContactIdentity>,
+  myNick: string | undefined,
+  ownAvatar: string | null | undefined,
+): { avatarUrl: string | undefined; avatarIdentifier: string } {
+  if (nick === myNick && nick) {
+    return { avatarUrl: ownAvatar || undefined, avatarIdentifier: nick }
+  }
+  const occupantForReply = nick ? room.occupants.get(nick) : undefined
+  const senderBareJid = occupantForReply?.jid
+    ? getBareJid(occupantForReply.jid)
+    : (nick ? room.nickToJidCache?.get(nick) : undefined)
+  const contactAvatar = senderBareJid ? contactsByJid.get(senderBareJid)?.avatar : undefined
+  const cachedReplyAvatar = nick ? room.nickToAvatarCache?.get(nick) : undefined
+  return {
+    avatarUrl: occupantForReply?.avatar || cachedReplyAvatar || contactAvatar,
+    avatarIdentifier: nick || 'unknown',
+  }
+}
+
 export function selectSelfOccupant(
   occupants: ReadonlyMap<string, RoomOccupant>,
   myNick: string | undefined,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { selectSelfOccupant, stableNickSet, resolveRoomSender } from './roomSenderResolution'
+import { selectSelfOccupant, stableNickSet, resolveRoomSender, resolveReplyAvatar } from './roomSenderResolution'
 import type { RoomOccupant, Room, RoomMessage } from '@fluux/sdk'
 
 const occ = (nick: string, extra: Partial<RoomOccupant> = {}): RoomOccupant =>
@@ -67,5 +67,24 @@ describe('resolveRoomSender', () => {
   it('counterpartPresent is true for non-private messages', () => {
     const s = resolveRoomSender(msg({ isPrivate: false }), room({}), new Map(), undefined)
     expect(s.counterpartPresent).toBe(true)
+  })
+})
+
+describe('resolveReplyAvatar', () => {
+  it('prefers occupant avatar, then cache, then contact', () => {
+    const r = room({
+      occupants: new Map([['alice', { nick: 'alice', avatar: 'blob:occ' } as any]]),
+      nickToAvatarCache: new Map([['alice', 'blob:cache']]),
+    })
+    const res = resolveReplyAvatar('alice', r, new Map(), 'me', 'blob:own')
+    expect(res).toEqual({ avatarUrl: 'blob:occ', avatarIdentifier: 'alice' })
+  })
+  it('uses own avatar when the reply nick is me', () => {
+    expect(resolveReplyAvatar('me', room({}), new Map(), 'me', 'blob:own'))
+      .toEqual({ avatarUrl: 'blob:own', avatarIdentifier: 'me' })
+  })
+  it('returns identifier-safe result for a null nick', () => {
+    expect(resolveReplyAvatar(undefined, room({}), new Map(), 'me', undefined))
+      .toEqual({ avatarUrl: undefined, avatarIdentifier: 'unknown' })
   })
 })
