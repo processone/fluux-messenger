@@ -596,26 +596,34 @@ Prove the win: a presence flap for one occupant re-renders only that occupant's 
 **Files:**
 - Create: `apps/fluux/src/components/roomRowPresenceMemo.test.tsx`
 
-Follow the existing pattern in `apps/fluux/src/components/messageRowMemo.test.tsx` (counter ref incremented in a spied row; mock the SDK stores via `test-setup.ts`). The test must:
+Follow the EXACT pattern of `apps/fluux/src/components/messageRowMemo.test.tsx`: render `RoomMessageList` DIRECTLY (not full RoomView — avoids the rosterStore mock-gap) with a stub `room` prop; mock `./conversation`'s `MessageBubble` to count renders keyed by `message.id`; drive re-renders with `rerender(...)`. Reuse that file's `ROOM_PROPS` stub shape.
+
+Simulate a presence flap the way `roomStore.addOccupant` does: build a NEW `room` object with a NEW `occupants` Map in which ONLY the flapped occupant's object is a new reference (show changed); every other occupant keeps the SAME object reference. That ref-preservation is what lets unaffected rows bail.
 
 - [ ] **Step 1: Write the guard test**
 
+Three occupants (alice, bob, carol), each authoring some messages. Assertions:
+
 ```tsx
-// Render a RoomView/RoomMessageList with N messages from 3 distinct occupants
-// (alice, bob, carol). Track per-occupant row render counts via a module-level
-// counter incremented inside a spy on RoomMessageBubbleWrapper's MessageBubble
-// (mirror messageRowMemo.test.tsx's instrumentation).
+// Setup: occupants alice/bob/carol (stable object refs A0,B0,C0); messages from each.
+// Render RoomMessageList with room0 = { ...stubRoom, occupants: Map(A0,B0,C0) }.
 //
-// 1) Flap alice's presence: roomStore.addOccupant(roomJid, { ...alice, show: 'away' })
-//    EXPECT: only alice's rows re-render (delta === alice's message count),
-//            bob's and carol's deltas === 0.
-// 2) Join a brand-new occupant 'dave' (no messages): addOccupant(roomJid, dave)
-//    EXPECT: all existing-row deltas === 0.
-// 3) Append a new message from bob: addMessage(...)
-//    EXPECT: existing rows' deltas === 0 (only the new row mounts).
+// TEST 1 (the core win) — presence FLAP of alice (set-preserving):
+//   room1 = { ...room0, occupants: new Map([['alice', {...A0, show:'away'}], ['bob', B0], ['carol', C0]]) }
+//   rerender(<RoomMessageList room={room1} messages={sameMsgsArray} {...ROOM_PROPS} />)
+//   EXPECT: alice's rows re-rendered (delta === alice's message count);
+//           bob's and carol's rows delta === 0  (memo bailed).
+//
+// TEST 2 — message APPEND (new messages array, occupants unchanged):
+//   rerender with messages=[...msgs, newBobMsg], room=room0
+//   EXPECT: every pre-existing row delta === 0 (only the new row mounts).
 ```
 
-Write it concretely using the project's room test helpers (see `RoomView.test.tsx` setup for `createMockStores`/`createMockRoom` usage and the demo `emitSDK` drivers referenced in `.claude/skills/perf-stress-ui`). Assert exact counts, not ranges.
+Do NOT assert that an occupant JOIN/LEAVE bails — a nick-set change intentionally
+changes `knownNicks` (mention highlighting), so rows re-render by design. Add a
+one-line comment in the test documenting this so the omission is not mistaken for a gap.
+
+Assert exact counts, not ranges. Use a real `getPresenceFromShow`-compatible `show` value (e.g. `'away'`) so `avatarPresence` actually changes for the flapped occupant.
 
 - [ ] **Step 2: Run — verify it passes against the new code**
 
